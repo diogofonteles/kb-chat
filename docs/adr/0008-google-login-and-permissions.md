@@ -16,7 +16,7 @@ ADR 0005 kept one implicit principal, `owner`, behind a seam, with logins deferr
 - The OAuth client id and secret come from the environment.
 
 **Who gets in**
-- The owner is configured by `KB_CHAT_OWNER_EMAIL` and has every permission.
+- The `master` role grants and revokes collections, features and the role itself. Any master can make another person a master, so there can be several. The first master is configured by `KB_CHAT_OWNER_EMAIL`. The last master cannot be demoted or removed.
 - Other people get in only when invited by email. The `people` store lives under `KB_CHAT_STATE_DIR/people.json` (0600).
 
 **Permissions**

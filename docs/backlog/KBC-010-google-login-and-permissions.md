@@ -10,15 +10,15 @@ depends_on: [KBC-007, KBC-008]
 # KBC-010 — Login com conta Google e acesso por permissões
 
 ## Story
-Como dono, quero que cada pessoa entre com a própria conta Google e só acesse os acervos e as funcionalidades que eu liberar, para compartilhar o app sem expor tudo.
+Como master, quero que cada pessoa entre com a própria conta Google e só acesse os acervos e as funcionalidades que eu liberar, para compartilhar o app sem expor tudo.
 
-Pedido do dono em 2026-10-24: "Coloque como requisito a necessidade de login (conta do Google) e o acesso às features e acervos de acordo com as permissões dadas".
+Pedido do dono em 2026-10-24: "Coloque como requisito a necessidade de login (conta do Google) e o acesso às features e acervos de acordo com as permissões dadas"; "Somente um usuário master que deve dar permissão aos acervos e features"; "Usuário master não é único, eu posso dar esse role para qualquer um".
 
 ## Scope
 **In:**
 - **Login obrigatório com Google** (OpenID Connect, "Entrar com Google"), inclusive no uso local. A sessão fica num cookie httpOnly, Secure e SameSite=Lax, e "Sair" está na lateral.
-- **Dono:** o e-mail do dono vem de configuração (`KB_CHAT_OWNER_EMAIL`) e recebe todas as permissões. Nenhuma outra conta entra sem convite.
-- **Tela "Pessoas e permissões"** (só o dono):
+- **Papel master:** quem é master concede e revoga acervos, funcionalidades e o próprio papel de master. O primeiro master vem de configuração (`KB_CHAT_OWNER_EMAIL`), e qualquer master pode tornar outra pessoa master; pode haver vários. Nenhuma outra conta entra sem convite.
+- **Tela "Pessoas e permissões"** (só masters):
   - convidar por e-mail;
   - por pessoa, escolher os **acervos** que ela vê e as **funcionalidades**:
     - Buscar documentos;
@@ -40,7 +40,7 @@ Pedido do dono em 2026-10-24: "Coloque como requisito a necessidade de login (co
 ## Business rules
 - BR-1: sem sessão válida, a API responde 401 em tudo que não seja login e saúde, e a web leva para "Entrar com Google".
 - BR-2: só entram o dono e os e-mails convidados, verificados pelo Google (`email_verified`). Um e-mail não convidado vê "Seu acesso ainda não foi liberado; peça ao dono".
-- BR-3: o padrão de um convite novo é "Buscar documentos" em nenhum acervo; o dono escolhe os acervos e o resto. O dono sempre tem tudo e não pode se remover.
+- BR-3: o padrão de um convite novo é "Buscar documentos" em nenhum acervo; um master escolhe os acervos e o resto. Somente masters dão ou tiram permissões, e um master tem acesso a tudo. Sempre resta ao menos um master: o último não pode ser rebaixado nem removido.
 - BR-4: revogar um acesso derruba as sessões abertas dessa pessoa em até 1 minuto.
 - BR-5: o uso de IA de um convidado conta no teto e no gasto dele. Com assinatura do Claude ou do ChatGPT, só o dono pode usar a própria assinatura (BR-6 do KBC-007).
 - BR-6: os dados de cada pessoa (histórico, preferências, chaves) nunca aparecem para outra, nem para o dono, exceto o gasto, que o dono vê por pessoa.
@@ -48,7 +48,7 @@ Pedido do dono em 2026-10-24: "Coloque como requisito a necessidade de login (co
 ## Functional requirements
 - FR-1: `GET /api/v1/auth/google` deve iniciar o fluxo OIDC (state, PKCE e nonce) e `GET /api/v1/auth/google/callback` deve criar a sessão.
 - FR-2: `GET /api/v1/me` deve devolver a pessoa, as permissões e os acervos visíveis; a web deve montar a interface a partir disso.
-- FR-3: o dono deve listar, convidar, alterar e revogar pessoas em `/api/v1/people`.
+- FR-3: um master deve listar, convidar, alterar (inclusive tornar master) e revogar pessoas em `/api/v1/people`; quem não é master recebe 403.
 - FR-4: toda rota de acervo deve verificar a permissão do acervo, e toda rota de funcionalidade deve verificar a permissão da funcionalidade, num guard único, com testes por rota.
 
 ## Non-functional requirements
@@ -77,6 +77,10 @@ Pedido do dono em 2026-10-24: "Coloque como requisito a necessidade de login (co
   - Given duas pessoas
   - When cada uma lista o histórico
   - Then cada uma vê só o seu
+- **AC-7 (BR-3)**
+  - Given dois masters
+  - When um rebaixa o outro e depois tenta rebaixar a si mesmo
+  - Then o primeiro rebaixamento funciona e o segundo é recusado ("Deve restar ao menos um master")
 - **AC-6 (NFR-2)**
   - Given todas as rotas registradas
   - When o teste de cobertura de guards roda
