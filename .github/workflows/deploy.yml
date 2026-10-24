@@ -3,6 +3,8 @@
 # two arm64 images on a native arm runner, pushes them to GHCR tagged with the commit SHA,
 # then asks the VM (through a forced-command SSH key) to run exactly that SHA and smokes it.
 # Rollback: deploy/scripts/rollback.sh on the VM, or re-run this workflow on an older commit.
+# Actions are pinned by commit SHA (Dependabot keeps them current): whatever this workflow
+# pushes to GHCR ends up running as root on the VM (ADR 0010 threat model).
 #
 # GitHub environment "production" (Settings -> Environments), set by the owner:
 #   secrets: DEPLOY_SSH_KEY (private key of the CI key, ed25519), DEPLOY_KNOWN_HOSTS
@@ -25,6 +27,8 @@ permissions:
 jobs:
   images:
     name: Build ${{ matrix.image }} (linux/arm64)
+    # A manual run from another branch must not reach production.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -35,14 +39,14 @@ jobs:
       matrix:
         image: [api, web]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: apps/${{ matrix.image }}/Dockerfile
@@ -58,6 +62,7 @@ jobs:
   deploy:
     name: Deploy to production (OCI)
     needs: images
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -86,7 +91,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Prepare the SSH key
         env:
@@ -102,18 +107,21 @@ jobs:
       - name: Deploy ${{ github.sha }}
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Any user name works with the job token; the owner's passes ci-gate's check (a
+          # bot actor such as dependabot[bot] would not).
+          REGISTRY_USER: ${{ github.repository_owner }}
         run: |
           # The token only lives while this job runs; the VM logs out after pulling.
           printf '%s' "$REGISTRY_TOKEN" |
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-              "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA $GITHUB_ACTOR"
+              "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA $REGISTRY_USER"
 
-      - name: The live release is this commit
+      - name: The running containers are this commit
         run: |
           live="$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" release)"
           echo "live release: $live"
           if [ "$live" != "$GITHUB_SHA" ]; then
-            echo "::error::the VM runs $live, not $GITHUB_SHA (deploy rolled back?)"
+            echo "::error::the containers run '$live', not $GITHUB_SHA (deploy rolled back?)"
             exit 1
           fi
 
