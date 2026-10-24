@@ -55,6 +55,10 @@ export function describeSteps(turn: ResearchTurn): string {
   return line ? line.charAt(0).toUpperCase() + line.slice(1) : '';
 }
 
-/** Distinct documents read: a document read again (another window) counts once. */
+/** Distinct documents read, by id: a document read again counts once, two with one title twice. */
 const documentsRead = (steps: readonly TurnStep[]): number =>
-  new Set(steps.filter((s) => s.kind === 'read').map((s) => s.text)).size;
+  new Set(
+    steps.flatMap((s) =>
+      s.kind === 'read' ? [('document' in s && s.document) || s.text] : [],
+    ),
+  ).size;

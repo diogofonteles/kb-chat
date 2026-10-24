@@ -21,7 +21,11 @@ describe('TurnResearchTools (the MCP side of the research tools)', () => {
     });
     const read = await tools.call('read_document', { document: '[1]' });
     expect(read.steps).toEqual([
-      { kind: 'read', text: 'Lendo “A Lei do Ritmo”' },
+      {
+        kind: 'read',
+        text: 'Lendo “A Lei do Ritmo”',
+        document: 'raw/articles/a-lei-do-ritmo.md',
+      },
     ]);
     expect(read.sources).toEqual(search.sources);
     const found = await tools.call('find_text', {

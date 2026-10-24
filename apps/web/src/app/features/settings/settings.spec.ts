@@ -276,6 +276,11 @@ describe('Configurações', () => {
     await fixture.whenStable();
     http.expectNone({ method: 'PUT', url: '/api/v1/settings' });
     expect(screen.getByText('Corrija o modelo indicado acima.')).toBeTruthy();
+    // Fixing the field clears both messages before the next "Salvar".
+    fireEvent.input(free, { target: { value: 'qwen/qwen3-max' } });
+    await fixture.whenStable();
+    expect(screen.queryByText('Corrija o modelo indicado acima.')).toBeNull();
+    expect(screen.queryByText(/Use só letras, números/)).toBeNull();
   });
 
   it('shows only the masked key and removes it (AC-2)', async () => {

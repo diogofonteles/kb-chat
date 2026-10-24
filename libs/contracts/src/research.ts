@@ -37,6 +37,8 @@ export const researchStepSchema = z.object({
   kind: z.enum(['search', 'subjects', 'read', 'related', 'deepen']),
   /** Short pt-BR description, e.g. "Buscando “cinco princípios ocultos”". */
   text: z.string(),
+  /** The document a `read` step read (titles repeat in a collection). */
+  document: z.string().optional(),
 });
 export type ResearchStep = z.infer<typeof researchStepSchema>;
 

@@ -91,6 +91,27 @@ describe('ResearchMessage', () => {
     expect(screen.getByText('Pesquisou 1 vez · leu 1 documento')).toBeTruthy();
   });
 
+  it('counts two documents with one title as two (by id)', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'search', text: 'Buscando “polaridade”' },
+          {
+            kind: 'read',
+            text: 'Lendo “Polaridade e Correspondência”',
+            document: 'raw/a.md',
+          },
+          {
+            kind: 'read',
+            text: 'Lendo “Polaridade e Correspondência”',
+            document: 'raw/b.md',
+          },
+        ],
+      }),
+    );
+    expect(screen.getByText('Pesquisou 1 vez · leu 2 documentos')).toBeTruthy();
+  });
+
   it('shows "aprofundou a pesquisa" on a restored escalated turn', async () => {
     await renderMessage(
       aTurn({ steps: [], stepCount: 13, escalated: true, restored: true }),

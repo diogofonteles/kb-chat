@@ -79,6 +79,7 @@ const failed = (text: string): PreparedCall => ({
 const readStep = (entry: CatalogEntry): ResearchStep => ({
   kind: 'read',
   text: `Lendo ${quote(entry.title)}`,
+  document: entry.id,
 });
 
 function parseArguments(raw: string): unknown {

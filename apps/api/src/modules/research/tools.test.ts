@@ -250,7 +250,11 @@ describe('read_document', () => {
       context,
       call('read_document', { document: 1 }),
     );
-    expect(step).toEqual({ kind: 'read', text: 'Lendo “A Lei do Ritmo”' });
+    expect(step).toEqual({
+      kind: 'read',
+      text: 'Lendo “A Lei do Ritmo”',
+      document: 'raw/articles/a-lei-do-ritmo.md',
+    });
     expect(output).toContain('[1] A Lei do Ritmo');
     expect(output).toContain('Resumo do kb: O texto explora a Lei do Ritmo');
     expect(output).toContain(
@@ -329,8 +333,16 @@ describe('read_documents (KBC-011)', () => {
       }),
     );
     expect(steps).toEqual([
-      { kind: 'read', text: 'Lendo “A Lei do Ritmo”' },
-      { kind: 'read', text: expect.stringMatching(/^Lendo “/) },
+      {
+        kind: 'read',
+        text: 'Lendo “A Lei do Ritmo”',
+        document: 'raw/articles/a-lei-do-ritmo.md',
+      },
+      {
+        kind: 'read',
+        text: expect.stringMatching(/^Lendo “/),
+        document: 'raw/articles/tratado-longo.md',
+      },
     ]);
     expect(output).toContain('[1] A Lei do Ritmo');
     expect(output).toMatch(/caracteres \d+ a \d+ de \d+/);
