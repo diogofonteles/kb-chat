@@ -7,6 +7,7 @@ import {
 } from '../../../test/research-factories.js';
 import type { StubReply } from '../../adapters/stub-llm-adapter.js';
 import type { AgentChunk, AgentMessage } from '../../ports/llm.js';
+import { LlmKeyRejectedError } from '../../ports/llm-errors.js';
 import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
 import { NARRATION_HOLD_CHARS } from './tool-loop-runner.js';
 
@@ -61,6 +62,7 @@ describe('ToolLoopRunner', () => {
     const done = ofType(events, 'done')[0];
     expect(done).toMatchObject({
       model: 'stub/model',
+      billing: 'per-token',
       interrupted: false,
       steps: 3,
     });
@@ -264,5 +266,75 @@ describe('ToolLoopRunner', () => {
     expect(runner.model).toBe('stub/model');
     expect(runner.billing).toBe('per-token');
     expect(runner.configured()).toBe(true);
+  });
+
+  it('drops a leading sentence about its own work from a short answer', async () => {
+    const { runner } = await fixtureRunner({
+      script: [
+        {
+          text: 'Agora tenho uma imagem completa. Vou compor a resposta.\n\n---\n\n## Os princípios\n\nSão cinco [1].',
+        },
+      ],
+    });
+    const events = await collectEvents(runner.run(input('princípios')));
+    expect(answerText(events)).toBe('## Os princípios\n\nSão cinco [1].');
+  });
+
+  it('drops the preamble of a long answer before its first streamed chunk', async () => {
+    const body = 'O ritmo governa os ciclos do cosmos [1]. '.repeat(60);
+    const { runner } = await fixtureRunner({
+      script: [{ text: `Tenho tudo o que preciso.\n\n${body}` }],
+    });
+    const events = await collectEvents(runner.run(input('ritmo')));
+    expect(answerText(events)).toBe(body);
+    expect(ofType(events, 'token').length).toBeGreaterThan(100);
+  });
+
+  it('holds the forced last answer until its preamble can be dropped', async () => {
+    const { runner, llm } = await fixtureRunner();
+    const answer =
+      'Ótimo! Agora tenho todas as informações necessárias:\n\n' +
+      'Os cinco princípios são descontinuidade, limite, movimento, espaço e tempo [1]. '.repeat(
+        5,
+      );
+    llm.streamAgent = async function* (
+      _messages,
+      _tools,
+      options,
+    ): AsyncIterable<AgentChunk> {
+      if (options.toolChoice !== 'none')
+        return yield {
+          type: 'tool_call',
+          call: { id: 'a', name: 'list_subjects', arguments: '{}' },
+        };
+      for (const char of answer) yield { type: 'token', text: char };
+    };
+    const events = await collectEvents(runner.run(input('princípios')));
+    expect(ofType(events, 'step')).toHaveLength(MAX_TOOL_STEPS);
+    expect(answerText(events)).toMatch(/^Os cinco princípios são/);
+    expect(answerText(events)).toHaveLength(
+      answer.length - answer.indexOf('Os cinco'),
+    );
+    // Streaming resumes right after the hold, one character at a time.
+    expect(ofType(events, 'token').length).toBeGreaterThan(100);
+  });
+
+  it('keeps an answer that starts with content as it is', async () => {
+    const text =
+      'Encontrei no acervo cinco princípios: descontinuidade e limite [1].';
+    const { runner } = await fixtureRunner({ script: [{ text }] });
+    const events = await collectEvents(runner.run(input('princípios')));
+    expect(answerText(events)).toBe(text);
+  });
+
+  it('reports a key the provider refused as LLM_KEY_REJECTED', async () => {
+    const { runner, llm } = await fixtureRunner();
+    llm.streamAgent = async function* (): AsyncIterable<AgentChunk> {
+      yield* [];
+      throw new LlmKeyRejectedError('OpenRouter', 401);
+    };
+    expect(await collectEvents(runner.run(input('ritmo')))).toEqual([
+      { type: 'error', code: 'LLM_KEY_REJECTED' },
+    ]);
   });
 });

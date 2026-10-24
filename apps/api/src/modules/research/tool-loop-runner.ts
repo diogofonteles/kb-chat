@@ -1,5 +1,6 @@
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import { LlmKeyRejectedError } from '../../ports/llm-errors.js';
 import type {
   AgentChunk,
   AgentLlmPort,
@@ -18,6 +19,7 @@ import {
   buildResearchMessages,
 } from './prompt.js';
 import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
+import { PREAMBLE_HOLD_CHARS, preambleLength } from './answer-preamble.js';
 import { SourceBook } from './source-book.js';
 import type { ResearchTools } from './tools.js';
 
@@ -55,14 +57,22 @@ interface Turn {
 
 interface CallResult {
   text: string;
-  /** Characters of `text` already streamed to the reader. */
+  /** True once the call is taken as the answer: its text streams from then on. */
+  started: boolean;
+  /** Characters of `text` already streamed to the reader (or dropped as preamble). */
   shownLength: number;
   readonly toolCalls: ToolCall[];
   usage: LlmUsage | null;
 }
 
 /** True once the call's text started streaming: the call is the answer. */
-const isAnswer = (call: CallResult): boolean => call.shownLength > 0;
+const isAnswer = (call: CallResult): boolean => call.started;
+
+/** A key the provider refused is the reader's to fix in Settings (KBC-007). */
+function errorCode(err: unknown): string {
+  if (err instanceof AppError) return err.code;
+  return err instanceof LlmKeyRejectedError ? 'LLM_KEY_REJECTED' : 'INTERNAL';
+}
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
 
@@ -109,10 +119,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     } catch (err) {
       if (!input.signal.aborted) {
         await this.record(turn, true);
-        yield {
-          type: 'error',
-          code: err instanceof AppError ? err.code : 'INTERNAL',
-        };
+        yield { type: 'error', code: errorCode(err) };
         return;
       }
     }
@@ -165,6 +172,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   ): AsyncGenerator<ResearchEvent, CallResult> {
     const call: CallResult = {
       text: '',
+      started: false,
       shownLength: 0,
       toolCalls: [],
       usage: null,
@@ -178,7 +186,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     } finally {
       await this.account(turn, call, prompt);
     }
-    if (call.toolCalls.length === 0) yield* this.flush(turn, call);
+    if (call.toolCalls.length === 0) yield* this.flush(turn, call, true);
     return call;
   }
 
@@ -216,14 +224,26 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     }
   }
 
-  /** Streams the call's text not shown yet, apart from earlier text by a blank line. */
-  private *flush(turn: Turn, call: CallResult): Iterable<ResearchEvent> {
+  /**
+   * Streams the call's text not shown yet; only one call per turn is ever shown (the one
+   * taken as the answer). The answer's first characters are held until a preamble about the agent's own work can be
+   * recognized and dropped ("Tenho tudo o que preciso. Vou compor a resposta.").
+   */
+  private *flush(
+    turn: Turn,
+    call: CallResult,
+    ended = false,
+  ): Iterable<ResearchEvent> {
+    if (!call.started) {
+      if (!ended && call.text.length < PREAMBLE_HOLD_CHARS) return;
+      call.started = true;
+      call.shownLength = preambleLength(call.text);
+    }
     const fresh = call.text.slice(call.shownLength);
     if (!fresh) return;
-    const separator = call.shownLength === 0 && turn.shownText ? '\n\n' : '';
     call.shownLength = call.text.length;
-    turn.shownText += separator + fresh;
-    yield { type: 'token', text: separator + fresh };
+    turn.shownText += fresh;
+    yield { type: 'token', text: fresh };
   }
 
   private async *ensureAnswer(turn: Turn): AsyncIterable<ResearchEvent> {
@@ -285,6 +305,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     return {
       type: 'done',
       usd: turn.usd,
+      billing: this.deps.llm.billing,
       model: this.deps.llm.model,
       interrupted,
       steps: turn.steps,
