@@ -17,18 +17,20 @@ import {
   FINAL_ANSWER_NOTE,
   buildResearchMessages,
 } from './prompt.js';
+import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
 import { SourceBook } from './source-book.js';
 import type { ResearchTools } from './tools.js';
 
-/** Tool calls per answer (BR-3); then one last call without tools writes the answer. */
-export const MAX_TOOL_STEPS = 10;
-/** Output budget of each model call. */
-export const MAX_OUTPUT_TOKENS = 2_000;
 /**
- * Text a model writes before deciding to call tools ("Vou pesquisar…") is held back up to
- * this size, so the reader only sees the answer; longer text streams right away.
+ * Narration rule (ADR 0006): the reader never sees text from a model call that ends with
+ * tool calls ("Vou ler os documentos…"). Each call's text is buffered; it is dropped when
+ * the call asks for tools and shown when it does not. Waiting for the end of every call
+ * would kill the streaming of the answer, so once the buffer passes this size with no tool
+ * call yet, the call is taken as the answer: its text streams from then on and any tool call
+ * it asks for afterwards is ignored. Narration in the real eval stayed under ~450
+ * characters; answers run to thousands, so 800 leaves a margin at ~2-4 s of delay.
  */
-const PREAMBLE_CHARS = 160;
+export const NARRATION_HOLD_CHARS = 800;
 const SKIPPED_CALL =
   'Não executada: o limite de passos desta resposta foi atingido.';
 
@@ -58,6 +60,9 @@ interface CallResult {
   readonly toolCalls: ToolCall[];
   usage: LlmUsage | null;
 }
+
+/** True once the call's text started streaming: the call is the answer. */
+const isAnswer = (call: CallResult): boolean => call.shownLength > 0;
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
 
@@ -97,6 +102,8 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       return;
     }
     const turn = this.startTurn(input, topicTitle);
+    // find_text needs the topic's folded text; build it while the model thinks.
+    void this.deps.tools.warm(input.topic).catch(() => undefined);
     try {
       yield* this.loop(turn);
     } catch (err) {
@@ -199,11 +206,13 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     { chunk, final }: { chunk: AgentChunk; final: boolean },
   ): Iterable<ResearchEvent> {
     if (chunk.type === 'usage') call.usage = chunk.usage;
-    else if (chunk.type === 'tool_call') call.toolCalls.push(chunk.call);
-    else {
+    else if (chunk.type === 'tool_call') {
+      if (!isAnswer(call)) call.toolCalls.push(chunk.call);
+    } else {
       call.text += chunk.text;
-      if (final || call.shownLength > 0 || call.text.length >= PREAMBLE_CHARS)
-        yield* this.flush(turn, call);
+      const holding =
+        call.toolCalls.length > 0 || call.text.length < NARRATION_HOLD_CHARS;
+      if (final || isAnswer(call) || !holding) yield* this.flush(turn, call);
     }
   }
 

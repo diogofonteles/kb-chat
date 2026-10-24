@@ -6,8 +6,9 @@ import {
   fixtureRunner,
 } from '../../../test/research-factories.js';
 import type { StubReply } from '../../adapters/stub-llm-adapter.js';
-import type { AgentChunk } from '../../ports/llm.js';
-import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './tool-loop-runner.js';
+import type { AgentChunk, AgentMessage } from '../../ports/llm.js';
+import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
+import { NARRATION_HOLD_CHARS } from './tool-loop-runner.js';
 
 const input = (question: string, signal = new AbortController().signal) => ({
   topic: 'hermetismo',
@@ -70,15 +71,16 @@ describe('ToolLoopRunner', () => {
     );
   });
 
-  it('stops at 10 tool steps and answers with what it has (AC-7)', async () => {
-    const script = Array.from({ length: 15 }, (_, i) =>
+  it('stops at 15 tool steps and answers with what it has (AC-7)', async () => {
+    const script = Array.from({ length: 20 }, (_, i) =>
       searchReply(`ritmo ${i}`),
     );
     const { runner, llm } = await fixtureRunner({ script });
     const events = await collectEvents(runner.run(input('ritmo')));
-    expect(ofType(events, 'step')).toHaveLength(MAX_TOOL_STEPS);
-    expect(ofType(events, 'done')[0]?.steps).toBe(10);
-    expect(llm.agentCalls).toHaveLength(11);
+    expect(MAX_TOOL_STEPS).toBe(15);
+    expect(ofType(events, 'step')).toHaveLength(15);
+    expect(ofType(events, 'done')[0]?.steps).toBe(15);
+    expect(llm.agentCalls).toHaveLength(16);
     expect(llm.agentCalls.at(-1)?.toolChoice).toBe('none');
     expect(answerText(events)).toMatch(/\[\d+\]\.$/);
   });
@@ -86,14 +88,14 @@ describe('ToolLoopRunner', () => {
   it('runs parallel calls and answers the ones over the budget as skipped', async () => {
     const batch = searchReply('ritmo', 'natureza', 'cabala', 'vida');
     const { runner, llm } = await fixtureRunner({
-      script: [batch, batch, batch],
+      script: [batch, batch, batch, batch],
     });
     const events = await collectEvents(runner.run(input('ritmo')));
-    expect(ofType(events, 'step')).toHaveLength(10);
+    expect(ofType(events, 'step')).toHaveLength(15);
     const skipped = llm.lastMessages.filter(
       (m) => m.role === 'tool' && m.content.startsWith('Não executada'),
     );
-    expect(skipped).toHaveLength(2);
+    expect(skipped).toHaveLength(1);
   });
 
   it('stops before the next model call when the daily cap is reached mid-way (AC-4)', async () => {
@@ -144,7 +146,7 @@ describe('ToolLoopRunner', () => {
   });
 
   it('stops a streaming answer on abort and prices the unreported usage', async () => {
-    const script = [{ text: 'palavra '.repeat(60) }];
+    const script = [{ text: 'palavra '.repeat(300) }];
     const { runner, ledger, llm } = await fixtureRunner({
       script,
       tokenDelayMs: 1,
@@ -155,7 +157,7 @@ describe('ToolLoopRunner', () => {
       events.push(event);
       if (event.type === 'token') abort.abort();
     }
-    expect(llm.yielded).toBeLessThan(30);
+    expect(llm.yielded).toBeLessThan(150);
     expect(events.at(-1)).toMatchObject({
       type: 'done',
       interrupted: true,
@@ -178,34 +180,48 @@ describe('ToolLoopRunner', () => {
     expect(ledger.entries[0]).toMatchObject({ usd: 0.01, interrupted: true });
   });
 
-  it('hides a short preamble before tool calls and shows the answer', async () => {
+  it('never shows the text of a call that ends with tool calls, however long', async () => {
     const { runner, llm } = await fixtureRunner();
+    const narration =
+      'Os documentos mais promissores são [1] e [2]. Vou lê-los agora. ';
     let calls = 0;
-    llm.streamAgent = async function* (): AsyncIterable<AgentChunk> {
+    let seen: readonly AgentMessage[] = [];
+    llm.streamAgent = async function* (messages): AsyncIterable<AgentChunk> {
       calls += 1;
-      if (calls === 1) {
-        yield { type: 'token', text: 'Vou pesquisar no acervo. ' };
-        yield {
-          type: 'tool_call',
-          call: { id: 'a', name: 'list_subjects', arguments: '' },
-        };
-        return;
-      }
-      yield { type: 'token', text: 'Resposta.' };
+      seen = [...messages];
+      if (calls > 1) return yield { type: 'token', text: 'Resposta.' };
+      for (let i = 0; i < 10; i += 1) yield { type: 'token', text: narration };
+      yield {
+        type: 'tool_call',
+        call: { id: 'a', name: 'list_subjects', arguments: '' },
+      };
     };
     const events = await collectEvents(runner.run(input('ritmo')));
+    expect(narration.repeat(10).length).toBeLessThan(NARRATION_HOLD_CHARS);
     expect(answerText(events)).toBe('Resposta.');
     expect(ofType(events, 'step')[0]?.step.kind).toBe('subjects');
-    expect(ofType(events, 'sources')).toHaveLength(0);
+    // The model keeps what it wrote; only the reader does not see it.
+    expect(seen.at(-2)).toMatchObject({
+      role: 'assistant',
+      content: narration.repeat(10),
+    });
   });
 
-  it('streams a long text before tool calls and separates the answer from it', async () => {
+  it('streams a long final answer in chunks once it passes the hold size', async () => {
+    const answer = 'O ritmo governa os ciclos do cosmos [1]. '.repeat(60);
+    const { runner } = await fixtureRunner({ script: [{ text: answer }] });
+    const events = await collectEvents(runner.run(input('ritmo')));
+    const tokens = ofType(events, 'token');
+    expect(answerText(events)).toBe(answer);
+    expect(tokens.length).toBeGreaterThan(100);
+    expect(tokens[0]?.text.length).toBeGreaterThanOrEqual(NARRATION_HOLD_CHARS);
+    expect(tokens[0]?.text.length).toBeLessThan(NARRATION_HOLD_CHARS + 50);
+  });
+
+  it('keeps a streamed answer as the answer and ignores tool calls asked after it', async () => {
     const { runner, llm } = await fixtureRunner();
-    const long = 'Contexto. '.repeat(20);
-    let calls = 0;
+    const long = 'Contexto do acervo. '.repeat(50);
     llm.streamAgent = async function* (): AsyncIterable<AgentChunk> {
-      calls += 1;
-      if (calls > 1) return yield { type: 'token', text: 'Fim.' };
       yield { type: 'token', text: long };
       yield {
         type: 'tool_call',
@@ -213,7 +229,9 @@ describe('ToolLoopRunner', () => {
       };
     };
     const events = await collectEvents(runner.run(input('ritmo')));
-    expect(answerText(events)).toBe(`${long}\n\nFim.`);
+    expect(answerText(events)).toBe(long);
+    expect(ofType(events, 'step')).toHaveLength(0);
+    expect(ofType(events, 'done')[0]?.steps).toBe(0);
   });
 
   it('writes a fallback when the model ends without text', async () => {
