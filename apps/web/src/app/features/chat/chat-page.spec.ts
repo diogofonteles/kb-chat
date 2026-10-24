@@ -7,6 +7,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
+import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
 
 const SEARCH_URL = '/api/v1/topics/hermetismo/searches';
@@ -54,7 +55,11 @@ describe('ChatPage', () => {
     expect(screen.getByText('lei do ritmo')).toBeTruthy();
     expect(screen.getByText(/Buscando em Hermetismo/)).toBeTruthy();
     const request = view.http.expectOne(SEARCH_URL);
-    expect(request.request.body).toEqual({ q: 'lei do ritmo', mode: 'all' });
+    expect(request.request.body).toEqual({
+      q: 'lei do ritmo',
+      mode: 'all',
+      filters: NO_FILTERS,
+    });
     request.flush(aResponse());
     await view.fixture.whenStable();
     expect(screen.getByText(/^1 documento · Tudo · 0,6 s$/)).toBeTruthy();
@@ -147,6 +152,7 @@ describe('ChatPage', () => {
     expect(view.http.expectOne(SEARCH_URL).request.body).toEqual({
       q: 'xyzzy',
       mode: 'semantic',
+      filters: NO_FILTERS,
     });
   });
 
@@ -192,6 +198,74 @@ describe('ChatPage', () => {
       (screen.getByRole('button', { name: 'Buscar' }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+});
+
+describe('ChatPage refining', () => {
+  it('re-runs the same message with a chosen filter and loads more pages', async () => {
+    const view = await renderPage();
+    await ask('ritmo', view);
+    view.http
+      .expectOne(SEARCH_URL)
+      .flush(aResponse([aHit()], { nextOffset: 10, total: 12 }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: /Tipo de texto/ }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Texto\/apostila/ }));
+    await view.fixture.whenStable();
+    const refined = view.http.expectOne(SEARCH_URL);
+    expect(refined.request.body.filters.genres).toEqual(['article_or_essay']);
+    refined.flush(aResponse([aHit()], { nextOffset: 10, total: 12 }));
+    await view.fixture.whenStable();
+    expect(screen.getAllByText('ritmo', { exact: false })).toBeTruthy();
+    expect(document.querySelectorAll('app-result-message')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await view.fixture.whenStable();
+    const more = view.http.expectOne(SEARCH_URL);
+    expect(more.request.body).toMatchObject({
+      offset: 10,
+      filters: { genres: ['article_or_essay'] },
+    });
+    more.flush(
+      aResponse([aHit({ id: 'b.md', title: 'Segundo' })], {
+        nextOffset: null,
+        total: 12,
+      }),
+    );
+    await view.fixture.whenStable();
+    expect(screen.getByRole('button', { name: /Segundo/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
+  });
+
+  it('opens a copy of a grouped result', async () => {
+    const view = await renderPage();
+    await ask('ritmo', view);
+    view.http.expectOne(SEARCH_URL).flush(
+      aResponse([
+        aHit({
+          copies: [
+            {
+              id: 'raw/articles/a-lei-do-ritmo-2.md',
+              title: 'A Lei do Ritmo',
+            },
+          ],
+        }),
+      ]),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: '+1 cópia' }));
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: /a-lei-do-ritmo-2\.md/ }),
+    );
+    TestBed.tick();
+    view.http
+      .expectOne(
+        '/api/v1/topics/hermetismo/documents/raw%2Farticles%2Fa-lei-do-ritmo-2.md',
+      )
+      .flush(aDocument());
+    await view.fixture.whenStable();
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });
 

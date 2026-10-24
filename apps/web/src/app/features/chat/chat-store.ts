@@ -11,7 +11,8 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
-  type SearchHit,
+  type DocumentRef,
+  type SearchFilters,
   type SearchMode,
   type TopicList,
 } from '@kb-chat/contracts';
@@ -20,14 +21,18 @@ import { KbApi, topicsUrl } from '@core/api/kb-api.js';
 import {
   Subject,
   catchError,
+  groupBy,
   map,
+  merge,
   mergeMap,
   of,
   scan,
   startWith,
+  switchMap,
   type Observable,
 } from 'rxjs';
 import {
+  NO_FILTERS,
   reduceChat,
   type Ask,
   type ChatEvent,
@@ -66,7 +71,9 @@ export class ChatStore {
   private readonly api = inject(KbApi);
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
   private readonly asks = new Subject<Ask>();
+  private readonly mores = new Subject<ChatMessage>();
   private nextId = 1;
+  private nextRev = 1;
 
   readonly topics = httpResource(topicsUrl, {
     parse: (body) => topicListSchema.parse(body),
@@ -87,10 +94,14 @@ export class ChatStore {
   readonly mode = this.modeState.asReadonly();
 
   readonly messages = toSignal(
-    this.asks.pipe(
-      mergeMap((ask) => this.run(ask)),
-      scan(reduceChat, [] as readonly ChatMessage[]),
-    ),
+    merge(
+      // Per message, a new run (retry, new filters) cancels the one in flight.
+      this.asks.pipe(
+        groupBy((ask) => ask.id),
+        mergeMap((runs) => runs.pipe(switchMap((ask) => this.run(ask)))),
+      ),
+      this.mores.pipe(mergeMap((message) => this.runMore(message))),
+    ).pipe(scan(reduceChat, [] as readonly ChatMessage[])),
     { initialValue: [] as readonly ChatMessage[] },
   );
 
@@ -105,41 +116,87 @@ export class ChatStore {
     this.modeState.set(mode);
   }
 
-  ask(question: string, mode: SearchMode = this.modeState()): void {
+  ask(
+    question: string,
+    mode: SearchMode = this.modeState(),
+    filters: SearchFilters = NO_FILTERS,
+  ): void {
     const topic = this.topicSlug();
     const trimmed = question.trim();
     if (!topic || !trimmed) return;
-    this.asks.next({ id: this.nextId++, topic, question: trimmed, mode });
-  }
-
-  retry(message: ChatMessage): void {
     this.asks.next({
-      id: message.id,
-      topic: message.topic,
-      question: message.question,
-      mode: message.mode,
+      id: this.nextId++,
+      rev: this.nextRev++,
+      topic,
+      question: trimmed,
+      mode,
+      filters,
     });
   }
 
-  open(topic: string, hit: Pick<SearchHit, 'id' | 'title'>): void {
-    this.openState.set({ topic, id: hit.id, title: hit.title });
+  retry(message: ChatMessage): void {
+    this.rerun(message, message.filters);
+  }
+
+  /** Re-runs the same message with new filters (the conversation does not grow). */
+  refine(message: ChatMessage, filters: SearchFilters): void {
+    this.rerun(message, filters);
+  }
+
+  loadMore(message: ChatMessage): void {
+    if (message.response?.nextOffset == null || message.loadingMore) return;
+    this.mores.next(message);
+  }
+
+  open(topic: string, doc: DocumentRef): void {
+    this.openState.set({ topic, id: doc.id, title: doc.title });
   }
 
   close(): void {
     this.openState.set(null);
   }
 
+  private rerun(message: ChatMessage, filters: SearchFilters): void {
+    const { id, topic, question, mode } = message;
+    this.asks.next({ id, rev: this.nextRev++, topic, question, mode, filters });
+  }
+
   private run(ask: Ask): Observable<ChatEvent> {
-    return this.api.search(ask.topic, { q: ask.question, mode: ask.mode }).pipe(
-      map((response): ChatEvent => ({ type: 'done', id: ask.id, response })),
-      catchError((err: unknown) =>
-        of<ChatEvent>({
-          type: 'failed',
-          id: ask.id,
-          error: toUiErrorCode(err),
-        }),
-      ),
-      startWith<ChatEvent>({ type: 'started', ask }),
-    );
+    const { id, rev } = ask;
+    return this.api
+      .search(ask.topic, {
+        q: ask.question,
+        mode: ask.mode,
+        filters: ask.filters,
+      })
+      .pipe(
+        map((response): ChatEvent => ({ type: 'done', id, rev, response })),
+        catchError((err: unknown) =>
+          of<ChatEvent>({ type: 'failed', id, rev, error: toUiErrorCode(err) }),
+        ),
+        startWith<ChatEvent>({ type: 'started', ask }),
+      );
+  }
+
+  private runMore(message: ChatMessage): Observable<ChatEvent> {
+    const { id, rev } = message;
+    const offset = message.response?.nextOffset ?? 0;
+    return this.api
+      .search(message.topic, {
+        q: message.question,
+        mode: message.mode,
+        filters: message.filters,
+        offset,
+      })
+      .pipe(
+        map((response): ChatEvent => ({
+          type: 'more-done',
+          id,
+          rev,
+          response,
+        })),
+        catchError(() => of<ChatEvent>({ type: 'more-failed', id, rev })),
+        startWith<ChatEvent>({ type: 'more-started', id, rev }),
+      );
   }
 }

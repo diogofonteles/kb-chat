@@ -55,7 +55,7 @@ describe('GET /api/v1/topics', () => {
     expect(response.json()).toEqual({
       items: [
         { slug: 'alquimia', title: 'Alquimia Prática', documentCount: 1 },
-        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 5 },
+        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 7 },
       ],
       defaultSlug: null,
     });
@@ -196,7 +196,7 @@ describe('GET /health', () => {
     expect(response.json()).toEqual({
       status: 'ok',
       search: 'ok',
-      catalog: { documents: 6 },
+      catalog: { documents: 8 },
     });
   });
 });
@@ -204,5 +204,63 @@ describe('GET /health', () => {
 describe('vault safety', () => {
   it('leaves the vault byte for byte unchanged', async () => {
     expect(await hashTree(FIXTURE_VAULT)).toBe(hashBefore);
+  });
+});
+
+describe('facet filters (KBC-002)', () => {
+  const searchWith = (payload: object) =>
+    app.inject({
+      method: 'POST',
+      url: '/api/v1/topics/hermetismo/searches',
+      headers: HOST,
+      payload,
+    });
+
+  it('groups copies into one card and hides off-topic by default', async () => {
+    const body = (await searchWith({ q: 'sétupla', mode: 'semantic' })).json();
+    expect(body.items.map((i: { id: string }) => i.id)).toEqual([
+      'raw/articles/a-natureza-s-tupla-2.md',
+    ]);
+    expect(body.items[0].copies).toEqual([
+      {
+        id: 'raw/articles/a-natureza-s-tupla-5.md',
+        title: 'A Natureza Sétupla',
+      },
+    ]);
+    expect(body.hiddenOffTopic).toBe(1);
+  });
+
+  it('filters by subject and text type and returns disjunctive counts', async () => {
+    const body = (
+      await searchWith({
+        q: 'natureza',
+        mode: 'semantic',
+        filters: { concepts: ['Cabala'], genres: ['talk_or_interview'] },
+      })
+    ).json();
+    expect(body.items.map((i: { title: string }) => i.title)).toEqual([
+      'A Natureza Sétupla',
+      'A Árvore da Vida',
+    ]);
+    expect(body.facets.concepts).toContainEqual({ value: 'Cabala', count: 2 });
+  });
+
+  it('serves collection-wide facet counts', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/topics/hermetismo/facets',
+      headers: HOST,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().concepts.slice(0, 2)).toEqual([
+      { value: 'Cabala', count: 2 },
+      { value: 'Cosmologia Espiritual e Metafísica', count: 2 },
+    ]);
+  });
+
+  it('rejects a filter field outside the allowlist', async () => {
+    const response = await searchWith({ q: 'x', filters: { path: '/etc' } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('VALIDATION_FAILED');
   });
 });

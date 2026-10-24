@@ -1,0 +1,151 @@
+<div
+  class="bar"
+  role="group"
+  aria-label="Filtros"
+  i18n-aria-label="@@filters.label"
+>
+  @for (group of groups(); track group.key) {
+    <div class="facet">
+      <button
+        type="button"
+        class="chip"
+        [class.on]="group.selectedCount > 0"
+        [attr.aria-expanded]="openKey() === group.key"
+        [attr.aria-controls]="'facet-' + group.key"
+        (click)="togglePopover(group.key)"
+      >
+        {{ group.title }}
+        @if (group.selectedCount > 0) {
+          <span>({{ group.selectedCount }})</span>
+        }
+        <span aria-hidden="true">▾</span>
+      </button>
+      @if (openKey() === group.key) {
+        <div
+          class="popover"
+          [id]="'facet-' + group.key"
+          role="group"
+          [attr.aria-label]="group.title"
+        >
+          @for (option of visibleOptions(group); track option.value) {
+            <label class="option">
+              <input
+                type="checkbox"
+                [checked]="option.selected"
+                (change)="toggle(group.key, option.value)"
+              />
+              <span class="option-label">{{ option.label }}</span>
+              <span class="option-count">{{ option.count }}</span>
+            </label>
+          }
+          @if (hiddenOptions(group) > 0) {
+            <button
+              type="button"
+              class="link"
+              (click)="expand(group.key)"
+              i18n="@@filters.showAll"
+            >
+              Ver todos ({{ group.options.length }})
+            </button>
+          }
+        </div>
+      }
+    </div>
+  }
+  <button type="button" class="chip sheet-button" (click)="openSheet()">
+    <span i18n="@@filters.open">Filtros</span>
+    @if (activeCount() > 0) {
+      <span>({{ activeCount() }})</span>
+    }
+  </button>
+  @if (hiddenOffTopic() > 0) {
+    <span
+      class="hidden-note"
+      i18n="@@filters.hiddenOffTopic"
+      >{hiddenOffTopic(), plural,
+        =1 {1 oculto (fora do tema)}
+        other {{{ hiddenOffTopic() }} ocultos (fora do tema)}
+      }</span
+    >
+  }
+</div>
+
+@if (active().length > 0) {
+  <ul
+    class="active"
+    aria-label="Filtros ativos"
+    i18n-aria-label="@@filters.active"
+  >
+    @for (filter of active(); track filter.label) {
+      <li>
+        <button
+          type="button"
+          class="active-chip"
+          (click)="remove(filter)"
+          [attr.aria-label]="filter.removeLabel"
+        >
+          {{ filter.label }} <span aria-hidden="true">×</span>
+        </button>
+      </li>
+    }
+  </ul>
+}
+
+@if (sheetOpen()) {
+  <div
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="filters-sheet-title"
+  >
+    <header class="sheet-head">
+      <h2 id="filters-sheet-title" i18n="@@filters.sheetTitle">Filtros</h2>
+    </header>
+    <div class="sheet-body">
+      @for (group of draftGroups(); track group.key) {
+        <fieldset>
+          <legend>{{ group.title }}</legend>
+          @for (option of visibleOptions(group); track option.value) {
+            <label class="option">
+              <input
+                type="checkbox"
+                [checked]="option.selected"
+                (change)="toggleDraft(group.key, option.value)"
+              />
+              <span class="option-label">{{ option.label }}</span>
+              <span class="option-count">{{ option.count }}</span>
+            </label>
+          }
+          @if (hiddenOptions(group) > 0) {
+            <button
+              type="button"
+              class="link"
+              (click)="expand(group.key)"
+              i18n="@@filters.showAll"
+            >
+              Ver todos ({{ group.options.length }})
+            </button>
+          }
+        </fieldset>
+      }
+    </div>
+    <footer class="sheet-foot">
+      <button
+        type="button"
+        class="cancel"
+        (click)="closeAll()"
+        i18n="@@filters.cancel"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="apply"
+        (click)="applySheet()"
+        i18n="@@filters.apply"
+      >
+        Aplicar
+      </button>
+    </footer>
+  </div>
+}

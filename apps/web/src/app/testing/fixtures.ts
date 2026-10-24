@@ -14,6 +14,7 @@ export const aHit = (overrides: Partial<SearchHit> = {}): SearchHit => ({
   depth: 2,
   relevance: 'core',
   concepts: ['Hermetismo e Filosofia Hermética', 'Cabala', 'Gnosticismo'],
+  copies: [],
   ...overrides,
 });
 
@@ -24,6 +25,17 @@ export const aResponse = (
   items,
   total: items.length,
   capped: false,
+  nextOffset: null,
+  hiddenOffTopic: 0,
+  facets: {
+    concepts: [
+      { value: 'Cabala', count: 1 },
+      { value: 'Gnosticismo', count: 1 },
+    ],
+    genres: [{ value: 'article_or_essay', count: 1 }],
+    depths: [{ value: 2, count: 1 }],
+    relevances: [{ value: 'core', count: 1 }],
+  },
   mode: 'all',
   tookMs: 640,
   ...overrides,

@@ -75,17 +75,20 @@ describe('search request handling', () => {
     expect(index.queries[0]?.q).toBe('lei do ritmo hermético');
   });
 
-  it('asks the index for up to 50 candidates and reports the real total', async () => {
+  it('asks the index for enough candidates and reports the real total', async () => {
     const index = new RecordingIndex();
     const server = await start({}, index);
     await search(server, { q: 'ritmo', limit: 1 });
-    expect(index.queries[0]?.limit).toBe(50);
+    expect(index.queries[0]?.limit).toBe(60);
+    await search(server, { q: 'ritmo', filters: { genres: ['paper'] } });
+    expect(index.queries[1]?.limit).toBe(200);
     const fixture = await start();
     const body = (
-      await search(fixture, { q: 'sétupla', mode: 'semantic', limit: 1 })
+      await search(fixture, { q: 'natureza', mode: 'semantic', limit: 1 })
     ).json();
     expect(body.items).toHaveLength(1);
-    expect(body.total).toBeGreaterThan(1);
+    expect(body.total).toBe(3);
+    expect(body.nextOffset).toBe(1);
     expect(body.capped).toBe(false);
   });
 

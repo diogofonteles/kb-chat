@@ -4,66 +4,104 @@
     {{ message().question }}
   </p>
 
-  @switch (message().status) {
-    @case ('loading') {
-      <div class="answer">
-        <p class="status" i18n="@@message.searching">
-          Buscando em {{ topicTitle() }}…
-        </p>
-        <div class="skeletons" aria-hidden="true">
-          <span></span><span></span><span></span>
-        </div>
-      </div>
-    }
-    @case ('error') {
-      <div class="answer error" role="alert">
-        <p>{{ error() }}</p>
-        <button
-          type="button"
-          class="secondary"
-          (click)="retried.emit()"
-          i18n="@@message.retry"
-        >
-          Tentar de novo
-        </button>
-      </div>
-    }
-    @default {
-      <div class="answer">
-        @if (items().length > 0) {
-          <p class="summary">
-            {{ count() }} · {{ modeName() }} ·
-            {{ seconds() | number: '1.1-1' }} s
-          </p>
-          <ol class="cards">
-            @for (hit of items(); track hit.id) {
-              <li>
-                <app-result-card
-                  [hit]="hit"
-                  [active]="hit.id === activeId()"
-                  (opened)="opened.emit($event)"
-                />
-              </li>
-            }
-          </ol>
+  @if (message().status === 'error') {
+    <div class="answer error" role="alert">
+      <p>{{ error() }}</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="retried.emit()"
+        i18n="@@message.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (response(); as current) {
+    <div class="answer" [class.refreshing]="refreshing()">
+      <p class="summary">
+        @if (refreshing()) {
+          <span i18n="@@message.refreshing">Atualizando…</span>
         } @else {
-          <div class="empty">
+          {{ count() }} · {{ modeName() }} · {{ seconds() | number: '1.1-1' }} s
+        }
+      </p>
+      @if (current.items.length > 0 || filtered()) {
+        <app-filter-bar
+          [facets]="current.facets"
+          [filters]="message().filters"
+          [hiddenOffTopic]="current.hiddenOffTopic"
+          (filtersChange)="filtersChanged.emit($event)"
+        />
+      }
+      @if (items().length > 0) {
+        <ol class="cards">
+          @for (hit of items(); track hit.id) {
+            <li>
+              <app-result-card
+                [hit]="hit"
+                [active]="hit.id === activeId()"
+                (opened)="opened.emit($event)"
+              />
+            </li>
+          }
+        </ol>
+        @if (current.nextOffset !== null) {
+          <button
+            type="button"
+            class="secondary more"
+            [disabled]="message().loadingMore"
+            (click)="moreRequested.emit()"
+            i18n="@@message.more"
+          >
+            {message().loadingMore, select,
+              true {Carregando…}
+              other {Mostrar mais}
+            }
+          </button>
+        }
+      } @else {
+        <div class="empty">
+          @if (filtered()) {
+            <p i18n="@@message.emptyFiltered">
+              Nada encontrado para "{{ message().question }}" com estes filtros.
+            </p>
+            <div class="suggestions">
+              @for (filter of removable(); track filter.label) {
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="removeFilter(filter)"
+                >
+                  {{ filter.removeLabel }}
+                </button>
+              }
+            </div>
+          } @else {
             <p i18n="@@message.empty">
               Nada encontrado para "{{ message().question }}".
             </p>
-            @if (canTrySemantic()) {
-              <button
-                type="button"
-                class="secondary"
-                (click)="modeSwitched.emit('semantic')"
-                i18n="@@message.trySemantic"
-              >
-                Buscar por significado
-              </button>
-            }
-          </div>
-        }
+          }
+          @if (canTrySemantic()) {
+            <button
+              type="button"
+              class="secondary"
+              (click)="modeSwitched.emit('semantic')"
+              i18n="@@message.trySemantic"
+            >
+              Buscar por significado
+            </button>
+          }
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="answer">
+      <p class="status" i18n="@@message.searching">
+        Buscando em {{ topicTitle() }}…
+      </p>
+      <div class="skeletons" aria-hidden="true">
+        <span></span><span></span><span></span>
       </div>
-    }
+    </div>
   }
 </article>

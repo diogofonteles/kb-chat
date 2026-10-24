@@ -20,3 +20,34 @@
     </span>
   }
 </button>
+@if (hit().copies.length > 0) {
+  <button
+    type="button"
+    class="copies-toggle"
+    [attr.aria-expanded]="copiesOpen()"
+    [attr.aria-controls]="copiesId()"
+    (click)="toggleCopies()"
+    i18n="@@card.copies"
+  >
+    {hit().copies.length, plural,
+      =1 {+1 cópia}
+      other {+{{ hit().copies.length }} cópias}
+    }
+  </button>
+  @if (copiesOpen()) {
+    <ul class="copies" [id]="copiesId()">
+      @for (copy of hit().copies; track copy.id) {
+        <li>
+          <button
+            type="button"
+            class="copy"
+            [attr.data-doc-id]="copy.id"
+            (click)="opened.emit(copy)"
+          >
+            {{ copy.title }} <span class="copy-path">{{ copy.id }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+}

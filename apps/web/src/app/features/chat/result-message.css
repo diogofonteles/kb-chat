@@ -86,3 +86,19 @@
 .secondary:hover {
   border-color: var(--color-accent);
 }
+
+.refreshing .cards {
+  opacity: 0.55;
+  transition: opacity 150ms var(--ease);
+}
+
+.more {
+  justify-self: center;
+  min-width: 12rem;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
