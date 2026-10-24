@@ -12,6 +12,8 @@
 }
 
 .sidebar {
+  /* The column is tinted, so the current conversation stands out on the surface color. */
+  --sidebar-active: var(--color-surface);
   min-height: 0;
   border-right: 1px solid var(--color-border);
   background: var(--color-surface-muted);
@@ -223,6 +225,18 @@
 
   .hint-keyboard {
     display: none;
+  }
+
+  /* The Menu button takes the brand's place; the title keeps one line. */
+  .brand {
+    display: none;
+  }
+
+  .topic {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .composer-dock {
