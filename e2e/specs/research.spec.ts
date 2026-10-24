@@ -151,3 +151,41 @@ test('AC-9: a research conversation restored from the history shows its saved an
   ).toBeVisible();
   expect(researchCalls()).toBe(0);
 });
+
+test('KBC-007 AC-4: a subscription turn shows "Incluído na sua assinatura" instead of a cost', async ({
+  page,
+}) => {
+  // The shared E2E server answers with the per-token stub; the subscription runner itself
+  // (a fake Claude Code over the turn's MCP endpoint) is covered by the API integration test.
+  const events = [
+    { type: 'step', step: { kind: 'search', text: 'Buscando “ritmo”' } },
+    {
+      type: 'sources',
+      sources: [
+        { n: 1, id: 'raw/articles/a-lei-do-ritmo.md', title: 'A Lei do Ritmo' },
+      ],
+    },
+    { type: 'token', text: 'Segundo o acervo, tudo flui [1].' },
+    {
+      type: 'done',
+      usd: 0,
+      billing: 'subscription',
+      model: 'claude-opus-5-5',
+      interrupted: false,
+      steps: 1,
+    },
+  ];
+  await page.route('**/api/v1/topics/*/research', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: events
+        .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+        .join(''),
+    }),
+  );
+  const answer = await research(page, 'ritmo');
+  await expect(answer.getByText('Incluído na sua assinatura')).toBeVisible();
+  await expect(answer.getByText(/Custo:/)).toHaveCount(0);
+  await expect(answer.getByRole('link', { name: /^Fonte 1:/ })).toBeVisible();
+});

@@ -26,6 +26,7 @@ test.beforeEach(async ({ page }) => {
 test('FR-6: ⚙ Configurações opens over the conversation and closes back to it', async ({
   page,
 }) => {
+  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('app-result-card').first()).toBeVisible();
@@ -117,6 +118,28 @@ test('AC-1: the wizard shows on the first run and not again after "Concluir"', a
   await expect(page.getByRole('dialog')).toBeHidden();
   expect(saved).toMatchObject({ preferences: { theme: 'dark' } });
   await page.reload();
-  await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
+  // The saved default view (research) opens, with the stub provider answering.
+  await expect(
+    page.getByText('O que você quer pesquisar no acervo?'),
+  ).toBeVisible();
   await expect(page.getByRole('heading', { name: /Como a IA/ })).toBeHidden();
+});
+
+test('the default view saved in Settings opens on the next page', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/settings', (route) =>
+    route.fulfill({
+      json: {
+        exists: true,
+        ...SETTINGS_VIEW,
+        preferences: { ...SETTINGS_VIEW.preferences, defaultView: 'search' },
+      },
+    }),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole('radio', { name: 'Buscar documentos' }),
+  ).toBeChecked();
+  await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
 });
