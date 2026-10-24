@@ -23,7 +23,7 @@ Answers come from a **research agent**: a tool-calling loop over the collection,
 | `find_text(phrase, limit ≤ 20)` | Literal, accent- and case-insensitive phrase search over the body and kb summary of **every** cataloged document of the topic, like `grep`. Alternatives are joined with ` \| `. Returns per document: [n], title, occurrences per alternative and the passage around the first one (± 200 characters), ranked by occurrences. |
 | `list_subjects(query?)` | The collection's subjects with document counts. |
 | `read_document(id, around?, offset?)` | The kb summary and frontmatter, plus a window of the body (≤ 12,000 characters). The window centers on the occurrences of `around` when it is given. |
-| `read_documents(ids[], around?)` | *Added by [ADR 0009](0009-faster-research-profiles-and-streaming.md):* up to 4 documents in one step, a 6,000-character window each. |
+| `read_documents(documents[], around?)` | *Added by [ADR 0009](0009-faster-research-profiles-and-streaming.md):* up to 4 documents in one step, a 6,000-character window each. |
 | `related_documents(id)` | The kb relations ("veja também"): examples, extensions and related documents. |
 
 **Loop.** A provider with native tool calling (OpenRouter, OpenAI, Anthropic) runs the loop in the API:
