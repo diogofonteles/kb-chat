@@ -1,17 +1,7 @@
-import { createHash, randomBytes } from 'node:crypto';
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { SettingsStorePort } from '../ports/settings-store.js';
-
-const isMissing = (err: unknown): boolean =>
-  err instanceof Error && 'code' in err && err.code === 'ENOENT';
+import { readJsonFile, writeJsonFile } from './atomic-json.js';
 
 const SAFE_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
@@ -32,29 +22,11 @@ export class JsonSettingsStore implements SettingsStorePort {
     return join(this.folder, settingsFileName(principal));
   }
 
-  async read(principal: string): Promise<unknown> {
-    try {
-      return JSON.parse(await readFile(this.fileOf(principal), 'utf8'));
-    } catch (err) {
-      if (isMissing(err)) return null;
-      throw err;
-    }
+  read(principal: string): Promise<unknown> {
+    return readJsonFile(this.fileOf(principal));
   }
 
-  async write(principal: string, value: object): Promise<void> {
-    await mkdir(this.folder, { recursive: true, mode: 0o700 });
-    const file = this.fileOf(principal);
-    const temp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
-    try {
-      await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, {
-        mode: 0o600,
-      });
-      // The mode above is filtered by the umask; chmod makes 0600 exact.
-      await chmod(temp, 0o600);
-      await rename(temp, file);
-    } catch (err) {
-      await rm(temp, { force: true });
-      throw err;
-    }
+  write(principal: string, value: object): Promise<void> {
+    return writeJsonFile(this.fileOf(principal), value);
   }
 }
