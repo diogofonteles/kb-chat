@@ -2,6 +2,7 @@ import { DOCUMENT, DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   Injector,
   afterNextRender,
   computed,
@@ -34,6 +35,8 @@ export class ChatPage {
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
   private readonly composer = viewChild.required(Composer);
+  private readonly host =
+    inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   protected readonly topic = this.store.topic;
   protected readonly messages = this.store.messages;
@@ -50,9 +53,11 @@ export class ChatPage {
   protected readonly announcement = computed(() => {
     const last = this.messages().at(-1);
     if (!last || last.status === 'loading') return '';
-    return last.response
+    // Prefixed with the question so a repeated identical count is still announced.
+    const outcome = last.response
       ? describeForAnnouncement(last.response)
       : errorMessage(last.error ?? 'INTERNAL');
+    return `${last.question}: ${outcome}`;
   });
 
   constructor() {
@@ -85,9 +90,20 @@ export class ChatPage {
   }
 
   protected closeDocument(): void {
+    const closedId = this.opened()?.id;
     this.store.close();
-    // After the conversation is visible again (mobile), so focus never lands on <body>.
-    afterNextRender(() => this.composer().focus(), { injector: this.injector });
+    // Back to the card that opened the document (focusing the question box would pop the
+    // phone keyboard); runs after the conversation is visible again so focus never lands on <body>.
+    afterNextRender(() => this.focusCard(closedId), {
+      injector: this.injector,
+    });
+  }
+
+  private focusCard(id: string | undefined): void {
+    const cards = this.host.querySelectorAll<HTMLElement>('[data-doc-id]');
+    const card = [...cards].find((element) => element.dataset['docId'] === id);
+    if (card) card.focus();
+    else this.composer().focus();
   }
 
   protected reloadTopics(): void {

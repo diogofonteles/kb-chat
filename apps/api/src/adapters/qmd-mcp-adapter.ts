@@ -95,6 +95,11 @@ export class QmdMcpAdapter implements SearchIndexPort {
     });
     const client = new Client({ name: 'kb-chat', version: '0.0.0' });
     await client.connect(transport);
+    if (this.closed) {
+      // close() ran while this reconnect was in flight: do not leave the child alive.
+      await client.close();
+      return;
+    }
     // Registered after a successful connect (a failed start is retried by start() only);
     // Client.onclose keeps the SDK's own transport handler that rejects pending calls.
     client.onclose = () => this.handleClose(client);
@@ -133,7 +138,13 @@ export class QmdMcpAdapter implements SearchIndexPort {
     this.options.onLog?.(`qmd mcp unavailable; retrying in ${delay} ms`);
     this.restartTimer = setTimeout(() => {
       this.restartTimer = null;
-      this.connect().catch(() => this.scheduleRestart());
+      this.connect().catch((err: unknown) => {
+        if (this.closed) return;
+        this.options.onLog?.(
+          `qmd mcp reconnect failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        this.scheduleRestart();
+      });
     }, delay);
     this.restartTimer.unref();
   }

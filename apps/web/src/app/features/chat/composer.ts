@@ -36,6 +36,11 @@ export class Composer {
   protected readonly canSend = computed(
     () => !this.disabled() && this.text().trim().length > 0,
   );
+  protected readonly sendHint = computed(() =>
+    this.disabled()
+      ? $localize`:@@composer.sendHintNoTopic:Nenhum acervo disponível para buscar.`
+      : $localize`:@@composer.sendHint:Escreva uma pergunta para buscar.`,
+  );
   protected readonly modeHelp = computed(
     () => MODE_OPTIONS.find((o) => o.value === this.mode())?.help ?? '',
   );

@@ -31,14 +31,27 @@ async function createFixtureIndex(
   );
 }
 
+/** Same default as the web: the topic with the most documents is the one opened first. */
+async function largestTopic(
+  vault: VaultReaderPort,
+): Promise<string | undefined> {
+  const topics = await vault.listTopics();
+  const sized = await Promise.all(
+    topics.map(async (topic) => ({
+      slug: topic.slug,
+      size: (await vault.listDocuments(topic.slug)).length,
+    })),
+  );
+  return sized.sort((a, b) => b.size - a.size)[0]?.slug;
+}
+
 /** Composition of the search index from config; MCP failure falls back to the kb CLI. */
 export async function createSearchIndex(
   options: SearchIndexFactoryOptions,
 ): Promise<SearchIndexPort> {
   const { config, vault, log } = options;
   if (config.KB_CHAT_SEARCH === 'fixture') return createFixtureIndex(vault);
-  const [firstTopic] = await vault.listTopics();
-  const warmTopic = config.KB_TOPIC ?? firstTopic?.slug;
+  const warmTopic = config.KB_TOPIC ?? (await largestTopic(vault));
   const mcp = new QmdMcpAdapter({
     command: config.QMD_BIN,
     warmCollection: warmTopic ? toCollection(warmTopic) : undefined,

@@ -1,6 +1,7 @@
 <button
   type="button"
   class="card"
+  [attr.data-doc-id]="hit().id"
   [class.active]="active()"
   [attr.aria-pressed]="active()"
   (click)="opened.emit(hit())"

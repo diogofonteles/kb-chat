@@ -183,11 +183,14 @@ describe('ResilientSearchIndex', () => {
     );
     expect(await down.search(query)).toEqual([backup]);
     expect(down.status()).toBe('degraded');
+    const failures: unknown[] = [];
     const failing = new ResilientSearchIndex(
       new FakeIndex('ok', new Error('x')),
       new FakeIndex('ok', [backup]),
+      (err) => failures.push(err),
     );
     expect(await failing.search(query)).toEqual([backup]);
+    expect(failures).toHaveLength(1);
     await failing.close();
   });
 });

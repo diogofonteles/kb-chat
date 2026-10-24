@@ -60,7 +60,7 @@ describe('ChatPage', () => {
     expect(screen.getByText(/^1 documento · Tudo · 0,6 s$/)).toBeTruthy();
     expect(
       document.querySelector('[aria-live="polite"]')?.textContent?.trim(),
-    ).toBe('1 documento encontrado.');
+    ).toBe('lei do ritmo: 1 documento encontrado.');
     expect(
       screen
         .getByRole('region', { name: 'Conversa' })
@@ -109,6 +109,9 @@ describe('ChatPage', () => {
     fireEvent.keyDown(panel, { key: 'Escape' });
     await view.fixture.whenStable();
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: /A Lei do Ritmo/ }),
+    );
   });
 
   it('shows the not-found message when the document is gone', async () => {

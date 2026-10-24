@@ -1,3 +1,5 @@
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FAKES_DIR } from '../../test/fixture-paths.js';
@@ -85,13 +87,35 @@ describe('QmdMcpAdapter', () => {
     expect(logs.length).toBe(afterClose);
   });
 
-  it('warms the collection up in both modes after connecting', async () => {
+  it('warms the collection up with one lexical and one vector query after connecting', async () => {
+    const logFile = join(
+      await mkdtemp(join(tmpdir(), 'kbchat-qmd-')),
+      'queries.jsonl',
+    );
     adapter = new QmdMcpAdapter({
       command: process.execPath,
-      args: [fakeQmd],
+      args: [fakeQmd, logFile],
       warmCollection: 'hermetismo',
     });
     await adapter.start();
-    expect(adapter.status()).toBe('ok');
+    const readTypes = async (): Promise<string[]> =>
+      (await readFile(logFile, 'utf8').catch(() => ''))
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line).searches[0].type);
+    let types: string[] = [];
+    for (let attempt = 0; attempt < 100 && types.length < 2; attempt += 1) {
+      types = await readTypes();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(types).toEqual(['lex', 'vec']);
+  });
+
+  it('does not keep a process alive when closed during a reconnect', async () => {
+    adapter = new QmdMcpAdapter({ command: process.execPath, args: [fakeQmd] });
+    const starting = adapter.start();
+    await adapter.close();
+    await starting;
+    expect(adapter.status()).toBe('down');
   });
 });

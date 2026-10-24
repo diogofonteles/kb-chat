@@ -48,15 +48,13 @@
       type="submit"
       class="send"
       [disabled]="!canSend()"
-      aria-describedby="send-hint"
+      [attr.aria-describedby]="canSend() ? null : 'send-hint'"
       i18n="@@composer.send"
     >
       Buscar
     </button>
     @if (!canSend()) {
-      <span id="send-hint" class="visually-hidden" i18n="@@composer.sendHint"
-        >Escreva uma pergunta para buscar.</span
-      >
+      <span id="send-hint" class="visually-hidden">{{ sendHint() }}</span>
     }
   </div>
 </form>

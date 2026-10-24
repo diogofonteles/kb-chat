@@ -65,6 +65,10 @@ test('AC-4: a card opens the document without frontmatter and Escape closes it',
   await expect(panel).not.toContainText('relevance:');
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
+  // Focus returns to the card that opened the document (QA-03).
+  await expect(
+    page.getByRole('button', { name: /A Lei do Ritmo/ }),
+  ).toBeFocused();
 });
 
 test('AC-5: no results offers a semantic search', async ({ page }) => {

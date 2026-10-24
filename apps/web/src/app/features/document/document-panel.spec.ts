@@ -66,4 +66,24 @@ describe('DocumentPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fechar documento' }));
     expect(view.closed).toHaveBeenCalledOnce();
   });
+
+  it('returns to the top and focuses the new title when the document changes', async () => {
+    const view = await renderPanel();
+    view.http.expectOne(URL).flush(aDocument());
+    await view.fixture.whenStable();
+    const host = view.fixture.nativeElement as HTMLElement;
+    host.scrollTop = 500;
+    screen.getByRole('button', { name: 'Fechar documento' }).focus();
+    view.fixture.componentRef.setInput('documentId', 'b.md');
+    TestBed.tick();
+    view.http
+      .expectOne('/api/v1/topics/hermetismo/documents/b.md')
+      .flush(aDocument({ id: 'b.md', title: 'Outro documento' }));
+    await view.fixture.whenStable();
+    expect(host.scrollTop).toBe(0);
+    expect(document.activeElement?.id).toBe('document-title');
+    expect(
+      screen.getByRole('heading', { name: 'Outro documento' }),
+    ).toBeTruthy();
+  });
 });
