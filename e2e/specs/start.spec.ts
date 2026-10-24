@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { startInSearchView } from './search-view.js';
+
+test.beforeEach(startInSearchView);
 
 test('AC-1/AC-2: start suggestions list the largest subjects and search one with its filter', async ({
   page,

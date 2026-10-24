@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { startInSearchView } from './search-view.js';
+
+test.beforeEach(startInSearchView);
 
 async function openFirst(
   page: Page,
