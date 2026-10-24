@@ -57,7 +57,15 @@ export interface ProviderRegistryOptions {
   readonly perTokenRunner?: PerTokenRunnerFactory;
   /** The research rules for a topic and profile, for the subscription CLIs; default: the module's, by slug. */
   readonly systemPrompt?: SubscriptionPrompt;
+  /**
+   * The owner's principal (KBC-010): only it may use the subscriptions (personal, KBC-007
+   * BR-6) and the keys of the server's environment; guests bring their own key.
+   */
+  readonly ownerPrincipal?: string;
 }
+
+const isSubscription = (provider: ResolvedProvider): boolean =>
+  provider === 'claude-subscription' || provider === 'chatgpt-subscription';
 
 /** How one runner is built: for whom, with which tools, and the deep model to escalate to. */
 interface RunnerBuild {
@@ -112,10 +120,16 @@ export class ProviderRegistry implements ProviderCatalog {
 
   /** The provider answering now for the principal. */
   active(principal: string): ResolvedProvider {
-    return (
-      this.options.settings.snapshot(principal)?.ai.provider ??
-      defaultProvider(this.options.config, this.claudeOnPath)
-    );
+    const saved = this.options.settings.snapshot(principal)?.ai.provider;
+    if (this.isOwner(principal))
+      return saved ?? defaultProvider(this.options.config, this.claudeOnPath);
+    if (saved && !isSubscription(saved)) return saved;
+    // A guest has no subscription and no environment key: search only, or the test stub.
+    return this.options.config.KB_CHAT_LLM === 'stub' ? 'stub' : 'none';
+  }
+
+  private isOwner(principal: string): boolean {
+    return principal === (this.options.ownerPrincipal ?? 'owner');
   }
 
   /** Daily cap in US$ for per-token providers (Settings, else KB_CHAT_DAILY_CAP_USD). */
@@ -214,6 +228,8 @@ export class ProviderRegistry implements ProviderCatalog {
     build: RunnerBuild,
   ): ResearchRunnerPort {
     const { principal } = build;
+    if (isSubscription(choice.provider) && !this.isOwner(principal))
+      return new DisabledResearchRunner();
     if (choice.provider === 'claude-subscription')
       return new ClaudeCliRunner(this.cliOptions('claude', choice, build));
     if (choice.provider === 'chatgpt-subscription')
@@ -303,10 +319,9 @@ export class ProviderRegistry implements ProviderCatalog {
   ): string | undefined {
     if (provider === 'stub' || !isKeyProvider(provider)) return undefined;
     const env = PROVIDERS[provider].keyEnv;
-    return (
-      this.options.settings.key(principal, provider) ??
-      (env ? this.options.config[env] : undefined)
-    );
+    const own = this.options.settings.key(principal, provider);
+    if (own || !this.isOwner(principal)) return own;
+    return env ? this.options.config[env] : undefined;
   }
 
   private keySource(
@@ -332,6 +347,7 @@ export class ProviderRegistry implements ProviderCatalog {
     id: AiProvider,
     cliFound: boolean,
   ): ProviderInfo['reason'] {
+    if (isSubscription(id) && !this.isOwner(principal)) return 'owner-only';
     if (PROVIDERS[id].cliBin && !cliFound) return 'cli-missing';
     if (id === 'chatgpt-subscription' && !this.options.config.KB_CHAT_CODEX)
       return 'not-enabled';

@@ -13,8 +13,6 @@ export interface ConversationFilter {
 
 export interface ConversationsServiceDeps {
   readonly store: ConversationStorePort;
-  /** Who owns the conversations (ADR 0005: the owner until release 2 adds logins). */
-  readonly principal: string;
 }
 
 const matches = (summary: ConversationSummary, filter: ConversationFilter) =>
@@ -25,28 +23,37 @@ const matches = (summary: ConversationSummary, filter: ConversationFilter) =>
 const byNewest = (a: ConversationSummary, b: ConversationSummary) =>
   b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id);
 
-/** The complete conversation history kept on this computer (no cap). */
+/**
+ * The complete conversation history kept on this computer (no cap), per principal: each
+ * person only lists, reads and removes their own (KBC-010 BR-6).
+ */
 export class ConversationsService {
   constructor(private readonly deps: ConversationsServiceDeps) {}
 
-  async list(filter: ConversationFilter = {}): Promise<ConversationSummary[]> {
-    const all = await this.deps.store.list(this.deps.principal);
+  async list(
+    principal: string,
+    filter: ConversationFilter = {},
+  ): Promise<ConversationSummary[]> {
+    const all = await this.deps.store.list(principal);
     return all
       .map(summarizeConversation)
       .filter((summary) => matches(summary, filter))
       .sort(byNewest);
   }
 
-  get(id: string): Promise<Conversation | null> {
-    return this.deps.store.get(this.deps.principal, id);
+  get(principal: string, id: string): Promise<Conversation | null> {
+    return this.deps.store.get(principal, id);
   }
 
-  async save(conversation: Conversation): Promise<ConversationSummary> {
-    await this.deps.store.put(this.deps.principal, conversation);
+  async save(
+    principal: string,
+    conversation: Conversation,
+  ): Promise<ConversationSummary> {
+    await this.deps.store.put(principal, conversation);
     return summarizeConversation(conversation);
   }
 
-  remove(id: string): Promise<boolean> {
-    return this.deps.store.remove(this.deps.principal, id);
+  remove(principal: string, id: string): Promise<boolean> {
+    return this.deps.store.remove(principal, id);
   }
 }

@@ -59,12 +59,42 @@ export const configSchema = z.object({
     .min(1)
     .default('~/.kb-chat')
     .transform(expandHome),
+  /**
+   * Google OAuth client id (public) of the "Entrar com Google" button (ADR 0008). The API
+   * checks every ID token's audience against it; required to start the API (main).
+   */
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  /** The owner's Google account: the first master, and the only one using subscriptions. */
+  KB_CHAT_OWNER_EMAIL: z
+    .email()
+    .transform((email) => email.toLowerCase())
+    .optional(),
+  /** Sign-in attempts per minute per client. */
+  AUTH_RATE_LIMIT: z.coerce.number().int().min(1).default(10),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
+
+interface SignInConfig {
+  readonly GOOGLE_CLIENT_ID: string;
+  readonly KB_CHAT_OWNER_EMAIL: string;
+}
+
+/** Sign-in is required (KBC-010): the API does not start without its two settings. */
+export function assertSignInConfigured(
+  config: AppConfig,
+): asserts config is AppConfig & SignInConfig {
+  const missing = (['GOOGLE_CLIENT_ID', 'KB_CHAT_OWNER_EMAIL'] as const).filter(
+    (name) => !config[name],
+  );
+  if (missing.length > 0)
+    throw new Error(
+      `Sign-in is not configured: set ${missing.join(' and ')} in the repository's .env`,
+    );
+}
 
 /** Validates the environment once at boot; an invalid value stops the process. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {

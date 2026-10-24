@@ -9,13 +9,18 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { ResearchRunnerPort } from '../../ports/research-runner.js';
+import { principalOf, type RouteAccess } from '../auth/index.js';
 
 export interface ResearchRouteOptions {
   /**
    * The runner of this turn, asked again on every request: the provider in Settings may
    * have changed since the last one (KBC-007 FR-5), and each profile has its model (KBC-011).
+   * The turn runs as the signed-in person: their provider, key, cap and ledger (KBC-010).
    */
-  readonly runner: (profile: ResearchProfile) => ResearchRunnerPort;
+  readonly runner: (
+    principal: string,
+    profile: ResearchProfile,
+  ) => ResearchRunnerPort;
   /** False for a topic the catalog does not know (refused before streaming). */
   readonly hasTopic: (topic: string) => boolean;
 }
@@ -43,8 +48,17 @@ function abortOnDisconnect(reply: FastifyReply): AbortSignal {
   return abort.signal;
 }
 
+/** The collection and "Pesquisa com IA" (KBC-010). */
+const RESEARCH_ACCESS: RouteAccess = {
+  topicParam: 'topic',
+  feature: 'research',
+};
+
 const researchOptions = {
-  config: { rateLimit: { max: RATE_PER_MINUTE, timeWindow: '1 minute' } },
+  config: {
+    access: RESEARCH_ACCESS,
+    rateLimit: { max: RATE_PER_MINUTE, timeWindow: '1 minute' },
+  },
   schema: {
     params: z.object({ topic: topicSlugSchema }),
     body: researchRequestSchema,
@@ -88,7 +102,7 @@ export const researchRoutes =
         researchOptions,
         async (request, reply) => {
           const { topic } = request.params;
-          const current = runner(request.body.profile);
+          const current = runner(principalOf(request), request.body.profile);
           if (!current.configured())
             throw new AppError(
               'LLM_NOT_CONFIGURED',

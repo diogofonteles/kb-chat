@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import { SIGNED_IN, principalOf } from '../auth/index.js';
 import type { ConversationsService } from './conversations-service.js';
 
 /** A long research conversation (answers and sources) outgrows Fastify's 1 MB default. */
@@ -24,18 +25,25 @@ function registerReads(app: FastifyInstance, service: ConversationsService) {
   typed.get(
     '/api/v1/conversations',
     {
+      config: { access: SIGNED_IN },
       schema: {
         querystring: listQuery,
         response: { 200: conversationListSchema },
       },
     },
-    async ({ query }) => ({ items: await service.list(query) }),
+    async (request) => ({
+      items: await service.list(principalOf(request), request.query),
+    }),
   );
   typed.get(
     '/api/v1/conversations/:id',
-    { schema: { params, response: { 200: conversationSchema } } },
-    async ({ params: { id } }) => {
-      const conversation = await service.get(id);
+    {
+      config: { access: SIGNED_IN },
+      schema: { params, response: { 200: conversationSchema } },
+    },
+    async (request) => {
+      const { id } = request.params;
+      const conversation = await service.get(principalOf(request), id);
       if (!conversation)
         throw new AppError('NOT_FOUND', `Unknown conversation ${id}`);
       return conversation;
@@ -49,27 +57,35 @@ function registerWrites(app: FastifyInstance, service: ConversationsService) {
     '/api/v1/conversations/:id',
     {
       bodyLimit: MAX_CONVERSATION_BYTES,
+      config: { access: SIGNED_IN },
       schema: {
         params,
         body: conversationSchema,
         response: { 200: conversationSummarySchema },
       },
     },
-    async ({ params: { id }, body }) => {
-      if (body.id !== id)
+    async (request) => {
+      const { body } = request;
+      if (body.id !== request.params.id)
         throw new AppError(
           'VALIDATION_FAILED',
           'The body id must match the path id',
         );
-      return service.save(body);
+      return service.save(principalOf(request), body);
     },
   );
-  typed.delete(
+}
+
+function registerRemove(app: FastifyInstance, service: ConversationsService) {
+  app.withTypeProvider<ZodTypeProvider>().delete(
     '/api/v1/conversations/:id',
-    { schema: { params, response: { 204: z.undefined() } } },
+    {
+      config: { access: SIGNED_IN },
+      schema: { params, response: { 204: z.undefined() } },
+    },
     // Idempotent: removing a conversation that is already gone is not an error.
-    async ({ params: { id } }, reply) => {
-      await service.remove(id);
+    async (request, reply) => {
+      await service.remove(principalOf(request), request.params.id);
       return reply.code(204).send();
     },
   );
@@ -81,4 +97,5 @@ export const conversationRoutes =
   async (app) => {
     registerReads(app, service);
     registerWrites(app, service);
+    registerRemove(app, service);
   };

@@ -1,14 +1,14 @@
+import { signedInApp } from '../test/auth-factories.js';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FIXTURE_VAULT } from '../test/fixture-paths.js';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
-import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import type { IndexQuery, SearchIndexPort } from './ports/search-index.js';
 import { createSearchIndex } from './search-index-factory.js';
 
-const HOST = { host: 'localhost' };
+const HOST: Record<string, string> = { host: 'localhost' };
 let app: FastifyInstance | undefined;
 
 afterEach(async () => {
@@ -30,7 +30,7 @@ async function start(
   const searchIndex =
     index ??
     (await createSearchIndex({ config, vault, log: createLogger('silent') }));
-  app = await buildApp({
+  app = await signedInApp(HOST)({
     config,
     vault,
     index: searchIndex,

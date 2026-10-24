@@ -17,7 +17,21 @@ import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
 import { searchRoutes } from './modules/search/index.js';
 import { topicRoutes } from './modules/topics/index.js';
+import authGuard from './plugins/auth-guard.js';
+import csrfGuard from './plugins/csrf-guard.js';
 import hostGuard from './plugins/host-guard.js';
+import routeAccess from './plugins/route-access.js';
+import {
+  OWNER_PRINCIPAL,
+  PeopleService,
+  SessionService,
+  authRoutes,
+  peopleRoutes,
+} from './modules/auth/index.js';
+import { MemoryPeopleStore } from './adapters/memory-people-store.js';
+import { MemorySessionStore } from './adapters/memory-session-store.js';
+import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
+import type { IdentityVerifierPort } from './ports/identity-verifier.js';
 import type { AgentLlmPort } from './ports/llm.js';
 import type { ResearchRunnerPort } from './ports/research-runner.js';
 import type { SearchIndexPort } from './ports/search-index.js';
@@ -45,8 +59,15 @@ import {
   type ResearchAgent,
 } from './research-agent-factory.js';
 
-/** The only principal until release 2 adds logins (ADR 0005). */
-export const OWNER = 'owner';
+/** The owner's principal: the alias of the data written before logins (ADR 0008). */
+export const OWNER = OWNER_PRINCIPAL;
+
+/** Who may sign in and how (ADR 0008); in memory, verifying with Google, when not given. */
+export interface AuthDeps {
+  readonly people: PeopleService;
+  readonly sessions: SessionService;
+  readonly verifier: IdentityVerifierPort;
+}
 
 export interface AppDeps {
   readonly config: AppConfig;
@@ -71,9 +92,11 @@ export interface AppDeps {
    * built here, over `catalog`, when not given.
    */
   readonly agent?: ResearchAgent;
+  readonly auth?: AuthDeps;
 }
 
 type FullDeps = AppDeps & {
+  auth: AuthDeps;
   ai: AiProviders;
   agent: ResearchAgent;
   catalog: CatalogRegistry;
@@ -91,21 +114,26 @@ async function registerResearch(
   app: FastifyInstance,
   deps: FullDeps,
 ): Promise<void> {
-  const { ai, agent, ledger, catalog } = deps;
-  const scope = {
-    principal: OWNER,
-    dailyCapUsd: () => ai.registry.dailyCapUsd(OWNER),
-  };
-  const fixed = deps.llm && agent.perTokenRunner(deps.llm, scope);
-  const runner = (profile: ResearchProfile = 'fast'): ResearchRunnerPort =>
-    fixed ?? ai.registry.researchRunner(OWNER, profile);
-  const spend = new SpendService({
-    llm: deps.llm ?? ai.llm,
-    ledger,
-    ...scope,
-    configured: () => runner().configured(),
+  const { ai, agent, ledger, catalog, llm } = deps;
+  const scopeOf = (principal: string) => ({
+    principal,
+    dailyCapUsd: () => ai.registry.dailyCapUsd(principal),
   });
-  await app.register(spendRoutes(spend));
+  const runner = (
+    principal: string,
+    profile: ResearchProfile = 'fast',
+  ): ResearchRunnerPort =>
+    llm
+      ? agent.perTokenRunner(llm, scopeOf(principal))
+      : ai.registry.researchRunner(principal, profile);
+  const spendFor = (principal: string) =>
+    new SpendService({
+      llm: llm ?? ai.registry.llm(principal),
+      ledger,
+      ...scopeOf(principal),
+      configured: () => runner(principal).configured(),
+    });
+  await app.register(spendRoutes(spendFor));
   const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
   await app.register(researchRoutes({ runner, hasTopic }));
 }
@@ -117,11 +145,12 @@ async function registerSearch(
 ): Promise<void> {
   const { config, index, catalog } = deps;
   await app.register(healthRoutes({ catalog, index }));
-  const preferences = () => deps.ai.settings.snapshot(OWNER)?.preferences;
   await app.register(
     topicRoutes({
       catalog,
-      preferredTopic: () => preferences()?.defaultTopic ?? config.KB_TOPIC,
+      preferredTopic: (principal) =>
+        deps.ai.settings.snapshot(principal)?.preferences.defaultTopic ??
+        config.KB_TOPIC,
     }),
   );
   await app.register(
@@ -145,15 +174,26 @@ async function registerRoutes(
     vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
   });
   await app.register(documentRoutes(documents));
-  await app.register(
-    usageRoutes({ catalog, log: deps.usage, principal: OWNER }),
-  );
-  const conversations = new ConversationsService({
-    store: deps.conversations,
-    principal: OWNER,
-  });
+  await app.register(usageRoutes({ catalog, log: deps.usage }));
+  const conversations = new ConversationsService({ store: deps.conversations });
   await app.register(conversationRoutes(conversations));
   await registerSettings(app, deps.ai);
+  await registerAuth(app, deps);
+}
+
+/** Sign-in, who is signed in and "Pessoas e permissões" (KBC-010, ADR 0008). */
+async function registerAuth(app: FastifyInstance, deps: FullDeps) {
+  const { config, catalog, auth } = deps;
+  const topics = () => catalog.topics().map(({ topic }) => topic.slug);
+  await app.register(
+    authRoutes({
+      ...auth,
+      topics,
+      googleClientId: config.GOOGLE_CLIENT_ID ?? null,
+      loginRatePerMinute: config.AUTH_RATE_LIMIT,
+    }),
+  );
+  await app.register(peopleRoutes({ ...auth, topics }));
 }
 
 /** Settings, providers and the MCP endpoint of subscription turns (KBC-007, ADR 0007). */
@@ -162,11 +202,7 @@ async function registerSettings(
   ai: AiProviders,
 ): Promise<void> {
   await app.register(
-    settingsRoutes({
-      settings: ai.settings,
-      providers: ai.registry,
-      principal: OWNER,
-    }),
+    settingsRoutes({ settings: ai.settings, providers: ai.registry }),
   );
   await app.register(mcpRoutes(ai.turns));
 }
@@ -186,6 +222,15 @@ const inMemoryAi = (
     systemPrompt: agent.systemPrompt,
   });
 
+const inMemoryAuth = (config: AppConfig): AuthDeps => ({
+  people: new PeopleService({
+    store: new MemoryPeopleStore(),
+    ownerEmail: config.KB_CHAT_OWNER_EMAIL,
+  }),
+  sessions: new SessionService({ store: new MemorySessionStore() }),
+  verifier: createGoogleVerifier(config.GOOGLE_CLIENT_ID ?? ''),
+});
+
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
 async function completeDeps(deps: AppDeps): Promise<FullDeps> {
   const catalog = deps.catalog ?? new CatalogRegistry(deps.vault);
@@ -201,6 +246,7 @@ async function completeDeps(deps: AppDeps): Promise<FullDeps> {
     });
   return {
     ...deps,
+    auth: deps.auth ?? inMemoryAuth(deps.config),
     ai: deps.ai ?? (await inMemoryAi(deps.config, agent)),
     agent,
     catalog,
@@ -222,8 +268,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
 
+  await app.register(routeAccess);
   await app.register(hostGuard, { allowedHosts: deps.config.ALLOWED_HOSTS });
   await app.register(cors, { origin: [deps.config.WEB_ORIGIN] });
+  await app.register(csrfGuard, { webOrigin: deps.config.WEB_ORIGIN });
+  await app.register(authGuard, full.auth);
+  // The signed-in person's settings are in memory before any route reads them.
+  app.addHook('preHandler', async (request) => {
+    if (request.viewer) await full.ai.settings.load(request.viewer.principal);
+  });
   await app.register(rateLimit, { global: false });
   await registerRoutes(app, full);
 

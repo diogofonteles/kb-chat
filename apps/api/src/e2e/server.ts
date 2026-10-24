@@ -14,6 +14,13 @@ import { createAiProviders } from '../providers/create-ai-providers.js';
 import { CatalogRegistry } from '../modules/catalog/index.js';
 import { createResearchAgent } from '../research-agent-factory.js';
 import { createSearchIndex } from '../search-index-factory.js';
+import { MemorySessionStore } from '../adapters/memory-session-store.js';
+import { JsonPeopleStore } from '../adapters/json-people-store.js';
+import { PeopleService, SessionService } from '../modules/auth/index.js';
+import { E2E_CLIENT_ID, createTestIdentity } from './test-identity.js';
+
+/** The owner of the E2E run: a master with the `owner` data the specs expect. */
+export const E2E_OWNER_EMAIL = 'owner@kb-chat.test';
 
 // E2E server: the fixture vault and the in-process index, no QMD or models.
 const config = loadConfig({
@@ -25,6 +32,10 @@ const config = loadConfig({
   KB_CHAT_LLM: 'stub',
   KB_CHAT_STATE_DIR: mkdtempSync(join(tmpdir(), 'kbchat-e2e-')),
   LOG_LEVEL: 'warn',
+  GOOGLE_CLIENT_ID: E2E_CLIENT_ID,
+  KB_CHAT_OWNER_EMAIL: E2E_OWNER_EMAIL,
+  // Every spec signs in; they run in parallel from one address.
+  AUTH_RATE_LIMIT: '10000',
 });
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
@@ -79,8 +90,19 @@ const conversations = new FsConversationStore({
   dir: join(config.KB_CHAT_STATE_DIR, 'conversations'),
   log: logger,
 });
+// Sign-in against the test identity (never Google): KBC-010.
+const identity = await createTestIdentity(config.PORT);
+const auth = {
+  people: new PeopleService({
+    store: new JsonPeopleStore(join(config.KB_CHAT_STATE_DIR, 'people.json')),
+    ownerEmail: config.KB_CHAT_OWNER_EMAIL,
+  }),
+  sessions: new SessionService({ store: new MemorySessionStore() }),
+  verifier: identity.verifier,
+};
 const app = await buildApp({
   config,
+  auth,
   vault,
   index,
   logger,
@@ -91,4 +113,5 @@ const app = await buildApp({
   usage,
   conversations,
 });
+identity.register(app);
 await app.listen({ host: '127.0.0.1', port: config.PORT });

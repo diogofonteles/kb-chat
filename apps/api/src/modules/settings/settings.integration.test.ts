@@ -1,3 +1,4 @@
+import { signedInApp } from '../../../test/auth-factories.js';
 import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ import { researchEventSchema, type ResearchEvent } from '@kb-chat/contracts';
 import { FsVaultAdapter } from '../../adapters/fs-vault-adapter.js';
 import { JsonSettingsStore } from '../../adapters/json-settings-store.js';
 import { MemorySpendLedger } from '../../adapters/memory-spend-ledger.js';
-import { OWNER, buildApp } from '../../app.js';
+import { OWNER } from '../../app.js';
 import { loadConfig } from '../../config.js';
 import { createAiProviders } from '../../providers/create-ai-providers.js';
 import { createResearchAgent } from '../../research-agent-factory.js';
@@ -18,7 +19,7 @@ import { createSearchIndex } from '../../search-index-factory.js';
 import { CatalogRegistry } from '../catalog/index.js';
 import { freePort } from '../../../test/free-port.js';
 
-const HOST = { host: 'localhost:3000' };
+const HOST: Record<string, string> = { host: 'localhost:3000' };
 const KEY = 'sk-or-v1-secret-key-abcd';
 
 interface TestApp {
@@ -87,7 +88,7 @@ async function start(
     perTokenRunner: agent.perTokenRunner,
     systemPrompt: agent.systemPrompt,
   });
-  const app = await buildApp({
+  const app = await signedInApp(HOST)({
     config,
     vault,
     index,

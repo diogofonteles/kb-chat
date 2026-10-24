@@ -30,6 +30,8 @@ export interface AiProvidersOptions {
   readonly turns?: McpTurnRegistry;
   /** Where the CLIs reach the MCP endpoints; default: this API on PORT. */
   readonly apiBaseUrl?: string;
+  /** Only this principal uses subscriptions and environment keys (KBC-010); default `owner`. */
+  readonly ownerPrincipal?: string;
 }
 
 /** Settings, the provider registry and the per-request ports built on them (ADR 0007). */
@@ -69,6 +71,7 @@ export async function createAiProviders(
     tools: options.tools,
     perTokenRunner: options.perTokenRunner,
     systemPrompt: options.systemPrompt,
+    ownerPrincipal: options.ownerPrincipal,
   });
   await registry.refreshCliLookup();
   return {

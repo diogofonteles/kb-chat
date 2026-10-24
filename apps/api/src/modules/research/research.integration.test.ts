@@ -1,3 +1,4 @@
+import { signedInApp } from '../../../test/auth-factories.js';
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { researchEventSchema } from '@kb-chat/contracts';
 import type { FastifyInstance } from 'fastify';
@@ -11,13 +12,13 @@ import {
   type StubLlmOptions,
 } from '../../adapters/stub-llm-adapter.js';
 import { OpenRouterAdapter } from '../../adapters/openrouter-adapter.js';
-import { OWNER, buildApp } from '../../app.js';
+import { OWNER } from '../../app.js';
 import type { AgentLlmPort } from '../../ports/llm.js';
 import { loadConfig } from '../../config.js';
 import { createLogger } from '../../logger.js';
 import { createSearchIndex } from '../../search-index-factory.js';
 
-const HOST = { host: 'localhost' };
+const HOST: Record<string, string> = { host: 'localhost' };
 let app: FastifyInstance | undefined;
 
 afterEach(async () => {
@@ -39,7 +40,7 @@ async function start(llmOptions: StubLlmOptions = {}, model?: AgentLlmPort) {
   });
   const llm = new StubLlmAdapter(llmOptions);
   const ledger = new MemorySpendLedger();
-  app = await buildApp({
+  app = await signedInApp(HOST)({
     config,
     vault,
     index,

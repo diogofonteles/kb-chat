@@ -1,3 +1,4 @@
+import { signedInApp } from '../test/auth-factories.js';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -5,7 +6,6 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FIXTURE_VAULT } from '../test/fixture-paths.js';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
-import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { createSearchIndex } from './search-index-factory.js';
@@ -20,7 +20,7 @@ async function hashTree(dir: string): Promise<string> {
   return hash.digest('hex');
 }
 
-const HOST = { host: 'localhost:3000' };
+const HOST: Record<string, string> = { host: 'localhost:3000' };
 let app: FastifyInstance;
 let hashBefore: string;
 
@@ -37,7 +37,7 @@ beforeAll(async () => {
     vault,
     log: createLogger('silent'),
   });
-  app = await buildApp({ config, vault, index });
+  app = await signedInApp(HOST)({ config, vault, index });
 });
 
 afterAll(async () => {
