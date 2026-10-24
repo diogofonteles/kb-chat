@@ -24,6 +24,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-006](KBC-006-start-suggestions-and-usage-log.md) | Sugestões iniciais e log de uso local | release-1 | done | KBC-002 |
 | [KBC-008](KBC-008-conversational-research-agent.md) | IA que pesquisa o acervo e conversa com contexto | release-1 | in-progress | KBC-004, KBC-005 |
 | [KBC-007](KBC-007-onboarding-preferences-ai-provider.md) | Configurações sempre à mão, onboarding e provedor de IA (chave própria ou assinatura Claude/ChatGPT) | release-1 | ready | KBC-005, KBC-008 |
+| [KBC-011](KBC-011-faster-research.md) | Pesquisa mais rápida: perfis Rápido/Profundo, modelo por perfil e resposta que aparece assim que começa | release-1 | in-progress | KBC-008 |
 
 ## Definição de pronto (global)
 
@@ -38,4 +39,5 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 - 2026-10-24: o dono autorizou seguir sem perguntas até a primeira versão publicada; revisa depois. Os padrões do kickoff valem como decisões.
 - 2026-10-24 (revisão do dono): a "Responder com IA" de uma chamada (ADR 0004) não atinge o objetivo. Entra o KBC-008 (agente de pesquisa conversacional, ADR 0006) antes do KBC-007, e a conversa multi-turno sai da release 2 para a release 1. O KBC-007 ganha "Configurações" sempre acessível e a assinatura do Claude rodando o mesmo agente via MCP.
 - 2026-10-24 (pedido do dono, "manter 100% do histórico"): o histórico sai do `localStorage` (50 conversas) e passa a ser guardado sem limite pela API local, com as conversas de busca e de pesquisa com IA. Emendas no KBC-005 (BR-1, AC-3, AC-4) e no KBC-008 (FR-1: rota `POST /api/v1/topics/:topic/research`, sem `mode`).
+- 2026-10-24 (teste do dono, "achei um pouco demorado na resposta"): entra o KBC-011. O Sonnet passa a ser o modelo padrão da assinatura do Claude (configurável), a pesquisa ganha os perfis Rápido e Profundo e a resposta aparece assim que começa (ADR 0009).
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.

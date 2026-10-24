@@ -1,6 +1,7 @@
 # 0007 — AI providers, subscriptions through the official CLIs, and local settings
 
 - Status: accepted (2026-10-24)
+- Amended by: [0009](0009-faster-research-profiles-and-streaming.md) (a fast and a deep model per provider; Sonnet by default on the Claude subscription)
 - Amends: [0004](0004-grounded-answers-single-llm-call.md) (the key is no longer env-only) and [0006](0006-research-agent-over-kb-tools.md) (how Claude Code reaches the tools)
 - Drivers: KBC-007 (preferences and provider without editing files), Q3 cost, the owner's benchmark (Claude at full capability, the default for local use), Q6 evolvability (ADR 0005 seam; logins and permissions in ADR 0008, KBC-010)
 
@@ -11,7 +12,7 @@ Release 1 reads the AI provider from env variables (`OPENROUTER_API_KEY`, `KB_CH
 ## Decision
 
 **Settings per principal.** Each principal has `<KB_CHAT_STATE_DIR>/settings/<principal>.json`. The owner's is `owner.json` in R1. ADR 0008 (Google login and permissions, KBC-010) will supply the signed-in principal; the owner stays the only master user who grants collections and features. Keys and the provider choice belong to the principal.
-- `preferences` (default collection, search mode, theme, default view) and `ai` (provider, model, keys, daily cap);
+- `preferences` (default collection, search mode, theme, default view) and `ai` (provider, model, keys, daily cap); *amended by [ADR 0009](0009-faster-research-profiles-and-streaming.md):* `ai.models[provider] = { fast, deep }` replaces `model`, and `preferences.researchProfile` is the default profile;
 - folder 0700, file 0600, written atomically (temporary file + rename);
 - an id that is not a plain file name is hashed into one;
 - the first-run wizard shows while the principal has no file (BR-5).
@@ -38,7 +39,7 @@ The research route asks the registry for the runner of each turn. A per-token ru
 | OpenRouter | `OpenRouterAdapter` (with tools, KBC-008) | per token, ledger and cap (ADR 0004) | `KB_CHAT_MODEL`, else `deepseek/deepseek-v4-pro` (ADR 0006: the research agent needs tool calling, so the vault's `kb.toml` model no longer applies) |
 | Anthropic API | `AnthropicAdapter`, official SDK, Messages streaming with tools | per token | `claude-opus-5-5` (4, 20); Sonnet 5.5 (2, 10), Haiku 5.5 (0.10, 0.50), Fable 5.1 (10, 50) |
 | OpenAI API | `OpenAiAdapter`, Chat Completions streaming with tools | per token | `gpt-5.4-mini` (0.75, 4.50); GPT-5.4 (2.50, 15), GPT-5.5 (5, 30) |
-| Claude subscription | `ClaudeCliRunner` (`claude -p`) | subscription: no ledger entry, no cap (BR-2) | the CLI's own; aliases `opus`, `sonnet`, `fable`, `haiku` |
+| Claude subscription | `ClaudeCliRunner` (`claude -p`) | subscription: no ledger entry, no cap (BR-2) | *ADR 0009:* `sonnet` (fast) and `opus` (deep); allowlist `opus`, `sonnet`, `fable`, `haiku` and their full ids |
 | ChatGPT subscription | `CodexCliRunner` (`codex exec --json`), **off unless `KB_CHAT_CODEX=on`** (see below) | subscription | the CLI's own |
 | None | — | — | search only |
 
@@ -64,7 +65,7 @@ The Anthropic adapter:
 - **Token.** 24 random bytes, valid only while the turn runs, with a 15-minute safety TTL; an unknown token gets 404. The MCP routes log the request as `POST /mcp/turns/***` (a route-scoped serializer), so the token never reaches the log; a test reads the log at `info`.
 - **Shared code.** The endpoint serves the research module's own `ResearchTools` (ADR 0006, `find_text` included) through `TurnResearchTools`, an adapter to `ResearchToolsPort` with that turn's source numbering; the in-API loop and the CLIs share one instance and one `find_text` cache, warmed when the turn starts. Each tool call becomes a `step` and, when new documents were numbered, a `sources` event in-process; the CLI's text deltas become `token` events.
 - **Same rules.** The CLIs get the in-API loop's system prompt (`researchSystemPrompt`, with the topic's title): search first, `find_text` before concluding absence, cite `[n]`, mark "(fora do acervo)", no narration. Claude Code takes it with `--system-prompt`; Codex reads it at the head of its input.
-- **Step cap.** After 15 tool steps, the in-API loop's cap (ADR 0006), tools answer with an instruction to finish.
+- **Step cap.** After 15 tool steps, the in-API loop's cap (ADR 0006), tools answer with an instruction to finish (*ADR 0009:* 6 in the fast profile).
 - **stdio.** `serveKbMcpStdio` remains for other MCP clients.
 
 **Connection test.** `POST /api/v1/settings/ai/test` sends a minimal question with a typed or saved key, or runs the CLI with no tools (which proves the login and the MCP connection). It stops at 20 s (NFR-1). The outcome is data, `{ ok, code }`: `LLM_KEY_REJECTED`, `LLM_NOT_CONFIGURED`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, `CLI_MISSING` or `CLI_LOGIN_REQUIRED`. `GET /api/v1/ai/providers` reports, per provider, the key source (Settings or env) and whether the CLI is on PATH; it looks the CLI up without a shell.
