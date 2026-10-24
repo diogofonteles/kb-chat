@@ -103,9 +103,16 @@
             [attr.list]="field.id + '-list'"
             [value]="field.value"
             [placeholder]="field.defaultLabel"
+            [attr.aria-invalid]="field.error ? true : null"
+            [attr.aria-describedby]="field.error ? field.id + '-error' : null"
             (input)="setModel(field.key, modelInput.value)"
             #modelInput
           />
+          @if (field.error) {
+            <p class="field-error" [id]="field.id + '-error'">
+              {{ field.error }}
+            </p>
+          }
           <datalist [id]="field.id + '-list'">
             @for (name of current.info.models; track name) {
               <option [value]="name"></option>
@@ -121,7 +128,7 @@
             <option value="" [selected]="field.value === ''">
               {{ field.defaultLabel }}
             </option>
-            @for (name of current.info.models; track name) {
+            @for (name of field.choices; track name) {
               <option [value]="name" [selected]="name === field.value">
                 {{ name }}
               </option>

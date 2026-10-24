@@ -244,6 +244,12 @@ describe('Configurações', () => {
     expect(fast.tagName).toBe('SELECT');
     expect(fast.value).toBe('');
     expect(fast.selectedOptions[0]?.textContent?.trim()).toBe('Padrão: sonnet');
+    // The default is offered once, as "Padrão: sonnet", not again as "sonnet".
+    expect([...fast.options].map((o) => o.value)).toEqual([
+      '',
+      'opus',
+      'haiku',
+    ]);
     expect(deep.value).toBe('haiku');
     fireEvent.change(fast, { target: { value: 'opus' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
@@ -261,6 +267,15 @@ describe('Configurações', () => {
     const free = screen.getByLabelText('Modelo rápido') as HTMLInputElement;
     expect(free.tagName).toBe('INPUT');
     expect(free.placeholder).toBe('Padrão: deepseek/deepseek-v4-flash');
+    // A model the API would refuse is said on its field, and nothing is sent.
+    fireEvent.input(free, { target: { value: '-rf bad' } });
+    await fixture.whenStable();
+    expect(free.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText(/Use só letras, números/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await fixture.whenStable();
+    http.expectNone({ method: 'PUT', url: '/api/v1/settings' });
+    expect(screen.getByText('Corrija o modelo indicado acima.')).toBeTruthy();
   });
 
   it('shows only the masked key and removes it (AC-2)', async () => {

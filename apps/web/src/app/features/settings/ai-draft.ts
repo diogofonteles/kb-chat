@@ -1,8 +1,10 @@
-import type {
-  AiProvider,
-  ProviderList,
-  SettingsUpdate,
-  SettingsView,
+import {
+  isAllowedModel,
+  modelIdSchema,
+  type AiProvider,
+  type ProviderList,
+  type SettingsUpdate,
+  type SettingsView,
 } from '@kb-chat/contracts';
 
 /** The fast and deep model being edited; '' = the provider's default. */
@@ -84,4 +86,29 @@ export function aiUpdateFrom(
     dailyCapUsd: draft.dailyCapUsd,
     ...(key && keyProvider ? { keys: { [keyProvider]: key } } : {}),
   };
+}
+
+/** Why a typed model cannot be saved; one pt-BR message per model field. */
+export type ModelErrors = Partial<Record<keyof DraftModels, string>>;
+
+const MODEL_FORMAT = () =>
+  $localize`:@@ai.modelInvalid:Use só letras, números e . _ : / @ - (sem espaços), começando por letra ou número.`;
+const MODEL_NOT_OFFERED = () =>
+  $localize`:@@ai.modelNotOffered:Este provedor não oferece esse modelo.`;
+
+function modelError(provider: AiProvider, typed: string): string | null {
+  const model = typed.trim();
+  if (!model || provider === 'none') return null;
+  if (!modelIdSchema.safeParse(model).success) return MODEL_FORMAT();
+  return isAllowedModel(provider, model) ? null : MODEL_NOT_OFFERED();
+}
+
+/** The model fields the API would refuse, checked before "Salvar" (same rules as the contract). */
+export function modelErrors(draft: AiDraft): ModelErrors {
+  const errors: ModelErrors = {};
+  for (const key of ['fastModel', 'deepModel'] as const) {
+    const error = modelError(draft.provider, draft[key]);
+    if (error) errors[key] = error;
+  }
+  return errors;
 }

@@ -215,3 +215,11 @@
 .test-result.failed {
   color: var(--color-danger);
 }
+
+/* A model the API would refuse: said next to its field, in text, not by color alone. */
+.field-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  font-weight: 600;
+}

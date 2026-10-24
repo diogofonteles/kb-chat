@@ -14,7 +14,12 @@ import type {
   AiTestResult,
   ProviderInfo,
 } from '@kb-chat/contracts';
-import { savedModels, type AiDraft, type DraftModels } from './ai-draft.js';
+import {
+  modelErrors,
+  savedModels,
+  type AiDraft,
+  type DraftModels,
+} from './ai-draft.js';
 import {
   BILLING_COPY,
   NOT_ENABLED,
@@ -125,12 +130,18 @@ export class AiProviderForm {
   protected readonly modelFields = computed(() => {
     const info = this.selected()?.info;
     const draft = this.draft();
+    const errors = modelErrors(draft);
     return MODEL_FIELDS.map((field) => {
       const fallback = info?.defaultModels[field.profile] ?? null;
       return {
         ...field,
         label: field.label(),
         value: draft[field.key],
+        error: errors[field.key] ?? null,
+        // The default already has its own first option ("Padrão: sonnet").
+        choices: (info?.models ?? []).filter(
+          (name) => name !== fallback || name === draft[field.key],
+        ),
         defaultLabel: fallback
           ? $localize`:@@ai.modelDefault:Padrão: ${fallback}:model:`
           : $localize`:@@ai.modelCli:Padrão da ferramenta`,
