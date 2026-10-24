@@ -137,11 +137,13 @@ test('AC-9: a research conversation restored from the history shows its saved an
     .click();
   await expect(page.locator('app-research-message')).toHaveCount(0);
   const researchCalls = countResearchCalls(page);
-  await (
-    await sidebar(page)
-  )
+  // The history is shared by every test of the run; this page lists its own save on top.
+  const saved = (await sidebar(page))
+    .getByRole('navigation', { name: 'Histórico' })
     .getByRole('button', { name: /natureza sétupla/ })
-    .click();
+    .first();
+  await expect(saved).toContainText('IA');
+  await saved.click();
   const restored = page.locator('app-research-message');
   await expect(restored.getByText(/Segundo o acervo/)).toBeVisible();
   await expect(
