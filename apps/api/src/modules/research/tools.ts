@@ -11,16 +11,20 @@ import {
 import type { SearchService } from '../search/index.js';
 import { windowOf } from './body-window.js';
 import type { SourceBook } from './source-book.js';
+import { TextFinder, foldPhrase, type TextSearch } from './text-finder.js';
 import {
   foldName,
   headerLines,
   hitLine,
   quote,
   refLine,
+  textHitLine,
   windowLines,
 } from './tool-output.js';
 import {
+  PHRASE_SEPARATOR,
   TOOL_DEFINITIONS,
+  findArgsSchema,
   readArgsSchema,
   relatedArgsSchema,
   searchArgsSchema,
@@ -30,6 +34,8 @@ import {
 
 const MAX_SUBJECTS = 60;
 const MAX_REFS_PER_GROUP = 10;
+const MAX_PHRASES = 8;
+const MIN_PHRASE_CHARS = 3;
 
 export interface ResearchToolsDeps {
   readonly search: SearchService;
@@ -51,6 +57,7 @@ export interface PreparedCall {
 type Handler = (args: unknown, context: ToolContext) => PreparedCall;
 type ReadArgs = z.output<typeof readArgsSchema>;
 type SearchArgs = z.output<typeof searchArgsSchema>;
+type FindArgs = z.output<typeof findArgsSchema>;
 
 const RELATION_LABELS = {
   exampleOf: 'É exemplo de',
@@ -74,6 +81,32 @@ function parseArguments(raw: string): unknown {
   }
 }
 
+/** The alternatives of a find_text phrase ("a | b"), without repeats or too-short ones. */
+function phrasesOf(phrase: string): string[] {
+  const byFolded = new Map<string, string>();
+  for (const part of phrase.split(PHRASE_SEPARATOR)) {
+    const folded = foldPhrase(part);
+    if (folded.length >= MIN_PHRASE_CHARS && !byFolded.has(folded))
+      byFolded.set(folded, part.trim());
+  }
+  return [...byFolded.values()].slice(0, MAX_PHRASES);
+}
+
+const phraseList = (phrases: readonly string[]): string =>
+  phrases.map(quote).join(' ou ');
+
+function noTextFound(phrases: readonly string[], scanned: number): string {
+  return `Nenhum dos ${scanned} documentos contém ${phraseList(phrases)}. Antes de concluir que o acervo não trata disso, tente variantes: sinônimos (ocultos, secretos, velados, universais, adicionais), singular e plural, o número por extenso e em algarismos, uma parte menor da frase, e search_collection.`;
+}
+
+function findSummary(phrases: readonly string[], found: TextSearch): string {
+  const shown =
+    found.hits.length < found.documents
+      ? `; mostrando os ${found.hits.length} com mais ocorrências`
+      : '';
+  return `Texto ${phraseList(phrases)} em ${found.scanned} documentos: ${found.documents} documento(s), ${found.occurrences} ocorrência(s)${shown}.`;
+}
+
 function describeFailure(err: unknown): string {
   const code = err instanceof AppError ? err.code : 'INTERNAL';
   return `A ferramenta falhou (${code}). Tente de novo ou use outra ferramenta.`;
@@ -87,12 +120,22 @@ export class ResearchTools {
   readonly definitions: readonly ToolDefinition[] = TOOL_DEFINITIONS;
   private readonly handlers: Record<ToolName, Handler> = {
     search_collection: (args, context) => this.searchCall(args, context),
+    find_text: (args, context) => this.findCall(args, context),
     list_subjects: (args, context) => this.subjectsCall(args, context),
     read_document: (args, context) => this.readCall(args, context),
     related_documents: (args, context) => this.relatedCall(args, context),
   };
 
-  constructor(private readonly deps: ResearchToolsDeps) {}
+  private readonly finder: TextFinder;
+
+  constructor(private readonly deps: ResearchToolsDeps) {
+    this.finder = new TextFinder(deps);
+  }
+
+  /** Builds the topic's find_text cache ahead of the first call (it takes seconds on a big vault). */
+  warm(topic: string): Promise<void> {
+    return this.finder.warm(topic);
+  }
 
   /** The topic's display title, or null when the topic does not exist. */
   topicTitle(topic: string): string | null {
@@ -156,6 +199,41 @@ export class ResearchTools {
     return [
       `Busca ${scope}: ${response.items.length} de ${response.total} documento(s).`,
       ...lines,
+    ].join('\n');
+  }
+
+  private findCall(args: unknown, context: ToolContext): PreparedCall {
+    const parsed = this.parsed(findArgsSchema, args);
+    if (typeof parsed === 'string') return failed(parsed);
+    if (phrasesOf(parsed.phrase).length === 0)
+      return failed(
+        `Texto curto demais: use ao menos ${MIN_PHRASE_CHARS} letras por variante.`,
+      );
+    return {
+      step: {
+        kind: 'search',
+        text: `Procurando o texto ${quote(parsed.phrase)} em todo o acervo`,
+      },
+      run: () => this.findText(parsed, context),
+    };
+  }
+
+  private async findText(
+    args: FindArgs,
+    { topic, book }: ToolContext,
+  ): Promise<string> {
+    const phrases = phrasesOf(args.phrase);
+    const found = await this.finder.find({
+      topic,
+      phrases,
+      limit: args.limit,
+    });
+    if (!found) return 'O acervo deste tópico não está disponível.';
+    if (found.hits.length === 0) return noTextFound(phrases, found.scanned);
+    return [
+      findSummary(phrases, found),
+      ...found.hits.map((hit) => textHitLine(book.number(hit.entry), hit)),
+      'Para ver o contexto: read_document com document=[n] e around=<o texto>.',
     ].join('\n');
   }
 

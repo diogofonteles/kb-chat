@@ -4,6 +4,10 @@ import type { ToolDefinition } from '../../ports/llm.js';
 
 /** Hits per search the agent may ask for (ADR 0006). */
 export const MAX_SEARCH_LIMIT = 15;
+/** Documents per find_text the agent may ask for (ADR 0006). */
+export const MAX_FIND_LIMIT = 20;
+/** Separator of alternative phrases in find_text. */
+export const PHRASE_SEPARATOR = '|';
 
 const documentRef = z
   .union([z.number().int().positive(), z.string().trim().min(1).max(1024)])
@@ -68,8 +72,30 @@ export const readArgsSchema = z.object({
 
 export const relatedArgsSchema = z.object({ document: documentRef });
 
+export const findArgsSchema = z.object({
+  phrase: z
+    .string()
+    .trim()
+    .min(3)
+    .max(500)
+    .describe(
+      'Texto exato a procurar (acentos e maiúsculas não importam), como "cinco princípios". Separe variantes com " | ": "princípios ocultos | princípios secretos | princípios velados".',
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_FIND_LIMIT)
+    .default(10)
+    .describe(`Quantos documentos trazer (1 a ${MAX_FIND_LIMIT}).`),
+});
+
 export type ToolName =
-  'search_collection' | 'list_subjects' | 'read_document' | 'related_documents';
+  | 'search_collection'
+  | 'find_text'
+  | 'list_subjects'
+  | 'read_document'
+  | 'related_documents';
 
 /** JSON Schema of the arguments, without the `$schema` key some providers refuse. */
 const toParameters = (schema: z.ZodType): Record<string, unknown> => {
@@ -83,6 +109,8 @@ const toParameters = (schema: z.ZodType): Record<string, unknown> => {
 const DESCRIPTIONS: Record<ToolName, string> = {
   search_collection:
     'Busca no acervo. Devolve, por documento: [n], título, resumo do kb, trecho e assuntos. Refaça com outras palavras, sinônimos e outro modo quando não achar.',
+  find_text:
+    'Procura um texto literal no corpo e no resumo de TODOS os documentos do acervo (como grep; acentos e maiúsculas não importam), mesmo em documentos sobre outro assunto. Devolve, por documento: [n], título, número de ocorrências e o trecho em volta. Use para frases exatas, nomes, listas e números ("cinco princípios", "doze princípios"); separe variantes com " | ".',
   list_subjects:
     'Lista os assuntos (conceitos do kb) do acervo, com quantos documentos cada um tem.',
   read_document:
@@ -93,6 +121,7 @@ const DESCRIPTIONS: Record<ToolName, string> = {
 
 const SCHEMAS: Record<ToolName, z.ZodType> = {
   search_collection: searchArgsSchema,
+  find_text: findArgsSchema,
   list_subjects: subjectsArgsSchema,
   read_document: readArgsSchema,
   related_documents: relatedArgsSchema,

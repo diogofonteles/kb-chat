@@ -22,10 +22,11 @@ async function run(
 }
 
 describe('ResearchTools definitions', () => {
-  it('declares the four tools with JSON Schema parameters', async () => {
+  it('declares the five tools with JSON Schema parameters', async () => {
     const tools = await fixtureTools();
     expect(tools.definitions.map((t) => t.name)).toEqual([
       'search_collection',
+      'find_text',
       'list_subjects',
       'read_document',
       'related_documents',
@@ -140,6 +141,57 @@ describe('search_collection', () => {
     expect(output).toBe(
       'A ferramenta falhou (TOPIC_NOT_FOUND). Tente de novo ou use outra ferramenta.',
     );
+  });
+});
+
+describe('find_text', () => {
+  it('finds a literal phrase in every document, numbered and ranked by occurrences', async () => {
+    const tools = await fixtureTools();
+    const context = hermetismoContext();
+    const { step, output } = await run(
+      tools,
+      context,
+      call('find_text', { phrase: 'SETUPLICIDADE | setuplicidade | sétupla' }),
+    );
+    expect(step).toEqual({
+      kind: 'search',
+      text: 'Procurando o texto “SETUPLICIDADE | setuplicidade | sétupla” em todo o acervo',
+    });
+    const lines = output.split('\n');
+    expect(lines[0]).toMatch(
+      /^Texto “SETUPLICIDADE” ou “sétupla” em 22 documentos: 3 documento\(s\), \d+ ocorrência\(s\)\.$/,
+    );
+    expect(lines[1]).toMatch(
+      /^\[1\] A Natureza Sétupla — \d+ ocorrência\(s\): “sétupla” \d+, “SETUPLICIDADE” 1 — Resumo: .* — Trecho: .*setuplicidade/,
+    );
+    expect(context.book.size).toBe(3);
+    expect(output).toContain('read_document com document=[n] e around=');
+  });
+
+  it('asks for variants before concluding absence, and refuses too-short phrases', async () => {
+    const tools = await fixtureTools();
+    const context = hermetismoContext();
+    const none = await run(
+      tools,
+      context,
+      call('find_text', { phrase: 'princípios ocultos | doze princípios' }),
+    );
+    expect(none.output).toMatch(
+      /^Nenhum dos 22 documentos contém “princípios ocultos” ou “doze princípios”\. Antes de concluir .* sinônimos \(ocultos, secretos, velados/,
+    );
+    const short = await run(
+      tools,
+      context,
+      call('find_text', { phrase: 'ab | cd' }),
+    );
+    expect(short.step).toBeNull();
+    expect(short.output).toMatch(/^Texto curto demais/);
+    const big = await run(
+      tools,
+      context,
+      call('find_text', { phrase: 'ritmo', limit: 21 }),
+    );
+    expect(big.output).toMatch(/Argumentos inválidos \(limit: /);
   });
 });
 
