@@ -63,9 +63,18 @@ class Weeks extends Map<string, WeekAccumulator> {
   }
 }
 
+/** A suggestion turns on its subject filter by itself; only the reader's own filters count. */
 const usedFilter = (record: UsageRecord): boolean =>
   record.type === 'filter' ||
-  (record.type === 'search' && record.filterCount > 0);
+  (record.type === 'search' &&
+    record.origin !== 'suggestion' &&
+    record.filterCount > 0);
+
+/** Refines and retries re-run the reader's search; they are not new searches. */
+const isNewSearch = (record: UsageRecord): boolean =>
+  record.type === 'search' &&
+  record.origin !== 'refine' &&
+  record.origin !== 'retry';
 
 function accumulate(records: readonly UsageRecord[]): Weeks {
   const weeks = new Weeks();
@@ -78,7 +87,7 @@ function accumulate(records: readonly UsageRecord[]): Weeks {
     const acc = weeks.at(record.ts);
     acc.sessions.add(record.sessionId);
     if (usedFilter(record)) acc.filteredSessions.add(record.sessionId);
-    if (record.type === 'search') {
+    if (isNewSearch(record)) {
       const outcome = { opened: false, ai: false };
       acc.searches.push(outcome);
       lastSearch.set(record.sessionId, outcome);

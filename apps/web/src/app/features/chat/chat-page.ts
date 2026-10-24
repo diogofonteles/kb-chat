@@ -163,9 +163,9 @@ export class ChatPage {
 
   /** A suggestion searches the subject's name with the subject filter on (KBC-006 FR-2). */
   protected askAbout(concept: string): void {
-    this.store.ask(concept, this.store.mode(), {
-      ...NO_FILTERS,
-      concepts: [concept],
+    this.store.ask(concept, {
+      filters: { ...NO_FILTERS, concepts: [concept] },
+      origin: 'suggestion',
     });
   }
 
@@ -199,7 +199,11 @@ export class ChatPage {
 
   protected askAgainIn(message: ChatMessage, mode: SearchMode): void {
     this.store.setMode(mode);
-    this.store.ask(message.question, mode, message.filters);
+    this.store.ask(message.question, {
+      mode,
+      filters: message.filters,
+      origin: 'mode',
+    });
   }
 
   protected closeDocument(): void {

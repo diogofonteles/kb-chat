@@ -29,9 +29,6 @@ import { createLogger } from './logger.js';
 /** The only principal until release 2 adds logins (ADR 0005). */
 export const OWNER = 'owner';
 
-/** Usage events older than this are removed when the API starts (KBC-006 BR-3). */
-export const USAGE_RETENTION_DAYS = 90;
-
 export interface AppDeps {
   readonly config: AppConfig;
   readonly vault: VaultReaderPort;

@@ -1,4 +1,4 @@
-import type { UsageRecord } from '@kb-chat/contracts';
+import { usageRecordSchema, type UsageRecord } from '@kb-chat/contracts';
 import {
   appendFile,
   mkdir,
@@ -14,10 +14,8 @@ export function parseUsageLog(text: string): UsageRecord[] {
   return text.split('\n').flatMap((line) => {
     if (!line.trim()) return [];
     try {
-      const record = JSON.parse(line) as UsageRecord;
-      return typeof record.ts === 'string' && typeof record.type === 'string'
-        ? [record]
-        : [];
+      const parsed = usageRecordSchema.safeParse(JSON.parse(line));
+      return parsed.success ? [parsed.data] : [];
     } catch {
       return [];
     }
@@ -30,7 +28,11 @@ export class JsonlUsageLog implements UsageLogPort {
 
   async append(record: UsageRecord): Promise<void> {
     await mkdir(dirname(this.file), { recursive: true });
-    await appendFile(this.file, `${JSON.stringify(record)}\n`, 'utf8');
+    await appendFile(
+      this.file,
+      `${JSON.stringify({ v: 1, ...record })}\n`,
+      'utf8',
+    );
   }
 
   async prune(cutoff: Date): Promise<number> {

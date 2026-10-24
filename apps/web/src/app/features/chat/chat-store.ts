@@ -14,6 +14,7 @@ import {
   type DocumentRef,
   type SearchFilters,
   type SearchMode,
+  type SearchResponse,
   type TopicList,
 } from '@kb-chat/contracts';
 import { toUiErrorCode } from '@core/api/api-error.js';
@@ -77,6 +78,12 @@ function pickDefaultTopic(list: TopicList | null): string | null {
     [...list.items].sort((a, b) => b.documentCount - a.documentCount)[0]
       ?.slug ?? null
   );
+}
+
+export interface AskOptions {
+  readonly mode?: SearchMode;
+  readonly filters?: SearchFilters;
+  readonly origin?: Ask['origin'];
 }
 
 const newConversationId = (): string => crypto.randomUUID();
@@ -205,18 +212,23 @@ export class ChatStore {
     this.topicNoticeState.set(null);
     this.conversationState.set(conversation.id);
     for (const saved of conversation.asks)
-      this.ask(saved.question, saved.mode, saved.filters);
+      this.ask(saved.question, {
+        mode: saved.mode,
+        filters: saved.filters,
+        origin: 'restore',
+      });
   }
 
   setMode(mode: SearchMode): void {
     this.modeState.set(mode);
   }
 
-  ask(
-    question: string,
-    mode: SearchMode = this.modeState(),
-    filters: SearchFilters = NO_FILTERS,
-  ): void {
+  ask(question: string, options: AskOptions = {}): void {
+    const {
+      mode = this.modeState(),
+      filters = NO_FILTERS,
+      origin = 'typed',
+    } = options;
     const topic = this.topicSlug();
     const trimmed = question.trim();
     if (!topic || !trimmed) return;
@@ -228,17 +240,22 @@ export class ChatStore {
       question: trimmed,
       mode,
       filters,
+      origin,
     });
   }
 
   retry(message: ChatMessage): void {
-    this.rerun(message, message.filters);
+    this.rerun(message, { filters: message.filters, origin: 'retry' });
   }
 
   /** Re-runs the same message with new filters (the conversation does not grow). */
   refine(message: ChatMessage, filters: SearchFilters): void {
     this.usage.track({ type: 'filter', filterCount: countFilters(filters) });
-    this.rerun(message, filters, REFINE_DEBOUNCE_MS);
+    this.rerun(message, {
+      filters,
+      origin: 'refine',
+      delayMs: REFINE_DEBOUNCE_MS,
+    });
   }
 
   loadMore(message: ChatMessage): void {
@@ -297,8 +314,11 @@ export class ChatStore {
 
   private rerun(
     message: ChatMessage,
-    filters: SearchFilters,
-    delayMs = 0,
+    {
+      filters,
+      origin,
+      delayMs = 0,
+    }: Pick<Ask, 'filters' | 'origin' | 'delayMs'>,
   ): void {
     const { id, topic, question, mode } = message;
     this.asks.next({
@@ -309,6 +329,7 @@ export class ChatStore {
       mode,
       filters,
       delayMs,
+      origin,
     });
   }
 
@@ -321,22 +342,27 @@ export class ChatStore {
       ? timer(ask.delayMs).pipe(switchMap(() => search))
       : search;
     return delayed.pipe(
-      tap((response) =>
-        this.usage.track({
-          type: 'search',
-          question: ask.question,
-          mode: ask.mode,
-          filterCount: countFilters(ask.filters),
-          total: response.total,
-          tookMs: Math.round(response.tookMs),
-        }),
-      ),
+      tap((response) => this.trackSearch(ask, response)),
       map((response): ChatEvent => ({ type: 'done', id, rev, response })),
       catchError((err: unknown) =>
         of<ChatEvent>({ type: 'failed', id, rev, error: toUiErrorCode(err) }),
       ),
       startWith<ChatEvent>({ type: 'started', ask }),
     );
+  }
+
+  private trackSearch(ask: Ask, response: SearchResponse): void {
+    const origin = ask.origin ?? 'typed';
+    if (origin === 'restore') return;
+    this.usage.track({
+      type: 'search',
+      origin,
+      question: ask.question,
+      mode: ask.mode,
+      filterCount: countFilters(ask.filters),
+      total: response.total,
+      tookMs: Math.round(response.tookMs),
+    });
   }
 
   private runMore(message: ChatMessage): Observable<ChatEvent> {

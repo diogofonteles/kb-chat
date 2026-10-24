@@ -15,6 +15,7 @@ const topicPath = (topic: string): string =>
 
 /** API URLs in one place; topic slugs may be nested ("a/b") and are always encoded. */
 export const topicsUrl = (): string => '/api/v1/topics';
+export const eventsUrl = (): string => '/api/v1/events';
 export const searchesUrl = (topic: string): string =>
   `${topicPath(topic)}/searches`;
 export const suggestionsUrl = (topic: string): string =>

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { SpendEntry, SpendLedgerPort } from '../ports/spend-ledger.js';
@@ -5,12 +6,27 @@ import type { SpendEntry, SpendLedgerPort } from '../ports/spend-ledger.js';
 const startOfLocalDay = (now: Date): number =>
   new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
-function parseLine(line: string): SpendEntry | null {
-  try {
-    return JSON.parse(line) as SpendEntry;
-  } catch {
-    return null;
-  }
+const spendEntrySchema = z.object({
+  ts: z.iso.datetime(),
+  principal: z.string(),
+  model: z.string(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  usd: z.number().nonnegative(),
+  interrupted: z.boolean(),
+});
+
+/** Parses spend.jsonl, skipping lines that are not valid entries. */
+export function parseSpendLedger(text: string): SpendEntry[] {
+  return text.split('\n').flatMap((line) => {
+    if (!line.trim()) return [];
+    try {
+      const parsed = spendEntrySchema.safeParse(JSON.parse(line));
+      return parsed.success ? [parsed.data] : [];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /** Spend ledger as a JSONL file under the local state folder (~/.kb-chat/spend.jsonl). */
@@ -25,10 +41,7 @@ export class JsonlSpendLedger implements SpendLedgerPort {
   async spentToday(principal: string, now = new Date()): Promise<number> {
     const text = await readFile(this.file, 'utf8').catch(() => '');
     const since = startOfLocalDay(now);
-    return text
-      .split('\n')
-      .map(parseLine)
-      .filter((entry): entry is SpendEntry => entry !== null)
+    return parseSpendLedger(text)
       .filter(
         (entry) =>
           entry.principal === principal && Date.parse(entry.ts) >= since,

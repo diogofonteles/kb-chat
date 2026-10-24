@@ -1,5 +1,6 @@
 import {
   EMPTY_FILTERS,
+  type SearchOrigin,
   type SearchFilters,
   type SearchMode,
   type SearchResponse,
@@ -18,6 +19,8 @@ export interface Ask {
   readonly filters: SearchFilters;
   /** Wait before hitting the API, so rapid chip clicks send one search (QA-7). */
   readonly delayMs?: number;
+  /** Why it ran, for the usage log (KBC-006); a restored search is not logged. */
+  readonly origin?: SearchOrigin | 'restore';
 }
 
 export interface ChatMessage extends Ask {

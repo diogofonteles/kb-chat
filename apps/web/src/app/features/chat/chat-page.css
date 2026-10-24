@@ -164,11 +164,6 @@
   border-color: var(--color-accent);
 }
 
-.suggestion-count {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
 .notice {
   display: grid;
   justify-items: center;

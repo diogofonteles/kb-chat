@@ -12,13 +12,17 @@ import {
 } from '@kb-chat/contracts';
 import { KbApi } from '@core/api/kb-api.js';
 import { HistoryStore } from '@core/history/history-store.js';
+import { UsageLog } from '@core/usage/usage-log.js';
 import { Subject } from 'rxjs';
 import { TOPICS, aResponse } from '../../testing/fixtures.js';
 import { ChatStore } from './chat-store.js';
 
 const GENRE: SearchFilters = { ...EMPTY_FILTERS, genres: ['paper'] };
 
+const usage = { track: vi.fn() };
+
 async function setup() {
+  usage.track.mockClear();
   localStorage.clear();
   const searches: {
     topic: string;
@@ -31,6 +35,7 @@ async function setup() {
       provideHttpClient(),
       provideHttpClientTesting(),
       ChatStore,
+      { provide: UsageLog, useValue: usage },
       {
         provide: KbApi,
         useValue: {
@@ -61,9 +66,9 @@ async function setup() {
 describe('ChatStore conversations (KBC-005)', () => {
   it('restores every question of a conversation in order with its mode and filters (FR-2)', async () => {
     const { store, history, searches, answer } = await setup();
-    store.ask('ritmo', 'semantic', GENRE);
+    store.ask('ritmo', { mode: 'semantic', filters: GENRE });
     answer(0);
-    store.ask('polaridade', 'exact');
+    store.ask('polaridade', { mode: 'exact' });
     answer(1);
     const [saved] = history.conversations();
     if (!saved) throw new Error('the conversation was not saved');
@@ -81,6 +86,14 @@ describe('ChatStore conversations (KBC-005)', () => {
       ['polaridade', 'exact', EMPTY_FILTERS],
     ]);
     expect(store.conversationId()).toBe(saved.id);
+    answer(2);
+    answer(3);
+    // Restored searches are not new searches in the usage log (KBC-006 review).
+    const origins = usage.track.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.type === 'search')
+      .map((event) => event.origin);
+    expect(origins).toEqual(['typed', 'typed']);
   });
 
   it('drops a late result of the previous conversation after "+ Nova conversa"', async () => {

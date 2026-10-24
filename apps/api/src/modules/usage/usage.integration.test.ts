@@ -81,6 +81,7 @@ describe('POST /api/v1/events (KBC-006 FR-3)', () => {
       sessionId: SESSION,
       event: {
         type: 'search',
+        origin: 'typed',
         question: 'lei do ritmo',
         mode: 'all',
         filterCount: 0,

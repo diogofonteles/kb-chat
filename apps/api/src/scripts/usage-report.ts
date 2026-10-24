@@ -4,23 +4,14 @@ import { join } from 'node:path';
 import { parseUsageLog } from '../adapters/jsonl-usage-log.js';
 import { loadConfig } from '../config.js';
 import { formatWeeklyUsage, weeklyUsage } from '../modules/usage/index.js';
-import type { SpendEntry } from '../ports/spend-ledger.js';
+import { parseSpendLedger } from '../adapters/jsonl-spend-ledger.js';
 
 const { KB_CHAT_STATE_DIR } = loadConfig();
 const read = (name: string) =>
   readFile(join(KB_CHAT_STATE_DIR, name), 'utf8').catch(() => '');
 
 const events = parseUsageLog(await read('events.jsonl'));
-const spend = (await read('spend.jsonl'))
-  .split('\n')
-  .filter((line) => line.trim())
-  .flatMap((line): SpendEntry[] => {
-    try {
-      return [JSON.parse(line) as SpendEntry];
-    } catch {
-      return [];
-    }
-  });
+const spend = parseSpendLedger(await read('spend.jsonl'));
 
 const rows = weeklyUsage(events, spend);
 process.stdout.write(

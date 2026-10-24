@@ -14,10 +14,25 @@ export const suggestionListSchema = z.object({
 });
 export type SuggestionList = z.infer<typeof suggestionListSchema>;
 
+/**
+ * Why a search ran: only typed questions, suggestions and "try in another mode" are new
+ * searches in the report; refines and retries re-run the same one (restores are not logged).
+ */
+export const SEARCH_ORIGINS = [
+  'typed',
+  'suggestion',
+  'mode',
+  'refine',
+  'retry',
+] as const;
+export const searchOriginSchema = z.enum(SEARCH_ORIGINS);
+export type SearchOrigin = z.infer<typeof searchOriginSchema>;
+
 /** Local usage events (KBC-006 BR-2); the question text never leaves this computer. */
 export const usageEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('search'),
+    origin: searchOriginSchema,
     question: z.string().min(1).max(2000),
     mode: searchModeSchema,
     filterCount: z.number().int().nonnegative(),
@@ -44,9 +59,13 @@ export const usageEventRequestSchema = z.object({
 });
 export type UsageEventRequest = z.infer<typeof usageEventRequestSchema>;
 
-/** One line of events.jsonl: the event plus who and when, added by the API. */
-export type UsageRecord = UsageEvent & {
-  readonly ts: string;
-  readonly principal: string;
-  readonly sessionId: string;
-};
+/** One line of events.jsonl: the event plus who and when, added by the API (format version 1). */
+export const usageRecordSchema = usageEventSchema.and(
+  z.object({
+    v: z.literal(1).optional(),
+    ts: z.iso.datetime(),
+    principal: z.string().min(1),
+    sessionId: z.string().min(1),
+  }),
+);
+export type UsageRecord = z.infer<typeof usageRecordSchema>;

@@ -47,7 +47,10 @@ function registerEvents(app: FastifyInstance, { log, principal }: UsageDeps) {
   app.withTypeProvider<ZodTypeProvider>().post(
     '/api/v1/events',
     {
-      schema: { body: usageEventRequestSchema },
+      schema: {
+        body: usageEventRequestSchema,
+        response: { 202: z.undefined() },
+      },
       config: { rateLimit: { max: EVENTS_PER_MINUTE, timeWindow: '1 minute' } },
     },
     async ({ body }, reply) => {

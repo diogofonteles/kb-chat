@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import type { UsageEvent } from '@kb-chat/contracts';
+import { eventsUrl } from '@core/api/kb-api.js';
 
 /**
  * Local usage log (KBC-006 FR-3): fire-and-forget POSTs to this computer's API.
@@ -14,7 +15,8 @@ export class UsageLog {
 
   track(event: UsageEvent): void {
     this.http
-      .post('/api/v1/events', { sessionId: this.sessionId, event })
+      .post(eventsUrl(), { sessionId: this.sessionId, event })
+      // A single POST completes by itself; nothing to unsubscribe from (NG-21).
       .subscribe({ error: () => undefined });
   }
 }

@@ -497,9 +497,10 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
     const view = await renderPage();
     const group = screen.getByRole('group', { name: 'Comece por um assunto:' });
     const buttons = within(group).getAllByRole('button');
-    expect(
-      buttons.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
-    ).toEqual(['Cabala 120', 'Alquimia 80']);
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual([
+      'Cabala',
+      'Alquimia',
+    ]);
     fireEvent.click(buttons[0] as HTMLElement);
     await view.fixture.whenStable();
     const request = view.http.expectOne(SEARCH_URL);
@@ -526,6 +527,7 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
     await view.fixture.whenStable();
     expect(usage.track).toHaveBeenCalledWith({
       type: 'search',
+      origin: 'typed',
       question: 'lei do ritmo',
       mode: 'all',
       filterCount: 0,
