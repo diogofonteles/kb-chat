@@ -1,0 +1,45 @@
+[
+  {
+    "question": "quais são os princípios herméticos",
+    "expected": ["princ-pios-herm-ticos", "caibalion"]
+  },
+  {
+    "question": "me diga então quais são os 5 princípios ocultos",
+    "followUp": true,
+    "expected": ["a-setuplicidade-do-espa-o-tempo", "a-ilus-o-do-movimento"],
+    "mustMention": ["descontinuidade", "limite", "movimento", "espaço", "tempo"]
+  },
+  {
+    "question": "quais são os 5 princípios ocultos",
+    "expected": ["a-setuplicidade-do-espa-o-tempo"],
+    "mustMention": ["descontinuidade", "limite", "movimento", "espaço", "tempo"]
+  },
+  {
+    "question": "o que é a natureza sétupla do homem?",
+    "expected": ["natureza-s-tupla", "setupl"]
+  },
+  {
+    "question": "explique a lei do ritmo",
+    "expected": ["ritmo"]
+  },
+  {
+    "question": "o que o acervo diz sobre o princípio de correspondência?",
+    "expected": ["correspond"]
+  },
+  {
+    "question": "quem foi Hermes Trismegisto?",
+    "expected": ["hermes"]
+  },
+  {
+    "question": "qual a relação entre o hermetismo e a alquimia?",
+    "expected": ["alquim"]
+  },
+  {
+    "question": "o que é o Caibalion e quem o escreveu?",
+    "expected": ["caibalion"]
+  },
+  {
+    "question": "como o princípio da polaridade pode ser usado na prática?",
+    "expected": ["polaridade"]
+  }
+]

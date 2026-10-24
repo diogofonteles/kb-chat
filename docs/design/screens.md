@@ -35,6 +35,8 @@ Desktop (≥ 1024 px)                                   Celular (< 1024 px)
 └──────────┴───────────────────────────┴──────────┘
 ```
 
+O ⚙ **Configurações** fica no pé da lateral e do menu do celular (T6).
+
 Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, (3) chips de filtro, (4) botão de IA. A busca é a navegação principal, por isso o campo fica fixo e sempre visível (SL-03).
 
 ---
@@ -132,37 +134,73 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 
 ---
 
-## T4. Responder com IA
+## T4. Pesquisa com IA (KBC-008)
 
-**Objetivo:** obter uma síntese da pergunta a partir do acervo, sabendo quanto custa e de onde veio. **Sucesso:** toda afirmação tem uma citação clicável, e o custo aparece antes e depois.
+*Emenda 2026-10-24: substitui o botão "Responder com IA · ~US$ 0,01" do KBC-004, que nunca disparava sozinho (KBC-008 BR-5).*
+
+**Objetivo:** perguntar como num chat com o Claude e receber uma resposta pesquisada em todo o acervo, que continua o assunto das perguntas anteriores. **Sucesso:** toda afirmação do acervo tem uma citação `[n]` clicável, e o custo (ou "Incluído na sua assinatura") aparece ao final.
 
 ### Fluxo
-1. Abaixo dos cartões: botão secundário **"Responder com IA · ~US$ 0,01"** (custo estimado visível no próprio botão, SL-24). Nunca dispara sozinho.
-2. Clique → estado "Lendo as fontes…" com etapas ("Escolhendo documentos (kb find)…", "Escrevendo resposta…") e "Parar".
-3. A resposta chega em streaming como uma mensagem do sistema. Citações [1], [2] abrem o painel no documento; abaixo, "Fontes" lista os documentos usados e "Custo: US$ 0,008".
-4. A resposta segue os filtros ativos. O cabeçalho da resposta diz quais ("Considerando: Cabala · Central").
+1. O seletor fixo no topo, **"Buscar documentos | Pesquisa com IA"**, escolhe a visão. Com um provedor, a visão inicial é "Pesquisa com IA" (ou a padrão de Configurações); sem provedor, "Pesquisa com IA" fica desabilitada, com a explicação.
+2. Na tela inicial, a saudação "O que você quer pesquisar no acervo?" e a caixa de pergunta ficam centralizadas juntas. Em janelas baixas, a saudação nunca fica sob a barra superior: a área dela rola.
+3. Perguntar já pesquisa com IA. Uma linha discreta mostra o passo atual ("Buscando “ritmo”", "Lendo “Os Princípios”") e, ao final, o resumo ("Pesquisou 2 vezes · leu 3 documentos"), que se expande. "Parar" fica visível enquanto o agente trabalha.
+4. A resposta chega em streaming abaixo da pergunta. `[n]` abre o painel no documento; abaixo, "Fontes" lista só os documentos citados, como chips numerados. Tabelas largas rolam na horizontal dentro da resposta.
+5. As perguntas seguintes levam as anteriores como contexto e aparecem abaixo, como no Claude.
 
 ### Regras de conteúdo
-- A IA responde **só** a partir das fontes recuperadas. Sem base, diz "O acervo não traz informação suficiente sobre isso" e sugere outra busca. Isso é honestidade, não falha.
-- Rodapé fixo: "Resposta gerada por IA a partir do acervo; confira nas fontes."
+- A IA pesquisa antes de responder e nunca pede ao leitor para refazer a busca. Conhecimento de fora do acervo vem marcado "(fora do acervo)".
+- Rodapé fixo: "Resposta gerada por IA a partir do acervo; confira nas fontes." com "Custo: US$ 0,008" ou "Incluído na sua assinatura".
 
 ### Estados
 | Estado | Mostra | Ação |
 |---|---|---|
-| Sem chave da OpenRouter | O botão aparece desabilitado com explicação: "Configure OPENROUTER_API_KEY no servidor para usar respostas com IA." (SL-20) | — |
-| Saldo insuficiente (HTTP 402) | "Os créditos da OpenRouter acabaram. Adicione em openrouter.ai/settings/credits." (tom sério, DS-19) | Link |
-| Teto diário atingido | "Limite de gasto de hoje atingido (US$ 1,00). Volta amanhã ou ajuste em Configurações." | — |
-| Erro do modelo ou timeout | "Não consegui gerar a resposta agora." + "Tentar de novo" (os resultados grátis continuam na tela) | Tentar de novo |
-| Interrompida | Texto parcial + "(interrompida)" + custo parcial | "Continuar" não existe na R1; "Tentar de novo" |
+| Sem provedor (ou "Nenhum" salvo em Configurações, na hora) | "Pesquisa com IA" desabilitada no seletor, com a explicação; a tela volta para "Buscar documentos" | — |
+| Saldo insuficiente (HTTP 402) | "Os créditos da OpenRouter acabaram…" (tom sério, DS-19) | Adicionar créditos · Tentar de novo |
+| Teto diário atingido | "Limite de gasto com IA de hoje atingido. Ele volta a zero à meia-noite; o valor se ajusta em ⚙ Configurações." | Abrir Configurações (sem "Tentar de novo") |
+| Chave recusada, CLI sem login, provedor fora | A mensagem do caso, com o que fazer (⚙ Configurações ou o login no terminal) | Tentar de novo |
+| Erro do modelo ou timeout | "Não consegui gerar a resposta agora." | Tentar de novo |
+| Interrompida | Texto parcial + "(interrompida)" e o aviso de custo parcial; antes do primeiro texto, "Resposta interrompida antes de começar." sem aviso de custo. Fica no histórico nos dois casos. | Tentar de novo |
 
 ---
 
-## T5. Lateral: sessão, acervo e tema
+## T5. Lateral: conversa, histórico, acervo e tema
 
-- **+ Nova conversa** e o histórico **da sessão**, guardado no navegador e rotulado "neste navegador" (o histórico persistente fica fora da R1).
+- **+ Nova conversa** e o **histórico completo**, guardado pela API local neste computador e rotulado "neste computador": todas as conversas das duas visões, sem limite (KBC-005 BR-1, emenda 2026-10-24). Restaurar uma conversa com IA mostra as respostas salvas sem chamar a IA.
+- Uma conversa que ainda não chegou à API fica guardada no navegador e é reenviada sozinha; enquanto isso, a lateral avisa "Ainda não consegui salvar uma conversa no histórico…".
 - **Acervo ▾**: lista de `kb topic list` com a contagem de documentos. Trocar de acervo inicia uma conversa nova (aviso inline, sem modal).
 - **Tema**: "Automático (claro/escuro)" · "Claro" · "Escuro" · "Esotérico", lembrado no navegador.
 - **Gasto com IA hoje: US$ 0,03 de US$ 1,00** (UP-02).
+
+## T6. Configurações (KBC-007)
+
+**Objetivo:** trocar quem responde (assinatura ou chave própria) e as preferências sem editar arquivos. **Sucesso:** trocar de provedor e ver a próxima resposta usar o novo, sem reiniciar.
+
+- Aberta pelo **⚙ Configurações**, fixo no pé da lateral (desktop) e do menu (celular). Abre como diálogo modal sobre a conversa, que continua igual ao fechar (FR-6). No celular, ocupa a tela inteira.
+- Seções à esquerda (no celular, abas no topo): **IA · Preferências · Sobre**. O foco começa no título; Esc e × fecham.
+- **IA:** cartões de rádio, nesta ordem: Assinatura do Claude, Anthropic API, OpenRouter, Assinatura do ChatGPT, OpenAI API, Nenhum. Cada cartão mostra o custo em texto ("Incluído na sua assinatura" ou "Cobra por uso · chave própria"). Uma assinatura sem a ferramenta instalada aparece desabilitada, com "Não instalado." e o passo a passo de instalação e login (BR-3).
+  - Provedor por uso: o campo da chave é só de escrita. Uma chave salva aparece como "Chave salva ••••abcd" com "Remover" (BR-1). Uma chave do servidor (variável de ambiente) é avisada.
+  - Modelo: texto livre com sugestões; vazio usa o padrão, mostrado no placeholder.
+  - Limite de gasto por dia (US$), só para os provedores por uso.
+  - "Testar conexão" responde em até 20 s, numa linha de status (NFR-1, AC-5).
+  - "Salvar" grava provedor, chave, modelo e limite juntos.
+- **Preferências:** tela inicial (Pesquisa com IA ou Buscar documentos), acervo padrão, modo de busca e tema. Salvam ao mudar ("Salvo automaticamente.").
+- **Sobre:** onde ficam os dados (~/.kb-chat, só o seu usuário lê); a assinatura nunca passa a senha ao kb-chat; "Rever o assistente de início".
+
+| Estado | Mostra |
+|---|---|
+| Carregando | "Carregando…" e "Verificando o que está disponível…" |
+| Servidor fora | "Não consegui carregar as configurações…" + "Tentar de novo" |
+| Erro ao salvar | "Não consegui salvar. Tente de novo." (o rascunho continua na tela) |
+
+## T7. Assistente de primeira abertura (KBC-007)
+
+- Aparece sozinho enquanto não há configuração salva para o usuário (BR-5). Cada passo pode ser pulado:
+  1. Como a IA vai responder? A Assinatura do Claude vem selecionada quando o Claude Code está instalado (BR-4).
+  2. Por onde começar? (tela inicial e modo de busca)
+  3. Qual acervo você estuda?
+  4. Escolha o tema.
+- Rodapé fixo: "Pular" (grava os padrões e não volta, FR-1), "Voltar", "Continuar" e "Concluir".
+- "Passo n de 4" no topo. Reabre em Configurações > Sobre.
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 

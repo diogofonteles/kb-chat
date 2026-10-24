@@ -12,9 +12,11 @@
     "lint": "eslint .",
     "e2e:server": "tsx src/e2e/server.ts",
     "latency": "tsx src/scripts/latency.ts",
-    "usage-report": "tsx src/scripts/usage-report.ts"
+    "usage-report": "tsx src/scripts/usage-report.ts",
+    "agent-eval": "tsx src/scripts/agent-eval.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.137.0",
     "@fastify/cors": "11.3.1",
     "@fastify/rate-limit": "11.1.0",
     "@kb-chat/contracts": "workspace:*",

@@ -1,6 +1,6 @@
 # 0004 — Grounded AI answers with one OpenRouter call over retrieved passages
 
-- Status: accepted (2026-10-24)
+- Status: superseded by [0006](0006-research-agent-over-kb-tools.md) for answers; its spend controls stay (2026-10-24)
 - Drivers: Q3 cost, Q4 grounding
 
 ## Context

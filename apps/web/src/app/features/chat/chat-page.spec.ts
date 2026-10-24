@@ -14,22 +14,20 @@ import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
-import { AnswersApi } from '@core/api/answers-api.js';
+import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
+import type { ResearchConversation } from '@kb-chat/contracts';
 import { EMPTY, of } from 'rxjs';
+import {
+  FakeConversationsServer,
+  aSearchConversation,
+} from '../../testing/fake-conversations.js';
 
-/** The page tests cover search and reading; the AI block gets a quiet stand-in. */
+/** These page tests cover search and reading (the research view has its own spec). */
 const FAKE_ANSWERS = {
-  provide: AnswersApi,
+  provide: ResearchApi,
   useValue: {
-    estimate: () =>
-      of({
-        usd: 0.0005,
-        model: 'stub/model',
-        passages: 1,
-        billing: 'per-token' as const,
-      }),
-    answer: () => EMPTY,
+    research: () => EMPTY,
     spendToday: () => of({ usd: 0, capUsd: 1, configured: true }),
   },
 };
@@ -38,14 +36,20 @@ const SEARCH_URL = '/api/v1/topics/hermetismo/searches';
 
 /** Start suggestions per collection (KBC-006); tests that need them set `suggestions`. */
 let suggestions: { concept: string; count: number }[] = [];
+/** The local API's conversation history; each render starts with an empty one. */
+let conversations = new FakeConversationsServer();
 const fakeStartRequests: HttpInterceptorFn = (request, next) =>
   request.url.endsWith('/suggestions')
     ? of(new HttpResponse({ status: 200, body: { items: suggestions } }))
-    : next(request);
+    : conversations.interceptor(request, next);
 const usage = { track: vi.fn() };
 
-async function renderPage() {
+async function renderPage(
+  extraProviders: { provide: unknown; useValue: unknown }[] = [],
+) {
   localStorage.clear();
+  // A configured provider opens the research view; these tests start in the search view.
+  localStorage.setItem('kb-chat.view', 'search');
   usage.track.mockClear();
   const view = await render(ChatPage, {
     providers: [
@@ -54,6 +58,7 @@ async function renderPage() {
       provideHttpClientTesting(),
       FAKE_ANSWERS,
       { provide: UsageLog, useValue: usage },
+      ...extraProviders,
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -222,6 +227,20 @@ describe('ChatPage', () => {
     expect(document.activeElement).toBe(screen.getByLabelText('Sua pergunta'));
   });
 
+  it('does not type the slash into the empty, already focused question box', async () => {
+    await renderPage();
+    const box = screen.getByLabelText('Sua pergunta');
+    box.focus();
+    const slash = new KeyboardEvent('keydown', {
+      key: '/',
+      bubbles: true,
+      cancelable: true,
+    });
+    box.dispatchEvent(slash);
+    expect(slash.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(box);
+  });
+
   it('clears the question with the clear button', async () => {
     const view = await renderPage();
     fireEvent.input(screen.getByLabelText('Sua pergunta'), {
@@ -385,6 +404,9 @@ describe('ChatPage without collections', () => {
 });
 
 describe('ChatPage side panel (KBC-005)', () => {
+  beforeEach(() => {
+    conversations = new FakeConversationsServer();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     document.documentElement.removeAttribute('data-theme');
@@ -469,20 +491,120 @@ describe('ChatPage side panel (KBC-005)', () => {
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
   });
 
-  it('says the history is unavailable when storage fails, and search still works (AC-4)', async () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-      throw new Error('SecurityError');
-    });
+  it('says the history is unavailable when the API fails, and search still works', async () => {
+    conversations.failWith = 0;
     const view = await renderPage();
-    expect(
-      screen.getByText('Histórico indisponível neste navegador.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Histórico indisponível no momento.')).toBeTruthy();
+    conversations.failWith = null;
+    // With a provider the page opens in the research view; search is one click away.
+    fireEvent.click(screen.getByRole('radio', { name: 'Buscar documentos' }));
+    await view.fixture.whenStable();
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
     expect(screen.getByText(/^1 documento · Tudo/)).toBeTruthy();
   });
+
+  it('lists conversations saved before, of both kinds, with their label', async () => {
+    const search = aSearchConversation({
+      title: 'lei do ritmo',
+      updatedAt: '2026-10-24T10:00:00.000Z',
+    });
+    const research = aResearchConversation('quais são os princípios');
+    for (const saved of [search, research])
+      conversations.saved.set(saved.id, saved);
+    await renderPage();
+    const history = screen.getByRole('navigation', { name: 'Histórico' });
+    expect(screen.getByText('neste computador')).toBeTruthy();
+    const items = within(history).getAllByRole('button');
+    expect(
+      items.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual([
+      'quais são os princípios IA · Hermetismo',
+      'lei do ritmo Busca · Hermetismo',
+    ]);
+  });
+
+  it('hands a research conversation to the research view without searching (KBC-008 FR-6)', async () => {
+    const research = aResearchConversation('quais são os princípios');
+    conversations.saved.set(research.id, research);
+    const answers = { ...FAKE_ANSWERS.useValue, research: vi.fn(() => EMPTY) };
+    const view = await renderPage([
+      { provide: ResearchApi, useValue: answers },
+    ]);
+    fireEvent.click(
+      screen.getByRole('button', { name: /quais são os princípios/ }),
+    );
+    await view.fixture.whenStable();
+    expect(
+      (
+        screen.getByRole('radio', {
+          name: /Pesquisa com IA/,
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    expect(screen.getByText(/Mentalismo, correspondência/)).toBeTruthy();
+    expect(answers.research).not.toHaveBeenCalled();
+    view.http.expectNone(SEARCH_URL);
+  });
+
+  it('brings a search conversation back in the search view, even from the research view', async () => {
+    const search = aSearchConversation({ title: 'lei do ritmo' });
+    conversations.saved.set(search.id, search);
+    const view = await renderPage();
+    fireEvent.click(screen.getByRole('radio', { name: /Pesquisa com IA/ }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: /lei do ritmo/ }));
+    await view.fixture.whenStable();
+    expect(
+      (
+        screen.getByRole('radio', {
+          name: 'Buscar documentos',
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    expect(view.container.querySelector('app-result-card')).toBeTruthy();
+  });
+
+  it('says so when a conversation cannot be opened', async () => {
+    const search = aSearchConversation({ title: 'lei do ritmo' });
+    conversations.saved.set(search.id, search);
+    const view = await renderPage();
+    conversations.saved.delete(search.id);
+    fireEvent.click(screen.getByRole('button', { name: /lei do ritmo/ }));
+    await view.fixture.whenStable();
+    expect(
+      screen.getByText('Não consegui abrir essa conversa. Tente de novo.'),
+    ).toBeTruthy();
+    view.http.expectNone(SEARCH_URL);
+  });
 });
+
+function aResearchConversation(title: string): ResearchConversation {
+  return {
+    kind: 'research',
+    id: crypto.randomUUID(),
+    topic: 'hermetismo',
+    title,
+    createdAt: '2026-10-24T11:00:00.000Z',
+    updatedAt: '2026-10-24T11:00:00.000Z',
+    turns: [
+      {
+        question: title,
+        answer: 'Mentalismo, correspondência…',
+        sources: [],
+        steps: 3,
+        usd: 0.01,
+        billing: 'per-token',
+        model: 'stub/model',
+        interrupted: false,
+        at: '2026-10-24T11:00:00.000Z',
+      },
+    ],
+  };
+}
 
 describe('ChatPage start suggestions and usage log (KBC-006)', () => {
   afterEach(() => {

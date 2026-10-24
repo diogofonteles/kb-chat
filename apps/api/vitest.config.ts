@@ -21,6 +21,8 @@ export default defineConfig({
         'src/modules/**/*.ts',
         'src/adapters/**/*.ts',
         'src/plugins/**/*.ts',
+        'src/providers/**/*.ts',
+        'src/mcp/**/*.ts',
       ],
       thresholds: { lines: 80, functions: 80, branches: 80 },
     },

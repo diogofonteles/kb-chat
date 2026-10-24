@@ -1,0 +1,124 @@
+:host {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-8) 0;
+}
+
+.eyebrow,
+.progress {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.eyebrow {
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+.content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-8) var(--space-6);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.lead {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-8);
+  border-top: 1px solid var(--color-border);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.primary,
+.secondary,
+.ghost {
+  min-height: var(--target);
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+
+.primary {
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+}
+
+.secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.ghost {
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  text-decoration: underline;
+}
+
+@media (max-width: 47.99rem) {
+  .head {
+    padding: var(--space-4) var(--space-4) 0;
+  }
+
+  .content {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+
+  .foot {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .primary,
+  .secondary {
+    padding: 0 var(--space-4);
+  }
+}
+
+/* Focused by script when the dialog opens; a heading is not a control. */
+.title:focus {
+  outline: none;
+}

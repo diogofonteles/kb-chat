@@ -38,14 +38,22 @@
 }
 
 /* First screen: greeting and question box centered together (like a chat home);
-   after the first question the box docks at the bottom. */
+   after the first question the box docks at the bottom. The greeting's row takes its
+   content height first and only the spacers around it shrink, so a short window never
+   clips the greeting: it scrolls in its own row instead. */
 .conversation.empty {
-  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1.25fr);
+  grid-template-rows:
+    auto minmax(0, 1fr) minmax(0, max-content) auto
+    minmax(0, 1.25fr);
 }
 
-.conversation.empty .thread {
-  align-content: end;
+.conversation.empty > .thread {
+  grid-row: 3;
   padding-bottom: var(--space-6);
+}
+
+.conversation.empty > .composer-dock {
+  grid-row: 4;
 }
 
 .conversation.empty .welcome {
@@ -74,11 +82,21 @@
   content: '☿';
 }
 
+.view-switch {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .topic {
+  /* One line, whatever the panel leaves: a long title ends in "…" (M-1). */
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-family: var(--font-display);
   font-size: 1.125rem;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .count {
@@ -90,7 +108,11 @@
 }
 
 .thread {
+  /* Containing block for absolutely positioned descendants (the visually hidden live
+     regions): without it they escape the scroller and stretch the page itself. */
+  position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: var(--space-8);
   width: 100%;
@@ -270,7 +292,14 @@
   }
 
   .topbar {
-    padding: var(--space-3) var(--space-4);
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-4) var(--space-3);
+  }
+
+  /* Phones: the view switch takes its own full-width row under the title. */
+  .view-switch {
+    flex-basis: 100%;
+    margin-left: 0;
   }
 
   .hint-keyboard {
@@ -283,9 +312,14 @@
     grid-template-rows: auto minmax(0, 1fr) auto;
   }
 
-  .conversation.empty .thread {
+  .conversation.empty > .thread {
+    grid-row: auto;
     align-content: safe center;
     padding-bottom: var(--space-4);
+  }
+
+  .conversation.empty > .composer-dock {
+    grid-row: auto;
   }
 
   /* The Menu button takes the brand's place; the title keeps one line. */

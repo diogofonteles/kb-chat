@@ -1,6 +1,6 @@
 import { ApplicationRef, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { AnswersApi } from '@core/api/answers-api.js';
+import { ResearchApi } from '@core/api/research-api.js';
 import { of, throwError } from 'rxjs';
 import { SpendStore, formatSpend } from './spend-store.js';
 
@@ -8,7 +8,7 @@ function createStore(spendToday: () => unknown) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
-      { provide: AnswersApi, useValue: { spendToday: vi.fn(spendToday) } },
+      { provide: ResearchApi, useValue: { spendToday: vi.fn(spendToday) } },
     ],
   });
   return TestBed.inject(SpendStore);

@@ -24,17 +24,39 @@ import { DocumentPanel } from '@features/document/document-panel.js';
 import { Sidebar, type SidebarAction } from '@features/sidebar/sidebar.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
 import { ChatStore } from './chat-store.js';
+import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
+import { provideResearchRestorer } from '@features/research/research-restorer.js';
 import { Composer } from './composer.js';
 import { describeForAnnouncement } from './result-count.js';
 import { ResultMessage } from './result-message.js';
+import { ResearchStore } from '@features/research/research-store.js';
+import { ResearchThread } from '@features/research/research-thread.js';
+import { ViewStore, type ChatView } from './view-store.js';
+import { ViewSwitch } from './view-switch.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
-/** Chat-style search page: conversation, question box and document panel (screens.md). */
+/**
+ * Chat page (screens.md): two views over one question box and document panel, the free
+ * search engine and the research agent (KBC-008), each with its own conversation.
+ */
 @Component({
   selector: 'app-chat-page',
-  imports: [Composer, ResultMessage, DocumentPanel, Sidebar, DecimalPipe],
-  providers: [ChatStore],
+  imports: [
+    Composer,
+    ResultMessage,
+    ResearchThread,
+    ViewSwitch,
+    DocumentPanel,
+    Sidebar,
+    DecimalPipe,
+  ],
+  providers: [
+    ChatStore,
+    ViewStore,
+    ResearchStore,
+    provideResearchRestorer(RESEARCH_RESTORER),
+  ],
   templateUrl: './chat-page.html',
   styleUrl: './chat-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,6 +64,8 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
 })
 export class ChatPage {
   protected readonly store = inject(ChatStore);
+  protected readonly views = inject(ViewStore);
+  protected readonly research = inject(ResearchStore);
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
   private readonly composer = viewChild.required(Composer);
@@ -57,7 +81,15 @@ export class ChatPage {
   protected readonly topic = this.store.topic;
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
-  protected readonly isEmpty = computed(() => this.messages().length === 0);
+  protected readonly currentView = this.views.current;
+  protected readonly researching = computed(
+    () => this.currentView() === 'research',
+  );
+  protected readonly isEmpty = computed(() =>
+    this.researching()
+      ? this.research.turns().length === 0
+      : this.messages().length === 0,
+  );
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
   protected readonly covered = computed(
     () => this.opened() !== null && !this.desktop(),
@@ -89,7 +121,7 @@ export class ChatPage {
   );
   /** Short live-region text (the cards themselves are not announced). */
   protected readonly announcement = computed(() => {
-    const last = this.messages().at(-1);
+    const last = this.researching() ? undefined : this.messages().at(-1);
     if (!last || last.status === 'loading') return '';
     // Prefixed with the question so a repeated identical count is still announced.
     const outcome = last.response
@@ -130,13 +162,22 @@ export class ChatPage {
     this.drawer()?.nativeElement.showModal();
   }
 
+  /** Where focus goes when the drawer finishes closing. */
+  private focusAfterMenu: 'menu' | 'composer' = 'menu';
+
   protected closeMenu(): void {
     this.drawer()?.nativeElement.close();
   }
 
-  /** Back to the Menu button when the drawer closes (Esc, ×, backdrop or an action). */
+  /**
+   * The drawer's `close` event arrives after the action that closed it, so it decides where
+   * focus goes: the question box after an action that needs typing, else the Menu button.
+   */
   protected menuClosed(): void {
-    this.menuButton()?.nativeElement.focus();
+    const target = this.focusAfterMenu;
+    this.focusAfterMenu = 'menu';
+    if (target === 'composer') this.composer().focus();
+    else this.menuButton()?.nativeElement.focus();
   }
 
   /** A tap on the backdrop lands on the <dialog> itself, outside its content. */
@@ -145,28 +186,70 @@ export class ChatPage {
   }
 
   protected sidebarActed(action: SidebarAction): void {
-    this.closeMenu();
-    // A new conversation is ready to type into; elsewhere focus stays put (the drawer returns it).
-    if (action !== 'restore')
+    // A new conversation (or another collection) is ready to type into.
+    const typing = action !== 'restore';
+    if (this.drawer()?.nativeElement.open) {
+      this.focusAfterMenu = typing ? 'composer' : 'menu';
+      this.closeMenu();
+    } else if (typing) {
       afterNextRender(() => this.composer().focus(), {
         injector: this.injector,
       });
+    }
   }
 
   protected changeMode(mode: SearchMode): void {
     this.store.setMode(mode);
   }
 
-  protected ask(question: string): void {
-    this.store.ask(question);
+  protected changeView(view: ChatView): void {
+    this.views.select(view);
   }
 
-  /** A suggestion searches the subject's name with the subject filter on (KBC-006 FR-2). */
+  protected ask(question: string): void {
+    if (this.researching()) this.askResearch(question);
+    else this.store.ask(question);
+  }
+
+  /** The new question scrolls into view; focus stays in the question box, as in a chat. */
+  private askResearch(question: string): void {
+    this.research.ask(question);
+    afterNextRender(
+      () =>
+        this.host
+          .querySelector('app-research-message:last-of-type')
+          ?.scrollIntoView({ block: 'start' }),
+      { injector: this.injector },
+    );
+  }
+
+  /**
+   * A suggestion searches the subject's name with the subject filter on (KBC-006 FR-2); in
+   * the research view it becomes a question to the agent.
+   */
   protected askAbout(concept: string): void {
+    if (this.researching()) {
+      this.askResearch(
+        $localize`:@@research.aboutSubject:O que o acervo diz sobre ${concept}:subject:?`,
+      );
+      return;
+    }
     this.store.ask(concept, {
       filters: { ...NO_FILTERS, concepts: [concept] },
       origin: 'suggestion',
     });
+  }
+
+  /** A cited source opens in the same document panel (AC-3). */
+  protected openSource(doc: DocumentRef): void {
+    const topic = this.store.topicSlug();
+    if (topic) this.store.open(topic, doc);
+  }
+
+  /** "Parar" disappears with the answer in flight: focus moves to the question box. */
+  protected stopResearch(): void {
+    this.research.stop();
+    afterNextRender(() => this.composer().focus(), { injector: this.injector });
   }
 
   protected openHit(doc: DocumentRef, message: ChatMessage): void {
@@ -227,12 +310,19 @@ export class ChatPage {
     this.store.topics.reload();
   }
 
+  /**
+   * "/" focuses the question box. Pressed in the box while it is still empty (it has focus
+   * on load), it does nothing, so following the hint never types "/" (M-9); in any other
+   * field it types as usual.
+   */
   protected focusOnSlash(event: KeyboardEvent): void {
+    if (event.key !== '/') return;
+    if (this.composer().isEmptyField(event.target)) {
+      event.preventDefault();
+      return;
+    }
     const target = event.target as HTMLElement | null;
-    const typing = target?.closest(
-      'input, textarea, select, [contenteditable]',
-    );
-    if (event.key !== '/' || typing) return;
+    if (target?.closest('input, textarea, select, [contenteditable]')) return;
     event.preventDefault();
     this.composer().focus();
   }

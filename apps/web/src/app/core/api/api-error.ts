@@ -45,11 +45,11 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   VALIDATION_FAILED: () =>
     $localize`:@@error.validation:A pergunta não pôde ser enviada. Revise o texto e tente de novo.`,
   LLM_NOT_CONFIGURED: () =>
-    $localize`:@@error.llmNotConfigured:Configure OPENROUTER_API_KEY no servidor para usar respostas com IA.`,
+    $localize`:@@error.llmNotConfigured:Nenhum provedor de IA está configurado. Escolha um em ⚙ Configurações.`,
   LLM_INSUFFICIENT_CREDIT: () =>
     $localize`:@@error.llmCredit:Os créditos da OpenRouter acabaram. Adicione em openrouter.ai/settings/credits.`,
   DAILY_CAP_REACHED: () =>
-    $localize`:@@error.dailyCap:Limite de gasto com IA de hoje atingido. Ele volta a zero à meia-noite; para mudar o valor, ajuste KB_CHAT_DAILY_CAP_USD no servidor.`,
+    $localize`:@@error.dailyCap:Limite de gasto com IA de hoje atingido. Ele volta a zero à meia-noite; o valor se ajusta em ⚙ Configurações.`,
   NOT_FOUND: () =>
     $localize`:@@error.notFound:Este endereço não existe no servidor.`,
   ANSWER_IN_PROGRESS: () =>

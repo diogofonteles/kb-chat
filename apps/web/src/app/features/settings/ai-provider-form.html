@@ -1,0 +1,160 @@
+<fieldset class="providers">
+  <legend class="legend" [class.visually-hidden]="compact()" i18n="@@ai.legend">
+    Como a IA responde
+  </legend>
+  @if (loading() && options().length === 0) {
+    <p class="note" i18n="@@ai.loading">Verificando o que está disponível…</p>
+  } @else if (options().length === 0) {
+    <p class="note" role="alert" i18n="@@ai.unavailable">
+      Não consegui listar os provedores. Verifique se o servidor está rodando.
+    </p>
+  }
+  @for (option of options(); track option.info.id) {
+    <label
+      class="card"
+      [class.selected]="option.info.id === draft().provider"
+      [class.disabled]="option.blocked !== null"
+    >
+      <input
+        type="radio"
+        name="ai-provider"
+        class="radio"
+        [value]="option.info.id"
+        [checked]="option.info.id === draft().provider"
+        [disabled]="option.blocked !== null"
+        (change)="choose(option.info.id)"
+      />
+      <span class="card-body">
+        <span class="card-head">
+          <span class="card-title">{{ option.name }}</span>
+          <span
+            class="badge"
+            [class.included]="option.info.billing === 'subscription'"
+            >{{ option.billing }}</span
+          >
+        </span>
+        <span class="card-hint">{{ option.description }}</span>
+        @if (option.blocked; as blocked) {
+          <span class="card-install">
+            <span class="unavailable">{{ blocked.label }}</span>
+            {{ blocked.steps }}
+          </span>
+        }
+      </span>
+    </label>
+  }
+</fieldset>
+
+@if (selected(); as current) {
+  @if (current.info.billing === 'per-token') {
+    <div class="field">
+      <label class="field-label" for="ai-key" i18n="@@ai.key"
+        >Chave da API · {{ current.name }}</label
+      >
+      @if (savedKey(); as saved) {
+        <p class="saved-key">
+          <span
+            ><span i18n="@@ai.keySaved">Chave salva</span>
+            <code class="masked">••••{{ saved.last4 }}</code></span
+          >
+          <button
+            type="button"
+            class="link danger"
+            (click)="removeKey()"
+            i18n="@@ai.removeKey"
+          >
+            Remover
+          </button>
+        </p>
+      } @else if (current.info.keySource === 'env') {
+        <p class="hint" i18n="@@ai.envKey">
+          Usando a chave configurada no servidor. Uma chave salva aqui tem
+          prioridade.
+        </p>
+      }
+      <input
+        id="ai-key"
+        class="input"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="draft().key"
+        [placeholder]="keyPlaceholder()"
+        (input)="setKey(keyInput.value)"
+        #keyInput
+      />
+      <p class="hint" i18n="@@ai.keyPrivacy">
+        Fica só neste computador, num arquivo que só o seu usuário lê. Depois de
+        salva, ela não é mostrada de novo.
+      </p>
+    </div>
+  }
+
+  @if (!compact() && current.info.billing !== 'none') {
+    <div class="field">
+      <label class="field-label" for="ai-model" i18n="@@ai.model">Modelo</label>
+      <input
+        id="ai-model"
+        class="input"
+        list="ai-models"
+        autocomplete="off"
+        [value]="draft().model"
+        [placeholder]="modelPlaceholder()"
+        (input)="setModel(modelInput.value)"
+        #modelInput
+      />
+      <datalist id="ai-models">
+        @for (name of current.info.models; track name) {
+          <option [value]="name"></option>
+        }
+      </datalist>
+    </div>
+  }
+
+  @if (!compact() && current.info.billing === 'per-token') {
+    <div class="field">
+      <label class="field-label" for="ai-cap" i18n="@@ai.cap"
+        >Limite de gasto por dia (US$)</label
+      >
+      <input
+        id="ai-cap"
+        class="input cap"
+        type="number"
+        inputmode="decimal"
+        min="0"
+        max="100"
+        step="0.5"
+        [value]="draft().dailyCapUsd"
+        (change)="setCap(capInput.value)"
+        #capInput
+      />
+    </div>
+  } @else if (current.info.billing === 'subscription') {
+    <p class="hint" i18n="@@ai.subscriptionNote">
+      Incluído na sua assinatura: não entra no gasto do dia e não tem limite em
+      US$. O kb-chat nunca vê a sua senha; ele só chama a ferramenta já logada.
+    </p>
+  }
+
+  @if (current.info.billing !== 'none') {
+    <div class="test">
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="testState().kind === 'running'"
+        (click)="test()"
+        i18n="@@ai.test"
+      >
+        Testar conexão
+      </button>
+      <p
+        class="test-result"
+        role="status"
+        [class.ok]="testOk()"
+        [class.failed]="testState().kind !== 'running' && !testOk()"
+      >
+        {{ testMessage() }}
+      </p>
+    </div>
+  }
+}

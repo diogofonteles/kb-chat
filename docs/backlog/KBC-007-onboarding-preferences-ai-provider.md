@@ -4,7 +4,7 @@ title: Onboarding com preferências e provedor de IA (chave própria ou assinatu
 status: ready
 slice: release-1
 outcome: primeira sessão sem configuração manual; IA sem custo por token para quem tem assinatura
-depends_on: [KBC-004, KBC-005]
+depends_on: [KBC-005, KBC-008]
 ---
 
 # KBC-007 — Onboarding com preferências e provedor de IA
@@ -17,7 +17,8 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
 ## Scope
 **In:**
 - Assistente de primeira abertura, com 4 passos curtos que podem ser pulados: acervo padrão, modo de busca, tema e provedor de IA.
-- Tela "Configurações" para alterar tudo depois.
+- Tela "Configurações", aberta a qualquer momento por um ícone ⚙ fixo na lateral (e no menu do celular), para ver e alterar preferências, chave de API, modelo e ligação com a assinatura.
+- Preferência "Pesquisar com IA por padrão" e escolha do modelo para os provedores por token.
 - Provedores de IA:
   - **OpenRouter** (chave);
   - **Anthropic API** (chave);
@@ -33,10 +34,10 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
 - OAuth próprio com Anthropic ou OpenAI: as assinaturas usam as ferramentas oficiais já logadas no Mac.
 
 ## Business rules
-- BR-1: as preferências e a chave ficam só no servidor local, em `~/.kb-chat/settings.json` com permissão 0600. A API nunca devolve a chave; mostra só os 4 últimos caracteres.
+- BR-1: as preferências e a chave ficam só no servidor local, uma configuração por usuário em `~/.kb-chat/settings/<usuário>.json` (hoje só o dono, `owner.json`; o login vem no KBC-010), com permissão 0600. A API nunca devolve a chave; mostra só os 4 últimos caracteres.
 - BR-2: provedores por token mostram o custo estimado e respeitam o teto diário (ADR 0004). Provedores por assinatura mostram "incluído na sua assinatura", não entram no gasto do dia e não têm teto em US$.
 - BR-3: os provedores por assinatura só aparecem como disponíveis quando a ferramenta oficial está instalada e logada (`claude` ou `codex` no PATH, com um teste de conexão bem-sucedido). Sem isso, a opção aparece desabilitada com a instrução de instalação e login.
-- BR-4: as variáveis de ambiente (`OPENROUTER_API_KEY` e outras) continuam valendo como padrão quando as configurações não definem um provedor.
+- BR-4: quando as configurações não definem um provedor, vale, nesta ordem: a **Assinatura do Claude**, se `claude` estiver no PATH; depois as variáveis de ambiente (`OPENROUTER_API_KEY` e outras); senão, só busca. Assim, no uso local, o padrão é o Claude sem configuração (decisão do dono, 2026-10-24). Nos testes, `KB_CHAT_LLM=stub` vem antes de tudo.
 - BR-5: o assistente aparece só na primeira abertura, enquanto `settings.json` não existir, e pode ser reaberto em "Configurações".
 - BR-7: o kb-chat nunca recebe credencial de assinatura. O login é feito uma vez na ferramenta oficial (`claude` → `/login`, que abre o login da conta claude.ai, com Google ou SSO se a conta for assim; `codex login` → "Sign in with ChatGPT"). O app só chama o CLI já logado (`claude -p` com saída em streaming; `codex exec`). Ao chamar o Claude Code, o servidor remove `ANTHROPIC_API_KEY` do ambiente, para o uso contar na assinatura e não na API.
 - BR-6: o uso por assinatura é pessoal e local. Na release 2, hospedada, cada convidado usa a própria chave (ADR 0006).
@@ -45,7 +46,8 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
 - FR-1: na primeira abertura, a web deve mostrar o assistente. "Pular" deve gravar os padrões.
 - FR-2: a API deve expor `GET/PUT /api/v1/settings` (sem segredos na resposta) e `POST /api/v1/settings/ai/test`, que testa o provedor com uma pergunta mínima e diz se funcionou.
 - FR-3: a API deve listar os provedores com a disponibilidade de cada um (`GET /api/v1/ai/providers`), detectando `claude` e `codex` no PATH.
-- FR-4: com um provedor por assinatura, "Responder com IA" deve usar o CLI oficial em modo não interativo, transmitindo a resposta em streaming, com as mesmas citações e regras de fundamentação do ADR 0004.
+- FR-4: com um provedor por assinatura, o agente de pesquisa (KBC-008, ADR 0006) deve rodar no CLI oficial em modo não interativo, com as ferramentas do acervo servidas por MCP (`kb-chat mcp`) e as ferramentas embutidas desligadas, transmitindo passos e resposta em streaming com as mesmas regras de citação.
+- FR-6: o ícone ⚙ "Configurações" deve estar visível em todas as telas (lateral no desktop, menu no celular) e abrir a tela de configurações sem perder a conversa atual.
 - FR-5: trocar de provedor deve valer na próxima resposta, sem reiniciar o servidor.
 
 ## Non-functional requirements
@@ -82,14 +84,19 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
   - When o usuário clica em "Testar conexão"
   - Then aparece "A chave não foi aceita pelo provedor"
 - **AC-6 (BR-4)**
-  - Given `OPENROUTER_API_KEY` no ambiente e nenhum provedor escolhido
+  - Given `OPENROUTER_API_KEY` no ambiente, nenhum provedor escolhido e `claude` fora do PATH
   - When o usuário pede uma resposta
   - Then o OpenRouter é usado
+- **AC-8 (BR-4)**
+  - Given nenhum provedor escolhido e `claude` no PATH
+  - When o usuário pede uma resposta
+  - Then a "Assinatura do Claude" é usada, mesmo com `OPENROUTER_API_KEY` no ambiente
+  - And o assistente de primeira abertura já vem com ela selecionada
 
 ## Test strategy
 | AC | Nível |
 |---|---|
-| AC-2, AC-3, AC-5, AC-6, NFR-2 | Integração da API, com CLIs e HTTP stub |
+| AC-2, AC-3, AC-5, AC-6, AC-8, NFR-2 | Integração da API, com CLIs e HTTP stub |
 | AC-1, AC-4 | E2E Playwright, com o provedor stub |
 
 ## References

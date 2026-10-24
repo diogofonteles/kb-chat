@@ -1,4 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { startInSearchView } from './search-view.js';
+
+test.beforeEach(startInSearchView);
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
@@ -9,6 +13,12 @@ async function sidebar(page: Page) {
     ? page.getByRole('complementary', { name: 'Lateral' })
     : page.getByRole('dialog', { name: 'Menu' });
 }
+
+/** The history is shared by every test of the run (it lives on the API): each test tags its own. */
+const uniqueTag = (): string => `e2e${randomUUID().slice(0, 8)}`;
+
+const historyOf = async (page: Page) =>
+  (await sidebar(page)).getByRole('navigation', { name: 'Histórico' });
 
 async function ask(page: Page, question: string) {
   await page.getByLabel('Sua pergunta').fill(question);
@@ -25,7 +35,8 @@ test.beforeEach(async ({ page }) => {
 test('AC-1/AC-2: a new conversation clears the screen and the history brings the old one back', async ({
   page,
 }) => {
-  await ask(page, 'ritmo');
+  const tag = uniqueTag();
+  await ask(page, `ritmo ${tag}`);
   await (
     await sidebar(page)
   )
@@ -33,16 +44,116 @@ test('AC-1/AC-2: a new conversation clears the screen and the history brings the
     .click();
   await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
   await expect(page.getByLabel('Sua pergunta')).toBeFocused();
-  await ask(page, 'natureza');
-  const panel = await sidebar(page);
-  const history = panel.getByRole('navigation', { name: /Histórico/ });
-  await expect(history.getByRole('button')).toHaveCount(2);
-  await history.getByRole('button', { name: /ritmo/ }).click();
+  await ask(page, `natureza ${tag}`);
+  const history = await historyOf(page);
+  await expect(
+    history.getByRole('button', { name: new RegExp(tag) }),
+  ).toHaveCount(2);
+  const old = history.getByRole('button', { name: `ritmo ${tag}` });
+  await expect(old).toContainText('Busca');
+  await old.click();
   // The restored conversation runs its search again; the other one is gone from the screen.
   await expect(page.locator('app-result-message .question')).toHaveText([
-    /ritmo/,
+    new RegExp(`ritmo ${tag}`),
   ]);
   await expect(page.locator('app-result-card').first()).toBeVisible();
+});
+
+test('the history is kept on this computer: it survives a reload and another browser', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const question = `ritmo ${uniqueTag()}`;
+  await ask(page, question);
+  await expect(
+    (await historyOf(page)).getByRole('button', { name: question }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    (await historyOf(page)).getByRole('button', { name: question }),
+  ).toBeVisible();
+  const other = await browser.newContext({ baseURL });
+  const fresh = await other.newPage();
+  await fresh.goto('/');
+  const history = await historyOf(fresh);
+  await history.getByRole('button', { name: question }).click();
+  await expect(fresh.locator('app-result-message .question')).toHaveText([
+    new RegExp(question),
+  ]);
+  await other.close();
+});
+
+test('lists every conversation, with no cap of 50', async ({ page }) => {
+  const tag = uniqueTag();
+  for (let n = 1; n <= 60; n++) {
+    const id = randomUUID();
+    const at = new Date(Date.UTC(2020, 0, 1, 0, n)).toISOString();
+    const title = `${tag} lote ${n}`;
+    const response = await page.request.put(`/api/v1/conversations/${id}`, {
+      data: {
+        kind: 'search',
+        id,
+        topic: 'hermetismo',
+        title,
+        createdAt: at,
+        updatedAt: at,
+        asks: [
+          {
+            question: title,
+            mode: 'all',
+            filters: { concepts: [], genres: [], depths: [], relevances: [] },
+            total: 1,
+          },
+        ],
+      },
+    });
+    expect(response.status()).toBe(200);
+  }
+  await page.reload();
+  const history = await historyOf(page);
+  await expect(
+    history.getByRole('button', { name: new RegExp(tag) }),
+  ).toHaveCount(60);
+  // The oldest is at the bottom of the scrollable list, and reachable.
+  const oldest = history.getByRole('button', {
+    name: new RegExp(`${tag} lote 1(?!\\d)`),
+  });
+  await oldest.scrollIntoViewIfNeeded();
+  await expect(oldest).toBeVisible();
+});
+
+test('moves the old browser history to this computer once', async ({
+  page,
+}) => {
+  const question = `ritmo ${uniqueTag()}`;
+  await page.evaluate((q) => {
+    localStorage.setItem(
+      'kb-chat.history',
+      JSON.stringify([
+        {
+          id: crypto.randomUUID(),
+          topic: 'hermetismo',
+          asks: [
+            {
+              question: q,
+              mode: 'all',
+              filters: { concepts: [], genres: [], depths: [], relevances: [] },
+              total: 1,
+            },
+          ],
+          updatedAt: new Date().toISOString(),
+        },
+      ]),
+    );
+  }, question);
+  await page.reload();
+  await expect(
+    (await historyOf(page)).getByRole('button', { name: question }),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('kb-chat.history')))
+    .toBeNull();
 });
 
 test('AC-5: another collection starts a new conversation and updates the count', async ({
@@ -73,9 +184,32 @@ test('AC-6: the esoteric theme survives a reload', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'esoteric');
 });
 
+/** "US$ 0,05" as the page writes it, as a pattern (any space as \s). */
+const dollars = (usd: number): string =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' })
+    .format(usd)
+    .replace('$', '\\$')
+    .replace(/\s/g, '\\s');
+
 test('AC-8: shows today’s AI spend against the cap', async ({ page }) => {
+  // Research tests of the same run spend too: the panel must show what the API answered.
+  const served = new Promise<{ usd: number; capUsd: number }>((resolve) => {
+    void page.route('**/api/v1/spend/today', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as { usd: number; capUsd: number };
+      resolve(body);
+      await route.fulfill({ response, json: body });
+    });
+  });
+  await page.reload();
+  const { usd, capUsd } = await served;
+  // The server starts the day at the seeded US$ 0.03 (e2e/server.ts) and a cap of US$ 1.
+  expect(usd).toBeGreaterThanOrEqual(0.03);
+  expect(capUsd).toBe(1);
   await expect(
-    (await sidebar(page)).getByText(/US\$\s0,03 de US\$\s1,00/),
+    (await sidebar(page)).getByText(
+      new RegExp(`^${dollars(usd)} de ${dollars(capUsd)}$`),
+    ),
   ).toBeVisible();
 });
 
