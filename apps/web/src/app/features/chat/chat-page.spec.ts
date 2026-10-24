@@ -18,18 +18,11 @@ import { AnswersApi } from '@core/api/answers-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { EMPTY, of } from 'rxjs';
 
-/** The page tests cover search and reading; the AI block gets a quiet stand-in. */
+/** These page tests cover search and reading (the research view has its own spec). */
 const FAKE_ANSWERS = {
   provide: AnswersApi,
   useValue: {
-    estimate: () =>
-      of({
-        usd: 0.0005,
-        model: 'stub/model',
-        passages: 1,
-        billing: 'per-token' as const,
-      }),
-    answer: () => EMPTY,
+    research: () => EMPTY,
     spendToday: () => of({ usd: 0, capUsd: 1, configured: true }),
   },
 };
@@ -46,6 +39,8 @@ const usage = { track: vi.fn() };
 
 async function renderPage() {
   localStorage.clear();
+  // A configured provider opens the research view; these tests start in the search view.
+  localStorage.setItem('kb-chat.view', 'search');
   usage.track.mockClear();
   const view = await render(ChatPage, {
     providers: [
@@ -477,6 +472,9 @@ describe('ChatPage side panel (KBC-005)', () => {
     expect(
       screen.getByText('Histórico indisponível neste navegador.'),
     ).toBeTruthy();
+    // The remembered view is unreadable too: the reader picks the search view.
+    fireEvent.click(screen.getByRole('radio', { name: 'Buscar documentos' }));
+    await view.fixture.whenStable();
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();

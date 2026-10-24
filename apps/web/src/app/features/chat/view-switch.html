@@ -1,0 +1,35 @@
+<fieldset class="switch">
+  <legend class="visually-hidden" i18n="@@view.legend">Modo da conversa</legend>
+  <label class="segment">
+    <input
+      type="radio"
+      name="chat-view"
+      value="search"
+      [checked]="view() === 'search'"
+      (change)="changed.emit('search')"
+    />
+    <span i18n="@@view.search">Buscar documentos</span>
+  </label>
+  <label class="segment">
+    <input
+      type="radio"
+      name="chat-view"
+      value="research"
+      [checked]="view() === 'research'"
+      [disabled]="!researchAvailable()"
+      [attr.aria-describedby]="researchAvailable() ? null : 'view-unavailable'"
+      (change)="changed.emit('research')"
+    />
+    <span
+      ><span class="spark" aria-hidden="true">✦</span>&ngsp;<span
+        i18n="@@view.research"
+        >Pesquisa com IA</span
+      ></span
+    >
+  </label>
+</fieldset>
+@if (!researchAvailable()) {
+  <p id="view-unavailable" class="unavailable" i18n="@@view.unavailable">
+    Configure um provedor de IA em Configurações para pesquisar com IA.
+  </p>
+}

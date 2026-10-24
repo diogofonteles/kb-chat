@@ -74,6 +74,10 @@
   content: '☿';
 }
 
+.view-switch {
+  margin-left: auto;
+}
+
 .topic {
   margin: 0;
   font-family: var(--font-display);
@@ -270,7 +274,14 @@
   }
 
   .topbar {
-    padding: var(--space-3) var(--space-4);
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-4) var(--space-3);
+  }
+
+  /* Phones: the view switch takes its own full-width row under the title. */
+  .view-switch {
+    flex-basis: 100%;
+    margin-left: 0;
   }
 
   .hint-keyboard {

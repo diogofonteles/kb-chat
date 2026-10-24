@@ -7,13 +7,12 @@
       #field
       id="question"
       rows="1"
-      [maxLength]="maxLength"
+      [maxLength]="maxLength()"
       [value]="text()"
       (input)="updateText($event)"
       (keydown)="sendOnEnter($event)"
-      placeholder="ex.: o que é a natureza sétupla?"
-      i18n-placeholder="@@composer.placeholder"
-      aria-describedby="mode-help"
+      [placeholder]="placeholder()"
+      [attr.aria-describedby]="research() ? null : 'mode-help'"
     ></textarea>
     @if (text()) {
       <button
@@ -28,20 +27,22 @@
     }
   </div>
   <div class="actions">
-    <label class="mode">
-      <span class="mode-label" i18n="@@composer.mode">Como buscar</span>
-      <select [value]="mode()" (change)="selectMode($event)">
-        @for (option of modes; track option.value) {
-          <option [value]="option.value" [selected]="option.value === mode()">
-            {{ option.label }}
-          </option>
-        }
-      </select>
-    </label>
-    <span id="mode-help" class="help">{{ modeHelp() }}</span>
+    @if (!research()) {
+      <label class="mode">
+        <span class="mode-label" i18n="@@composer.mode">Como buscar</span>
+        <select [value]="mode()" (change)="selectMode($event)">
+          @for (option of modes; track option.value) {
+            <option [value]="option.value" [selected]="option.value === mode()">
+              {{ option.label }}
+            </option>
+          }
+        </select>
+      </label>
+      <span id="mode-help" class="help">{{ modeHelp() }}</span>
+    }
     @if (nearLimit()) {
       <span class="limit" aria-live="polite" i18n="@@composer.limit"
-        >{{ text().length }}/{{ maxLength }}</span
+        >{{ text().length }}/{{ maxLength() }}</span
       >
     }
     <button
@@ -49,9 +50,12 @@
       class="send"
       [disabled]="!canSend()"
       [attr.aria-describedby]="canSend() ? null : 'send-hint'"
-      i18n="@@composer.send"
     >
-      Buscar
+      @if (research()) {
+        <ng-container i18n="@@composer.ask">Perguntar</ng-container>
+      } @else {
+        <ng-container i18n="@@composer.send">Buscar</ng-container>
+      }
     </button>
     @if (!canSend()) {
       <span id="send-hint" class="visually-hidden">{{ sendHint() }}</span>
