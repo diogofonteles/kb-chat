@@ -1,34 +1,15 @@
 #cloud-config
 # First boot of the kb-chat VM (ADR 0010): Ubuntu 24.04 aarch64 on VM.Standard.A1.Flex.
-# deploy/oci/create-instance.sh renders the placeholder below and passes the result as the
+# deploy/oci/provision.sh renders the placeholder below and passes the result as the
 # instance's user_data; the owner's personal key goes in the instance metadata
 # (ssh_authorized_keys) and lands on the default user "ubuntu" (sudo). The log is
 # /var/log/cloud-init-output.log.
 #   __CI_SSH_PUBLIC_KEY__  the GitHub Actions deploy key (user "deploy", forced command only)
-
-package_update: true
-package_upgrade: true
-
-apt:
-  sources:
-    docker.list:
-      source: deb [arch=arm64 signed-by=$KEY_FILE] https://download.docker.com/linux/ubuntu $RELEASE stable
-      keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
-
-packages:
-  - docker-ce
-  - docker-ce-cli
-  - containerd.io
-  - docker-compose-plugin
-  - fail2ban
-  - unattended-upgrades
-  - netfilter-persistent
-  - iptables-persistent
-  - age
-  - zstd
-  - rsync
-  - pipx
-  - jq
+#
+# Nothing here needs the network before /usr/local/sbin/kb-chat-setup runs: the subnet has
+# no NAT gateway and the reserved public IP is bound a few seconds after the launch, so the
+# setup script waits for egress, installs the packages, and writes the done marker only when
+# Docker, the OCI CLI and the data volume are all in place.
 
 swap:
   filename: /swapfile
@@ -40,7 +21,7 @@ users:
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:
-      - command="/srv/kb-chat/deploy/scripts/ci-gate.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty __CI_SSH_PUBLIC_KEY__
+      - restrict,command="/srv/kb-chat/deploy/scripts/ci-gate.sh" __CI_SSH_PUBLIC_KEY__
 
 write_files:
   # SSH: keys only, no root.
@@ -92,7 +73,8 @@ write_files:
       }
 
   # Mounts the data block volume at /srv/kb-chat (paravirtualized attachment; consistent
-  # device path). Waits for the attachment, formats only a blank volume.
+  # device path). Waits for the attachment and formats only a blank volume. No fallback: if
+  # the volume is not there, setup fails and the state never lands on the boot volume.
   - path: /usr/local/sbin/kb-chat-mount-volume
     permissions: '0755'
     content: |
@@ -101,17 +83,92 @@ write_files:
       device=/dev/oracleoci/oraclevdb
       for _ in $(seq 1 60); do [ -e "$device" ] && break; sleep 10; done
       if [ ! -e "$device" ]; then
-        echo "kb-chat: block volume $device not attached; data stays on the boot volume" >&2
-        mkdir -p /srv/kb-chat
-        exit 0
+        echo "kb-chat: block volume $device is not attached; attach it and rerun kb-chat-setup" >&2
+        exit 1
       fi
       if ! blkid "$device" >/dev/null 2>&1; then
         mkfs.ext4 -L kb-chat-data "$device"
       fi
       uuid="$(blkid -s UUID -o value "$device")"
       mkdir -p /srv/kb-chat
+      # nofail keeps the VM reachable over SSH if the volume is missing at boot; Docker
+      # requires the mount (drop-in below), so the containers never start without it.
       grep -q "$uuid" /etc/fstab || echo "UUID=$uuid /srv/kb-chat ext4 defaults,_netdev,nofail,noatime 0 2" >> /etc/fstab
       mountpoint -q /srv/kb-chat || mount /srv/kb-chat
+      mountpoint -q /srv/kb-chat
+
+  # Docker (and so every container) starts only with the data volume mounted.
+  - path: /etc/systemd/system/docker.service.d/10-kb-chat-data.conf
+    permissions: '0644'
+    content: |
+      [Unit]
+      RequiresMountsFor=/srv/kb-chat
+
+  # Everything that needs the network or the volume, in order. The done marker is written
+  # only when Docker, the OCI CLI and the mount are verified; bootstrap-vm.sh checks it.
+  - path: /usr/local/sbin/kb-chat-setup
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      log() { echo "kb-chat-setup: $*"; }
+      export DEBIAN_FRONTEND=noninteractive
+
+      log "waiting for internet egress (the reserved public IP)"
+      for _ in $(seq 1 90); do
+        curl -fsS --max-time 10 -o /dev/null https://download.docker.com/linux/ubuntu/gpg && break
+        sleep 10
+      done
+      curl -fsS --max-time 10 -o /dev/null https://download.docker.com/linux/ubuntu/gpg ||
+        { log "no egress after 15 min: is the reserved IP bound to the VM?"; exit 1; }
+
+      log "mounting the data volume"
+      /usr/local/sbin/kb-chat-mount-volume
+
+      log "installing packages"
+      apt-get update
+      apt-get -y upgrade
+      install -d -m 0755 /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      fingerprint="$(gpg --show-keys --with-colons /etc/apt/keyrings/docker.asc | awk -F: '/^fpr/ { print $10; exit }')"
+      [ "$fingerprint" = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88" ] ||
+        { log "unexpected Docker signing key $fingerprint"; exit 1; }
+      codename="$(awk -F= '/^VERSION_CODENAME=/ { print $2 }' /etc/os-release)"
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $codename stable" \
+        > /etc/apt/sources.list.d/docker.list
+      echo "iptables-persistent iptables-persistent/autosave_v4 boolean false" | debconf-set-selections
+      echo "iptables-persistent iptables-persistent/autosave_v6 boolean false" | debconf-set-selections
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin \
+        fail2ban unattended-upgrades netfilter-persistent iptables-persistent age zstd rsync pipx jq
+
+      log "layout under /srv/kb-chat (app folders owned by uid 10001)"
+      mkdir -p /srv/kb-chat/deploy/scripts /srv/kb-chat/vault /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config \
+        /srv/kb-chat/qmd/incoming /srv/kb-chat/state /srv/kb-chat/claude
+      chown -R 10001:10001 /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config /srv/kb-chat/state /srv/kb-chat/claude
+      chmod 0700 /srv/kb-chat/state /srv/kb-chat/claude
+      chown -R ubuntu:ubuntu /srv/kb-chat/vault /srv/kb-chat/qmd/incoming
+      chown root:root /srv/kb-chat/deploy && chmod 0755 /srv/kb-chat/deploy
+
+      log "host firewall, Docker, fail2ban, ssh"
+      /usr/local/sbin/kb-chat-open-ports
+      systemctl daemon-reload
+      systemctl restart docker
+      systemctl enable --now fail2ban
+      systemctl restart ssh
+
+      log "OCI CLI (backups with the instance principal, no API key on the VM)"
+      PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install oci-cli
+
+      systemctl enable kb-chat-backup.timer kb-chat-sweep-sessions.timer
+
+      log "verifying"
+      mountpoint -q /srv/kb-chat
+      systemctl is-active --quiet docker
+      docker compose version
+      /usr/local/bin/oci --version
+      touch /var/lib/kb-chat-cloud-init-done
+      log "done"
 
   # Oracle's Ubuntu images ship iptables rules that REJECT everything but SSH, even after the
   # security list allows a port. Open 80/443 before the final REJECT, persistently.
@@ -122,8 +179,8 @@ write_files:
       set -euo pipefail
       rules=/etc/iptables/rules.v4
       for spec in "tcp 80" "tcp 443" "udp 443"; do
-        set -- $spec
-        rule="-A INPUT -p $1 -m state --state NEW -m $1 --dport $2 -j ACCEPT"
+        read -r proto port <<<"$spec"
+        rule="-A INPUT -p $proto -m state --state NEW -m $proto --dport $port -j ACCEPT"
         grep -qF -- "$rule" "$rules" && continue
         # Insert just before the first REJECT of the INPUT chain.
         awk -v rule="$rule" '!done && /^-A INPUT .*-j REJECT/ { print rule; done = 1 } { print }' "$rules" > "$rules.new"
@@ -185,19 +242,5 @@ write_files:
       WantedBy=timers.target
 
 runcmd:
-  - /usr/local/sbin/kb-chat-mount-volume
-  # Layout (ADR 0010). App-owned folders belong to uid 10001 (the API container's user).
-  - mkdir -p /srv/kb-chat/deploy/scripts /srv/kb-chat/vault /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config /srv/kb-chat/qmd/incoming /srv/kb-chat/state /srv/kb-chat/claude
-  - chown -R 10001:10001 /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config /srv/kb-chat/state /srv/kb-chat/claude
-  - chmod 0700 /srv/kb-chat/state /srv/kb-chat/claude
-  - chown -R ubuntu:ubuntu /srv/kb-chat/vault /srv/kb-chat/qmd/incoming
-  - chown root:root /srv/kb-chat/deploy && chmod 0755 /srv/kb-chat/deploy
-  - /usr/local/sbin/kb-chat-open-ports
-  - systemctl restart docker
-  - systemctl enable --now fail2ban
-  - systemctl restart ssh
-  # OCI CLI for backups with the instance principal (no API key on the VM).
-  - PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install oci-cli
-  - systemctl daemon-reload
-  - systemctl enable kb-chat-backup.timer kb-chat-sweep-sessions.timer
-  - touch /var/lib/kb-chat-cloud-init-done
+  # One script, so a failure stops everything after it and no done marker is written.
+  - [/usr/local/sbin/kb-chat-setup]
