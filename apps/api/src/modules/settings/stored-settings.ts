@@ -2,6 +2,7 @@ import {
   aiProviderSchema,
   keyProviderSchema,
   MAX_DAILY_CAP_USD,
+  modelIdSchema,
   preferencesSchema,
   type SettingsUpdate,
 } from '@kb-chat/contracts';
@@ -14,7 +15,8 @@ export const storedSettingsSchema = z.object({
   ai: z
     .object({
       provider: aiProviderSchema.nullable().default(null),
-      model: z.string().min(1).optional(),
+      // A hand-edited model that could not go to a CLI's argv falls back to the default.
+      model: modelIdSchema.optional().catch(undefined),
       keys: z.partialRecord(keyProviderSchema, z.string().min(1)).default({}),
       dailyCapUsd: z.number().min(0).max(MAX_DAILY_CAP_USD).optional(),
     })

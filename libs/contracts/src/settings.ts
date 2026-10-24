@@ -62,6 +62,17 @@ export type SettingsView = z.infer<typeof settingsViewSchema>;
 const apiKeySchema = z.string().trim().min(8).max(400);
 
 /**
+ * A model id or CLI alias ("opus", "deepseek/deepseek-v4-pro", "gpt-5.5"). It reaches a
+ * CLI's argv, so it never starts with "-" and has no spaces or shell characters.
+ */
+export const modelIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/, { error: 'Invalid model id' });
+
+/**
  * PUT /api/v1/settings: a partial update. A key is write-only; `null` removes it,
  * and `model: null` returns to the provider's default.
  */
@@ -77,7 +88,7 @@ export const settingsUpdateSchema = z.strictObject({
   ai: z
     .strictObject({
       provider: aiProviderSchema.nullable().optional(),
-      model: z.string().trim().min(1).max(200).nullable().optional(),
+      model: modelIdSchema.nullable().optional(),
       keys: z
         .partialRecord(keyProviderSchema, apiKeySchema.nullable())
         .optional(),
@@ -98,6 +109,8 @@ export type ProviderBilling = z.infer<typeof providerBillingSchema>;
 export const providerUnavailableReasonSchema = z.enum([
   'key-missing',
   'cli-missing',
+  /** Off on this server until the owner enables it (Codex, ADR 0007). */
+  'not-enabled',
 ]);
 export type ProviderUnavailableReason = z.infer<
   typeof providerUnavailableReasonSchema
@@ -131,7 +144,7 @@ export type ProviderList = z.infer<typeof providerListSchema>;
 export const aiTestRequestSchema = z.strictObject({
   provider: aiProviderSchema.exclude(['none']),
   key: apiKeySchema.optional(),
-  model: z.string().trim().min(1).max(200).optional(),
+  model: modelIdSchema.optional(),
 });
 export type AiTestRequest = z.infer<typeof aiTestRequestSchema>;
 

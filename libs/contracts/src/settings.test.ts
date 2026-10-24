@@ -53,6 +53,26 @@ describe('settings contract', () => {
     );
   });
 
+  it('accepts model ids and aliases and refuses values a CLI could read as a flag', () => {
+    for (const model of [
+      'opus',
+      'deepseek/deepseek-v4-pro',
+      'gpt-5.5',
+      'm@v1:x',
+    ])
+      expect(settingsUpdateSchema.safeParse({ ai: { model } }).success).toBe(
+        true,
+      );
+    for (const model of ['--dangerously-skip-permissions', '-x', 'a b', 'a;b'])
+      expect(settingsUpdateSchema.safeParse({ ai: { model } }).success).toBe(
+        false,
+      );
+    expect(
+      aiTestRequestSchema.safeParse({ provider: 'openai', model: '-p' })
+        .success,
+    ).toBe(false);
+  });
+
   it('tests every provider except "none", and lists "stub" as active only', () => {
     expect(aiTestRequestSchema.safeParse({ provider: 'none' }).success).toBe(
       false,
