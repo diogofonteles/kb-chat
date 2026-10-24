@@ -227,6 +227,20 @@ describe('ChatPage', () => {
     expect(document.activeElement).toBe(screen.getByLabelText('Sua pergunta'));
   });
 
+  it('does not type the slash into the empty, already focused question box', async () => {
+    await renderPage();
+    const box = screen.getByLabelText('Sua pergunta');
+    box.focus();
+    const slash = new KeyboardEvent('keydown', {
+      key: '/',
+      bubbles: true,
+      cancelable: true,
+    });
+    box.dispatchEvent(slash);
+    expect(slash.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(box);
+  });
+
   it('clears the question with the clear button', async () => {
     const view = await renderPage();
     fireEvent.input(screen.getByLabelText('Sua pergunta'), {

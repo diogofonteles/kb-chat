@@ -54,6 +54,12 @@ export class Composer {
     () => MODE_OPTIONS.find((o) => o.value === this.mode())?.help ?? '',
   );
 
+  /** True for the question field while it is still empty (the "/" hint's target). */
+  isEmptyField(target: EventTarget | null): boolean {
+    const field = this.field().nativeElement;
+    return target === field && field.value === '';
+  }
+
   focus(): void {
     this.field().nativeElement.focus();
   }

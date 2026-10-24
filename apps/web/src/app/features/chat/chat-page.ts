@@ -297,12 +297,19 @@ export class ChatPage {
     this.store.topics.reload();
   }
 
+  /**
+   * "/" focuses the question box. Pressed in the box while it is still empty (it has focus
+   * on load), it does nothing, so following the hint never types "/" (M-9); in any other
+   * field it types as usual.
+   */
   protected focusOnSlash(event: KeyboardEvent): void {
+    if (event.key !== '/') return;
+    if (this.composer().isEmptyField(event.target)) {
+      event.preventDefault();
+      return;
+    }
     const target = event.target as HTMLElement | null;
-    const typing = target?.closest(
-      'input, textarea, select, [contenteditable]',
-    );
-    if (event.key !== '/' || typing) return;
+    if (target?.closest('input, textarea, select, [contenteditable]')) return;
     event.preventDefault();
     this.composer().focus();
   }
