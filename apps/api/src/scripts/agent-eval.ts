@@ -125,7 +125,7 @@ function outcomeSection(outcome: Outcome, index: number): string {
     '',
     `- Cita o documento esperado: ${yesNo(outcome.hit)} (esperado: ${outcome.question.expected.join(', ') || '—'})`,
     ...mentionLine(outcome),
-    `- Primeiro passo: ${seconds(outcome.firstStepMs)} · primeiro texto: ${seconds(outcome.firstTokenMs)} · total: ${seconds(outcome.totalMs)} · custo: US$ ${outcome.usd.toFixed(4)} · textos recolhidos: ${outcome.retracts}${outcome.error ? ` · erro: ${outcome.error}` : ''}`,
+    `- Primeiro passo: ${seconds(outcome.firstStepMs)} · primeiro texto: ${seconds(outcome.firstTokenMs)} · total: ${seconds(outcome.totalMs)} · custo: US$ ${outcome.usd.toFixed(4)} · textos recolhidos: ${outcome.retracts} · aprofundou: ${outcome.escalated ? `sim (${outcome.model ?? '?'})` : 'não'}${outcome.error ? ` · erro: ${outcome.error}` : ''}`,
     `- Passos (${outcome.steps.length}): ${outcome.steps.map((step, i) => `${step} (${seconds(outcome.stepMs[i] ?? null)})`).join(' → ') || '—'}`,
     '',
     '### Resposta',
@@ -180,6 +180,7 @@ function summary(outcomes: readonly Outcome[], run: RunInfo): string {
     `- Custo total: US$ ${usd.toFixed(4)} · médio: US$ ${(usd / Math.max(1, outcomes.length)).toFixed(4)}`,
     `- Respostas que nomeiam os termos exigidos: ${mentionOk.length}/${mentionJudged.length}`,
     `- Textos recolhidos (mostrados e retirados): ${outcomes.reduce((sum, o) => sum + o.retracts, 0)} · erros: ${outcomes.filter((o) => o.error).length}`,
+    `- Aprofundadas automaticamente (Rápido → Profundo): ${outcomes.filter((o) => o.escalated).length}/${outcomes.length}`,
     '',
   ].join('\n');
 }

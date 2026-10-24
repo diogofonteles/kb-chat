@@ -62,6 +62,8 @@ describe('agent-eval session', () => {
         profile: 'fast',
       });
       expect(turn.retracts).toBe(1);
+      expect(turn.escalated).toBe(false);
+      expect(turn.model).toBe('stub/model');
       expect(turn.answer).toMatch(/\[1\]\.$/);
       expect(turn.answer).not.toContain('confiro');
       expect(turn.usd).toBeGreaterThan(0);

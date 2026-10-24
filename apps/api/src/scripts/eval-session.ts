@@ -95,6 +95,10 @@ export interface EvalTurn {
   readonly firstStepMs: number | null;
   readonly firstTokenMs: number | null;
   readonly totalMs: number;
+  /** The fast pass handed over to the deep profile (ADR 0009). */
+  readonly escalated: boolean;
+  /** The model that wrote the answer (the deep one after an escalation). */
+  readonly model: string | null;
 }
 
 interface TurnState {
@@ -107,6 +111,8 @@ interface TurnState {
   error: string | null;
   firstStepMs: number | null;
   firstTokenMs: number | null;
+  escalated: boolean;
+  model: string | null;
 }
 
 const COLLECTORS: {
@@ -136,6 +142,8 @@ const COLLECTORS: {
   },
   done: (state, event) => {
     state.usd = event.usd;
+    state.escalated = event.escalated === true;
+    state.model = event.model;
   },
   error: (state, event) => {
     state.error = event.code;
@@ -174,6 +182,8 @@ export async function runEvalTurn(
     error: null,
     firstStepMs: null,
     firstTokenMs: null,
+    escalated: false,
+    model: null,
   };
   const startedAt = performance.now();
   const elapsed = () => Math.round(performance.now() - startedAt);
