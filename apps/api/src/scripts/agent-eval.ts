@@ -1,22 +1,20 @@
-// Research agent evaluation (KBC-008 AC-8, NFR-1..3) against the real vault and the
-// provider the API would use now (Settings, then the environment, ADR 0007); a per-token
-// provider spends real money within the daily cap. Usage:
-//   pnpm --filter @kb-chat/api agent-eval <questions.json> <report.md> [topic]
+// Research agent evaluation (KBC-008 AC-8, NFR-1..3; KBC-011 NFR-1..3) against the real vault
+// and the provider the API would use now (Settings, then the environment, ADR 0007); a
+// per-token provider spends real money within the daily cap. The kb tools are served to a
+// subscription CLI by an MCP endpoint of the eval's own. Usage:
+//   pnpm --filter @kb-chat/api agent-eval <questions.json> <report.md> [topic] [--profile fast|deep]
+import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import type { ResearchEvent, ResearchTurn } from '@kb-chat/contracts';
+import { dirname } from 'node:path';
+import {
+  researchProfileSchema,
+  type ResearchProfile,
+  type ResearchTurn,
+} from '@kb-chat/contracts';
 import { z } from 'zod';
-import { FsVaultAdapter } from '../adapters/fs-vault-adapter.js';
-import { JsonSettingsStore } from '../adapters/json-settings-store.js';
-import { JsonlSpendLedger } from '../adapters/jsonl-spend-ledger.js';
-import { OWNER } from '../app.js';
 import { loadConfig } from '../config.js';
-import { createLogger } from '../logger.js';
-import { CatalogRegistry } from '../modules/catalog/index.js';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
-import { createAiProviders } from '../providers/create-ai-providers.js';
-import { createResearchAgent } from '../research-agent-factory.js';
-import { createSearchIndex } from '../search-index-factory.js';
+import { openEvalSession, runEvalTurn, type EvalTurn } from './eval-session.js';
 
 const questionsSchema = z.array(
   z.object({
@@ -31,92 +29,43 @@ const questionsSchema = z.array(
 );
 type Question = z.infer<typeof questionsSchema>[number];
 
-interface Outcome {
+interface Outcome extends EvalTurn {
   readonly question: Question;
-  readonly answer: string;
-  readonly steps: readonly string[];
   readonly cited: readonly string[];
   readonly hit: boolean | null;
   /** The mustMention words missing from the answer; null when none were asked. */
   readonly missing: readonly string[] | null;
-  readonly firstStepMs: number | null;
-  readonly firstTokenMs: number | null;
-  readonly totalMs: number;
-  readonly usd: number;
-  readonly error: string | null;
 }
 
 const fold = (text: string): string =>
   text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
-const [questionsPath, reportPath, topicArg] = process.argv.slice(2);
-if (!questionsPath || !reportPath) {
+function parseArgs(argv: readonly string[]) {
+  const flag = argv.indexOf('--profile');
+  const profile = researchProfileSchema.parse(
+    flag >= 0 ? argv[flag + 1] : 'fast',
+  );
+  const positional = argv.filter(
+    (_, i) => flag < 0 || (i !== flag && i !== flag + 1),
+  );
+  const [questionsPath, reportPath, topic] = positional;
+  return { questionsPath, reportPath, topic, profile };
+}
+
+const args = parseArgs(process.argv.slice(2));
+if (!args.questionsPath || !args.reportPath) {
   process.stderr.write(
-    'Uso: pnpm --filter @kb-chat/api agent-eval <perguntas.json> <relatorio.md> [tópico]\n',
+    'Uso: pnpm --filter @kb-chat/api agent-eval <perguntas.json> <relatorio.md> [tópico] [--profile fast|deep]\n',
   );
   process.exit(2);
 }
 
-async function composeRunner() {
-  const config = loadConfig();
-  const log = createLogger('warn');
-  const vault = new FsVaultAdapter(config.KB_VAULT);
-  const index = await createSearchIndex({ config, vault, log });
-  const catalog = new CatalogRegistry(vault);
-  await catalog.load();
-  const ledger = new JsonlSpendLedger(
-    join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
-  );
-  const agent = createResearchAgent({ catalog, index, vault, ledger });
-  const ai = await createAiProviders({
-    config,
-    principal: OWNER,
-    store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
-    env: process.env,
-    tools: agent.toolsFor,
-    perTokenRunner: agent.perTokenRunner,
-    systemPrompt: agent.systemPrompt,
-  });
-  const runner = ai.registry.researchRunner(OWNER);
-  return { runner, index, topic: topicArg ?? config.KB_TOPIC ?? 'hermetismo' };
-}
-
-interface Collected {
-  answer: string;
-  steps: string[];
-  sources: Map<number, string>;
-  usd: number;
-  error: string | null;
-  firstStepMs: number | null;
-  firstTokenMs: number | null;
-}
-
-function collect(
-  state: Collected,
-  event: ResearchEvent,
-  startedAt: number,
-): void {
-  if (event.type === 'token') {
-    state.answer += event.text;
-    state.firstTokenMs ??= Math.round(performance.now() - startedAt);
-  }
-  if (event.type === 'step') {
-    state.steps.push(event.step.text);
-    state.firstStepMs ??= Math.round(performance.now() - startedAt);
-  }
-  if (event.type === 'sources')
-    for (const s of event.sources)
-      state.sources.set(s.n, `${s.title} (${s.id})`);
-  if (event.type === 'done') state.usd = event.usd;
-  if (event.type === 'error') state.error = event.code;
-}
-
-const citedSources = (state: Collected): string[] =>
+const citedSources = (turn: EvalTurn): string[] =>
   [
     ...new Set(
-      [...state.answer.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])),
+      [...turn.answer.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])),
     ),
-  ].map((n) => `[${n}] ${state.sources.get(n) ?? '(número sem fonte)'}`);
+  ].map((n) => `[${n}] ${turn.sources.get(n) ?? '(número sem fonte)'}`);
 
 const isHit = (question: Question, cited: readonly string[]): boolean | null =>
   question.expected.length === 0
@@ -132,51 +81,26 @@ const missingWords = (question: Question, answer: string): string[] | null =>
     ? null
     : question.mustMention.filter((word) => !fold(answer).includes(fold(word)));
 
-async function runTurn(
-  runner: ResearchRunnerPort,
-  question: Question,
-  context: { topic: string; history: readonly ResearchTurn[] },
-): Promise<Collected> {
-  const state: Collected = {
-    answer: '',
-    steps: [],
-    sources: new Map(),
-    usd: 0,
-    error: null,
-    firstStepMs: null,
-    firstTokenMs: null,
-  };
-  const startedAt = performance.now();
-  const input = {
-    topic: context.topic,
-    question: question.question,
-    history: context.history,
-    signal: new AbortController().signal,
-  };
-  for await (const event of runner.run(input)) collect(state, event, startedAt);
-  return state;
-}
-
 async function ask(
   runner: ResearchRunnerPort,
   question: Question,
-  context: { topic: string; history: readonly ResearchTurn[] },
+  context: {
+    topic: string;
+    history: readonly ResearchTurn[];
+    profile: ResearchProfile;
+  },
 ): Promise<Outcome> {
-  const startedAt = performance.now();
-  const state = await runTurn(runner, question, context);
-  const cited = citedSources(state);
+  const turn = await runEvalTurn(runner, {
+    ...context,
+    question: question.question,
+  });
+  const cited = citedSources(turn);
   return {
+    ...turn,
     question,
-    answer: state.answer,
-    steps: state.steps,
     cited,
     hit: isHit(question, cited),
-    missing: missingWords(question, state.answer),
-    firstStepMs: state.firstStepMs,
-    firstTokenMs: state.firstTokenMs,
-    totalMs: Math.round(performance.now() - startedAt),
-    usd: state.usd,
-    error: state.error,
+    missing: missingWords(question, turn.answer),
   };
 }
 
@@ -201,7 +125,7 @@ function outcomeSection(outcome: Outcome, index: number): string {
     '',
     `- Cita o documento esperado: ${yesNo(outcome.hit)} (esperado: ${outcome.question.expected.join(', ') || '—'})`,
     ...mentionLine(outcome),
-    `- Primeiro passo: ${seconds(outcome.firstStepMs)} · primeiro texto: ${seconds(outcome.firstTokenMs)} · total: ${seconds(outcome.totalMs)} · custo: US$ ${outcome.usd.toFixed(4)}${outcome.error ? ` · erro: ${outcome.error}` : ''}`,
+    `- Primeiro passo: ${seconds(outcome.firstStepMs)} · primeiro texto: ${seconds(outcome.firstTokenMs)} · total: ${seconds(outcome.totalMs)} · custo: US$ ${outcome.usd.toFixed(4)} · textos recolhidos: ${outcome.retracts}${outcome.error ? ` · erro: ${outcome.error}` : ''}`,
     `- Passos (${outcome.steps.length}): ${outcome.steps.join(' → ') || '—'}`,
     '',
     '### Resposta',
@@ -217,49 +141,82 @@ function outcomeSection(outcome: Outcome, index: number): string {
   ].join('\n');
 }
 
-function summary(outcomes: readonly Outcome[], model: string): string {
+const medianOf = (values: readonly number[]): number => {
+  const sorted = [...values].sort((x, y) => x - y);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+};
+
+interface RunInfo {
+  readonly model: string;
+  readonly provider: string;
+  readonly profile: ResearchProfile;
+}
+
+function commitOf(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return '?';
+  }
+}
+
+function summary(outcomes: readonly Outcome[], run: RunInfo): string {
   const judged = outcomes.filter((o) => o.hit !== null);
   const hits = judged.filter((o) => o.hit).length;
   const usd = outcomes.reduce((sum, o) => sum + o.usd, 0);
-  const totals = outcomes.map((o) => o.totalMs).sort((a, b) => a - b);
-  const median = totals[Math.floor(totals.length / 2)] ?? 0;
+  const totals = outcomes.map((o) => o.totalMs);
+  const firstTexts = outcomes.map((o) => o.firstTokenMs ?? o.totalMs);
   const mentionJudged = outcomes.filter((o) => o.missing !== null);
   const mentionOk = mentionJudged.filter((o) => o.missing?.length === 0);
   return [
-    '# Avaliação do agente de pesquisa (KBC-008)',
+    '# Avaliação do agente de pesquisa (KBC-008, KBC-011)',
     '',
-    `- Data: ${new Date().toISOString()} · modelo: ${model} · perguntas: ${outcomes.length}`,
-    `- Citam o documento esperado: ${hits}/${judged.length} (meta: ≥ 8/10, NFR-3)`,
-    `- Custo total: US$ ${usd.toFixed(4)} · médio: US$ ${(usd / Math.max(1, outcomes.length)).toFixed(4)} (meta: ≤ US$ 0,02, NFR-2)`,
-    `- Tempo total mediano: ${seconds(median)} · maior: ${seconds(totals.at(-1) ?? 0)} (meta: ≤ 60 s, NFR-1)`,
+    `- Data: ${new Date().toISOString()} · commit: ${commitOf()} · provedor: ${run.provider} · modelo: ${run.model} · perfil: ${run.profile} · perguntas: ${outcomes.length}`,
+    `- Citam o documento esperado: ${hits}/${judged.length} (meta: ≥ 8/10)`,
+    `- Primeiro texto mediano: ${seconds(medianOf(firstTexts))} (meta do perfil rápido: ≤ 10 s, KBC-011 NFR-1)`,
+    `- Tempo total mediano: ${seconds(medianOf(totals))} · maior: ${seconds(Math.max(0, ...totals))} (meta do perfil rápido: ≤ 20 s, KBC-011 NFR-2)`,
+    `- Custo total: US$ ${usd.toFixed(4)} · médio: US$ ${(usd / Math.max(1, outcomes.length)).toFixed(4)}`,
     `- Respostas que nomeiam os termos exigidos: ${mentionOk.length}/${mentionJudged.length}`,
-    `- Erros: ${outcomes.filter((o) => o.error).length}`,
+    `- Textos recolhidos (mostrados e retirados): ${outcomes.reduce((sum, o) => sum + o.retracts, 0)} · erros: ${outcomes.filter((o) => o.error).length}`,
     '',
   ].join('\n');
 }
 
 const questions = questionsSchema.parse(
-  JSON.parse(await readFile(questionsPath, 'utf8')),
+  JSON.parse(await readFile(args.questionsPath, 'utf8')),
 );
-const { runner, index, topic } = await composeRunner();
+const config = loadConfig();
+const topic = args.topic ?? config.KB_TOPIC ?? 'hermetismo';
+const { profile } = args;
+const session = await openEvalSession({ config, env: process.env, profile });
 const outcomes: Outcome[] = [];
 // A follow-up continues the conversation of the questions before it; any other question starts a new one.
 let conversation: ResearchTurn[] = [];
 for (const question of questions) {
   process.stdout.write(`… ${question.question}\n`);
   const history = question.followUp ? conversation : [];
-  const outcome = await ask(runner, question, { topic, history });
+  const outcome = await ask(session.runner, question, {
+    topic,
+    history,
+    profile,
+  });
   outcomes.push(outcome);
   conversation = [
     ...history,
     { question: question.question, answer: outcome.answer },
   ].slice(-20);
 }
-await index.close();
-const report = [
-  summary(outcomes, runner.model),
-  ...outcomes.map(outcomeSection),
-].join('\n');
-await mkdir(dirname(reportPath), { recursive: true });
-await writeFile(reportPath, report);
-process.stdout.write(`Relatório: ${reportPath}\n`);
+await session.close();
+const run = {
+  model: session.runner.model,
+  provider: session.provider,
+  profile,
+};
+const report = [summary(outcomes, run), ...outcomes.map(outcomeSection)].join(
+  '\n',
+);
+await mkdir(dirname(args.reportPath), { recursive: true });
+await writeFile(args.reportPath, report);
+process.stdout.write(`Relatório: ${args.reportPath}\n`);
