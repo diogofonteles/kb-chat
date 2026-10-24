@@ -14,6 +14,7 @@ import type {
 import { errorMessage } from '@core/api/api-error.js';
 import { modeLabel } from '@core/i18n/facet-labels.js';
 import { hasFilters, type ChatMessage } from './chat-message.js';
+import { AiAnswer } from '@features/answer/ai-answer.js';
 import { FilterBar } from './filter-bar.js';
 import {
   activeFilters,
@@ -26,7 +27,7 @@ import { describeResultCount } from './result-count.js';
 /** The system's answer to one question: summary, filters, cards and every state (screens.md T2). */
 @Component({
   selector: 'app-result-message',
-  imports: [ResultCard, FilterBar, DecimalPipe],
+  imports: [ResultCard, FilterBar, AiAnswer, DecimalPipe],
   templateUrl: './result-message.html',
   styleUrl: './result-message.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

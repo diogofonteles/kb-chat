@@ -1,14 +1,21 @@
+import { join } from 'node:path';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
+import { JsonlSpendLedger } from './adapters/jsonl-spend-ledger.js';
+import { createLlm } from './llm-factory.js';
 import { createSearchIndex } from './search-index-factory.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
 const index = await createSearchIndex({ config, vault, log: logger });
-const app = await buildApp({ config, vault, index, logger });
+const llm = await createLlm(config);
+const ledger = new JsonlSpendLedger(
+  join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
+);
+const app = await buildApp({ config, vault, index, logger, llm, ledger });
 
 const shutdown = async (): Promise<void> => {
   await app.close();

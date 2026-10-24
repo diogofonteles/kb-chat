@@ -22,6 +22,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-004](KBC-004-grounded-ai-answer.md) | Responder com IA citando as fontes | release-1 | ready | KBC-001 |
 | [KBC-005](KBC-005-sidebar-topics-history-themes.md) | Lateral: acervo, histórico, temas e gasto | release-1 | ready | KBC-001, KBC-004 |
 | [KBC-006](KBC-006-start-suggestions-and-usage-log.md) | Sugestões iniciais e log de uso local | release-1 | ready | KBC-002 |
+| [KBC-007](KBC-007-onboarding-preferences-ai-provider.md) | Onboarding: preferências e provedor de IA (chave própria ou assinatura Claude/ChatGPT) | release-1 | ready | KBC-004, KBC-005 |
 
 ## Definição de pronto (global)
 

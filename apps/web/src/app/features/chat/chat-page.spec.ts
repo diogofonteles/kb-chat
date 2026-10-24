@@ -9,6 +9,18 @@ import { fireEvent, render, screen } from '@testing-library/angular';
 import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
+import { AnswersApi } from '@core/api/answers-api.js';
+import { EMPTY, of } from 'rxjs';
+
+/** The page tests cover search and reading; the AI block gets a quiet stand-in. */
+const FAKE_ANSWERS = {
+  provide: AnswersApi,
+  useValue: {
+    estimate: () => of({ usd: 0.0005, model: 'stub/model', passages: 1 }),
+    answer: () => EMPTY,
+    spendToday: () => of({ usd: 0, capUsd: 1, configured: true }),
+  },
+};
 
 const SEARCH_URL = '/api/v1/topics/hermetismo/searches';
 
@@ -19,6 +31,7 @@ async function renderPage() {
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+      FAKE_ANSWERS,
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -278,6 +291,7 @@ describe('ChatPage default collection', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+        FAKE_ANSWERS,
       ],
     });
     TestBed.inject(HttpTestingController)
@@ -312,6 +326,7 @@ describe('ChatPage without collections', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+        FAKE_ANSWERS,
       ],
     });
     const http = TestBed.inject(HttpTestingController);
@@ -326,6 +341,7 @@ describe('ChatPage without collections', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+        FAKE_ANSWERS,
       ],
     });
     const http = TestBed.inject(HttpTestingController);

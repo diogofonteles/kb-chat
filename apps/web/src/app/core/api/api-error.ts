@@ -4,12 +4,30 @@ import { apiErrorSchema, type ApiErrorCode } from '@kb-chat/contracts';
 /** Client-side failure kinds next to the API's own codes. */
 export type UiErrorCode = ApiErrorCode | 'OFFLINE';
 
+/** Text responses (the streamed answer) carry the error envelope as a JSON string. */
+function parseBody(body: unknown): unknown {
+  if (typeof body !== 'string') return body;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
+}
+
 /** Reads the contract's error envelope; a network failure (status 0) or a gateway error is OFFLINE. */
 export function toUiErrorCode(err: unknown): UiErrorCode {
+  // rxResource wraps non-Error failures (HttpErrorResponse is one) and keeps the original as `cause`.
+  if (
+    !(err instanceof HttpErrorResponse) &&
+    err instanceof Error &&
+    err.cause instanceof HttpErrorResponse
+  ) {
+    return toUiErrorCode(err.cause);
+  }
   if (!(err instanceof HttpErrorResponse)) return 'INTERNAL';
   if (err.status === 0 || err.status === 502 || err.status === 504)
     return 'OFFLINE';
-  const parsed = apiErrorSchema.safeParse(err.error);
+  const parsed = apiErrorSchema.safeParse(parseBody(err.error));
   return parsed.success ? parsed.data.error.code : 'INTERNAL';
 }
 

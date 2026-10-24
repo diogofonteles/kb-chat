@@ -18,6 +18,19 @@ describe('toUiErrorCode', () => {
     );
   });
 
+  it('unwraps errors wrapped by rxResource and reads text bodies', () => {
+    const http = new HttpErrorResponse({
+      status: 409,
+      error: '{"error":{"code":"LLM_NOT_CONFIGURED","message":"x"}}',
+    });
+    expect(toUiErrorCode(new Error('wrapped', { cause: http }))).toBe(
+      'LLM_NOT_CONFIGURED',
+    );
+    expect(
+      toUiErrorCode(new HttpErrorResponse({ status: 500, error: 'not json' })),
+    ).toBe('INTERNAL');
+  });
+
   it('falls back to INTERNAL for unknown bodies and non-HTTP errors', () => {
     expect(
       toUiErrorCode(new HttpErrorResponse({ status: 500, error: 'boom' })),
