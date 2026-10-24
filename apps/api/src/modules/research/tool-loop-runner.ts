@@ -186,7 +186,9 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     } finally {
       await this.account(turn, call, prompt);
     }
-    if (call.toolCalls.length === 0) yield* this.flush(turn, call, true);
+    // The forced last call is the answer even if the provider ignored "none" (OpenRouter).
+    if (final || call.toolCalls.length === 0)
+      yield* this.flush(turn, call, true);
     return call;
   }
 

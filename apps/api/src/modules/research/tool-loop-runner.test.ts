@@ -213,6 +213,34 @@ describe('ToolLoopRunner', () => {
     });
   });
 
+  it('shows a short final answer even when the forced last call also asks for a tool', async () => {
+    const { runner, llm } = await fixtureRunner();
+    const short = 'O ritmo é uma lei [1].';
+    llm.streamAgent = async function* (
+      _messages,
+      _tools,
+      options,
+    ): AsyncIterable<AgentChunk> {
+      if (options.toolChoice === 'none') {
+        yield { type: 'token', text: short };
+        yield {
+          type: 'tool_call',
+          call: { id: 'late', name: 'list_subjects', arguments: '{}' },
+        };
+        return;
+      }
+      for (let i = 0; i < MAX_TOOL_STEPS; i += 1)
+        yield {
+          type: 'tool_call',
+          call: { id: `c${i}`, name: 'list_subjects', arguments: '{}' },
+        };
+    };
+    const events = await collectEvents(runner.run(input('ritmo')));
+    expect(short.length).toBeLessThan(300);
+    expect(answerText(events)).toBe(short);
+    expect(ofType(events, 'done')[0]?.steps).toBe(MAX_TOOL_STEPS);
+  });
+
   it('streams a long final answer in chunks once it passes the hold size', async () => {
     const answer = 'O ritmo governa os ciclos do cosmos [1]. '.repeat(60);
     const { runner } = await fixtureRunner({ script: [{ text: answer }] });
