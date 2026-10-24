@@ -1,3 +1,4 @@
+import type { SubscriptionPrompt } from '../adapters/subscription-prompt.js';
 import type { AppConfig } from '../config.js';
 import { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import { SettingsService } from '../modules/settings/index.js';
@@ -22,9 +23,13 @@ export interface AiProvidersOptions {
   readonly tools?: ResearchToolsFactory;
   /** The in-API tool loop over a per-token model (KBC-008). */
   readonly perTokenRunner?: PerTokenRunnerFactory;
-  /** The research rules for a topic, for the subscription CLIs (the module's prompt). */
-  readonly systemPrompt?: (topic: string) => string;
+  /** The research rules for a topic and profile, for the subscription CLIs (the module's prompt). */
+  readonly systemPrompt?: SubscriptionPrompt;
   readonly warn?: (message: string) => void;
+  /** The turns' MCP registry when the caller serves it itself (agent-eval); default: a new one. */
+  readonly turns?: McpTurnRegistry;
+  /** Where the CLIs reach the MCP endpoints; default: this API on PORT. */
+  readonly apiBaseUrl?: string;
 }
 
 /** Settings, the provider registry and the per-request ports built on them (ADR 0007). */
@@ -53,12 +58,12 @@ export async function createAiProviders(
 ): Promise<AiProviders> {
   const { config } = options;
   const settings = await loadSettings(options);
-  const turns = new McpTurnRegistry();
+  const turns = options.turns ?? new McpTurnRegistry();
   const registry = new ProviderRegistry({
     config,
     settings,
     turns,
-    apiBaseUrl: `http://127.0.0.1:${config.PORT}`,
+    apiBaseUrl: options.apiBaseUrl ?? `http://127.0.0.1:${config.PORT}`,
     env: options.env,
     fetch: options.fetch,
     tools: options.tools,

@@ -7,6 +7,7 @@ describe('buildResearchMessages', () => {
       topicTitle: 'Hermetismo',
       question: 'quais são os 5 princípios ocultos',
       history: [],
+      profile: 'deep',
     });
     expect(system?.role).toBe('system');
     const text = system?.content ?? '';
@@ -24,6 +25,16 @@ describe('buildResearchMessages', () => {
     ])
       expect(text).toContain(variant);
     expect(text).toContain('"cinco princípios", "doze princípios"');
+  });
+
+  it('gives the fast profile 6 steps, batched reads and a focused answer (KBC-011)', () => {
+    const fast = researchSystemPrompt('Hermetismo', 'fast');
+    expect(fast).toContain('no máximo 6 passos');
+    expect(fast).toContain('read_documents');
+    expect(fast).toContain('Responda de forma focada');
+    expect(researchSystemPrompt('Hermetismo', 'deep')).not.toContain(
+      'Responda de forma focada',
+    );
   });
 
   it('tells the model to open with the answer itself, never with its own process', () => {

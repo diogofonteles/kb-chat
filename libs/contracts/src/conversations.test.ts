@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   conversationSchema,
+  savedResearchTurnSchema,
   summarizeConversation,
   type Conversation,
 } from './conversations.js';
@@ -79,5 +80,23 @@ describe('conversations contract', () => {
     expect(conversationSchema.safeParse({ ...search, asks: [] }).success).toBe(
       false,
     );
+  });
+
+  it('keeps that a research turn went deeper, and reads older turns without it (ADR 0009)', () => {
+    const turn = {
+      question: 'q',
+      answer: 'a',
+      sources: [],
+      steps: 9,
+      usd: 0,
+      billing: 'subscription',
+      model: 'opus',
+      interrupted: false,
+      at: '2026-10-24T19:00:00.000Z',
+    };
+    expect(
+      savedResearchTurnSchema.parse({ ...turn, escalated: true }).escalated,
+    ).toBe(true);
+    expect(savedResearchTurnSchema.parse(turn).escalated).toBeUndefined();
   });
 });

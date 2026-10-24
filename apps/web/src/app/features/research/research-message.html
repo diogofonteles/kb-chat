@@ -12,8 +12,8 @@
             <span class="steps-text">{{ stepsLine() }}</span>
           </summary>
           <ol>
-            @for (step of turn().steps; track $index) {
-              <li>{{ step.text }}</li>
+            @for (step of stepItems(); track $index) {
+              <li [class.thought]="step.thought">{{ step.text }}</li>
             }
           </ol>
         </details>

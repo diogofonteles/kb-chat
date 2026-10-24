@@ -1,10 +1,16 @@
-import type { ResearchEvent, ResearchTurn } from '@kb-chat/contracts';
+import type {
+  ResearchEvent,
+  ResearchProfile,
+  ResearchTurn,
+} from '@kb-chat/contracts';
 import type { AgentLlmPort } from './llm.js';
 
 export interface ResearchInput {
   readonly topic: string;
   readonly question: string;
   readonly history: readonly ResearchTurn[];
+  /** Step budget and prompt of the turn (KBC-011); the model was chosen with the runner. */
+  readonly profile: ResearchProfile;
   readonly signal: AbortSignal;
 }
 
@@ -26,8 +32,17 @@ export interface SpendScope {
   readonly dailyCapUsd: () => number;
 }
 
+/** The deep profile a fast turn may escalate to (ADR 0009). */
+export interface Escalation<T> {
+  /** The deep model (a per-token adapter, or a CLI model id). */
+  readonly deep: T;
+  /** Read on every turn: Settings' "Aprofundar automaticamente". */
+  readonly enabled: () => boolean;
+}
+
 /** Builds the in-API tool loop (KBC-008) over a per-token model. */
 export type PerTokenRunnerFactory = (
   llm: AgentLlmPort,
   scope: SpendScope,
+  escalation?: Escalation<AgentLlmPort>,
 ) => ResearchRunnerPort;

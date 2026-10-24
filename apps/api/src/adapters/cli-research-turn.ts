@@ -1,20 +1,30 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AiTestCode, ResearchEvent } from '@kb-chat/contracts';
+import type {
+  AiTestCode,
+  AnswerSource,
+  ResearchEvent,
+} from '@kb-chat/contracts';
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
+import {
+  AnswerStream,
+  DEEPEN_STEP,
+  PROFILE_STEPS,
+  deepenReason,
+  findingsText,
+} from '../modules/research/index.js';
 import { MCP_BEARER_PATH, mcpTurnPath } from '../mcp/mcp-routes.js';
-import type { ResearchInput } from '../ports/research-runner.js';
+import type { Escalation, ResearchInput } from '../ports/research-runner.js';
 import type {
   ResearchToolResult,
   ResearchToolsPort,
 } from '../ports/research-tools.js';
-import { CliAnswer } from './cli-answer.js';
 import { EventQueue } from './event-queue.js';
 import { spawnCli, subscriptionEnv, type CliProcess } from './cli-process.js';
 
 /** What one stdout line of a CLI means. */
 export interface CliLine {
-  /** Answer text, held by the narration rule before it is shown. */
+  /** Answer text; it streams at once and is retracted if its message calls tools (ADR 0009). */
   readonly text?: string;
   /** How the model's message ended, when the CLI says so: with tool calls or as an answer. */
   readonly messageEnd?: 'tool_use' | 'answer';
@@ -45,8 +55,8 @@ export interface CliLaunch {
 /** How one official CLI is called and read (Claude Code, Codex). */
 export interface CliDialect {
   readonly name: string;
-  launch(access: TurnAccess, input: ResearchInput): Promise<CliLaunch>;
-  input(input: ResearchInput): string;
+  launch(access: TurnAccess, input: CliPassInput): Promise<CliLaunch>;
+  input(input: CliPassInput): string;
   parse(line: string): CliLine;
 }
 
@@ -61,17 +71,40 @@ export interface CliTurnOptions {
   readonly model: string;
   /** SIGTERM → SIGKILL delay on abort; default KILL_GRACE_MS. */
   readonly killGraceMs?: number;
+  /** A fast turn's deep model (undefined: the CLI's own) to escalate to (ADR 0009). */
+  readonly escalation?: Escalation<string | undefined>;
 }
+
+/** One research turn as the runner hands it over: the tools and the CLI's model. */
+export type TurnInput = ResearchInput & {
+  readonly tools: ResearchToolsPort;
+  /** The `--model` of the fast (or only) pass; undefined: the CLI's own. */
+  readonly model?: string;
+};
+
+/** One CLI run of a turn: the first pass, or the deep pass after an escalation. */
+export type CliPassInput = TurnInput & {
+  /** The fast pass may answer with the escalation marker (its prompt says how). */
+  readonly canDeepen: boolean;
+  /** What the fast pass found, told to the deep pass. */
+  readonly findings?: string;
+};
 
 interface TurnState {
   model: string;
   steps: number;
   /** Sources already streamed: a sources event goes out only when the list grows. */
   sourcesSent: number;
+  sources: AnswerSource[];
   result: CliLine['result'];
+  /** Why the fast pass must go deeper; null while it answered. */
+  deepen: string | null;
 }
 
-function finalEvent(state: TurnState, aborted: boolean): ResearchEvent {
+function finalEvent(
+  state: TurnState,
+  { aborted, escalated }: { aborted: boolean; escalated: boolean },
+): ResearchEvent {
   if (aborted || state.result?.ok)
     return {
       type: 'done',
@@ -81,6 +114,7 @@ function finalEvent(state: TurnState, aborted: boolean): ResearchEvent {
       model: state.model,
       interrupted: aborted,
       steps: state.steps,
+      ...(escalated ? { escalated: true } : {}),
     };
   return {
     type: 'error',
@@ -88,27 +122,39 @@ function finalEvent(state: TurnState, aborted: boolean): ResearchEvent {
   };
 }
 
-/** The live state of one turn: its events, the CLI's verdict and the steps taken. */
+interface CliTurnSetup {
+  readonly dialect: CliDialect;
+  readonly model: string;
+  /** Shared by both passes, so segment numbers never repeat in one turn. */
+  readonly answer: AnswerStream;
+  readonly canDeepen: boolean;
+  /** What the reader asked: what a give-up answer would deny. */
+  readonly question: string;
+}
+
+/** The live state of one CLI pass: its events, the CLI's verdict and the steps taken. */
 class CliTurn {
   readonly queue = new EventQueue<ResearchEvent>();
   readonly state: TurnState;
-  private readonly answer = new CliAnswer((text) =>
-    this.queue.push({ type: 'token', text }),
-  );
 
-  constructor(
-    private readonly dialect: CliDialect,
-    model: string,
-  ) {
-    this.state = { model, steps: 0, sourcesSent: 0, result: undefined };
+  constructor(private readonly setup: CliTurnSetup) {
+    this.state = {
+      model: setup.model,
+      steps: 0,
+      sourcesSent: 0,
+      sources: [],
+      result: undefined,
+      deepen: null,
+    };
   }
 
-  onToolResult({ step, sources }: ResearchToolResult): void {
-    this.answer.toolCalled();
+  onToolResult({ steps, sources }: ResearchToolResult): void {
+    this.push(this.setup.answer.toolCalled());
     this.state.steps += 1;
-    if (step) this.queue.push({ type: 'step', step });
+    for (const step of steps) this.queue.push({ type: 'step', step });
     if (sources.length === this.state.sourcesSent) return;
     this.state.sourcesSent = sources.length;
+    this.state.sources = [...sources];
     this.queue.push({ type: 'sources', sources: [...sources] });
   }
 
@@ -117,23 +163,38 @@ class CliTurn {
     await cli.exit;
   }
 
-  finish(aborted: boolean): void {
-    this.answer.ended();
-    this.queue.push(finalEvent(this.state, aborted));
+  finish(): void {
+    this.endAnswer();
     this.queue.end();
   }
 
+  /** The message ended without tools: the answer, or the fast pass asking to go deeper. */
+  private endAnswer(): void {
+    const { answer, canDeepen } = this.setup;
+    const { question } = this.setup;
+    const reason = canDeepen ? deepenReason(answer.current, question) : null;
+    if (reason !== null && this.state.deepen === null) {
+      this.state.deepen = reason;
+      this.push(answer.toolCalled());
+      return;
+    }
+    this.push(answer.ended());
+  }
+
   private apply(line: string): void {
-    const parsed = this.dialect.parse(line);
+    const parsed = this.setup.dialect.parse(line);
+    const { answer } = this.setup;
     if (parsed.model) this.state.model = parsed.model;
     if (parsed.result) this.state.result = parsed.result;
-    if (parsed.text) this.answer.text(parsed.text);
-    if (parsed.messageEnd === 'tool_use') this.answer.toolCalled();
-    if (parsed.messageEnd === 'answer') this.answer.ended();
+    if (parsed.text) this.push(answer.text(parsed.text));
+    if (parsed.messageEnd === 'tool_use') this.push(answer.toolCalled());
+    if (parsed.messageEnd === 'answer') this.endAnswer();
+  }
+
+  private push(events: readonly ResearchEvent[]): void {
+    for (const event of events) this.queue.push(event);
   }
 }
-
-type TurnInput = ResearchInput & { readonly tools: ResearchToolsPort };
 
 async function turnAccess(
   options: CliTurnOptions,
@@ -152,7 +213,7 @@ async function turnAccess(
 async function startCli(
   options: CliTurnOptions,
   dialect: CliDialect,
-  call: { readonly input: TurnInput; readonly access: TurnAccess },
+  call: { readonly input: CliPassInput; readonly access: TurnAccess },
 ): Promise<CliProcess> {
   const launch = await dialect.launch(call.access, call.input);
   return spawnCli({
@@ -169,11 +230,13 @@ async function startCli(
 async function openTurn(
   options: CliTurnOptions,
   dialect: CliDialect,
-  { input, turn }: { readonly input: TurnInput; readonly turn: CliTurn },
+  { input, turn, maxSteps }: OpenPass,
 ) {
-  const endpoint = options.turns.open(input.tools, {
-    onResult: (result) => turn.onToolResult(result),
-  });
+  const endpoint = options.turns.open(
+    input.tools,
+    { onResult: (result) => turn.onToolResult(result) },
+    maxSteps,
+  );
   let dir: string | undefined;
   try {
     const access = await turnAccess(options, endpoint.token);
@@ -193,35 +256,113 @@ async function openTurn(
   }
 }
 
+interface OpenPass {
+  readonly input: CliPassInput;
+  readonly turn: CliTurn;
+  readonly maxSteps: number;
+}
+
+/** One CLI run: its endpoint and process live only while its events are read. */
+async function* runPass(
+  options: CliTurnOptions,
+  dialect: CliDialect,
+  pass: Omit<OpenPass, 'turn'> & { readonly answer: AnswerStream },
+): AsyncGenerator<ResearchEvent, TurnState> {
+  const { input } = pass;
+  const { canDeepen, question } = input;
+  const model = input.model ?? options.model;
+  const turn = new CliTurn({ ...pass, dialect, model, canDeepen, question });
+  const opened = { ...pass, turn };
+  const { cli, endpoint, close } = await openTurn(options, dialect, opened);
+  const unwatch = stopOnAbort(input.signal, () => {
+    endpoint.close();
+    cli.kill();
+  });
+  void turn
+    .read(cli)
+    .catch(() => undefined)
+    .then(() => turn.finish());
+  try {
+    yield* turn.queue;
+  } finally {
+    unwatch();
+    close();
+  }
+  return turn.state;
+}
+
+/** Runs `stop` when the reader aborts, at once if already aborted; returns the way to stop watching. */
+export function stopOnAbort(signal: AbortSignal, stop: () => void): () => void {
+  if (signal.aborted) {
+    stop();
+    return () => undefined;
+  }
+  signal.addEventListener('abort', stop, { once: true });
+  return () => signal.removeEventListener('abort', stop);
+}
+
+/** The deep pass of an escalated turn: the deep model, told what the fast pass found. */
+function deepPass(
+  input: TurnInput,
+  fast: TurnState,
+  escalation: Escalation<string | undefined>,
+): Omit<OpenPass, 'turn'> {
+  const findings = findingsText({ sources: fast.sources });
+  return {
+    input: {
+      ...input,
+      profile: 'deep',
+      model: escalation.deep,
+      canDeepen: false,
+      findings,
+    },
+    maxSteps: Math.max(1, PROFILE_STEPS.deep - fast.steps),
+  };
+}
+
+/** The deep model a fast turn may hand over to, when Settings allow it. */
+function escalationOf(
+  options: CliTurnOptions,
+  input: TurnInput,
+): Escalation<string | undefined> | undefined {
+  const allowed = input.profile === 'fast' && options.escalation?.enabled();
+  return allowed ? options.escalation : undefined;
+}
+
 /**
  * One research turn run by a subscription CLI (KBC-007 FR-4): the tools are served to it
  * over the turn's MCP endpoint, its stdout becomes tokens, and each tool call it makes
  * becomes a step and a sources event. Aborting closes the endpoint at once and kills the
- * CLI's process group (SIGTERM, then SIGKILL).
+ * CLI's process group (SIGTERM, then SIGKILL). A fast pass that could not settle the
+ * question escalates: a second CLI run with the deep model, the same tools and numbering,
+ * and the rest of the deep step budget (ADR 0009).
  */
 export async function* runCliTurn(
   options: CliTurnOptions,
   dialect: CliDialect,
   input: TurnInput,
 ): AsyncIterable<ResearchEvent> {
-  const turn = new CliTurn(dialect, options.model);
-  const { cli, endpoint, close } = await openTurn(options, dialect, {
-    input,
-    turn,
+  const answer = new AnswerStream();
+  const escalation = escalationOf(options, input);
+  const first = { ...input, canDeepen: escalation !== undefined };
+  const fast = yield* runPass(options, dialect, {
+    input: first,
+    maxSteps: PROFILE_STEPS[input.profile],
+    answer,
   });
-  const abort = () => {
-    endpoint.close();
-    cli.kill();
-  };
-  input.signal.addEventListener('abort', abort, { once: true });
-  void turn
-    .read(cli)
-    .catch(() => undefined)
-    .then(() => turn.finish(input.signal.aborted));
-  try {
-    yield* turn.queue;
-  } finally {
-    input.signal.removeEventListener('abort', abort);
-    close();
+  const aborted = input.signal.aborted;
+  if (!escalation || fast.deepen === null || aborted || !fast.result?.ok) {
+    yield finalEvent(fast, { aborted, escalated: false });
+    return;
   }
+  yield { type: 'step', step: DEEPEN_STEP };
+  // The reader may stop right on "Aprofundando…": then the deep CLI never starts.
+  if (input.signal.aborted) {
+    yield finalEvent(fast, { aborted: true, escalated: true });
+    return;
+  }
+  const pass = deepPass(input, fast, escalation);
+  const deep = yield* runPass(options, dialect, { ...pass, answer });
+  const total = { ...deep, steps: fast.steps + deep.steps };
+  yield finalEvent(total, { aborted: input.signal.aborted, escalated: true });
 }

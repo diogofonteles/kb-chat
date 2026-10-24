@@ -6,13 +6,18 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { ResearchEvent, ResearchRequest } from '@kb-chat/contracts';
+import type {
+  ResearchEvent,
+  ResearchProfile,
+  ResearchRequest,
+} from '@kb-chat/contracts';
 import { ResearchApi } from '@core/api/research-api.js';
 import { toUiErrorCode } from '@core/api/api-error.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
+import { SettingsStore } from '@features/settings/settings-store.js';
 import { finalize, switchMap, timer, type Subscription } from 'rxjs';
 import {
   SAVE_RESEARCH,
@@ -64,6 +69,7 @@ export class ResearchStore {
   private readonly views = inject(ViewStore);
   private readonly spend = inject(SpendStore);
   private readonly usage = inject(UsageLog);
+  private readonly settings = inject(SettingsStore);
   private readonly saveConversation = inject(SAVE_RESEARCH);
   private readonly destroyRef = inject(DestroyRef);
   private subscription: Subscription | null = null;
@@ -81,6 +87,12 @@ export class ResearchStore {
   readonly streaming = computed(() =>
     this.turns().some((turn) => turn.phase === 'streaming'),
   );
+  /** "Rápido | Profundo" of the next question (KBC-011), remembered in this browser. */
+  readonly profile = this.settings.researchProfile;
+
+  chooseProfile(profile: ResearchProfile): void {
+    this.settings.chooseResearchProfile(profile);
+  }
 
   /** Asks the agent; a turn still in flight is stopped first (one at a time). */
   ask(question: string): void {
@@ -92,7 +104,11 @@ export class ResearchStore {
     const history = toHistory(this.state().turns);
     const turn = startTurn(this.nextId++, trimmed);
     this.state.update((s) => ({ ...s, turns: [...s.turns, turn] }));
-    this.run(turn.id, topic, { question: trimmed, history });
+    this.run(turn.id, topic, {
+      question: trimmed,
+      history,
+      profile: this.profile(),
+    });
   }
 
   /** "Tentar de novo" on the last turn (failed or stopped): asks the same question in its place. */

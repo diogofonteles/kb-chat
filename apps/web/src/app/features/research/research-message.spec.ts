@@ -43,6 +43,97 @@ async function renderMessage(turn: ResearchTurn, last = true) {
 }
 
 describe('ResearchMessage', () => {
+  it('lists what the agent thought aloud among the steps, apart from the answer (ADR 0009)', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'thought', text: 'Os textos sobre isso são dois.' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+        ],
+      }),
+    );
+    const thought = screen.getByText(
+      'Pensando: Os textos sobre isso são dois.',
+    );
+    expect(thought.tagName).toBe('LI');
+    // The summary counts only what the agent did.
+    expect(screen.getByText('Leu 1 documento')).toBeTruthy();
+  });
+
+  it('says when a fast answer went on with the deep research (ADR 0009)', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'search', text: 'Buscando “princípios ocultos”' },
+          { kind: 'deepen', text: 'Aprofundando a pesquisa…' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+        ],
+      }),
+    );
+    expect(
+      screen.getByText(
+        'Pesquisou 1 vez · leu 1 documento · aprofundou a pesquisa',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Aprofundando a pesquisa…').tagName).toBe('LI');
+  });
+
+  it('counts each document read once, and says a restored turn went deeper', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'search', text: 'Buscando “princípios”' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+        ],
+      }),
+    );
+    expect(screen.getByText('Pesquisou 1 vez · leu 1 documento')).toBeTruthy();
+  });
+
+  it('counts two documents with one title as two (by id)', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'search', text: 'Buscando “polaridade”' },
+          {
+            kind: 'read',
+            text: 'Lendo “Polaridade e Correspondência”',
+            document: 'raw/a.md',
+          },
+          {
+            kind: 'read',
+            text: 'Lendo “Polaridade e Correspondência”',
+            document: 'raw/b.md',
+          },
+        ],
+      }),
+    );
+    expect(screen.getByText('Pesquisou 1 vez · leu 2 documentos')).toBeTruthy();
+  });
+
+  it('shows "aprofundou a pesquisa" on a restored escalated turn', async () => {
+    await renderMessage(
+      aTurn({ steps: [], stepCount: 13, escalated: true, restored: true }),
+    );
+    expect(
+      screen.getByText('13 passos de pesquisa · aprofundou a pesquisa'),
+    ).toBeTruthy();
+  });
+
+  it('shows the thought as the live step while the agent works', async () => {
+    await renderMessage(
+      aTurn({
+        phase: 'streaming',
+        text: '',
+        steps: [{ kind: 'thought', text: 'Vou ler dois textos.' }],
+      }),
+    );
+    expect(screen.getAllByText('Pensando: Vou ler dois textos.')).toHaveLength(
+      2,
+    );
+  });
+
   it('opens the cited document from [n] and from the sources list (AC-3)', async () => {
     const view = await renderMessage(aTurn());
     fireEvent.click(screen.getByRole('link', { name: 'Fonte 2: O Caibalion' }));

@@ -9,7 +9,7 @@ import {
   type CatalogRegistry,
 } from '../catalog/index.js';
 import type { SearchService } from '../search/index.js';
-import { windowOf } from './body-window.js';
+import { windowOf, type WindowRequest } from './body-window.js';
 import type { SourceBook } from './source-book.js';
 import { TextFinder, foldPhrase, type TextSearch } from './text-finder.js';
 import {
@@ -22,10 +22,12 @@ import {
   windowLines,
 } from './tool-output.js';
 import {
+  BATCH_WINDOW_CHARS,
   PHRASE_SEPARATOR,
   TOOL_DEFINITIONS,
   findArgsSchema,
   readArgsSchema,
+  readManyArgsSchema,
   relatedArgsSchema,
   searchArgsSchema,
   subjectsArgsSchema,
@@ -48,14 +50,15 @@ export interface ToolContext {
   readonly book: SourceBook;
 }
 
-/** A tool call ready to run: the step shown to the reader and the text for the model. */
+/** A tool call ready to run: the steps shown to the reader and the text for the model. */
 export interface PreparedCall {
-  readonly step: ResearchStep | null;
+  /** One per thing done (a batch read shows one step per document); none when refused. */
+  readonly steps: readonly ResearchStep[];
   run(): Promise<string>;
 }
 
 type Handler = (args: unknown, context: ToolContext) => PreparedCall;
-type ReadArgs = z.output<typeof readArgsSchema>;
+type ReadManyArgs = z.output<typeof readManyArgsSchema>;
 type SearchArgs = z.output<typeof searchArgsSchema>;
 type FindArgs = z.output<typeof findArgsSchema>;
 
@@ -69,8 +72,14 @@ const RELATION_LABELS = {
 } as const;
 
 const failed = (text: string): PreparedCall => ({
-  step: null,
+  steps: [],
   run: async () => text,
+});
+
+const readStep = (entry: CatalogEntry): ResearchStep => ({
+  kind: 'read',
+  text: `Lendo ${quote(entry.title)}`,
+  document: entry.id,
 });
 
 function parseArguments(raw: string): unknown {
@@ -123,6 +132,7 @@ export class ResearchTools {
     find_text: (args, context) => this.findCall(args, context),
     list_subjects: (args, context) => this.subjectsCall(args, context),
     read_document: (args, context) => this.readCall(args, context),
+    read_documents: (args, context) => this.readManyCall(args, context),
     related_documents: (args, context) => this.relatedCall(args, context),
   };
 
@@ -147,7 +157,7 @@ export class ResearchTools {
     if (!handler) return failed(`Ferramenta desconhecida: ${call.name}.`);
     const prepared = handler(parseArguments(call.arguments), context);
     return {
-      step: prepared.step,
+      steps: prepared.steps,
       run: () => prepared.run().catch(describeFailure),
     };
   }
@@ -170,7 +180,7 @@ export class ResearchTools {
     const parsed = this.parsed(searchArgsSchema, args);
     if (typeof parsed === 'string') return failed(parsed);
     return {
-      step: { kind: 'search', text: `Buscando ${quote(parsed.query)}` },
+      steps: [{ kind: 'search', text: `Buscando ${quote(parsed.query)}` }],
       run: () => this.runSearch(parsed, context),
     };
   }
@@ -210,10 +220,12 @@ export class ResearchTools {
         `Texto curto demais: use ao menos ${MIN_PHRASE_CHARS} letras por variante.`,
       );
     return {
-      step: {
-        kind: 'search',
-        text: `Procurando o texto ${quote(parsed.phrase)} em todo o acervo`,
-      },
+      steps: [
+        {
+          kind: 'search',
+          text: `Procurando o texto ${quote(parsed.phrase)} em todo o acervo`,
+        },
+      ],
       run: () => this.findText(parsed, context),
     };
   }
@@ -255,7 +267,7 @@ export class ResearchTools {
       ? `Listando os assuntos sobre ${quote(parsed.query)}`
       : 'Listando os assuntos';
     return {
-      step: { kind: 'subjects', text },
+      steps: [{ kind: 'subjects', text }],
       run: async () => this.listSubjects(topic, parsed.query),
     };
   }
@@ -281,14 +293,43 @@ export class ResearchTools {
     const entry = this.resolve(parsed.document, context);
     if (!entry) return failed(this.notFound(parsed.document));
     return {
-      step: { kind: 'read', text: `Lendo ${quote(entry.title)}` },
+      steps: [readStep(entry)],
       run: () => this.read(entry, parsed, context),
     };
   }
 
+  /** read_documents (KBC-011): several documents in one step, a shorter window each. */
+  private readManyCall(args: unknown, context: ToolContext): PreparedCall {
+    const parsed = this.parsed(readManyArgsSchema, args);
+    if (typeof parsed === 'string') return failed(parsed);
+    const entries = parsed.documents.map((ref) => this.resolve(ref, context));
+    const missing = parsed.documents.filter((_, i) => !entries[i]);
+    const found = [...new Set(entries.filter((e) => e !== null))];
+    if (found.length === 0) return failed(this.notFound(missing[0] ?? ''));
+    return {
+      steps: found.map(readStep),
+      run: () => this.readMany(found, { parsed, missing }, context),
+    };
+  }
+
+  private async readMany(
+    entries: readonly CatalogEntry[],
+    { parsed, missing }: { parsed: ReadManyArgs; missing: unknown[] },
+    context: ToolContext,
+  ): Promise<string> {
+    const request = { around: parsed.around, size: BATCH_WINDOW_CHARS };
+    const texts = await Promise.all(
+      entries.map((entry) => this.read(entry, request, context)),
+    );
+    const notFound = missing.map((ref) =>
+      this.notFound(typeof ref === 'number' ? ref : String(ref)),
+    );
+    return [...texts, ...notFound].join('\n\n');
+  }
+
   private async read(
     entry: CatalogEntry,
-    args: ReadArgs,
+    args: WindowRequest,
     { topic, book }: ToolContext,
   ): Promise<string> {
     const n = book.number(entry);
@@ -308,10 +349,12 @@ export class ResearchTools {
     const entry = this.resolve(parsed.document, context);
     if (!entry) return failed(this.notFound(parsed.document));
     return {
-      step: {
-        kind: 'related',
-        text: `Seguindo as ligações de ${quote(entry.title)}`,
-      },
+      steps: [
+        {
+          kind: 'related',
+          text: `Seguindo as ligações de ${quote(entry.title)}`,
+        },
+      ],
       run: async () => this.related(entry, context),
     };
   }

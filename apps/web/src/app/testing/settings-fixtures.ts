@@ -8,8 +8,14 @@ export const aSettingsView = (
   overrides: Partial<SettingsView> = {},
 ): SettingsView => ({
   exists: true,
-  preferences: { searchMode: 'all', theme: 'auto', defaultView: 'research' },
-  ai: { provider: null, keys: {}, dailyCapUsd: 1 },
+  preferences: {
+    searchMode: 'all',
+    theme: 'auto',
+    defaultView: 'research',
+    researchProfile: 'fast',
+    autoDeepen: true,
+  },
+  ai: { provider: null, models: {}, keys: {}, dailyCapUsd: 1 },
   ...overrides,
 });
 
@@ -27,8 +33,9 @@ const info = (
   available: true,
   reason: null,
   keySource: null,
-  defaultModel: null,
+  defaultModels: { fast: null, deep: null },
   models: [],
+  freeModel: !id.endsWith('subscription'),
   ...overrides,
 });
 
@@ -43,17 +50,22 @@ export const aProviderList = (overrides: Overrides = {}): ProviderList => ({
   items: [
     info('openrouter', {
       ...KEY_MISSING,
-      defaultModel: 'deepseek/deepseek-v4-flash',
+      defaultModels: {
+        fast: 'deepseek/deepseek-v4-flash',
+        deep: 'deepseek/deepseek-v4-pro',
+      },
       ...overrides.openrouter,
     }),
     info('anthropic', {
       ...KEY_MISSING,
-      defaultModel: 'claude-opus-5-5',
+      defaultModels: { fast: 'claude-sonnet-5-5', deep: 'claude-opus-5-5' },
       ...overrides.anthropic,
     }),
     info('openai', { ...KEY_MISSING, ...overrides.openai }),
     info('claude-subscription', {
       ...CLI_MISSING,
+      defaultModels: { fast: 'sonnet', deep: 'opus' },
+      models: ['sonnet', 'opus', 'haiku'],
       ...overrides['claude-subscription'],
     }),
     info('chatgpt-subscription', {

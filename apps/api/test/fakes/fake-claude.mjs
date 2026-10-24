@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Fake `claude -p --output-format stream-json`: calls the kb MCP endpoint named in
 // --mcp-config like Claude Code would, then streams an answer citing [1].
-// $HOME/fake-cli.json { mode, report } — mode: answer (default) | sleep | stubborn (ignores SIGTERM) | login. report: a file that
+// $HOME/fake-cli.json { mode, report } — mode: answer (default) | aloud (thinks aloud before the
+// tool call) | deepen (asks to go deeper unless started with --model=opus) | deepen-mid
+// (the same after a sentence, the marker split across deltas) | absent (gives
+// up on the collection unless --model=opus) | sleep | stubborn (ignores SIGTERM) | login. report: a file that
 // receives { args, stdin, env } with the names of the credential variables it saw.
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -72,12 +75,17 @@ const stop = (reason) =>
 
 if (mode === 'stubborn') process.on('SIGTERM', () => undefined);
 if (mode === 'sleep' || mode === 'stubborn') {
-  // Past the narration hold, so it streams before the reader stops it.
+  // Streams at once (ADR 0009), so the reader can stop it mid-answer.
   delta('Pensando no acervo. '.repeat(50));
   setInterval(() => undefined, 1000);
 } else {
-  // Narration before the tool call, as Claude writes it: never shown (ADR 0006).
-  delta('Vou procurar no acervo. ');
+  // Text before the tool call, as Claude writes it. "Vou procurar…" is held as narration;
+  // "aloud" text streams and is then retracted (ADR 0009).
+  delta(
+    mode === 'aloud'
+      ? 'Os textos sobre o ritmo parecem ser dois. '
+      : 'Vou procurar no acervo. ',
+  );
   stop('tool_use');
   const configPath = args[args.indexOf('--mcp-config') + 1];
   const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -104,9 +112,18 @@ if (mode === 'sleep' || mode === 'stubborn') {
       },
     },
   });
-  delta('Tenho tudo o que preciso. ');
-  delta('Segundo o acervo, ');
-  delta('tudo flui [1].');
+  const deep = args.includes('--model=opus');
+  if (mode === 'deepen' && !deep) delta('<<APROFUNDAR>> faltou a lista');
+  else if (mode === 'deepen-mid' && !deep) {
+    delta('Achei só parte da lista. <');
+    delta('<APROFUNDAR>> faltam dois');
+  } else if (mode === 'absent' && !deep)
+    delta('O acervo não traz essa lista. ');
+  else {
+    delta('Tenho tudo o que preciso. ');
+    delta('Segundo o acervo, ');
+    delta('tudo flui [1].');
+  }
   stop('end_turn');
   emit({ type: 'assistant', message: { content: [] } });
   emit({

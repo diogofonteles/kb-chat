@@ -95,11 +95,16 @@ describe('POST /api/v1/topics/:topic/research', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toMatch(/text\/event-stream/);
     const stream = events(response.body);
-    expect(stream.map((e) => e.type)).toEqual([
+    // The thought before the read streams at once and is retracted (ADR 0009).
+    const kinds = stream
+      .map((e) => e.type)
+      .filter((type, i, all) => type !== all[i - 1]);
+    expect(kinds).toEqual([
       'start',
       'step',
-      'step',
       'sources',
+      'token',
+      'retract',
       'step',
       'token',
       'done',

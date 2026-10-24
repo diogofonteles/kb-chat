@@ -10,7 +10,18 @@ describe('research contracts', () => {
     expect(researchRequestSchema.parse({ question: '  ritmo  ' })).toEqual({
       question: 'ritmo',
       history: [],
+      profile: 'fast',
     });
+  });
+
+  it('takes the fast or the deep profile and nothing else (KBC-011)', () => {
+    expect(
+      researchRequestSchema.parse({ question: 'x', profile: 'deep' }).profile,
+    ).toBe('deep');
+    expect(
+      researchRequestSchema.safeParse({ question: 'x', profile: 'max' })
+        .success,
+    ).toBe(false);
   });
 
   it('refuses an empty question, unknown fields and a history over the cap', () => {
@@ -31,7 +42,8 @@ describe('research contracts', () => {
     const events = [
       { type: 'step', step: { kind: 'search', text: 'Buscando “ritmo”' } },
       { type: 'sources', sources: [{ n: 1, id: 'a.md', title: 'A' }] },
-      { type: 'token', text: 'Segundo o acervo [1].' },
+      { type: 'token', text: 'Segundo o acervo [1].', segment: 0 },
+      { type: 'retract', segment: 0 },
       {
         type: 'done',
         usd: 0.01,
@@ -39,6 +51,19 @@ describe('research contracts', () => {
         model: 'm',
         interrupted: false,
         steps: 3,
+      },
+      {
+        type: 'done',
+        usd: 0,
+        billing: 'subscription',
+        model: 'opus',
+        interrupted: false,
+        steps: 9,
+        escalated: true,
+      },
+      {
+        type: 'step',
+        step: { kind: 'deepen', text: 'Aprofundando a pesquisa…' },
       },
       {
         type: 'done',
@@ -57,6 +82,9 @@ describe('research contracts', () => {
         type: 'step',
         step: { kind: 'write', text: '' },
       }).success,
+    ).toBe(false);
+    expect(
+      researchEventSchema.safeParse({ type: 'retract', segment: -1 }).success,
     ).toBe(false);
   });
 });

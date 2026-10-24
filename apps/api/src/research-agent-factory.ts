@@ -1,3 +1,4 @@
+import type { SubscriptionPrompt } from './adapters/subscription-prompt.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
 import {
   ResearchTools,
@@ -32,8 +33,8 @@ export interface ResearchAgent {
   readonly toolsFor: ResearchToolsFactory;
   /** The in-API loop over a per-token model, spending on the given principal's ledger. */
   readonly perTokenRunner: PerTokenRunnerFactory;
-  /** The research rules with the topic's title, for the subscription CLIs. */
-  readonly systemPrompt: (topic: string) => string;
+  /** The research rules with the topic's title and the profile, for the subscription CLIs. */
+  readonly systemPrompt: SubscriptionPrompt;
 }
 
 export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
@@ -44,13 +45,24 @@ export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
     search,
     tools,
     toolsFor: turnToolsFactory(tools),
-    perTokenRunner: (llm, scope) =>
+    perTokenRunner: (llm, scope, escalation) =>
       new ToolLoopRunner({
         llm,
         tools,
         spend: new SpendService({ llm, ledger, ...scope }),
+        ...(escalation && {
+          deep: {
+            llm: escalation.deep,
+            spend: new SpendService({ llm: escalation.deep, ledger, ...scope }),
+          },
+          autoDeepen: escalation.enabled,
+        }),
       }),
-    systemPrompt: (topic) =>
-      researchSystemPrompt(tools.topicTitle(topic) ?? topic),
+    systemPrompt: (topic, profile, canDeepen) =>
+      researchSystemPrompt(
+        tools.topicTitle(topic) ?? topic,
+        profile,
+        canDeepen,
+      ),
   };
 }

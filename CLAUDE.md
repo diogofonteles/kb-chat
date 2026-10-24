@@ -13,7 +13,7 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 ## Architecture (reference)
 
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — drivers, C4, modules, contracts, threat model
-- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam · 0006 research agent · 0007 AI providers and local settings
+- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract)
 - Screens: [`docs/design/screens.md`](docs/design/screens.md) · Backlog: [`docs/backlog/README.md`](docs/backlog/README.md)
 
 ## Stack

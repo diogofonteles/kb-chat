@@ -9,16 +9,26 @@ import {
 import type { StubReply } from '../../adapters/stub-llm-adapter.js';
 import type { AgentChunk, AgentMessage } from '../../ports/llm.js';
 import { LlmKeyRejectedError } from '../../ports/llm-errors.js';
-import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
+import { STUB_THOUGHT } from '../../adapters/stub-llm-adapter.js';
+import {
+  FAST_TOOL_STEPS,
+  MAX_OUTPUT_TOKENS,
+  MAX_TOOL_STEPS,
+} from './limits.js';
 import { AnthropicAdapter } from '../../adapters/anthropic-adapter.js';
 import { MemorySpendLedger } from '../../adapters/memory-spend-ledger.js';
 import { SpendService } from '../spend/index.js';
-import { NARRATION_HOLD_CHARS, ToolLoopRunner } from './tool-loop-runner.js';
+import { ToolLoopRunner } from './tool-loop-runner.js';
 
-const input = (question: string, signal = new AbortController().signal) => ({
+const input = (
+  question: string,
+  signal = new AbortController().signal,
+  profile: 'fast' | 'deep' = 'deep',
+) => ({
   topic: 'hermetismo',
   question,
   history: [],
+  profile,
   signal,
 });
 
@@ -41,11 +51,15 @@ describe('ToolLoopRunner', () => {
   it('searches again with other words when the first search finds nothing and cites what it read (AC-1)', async () => {
     const { runner, llm, ledger } = await fixtureRunner();
     const events = await collectEvents(runner.run(input('pitagóricos')));
-    // A short answer is held back like a preamble until the call ends, so it arrives whole.
-    expect(events.map((e) => e.type)).toEqual([
-      'step',
+    // The thought before the read streamed at once and was retracted when the read came.
+    const kinds = events
+      .map((e) => e.type)
+      .filter((t, i, all) => t !== all[i - 1]);
+    expect(kinds).toEqual([
       'step',
       'sources',
+      'token',
+      'retract',
       'step',
       'token',
       'done',
@@ -75,6 +89,19 @@ describe('ToolLoopRunner', () => {
     expect(llm.agentCalls.map((o) => [o.toolChoice, o.maxTokens])).toEqual(
       Array.from({ length: 4 }, () => ['auto', MAX_OUTPUT_TOKENS]),
     );
+  });
+
+  it('stops at 6 tool steps in the fast profile (KBC-011)', async () => {
+    const script = Array.from({ length: 20 }, (_, i) =>
+      searchReply(`ritmo ${i}`),
+    );
+    const { runner, llm } = await fixtureRunner({ script });
+    const events = await collectEvents(
+      runner.run(input('ritmo', undefined, 'fast')),
+    );
+    expect(ofType(events, 'step')).toHaveLength(FAST_TOOL_STEPS);
+    expect(llm.agentCalls).toHaveLength(FAST_TOOL_STEPS + 1);
+    expect(llm.lastMessages[0]?.content).toContain('Pesquisa rápida');
   });
 
   it('stops at 15 tool steps and answers with what it has (AC-7)', async () => {
@@ -142,7 +169,8 @@ describe('ToolLoopRunner', () => {
       if (event.type === 'step' && event.step.kind === 'read') abort.abort();
     }
     expect(llm.agentCalls).toHaveLength(3);
-    expect(ofType(events, 'token')).toHaveLength(0);
+    // The thought before the read was shown and taken back: no answer text is left.
+    expect(answerText(events)).toBe('');
     expect(events.at(-1)).toMatchObject({
       type: 'done',
       interrupted: true,
@@ -186,31 +214,50 @@ describe('ToolLoopRunner', () => {
     expect(ledger.entries[0]).toMatchObject({ usd: 0.01, interrupted: true });
   });
 
-  it('never shows the text of a call that ends with tool calls, however long', async () => {
+  it('streams text at once and retracts it when its call then asks for tools (ADR 0009)', async () => {
     const { runner, llm } = await fixtureRunner();
-    const narration =
-      'Os documentos mais promissores são [1] e [2]. Vou lê-los agora. ';
+    const thought =
+      'Os documentos mais promissores são [1] e [2], sobre o ritmo. ';
     let calls = 0;
     let seen: readonly AgentMessage[] = [];
     llm.streamAgent = async function* (messages): AsyncIterable<AgentChunk> {
       calls += 1;
       seen = [...messages];
       if (calls > 1) return yield { type: 'token', text: 'Resposta.' };
-      for (let i = 0; i < 10; i += 1) yield { type: 'token', text: narration };
+      for (let i = 0; i < 10; i += 1) yield { type: 'token', text: thought };
       yield {
         type: 'tool_call',
         call: { id: 'a', name: 'list_subjects', arguments: '' },
       };
     };
     const events = await collectEvents(runner.run(input('ritmo')));
-    expect(narration.repeat(10).length).toBeLessThan(NARRATION_HOLD_CHARS);
+    const first = ofType(events, 'token')[0];
+    expect(first).toEqual({ type: 'token', text: thought, segment: 0 });
+    expect(ofType(events, 'retract')).toEqual([
+      { type: 'retract', segment: 0 },
+    ]);
     expect(answerText(events)).toBe('Resposta.');
+    expect(ofType(events, 'token').at(-1)?.segment).toBe(1);
     expect(ofType(events, 'step')[0]?.step.kind).toBe('subjects');
     // The model keeps what it wrote; only the reader does not see it.
     expect(seen.at(-2)).toMatchObject({
       role: 'assistant',
-      content: narration.repeat(10),
+      content: thought.repeat(10),
     });
+  });
+
+  it('holds a call that announces research until it ends, so nothing flashes', async () => {
+    const { runner } = await fixtureRunner({
+      script: [
+        {
+          thought: 'Vou buscar no acervo os princípios ocultos. ',
+          toolCalls: [{ name: 'list_subjects', arguments: {} }],
+        },
+      ],
+    });
+    const events = await collectEvents(runner.run(input('princípios')));
+    expect(ofType(events, 'retract')).toHaveLength(0);
+    expect(answerText(events)).not.toContain('Vou buscar');
   });
 
   it('shows a short final answer even when the forced last call also asks for a tool', async () => {
@@ -236,36 +283,29 @@ describe('ToolLoopRunner', () => {
         };
     };
     const events = await collectEvents(runner.run(input('ritmo')));
-    expect(short.length).toBeLessThan(300);
     expect(answerText(events)).toBe(short);
     expect(ofType(events, 'done')[0]?.steps).toBe(MAX_TOOL_STEPS);
   });
 
-  it('streams a long final answer in chunks once it passes the hold size', async () => {
+  it('streams the answer from its first sentence on', async () => {
     const answer = 'O ritmo governa os ciclos do cosmos [1]. '.repeat(60);
     const { runner } = await fixtureRunner({ script: [{ text: answer }] });
     const events = await collectEvents(runner.run(input('ritmo')));
     const tokens = ofType(events, 'token');
     expect(answerText(events)).toBe(answer);
     expect(tokens.length).toBeGreaterThan(100);
-    expect(tokens[0]?.text.length).toBeGreaterThanOrEqual(NARRATION_HOLD_CHARS);
-    expect(tokens[0]?.text.length).toBeLessThan(NARRATION_HOLD_CHARS + 50);
+    // Held only until the first sentence ended: well under the preamble window.
+    expect(tokens[0]?.text).toBe('O ritmo governa os ciclos do cosmos [1]. ');
   });
 
-  it('keeps a streamed answer as the answer and ignores tool calls asked after it', async () => {
-    const { runner, llm } = await fixtureRunner();
-    const long = 'Contexto do acervo. '.repeat(50);
-    llm.streamAgent = async function* (): AsyncIterable<AgentChunk> {
-      yield { type: 'token', text: long };
-      yield {
-        type: 'tool_call',
-        call: { id: 'a', name: 'list_subjects', arguments: '{}' },
-      };
-    };
-    const events = await collectEvents(runner.run(input('ritmo')));
-    expect(answerText(events)).toBe(long);
-    expect(ofType(events, 'step')).toHaveLength(0);
-    expect(ofType(events, 'done')[0]?.steps).toBe(0);
+  it('shows the default script thought and takes it back before the answer', async () => {
+    const { runner } = await fixtureRunner();
+    const events = await collectEvents(runner.run(input('pitagóricos')));
+    const shown = ofType(events, 'token')
+      .map((e) => e.text)
+      .join('');
+    expect(shown).toContain(STUB_THOUGHT.trim());
+    expect(answerText(events)).not.toContain('confiro');
   });
 
   it('writes a fallback when the model ends without text', async () => {
@@ -347,7 +387,8 @@ describe('ToolLoopRunner', () => {
     expect(answerText(events)).toHaveLength(
       answer.length - answer.indexOf('Os cinco'),
     );
-    // Streaming resumes right after the hold, one character at a time.
+    // Streaming resumes right after the first sentence, one character at a time.
+    expect(ofType(events, 'token')[0]?.text).toMatch(/^Os cinco princípios/);
     expect(ofType(events, 'token').length).toBeGreaterThan(100);
   });
 

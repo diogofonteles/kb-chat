@@ -6,6 +6,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
+import type { ResearchProfile } from '@kb-chat/contracts';
 import type { AppConfig } from './config.js';
 import { registerErrorHandler } from './error-handler.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
@@ -96,8 +97,8 @@ async function registerResearch(
     dailyCapUsd: () => ai.registry.dailyCapUsd(OWNER),
   };
   const fixed = deps.llm && agent.perTokenRunner(deps.llm, scope);
-  const runner = (): ResearchRunnerPort =>
-    fixed ?? ai.registry.researchRunner(OWNER);
+  const runner = (profile: ResearchProfile = 'fast'): ResearchRunnerPort =>
+    fixed ?? ai.registry.researchRunner(OWNER, profile);
   const spend = new SpendService({
     llm: deps.llm ?? ai.llm,
     ledger,

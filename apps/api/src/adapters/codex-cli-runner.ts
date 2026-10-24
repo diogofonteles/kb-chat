@@ -21,6 +21,7 @@ import {
 import {
   defaultSubscriptionPrompt,
   subscriptionTurnInput,
+  type SubscriptionPrompt,
 } from './subscription-prompt.js';
 
 /**
@@ -56,15 +57,16 @@ export function parseCodexLine(text: string): CliLine {
     line.type === 'item.completed' && line.item?.type === 'agent_message'
       ? line.item.text
       : undefined;
-  // Codex sends each message whole; a message before a tool call is dropped as narration.
+  // Codex sends each message whole: one before a tool call is shown, then retracted when
+  // the tool result arrives (ADR 0009).
   return message ? { text: `${message}\n\n` } : {};
 }
 
 export interface CodexCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   readonly model?: string;
   readonly tools?: ResearchToolsFactory;
-  /** The research rules for a topic; default: defaultSubscriptionPrompt. */
-  readonly systemPrompt?: (topic: string) => string;
+  /** The research rules for a topic and profile; default: defaultSubscriptionPrompt. */
+  readonly systemPrompt?: SubscriptionPrompt;
 }
 
 /** The variable that carries the turn token to Codex (sent as `Authorization: Bearer`). */
@@ -149,10 +151,10 @@ export class CodexCliRunner implements ResearchRunnerPort {
     const prompt = options.systemPrompt ?? defaultSubscriptionPrompt;
     this.dialect = {
       name: 'codex',
-      launch: (access) => this.launch(access),
+      launch: (access, input) => this.launch(access, input.model),
       // Codex has no system-prompt flag: the instructions lead the input.
       input: (input) =>
-        `${prompt(input.topic)}\n\n${subscriptionTurnInput(input.question, input.history)}`,
+        `${prompt(input.topic, input.profile, input.canDeepen)}\n\n${subscriptionTurnInput(input.question, input.history, input.findings)}`,
       parse: parseCodexLine,
     };
   }
@@ -161,10 +163,13 @@ export class CodexCliRunner implements ResearchRunnerPort {
     return this.options.tools !== undefined;
   }
 
-  private async launch(access: TurnAccess): Promise<CliLaunch> {
+  private async launch(
+    access: TurnAccess,
+    model: string | undefined,
+  ): Promise<CliLaunch> {
     const home = await privateCodexHome(this.options.workDir, this.options.env);
     return {
-      args: codexArgs(access.bearerUrl, this.options.model),
+      args: codexArgs(access.bearerUrl, model),
       env: { CODEX_HOME: home, [CODEX_TOKEN_ENV]: access.token },
     };
   }
@@ -179,6 +184,7 @@ export class CodexCliRunner implements ResearchRunnerPort {
     yield* runCliTurn({ ...this.options, model: this.model }, this.dialect, {
       ...input,
       tools,
+      model: this.options.model,
     });
   }
 }

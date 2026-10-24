@@ -39,6 +39,29 @@
         </select>
       </label>
       <span id="mode-help" class="help">{{ modeHelp() }}</span>
+    } @else {
+      <fieldset class="profile" aria-describedby="profile-help">
+        <legend class="visually-hidden" i18n="@@composer.profile">
+          Tipo de pesquisa
+        </legend>
+        @for (option of profiles; track option.value) {
+          <label
+            class="profile-option"
+            [class.selected]="option.value === profile()"
+          >
+            <input
+              type="radio"
+              name="research-profile"
+              class="profile-radio"
+              [value]="option.value"
+              [checked]="option.value === profile()"
+              (change)="selectProfile(option.value)"
+            />
+            <span>{{ option.label }}</span>
+          </label>
+        }
+      </fieldset>
+      <span id="profile-help" class="help">{{ profileHelp() }}</span>
     }
     @if (nearLimit()) {
       <span class="limit" aria-live="polite" i18n="@@composer.limit"

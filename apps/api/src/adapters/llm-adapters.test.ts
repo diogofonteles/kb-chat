@@ -388,12 +388,18 @@ describe('spend ledgers', () => {
 });
 
 describe('provider composition and the disabled provider', () => {
-  it('defaults OpenRouter to the research model and honours KB_CHAT_MODEL', () => {
-    const model = (env: NodeJS.ProcessEnv) =>
-      PROVIDERS.openrouter.defaultModel(loadConfig(env));
-    expect(model({})).toBe(OPENROUTER_DEFAULT_MODEL);
+  it('defaults OpenRouter to flash (fast) and pro (deep) and honours KB_CHAT_MODEL for both', () => {
+    const models = (env: NodeJS.ProcessEnv) =>
+      PROVIDERS.openrouter.defaultModels(loadConfig(env));
+    expect(models({})).toEqual({
+      fast: 'deepseek/deepseek-v4-flash',
+      deep: OPENROUTER_DEFAULT_MODEL,
+    });
     expect(OPENROUTER_DEFAULT_MODEL).toBe('deepseek/deepseek-v4-pro');
-    expect(model({ KB_CHAT_MODEL: 'x/y' })).toBe('x/y');
+    expect(models({ KB_CHAT_MODEL: 'x/y' })).toEqual({
+      fast: 'x/y',
+      deep: 'x/y',
+    });
   });
 
   it('refuses everything when no provider is configured', async () => {

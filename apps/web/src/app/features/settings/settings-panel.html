@@ -73,6 +73,10 @@
           <p class="save-status" role="status">
             @if (aiSave() === 'saved') {
               <span i18n="@@settings.saved">Salvo.</span>
+            } @else if (aiSave() === 'invalid') {
+              <span class="error" i18n="@@settings.fixModel"
+                >Corrija o modelo indicado acima.</span
+              >
             } @else if (aiSave() === 'failed') {
               <span class="error" i18n="@@settings.saveFailed"
                 >Não consegui salvar. Tente de novo.</span

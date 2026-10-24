@@ -4,6 +4,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import type {
   AiTestRequest,
   AiTestResult,
+  ResearchProfile,
   SettingsUpdate,
   SettingsView,
 } from '@kb-chat/contracts';
@@ -11,6 +12,10 @@ import { SettingsApi } from '@core/api/settings-api.js';
 import { ThemeStore } from '@core/theme/theme-store.js';
 import { writeModePreference } from '@features/chat/mode-preference.js';
 import { writeViewPreference } from '@features/chat/view-preference.js';
+import {
+  readProfilePreference,
+  writeProfilePreference,
+} from '@features/research/profile-preference.js';
 import { tap, type Observable } from 'rxjs';
 
 export type SettingsPanel = 'settings' | 'onboarding';
@@ -40,6 +45,10 @@ export class SettingsStore {
   private readonly started = signal(false);
   private readonly requested = signal<SettingsPanel | null>(null);
   private readonly onboardingDismissed = signal(false);
+  /** The profile this browser picked in the research composer (KBC-011). */
+  private readonly chosenProfile = signal<ResearchProfile | null>(
+    readProfilePreference(this.storage),
+  );
 
   readonly view = rxResource({
     params: () => this.started() || undefined,
@@ -56,6 +65,13 @@ export class SettingsStore {
   );
   readonly providerList = computed(() =>
     this.providers.hasValue() ? this.providers.value() : null,
+  );
+  /** The research profile: this browser's choice, else the Settings default, else fast. */
+  readonly researchProfile = computed<ResearchProfile>(
+    () =>
+      this.chosenProfile() ??
+      this.settings()?.preferences.researchProfile ??
+      'fast',
   );
   /** No settings saved yet: the first-run wizard shows (BR-5). */
   readonly firstRun = computed(() => this.settings()?.exists === false);
@@ -86,13 +102,24 @@ export class SettingsStore {
   }
 
   save(update: SettingsUpdate): Observable<SettingsView> {
+    const savedProfile = this.settings()?.preferences.researchProfile;
     return this.api.save(update).pipe(
       tap((view) => {
         this.view.set(view);
         this.applyLocal(view);
+        // A changed default in Settings also becomes this browser's choice; other saves keep it.
+        const profile = update.preferences?.researchProfile;
+        if (profile && profile !== savedProfile)
+          this.chooseResearchProfile(profile);
         this.providers.reload();
       }),
     );
+  }
+
+  /** The composer's "Rápido | Profundo": remembered in this browser. */
+  chooseResearchProfile(profile: ResearchProfile): void {
+    this.chosenProfile.set(profile);
+    writeProfilePreference(this.storage, profile);
   }
 
   test(request: AiTestRequest): Observable<AiTestResult> {

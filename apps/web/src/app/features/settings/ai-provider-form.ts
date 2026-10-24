@@ -14,7 +14,12 @@ import type {
   AiTestResult,
   ProviderInfo,
 } from '@kb-chat/contracts';
-import type { AiDraft } from './ai-draft.js';
+import {
+  modelErrors,
+  savedModels,
+  type AiDraft,
+  type DraftModels,
+} from './ai-draft.js';
 import {
   BILLING_COPY,
   NOT_ENABLED,
@@ -59,6 +64,21 @@ const toOption = (info: ProviderInfo): ProviderOption => {
     blocked: blockedBy(info),
   };
 };
+
+const MODEL_FIELDS = [
+  {
+    key: 'fastModel',
+    profile: 'fast',
+    id: 'ai-model-fast',
+    label: () => $localize`:@@ai.modelFast:Modelo rápido`,
+  },
+  {
+    key: 'deepModel',
+    profile: 'deep',
+    id: 'ai-model-deep',
+    label: () => $localize`:@@ai.modelDeep:Modelo profundo`,
+  },
+] as const;
 
 const seconds = (ms: number): string =>
   new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(
@@ -106,11 +126,27 @@ export class AiProviderForm {
       ? $localize`:@@ai.keyReplace:Trocar a chave`
       : $localize`:@@ai.keyPaste:Cole a sua chave`,
   );
-  protected readonly modelPlaceholder = computed(() => {
-    const fallback = this.selected()?.info.defaultModel;
-    return fallback
-      ? $localize`:@@ai.modelDefault:Padrão: ${fallback}:model:`
-      : $localize`:@@ai.modelCli:Padrão da ferramenta`;
+  /** The fast and deep model fields, each with its default shown (KBC-011). */
+  protected readonly modelFields = computed(() => {
+    const info = this.selected()?.info;
+    const draft = this.draft();
+    const errors = modelErrors(draft);
+    return MODEL_FIELDS.map((field) => {
+      const fallback = info?.defaultModels[field.profile] ?? null;
+      return {
+        ...field,
+        label: field.label(),
+        value: draft[field.key],
+        error: errors[field.key] ?? null,
+        // The default already has its own first option ("Padrão: sonnet").
+        choices: (info?.models ?? []).filter(
+          (name) => name !== fallback || name === draft[field.key],
+        ),
+        defaultLabel: fallback
+          ? $localize`:@@ai.modelDefault:Padrão: ${fallback}:model:`
+          : $localize`:@@ai.modelCli:Padrão da ferramenta`,
+      };
+    });
   });
   protected readonly testMessage = computed(() => {
     const state = this.testState();
@@ -129,7 +165,8 @@ export class AiProviderForm {
   });
 
   protected choose(provider: AiProvider): void {
-    this.draft.update((draft) => ({ ...draft, provider, model: '', key: '' }));
+    const models = savedModels(this.store.settings(), provider);
+    this.draft.update((draft) => ({ ...draft, ...models, provider, key: '' }));
     this.testState.set({ kind: 'idle' });
   }
 
@@ -137,8 +174,8 @@ export class AiProviderForm {
     this.draft.update((draft) => ({ ...draft, key: value }));
   }
 
-  protected setModel(value: string): void {
-    this.draft.update((draft) => ({ ...draft, model: value }));
+  protected setModel(key: keyof DraftModels, value: string): void {
+    this.draft.update((draft) => ({ ...draft, [key]: value }));
   }
 
   protected setCap(value: string): void {
@@ -158,7 +195,7 @@ export class AiProviderForm {
   }
 
   protected test(): void {
-    const { provider, key, model: chosen } = this.draft();
+    const { provider, key, fastModel: chosen } = this.draft();
     if (provider === 'none') return;
     this.testState.set({ kind: 'running' });
     this.store

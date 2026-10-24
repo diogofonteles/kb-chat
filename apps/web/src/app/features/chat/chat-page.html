@@ -193,6 +193,8 @@
           [mode]="store.mode()"
           (modeChange)="changeMode($event)"
           [research]="researching()"
+          [profile]="research.profile()"
+          (profileChange)="research.chooseProfile($event)"
           [disabled]="!topic()"
           (submitted)="ask($event)"
         />

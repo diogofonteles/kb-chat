@@ -34,7 +34,7 @@ export class TurnResearchTools implements ResearchToolsPort {
       { topic: this.topic, book: this.book },
     );
     const text = await prepared.run();
-    return { text, step: prepared.step, sources: this.book.list() };
+    return { text, steps: prepared.steps, sources: this.book.list() };
   }
 }
 

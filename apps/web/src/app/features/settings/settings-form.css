@@ -110,6 +110,23 @@
   font-weight: 600;
 }
 
+/* A switch-like preference: the box and its label share one large target. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
 .input {
   box-sizing: border-box;
   width: 100%;
@@ -197,4 +214,12 @@
 
 .test-result.failed {
   color: var(--color-danger);
+}
+
+/* A model the API would refuse: said next to its field, in text, not by color alone. */
+.field-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  font-weight: 600;
 }

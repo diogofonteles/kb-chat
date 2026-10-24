@@ -3,14 +3,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ResearchEvent } from '@kb-chat/contracts';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FakeResearchTools } from '../../test/fake-research-tools.js';
+import { answerText } from '../../test/research-factories.js';
 import { FAKES_DIR } from '../../test/fixture-paths.js';
 import { freePort } from '../../test/free-port.js';
 import { mcpRoutes } from '../mcp/mcp-routes.js';
 import { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import {
+  CLAUDE_EFFORT,
   ClaudeCliRunner,
   claudeArgs,
   parseClaudeLine,
@@ -21,6 +23,7 @@ import {
   parseCodexLine,
 } from './codex-cli-runner.js';
 import { subscriptionEnv } from './cli-process.js';
+import { stopOnAbort } from './cli-research-turn.js';
 
 const turns = new McpTurnRegistry();
 let server: FastifyInstance;
@@ -59,6 +62,7 @@ async function collect(
     topic: 'hermetismo',
     question: 'O que é o ritmo?',
     history: [{ question: 'Antes', answer: 'Resposta anterior' }],
+    profile: 'fast',
     signal,
   }))
     events.push(event);
@@ -81,6 +85,115 @@ function claude(
   });
 }
 
+/** A Claude runner on Sonnet that may escalate to Opus (ADR 0009). */
+function escalating(env: NodeJS.ProcessEnv, enabled = true) {
+  return new ClaudeCliRunner({
+    bin: join(FAKES_DIR, 'fake-claude.mjs'),
+    apiBaseUrl,
+    turns,
+    workDir,
+    env: { ...process.env, ...env },
+    tools: () => new FakeResearchTools(),
+    model: 'sonnet',
+    escalation: { deep: 'opus', enabled: () => enabled },
+    killGraceMs: 200,
+  });
+}
+
+describe('ClaudeCliRunner auto-escalation (ADR 0009)', () => {
+  it('runs the deep model with the fast findings when the fast pass asks to go deeper', async () => {
+    const report = join(workDir, 'deepen.json');
+    const events = await collect(
+      escalating(await fakeHome({ mode: 'deepen', report })),
+    );
+    const steps = events.flatMap((e) => (e.type === 'step' ? [e.step] : []));
+    expect(steps.map((s) => s.kind)).toEqual(['search', 'deepen', 'search']);
+    expect(
+      events.some((e) => e.type === 'token' && e.text.includes('<<')),
+    ).toBe(false);
+    expect(answerText(events)).toBe('Segundo o acervo, tudo flui [1].');
+    expect(events.at(-1)).toMatchObject({
+      type: 'done',
+      escalated: true,
+      steps: 2,
+    });
+    // The report holds the second (deep) run: Opus, told what the fast pass found.
+    const seen = JSON.parse(await readFile(report, 'utf8'));
+    expect(seen.args).toContain('--model=opus');
+    expect(seen.args).not.toContain('--effort=low');
+    expect(seen.stdin).toContain('<findings>');
+    expect(seen.stdin).toContain('Faça a sua própria pesquisa');
+    expect(seen.stdin).toContain('[1] A Lei do Ritmo');
+    expect(turns.size).toBe(0);
+  });
+
+  it('never shows a marker written after a sentence, even split across deltas', async () => {
+    const events = await collect(
+      escalating(await fakeHome({ mode: 'deepen-mid' })),
+    );
+    const shown = events
+      .flatMap((e) => (e.type === 'token' ? [e.text] : []))
+      .join('');
+    expect(shown).toContain('Achei só parte da lista.');
+    expect(shown).not.toContain('<');
+    expect(answerText(events)).toBe('Segundo o acervo, tudo flui [1].');
+    expect(events.at(-1)).toMatchObject({ type: 'done', escalated: true });
+  });
+
+  it('never starts the deep CLI when the reader stops on "Aprofundando…"', async () => {
+    const report = join(workDir, 'stopped.json');
+    const abort = new AbortController();
+    const events: ResearchEvent[] = [];
+    const runner = escalating(await fakeHome({ mode: 'deepen', report }));
+    for await (const event of runner.run({
+      topic: 'hermetismo',
+      question: 'q',
+      history: [],
+      profile: 'fast',
+      signal: abort.signal,
+    })) {
+      events.push(event);
+      if (event.type === 'step' && event.step.kind === 'deepen') abort.abort();
+    }
+    expect(events.at(-1)).toMatchObject({
+      type: 'done',
+      interrupted: true,
+      escalated: true,
+    });
+    // The report is the fast run's: the deep (opus) run never started.
+    const seen = JSON.parse(await readFile(report, 'utf8'));
+    expect(seen.args).not.toContain('--model=opus');
+    expect(turns.size).toBe(0);
+  });
+
+  it('stops at once when the reader aborted before the CLI was watched', () => {
+    const stop = vi.fn();
+    const aborted = new AbortController();
+    aborted.abort();
+    stopOnAbort(aborted.signal, stop)();
+    expect(stop).toHaveBeenCalledOnce();
+    const live = new AbortController();
+    const later = vi.fn();
+    const unwatch = stopOnAbort(live.signal, later);
+    unwatch();
+    live.abort();
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it('escalates an answer that gives up on the collection, and not when Settings turn it off', async () => {
+    const events = await collect(
+      escalating(await fakeHome({ mode: 'absent' })),
+    );
+    expect(events.some((e) => e.type === 'retract')).toBe(true);
+    expect(answerText(events)).toBe('Segundo o acervo, tudo flui [1].');
+    const off = await collect(
+      escalating(await fakeHome({ mode: 'absent' }), false),
+    );
+    expect(answerText(off)).toBe('O acervo não traz essa lista. ');
+    expect(off.at(-1)).not.toHaveProperty('escalated');
+  });
+});
+
 describe('ClaudeCliRunner', () => {
   it('streams the steps, the sources and the [n] text, free of charge (AC-4)', async () => {
     const tools = new FakeResearchTools();
@@ -98,7 +211,7 @@ describe('ClaudeCliRunner', () => {
         ],
       },
       // The narration before the tool call and the leading "Tenho tudo…" are dropped.
-      { type: 'token', text: 'Segundo o acervo, tudo flui [1].' },
+      { type: 'token', text: 'Segundo o acervo, tudo flui [1].', segment: 1 },
       {
         type: 'done',
         usd: 0,
@@ -110,6 +223,22 @@ describe('ClaudeCliRunner', () => {
     ]);
     expect(tools.calls).toHaveLength(1);
     expect(turns.size).toBe(0);
+  });
+
+  it('streams text written before a tool call at once, then retracts it (ADR 0009)', async () => {
+    const events = await collect(claude(await fakeHome({ mode: 'aloud' })));
+    expect(events.slice(0, 2)).toEqual([
+      {
+        type: 'token',
+        text: 'Os textos sobre o ritmo parecem ser dois. ',
+        segment: 0,
+      },
+      { type: 'retract', segment: 0 },
+    ]);
+    expect(events.filter((e) => e.type === 'token').at(-1)).toMatchObject({
+      text: 'Segundo o acervo, tudo flui [1].',
+      segment: 1,
+    });
   });
 
   it('starts claude without ANTHROPIC_API_KEY, with the question on stdin (AC-7)', async () => {
@@ -149,6 +278,7 @@ describe('ClaudeCliRunner', () => {
       topic: 'hermetismo',
       question: 'q',
       history: [],
+      profile: 'deep',
       signal: abort.signal,
     })) {
       events.push(event);
@@ -177,6 +307,7 @@ describe('ClaudeCliRunner', () => {
       topic: 'hermetismo',
       question: 'q',
       history: [],
+      profile: 'deep',
       signal: abort.signal,
     })) {
       events.push(event);
@@ -348,6 +479,15 @@ describe('CLI dialects', () => {
       ]),
     );
     expect(args[args.indexOf('--mcp-config') + 1]).toBe('/turn/mcp.json');
+    expect(args.some((arg) => arg.startsWith('--effort'))).toBe(false);
+    // The fast profile thinks less between tool calls (KBC-011).
+    expect(
+      claudeArgs('/m.json', {
+        systemPrompt: 'r',
+        effort: CLAUDE_EFFORT.fast,
+      }),
+    ).toContain('--effort=low');
+    expect(CLAUDE_EFFORT.deep).toBeUndefined();
     expect(codexArgs('http://x', 'gpt-5.5')).toEqual(
       expect.arrayContaining([
         'exec',

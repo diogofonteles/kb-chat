@@ -1,6 +1,10 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AiTestCode, ResearchEvent } from '@kb-chat/contracts';
+import type {
+  AiTestCode,
+  ResearchEvent,
+  ResearchProfile,
+} from '@kb-chat/contracts';
 import { z } from 'zod';
 import { KB_MCP_SERVER } from '../mcp/kb-mcp-server.js';
 import type {
@@ -18,6 +22,7 @@ import {
 import {
   defaultSubscriptionPrompt,
   subscriptionTurnInput,
+  type SubscriptionPrompt,
 } from './subscription-prompt.js';
 
 /** Claude Code's `--output-format stream-json` lines that matter here (verified on 2.1.x). */
@@ -96,8 +101,8 @@ export interface ClaudeCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   /** An alias ("opus", "sonnet", "fable") or a full model name; default: the CLI's. */
   readonly model?: string;
   readonly tools?: ResearchToolsFactory;
-  /** The research rules for a topic; default: defaultSubscriptionPrompt. */
-  readonly systemPrompt?: (topic: string) => string;
+  /** The research rules for a topic and profile; default: defaultSubscriptionPrompt. */
+  readonly systemPrompt?: SubscriptionPrompt;
 }
 
 /**
@@ -115,10 +120,22 @@ export async function writeClaudeMcpConfig(
   return path;
 }
 
+/**
+ * Claude Code's effort per research profile (KBC-011): the fast profile thinks less between
+ * tool calls; the deep one keeps the CLI's default.
+ */
+export const CLAUDE_EFFORT: Readonly<
+  Record<ResearchProfile, 'low' | undefined>
+> = { fast: 'low', deep: undefined };
+
 /** The arguments of a research turn: only the kb MCP tools, no built-ins, no user settings. */
 export function claudeArgs(
   mcpConfigPath: string,
-  options: { readonly model?: string; readonly systemPrompt: string },
+  options: {
+    readonly model?: string;
+    readonly systemPrompt: string;
+    readonly effort?: string;
+  },
 ): string[] {
   return [
     '-p',
@@ -133,6 +150,7 @@ export function claudeArgs(
     ...['--system-prompt', options.systemPrompt],
     // "--model=x": a value can never be read as another flag.
     ...(options.model ? [`--model=${options.model}`] : []),
+    ...(options.effort ? [`--effort=${options.effort}`] : []),
   ];
 }
 
@@ -153,11 +171,13 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
       name: 'claude',
       launch: async (access, input) => ({
         args: claudeArgs(await writeClaudeMcpConfig(access), {
-          model: options.model,
-          systemPrompt: prompt(input.topic),
+          model: input.model,
+          systemPrompt: prompt(input.topic, input.profile, input.canDeepen),
+          effort: CLAUDE_EFFORT[input.profile],
         }),
       }),
-      input: (input) => subscriptionTurnInput(input.question, input.history),
+      input: (input) =>
+        subscriptionTurnInput(input.question, input.history, input.findings),
       parse: parseClaudeLine,
     };
   }
@@ -176,6 +196,7 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
     yield* runCliTurn({ ...this.options, model: this.model }, this.dialect, {
       ...input,
       tools,
+      model: this.options.model,
     });
   }
 }

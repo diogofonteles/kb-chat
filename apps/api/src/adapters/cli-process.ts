@@ -59,11 +59,15 @@ export function spawnCli(call: CliCall): CliProcess {
     child.once('error', () => resolve(-1));
     child.once('close', (code) => resolve(code));
   });
+  const graceMs = call.killGraceMs ?? KILL_GRACE_MS;
   child.stdin?.on('error', () => undefined);
   child.stdin?.end(call.input);
-  if (!child.stdout) throw new Error(`${call.bin} started without stdout`);
+  if (!child.stdout) {
+    // Never leave a started CLI behind when it cannot be read.
+    killTree(child, graceMs);
+    throw new Error(`${call.bin} started without stdout`);
+  }
   const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
-  const graceMs = call.killGraceMs ?? KILL_GRACE_MS;
   return { lines, exit, kill: () => killTree(child, graceMs) };
 }
 

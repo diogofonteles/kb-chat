@@ -18,6 +18,8 @@ export interface BodyWindow {
 export interface WindowRequest {
   readonly around?: string;
   readonly offset?: number;
+  /** Characters of the window; default WINDOW_CHARS (read_documents asks for less). */
+  readonly size?: number;
 }
 
 /** Accent- and case-insensitive folding that keeps one character per character, so positions match. */
@@ -52,15 +54,24 @@ function occurrences(folded: string, around: string, from: number): number[] {
     .sort((a, b) => a - b);
 }
 
-const countInside = (positions: readonly number[], start: number): number =>
-  positions.filter((p) => p >= start && p < start + WINDOW_CHARS).length;
+interface Span {
+  readonly start: number;
+  readonly size: number;
+}
+
+const countInside = (positions: readonly number[], span: Span): number =>
+  positions.filter((p) => p >= span.start && p < span.start + span.size).length;
 
 /** The start whose window holds the most occurrences (the earliest on a tie). */
-function densestStart(positions: readonly number[], floor: number): number {
+function densestStart(
+  positions: readonly number[],
+  { start: floor, size }: Span,
+): number {
+  const lead = Math.min(LEAD_CHARS, Math.floor(size / 4));
   let best = { start: floor, count: -1 };
   for (const position of positions) {
-    const start = Math.max(floor, position - LEAD_CHARS);
-    const count = countInside(positions, start);
+    const start = Math.max(floor, position - lead);
+    const count = countInside(positions, { start, size });
     if (count > best.count) best = { start, count };
   }
   return best.start;
@@ -79,20 +90,21 @@ function snapToLine(body: string, start: number, floor: number): number {
  */
 export function windowOf(body: string, request: WindowRequest): BodyWindow {
   const total = body.length;
+  const size = request.size ?? WINDOW_CHARS;
   const floor = Math.min(Math.max(0, request.offset ?? 0), total);
   const positions = request.around
     ? occurrences(foldKeepingLength(body), request.around, floor)
     : [];
   const start =
     positions.length > 0
-      ? snapToLine(body, densestStart(positions, floor), floor)
+      ? snapToLine(body, densestStart(positions, { start: floor, size }), floor)
       : floor;
-  const end = Math.min(total, start + WINDOW_CHARS);
+  const end = Math.min(total, start + size);
   return {
     text: body.slice(start, end),
     start,
     end,
     total,
-    matches: request.around ? countInside(positions, start) : null,
+    matches: request.around ? countInside(positions, { start, size }) : null,
   };
 }

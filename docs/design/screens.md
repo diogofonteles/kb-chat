@@ -143,9 +143,11 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 ### Fluxo
 1. O seletor fixo no topo, **"Buscar documentos | Pesquisa com IA"**, escolhe a visão. Com um provedor, a visão inicial é "Pesquisa com IA" (ou a padrão de Configurações); sem provedor, "Pesquisa com IA" fica desabilitada, com a explicação.
 2. Na tela inicial, a saudação "O que você quer pesquisar no acervo?" e a caixa de pergunta ficam centralizadas juntas. Em janelas baixas, a saudação nunca fica sob a barra superior: a área dela rola.
-3. Perguntar já pesquisa com IA. Uma linha discreta mostra o passo atual ("Buscando “ritmo”", "Lendo “Os Princípios”") e, ao final, o resumo ("Pesquisou 2 vezes · leu 3 documentos"), que se expande. "Parar" fica visível enquanto o agente trabalha.
-4. A resposta chega em streaming abaixo da pergunta. `[n]` abre o painel no documento; abaixo, "Fontes" lista só os documentos citados, como chips numerados. Tabelas largas rolam na horizontal dentro da resposta.
-5. As perguntas seguintes levam as anteriores como contexto e aparecem abaixo, como no Claude.
+3. Perguntar já pesquisa com IA. Na caixa de pergunta, um seletor segmentado **"Rápido | Profundo"** (dois rádios, MA-19) escolhe o perfil, com uma linha de ajuda ("Responde em segundos, com uma pesquisa curta e uma resposta direta." / "Pesquisa mais e usa o modelo mais forte; pode levar um minuto."). O padrão vem de Configurações; o navegador lembra a última escolha (KBC-011). No celular, a ajuda fica só para leitores de tela.
+4. Uma linha discreta mostra o passo atual ("Buscando “ritmo”", "Lendo “Os Princípios”") e, ao final, o resumo ("Pesquisou 2 vezes · leu 3 documentos"), que se expande. "Parar" fica visível enquanto o agente trabalha.
+5. A resposta aparece assim que o modelo começa a escrever (ADR 0009). Se um texto já mostrado era o agente pensando alto antes de usar uma ferramenta, ele sai da resposta e fica na lista de passos como **"Pensando: …"**, em itálico e mais discreto, para o leitor entender por que o texto sumiu (UP-01). A resposta chega em streaming abaixo da pergunta.
+   - Quando a pesquisa Rápida não basta, a linha de passos mostra **"Aprofundando a pesquisa…"** e a mesma resposta continua no perfil Profundo; ao final, o resumo diz "… · aprofundou a pesquisa" (ADR 0009). `[n]` abre o painel no documento; abaixo, "Fontes" lista só os documentos citados, como chips numerados. Tabelas largas rolam na horizontal dentro da resposta.
+6. As perguntas seguintes levam as anteriores como contexto e aparecem abaixo, como no Claude.
 
 ### Regras de conteúdo
 - A IA pesquisa antes de responder e nunca pede ao leitor para refazer a busca. Conhecimento de fora do acervo vem marcado "(fora do acervo)".
@@ -179,11 +181,11 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 - Seções à esquerda (no celular, abas no topo): **IA · Preferências · Sobre**. O foco começa no título; Esc e × fecham.
 - **IA:** cartões de rádio, nesta ordem: Assinatura do Claude, Anthropic API, OpenRouter, Assinatura do ChatGPT, OpenAI API, Nenhum. Cada cartão mostra o custo em texto ("Incluído na sua assinatura" ou "Cobra por uso · chave própria"). Uma assinatura sem a ferramenta instalada aparece desabilitada, com "Não instalado." e o passo a passo de instalação e login (BR-3).
   - Provedor por uso: o campo da chave é só de escrita. Uma chave salva aparece como "Chave salva ••••abcd" com "Remover" (BR-1). Uma chave do servidor (variável de ambiente) é avisada.
-  - Modelo: texto livre com sugestões; vazio usa o padrão, mostrado no placeholder.
+  - **Modelo rápido** e **Modelo profundo** (KBC-011): um para cada perfil da pesquisa. Nas assinaturas, uma lista fechada ("Padrão: sonnet", `opus`, `haiku`…); nos provedores por uso, texto livre com sugestões. Vazio usa o padrão, mostrado na primeira opção ou no placeholder. Cada provedor guarda os seus.
   - Limite de gasto por dia (US$), só para os provedores por uso.
   - "Testar conexão" responde em até 20 s, numa linha de status (NFR-1, AC-5).
   - "Salvar" grava provedor, chave, modelo e limite juntos.
-- **Preferências:** tela inicial (Pesquisa com IA ou Buscar documentos), acervo padrão, modo de busca e tema. Salvam ao mudar ("Salvo automaticamente.").
+- **Preferências:** tela inicial (Pesquisa com IA ou Buscar documentos), pesquisa com IA por padrão (Rápido ou Profundo), **Aprofundar automaticamente** (caixa de seleção, ligada por padrão, com uma linha de ajuda), acervo padrão, modo de busca e tema. Salvam ao mudar ("Salvo automaticamente.").
 - **Sobre:** onde ficam os dados (~/.kb-chat, só o seu usuário lê); a assinatura nunca passa a senha ao kb-chat; "Rever o assistente de início".
 
 | Estado | Mostra |

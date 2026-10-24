@@ -132,7 +132,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 | `GET /api/v1/topics/{topic}/facets` | Facet values with collection-wide counts |
 | `POST /api/v1/topics/{topic}/searches` | Body `{ q, mode: all\|exact\|semantic, filters, cursor? }` → `{ items[], facets (counts over the result set), total, nextCursor, tookMs }`; POST because the filters are structured, with no side effect beyond the usage event |
 | `GET /api/v1/topics/{topic}/documents/{id}` | Body markdown without frontmatter, facets, summary, see-also groups, highlight terms |
-| `POST /api/v1/topics/{topic}/research` | One research turn for `{ question, history }`: streams (SSE) `step`, `sources`, `token`, `done` (cost, steps) or `error` (ADR 0006); rate-limited, the daily cap checked before every model call |
+| `POST /api/v1/topics/{topic}/research` | One research turn for `{ question, history, profile }`: streams (SSE) `step`, `sources`, `token` (with its `segment`), `retract`, `done` (cost, steps) or `error` (ADR 0006, ADR 0009); rate-limited, the daily cap checked before every model call |
 | `GET /api/v1/spend/today` | Spend today and the cap |
 | `GET /api/v1/conversations` | Every saved conversation as summaries, newest first by `updatedAt`; optional `?kind=search\|research&topic=` |
 | `GET` / `PUT` / `DELETE /api/v1/conversations/{id}` | One conversation (uuid id): read, upsert (path id must equal body id; answers with the summary), remove (204, idempotent) |

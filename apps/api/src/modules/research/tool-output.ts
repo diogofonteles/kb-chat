@@ -6,6 +6,8 @@ import type { TextHit } from './text-finder.js';
 const OPEN = '<<<DOCUMENTO';
 const CLOSE = 'DOCUMENTO>>>';
 const LINE_CHARS = 300;
+/** Summary and snippet per hit (KBC-011): long enough that many answers need no read. */
+const HIT_TEXT_CHARS = 400;
 
 /** One line, at most `max` characters: tool outputs stay compact. */
 export function oneLine(text: string, max = LINE_CHARS): string {
@@ -25,9 +27,9 @@ export function hitLine(
   summary: string | null,
 ): string {
   const parts = [`[${n}] ${oneLine(hit.title, 160)}`];
-  if (summary) parts.push(`Resumo: ${oneLine(summary)}`);
+  if (summary) parts.push(`Resumo: ${oneLine(summary, HIT_TEXT_CHARS)}`);
   if (hit.snippet && hit.snippet !== summary)
-    parts.push(`Trecho: ${oneLine(hit.snippet)}`);
+    parts.push(`Trecho: ${oneLine(hit.snippet, HIT_TEXT_CHARS)}`);
   if (hit.concepts.length > 0)
     parts.push(`Assuntos: ${hit.concepts.slice(0, 6).join(', ')}`);
   return parts.join(' — ');
@@ -94,7 +96,7 @@ export function textHitLine(n: number, hit: TextHit): string {
     `${hit.occurrences} ocorrência(s): ${counts}`,
   ];
   if (hit.entry.summary)
-    parts.push(`Resumo: ${oneLine(hit.entry.summary, 160)}`);
+    parts.push(`Resumo: ${oneLine(hit.entry.summary, HIT_TEXT_CHARS)}`);
   if (hit.snippet)
     parts.push(`Trecho: ${oneLine(hit.snippet, SNIPPET_LINE_CHARS)}`);
   return parts.join(' — ');

@@ -27,7 +27,13 @@ function setup(configured = true) {
 
 const withDefaultView = (defaultView: DefaultView): SettingsView =>
   aSettingsView({
-    preferences: { searchMode: 'all', theme: 'auto', defaultView },
+    preferences: {
+      searchMode: 'all',
+      theme: 'auto',
+      defaultView,
+      researchProfile: 'fast',
+      autoDeepen: true,
+    },
   });
 
 describe('ViewStore (KBC-008 FR-5)', () => {
@@ -62,7 +68,9 @@ describe('ViewStore (KBC-008 FR-5)', () => {
     TestBed.tick();
     expect(views.current()).toBe('research');
     settings.set(
-      aSettingsView({ ai: { provider: 'none', keys: {}, dailyCapUsd: 1 } }),
+      aSettingsView({
+        ai: { provider: 'none', models: {}, keys: {}, dailyCapUsd: 1 },
+      }),
     );
     TestBed.tick();
     expect(views.researchAvailable()).toBe(false);

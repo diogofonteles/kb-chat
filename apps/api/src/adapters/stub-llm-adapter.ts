@@ -17,8 +17,14 @@ export type StubReply =
         readonly name: string;
         readonly arguments: Record<string, unknown>;
       }[];
+      /** Written before the tool calls: the agent thinking aloud, then retracted (ADR 0009). */
+      readonly thought?: string;
     }
   | { readonly text: string };
+
+/** The default script's thought before it reads (E2E shows it as "Pensando: …"). */
+export const STUB_THOUGHT =
+  'Um dos documentos parece tratar disso; confiro o trecho. ';
 
 export interface StubLlmOptions {
   readonly answer?: string;
@@ -29,6 +35,10 @@ export interface StubLlmOptions {
   readonly script?: readonly StubReply[];
   /** Cost reported per agent call; default: US$ 1 per million tokens. */
   readonly usdPerCall?: number;
+  /** The model name it reports; default "stub/model". */
+  readonly model?: string;
+  /** What the forced last call (toolChoice "none") writes; default: an answer citing [n]. */
+  readonly finalText?: string;
 }
 
 const DEFAULT_ANSWER = 'Segundo o acervo, a natureza é sétupla [1].';
@@ -71,6 +81,7 @@ function defaultReply(messages: AgentHistory): StubReply {
   const first = firstReference(messages);
   if (call === 2 && first)
     return {
+      thought: STUB_THOUGHT,
       toolCalls: [
         {
           name: 'read_document',
@@ -97,7 +108,7 @@ function finalText(messages: AgentHistory): string {
  * and a scripted research turn for `streamAgent`, at US$ 1 per million tokens.
  */
 export class StubLlmAdapter implements AgentLlmPort {
-  readonly model = 'stub/model';
+  readonly model: string;
   readonly billing = 'per-token' as const;
   /** Messages of the last call, calls made and tokens handed out, for assertions. */
   lastMessages: readonly AgentMessage[] = [];
@@ -106,7 +117,9 @@ export class StubLlmAdapter implements AgentLlmPort {
   calls = 0;
   yielded = 0;
 
-  constructor(private readonly options: StubLlmOptions = {}) {}
+  constructor(private readonly options: StubLlmOptions = {}) {
+    this.model = options.model ?? 'stub/model';
+  }
 
   configured(): boolean {
     return this.options.configured ?? true;
@@ -128,7 +141,7 @@ export class StubLlmAdapter implements AgentLlmPort {
     messages: readonly LlmMessage[],
     options: LlmStreamOptions,
   ): AsyncIterable<LlmChunk> {
-    this.lastMessages = messages;
+    this.lastMessages = [...messages];
     this.calls += 1;
     yield* this.words(this.options.answer ?? DEFAULT_ANSWER, messages, options);
   }
@@ -138,7 +151,7 @@ export class StubLlmAdapter implements AgentLlmPort {
     _tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
-    this.lastMessages = messages;
+    this.lastMessages = [...messages];
     this.calls += 1;
     this.agentCalls.push(options);
     const reply = this.reply(messages, options);
@@ -146,6 +159,7 @@ export class StubLlmAdapter implements AgentLlmPort {
       yield* this.words(reply.text, messages, options);
       return;
     }
+    if (reply.thought) yield* this.words(reply.thought, messages, options);
     for (const [index, call] of reply.toolCalls.entries())
       yield {
         type: 'tool_call',
@@ -165,7 +179,8 @@ export class StubLlmAdapter implements AgentLlmPort {
     messages: AgentHistory,
     options: AgentStreamOptions,
   ): StubReply {
-    if (options.toolChoice === 'none') return { text: finalText(messages) };
+    if (options.toolChoice === 'none')
+      return { text: this.options.finalText ?? finalText(messages) };
     if (!this.options.script) return defaultReply(messages);
     return (
       this.options.script[callsInTurn(messages)] ?? {

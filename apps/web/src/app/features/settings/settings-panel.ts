@@ -11,13 +11,18 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { Preferences } from '@kb-chat/contracts';
 import { AiProviderForm } from './ai-provider-form.js';
-import { aiDraftFrom, aiUpdateFrom, type AiDraft } from './ai-draft.js';
+import {
+  aiDraftFrom,
+  aiUpdateFrom,
+  modelErrors,
+  type AiDraft,
+} from './ai-draft.js';
 import { PreferencesForm } from './preferences-form.js';
 import { SettingsStore } from './settings-store.js';
 
 export type SettingsSection = 'ai' | 'preferences' | 'about';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'failed';
+type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'invalid';
 
 /** "Configurações" (KBC-007 FR-6): AI provider, preferences and where the data lives. */
 @Component({
@@ -70,6 +75,11 @@ export class SettingsPanel {
   protected saveAi(): void {
     const draft = this.aiDraft();
     if (!draft) return;
+    // A model the API would refuse is shown on its field, not as a failed save.
+    if (Object.keys(modelErrors(draft)).length > 0) {
+      this.aiSave.set('invalid');
+      return;
+    }
     this.aiSave.set('saving');
     this.store
       .save({ ai: aiUpdateFrom(draft) })

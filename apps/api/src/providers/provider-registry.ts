@@ -1,16 +1,19 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import type {
-  AiProvider,
-  AiTestRequest,
-  AiTestResult,
-  ProviderInfo,
-  ProviderList,
+import {
+  MODEL_ALLOWLISTS,
+  type AiProvider,
+  type AiTestRequest,
+  type AiTestResult,
+  type ProviderInfo,
+  type ProviderList,
+  type ResearchProfile,
 } from '@kb-chat/contracts';
 import { AnthropicAdapter } from '../adapters/anthropic-adapter.js';
 import { ClaudeCliRunner } from '../adapters/claude-cli-runner.js';
 import { CodexCliRunner } from '../adapters/codex-cli-runner.js';
 import { DisabledLlm } from '../adapters/disabled-llm.js';
+import type { SubscriptionPrompt } from '../adapters/subscription-prompt.js';
 import { OpenAiAdapter } from '../adapters/openai-adapter.js';
 import { OpenRouterAdapter } from '../adapters/openrouter-adapter.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
@@ -21,7 +24,9 @@ import type {
   SettingsService,
 } from '../modules/settings/index.js';
 import type { LlmPort } from '../ports/llm.js';
+import type { AgentLlmPort } from '../ports/llm.js';
 import type {
+  Escalation,
   PerTokenRunnerFactory,
   ResearchRunnerPort,
 } from '../ports/research-runner.js';
@@ -50,8 +55,16 @@ export interface ProviderRegistryOptions {
   readonly tools?: ResearchToolsFactory;
   /** The in-API tool loop (KBC-008) over a per-token model. */
   readonly perTokenRunner?: PerTokenRunnerFactory;
-  /** The research rules for a topic, for the subscription CLIs; default: the module's, by slug. */
-  readonly systemPrompt?: (topic: string) => string;
+  /** The research rules for a topic and profile, for the subscription CLIs; default: the module's, by slug. */
+  readonly systemPrompt?: SubscriptionPrompt;
+}
+
+/** How one runner is built: for whom, with which tools, and the deep model to escalate to. */
+interface RunnerBuild {
+  readonly principal: string;
+  readonly tools?: ResearchToolsFactory;
+  /** A fast runner's deep model (null: the CLI's own); undefined: no escalation. */
+  readonly deepModel?: string | null;
 }
 
 /** A provider resolved for one principal: which one, its model and its key. */
@@ -65,6 +78,8 @@ interface ChoiceOverride {
   readonly provider?: ResolvedProvider;
   readonly model?: string;
   readonly key?: string;
+  /** Whose model: the fast one (default) or the deep one (KBC-011). */
+  readonly profile?: ResearchProfile;
 }
 
 /** A key's fingerprint for cache ids: the key itself is kept only by the adapter. */
@@ -110,11 +125,13 @@ export class ProviderRegistry implements ProviderCatalog {
 
   choice(principal: string, override: ChoiceOverride = {}): ProviderChoice {
     const provider = override.provider ?? this.active(principal);
-    const saved = this.options.settings.snapshot(principal)?.ai;
-    const savedModel = saved?.provider === provider ? saved.model : undefined;
+    const profile = override.profile ?? 'fast';
     return {
       provider,
-      model: override.model ?? savedModel ?? this.defaultModel(provider),
+      model:
+        override.model ??
+        this.savedModel(principal, provider, profile) ??
+        this.defaultModel(provider, profile),
       key: override.key ?? this.key(principal, provider),
     };
   }
@@ -126,11 +143,31 @@ export class ProviderRegistry implements ProviderCatalog {
     ) as LlmPort;
   }
 
-  researchRunner(principal: string): ResearchRunnerPort {
-    const choice = this.choice(principal);
-    return this.cached(choiceId('runner', principal, choice), () =>
-      this.buildRunner(choice, principal),
+  /**
+   * The runner of a research turn: the provider's model for the profile (KBC-011). A fast
+   * runner also gets the deep model, to escalate to when the fast pass is not enough.
+   */
+  researchRunner(
+    principal: string,
+    profile: ResearchProfile = 'fast',
+  ): ResearchRunnerPort {
+    const choice = this.choice(principal, { profile });
+    const deepModel =
+      profile === 'fast'
+        ? (this.choice(principal, { profile: 'deep' }).model ?? null)
+        : undefined;
+    // One cached runner per profile (and deep model), so asking fast then deep keeps both.
+    const kind = `runner-${profile}>${deepModel ?? ''}`;
+    return this.cached(choiceId(kind, principal, choice), () =>
+      this.buildRunner(choice, { principal, deepModel }),
     ) as ResearchRunnerPort;
+  }
+
+  /** Settings' "Aprofundar automaticamente" (on unless turned off). */
+  autoDeepen(principal: string): boolean {
+    return (
+      this.options.settings.snapshot(principal)?.preferences.autoDeepen ?? true
+    );
   }
 
   async list(principal: string): Promise<ProviderList> {
@@ -153,7 +190,8 @@ export class ProviderRegistry implements ProviderCatalog {
       signal,
       locate: () => this.locateCli(request.provider),
       llm: () => this.buildLlm(choice),
-      runner: () => this.buildRunner(choice, principal, () => NO_TOOLS),
+      runner: () =>
+        this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
   }
 
@@ -173,31 +211,47 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private buildRunner(
     choice: ProviderChoice,
-    principal: string,
-    tools = this.options.tools,
+    build: RunnerBuild,
   ): ResearchRunnerPort {
+    const { principal } = build;
     if (choice.provider === 'claude-subscription')
-      return new ClaudeCliRunner(this.cliOptions('claude', choice, tools));
+      return new ClaudeCliRunner(this.cliOptions('claude', choice, build));
     if (choice.provider === 'chatgpt-subscription')
       return this.options.config.KB_CHAT_CODEX
-        ? new CodexCliRunner(this.cliOptions('codex', choice, tools))
+        ? new CodexCliRunner(this.cliOptions('codex', choice, build))
         : new DisabledResearchRunner();
     const llm = this.buildLlm(choice);
     const loop = this.options.perTokenRunner;
     if (!loop || !isAgentLlm(llm)) return new DisabledResearchRunner();
-    return loop(llm, {
-      principal,
-      dailyCapUsd: () => this.dailyCapUsd(principal),
-    });
+    const scope = { principal, dailyCapUsd: () => this.dailyCapUsd(principal) };
+    return loop(llm, scope, this.perTokenEscalation(choice, build));
+  }
+
+  private perTokenEscalation(
+    choice: ProviderChoice,
+    { principal, deepModel }: RunnerBuild,
+  ): Escalation<AgentLlmPort> | undefined {
+    if (deepModel === undefined) return undefined;
+    const deep = this.buildLlm({ ...choice, model: deepModel ?? undefined });
+    if (!isAgentLlm(deep)) return undefined;
+    return { deep, enabled: () => this.autoDeepen(principal) };
   }
 
   private cliOptions(
     cli: 'claude' | 'codex',
     choice: ProviderChoice,
-    tools: ResearchToolsFactory | undefined,
+    { principal, deepModel, tools = this.options.tools }: RunnerBuild,
   ) {
     const { config } = this.options;
+    const escalation: Escalation<string | undefined> | undefined =
+      deepModel === undefined
+        ? undefined
+        : {
+            deep: deepModel ?? undefined,
+            enabled: () => this.autoDeepen(principal),
+          };
     return {
+      escalation,
       bin: cli === 'claude' ? config.CLAUDE_BIN : config.CODEX_BIN,
       model: choice.model,
       apiBaseUrl: this.options.apiBaseUrl,
@@ -224,9 +278,23 @@ export class ProviderRegistry implements ProviderCatalog {
     return built;
   }
 
-  private defaultModel(provider: ResolvedProvider): string | undefined {
+  private savedModel(
+    principal: string,
+    provider: ResolvedProvider,
+    profile: ResearchProfile,
+  ): string | undefined {
+    if (provider === 'stub' || provider === 'none') return undefined;
+    const models = this.options.settings.snapshot(principal)?.ai.models;
+    return models?.[provider]?.[profile];
+  }
+
+  private defaultModel(
+    provider: ResolvedProvider,
+    profile: ResearchProfile,
+  ): string | undefined {
     if (provider === 'stub') return 'stub/model';
-    return PROVIDERS[provider].defaultModel(this.options.config) ?? undefined;
+    const defaults = PROVIDERS[provider].defaultModels(this.options.config);
+    return defaults[profile] ?? undefined;
   }
 
   private key(
@@ -275,18 +343,19 @@ export class ProviderRegistry implements ProviderCatalog {
   private async info(principal: string, id: AiProvider): Promise<ProviderInfo> {
     const cliFound = (await this.locateCli(id)) !== null;
     const reason = this.unavailableReason(principal, id, cliFound);
-    const defaultModel = this.defaultModel(id);
-    const models = [defaultModel, ...PROVIDERS[id].models].filter(
-      (model): model is string => Boolean(model),
-    );
+    const defaults = PROVIDERS[id].defaultModels(this.options.config);
+    const models = [defaults.fast, defaults.deep, ...PROVIDERS[id].models];
     return {
       id,
       billing: PROVIDERS[id].billing,
       available: reason === null,
       reason,
       keySource: this.keySource(principal, id),
-      defaultModel: defaultModel ?? null,
-      models: [...new Set(models)],
+      defaultModels: defaults,
+      models: [
+        ...new Set(models.filter((m): m is string => typeof m === 'string')),
+      ],
+      freeModel: id === 'none' || !MODEL_ALLOWLISTS[id],
     };
   }
 }

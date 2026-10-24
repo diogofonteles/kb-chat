@@ -61,7 +61,7 @@ function setup() {
 function answer(stream: Subject<ResearchEvent>, text: string, usd = 0.002) {
   stream.next({ type: 'step', step: { kind: 'search', text: 'Buscando' } });
   stream.next({ type: 'sources', sources: [SOURCE] });
-  stream.next({ type: 'token', text });
+  stream.next({ type: 'token', text, segment: 0 });
   stream.next({
     type: 'done',
     usd,
@@ -74,12 +74,73 @@ function answer(stream: Subject<ResearchEvent>, text: string, usd = 0.002) {
 }
 
 describe('ResearchStore', () => {
+  it('sends the profile picked in the composer and remembers it in this browser (KBC-011)', () => {
+    const { store, api } = setup();
+    expect(store.profile()).toBe('fast');
+    store.chooseProfile('deep');
+    store.ask('quais são os 5 princípios ocultos');
+    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
+      question: 'quais são os 5 princípios ocultos',
+      history: [],
+      profile: 'deep',
+    });
+    expect(localStorage.getItem('kb-chat.research-profile')).toBe('deep');
+  });
+
+  it('saves and restores that a turn went on with the deep research (ADR 0009)', () => {
+    const { store, streams, save } = setup();
+    store.ask('quais são os 5 princípios ocultos');
+    const stream = streams[0] as Subject<ResearchEvent>;
+    stream.next({
+      type: 'step',
+      step: { kind: 'deepen', text: 'Aprofundando a pesquisa…' },
+    });
+    stream.next({ type: 'token', text: 'São cinco [1].', segment: 1 });
+    stream.next({
+      type: 'done',
+      usd: 0,
+      billing: 'subscription',
+      model: 'claude-opus-5-5',
+      interrupted: false,
+      steps: 9,
+      escalated: true,
+    });
+    const saved = save.mock.lastCall?.[0];
+    expect(saved?.turns[0]).toMatchObject({ escalated: true, steps: 9 });
+    if (saved) store.restore(saved);
+    expect(store.turns()[0]).toMatchObject({ escalated: true, restored: true });
+  });
+
+  it('moves a retracted segment out of the answer into the steps as a thought (ADR 0009)', () => {
+    const { store, streams, save } = setup();
+    store.ask('ritmo');
+    const stream = streams[0] as Subject<ResearchEvent>;
+    stream.next({ type: 'token', text: 'Os textos são ', segment: 0 });
+    stream.next({ type: 'token', text: 'dois.', segment: 0 });
+    expect(store.turns()[0]?.text).toBe('Os textos são dois.');
+    stream.next({ type: 'retract', segment: 0 });
+    stream.next({ type: 'retract', segment: 7 });
+    stream.next({ type: 'step', step: { kind: 'read', text: 'Lendo “A”' } });
+    answer(stream, 'O ritmo é uma lei [1].');
+    const turn = store.turns()[0];
+    expect(turn?.text).toBe('O ritmo é uma lei [1].');
+    expect(turn?.steps.slice(0, 2)).toEqual([
+      { kind: 'thought', text: 'Os textos são dois.' },
+      { kind: 'read', text: 'Lendo “A”' },
+    ]);
+    // Saved turns keep only the answer text.
+    expect(save.mock.lastCall?.[0].turns[0]?.answer).toBe(
+      'O ritmo é uma lei [1].',
+    );
+  });
+
   it('sends the previous question and answer as history on a follow-up (AC-2)', () => {
     const { store, api, streams } = setup();
     store.ask('quais são os princípios?');
     expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
       question: 'quais são os princípios?',
       history: [],
+      profile: 'fast',
     });
     answer(streams[0] as Subject<ResearchEvent>, 'São sete [1].');
     store.ask('  e o terceiro?  ');
@@ -88,6 +149,7 @@ describe('ResearchStore', () => {
       history: [
         { question: 'quais são os princípios?', answer: 'São sete [1].' },
       ],
+      profile: 'fast',
     });
     expect(store.turns().map((turn) => turn.question)).toEqual([
       'quais são os princípios?',
@@ -128,7 +190,7 @@ describe('ResearchStore', () => {
     const { store, streams, usage, spend, save } = setup();
     store.ask('quais são?');
     const stream = streams[0] as Subject<ResearchEvent>;
-    stream.next({ type: 'token', text: 'Começo' });
+    stream.next({ type: 'token', text: 'Começo', segment: 0 });
     expect(store.streaming()).toBe(true);
     store.stop();
     expect(stream.observed).toBe(false);
@@ -254,6 +316,7 @@ describe('ResearchStore', () => {
     expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
       question: 'outra',
       history: [],
+      profile: 'fast',
     });
     chat.topicSlug.set('outro');
     expect(store.turns()).toEqual([]);

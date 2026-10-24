@@ -13,8 +13,14 @@ async function openSettings(page: Page) {
 }
 
 const SETTINGS_VIEW = {
-  preferences: { searchMode: 'all', theme: 'auto', defaultView: 'research' },
-  ai: { provider: null, keys: {}, dailyCapUsd: 1 },
+  preferences: {
+    searchMode: 'all',
+    theme: 'auto',
+    defaultView: 'research',
+    researchProfile: 'fast',
+    autoDeepen: true,
+  },
+  ai: { provider: null, models: {}, keys: {}, dailyCapUsd: 1 },
 };
 
 test.beforeEach(async ({ page }) => {
@@ -90,6 +96,36 @@ test('AC-5: an invalid key gets "A chave não foi aceita pelo provedor"', async 
   await expect(
     dialog.getByText('A chave não foi aceita pelo provedor.'),
   ).toBeVisible();
+});
+
+test('KBC-011: each provider shows a fast and a deep model with its defaults', async ({
+  page,
+}) => {
+  const dialog = await openSettings(page);
+  await dialog.getByRole('radio', { name: /OpenRouter/ }).check();
+  await expect(dialog.getByLabel('Modelo rápido')).toHaveAttribute(
+    'placeholder',
+    'Padrão: deepseek/deepseek-v4-flash',
+  );
+  await expect(dialog.getByLabel('Modelo profundo')).toHaveAttribute(
+    'placeholder',
+    'Padrão: deepseek/deepseek-v4-pro',
+  );
+  await dialog.getByRole('radio', { name: /Anthropic API/ }).check();
+  await expect(dialog.getByLabel('Modelo rápido')).toHaveAttribute(
+    'placeholder',
+    'Padrão: claude-sonnet-5-5',
+  );
+});
+
+test('ADR 0009: "Aprofundar automaticamente" is on by default in Preferências', async ({
+  page,
+}) => {
+  const dialog = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Preferências' }).click();
+  await expect(
+    dialog.getByRole('checkbox', { name: 'Aprofundar automaticamente' }),
+  ).toBeChecked();
 });
 
 test('AC-1: the wizard shows on the first run and not again after "Concluir"', async ({

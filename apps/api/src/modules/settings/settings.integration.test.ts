@@ -159,6 +159,43 @@ describe('GET/PUT /api/v1/settings', () => {
     expect(response.json().ai).toMatchObject({ keys: {}, dailyCapUsd: 2 });
   });
 
+  it('keeps a fast and a deep model per provider and refuses a model the CLI does not offer (KBC-011)', async () => {
+    const { app } = await start();
+    expect(
+      (await get(app, '/api/v1/settings')).json().preferences,
+    ).toMatchObject({ autoDeepen: true });
+    const saved = await put(app, {
+      preferences: { researchProfile: 'deep', autoDeepen: false },
+      ai: {
+        provider: 'claude-subscription',
+        models: {
+          'claude-subscription': { fast: 'haiku', deep: 'opus' },
+          openrouter: { fast: 'qwen/qwen3-max' },
+        },
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({
+      preferences: { researchProfile: 'deep', autoDeepen: false },
+      ai: {
+        models: {
+          'claude-subscription': { fast: 'haiku', deep: 'opus' },
+          openrouter: { fast: 'qwen/qwen3-max' },
+        },
+      },
+    });
+    const refused = await put(app, {
+      ai: { models: { 'claude-subscription': { fast: 'gpt-5.5' } } },
+    });
+    expect(refused.statusCode).toBe(400);
+    const back = await put(app, {
+      ai: { models: { 'claude-subscription': { fast: null } } },
+    });
+    expect(back.json().ai.models['claude-subscription']).toEqual({
+      deep: 'opus',
+    });
+  });
+
   it('refuses unknown fields and invalid values with 400', async () => {
     const { app } = await start();
     expect((await put(app, { ai: { provider: 'gemini' } })).statusCode).toBe(
@@ -213,7 +250,13 @@ describe('GET /api/v1/ai/providers', () => {
     expect(byId.get('anthropic')).toMatchObject({
       available: false,
       reason: 'key-missing',
-      defaultModel: 'claude-opus-5-5',
+      defaultModels: { fast: 'claude-sonnet-5-5', deep: 'claude-opus-5-5' },
+      freeModel: true,
+    });
+    expect(byId.get('claude-subscription')).toMatchObject({
+      defaultModels: { fast: 'sonnet', deep: 'opus' },
+      freeModel: false,
+      models: expect.arrayContaining(['sonnet', 'opus', 'haiku']),
     });
     // claude on PATH comes before the env keys (BR-4, owner's decision 2026-10-24).
     expect(list.active).toBe('claude-subscription');
@@ -286,10 +329,8 @@ describe('POST /api/v1/settings/ai/test', () => {
     // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
     await app.listen({ host: '127.0.0.1', port });
     const response = await test(app, { provider: 'claude-subscription' });
-    expect(response.json()).toMatchObject({
-      ok: true,
-      model: 'claude-subscription',
-    });
+    // The fast profile's model: Sonnet by default for the subscription (KBC-011).
+    expect(response.json()).toMatchObject({ ok: true, model: 'sonnet' });
   });
 });
 
