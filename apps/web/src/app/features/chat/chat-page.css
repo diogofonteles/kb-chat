@@ -133,3 +133,8 @@
     padding: 0 var(--space-3) var(--space-3);
   }
 }
+
+/* Long chip rows and titles must wrap or scroll inside the column, never widen the page. */
+.thread > * {
+  min-width: 0;
+}

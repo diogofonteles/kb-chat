@@ -41,7 +41,13 @@ export const searchRequestSchema = z.strictObject({
   mode: searchModeSchema.default('all'),
   limit: z.number().int().min(1).max(MAX_RESULTS).default(10),
   offset: z.number().int().min(0).max(MAX_RESULTS).default(0),
-  filters: searchFiltersSchema.default(EMPTY_FILTERS),
+  // A fresh object per request: the default is copied shallowly (TS-09).
+  filters: searchFiltersSchema.default(() => ({
+    concepts: [],
+    genres: [],
+    depths: [],
+    relevances: [],
+  })),
 });
 export type SearchRequest = z.input<typeof searchRequestSchema>;
 

@@ -11,6 +11,7 @@
           #chip
           type="button"
           class="chip"
+          [attr.data-facet]="group.key"
           [class.on]="group.selectedCount > 0"
           [attr.aria-expanded]="openKey() === group.key"
           [attr.aria-controls]="
@@ -125,7 +126,7 @@
     </header>
     <div class="sheet-body">
       @for (group of draftGroups(); track group.key) {
-        <fieldset>
+        <fieldset [attr.data-sheet-facet]="group.key">
           <legend>{{ group.title }}</legend>
           @for (option of visibleOptions(group); track option.value) {
             <label class="option">

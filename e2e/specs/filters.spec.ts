@@ -115,6 +115,7 @@ test.describe('paging and empty filters', () => {
 
   test('AC-11: an empty filtered result offers to remove a filter', async ({
     page,
+    viewport,
   }) => {
     await askSemantic(page, 'ritmo');
     await expect(page.locator('app-result-card').first()).toBeVisible();
@@ -131,16 +132,15 @@ test.describe('paging and empty filters', () => {
         json: { ...json, items: [], total: 0, nextOffset: null },
       });
     });
+    const phone = (viewport?.width ?? 0) < 1024;
     await page
-      .getByRole('button', { name: /Tipo de texto|Filtros/ })
-      .first()
+      .getByRole('button', {
+        name: phone ? 'Filtros' : /^Tipo de texto/,
+        exact: phone,
+      })
       .click();
-    await page
-      .getByRole('checkbox', { name: /Texto\/apostila/ })
-      .first()
-      .check();
-    const apply = page.getByRole('button', { name: 'Aplicar' });
-    if (await apply.isVisible()) await apply.click();
+    await page.getByRole('checkbox', { name: /Texto\/apostila/ }).check();
+    if (phone) await page.getByRole('button', { name: 'Aplicar' }).click();
     await expect(
       page.getByText('Nada encontrado para "ritmo" com estes filtros.'),
     ).toBeVisible();
@@ -149,6 +149,19 @@ test.describe('paging and empty filters', () => {
       .last()
       .click();
     await expect(page.locator('app-result-card').first()).toBeVisible();
+  });
+
+  test('the results page never scrolls sideways, even with active filters', async ({
+    page,
+  }) => {
+    await askSemantic(page, 'natureza');
+    await expect(page.locator('app-result-card').first()).toBeVisible();
+    const overflow = () =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await page.goto('/');
   });
 });
 

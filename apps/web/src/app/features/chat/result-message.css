@@ -17,6 +17,7 @@
 .answer {
   display: grid;
   gap: var(--space-3);
+  min-width: 0;
 }
 
 .status,
@@ -85,11 +86,6 @@
 
 .secondary:hover {
   border-color: var(--color-accent);
-}
-
-.refreshing .cards {
-  opacity: 0.55;
-  transition: opacity 150ms var(--ease);
 }
 
 .more {

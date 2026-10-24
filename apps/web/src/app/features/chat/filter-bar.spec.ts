@@ -115,7 +115,7 @@ describe('FilterBar focus', () => {
     expect(document.activeElement).toBe(chip);
   });
 
-  it('keeps focus in the bar after removing an active filter', async () => {
+  it('moves focus to the facet chip after removing an active filter (desktop)', async () => {
     await renderBar({ ...NO_FILTERS, depths: [1] });
     fireEvent.click(
       screen.getByRole('button', {
@@ -123,7 +123,7 @@ describe('FilterBar focus', () => {
       }),
     );
     expect(document.activeElement).toBe(
-      screen.getByText('Filtros').closest('button'),
+      screen.getByRole('button', { name: /^Profundidade/ }),
     );
   });
 

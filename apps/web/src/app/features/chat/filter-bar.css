@@ -1,6 +1,8 @@
 :host {
   display: grid;
   gap: var(--space-2);
+  /* Grid/flex children default to min-width:auto; without this the chip row widens the page. */
+  min-width: 0;
 }
 
 .bar {
@@ -8,6 +10,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .facets {
@@ -222,7 +225,9 @@ legend {
   }
 
   .facets {
+    flex: 1 1 auto;
     flex-wrap: nowrap;
+    min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
   }

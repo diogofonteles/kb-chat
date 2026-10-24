@@ -93,8 +93,8 @@ export class FilterBar {
 
   /** Desktop opens the facet's popover; phones open the sheet (no popovers at that width). */
   protected openFacet(key: FacetKey): void {
-    if (this.view?.matchMedia?.(MOBILE_QUERY).matches) {
-      this.openSheet();
+    if (this.isPhone()) {
+      this.openSheet(key);
       return;
     }
     this.openKey.update((open) => (open === key ? null : key));
@@ -106,21 +106,42 @@ export class FilterBar {
 
   protected remove(filter: ActiveFilter): void {
     this.toggle(filter.key, filter.value);
-    // The removed chip disappears: keep focus in the bar instead of dropping it on <body>.
-    this.sheetButton().nativeElement.focus();
+    // The removed chip disappears: keep focus on its facet (desktop) or on "Filtros" (phones).
+    const facetChip = this.host.querySelector<HTMLElement>(
+      `[data-facet="${filter.key}"]`,
+    );
+    const target =
+      this.isPhone() || !facetChip
+        ? this.sheetButton().nativeElement
+        : facetChip;
+    target.focus();
+  }
+
+  private isPhone(): boolean {
+    return this.view?.matchMedia?.(MOBILE_QUERY).matches ?? false;
   }
 
   protected toggleDraft(key: FacetKey, value: FacetValue): void {
     this.draft.update((filters) => toggleFilter(filters, key, value));
   }
 
-  protected openSheet(): void {
+  protected openSheet(facet?: FacetKey): void {
     this.draft.set(this.filters());
     this.sheetOpen.set(true);
-    // showModal() makes the rest of the page inert, traps focus and closes on Escape.
-    afterNextRender(() => this.sheet()?.nativeElement.showModal(), {
-      injector: this.injector,
-    });
+    // showModal() makes the rest of the page inert, traps focus and closes on Escape;
+    // opened from a chip, the sheet starts on that facet's first option.
+    afterNextRender(() => this.showSheet(facet), { injector: this.injector });
+  }
+
+  private showSheet(facet: FacetKey | undefined): void {
+    const dialog = this.sheet()?.nativeElement;
+    dialog?.showModal();
+    if (!facet) return;
+    const first = dialog?.querySelector<HTMLInputElement>(
+      `[data-sheet-facet="${facet}"] input`,
+    );
+    first?.focus();
+    first?.scrollIntoView({ block: 'start' });
   }
 
   protected applySheet(): void {
