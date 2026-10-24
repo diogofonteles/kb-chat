@@ -1,0 +1,194 @@
+:host {
+  display: block;
+}
+
+.turn {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* The reader's question: a quiet bubble on the right, like a chat with Claude. */
+.question {
+  justify-self: end;
+  max-width: min(85%, 36rem);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.reply {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.steps {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.steps summary,
+p.steps {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  max-width: 100%;
+}
+
+.steps summary {
+  padding: 0 var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.steps summary::-webkit-details-marker {
+  display: none;
+}
+
+.steps summary:hover {
+  color: var(--color-text);
+}
+
+/* The chevron says the line opens; it turns when open. */
+.steps summary::after {
+  content: '';
+  flex: none;
+  width: 0.45em;
+  height: 0.45em;
+  margin-top: -0.2em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 150ms var(--ease);
+}
+
+.steps[open] summary::after {
+  margin-top: 0.2em;
+  transform: rotate(-135deg);
+}
+
+.steps-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* While the agent works: a soft pulse next to the current step. */
+.working .steps-text::before {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: var(--space-2);
+  border-radius: 50%;
+  background: var(--color-accent);
+  vertical-align: 0.05em;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.steps ol {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-border);
+  list-style: none;
+}
+
+.answer {
+  font-family: var(--font-reading);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.note,
+.footer {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.error {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-danger);
+}
+
+.error a {
+  color: var(--color-accent-strong);
+}
+
+.sources-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.sources ol {
+  display: grid;
+  margin: 0;
+  padding-left: 1.75em;
+  font-size: var(--text-sm);
+}
+
+.sources li::marker {
+  color: var(--color-text-muted);
+}
+
+.source {
+  min-height: var(--target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-strong);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.secondary {
+  justify-self: start;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stop::before {
+  content: '';
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: var(--space-2);
+  border-radius: 2px;
+  background: currentColor;
+}

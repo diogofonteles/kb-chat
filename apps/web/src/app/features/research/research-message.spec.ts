@@ -1,0 +1,125 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { fireEvent, render, screen } from '@testing-library/angular';
+import { ResearchMessage } from './research-message.js';
+import { startTurn, type ResearchTurn } from './research-turn.js';
+
+const SOURCES = [
+  { n: 1, id: 'raw/a.md', title: 'Os Princípios' },
+  { n: 2, id: 'raw/b.md', title: 'O Caibalion' },
+  { n: 3, id: 'raw/c.md', title: 'Não citado' },
+];
+
+const aTurn = (overrides: Partial<ResearchTurn> = {}): ResearchTurn => ({
+  ...startTurn(1, 'quais são os princípios?'),
+  phase: 'done',
+  text: 'São sete [1], descritos no Caibalion [2].',
+  sources: SOURCES,
+  steps: [
+    { kind: 'search', text: 'Buscando “princípios ocultos”' },
+    { kind: 'search', text: 'Buscando “princípios herméticos”' },
+    { kind: 'read', text: 'Lendo “Os Princípios”' },
+  ],
+  stepCount: 3,
+  usd: 0.0042,
+  model: 'm',
+  ...overrides,
+});
+
+async function renderMessage(turn: ResearchTurn, last = true) {
+  const opened = vi.fn();
+  const stopped = vi.fn();
+  const retried = vi.fn();
+  const view = await render(ResearchMessage, {
+    providers: [provideZonelessChangeDetection()],
+    inputs: { turn, last },
+    on: { opened, stopped, retried },
+  });
+  return { ...view, opened, stopped, retried };
+}
+
+describe('ResearchMessage', () => {
+  it('opens the cited document from [n] and from the sources list (AC-3)', async () => {
+    const view = await renderMessage(aTurn());
+    fireEvent.click(screen.getByRole('link', { name: 'Fonte 2: O Caibalion' }));
+    expect(view.opened).toHaveBeenCalledWith({
+      id: 'raw/b.md',
+      title: 'O Caibalion',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Os Princípios' }));
+    expect(view.opened).toHaveBeenLastCalledWith({
+      id: 'raw/a.md',
+      title: 'Os Princípios',
+    });
+    // Only the documents the answer cites are listed as sources.
+    expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
+  });
+
+  it('summarizes the steps in one line that expands to the step texts', async () => {
+    await renderMessage(aTurn());
+    const summary = screen.getByText('Pesquisou 2 vezes · leu 1 documento');
+    expect(summary.closest('summary')).toBeTruthy();
+    expect(screen.getByText('Buscando “princípios herméticos”')).toBeTruthy();
+  });
+
+  it('shows the AI notice with the cost, and no cost for a subscription', async () => {
+    const view = await renderMessage(aTurn());
+    expect(
+      screen.getByText(
+        'Resposta gerada por IA a partir do acervo; confira nas fontes.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/^Custo: US\$\s0,0042$/)).toBeTruthy();
+    view.fixture.componentRef.setInput('turn', aTurn({ usd: 0 }));
+    await view.fixture.whenStable();
+    expect(screen.queryByText(/Custo:/)).toBeNull();
+  });
+
+  it('shows the current step and "Parar" while the agent works', async () => {
+    const view = await renderMessage(
+      aTurn({ phase: 'streaming', text: '', usd: null }),
+    );
+    expect(screen.getByRole('article').getAttribute('aria-busy')).toBe('true');
+    expect(
+      screen.getByText('Lendo “Os Princípios”', { selector: 'summary *' }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Resposta gerada por IA/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Parar' }));
+    expect(view.stopped).toHaveBeenCalledOnce();
+  });
+
+  it('says how many steps a restored answer took, without a list', async () => {
+    await renderMessage(aTurn({ steps: [], stepCount: 4, restored: true }));
+    expect(screen.getByText('4 passos de pesquisa')).toBeTruthy();
+    expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('explains a missing credit with the link, and retries the last turn', async () => {
+    const view = await renderMessage(
+      aTurn({ phase: 'error', text: '', error: 'LLM_INSUFFICIENT_CREDIT' }),
+    );
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /créditos da OpenRouter acabaram/,
+    );
+    expect(
+      screen
+        .getByRole('link', { name: 'Adicionar créditos' })
+        .getAttribute('href'),
+    ).toBe('https://openrouter.ai/settings/credits');
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(view.retried).toHaveBeenCalledOnce();
+  });
+
+  it('uses the AI wording for the rate limit and marks a stopped answer', async () => {
+    const view = await renderMessage(
+      aTurn({ phase: 'error', text: '', error: 'RATE_LIMITED' }),
+      false,
+    );
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /Muitas respostas em pouco tempo/,
+    );
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    view.fixture.componentRef.setInput('turn', aTurn({ interrupted: true }));
+    await view.fixture.whenStable();
+    expect(screen.getByText('(interrompida)')).toBeTruthy();
+  });
+});
