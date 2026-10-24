@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -7,6 +7,7 @@ import { ApplicationRef, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   EMPTY_FILTERS,
+  type SearchConversation,
   type SearchFilters,
   type SearchResponse,
 } from '@kb-chat/contracts';
@@ -14,6 +15,7 @@ import { KbApi } from '@core/api/kb-api.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { Subject } from 'rxjs';
+import { FakeConversationsServer } from '../../testing/fake-conversations.js';
 import { TOPICS, aResponse } from '../../testing/fixtures.js';
 import { ChatStore } from './chat-store.js';
 
@@ -24,6 +26,7 @@ const usage = { track: vi.fn() };
 async function setup() {
   usage.track.mockClear();
   localStorage.clear();
+  const server = new FakeConversationsServer();
   const searches: {
     topic: string;
     q: string;
@@ -32,7 +35,7 @@ async function setup() {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([server.interceptor])),
       provideHttpClientTesting(),
       ChatStore,
       { provide: UsageLog, useValue: usage },
@@ -60,22 +63,31 @@ async function setup() {
     searches[index]?.reply.next(response);
     searches[index]?.reply.complete();
   };
-  return { store, history, searches, answer };
+  /** The conversation as the API received it. */
+  const savedOnServer = (id: string) =>
+    server.saved.get(id) as SearchConversation | undefined;
+  return { store, history, searches, answer, savedOnServer };
 }
 
 describe('ChatStore conversations (KBC-005)', () => {
   it('restores every question of a conversation in order with its mode and filters (FR-2)', async () => {
-    const { store, history, searches, answer } = await setup();
+    const { store, history, searches, answer, savedOnServer } = await setup();
     store.ask('ritmo', { mode: 'semantic', filters: GENRE });
     answer(0);
     store.ask('polaridade', { mode: 'exact' });
     answer(1);
-    const [saved] = history.conversations();
+    const saved = savedOnServer(store.conversationId());
     if (!saved) throw new Error('the conversation was not saved');
+    expect(saved).toMatchObject({ kind: 'search', title: 'ritmo' });
     expect(saved.asks.map((a) => [a.question, a.mode])).toEqual([
       ['ritmo', 'semantic'],
       ['polaridade', 'exact'],
     ]);
+    expect(history.conversations()[0]).toMatchObject({
+      id: saved.id,
+      kind: 'search',
+      count: 2,
+    });
     store.newConversation();
     store.restore(saved);
     expect(searches.slice(2).map((s) => s.q)).toEqual(['ritmo', 'polaridade']);
@@ -94,6 +106,20 @@ describe('ChatStore conversations (KBC-005)', () => {
       .filter((event) => event.type === 'search')
       .map((event) => event.origin);
     expect(origins).toEqual(['typed', 'typed']);
+    // Saved again after the re-run, it keeps the day it started.
+    expect(savedOnServer(saved.id)?.createdAt).toBe(saved.createdAt);
+  });
+
+  it('keeps the creation time across the saves of one conversation', async () => {
+    const { store, answer, savedOnServer } = await setup();
+    store.ask('ritmo');
+    answer(0);
+    const first = savedOnServer(store.conversationId());
+    store.ask('polaridade');
+    answer(1);
+    const second = savedOnServer(store.conversationId());
+    expect(second?.asks).toHaveLength(2);
+    expect(second?.createdAt).toBe(first?.createdAt);
   });
 
   it('drops a late result of the previous conversation after "+ Nova conversa"', async () => {

@@ -12,16 +12,14 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
   type DocumentRef,
+  type SearchConversation,
   type SearchFilters,
   type SearchMode,
   type SearchResponse,
   type TopicList,
 } from '@kb-chat/contracts';
 import { toUiErrorCode } from '@core/api/api-error.js';
-import {
-  HistoryStore,
-  type Conversation,
-} from '@core/history/history-store.js';
+import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { KbApi, topicsUrl } from '@core/api/kb-api.js';
 import {
@@ -91,24 +89,43 @@ const newConversationId = (): string => crypto.randomUUID();
 const countFilters = (filters: SearchFilters): number =>
   Object.values(filters).reduce((sum, values) => sum + values.length, 0);
 
+/** The contract's limit for a title (the first question, as typed). */
+const TITLE_MAX = 2000;
+
+/** Which conversation is on screen and since when (kept across saves of the same one). */
+interface ConversationMeta {
+  readonly id: string;
+  /** Set when its first question gets an outcome; a restored one keeps its own. */
+  readonly createdAt: string | null;
+}
+
+const freshConversation = (): ConversationMeta => ({
+  id: newConversationId(),
+  createdAt: null,
+});
+
 /** The history entry for the messages on screen; null until a question has an outcome. */
 function toConversation(
-  id: string,
+  meta: ConversationMeta,
   messages: readonly ChatMessage[],
-): Conversation | null {
+): SearchConversation | null {
   const first = messages[0];
   if (!first || messages.every((message) => message.status === 'loading'))
     return null;
+  const now = new Date().toISOString();
   return {
-    id,
+    kind: 'search',
+    id: meta.id,
     topic: first.topic,
+    title: first.question.slice(0, TITLE_MAX),
+    createdAt: meta.createdAt ?? now,
+    updatedAt: now,
     asks: messages.map(({ question, mode, filters, response }) => ({
       question,
       mode,
       filters,
       total: response?.total ?? null,
     })),
-    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -161,8 +178,8 @@ export class ChatStore {
   );
 
   /** Id of the conversation on screen in the history (KBC-005 BR-1). */
-  private readonly conversationState = signal(newConversationId());
-  readonly conversationId = this.conversationState.asReadonly();
+  private readonly conversationState = signal(freshConversation());
+  readonly conversationId = computed(() => this.conversationState().id);
   /** Collection just switched to, shown inline until the next question (BR-2). */
   private readonly topicNoticeState = signal<string | null>(null);
   readonly topicNotice = this.topicNoticeState.asReadonly();
@@ -179,8 +196,14 @@ export class ChatStore {
 
   /** Writes the conversation to the history when its summary changed (not on every page or chip). */
   private remember(messages: readonly ChatMessage[]): void {
-    const conversation = toConversation(this.conversationState(), messages);
+    const meta = this.conversationState();
+    const conversation = toConversation(meta, messages);
     if (!conversation) return;
+    if (meta.createdAt === null)
+      this.conversationState.set({
+        ...meta,
+        createdAt: conversation.createdAt,
+      });
     const key = JSON.stringify([
       conversation.id,
       conversation.topic,
@@ -205,12 +228,13 @@ export class ChatStore {
     this.topicNoticeState.set(slug);
   }
 
-  /** Brings a conversation back from the history and runs its searches again (FR-2). */
-  restore(conversation: Conversation): void {
+  /** Brings a search conversation back from the history and runs its searches again (FR-2). */
+  restore(conversation: SearchConversation): void {
     this.topicSlug.set(conversation.topic);
     this.reset();
     this.topicNoticeState.set(null);
-    this.conversationState.set(conversation.id);
+    const { id, createdAt } = conversation;
+    this.conversationState.set({ id, createdAt });
     for (const saved of conversation.asks)
       this.ask(saved.question, {
         mode: saved.mode,
@@ -308,7 +332,7 @@ export class ChatStore {
     // A restored conversation is saved again (and moves to the top) once its searches settle.
     this.rememberedKey = '';
     this.close();
-    this.conversationState.set(newConversationId());
+    this.conversationState.set(freshConversation());
     this.resets.next({ type: 'reset' });
   }
 
