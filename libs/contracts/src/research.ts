@@ -24,6 +24,10 @@ export const researchStepSchema = z.object({
 });
 export type ResearchStep = z.infer<typeof researchStepSchema>;
 
+/** How a research turn was paid: per token (cost shown, daily cap) or by a subscription (KBC-007 BR-2). */
+export const researchBillingSchema = z.enum(['per-token', 'subscription']);
+export type ResearchBilling = z.infer<typeof researchBillingSchema>;
+
 /**
  * Server-sent events of POST /topics/:topic/research (one JSON object per `data:` line).
  * `sources` repeats the full list whenever the agent meets new documents; [n] in the text
@@ -39,6 +43,7 @@ export const researchEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('done'),
     usd: z.number().nonnegative(),
+    billing: researchBillingSchema,
     model: z.string(),
     interrupted: z.boolean(),
     steps: z.number().int().nonnegative(),

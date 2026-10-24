@@ -72,10 +72,11 @@ describe('settings contract', () => {
       researchEventSchema.parse({
         type: 'done',
         usd: 0,
+        billing: 'subscription',
         model: 'claude-code',
         interrupted: false,
         steps: 2,
       }),
-    ).toMatchObject({ usd: 0 });
+    ).toMatchObject({ usd: 0, billing: 'subscription' });
   });
 });

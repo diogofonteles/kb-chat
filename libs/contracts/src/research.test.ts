@@ -32,7 +32,22 @@ describe('research contracts', () => {
       { type: 'step', step: { kind: 'search', text: 'Buscando “ritmo”' } },
       { type: 'sources', sources: [{ n: 1, id: 'a.md', title: 'A' }] },
       { type: 'token', text: 'Segundo o acervo [1].' },
-      { type: 'done', usd: 0.01, model: 'm', interrupted: false, steps: 3 },
+      {
+        type: 'done',
+        usd: 0.01,
+        billing: 'per-token',
+        model: 'm',
+        interrupted: false,
+        steps: 3,
+      },
+      {
+        type: 'done',
+        usd: 0,
+        billing: 'subscription',
+        model: 'claude',
+        interrupted: false,
+        steps: 2,
+      },
       { type: 'error', code: 'DAILY_CAP_REACHED' },
     ];
     for (const event of events)

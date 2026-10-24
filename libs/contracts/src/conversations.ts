@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { answerSourceSchema } from './answers.js';
+import { researchBillingSchema } from './research.js';
 import { searchFiltersSchema, searchModeSchema } from './search.js';
 
 /**
@@ -25,6 +26,8 @@ export const savedResearchTurnSchema = z.object({
   sources: z.array(answerSourceSchema),
   steps: z.number().int().nonnegative(),
   usd: z.number().nonnegative(),
+  /** Turns saved before KBC-007 were all per token. */
+  billing: researchBillingSchema.default('per-token'),
   model: z.string(),
   interrupted: z.boolean(),
   at: z.iso.datetime(),

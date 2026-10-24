@@ -33,6 +33,7 @@ const research: Conversation = {
       sources: [],
       steps: 3,
       usd: 0.01,
+      billing: 'per-token',
       model: 'stub',
       interrupted: false,
       at: '2026-10-24T12:05:00.000Z',
@@ -51,6 +52,23 @@ describe('conversations contract', () => {
       count: 2,
     });
     expect(summarizeConversation(research).count).toBe(1);
+  });
+
+  it('reads turns saved before billing existed as per-token ones', () => {
+    const legacy = {
+      question: 'lei do ritmo',
+      answer: 'Tudo flui.',
+      sources: [],
+      steps: 3,
+      usd: 0.01,
+      model: 'stub',
+      interrupted: false,
+      at: '2026-10-24T12:05:00.000Z',
+    };
+    const parsed = conversationSchema.parse({ ...research, turns: [legacy] });
+    expect(parsed.kind === 'research' && parsed.turns[0]?.billing).toBe(
+      'per-token',
+    );
   });
 
   it('refuses a conversation whose id is not a uuid or that has no questions', () => {
