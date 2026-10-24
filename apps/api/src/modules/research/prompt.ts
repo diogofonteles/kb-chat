@@ -85,6 +85,13 @@ export function buildResearchMessages(input: PromptInput): AgentMessage[] {
 export const FINAL_ANSWER_NOTE =
   'Você usou todos os passos de pesquisa desta resposta. Responda agora com o que encontrou, citando [n], e diga o que ficou sem resposta no acervo.';
 
+/**
+ * The fast pass's budget is spent and it may still hand over (ADR 0009): it answers when
+ * it can, or writes the marker instead of saying what is missing.
+ */
+export const FINAL_DEEPEN_NOTE =
+  'Você usou todos os passos desta pesquisa rápida. Se o que encontrou responde por completo, responda agora, citando [n]. Se não, escreva só <<APROFUNDAR>> seguido de um motivo curto.';
+
 /** Shown when the model ends without any text. */
 export const EMPTY_ANSWER =
   'Não consegui escrever uma resposta desta vez. Tente perguntar de novo.';

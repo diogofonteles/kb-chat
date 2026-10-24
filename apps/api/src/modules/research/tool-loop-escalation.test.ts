@@ -34,7 +34,7 @@ describe('auto-escalation from the fast to the deep profile (ADR 0009)', () => {
       {
         script: [search, { text: `${DEEPEN_MARKER} a lista ficou incompleta` }],
       },
-      {},
+      { script: [{ text: 'Segundo o acervo, os cinco são estes [1].' }] },
     );
     const events = await collectEvents(runner.run(input()));
     expect(llm.lastMessages[0]?.content).toContain(DEEPEN_MARKER);
@@ -53,7 +53,7 @@ describe('auto-escalation from the fast to the deep profile (ADR 0009)', () => {
     expect(
       deep.lastMessages.some(
         (m) =>
-          m.role === 'system' &&
+          m.role === 'user' &&
           m.content.includes('a lista ficou incompleta') &&
           m.content.includes('mais 14 passos'),
       ),
@@ -63,7 +63,55 @@ describe('auto-escalation from the fast to the deep profile (ADR 0009)', () => {
       model: 'stub/deep',
       escalated: true,
     });
-    expect(ledger.entries).toHaveLength(1);
+    // One ledger entry per model: each is charged its own share.
+    expect(ledger.entries.map((e) => e.model)).toEqual([
+      'stub/model',
+      'stub/deep',
+    ]);
+  });
+
+  it('escalates from the forced last call, without the "answer now" note, and the deep model searches on', async () => {
+    const { runner, llm, deep } = await escalatingRunner(
+      {
+        script: Array.from({ length: 6 }, () => search),
+        finalText: `${DEEPEN_MARKER} faltam dois princípios`,
+      },
+      {},
+    );
+    const events = await collectEvents(runner.run(input()));
+    expect(llm.lastMessages.at(-1)?.content).toContain('Se não, escreva só');
+    const kinds = ofType(events, 'step').map((e) => e.step.kind);
+    expect(kinds.slice(0, 7)).toEqual([...Array(6).fill('search'), 'deepen']);
+    expect(kinds.slice(7)).toContain('search');
+    expect(deep.agentCalls[0]?.toolChoice).toBe('auto');
+    expect(
+      deep.lastMessages.some((m) =>
+        m.content.startsWith('Você usou todos os passos'),
+      ),
+    ).toBe(false);
+    const done = ofType(events, 'done')[0];
+    expect(done).toMatchObject({ escalated: true, model: 'stub/deep' });
+    expect(done?.steps).toBeGreaterThan(6);
+  });
+
+  it('never shows the marker when it comes after a sentence, nor keeps it in the thought', async () => {
+    const { runner } = await escalatingRunner(
+      {
+        script: [
+          search,
+          { text: `Achei só parte da lista. ${DEEPEN_MARKER} faltam dois` },
+        ],
+      },
+      {},
+    );
+    const events = await collectEvents(runner.run(input()));
+    const shown = ofType(events, 'token')
+      .map((e) => e.text)
+      .join('');
+    expect(shown).toContain('Achei só parte da lista.');
+    expect(shown).not.toContain('<');
+    expect(ofType(events, 'retract')).toHaveLength(1);
+    expect(ofType(events, 'done')[0]?.escalated).toBe(true);
   });
 
   it('escalates an answer that gives up on the collection, taking back what was shown', async () => {
@@ -104,14 +152,39 @@ describe('auto-escalation from the fast to the deep profile (ADR 0009)', () => {
     expect(deepProfile.deep.calls).toBe(0);
   });
 
-  it('reads the reason after the marker and recognizes absence phrases', () => {
+  it('reads the reason after the marker, wherever it is', () => {
     expect(deepenOf(`${DEEPEN_MARKER} faltou a lista\nresto`)).toBe(
       'faltou a lista',
     );
+    expect(deepenOf(`Achei parte. ${DEEPEN_MARKER} faltam dois`)).toBe(
+      'faltam dois',
+    );
     expect(deepenOf(DEEPEN_MARKER)).toBe('a pesquisa rápida não bastou');
-    expect(deepenOf('Não há informações sobre isso.')).toMatch(/não há/i);
-    expect(deepenOf('Não encontrei a lista.')).toMatch(/não encontrei/i);
-    expect(deepenOf('Os cinco são descontinuidade e limite [1].')).toBeNull();
+  });
+
+  it.each([
+    'O acervo não nomeia os cinco princípios ocultos.',
+    'Os textos do acervo não mencionam essa lista.',
+    'Nenhum documento traz os nomes.',
+    'Não há informações sobre isso no acervo.',
+    'Não encontrei a lista.',
+    'Não localizei os nomes nos textos.',
+    'Essa lista não consta nos documentos.',
+    'O nome não aparece no acervo.',
+    '## Os cinco princípios\n\nO acervo não traz a lista.',
+  ])('escalates an answer that gives up on the collection: %s', (answer) => {
+    expect(deepenOf(answer)).not.toBeNull();
+  });
+
+  it.each([
+    'Segundo o texto, o ritmo não traz descanso [2].',
+    'O acervo não traz datas, mas descreve o ciclo [1].',
+    'O ritmo não traz descanso.',
+    'Os cinco são descontinuidade e limite [1]. O acervo não traz mais nada.',
+    'O acervo traz os cinco princípios.',
+    'Os cinco são descontinuidade e limite [1].',
+  ])('keeps an answer that answers: %s', (answer) => {
+    expect(deepenOf(answer)).toBeNull();
   });
 });
 

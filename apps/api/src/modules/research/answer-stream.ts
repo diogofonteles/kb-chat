@@ -1,5 +1,6 @@
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { preambleLength } from './answer-preamble.js';
+import { withoutMarker } from './escalation.js';
 
 /**
  * Most characters held at the start of a segment so a preamble about the agent's own work
@@ -36,6 +37,8 @@ export class AnswerStream {
   private seen = false;
   private started = false;
   private narration = false;
+  /** The escalation marker began in this segment: nothing more is shown until it ends. */
+  private markerHeld = false;
   private readonly shownText = new Map<number, string>();
 
   /** The answer as the reader sees it now (segments not retracted). */
@@ -53,7 +56,7 @@ export class AnswerStream {
     if (!delta) return [];
     this.held += delta;
     this.seen = true;
-    if (this.started) return this.emit(this.takeHeld());
+    if (this.started) return this.release();
     return this.narration ? [] : this.begin(false);
   }
 
@@ -70,7 +73,9 @@ export class AnswerStream {
   /** The current model call ended without tools: what it holds is the answer. */
   ended(): Events {
     this.narration = false;
-    const events = this.started ? this.emit(this.takeHeld()) : this.begin(true);
+    const events = this.started
+      ? this.emit(withoutMarker(this.takeHeld()))
+      : this.begin(true);
     this.next();
     return events;
   }
@@ -92,10 +97,32 @@ export class AnswerStream {
       this.narration = true;
       return [];
     }
-    this.held = '';
+    this.held = rest;
     if (!rest) return [];
     this.started = true;
-    return this.emit(rest);
+    return ended ? this.emit(withoutMarker(this.takeHeld())) : this.release();
+  }
+
+  /**
+   * Shows what is held, except from a `<` on: it may open the escalation marker, which the
+   * reader never sees (ADR 0009). A `<` not followed by another is shown with what follows.
+   */
+  private release(): Events {
+    if (this.markerHeld) return [];
+    let shown = '';
+    for (;;) {
+      const at = this.held.indexOf('<');
+      shown += at < 0 ? this.held : this.held.slice(0, at);
+      this.held = at < 0 ? '' : this.held.slice(at);
+      if (this.held.length < 2) break;
+      if (this.held.startsWith('<<')) {
+        this.markerHeld = true;
+        break;
+      }
+      shown += '<';
+      this.held = this.held.slice(1);
+    }
+    return this.emit(shown);
   }
 
   private takeHeld(): string {
@@ -118,5 +145,6 @@ export class AnswerStream {
     this.seen = false;
     this.started = false;
     this.narration = false;
+    this.markerHeld = false;
   }
 }

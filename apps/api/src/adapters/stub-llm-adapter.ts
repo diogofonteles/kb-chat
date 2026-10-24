@@ -37,6 +37,8 @@ export interface StubLlmOptions {
   readonly usdPerCall?: number;
   /** The model name it reports; default "stub/model". */
   readonly model?: string;
+  /** What the forced last call (toolChoice "none") writes; default: an answer citing [n]. */
+  readonly finalText?: string;
 }
 
 const DEFAULT_ANSWER = 'Segundo o acervo, a natureza é sétupla [1].';
@@ -177,7 +179,8 @@ export class StubLlmAdapter implements AgentLlmPort {
     messages: AgentHistory,
     options: AgentStreamOptions,
   ): StubReply {
-    if (options.toolChoice === 'none') return { text: finalText(messages) };
+    if (options.toolChoice === 'none')
+      return { text: this.options.finalText ?? finalText(messages) };
     if (!this.options.script) return defaultReply(messages);
     return (
       this.options.script[callsInTurn(messages)] ?? {
