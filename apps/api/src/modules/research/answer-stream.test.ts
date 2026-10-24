@@ -84,4 +84,14 @@ describe('AnswerStream (ADR 0009)', () => {
       { type: 'token', text: 'Outra. ', segment: 1 },
     ]);
   });
+
+  it('ends a segment with only what came before the marker when nothing escalates (deep pass, Stop)', () => {
+    const stream = new AnswerStream();
+    stream.text('Primeira frase. <<APROFUNDAR>> faltam dois');
+    stream.ended();
+    expect(stream.shown).toBe('Primeira frase. ');
+    const whole = new AnswerStream();
+    expect(whole.text('<<APROFUNDAR>> faltam dois')).toEqual([]);
+    expect(whole.ended()).toEqual([]);
+  });
 });

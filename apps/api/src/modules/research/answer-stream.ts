@@ -1,6 +1,6 @@
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { preambleLength } from './answer-preamble.js';
-import { withoutMarker } from './escalation.js';
+import { beforeMarker } from './escalation.js';
 
 /**
  * Most characters held at the start of a segment so a preamble about the agent's own work
@@ -74,7 +74,7 @@ export class AnswerStream {
   ended(): Events {
     this.narration = false;
     const events = this.started
-      ? this.emit(withoutMarker(this.takeHeld()))
+      ? this.emit(beforeMarker(this.takeHeld()))
       : this.begin(true);
     this.next();
     return events;
@@ -100,7 +100,7 @@ export class AnswerStream {
     this.held = rest;
     if (!rest) return [];
     this.started = true;
-    return ended ? this.emit(withoutMarker(this.takeHeld())) : this.release();
+    return ended ? this.emit(beforeMarker(this.takeHeld())) : this.release();
   }
 
   /**
