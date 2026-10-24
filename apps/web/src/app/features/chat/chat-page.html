@@ -108,6 +108,40 @@
                   >Dica: pressione / para escrever.</span
                 >
               </p>
+              @if (suggestions().length > 0) {
+                <div
+                  class="suggestions"
+                  role="group"
+                  aria-labelledby="suggestions-title"
+                >
+                  <p
+                    id="suggestions-title"
+                    class="suggestions-title"
+                    i18n="@@page.suggestions"
+                  >
+                    Comece por um assunto:
+                  </p>
+                  <ul>
+                    @for (
+                      suggestion of suggestions();
+                      track suggestion.concept
+                    ) {
+                      <li>
+                        <button
+                          type="button"
+                          class="suggestion"
+                          (click)="askAbout(suggestion.concept)"
+                        >
+                          {{ suggestion.concept }}
+                          <span class="suggestion-count">{{
+                            suggestion.count | number
+                          }}</span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
             }
           </div>
         }

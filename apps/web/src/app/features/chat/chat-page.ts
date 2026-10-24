@@ -16,10 +16,13 @@ import type {
   SearchFilters,
   SearchMode,
 } from '@kb-chat/contracts';
+import { httpResource } from '@angular/common/http';
+import { suggestionListSchema } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { suggestionsUrl } from '@core/api/kb-api.js';
 import { DocumentPanel } from '@features/document/document-panel.js';
 import { Sidebar, type SidebarAction } from '@features/sidebar/sidebar.js';
-import type { ChatMessage } from './chat-message.js';
+import { NO_FILTERS, type ChatMessage } from './chat-message.js';
 import { ChatStore } from './chat-store.js';
 import { Composer } from './composer.js';
 import { describeForAnnouncement } from './result-count.js';
@@ -58,6 +61,17 @@ export class ChatPage {
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
   protected readonly covered = computed(
     () => this.opened() !== null && !this.desktop(),
+  );
+  /** The largest subjects as one-click starting points (KBC-006 FR-1); hidden when unavailable. */
+  private readonly suggestionList = httpResource(
+    () => {
+      const slug = this.store.topicSlug();
+      return slug ? suggestionsUrl(slug) : undefined;
+    },
+    { parse: (body) => suggestionListSchema.parse(body) },
+  );
+  protected readonly suggestions = computed(() =>
+    this.suggestionList.hasValue() ? this.suggestionList.value().items : [],
   );
   protected readonly topicNotice = computed(() => {
     const slug = this.store.topicNotice();
@@ -145,6 +159,14 @@ export class ChatPage {
 
   protected ask(question: string): void {
     this.store.ask(question);
+  }
+
+  /** A suggestion searches the subject's name with the subject filter on (KBC-006 FR-2). */
+  protected askAbout(concept: string): void {
+    this.store.ask(concept, this.store.mode(), {
+      ...NO_FILTERS,
+      concepts: [concept],
+    });
   }
 
   protected openHit(doc: DocumentRef, message: ChatMessage): void {

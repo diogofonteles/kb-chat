@@ -21,6 +21,7 @@ import {
   HistoryStore,
   type Conversation,
 } from '@core/history/history-store.js';
+import { UsageLog } from '@core/usage/usage-log.js';
 import { KbApi, topicsUrl } from '@core/api/kb-api.js';
 import {
   Subject,
@@ -80,6 +81,9 @@ function pickDefaultTopic(list: TopicList | null): string | null {
 
 const newConversationId = (): string => crypto.randomUUID();
 
+const countFilters = (filters: SearchFilters): number =>
+  Object.values(filters).reduce((sum, values) => sum + values.length, 0);
+
 /** The history entry for the messages on screen; null until a question has an outcome. */
 function toConversation(
   id: string,
@@ -107,6 +111,7 @@ export class ChatStore {
   private readonly api = inject(KbApi);
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
   private readonly history = inject(HistoryStore);
+  private readonly usage = inject(UsageLog);
   private readonly asks = new Subject<Ask>();
   private readonly mores = new Subject<ChatMessage>();
   private readonly resets = new Subject<ChatEvent>();
@@ -232,6 +237,7 @@ export class ChatStore {
 
   /** Re-runs the same message with new filters (the conversation does not grow). */
   refine(message: ChatMessage, filters: SearchFilters): void {
+    this.usage.track({ type: 'filter', filterCount: countFilters(filters) });
     this.rerun(message, filters, REFINE_DEBOUNCE_MS);
   }
 
@@ -243,8 +249,13 @@ export class ChatStore {
   open(
     topic: string,
     doc: DocumentRef,
-    from?: Pick<ChatMessage, 'id' | 'question'>,
+    from?: Pick<ChatMessage, 'id' | 'question' | 'response'>,
   ): void {
+    const index = from?.response?.items.findIndex((hit) => hit.id === doc.id);
+    this.usage.track({
+      type: 'open_doc',
+      position: index === undefined || index < 0 ? null : index + 1,
+    });
     this.historyState.set([]);
     this.openState.set({
       topic,
@@ -310,6 +321,16 @@ export class ChatStore {
       ? timer(ask.delayMs).pipe(switchMap(() => search))
       : search;
     return delayed.pipe(
+      tap((response) =>
+        this.usage.track({
+          type: 'search',
+          question: ask.question,
+          mode: ask.mode,
+          filterCount: countFilters(ask.filters),
+          total: response.total,
+          tookMs: Math.round(response.tookMs),
+        }),
+      ),
       map((response): ChatEvent => ({ type: 'done', id, rev, response })),
       catchError((err: unknown) =>
         of<ChatEvent>({ type: 'failed', id, rev, error: toUiErrorCode(err) }),

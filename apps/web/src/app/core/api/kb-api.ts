@@ -17,6 +17,8 @@ const topicPath = (topic: string): string =>
 export const topicsUrl = (): string => '/api/v1/topics';
 export const searchesUrl = (topic: string): string =>
   `${topicPath(topic)}/searches`;
+export const suggestionsUrl = (topic: string): string =>
+  `${topicPath(topic)}/suggestions`;
 export const documentUrl = (topic: string, id: string): string =>
   `${topicPath(topic)}/documents/${encodeURIComponent(id)}`;
 

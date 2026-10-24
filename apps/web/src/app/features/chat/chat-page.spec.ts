@@ -1,4 +1,9 @@
-import { provideHttpClient } from '@angular/common/http';
+import {
+  HttpResponse,
+  provideHttpClient,
+  withInterceptors,
+  type HttpInterceptorFn,
+} from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -10,6 +15,7 @@ import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
 import { AnswersApi } from '@core/api/answers-api.js';
+import { UsageLog } from '@core/usage/usage-log.js';
 import { EMPTY, of } from 'rxjs';
 
 /** The page tests cover search and reading; the AI block gets a quiet stand-in. */
@@ -30,14 +36,24 @@ const FAKE_ANSWERS = {
 
 const SEARCH_URL = '/api/v1/topics/hermetismo/searches';
 
+/** Start suggestions per collection (KBC-006); tests that need them set `suggestions`. */
+let suggestions: { concept: string; count: number }[] = [];
+const fakeStartRequests: HttpInterceptorFn = (request, next) =>
+  request.url.endsWith('/suggestions')
+    ? of(new HttpResponse({ status: 200, body: { items: suggestions } }))
+    : next(request);
+const usage = { track: vi.fn() };
+
 async function renderPage() {
   localStorage.clear();
+  usage.track.mockClear();
   const view = await render(ChatPage, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([fakeStartRequests])),
       provideHttpClientTesting(),
       FAKE_ANSWERS,
+      { provide: UsageLog, useValue: usage },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -299,7 +315,7 @@ describe('ChatPage default collection', () => {
     const view = await render(ChatPage, {
       providers: [
         provideZonelessChangeDetection(),
-        provideHttpClient(),
+        provideHttpClient(withInterceptors([fakeStartRequests])),
         provideHttpClientTesting(),
         FAKE_ANSWERS,
       ],
@@ -334,7 +350,7 @@ describe('ChatPage without collections', () => {
     const view = await render(ChatPage, {
       providers: [
         provideZonelessChangeDetection(),
-        provideHttpClient(),
+        provideHttpClient(withInterceptors([fakeStartRequests])),
         provideHttpClientTesting(),
         FAKE_ANSWERS,
       ],
@@ -349,7 +365,7 @@ describe('ChatPage without collections', () => {
     const view = await render(ChatPage, {
       providers: [
         provideZonelessChangeDetection(),
-        provideHttpClient(),
+        provideHttpClient(withInterceptors([fakeStartRequests])),
         provideHttpClientTesting(),
         FAKE_ANSWERS,
       ],
@@ -465,5 +481,61 @@ describe('ChatPage side panel (KBC-005)', () => {
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
     expect(screen.getByText(/^1 documento · Tudo/)).toBeTruthy();
+  });
+});
+
+describe('ChatPage start suggestions and usage log (KBC-006)', () => {
+  afterEach(() => {
+    suggestions = [];
+  });
+
+  it('offers the largest subjects and searches one with its filter on (AC-1, AC-2)', async () => {
+    suggestions = [
+      { concept: 'Cabala', count: 120 },
+      { concept: 'Alquimia', count: 80 },
+    ];
+    const view = await renderPage();
+    const group = screen.getByRole('group', { name: 'Comece por um assunto:' });
+    const buttons = within(group).getAllByRole('button');
+    expect(
+      buttons.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
+    ).toEqual(['Cabala 120', 'Alquimia 80']);
+    fireEvent.click(buttons[0] as HTMLElement);
+    await view.fixture.whenStable();
+    const request = view.http.expectOne(SEARCH_URL);
+    expect(request.request.body).toEqual({
+      q: 'Cabala',
+      mode: 'all',
+      filters: { ...NO_FILTERS, concepts: ['Cabala'] },
+    });
+  });
+
+  it('hides the suggestions when the collection has none', async () => {
+    await renderPage();
+    expect(
+      screen.queryByRole('group', { name: 'Comece por um assunto:' }),
+    ).toBeNull();
+  });
+
+  it('logs the search and the opened result with its position (AC-3)', async () => {
+    const view = await renderPage();
+    await ask('lei do ritmo', view);
+    view.http
+      .expectOne(SEARCH_URL)
+      .flush(aResponse([aHit(), aHit({ id: 'b.md', title: 'Segundo' })]));
+    await view.fixture.whenStable();
+    expect(usage.track).toHaveBeenCalledWith({
+      type: 'search',
+      question: 'lei do ritmo',
+      mode: 'all',
+      filterCount: 0,
+      total: 2,
+      tookMs: 640,
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Segundo/ }));
+    expect(usage.track).toHaveBeenLastCalledWith({
+      type: 'open_doc',
+      position: 2,
+    });
   });
 });
