@@ -5,11 +5,16 @@ import type { CatalogRegistry } from '../catalog/index.js';
 
 export interface TopicsDeps {
   readonly catalog: CatalogRegistry;
-  /** KB_TOPIC; ignored when it names no topic in the vault. */
-  readonly preferredTopic?: string;
+  /** Settings' default collection or KB_TOPIC; ignored when it names no topic in the vault. */
+  readonly preferredTopic?: string | (() => string | undefined);
 }
 
-export function listTopics({ catalog, preferredTopic }: TopicsDeps): TopicList {
+export function listTopics({
+  catalog,
+  preferredTopic: preferred,
+}: TopicsDeps): TopicList {
+  const preferredTopic =
+    typeof preferred === 'function' ? preferred() : preferred;
   const items = catalog.topics().map(({ topic, entries }) => ({
     slug: topic.slug,
     title: topic.title,

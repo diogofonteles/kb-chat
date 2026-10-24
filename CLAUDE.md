@@ -13,7 +13,7 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 ## Architecture (reference)
 
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — drivers, C4, modules, contracts, threat model
-- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam · 0006 research agent
+- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam · 0006 research agent · 0007 AI providers and local settings
 - Screens: [`docs/design/screens.md`](docs/design/screens.md) · Backlog: [`docs/backlog/README.md`](docs/backlog/README.md)
 
 ## Stack
@@ -31,7 +31,7 @@ pnpm dev:api     # http://127.0.0.1:3000/health (reads KB_VAULT, default ~/dev/p
 pnpm dev:web     # http://localhost:4200 (proxies /api to :3000)
 ```
 
-Variables: [`.env.example`](.env.example) (all optional). `OPENROUTER_API_KEY` is only needed for the AI research agent (KBC-008, ADR 0006).
+Variables: [`.env.example`](.env.example) (all optional). `OPENROUTER_API_KEY` is only needed for AI answers (KBC-004).
 
 ## Quality
 

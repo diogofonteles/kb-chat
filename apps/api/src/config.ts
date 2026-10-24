@@ -38,6 +38,12 @@ export const configSchema = z.object({
     .default('off')
     .transform((value) => value === 'on'),
   KB_CHAT_LLM: z.enum(['openrouter', 'stub']).default('openrouter'),
+  /** Per-token provider keys used while Settings do not set one (KBC-007 BR-4). */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  /** Official CLIs for the subscriptions (KBC-007): a name looked up on PATH, or a path. */
+  CLAUDE_BIN: z.string().min(1).default('claude'),
+  CODEX_BIN: z.string().min(1).default('codex'),
   KB_CHAT_DAILY_CAP_USD: z.coerce.number().min(0).default(1),
   /** Local state (spend ledger, usage log, settings). */
   KB_CHAT_STATE_DIR: z

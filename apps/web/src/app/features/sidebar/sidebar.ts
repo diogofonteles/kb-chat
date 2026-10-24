@@ -20,6 +20,7 @@ import { THEMES, ThemeStore, type Theme } from '@core/theme/theme-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { ResearchStore } from '@features/research/research-store.js';
+import { SettingsButton } from '@features/settings/settings-button.js';
 
 export type SidebarAction = 'new' | 'restore' | 'topic';
 
@@ -42,7 +43,7 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
  */
 @Component({
   selector: 'app-sidebar',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, SettingsButton],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

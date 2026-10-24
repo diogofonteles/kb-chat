@@ -8,3 +8,4 @@ export * from './topics.js';
 export * from './usage.js';
 export * from './research.js';
 export * from './conversations.js';
+export * from './settings.js';

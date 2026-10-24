@@ -35,6 +35,8 @@ Desktop (≥ 1024 px)                                   Celular (< 1024 px)
 └──────────┴───────────────────────────┴──────────┘
 ```
 
+O ⚙ **Configurações** fica no pé da lateral e do menu do celular (T6).
+
 Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, (3) chips de filtro, (4) botão de IA. A busca é a navegação principal, por isso o campo fica fixo e sempre visível (SL-03).
 
 ---
@@ -163,6 +165,37 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 - **Acervo ▾**: lista de `kb topic list` com a contagem de documentos. Trocar de acervo inicia uma conversa nova (aviso inline, sem modal).
 - **Tema**: "Automático (claro/escuro)" · "Claro" · "Escuro" · "Esotérico", lembrado no navegador.
 - **Gasto com IA hoje: US$ 0,03 de US$ 1,00** (UP-02).
+
+## T6. Configurações (KBC-007)
+
+**Objetivo:** trocar quem responde (assinatura ou chave própria) e as preferências sem editar arquivos. **Sucesso:** trocar de provedor e ver a próxima resposta usar o novo, sem reiniciar.
+
+- Aberta pelo **⚙ Configurações**, fixo no pé da lateral (desktop) e do menu (celular). Abre como diálogo modal sobre a conversa, que continua igual ao fechar (FR-6). No celular, ocupa a tela inteira.
+- Seções à esquerda (no celular, abas no topo): **IA · Preferências · Sobre**. O foco começa no título; Esc e × fecham.
+- **IA:** cartões de rádio, nesta ordem: Assinatura do Claude, Anthropic API, OpenRouter, Assinatura do ChatGPT, OpenAI API, Nenhum. Cada cartão mostra o custo em texto ("Incluído na sua assinatura" ou "Cobra por uso · chave própria"). Uma assinatura sem a ferramenta instalada aparece desabilitada, com "Não instalado." e o passo a passo de instalação e login (BR-3).
+  - Provedor por uso: o campo da chave é só de escrita. Uma chave salva aparece como "Chave salva ••••abcd" com "Remover" (BR-1). Uma chave do servidor (variável de ambiente) é avisada.
+  - Modelo: texto livre com sugestões; vazio usa o padrão, mostrado no placeholder.
+  - Limite de gasto por dia (US$), só para os provedores por uso.
+  - "Testar conexão" responde em até 20 s, numa linha de status (NFR-1, AC-5).
+  - "Salvar" grava provedor, chave, modelo e limite juntos.
+- **Preferências:** tela inicial (Pesquisa com IA ou Buscar documentos), acervo padrão, modo de busca e tema. Salvam ao mudar ("Salvo automaticamente.").
+- **Sobre:** onde ficam os dados (~/.kb-chat, só o seu usuário lê); a assinatura nunca passa a senha ao kb-chat; "Rever o assistente de início".
+
+| Estado | Mostra |
+|---|---|
+| Carregando | "Carregando…" e "Verificando o que está disponível…" |
+| Servidor fora | "Não consegui carregar as configurações…" + "Tentar de novo" |
+| Erro ao salvar | "Não consegui salvar. Tente de novo." (o rascunho continua na tela) |
+
+## T7. Assistente de primeira abertura (KBC-007)
+
+- Aparece sozinho enquanto não há configuração salva para o usuário (BR-5). Cada passo pode ser pulado:
+  1. Como a IA vai responder? A Assinatura do Claude vem selecionada quando o Claude Code está instalado (BR-4).
+  2. Por onde começar? (tela inicial e modo de busca)
+  3. Qual acervo você estuda?
+  4. Escolha o tema.
+- Rodapé fixo: "Pular" (grava os padrões e não volta, FR-1), "Voltar", "Continuar" e "Concluir".
+- "Passo n de 4" no topo. Reabre em Configurações > Sobre.
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
