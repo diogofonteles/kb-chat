@@ -56,22 +56,16 @@ p.steps {
   color: var(--color-text);
 }
 
-/* The chevron says the line opens; it turns when open. */
+/* The disclosure triangle says the line opens: ▸ closed, ▾ open. */
 .steps summary::after {
-  content: '';
+  content: '▾';
   flex: none;
-  width: 0.45em;
-  height: 0.45em;
-  margin-top: -0.2em;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
+  transform: rotate(-90deg);
   transition: transform 150ms var(--ease);
 }
 
 .steps[open] summary::after {
-  margin-top: 0.2em;
-  transform: rotate(-135deg);
+  transform: none;
 }
 
 .steps-text {
@@ -147,28 +141,57 @@ p.steps {
   font-weight: 600;
 }
 
+/* Cited documents as compact chips, numbered like the [n] in the text. */
 .sources ol {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin: 0;
-  padding-left: 1.75em;
-  font-size: var(--text-sm);
-}
-
-.sources li::marker {
-  color: var(--color-text-muted);
+  padding: 0;
+  list-style: none;
 }
 
 .source {
-  min-height: var(--target);
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-accent-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  min-height: 2.25rem;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
   text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  overflow-wrap: anywhere;
   cursor: pointer;
+}
+
+.source:hover {
+  border-color: var(--color-accent);
+}
+
+.source-n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+.source-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .source {
+    min-height: var(--target);
+  }
 }
 
 .secondary {

@@ -72,14 +72,18 @@
           <h3 class="sources-title" i18n="@@ai.sources">Fontes</h3>
           <ol>
             @for (source of cited(); track source.n) {
-              <li [value]="source.n">
+              <li>
                 <button
                   type="button"
                   class="source"
                   [attr.data-doc-id]="source.id"
+                  [title]="source.title"
                   (click)="opened.emit({ id: source.id, title: source.title })"
                 >
-                  {{ source.title }}
+                  <span class="source-n" aria-hidden="true">{{
+                    source.n
+                  }}</span>
+                  <span class="source-title">{{ source.title }}</span>
                 </button>
               </li>
             }
