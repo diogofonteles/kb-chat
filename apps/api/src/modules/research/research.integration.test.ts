@@ -10,7 +10,9 @@ import {
   StubLlmAdapter,
   type StubLlmOptions,
 } from '../../adapters/stub-llm-adapter.js';
+import { OpenRouterAdapter } from '../../adapters/openrouter-adapter.js';
 import { OWNER, buildApp } from '../../app.js';
+import type { AgentLlmPort } from '../../ports/llm.js';
 import { loadConfig } from '../../config.js';
 import { createLogger } from '../../logger.js';
 import { createSearchIndex } from '../../search-index-factory.js';
@@ -23,7 +25,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function start(llmOptions: StubLlmOptions = {}) {
+async function start(llmOptions: StubLlmOptions = {}, model?: AgentLlmPort) {
   const config = loadConfig({
     KB_VAULT: FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
@@ -41,7 +43,7 @@ async function start(llmOptions: StubLlmOptions = {}) {
     config,
     vault,
     index,
-    llm,
+    llm: model ?? llm,
     ledger,
     logger: createLogger('silent'),
   });
@@ -62,7 +64,31 @@ const events = (body: string): ResearchEvent[] =>
     .filter((block) => block.startsWith('data: '))
     .map((block) => researchEventSchema.parse(JSON.parse(block.slice(6))));
 
+/** OpenRouter over HTTP that lists the model and refuses the key on every completion. */
+const refusingOpenRouter = (): AgentLlmPort =>
+  new OpenRouterAdapter({
+    apiKey: 'sk-or-refused-1234',
+    model: 'm/refused',
+    fetch: async (url) => {
+      if (String(url).endsWith('/models'))
+        return Response.json({
+          data: [
+            { id: 'm/refused', pricing: { prompt: '0', completion: '0' } },
+          ],
+        });
+      if (String(url).endsWith('/credits'))
+        return Response.json({}, { status: 401 });
+      return new Response('{"error":"bad key"}', { status: 401 });
+    },
+  });
+
 describe('POST /api/v1/topics/:topic/research', () => {
+  it('streams LLM_KEY_REJECTED when OpenRouter refuses the key (KBC-007)', async () => {
+    const { app: server } = await start({}, refusingOpenRouter());
+    const stream = events((await ask(server, { question: 'ritmo' })).body);
+    expect(stream.at(-1)).toEqual({ type: 'error', code: 'LLM_KEY_REJECTED' });
+  });
+
   it('streams steps, sources, the answer and the cost, and records one spend entry (AC-1)', async () => {
     const { app: server, ledger } = await start();
     const response = await ask(server, { question: 'ritmo' });

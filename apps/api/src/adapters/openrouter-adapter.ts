@@ -11,6 +11,7 @@ import type {
   ToolCall,
   ToolDefinition,
 } from '../ports/llm.js';
+import { LlmKeyRejectedError } from '../ports/llm-errors.js';
 
 const API = 'https://openrouter.ai/api/v1';
 const BALANCE_TTL_MS = 60_000;
@@ -279,6 +280,8 @@ export class OpenRouterAdapter implements AgentLlmPort {
         AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       ]),
     });
+    if (response.status === 401 || response.status === 403)
+      throw new LlmKeyRejectedError('OpenRouter', response.status);
     if (!response.ok || !response.body)
       throw new Error(`OpenRouter answered ${response.status}`);
     return response.body;

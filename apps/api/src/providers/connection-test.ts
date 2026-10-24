@@ -41,15 +41,12 @@ class TestFailure extends Error {
   }
 }
 
-/** OpenRouter's adapter reports refusals as "OpenRouter answered 401". */
-const isKeyRejected = (err: unknown): boolean =>
-  err instanceof LlmKeyRejectedError ||
-  (err instanceof Error && /answered 40[13]\b/.test(err.message));
-
 function failureCode(err: unknown, timedOut: boolean): AiTestCode {
   if (err instanceof TestFailure) return err.code;
   if (timedOut) return 'PROVIDER_TIMEOUT';
-  return isKeyRejected(err) ? 'LLM_KEY_REJECTED' : 'PROVIDER_UNAVAILABLE';
+  return err instanceof LlmKeyRejectedError
+    ? 'LLM_KEY_REJECTED'
+    : 'PROVIDER_UNAVAILABLE';
 }
 
 async function askModel(llm: LlmPort, signal: AbortSignal): Promise<void> {

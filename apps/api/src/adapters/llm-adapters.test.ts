@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../config.js';
 import { DEFAULT_MODEL, createLlm } from '../llm-factory.js';
+import { LlmKeyRejectedError } from '../ports/llm-errors.js';
 import { DisabledLlm } from './disabled-llm.js';
 import { JsonlSpendLedger } from './jsonl-spend-ledger.js';
 import { MemorySpendLedger } from './memory-spend-ledger.js';
@@ -135,6 +136,25 @@ describe('OpenRouterAdapter', () => {
     };
     await expect(run()).rejects.toThrow(/402/);
   });
+
+  it.each([401, 403])(
+    'turns a refused key (HTTP %i) into LlmKeyRejectedError',
+    async (status) => {
+      const adapter = new OpenRouterAdapter({
+        apiKey: 'sk-or-refused',
+        model: 'm',
+        fetch: vi.fn<typeof fetch>(async () => json({}, status)),
+      });
+      const run = async () => {
+        for await (const _ of adapter.streamAgent([], [], {
+          maxTokens: 1,
+          signal: new AbortController().signal,
+        }))
+          void _;
+      };
+      await expect(run()).rejects.toBeInstanceOf(LlmKeyRejectedError);
+    },
+  );
 
   it('reads and caches the model price and the account balance', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) =>
