@@ -9,7 +9,6 @@ import {
 import { dirname } from 'node:path';
 import type { UsageLogPort } from '../ports/usage-log.js';
 
-/** Parses events.jsonl, skipping lines that are not records (a torn last write, manual edits). */
 /** Lines written before search events had an origin (KBC-006 review) count as typed searches. */
 function upgrade(value: unknown): unknown {
   if (typeof value !== 'object' || value === null) return value;
