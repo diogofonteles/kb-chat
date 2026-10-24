@@ -2,7 +2,11 @@ import { join } from 'node:path';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { OWNER, buildApp } from './app.js';
 import { applyUsageRetention } from './modules/usage/index.js';
-import { loadConfig } from './config.js';
+import { assertSignInConfigured, loadConfig } from './config.js';
+import { JsonPeopleStore } from './adapters/json-people-store.js';
+import { FsSessionStore } from './adapters/fs-session-store.js';
+import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
+import { PeopleService, SessionService } from './modules/auth/index.js';
 import { createLogger } from './logger.js';
 import { JsonlSpendLedger } from './adapters/jsonl-spend-ledger.js';
 import { JsonlUsageLog } from './adapters/jsonl-usage-log.js';
@@ -14,6 +18,7 @@ import { createResearchAgent } from './research-agent-factory.js';
 import { createSearchIndex } from './search-index-factory.js';
 
 const config = loadConfig();
+assertSignInConfigured(config);
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
 const index = await createSearchIndex({ config, vault, log: logger });
@@ -41,8 +46,20 @@ const conversations = new FsConversationStore({
   dir: join(config.KB_CHAT_STATE_DIR, 'conversations'),
   log: logger,
 });
+// Sign-in with Google and who may use what (KBC-010, ADR 0008).
+const auth = {
+  people: new PeopleService({
+    store: new JsonPeopleStore(join(config.KB_CHAT_STATE_DIR, 'people.json')),
+    ownerEmail: config.KB_CHAT_OWNER_EMAIL,
+  }),
+  sessions: new SessionService({
+    store: new FsSessionStore(join(config.KB_CHAT_STATE_DIR, 'sessions')),
+  }),
+  verifier: createGoogleVerifier(config.GOOGLE_CLIENT_ID),
+};
 const app = await buildApp({
   config,
+  auth,
   vault,
   index,
   logger,

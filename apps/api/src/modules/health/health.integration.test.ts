@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FAKES_DIR, FIXTURE_VAULT } from '../../../test/fixture-paths.js';
 import { FsVaultAdapter } from '../../adapters/fs-vault-adapter.js';
-import { buildApp } from '../../app.js';
+import { signedInApp } from '../../../test/auth-factories.js';
 import { loadConfig } from '../../config.js';
 import { createSearchIndex } from '../../search-index-factory.js';
 
@@ -23,8 +23,8 @@ describe('health when QMD cannot start', () => {
         warn: (_obj: object, message?: string) => logs.push(message ?? ''),
       },
     });
-    const app = await buildApp({ config, vault, index });
-    const headers = { host: 'localhost' };
+    const headers: Record<string, string> = { host: 'localhost' };
+    const app = await signedInApp(headers)({ config, vault, index });
 
     const health = await app.inject({ method: 'GET', url: '/health', headers });
     const search = await app.inject({

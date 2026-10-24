@@ -70,12 +70,14 @@
         } @else {
           <h1 class="topic" i18n="@@page.title">kb-chat</h1>
         }
-        <app-view-switch
-          class="view-switch"
-          [view]="currentView()"
-          [researchAvailable]="views.researchAvailable()"
-          (changed)="changeView($event)"
-        />
+        @if (views.bothAllowed()) {
+          <app-view-switch
+            class="view-switch"
+            [view]="currentView()"
+            [researchAvailable]="views.researchAvailable()"
+            (changed)="changeView($event)"
+          />
+        }
       </header>
 
       <section
@@ -110,9 +112,15 @@
                 </button>
               </div>
             } @else if (noTopics()) {
-              <p class="notice" role="alert" i18n="@@page.noTopics">
-                Nenhum acervo kb encontrado no vault configurado (KB_VAULT).
-              </p>
+              @if (!guest()) {
+                <p class="notice" role="alert" i18n="@@page.noTopics">
+                  Nenhum acervo kb encontrado no vault configurado (KB_VAULT).
+                </p>
+              } @else {
+                <p class="notice" role="alert" i18n="@@page.noTopicsGranted">
+                  Nenhum acervo foi liberado para você ainda; peça a um master.
+                </p>
+              }
             } @else {
               <p class="hint">
                 @if (researching()) {

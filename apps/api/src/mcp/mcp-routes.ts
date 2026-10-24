@@ -2,6 +2,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../app-error.js';
+import { PUBLIC } from '../modules/auth/index.js';
 import { createKbMcpServer } from './kb-mcp-server.js';
 import type { McpTurnRegistry } from './mcp-turns.js';
 
@@ -57,8 +58,10 @@ export const mcpRoutes =
     };
     await app.register(
       async (scope) => {
-        scope.all('/mcp/turns/:token', handler);
-        scope.all(MCP_BEARER_PATH, handler);
+        // Authenticated by the turn's own token, not by a session (ADR 0007).
+        const options = { config: { access: PUBLIC } };
+        scope.all('/mcp/turns/:token', options, handler);
+        scope.all(MCP_BEARER_PATH, options, handler);
       },
       { logSerializers: { req: redactedTurnRequest } },
     );

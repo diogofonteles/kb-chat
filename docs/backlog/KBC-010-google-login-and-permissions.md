@@ -1,7 +1,7 @@
 ---
 id: KBC-010
 title: Login com conta Google e acesso por permissões (funcionalidades e acervos)
-status: draft
+status: done
 slice: release-1
 outcome: cada pessoa entra com a própria conta e só vê os acervos e funções que recebeu
 depends_on: [KBC-007, KBC-008]
@@ -86,9 +86,11 @@ Pedido do dono em 2026-10-24: "Coloque como requisito a necessidade de login (co
   - When o teste de cobertura de guards roda
   - Then nenhuma rota de acervo ou funcionalidade está sem guard
 
-## Open questions
-- Uso só local hoje: o login também deve ser obrigatório para o próprio dono no Mac, ou só quando hospedado? Padrão adotado: obrigatório sempre (o pedido diz "necessidade de login"). — dono
-- Os convidados usam a chave de IA do dono (com teto por pessoa) ou cada um traz a sua? Padrão: cada um traz a sua; o dono pode liberar a dele com teto. — dono
+## Decisões do dono (2026-10-24)
+- Login obrigatório sempre, inclusive no Mac do dono.
+- Cada convidado usa a própria chave e configuração de IA; compartilhar a do master com teto fica para depois. As assinaturas (Claude, ChatGPT) e as chaves do `.env` servem só a conta do dono.
+- Vários masters; o último não pode ser rebaixado nem removido, e a conta do dono continua sempre master.
+- FR-1 e NFR-1 mudam: o login usa o Google Identity Services (ID token) com `POST /api/v1/auth/google`, verificado pela API com as chaves do Google, sem client secret e sem redirect (ADR 0008, aceita). O texto de BR-2 passa a "peça a um master".
 
 ## References
 - ADR 0005 (seam de autenticação local), a ser substituída pela ADR 0008 (Google OIDC e permissões).

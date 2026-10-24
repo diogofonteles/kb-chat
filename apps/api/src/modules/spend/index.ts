@@ -1,4 +1,8 @@
-export { spendRoutes } from './routes.js';
+export {
+  spendRoutes,
+  type SpendPerson,
+  type SpendRouteDeps,
+} from './routes.js';
 export {
   SpendService,
   tokensOf,

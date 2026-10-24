@@ -15,7 +15,7 @@
 
 <div class="body">
   <nav class="nav" aria-label="Seções" i18n-aria-label="@@settings.sections">
-    @for (item of sections; track item.id) {
+    @for (item of sections(); track item.id) {
       <button
         type="button"
         class="nav-item"
@@ -109,6 +109,17 @@
             >
           }
         </p>
+      </section>
+    } @else if (section() === 'people') {
+      <section class="section" aria-labelledby="settings-people">
+        <h3
+          id="settings-people"
+          class="section-title"
+          i18n="@@settings.peopleTitle"
+        >
+          Pessoas e permissões
+        </h3>
+        <app-people-panel />
       </section>
     } @else {
       <section class="section" aria-labelledby="settings-about">

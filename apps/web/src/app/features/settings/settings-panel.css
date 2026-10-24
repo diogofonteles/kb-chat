@@ -172,6 +172,12 @@
     overflow-x: auto;
   }
 
+  /* One line per tab; the row scrolls when the tabs do not fit. */
+  .nav-item {
+    flex: none;
+    white-space: nowrap;
+  }
+
   .content {
     padding: var(--space-4) var(--space-4) var(--space-8);
   }

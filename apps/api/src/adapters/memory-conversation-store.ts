@@ -21,8 +21,11 @@ export class MemoryConversationStore implements ConversationStorePort {
     return entry?.principal === principal ? entry.conversation : null;
   }
 
-  async put(principal: string, conversation: Conversation): Promise<void> {
+  async put(principal: string, conversation: Conversation): Promise<boolean> {
+    const owner = this.entries.get(conversation.id)?.principal;
+    if (owner !== undefined && owner !== principal) return false;
     this.entries.set(conversation.id, { principal, conversation });
+    return true;
   }
 
   async remove(principal: string, id: string): Promise<boolean> {

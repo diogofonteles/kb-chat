@@ -7,6 +7,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { SessionStore } from '@core/auth/session-store.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import {
@@ -36,6 +37,14 @@ export class ViewStore {
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
   private readonly spend = inject(SpendStore);
   private readonly settings = inject(SettingsStore);
+  private readonly session = inject(SessionStore);
+  /** The views this person may use (KBC-010): the other one is not shown at all. */
+  readonly researchAllowed = computed(() => this.session.can('research'));
+  readonly searchAllowed = computed(() => this.session.can('search'));
+  /** The switch only shows when both views are allowed. */
+  readonly bothAllowed = computed(
+    () => this.researchAllowed() && this.searchAllowed(),
+  );
   private readonly chosen = signal<ChatView | null>(
     readViewPreference(this.storage),
   );
@@ -53,11 +62,17 @@ export class ViewStore {
    * false at once when Settings save "Nenhum" (KBC-007 FR-5).
    */
   readonly researchAvailable = computed(
-    () => this.spend.configured() && this.savedProvider() !== 'none',
+    () =>
+      this.researchAllowed() &&
+      this.spend.configured() &&
+      this.savedProvider() !== 'none',
   );
-  readonly current = computed<ChatView>(() =>
-    this.researchAvailable() ? (this.chosen() ?? this.preferred()) : 'search',
-  );
+  readonly current = computed<ChatView>(() => {
+    if (!this.searchAllowed() && this.researchAllowed()) return 'research';
+    return this.researchAvailable()
+      ? (this.chosen() ?? this.preferred())
+      : 'search';
+  });
 
   constructor() {
     // Another provider saved: ask the API again whether research can run now.

@@ -1,6 +1,6 @@
 # 0005 — Local-first single user in release 1, with an auth seam for release 2
 
-- Status: accepted (2026-10-24)
+- Status: superseded by [0008](0008-google-login-and-permissions.md) (2026-10-24); accepted 2026-10-24
 - Drivers: Q6 evolvability; decision: local first, invited users with login later
 
 ## Context

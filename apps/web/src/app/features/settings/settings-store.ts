@@ -9,6 +9,7 @@ import type {
   SettingsView,
 } from '@kb-chat/contracts';
 import { SettingsApi } from '@core/api/settings-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { ThemeStore } from '@core/theme/theme-store.js';
 import { writeModePreference } from '@features/chat/mode-preference.js';
 import { writeViewPreference } from '@features/chat/view-preference.js';
@@ -19,6 +20,9 @@ import {
 import { tap, type Observable } from 'rxjs';
 
 export type SettingsPanel = 'settings' | 'onboarding';
+
+/** The sections of Configurações; `people` is "Pessoas e permissões" (masters, KBC-010). */
+export type SettingsSection = 'ai' | 'preferences' | 'people' | 'about';
 
 /** This browser's own choices (ThemeStore, mode-preference). */
 const THEME_KEY = 'kb-chat.theme';
@@ -41,10 +45,16 @@ function safeStorage(view: Window | null): Storage | undefined {
 export class SettingsStore {
   private readonly api = inject(SettingsApi);
   private readonly themes = inject(ThemeStore);
+  private readonly session = inject(SessionStore);
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
   private readonly started = signal(false);
   private readonly requested = signal<SettingsPanel | null>(null);
   private readonly onboardingDismissed = signal(false);
+  private readonly requestedSection = signal<SettingsSection | null>(null);
+  /** The section Configurações opens at (the sidebar's "Pessoas e permissões"). */
+  readonly section = this.requestedSection.asReadonly();
+  /** Choosing a provider or a key is a feature of its own (KBC-010). */
+  readonly ownAi = computed(() => this.session.can('own-ai-settings'));
   /** The profile this browser picked in the research composer (KBC-011). */
   private readonly chosenProfile = signal<ResearchProfile | null>(
     readProfilePreference(this.storage),
@@ -56,7 +66,7 @@ export class SettingsStore {
       this.api.settings().pipe(tap((view) => this.applyUnchosen(view))),
   });
   readonly providers = rxResource({
-    params: () => this.started() || undefined,
+    params: () => (this.started() && this.ownAi()) || undefined,
     stream: () => this.api.providers(),
   });
 
@@ -74,7 +84,9 @@ export class SettingsStore {
       'fast',
   );
   /** No settings saved yet: the first-run wizard shows (BR-5). */
-  readonly firstRun = computed(() => this.settings()?.exists === false);
+  readonly firstRun = computed(
+    () => this.settings()?.exists === false && this.ownAi(),
+  );
   /** The open screen; the wizard opens by itself on the first run, once per page. */
   readonly panel = computed<SettingsPanel | null>(
     () =>
@@ -86,8 +98,9 @@ export class SettingsStore {
     this.started.set(true);
   }
 
-  openSettings(): void {
+  openSettings(section: SettingsSection | null = null): void {
     this.start();
+    this.requestedSection.set(section);
     this.requested.set('settings');
   }
 

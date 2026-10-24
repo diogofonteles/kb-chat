@@ -1,3 +1,4 @@
+import { signedInApp } from '../../../test/auth-factories.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,12 +12,11 @@ import {
 import { FIXTURE_VAULT } from '../../../test/fixture-paths.js';
 import { FsConversationStore } from '../../adapters/fs-conversation-store.js';
 import { FsVaultAdapter } from '../../adapters/fs-vault-adapter.js';
-import { buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
 import { createLogger } from '../../logger.js';
 import { createSearchIndex } from '../../search-index-factory.js';
 
-const HOST = { host: 'localhost:3000' };
+const HOST: Record<string, string> = { host: 'localhost:3000' };
 const URL = '/api/v1/conversations';
 let app: FastifyInstance;
 
@@ -31,7 +31,7 @@ beforeAll(async () => {
   const index = await createSearchIndex({ config, vault, log });
   const dir = join(mkdtempSync(join(tmpdir(), 'kbchat-api-')), 'conversations');
   const conversations = new FsConversationStore({ dir, log });
-  app = await buildApp({ config, vault, index, conversations });
+  app = await signedInApp(HOST)({ config, vault, index, conversations });
 });
 
 afterAll(async () => {

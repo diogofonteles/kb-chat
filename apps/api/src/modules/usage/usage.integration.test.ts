@@ -1,3 +1,4 @@
+import { signedInApp } from '../../../test/auth-factories.js';
 import { mkdtempSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -10,12 +11,11 @@ import {
   JsonlUsageLog,
   parseUsageLog,
 } from '../../adapters/jsonl-usage-log.js';
-import { buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
 import { createLogger } from '../../logger.js';
 import { createSearchIndex } from '../../search-index-factory.js';
 
-const HOST = { host: 'localhost:3000' };
+const HOST: Record<string, string> = { host: 'localhost:3000' };
 const SESSION = '0b6f1f0e-6a3e-4d0a-9d55-6f1c2b9b8a11';
 const file = join(mkdtempSync(join(tmpdir(), 'kbchat-usage-')), 'events.jsonl');
 let app: FastifyInstance;
@@ -32,7 +32,7 @@ beforeAll(async () => {
     vault,
     log: createLogger('silent'),
   });
-  app = await buildApp({
+  app = await signedInApp(HOST)({
     config,
     vault,
     index,

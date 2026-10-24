@@ -17,38 +17,57 @@ import {
   modelErrors,
   type AiDraft,
 } from './ai-draft.js';
+import { SessionStore } from '@core/auth/session-store.js';
+import { PeoplePanel } from '@features/people/people-panel.js';
 import { PreferencesForm } from './preferences-form.js';
-import { SettingsStore } from './settings-store.js';
+import { SettingsStore, type SettingsSection } from './settings-store.js';
 
-export type SettingsSection = 'ai' | 'preferences' | 'about';
+export type { SettingsSection } from './settings-store.js';
+
+const SECTIONS: readonly { id: SettingsSection; label: () => string }[] = [
+  { id: 'ai', label: () => $localize`:@@settings.ai:IA` },
+  {
+    id: 'preferences',
+    label: () => $localize`:@@settings.preferences:Preferências`,
+  },
+  {
+    id: 'people',
+    label: () => $localize`:@@settings.people:Pessoas e permissões`,
+  },
+  { id: 'about', label: () => $localize`:@@settings.about:Sobre` },
+];
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'invalid';
 
 /** "Configurações" (KBC-007 FR-6): AI provider, preferences and where the data lives. */
 @Component({
   selector: 'app-settings-panel',
-  imports: [AiProviderForm, PreferencesForm],
+  imports: [AiProviderForm, PreferencesForm, PeoplePanel],
   templateUrl: './settings-panel.html',
   styleUrl: './settings-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SettingsPanel {
   private readonly store = inject(SettingsStore);
+  private readonly session = inject(SessionStore);
   private readonly destroyRef = inject(DestroyRef);
   readonly closed = output();
 
-  protected readonly section = signal<SettingsSection>('ai');
-  protected readonly sections: readonly {
-    id: SettingsSection;
-    label: string;
-  }[] = [
-    { id: 'ai', label: $localize`:@@settings.ai:IA` },
-    {
-      id: 'preferences',
-      label: $localize`:@@settings.preferences:Preferências`,
-    },
-    { id: 'about', label: $localize`:@@settings.about:Sobre` },
-  ];
+  /** Only what the person may change (KBC-010): AI with own-ai-settings, people for masters. */
+  protected readonly sections = computed(() =>
+    SECTIONS.filter(
+      ({ id }) =>
+        (id !== 'ai' || this.store.ownAi()) &&
+        (id !== 'people' || this.session.isMaster()),
+    ).map(({ id, label }) => ({ id, label: label() })),
+  );
+  protected readonly section = linkedSignal<SettingsSection>(() => {
+    const available = this.sections().map(({ id }) => id);
+    const requested = this.store.section();
+    return requested && available.includes(requested)
+      ? requested
+      : (available[0] ?? 'about');
+  });
   protected readonly settings = this.store.settings;
   protected readonly loadFailed = computed(
     () => this.store.view.error() !== undefined,

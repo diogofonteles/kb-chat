@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 import { startInSearchView } from './search-view.js';
 
 test.beforeEach(startInSearchView);

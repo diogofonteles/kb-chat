@@ -1,0 +1,102 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.login {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--space-6) var(--space-4);
+  box-sizing: border-box;
+}
+
+.card {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  width: min(100%, 26rem);
+  text-align: center;
+}
+
+.brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.tagline {
+  margin: 0 0 var(--space-4);
+  text-wrap: balance;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+}
+
+.google-button {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+  width: 100%;
+}
+
+.google-button.hidden {
+  visibility: hidden;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status,
+.muted {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.note {
+  margin: var(--space-6) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.secondary:hover {
+  border-color: var(--color-text-muted);
+}
+
+.secondary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}

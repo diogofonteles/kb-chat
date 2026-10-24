@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { CSRF, expect, test } from './fixtures.js';
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
@@ -73,6 +74,7 @@ test('AC-2: a saved key shows only its last 4 characters and can be removed', as
   const key = `sk-e2e-secret-${last4}`;
   // Only the key: the provider answering the other specs stays as it is.
   const saved = await page.request.put('/api/v1/settings', {
+    headers: CSRF,
     data: { ai: { keys: { [provider]: key } } },
   });
   expect(await saved.text()).not.toContain(key);

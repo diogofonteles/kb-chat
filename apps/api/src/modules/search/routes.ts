@@ -7,7 +7,11 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import type { RouteAccess } from '../auth/index.js';
 import type { SearchService } from './search-service.js';
+
+/** Searching a collection needs the collection and "Buscar documentos" (KBC-010). */
+const SEARCH_ACCESS: RouteAccess = { topicParam: 'topic', feature: 'search' };
 
 export interface SearchRouteOptions {
   readonly service: SearchService;
@@ -21,7 +25,10 @@ export const searchRoutes =
     app.withTypeProvider<ZodTypeProvider>().post(
       '/api/v1/topics/:topic/searches',
       {
-        config: { rateLimit: { max: ratePerMinute, timeWindow: '1 minute' } },
+        config: {
+          access: SEARCH_ACCESS,
+          rateLimit: { max: ratePerMinute, timeWindow: '1 minute' },
+        },
         schema: {
           params: z.object({ topic: topicSlugSchema }),
           body: searchRequestSchema,
@@ -33,6 +40,7 @@ export const searchRoutes =
     app.withTypeProvider<ZodTypeProvider>().get(
       '/api/v1/topics/:topic/facets',
       {
+        config: { access: SEARCH_ACCESS },
         schema: {
           params: z.object({ topic: topicSlugSchema }),
           response: { 200: topicFacetsSchema },

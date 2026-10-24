@@ -13,7 +13,7 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 ## Architecture (reference)
 
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — drivers, C4, modules, contracts, threat model
-- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract)
+- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam (superseded) · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract)
 - Screens: [`docs/design/screens.md`](docs/design/screens.md) · Backlog: [`docs/backlog/README.md`](docs/backlog/README.md)
 
 ## Stack
@@ -27,11 +27,11 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 
 ```bash
 pnpm install
-pnpm dev:api     # http://127.0.0.1:3000/health (reads KB_VAULT, default ~/dev/personal/hermetismo)
+pnpm dev:api     # http://127.0.0.1:3000/health (reads the root .env; KB_VAULT default ~/dev/personal/hermetismo)
 pnpm dev:web     # http://localhost:4200 (proxies /api to :3000)
 ```
 
-Variables: [`.env.example`](.env.example) (all optional). The AI provider is chosen in ⚙ Configurações (KBC-007, ADR 0007); with none chosen, the Claude subscription answers when `claude` is on PATH, then the env keys (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
+Variables: [`.env.example`](.env.example), loaded from the repository root `.env` (gitignored). `GOOGLE_CLIENT_ID` and `KB_CHAT_OWNER_EMAIL` are required: sign-in with Google is mandatory (KBC-010, ADR 0008), and Google only accepts the button on the client's authorized origins (`http://localhost:4200`). A git worktree has no `.env`: copy the main checkout's. The AI provider is chosen in ⚙ Configurações (KBC-007, ADR 0007); with none chosen, the Claude subscription answers when `claude` is on PATH, then the env keys (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
 
 ## Quality
 

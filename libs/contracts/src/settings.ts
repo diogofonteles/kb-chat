@@ -192,6 +192,8 @@ export const providerUnavailableReasonSchema = z.enum([
   'cli-missing',
   /** Off on this server until the owner enables it (Codex, ADR 0007). */
   'not-enabled',
+  /** Subscriptions are personal: only the owner's account may use them (KBC-007 BR-6, KBC-010). */
+  'owner-only',
 ]);
 export type ProviderUnavailableReason = z.infer<
   typeof providerUnavailableReasonSchema

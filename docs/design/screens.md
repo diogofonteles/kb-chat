@@ -204,6 +204,32 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 - Rodapé fixo: "Pular" (grava os padrões e não volta, FR-1), "Voltar", "Continuar" e "Concluir".
 - "Passo n de 4" no topo. Reabre em Configurações > Sobre.
 
+## T8. Entrar (KBC-010)
+
+**Objetivo:** entrar com a própria conta Google em um clique. **Sucesso:** do botão ao app sem digitar nada.
+
+- Tela própria, centralizada, antes de qualquer outra (login obrigatório, inclusive no Mac do dono): "kb-chat" (título), uma linha de descrição, o botão do Google "Fazer login com o Google" (Google Identity Services) e a nota "Seus dados ficam neste computador."
+- Sem convite: "Seu acesso ainda não foi liberado; peça a um master." com "Sair" (volta ao botão, sem o login automático do Google).
+- Qualquer resposta 401 depois disso (sessão revogada ou vencida) recarrega a página e volta a esta tela; nada da pessoa anterior fica na memória (BR-6).
+
+| Estado | Mostra |
+|---|---|
+| Carregando | "Carregando…" |
+| Sem client id | "O login não está configurado: defina GOOGLE_CLIENT_ID no .env e reinicie a API." |
+| Script do Google indisponível | "Não consegui carregar o botão do Google…" + "Tentar de novo" |
+| Entrando | "Entrando…" |
+| Falha na verificação | a mensagem do erro (ex.: "Não consegui confirmar o login com o Google agora…") |
+
+## T9. Pessoas e permissões (KBC-010, só masters)
+
+- Seção de ⚙ Configurações, aberta também pela lateral ("Pessoas e permissões", acima de ⚙). Some para quem não é master; a seção IA some para quem não tem "Configurações de IA próprias".
+- **Convidar por e-mail (conta Google)** (rótulo acima do campo) + "Convidar"; dica: quem é convidado começa com "Buscar documentos" e nenhum acervo (BR-3).
+- Lista: nome (ou e-mail), e-mail, selos "Master" e "Dono", acervos, último acesso ("Ainda não entrou") e, só para o dono, "Gasto de IA hoje: US$ …" (BR-6). Um convite recusado aparece logo abaixo do campo de e-mail. Abrir uma pessoa mostra:
+  - **Acervos** e **Funcionalidades** (Buscar documentos, Pesquisa com IA, Montar/ampliar acervo, Configurações de IA próprias), caixas de seleção que salvam ao mudar ("Salvo."). Para um master aparecem marcadas e desabilitadas: "Masters veem todos os acervos e usam todas as funcionalidades."
+  - "Tornar master" / "Remover master"; recusas em texto claro: "Deve restar ao menos um master.", "A conta do dono não pode ser rebaixada nem removida."
+  - "Revogar acesso" pede confirmação ("Revogar o acesso de … ? A pessoa sai na hora." · "Revogar" · "Cancelar"); a conta do dono não tem essa ação.
+- A lateral mostra a pessoa (foto ou inicial, nome, e-mail) e "Sair". A visão "Pesquisa com IA" e os acervos não liberados não aparecem; um convidado sem acervo vê "Nenhum acervo foi liberado para você ainda; peça a um master."
+
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
 Tokens DTCG em `apps/web/src/styles/tokens.json` (cores; `scripts/tokens.mjs` gera o CSS) com três conjuntos: `light`, `dark` e `esoteric`. No máximo 3 tamanhos de tipo por tela. O vermelho fica reservado para erros.
