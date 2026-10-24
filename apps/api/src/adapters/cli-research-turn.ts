@@ -96,7 +96,6 @@ interface TurnState {
   /** Sources already streamed: a sources event goes out only when the list grows. */
   sourcesSent: number;
   sources: AnswerSource[];
-  stepTexts: string[];
   result: CliLine['result'];
   /** Why the fast pass must go deeper; null while it answered. */
   deepen: string | null;
@@ -142,7 +141,6 @@ class CliTurn {
       steps: 0,
       sourcesSent: 0,
       sources: [],
-      stepTexts: [],
       result: undefined,
       deepen: null,
     };
@@ -152,7 +150,6 @@ class CliTurn {
     this.push(this.setup.answer.toolCalled());
     this.state.steps += 1;
     for (const step of steps) this.queue.push({ type: 'step', step });
-    this.state.stepTexts.push(...steps.map((step) => step.text));
     if (sources.length === this.state.sourcesSent) return;
     this.state.sourcesSent = sources.length;
     this.state.sources = [...sources];
@@ -306,11 +303,7 @@ function deepPass(
   fast: TurnState,
   escalation: Escalation<string | undefined>,
 ): Omit<OpenPass, 'turn'> {
-  const findings = findingsText({
-    reason: fast.deepen ?? '',
-    steps: fast.stepTexts,
-    sources: fast.sources,
-  });
+  const findings = findingsText({ sources: fast.sources });
   return {
     input: {
       ...input,

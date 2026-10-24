@@ -121,7 +121,7 @@ describe('ClaudeCliRunner auto-escalation (ADR 0009)', () => {
     expect(seen.args).toContain('--model=opus');
     expect(seen.args).not.toContain('--effort=low');
     expect(seen.stdin).toContain('<findings>');
-    expect(seen.stdin).toContain('faltou a lista');
+    expect(seen.stdin).toContain('Faça a sua própria pesquisa');
     expect(seen.stdin).toContain('[1] A Lei do Ritmo');
     expect(turns.size).toBe(0);
   });
