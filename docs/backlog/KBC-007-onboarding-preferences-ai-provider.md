@@ -1,7 +1,7 @@
 ---
 id: KBC-007
 title: Onboarding com preferências e provedor de IA (chave própria ou assinatura)
-status: ready
+status: done
 slice: release-1
 outcome: primeira sessão sem configuração manual; IA sem custo por token para quem tem assinatura
 depends_on: [KBC-005, KBC-008]
