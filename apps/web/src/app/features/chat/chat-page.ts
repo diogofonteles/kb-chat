@@ -162,13 +162,22 @@ export class ChatPage {
     this.drawer()?.nativeElement.showModal();
   }
 
+  /** Where focus goes when the drawer finishes closing. */
+  private focusAfterMenu: 'menu' | 'composer' = 'menu';
+
   protected closeMenu(): void {
     this.drawer()?.nativeElement.close();
   }
 
-  /** Back to the Menu button when the drawer closes (Esc, ×, backdrop or an action). */
+  /**
+   * The drawer's `close` event arrives after the action that closed it, so it decides where
+   * focus goes: the question box after an action that needs typing, else the Menu button.
+   */
   protected menuClosed(): void {
-    this.menuButton()?.nativeElement.focus();
+    const target = this.focusAfterMenu;
+    this.focusAfterMenu = 'menu';
+    if (target === 'composer') this.composer().focus();
+    else this.menuButton()?.nativeElement.focus();
   }
 
   /** A tap on the backdrop lands on the <dialog> itself, outside its content. */
@@ -177,12 +186,16 @@ export class ChatPage {
   }
 
   protected sidebarActed(action: SidebarAction): void {
-    this.closeMenu();
-    // A new conversation is ready to type into; elsewhere focus stays put (the drawer returns it).
-    if (action !== 'restore')
+    // A new conversation (or another collection) is ready to type into.
+    const typing = action !== 'restore';
+    if (this.drawer()?.nativeElement.open) {
+      this.focusAfterMenu = typing ? 'composer' : 'menu';
+      this.closeMenu();
+    } else if (typing) {
       afterNextRender(() => this.composer().focus(), {
         injector: this.injector,
       });
+    }
   }
 
   protected changeMode(mode: SearchMode): void {
