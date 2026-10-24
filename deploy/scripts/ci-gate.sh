@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Forced command of the CI deploy key (ADR 0010): the key in the GitHub "production"
 # environment can only ask for these, never open a shell. In ~deploy/.ssh/authorized_keys:
-#   command="/srv/kb-chat/deploy/scripts/ci-gate.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... kb-chat-ci
+#   restrict,command="/srv/kb-chat/deploy/scripts/ci-gate.sh" ssh-ed25519 AAAA... kb-chat-ci
 # Accepted (SSH_ORIGINAL_COMMAND):
 #   deploy <sha> <registry-user>   registry token on stdin (the workflow's GITHUB_TOKEN)
 #   smoke                          the VM-side smoke of the current release
-#   release                        prints the live image tag
+#   release                        prints the image tag the containers actually run
 set -euo pipefail
 
 DEPLOY_DIR="${KB_CHAT_DEPLOY_DIR:-/srv/kb-chat/deploy}"
@@ -26,7 +26,7 @@ case "${words[0]:-}" in
     ;;
   release)
     [ "${#words[@]}" -eq 1 ] || exit 2
-    sed -n 's/^KB_CHAT_TAG=//p' "$DEPLOY_DIR/release.env"
+    exec sudo -n "$DEPLOY_DIR/scripts/deploy.sh" --running
     ;;
   *)
     echo "ci-gate: refused" >&2

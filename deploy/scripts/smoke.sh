@@ -86,7 +86,8 @@ status_of() {
 
 check_mcp_hidden() {
   local code
-  code="$(status_of -X POST "$BASE/mcp/turn")"
+  # The real route shape (/mcp/turns/:token), with a token that cannot exist.
+  code="$(status_of -X POST "$BASE/mcp/turns/smoke-check-not-a-real-turn-token")"
   if [ "$code" = "404" ]; then pass "/mcp is not public (404)"; else fail "/mcp answered $code from outside"; fi
 }
 
