@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../config.js';
-import { DEFAULT_MODEL, createLlm } from '../llm-factory.js';
+import {
+  OPENROUTER_DEFAULT_MODEL,
+  PROVIDERS,
+} from '../providers/provider-catalog.js';
 import { LlmKeyRejectedError } from '../ports/llm-errors.js';
 import { DisabledLlm } from './disabled-llm.js';
 import { JsonlSpendLedger } from './jsonl-spend-ledger.js';
@@ -385,13 +388,12 @@ describe('spend ledgers', () => {
 });
 
 describe('provider composition and the disabled provider', () => {
-  it('defaults to the research model and honours KB_CHAT_MODEL and the stub', () => {
-    expect(createLlm(loadConfig({})).model).toBe(DEFAULT_MODEL);
-    expect(DEFAULT_MODEL).toBe('deepseek/deepseek-v4-pro');
-    expect(createLlm(loadConfig({ KB_CHAT_MODEL: 'x/y' })).model).toBe('x/y');
-    expect(createLlm(loadConfig({ KB_CHAT_LLM: 'stub' })).model).toBe(
-      'stub/model',
-    );
+  it('defaults OpenRouter to the research model and honours KB_CHAT_MODEL', () => {
+    const model = (env: NodeJS.ProcessEnv) =>
+      PROVIDERS.openrouter.defaultModel(loadConfig(env));
+    expect(model({})).toBe(OPENROUTER_DEFAULT_MODEL);
+    expect(OPENROUTER_DEFAULT_MODEL).toBe('deepseek/deepseek-v4-pro');
+    expect(model({ KB_CHAT_MODEL: 'x/y' })).toBe('x/y');
   });
 
   it('refuses everything when no provider is configured', async () => {

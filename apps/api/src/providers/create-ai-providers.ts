@@ -4,7 +4,7 @@ import { SettingsService } from '../modules/settings/index.js';
 import type { PerTokenRunnerFactory } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import type { SettingsStorePort } from '../ports/settings-store.js';
-import { DynamicLlm, DynamicResearchRunner } from './dynamic-ports.js';
+import { DynamicLlm } from './dynamic-ports.js';
 import { ProviderRegistry } from './provider-registry.js';
 
 export interface AiProvidersOptions {
@@ -34,8 +34,6 @@ export interface AiProviders {
   readonly turns: McpTurnRegistry;
   /** The current provider's model, resolved on every call (FR-5). */
   readonly llm: DynamicLlm;
-  /** The current provider's research runner, resolved per turn (FR-5). */
-  readonly research: DynamicResearchRunner;
 }
 
 async function loadSettings(
@@ -73,8 +71,5 @@ export async function createAiProviders(
     registry,
     turns,
     llm: new DynamicLlm(() => registry.llm(options.principal)),
-    research: new DynamicResearchRunner(() =>
-      registry.researchRunner(options.principal),
-    ),
   };
 }

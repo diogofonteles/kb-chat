@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { answerSourceSchema } from './answers.js';
+import { documentRefSchema } from './search.js';
+
+/** A numbered source: [n] in the answer text points to sources[n - 1]. */
+export const answerSourceSchema = documentRefSchema.extend({
+  n: z.number().int().positive(),
+});
+export type AnswerSource = z.infer<typeof answerSourceSchema>;
 
 /** Previous turns sent with a follow-up (KBC-008 BR-4): the text only, never the documents read. */
 export const MAX_HISTORY_TURNS = 20;

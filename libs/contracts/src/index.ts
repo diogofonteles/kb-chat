@@ -1,4 +1,3 @@
-export * from './answers.js';
 export * from './documents.js';
 export * from './errors.js';
 export * from './facets.js';
@@ -9,3 +8,4 @@ export * from './usage.js';
 export * from './research.js';
 export * from './conversations.js';
 export * from './settings.js';
+export * from './spend.js';

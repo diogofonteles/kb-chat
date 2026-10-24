@@ -11,10 +11,7 @@ import type {
   LlmStreamOptions,
   ToolDefinition,
 } from '../ports/llm.js';
-import type {
-  ResearchInput,
-  ResearchRunnerPort,
-} from '../ports/research-runner.js';
+import type { ResearchRunnerPort } from '../ports/research-runner.js';
 
 export const isAgentLlm = (llm: LlmPort): llm is AgentLlmPort =>
   'streamAgent' in llm && typeof llm.streamAgent === 'function';
@@ -67,27 +64,6 @@ export class DynamicLlm implements AgentLlmPort {
     if (!isAgentLlm(llm))
       throw new Error(`${llm.model} does not support tool calling`);
     return llm.streamAgent(messages, tools, options);
-  }
-}
-
-/** The research runner of the current provider, resolved per turn (FR-5). */
-export class DynamicResearchRunner implements ResearchRunnerPort {
-  constructor(private readonly current: () => ResearchRunnerPort) {}
-
-  get model(): string {
-    return this.current().model;
-  }
-
-  get billing(): ResearchRunnerPort['billing'] {
-    return this.current().billing;
-  }
-
-  configured(): boolean {
-    return this.current().configured();
-  }
-
-  run(input: ResearchInput): AsyncIterable<ResearchEvent> {
-    return this.current().run(input);
   }
 }
 

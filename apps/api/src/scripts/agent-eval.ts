@@ -1,20 +1,21 @@
 // Research agent evaluation (KBC-008 AC-8, NFR-1..3) against the real vault and the
-// configured provider; it spends real money within the daily cap. Usage:
+// provider the API would use now (Settings, then the environment, ADR 0007); a per-token
+// provider spends real money within the daily cap. Usage:
 //   pnpm --filter @kb-chat/api agent-eval <questions.json> <report.md> [topic]
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { ResearchEvent, ResearchTurn } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { FsVaultAdapter } from '../adapters/fs-vault-adapter.js';
+import { JsonSettingsStore } from '../adapters/json-settings-store.js';
 import { JsonlSpendLedger } from '../adapters/jsonl-spend-ledger.js';
 import { OWNER } from '../app.js';
 import { loadConfig } from '../config.js';
-import { createLlm } from '../llm-factory.js';
 import { createLogger } from '../logger.js';
 import { CatalogRegistry } from '../modules/catalog/index.js';
-import { ResearchTools, ToolLoopRunner } from '../modules/research/index.js';
-import { SearchService } from '../modules/search/index.js';
-import { SpendService } from '../modules/spend/index.js';
+import type { ResearchRunnerPort } from '../ports/research-runner.js';
+import { createAiProviders } from '../providers/create-ai-providers.js';
+import { createResearchAgent } from '../research-agent-factory.js';
 import { createSearchIndex } from '../search-index-factory.js';
 
 const questionsSchema = z.array(
@@ -63,19 +64,20 @@ async function composeRunner() {
   const index = await createSearchIndex({ config, vault, log });
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
-  const llm = createLlm(config);
   const ledger = new JsonlSpendLedger(
     join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
   );
-  const spend = new SpendService({
-    llm,
-    ledger,
-    dailyCapUsd: () => config.KB_CHAT_DAILY_CAP_USD,
+  const agent = createResearchAgent({ catalog, index, vault, ledger });
+  const ai = await createAiProviders({
+    config,
     principal: OWNER,
+    store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
+    env: process.env,
+    tools: agent.toolsFor,
+    perTokenRunner: agent.perTokenRunner,
+    systemPrompt: agent.systemPrompt,
   });
-  const search = new SearchService({ catalog, index, vault });
-  const tools = new ResearchTools({ search, catalog, vault });
-  const runner = new ToolLoopRunner({ llm, tools, spend });
+  const runner = ai.registry.researchRunner(OWNER);
   return { runner, index, topic: topicArg ?? config.KB_TOPIC ?? 'hermetismo' };
 }
 
@@ -131,7 +133,7 @@ const missingWords = (question: Question, answer: string): string[] | null =>
     : question.mustMention.filter((word) => !fold(answer).includes(fold(word)));
 
 async function runTurn(
-  runner: ToolLoopRunner,
+  runner: ResearchRunnerPort,
   question: Question,
   context: { topic: string; history: readonly ResearchTurn[] },
 ): Promise<Collected> {
@@ -156,7 +158,7 @@ async function runTurn(
 }
 
 async function ask(
-  runner: ToolLoopRunner,
+  runner: ResearchRunnerPort,
   question: Question,
   context: { topic: string; history: readonly ResearchTurn[] },
 ): Promise<Outcome> {

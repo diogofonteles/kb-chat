@@ -12,7 +12,6 @@ import {
   OPENAI_PRICES,
 } from '../adapters/openai-adapter.js';
 import type { AppConfig } from '../config.js';
-import { DEFAULT_MODEL } from '../llm-factory.js';
 
 /** A provider as chosen in Settings, plus the deterministic stub of tests and E2E. */
 export type ResolvedProvider = AiProvider | 'stub';
@@ -29,9 +28,12 @@ export interface ProviderDescriptor {
   readonly models: readonly string[];
 }
 
+/** Research agent default (ADR 0006): tool calling at about US$ 0.23 per million input tokens. */
+export const OPENROUTER_DEFAULT_MODEL = 'deepseek/deepseek-v4-pro';
+
 /** The research agent needs tool calling: ADR 0006's default, not the vault's kb.toml model. */
 const openRouterDefault = (config: AppConfig) =>
-  config.KB_CHAT_MODEL ?? DEFAULT_MODEL;
+  config.KB_CHAT_MODEL ?? OPENROUTER_DEFAULT_MODEL;
 
 export const PROVIDERS: Readonly<Record<AiProvider, ProviderDescriptor>> = {
   openrouter: {
