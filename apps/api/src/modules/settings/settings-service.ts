@@ -75,7 +75,7 @@ export class SettingsService {
       preferences: settings.preferences,
       ai: {
         provider: settings.ai.provider,
-        ...(settings.ai.model ? { model: settings.ai.model } : {}),
+        models: settings.ai.models,
         keys: maskKeys(settings.ai.keys),
         dailyCapUsd: this.dailyCapUsd(principal),
       },

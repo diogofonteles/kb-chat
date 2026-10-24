@@ -14,6 +14,7 @@ describe('settings contract', () => {
       preferences: {},
       ai: {
         provider: null,
+        models: {},
         keys: { openrouter: { set: true, last4: 'abcd' } },
         dailyCapUsd: 1,
       },
@@ -22,6 +23,7 @@ describe('settings contract', () => {
       searchMode: 'all',
       theme: 'auto',
       defaultView: 'research',
+      researchProfile: 'fast',
     });
     expect(
       settingsViewSchema.safeParse({
@@ -34,11 +36,14 @@ describe('settings contract', () => {
   it('accepts partial updates, null removals, and refuses unknown fields', () => {
     expect(
       settingsUpdateSchema.parse({
-        ai: { keys: { anthropic: null }, model: null },
+        ai: {
+          keys: { anthropic: null },
+          models: { anthropic: { fast: null } },
+        },
         preferences: { defaultTopic: null },
       }),
     ).toEqual({
-      ai: { keys: { anthropic: null }, model: null },
+      ai: { keys: { anthropic: null }, models: { anthropic: { fast: null } } },
       preferences: { defaultTopic: null },
     });
     expect(
@@ -54,19 +59,25 @@ describe('settings contract', () => {
   });
 
   it('accepts model ids and aliases and refuses values a CLI could read as a flag', () => {
-    for (const model of [
-      'opus',
-      'deepseek/deepseek-v4-pro',
-      'gpt-5.5',
-      'm@v1:x',
-    ])
-      expect(settingsUpdateSchema.safeParse({ ai: { model } }).success).toBe(
-        true,
-      );
+    const update = (provider: string, model: string) =>
+      settingsUpdateSchema.safeParse({
+        ai: { models: { [provider]: { deep: model } } },
+      }).success;
+    for (const model of ['deepseek/deepseek-v4-pro', 'gpt-5.5', 'm@v1:x'])
+      expect(update('openrouter', model)).toBe(true);
     for (const model of ['--dangerously-skip-permissions', '-x', 'a b', 'a;b'])
-      expect(settingsUpdateSchema.safeParse({ ai: { model } }).success).toBe(
-        false,
-      );
+      expect(update('openrouter', model)).toBe(false);
+    // A subscription CLI takes only its own aliases and ids (KBC-011).
+    for (const model of ['sonnet', 'opus', 'haiku', 'claude-opus-5-5'])
+      expect(update('claude-subscription', model)).toBe(true);
+    for (const model of ['gpt-5.5', 'deepseek/deepseek-v4-pro'])
+      expect(update('claude-subscription', model)).toBe(false);
+    expect(
+      aiTestRequestSchema.safeParse({
+        provider: 'claude-subscription',
+        model: 'gpt-5.5',
+      }).success,
+    ).toBe(false);
     expect(
       aiTestRequestSchema.safeParse({ provider: 'openai', model: '-p' })
         .success,

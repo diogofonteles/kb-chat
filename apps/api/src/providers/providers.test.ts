@@ -7,6 +7,7 @@ import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
 import { loadConfig } from '../config.js';
 import {
   applySettingsUpdate,
+  storedSettingsSchema,
   DEFAULT_SETTINGS,
   SettingsService,
 } from '../modules/settings/index.js';
@@ -52,14 +53,31 @@ describe('settings per principal', () => {
     expect(settings.key('guest', 'openai')).toBeUndefined();
     const merged = applySettingsUpdate(DEFAULT_SETTINGS, {
       preferences: { defaultTopic: 'a' },
-      ai: { model: 'm' },
+      ai: { models: { openrouter: { fast: 'm' } } },
+    });
+    expect(merged.ai.models).toEqual({
+      openrouter: { fast: 'm', deep: undefined },
     });
     expect(
       applySettingsUpdate(merged, {
         preferences: { defaultTopic: null },
-        ai: { model: null },
-      }),
-    ).toEqual(DEFAULT_SETTINGS);
+        ai: { models: { openrouter: { fast: null } } },
+      }).ai.models.openrouter,
+    ).toEqual({ fast: undefined, deep: undefined });
+  });
+
+  it('reads a pre-KBC-011 file: its single model becomes both profiles of its provider', () => {
+    const migrated = storedSettingsSchema.parse({
+      ai: { provider: 'claude-subscription', model: 'opus' },
+    });
+    expect(migrated.ai.models).toEqual({
+      'claude-subscription': { fast: 'opus', deep: 'opus' },
+    });
+    expect('model' in migrated.ai).toBe(false);
+    const handEdited = storedSettingsSchema.parse({
+      ai: { models: { 'claude-subscription': { fast: 'gpt-5.5' } } },
+    });
+    expect(handEdited.ai.models['claude-subscription']?.fast).toBeUndefined();
   });
 
   it('treats an invalid file as defaults without logging its content', async () => {
@@ -89,13 +107,14 @@ describe('ProviderRegistry', () => {
     });
     expect(ai.registry.active('owner')).toBe('openrouter');
     expect(ai.llm.configured()).toBe(true);
-    expect(ai.llm.model).toBe('deepseek/deepseek-v4-pro');
+    // The side panel prices the fast profile, the research view's default (KBC-011).
+    expect(ai.llm.model).toBe('deepseek/deepseek-v4-flash');
     expect(ai.llm.billing).toBe('per-token');
     await ai.settings.update('owner', { ai: { provider: 'none' } });
     expect(ai.llm.configured()).toBe(false);
   });
 
-  it('picks the Anthropic default model and a saved model only for its provider', async () => {
+  it('picks the Anthropic models per profile and a saved model only for its provider', async () => {
     const ai = await createAiProviders({
       config: config({ ANTHROPIC_API_KEY: 'sk-ant-env-1111' }),
       store: new MemorySettingsStore(),
@@ -104,15 +123,22 @@ describe('ProviderRegistry', () => {
     });
     expect(ai.registry.choice('owner')).toMatchObject({
       provider: 'anthropic',
-      model: 'claude-opus-5-5',
+      model: 'claude-sonnet-5-5',
     });
-    await ai.settings.update('owner', {
-      ai: { provider: 'openai', model: 'gpt-5.5' },
-    });
-    expect(ai.registry.choice('owner', { provider: 'anthropic' }).model).toBe(
+    expect(ai.registry.choice('owner', { profile: 'deep' }).model).toBe(
       'claude-opus-5-5',
     );
-    expect(ai.registry.choice('owner').model).toBe('gpt-5.5');
+    await ai.settings.update('owner', {
+      ai: { provider: 'openai', models: { openai: { deep: 'gpt-5.5' } } },
+    });
+    expect(
+      ai.registry.choice('owner', { provider: 'anthropic', profile: 'deep' })
+        .model,
+    ).toBe('claude-opus-5-5');
+    expect(ai.registry.choice('owner', { profile: 'deep' }).model).toBe(
+      'gpt-5.5',
+    );
+    expect(ai.registry.choice('owner').model).toBe('gpt-5.4-mini');
     expect(ai.registry.llm('owner')).toBe(ai.registry.llm('owner'));
   });
 
@@ -127,10 +153,19 @@ describe('ProviderRegistry', () => {
     expect(runner()).toBeInstanceOf(DisabledResearchRunner);
     expect(runner().configured()).toBe(false);
     await ai.settings.update('owner', {
-      ai: { provider: 'claude-subscription', model: 'opus' },
+      ai: { provider: 'claude-subscription' },
     });
     expect(runner().billing).toBe('subscription');
-    expect(runner().model).toBe('opus');
+    // Sonnet answers fast, Opus deep (KBC-011); each profile keeps its own runner.
+    expect(runner().model).toBe('sonnet');
+    const deep = ai.registry.researchRunner('owner', 'deep');
+    expect(deep.model).toBe('opus');
+    expect(ai.registry.researchRunner('owner', 'deep')).toBe(deep);
+    expect(runner()).toBe(ai.registry.researchRunner('owner', 'fast'));
+    await ai.settings.update('owner', {
+      ai: { models: { 'claude-subscription': { fast: 'haiku' } } },
+    });
+    expect(runner().model).toBe('haiku');
     await ai.settings.update('owner', {
       ai: { provider: 'chatgpt-subscription' },
     });
