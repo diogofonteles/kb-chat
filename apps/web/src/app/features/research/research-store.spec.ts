@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ResearchEvent } from '@kb-chat/contracts';
-import { AnswersApi } from '@core/api/answers-api.js';
+import { ResearchApi } from '@core/api/research-api.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatStore } from '@features/chat/chat-store.js';
@@ -47,7 +47,7 @@ function setup() {
       provideZonelessChangeDetection(),
       ResearchStore,
       ViewStore,
-      { provide: AnswersApi, useValue: api },
+      { provide: ResearchApi, useValue: api },
       { provide: ChatStore, useValue: chat },
       { provide: SpendStore, useValue: spend },
       { provide: UsageLog, useValue: usage },

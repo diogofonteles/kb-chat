@@ -14,7 +14,7 @@ import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
-import { AnswersApi } from '@core/api/answers-api.js';
+import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import type { ResearchConversation } from '@kb-chat/contracts';
 import { EMPTY, of } from 'rxjs';
@@ -25,7 +25,7 @@ import {
 
 /** These page tests cover search and reading (the research view has its own spec). */
 const FAKE_ANSWERS = {
-  provide: AnswersApi,
+  provide: ResearchApi,
   useValue: {
     research: () => EMPTY,
     spendToday: () => of({ usd: 0, capUsd: 1, configured: true }),
@@ -515,7 +515,9 @@ describe('ChatPage side panel (KBC-005)', () => {
     const research = aResearchConversation('quais são os princípios');
     conversations.saved.set(research.id, research);
     const answers = { ...FAKE_ANSWERS.useValue, research: vi.fn(() => EMPTY) };
-    const view = await renderPage([{ provide: AnswersApi, useValue: answers }]);
+    const view = await renderPage([
+      { provide: ResearchApi, useValue: answers },
+    ]);
     fireEvent.click(
       screen.getByRole('button', { name: /quais são os princípios/ }),
     );

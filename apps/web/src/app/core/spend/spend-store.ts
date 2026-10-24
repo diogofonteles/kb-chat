@@ -1,6 +1,6 @@
 import { Injectable, LOCALE_ID, computed, inject } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
-import { AnswersApi } from '@core/api/answers-api.js';
+import { ResearchApi } from '@core/api/research-api.js';
 
 export const formatSpend = (value: number, locale = 'pt-BR'): string =>
   new Intl.NumberFormat(locale, {
@@ -13,7 +13,7 @@ export const formatSpend = (value: number, locale = 'pt-BR'): string =>
 /** Today's AI spend for the side panel (KBC-005 FR-5); refreshed after every answer. */
 @Injectable({ providedIn: 'root' })
 export class SpendStore {
-  private readonly api = inject(AnswersApi);
+  private readonly api = inject(ResearchApi);
   private readonly locale = inject(LOCALE_ID);
 
   readonly today = rxResource({ stream: () => this.api.spendToday() });

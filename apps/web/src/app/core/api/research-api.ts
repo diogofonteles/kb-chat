@@ -33,7 +33,7 @@ export function newEvents<T>(
 
 /** AI over HttpClient (ADR 0004, ADR 0006): today's spend and the streamed research agent. */
 @Injectable({ providedIn: 'root' })
-export class AnswersApi {
+export class ResearchApi {
   private readonly http = inject(HttpClient);
 
   spendToday(): Observable<SpendToday> {

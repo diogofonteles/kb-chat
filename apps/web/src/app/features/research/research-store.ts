@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { ResearchEvent, ResearchRequest } from '@kb-chat/contracts';
-import { AnswersApi } from '@core/api/answers-api.js';
+import { ResearchApi } from '@core/api/research-api.js';
 import { toUiErrorCode } from '@core/api/api-error.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
@@ -59,7 +59,7 @@ const endUnfinished = (turn: ResearchTurn): ResearchTurn =>
  */
 @Injectable()
 export class ResearchStore {
-  private readonly api = inject(AnswersApi);
+  private readonly api = inject(ResearchApi);
   private readonly chat = inject(ChatStore);
   private readonly views = inject(ViewStore);
   private readonly spend = inject(SpendStore);

@@ -12,7 +12,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ResearchEvent } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
-import { AnswersApi } from '@core/api/answers-api.js';
+import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatPage } from '@features/chat/chat-page.js';
 import { Subject, of } from 'rxjs';
@@ -51,7 +51,7 @@ async function renderPage({ configured = true } = {}) {
       provideZonelessChangeDetection(),
       provideHttpClient(withInterceptors([fakeStart])),
       provideHttpClientTesting(),
-      { provide: AnswersApi, useValue: api },
+      { provide: ResearchApi, useValue: api },
       { provide: UsageLog, useValue: { track: vi.fn() } },
     ],
   });

@@ -6,7 +6,7 @@ import {
 import { HttpEventType } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { researchEventSchema, type ResearchEvent } from '@kb-chat/contracts';
-import { AnswersApi, newEvents } from './answers-api.js';
+import { ResearchApi, newEvents } from './research-api.js';
 
 const sse = (...events: object[]) =>
   events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('');
@@ -31,13 +31,13 @@ describe('newEvents', () => {
   });
 });
 
-describe('AnswersApi.research', () => {
+describe('ResearchApi.research', () => {
   it('posts the question with the history and emits each event once', () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     const received: ResearchEvent[] = [];
-    TestBed.inject(AnswersApi)
+    TestBed.inject(ResearchApi)
       .research('hermetismo', {
         question: 'e o terceiro?',
         history: [{ question: 'quais são?', answer: 'Sete [1].' }],
