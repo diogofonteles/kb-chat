@@ -78,6 +78,12 @@ async function composeRunner() {
     systemPrompt: agent.systemPrompt,
   });
   const runner = ai.registry.researchRunner(OWNER);
+  // Subscription runners reach the kb tools through the API's MCP routes, which this
+  // script does not serve yet (KBC-011): refuse instead of measuring an agent without tools.
+  if (runner.billing === 'subscription')
+    throw new Error(
+      'agent-eval needs a per-token provider for now: set KB_CHAT_LLM or a provider key and choose it in Settings.',
+    );
   return { runner, index, topic: topicArg ?? config.KB_TOPIC ?? 'hermetismo' };
 }
 
