@@ -8,7 +8,6 @@ import {
 } from 'fastify-type-provider-zod';
 import type { AppConfig } from './config.js';
 import { registerErrorHandler } from './error-handler.js';
-import { DisabledLlm } from './adapters/disabled-llm.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
 import { AnswersService, answerRoutes } from './modules/answers/index.js';
@@ -25,6 +24,13 @@ import type { VaultReaderPort } from './ports/vault-reader.js';
 import { MemoryUsageLog } from './adapters/memory-usage-log.js';
 import { usageRoutes } from './modules/usage/index.js';
 import { createLogger } from './logger.js';
+import { MemorySettingsStore } from './adapters/memory-settings-store.js';
+import { mcpRoutes } from './mcp/mcp-routes.js';
+import { settingsRoutes } from './modules/settings/index.js';
+import {
+  createAiProviders,
+  type AiProviders,
+} from './providers/create-ai-providers.js';
 
 /** The only principal until release 2 adds logins (ADR 0005). */
 export const OWNER = 'owner';
@@ -40,9 +46,12 @@ export interface AppDeps {
   readonly usage?: UsageLogPort;
   readonly catalog?: CatalogRegistry;
   readonly logger?: FastifyBaseLogger;
+  /** Settings and AI providers (KBC-007); in memory, from the environment, when not given. */
+  readonly ai?: AiProviders;
 }
 
 type FullDeps = AppDeps & {
+  ai: AiProviders;
   catalog: CatalogRegistry;
   llm: LlmPort;
   ledger: SpendLedgerPort;
@@ -77,7 +86,13 @@ async function registerRoutes(
 ): Promise<void> {
   const { config, vault, index, catalog } = deps;
   await app.register(healthRoutes({ catalog, index }));
-  await app.register(topicRoutes({ catalog, preferredTopic: config.KB_TOPIC }));
+  const preferences = () => deps.ai.settings.snapshot(OWNER)?.preferences;
+  await app.register(
+    topicRoutes({
+      catalog,
+      preferredTopic: () => preferences()?.defaultTopic ?? config.KB_TOPIC,
+    }),
+  );
   const search = new SearchService({ catalog, index, vault });
   await app.register(
     searchRoutes({ service: search, ratePerMinute: config.SEARCH_RATE_LIMIT }),
@@ -92,7 +107,32 @@ async function registerRoutes(
   await app.register(
     usageRoutes({ catalog, log: deps.usage, principal: OWNER }),
   );
+  await registerSettings(app, deps.ai);
 }
+
+/** Settings, providers and the MCP endpoint of subscription turns (KBC-007, ADR 0007). */
+async function registerSettings(
+  app: FastifyInstance,
+  ai: AiProviders,
+): Promise<void> {
+  await app.register(
+    settingsRoutes({
+      settings: ai.settings,
+      providers: ai.registry,
+      principal: OWNER,
+    }),
+  );
+  await app.register(mcpRoutes(ai.turns));
+}
+
+/** Settings in memory and providers from the environment only (tests). */
+const inMemoryAi = (config: AppConfig): Promise<AiProviders> =>
+  createAiProviders({
+    config,
+    store: new MemorySettingsStore(),
+    principal: OWNER,
+    env: {},
+  });
 
 /** Assembles the API; only `main` listens (ND-01). */
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -111,10 +151,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(hostGuard, { allowedHosts: deps.config.ALLOWED_HOSTS });
   await app.register(cors, { origin: [deps.config.WEB_ORIGIN] });
   await app.register(rateLimit, { global: false });
+  const ai = deps.ai ?? (await inMemoryAi(deps.config));
   await registerRoutes(app, {
     ...deps,
+    ai,
     catalog,
-    llm: deps.llm ?? new DisabledLlm(),
+    llm: deps.llm ?? ai.llm,
     ledger: deps.ledger ?? new MemorySpendLedger(),
     usage: deps.usage ?? new MemoryUsageLog(),
   });

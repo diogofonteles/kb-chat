@@ -1,19 +1,27 @@
 import { join } from 'node:path';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
-import { buildApp } from './app.js';
+import { OWNER, buildApp } from './app.js';
 import { applyUsageRetention } from './modules/usage/index.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { JsonlSpendLedger } from './adapters/jsonl-spend-ledger.js';
 import { JsonlUsageLog } from './adapters/jsonl-usage-log.js';
-import { createLlm } from './llm-factory.js';
+import { JsonSettingsStore } from './adapters/json-settings-store.js';
+import { createAiProviders } from './providers/create-ai-providers.js';
 import { createSearchIndex } from './search-index-factory.js';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
 const index = await createSearchIndex({ config, vault, log: logger });
-const llm = await createLlm(config);
+// Settings first, then the environment, resolved per request (KBC-007, ADR 0007).
+const ai = await createAiProviders({
+  config,
+  principal: OWNER,
+  store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
+  env: process.env,
+  warn: (message) => logger.warn(message),
+});
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
 );
@@ -24,7 +32,8 @@ const app = await buildApp({
   vault,
   index,
   logger,
-  llm,
+  llm: ai.llm,
+  ai,
   ledger,
   usage,
 });
