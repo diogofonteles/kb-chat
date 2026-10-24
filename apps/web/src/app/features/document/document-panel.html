@@ -8,31 +8,36 @@
   >
     <span class="close-mobile" aria-hidden="true">←</span
     ><span class="close-desktop" aria-hidden="true">×</span>
-    <span class="close-text" i18n="@@panel.back">Voltar</span>
+    <span class="close-text" aria-hidden="true" i18n="@@panel.back"
+      >Voltar</span
+    >
   </button>
   <h2 id="document-title" #heading tabindex="-1">{{ title() }}</h2>
-  @if (facets()) {
-  <p class="facets">{{ facets() }}</p>
-  } @if (loaded()?.concepts?.length) {
-  <ul class="concepts" aria-label="Assuntos" i18n-aria-label="@@panel.concepts">
-    @for (concept of loaded()?.concepts; track concept) {
-    <li>{{ concept }}</li>
-    }
-  </ul>
-  }
 </header>
 
-@if (document.isLoading()) {
-<div class="loading" role="status" i18n="@@panel.loading">
-  Carregando documento…
+<div class="meta">
+  @if (facets()) {
+    <p class="facets">{{ facets() }}</p>
+  }
+  @if (concepts()) {
+    <p class="concepts">
+      <span i18n="@@panel.concepts">Assuntos:</span> {{ concepts() }}
+    </p>
+  }
 </div>
+
+@if (document.isLoading()) {
+  <div class="loading" role="status" i18n="@@panel.loading">
+    Carregando documento…
+  </div>
 } @else if (document.error()) {
-<p class="error" role="alert">{{ errorText() }}</p>
-} @else if (loaded(); as doc) { @if (doc.summary) {
-<details class="summary" open>
-  <summary i18n="@@panel.summary">Resumo</summary>
-  <p>{{ doc.summary }}</p>
-</details>
-}
-<div class="body" [innerHTML]="html()"></div>
+  <p class="error" role="alert">{{ errorText() }}</p>
+} @else if (loaded(); as doc) {
+  @if (doc.summary) {
+    <details class="summary" open>
+      <summary i18n="@@panel.summary">Resumo</summary>
+      <p>{{ doc.summary }}</p>
+    </details>
+  }
+  <div class="body" [innerHTML]="html()"></div>
 }

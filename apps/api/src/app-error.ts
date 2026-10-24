@@ -9,21 +9,32 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   LLM_INSUFFICIENT_CREDIT: 402,
   DAILY_CAP_REACHED: 429,
   VALIDATION_FAILED: 400,
+  NOT_FOUND: 404,
+  RATE_LIMITED: 429,
   FORBIDDEN_HOST: 403,
   INTERNAL: 500,
 };
 
+export interface AppErrorOptions {
+  /** Sent to the client for 4xx only. */
+  readonly details?: unknown;
+  /** Logged, never sent. */
+  readonly cause?: unknown;
+}
+
 /** Domain error carrying a stable contract code; the root handler maps it to the envelope. */
 export class AppError extends Error {
   readonly statusCode: number;
+  readonly details: unknown;
 
   constructor(
     readonly code: ApiErrorCode,
     message: string,
-    readonly details?: unknown,
+    options: AppErrorOptions = {},
   ) {
-    super(message);
+    super(message, { cause: options.cause });
     this.name = 'AppError';
     this.statusCode = STATUS_BY_CODE[code];
+    this.details = options.details;
   }
 }

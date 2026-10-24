@@ -42,7 +42,6 @@ export class KbCliSearchAdapter implements SearchIndexPort {
   async search(query: IndexQuery): Promise<readonly IndexHit[]> {
     const args = [
       'search',
-      query.q,
       '--collection',
       query.collection,
       '--format',
@@ -52,6 +51,9 @@ export class KbCliSearchAdapter implements SearchIndexPort {
       '--vault',
       this.options.vault,
       ...MODE_FLAGS[query.mode],
+      // "--" ends the options so a question starting with "-" stays text.
+      '--',
+      query.q,
     ];
     const { stdout } = await run(this.options.command, args, {
       timeout: this.options.timeoutMs ?? 180_000,

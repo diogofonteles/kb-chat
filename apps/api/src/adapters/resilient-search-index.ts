@@ -10,6 +10,7 @@ export class ResilientSearchIndex implements SearchIndexPort {
   constructor(
     private readonly primary: SearchIndexPort,
     private readonly fallback: SearchIndexPort,
+    private readonly onFallback: (err: unknown) => void = () => undefined,
   ) {}
 
   status(): SearchIndexStatus {
@@ -20,7 +21,9 @@ export class ResilientSearchIndex implements SearchIndexPort {
     if (this.primary.status() !== 'ok') return this.fallback.search(query);
     try {
       return await this.primary.search(query);
-    } catch {
+    } catch (err) {
+      // Logged so a QMD contract change (Q5) is visible, then served by the fallback.
+      this.onFallback(err);
       return this.fallback.search(query);
     }
   }

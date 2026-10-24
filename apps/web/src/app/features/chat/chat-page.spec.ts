@@ -57,7 +57,15 @@ describe('ChatPage', () => {
     expect(request.request.body).toEqual({ q: 'lei do ritmo', mode: 'all' });
     request.flush(aResponse());
     await view.fixture.whenStable();
-    expect(screen.getByText('1 documento')).toBeTruthy();
+    expect(screen.getByText(/^1 documento · Tudo · 0,6 s$/)).toBeTruthy();
+    expect(
+      document.querySelector('[aria-live="polite"]')?.textContent?.trim(),
+    ).toBe('1 documento encontrado.');
+    expect(
+      screen
+        .getByRole('region', { name: 'Conversa' })
+        .getAttribute('aria-live'),
+    ).toBeNull();
     expect(screen.getByText(/0,6 s/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /A Lei do Ritmo/ })).toBeTruthy();
     expect(
@@ -184,6 +192,40 @@ describe('ChatPage', () => {
   });
 });
 
+describe('ChatPage default collection', () => {
+  it('opens the KB_TOPIC collection when the API names one', async () => {
+    const view = await render(ChatPage, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/topics')
+      .flush({ ...TOPICS, defaultSlug: 'alquimia' });
+    await view.fixture.whenStable();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
+      'Alquimia',
+    );
+  });
+
+  it('announces a failed search in the live region', async () => {
+    const view = await renderPage();
+    await ask('ritmo', view);
+    view.http
+      .expectOne(SEARCH_URL)
+      .flush(
+        { error: { code: 'RATE_LIMITED', message: 'x' } },
+        { status: 429, statusText: 'Too Many' },
+      );
+    await view.fixture.whenStable();
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toMatch(
+      /Muitas buscas/,
+    );
+  });
+});
+
 describe('ChatPage without collections', () => {
   it('explains the empty vault and the offline server', async () => {
     const view = await render(ChatPage, {
@@ -194,7 +236,7 @@ describe('ChatPage without collections', () => {
       ],
     });
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/v1/topics').flush({ items: [] });
+    http.expectOne('/api/v1/topics').flush({ items: [], defaultSlug: null });
     await view.fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toMatch(/Nenhum acervo/);
   });

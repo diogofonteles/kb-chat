@@ -26,7 +26,12 @@ export class Composer {
 
   private readonly field =
     viewChild.required<ElementRef<HTMLTextAreaElement>>('field');
+  /** Same limit as the API contract (searchRequestSchema). */
+  protected readonly maxLength = 500;
   protected readonly text = signal('');
+  protected readonly nearLimit = computed(
+    () => this.text().length >= this.maxLength - 50,
+  );
   protected readonly modes = MODE_OPTIONS;
   protected readonly canSend = computed(
     () => !this.disabled() && this.text().trim().length > 0,

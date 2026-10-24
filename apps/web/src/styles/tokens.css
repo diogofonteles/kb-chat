@@ -1,4 +1,4 @@
-/* Design tokens (docs/design/screens.md, "Temas e tokens"). Mirrors tokens.json (DTCG). */
+/* Design tokens as CSS custom properties (docs/design/screens.md, "Temas e tokens"); the DTCG file comes with the theme switcher (KBC-005). */
 :root {
   --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-reading: 'Source Serif 4', Georgia, 'Times New Roman', serif;

@@ -32,6 +32,10 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.llmCredit:Os créditos da OpenRouter acabaram. Adicione em openrouter.ai/settings/credits.`,
   DAILY_CAP_REACHED: () =>
     $localize`:@@error.dailyCap:Limite de gasto com IA de hoje atingido.`,
+  NOT_FOUND: () =>
+    $localize`:@@error.notFound:Este endereço não existe no servidor.`,
+  RATE_LIMITED: () =>
+    $localize`:@@error.rateLimited:Muitas buscas em pouco tempo. Espere um instante e tente de novo.`,
   FORBIDDEN_HOST: () =>
     $localize`:@@error.forbiddenHost:Acesso recusado pelo servidor.`,
   INTERNAL: () =>

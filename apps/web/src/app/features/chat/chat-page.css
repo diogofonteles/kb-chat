@@ -109,8 +109,16 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .layout.with-panel .conversation {
-    display: none;
+  /* The panel covers the conversation instead of display:none, so the
+     conversation keeps its scroll position when the reader comes back. */
+  .conversation.covered {
+    visibility: hidden;
+  }
+
+  .panel {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
   }
 
   .topbar {
@@ -119,5 +127,9 @@
 
   .hint-keyboard {
     display: none;
+  }
+
+  .composer-dock {
+    padding: 0 var(--space-3) var(--space-3);
   }
 }

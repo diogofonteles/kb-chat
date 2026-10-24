@@ -13,5 +13,9 @@ export const topicSchema = z.object({
 });
 export type Topic = z.infer<typeof topicSchema>;
 
-export const topicListSchema = z.object({ items: z.array(topicSchema) });
+export const topicListSchema = z.object({
+  items: z.array(topicSchema),
+  /** Topic configured to open by default (KB_TOPIC), or null. */
+  defaultSlug: topicSlugSchema.nullable(),
+});
 export type TopicList = z.infer<typeof topicListSchema>;

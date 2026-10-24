@@ -1,1 +1,1 @@
-export { listTopics, topicRoutes } from './routes.js';
+export { listTopics, topicRoutes, type TopicsDeps } from './routes.js';

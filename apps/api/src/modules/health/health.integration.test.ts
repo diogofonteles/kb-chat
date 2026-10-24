@@ -19,7 +19,9 @@ describe('health when QMD cannot start', () => {
     const index = await createSearchIndex({
       config,
       vault,
-      log: (message) => logs.push(message),
+      log: {
+        warn: (_obj: object, message?: string) => logs.push(message ?? ''),
+      },
     });
     const app = await buildApp({ config, vault, index });
     const headers = { host: 'localhost' };
@@ -38,6 +40,6 @@ describe('health when QMD cannot start', () => {
       search: 'degraded',
     });
     expect(search.json().items[0].id).toBe('raw/articles/a-lei-do-ritmo.md');
-    expect(logs[0]).toMatch(/using kb search/);
+    expect(logs.some((line) => /using kb search/.test(line))).toBe(true);
   });
 });

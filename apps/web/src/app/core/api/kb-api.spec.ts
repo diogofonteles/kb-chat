@@ -4,49 +4,35 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { aDocument, aResponse, TOPICS } from '../../testing/fixtures.js';
-import { KbApi } from './kb-api.js';
+import { aResponse } from '../../testing/fixtures.js';
+import { KbApi, documentUrl, searchesUrl, topicsUrl } from './kb-api.js';
 
 describe('KbApi', () => {
-  let api: KbApi;
-  let http: HttpTestingController;
-
-  beforeEach(() => {
+  it('posts a search and parses the response', () => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
-    api = TestBed.inject(KbApi);
-    http = TestBed.inject(HttpTestingController);
-  });
-
-  afterEach(() => http.verify());
-
-  it('lists topics', () => {
-    let count = 0;
-    api.listTopics().subscribe((list) => (count = list.items.length));
-    http.expectOne('/api/v1/topics').flush(TOPICS);
-    expect(count).toBe(2);
-  });
-
-  it('posts a search and parses the response', () => {
+    const http = TestBed.inject(HttpTestingController);
     let mode = '';
-    api
+    TestBed.inject(KbApi)
       .search('hermetismo', { q: 'ritmo', mode: 'exact' })
       .subscribe((response) => (mode = response.mode));
     const request = http.expectOne('/api/v1/topics/hermetismo/searches');
     expect(request.request.body).toEqual({ q: 'ritmo', mode: 'exact' });
     request.flush(aResponse([], { mode: 'exact' }));
     expect(mode).toBe('exact');
+    http.verify();
   });
+});
 
-  it('encodes the document id in the URL', () => {
-    let title = '';
-    api
-      .getDocument('hermetismo', 'raw/articles/a.md')
-      .subscribe((doc) => (title = doc.title));
-    http
-      .expectOne('/api/v1/topics/hermetismo/documents/raw%2Farticles%2Fa.md')
-      .flush(aDocument());
-    expect(title).toBe('A Lei do Ritmo');
+describe('API URLs', () => {
+  it('encodes nested topics and document ids', () => {
+    expect(topicsUrl()).toBe('/api/v1/topics');
+    expect(searchesUrl('harness/goclaw')).toBe(
+      '/api/v1/topics/harness%2Fgoclaw/searches',
+    );
+    expect(documentUrl('hermetismo', 'raw/a.md')).toBe(
+      '/api/v1/topics/hermetismo/documents/raw%2Fa.md',
+    );
   });
 });

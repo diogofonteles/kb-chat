@@ -8,7 +8,7 @@
       "root": "",
       "sourceRoot": "src",
       "prefix": "app",
-      "i18n": { "sourceLocale": "pt-BR" },
+      "i18n": { "sourceLocale": "pt" },
       "architect": {
         "build": {
           "builder": "@angular/build:application",

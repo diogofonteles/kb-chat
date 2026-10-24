@@ -22,6 +22,10 @@ export const configSchema = z.object({
   KB_BIN: z.string().min(1).default('kb'),
   QMD_BIN: z.string().min(1).default('qmd'),
   KB_CHAT_SEARCH: z.enum(['qmd', 'fixture']).default('qmd'),
+  /** Topic opened by default; without it the web picks the largest topic. */
+  KB_TOPIC: z.string().min(1).optional(),
+  /** Searches per minute per client (local single user: generous, ND-22). */
+  SEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(120),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

@@ -1,4 +1,4 @@
-export { searchRoutes } from './routes.js';
+export { searchRoutes, type SearchRouteOptions } from './routes.js';
 export {
   SearchService,
   toCollection,

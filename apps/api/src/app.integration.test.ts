@@ -7,6 +7,7 @@ import { FIXTURE_VAULT } from '../test/fixture-paths.js';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { createLogger } from './logger.js';
 import { createSearchIndex } from './search-index-factory.js';
 
 async function hashTree(dir: string): Promise<string> {
@@ -34,7 +35,7 @@ beforeAll(async () => {
   const index = await createSearchIndex({
     config,
     vault,
-    log: () => undefined,
+    log: createLogger('silent'),
   });
   app = await buildApp({ config, vault, index });
 });
@@ -56,6 +57,7 @@ describe('GET /api/v1/topics', () => {
         { slug: 'alquimia', title: 'Alquimia Prática', documentCount: 1 },
         { slug: 'hermetismo', title: 'Hermetismo', documentCount: 5 },
       ],
+      defaultSlug: null,
     });
   });
 });

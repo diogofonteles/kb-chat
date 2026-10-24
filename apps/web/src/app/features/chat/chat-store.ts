@@ -1,5 +1,5 @@
-import { httpResource } from '@angular/common/http';
 import { DOCUMENT } from '@angular/common';
+import { httpResource } from '@angular/common/http';
 import {
   Injectable,
   computed,
@@ -13,9 +13,10 @@ import {
   topicListSchema,
   type SearchHit,
   type SearchMode,
+  type TopicList,
 } from '@kb-chat/contracts';
 import { toUiErrorCode } from '@core/api/api-error.js';
-import { KbApi } from '@core/api/kb-api.js';
+import { KbApi, topicsUrl } from '@core/api/kb-api.js';
 import {
   Subject,
   catchError,
@@ -40,27 +41,42 @@ export interface OpenDocument {
   readonly title: string;
 }
 
+/** localStorage access itself can throw (blocked site data); the app then runs without it. */
+function safeStorage(view: Window | null): Storage | undefined {
+  try {
+    return view?.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+/** KB_TOPIC when configured, otherwise the largest collection (the main study material). */
+function pickDefaultTopic(list: TopicList | null): string | null {
+  if (!list) return null;
+  if (list.defaultSlug) return list.defaultSlug;
+  return (
+    [...list.items].sort((a, b) => b.documentCount - a.documentCount)[0]
+      ?.slug ?? null
+  );
+}
+
 /** Conversation state of the chat page (provided on the page, NG-16). */
 @Injectable()
 export class ChatStore {
   private readonly api = inject(KbApi);
-  private readonly storage = inject(DOCUMENT).defaultView?.localStorage;
+  private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
   private readonly asks = new Subject<Ask>();
   private nextId = 1;
 
-  readonly topics = httpResource(() => '/api/v1/topics', {
+  readonly topics = httpResource(topicsUrl, {
     parse: (body) => topicListSchema.parse(body),
   });
   // A resource in error throws on value(); hasValue() guards every read.
-  readonly topicList = computed(() =>
-    this.topics.hasValue() ? this.topics.value().items : [],
+  private readonly topicData = computed(() =>
+    this.topics.hasValue() ? this.topics.value() : null,
   );
-  // Default collection: the largest one (the vault's main study material).
-  readonly topicSlug = linkedSignal(
-    () =>
-      [...this.topicList()].sort((a, b) => b.documentCount - a.documentCount)[0]
-        ?.slug ?? null,
-  );
+  readonly topicList = computed(() => this.topicData()?.items ?? []);
+  readonly topicSlug = linkedSignal(() => pickDefaultTopic(this.topicData()));
   readonly topic = computed(
     () => this.topicList().find((t) => t.slug === this.topicSlug()) ?? null,
   );
@@ -75,9 +91,7 @@ export class ChatStore {
       mergeMap((ask) => this.run(ask)),
       scan(reduceChat, [] as readonly ChatMessage[]),
     ),
-    {
-      initialValue: [] as readonly ChatMessage[],
-    },
+    { initialValue: [] as readonly ChatMessage[] },
   );
 
   private readonly openState = signal<OpenDocument | null>(null);

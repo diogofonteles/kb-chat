@@ -1,11 +1,14 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { parse } from 'yaml';
+import { z } from 'zod';
 import type { TopicFolder, VaultReaderPort } from '../ports/vault-reader.js';
 
 const SERVED_ROOTS = ['raw', join('wiki', 'concepts')] as const;
 const EXCLUDED_SEGMENT = '_quarantine';
 const MAX_NESTING = 2;
+
+const topicYamlSchema = z.looseObject({ title: z.string().optional() });
 
 const isMarkdown = (path: string): boolean => path.endsWith('.md');
 
@@ -20,9 +23,9 @@ async function exists(path: string): Promise<boolean> {
 
 async function readTopicTitle(dir: string, slug: string): Promise<string> {
   const yamlText = await readFile(join(dir, 'topic.yaml'), 'utf8');
-  const parsed: unknown = parse(yamlText);
-  const title = (parsed as { title?: unknown } | null)?.title;
-  return typeof title === 'string' && title.trim() ? title.trim() : slug;
+  const parsed = topicYamlSchema.safeParse(parse(yamlText));
+  const title = parsed.success ? parsed.data.title?.trim() : undefined;
+  return title || slug;
 }
 
 async function listServedRoot(

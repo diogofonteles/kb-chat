@@ -1,11 +1,15 @@
 import type {
+  SearchHit,
   SearchRequest,
   SearchResponse,
-  SearchHit,
 } from '@kb-chat/contracts';
 import { searchRequestSchema } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { IndexHit, SearchIndexPort } from '../../ports/search-index.js';
+import type {
+  IndexHit,
+  IndexQuery,
+  SearchIndexPort,
+} from '../../ports/search-index.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
   splitFrontmatter,
@@ -21,9 +25,24 @@ export interface SearchServiceDeps {
   readonly vault: VaultReaderPort;
 }
 
+/** Candidates asked from the index so `total` counts more than one page. */
+export const MAX_CANDIDATES = 50;
+
 /** QMD derives a collection name from the topic id. */
 export const toCollection = (topic: string): string =>
   topic.replace(/\//g, '-');
+
+/**
+ * A line break in the question would be read by QMD as a structured query
+ * document ("lex:", "vec:" lines), so all whitespace collapses to one space.
+ */
+export const normalizeQuestion = (q: string): string =>
+  q.replace(/\s+/g, ' ').trim();
+
+interface KnownHit {
+  readonly hit: IndexHit;
+  readonly entry: CatalogEntry;
+}
 
 export class SearchService {
   constructor(private readonly deps: SearchServiceDeps) {}
@@ -34,22 +53,33 @@ export class SearchService {
     const startedAt = performance.now();
     const hits = await this.queryIndex({
       collection: toCollection(topic),
-      q,
+      q: normalizeQuestion(q),
       mode,
-      limit,
+      limit: MAX_CANDIDATES,
     });
-    const known = hits
-      .filter((hit) => catalog.entries.has(hit.id))
-      .slice(0, limit);
+    const known = this.keepCataloged(catalog, hits);
     const items = await Promise.all(
-      known.map((hit) => this.toSearchHit(catalog, hit)),
+      known.slice(0, limit).map((found) => this.toSearchHit(catalog, found)),
     );
     return {
       items,
-      total: items.length,
+      total: known.length,
+      capped: hits.length >= MAX_CANDIDATES,
       mode,
       tookMs: Math.round(performance.now() - startedAt),
     };
+  }
+
+  private keepCataloged(
+    catalog: TopicCatalog,
+    hits: readonly IndexHit[],
+  ): KnownHit[] {
+    const known: KnownHit[] = [];
+    for (const hit of hits) {
+      const entry = catalog.entries.get(hit.id);
+      if (entry) known.push({ hit, entry });
+    }
+    return known;
   }
 
   private requireTopic(topic: string): TopicCatalog {
@@ -59,23 +89,20 @@ export class SearchService {
     return catalog;
   }
 
-  private async queryIndex(
-    query: Parameters<SearchIndexPort['search']>[0],
-  ): Promise<readonly IndexHit[]> {
+  private async queryIndex(query: IndexQuery): Promise<readonly IndexHit[]> {
     try {
       return await this.deps.index.search(query);
     } catch (err) {
       throw new AppError('SEARCH_UNAVAILABLE', 'Search index unavailable', {
-        cause: err instanceof Error ? err.message : String(err),
+        cause: err,
       });
     }
   }
 
   private async toSearchHit(
     catalog: TopicCatalog,
-    hit: IndexHit,
+    { hit, entry }: KnownHit,
   ): Promise<SearchHit> {
-    const entry = catalog.entries.get(hit.id) as CatalogEntry;
     const text = await this.deps.vault.readDocument(catalog.topic.slug, hit.id);
     const body = text === null ? '' : splitFrontmatter(text).body;
     return {

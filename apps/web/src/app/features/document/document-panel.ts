@@ -3,8 +3,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  afterNextRender,
+  afterRenderEffect,
   computed,
+  inject,
   input,
   output,
   viewChild,
@@ -54,6 +55,9 @@ export class DocumentPanel {
     const doc = this.loaded();
     return doc ? describeFacets(doc) : '';
   });
+  protected readonly concepts = computed(
+    () => this.loaded()?.concepts.join(' · ') ?? '',
+  );
   protected readonly html = computed(() =>
     renderMarkdown(this.loaded()?.body ?? ''),
   );
@@ -63,6 +67,12 @@ export class DocumentPanel {
   });
 
   constructor() {
-    afterNextRender(() => this.heading().nativeElement.focus());
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    // A new document starts at its top with focus on its title (also when switching in place).
+    afterRenderEffect(() => {
+      this.documentId();
+      host.scrollTop = 0;
+      this.heading().nativeElement.focus();
+    });
   }
 }

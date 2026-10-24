@@ -153,6 +153,11 @@ describe('KbCliSearchAdapter', () => {
     expect(adapter.status()).toBe('degraded');
   });
 
+  it('ends options before the question so a leading dash stays text', async () => {
+    const [hit] = await adapter.search({ ...query, q: '--vault=/etc' });
+    expect(hit?.snippet).toMatch(/-- --vault=\/etc$/);
+  });
+
   it('rejects when kb exits with an error', async () => {
     await expect(adapter.search({ ...query, q: 'fail' })).rejects.toThrow();
   });

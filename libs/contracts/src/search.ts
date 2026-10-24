@@ -23,7 +23,10 @@ export type SearchHit = z.infer<typeof searchHitSchema>;
 
 export const searchResponseSchema = z.object({
   items: z.array(searchHitSchema),
+  /** Matches found among the index candidates (at most the candidate cap). */
   total: z.number().int().nonnegative(),
+  /** True when the index returned its candidate cap, so there may be more. */
+  capped: z.boolean(),
   mode: searchModeSchema,
   tookMs: z.number().nonnegative(),
 });

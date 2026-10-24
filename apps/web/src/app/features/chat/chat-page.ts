@@ -1,7 +1,9 @@
-import { DecimalPipe } from '@angular/common';
+import { DOCUMENT, DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  Injector,
+  afterNextRender,
   computed,
   inject,
   viewChild,
@@ -12,7 +14,10 @@ import { DocumentPanel } from '@features/document/document-panel.js';
 import type { ChatMessage } from './chat-message.js';
 import { ChatStore } from './chat-store.js';
 import { Composer } from './composer.js';
+import { describeForAnnouncement } from './result-count.js';
 import { ResultMessage } from './result-message.js';
+
+const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /** Chat-style search page: conversation, question box and document panel (screens.md). */
 @Component({
@@ -26,6 +31,8 @@ import { ResultMessage } from './result-message.js';
 })
 export class ChatPage {
   protected readonly store = inject(ChatStore);
+  private readonly injector = inject(Injector);
+  private readonly view = inject(DOCUMENT).defaultView;
   private readonly composer = viewChild.required(Composer);
 
   protected readonly topic = this.store.topic;
@@ -39,6 +46,22 @@ export class ChatPage {
   protected readonly noTopics = computed(
     () => this.store.topics.hasValue() && this.store.topicList().length === 0,
   );
+  /** Short live-region text (the cards themselves are not announced). */
+  protected readonly announcement = computed(() => {
+    const last = this.messages().at(-1);
+    if (!last || last.status === 'loading') return '';
+    return last.response
+      ? describeForAnnouncement(last.response)
+      : errorMessage(last.error ?? 'INTERNAL');
+  });
+
+  constructor() {
+    // The question box starts focused on desktop; on phones it would pop the keyboard.
+    afterNextRender(() => {
+      if (this.view?.matchMedia?.(DESKTOP_QUERY).matches)
+        this.composer().focus();
+    });
+  }
 
   protected changeMode(mode: SearchMode): void {
     this.store.setMode(mode);
@@ -63,7 +86,8 @@ export class ChatPage {
 
   protected closeDocument(): void {
     this.store.close();
-    this.composer().focus();
+    // After the conversation is visible again (mobile), so focus never lands on <body>.
+    afterNextRender(() => this.composer().focus(), { injector: this.injector });
   }
 
   protected reloadTopics(): void {

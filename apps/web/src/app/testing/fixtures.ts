@@ -23,6 +23,7 @@ export const aResponse = (
 ): SearchResponse => ({
   items,
   total: items.length,
+  capped: false,
   mode: 'all',
   tookMs: 640,
   ...overrides,
@@ -45,4 +46,5 @@ export const TOPICS: TopicList = {
     { slug: 'hermetismo', title: 'Hermetismo', documentCount: 4235 },
     { slug: 'alquimia', title: 'Alquimia', documentCount: 1 },
   ],
+  defaultSlug: null,
 };
