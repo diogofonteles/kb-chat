@@ -96,10 +96,15 @@ export class Sidebar {
     this.opens.next(summary.id);
   }
 
-  /** Search re-runs its asks; research shows what was saved, never calling the AI again. */
+  /**
+   * Search re-runs its asks in the search view; research shows what was saved in the
+   * research view, never calling the AI again.
+   */
   private restoreLoaded(conversation: Conversation): void {
-    if (conversation.kind === 'search') this.chat.restore(conversation);
-    else this.restorer.restore(conversation);
+    if (conversation.kind === 'search') {
+      this.views.select('search');
+      this.chat.restore(conversation);
+    } else this.restorer.restore(conversation);
     this.acted.emit('restore');
   }
 

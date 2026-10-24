@@ -532,6 +532,26 @@ describe('ChatPage side panel (KBC-005)', () => {
     view.http.expectNone(SEARCH_URL);
   });
 
+  it('brings a search conversation back in the search view, even from the research view', async () => {
+    const search = aSearchConversation({ title: 'lei do ritmo' });
+    conversations.saved.set(search.id, search);
+    const view = await renderPage();
+    fireEvent.click(screen.getByRole('radio', { name: /Pesquisa com IA/ }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: /lei do ritmo/ }));
+    await view.fixture.whenStable();
+    expect(
+      (
+        screen.getByRole('radio', {
+          name: 'Buscar documentos',
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    expect(view.container.querySelector('app-result-card')).toBeTruthy();
+  });
+
   it('says so when a conversation cannot be opened', async () => {
     const search = aSearchConversation({ title: 'lei do ritmo' });
     conversations.saved.set(search.id, search);
