@@ -4,7 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
-    "noEmit": true
+    "noEmit": true,
+    "lib": ["ES2023", "DOM"]
   },
   "include": ["**/*.ts"]
 }

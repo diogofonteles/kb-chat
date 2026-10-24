@@ -1,4 +1,5 @@
 import type {
+  SearchFilters,
   DepthLevel,
   Genre,
   Relevance,
@@ -70,4 +71,24 @@ export function describeFacets(facets: {
     facets.relevance === null ? null : RELEVANCE_LABELS[facets.relevance],
   ];
   return parts.filter((part): part is string => part !== null).join(' · ');
+}
+
+/** The facets a search can filter by (single source: the search contract). */
+export type FacetKey = keyof SearchFilters;
+
+export const FACET_TITLES: Record<FacetKey, string> = {
+  concepts: $localize`:@@facet.concepts:Assuntos`,
+  genres: $localize`:@@facet.genres:Tipo de texto`,
+  depths: $localize`:@@facet.depths:Profundidade`,
+  relevances: $localize`:@@facet.relevances:Ligação com o tema`,
+};
+
+/** Display label of one facet value; concepts are already human names. */
+export function facetValueLabel(key: FacetKey, value: string | number): string {
+  if (key === 'genres') return GENRE_LABELS[value as Genre] ?? String(value);
+  if (key === 'depths')
+    return DEPTH_LABELS[value as DepthLevel] ?? String(value);
+  if (key === 'relevances')
+    return RELEVANCE_LABELS[value as Relevance] ?? String(value);
+  return String(value);
 }

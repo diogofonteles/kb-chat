@@ -17,6 +17,7 @@
 .answer {
   display: grid;
   gap: var(--space-3);
+  min-width: 0;
 }
 
 .status,
@@ -85,4 +86,21 @@
 
 .secondary:hover {
   border-color: var(--color-accent);
+}
+
+.more {
+  justify-self: center;
+  min-width: 12rem;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.more-error {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-danger);
 }

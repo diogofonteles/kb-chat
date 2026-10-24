@@ -2,8 +2,10 @@ import type {
   SearchHit,
   SearchRequest,
   SearchResponse,
+  TopicFacets,
 } from '@kb-chat/contracts';
-import { searchRequestSchema } from '@kb-chat/contracts';
+import { MAX_RESULTS, searchRequestSchema } from '@kb-chat/contracts';
+import type { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type {
   IndexHit,
@@ -13,10 +15,16 @@ import type {
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
   splitFrontmatter,
-  type CatalogEntry,
   type CatalogRegistry,
   type TopicCatalog,
 } from '../catalog/index.js';
+import {
+  countFacets,
+  groupCopies,
+  refine,
+  type Candidate,
+  type CopyGroup,
+} from './refine.js';
 import { cleanSnippet } from './snippet.js';
 
 export interface SearchServiceDeps {
@@ -25,8 +33,8 @@ export interface SearchServiceDeps {
   readonly vault: VaultReaderPort;
 }
 
-/** Candidates asked from the index so `total` counts more than one page. */
-export const MAX_CANDIDATES = 50;
+/** Index candidates: enough for 50 results, more when filters may discard many (ADR 0003). */
+export const CANDIDATES = { plain: 60, filtered: 200 } as const;
 
 /** QMD derives a collection name from the topic id. */
 export const toCollection = (topic: string): string =>
@@ -39,42 +47,70 @@ export const toCollection = (topic: string): string =>
 export const normalizeQuestion = (q: string): string =>
   q.replace(/\s+/g, ' ').trim();
 
-interface KnownHit {
-  readonly hit: IndexHit;
-  readonly entry: CatalogEntry;
-}
+type SearchFilterQuery = z.output<typeof searchRequestSchema>;
 
 export class SearchService {
   constructor(private readonly deps: SearchServiceDeps) {}
 
   async search(topic: string, request: SearchRequest): Promise<SearchResponse> {
     const catalog = this.requireTopic(topic);
-    const { q, mode, limit } = searchRequestSchema.parse(request);
+    const { q, mode, limit, offset, filters } =
+      searchRequestSchema.parse(request);
     const startedAt = performance.now();
-    const hits = await this.queryIndex({
-      collection: toCollection(topic),
-      q: normalizeQuestion(q),
+    const { groups, capped } = await this.findGroups(catalog, {
+      q,
       mode,
-      limit: MAX_CANDIDATES,
+      filters,
     });
-    const known = this.keepCataloged(catalog, hits);
+    const { page, ...refined } = refine(groups, {
+      filters,
+      offset,
+      limit,
+      maxResults: MAX_RESULTS,
+    });
     const items = await Promise.all(
-      known.slice(0, limit).map((found) => this.toSearchHit(catalog, found)),
+      page.map((group) => this.toSearchHit(catalog, group)),
     );
     return {
+      ...refined,
       items,
-      total: known.length,
-      capped: hits.length >= MAX_CANDIDATES,
+      capped,
       mode,
       tookMs: Math.round(performance.now() - startedAt),
     };
   }
 
+  /** Index candidates for the question, kept when cataloged and grouped by copy. */
+  private async findGroups(
+    catalog: TopicCatalog,
+    { q, mode, filters }: Pick<SearchFilterQuery, 'q' | 'mode' | 'filters'>,
+  ): Promise<{ groups: CopyGroup[]; capped: boolean }> {
+    const filtered = Object.values(filters).some((values) => values.length > 0);
+    const limit = filtered ? CANDIDATES.filtered : CANDIDATES.plain;
+    const collection = toCollection(catalog.topic.slug);
+    const hits = await this.queryIndex({
+      collection,
+      q: normalizeQuestion(q),
+      mode,
+      limit,
+    });
+    return {
+      groups: groupCopies(this.keepCataloged(catalog, hits)),
+      capped: hits.length >= limit,
+    };
+  }
+
+  /** Collection-wide counts per facet value (start-screen suggestions and "no acervo" counts). */
+  topicFacets(topic: string): TopicFacets {
+    const entries = [...this.requireTopic(topic).entries.values()];
+    return countFacets(() => entries);
+  }
+
   private keepCataloged(
     catalog: TopicCatalog,
     hits: readonly IndexHit[],
-  ): KnownHit[] {
-    const known: KnownHit[] = [];
+  ): Candidate[] {
+    const known: Candidate[] = [];
     for (const hit of hits) {
       const entry = catalog.entries.get(hit.id);
       if (entry) known.push({ hit, entry });
@@ -101,8 +137,9 @@ export class SearchService {
 
   private async toSearchHit(
     catalog: TopicCatalog,
-    { hit, entry }: KnownHit,
+    { lead, copies }: CopyGroup,
   ): Promise<SearchHit> {
+    const { hit, entry } = lead;
     const text = await this.deps.vault.readDocument(catalog.topic.slug, hit.id);
     const body = text === null ? '' : splitFrontmatter(text).body;
     return {
@@ -114,6 +151,7 @@ export class SearchService {
       depth: entry.depth,
       relevance: entry.relevance,
       concepts: [...entry.concepts],
+      copies: copies.map((copy) => ({ id: copy.id, title: copy.title })),
     };
   }
 }

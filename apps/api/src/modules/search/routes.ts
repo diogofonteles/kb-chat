@@ -1,6 +1,7 @@
 import {
   searchRequestSchema,
   searchResponseSchema,
+  topicFacetsSchema,
   topicSlugSchema,
 } from '@kb-chat/contracts';
 import type { FastifyPluginAsync } from 'fastify';
@@ -28,5 +29,15 @@ export const searchRoutes =
         },
       },
       async (request) => service.search(request.params.topic, request.body),
+    );
+    app.withTypeProvider<ZodTypeProvider>().get(
+      '/api/v1/topics/:topic/facets',
+      {
+        schema: {
+          params: z.object({ topic: topicSlugSchema }),
+          response: { 200: topicFacetsSchema },
+        },
+      },
+      async (request) => service.topicFacets(request.params.topic),
     );
   };

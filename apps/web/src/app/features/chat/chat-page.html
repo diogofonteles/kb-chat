@@ -63,6 +63,8 @@
           (opened)="openHit($event, message)"
           (retried)="retry(message)"
           (modeSwitched)="askAgainIn(message, $event)"
+          (filtersChanged)="refine(message, $event)"
+          (moreRequested)="loadMore(message)"
         />
       }
     </section>

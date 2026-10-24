@@ -9,7 +9,11 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
-import type { SearchHit, SearchMode } from '@kb-chat/contracts';
+import type {
+  DocumentRef,
+  SearchFilters,
+  SearchMode,
+} from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { DocumentPanel } from '@features/document/document-panel.js';
 import type { ChatMessage } from './chat-message.js';
@@ -76,8 +80,16 @@ export class ChatPage {
     this.store.ask(question);
   }
 
-  protected openHit(hit: SearchHit, message: ChatMessage): void {
-    this.store.open(message.topic, hit);
+  protected openHit(doc: DocumentRef, message: ChatMessage): void {
+    this.store.open(message.topic, doc);
+  }
+
+  protected refine(message: ChatMessage, filters: SearchFilters): void {
+    this.store.refine(message, filters);
+  }
+
+  protected loadMore(message: ChatMessage): void {
+    this.store.loadMore(message);
   }
 
   protected retry(message: ChatMessage): void {
@@ -86,7 +98,7 @@ export class ChatPage {
 
   protected askAgainIn(message: ChatMessage, mode: SearchMode): void {
     this.store.setMode(mode);
-    this.store.ask(message.question, mode);
+    this.store.ask(message.question, mode, message.filters);
   }
 
   protected closeDocument(): void {

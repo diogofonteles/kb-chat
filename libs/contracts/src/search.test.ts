@@ -5,11 +5,32 @@ import { topicSlugSchema } from './topics.js';
 describe('searchRequestSchema', () => {
   it('defaults the mode to all and the limit to 10', () => {
     const parsed = searchRequestSchema.parse({ q: 'ritmo' });
-    expect(parsed).toEqual({ q: 'ritmo', mode: 'all', limit: 10 });
+    expect(parsed).toEqual({
+      q: 'ritmo',
+      mode: 'all',
+      limit: 10,
+      offset: 0,
+      filters: { concepts: [], genres: [], depths: [], relevances: [] },
+    });
   });
 
   it('rejects a blank question', () => {
     expect(searchRequestSchema.safeParse({ q: '   ' }).success).toBe(false);
+  });
+
+  it('accepts facet filters and rejects unknown facet values', () => {
+    const ok = searchRequestSchema.safeParse({
+      q: 'x',
+      filters: { genres: ['paper'], depths: [2] },
+    });
+    expect(ok.success).toBe(true);
+    expect(
+      searchRequestSchema.safeParse({ q: 'x', filters: { genres: ['poem'] } })
+        .success,
+    ).toBe(false);
+    expect(
+      searchRequestSchema.safeParse({ q: 'x', filters: { path: 'x' } }).success,
+    ).toBe(false);
   });
 
   it('rejects unknown fields', () => {
