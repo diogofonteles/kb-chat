@@ -39,3 +39,47 @@ test('AC-4: a failing usage log never shows an error', async ({ page }) => {
   // the whole suite runs in parallel, are unrelated to the usage log).
   await expect(page.locator('app-result-message .answer.error')).toHaveCount(0);
 });
+
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1366, height: 768 },
+]) {
+  test(`the start screen shows the whole greeting below the top bar at ${size.width}×${size.height}`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'laptop heights only');
+    await page.setViewportSize(size);
+    await page.goto('/');
+    for (const view of ['Pesquisa com IA', 'Buscar documentos']) {
+      await page.getByRole('radio', { name: new RegExp(view) }).check();
+      const greeting = page.locator('.greeting');
+      await expect(greeting).toBeVisible();
+      const top = await page.locator('.topbar').boundingBox();
+      const title = await greeting.boundingBox();
+      expect(title?.y ?? 0).toBeGreaterThanOrEqual(
+        (top?.y ?? 0) + (top?.height ?? 0),
+      );
+      await expect(greeting).toBeInViewport({ ratio: 1 });
+    }
+  });
+}
+
+test('the top bar stays on one line with the document panel open', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'desktop',
+    'the side panel is desktop only',
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const height = async () =>
+    (await page.locator('.topbar').boundingBox())?.height ?? 0;
+  const closed = await height();
+  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+  await page.getByLabel('Sua pergunta').fill('ritmo');
+  await page.getByRole('button', { name: 'Buscar' }).click();
+  await page.locator('[data-doc-id]').first().click();
+  await expect(page.locator('app-document-panel')).toBeVisible();
+  expect(await height()).toBeLessThanOrEqual(closed + 1);
+});
