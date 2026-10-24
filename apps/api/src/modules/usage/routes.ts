@@ -3,7 +3,7 @@ import {
   topicSlugSchema,
   usageEventRequestSchema,
 } from '@kb-chat/contracts';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
@@ -20,46 +20,49 @@ export interface UsageDeps {
 
 const EVENTS_PER_MINUTE = 600;
 
-/** Start suggestions and the local usage log (KBC-006). */
-export const usageRoutes =
-  ({ catalog, log, principal }: UsageDeps): FastifyPluginAsync =>
-  async (app) => {
-    const routes = app.withTypeProvider<ZodTypeProvider>();
-    routes.get(
+const suggestionsSchema = {
+  params: z.object({ topic: topicSlugSchema }),
+  response: { 200: suggestionListSchema },
+};
+
+function registerSuggestions(app: FastifyInstance, { catalog }: UsageDeps) {
+  app
+    .withTypeProvider<ZodTypeProvider>()
+    .get(
       '/api/v1/topics/:topic/suggestions',
-      {
-        schema: {
-          params: z.object({ topic: topicSlugSchema }),
-          response: { 200: suggestionListSchema },
-        },
-      },
-      async (request) => {
-        const topic = catalog.get(request.params.topic);
+      { schema: suggestionsSchema },
+      async ({ params }) => {
+        const topic = catalog.get(params.topic);
         if (!topic)
           throw new AppError(
             'TOPIC_NOT_FOUND',
-            `Unknown topic ${request.params.topic}`,
+            `Unknown topic ${params.topic}`,
           );
         return topSuggestions(topic.entries.values());
       },
     );
-    routes.post(
-      '/api/v1/events',
-      {
-        schema: { body: usageEventRequestSchema },
-        config: {
-          rateLimit: { max: EVENTS_PER_MINUTE, timeWindow: '1 minute' },
-        },
-      },
-      async (request, reply) => {
-        const { sessionId, event } = request.body;
-        await log.append({
-          ...event,
-          ts: new Date().toISOString(),
-          principal,
-          sessionId,
-        });
-        return reply.code(202).send();
-      },
-    );
+}
+
+function registerEvents(app: FastifyInstance, { log, principal }: UsageDeps) {
+  app.withTypeProvider<ZodTypeProvider>().post(
+    '/api/v1/events',
+    {
+      schema: { body: usageEventRequestSchema },
+      config: { rateLimit: { max: EVENTS_PER_MINUTE, timeWindow: '1 minute' } },
+    },
+    async ({ body }, reply) => {
+      const { sessionId, event } = body;
+      const ts = new Date().toISOString();
+      await log.append({ ...event, ts, principal, sessionId });
+      return reply.code(202).send();
+    },
+  );
+}
+
+/** Start suggestions and the local usage log (KBC-006). */
+export const usageRoutes =
+  (deps: UsageDeps): FastifyPluginAsync =>
+  async (app) => {
+    registerSuggestions(app, deps);
+    registerEvents(app, deps);
   };

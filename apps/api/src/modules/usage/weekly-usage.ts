@@ -44,33 +44,40 @@ interface WeekAccumulator {
 const share = (part: number, whole: number): number =>
   whole === 0 ? 0 : part / whole;
 
-function accumulate(records: readonly UsageRecord[]) {
-  const weeks = new Map<string, WeekAccumulator>();
-  const week = (key: string): WeekAccumulator => {
-    let acc = weeks.get(key);
-    if (!acc) {
-      acc = {
-        sessions: new Set(),
-        filteredSessions: new Set(),
-        searches: [],
-        spendUsd: 0,
-      };
-      weeks.set(key, acc);
-    }
-    return acc;
-  };
+const emptyWeek = (): WeekAccumulator => ({
+  sessions: new Set(),
+  filteredSessions: new Set(),
+  searches: [],
+  spendUsd: 0,
+});
+
+/** Accumulators per week, created on first use. */
+class Weeks extends Map<string, WeekAccumulator> {
+  at(ts: string): WeekAccumulator {
+    const key = weekOf(ts);
+    const existing = this.get(key);
+    if (existing) return existing;
+    const created = emptyWeek();
+    this.set(key, created);
+    return created;
+  }
+}
+
+const usedFilter = (record: UsageRecord): boolean =>
+  record.type === 'filter' ||
+  (record.type === 'search' && record.filterCount > 0);
+
+function accumulate(records: readonly UsageRecord[]): Weeks {
+  const weeks = new Weeks();
   // The latest search of each session receives the documents opened and answers asked after it.
   const lastSearch = new Map<string, SearchOutcome>();
   const sorted = [...records].sort(
     (a, b) => Date.parse(a.ts) - Date.parse(b.ts),
   );
   for (const record of sorted) {
-    const acc = week(weekOf(record.ts));
+    const acc = weeks.at(record.ts);
     acc.sessions.add(record.sessionId);
-    const filtered =
-      record.type === 'filter' ||
-      (record.type === 'search' && record.filterCount > 0);
-    if (filtered) acc.filteredSessions.add(record.sessionId);
+    if (usedFilter(record)) acc.filteredSessions.add(record.sessionId);
     if (record.type === 'search') {
       const outcome = { opened: false, ai: false };
       acc.searches.push(outcome);
@@ -81,7 +88,7 @@ function accumulate(records: readonly UsageRecord[]) {
     if (current && (record.type === 'ai_answer' || record.type === 'ai_cancel'))
       current.ai = true;
   }
-  return { weeks, week };
+  return weeks;
 }
 
 /** Weekly metrics of the brief from the local usage log and the spend ledger. */
@@ -89,8 +96,8 @@ export function weeklyUsage(
   records: readonly UsageRecord[],
   spend: readonly SpendEntry[],
 ): WeekUsage[] {
-  const { weeks, week } = accumulate(records);
-  for (const entry of spend) week(weekOf(entry.ts)).spendUsd += entry.usd;
+  const weeks = accumulate(records);
+  for (const entry of spend) weeks.at(entry.ts).spendUsd += entry.usd;
   return [...weeks]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, acc]) => ({
