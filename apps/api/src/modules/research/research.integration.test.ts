@@ -96,6 +96,7 @@ describe('POST /api/v1/topics/:topic/research', () => {
     expect(response.headers['content-type']).toMatch(/text\/event-stream/);
     const stream = events(response.body);
     expect(stream.map((e) => e.type)).toEqual([
+      'start',
       'step',
       'step',
       'sources',
@@ -180,7 +181,10 @@ describe('POST /api/v1/topics/:topic/research', () => {
       throw new Error('provider down');
     };
     const stream = events((await ask(server, { question: 'ritmo' })).body);
-    expect(stream).toEqual([{ type: 'error', code: 'INTERNAL' }]);
+    expect(stream).toEqual([
+      { type: 'start', model: 'stub/model', billing: 'per-token' },
+      { type: 'error', code: 'INTERNAL' },
+    ]);
   });
 
   it('no longer serves the single-call answers route', async () => {

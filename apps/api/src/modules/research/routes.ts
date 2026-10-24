@@ -65,6 +65,7 @@ async function streamResearch(
 ): Promise<void> {
   const signal = abortOnDisconnect(reply);
   const send = openStream(reply);
+  send({ type: 'start', model: runner.model, billing: runner.billing });
   try {
     const input = { topic, ...body, signal };
     for await (const event of runner.run(input)) send(event);

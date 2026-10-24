@@ -338,6 +338,7 @@ describe('POST /api/v1/topics/:topic/research with the provider in Settings', ()
     const { app, ledger } = await start({ KB_CHAT_LLM: 'stub' });
     await put(app, { ai: { dailyCapUsd: 0 } });
     expect(events((await research(app)).body)).toEqual([
+      { type: 'start', model: 'stub/model', billing: 'per-token' },
       { type: 'error', code: 'DAILY_CAP_REACHED' },
     ]);
     await put(app, { ai: { dailyCapUsd: 1 } });
