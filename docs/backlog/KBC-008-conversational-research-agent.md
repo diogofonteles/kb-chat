@@ -1,7 +1,7 @@
 ---
 id: KBC-008
 title: IA que pesquisa o acervo e conversa com contexto
-status: in-progress
+status: done
 slice: release-1
 outcome: responder qualquer pergunta com referência no acervo, sem o leitor refazer buscas
 depends_on: [KBC-004, KBC-005]

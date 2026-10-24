@@ -22,8 +22,8 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-004](KBC-004-grounded-ai-answer.md) | Responder com IA citando as fontes | release-1 | done | KBC-001 |
 | [KBC-005](KBC-005-sidebar-topics-history-themes.md) | Lateral: acervo, histórico, temas e gasto | release-1 | done | KBC-001, KBC-004 |
 | [KBC-006](KBC-006-start-suggestions-and-usage-log.md) | Sugestões iniciais e log de uso local | release-1 | done | KBC-002 |
-| [KBC-008](KBC-008-conversational-research-agent.md) | IA que pesquisa o acervo e conversa com contexto | release-1 | in-progress | KBC-004, KBC-005 |
-| [KBC-007](KBC-007-onboarding-preferences-ai-provider.md) | Configurações sempre à mão, onboarding e provedor de IA (chave própria ou assinatura Claude/ChatGPT) | release-1 | ready | KBC-005, KBC-008 |
+| [KBC-008](KBC-008-conversational-research-agent.md) | IA que pesquisa o acervo e conversa com contexto | release-1 | done | KBC-004, KBC-005 |
+| [KBC-007](KBC-007-onboarding-preferences-ai-provider.md) | Configurações sempre à mão, onboarding e provedor de IA (chave própria ou assinatura Claude/ChatGPT) | release-1 | done | KBC-005, KBC-008 |
 | [KBC-010](KBC-010-google-login-and-permissions.md) | Login com conta Google e acesso por permissões (funcionalidades e acervos) | release-1 | draft | KBC-007, KBC-008 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
