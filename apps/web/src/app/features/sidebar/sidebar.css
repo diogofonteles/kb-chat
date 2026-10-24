@@ -1,0 +1,124 @@
+:host {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-4) var(--space-3);
+}
+
+.new {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.new:hover {
+  border-color: var(--color-accent);
+}
+
+.label {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.where {
+  font-weight: 400;
+}
+
+.history {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.history ul {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.conversation {
+  display: grid;
+  width: 100%;
+  min-height: var(--target);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conversation:hover {
+  background: var(--color-surface-muted);
+}
+
+.conversation[aria-current='true'] {
+  background: var(--color-surface-muted);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.question {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.settings {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+select {
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.spend {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+}

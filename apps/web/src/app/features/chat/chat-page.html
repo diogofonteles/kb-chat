@@ -1,105 +1,157 @@
-<div class="layout" [class.with-panel]="opened()">
-  <main
-    class="conversation"
-    [class.covered]="opened()"
-    [class.empty]="isEmpty()"
-    [attr.inert]="covered() ? '' : null"
-  >
-    <header class="topbar">
-      <span class="brand" aria-hidden="true">✦</span>
-      @if (topic(); as current) {
-        <h1 class="topic">
-          {{ current.title }}
-          <span
-            class="count"
-            i18n="@@page.count"
-            >{current.documentCount, plural,
-              =1 {1 documento}
-              other {{{ current.documentCount | number }} documentos}
-            }</span
-          >
-        </h1>
-      } @else {
-        <h1 class="topic" i18n="@@page.title">kb-chat</h1>
-      }
-    </header>
-
-    <section
-      class="thread"
-      aria-label="Conversa"
-      i18n-aria-label="@@page.thread"
+<div class="shell">
+  @if (desktop()) {
+    <aside
+      class="sidebar"
+      aria-label="Lateral"
+      i18n-aria-label="@@page.sidebar"
     >
-      @if (isEmpty()) {
-        <div class="welcome">
-          <p class="greeting" i18n="@@page.greeting">
-            O que você quer estudar hoje?
-          </p>
-          @if (topicsError()) {
-            <div class="notice" role="alert">
-              <p>{{ topicsError() }}</p>
-              <button
-                type="button"
-                class="secondary"
-                (click)="reloadTopics()"
-                i18n="@@page.retry"
-              >
-                Tentar de novo
-              </button>
-            </div>
-          } @else if (noTopics()) {
-            <p class="notice" role="alert" i18n="@@page.noTopics">
-              Nenhum acervo kb encontrado no vault configurado (KB_VAULT).
-            </p>
-          } @else {
-            <p class="hint">
-              <span i18n="@@page.hint">Pergunte em linguagem natural.</span>
-              <span class="hint-keyboard" i18n="@@page.hintKeyboard"
-                >Dica: pressione / para escrever.</span
-              >
-            </p>
-          }
-        </div>
-      }
-      @for (message of messages(); track message.id) {
-        <app-result-message
-          [message]="message"
-          [topicTitle]="topic()?.title ?? ''"
-          [activeId]="opened()?.id ?? null"
-          (opened)="openHit($event, message)"
-          (retried)="retry(message)"
-          (modeSwitched)="askAgainIn(message, $event)"
-          (filtersChanged)="refine(message, $event)"
-          (moreRequested)="loadMore(message)"
-        />
-      }
-    </section>
-
-    <p class="visually-hidden page-announcement" aria-live="polite">
-      {{ announcement() }}
-    </p>
-
-    <div class="composer-dock">
-      <app-composer
-        [mode]="store.mode()"
-        (modeChange)="changeMode($event)"
-        [disabled]="!topic()"
-        (submitted)="ask($event)"
-      />
-    </div>
-  </main>
-
-  @if (opened(); as doc) {
-    <app-document-panel
-      class="panel"
-      [topic]="doc.topic"
-      [documentId]="doc.id"
-      [fallbackTitle]="doc.title"
-      [highlight]="doc.question"
-      [canGoBack]="store.canGoBack()"
-      (closed)="closeDocument()"
-      (back)="store.back()"
-      (navigated)="store.openWithin($event)"
-      (conceptSelected)="filterByConcept($event)"
-    />
+      <app-sidebar (acted)="sidebarActed($event)" />
+    </aside>
+  } @else {
+    <!-- The backdrop click only adds a pointer way out: the modal <dialog> already closes on Escape. -->
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+    <dialog
+      #drawer
+      class="drawer"
+      aria-label="Menu"
+      i18n-aria-label="@@page.menu"
+      (close)="menuClosed()"
+      (click)="drawerClick($event)"
+    >
+      <div class="drawer-body">
+        <button
+          type="button"
+          class="drawer-close"
+          aria-label="Fechar menu"
+          i18n-aria-label="@@page.closeMenu"
+          (click)="closeMenu()"
+        >
+          ×
+        </button>
+        <app-sidebar (acted)="sidebarActed($event)" />
+      </div>
+    </dialog>
   }
+  <div class="layout" [class.with-panel]="opened()">
+    <main
+      class="conversation"
+      [class.covered]="opened()"
+      [class.empty]="isEmpty()"
+      [attr.inert]="covered() ? '' : null"
+    >
+      <header class="topbar">
+        @if (!desktop()) {
+          <button
+            #menuButton
+            type="button"
+            class="menu"
+            aria-haspopup="dialog"
+            (click)="openMenu()"
+          >
+            <span aria-hidden="true">☰</span>&ngsp;<span
+              i18n="@@page.menuButton"
+              >Menu</span
+            >
+          </button>
+        }
+        <span class="brand" aria-hidden="true">✦</span>
+        @if (topic(); as current) {
+          <h1 class="topic">
+            {{ current.title }}
+            <span
+              class="count"
+              i18n="@@page.count"
+              >{current.documentCount, plural,
+                =1 {1 documento}
+                other {{{ current.documentCount | number }} documentos}
+              }</span
+            >
+          </h1>
+        } @else {
+          <h1 class="topic" i18n="@@page.title">kb-chat</h1>
+        }
+      </header>
+
+      <section
+        class="thread"
+        aria-label="Conversa"
+        i18n-aria-label="@@page.thread"
+      >
+        @if (isEmpty()) {
+          <div class="welcome">
+            @if (topicNotice()) {
+              <p class="topic-notice" role="status">{{ topicNotice() }}</p>
+            }
+            <p class="greeting" i18n="@@page.greeting">
+              O que você quer estudar hoje?
+            </p>
+            @if (topicsError()) {
+              <div class="notice" role="alert">
+                <p>{{ topicsError() }}</p>
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="reloadTopics()"
+                  i18n="@@page.retry"
+                >
+                  Tentar de novo
+                </button>
+              </div>
+            } @else if (noTopics()) {
+              <p class="notice" role="alert" i18n="@@page.noTopics">
+                Nenhum acervo kb encontrado no vault configurado (KB_VAULT).
+              </p>
+            } @else {
+              <p class="hint">
+                <span i18n="@@page.hint">Pergunte em linguagem natural.</span>
+                <span class="hint-keyboard" i18n="@@page.hintKeyboard"
+                  >Dica: pressione / para escrever.</span
+                >
+              </p>
+            }
+          </div>
+        }
+        @for (message of messages(); track message.id) {
+          <app-result-message
+            [message]="message"
+            [topicTitle]="topic()?.title ?? ''"
+            [activeId]="opened()?.id ?? null"
+            (opened)="openHit($event, message)"
+            (retried)="retry(message)"
+            (modeSwitched)="askAgainIn(message, $event)"
+            (filtersChanged)="refine(message, $event)"
+            (moreRequested)="loadMore(message)"
+          />
+        }
+      </section>
+
+      <p class="visually-hidden page-announcement" aria-live="polite">
+        {{ announcement() }}
+      </p>
+
+      <div class="composer-dock">
+        <app-composer
+          [mode]="store.mode()"
+          (modeChange)="changeMode($event)"
+          [disabled]="!topic()"
+          (submitted)="ask($event)"
+        />
+      </div>
+    </main>
+
+    @if (opened(); as doc) {
+      <app-document-panel
+        class="panel"
+        [topic]="doc.topic"
+        [documentId]="doc.id"
+        [fallbackTitle]="doc.title"
+        [highlight]="doc.question"
+        [canGoBack]="store.canGoBack()"
+        (closed)="closeDocument()"
+        (back)="store.back()"
+        (navigated)="store.openWithin($event)"
+        (conceptSelected)="filterByConcept($event)"
+      />
+    }
+  </div>
 </div>

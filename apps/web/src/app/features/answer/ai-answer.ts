@@ -19,6 +19,7 @@ import type {
   SearchMode,
 } from '@kb-chat/contracts';
 import { AnswersApi } from '@core/api/answers-api.js';
+import { SpendStore } from '@core/spend/spend-store.js';
 import {
   errorMessage,
   toUiErrorCode,
@@ -33,6 +34,8 @@ import {
   renderAnswer,
 } from './answer-format.js';
 import { describeFilters } from './filters-summary.js';
+
+const STOP_SETTLE_MS = 1000;
 
 interface AnswerRun {
   readonly phase: 'idle' | 'streaming' | 'done' | 'error';
@@ -73,6 +76,7 @@ const IDLE: AnswerRun = {
 })
 export class AiAnswer {
   private readonly api = inject(AnswersApi);
+  private readonly spend = inject(SpendStore);
   private readonly destroyRef = inject(DestroyRef);
   private subscription: Subscription | null = null;
 
@@ -151,12 +155,16 @@ export class AiAnswer {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (event) => this.apply(event),
-        error: (err: unknown) =>
+        error: (err: unknown) => {
           this.run.update((run) => ({
             ...run,
             phase: 'error',
             error: toUiErrorCode(err),
-          })),
+          }));
+          this.spend.refresh();
+        },
+        // Today's spend in the side panel follows every finished answer (KBC-005 FR-5).
+        complete: () => this.spend.refresh(),
       });
   }
 
@@ -164,6 +172,8 @@ export class AiAnswer {
   protected stop(): void {
     this.stopSilently();
     this.run.update((run) => ({ ...run, phase: 'done', interrupted: true }));
+    // The server records the partial cost once it notices the abort: read the spend a bit later.
+    setTimeout(() => this.spend.refresh(), STOP_SETTLE_MS);
   }
 
   protected openCitation(event: MouseEvent): void {

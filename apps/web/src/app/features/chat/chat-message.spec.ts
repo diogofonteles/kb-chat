@@ -67,6 +67,14 @@ describe('reduceChat', () => {
     expect(rerun[0]?.response?.items).toHaveLength(1);
   });
 
+  it('empties the conversation on reset and ignores late results of old runs', () => {
+    const empty = reduceChat(start(), { type: 'reset' });
+    expect(empty).toEqual([]);
+    expect(
+      reduceChat(empty, { type: 'done', id: 1, rev: 1, response: aResponse() }),
+    ).toEqual([]);
+  });
+
   it('ignores results of a stale run', () => {
     const rerun = reduceChat(start(), {
       type: 'started',

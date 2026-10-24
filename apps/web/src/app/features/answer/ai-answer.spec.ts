@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { EMPTY_FILTERS, type AnswerEvent } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { AnswersApi } from '@core/api/answers-api.js';
+import { SpendStore } from '@core/spend/spend-store.js';
 import { Subject, of, throwError } from 'rxjs';
 import { AiAnswer } from './ai-answer.js';
 import {
@@ -29,12 +30,13 @@ function setup(
   return { stream, api };
 }
 
-async function renderAnswer(api: object) {
+async function renderAnswer(api: object, spend = { refresh: vi.fn() }) {
   const opened = vi.fn();
   const view = await render(AiAnswer, {
     providers: [
       provideZonelessChangeDetection(),
       { provide: AnswersApi, useValue: api },
+      { provide: SpendStore, useValue: spend },
     ],
     inputs: {
       topic: 'hermetismo',
@@ -242,6 +244,43 @@ describe('AiAnswer guards (KBC-004 review)', () => {
         .getByRole('link', { name: 'Adicionar créditos' })
         .getAttribute('href'),
     ).toBe('https://openrouter.ai/settings/credits');
+  });
+});
+
+describe('AiAnswer and the spend of the day (KBC-005 FR-5)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  async function started(answer?: unknown) {
+    const { api, stream } = setup();
+    if (answer) api.answer.mockReturnValueOnce(answer as never);
+    const spend = { refresh: vi.fn() };
+    const view = await renderAnswer(api, spend);
+    fireEvent.click(screen.getByRole('button', { name: /Responder com IA/ }));
+    await view.fixture.whenStable();
+    return { stream, spend, view };
+  }
+
+  it('refreshes the spend when an answer finishes', async () => {
+    const { stream, spend } = await started();
+    stream.next({ type: 'token', text: 'Texto' });
+    stream.next({ type: 'done', usd: 0.0001, model: 'm', interrupted: false });
+    stream.complete();
+    expect(spend.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the spend when an answer fails', async () => {
+    const { spend } = await started(throwError(() => new Error('x')));
+    expect(spend.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the spend shortly after "Parar"', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const { spend, view } = await started();
+    fireEvent.click(screen.getByRole('button', { name: 'Parar' }));
+    await view.fixture.whenStable();
+    expect(spend.refresh).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(spend.refresh).toHaveBeenCalledTimes(1);
   });
 });
 

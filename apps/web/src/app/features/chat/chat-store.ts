@@ -7,6 +7,7 @@ import {
   inject,
   linkedSignal,
   signal,
+  untracked,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -17,6 +18,10 @@ import {
   type TopicList,
 } from '@kb-chat/contracts';
 import { toUiErrorCode } from '@core/api/api-error.js';
+import {
+  HistoryStore,
+  type Conversation,
+} from '@core/history/history-store.js';
 import { KbApi, topicsUrl } from '@core/api/kb-api.js';
 import {
   Subject,
@@ -73,13 +78,38 @@ function pickDefaultTopic(list: TopicList | null): string | null {
   );
 }
 
+const newConversationId = (): string => crypto.randomUUID();
+
+/** The history entry for the messages on screen; null until a question has an outcome. */
+function toConversation(
+  id: string,
+  messages: readonly ChatMessage[],
+): Conversation | null {
+  const settled = messages.filter((message) => message.status !== 'loading');
+  const first = messages[0];
+  if (!first || settled.length === 0) return null;
+  return {
+    id,
+    topic: first.topic,
+    asks: messages.map(({ question, mode, filters, response }) => ({
+      question,
+      mode,
+      filters,
+      total: response?.total ?? null,
+    })),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 /** Conversation state of the chat page (provided on the page, NG-16). */
 @Injectable()
 export class ChatStore {
   private readonly api = inject(KbApi);
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
+  private readonly history = inject(HistoryStore);
   private readonly asks = new Subject<Ask>();
   private readonly mores = new Subject<ChatMessage>();
+  private readonly resets = new Subject<ChatEvent>();
   private nextId = 1;
   private nextRev = 1;
 
@@ -103,6 +133,7 @@ export class ChatStore {
 
   readonly messages = toSignal(
     merge(
+      this.resets,
       // Per message, a new run (retry, new filters) cancels the one in flight.
       this.asks.pipe(
         groupBy((ask) => ask.id),
@@ -113,6 +144,13 @@ export class ChatStore {
     { initialValue: [] as readonly ChatMessage[] },
   );
 
+  /** Id of the conversation on screen in the history (KBC-005 BR-1). */
+  private readonly conversationState = signal(newConversationId());
+  readonly conversationId = this.conversationState.asReadonly();
+  /** Collection just switched to, shown inline until the next question (BR-2). */
+  private readonly topicNoticeState = signal<string | null>(null);
+  readonly topicNotice = this.topicNoticeState.asReadonly();
+
   private readonly openState = signal<OpenDocument | null>(null);
   readonly openDocument = this.openState.asReadonly();
   /** Documents left through "Veja também", for "← Voltar" inside the panel. */
@@ -121,6 +159,38 @@ export class ChatStore {
 
   constructor() {
     effect(() => writeModePreference(this.storage, this.modeState()));
+    // Every finished question updates the conversation in the history.
+    effect(() => {
+      const conversation = toConversation(
+        this.conversationState(),
+        this.messages(),
+      );
+      if (conversation) untracked(() => this.history.save(conversation));
+    });
+  }
+
+  /** "+ Nova conversa" (FR-1): an empty conversation in the same collection. */
+  newConversation(): void {
+    this.topicNoticeState.set(null);
+    this.reset();
+  }
+
+  /** Another collection starts a new conversation, with an inline notice (FR-3, BR-2). */
+  selectTopic(slug: string): void {
+    if (slug === this.topicSlug()) return;
+    this.topicSlug.set(slug);
+    this.reset();
+    this.topicNoticeState.set(slug);
+  }
+
+  /** Brings a conversation back from the history and runs its searches again (FR-2). */
+  restore(conversation: Conversation): void {
+    this.topicSlug.set(conversation.topic);
+    this.reset();
+    this.topicNoticeState.set(null);
+    this.conversationState.set(conversation.id);
+    for (const saved of conversation.asks)
+      this.ask(saved.question, saved.mode, saved.filters);
   }
 
   setMode(mode: SearchMode): void {
@@ -135,6 +205,7 @@ export class ChatStore {
     const topic = this.topicSlug();
     const trimmed = question.trim();
     if (!topic || !trimmed) return;
+    this.topicNoticeState.set(null);
     this.asks.next({
       id: this.nextId++,
       rev: this.nextRev++,
@@ -193,6 +264,12 @@ export class ChatStore {
   close(): void {
     this.historyState.set([]);
     this.openState.set(null);
+  }
+
+  private reset(): void {
+    this.close();
+    this.conversationState.set(newConversationId());
+    this.resets.next({ type: 'reset' });
   }
 
   private rerun(
