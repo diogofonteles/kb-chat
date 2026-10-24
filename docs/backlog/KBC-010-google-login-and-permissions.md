@@ -17,7 +17,7 @@ Pedido do dono em 2026-10-24: "Coloque como requisito a necessidade de login (co
 ## Scope
 **In:**
 - **Login obrigatório com Google** (OpenID Connect, "Entrar com Google"), inclusive no uso local. A sessão fica num cookie httpOnly, Secure e SameSite=Lax, e "Sair" está na lateral.
-- **Papel master:** quem é master concede e revoga acervos, funcionalidades e o próprio papel de master. O primeiro master vem de configuração (`KB_CHAT_OWNER_EMAIL`), e qualquer master pode tornar outra pessoa master; pode haver vários. Nenhuma outra conta entra sem convite.
+- **Papel master:** quem é master concede e revoga acervos, funcionalidades e o próprio papel de master. O primeiro master é a conta Google do dono (Diogo), configurada em `KB_CHAT_OWNER_EMAIL` no `.env` local, e qualquer master pode tornar outra pessoa master; pode haver vários. Nenhuma outra conta entra sem convite.
 - **Tela "Pessoas e permissões"** (só masters):
   - convidar por e-mail;
   - por pessoa, escolher os **acervos** que ela vê e as **funcionalidades**:
