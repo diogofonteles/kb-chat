@@ -58,6 +58,22 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.rateLimited:Muitas buscas em pouco tempo. Espere um instante e tente de novo.`,
   FORBIDDEN_HOST: () =>
     $localize`:@@error.forbiddenHost:Acesso recusado pelo servidor.`,
+  UNAUTHENTICATED: () =>
+    $localize`:@@error.unauthenticated:Sua sessão terminou. Entre de novo com a sua conta Google.`,
+  FORBIDDEN: () =>
+    $localize`:@@error.forbidden:Você não tem permissão para isto. Peça a um master.`,
+  NOT_INVITED: () =>
+    $localize`:@@error.notInvited:Seu acesso ainda não foi liberado; peça a um master.`,
+  CSRF_REJECTED: () =>
+    $localize`:@@error.csrf:O pedido foi recusado por segurança. Recarregue a página e tente de novo.`,
+  LAST_MASTER: () =>
+    $localize`:@@error.lastMaster:Deve restar ao menos um master.`,
+  OWNER_PROTECTED: () =>
+    $localize`:@@error.ownerProtected:A conta do dono não pode ser rebaixada nem removida.`,
+  ALREADY_INVITED: () =>
+    $localize`:@@error.alreadyInvited:Este e-mail já foi convidado.`,
+  AUTH_UNAVAILABLE: () =>
+    $localize`:@@error.authUnavailable:Não consegui confirmar o login com o Google agora. Tente de novo em instantes.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

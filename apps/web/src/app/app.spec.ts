@@ -1,15 +1,17 @@
 import { provideZonelessChangeDetection } from '@angular/core';
+import { DeferBlockBehavior } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { render } from '@testing-library/angular';
+import { render, screen } from '@testing-library/angular';
 import { App } from './app.js';
 import { routes } from './app.routes.js';
 
 describe('App', () => {
-  it('renders the router outlet with the chat route registered', async () => {
-    const { container } = await render(App, {
+  it('shows "Carregando…" until the session shell loads, with the chat route registered', async () => {
+    await render(App, {
       providers: [provideZonelessChangeDetection(), provideRouter([])],
+      deferBlockBehavior: DeferBlockBehavior.Manual,
     });
-    expect(container.querySelector('router-outlet')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('Carregando');
     expect(routes[0]?.path).toBe('');
   });
 });

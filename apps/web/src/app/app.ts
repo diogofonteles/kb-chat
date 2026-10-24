@@ -1,12 +1,28 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
-import { SettingsHost } from '@features/settings/settings-host.js';
+import { SessionShell } from '@features/shell/session-shell.js';
 
+/**
+ * The root: the session shell (login or the app) loads in its own chunk, so the first
+ * bundle stays small; "Carregando…" shows meanwhile.
+ */
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, SettingsHost],
-  // Settings load in their own chunk, right after the first paint (keeps the initial bundle small).
-  template: '<router-outlet />@defer (on immediate) {<app-settings-host />}',
+  imports: [SessionShell],
+  template: `
+    @defer (on immediate) {
+      <app-session-shell />
+    } @placeholder {
+      <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
+    }
+  `,
+  styles: `
+    .boot {
+      margin: 0;
+      padding: var(--space-8);
+      text-align: center;
+      color: var(--color-text-muted);
+    }
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {}
