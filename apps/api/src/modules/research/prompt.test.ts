@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildResearchMessages } from './prompt.js';
+import { buildResearchMessages, researchSystemPrompt } from './prompt.js';
 
 describe('buildResearchMessages', () => {
   it('tells the model to grep with find_text and variants before concluding absence, within 15 steps', () => {
@@ -24,5 +24,12 @@ describe('buildResearchMessages', () => {
     ])
       expect(text).toContain(variant);
     expect(text).toContain('"cinco princípios", "doze princípios"');
+  });
+
+  it('tells the model to open with the answer itself, never with its own process', () => {
+    const text = researchSystemPrompt('Hermetismo');
+    expect(text).toContain('A primeira frase já é conteúdo da resposta');
+    expect(text).toContain('"Tenho tudo o que preciso"');
+    expect(text).toContain('"---"');
   });
 });

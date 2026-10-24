@@ -46,10 +46,20 @@ if (mode === 'login') {
   });
   process.exit(1);
 }
+const stop = (reason) =>
+  emit({
+    type: 'stream_event',
+    event: { type: 'message_delta', delta: { stop_reason: reason } },
+  });
+
 if (mode === 'sleep') {
-  delta('Pensando');
+  // Past the narration hold, so it streams before the reader stops it.
+  delta('Pensando no acervo. '.repeat(50));
   setInterval(() => undefined, 1000);
 } else {
+  // Narration before the tool call, as Claude writes it: never shown (ADR 0006).
+  delta('Vou procurar no acervo. ');
+  stop('tool_use');
   const config = JSON.parse(args[args.indexOf('--mcp-config') + 1]);
   const client = new Client({ name: 'fake-claude', version: '0.0.0' });
   await client.connect(
@@ -74,8 +84,10 @@ if (mode === 'sleep') {
       },
     },
   });
+  delta('Tenho tudo o que preciso. ');
   delta('Segundo o acervo, ');
   delta('tudo flui [1].');
+  stop('end_turn');
   emit({ type: 'assistant', message: { content: [] } });
   emit({
     type: 'result',

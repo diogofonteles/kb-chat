@@ -82,11 +82,12 @@ describe('ClaudeCliRunner', () => {
           },
         ],
       },
-      { type: 'token', text: 'Segundo o acervo, ' },
-      { type: 'token', text: 'tudo flui [1].' },
+      // The narration before the tool call and the leading "Tenho tudo…" are dropped.
+      { type: 'token', text: 'Segundo o acervo, tudo flui [1].' },
       {
         type: 'done',
         usd: 0,
+        billing: 'subscription',
         model: 'claude-fake-1',
         interrupted: false,
         steps: 1,
@@ -113,6 +114,11 @@ describe('ClaudeCliRunner', () => {
       expect.arrayContaining(['--tools', '', '--strict-mcp-config']),
     );
     expect(JSON.stringify(seen.args)).not.toContain('sk-ant');
+    // The in-API loop's research rules, so Claude greps before concluding absence.
+    const prompt = String(seen.args[seen.args.indexOf('--system-prompt') + 1]);
+    expect(prompt).toContain('“hermetismo”');
+    expect(prompt).toContain('find_text');
+    expect(prompt).toContain('(fora do acervo)');
   });
 
   it('kills the CLI and ends as interrupted when the reader stops (abort)', async () => {
@@ -199,7 +205,22 @@ describe('CLI dialects', () => {
       parseClaudeLine(
         '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"}}}',
       ),
-    ).toEqual({ events: [] });
+    ).toEqual({});
+    expect(
+      parseClaudeLine(
+        '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Oi"}}}',
+      ),
+    ).toEqual({ text: 'Oi' });
+    expect(
+      parseClaudeLine(
+        '{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"tool_use"}}}',
+      ),
+    ).toEqual({ messageEnd: 'tool_use' });
+    expect(
+      parseClaudeLine(
+        '{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"}}}',
+      ),
+    ).toEqual({ messageEnd: 'answer' });
     expect(
       parseClaudeLine('{"type":"result","subtype":"error_max_turns"}'),
     ).toEqual({
@@ -222,7 +243,12 @@ describe('CLI dialects', () => {
       parseCodexLine(
         '{"type":"item.completed","item":{"type":"reasoning","text":"x"}}',
       ),
-    ).toEqual({ events: [] });
+    ).toEqual({});
+    expect(
+      parseCodexLine(
+        '{"type":"item.completed","item":{"type":"agent_message","text":"Resposta"}}',
+      ),
+    ).toEqual({ text: 'Resposta\n\n' });
     expect(parseCodexLine('[]')).toEqual({});
     expect(parseCodexLine('{')).toEqual({});
   });
@@ -230,10 +256,13 @@ describe('CLI dialects', () => {
   it('builds argument lists with only the kb tools and no shell', () => {
     const args = claudeArgs('http://127.0.0.1:1/mcp/turns/t', {
       model: 'opus',
+      systemPrompt: 'rules',
     });
     expect(args).toEqual(
       expect.arrayContaining([
         '-p',
+        '--system-prompt',
+        'rules',
         '--allowedTools',
         'mcp__kb',
         '--no-session-persistence',

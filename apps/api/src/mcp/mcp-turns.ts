@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { MAX_TOOL_STEPS } from '../modules/research/index.js';
 import type { ToolDefinition } from '../ports/llm.js';
 import type {
   ResearchToolResult,
@@ -6,8 +7,8 @@ import type {
 } from '../ports/research-tools.js';
 import type { KbMcpHooks } from './kb-mcp-server.js';
 
-/** KBC-008 BR-3: at most 10 tool steps per answer. */
-export const MAX_TURN_STEPS = 10;
+/** The same step cap as the in-API loop (ADR 0006: 15 tool steps per answer). */
+export const MAX_TURN_STEPS = MAX_TOOL_STEPS;
 /** A turn that was never closed (a crashed CLI) stops answering after this. */
 const TURN_TTL_MS = 15 * 60_000;
 

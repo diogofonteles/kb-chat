@@ -13,7 +13,7 @@ import {
   type CliTurnOptions,
 } from './cli-research-turn.js';
 import {
-  SUBSCRIPTION_RESEARCH_PROMPT,
+  defaultSubscriptionPrompt,
   subscriptionTurnInput,
 } from './subscription-prompt.js';
 
@@ -28,8 +28,13 @@ const lineSchema = z.discriminatedUnion('type', [
     type: z.literal('stream_event'),
     event: z.looseObject({
       type: z.string(),
+      // text_delta in content_block_delta; stop_reason (no type) in message_delta.
       delta: z
-        .looseObject({ type: z.string(), text: z.string().optional() })
+        .looseObject({
+          type: z.string().optional(),
+          text: z.string().optional(),
+          stop_reason: z.string().nullable().optional(),
+        })
         .optional(),
     }),
   }),
@@ -53,10 +58,15 @@ const PARSERS: Record<ClaudeLine['type'], (line: ClaudeLine) => CliLine> = {
       ? { model: line.model }
       : {},
   stream_event: (line) => {
-    const delta = line.type === 'stream_event' ? line.event.delta : undefined;
-    const text = delta?.type === 'text_delta' ? delta.text : undefined;
-    const events: ResearchEvent[] = text ? [{ type: 'token', text }] : [];
-    return { events };
+    if (line.type !== 'stream_event') return {};
+    const { type, delta } = line.event;
+    if (type === 'message_delta' && delta?.stop_reason)
+      return {
+        messageEnd: delta.stop_reason === 'tool_use' ? 'tool_use' : 'answer',
+      };
+    return delta?.type === 'text_delta' && delta.text
+      ? { text: delta.text }
+      : {};
   },
   result: (line) => {
     if (line.type !== 'result') return {};
@@ -83,13 +93,14 @@ export interface ClaudeCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   /** An alias ("opus", "sonnet", "fable") or a full model name; default: the CLI's. */
   readonly model?: string;
   readonly tools?: ResearchToolsFactory;
-  readonly systemPrompt?: string;
+  /** The research rules for a topic; default: defaultSubscriptionPrompt. */
+  readonly systemPrompt?: (topic: string) => string;
 }
 
 /** The arguments of a research turn: only the kb MCP tools, no built-ins, no user settings. */
 export function claudeArgs(
   mcpUrl: string,
-  options: Pick<ClaudeCliRunnerOptions, 'model' | 'systemPrompt'>,
+  options: { readonly model?: string; readonly systemPrompt: string },
 ): string[] {
   const mcpConfig = JSON.stringify({
     mcpServers: { [KB_MCP_SERVER]: { type: 'http', url: mcpUrl } },
@@ -104,10 +115,7 @@ export function claudeArgs(
     ...['--setting-sources', ''],
     '--no-session-persistence',
     ...['--permission-prompts', 'none'],
-    ...[
-      '--system-prompt',
-      options.systemPrompt ?? SUBSCRIPTION_RESEARCH_PROMPT,
-    ],
+    ...['--system-prompt', options.systemPrompt],
     ...(options.model ? ['--model', options.model] : []),
   ];
 }
@@ -124,9 +132,14 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
 
   constructor(private readonly options: ClaudeCliRunnerOptions) {
     this.model = options.model ?? 'claude-code';
+    const prompt = options.systemPrompt ?? defaultSubscriptionPrompt;
     this.dialect = {
       name: 'claude',
-      args: (url) => claudeArgs(url, options),
+      args: (url, input) =>
+        claudeArgs(url, {
+          model: options.model,
+          systemPrompt: prompt(input.topic),
+        }),
       input: (input) => subscriptionTurnInput(input.question, input.history),
       parse: parseClaudeLine,
     };

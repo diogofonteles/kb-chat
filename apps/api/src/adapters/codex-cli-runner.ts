@@ -14,7 +14,7 @@ import {
   type CliTurnOptions,
 } from './cli-research-turn.js';
 import {
-  SUBSCRIPTION_RESEARCH_PROMPT,
+  defaultSubscriptionPrompt,
   subscriptionTurnInput,
 } from './subscription-prompt.js';
 
@@ -51,17 +51,15 @@ export function parseCodexLine(text: string): CliLine {
     line.type === 'item.completed' && line.item?.type === 'agent_message'
       ? line.item.text
       : undefined;
-  // Codex sends each message whole; separate consecutive ones as paragraphs.
-  const events: ResearchEvent[] = message
-    ? [{ type: 'token', text: `${message}\n\n` }]
-    : [];
-  return { events };
+  // Codex sends each message whole; a message before a tool call is dropped as narration.
+  return message ? { text: `${message}\n\n` } : {};
 }
 
 export interface CodexCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   readonly model?: string;
   readonly tools?: ResearchToolsFactory;
-  readonly systemPrompt?: string;
+  /** The research rules for a topic; default: defaultSubscriptionPrompt. */
+  readonly systemPrompt?: (topic: string) => string;
 }
 
 /** Read-only sandbox, no session kept, the kb tools over the turn's MCP endpoint. */
@@ -87,13 +85,13 @@ export class CodexCliRunner implements ResearchRunnerPort {
 
   constructor(private readonly options: CodexCliRunnerOptions) {
     this.model = options.model ?? 'codex';
-    const prompt = options.systemPrompt ?? SUBSCRIPTION_RESEARCH_PROMPT;
+    const prompt = options.systemPrompt ?? defaultSubscriptionPrompt;
     this.dialect = {
       name: 'codex',
       args: (url) => codexArgs(url, options.model),
       // Codex has no system-prompt flag: the instructions lead the input.
       input: (input) =>
-        `${prompt}\n\n${subscriptionTurnInput(input.question, input.history)}`,
+        `${prompt(input.topic)}\n\n${subscriptionTurnInput(input.question, input.history)}`,
       parse: parseCodexLine,
     };
   }

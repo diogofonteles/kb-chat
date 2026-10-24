@@ -7,12 +7,16 @@ import type {
   ResearchToolResult,
   ResearchToolsPort,
 } from '../ports/research-tools.js';
+import { CliAnswer } from './cli-answer.js';
 import { EventQueue } from './event-queue.js';
 import { spawnCli, subscriptionEnv, type CliProcess } from './cli-process.js';
 
 /** What one stdout line of a CLI means. */
 export interface CliLine {
-  readonly events?: readonly ResearchEvent[];
+  /** Answer text, held by the narration rule before it is shown. */
+  readonly text?: string;
+  /** How the model's message ended, when the CLI says so: with tool calls or as an answer. */
+  readonly messageEnd?: 'tool_use' | 'answer';
   readonly model?: string;
   /** The CLI's final verdict: success, or why it failed. */
   readonly result?:
@@ -22,7 +26,7 @@ export interface CliLine {
 /** How one official CLI is called and read (Claude Code, Codex). */
 export interface CliDialect {
   readonly name: string;
-  args(mcpUrl: string): readonly string[];
+  args(mcpUrl: string, input: ResearchInput): readonly string[];
   input(input: ResearchInput): string;
   parse(line: string): CliLine;
 }
@@ -41,13 +45,10 @@ export interface CliTurnOptions {
 interface TurnState {
   model: string;
   steps: number;
+  /** Sources already streamed: a sources event goes out only when the list grows. */
+  sourcesSent: number;
   result: CliLine['result'];
 }
-
-const stepEvents = (result: ResearchToolResult): ResearchEvent[] => [
-  { type: 'step', step: result.step },
-  { type: 'sources', sources: [...result.sources] },
-];
 
 function finalEvent(state: TurnState, aborted: boolean): ResearchEvent {
   if (aborted || state.result?.ok)
@@ -55,6 +56,7 @@ function finalEvent(state: TurnState, aborted: boolean): ResearchEvent {
       type: 'done',
       // Covered by the subscription: no spend entry, no cap (KBC-007 BR-2).
       usd: 0,
+      billing: 'subscription',
       model: state.model,
       interrupted: aborted,
       steps: state.steps,
@@ -69,17 +71,24 @@ function finalEvent(state: TurnState, aborted: boolean): ResearchEvent {
 class CliTurn {
   readonly queue = new EventQueue<ResearchEvent>();
   readonly state: TurnState;
+  private readonly answer = new CliAnswer((text) =>
+    this.queue.push({ type: 'token', text }),
+  );
 
   constructor(
     private readonly dialect: CliDialect,
     model: string,
   ) {
-    this.state = { model, steps: 0, result: undefined };
+    this.state = { model, steps: 0, sourcesSent: 0, result: undefined };
   }
 
-  onToolResult(result: ResearchToolResult): void {
+  onToolResult({ step, sources }: ResearchToolResult): void {
+    this.answer.toolCalled();
     this.state.steps += 1;
-    stepEvents(result).forEach((event) => this.queue.push(event));
+    if (step) this.queue.push({ type: 'step', step });
+    if (sources.length === this.state.sourcesSent) return;
+    this.state.sourcesSent = sources.length;
+    this.queue.push({ type: 'sources', sources: [...sources] });
   }
 
   async read(cli: CliProcess): Promise<void> {
@@ -88,6 +97,7 @@ class CliTurn {
   }
 
   finish(aborted: boolean): void {
+    this.answer.ended();
     this.queue.push(finalEvent(this.state, aborted));
     this.queue.end();
   }
@@ -96,7 +106,9 @@ class CliTurn {
     const parsed = this.dialect.parse(line);
     if (parsed.model) this.state.model = parsed.model;
     if (parsed.result) this.state.result = parsed.result;
-    for (const event of parsed.events ?? []) this.queue.push(event);
+    if (parsed.text) this.answer.text(parsed.text);
+    if (parsed.messageEnd === 'tool_use') this.answer.toolCalled();
+    if (parsed.messageEnd === 'answer') this.answer.ended();
   }
 }
 
@@ -110,7 +122,10 @@ async function startCli(
   await mkdir(options.workDir, { recursive: true, mode: 0o700 });
   return spawnCli({
     bin: options.bin,
-    args: dialect.args(`${options.apiBaseUrl}${mcpTurnPath(call.token)}`),
+    args: dialect.args(
+      `${options.apiBaseUrl}${mcpTurnPath(call.token)}`,
+      call.input,
+    ),
     cwd: options.workDir,
     env: subscriptionEnv(options.env),
     input: dialect.input(call.input),

@@ -4,7 +4,8 @@ import type { ToolDefinition } from './llm.js';
 /** What one tool call produced: the text the model reads, the step shown and the sources so far. */
 export interface ResearchToolResult {
   readonly text: string;
-  readonly step: ResearchStep;
+  /** The step shown to the reader; null when the call was refused (invalid arguments). */
+  readonly step: ResearchStep | null;
   /** Every document numbered in this turn so far ([n] points to sources[n - 1]). */
   readonly sources: readonly AnswerSource[];
 }
