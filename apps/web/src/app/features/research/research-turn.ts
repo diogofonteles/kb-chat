@@ -45,6 +45,8 @@ export interface ResearchTurn {
   readonly billing: ResearchBilling;
   readonly model: string;
   readonly interrupted: boolean;
+  /** The fast turn went on with the deep profile (ADR 0009). */
+  readonly escalated: boolean;
   readonly error: ResearchErrorCode | null;
   readonly at: string;
   /** Brought back from the history (FR-6): shown as saved, never announced or re-run. */
@@ -65,6 +67,7 @@ export function startTurn(id: number, question: string): ResearchTurn {
     billing: 'per-token',
     model: '',
     interrupted: false,
+    escalated: false,
     error: null,
     at: new Date().toISOString(),
     restored: false,
@@ -134,6 +137,7 @@ const HANDLERS: {
     billing: e.billing,
     model: e.model,
     interrupted: e.interrupted,
+    escalated: e.escalated === true,
     stepCount: Math.max(turn.stepCount, e.steps),
   }),
   error: (turn, e) => ({
@@ -193,6 +197,7 @@ export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
     billing: turn.billing,
     model: turn.model,
     interrupted: turn.interrupted,
+    ...(turn.escalated ? { escalated: true } : {}),
     at: turn.at,
   };
 }
@@ -214,6 +219,7 @@ export function fromSavedTurn(
     billing: saved.billing,
     model: saved.model,
     interrupted: saved.interrupted,
+    escalated: saved.escalated === true,
     error: null,
     at: saved.at,
     restored: true,

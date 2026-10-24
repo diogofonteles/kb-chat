@@ -87,6 +87,30 @@ describe('ResearchStore', () => {
     expect(localStorage.getItem('kb-chat.research-profile')).toBe('deep');
   });
 
+  it('saves and restores that a turn went on with the deep research (ADR 0009)', () => {
+    const { store, streams, save } = setup();
+    store.ask('quais são os 5 princípios ocultos');
+    const stream = streams[0] as Subject<ResearchEvent>;
+    stream.next({
+      type: 'step',
+      step: { kind: 'deepen', text: 'Aprofundando a pesquisa…' },
+    });
+    stream.next({ type: 'token', text: 'São cinco [1].', segment: 1 });
+    stream.next({
+      type: 'done',
+      usd: 0,
+      billing: 'subscription',
+      model: 'claude-opus-5-5',
+      interrupted: false,
+      steps: 9,
+      escalated: true,
+    });
+    const saved = save.mock.lastCall?.[0];
+    expect(saved?.turns[0]).toMatchObject({ escalated: true, steps: 9 });
+    if (saved) store.restore(saved);
+    expect(store.turns()[0]).toMatchObject({ escalated: true, restored: true });
+  });
+
   it('moves a retracted segment out of the answer into the steps as a thought (ADR 0009)', () => {
     const { store, streams, save } = setup();
     store.ask('ritmo');

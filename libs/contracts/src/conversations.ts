@@ -29,6 +29,8 @@ export const savedResearchTurnSchema = z.object({
   billing: researchBillingSchema.default('per-token'),
   model: z.string(),
   interrupted: z.boolean(),
+  /** The fast turn went on with the deep profile (ADR 0009); absent in older turns. */
+  escalated: z.boolean().optional(),
   at: z.iso.datetime(),
 });
 export type SavedResearchTurn = z.infer<typeof savedResearchTurnSchema>;

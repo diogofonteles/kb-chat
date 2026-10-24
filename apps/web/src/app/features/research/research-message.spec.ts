@@ -78,6 +78,28 @@ describe('ResearchMessage', () => {
     expect(screen.getByText('Aprofundando a pesquisa…').tagName).toBe('LI');
   });
 
+  it('counts each document read once, and says a restored turn went deeper', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'search', text: 'Buscando “princípios”' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+        ],
+      }),
+    );
+    expect(screen.getByText('Pesquisou 1 vez · leu 1 documento')).toBeTruthy();
+  });
+
+  it('shows "aprofundou a pesquisa" on a restored escalated turn', async () => {
+    await renderMessage(
+      aTurn({ steps: [], stepCount: 13, escalated: true, restored: true }),
+    );
+    expect(
+      screen.getByText('13 passos de pesquisa · aprofundou a pesquisa'),
+    ).toBeTruthy();
+  });
+
   it('shows the thought as the live step while the agent works', async () => {
     await renderMessage(
       aTurn({

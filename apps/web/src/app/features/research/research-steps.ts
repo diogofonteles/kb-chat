@@ -37,16 +37,24 @@ export function describeSteps(turn: ResearchTurn): string {
       : $localize`:@@research.working:Pesquisando no acervo…`;
   }
   const searches = countOf(turn.steps, 'search');
-  const reads = countOf(turn.steps, 'read');
-  const deepened = turn.steps.some((step) => step.kind === 'deepen');
+  const reads = documentsRead(turn.steps);
+  const deepened =
+    turn.escalated || turn.steps.some((s) => s.kind === 'deepen');
   const parts = [
     ...(searches > 0 ? [searched(searches)] : []),
     ...(reads > 0 ? [read(reads)] : []),
+    // A restored turn only kept its step count.
+    ...(searches + reads === 0 && turn.stepCount > 0
+      ? [stepCount(turn.stepCount)]
+      : []),
     ...(deepened
       ? [$localize`:@@research.deepened:aprofundou a pesquisa`]
       : []),
   ];
   const line = parts.join(' · ');
-  if (line) return line.charAt(0).toUpperCase() + line.slice(1);
-  return turn.stepCount > 0 ? stepCount(turn.stepCount) : '';
+  return line ? line.charAt(0).toUpperCase() + line.slice(1) : '';
 }
+
+/** Distinct documents read: a document read again (another window) counts once. */
+const documentsRead = (steps: readonly TurnStep[]): number =>
+  new Set(steps.filter((s) => s.kind === 'read').map((s) => s.text)).size;
