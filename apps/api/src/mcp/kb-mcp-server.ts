@@ -39,6 +39,8 @@ export function createKbMcpServer(
       name: tool.name,
       description: tool.description,
       inputSchema: { type: 'object' as const, ...tool.parameters },
+      // Read-only and closed-world: a client may run several of them at once (KBC-011).
+      annotations: { readOnlyHint: true, openWorldHint: false },
     })),
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {

@@ -18,17 +18,22 @@ async function run(
   toolCall: ToolCall,
 ) {
   const prepared = tools.prepare(toolCall, context);
-  return { step: prepared.step, output: await prepared.run() };
+  return {
+    step: prepared.steps[0] ?? null,
+    steps: prepared.steps,
+    output: await prepared.run(),
+  };
 }
 
 describe('ResearchTools definitions', () => {
-  it('declares the five tools with JSON Schema parameters', async () => {
+  it('declares the six tools with JSON Schema parameters', async () => {
     const tools = await fixtureTools();
     expect(tools.definitions.map((t) => t.name)).toEqual([
       'search_collection',
       'find_text',
       'list_subjects',
       'read_document',
+      'read_documents',
       'related_documents',
     ]);
     const search = tools.definitions[0]?.parameters;
@@ -127,6 +132,7 @@ describe('search_collection', () => {
     const unknown = await run(tools, context, call('delete_vault', {}));
     expect(unknown).toEqual({
       step: null,
+      steps: [],
       output: 'Ferramenta desconhecida: delete_vault.',
     });
   });
@@ -286,6 +292,7 @@ describe('read_document', () => {
     );
     expect(missing).toEqual({
       step: null,
+      steps: [],
       output:
         'Documento [7] não encontrado. Use o número [n] de um resultado de busca ou de uma ligação.',
     });
@@ -297,6 +304,65 @@ describe('read_document', () => {
     expect(outside.output).toMatch(
       /^Documento “\.\.\/\.\.\/etc\/passwd” não encontrado/,
     );
+  });
+});
+
+describe('read_documents (KBC-011)', () => {
+  it('reads several documents in one call, one step each, a 6,000-character window each', async () => {
+    const tools = await fixtureTools();
+    const context = hermetismoContext();
+    await run(
+      tools,
+      context,
+      call('search_collection', { query: 'lei do ritmo', mode: 'exact' }),
+    );
+    const { steps, output } = await run(
+      tools,
+      context,
+      call('read_documents', {
+        documents: [1, 'raw/articles/tratado-longo.md', 1],
+        around: 'respiração',
+      }),
+    );
+    expect(steps).toEqual([
+      { kind: 'read', text: 'Lendo “A Lei do Ritmo”' },
+      { kind: 'read', text: expect.stringMatching(/^Lendo “/) },
+    ]);
+    expect(output).toContain('[1] A Lei do Ritmo');
+    expect(output).toMatch(/caracteres \d+ a \d+ de \d+/);
+    const longest = Math.max(
+      ...[...output.matchAll(/<<<DOCUMENTO\n([\s\S]*?)\nDOCUMENTO>>>/g)].map(
+        (m) => m[1]?.length ?? 0,
+      ),
+    );
+    expect(longest).toBeLessThanOrEqual(6_000);
+  });
+
+  it('reads what it finds and names what it could not, and refuses more than 4', async () => {
+    const tools = await fixtureTools();
+    const context = hermetismoContext();
+    const partial = await run(
+      tools,
+      context,
+      call('read_documents', {
+        documents: ['raw/articles/a-lei-do-ritmo.md', 9],
+      }),
+    );
+    expect(partial.steps).toHaveLength(1);
+    expect(partial.output).toContain('Documento [9] não encontrado');
+    const none = await run(
+      tools,
+      context,
+      call('read_documents', { documents: [8, 9] }),
+    );
+    expect(none).toMatchObject({ steps: [] });
+    expect(none.output).toMatch(/^Documento \[8\] não encontrado/);
+    const many = await run(
+      tools,
+      context,
+      call('read_documents', { documents: [1, 2, 3, 4, 5] }),
+    );
+    expect(many.output).toMatch(/^Argumentos inválidos/);
   });
 });
 

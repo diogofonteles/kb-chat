@@ -10,10 +10,9 @@ describe('TurnResearchTools (the MCP side of the research tools)', () => {
       query: 'pitagóricos',
       mode: 'exact',
     });
-    expect(search.step).toEqual({
-      kind: 'search',
-      text: 'Buscando “pitagóricos”',
-    });
+    expect(search.steps).toEqual([
+      { kind: 'search', text: 'Buscando “pitagóricos”' },
+    ]);
     expect(search.text).toContain('[1] A Lei do Ritmo');
     expect(search.sources[0]).toEqual({
       n: 1,
@@ -21,12 +20,14 @@ describe('TurnResearchTools (the MCP side of the research tools)', () => {
       title: 'A Lei do Ritmo',
     });
     const read = await tools.call('read_document', { document: '[1]' });
-    expect(read.step).toEqual({ kind: 'read', text: 'Lendo “A Lei do Ritmo”' });
+    expect(read.steps).toEqual([
+      { kind: 'read', text: 'Lendo “A Lei do Ritmo”' },
+    ]);
     expect(read.sources).toEqual(search.sources);
     const found = await tools.call('find_text', {
       phrase: 'tudo flui | nada repousa',
     });
-    expect(found.step?.kind).toBe('search');
+    expect(found.steps[0]?.kind).toBe('search');
     expect(found.sources.length).toBeGreaterThanOrEqual(search.sources.length);
   });
 
@@ -35,16 +36,15 @@ describe('TurnResearchTools (the MCP side of the research tools)', () => {
     await factory('hermetismo').call('search_collection', { query: 'ritmo' });
     const fresh = await factory('hermetismo').call('list_subjects', {});
     expect(fresh.sources).toEqual([]);
-    expect(fresh.step).toEqual({
-      kind: 'subjects',
-      text: 'Listando os assuntos',
-    });
+    expect(fresh.steps).toEqual([
+      { kind: 'subjects', text: 'Listando os assuntos' },
+    ]);
   });
 
   it('answers invalid arguments as text with no step, and rejects unknown tools', async () => {
     const tools = turnToolsFactory(await fixtureTools())('hermetismo');
     const invalid = await tools.call('search_collection', { query: 42 });
-    expect(invalid.step).toBeNull();
+    expect(invalid.steps).toEqual([]);
     expect(invalid.text).toMatch(/^Argumentos inválidos/);
     await expect(tools.call('write_file', {})).rejects.toThrow(
       'Unknown tool write_file',

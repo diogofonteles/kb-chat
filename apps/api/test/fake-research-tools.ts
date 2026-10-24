@@ -40,7 +40,7 @@ export class FakeResearchTools implements ResearchToolsPort {
       });
     return {
       text: '[1] A Lei do Ritmo: tudo flui.',
-      step: { kind: 'search', text: `Buscando “${query}”` },
+      steps: [{ kind: 'search', text: `Buscando “${query}”` }],
       sources: [...this.sources],
     };
   }
