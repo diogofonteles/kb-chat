@@ -282,6 +282,17 @@
     display: none;
   }
 
+  /* Phones: the start screen fills the space above the docked question box, so a long list
+     of suggestions scrolls instead of pushing the greeting off screen. */
+  .conversation.empty {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .conversation.empty .thread {
+    align-content: safe center;
+    padding-bottom: var(--space-4);
+  }
+
   /* The Menu button takes the brand's place; the title keeps one line. */
   .brand {
     display: none;
