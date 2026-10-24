@@ -1,7 +1,7 @@
 ---
 id: KBC-004
 title: Responder com IA citando as fontes
-status: ready
+status: done
 slice: release-1
 outcome: % de buscas que pedem IA (< 30%); gasto/dia ≤ teto
 depends_on: [KBC-001]
