@@ -1,7 +1,7 @@
 ---
 id: KBC-003
 title: Ler com trecho destacado e "Veja também"
-status: ready
+status: done
 slice: release-1
 outcome: % de buscas que abrem documento; profundidade de navegação
 depends_on: [KBC-001]

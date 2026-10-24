@@ -11,6 +11,7 @@ export const API_ERROR_CODES = [
   'VALIDATION_FAILED',
   'NOT_FOUND',
   'RATE_LIMITED',
+  'ANSWER_IN_PROGRESS',
   'FORBIDDEN_HOST',
   'INTERNAL',
 ] as const;

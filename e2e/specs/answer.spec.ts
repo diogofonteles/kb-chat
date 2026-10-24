@@ -24,7 +24,7 @@ test('AC-1/AC-3: "Responder com IA" shows its cost, streams a cited answer and o
       'Resposta gerada por IA a partir do acervo; confira nas fontes.',
     ),
   ).toBeVisible();
-  await ai.getByRole('link', { name: '[1]' }).click();
+  await ai.getByRole('link', { name: /^Fonte 1:/ }).click();
   await expect(
     page.getByRole('dialog').getByRole('heading', { level: 2 }),
   ).toBeVisible();

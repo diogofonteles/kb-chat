@@ -22,8 +22,10 @@ const DEFAULT_ANSWER = 'Segundo o acervo, a natureza é sétupla [1].';
 export class StubLlmAdapter implements LlmPort {
   readonly model = 'stub/model';
   readonly billing = 'per-token' as const;
-  /** Messages of the last call, for assertions. */
+  /** Messages of the last call, calls made and tokens handed out, for assertions. */
   lastMessages: readonly LlmMessage[] = [];
+  calls = 0;
+  yielded = 0;
 
   constructor(private readonly options: StubLlmOptions = {}) {}
 
@@ -44,6 +46,7 @@ export class StubLlmAdapter implements LlmPort {
     options: LlmStreamOptions,
   ): AsyncIterable<LlmChunk> {
     this.lastMessages = messages;
+    this.calls += 1;
     const words = (this.options.answer ?? DEFAULT_ANSWER).split(/(?<= )/);
     for (const word of words) {
       if (options.signal.aborted) return;
@@ -51,6 +54,7 @@ export class StubLlmAdapter implements LlmPort {
         await new Promise((resolve) =>
           setTimeout(resolve, this.options.tokenDelayMs),
         );
+      this.yielded += 1;
       yield { type: 'token', text: word };
     }
     const inputTokens = Math.ceil(

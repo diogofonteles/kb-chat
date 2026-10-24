@@ -20,7 +20,7 @@ await button.click();
 await expect(ai.getByText(/Custo: US\$/)).toBeVisible({ timeout: 60_000 });
 await page.screenshot({ path: shot });
 await ai
-  .getByRole('link', { name: /^\[1\]$/ })
+  .getByRole('link', { name: /^Fonte 1:/ })
   .first()
   .click();
 await expect(page.getByRole('dialog')).toBeVisible();

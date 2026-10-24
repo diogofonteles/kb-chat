@@ -10,7 +10,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
-import type { AnswersService } from './answers-service.js';
+import type { AnswersService, PreparedAnswer } from './answers-service.js';
 
 export interface AnswerRouteOptions {
   readonly service: AnswersService;
@@ -49,17 +49,34 @@ interface AnswerCall {
   readonly key: string;
 }
 
-function replayCached(
-  service: AnswersService,
-  key: string,
-  reply: FastifyReply,
-): boolean {
-  const cached = service.replay(key);
-  if (!cached) return false;
+function replay(events: readonly AnswerEvent[], reply: FastifyReply): void {
   const send = openStream(reply);
-  cached.forEach(send);
+  events.forEach(send);
   reply.raw.end();
-  return true;
+}
+
+/** Prompt and spend checks; a refusal frees the reserved Idempotency-Key for a retry. */
+async function prepareOrRelease(
+  service: AnswersService,
+  call: AnswerCall,
+): Promise<PreparedAnswer> {
+  try {
+    const prepared = await service.prepare(call.topic, call.body);
+    await service.guardSpend(prepared.estimateUsd);
+    return prepared;
+  } catch (err) {
+    service.release(call.key);
+    throw err;
+  }
+}
+
+/** Aborts the model when the client goes away (the body was read, so only the response tells). */
+function abortOnDisconnect(reply: FastifyReply): AbortSignal {
+  const abort = new AbortController();
+  reply.raw.on('close', () => {
+    if (!reply.raw.writableFinished) abort.abort();
+  });
+  return abort.signal;
 }
 
 async function streamAnswer(
@@ -68,16 +85,14 @@ async function streamAnswer(
   context: { request: FastifyRequest; reply: FastifyReply },
 ): Promise<void> {
   const { request, reply } = context;
-  if (replayCached(service, call.key, reply)) return;
-  // Every refusal (no provider, cap, credit) happens here, before any spend and before streaming.
-  const prepared = await service.prepare(call.topic, call.body);
-  await service.guardSpend(prepared.estimateUsd);
-  const abort = new AbortController();
-  request.raw.on('close', () => abort.abort());
+  const cached = service.claim(call.key, call.body);
+  if (cached) return replay(cached, reply);
+  const prepared = await prepareOrRelease(service, call);
+  const signal = abortOnDisconnect(reply);
   const send = openStream(reply);
   try {
     for await (const event of service.stream(prepared, {
-      signal: abort.signal,
+      signal,
       key: call.key,
     }))
       send(event);
@@ -90,6 +105,15 @@ async function streamAnswer(
   }
   reply.raw.end();
 }
+
+const answerOptions = {
+  config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  schema: {
+    params: topicParams,
+    body: answerRequestSchema,
+    headers: answerHeaders,
+  },
+};
 
 export const answerRoutes =
   ({ service, spendToday }: AnswerRouteOptions): FastifyPluginAsync =>
@@ -105,13 +129,7 @@ export const answerRoutes =
     );
     typed.post(
       '/api/v1/topics/:topic/answers',
-      {
-        schema: {
-          params: topicParams,
-          body: answerRequestSchema,
-          headers: answerHeaders,
-        },
-      },
+      answerOptions,
       async (request, reply) => {
         const call = {
           topic: request.params.topic,

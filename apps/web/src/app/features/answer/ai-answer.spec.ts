@@ -6,13 +6,18 @@ import { fireEvent, render, screen } from '@testing-library/angular';
 import { AnswersApi } from '@core/api/answers-api.js';
 import { Subject, of, throwError } from 'rxjs';
 import { AiAnswer } from './ai-answer.js';
-import { formatCost, formatEstimate } from './answer-format.js';
+import {
+  formatCost,
+  formatEstimate,
+  renderAnswer as renderAnswerHtml,
+} from './answer-format.js';
 
 function setup(
   estimate: ReturnType<AnswersApi['estimate']> = of({
     usd: 0.0005,
     model: 'm',
     passages: 3,
+    billing: 'per-token',
   }),
 ) {
   const stream = new Subject<AnswerEvent>();
@@ -76,8 +81,10 @@ describe('AiAnswer', () => {
     stream.next({ type: 'done', usd: 0.0004, model: 'm', interrupted: false });
     await view.fixture.whenStable();
     expect(screen.getByText(/A natureza é sétupla/)).toBeTruthy();
-    expect(screen.getByText('Custo: US$ 0,0004')).toBeTruthy();
-    fireEvent.click(screen.getByRole('link', { name: '[1]' }));
+    expect(screen.getByText(/^Custo: US\$\s0,0004$/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('link', { name: 'Fonte 1: A Natureza Sétupla' }),
+    );
     expect(view.opened).toHaveBeenCalledWith({
       id: 'raw/a.md',
       title: 'A Natureza Sétupla',
@@ -106,8 +113,12 @@ describe('AiAnswer', () => {
     const { api } = setup(throwError(() => error));
     await renderAnswer(api);
     expect(
-      screen.queryByRole('button', { name: /Responder com IA/ }),
-    ).toBeNull();
+      (
+        screen.getByRole('button', {
+          name: /Responder com IA/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
     expect(screen.getByText(/configure um provedor de IA/)).toBeTruthy();
   });
 
@@ -165,10 +176,90 @@ describe('AiAnswer', () => {
   });
 });
 
+describe('AiAnswer guards (KBC-004 review)', () => {
+  it('ignores a second click while an answer is streaming', async () => {
+    const { api } = setup();
+    const view = await renderAnswer(api);
+    const button = screen.getByRole('button', { name: /Responder com IA/ });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await view.fixture.whenStable();
+    expect(api.answer).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the stream of the old search when the filters change (BR-4)', async () => {
+    const { api, stream } = setup();
+    const view = await renderAnswer(api);
+    fireEvent.click(screen.getByRole('button', { name: /Responder com IA/ }));
+    await view.fixture.whenStable();
+    view.fixture.componentRef.setInput('filters', {
+      ...EMPTY_FILTERS,
+      genres: ['paper'],
+    });
+    await view.fixture.whenStable();
+    expect(stream.observed).toBe(false);
+    expect(
+      screen.getByText('Considerando: Tipo de texto: Estudo acadêmico'),
+    ).toBeTruthy();
+  });
+
+  it('announces a finished answer and suggests another search when the collection lacks material (AC-11)', async () => {
+    const { api, stream } = setup();
+    const view = await renderAnswer(api);
+    fireEvent.click(screen.getByRole('button', { name: /Responder com IA/ }));
+    stream.next(SOURCES);
+    stream.next({
+      type: 'token',
+      text: 'O acervo não traz informação suficiente sobre isso.',
+    });
+    stream.next({ type: 'done', usd: 0.0001, model: 'm', interrupted: false });
+    await view.fixture.whenStable();
+    expect(screen.getByText(/refaça a busca com outras palavras/)).toBeTruthy();
+    expect(
+      view.container.querySelector('[aria-live="polite"]')?.textContent,
+    ).toBe('Resposta da IA pronta.');
+  });
+
+  it('offers a retry after stopping before the first token and links to add credits', async () => {
+    const { api, stream } = setup();
+    const view = await renderAnswer(api);
+    fireEvent.click(screen.getByRole('button', { name: /Responder com IA/ }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Parar' }));
+    await view.fixture.whenStable();
+    expect(
+      screen.getByText('Resposta interrompida antes de começar.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Lendo/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    stream.next({ type: 'error', code: 'LLM_INSUFFICIENT_CREDIT' });
+    await view.fixture.whenStable();
+    expect(
+      screen
+        .getByRole('link', { name: 'Adicionar créditos' })
+        .getAttribute('href'),
+    ).toBe('https://openrouter.ai/settings/credits');
+  });
+});
+
 describe('answer formatting', () => {
+  it('drops raw HTML, links and images from model output, keeping citations', () => {
+    const html = renderAnswerHtml(
+      'Veja <img src="https://evil/x?q=1"> e [site](https://evil) e ![x](https://evil/i.png) [1].',
+      [{ n: 1, id: 'a.md', title: 'A' }],
+    );
+    expect(html).not.toMatch(/<img|href="https:\/\/evil/);
+    expect(html).toContain('&lt;img');
+    expect(html).toContain('site');
+    expect(html).toContain(
+      '<a class="cite" href="#fonte-1" aria-label="Fonte 1: A"',
+    );
+    expect(renderAnswerHtml('sem fonte [9]')).toContain('[9]');
+  });
+
   it('formats estimates and costs in pt-BR', () => {
     expect(formatEstimate(0.004)).toBe('menos de US$ 0,01');
-    expect(formatEstimate(0.031)).toBe('~US$ 0,04');
-    expect(formatCost(0.00042)).toBe('US$ 0,0004');
+    expect(formatEstimate(0.031)).toMatch(/^~US\$\s0,04$/);
+    expect(formatCost(0.00042)).toMatch(/^US\$\s0,0004$/);
   });
 });

@@ -177,7 +177,11 @@ describe('estimates and spend', () => {
       headers: HOST,
       payload: { q: 'natureza' },
     });
-    expect(response.json()).toMatchObject({ model: 'stub/model', passages: 3 });
+    expect(response.json()).toMatchObject({
+      model: 'stub/model',
+      passages: 3,
+      billing: 'per-token',
+    });
     expect(response.json().usd).toBeGreaterThan(0.0008);
   });
 

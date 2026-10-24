@@ -9,6 +9,8 @@ import type {
 
 const API = 'https://openrouter.ai/api/v1';
 const BALANCE_TTL_MS = 60_000;
+/** A stalled provider must not hold a request (and its reserved key) forever. */
+const REQUEST_TIMEOUT_MS = 90_000;
 
 const modelsSchema = z.object({
   data: z.array(
@@ -22,6 +24,7 @@ const creditsSchema = z.object({
   data: z.object({ total_credits: z.number(), total_usage: z.number() }),
 });
 const chunkSchema = z.looseObject({
+  error: z.looseObject({ message: z.string().optional() }).optional(),
   choices: z
     .array(
       z.looseObject({
@@ -130,7 +133,10 @@ export class OpenRouterAdapter implements LlmPort {
         // deepseek-v4-flash at 800 tokens); grounded answers do not need it.
         reasoning: { enabled: false },
       }),
-      signal: options.signal,
+      signal: AbortSignal.any([
+        options.signal,
+        AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      ]),
     });
     if (!response.ok || !response.body)
       throw new Error(`OpenRouter answered ${response.status}`);
@@ -151,6 +157,11 @@ export class OpenRouterAdapter implements LlmPort {
 function* toChunks(data: string): Iterable<LlmChunk> {
   const parsed = chunkSchema.safeParse(JSON.parse(data));
   if (!parsed.success) return;
+  // OpenRouter reports mid-stream provider failures as a chunk with `error`.
+  if (parsed.data.error)
+    throw new Error(
+      `OpenRouter stream error: ${parsed.data.error.message ?? 'unknown'}`,
+    );
   const text = parsed.data.choices?.[0]?.delta?.content;
   if (text) yield { type: 'token', text };
   const usage = parsed.data.usage;
@@ -160,7 +171,7 @@ function* toChunks(data: string): Iterable<LlmChunk> {
       usage: {
         inputTokens: usage.prompt_tokens,
         outputTokens: usage.completion_tokens,
-        usd: usage.cost ?? 0,
+        usd: usage.cost ?? null,
       },
     };
   }

@@ -6,7 +6,8 @@ export interface LlmMessage {
 export interface LlmUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
-  readonly usd: number;
+  /** Real cost when the provider reports it; null means "compute from the price list". */
+  readonly usd: number | null;
 }
 
 export type LlmChunk =

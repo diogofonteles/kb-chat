@@ -16,7 +16,13 @@ import { EMPTY, of } from 'rxjs';
 const FAKE_ANSWERS = {
   provide: AnswersApi,
   useValue: {
-    estimate: () => of({ usd: 0.0005, model: 'stub/model', passages: 1 }),
+    estimate: () =>
+      of({
+        usd: 0.0005,
+        model: 'stub/model',
+        passages: 1,
+        billing: 'per-token' as const,
+      }),
     answer: () => EMPTY,
     spendToday: () => of({ usd: 0, capUsd: 1, configured: true }),
   },
@@ -77,7 +83,7 @@ describe('ChatPage', () => {
     await view.fixture.whenStable();
     expect(screen.getByText(/^1 documento · Tudo · 0,6 s$/)).toBeTruthy();
     expect(
-      document.querySelector('[aria-live="polite"]')?.textContent?.trim(),
+      document.querySelector('.page-announcement')?.textContent?.trim(),
     ).toBe('lei do ritmo: 1 documento encontrado.');
     expect(
       screen
@@ -313,7 +319,7 @@ describe('ChatPage default collection', () => {
         { status: 429, statusText: 'Too Many' },
       );
     await view.fixture.whenStable();
-    expect(document.querySelector('[aria-live="polite"]')?.textContent).toMatch(
+    expect(document.querySelector('.page-announcement')?.textContent).toMatch(
       /Muitas buscas/,
     );
   });

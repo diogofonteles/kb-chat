@@ -3,10 +3,12 @@ import {
   Component,
   DestroyRef,
   computed,
+  effect,
   inject,
   input,
   linkedSignal,
   output,
+  untracked,
 } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
@@ -27,8 +29,10 @@ import {
   citedSource,
   formatCost,
   formatEstimate,
+  isInsufficient,
   renderAnswer,
 } from './answer-format.js';
+import { describeFilters } from './filters-summary.js';
 
 interface AnswerRun {
   readonly phase: 'idle' | 'streaming' | 'done' | 'error';
@@ -96,7 +100,22 @@ export class AiAnswer {
   protected readonly priceLabel = computed(() =>
     this.estimate.hasValue() ? formatEstimate(this.estimate.value().usd) : '',
   );
-  protected readonly html = computed(() => renderAnswer(this.run().text));
+  protected readonly html = computed(() =>
+    renderAnswer(this.run().text, this.run().sources),
+  );
+  protected readonly insufficient = computed(
+    () => this.run().phase === 'done' && isInsufficient(this.run().text),
+  );
+  protected readonly considering = computed(() =>
+    describeFilters(this.filters()),
+  );
+  /** Short live-region text: the streamed tokens themselves are not announced. */
+  protected readonly announcement = computed(() => {
+    const run = this.run();
+    if (run.phase === 'done' && !run.interrupted)
+      return $localize`:@@ai.ready:Resposta da IA pronta.`;
+    return run.phase === 'error' ? this.errorText() : '';
+  });
   protected readonly costLabel = computed(() => {
     const usd = this.run().usd;
     return usd === null ? '' : formatCost(usd);
@@ -108,9 +127,16 @@ export class AiAnswer {
 
   constructor() {
     this.destroyRef.onDestroy(() => this.subscription?.unsubscribe());
+    // New question or filters: the answer in flight belongs to the old search and is stopped (BR-4).
+    effect(() => {
+      this.request();
+      untracked(() => this.stopSilently());
+    });
   }
 
   protected start(): void {
+    // A second click before the screen updates must not start (and pay for) another answer.
+    if (this.run().phase === 'streaming') return;
     this.stopSilently();
     this.run.set({ ...IDLE, phase: 'streaming' });
     this.subscription = this.api

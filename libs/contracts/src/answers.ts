@@ -23,6 +23,8 @@ export const answerEstimateSchema = z.object({
   usd: z.number().nonnegative(),
   model: z.string(),
   passages: z.number().int().nonnegative(),
+  /** "subscription" answers are covered by a plan: no per-answer cost (KBC-007). */
+  billing: z.enum(['per-token', 'subscription']),
 });
 export type AnswerEstimate = z.infer<typeof answerEstimateSchema>;
 

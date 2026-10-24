@@ -25,7 +25,7 @@ import {
 import { buildMessages } from './prompt.js';
 
 /** Longest answer requested from the model (ADR 0004). */
-export const MAX_OUTPUT_TOKENS = 1000;
+export const MAX_OUTPUT_TOKENS = 800;
 const CHARS_PER_TOKEN = 3.5;
 const REPLAY_TTL_MS = 10 * 60_000;
 
@@ -64,9 +64,10 @@ async function* collect(
 }
 
 export class AnswersService {
+  /** Finished answers by Idempotency-Key; `events: null` marks one still streaming. */
   private readonly replays = new Map<
     string,
-    { events: AnswerEvent[]; at: number }
+    { hash: string; events: AnswerEvent[] | null; at: number }
   >();
 
   constructor(private readonly deps: AnswersServiceDeps) {}
@@ -81,6 +82,7 @@ export class AnswersService {
       usd: prepared.estimateUsd,
       model: this.deps.llm.model,
       passages: prepared.sources.length,
+      billing: this.deps.llm.billing,
     };
   }
 
@@ -111,14 +113,37 @@ export class AnswersService {
       throw new AppError('LLM_INSUFFICIENT_CREDIT', 'Insufficient credit');
   }
 
-  replay(idempotencyKey: string): readonly AnswerEvent[] | null {
-    const cached = this.replays.get(idempotencyKey);
-    return cached && Date.now() - cached.at < REPLAY_TTL_MS
-      ? cached.events
-      : null;
+  /**
+   * Idempotency (CS-06, FR-9): replays a finished answer, refuses a key still streaming
+   * (ANSWER_IN_PROGRESS) or reused for another question, otherwise reserves the key.
+   */
+  claim(key: string, request: AnswerRequest): readonly AnswerEvent[] | null {
+    this.pruneReplays();
+    const hash = JSON.stringify(answerRequestSchema.parse(request));
+    const existing = this.replays.get(key);
+    if (!existing) {
+      this.replays.set(key, { hash, events: null, at: Date.now() });
+      return null;
+    }
+    if (existing.hash !== hash)
+      throw new AppError(
+        'VALIDATION_FAILED',
+        'Idempotency-Key reused for another question',
+      );
+    if (!existing.events)
+      throw new AppError(
+        'ANSWER_IN_PROGRESS',
+        'This answer is still being written',
+      );
+    return existing.events;
   }
 
-  /** Streams sources, tokens and the final cost; the spend is recorded even when interrupted. */
+  /** Frees a reserved key when the answer was refused or did not finish, so it can be retried. */
+  release(key: string): void {
+    if (!this.replays.get(key)?.events) this.replays.delete(key);
+  }
+
+  /** Streams sources, tokens and the final cost; the spend is recorded even when interrupted or failed. */
   async *stream(
     prepared: PreparedAnswer,
     options: { signal: AbortSignal; key: string },
@@ -128,10 +153,16 @@ export class AnswersService {
     ];
     yield events[0] as AnswerEvent;
     const run: RunState = { text: '', usage: null };
-    for await (const text of this.tokens(prepared, run, options.signal)) {
-      const event: AnswerEvent = { type: 'token', text };
-      events.push(event);
-      yield event;
+    try {
+      for await (const text of this.tokens(prepared, run, options.signal)) {
+        const event: AnswerEvent = { type: 'token', text };
+        events.push(event);
+        yield event;
+      }
+    } catch (err) {
+      await this.record(prepared, { ...run, interrupted: true });
+      this.release(options.key);
+      throw err;
     }
     const done = await this.record(prepared, {
       ...run,
@@ -139,8 +170,19 @@ export class AnswersService {
     });
     events.push(done);
     yield done;
-    if (!done.interrupted)
-      this.replays.set(options.key, { events, at: Date.now() });
+    this.finish(options.key, done.interrupted ? null : events);
+  }
+
+  private finish(key: string, events: AnswerEvent[] | null): void {
+    const reserved = this.replays.get(key);
+    if (events && reserved)
+      this.replays.set(key, { ...reserved, events, at: Date.now() });
+    else this.release(key);
+  }
+
+  private pruneReplays(now = Date.now()): void {
+    for (const [key, replay] of this.replays)
+      if (now - replay.at > REPLAY_TTL_MS) this.replays.delete(key);
   }
 
   /** Model tokens; collects the text and usage into `run`. An abort ends it quietly. */
@@ -166,31 +208,35 @@ export class AnswersService {
     prepared: PreparedAnswer,
     run: { usage: LlmUsage | null; text: string; interrupted: boolean },
   ): Promise<Extract<AnswerEvent, { type: 'done' }>> {
-    const price = await this.deps.llm.price();
-    const inputTokens =
-      run.usage?.inputTokens ??
-      tokensOf(prepared.messages.map((m) => m.content).join('\n'));
-    const outputTokens = run.usage?.outputTokens ?? tokensOf(run.text);
-    const usd =
-      this.deps.llm.billing === 'subscription'
-        ? 0
-        : (run.usage?.usd ??
-          inputTokens * price.input + outputTokens * price.output);
+    const { inputTokens, outputTokens, usd } = await this.costOf(prepared, run);
+    const { model } = this.deps.llm;
     await this.deps.ledger.append({
       ts: new Date().toISOString(),
       principal: this.deps.principal,
-      model: this.deps.llm.model,
+      model,
       inputTokens,
       outputTokens,
       usd,
       interrupted: run.interrupted,
     });
-    return {
-      type: 'done',
-      usd,
-      model: this.deps.llm.model,
-      interrupted: run.interrupted,
-    };
+    return { type: 'done', usd, model, interrupted: run.interrupted };
+  }
+
+  /** Real usage when reported; otherwise counted from the text and priced from the price list. */
+  private async costOf(
+    prepared: PreparedAnswer,
+    run: { usage: LlmUsage | null; text: string },
+  ) {
+    const inputTokens =
+      run.usage?.inputTokens ??
+      tokensOf(prepared.messages.map((m) => m.content).join('\n'));
+    const outputTokens = run.usage?.outputTokens ?? tokensOf(run.text);
+    if (this.deps.llm.billing === 'subscription')
+      return { inputTokens, outputTokens, usd: 0 };
+    const price = await this.deps.llm.price();
+    const usd =
+      run.usage?.usd ?? inputTokens * price.input + outputTokens * price.output;
+    return { inputTokens, outputTokens, usd };
   }
 
   private requireConfigured(): void {

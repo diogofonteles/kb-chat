@@ -49,9 +49,11 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   LLM_INSUFFICIENT_CREDIT: () =>
     $localize`:@@error.llmCredit:Os créditos da OpenRouter acabaram. Adicione em openrouter.ai/settings/credits.`,
   DAILY_CAP_REACHED: () =>
-    $localize`:@@error.dailyCap:Limite de gasto com IA de hoje atingido.`,
+    $localize`:@@error.dailyCap:Limite de gasto com IA de hoje atingido. Ele volta a zero à meia-noite; para mudar o valor, ajuste KB_CHAT_DAILY_CAP_USD no servidor.`,
   NOT_FOUND: () =>
     $localize`:@@error.notFound:Este endereço não existe no servidor.`,
+  ANSWER_IN_PROGRESS: () =>
+    $localize`:@@error.answerInProgress:Esta resposta ainda está sendo escrita.`,
   RATE_LIMITED: () =>
     $localize`:@@error.rateLimited:Muitas buscas em pouco tempo. Espere um instante e tente de novo.`,
   FORBIDDEN_HOST: () =>

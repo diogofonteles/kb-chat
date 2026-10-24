@@ -83,6 +83,35 @@ describe('OpenRouterAdapter', () => {
     expect(adapter.billing).toBe('per-token');
   });
 
+  it('turns an error chunk inside the stream into a failure and prices missing costs as null', async () => {
+    const adapter = new OpenRouterAdapter({
+      apiKey: 'k',
+      model: 'm',
+      fetch: vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            sseBody([
+              'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":1}}',
+              'data: {"error":{"message":"upstream overloaded"}}',
+              '',
+            ]),
+          ),
+      ),
+    });
+    const chunks: unknown[] = [];
+    const run = async () => {
+      for await (const chunk of adapter.stream([], {
+        maxTokens: 1,
+        signal: new AbortController().signal,
+      }))
+        chunks.push(chunk);
+    };
+    await expect(run()).rejects.toThrow(/upstream overloaded/);
+    expect(chunks).toEqual([
+      { type: 'usage', usage: { inputTokens: 10, outputTokens: 1, usd: null } },
+    ]);
+  });
+
   it('fails on an error status', async () => {
     const adapter = new OpenRouterAdapter({
       apiKey: 'k',
