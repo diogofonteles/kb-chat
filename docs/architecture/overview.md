@@ -141,6 +141,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 | `GET /api/v1/topics/{topic}/documents/{id}` | Body markdown without frontmatter, facets, summary, see-also groups, highlight terms |
 | `POST /api/v1/topics/{topic}/research` | One research turn for `{ question, history, profile }`: streams (SSE) `step`, `sources`, `token` (with its `segment`), `retract`, `done` (cost, steps) or `error` (ADR 0006, ADR 0009); rate-limited, the daily cap checked before every model call |
 | `GET /api/v1/spend/today` | Spend today and the cap |
+| `GET /api/v1/spend/people` | Owner only: each person's spend today (BR-6) |
 | `GET /api/v1/conversations` | Every saved conversation as summaries, newest first by `updatedAt`; optional `?kind=search\|research&topic=` |
 | `GET` / `PUT` / `DELETE /api/v1/conversations/{id}` | One conversation (uuid id): read, upsert (path id must equal body id; answers with the summary), remove (204, idempotent) |
 | `GET /api/v1/auth/config` | Public: the Google client id for the sign-in button |
@@ -184,10 +185,10 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
    - A revoked person keeps working; the last master is removed and nobody can manage access.
    - Brute force on the sign-in route; tokens or emails in the logs.
 3. **What are we doing about it?**
-   - RS256 signature against Google's JWKS, `aud`, `iss`, `exp`/`iat` (60 s skew, 1 h max age) and `email_verified`; the issuer and keys URL are constants.
+   - RS256 signature against Google's JWKS, `aud`, `iss`, `exp`/`iat` (60 s skew, 1 h max age) and `email_verified`; the issuer and keys URL are constants. Each credential opens one session (a replay is refused while it is valid); the keys download times out after 5 s.
    - `SameSite=Lax` plus the `X-Requested-With: kb-chat` header and the `Origin` check on every state change, sign-in included.
    - `HttpOnly` cookie (`Secure` when hosted); only the token's SHA-256 is stored, in 0600 files; sliding 30-day expiry.
-   - One guard driven by `config.access` on every route (404 for unseen collections, 403 for features and roles), conversations and settings keyed by principal, subscriptions and environment keys for the owner only.
+   - One guard driven by `config.access` on every route (404 for unseen collections, 403 for features and roles), conversations and settings keyed by principal (saving over another person's id answers 404), subscriptions and environment keys for the owner only; the owner sees spend per person, not content.
    - Revocation deletes the sessions at once; `LAST_MASTER` and `OWNER_PROTECTED` keep a master in place.
    - `config.rateLimit` on sign-in; the log carries the person id, never the token or the email.
 4. **Did we do a good job?** Tests: token verification with a local key and a fake JWKS (no network), the guard matrix per route kind, the route-coverage check (NFR-2), revocation, the last master, CSRF and the owner migration (`auth.integration.test.ts`, `route-access.test.ts`); E2E AC-1 to AC-7 at 1440 and 390.

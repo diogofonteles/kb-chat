@@ -224,7 +224,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 
 - Seção de ⚙ Configurações, aberta também pela lateral ("Pessoas e permissões", acima de ⚙). Some para quem não é master; a seção IA some para quem não tem "Configurações de IA próprias".
 - **Convidar por e-mail (conta Google)** (rótulo acima do campo) + "Convidar"; dica: quem é convidado começa com "Buscar documentos" e nenhum acervo (BR-3).
-- Lista: nome (ou e-mail), e-mail, selos "Master" e "Dono", acervos e último acesso ("Ainda não entrou"). Abrir uma pessoa mostra:
+- Lista: nome (ou e-mail), e-mail, selos "Master" e "Dono", acervos, último acesso ("Ainda não entrou") e, só para o dono, "Gasto de IA hoje: US$ …" (BR-6). Um convite recusado aparece logo abaixo do campo de e-mail. Abrir uma pessoa mostra:
   - **Acervos** e **Funcionalidades** (Buscar documentos, Pesquisa com IA, Montar/ampliar acervo, Configurações de IA próprias), caixas de seleção que salvam ao mudar ("Salvo."). Para um master aparecem marcadas e desabilitadas: "Masters veem todos os acervos e usam todas as funcionalidades."
   - "Tornar master" / "Remover master"; recusas em texto claro: "Deve restar ao menos um master.", "A conta do dono não pode ser rebaixada nem removida."
   - "Revogar acesso" pede confirmação ("Revogar o acesso de … ? A pessoa sai na hora." · "Revogar" · "Cancelar"); a conta do dono não tem essa ação.
