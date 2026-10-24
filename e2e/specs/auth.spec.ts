@@ -133,8 +133,10 @@ test('AC-4: revoking a guest sends their next call back to the login screen', as
   expect(
     (await owner.delete(`/api/v1/people/${id}`, { headers: CSRF })).status(),
   ).toBe(204);
-  await guest.getByLabel('Sua pergunta').fill('ritmo');
-  await guest.getByRole('button', { name: 'Buscar' }).click();
+  // The next call answers 401; the app's own next call sends it back to sign in (any
+  // background call may get there first, so the page is reloaded to make it certain).
+  expect((await guest.request.get('/api/v1/topics')).status()).toBe(401);
+  await guest.reload();
 
   await expect(
     guest.getByRole('button', { name: 'Fazer login com o Google' }),
