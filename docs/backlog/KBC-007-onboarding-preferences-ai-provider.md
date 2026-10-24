@@ -4,7 +4,7 @@ title: Onboarding com preferências e provedor de IA (chave própria ou assinatu
 status: ready
 slice: release-1
 outcome: primeira sessão sem configuração manual; IA sem custo por token para quem tem assinatura
-depends_on: [KBC-004, KBC-005]
+depends_on: [KBC-005, KBC-008]
 ---
 
 # KBC-007 — Onboarding com preferências e provedor de IA
@@ -17,7 +17,8 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
 ## Scope
 **In:**
 - Assistente de primeira abertura, com 4 passos curtos que podem ser pulados: acervo padrão, modo de busca, tema e provedor de IA.
-- Tela "Configurações" para alterar tudo depois.
+- Tela "Configurações", aberta a qualquer momento por um ícone ⚙ fixo na lateral (e no menu do celular), para ver e alterar preferências, chave de API, modelo e ligação com a assinatura.
+- Preferência "Pesquisar com IA por padrão" e escolha do modelo para os provedores por token.
 - Provedores de IA:
   - **OpenRouter** (chave);
   - **Anthropic API** (chave);
@@ -45,7 +46,8 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
 - FR-1: na primeira abertura, a web deve mostrar o assistente. "Pular" deve gravar os padrões.
 - FR-2: a API deve expor `GET/PUT /api/v1/settings` (sem segredos na resposta) e `POST /api/v1/settings/ai/test`, que testa o provedor com uma pergunta mínima e diz se funcionou.
 - FR-3: a API deve listar os provedores com a disponibilidade de cada um (`GET /api/v1/ai/providers`), detectando `claude` e `codex` no PATH.
-- FR-4: com um provedor por assinatura, "Responder com IA" deve usar o CLI oficial em modo não interativo, transmitindo a resposta em streaming, com as mesmas citações e regras de fundamentação do ADR 0004.
+- FR-4: com um provedor por assinatura, o agente de pesquisa (KBC-008, ADR 0006) deve rodar no CLI oficial em modo não interativo, com as ferramentas do acervo servidas por MCP (`kb-chat mcp`) e as ferramentas embutidas desligadas, transmitindo passos e resposta em streaming com as mesmas regras de citação.
+- FR-6: o ícone ⚙ "Configurações" deve estar visível em todas as telas (lateral no desktop, menu no celular) e abrir a tela de configurações sem perder a conversa atual.
 - FR-5: trocar de provedor deve valer na próxima resposta, sem reiniciar o servidor.
 
 ## Non-functional requirements
