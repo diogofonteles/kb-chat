@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   SignJWT,
   exportJWK,
@@ -51,6 +51,7 @@ async function mint(
     .setIssuer(E2E_ISSUER)
     .setAudience(E2E_CLIENT_ID)
     .setSubject(subOf(request.email))
+    .setJti(randomUUID())
     .setIssuedAt()
     .setExpirationTime('1h')
     .sign(privateKey);

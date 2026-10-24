@@ -64,7 +64,9 @@ export class FsConversationStore implements ConversationStorePort {
     return entry?.principal === principal ? entry.conversation : null;
   }
 
-  async put(principal: string, conversation: Conversation): Promise<void> {
+  async put(principal: string, conversation: Conversation): Promise<boolean> {
+    const existing = await this.read(conversation.id);
+    if (existing && existing.principal !== principal) return false;
     const file = this.fileOf(conversation.id);
     const stored: Stored = { v: 1, principal, conversation };
     await mkdir(this.options.dir, { recursive: true, mode: 0o700 });
@@ -76,6 +78,7 @@ export class FsConversationStore implements ConversationStorePort {
         flag: 'wx',
       });
       await rename(temp, file);
+      return true;
     } catch (err) {
       await rm(temp, { force: true });
       throw err;

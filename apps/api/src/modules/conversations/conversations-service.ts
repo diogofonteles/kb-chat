@@ -4,6 +4,7 @@ import {
   type ConversationKind,
   type ConversationSummary,
 } from '@kb-chat/contracts';
+import { AppError } from '../../app-error.js';
 import type { ConversationStorePort } from '../../ports/conversation-store.js';
 
 export interface ConversationFilter {
@@ -49,7 +50,9 @@ export class ConversationsService {
     principal: string,
     conversation: Conversation,
   ): Promise<ConversationSummary> {
-    await this.deps.store.put(principal, conversation);
+    // Another person's id is answered like an unknown one (KBC-010 BR-6).
+    if (!(await this.deps.store.put(principal, conversation)))
+      throw new AppError('NOT_FOUND', 'Unknown conversation');
     return summarizeConversation(conversation);
   }
 

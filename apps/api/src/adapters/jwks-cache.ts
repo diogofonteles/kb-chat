@@ -11,10 +11,14 @@ const MAX_AGE_CAP_S = 24 * 3600;
 /** A token with an unknown key id refetches at most this often. */
 const REFETCH_COOLDOWN_MS = 30_000;
 
+/** A hung key server must not hang every sign-in. */
+const DEFAULT_TIMEOUT_MS = 5000;
+
 export interface JwksCacheOptions {
   readonly url: string;
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
+  readonly timeoutMs?: number;
 }
 
 /** "public, max-age=21110, must-revalidate" → 21110 (seconds), capped at a day. */
@@ -77,7 +81,12 @@ export class JwksCache {
   }
 
   private async download(): Promise<CachedKeys> {
-    const response = await (this.options.fetch ?? fetch)(this.options.url);
+    const signal = AbortSignal.timeout(
+      this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    );
+    const response = await (this.options.fetch ?? fetch)(this.options.url, {
+      signal,
+    });
     if (!response.ok)
       throw new Error(`JWKS request failed with ${response.status}`);
     const jwks = (await response.json()) as JSONWebKeySet;

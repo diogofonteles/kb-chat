@@ -456,6 +456,10 @@ describe('permissions per person (FR-4)', () => {
       ).statusCode,
     ).toBe(200);
     expect((await guest('GET', '/api/v1/spend/today')).statusCode).toBe(200);
+    const hiddenDefault = await guest('PUT', '/api/v1/settings', {
+      preferences: { defaultTopic: 'alquimia' },
+    });
+    expect(hiddenDefault.statusCode).toBe(400);
   });
 
   it('applies a new grant on the next request, and a master reaches every collection', async () => {
@@ -545,6 +549,15 @@ describe('permissions per person (FR-4)', () => {
     expect(
       (await guest('GET', `/api/v1/conversations/${mine.id}`)).statusCode,
     ).toBe(404);
+    const takeover = await guest('PUT', `/api/v1/conversations/${mine.id}`, {
+      ...mine,
+      title: 'tomada',
+    });
+    expect(takeover.statusCode).toBe(404);
+    await guest('DELETE', `/api/v1/conversations/${mine.id}`);
+    expect(
+      (await owner('GET', `/api/v1/conversations/${mine.id}`)).json().title,
+    ).toBe('do dono');
   });
 
   it('AC-7: with two masters one demotes the other, then cannot demote themselves', async () => {
@@ -622,5 +635,50 @@ describe('AI for guests (BR-5, KBC-007 BR-6)', () => {
         })
       ).statusCode,
     ).toBe(409);
+  });
+});
+
+describe('spend per person (BR-6)', () => {
+  it("shows the owner each person's spend today, and nobody else", async () => {
+    const started = await start();
+    const ownerHeaders = await signIn(started, OWNER_EMAIL);
+    const id = await invite(started, ownerHeaders, {
+      email: 'guest@example.com',
+      topics: ['hermetismo'],
+    });
+    const guestHeaders = await signIn(started, 'guest@example.com');
+    await new JsonlSpendLedger(join(started.state, 'spend.jsonl')).append({
+      ts: new Date().toISOString(),
+      principal: 'sub-guest@example.com',
+      model: 'm',
+      inputTokens: 1,
+      outputTokens: 1,
+      usd: 0.5,
+      interrupted: false,
+    });
+
+    const seen = await call(started.app, ownerHeaders)(
+      'GET',
+      '/api/v1/spend/people',
+    );
+
+    expect(seen.statusCode).toBe(200);
+    expect(seen.json().items).toEqual(
+      expect.arrayContaining([
+        { email: OWNER_EMAIL, usd: 0 },
+        { email: 'guest@example.com', usd: 0.5 },
+      ]),
+    );
+    expect(
+      (await call(started.app, guestHeaders)('GET', '/api/v1/spend/people'))
+        .statusCode,
+    ).toBe(403);
+    await call(started.app, ownerHeaders)('PATCH', `/api/v1/people/${id}`, {
+      role: 'master',
+    });
+    expect(
+      (await call(started.app, guestHeaders)('GET', '/api/v1/spend/people'))
+        .statusCode,
+    ).toBe(403);
   });
 });

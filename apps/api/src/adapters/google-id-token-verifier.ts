@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { errors, jwtVerify } from 'jose';
 import { z } from 'zod';
 import { AppError } from '../app-error.js';
@@ -32,6 +33,8 @@ export interface IdTokenVerifierOptions {
   readonly fetch?: typeof fetch;
   /** Milliseconds; tests move the clock. */
   readonly now?: () => number;
+  /** How long the keys download may take before sign-in answers AUTH_UNAVAILABLE. */
+  readonly jwksTimeoutMs?: number;
 }
 
 const claimsSchema = z.object({
@@ -39,6 +42,7 @@ const claimsSchema = z.object({
   email: z.email(),
   // Older tokens carried the flag as a string.
   email_verified: z.union([z.boolean(), z.literal('true'), z.literal('false')]),
+  exp: z.number(),
   name: z.string().max(200).optional(),
   picture: z.url().optional(),
 });
@@ -46,15 +50,21 @@ const claimsSchema = z.object({
 const unauthenticated = (cause: unknown): AppError =>
   new AppError('UNAUTHENTICATED', 'Invalid Google credential', { cause });
 
-/** Verifies a Google Identity Services credential: RS256, aud, iss, exp/iat, email. */
+/**
+ * Verifies a Google Identity Services credential: RS256, aud, iss, exp/iat, email. Each
+ * credential opens one session only: a replayed one is refused until it expires.
+ */
 export class GoogleIdTokenVerifier implements IdentityVerifierPort {
   private readonly jwks: JwksCache;
+  /** SHA-256 of each accepted credential → its expiry (ms). */
+  private readonly used = new Map<string, number>();
 
   constructor(private readonly options: IdTokenVerifierOptions) {
     this.jwks = new JwksCache({
       url: options.jwksUrl,
       fetch: options.fetch,
       now: options.now,
+      timeoutMs: options.jwksTimeoutMs,
     });
   }
 
@@ -62,6 +72,7 @@ export class GoogleIdTokenVerifier implements IdentityVerifierPort {
     const payload = await this.verifiedPayload(credential);
     const claims = claimsSchema.safeParse(payload);
     if (!claims.success) throw unauthenticated(claims.error);
+    this.useOnce(credential, claims.data.exp);
     const { sub, email, name, picture } = claims.data;
     const verified = String(claims.data.email_verified) === 'true';
     return {
@@ -71,6 +82,16 @@ export class GoogleIdTokenVerifier implements IdentityVerifierPort {
       name: name ?? email,
       picture: picture ?? null,
     };
+  }
+
+  private useOnce(credential: string, expS: number): void {
+    const now = this.options.now?.() ?? Date.now();
+    for (const [key, expiry] of this.used)
+      if (expiry <= now) this.used.delete(key);
+    const key = createHash('sha256').update(credential).digest('hex');
+    if (this.used.has(key))
+      throw unauthenticated(new Error('credential already used'));
+    this.used.set(key, (expS + CLOCK_TOLERANCE_S) * 1000);
   }
 
   private async verifiedPayload(credential: string): Promise<unknown> {

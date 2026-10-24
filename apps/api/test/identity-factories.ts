@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   SignJWT,
   exportJWK,
@@ -60,6 +61,8 @@ export function mintIdToken(
     name: 'Guest',
     iat: now,
     exp: now + 3600,
+    // Google gives each token its own id; two equal tokens would look like a replay.
+    jti: randomUUID(),
     ...claims,
   })
     .setProtectedHeader({

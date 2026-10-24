@@ -111,10 +111,8 @@ describe('GoogleIdTokenVerifier', () => {
     const keys = await createTestKeys({ cacheControl: 'public, max-age=600' });
     let now = Date.now();
     const verifier = testVerifier(keys, () => now);
-    const token = await mintIdToken(keys);
-
-    await verifier.verify(token);
-    await verifier.verify(token);
+    await verifier.verify(await mintIdToken(keys, { jti: 'a' }));
+    await verifier.verify(await mintIdToken(keys, { jti: 'b' }));
     expect(keys.downloads()).toBe(1);
 
     now += 601_000;
@@ -149,6 +147,38 @@ describe('GoogleIdTokenVerifier', () => {
       issuers: ['https://accounts.google.com'],
       fetch: async () => new Response('down', { status: 503 }),
     });
+    expect(await codeOf(verifier.verify(await mintIdToken(keys)))).toBe(
+      'AUTH_UNAVAILABLE',
+    );
+  });
+});
+
+describe('GoogleIdTokenVerifier, replays and outages', () => {
+  it('opens one session per credential: the same token again is refused', async () => {
+    const keys = await createTestKeys();
+    const verifier = testVerifier(keys);
+    const token = await mintIdToken(keys);
+
+    await expect(verifier.verify(token)).resolves.toBeDefined();
+    expect(await codeOf(verifier.verify(token))).toBe('UNAUTHENTICATED');
+  });
+
+  it('gives up on a key server that does not answer (AUTH_UNAVAILABLE)', async () => {
+    const keys = await createTestKeys();
+    const hanging: typeof fetch = (_url, init) =>
+      new Promise((_resolve, reject) =>
+        init?.signal?.addEventListener('abort', () =>
+          reject(new Error('aborted')),
+        ),
+      );
+    const verifier = new GoogleIdTokenVerifier({
+      clientId: 'test-client.apps.googleusercontent.com',
+      jwksUrl: 'https://keys.test/certs',
+      issuers: ['https://accounts.google.com'],
+      fetch: hanging,
+      jwksTimeoutMs: 20,
+    });
+
     expect(await codeOf(verifier.verify(await mintIdToken(keys)))).toBe(
       'AUTH_UNAVAILABLE',
     );

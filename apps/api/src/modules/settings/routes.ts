@@ -19,6 +19,7 @@ import { AppError } from '../../app-error.js';
 import {
   SIGNED_IN,
   assertFeature,
+  canSee,
   principalOf,
   viewerOf,
   type RouteAccess,
@@ -63,6 +64,9 @@ function assertMayUpdate(
   request: FastifyRequest,
   update: SettingsUpdate,
 ): void {
+  const topic = update.preferences?.defaultTopic;
+  if (topic && !canSee(request, topic))
+    throw new AppError('VALIDATION_FAILED', 'Unknown collection');
   if (update.ai === undefined) return;
   assertFeature(request, 'own-ai-settings');
   const provider = update.ai.provider;

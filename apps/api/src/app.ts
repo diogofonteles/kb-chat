@@ -133,9 +133,22 @@ async function registerResearch(
       ...scopeOf(principal),
       configured: () => runner(principal).configured(),
     });
-  await app.register(spendRoutes(spendFor));
+  await app.register(
+    spendRoutes({ serviceFor: spendFor, ledger, people: () => spenders(deps) }),
+  );
   const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
   await app.register(researchRoutes({ runner, hasTopic }));
+}
+
+/** Everyone who has signed in, with the principal their spend is kept under. */
+async function spenders(deps: FullDeps) {
+  const { people } = deps.auth;
+  return (await people.list())
+    .filter((person) => person.sub !== null)
+    .map((person) => ({
+      email: person.email,
+      principal: people.viewerOf(person).principal,
+    }));
 }
 
 /** Health, topics (with the Settings default collection) and the free search. */
