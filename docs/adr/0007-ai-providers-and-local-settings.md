@@ -29,7 +29,7 @@ The API reads a principal's file once and keeps it in memory. Routes take the pr
 3. **the Claude subscription when `claude` is on PATH**, so `pnpm dev` answers with Claude with no setup; the lookup runs at boot and again on every provider list;
 4. the env keys, as before KBC-007: `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`;
 5. none (search only).
- `DynamicLlm` and `DynamicResearchRunner` delegate to it, so a switch applies on the next answer without a restart (FR-5). Built adapters are reused while the choice is unchanged; a replaced key leaves memory.
+ The research route asks it for the runner of every turn and `DynamicLlm` (the side panel's spend) delegates to it, so a switch applies on the next answer without a restart (FR-5). Built adapters are reused while the choice is unchanged (the cache id carries a SHA-256 fingerprint of the key, never the key); a replaced key leaves memory. A model id must match `^[A-Za-z0-9][A-Za-z0-9._:/@-]*$` (contract and stored file), so it can never be read as a CLI flag.
 
 The research route asks the registry for the runner of each turn. A per-token runner is the in-API tool loop over that provider's model; it checks the principal's daily cap from Settings (`ProviderRegistry.dailyCapUsd`) before every model call and writes one ledger entry per turn. A subscription turn skips the cap and the ledger. The `done` event carries `billing` (`per-token` | `subscription`), so the web shows the cost or "Incluído na sua assinatura", and saved turns keep it (older ones read as `per-token`).
 
@@ -39,7 +39,7 @@ The research route asks the registry for the runner of each turn. A per-token ru
 | Anthropic API | `AnthropicAdapter`, official SDK, Messages streaming with tools | per token | `claude-opus-5-5` (4, 20); Sonnet 5.5 (2, 10), Haiku 5.5 (0.10, 0.50), Fable 5.1 (10, 50) |
 | OpenAI API | `OpenAiAdapter`, Chat Completions streaming with tools | per token | `gpt-5.4-mini` (0.75, 4.50); GPT-5.4 (2.50, 15), GPT-5.5 (5, 30) |
 | Claude subscription | `ClaudeCliRunner` (`claude -p`) | subscription: no ledger entry, no cap (BR-2) | the CLI's own; aliases `opus`, `sonnet`, `fable`, `haiku` |
-| ChatGPT subscription | `CodexCliRunner` (`codex exec --json`) | subscription | the CLI's own |
+| ChatGPT subscription | `CodexCliRunner` (`codex exec --json`), **off unless `KB_CHAT_CODEX=on`** (see below) | subscription | the CLI's own |
 | None | — | — | search only |
 
 Prices come from each vendor's list (2026-10) and live next to the adapter. A model missing from the table is priced as the dearest one, so the daily cap errs on the safe side.
@@ -50,15 +50,18 @@ The Anthropic adapter:
 - keeps each tool-calling turn's content so that its thinking blocks go back unchanged on the next step, as the API requires.
 
 **Subscriptions through the official CLIs (BR-7).** kb-chat never receives a subscription credential. The person logs in once in the CLI (`claude` → `/login`, `codex login`), and the API only spawns it:
-- **Process.** `execFile`-style spawn, no shell; its own process group, so "Parar" kills the CLI and its children.
-- **Isolation.** A private working folder under the state folder. Claude Code also gets `--setting-sources ""`, `--strict-mcp-config` and `--no-session-persistence`, so no user settings, other MCP servers, CLAUDE.md or saved session are involved.
+- **Process.** `execFile`-style spawn, no shell; its own process group. "Parar" closes the turn's MCP endpoint at once and sends SIGTERM to the group, then SIGKILL after 3 s if it is still running. A CLI that cannot start closes the endpoint too.
+- **Isolation.** A private working folder under the state folder, plus a private folder (0700) per turn, removed when it ends. Claude Code also gets `--setting-sources ""`, `--strict-mcp-config` and `--no-session-persistence`, so no user settings, other MCP servers, CLAUDE.md or saved session are involved.
 - **Tools.** Built-ins off (`--tools ""`); only `mcp__kb` is allowed; `--permission-prompts none`.
-- **Credentials.** `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY` and `OPENROUTER_API_KEY` are removed from the CLI's environment, so usage counts on the plan and not on an API account (AC-7).
-- **Input.** The question and the previous turns go through stdin, never argv.
+- **Environment.** An allowlist, not the server's environment: `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, the locale (`LANG`, `LC_*`), `TERM`, `TMPDIR`, `TZ`, the XDG folders, `CLAUDE_CONFIG_DIR` and the proxy/CA variables. No API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) or other server variable reaches the CLI, so usage counts on the plan and not on an API account (AC-7). One real `claude -p` call with this environment (2026-10-24) answered from the subscription login.
+- **Input.** The question and the previous turns go through stdin, never argv; the model goes as `--model=<id>`.
+- **The turn token never in argv.** Claude Code reads its MCP config from a 0600 file in the turn's folder (`--mcp-config <path>`); Codex gets the token in an environment variable named by `bearer_token_env_var`, sent as `Authorization: Bearer` to `/mcp/turn`. `ps` shows neither.
+
+**Codex is off unless the owner enables it (`KB_CHAT_CODEX=on`).** Claude Code can be limited to the kb tools; Codex cannot, as of 0.164: it has no switch that turns off every built-in tool, its tool set (shell, unified exec, patch, image viewer, web search, browser and computer use, sub-agents, apps, plugins, memories) changes between versions, and `--sandbox read-only` still lets its shell read any file of the user (`~/.ssh`, the settings file with the API keys). A prompt injection in a document could make it read such a file and put it in an answer that is then saved in the history. kb-chat does what it can, best effort: a private `CODEX_HOME` under the state folder with only the owner's `auth.json` copied in (again whenever the owner's copy is newer), so the user's `config.toml`, other MCP servers and profiles are never loaded; `features.shell_tool`, `features.unified_exec`, `features.view_image` and `features.apply_patch_freeform` off; `web_search="disabled"`, `project_doc_max_bytes=0` and `history.persistence="none"`. Only the long-standing keys are set, because Codex rejects unknown feature keys. With `KB_CHAT_CODEX` off (the default) the provider list reports it as `not-enabled`, Settings shows it disabled with this reason, and its runner refuses research. A Codex login kept in the OS keyring instead of `auth.json` is not copied, so the private home reports "login required".
 
 **The tools over MCP.** ADR 0006 named a stdio `kb-chat mcp` server, started per turn. A per-turn process would load the catalog and start QMD every time (seconds to minutes, ADR 0002). So the API serves the same tools itself:
-- **Endpoint.** A per-turn **Streamable HTTP MCP endpoint**, `/mcp/turns/<token>`, stateless, bound to `127.0.0.1` behind the Host guard.
-- **Token.** 24 random bytes, valid only while the turn runs, with a 15-minute safety TTL; an unknown token gets 404.
+- **Endpoint.** A per-turn **Streamable HTTP MCP endpoint**, `/mcp/turns/<token>` (or `/mcp/turn` with the token as a bearer header), stateless, bound to `127.0.0.1` behind the Host guard.
+- **Token.** 24 random bytes, valid only while the turn runs, with a 15-minute safety TTL; an unknown token gets 404. The MCP routes log the request as `POST /mcp/turns/***` (a route-scoped serializer), so the token never reaches the log; a test reads the log at `info`.
 - **Shared code.** The endpoint serves the research module's own `ResearchTools` (ADR 0006, `find_text` included) through `TurnResearchTools`, an adapter to `ResearchToolsPort` with that turn's source numbering; the in-API loop and the CLIs share one instance and one `find_text` cache, warmed when the turn starts. Each tool call becomes a `step` and, when new documents were numbered, a `sources` event in-process; the CLI's text deltas become `token` events.
 - **Same rules.** The CLIs get the in-API loop's system prompt (`researchSystemPrompt`, with the topic's title): search first, `find_text` before concluding absence, cite `[n]`, mark "(fora do acervo)", no narration. Claude Code takes it with `--system-prompt`; Codex reads it at the head of its input.
 - **Step cap.** After 15 tool steps, the in-API loop's cap (ADR 0006), tools answer with an instruction to finish.
@@ -78,7 +81,7 @@ The Anthropic adapter:
 - Good: the provider changes from the UI without a restart; subscriptions cost nothing per token; the same tools serve three runners.
 - Bad: plain-text keys on disk (owner-only), acceptable for a local single user and revisited for hosting in ADR 0008 (a secrets store per user). A CLI upgrade may change its flags or events: the dialect parsers ignore unknown lines, and the connection test exposes a break.
 - `apiKeySource: "none"` in Claude Code's init event confirmed, in the real run, that the subscription (not an API key) answered.
-- Codex support is best effort (written from the published `exec --json` events; Codex is not installed here).
-- Threats added: another local process could call a turn's MCP endpoint only with its token, which is never logged and lives for the turn; a document's prompt injection is limited by the read-only tools and by no built-ins.
+- Codex support is best effort (written from the published `exec --json` events and the 0.164 config schema; Codex is not installed here) and off by default, for the reason above.
+- Threats added: another local process could call a turn's MCP endpoint only with its token, which is never logged, never in argv and lives for the turn. A document's prompt injection is limited by the read-only tools and by no built-ins **with Claude Code**; with Codex it is limited only by the best-effort lock-down, which is why it needs the owner's explicit opt-in.
 - Compliance: integration tests for masking, 0600, AC-3 (CLI absent), AC-5 (refused key), AC-6 (env default) and AC-7 (env without the key); runner tests with fake CLIs, including abort.
 - ADR 0008 (Google login and permissions) supplies the principal and decides where keys live when hosted.

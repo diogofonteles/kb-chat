@@ -25,13 +25,14 @@ Answers come from a **research agent**: a tool-calling loop over the collection,
 | `related_documents(id)` | The kb relations ("veja também"): examples, extensions and related documents. |
 
 **Loop.** A provider with native tool calling (OpenRouter, OpenAI, Anthropic) runs the loop in the API:
-- at most 15 tool steps per answer and 2,000 output tokens per model call;
-- the model's reasoning stays on;
+- at most 15 tool steps per answer;
+- **2,000 output tokens requested per model call**. An adapter may raise it where reasoning counts as output: Anthropic sends at least 8,000 (thinking is always on, ADR 0007) and OpenAI reasoning models (GPT-5.x) at least 4,000 at `reasoning_effort: low`. The spend guard prices each call at the budget the adapter really sends (`AgentLlmPort.maxOutputTokens`), not at 2,000;
+- **reasoning is off by default on OpenRouter** (`KB_CHAT_REASONING=off`; `on` turns it back on). With 2,000 tokens per call a reasoning model may spend the whole budget thinking and return no text (seen with deepseek-v4-flash at 800 tokens), and DeepSeek's thinking mode expects its reasoning sent back on every tool turn, which the OpenAI wire format used here does not carry. The real eval with reasoning off (`work/KBC-008/eval-reasoning-off.md`) cited the expected document in 10/10; the search-read loop gives the model room to think between steps instead;
 - the conversation is sent as prior user/assistant turns (text only, not tool results);
-- **narration is never shown**: each model call's text is buffered. A call that ends with tool calls has its text dropped for the reader (the model keeps it in its context). A call that does not is the answer and is shown. To keep the answer streaming, once the buffer passes 800 characters with no tool call yet, the call is taken as the answer: its text streams from then on and any tool call it asks for afterwards is ignored. Narration in the real eval stayed under ~450 characters, so the hold costs the answer a few seconds before its first token and never leaks a preamble. The forced last call (no tools) streams at once.
+- **narration is never shown**: each model call's text is buffered. A call that ends with tool calls has its text dropped for the reader (the model keeps it in its context). A call that does not is the answer and is shown. To keep the answer streaming, once the buffer passes 800 characters with no tool call yet, the call is taken as the answer: its text streams from then on and any tool call it asks for afterwards is ignored. Narration in the real eval stayed under ~450 characters, so the hold costs the answer a few seconds before its first token and never leaks a preamble. The forced last call (no tools) streams at once, and its text is the answer even when the provider ignores `tool_choice: "none"` and also asks for a tool.
 
 **Claude subscription.** Claude Code (`claude -p`) runs the loop itself:
-- the same tools are served to it as an **MCP server** (`kb-chat mcp`, stdio);
+- the same tools are served to it over MCP. *Amended by [ADR 0007](0007-ai-providers-and-local-settings.md):* not a stdio `kb-chat mcp` process per turn (it would rebuild the catalog and QMD every answer) but a per-turn Streamable HTTP endpoint of the API itself;
 - built-in tools are disabled, and only `mcp__kb__*` is allowed.
 
 **Prompt.**
@@ -42,11 +43,11 @@ Answers come from a **research agent**: a tool-calling loop over the collection,
 
 **Stream to the client.** SSE events:
 - `step`: a short, human description ("Buscando 'cinco princípios ocultos'", "Lendo 'Os Princípios Herméticos Ocultos'");
-- `sources` (grows as documents are read), `token`, `done` (cost) and `error`.
+- `start` (the turn's model and billing, so a stopped turn is saved with them), `sources` (grows as documents are read), `token`, `done` (cost) and `error`.
 
 **Spend.**
 - Per-token providers keep ADR 0004's controls: the ledger, the daily cap and the credit check.
-- The cap is checked before every step, not only once. The estimate shown is the typical cost of the configured model, not a precise number.
+- The cap is checked before every model call, not only once, at the output budget the adapter really sends. The estimate shown is the typical cost of the configured model, not a precise number.
 
 **`find_text` cache.** Ranked search only surfaces documents about the question's theme; the answer to "quais são os 5 princípios ocultos" sits in a document about space-time (`a-setuplicidade-do-espa-o-tempo`). `find_text` scans a per-topic, in-memory folded copy of the text (summary + body, one line, no markdown emphasis, accents and case folded, Latin-1 so V8 keeps it one byte per character). It is built lazily on first use and warmed at the start of every research turn, while the model thinks. It is keyed by the catalog object, so a catalog reload rebuilds it. Passages come from re-reading only the hit files. On the real vault (4,235 documents, 178 MB of markdown): about 4 s to build, about 200 MB of heap, and 70–500 ms per search with up to four alternatives.
 

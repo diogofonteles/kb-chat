@@ -30,7 +30,8 @@ Pedido do dono em 2026-10-24, depois de usar a release 1: "esperava que continua
 ## Business rules
 - BR-1: a IA pesquisa antes de responder e nunca pede ao leitor para refazer a busca. Se, depois de pesquisar, o acervo não trouxer a resposta, ela diz o que procurou e o que encontrou.
 - BR-2: fatos do acervo levam `[n]`, e n aponta para um documento que a IA leu. Conhecimento de fora do acervo pode complementar, mas vem marcado "(fora do acervo)".
-- BR-3: cada resposta tem no máximo 10 passos de ferramenta. Com provedor por token, o teto diário é verificado antes de cada passo (ADR 0004/0006); se o teto é atingido no meio, a IA para e explica.
+- BR-3 *(emenda 2026-10-24)*: cada resposta tem no máximo **15** passos de ferramenta. Com provedor por token, o teto diário é verificado antes de cada chamada ao modelo, ao preço do orçamento de saída que o provedor de fato recebe (ADR 0004/0006); se o teto é atingido no meio, a IA para e explica.
+  - *Texto original:* "no máximo 10 passos de ferramenta". Subiu para 15 junto com `find_text` e a leitura por janelas (commit `feeaa60`, ADR 0006), que dão ao agente mais passos curtos por resposta; o item fica alinhado ao que foi entregue.
 - BR-4: o contexto de uma conversa é o texto das perguntas e respostas anteriores (não os documentos lidos). Uma conversa nova começa sem contexto.
 - BR-5: na visão "Pesquisa com IA", perguntar já pesquisa com IA, sem um segundo clique. A estimativa deixa de ser um passo prévio e o custo real aparece ao final. Isso substitui a BR de "nunca roda sozinha" do KBC-004, por pedido do dono.
 - BR-6: a visão "Buscar documentos" nunca chama a IA. A visão "Pesquisa com IA" não mostra cartões de busca, só os documentos que o agente usou.
@@ -48,7 +49,8 @@ Pedido do dono em 2026-10-24, depois de usar a release 1: "esperava que continua
 - FR-6: o histórico da lateral deve guardar as conversas com IA com as respostas e fontes. Restaurar uma delas mostra as respostas salvas, sem chamar a IA de novo.
 
 ## Non-functional requirements
-- NFR-1: o primeiro passo visível aparece em até 3 s; a resposta típica (3 a 5 passos) termina em até 60 s com o modelo padrão, medido por `pnpm --filter @kb-chat/api agent-latency` em 10 perguntas reais.
+- NFR-1 *(emenda 2026-10-24)*: o primeiro passo visível aparece em até 3 s; a resposta típica (3 a 5 passos) termina em até 60 s com o modelo padrão, medido por `pnpm --filter @kb-chat/api agent-eval <perguntas.json> <relatório.md>` em 10 perguntas reais (o relatório traz o tempo até o primeiro passo e o total de cada uma).
+  - *Texto original:* medido por `agent-latency`, script que não chegou a existir; o `agent-eval` mede latência, custo e citação juntos.
 - NFR-2: custo médio ≤ US$ 0,02 por resposta com o modelo padrão, medido nas mesmas 10 perguntas.
 - NFR-3: no conjunto de avaliação de 10 perguntas reais (incluindo "quais são os 5 princípios ocultos"), ≥ 8 respostas citam o documento que contém a resposta.
 
@@ -69,7 +71,7 @@ Pedido do dono em 2026-10-24, depois de usar a release 1: "esperava que continua
 - **AC-4 (BR-3)**
   - Given um gasto do dia no limite
   - When o agente vai dar o próximo passo
-  - Then ele para e aparece "Limite de gasto de hoje atingido"
+  - Then ele para e aparece "Limite de gasto com IA de hoje atingido", com o caminho para ⚙ Configurações e sem "Tentar de novo" *(emenda 2026-10-24; texto original: "Limite de gasto de hoje atingido")*
 - **AC-5 (FR-5)**
   - Given uma conversa em cada visão
   - When o leitor troca de visão e volta
@@ -84,13 +86,13 @@ Pedido do dono em 2026-10-24, depois de usar a release 1: "esperava que continua
   - When o leitor a restaura
   - Then as respostas e fontes salvas aparecem sem nova chamada à IA
 - **AC-7 (BR-3)**
-  - Given um roteiro de stub com 15 buscas
+  - Given um roteiro de stub com mais de 15 buscas
   - When o agente roda
-  - Then ele para em 10 passos e responde com o que tem
+  - Then ele para em 15 passos e responde com o que tem *(emenda 2026-10-24, BR-3; texto original: "15 buscas … para em 10 passos")*
 - **AC-8 (NFR-3)**
   - Given o acervo real e o modelo padrão
   - When o conjunto de avaliação roda
-  - Then ≥ 8/10 citam o documento esperado (relatório em `work/KBC-008/eval.md`)
+  - Then ≥ 8/10 citam o documento esperado (relatório em `work/KBC-008/eval*.md`, um arquivo por rodada, com o provedor e o commit no cabeçalho) *(emenda 2026-10-24; texto original: `work/KBC-008/eval.md`)*
 
 ## Test strategy
 | AC | Nível |
