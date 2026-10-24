@@ -196,6 +196,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 ## Operability (CS-21 to CS-25)
 
 - **Config by env:** `GOOGLE_CLIENT_ID` and `KB_CHAT_OWNER_EMAIL` (required; read from the repository root `.env` by `pnpm dev:api`), `AUTH_RATE_LIMIT`, `KB_VAULT` (default `~/dev/personal/hermetismo`), `QMD_BIN`, `KB_BIN`, `OPENROUTER_API_KEY`, `KB_CHAT_MODEL` (default: the vault's `kb.toml` generation model), `KB_CHAT_DAILY_CAP_USD` (default 1), `PORT`, `WEB_ORIGIN`.
+- **Hosting (ADR 0010):** production runs as a Docker Compose project on one OCI Always Free VM, Caddy in front. The container sets `HOST=0.0.0.0` and `TRUST_PROXY=uniquelocal`; the MCP turn endpoint refuses non-loopback sockets. Deployment diagram, threat model and runbook: ADR 0010 and `docs/deploy/runbook.md`.
 - **Logs:** structured pino to stdout with a correlation id, route, status and latency.
 - **Health:** `/health` reports catalog, QMD and LLM status, which the web uses for the "server is down" states.
 - **Lifecycle:** on SIGTERM, close QMD and drain streams. QMD restarts with backoff when it dies.
