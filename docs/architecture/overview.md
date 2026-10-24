@@ -61,7 +61,7 @@ Person(student, "Student")
 Container(web, "Web app", "Angular 21, zoneless, signals", "Chat UI, filter chips, document panel, themes")
 Container(api, "API", "Node 22+, Fastify 5, zod", "Search, facets, documents, relations, AI answers, spend ledger")
 ContainerDb(catalog, "Catalog", "In-memory index built from frontmatter", "Per-document facets, title, summary, relations")
-ContainerDb(ledger, "Local state", "JSONL files in ~/.kb-chat/", "AI spend ledger and usage events")
+ContainerDb(ledger, "Local state", "JSONL and JSON files in ~/.kb-chat/", "AI spend ledger, usage events and saved conversations")
 System_Ext(vault, "kb vault", "Markdown files")
 System_Ext(qmd, "QMD MCP server", "Long-lived child process of the API, Node 24")
 System_Ext(openrouter, "OpenRouter")
@@ -97,6 +97,7 @@ API modules, organised by business capability:
 | `research` | Research agent (ADR 0006): tools over the index, summaries and relations, the tool loop | `ToolLoopRunner.run(turn)` (stream), `ResearchTools` |
 | `spend` | Spend ledger, daily cap and credit checks (ADR 0004) | `SpendService.guard(usd)`, `record(turn)`, `today()` |
 | `usage` | Local event log for the research plan | `record(event)` |
+| `conversations` | The complete conversation history (search and research), no cap, keyed by principal | `list(filter)`, `get(id)`, `save(conversation)`, `remove(id)` |
 
 Ports (interfaces in the module) and their adapters (in `adapters/`):
 
@@ -119,6 +120,7 @@ Dependency rules, enforced by `eslint-plugin-boundaries` or Nx module-boundary t
 - **Frontmatter keys read:** `title`, `summary`, `genre`, `depth`, `relevance`, `concepts`, `example_of`, `extends`, `related`, `type`, `stage`, `ingest_batch`. A missing key means the facet value "(none)" and is hidden in the UI.
 - **Duplicate groups** (same normalized title, e.g. `a-natureza-s-tupla-2.md` and `-5.md`) are computed in the catalog, and search returns the best-scoring member with `duplicates: n`.
 - **Spend ledger and usage events:** owned by `spend` and `usage`, stored under `~/.kb-chat/`, with 90-day retention for events (research plan).
+- **Conversations:** owned by `conversations`, one JSON file per conversation in `~/.kb-chat/conversations/<uuid>.json` (mode 0600, written to a temp file and renamed), kept forever; unreadable files are skipped with a warning.
 
 ## Contracts (CS-01, CS-08, CS-09, CS-11)
 
@@ -132,6 +134,8 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 | `GET /api/v1/topics/{topic}/documents/{id}` | Body markdown without frontmatter, facets, summary, see-also groups, highlight terms |
 | `POST /api/v1/topics/{topic}/research` | One research turn for `{ question, history }`: streams (SSE) `step`, `sources`, `token`, `done` (cost, steps) or `error` (ADR 0006); rate-limited, the daily cap checked before every model call |
 | `GET /api/v1/spend/today` | Spend today and the cap |
+| `GET /api/v1/conversations` | Every saved conversation as summaries, newest first by `updatedAt`; optional `?kind=search\|research&topic=` |
+| `GET` / `PUT` / `DELETE /api/v1/conversations/{id}` | One conversation (uuid id): read, upsert (path id must equal body id; answers with the summary), remove (204, idempotent) |
 | `GET /health` | Readiness: catalog loaded, QMD alive, LLM configured |
 
 - **Errors:** one shape, `{ error: { code, message, details? } }`. Stable codes: `TOPIC_NOT_FOUND`, `INDEX_MISSING`, `SEARCH_UNAVAILABLE`, `DOCUMENT_NOT_FOUND`, `LLM_NOT_CONFIGURED`, `LLM_INSUFFICIENT_CREDIT`, `DAILY_CAP_REACHED`, `VALIDATION_FAILED`. No stack traces (CS-08). The web maps each code to the pt-BR copy in `screens.md`.

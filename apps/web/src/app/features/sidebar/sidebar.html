@@ -5,21 +5,33 @@
 </button>
 
 <nav class="history" aria-labelledby="history-title">
-  <h2 id="history-title" class="label">
-    <span i18n="@@sidebar.history">Histórico</span>&ngsp;<span
-      class="where"
-      i18n="@@sidebar.thisBrowser"
-      >(neste navegador)</span
-    >
-  </h2>
+  <div class="heading">
+    <h2 id="history-title" class="label" i18n="@@sidebar.history">Histórico</h2>
+    <p class="where" i18n="@@sidebar.thisComputer">neste computador</p>
+  </div>
   @if (!history.available()) {
-    <p class="note" i18n="@@sidebar.historyUnavailable">
-      Histórico indisponível neste navegador.
+    <p class="note" role="status">
+      @if (history.lastError()?.action === 'save') {
+        <ng-container i18n="@@sidebar.historySaveFailed"
+          >Não consegui salvar a conversa no histórico.</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@sidebar.historyUnavailable"
+          >Histórico indisponível no momento.</ng-container
+        >
+      }
     </p>
-  } @else if (history.conversations().length === 0) {
-    <p class="note" i18n="@@sidebar.historyEmpty">
-      Suas conversas aparecem aqui.
+  } @else if (history.lastError()?.action === 'load') {
+    <p class="note" role="status" i18n="@@sidebar.historyLoadFailed">
+      Não consegui abrir essa conversa. Tente de novo.
     </p>
+  }
+  @if (history.conversations().length === 0) {
+    @if (history.available()) {
+      <p class="note" i18n="@@sidebar.historyEmpty">
+        Suas conversas aparecem aqui.
+      </p>
+    }
   } @else {
     <ul>
       @for (conversation of history.conversations(); track conversation.id) {
@@ -32,16 +44,21 @@
             "
             (click)="open(conversation)"
           >
-            <span class="question" [title]="conversation.asks[0].question">{{
-              conversation.asks[0].question
-            }}</span>
-            <span class="meta">
-              {{ titles().get(conversation.topic) ?? conversation.topic }}
-              @if (conversation.asks.length > 1) {
+            <span class="question" [title]="conversation.title">{{
+              conversation.title
+            }}</span
+            >&ngsp;<span class="meta">
+              <span
+                class="kind"
+                [class.research]="conversation.kind === 'research'"
+                >{{ kindLabels[conversation.kind] }}</span
+              >
+              · {{ titles().get(conversation.topic) ?? conversation.topic }}
+              @if (conversation.count > 1) {
                 <span i18n="@@sidebar.questions"
                   >·
-                  {conversation.asks.length, plural,
-                    other {{{ conversation.asks.length }} perguntas}
+                  {conversation.count, plural,
+                    other {{{ conversation.count }} perguntas}
                   }</span
                 >
               }

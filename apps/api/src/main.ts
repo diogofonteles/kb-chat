@@ -6,6 +6,7 @@ import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { JsonlSpendLedger } from './adapters/jsonl-spend-ledger.js';
 import { JsonlUsageLog } from './adapters/jsonl-usage-log.js';
+import { FsConversationStore } from './adapters/fs-conversation-store.js';
 import { createLlm } from './llm-factory.js';
 import { createSearchIndex } from './search-index-factory.js';
 
@@ -19,6 +20,10 @@ const ledger = new JsonlSpendLedger(
 );
 const usage = new JsonlUsageLog(join(config.KB_CHAT_STATE_DIR, 'events.jsonl'));
 await applyUsageRetention(usage, logger);
+const conversations = new FsConversationStore({
+  dir: join(config.KB_CHAT_STATE_DIR, 'conversations'),
+  log: logger,
+});
 const app = await buildApp({
   config,
   vault,
@@ -27,6 +32,7 @@ const app = await buildApp({
   llm,
   ledger,
   usage,
+  conversations,
 });
 
 const shutdown = async (): Promise<void> => {

@@ -30,13 +30,20 @@
   color: var(--color-text-muted);
 }
 
+.heading {
+  display: grid;
+  gap: 2px;
+}
+
 .where {
-  font-weight: 400;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
 }
 
 .history {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: var(--space-2);
   min-height: 0;
 }
@@ -83,6 +90,19 @@
 .meta {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+.kind {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.kind.research {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
 }
 
 .note {

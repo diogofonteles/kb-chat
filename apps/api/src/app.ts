@@ -28,6 +28,12 @@ import type { SpendLedgerPort } from './ports/spend-ledger.js';
 import type { UsageLogPort } from './ports/usage-log.js';
 import type { VaultReaderPort } from './ports/vault-reader.js';
 import { MemoryUsageLog } from './adapters/memory-usage-log.js';
+import { MemoryConversationStore } from './adapters/memory-conversation-store.js';
+import type { ConversationStorePort } from './ports/conversation-store.js';
+import {
+  ConversationsService,
+  conversationRoutes,
+} from './modules/conversations/index.js';
 import { usageRoutes } from './modules/usage/index.js';
 import { createLogger } from './logger.js';
 
@@ -43,6 +49,8 @@ export interface AppDeps {
   readonly ledger?: SpendLedgerPort;
   /** Local usage log (KBC-006); in memory when not given. */
   readonly usage?: UsageLogPort;
+  /** Saved conversations (the complete history); in memory when not given. */
+  readonly conversations?: ConversationStorePort;
   readonly catalog?: CatalogRegistry;
   readonly logger?: FastifyBaseLogger;
 }
@@ -52,6 +60,7 @@ type FullDeps = AppDeps & {
   llm: AgentLlmPort;
   ledger: SpendLedgerPort;
   usage: UsageLogPort;
+  conversations: ConversationStorePort;
 };
 
 /** The research agent (ADR 0006) and the spend controls it shares with the side panel. */
@@ -95,6 +104,11 @@ async function registerRoutes(
   await app.register(
     usageRoutes({ catalog, log: deps.usage, principal: OWNER }),
   );
+  const conversations = new ConversationsService({
+    store: deps.conversations,
+    principal: OWNER,
+  });
+  await app.register(conversationRoutes(conversations));
 }
 
 /** Assembles the API; only `main` listens (ND-01). */
@@ -120,6 +134,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     llm: deps.llm ?? new DisabledLlm(),
     ledger: deps.ledger ?? new MemorySpendLedger(),
     usage: deps.usage ?? new MemoryUsageLog(),
+    conversations: deps.conversations ?? new MemoryConversationStore(),
   });
 
   app.addHook('onClose', async () => deps.index.close());

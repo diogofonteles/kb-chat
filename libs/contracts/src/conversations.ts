@@ -71,3 +71,18 @@ export const conversationListSchema = z.object({
   items: z.array(conversationSummarySchema),
 });
 export type ConversationList = z.infer<typeof conversationListSchema>;
+
+export type SearchConversation = Extract<Conversation, { kind: 'search' }>;
+export type ResearchConversation = Extract<Conversation, { kind: 'research' }>;
+
+/** The list entry of a conversation; shared so the web can update its list before the API answers. */
+export function summarizeConversation(
+  conversation: Conversation,
+): ConversationSummary {
+  const { id, kind, topic, title, updatedAt } = conversation;
+  const count =
+    conversation.kind === 'search'
+      ? conversation.asks.length
+      : conversation.turns.length;
+  return { id, kind, topic, title, updatedAt, count };
+}
