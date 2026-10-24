@@ -13,6 +13,7 @@ import {
 import { SpendStore } from '@core/spend/spend-store.js';
 import { THEMES, ThemeStore, type Theme } from '@core/theme/theme-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { SettingsButton } from '@features/settings/settings-button.js';
 
 export type SidebarAction = 'new' | 'restore' | 'topic';
 
@@ -30,7 +31,7 @@ const THEME_LABELS: Record<Theme, () => string> = {
  */
 @Component({
   selector: 'app-sidebar',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, SettingsButton],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
