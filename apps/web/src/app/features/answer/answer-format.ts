@@ -47,25 +47,14 @@ export function citedSource(target: EventTarget | null): number | null {
   return match ? Number(match[1]) : null;
 }
 
-const usd = (fractionDigits: number) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'symbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: fractionDigits,
-  });
-
-/** "menos de US$ 0,01" for the usual answer (decision 2026-10-24), otherwise the rounded-up amount. */
-export function formatEstimate(value: number): string {
-  if (value < 0.01) return $localize`:@@ai.lessThanCent:menos de US$ 0,01`;
-  return `~${usd(2).format(Math.ceil(value * 100) / 100)}`;
-}
+const usd = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'USD',
+  currencyDisplay: 'symbol',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
 
 export function formatCost(value: number): string {
-  return usd(4).format(value);
+  return usd.format(value);
 }
-
-/** The model's own "not enough material" answer (ADR 0004), so the UI can suggest another search. */
-export const isInsufficient = (text: string): boolean =>
-  /não traz informação suficiente/i.test(text);

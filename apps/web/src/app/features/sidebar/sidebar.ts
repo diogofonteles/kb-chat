@@ -18,6 +18,8 @@ import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { THEMES, ThemeStore, type Theme } from '@core/theme/theme-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { ViewStore } from '@features/chat/view-store.js';
+import { ResearchStore } from '@features/research/research-store.js';
 
 export type SidebarAction = 'new' | 'restore' | 'topic';
 
@@ -47,6 +49,8 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
 })
 export class Sidebar {
   protected readonly chat = inject(ChatStore);
+  private readonly views = inject(ViewStore);
+  private readonly research = inject(ResearchStore);
   protected readonly history = inject(HistoryStore);
   protected readonly spend = inject(SpendStore);
   private readonly themes = inject(ThemeStore);
@@ -80,8 +84,10 @@ export class Sidebar {
       .subscribe((conversation) => this.restoreLoaded(conversation));
   }
 
+  /** "+ Nova conversa" starts over in the current view; the other one keeps its conversation. */
   protected startNew(): void {
-    this.chat.newConversation();
+    if (this.views.current() === 'research') this.research.newConversation();
+    else this.chat.newConversation();
     this.acted.emit('new');
   }
 

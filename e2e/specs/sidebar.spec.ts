@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { startInSearchView } from './search-view.js';
+
+test.beforeEach(startInSearchView);
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 

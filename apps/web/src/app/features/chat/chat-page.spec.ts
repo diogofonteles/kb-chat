@@ -27,18 +27,11 @@ import {
   aSearchConversation,
 } from '../../testing/fake-conversations.js';
 
-/** The page tests cover search and reading; the AI block gets a quiet stand-in. */
+/** These page tests cover search and reading (the research view has its own spec). */
 const FAKE_ANSWERS = {
   provide: AnswersApi,
   useValue: {
-    estimate: () =>
-      of({
-        usd: 0.0005,
-        model: 'stub/model',
-        passages: 1,
-        billing: 'per-token' as const,
-      }),
-    answer: () => EMPTY,
+    research: () => EMPTY,
     spendToday: () => of({ usd: 0, capUsd: 1, configured: true }),
   },
 };
@@ -59,6 +52,8 @@ async function renderPage(
   extraProviders: { provide: unknown; useValue: unknown }[] = [],
 ) {
   localStorage.clear();
+  // A configured provider opens the research view; these tests start in the search view.
+  localStorage.setItem('kb-chat.view', 'search');
   usage.track.mockClear();
   const view = await render(ChatPage, {
     providers: [
@@ -491,6 +486,9 @@ describe('ChatPage side panel (KBC-005)', () => {
     const view = await renderPage();
     expect(screen.getByText('Histórico indisponível no momento.')).toBeTruthy();
     conversations.failWith = null;
+    // With a provider the page opens in the research view; search is one click away.
+    fireEvent.click(screen.getByRole('radio', { name: 'Buscar documentos' }));
+    await view.fixture.whenStable();
     await ask('lei do ritmo', view);
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();

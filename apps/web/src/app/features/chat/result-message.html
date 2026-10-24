@@ -25,15 +25,6 @@
           {{ count() }} · {{ modeName() }} · {{ seconds() | number: '1.1-1' }} s
         }
       </p>
-      @if (current.items.length > 0) {
-        <app-ai-answer
-          [topic]="message().topic"
-          [question]="message().question"
-          [mode]="message().mode"
-          [filters]="message().filters"
-          (opened)="opened.emit($event)"
-        />
-      }
       @if (current.items.length > 0 || filtered()) {
         <app-filter-bar
           [facets]="current.facets"
