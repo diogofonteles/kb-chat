@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { CSRF, OWNER_EMAIL, expect, pageAs, test } from './fixtures.js';
 import { startInSearchView } from './search-view.js';
 
 test.beforeEach(startInSearchView);
@@ -62,7 +63,6 @@ test('AC-1/AC-2: a new conversation clears the screen and the history brings the
 test('the history is kept on this computer: it survives a reload and another browser', async ({
   page,
   browser,
-  baseURL,
 }) => {
   const question = `ritmo ${uniqueTag()}`;
   await ask(page, question);
@@ -73,8 +73,9 @@ test('the history is kept on this computer: it survives a reload and another bro
   await expect(
     (await historyOf(page)).getByRole('button', { name: question }),
   ).toBeVisible();
-  const other = await browser.newContext({ baseURL });
-  const fresh = await other.newPage();
+  // Another browser of the same person: signed in with the same account (KBC-010).
+  const fresh = await pageAs(browser, OWNER_EMAIL, page.viewportSize());
+  const other = fresh.context();
   await fresh.goto('/');
   const history = await historyOf(fresh);
   await history.getByRole('button', { name: question }).click();
@@ -91,6 +92,7 @@ test('lists every conversation, with no cap of 50', async ({ page }) => {
     const at = new Date(Date.UTC(2020, 0, 1, 0, n)).toISOString();
     const title = `${tag} lote ${n}`;
     const response = await page.request.put(`/api/v1/conversations/${id}`, {
+      headers: CSRF,
       data: {
         kind: 'search',
         id,

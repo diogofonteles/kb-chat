@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures.js';
 
 /**
  * "Pesquisa com IA" (KBC-008) against the stub agent (KB_CHAT_LLM=stub): it searches, finds
