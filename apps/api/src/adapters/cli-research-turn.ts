@@ -291,8 +291,12 @@ async function* runPass(
   return turn.state;
 }
 
-/** Runs `stop` when the reader aborts; returns the way to stop watching. */
-function stopOnAbort(signal: AbortSignal, stop: () => void): () => void {
+/** Runs `stop` when the reader aborts, at once if already aborted; returns the way to stop watching. */
+export function stopOnAbort(signal: AbortSignal, stop: () => void): () => void {
+  if (signal.aborted) {
+    stop();
+    return () => undefined;
+  }
   signal.addEventListener('abort', stop, { once: true });
   return () => signal.removeEventListener('abort', stop);
 }
@@ -316,6 +320,15 @@ function deepPass(
   };
 }
 
+/** The deep model a fast turn may hand over to, when Settings allow it. */
+function escalationOf(
+  options: CliTurnOptions,
+  input: TurnInput,
+): Escalation<string | undefined> | undefined {
+  const allowed = input.profile === 'fast' && options.escalation?.enabled();
+  return allowed ? options.escalation : undefined;
+}
+
 /**
  * One research turn run by a subscription CLI (KBC-007 FR-4): the tools are served to it
  * over the turn's MCP endpoint, its stdout becomes tokens, and each tool call it makes
@@ -330,10 +343,7 @@ export async function* runCliTurn(
   input: TurnInput,
 ): AsyncIterable<ResearchEvent> {
   const answer = new AnswerStream();
-  const escalation =
-    input.profile === 'fast' && options.escalation?.enabled()
-      ? options.escalation
-      : undefined;
+  const escalation = escalationOf(options, input);
   const first = { ...input, canDeepen: escalation !== undefined };
   const fast = yield* runPass(options, dialect, {
     input: first,
@@ -346,6 +356,11 @@ export async function* runCliTurn(
     return;
   }
   yield { type: 'step', step: DEEPEN_STEP };
+  // The reader may stop right on "Aprofundando…": then the deep CLI never starts.
+  if (input.signal.aborted) {
+    yield finalEvent(fast, { aborted: true, escalated: true });
+    return;
+  }
   const pass = deepPass(input, fast, escalation);
   const deep = yield* runPass(options, dialect, { ...pass, answer });
   const total = { ...deep, steps: fast.steps + deep.steps };

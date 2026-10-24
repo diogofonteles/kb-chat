@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ResearchEvent } from '@kb-chat/contracts';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FakeResearchTools } from '../../test/fake-research-tools.js';
 import { answerText } from '../../test/research-factories.js';
 import { FAKES_DIR } from '../../test/fixture-paths.js';
@@ -23,6 +23,7 @@ import {
   parseCodexLine,
 } from './codex-cli-runner.js';
 import { subscriptionEnv } from './cli-process.js';
+import { stopOnAbort } from './cli-research-turn.js';
 
 const turns = new McpTurnRegistry();
 let server: FastifyInstance;
@@ -124,6 +125,59 @@ describe('ClaudeCliRunner auto-escalation (ADR 0009)', () => {
     expect(seen.stdin).toContain('Faça a sua própria pesquisa');
     expect(seen.stdin).toContain('[1] A Lei do Ritmo');
     expect(turns.size).toBe(0);
+  });
+
+  it('never shows a marker written after a sentence, even split across deltas', async () => {
+    const events = await collect(
+      escalating(await fakeHome({ mode: 'deepen-mid' })),
+    );
+    const shown = events
+      .flatMap((e) => (e.type === 'token' ? [e.text] : []))
+      .join('');
+    expect(shown).toContain('Achei só parte da lista.');
+    expect(shown).not.toContain('<');
+    expect(answerText(events)).toBe('Segundo o acervo, tudo flui [1].');
+    expect(events.at(-1)).toMatchObject({ type: 'done', escalated: true });
+  });
+
+  it('never starts the deep CLI when the reader stops on "Aprofundando…"', async () => {
+    const report = join(workDir, 'stopped.json');
+    const abort = new AbortController();
+    const events: ResearchEvent[] = [];
+    const runner = escalating(await fakeHome({ mode: 'deepen', report }));
+    for await (const event of runner.run({
+      topic: 'hermetismo',
+      question: 'q',
+      history: [],
+      profile: 'fast',
+      signal: abort.signal,
+    })) {
+      events.push(event);
+      if (event.type === 'step' && event.step.kind === 'deepen') abort.abort();
+    }
+    expect(events.at(-1)).toMatchObject({
+      type: 'done',
+      interrupted: true,
+      escalated: true,
+    });
+    // The report is the fast run's: the deep (opus) run never started.
+    const seen = JSON.parse(await readFile(report, 'utf8'));
+    expect(seen.args).not.toContain('--model=opus');
+    expect(turns.size).toBe(0);
+  });
+
+  it('stops at once when the reader aborted before the CLI was watched', () => {
+    const stop = vi.fn();
+    const aborted = new AbortController();
+    aborted.abort();
+    stopOnAbort(aborted.signal, stop)();
+    expect(stop).toHaveBeenCalledOnce();
+    const live = new AbortController();
+    const later = vi.fn();
+    const unwatch = stopOnAbort(live.signal, later);
+    unwatch();
+    live.abort();
+    expect(later).not.toHaveBeenCalled();
   });
 
   it('escalates an answer that gives up on the collection, and not when Settings turn it off', async () => {
