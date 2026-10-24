@@ -56,6 +56,26 @@ describe('parseUsageLog', () => {
       ].join('\n'),
     );
     expect(parseUsageLog(await readFile(file, 'utf8'))).toHaveLength(1);
-    expect(await new JsonlUsageLog(file).prune(CUTOFF)).toBe(3);
+    // Retention decides by date only: the line without a readable date goes, the others stay.
+    expect(await new JsonlUsageLog(file).prune(CUTOFF)).toBe(2);
+  });
+
+  it('keeps recent lines of an older format and reads them as typed searches (QA BUG-1)', async () => {
+    const file = tempFile();
+    const legacy = {
+      type: 'search',
+      question: 'ritmo',
+      mode: 'all',
+      filterCount: 0,
+      total: 3,
+      tookMs: 10,
+      ts: daysAgo(2),
+      principal: 'owner',
+      sessionId: 's',
+    };
+    await writeFile(file, `${JSON.stringify(legacy)}\n`);
+    expect(await new JsonlUsageLog(file).prune(CUTOFF)).toBe(0);
+    const [record] = parseUsageLog(await readFile(file, 'utf8'));
+    expect(record).toMatchObject({ type: 'search', origin: 'typed' });
   });
 });

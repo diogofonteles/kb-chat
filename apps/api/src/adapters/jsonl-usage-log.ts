@@ -10,16 +10,37 @@ import { dirname } from 'node:path';
 import type { UsageLogPort } from '../ports/usage-log.js';
 
 /** Parses events.jsonl, skipping lines that are not records (a torn last write, manual edits). */
+/** Lines written before search events had an origin (KBC-006 review) count as typed searches. */
+function upgrade(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+  const record = value as Record<string, unknown>;
+  return record['type'] === 'search' && record['origin'] === undefined
+    ? { ...record, origin: 'typed' }
+    : record;
+}
+
+function parseLine(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Parses events.jsonl, skipping lines that are not records (a torn last write, manual edits). */
 export function parseUsageLog(text: string): UsageRecord[] {
   return text.split('\n').flatMap((line) => {
     if (!line.trim()) return [];
-    try {
-      const parsed = usageRecordSchema.safeParse(JSON.parse(line));
-      return parsed.success ? [parsed.data] : [];
-    } catch {
-      return [];
-    }
+    const parsed = usageRecordSchema.safeParse(upgrade(parseLine(line)));
+    return parsed.success ? [parsed.data] : [];
   });
+}
+
+/** Retention looks only at the timestamp: a line from another format version is kept while recent. */
+function isRecent(line: string, cutoff: Date): boolean {
+  const value = parseLine(line) as { ts?: unknown } | undefined;
+  const ts = typeof value?.ts === 'string' ? Date.parse(value.ts) : Number.NaN;
+  return ts >= cutoff.getTime();
 }
 
 /** Usage log as JSONL under the local state folder (~/.kb-chat/events.jsonl). */
@@ -38,18 +59,13 @@ export class JsonlUsageLog implements UsageLogPort {
   async prune(cutoff: Date): Promise<number> {
     const text = await readFile(this.file, 'utf8').catch(() => null);
     if (text === null) return 0;
-    const records = parseUsageLog(text);
-    const kept = records.filter((r) => Date.parse(r.ts) >= cutoff.getTime());
-    const removed =
-      text.split('\n').filter((l) => l.trim()).length - kept.length;
+    const lines = text.split('\n').filter((line) => line.trim());
+    const kept = lines.filter((line) => isRecent(line, cutoff));
+    const removed = lines.length - kept.length;
     if (removed === 0) return 0;
     // Written aside and renamed, so a crash never leaves a half-written log.
     const temp = `${this.file}.tmp`;
-    await writeFile(
-      temp,
-      kept.map((record) => `${JSON.stringify(record)}\n`).join(''),
-      'utf8',
-    );
+    await writeFile(temp, kept.map((line) => `${line}\n`).join(''), 'utf8');
     await rename(temp, this.file);
     return removed;
   }
