@@ -1,9 +1,11 @@
 import { join } from 'node:path';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { buildApp } from './app.js';
+import { applyUsageRetention } from './modules/usage/index.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { JsonlSpendLedger } from './adapters/jsonl-spend-ledger.js';
+import { JsonlUsageLog } from './adapters/jsonl-usage-log.js';
 import { createLlm } from './llm-factory.js';
 import { createSearchIndex } from './search-index-factory.js';
 
@@ -15,7 +17,17 @@ const llm = await createLlm(config);
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
 );
-const app = await buildApp({ config, vault, index, logger, llm, ledger });
+const usage = new JsonlUsageLog(join(config.KB_CHAT_STATE_DIR, 'events.jsonl'));
+await applyUsageRetention(usage, logger);
+const app = await buildApp({
+  config,
+  vault,
+  index,
+  logger,
+  llm,
+  ledger,
+  usage,
+});
 
 const shutdown = async (): Promise<void> => {
   await app.close();

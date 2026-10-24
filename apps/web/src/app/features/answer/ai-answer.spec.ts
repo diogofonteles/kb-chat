@@ -5,6 +5,7 @@ import { EMPTY_FILTERS, type AnswerEvent } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { AnswersApi } from '@core/api/answers-api.js';
 import { SpendStore } from '@core/spend/spend-store.js';
+import { UsageLog } from '@core/usage/usage-log.js';
 import { Subject, of, throwError } from 'rxjs';
 import { AiAnswer } from './ai-answer.js';
 import {
@@ -12,6 +13,8 @@ import {
   formatEstimate,
   renderAnswer as renderAnswerHtml,
 } from './answer-format.js';
+
+const usage = { track: vi.fn() };
 
 function setup(
   estimate: ReturnType<AnswersApi['estimate']> = of({
@@ -37,6 +40,7 @@ async function renderAnswer(api: object, spend = { refresh: vi.fn() }) {
       provideZonelessChangeDetection(),
       { provide: AnswersApi, useValue: api },
       { provide: SpendStore, useValue: spend },
+      { provide: UsageLog, useValue: usage },
     ],
     inputs: {
       topic: 'hermetismo',
@@ -282,6 +286,28 @@ describe('AiAnswer and the spend of the day (KBC-005 FR-5)', () => {
     const { spend, view } = await started();
     view.fixture.destroy();
     expect(spend.refresh).toHaveBeenCalledExactlyOnceWith(1000);
+  });
+});
+
+describe('AiAnswer usage log (KBC-006 BR-2)', () => {
+  it('logs a finished answer with its cost and a stopped one as a cancel', async () => {
+    usage.track.mockClear();
+    const { api, stream } = setup();
+    const view = await renderAnswer(api);
+    fireEvent.click(screen.getByRole('button', { name: /Responder com IA/ }));
+    stream.next({ type: 'token', text: 'Texto' });
+    stream.next({ type: 'done', usd: 0.0003, model: 'm', interrupted: false });
+    await view.fixture.whenStable();
+    expect(usage.track).toHaveBeenCalledWith({
+      type: 'ai_answer',
+      usd: 0.0003,
+    });
+    view.fixture.componentRef.setInput('question', 'outra');
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: /Responder com IA/ }));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Parar' }));
+    expect(usage.track).toHaveBeenLastCalledWith({ type: 'ai_cancel' });
   });
 });
 

@@ -20,6 +20,7 @@ import type {
 } from '@kb-chat/contracts';
 import { AnswersApi } from '@core/api/answers-api.js';
 import { SpendStore } from '@core/spend/spend-store.js';
+import { UsageLog } from '@core/usage/usage-log.js';
 import {
   errorMessage,
   toUiErrorCode,
@@ -77,6 +78,7 @@ const IDLE: AnswerRun = {
 export class AiAnswer {
   private readonly api = inject(AnswersApi);
   private readonly spend = inject(SpendStore);
+  private readonly usage = inject(UsageLog);
   private readonly destroyRef = inject(DestroyRef);
   private subscription: Subscription | null = null;
 
@@ -177,6 +179,7 @@ export class AiAnswer {
 
   /** "Parar": aborts the request (the server stops the model and records the partial cost). */
   protected stop(): void {
+    this.usage.track({ type: 'ai_cancel' });
     this.stopSilently();
     this.run.update((run) => ({ ...run, phase: 'done', interrupted: true }));
   }
@@ -190,6 +193,8 @@ export class AiAnswer {
   }
 
   private apply(event: AnswerEvent): void {
+    if (event.type === 'done' && !event.interrupted)
+      this.usage.track({ type: 'ai_answer', usd: event.usd });
     this.run.update((run) => applyEvent(run, event));
   }
 
