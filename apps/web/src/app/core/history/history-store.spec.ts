@@ -11,8 +11,9 @@ import {
   type SearchConversation,
 } from '@kb-chat/contracts';
 import { aSearchConversation } from '../../testing/fake-conversations.js';
-import { HistoryStore } from './history-store.js';
+import { HistoryStore, RETRY_FIRST_MS } from './history-store.js';
 import { LEGACY_HISTORY_KEY } from './legacy-history.js';
+import { PENDING_SAVES_KEY } from './pending-saves.js';
 
 const LIST = '/api/v1/conversations';
 const one = (id: string) => `${LIST}/${id}`;
@@ -114,6 +115,75 @@ describe('HistoryStore (the complete history on the local API)', () => {
       .flush(summarizeConversation(conversation));
     expect(store.available()).toBe(true);
     expect(store.lastError()).toBeNull();
+  });
+
+  it('keeps a failed save pending through other saves and sends it again on the next save', async () => {
+    const { store, http } = await loadedStore();
+    const [failed, other] = [aSearchConversation(), aSearchConversation()];
+    store.save(failed);
+    http
+      .expectOne(one(failed.id))
+      .error(new ProgressEvent('error'), NETWORK_DOWN);
+    store.save(other);
+    http.expectOne(one(other.id)).flush(summarizeConversation(other));
+    // Another conversation saving fine does not clear the one still missing.
+    expect(store.available()).toBe(false);
+    expect(store.lastError()).toEqual({ action: 'save', id: failed.id });
+    const retry = http.expectOne(one(failed.id));
+    expect(retry.request.body).toEqual(failed);
+    retry.flush(summarizeConversation(failed));
+    expect(store.available()).toBe(true);
+    expect(store.lastError()).toBeNull();
+    expect(localStorage.getItem(PENDING_SAVES_KEY)).toBeNull();
+  });
+
+  it('retries a failed save by itself, with backoff', async () => {
+    const { store, http } = await loadedStore();
+    vi.useFakeTimers();
+    try {
+      const conversation = aSearchConversation();
+      store.save(conversation);
+      http
+        .expectOne(one(conversation.id))
+        .error(new ProgressEvent('error'), NETWORK_DOWN);
+      vi.advanceTimersByTime(RETRY_FIRST_MS);
+      http
+        .expectOne(one(conversation.id))
+        .error(new ProgressEvent('error'), NETWORK_DOWN);
+      vi.advanceTimersByTime(RETRY_FIRST_MS);
+      http.expectNone(one(conversation.id));
+      vi.advanceTimersByTime(RETRY_FIRST_MS);
+      http
+        .expectOne(one(conversation.id))
+        .flush(summarizeConversation(conversation));
+      expect(store.available()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a pending conversation across a reload and saves it once the list loads', async () => {
+    const first = await loadedStore();
+    const conversation = aSearchConversation({ title: 'não salva' });
+    first.store.save(conversation);
+    first.http
+      .expectOne(one(conversation.id))
+      .error(new ProgressEvent('error'), NETWORK_DOWN);
+    TestBed.resetTestingModule();
+    const { store, http } = createStore();
+    // Listed and readable from this browser before the API has it.
+    expect(store.conversations().map((c) => c.title)).toEqual(['não salva']);
+    const loaded: Conversation[] = [];
+    store.load(conversation.id).subscribe((c) => loaded.push(c));
+    expect(loaded).toEqual([conversation]);
+    expect(store.available()).toBe(false);
+    http.expectOne(LIST).flush({ items: [] });
+    await settle();
+    http
+      .expectOne(one(conversation.id))
+      .flush(summarizeConversation(conversation));
+    expect(store.available()).toBe(true);
+    expect(localStorage.getItem(PENDING_SAVES_KEY)).toBeNull();
   });
 
   it('loads a whole conversation by id, and reports a failed load', async () => {

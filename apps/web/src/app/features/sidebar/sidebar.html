@@ -13,7 +13,8 @@
     <p class="note" role="status">
       @if (history.lastError()?.action === 'save') {
         <ng-container i18n="@@sidebar.historySaveFailed"
-          >Não consegui salvar a conversa no histórico.</ng-container
+          >Ainda não consegui salvar uma conversa no histórico. Ela fica
+          guardada neste navegador e eu tento de novo sozinho.</ng-container
         >
       } @else {
         <ng-container i18n="@@sidebar.historyUnavailable"
