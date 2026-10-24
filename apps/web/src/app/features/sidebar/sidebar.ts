@@ -67,6 +67,12 @@ export class Sidebar {
     value,
     label: THEME_LABELS[value](),
   }));
+  /** The conversation on screen: the one of the current view (KBC-008 FR-5). */
+  protected readonly currentId = computed(() =>
+    this.views.current() === 'research'
+      ? this.research.conversationId()
+      : this.chat.conversationId(),
+  );
   protected readonly titles = computed(
     () => new Map(this.chat.topicList().map((t) => [t.slug, t.title])),
   );

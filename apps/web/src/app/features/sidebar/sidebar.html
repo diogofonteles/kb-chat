@@ -40,7 +40,7 @@
             type="button"
             class="conversation"
             [attr.aria-current]="
-              conversation.id === chat.conversationId() ? 'true' : null
+              conversation.id === currentId() ? 'true' : null
             "
             (click)="open(conversation)"
           >

@@ -79,6 +79,7 @@ async function answer(page: Page, index: number, text: string) {
   stream.next({
     type: 'done',
     usd: 0.001,
+    billing: 'per-token',
     model: 'm',
     interrupted: false,
     steps: 2,
@@ -133,6 +134,10 @@ describe('ChatPage research view (KBC-008)', () => {
     expect(history.textContent?.replace(/\s+/g, ' ')).toContain(
       'o que é o ritmo? IA · Hermetismo',
     );
+    // The research conversation on screen is the current one in the history.
+    expect(
+      history.querySelector('[aria-current="true"]')?.textContent,
+    ).toContain('o que é o ritmo?');
   });
 
   it('opens the cited document in the panel (AC-3)', async () => {
@@ -211,7 +216,7 @@ describe('ChatPage research view (KBC-008)', () => {
     expect(research.disabled).toBe(true);
     expect(
       screen.getByText(
-        'Configure um provedor de IA em Configurações para pesquisar com IA.',
+        'Configure um provedor de IA em ⚙ Configurações para pesquisar com IA.',
       ),
     ).toBeTruthy();
     expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
