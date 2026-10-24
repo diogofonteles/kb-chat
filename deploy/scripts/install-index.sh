@@ -27,6 +27,13 @@ compose() {
     --env-file "$DEPLOY_DIR/.env" --env-file "$DEPLOY_DIR/release.env" "$@"
 }
 
+# The same lock as deploy.sh: never swap the index while a release is changing.
+if [ -z "${KB_CHAT_LOCKED:-}" ] && command -v flock >/dev/null; then
+  exec 9>"$DEPLOY_DIR/.lock"
+  flock -w 300 9 || die "another deploy holds $DEPLOY_DIR/.lock"
+  export KB_CHAT_LOCKED=1
+fi
+
 mkdir -p "$CACHE" "$CONFIG"
 # Before the first deploy there is no release yet: just put the files in place.
 running=0
@@ -36,6 +43,9 @@ if [ -f "$DEPLOY_DIR/release.env" ]; then
 fi
 if [ -f "$CACHE/index.sqlite" ]; then
   mv -f "$CACHE/index.sqlite" "$CACHE/index.sqlite.previous"
+fi
+if [ -f "$CONFIG/index.yml" ]; then
+  cp -f "$CONFIG/index.yml" "$CONFIG/index.yml.previous"
 fi
 rm -f "$CACHE/index.sqlite-wal" "$CACHE/index.sqlite-shm"
 mv -f "$INCOMING/index.sqlite" "$CACHE/index.sqlite"
@@ -47,6 +57,18 @@ if [ "$running" -eq 0 ]; then
   echo "install-index: index installed; the first deploy will start the API"
   exit 0
 fi
-compose up -d --wait --wait-timeout 180 api web
-"$DEPLOY_DIR/scripts/smoke.sh"
-echo "install-index: new index live"
+if compose up -d --wait --wait-timeout 180 api web && "$DEPLOY_DIR/scripts/smoke.sh"; then
+  echo "install-index: new index live"
+  exit 0
+fi
+
+# The new index does not pass: put the previous one back so search keeps working.
+echo "install-index: the new index failed the smoke; restoring the previous one" >&2
+if [ -f "$CACHE/index.sqlite.previous" ]; then
+  compose stop api || true
+  rm -f "$CACHE/index.sqlite-wal" "$CACHE/index.sqlite-shm"
+  mv -f "$CACHE/index.sqlite.previous" "$CACHE/index.sqlite"
+  if [ -f "$CONFIG/index.yml.previous" ]; then mv -f "$CONFIG/index.yml.previous" "$CONFIG/index.yml"; fi
+  compose up -d --wait --wait-timeout 180 api web || true
+fi
+exit 1

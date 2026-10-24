@@ -48,24 +48,41 @@ topics="$(find "$VAULT" -mindepth 2 -maxdepth 2 -name topic.yaml -not -path '*/_
 [ -f "$INDEX" ] || die "no QMD index at $INDEX (run qmd update && qmd embed)"
 command -v sqlite3 >/dev/null || die "sqlite3 is required for a consistent index snapshot"
 
-RSYNC=(rsync -az --human-readable --itemize-changes --partial)
-[ "$DRY_RUN" -eq 1 ] && RSYNC+=(--dry-run)
-
-echo "sync-vault: $VAULT ($topics topics) -> $HOST:$REMOTE_ROOT/vault"
-# Only what the API reads: kb.toml and the topic folders. Underscore folders are kb's work
-# areas (_convert, _extract, _models) and are skipped by the API too.
-"${RSYNC[@]}" --delete --delete-delay --max-delete="$MAX_DELETE" \
-  --exclude='/_*/' --exclude='/.*' --exclude='/*.sh' --exclude='.DS_Store' \
-  "$VAULT/" "$HOST:$REMOTE_ROOT/vault/"
-
-# QMD's collection config with the Mac paths moved to the container's /vault (every
-# collection must live inside the vault being sent).
+# QMD's collection config with the Mac paths moved to the container's /vault. Checked
+# before anything is sent: every collection must live inside the vault being sent.
+[ -f "$QMD_CONFIG" ] || die "no QMD config at $QMD_CONFIG"
 server_config_dir="$(mktemp -d)"
 trap 'rm -rf "$server_config_dir"' EXIT
-[ -f "$QMD_CONFIG" ] || die "no QMD config at $QMD_CONFIG"
-outside="$(awk '/^ +path: / { print $2 }' "$QMD_CONFIG" | grep -v "^$VAULT/" || true)"
+outside="$(awk -v prefix="$VAULT/" '/^ +path: / && index($2, prefix) != 1 { print $2 }' "$QMD_CONFIG")"
 [ -z "$outside" ] || die "collections outside $VAULT cannot be served: $outside"
-sed "s#^\( *path: \)$VAULT/#\1/vault/#" "$QMD_CONFIG" >"$server_config_dir/index.yml"
+# Literal prefix swap (no regex: the vault path may contain . or #).
+awk -v prefix="$VAULT/" '
+  /^ +path: / && index($2, prefix) == 1 {
+    indent = substr($0, 1, index($0, "path:") - 1)
+    print indent "path: /vault/" substr($2, length(prefix) + 1)
+    next
+  }
+  { print }
+' "$QMD_CONFIG" >"$server_config_dir/index.yml"
+
+RSYNC=(rsync -az --human-readable --itemize-changes --partial)
+VAULT_FILTERS=(--exclude='/_*/' --exclude='/.*' --exclude='/*.sh' --exclude='.DS_Store')
+
+# Count the deletions with a dry run first and refuse before touching the VM: rsync's own
+# --max-delete only stops after deleting that many files.
+deletions="$("${RSYNC[@]}" --dry-run --delete "${VAULT_FILTERS[@]}" "$VAULT/" "$HOST:$REMOTE_ROOT/vault/" |
+  grep -c '^\*deleting' || true)"
+if [ "$deletions" -gt "$MAX_DELETE" ]; then
+  die "would delete $deletions files on the VM (limit $MAX_DELETE); nothing was sent. Check the vault, then pass --max-delete $deletions"
+fi
+
+echo "sync-vault: $VAULT ($topics topics, $deletions deletions) -> $HOST:$REMOTE_ROOT/vault"
+[ "$DRY_RUN" -eq 1 ] && RSYNC+=(--dry-run)
+# Only what the API reads: kb.toml and the topic folders. Underscore folders are kb's work
+# areas (_convert, _extract, _models) and are skipped by the API too. --max-delete stays as
+# a backstop for files deleted on the Mac between the two runs.
+"${RSYNC[@]}" --delete --delete-delay --max-delete="$MAX_DELETE" "${VAULT_FILTERS[@]}" \
+  "$VAULT/" "$HOST:$REMOTE_ROOT/vault/"
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "sync-vault: dry run; would send a snapshot of $INDEX ($(du -h "$INDEX" | cut -f1)) and this QMD config:"

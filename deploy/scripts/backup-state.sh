@@ -6,10 +6,12 @@
 #   deploy/  .env (secrets), release.env, releases.log
 # Not saved: the vault and the QMD index (their source of truth is the owner's Mac).
 # The archive is encrypted with age to a public key; the private key never is on the VM.
-# Upload uses the instance's own identity (OCI instance principal): no API key on disk.
+# Upload uses the instance's own identity (OCI instance principal): no API key on disk. The
+# VM may only create and list objects: it cannot delete or overwrite a backup, and the
+# 30-day retention is the bucket's lifecycle policy (deploy/oci/provision.sh).
 # Settings (root-owned, /srv/kb-chat/deploy/backup.env):
 #   BACKUP_BUCKET=kb-chat-backups  BACKUP_NAMESPACE=<tenancy namespace>
-#   BACKUP_AGE_RECIPIENT=age1...   BACKUP_KEEP_DAYS=30
+#   BACKUP_AGE_RECIPIENT=age1...
 #   sudo backup-state.sh [--dry-run]
 set -euo pipefail
 
@@ -25,11 +27,9 @@ log() { printf '%s backup: %s\n' "$(date -u +%FT%TZ)" "$*"; }
 # shellcheck source=/dev/null
 . "$SETTINGS"
 : "${BACKUP_BUCKET:?}" "${BACKUP_NAMESPACE:?}" "${BACKUP_AGE_RECIPIENT:?}"
-KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 OCI=(oci --auth instance_principal)
 command -v age >/dev/null || die "age is not installed"
 command -v zstd >/dev/null || die "zstd is not installed"
-command -v jq >/dev/null || die "jq is not installed"
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 object="state/kb-chat-state-$stamp.tar.zst.age"
@@ -42,30 +42,19 @@ for path in state claude deploy/.env deploy/release.env deploy/releases.log; do
   if [ -e "$ROOT/$path" ]; then paths+=("$path"); fi
 done
 [ "${#paths[@]}" -gt 0 ] || die "nothing to back up under $ROOT"
-tar -C "$ROOT" --create --zstd --file "$work/state.tar.zst" "${paths[@]}"
-age --encrypt --recipient "$BACKUP_AGE_RECIPIENT" --output "$work/state.age" "$work/state.tar.zst"
+# Streamed straight into age: the plaintext archive (with .env) never touches the disk.
+# State files are written atomically (temp + rename); a .jsonl may end in a partial line,
+# which the readers skip.
+tar -C "$ROOT" --create --zstd --file - "${paths[@]}" |
+  age --encrypt --recipient "$BACKUP_AGE_RECIPIENT" --output "$work/state.age"
 size="$(du -h "$work/state.age" | cut -f1)"
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  log "dry run: would upload $object ($size) to $BACKUP_BUCKET"
-  tar -tvf "$work/state.tar.zst" | head -n 20
+  log "dry run: would upload $object ($size) to $BACKUP_BUCKET with:"
+  printf '  %s\n' "${paths[@]}"
   exit 0
 fi
 
 "${OCI[@]}" os object put --namespace "$BACKUP_NAMESPACE" --bucket-name "$BACKUP_BUCKET" \
   --name "$object" --file "$work/state.age" --no-overwrite >/dev/null
 log "uploaded $object ($size)"
-
-# Retention: delete state backups older than KEEP_DAYS (the bucket stays far below 20 GB).
-cutoff="$(date -u -d "-$KEEP_DAYS days" +%Y%m%dT%H%M%SZ)"
-"${OCI[@]}" os object list --namespace "$BACKUP_NAMESPACE" --bucket-name "$BACKUP_BUCKET" \
-  --prefix state/kb-chat-state- --all --query 'data[].name' --output json |
-  jq -r '.[]' | grep -E '^state/kb-chat-state-' | while read -r name; do
-    taken="${name#state/kb-chat-state-}"
-    taken="${taken%%.*}"
-    if [[ "$taken" < "$cutoff" ]]; then
-      "${OCI[@]}" os object delete --namespace "$BACKUP_NAMESPACE" --bucket-name "$BACKUP_BUCKET" \
-        --object-name "$name" --force >/dev/null
-      log "deleted $name (older than $KEEP_DAYS days)"
-    fi
-  done
