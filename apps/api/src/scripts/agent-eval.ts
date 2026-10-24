@@ -193,23 +193,27 @@ const topic = args.topic ?? config.KB_TOPIC ?? 'hermetismo';
 const { profile } = args;
 const session = await openEvalSession({ config, env: process.env, profile });
 const outcomes: Outcome[] = [];
-// A follow-up continues the conversation of the questions before it; any other question starts a new one.
-let conversation: ResearchTurn[] = [];
-for (const question of questions) {
-  process.stdout.write(`… ${question.question}\n`);
-  const history = question.followUp ? conversation : [];
-  const outcome = await ask(session.runner, question, {
-    topic,
-    history,
-    profile,
-  });
-  outcomes.push(outcome);
-  conversation = [
-    ...history,
-    { question: question.question, answer: outcome.answer },
-  ].slice(-20);
+try {
+  // A follow-up continues the conversation of the questions before it; any other question starts a new one.
+  let conversation: ResearchTurn[] = [];
+  for (const question of questions) {
+    process.stdout.write(`… ${question.question}\n`);
+    const history = question.followUp ? conversation : [];
+    const outcome = await ask(session.runner, question, {
+      topic,
+      history,
+      profile,
+    });
+    outcomes.push(outcome);
+    conversation = [
+      ...history,
+      { question: question.question, answer: outcome.answer },
+    ].slice(-20);
+  }
+} finally {
+  // The MCP endpoint and the index close even when a question throws.
+  await session.close();
 }
-await session.close();
 const run = {
   model: session.runner.model,
   provider: session.provider,
