@@ -112,6 +112,10 @@ export class StubLlmAdapter implements AgentLlmPort {
     return this.options.configured ?? true;
   }
 
+  maxOutputTokens(requested: number): number {
+    return requested;
+  }
+
   async price(): Promise<LlmPrice> {
     return { input: 1e-6, output: 1e-6 };
   }

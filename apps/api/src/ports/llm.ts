@@ -81,6 +81,11 @@ export interface AgentStreamOptions extends LlmStreamOptions {
 
 /** A model with native tool calling (OpenRouter, OpenAI, Anthropic; the stub in tests). */
 export interface AgentLlmPort extends LlmPort {
+  /**
+   * The output tokens a call asking for `requested` may really spend: some adapters raise
+   * it (Anthropic's thinking floor), and the spend guard prices this, not the request.
+   */
+  maxOutputTokens(requested: number): number;
   streamAgent(
     messages: readonly AgentMessage[],
     tools: readonly ToolDefinition[],

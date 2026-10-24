@@ -181,6 +181,10 @@ export class OpenRouterAdapter implements AgentLlmPort {
     return Boolean(this.options.apiKey);
   }
 
+  maxOutputTokens(requested: number): number {
+    return requested;
+  }
+
   async price(): Promise<LlmPrice> {
     if (this.cachedPrice) return this.cachedPrice;
     const response = await this.fetch(`${API}/models`, {

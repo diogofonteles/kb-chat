@@ -14,6 +14,10 @@ export class DisabledLlm implements AgentLlmPort {
     return false;
   }
 
+  maxOutputTokens(requested: number): number {
+    return requested;
+  }
+
   async price(): Promise<LlmPrice> {
     return { input: 0, output: 0 };
   }

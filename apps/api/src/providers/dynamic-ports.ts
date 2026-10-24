@@ -38,6 +38,11 @@ export class DynamicLlm implements AgentLlmPort {
     return this.current().configured();
   }
 
+  maxOutputTokens(requested: number): number {
+    const llm = this.current();
+    return isAgentLlm(llm) ? llm.maxOutputTokens(requested) : requested;
+  }
+
   price(): Promise<LlmPrice> {
     return this.current().price();
   }

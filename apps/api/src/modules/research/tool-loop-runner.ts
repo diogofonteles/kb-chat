@@ -161,7 +161,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   private async guard(turn: Turn): Promise<void> {
     const estimate = await this.deps.spend.estimate(
       promptText(turn.messages),
-      MAX_OUTPUT_TOKENS,
+      this.deps.llm.maxOutputTokens(MAX_OUTPUT_TOKENS),
     );
     await this.deps.spend.guard(turn.usd + estimate);
   }

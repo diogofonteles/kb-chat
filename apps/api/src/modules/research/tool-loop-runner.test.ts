@@ -1,15 +1,19 @@
 import type { ResearchEvent } from '@kb-chat/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   answerText,
   collectEvents,
   fixtureRunner,
+  fixtureTools,
 } from '../../../test/research-factories.js';
 import type { StubReply } from '../../adapters/stub-llm-adapter.js';
 import type { AgentChunk, AgentMessage } from '../../ports/llm.js';
 import { LlmKeyRejectedError } from '../../ports/llm-errors.js';
 import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
-import { NARRATION_HOLD_CHARS } from './tool-loop-runner.js';
+import { AnthropicAdapter } from '../../adapters/anthropic-adapter.js';
+import { MemorySpendLedger } from '../../adapters/memory-spend-ledger.js';
+import { SpendService } from '../spend/index.js';
+import { NARRATION_HOLD_CHARS, ToolLoopRunner } from './tool-loop-runner.js';
 
 const input = (question: string, signal = new AbortController().signal) => ({
   topic: 'hermetismo',
@@ -336,5 +340,32 @@ describe('ToolLoopRunner', () => {
     expect(await collectEvents(runner.run(input('ritmo')))).toEqual([
       { type: 'error', code: 'LLM_KEY_REJECTED' },
     ]);
+  });
+
+  it('guards each call with the output budget the adapter really sends (Anthropic floor)', async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response('', { status: 500 }),
+    );
+    const llm = new AnthropicAdapter({
+      apiKey: 'sk-ant-test',
+      model: 'claude-fable-5-1',
+      fetch: fetchMock,
+    });
+    // 8,000 output tokens at US$ 50/M is US$ 0.40; 2,000 would have been US$ 0.10.
+    const spend = new SpendService({
+      llm,
+      ledger: new MemorySpendLedger(),
+      dailyCapUsd: () => 0.2,
+      principal: 'owner',
+    });
+    const runner = new ToolLoopRunner({
+      llm,
+      tools: await fixtureTools(),
+      spend,
+    });
+    expect(await collectEvents(runner.run(input('ritmo')))).toEqual([
+      { type: 'error', code: 'DAILY_CAP_REACHED' },
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

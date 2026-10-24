@@ -117,6 +117,10 @@ export class AnthropicAdapter implements AgentLlmPort {
     return Boolean(this.options.apiKey);
   }
 
+  maxOutputTokens(requested: number): number {
+    return Math.max(requested, MIN_OUTPUT_TOKENS);
+  }
+
   async price(): Promise<LlmPrice> {
     return anthropicPrice(this.model);
   }
@@ -163,7 +167,7 @@ export class AnthropicAdapter implements AgentLlmPort {
     const fallback = FALLBACK_MODELS.has(this.model);
     return {
       model: this.model,
-      max_tokens: Math.max(options.maxTokens, MIN_OUTPUT_TOKENS),
+      max_tokens: this.maxOutputTokens(options.maxTokens),
       ...(system ? { system } : {}),
       messages: this.toMessages(messages),
       ...(tools.length > 0 ? { tools: tools.map(toTool) } : {}),

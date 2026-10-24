@@ -136,6 +136,10 @@ export class OpenAiAdapter implements AgentLlmPort {
     return Boolean(this.options.apiKey);
   }
 
+  maxOutputTokens(requested: number): number {
+    return requested;
+  }
+
   async price(): Promise<LlmPrice> {
     return openAiPrice(this.model);
   }
