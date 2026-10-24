@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "project": {
+    "id": "kb-chat",
+    "name": "kb-chat"
+  },
+  "languages": {
+    "_note": "BCP 47 tags. artifacts: work artifacts only (PRD, techspec, tasks, specs); code: code, file names, docs, commits and branches. Set with: devflow-config set languages.<key> <tag>",
+    "artifacts": "pt-BR",
+    "code": "en"
+  },
+  "adapters": {
+    "_note": "tracker: manual | none | github-issues; deploy: fly | none",
+    "tracker": "manual",
+    "scm": "github",
+    "delivery": "pr",
+    "deploy": "none"
+  },
+  "github": {
+    "repo": "diogofonteles/kb-chat"
+  },
+  "repos": [
+    {
+      "id": "kb-chat",
+      "path": ".",
+      "remote": "https://github.com/diogofonteles/kb-chat.git",
+      "stack": "nx-angular-fastify",
+      "base": {
+        "type": "fixed",
+        "branch": "develop",
+        "exceptions": {
+          "hotfix/*": "main"
+        }
+      },
+      "promotion": {
+        "develop": [
+          "feature/*",
+          "fix/*",
+          "chore/*",
+          "docs/*",
+          "refactor/*",
+          "test/*",
+          "hotfix/*"
+        ],
+        "main": [
+          "develop",
+          "hotfix/*"
+        ]
+      },
+      "commit": {
+        "pattern": "^(feat|fix|docs|refactor|test|chore|build|ci|perf)(\\([a-z0-9,-]+\\))?!?: [a-z].+"
+      }
+    }
+  ],
+  "goal": {
+    "requiredGates": [
+      "intake",
+      "spec",
+      "gates",
+      "local-validation",
+      "qa",
+      "review",
+      "pr",
+      "ci",
+      "merge"
+    ],
+    "maxIdleTurns": 3,
+    "maxReviewRounds": 3,
+    "extraBlockTypes": [
+      "COST"
+    ]
+  },
+  "qa": {
+    "_note": "QA stage (qa-engineer skill, gate qa) between local validation and review. true: the qa gate is required; false: it is dropped. Toggle with: devflow-config set qa.enabled on|off",
+    "enabled": true
+  },
+  "guards": {
+    "disabled": [],
+    "protectedBranches": [],
+    "noAi": {
+      "allowedTerms": [],
+      "allow": []
+    },
+    "secret": {
+      "allowedFiles": []
+    }
+  },
+  "secrets": [
+    {
+      "name": "OPENROUTER_API_KEY",
+      "source": "env",
+      "usage": "AI answers (api); optional, search works without it",
+      "required": false
+    }
+  ],
+  "commands": {
+    "preflight": [
+      "gh auth status",
+      "git fetch origin",
+      "pnpm install --frozen-lockfile"
+    ],
+    "gates": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm format:check",
+    "devServers": [
+      "pnpm dev:api",
+      "pnpm dev:web"
+    ],
+    "e2e": "pnpm e2e (Playwright, stub API fixtures) for the touched flow",
+    "contracts": "zod schemas in @kb-chat/contracts (libs/contracts)",
+    "rollout": "local only in release 1: API before web; promotion develop -> main is the owner's release decision"
+  },
+  "warnings": []
+}
