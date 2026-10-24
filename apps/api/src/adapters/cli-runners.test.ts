@@ -5,6 +5,7 @@ import type { ResearchEvent } from '@kb-chat/contracts';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FakeResearchTools } from '../../test/fake-research-tools.js';
+import { answerText } from '../../test/research-factories.js';
 import { FAKES_DIR } from '../../test/fixture-paths.js';
 import { freePort } from '../../test/free-port.js';
 import { mcpRoutes } from '../mcp/mcp-routes.js';
@@ -82,6 +83,62 @@ function claude(
     killGraceMs: 200,
   });
 }
+
+/** A Claude runner on Sonnet that may escalate to Opus (ADR 0009). */
+function escalating(env: NodeJS.ProcessEnv, enabled = true) {
+  return new ClaudeCliRunner({
+    bin: join(FAKES_DIR, 'fake-claude.mjs'),
+    apiBaseUrl,
+    turns,
+    workDir,
+    env: { ...process.env, ...env },
+    tools: () => new FakeResearchTools(),
+    model: 'sonnet',
+    escalation: { deep: 'opus', enabled: () => enabled },
+    killGraceMs: 200,
+  });
+}
+
+describe('ClaudeCliRunner auto-escalation (ADR 0009)', () => {
+  it('runs the deep model with the fast findings when the fast pass asks to go deeper', async () => {
+    const report = join(workDir, 'deepen.json');
+    const events = await collect(
+      escalating(await fakeHome({ mode: 'deepen', report })),
+    );
+    const steps = events.flatMap((e) => (e.type === 'step' ? [e.step] : []));
+    expect(steps.map((s) => s.kind)).toEqual(['search', 'deepen', 'search']);
+    expect(
+      events.some((e) => e.type === 'token' && e.text.includes('<<')),
+    ).toBe(false);
+    expect(answerText(events)).toBe('Segundo o acervo, tudo flui [1].');
+    expect(events.at(-1)).toMatchObject({
+      type: 'done',
+      escalated: true,
+      steps: 2,
+    });
+    // The report holds the second (deep) run: Opus, told what the fast pass found.
+    const seen = JSON.parse(await readFile(report, 'utf8'));
+    expect(seen.args).toContain('--model=opus');
+    expect(seen.args).not.toContain('--effort=low');
+    expect(seen.stdin).toContain('<findings>');
+    expect(seen.stdin).toContain('faltou a lista');
+    expect(seen.stdin).toContain('[1] A Lei do Ritmo');
+    expect(turns.size).toBe(0);
+  });
+
+  it('escalates an answer that gives up on the collection, and not when Settings turn it off', async () => {
+    const events = await collect(
+      escalating(await fakeHome({ mode: 'absent' })),
+    );
+    expect(events.some((e) => e.type === 'retract')).toBe(true);
+    expect(answerText(events)).toBe('Segundo o acervo, tudo flui [1].');
+    const off = await collect(
+      escalating(await fakeHome({ mode: 'absent' }), false),
+    );
+    expect(answerText(off)).toBe('O acervo não nomeia os cinco princípios. ');
+    expect(off.at(-1)).not.toHaveProperty('escalated');
+  });
+});
 
 describe('ClaudeCliRunner', () => {
   it('streams the steps, the sources and the [n] text, free of charge (AC-4)', async () => {

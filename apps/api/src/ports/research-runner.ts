@@ -32,8 +32,17 @@ export interface SpendScope {
   readonly dailyCapUsd: () => number;
 }
 
+/** The deep profile a fast turn may escalate to (ADR 0009). */
+export interface Escalation<T> {
+  /** The deep model (a per-token adapter, or a CLI model id). */
+  readonly deep: T;
+  /** Read on every turn: Settings' "Aprofundar automaticamente". */
+  readonly enabled: () => boolean;
+}
+
 /** Builds the in-API tool loop (KBC-008) over a per-token model. */
 export type PerTokenRunnerFactory = (
   llm: AgentLlmPort,
   scope: SpendScope,
+  escalation?: Escalation<AgentLlmPort>,
 ) => ResearchRunnerPort;

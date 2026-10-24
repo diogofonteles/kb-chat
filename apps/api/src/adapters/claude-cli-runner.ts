@@ -171,12 +171,13 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
       name: 'claude',
       launch: async (access, input) => ({
         args: claudeArgs(await writeClaudeMcpConfig(access), {
-          model: options.model,
-          systemPrompt: prompt(input.topic, input.profile),
+          model: input.model,
+          systemPrompt: prompt(input.topic, input.profile, input.canDeepen),
           effort: CLAUDE_EFFORT[input.profile],
         }),
       }),
-      input: (input) => subscriptionTurnInput(input.question, input.history),
+      input: (input) =>
+        subscriptionTurnInput(input.question, input.history, input.findings),
       parse: parseClaudeLine,
     };
   }
@@ -195,6 +196,7 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
     yield* runCliTurn({ ...this.options, model: this.model }, this.dialect, {
       ...input,
       tools,
+      model: this.options.model,
     });
   }
 }

@@ -24,6 +24,7 @@ describe('settings contract', () => {
       theme: 'auto',
       defaultView: 'research',
       researchProfile: 'fast',
+      autoDeepen: true,
     });
     expect(
       settingsViewSchema.safeParse({

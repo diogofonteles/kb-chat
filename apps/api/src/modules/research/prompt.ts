@@ -1,5 +1,6 @@
 import type { ResearchProfile, ResearchTurn } from '@kb-chat/contracts';
 import type { AgentMessage } from '../../ports/llm.js';
+import { DEEPEN_RULE } from './escalation.js';
 import { PROFILE_STEPS } from './limits.js';
 
 export const OUTSIDE_MARK = '(fora do acervo)';
@@ -9,6 +10,8 @@ export interface PromptInput {
   readonly question: string;
   readonly history: readonly ResearchTurn[];
   readonly profile: ResearchProfile;
+  /** The fast pass may hand over to the deep profile (auto-escalation, ADR 0009). */
+  readonly canDeepen?: boolean;
 }
 
 /** What changes between the profiles (KBC-011): the step budget and how long to answer. */
@@ -31,6 +34,7 @@ const PROFILE_RULES: Readonly<
 export const researchSystemPrompt = (
   topicTitle: string,
   profile: ResearchProfile = 'deep',
+  canDeepen = false,
 ): string =>
   [
     `Você é um pesquisador que estuda com o leitor um acervo pessoal de textos sobre “${topicTitle}” e responde em português do Brasil.`,
@@ -50,6 +54,7 @@ export const researchSystemPrompt = (
     '- Cite cada fato do acervo com o número do documento entre colchetes, como [3] ou [2][5]. Use só números de documentos que as ferramentas mostraram nesta resposta. Os números das respostas anteriores da conversa não valem mais.',
     `- Você pode completar com o que sabe de fora do acervo quando isso ajudar o leitor, mas marque esses trechos com "${OUTSIDE_MARK}" e nunca os atribua aos documentos.`,
     PROFILE_RULES[profile].style,
+    ...(profile === 'fast' && canDeepen ? [DEEPEN_RULE] : []),
     '- Quando o acervo listar itens (por exemplo, princípios), traga a lista completa com os nomes usados nos textos.',
     '- Escreva texto só na resposta final. A primeira frase já é conteúdo da resposta (por exemplo, "Os cinco princípios ocultos são…"). Nunca comece falando do seu trabalho ("Agora tenho uma imagem completa", "Tenho tudo o que preciso", "Vou compor a resposta", "Reuni as informações"), nem com um separador "---". Não narre o que vai pesquisar nem o que já pesquisou: o leitor vê os passos.',
     '',
@@ -65,7 +70,11 @@ export function buildResearchMessages(input: PromptInput): AgentMessage[] {
   return [
     {
       role: 'system',
-      content: researchSystemPrompt(input.topicTitle, input.profile),
+      content: researchSystemPrompt(
+        input.topicTitle,
+        input.profile,
+        input.canDeepen,
+      ),
     },
     ...history,
     { role: 'user', content: input.question },

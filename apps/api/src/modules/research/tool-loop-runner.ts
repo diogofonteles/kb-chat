@@ -17,8 +17,10 @@ import {
   EMPTY_ANSWER,
   FINAL_ANSWER_NOTE,
   buildResearchMessages,
+  researchSystemPrompt,
 } from './prompt.js';
 import { AnswerStream } from './answer-stream.js';
+import { DEEPEN_STEP, deepenNote, deepenReason } from './escalation.js';
 import { MAX_OUTPUT_TOKENS, PROFILE_STEPS } from './limits.js';
 import { SourceBook } from './source-book.js';
 import type { ResearchTools } from './tools.js';
@@ -26,19 +28,33 @@ import type { ResearchTools } from './tools.js';
 const SKIPPED_CALL =
   'Não executada: o limite de passos desta resposta foi atingido.';
 
-export interface ToolLoopRunnerDeps {
+/** A model and the spend service that prices it. */
+export interface LoopEngine {
   readonly llm: AgentLlmPort;
-  readonly tools: ResearchTools;
   readonly spend: SpendService;
+}
+
+export interface ToolLoopRunnerDeps extends LoopEngine {
+  readonly tools: ResearchTools;
+  /** The deep profile's model, for a fast turn that escalates (ADR 0009). */
+  readonly deep?: LoopEngine;
+  /** Whether a fast turn may escalate (Settings, "Aprofundar automaticamente"). */
+  readonly autoDeepen?: () => boolean;
 }
 
 interface Turn {
   readonly input: ResearchInput;
+  readonly topicTitle: string;
   readonly book: SourceBook;
   readonly messages: AgentMessage[];
   readonly answer: AnswerStream;
-  /** The profile's step budget (KBC-011). */
-  readonly maxSteps: number;
+  /** The model answering now: the fast one, then the deep one after an escalation. */
+  engine: LoopEngine;
+  /** The step budget: the profile's, then the deep one's after an escalation (KBC-011). */
+  maxSteps: number;
+  /** The deep profile still to hand over to, while the turn may escalate. */
+  deepen: LoopEngine | null;
+  escalated: boolean;
   steps: number;
   calls: number;
   sourcesSent: number;
@@ -114,11 +130,19 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   }
 
   private startTurn(input: ResearchInput, topicTitle: string): Turn {
+    const canDeepen =
+      input.profile === 'fast' &&
+      this.deps.deep !== undefined &&
+      (this.deps.autoDeepen?.() ?? true);
     return {
       input,
+      topicTitle,
       book: new SourceBook(),
-      messages: buildResearchMessages({ ...input, topicTitle }),
+      messages: buildResearchMessages({ ...input, topicTitle, canDeepen }),
       answer: new AnswerStream(),
+      engine: this.deps,
+      deepen: canDeepen ? (this.deps.deep ?? null) : null,
+      escalated: false,
       maxSteps: PROFILE_STEPS[input.profile],
       steps: 0,
       calls: 0,
@@ -137,21 +161,64 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         turn.messages.push({ role: 'system', content: FINAL_ANSWER_NOTE });
       await this.guard(turn);
       const call = yield* this.callModel(turn, final);
-      if (final || call.toolCalls.length === 0) {
-        yield* this.ensureAnswer(turn);
-        return;
-      }
-      yield* this.runTools(turn, call);
+      if (yield* this.afterCall(turn, call, final)) return;
     }
+  }
+
+  /** Runs the tools a call asked for, or ends (or escalates) on an answer; true when done. */
+  private async *afterCall(
+    turn: Turn,
+    call: CallResult,
+    final: boolean,
+  ): AsyncGenerator<ResearchEvent, boolean> {
+    if (!final && call.toolCalls.length > 0) {
+      yield* this.runTools(turn, call);
+      return false;
+    }
+    if (yield* this.escalate(turn, call)) return false;
+    yield* turn.answer.ended();
+    yield* this.ensureAnswer(turn);
+    return true;
+  }
+
+  /**
+   * A fast answer that could not settle the question (the marker, or an answer that gives
+   * up on the collection) is taken back and the same turn goes on with the deep model, its
+   * prompt and the rest of the deep step budget, keeping every tool result (ADR 0009).
+   */
+  private async *escalate(
+    turn: Turn,
+    call: CallResult,
+  ): AsyncGenerator<ResearchEvent, boolean> {
+    const reason = deepenReason(turn.answer.current);
+    const deep = turn.deepen;
+    if (!deep || reason === null || turn.input.signal.aborted) return false;
+    yield* turn.answer.toolCalled();
+    yield { type: 'step', step: DEEPEN_STEP };
+    turn.deepen = null;
+    turn.escalated = true;
+    turn.engine = deep;
+    turn.maxSteps = PROFILE_STEPS.deep;
+    const prompt = researchSystemPrompt(turn.topicTitle, 'deep');
+    turn.messages[0] = { role: 'system', content: prompt };
+    turn.messages.push(
+      { role: 'assistant', content: call.text, toolCalls: [] },
+      {
+        role: 'system',
+        content: deepenNote(reason, turn.maxSteps - turn.steps),
+      },
+    );
+    return true;
   }
 
   /** Daily cap and credit before every model call, counting what this turn already spent. */
   private async guard(turn: Turn): Promise<void> {
-    const estimate = await this.deps.spend.estimate(
+    const { llm, spend } = turn.engine;
+    const estimate = await spend.estimate(
       promptText(turn.messages),
-      this.deps.llm.maxOutputTokens(MAX_OUTPUT_TOKENS),
+      llm.maxOutputTokens(MAX_OUTPUT_TOKENS),
     );
-    await this.deps.spend.guard(turn.usd + estimate);
+    await spend.guard(turn.usd + estimate);
   }
 
   private async *callModel(
@@ -168,8 +235,6 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     } finally {
       await this.account(turn, call, prompt);
     }
-    // The forced last call is the answer even if the provider ignored "none" (OpenRouter).
-    if (final || call.toolCalls.length === 0) yield* turn.answer.ended();
     return call;
   }
 
@@ -178,7 +243,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     call: CallResult,
     final: boolean,
   ): AsyncIterable<ResearchEvent> {
-    const chunks = this.deps.llm.streamAgent(
+    const chunks = turn.engine.llm.streamAgent(
       turn.messages,
       this.deps.tools.definitions,
       {
@@ -256,13 +321,13 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     };
     turn.inputTokens += usage.inputTokens;
     turn.outputTokens += usage.outputTokens;
-    turn.usd += await this.deps.spend.costOf(usage);
+    turn.usd += await turn.engine.spend.costOf(usage);
   }
 
   /** One ledger entry per turn with the summed usage (nothing spent, nothing recorded). */
   private async record(turn: Turn, interrupted: boolean): Promise<Done> {
     if (turn.calls > 0)
-      await this.deps.spend.record({
+      await turn.engine.spend.record({
         inputTokens: turn.inputTokens,
         outputTokens: turn.outputTokens,
         usd: turn.usd,
@@ -271,10 +336,11 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     return {
       type: 'done',
       usd: turn.usd,
-      billing: this.deps.llm.billing,
-      model: this.deps.llm.model,
+      billing: turn.engine.llm.billing,
+      model: turn.engine.llm.model,
       interrupted,
       steps: turn.steps,
+      ...(turn.escalated ? { escalated: true } : {}),
     };
   }
 }

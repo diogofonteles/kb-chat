@@ -161,8 +161,11 @@ describe('GET/PUT /api/v1/settings', () => {
 
   it('keeps a fast and a deep model per provider and refuses a model the CLI does not offer (KBC-011)', async () => {
     const { app } = await start();
+    expect(
+      (await get(app, '/api/v1/settings')).json().preferences,
+    ).toMatchObject({ autoDeepen: true });
     const saved = await put(app, {
-      preferences: { researchProfile: 'deep' },
+      preferences: { researchProfile: 'deep', autoDeepen: false },
       ai: {
         provider: 'claude-subscription',
         models: {
@@ -173,7 +176,7 @@ describe('GET/PUT /api/v1/settings', () => {
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toMatchObject({
-      preferences: { researchProfile: 'deep' },
+      preferences: { researchProfile: 'deep', autoDeepen: false },
       ai: {
         models: {
           'claude-subscription': { fast: 'haiku', deep: 'opus' },

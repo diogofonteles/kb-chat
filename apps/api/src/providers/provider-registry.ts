@@ -24,7 +24,9 @@ import type {
   SettingsService,
 } from '../modules/settings/index.js';
 import type { LlmPort } from '../ports/llm.js';
+import type { AgentLlmPort } from '../ports/llm.js';
 import type {
+  Escalation,
   PerTokenRunnerFactory,
   ResearchRunnerPort,
 } from '../ports/research-runner.js';
@@ -55,6 +57,14 @@ export interface ProviderRegistryOptions {
   readonly perTokenRunner?: PerTokenRunnerFactory;
   /** The research rules for a topic and profile, for the subscription CLIs; default: the module's, by slug. */
   readonly systemPrompt?: SubscriptionPrompt;
+}
+
+/** How one runner is built: for whom, with which tools, and the deep model to escalate to. */
+interface RunnerBuild {
+  readonly principal: string;
+  readonly tools?: ResearchToolsFactory;
+  /** A fast runner's deep model (null: the CLI's own); undefined: no escalation. */
+  readonly deepModel?: string | null;
 }
 
 /** A provider resolved for one principal: which one, its model and its key. */
@@ -133,16 +143,31 @@ export class ProviderRegistry implements ProviderCatalog {
     ) as LlmPort;
   }
 
-  /** The runner of a research turn: the provider's model for the profile (KBC-011). */
+  /**
+   * The runner of a research turn: the provider's model for the profile (KBC-011). A fast
+   * runner also gets the deep model, to escalate to when the fast pass is not enough.
+   */
   researchRunner(
     principal: string,
     profile: ResearchProfile = 'fast',
   ): ResearchRunnerPort {
     const choice = this.choice(principal, { profile });
-    // One cached runner per profile, so asking fast then deep keeps both.
-    return this.cached(choiceId(`runner-${profile}`, principal, choice), () =>
-      this.buildRunner(choice, principal),
+    const deepModel =
+      profile === 'fast'
+        ? (this.choice(principal, { profile: 'deep' }).model ?? null)
+        : undefined;
+    // One cached runner per profile (and deep model), so asking fast then deep keeps both.
+    const kind = `runner-${profile}>${deepModel ?? ''}`;
+    return this.cached(choiceId(kind, principal, choice), () =>
+      this.buildRunner(choice, { principal, deepModel }),
     ) as ResearchRunnerPort;
+  }
+
+  /** Settings' "Aprofundar automaticamente" (on unless turned off). */
+  autoDeepen(principal: string): boolean {
+    return (
+      this.options.settings.snapshot(principal)?.preferences.autoDeepen ?? true
+    );
   }
 
   async list(principal: string): Promise<ProviderList> {
@@ -165,7 +190,8 @@ export class ProviderRegistry implements ProviderCatalog {
       signal,
       locate: () => this.locateCli(request.provider),
       llm: () => this.buildLlm(choice),
-      runner: () => this.buildRunner(choice, principal, () => NO_TOOLS),
+      runner: () =>
+        this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
   }
 
@@ -185,31 +211,47 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private buildRunner(
     choice: ProviderChoice,
-    principal: string,
-    tools = this.options.tools,
+    build: RunnerBuild,
   ): ResearchRunnerPort {
+    const { principal } = build;
     if (choice.provider === 'claude-subscription')
-      return new ClaudeCliRunner(this.cliOptions('claude', choice, tools));
+      return new ClaudeCliRunner(this.cliOptions('claude', choice, build));
     if (choice.provider === 'chatgpt-subscription')
       return this.options.config.KB_CHAT_CODEX
-        ? new CodexCliRunner(this.cliOptions('codex', choice, tools))
+        ? new CodexCliRunner(this.cliOptions('codex', choice, build))
         : new DisabledResearchRunner();
     const llm = this.buildLlm(choice);
     const loop = this.options.perTokenRunner;
     if (!loop || !isAgentLlm(llm)) return new DisabledResearchRunner();
-    return loop(llm, {
-      principal,
-      dailyCapUsd: () => this.dailyCapUsd(principal),
-    });
+    const scope = { principal, dailyCapUsd: () => this.dailyCapUsd(principal) };
+    return loop(llm, scope, this.perTokenEscalation(choice, build));
+  }
+
+  private perTokenEscalation(
+    choice: ProviderChoice,
+    { principal, deepModel }: RunnerBuild,
+  ): Escalation<AgentLlmPort> | undefined {
+    if (deepModel === undefined) return undefined;
+    const deep = this.buildLlm({ ...choice, model: deepModel ?? undefined });
+    if (!isAgentLlm(deep)) return undefined;
+    return { deep, enabled: () => this.autoDeepen(principal) };
   }
 
   private cliOptions(
     cli: 'claude' | 'codex',
     choice: ProviderChoice,
-    tools: ResearchToolsFactory | undefined,
+    { principal, deepModel, tools = this.options.tools }: RunnerBuild,
   ) {
     const { config } = this.options;
+    const escalation: Escalation<string | undefined> | undefined =
+      deepModel === undefined
+        ? undefined
+        : {
+            deep: deepModel ?? undefined,
+            enabled: () => this.autoDeepen(principal),
+          };
     return {
+      escalation,
       bin: cli === 'claude' ? config.CLAUDE_BIN : config.CODEX_BIN,
       model: choice.model,
       apiBaseUrl: this.options.apiBaseUrl,

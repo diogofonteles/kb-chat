@@ -18,6 +18,9 @@ const SENTENCE_END = /[.?:;]\s|\n/u;
 const NARRATION =
   /^(?:(?:agora|primeiro|então|ok|certo|bem)[,.]?\s+)?(?:vou|deixe-me|deixa eu|preciso|vamos|let me|i'll|i will)\s+(?:\S+\s+){0,2}?(?:buscar|procurar|pesquisar|ler|verificar|consultar|olhar|checar|examinar|investigar|aprofundar|conferir|search|look|read|check|find)/iu;
 
+/** The start of the escalation marker (ADR 0009): held whole, the runner decides. */
+const MARKER_START = /^<(?:<|$)/u;
+
 type Events = ResearchEvent[];
 
 /**
@@ -38,6 +41,11 @@ export class AnswerStream {
   /** The answer as the reader sees it now (segments not retracted). */
   get shown(): string {
     return [...this.shownText.values()].join('');
+  }
+
+  /** Everything the current model call wrote so far, shown or held. */
+  get current(): string {
+    return (this.shownText.get(this.segment) ?? '') + this.held;
   }
 
   /** Answer text from the current model call. */
@@ -80,7 +88,7 @@ export class AnswerStream {
     const rest = this.held.slice(preambleLength(this.held));
     const sentence = SENTENCE_END.test(rest);
     if (!ended && !sentence && rest.length < PREAMBLE_WINDOW_CHARS) return [];
-    if (!ended && NARRATION.test(rest)) {
+    if (!ended && (NARRATION.test(rest) || MARKER_START.test(rest))) {
       this.narration = true;
       return [];
     }

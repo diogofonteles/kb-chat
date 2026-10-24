@@ -33,7 +33,8 @@ export type ResearchRequest = z.input<typeof researchRequestSchema>;
 
 /** What the agent is doing, shown as a discreet line while it works (ADR 0006). */
 export const researchStepSchema = z.object({
-  kind: z.enum(['search', 'subjects', 'read', 'related']),
+  /** `deepen`: the fast pass was not enough and the deep profile takes over (ADR 0009). */
+  kind: z.enum(['search', 'subjects', 'read', 'related', 'deepen']),
   /** Short pt-BR description, e.g. "Buscando “cinco princípios ocultos”". */
   text: z.string(),
 });
@@ -78,6 +79,8 @@ export const researchEventSchema = z.discriminatedUnion('type', [
     model: z.string(),
     interrupted: z.boolean(),
     steps: z.number().int().nonnegative(),
+    /** True when a fast turn escalated to the deep profile; `model` is then the deep one. */
+    escalated: z.boolean().optional(),
   }),
   z.object({ type: z.literal('error'), code: z.string() }),
 ]);

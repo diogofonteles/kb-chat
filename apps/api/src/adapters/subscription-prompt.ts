@@ -5,6 +5,7 @@ import type { ResearchProfile, ResearchTurn } from '@kb-chat/contracts';
 export type SubscriptionPrompt = (
   topic: string,
   profile: ResearchProfile,
+  canDeepen?: boolean,
 ) => string;
 
 /**
@@ -13,16 +14,23 @@ export type SubscriptionPrompt = (
  * absence, cite [n], mark "(fora do acervo)" and never narrate. The composition root passes
  * one with the topic's title; this default names the topic by its slug.
  */
-export const defaultSubscriptionPrompt: SubscriptionPrompt = (topic, profile) =>
-  researchSystemPrompt(topic, profile);
+export const defaultSubscriptionPrompt: SubscriptionPrompt = (
+  topic,
+  profile,
+  canDeepen,
+) => researchSystemPrompt(topic, profile, canDeepen);
 
 const escape = (text: string): string =>
   text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
-/** The question and the previous turns as the CLI's stdin (KBC-008 BR-4: text only). */
+/**
+ * The question and the previous turns as the CLI's stdin (KBC-008 BR-4: text only), and
+ * what a fast pass found when this is the deep pass of an escalated turn (ADR 0009).
+ */
 export function subscriptionTurnInput(
   question: string,
   history: readonly ResearchTurn[],
+  findings?: string,
 ): string {
   const turns = history.map(
     (turn) =>
@@ -32,5 +40,8 @@ export function subscriptionTurnInput(
     turns.length > 0
       ? `Previous turns of this conversation:\n<conversation>\n${turns.join('\n')}\n</conversation>\n\n`
       : '';
-  return `${context}<question>${escape(question)}</question>\n`;
+  const found = findings
+    ? `\n<findings>\n${escape(findings)}\n</findings>\n`
+    : '';
+  return `${context}<question>${escape(question)}</question>\n${found}`;
 }

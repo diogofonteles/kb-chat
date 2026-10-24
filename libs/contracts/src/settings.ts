@@ -78,6 +78,8 @@ export const preferencesSchema = z.object({
   defaultView: defaultViewSchema.default('research'),
   /** The research composer's profile until this browser picks one (KBC-011). */
   researchProfile: researchProfileSchema.default('fast'),
+  /** A fast answer that the collection could not settle goes on with the deep profile. */
+  autoDeepen: z.boolean().default(true),
 });
 export type Preferences = z.infer<typeof preferencesSchema>;
 
@@ -161,6 +163,7 @@ export const settingsUpdateSchema = z.strictObject({
       theme: themeSchema.optional(),
       defaultView: defaultViewSchema.optional(),
       researchProfile: researchProfileSchema.optional(),
+      autoDeepen: z.boolean().optional(),
     })
     .optional(),
   ai: z

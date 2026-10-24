@@ -45,13 +45,24 @@ export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
     search,
     tools,
     toolsFor: turnToolsFactory(tools),
-    perTokenRunner: (llm, scope) =>
+    perTokenRunner: (llm, scope, escalation) =>
       new ToolLoopRunner({
         llm,
         tools,
         spend: new SpendService({ llm, ledger, ...scope }),
+        ...(escalation && {
+          deep: {
+            llm: escalation.deep,
+            spend: new SpendService({ llm: escalation.deep, ledger, ...scope }),
+          },
+          autoDeepen: escalation.enabled,
+        }),
       }),
-    systemPrompt: (topic, profile) =>
-      researchSystemPrompt(tools.topicTitle(topic) ?? topic, profile),
+    systemPrompt: (topic, profile, canDeepen) =>
+      researchSystemPrompt(
+        tools.topicTitle(topic) ?? topic,
+        profile,
+        canDeepen,
+      ),
   };
 }

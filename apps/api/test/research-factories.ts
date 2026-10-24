@@ -69,6 +69,36 @@ export async function fixtureRunner(
   return { runner, llm, ledger };
 }
 
+export interface EscalatingFixture extends RunnerFixture {
+  readonly deep: StubLlmAdapter;
+}
+
+/** A fast runner over one stub that may escalate to another (ADR 0009). */
+export async function escalatingRunner(
+  fast: StubLlmOptions,
+  deepOptions: StubLlmOptions,
+  autoDeepen = true,
+): Promise<EscalatingFixture> {
+  const llm = new StubLlmAdapter(fast);
+  const deep = new StubLlmAdapter({ model: 'stub/deep', ...deepOptions });
+  const ledger = new MemorySpendLedger();
+  const spendOf = (model: StubLlmAdapter) =>
+    new SpendService({
+      llm: model,
+      ledger,
+      dailyCapUsd: () => 1,
+      principal: 'owner',
+    });
+  const runner = new ToolLoopRunner({
+    llm,
+    tools: await fixtureTools(),
+    spend: spendOf(llm),
+    deep: { llm: deep, spend: spendOf(deep) },
+    autoDeepen: () => autoDeepen,
+  });
+  return { runner, llm, deep, ledger };
+}
+
 /** Every event of one research turn. */
 export async function collectEvents(
   events: AsyncIterable<ResearchEvent>,

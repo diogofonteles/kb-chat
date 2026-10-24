@@ -35,6 +35,8 @@ export interface StubLlmOptions {
   readonly script?: readonly StubReply[];
   /** Cost reported per agent call; default: US$ 1 per million tokens. */
   readonly usdPerCall?: number;
+  /** The model name it reports; default "stub/model". */
+  readonly model?: string;
 }
 
 const DEFAULT_ANSWER = 'Segundo o acervo, a natureza é sétupla [1].';
@@ -104,7 +106,7 @@ function finalText(messages: AgentHistory): string {
  * and a scripted research turn for `streamAgent`, at US$ 1 per million tokens.
  */
 export class StubLlmAdapter implements AgentLlmPort {
-  readonly model = 'stub/model';
+  readonly model: string;
   readonly billing = 'per-token' as const;
   /** Messages of the last call, calls made and tokens handed out, for assertions. */
   lastMessages: readonly AgentMessage[] = [];
@@ -113,7 +115,9 @@ export class StubLlmAdapter implements AgentLlmPort {
   calls = 0;
   yielded = 0;
 
-  constructor(private readonly options: StubLlmOptions = {}) {}
+  constructor(private readonly options: StubLlmOptions = {}) {
+    this.model = options.model ?? 'stub/model';
+  }
 
   configured(): boolean {
     return this.options.configured ?? true;
@@ -135,7 +139,7 @@ export class StubLlmAdapter implements AgentLlmPort {
     messages: readonly LlmMessage[],
     options: LlmStreamOptions,
   ): AsyncIterable<LlmChunk> {
-    this.lastMessages = messages;
+    this.lastMessages = [...messages];
     this.calls += 1;
     yield* this.words(this.options.answer ?? DEFAULT_ANSWER, messages, options);
   }
@@ -145,7 +149,7 @@ export class StubLlmAdapter implements AgentLlmPort {
     _tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
-    this.lastMessages = messages;
+    this.lastMessages = [...messages];
     this.calls += 1;
     this.agentCalls.push(options);
     const reply = this.reply(messages, options);
