@@ -31,6 +31,8 @@ export interface ChatMessage extends Ask {
 }
 
 export type ChatEvent =
+  /** New conversation: results of runs still in flight no longer match any message. */
+  | { readonly type: 'reset' }
   | { readonly type: 'started'; readonly ask: Ask }
   | {
       readonly type: 'done';
@@ -126,6 +128,7 @@ const HANDLERS: {
     e: Extract<ChatEvent, { type: K }>,
   ) => Messages;
 } = {
+  reset: () => [],
   started: (m, e) => upsert(m, e.ask),
   done: (m, e) =>
     patchRun(m, e, () => ({ status: 'done', response: e.response })),

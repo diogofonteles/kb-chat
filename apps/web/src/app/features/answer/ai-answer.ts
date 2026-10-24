@@ -19,12 +19,13 @@ import type {
   SearchMode,
 } from '@kb-chat/contracts';
 import { AnswersApi } from '@core/api/answers-api.js';
+import { SpendStore } from '@core/spend/spend-store.js';
 import {
   errorMessage,
   toUiErrorCode,
   type UiErrorCode,
 } from '@core/api/api-error.js';
-import type { Subscription } from 'rxjs';
+import { finalize, type Subscription } from 'rxjs';
 import {
   citedSource,
   formatCost,
@@ -33,6 +34,8 @@ import {
   renderAnswer,
 } from './answer-format.js';
 import { describeFilters } from './filters-summary.js';
+
+const STOP_SETTLE_MS = 1000;
 
 interface AnswerRun {
   readonly phase: 'idle' | 'streaming' | 'done' | 'error';
@@ -73,6 +76,7 @@ const IDLE: AnswerRun = {
 })
 export class AiAnswer {
   private readonly api = inject(AnswersApi);
+  private readonly spend = inject(SpendStore);
   private readonly destroyRef = inject(DestroyRef);
   private subscription: Subscription | null = null;
 
@@ -148,7 +152,18 @@ export class AiAnswer {
     this.run.set({ ...IDLE, phase: 'streaming' });
     this.subscription = this.api
       .answer(this.topic(), this.request(), crypto.randomUUID())
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        // Today's spend follows every answer, also one cut short by "Parar", new filters or a
+        // new conversation (KBC-005 FR-5); a cut-short one is recorded by the server a moment later.
+        finalize(() =>
+          this.spend.refresh(
+            this.run().phase === 'streaming' || this.run().interrupted
+              ? STOP_SETTLE_MS
+              : 0,
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: (event) => this.apply(event),
         error: (err: unknown) =>

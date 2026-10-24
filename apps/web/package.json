@@ -7,7 +7,8 @@
     "build": "ng build",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
     "test": "ng test",
-    "lint": "eslint ."
+    "lint": "node scripts/tokens.mjs --check && eslint .",
+    "tokens": "node scripts/tokens.mjs"
   },
   "dependencies": {
     "@angular/common": "21.0.0",

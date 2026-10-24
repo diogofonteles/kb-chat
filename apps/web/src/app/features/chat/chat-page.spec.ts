@@ -5,7 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { fireEvent, render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
@@ -186,7 +186,11 @@ describe('ChatPage', () => {
       );
     await view.fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toMatch(/indisponível/);
-    expect(screen.getByText('ritmo')).toBeTruthy();
+    expect(
+      within(screen.getByRole('region', { name: 'Conversa' })).getByText(
+        'ritmo',
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     await view.fixture.whenStable();
     view.http
@@ -361,5 +365,105 @@ describe('ChatPage without collections', () => {
     http.expectOne('/api/v1/topics').flush(TOPICS);
     await view.fixture.whenStable();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('ChatPage side panel (KBC-005)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('starts a new conversation and focuses the question box (AC-1)', async () => {
+    const view = await renderPage();
+    await ask('lei do ritmo', view);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: /Nova conversa/ }));
+    await view.fixture.whenStable();
+    expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText('Sua pergunta'));
+  });
+
+  it('lists finished conversations and restores one by running it again (AC-2)', async () => {
+    const view = await renderPage();
+    await ask('lei do ritmo', view);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: /Nova conversa/ }));
+    await ask('caibalion', view);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    const history = screen.getByRole('navigation', { name: /Histórico/ });
+    const items = history.querySelectorAll('button');
+    expect([...items].map((b) => b.textContent)).toEqual([
+      expect.stringContaining('caibalion'),
+      expect.stringContaining('lei do ritmo'),
+    ]);
+    expect(items[0]?.getAttribute('aria-current')).toBe('true');
+    fireEvent.click(items[1] as HTMLElement);
+    await view.fixture.whenStable();
+    const rerun = view.http.expectOne(SEARCH_URL);
+    expect(rerun.request.body.q).toBe('lei do ritmo');
+    rerun.flush(aResponse());
+    await view.fixture.whenStable();
+    expect(
+      screen.queryByText('caibalion', { selector: '.question-text, p' }),
+    ).toBeNull();
+    expect(
+      history.querySelector('[aria-current="true"]')?.textContent,
+    ).toContain('lei do ritmo');
+  });
+
+  it('switches the collection into a new conversation with an inline notice (AC-5)', async () => {
+    const view = await renderPage();
+    await ask('lei do ritmo', view);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    await view.fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Nova conversa em Alquimia',
+    );
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
+      '1 documento',
+    );
+    await ask('pedra', view);
+    expect(
+      view.http.expectOne('/api/v1/topics/alquimia/searches').request.body.q,
+    ).toBe('pedra');
+    expect(screen.queryByText('Nova conversa em Alquimia')).toBeNull();
+  });
+
+  it('shows today’s AI spend and applies the chosen theme (AC-8, FR-4)', async () => {
+    const view = await renderPage();
+    expect(screen.getByText(/^US\$\s0,00 de US\$\s1,00$/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Tema'), {
+      target: { value: 'esoteric' },
+    });
+    await view.fixture.whenStable();
+    expect(document.documentElement.dataset['theme']).toBe('esoteric');
+    expect(localStorage.getItem('kb-chat.theme')).toBe('esoteric');
+    fireEvent.change(screen.getByLabelText('Tema'), {
+      target: { value: 'auto' },
+    });
+    await view.fixture.whenStable();
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
+  it('says the history is unavailable when storage fails, and search still works (AC-4)', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    const view = await renderPage();
+    expect(
+      screen.getByText('Histórico indisponível neste navegador.'),
+    ).toBeTruthy();
+    await ask('lei do ritmo', view);
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    expect(screen.getByText(/^1 documento · Tudo/)).toBeTruthy();
   });
 });

@@ -1,0 +1,98 @@
+<button type="button" class="new" (click)="startNew()">
+  <span aria-hidden="true">+</span>&ngsp;<span i18n="@@sidebar.new"
+    >Nova conversa</span
+  >
+</button>
+
+<nav class="history" aria-labelledby="history-title">
+  <h2 id="history-title" class="label">
+    <span i18n="@@sidebar.history">Histórico</span>&ngsp;<span
+      class="where"
+      i18n="@@sidebar.thisBrowser"
+      >(neste navegador)</span
+    >
+  </h2>
+  @if (!history.available()) {
+    <p class="note" i18n="@@sidebar.historyUnavailable">
+      Histórico indisponível neste navegador.
+    </p>
+  } @else if (history.conversations().length === 0) {
+    <p class="note" i18n="@@sidebar.historyEmpty">
+      Suas conversas aparecem aqui.
+    </p>
+  } @else {
+    <ul>
+      @for (conversation of history.conversations(); track conversation.id) {
+        <li>
+          <button
+            type="button"
+            class="conversation"
+            [attr.aria-current]="
+              conversation.id === chat.conversationId() ? 'true' : null
+            "
+            (click)="open(conversation)"
+          >
+            <span class="question" [title]="conversation.asks[0].question">{{
+              conversation.asks[0].question
+            }}</span>
+            <span class="meta">
+              {{ titles().get(conversation.topic) ?? conversation.topic }}
+              @if (conversation.asks.length > 1) {
+                <span i18n="@@sidebar.questions"
+                  >·
+                  {conversation.asks.length, plural,
+                    other {{{ conversation.asks.length }} perguntas}
+                  }</span
+                >
+              }
+            </span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</nav>
+
+<div class="settings">
+  <label class="field">
+    <span class="label" i18n="@@sidebar.topic">Acervo</span>
+    <select
+      #topicSelect
+      [disabled]="chat.topicList().length === 0"
+      (change)="changeTopic(topicSelect.value)"
+    >
+      @for (topic of chat.topicList(); track topic.slug) {
+        <option
+          [value]="topic.slug"
+          [selected]="topic.slug === chat.topicSlug()"
+        >
+          {{ topic.title }} ({{ topic.documentCount | number }})
+        </option>
+      }
+    </select>
+  </label>
+
+  <label class="field">
+    <span class="label" i18n="@@sidebar.theme">Tema</span>
+    <select #themeSelect (change)="changeTheme(themeSelect.value)">
+      @for (option of themeOptions; track option.value) {
+        <option [value]="option.value" [selected]="option.value === theme()">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+  </label>
+
+  <p class="spend">
+    <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
+    @if (!spend.configured()) {
+      <span i18n="@@sidebar.spendOff">IA não configurada</span>
+    } @else if (spend.label()) {
+      <span class="amount">{{ spend.label() }}</span>
+    } @else if (spend.today.error()) {
+      <span i18n="@@sidebar.spendError">Gasto indisponível</span>
+    } @else {
+      <span i18n="@@sidebar.spendLoading">Carregando…</span>
+    }
+  </p>
+</div>

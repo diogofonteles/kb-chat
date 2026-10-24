@@ -166,14 +166,14 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
-Tokens DTCG em `apps/web/src/styles/tokens/` com três conjuntos: `light`, `dark` e `esoteric`. No máximo 3 tamanhos de tipo por tela. O vermelho fica reservado para erros.
+Tokens DTCG em `apps/web/src/styles/tokens.json` (cores; `scripts/tokens.mjs` gera o CSS) com três conjuntos: `light`, `dark` e `esoteric`. No máximo 3 tamanhos de tipo por tela. O vermelho fica reservado para erros.
 
 | Token | Claro | Escuro | Esotérico |
 |---|---|---|---|
 | `color.bg` | creme quente `#F7F5F0` | `#1F1E1C` | noite índigo `#14121F` |
 | `color.surface` | `#FFFFFF` | `#2A2926` | `#1E1B2E` |
 | `color.text` | `#1F1E1C` | `#EDEAE3` | `#E9E2CF` |
-| `color.accent` | terracota `#B5562F` | `#D9774F` | dourado `#C9A54A` |
+| `color.accent` | terracota `#A64D29` | `#E0835D` | dourado `#C9A54A` |
 | `font.reading` | serifada (Source Serif 4) | idem | Cormorant Garamond (títulos) + Source Serif 4 (corpo) |
 | `font.ui` | sans (Inter) | idem | idem |
 

@@ -1,0 +1,63 @@
+/* Generated from tokens.json by scripts/tokens.mjs — do not edit by hand. */
+:root,
+[data-theme='light'] {
+  --color-bg: #f7f5f0;
+  --color-surface: #ffffff;
+  --color-surface-muted: #efebe3;
+  --color-text: #1f1e1c;
+  --color-text-muted: #5c5850;
+  --color-border: #ddd6c9;
+  --color-accent: #a64d29;
+  --color-accent-strong: #9a4524;
+  --color-on-accent: #ffffff;
+  --color-mark: #f6dfb8;
+  --color-focus: #1f5fbf;
+  --color-danger: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='esoteric']) {
+    --color-bg: #1f1e1c;
+    --color-surface: #2a2926;
+    --color-surface-muted: #34322e;
+    --color-text: #edeae3;
+    --color-text-muted: #b5afa4;
+    --color-border: #47443e;
+    --color-accent: #e0835d;
+    --color-accent-strong: #e8906b;
+    --color-on-accent: #1f1e1c;
+    --color-mark: #5e4a26;
+    --color-focus: #8ab4ff;
+    --color-danger: #ff8a7a;
+  }
+}
+
+[data-theme='dark'] {
+  --color-bg: #1f1e1c;
+  --color-surface: #2a2926;
+  --color-surface-muted: #34322e;
+  --color-text: #edeae3;
+  --color-text-muted: #b5afa4;
+  --color-border: #47443e;
+  --color-accent: #e0835d;
+  --color-accent-strong: #e8906b;
+  --color-on-accent: #1f1e1c;
+  --color-mark: #5e4a26;
+  --color-focus: #8ab4ff;
+  --color-danger: #ff8a7a;
+}
+
+[data-theme='esoteric'] {
+  --color-bg: #14121f;
+  --color-surface: #1e1b2e;
+  --color-surface-muted: #2a2640;
+  --color-text: #e9e2cf;
+  --color-text-muted: #b9b09a;
+  --color-border: #3b3558;
+  --color-accent: #c9a54a;
+  --color-accent-strong: #e0c06a;
+  --color-on-accent: #14121f;
+  --color-mark: #4d3f17;
+  --color-focus: #9fc1ff;
+  --color-danger: #ff8f80;
+}

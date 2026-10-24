@@ -38,6 +38,7 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
 - BR-3: os provedores por assinatura só aparecem como disponíveis quando a ferramenta oficial está instalada e logada (`claude` ou `codex` no PATH, com um teste de conexão bem-sucedido). Sem isso, a opção aparece desabilitada com a instrução de instalação e login.
 - BR-4: as variáveis de ambiente (`OPENROUTER_API_KEY` e outras) continuam valendo como padrão quando as configurações não definem um provedor.
 - BR-5: o assistente aparece só na primeira abertura, enquanto `settings.json` não existir, e pode ser reaberto em "Configurações".
+- BR-7: o kb-chat nunca recebe credencial de assinatura. O login é feito uma vez na ferramenta oficial (`claude` → `/login`, que abre o login da conta claude.ai, com Google ou SSO se a conta for assim; `codex login` → "Sign in with ChatGPT"). O app só chama o CLI já logado (`claude -p` com saída em streaming; `codex exec`). Ao chamar o Claude Code, o servidor remove `ANTHROPIC_API_KEY` do ambiente, para o uso contar na assinatura e não na API.
 - BR-6: o uso por assinatura é pessoal e local. Na release 2, hospedada, cada convidado usa a própria chave (ADR 0006).
 
 ## Functional requirements
@@ -52,6 +53,10 @@ Pedido do dono em 2026-10-24: "no onboarding o usuário deve poder configurar su
 - NFR-2: a chave nunca aparece em log, resposta, evidência nem no navegador (teste automatizado).
 
 ## Acceptance criteria
+- **AC-7 (BR-7)**
+  - Given `ANTHROPIC_API_KEY` definido no ambiente do servidor
+  - When uma resposta usa a "Assinatura do Claude"
+  - Then o processo `claude` é iniciado sem essa variável
 - **AC-1 (FR-1, BR-5)**
   - Given nenhum `settings.json`
   - When o app abre

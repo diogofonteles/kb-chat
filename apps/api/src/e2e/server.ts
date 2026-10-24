@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FsVaultAdapter } from '../adapters/fs-vault-adapter.js';
-import { buildApp } from '../app.js';
+import { OWNER, buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { createLogger } from '../logger.js';
 import { JsonlSpendLedger } from '../adapters/jsonl-spend-ledger.js';
@@ -28,5 +28,15 @@ const llm = await createLlm(config);
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
 );
+// Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).
+await ledger.append({
+  ts: new Date().toISOString(),
+  principal: OWNER,
+  model: 'stub',
+  inputTokens: 0,
+  outputTokens: 0,
+  usd: 0.03,
+  interrupted: false,
+});
 const app = await buildApp({ config, vault, index, logger, llm, ledger });
 await app.listen({ host: '127.0.0.1', port: config.PORT });

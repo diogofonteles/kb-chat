@@ -1,7 +1,7 @@
 ---
 id: KBC-005
 title: "Lateral: acervo, histórico da sessão, temas e gasto do dia"
-status: ready
+status: in-progress
 slice: release-1
 outcome: sessões por semana (retomar uma pesquisa); conforto de leitura
 depends_on: [KBC-001, KBC-004]
