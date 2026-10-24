@@ -8,12 +8,17 @@ import { ViewStore } from './view-store.js';
 
 const settings = signal<SettingsView | null>(null);
 
+const refresh = vi.fn();
+
 function setup(configured = true) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       ViewStore,
-      { provide: SpendStore, useValue: { configured: signal(configured) } },
+      {
+        provide: SpendStore,
+        useValue: { configured: signal(configured), refresh },
+      },
       { provide: SettingsStore, useValue: { settings } },
     ],
   });
@@ -29,6 +34,7 @@ describe('ViewStore (KBC-008 FR-5)', () => {
   beforeEach(() => {
     localStorage.clear();
     settings.set(null);
+    refresh.mockClear();
   });
 
   it('starts in the research view when a provider is configured', () => {
@@ -48,6 +54,20 @@ describe('ViewStore (KBC-008 FR-5)', () => {
     views.select('research');
     expect(views.current()).toBe('search');
     expect(views.researchAvailable()).toBe(false);
+  });
+
+  it('leaves the research view at once when Settings save "Nenhum", and asks the API again', () => {
+    settings.set(aSettingsView());
+    const views = setup();
+    TestBed.tick();
+    expect(views.current()).toBe('research');
+    settings.set(
+      aSettingsView({ ai: { provider: 'none', keys: {}, dailyCapUsd: 1 } }),
+    );
+    TestBed.tick();
+    expect(views.researchAvailable()).toBe(false);
+    expect(views.current()).toBe('search');
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it('ignores an unknown remembered value', () => {

@@ -1,5 +1,12 @@
 import { DOCUMENT } from '@angular/common';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import {
+  Injectable,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import {
@@ -36,11 +43,34 @@ export class ViewStore {
     () => this.settings.settings()?.preferences.defaultView ?? 'research',
   );
 
-  /** True while today's spend is loading or unreadable: the API answers for itself then. */
-  readonly researchAvailable = this.spend.configured;
+  /** The provider saved in Settings; undefined until they load. */
+  private readonly savedProvider = computed(
+    () => this.settings.settings()?.ai.provider,
+  );
+
+  /**
+   * True while today's spend is loading or unreadable (the API answers for itself then);
+   * false at once when Settings save "Nenhum" (KBC-007 FR-5).
+   */
+  readonly researchAvailable = computed(
+    () => this.spend.configured() && this.savedProvider() !== 'none',
+  );
   readonly current = computed<ChatView>(() =>
     this.researchAvailable() ? (this.chosen() ?? this.preferred()) : 'search',
   );
+
+  constructor() {
+    // Another provider saved: ask the API again whether research can run now.
+    let previous: string | null | undefined;
+    effect(() => {
+      const provider = this.savedProvider();
+      untracked(() => {
+        if (previous !== undefined && provider !== previous)
+          this.spend.refresh();
+        previous = provider;
+      });
+    });
+  }
 
   select(view: ChatView): void {
     if (view === 'research' && !this.researchAvailable()) return;
