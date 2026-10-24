@@ -27,9 +27,9 @@
   Quem é convidado começa com "Buscar documentos" e nenhum acervo.
 </p>
 
-<p class="notice" [class.error]="notice()?.kind === 'error'" role="status">
-  {{ notice()?.text ?? '' }}
-</p>
+@if (!openId()) {
+  <ng-container *ngTemplateOutlet="status" />
+}
 
 @if (people.error()) {
   <div class="alert" role="alert">
@@ -96,8 +96,16 @@
             (changed)="change(person, $event)"
             (revoked)="revoke(person)"
           />
+          <ng-container *ngTemplateOutlet="status" />
         }
       </li>
     }
   </ul>
 }
+
+<!-- The outcome of the last change, next to the person it changed (MA-23). -->
+<ng-template #status>
+  <p class="notice" [class.error]="notice()?.kind === 'error'" role="status">
+    {{ notice()?.text ?? '' }}
+  </p>
+</ng-template>

@@ -186,6 +186,8 @@ select {
 }
 
 .avatar.initial {
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
   display: grid;
   place-items: center;
   background: var(--color-surface-muted);

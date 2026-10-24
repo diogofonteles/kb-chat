@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -28,7 +28,7 @@ type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
  */
 @Component({
   selector: 'app-people-panel',
-  imports: [PersonEditor, DatePipe],
+  imports: [PersonEditor, DatePipe, NgTemplateOutlet],
   templateUrl: './people-panel.html',
   styleUrl: './people-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
