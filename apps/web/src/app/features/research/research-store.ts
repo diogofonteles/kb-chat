@@ -13,7 +13,7 @@ import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
-import { finalize, type Subscription } from 'rxjs';
+import { finalize, switchMap, timer, type Subscription } from 'rxjs';
 import {
   SAVE_RESEARCH,
   type ResearchConversation,
@@ -21,7 +21,7 @@ import {
 import {
   applyEvent,
   fromSavedTurn,
-  isFinished,
+  isSaved,
   startTurn,
   toHistory,
   toSavedTurn,
@@ -68,6 +68,8 @@ export class ResearchStore {
   private readonly destroyRef = inject(DestroyRef);
   private subscription: Subscription | null = null;
   private nextId = 1;
+  /** Today's spend when the turn in flight started: a stop prices the turn by the difference. */
+  private spendAtStart: number | null = null;
   private readonly state = signal<ConversationState>(emptyConversation(null));
 
   readonly conversationId = computed(() => this.state().id);
@@ -93,15 +95,20 @@ export class ResearchStore {
     this.run(turn.id, topic, { question: trimmed, history });
   }
 
-  /** "Tentar de novo" on the last turn: asks the same question in its place. */
+  /** "Tentar de novo" on the last turn (failed or stopped): asks the same question in its place. */
   retry(): void {
     const last = this.state().turns.at(-1);
-    if (!last || last.phase !== 'error') return;
+    const retriable =
+      last?.phase === 'error' || (last?.phase === 'done' && last.interrupted);
+    if (!last || !retriable) return;
     this.state.update((s) => ({ ...s, turns: s.turns.slice(0, -1) }));
     this.ask(last.question);
   }
 
-  /** "Parar": aborts the request; the server stops the agent and records the partial cost. */
+  /**
+   * "Parar": aborts the request; the server stops the agent and records the partial cost.
+   * The turn is saved at once (also with no text yet) and again with that cost once known.
+   */
   stop(): void {
     const current = this.state().turns.find((t) => t.phase === 'streaming');
     if (!current) return;
@@ -114,6 +121,7 @@ export class ResearchStore {
       interrupted: true,
     }));
     this.persist();
+    this.settleStoppedCost(current.id);
   }
 
   /** "+ Nova conversa" in this view: an empty conversation in the same collection (BR-4). */
@@ -143,7 +151,7 @@ export class ResearchStore {
 
   private toConversation(): ResearchConversation | null {
     const { id, topic, createdAt, turns } = this.state();
-    const finished = turns.filter(isFinished);
+    const finished = turns.filter(isSaved);
     const first = finished[0];
     if (!topic || !first) return null;
     return {
@@ -158,6 +166,7 @@ export class ResearchStore {
   }
 
   private run(id: number, topic: string, request: ResearchRequest): void {
+    this.spendAtStart = this.spend.usd();
     this.subscription = this.api
       .research(topic, request)
       .pipe(
@@ -182,6 +191,29 @@ export class ResearchStore {
       this.usage.track({ type: 'ai_answer', usd: event.usd });
     this.patch(id, (turn) => applyEvent(turn, event));
     if (event.type === 'done') this.persist();
+  }
+
+  /** Reads today's spend after the server recorded the stopped turn; the rise is its cost. */
+  private settleStoppedCost(id: number): void {
+    const before = this.spendAtStart;
+    const turn = this.state().turns.find((t) => t.id === id);
+    if (before === null || turn?.billing !== 'per-token') return;
+    const conversationId = this.state().id;
+    timer(STOP_SETTLE_MS)
+      .pipe(
+        switchMap(() => this.api.spendToday()),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (today) => {
+          if (this.state().id !== conversationId) return;
+          const usd = Math.max(0, today.usd - before);
+          this.patch(id, (t) => ({ ...t, usd }));
+          this.persist();
+        },
+        // The cost stays unknown (0) in the saved turn; the side panel still refreshes.
+        error: () => undefined,
+      });
   }
 
   private refreshSpend(id: number): void {

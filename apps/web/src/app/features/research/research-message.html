@@ -41,14 +41,14 @@
           >
         }
       </p>
-      @if (last()) {
+      @if (capReached()) {
         <button
           type="button"
           class="secondary"
-          (click)="retried.emit()"
-          i18n="@@ai.retry"
+          (click)="openSettings()"
+          i18n="@@ai.openSettings"
         >
-          Tentar de novo
+          Abrir Configurações
         </button>
       }
     }
@@ -61,7 +61,7 @@
             other {Resposta interrompida antes de começar.}
           }
         </p>
-        @if (!turn().restored && !subscription()) {
+        @if (partialCost()) {
           <p class="note" i18n="@@ai.partialCost">
             O custo do que já foi processado entra no gasto do dia.
           </p>
@@ -100,6 +100,17 @@
           <span i18n="@@ai.cost">Custo: {{ costLabel() }}</span>
         }
       </p>
+    }
+
+    @if (canRetry()) {
+      <button
+        type="button"
+        class="secondary"
+        (click)="retried.emit()"
+        i18n="@@ai.retry"
+      >
+        Tentar de novo
+      </button>
     }
 
     @if (streaming()) {

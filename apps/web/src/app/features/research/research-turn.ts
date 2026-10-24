@@ -59,6 +59,7 @@ const HANDLERS: {
     e: Extract<ResearchEvent, { type: K }>,
   ) => ResearchTurn;
 } = {
+  start: (turn, e) => ({ ...turn, model: e.model, billing: e.billing }),
   step: (turn, e) => ({
     ...turn,
     steps: [...turn.steps, e.step],
@@ -95,9 +96,13 @@ export function applyEvent(
   return handler(turn, event);
 }
 
-/** A turn that ended with text: it is context for follow-ups and goes to the history. */
+/** A turn that ended with text: it is context for follow-ups. */
 export const isFinished = (turn: ResearchTurn): boolean =>
   turn.phase === 'done' && turn.text.trim().length > 0;
+
+/** A turn that goes to the history: every finished one, also one stopped before any text. */
+export const isSaved = (turn: ResearchTurn): boolean =>
+  turn.phase === 'done' && (turn.interrupted || turn.text.trim().length > 0);
 
 const MAX_ANSWER_CHARS = 20_000;
 

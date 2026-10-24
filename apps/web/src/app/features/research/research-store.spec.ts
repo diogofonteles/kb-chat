@@ -7,7 +7,7 @@ import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
-import { Subject, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import {
   SAVE_RESEARCH,
   type ResearchConversation,
@@ -19,19 +19,27 @@ const SOURCE = { n: 1, id: 'raw/a.md', title: 'Os Princípios' };
 function setup() {
   localStorage.clear();
   const streams: Subject<ResearchEvent>[] = [];
+  const spendNow = { usd: 0.1 };
   const api = {
     research: vi.fn(() => {
       const stream = new Subject<ResearchEvent>();
       streams.push(stream);
       return stream;
     }),
+    spendToday: vi.fn(() =>
+      of({ usd: spendNow.usd, capUsd: 1, configured: true }),
+    ),
   };
   const topicSlug = signal<string | null>('hermetismo');
   const chat = {
     topicSlug,
     selectTopic: vi.fn((slug: string) => topicSlug.set(slug)),
   };
-  const spend = { configured: signal(true), refresh: vi.fn() };
+  const spend = {
+    configured: signal(true),
+    usd: signal<number | null>(0.1),
+    refresh: vi.fn(),
+  };
   const usage = { track: vi.fn() };
   const save = vi.fn<(conversation: ResearchConversation) => void>();
   TestBed.configureTestingModule({
@@ -47,7 +55,7 @@ function setup() {
     ],
   });
   const store = TestBed.inject(ResearchStore);
-  return { store, api, streams, chat, spend, usage, save };
+  return { store, api, streams, chat, spend, usage, save, spendNow };
 }
 
 function answer(stream: Subject<ResearchEvent>, text: string, usd = 0.002) {
@@ -251,11 +259,46 @@ describe('ResearchStore', () => {
     expect(store.turns()).toEqual([]);
   });
 
-  it('does not save a conversation without a finished answer', () => {
+  it('does not save a conversation with no turn ended yet', () => {
     const { store, save } = setup();
     store.persist();
     store.ask('quais são?');
-    store.stop();
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('saves a turn stopped before any text, with the model and the cost spent (100% of the history)', () => {
+    vi.useFakeTimers();
+    try {
+      const { store, streams, save, spendNow } = setup();
+      store.ask('quais são?');
+      const stream = streams[0] as Subject<ResearchEvent>;
+      stream.next({ type: 'start', model: 'deepseek/x', billing: 'per-token' });
+      stream.next({ type: 'step', step: { kind: 'search', text: 'Buscando' } });
+      store.stop();
+      expect(save.mock.lastCall?.[0].turns).toEqual([
+        expect.objectContaining({
+          question: 'quais são?',
+          answer: '',
+          model: 'deepseek/x',
+          interrupted: true,
+          usd: 0,
+        }),
+      ]);
+      spendNow.usd = 0.13;
+      vi.advanceTimersByTime(STOP_SETTLE_MS);
+      expect(save.mock.lastCall?.[0].turns[0]?.usd).toBeCloseTo(0.03, 10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('asks a stopped question again in its place on "Tentar de novo"', () => {
+    const { store, api } = setup();
+    store.ask('quais são?');
+    store.stop();
+    store.retry();
+    expect(api.research).toHaveBeenCalledTimes(2);
+    expect(store.turns()).toHaveLength(1);
+    expect(store.streaming()).toBe(true);
   });
 });

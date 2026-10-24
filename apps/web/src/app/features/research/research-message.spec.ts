@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
+import { SettingsStore } from '@features/settings/settings-store.js';
 import { ResearchMessage } from './research-message.js';
 import { startTurn, type ResearchTurn } from './research-turn.js';
 
@@ -29,12 +30,16 @@ async function renderMessage(turn: ResearchTurn, last = true) {
   const opened = vi.fn();
   const stopped = vi.fn();
   const retried = vi.fn();
+  const settings = { openSettings: vi.fn() };
   const view = await render(ResearchMessage, {
-    providers: [provideZonelessChangeDetection()],
+    providers: [
+      provideZonelessChangeDetection(),
+      { provide: SettingsStore, useValue: settings },
+    ],
     inputs: { turn, last },
     on: { opened, stopped, retried },
   });
-  return { ...view, opened, stopped, retried };
+  return { ...view, opened, stopped, retried, settings };
 }
 
 describe('ResearchMessage', () => {
@@ -131,6 +136,29 @@ describe('ResearchMessage', () => {
         .getByRole('link', { name: 'Adicionar créditos' })
         .getAttribute('href'),
     ).toBe('https://openrouter.ai/settings/credits');
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(view.retried).toHaveBeenCalledOnce();
+  });
+
+  it('points a spent daily cap to Settings, without "Tentar de novo"', async () => {
+    const view = await renderMessage(
+      aTurn({ phase: 'error', text: '', error: 'DAILY_CAP_REACHED' }),
+    );
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Abrir Configurações' }),
+    );
+    expect(view.settings.openSettings).toHaveBeenCalledOnce();
+  });
+
+  it('offers "Tentar de novo" on a stop before any text, with no cost notice', async () => {
+    const view = await renderMessage(
+      aTurn({ text: '', interrupted: true, usd: 0 }),
+    );
+    expect(
+      screen.getByText('Resposta interrompida antes de começar.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/O custo do que já foi processado/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     expect(view.retried).toHaveBeenCalledOnce();
   });

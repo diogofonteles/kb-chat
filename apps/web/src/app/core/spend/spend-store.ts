@@ -21,6 +21,8 @@ export class SpendStore {
     this.today.hasValue() ? this.today.value() : null,
   );
   readonly configured = computed(() => this.value()?.configured ?? true);
+  /** Today's spend in US$, or null while unknown. */
+  readonly usd = computed(() => this.value()?.usd ?? null);
   /** "US$ 0,03 de US$ 1,00", or '' while loading or on error. */
   readonly label = computed(() => {
     const spend = this.value();

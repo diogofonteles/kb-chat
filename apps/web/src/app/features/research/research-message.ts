@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -11,6 +12,7 @@ import {
   formatCost,
   renderAnswer,
 } from '@features/answer/answer-format.js';
+import { SettingsStore } from '@features/settings/settings-store.js';
 import { aiErrorMessage } from './research-errors.js';
 import { describeSteps } from './research-steps.js';
 import { citedSources, type ResearchTurn } from './research-turn.js';
@@ -35,6 +37,7 @@ export class ResearchMessage {
   readonly opened = output<DocumentRef>();
   readonly stopped = output();
   readonly retried = output();
+  private readonly settings = inject(SettingsStore);
 
   protected readonly streaming = computed(
     () => this.turn().phase === 'streaming',
@@ -53,10 +56,29 @@ export class ResearchMessage {
     const usd = this.turn().usd;
     return usd ? formatCost(usd) : '';
   });
+  /** Asking again fits a failure or a stop, never a spent daily cap (that needs Settings). */
+  protected readonly canRetry = computed(() => {
+    const turn = this.turn();
+    if (!this.last() || turn.restored) return false;
+    if (turn.phase === 'error') return turn.error !== 'DAILY_CAP_REACHED';
+    return turn.phase === 'done' && turn.interrupted;
+  });
+  protected readonly capReached = computed(
+    () => this.turn().error === 'DAILY_CAP_REACHED',
+  );
+  /** Only a stop after the answer started has spent something worth a notice. */
+  protected readonly partialCost = computed(() => {
+    const turn = this.turn();
+    return !turn.restored && !this.subscription() && turn.text.trim() !== '';
+  });
   protected readonly errorText = computed(() => {
     const code = this.turn().error;
     return code ? aiErrorMessage(code) : '';
   });
+
+  protected openSettings(): void {
+    this.settings.openSettings();
+  }
 
   protected openCitation(event: MouseEvent): void {
     const n = citedSource(event.target);
