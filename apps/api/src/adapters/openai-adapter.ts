@@ -28,6 +28,14 @@ export const OPENAI_PRICES: Readonly<Record<string, LlmPrice>> = {
 };
 const MOST_EXPENSIVE: LlmPrice = { input: 5e-6, output: 30e-6 };
 
+/** GPT-5.x and the o-series reason by default; their reasoning counts as output. */
+const REASONING_MODEL = /^(gpt-5|o\d)/;
+/**
+ * Reasoning models think at effort "low" with this output floor, so the reasoning cannot
+ * spend the whole budget and leave the answer empty (as Anthropic's thinking floor).
+ */
+const REASONING_OUTPUT_FLOOR = 4000;
+
 export const openAiPrice = (model: string): LlmPrice =>
   OPENAI_PRICES[model] ?? MOST_EXPENSIVE;
 
@@ -137,7 +145,13 @@ export class OpenAiAdapter implements AgentLlmPort {
   }
 
   maxOutputTokens(requested: number): number {
-    return requested;
+    return this.reasons()
+      ? Math.max(requested, REASONING_OUTPUT_FLOOR)
+      : requested;
+  }
+
+  private reasons(): boolean {
+    return REASONING_MODEL.test(this.model);
   }
 
   async price(): Promise<LlmPrice> {
@@ -209,7 +223,8 @@ export class OpenAiAdapter implements AgentLlmPort {
           }
         : {}),
       // GPT-5 models take max_completion_tokens (reasoning counts toward it).
-      max_completion_tokens: options.maxTokens,
+      max_completion_tokens: this.maxOutputTokens(options.maxTokens),
+      ...(this.reasons() ? { reasoning_effort: 'low' } : {}),
       stream: true,
       stream_options: { include_usage: true },
     };

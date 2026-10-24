@@ -250,9 +250,12 @@ describe('OpenAiAdapter', () => {
     const body = bodyOf(fetchMock.mock.calls[0]);
     expect(body).toMatchObject({
       tool_choice: 'auto',
-      max_completion_tokens: 2000,
+      // A reasoning model thinks at "low" with room left for the answer.
+      max_completion_tokens: 4000,
+      reasoning_effort: 'low',
       stream_options: { include_usage: true },
     });
+    expect(llm.maxOutputTokens(2000)).toBe(4000);
     expect(body.messages[1]).toEqual({
       role: 'assistant',
       content: null,
@@ -290,6 +293,8 @@ describe('OpenAiAdapter', () => {
     ))
       tokens.push(chunk);
     expect(tokens).toEqual([{ type: 'token', text: 'oi' }]);
+    // A model that does not reason keeps the requested budget and no effort setting.
+    expect(ok.maxOutputTokens(2000)).toBe(2000);
     expect(openAiPrice('gpt-x')).toEqual({ input: 5e-6, output: 30e-6 });
     expect(await ok.balance()).toBeNull();
     const refused = new OpenAiAdapter({
