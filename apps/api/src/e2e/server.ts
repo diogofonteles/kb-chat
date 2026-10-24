@@ -7,6 +7,7 @@ import { OWNER, buildApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { createLogger } from '../logger.js';
 import { JsonlSpendLedger } from '../adapters/jsonl-spend-ledger.js';
+import { JsonlUsageLog } from '../adapters/jsonl-usage-log.js';
 import { createLlm } from '../llm-factory.js';
 import { createSearchIndex } from '../search-index-factory.js';
 
@@ -38,5 +39,14 @@ await ledger.append({
   usd: 0.03,
   interrupted: false,
 });
-const app = await buildApp({ config, vault, index, logger, llm, ledger });
+const usage = new JsonlUsageLog(join(config.KB_CHAT_STATE_DIR, 'events.jsonl'));
+const app = await buildApp({
+  config,
+  vault,
+  index,
+  logger,
+  llm,
+  ledger,
+  usage,
+});
 await app.listen({ host: '127.0.0.1', port: config.PORT });

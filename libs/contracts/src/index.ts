@@ -5,3 +5,4 @@ export * from './facets.js';
 export * from './health.js';
 export * from './search.js';
 export * from './topics.js';
+export * from './usage.js';

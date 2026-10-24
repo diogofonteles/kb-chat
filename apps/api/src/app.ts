@@ -20,11 +20,17 @@ import hostGuard from './plugins/host-guard.js';
 import type { LlmPort } from './ports/llm.js';
 import type { SearchIndexPort } from './ports/search-index.js';
 import type { SpendLedgerPort } from './ports/spend-ledger.js';
+import type { UsageLogPort } from './ports/usage-log.js';
 import type { VaultReaderPort } from './ports/vault-reader.js';
+import { MemoryUsageLog } from './adapters/memory-usage-log.js';
+import { usageRoutes } from './modules/usage/index.js';
 import { createLogger } from './logger.js';
 
 /** The only principal until release 2 adds logins (ADR 0005). */
 export const OWNER = 'owner';
+
+/** Usage events older than this are removed when the API starts (KBC-006 BR-3). */
+export const USAGE_RETENTION_DAYS = 90;
 
 export interface AppDeps {
   readonly config: AppConfig;
@@ -33,6 +39,8 @@ export interface AppDeps {
   /** AI provider; without one, answers are disabled (LLM_NOT_CONFIGURED). */
   readonly llm?: LlmPort;
   readonly ledger?: SpendLedgerPort;
+  /** Local usage log (KBC-006); in memory when not given. */
+  readonly usage?: UsageLogPort;
   readonly catalog?: CatalogRegistry;
   readonly logger?: FastifyBaseLogger;
 }
@@ -41,6 +49,7 @@ type FullDeps = AppDeps & {
   catalog: CatalogRegistry;
   llm: LlmPort;
   ledger: SpendLedgerPort;
+  usage: UsageLogPort;
 };
 
 async function registerAnswers(
@@ -83,6 +92,9 @@ async function registerRoutes(
     vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
   });
   await app.register(documentRoutes(documents));
+  await app.register(
+    usageRoutes({ catalog, log: deps.usage, principal: OWNER }),
+  );
 }
 
 /** Assembles the API; only `main` listens (ND-01). */
@@ -107,6 +119,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     catalog,
     llm: deps.llm ?? new DisabledLlm(),
     ledger: deps.ledger ?? new MemorySpendLedger(),
+    usage: deps.usage ?? new MemoryUsageLog(),
   });
 
   app.addHook('onClose', async () => deps.index.close());
