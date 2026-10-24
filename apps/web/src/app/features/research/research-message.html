@@ -61,7 +61,7 @@
             other {Resposta interrompida antes de começar.}
           }
         </p>
-        @if (!turn().restored) {
+        @if (!turn().restored && !subscription()) {
           <p class="note" i18n="@@ai.partialCost">
             O custo do que já foi processado entra no gasto do dia.
           </p>
@@ -94,7 +94,9 @@
         <span i18n="@@ai.disclaimer"
           >Resposta gerada por IA a partir do acervo; confira nas fontes.</span
         >
-        @if (costLabel()) {
+        @if (subscription()) {
+          <span i18n="@@ai.subscription">Incluído na sua assinatura</span>
+        } @else if (costLabel()) {
           <span i18n="@@ai.cost">Custo: {{ costLabel() }}</span>
         }
       </p>

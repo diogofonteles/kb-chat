@@ -1,12 +1,16 @@
 import {
   MAX_HISTORY_TURNS,
   type AnswerSource,
+  type ResearchBilling,
   type ResearchEvent,
   type ResearchStep,
   type ResearchTurn as HistoryTurn,
   type SavedResearchTurn,
 } from '@kb-chat/contracts';
-import type { UiErrorCode } from '@core/api/api-error.js';
+import {
+  toResearchErrorCode,
+  type ResearchErrorCode,
+} from './research-errors.js';
 
 /** One question and the agent's answer, as shown in the "Pesquisa com IA" thread. */
 export interface ResearchTurn {
@@ -20,9 +24,11 @@ export interface ResearchTurn {
   readonly steps: readonly ResearchStep[];
   readonly stepCount: number;
   readonly usd: number | null;
+  /** A subscription turn shows "Incluído na sua assinatura" instead of a cost (KBC-007 BR-2). */
+  readonly billing: ResearchBilling;
   readonly model: string;
   readonly interrupted: boolean;
-  readonly error: UiErrorCode | null;
+  readonly error: ResearchErrorCode | null;
   readonly at: string;
   /** Brought back from the history (FR-6): shown as saved, never announced or re-run. */
   readonly restored: boolean;
@@ -38,6 +44,7 @@ export function startTurn(id: number, question: string): ResearchTurn {
     steps: [],
     stepCount: 0,
     usd: null,
+    billing: 'per-token',
     model: '',
     interrupted: false,
     error: null,
@@ -45,17 +52,6 @@ export function startTurn(id: number, question: string): ResearchTurn {
     restored: false,
   };
 }
-
-/** Codes the agent stream may send that have their own wording; anything else is generic. */
-const KNOWN_STREAM_CODES: readonly UiErrorCode[] = [
-  'DAILY_CAP_REACHED',
-  'LLM_INSUFFICIENT_CREDIT',
-  'LLM_NOT_CONFIGURED',
-  'RATE_LIMITED',
-];
-
-export const toKnownCode = (code: string): UiErrorCode =>
-  KNOWN_STREAM_CODES.find((value) => value === code) ?? 'INTERNAL';
 
 const HANDLERS: {
   [K in ResearchEvent['type']]: (
@@ -76,11 +72,16 @@ const HANDLERS: {
     phase: turn.text.trim() || e.interrupted ? 'done' : 'error',
     error: turn.text.trim() || e.interrupted ? null : 'INTERNAL',
     usd: e.usd,
+    billing: e.billing,
     model: e.model,
     interrupted: e.interrupted,
     stepCount: Math.max(turn.stepCount, e.steps),
   }),
-  error: (turn, e) => ({ ...turn, phase: 'error', error: toKnownCode(e.code) }),
+  error: (turn, e) => ({
+    ...turn,
+    phase: 'error',
+    error: toResearchErrorCode(e.code),
+  }),
 };
 
 export function applyEvent(
@@ -126,6 +127,7 @@ export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
     sources: [...turn.sources],
     steps: turn.stepCount,
     usd: turn.usd ?? 0,
+    billing: turn.billing,
     model: turn.model,
     interrupted: turn.interrupted,
     at: turn.at,
@@ -145,6 +147,7 @@ export function fromSavedTurn(
     steps: [],
     stepCount: saved.steps,
     usd: saved.usd,
+    billing: saved.billing,
     model: saved.model,
     interrupted: saved.interrupted,
     error: null,

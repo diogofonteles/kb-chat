@@ -54,7 +54,14 @@ function answer(stream: Subject<ResearchEvent>, text: string, usd = 0.002) {
   stream.next({ type: 'step', step: { kind: 'search', text: 'Buscando' } });
   stream.next({ type: 'sources', sources: [SOURCE] });
   stream.next({ type: 'token', text });
-  stream.next({ type: 'done', usd, model: 'm', interrupted: false, steps: 1 });
+  stream.next({
+    type: 'done',
+    usd,
+    billing: 'per-token',
+    model: 'm',
+    interrupted: false,
+    steps: 1,
+  });
   stream.complete();
 }
 
@@ -141,6 +148,9 @@ describe('ResearchStore', () => {
   it.each([
     ['DAILY_CAP_REACHED', 'DAILY_CAP_REACHED'],
     ['LLM_INSUFFICIENT_CREDIT', 'LLM_INSUFFICIENT_CREDIT'],
+    ['CLI_LOGIN_REQUIRED', 'CLI_LOGIN_REQUIRED'],
+    ['PROVIDER_UNAVAILABLE', 'PROVIDER_UNAVAILABLE'],
+    ['LLM_KEY_REJECTED', 'LLM_KEY_REJECTED'],
     ['SOMETHING_NEW', 'INTERNAL'],
   ])('maps the stream error %s to %s', (code, expected) => {
     const { store, streams } = setup();
@@ -173,6 +183,7 @@ describe('ResearchStore', () => {
     streams[0]?.next({
       type: 'done',
       usd: 0,
+      billing: 'per-token',
       model: 'm',
       interrupted: false,
       steps: 0,
@@ -203,6 +214,7 @@ describe('ResearchStore', () => {
           sources: [SOURCE],
           steps: 3,
           usd: 0.01,
+          billing: 'per-token',
           model: 'm',
           interrupted: false,
           at: '2026-10-24T10:00:30.000Z',

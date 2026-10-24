@@ -581,6 +581,7 @@ function aResearchConversation(title: string): ResearchConversation {
         sources: [],
         steps: 3,
         usd: 0.01,
+        billing: 'per-token',
         model: 'stub/model',
         interrupted: false,
         at: '2026-10-24T11:00:00.000Z',

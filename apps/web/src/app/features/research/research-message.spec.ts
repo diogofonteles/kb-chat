@@ -69,9 +69,35 @@ describe('ResearchMessage', () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText(/^Custo: US\$\s0,0042$/)).toBeTruthy();
-    view.fixture.componentRef.setInput('turn', aTurn({ usd: 0 }));
+    expect(screen.queryByText('Incluído na sua assinatura')).toBeNull();
+    view.fixture.componentRef.setInput(
+      'turn',
+      aTurn({ usd: 0, billing: 'subscription' }),
+    );
     await view.fixture.whenStable();
     expect(screen.queryByText(/Custo:/)).toBeNull();
+    expect(screen.getByText('Incluído na sua assinatura')).toBeTruthy();
+  });
+
+  it('keeps the partial-cost note off an interrupted subscription turn', async () => {
+    const view = await renderMessage(aTurn({ interrupted: true }));
+    expect(screen.getByText(/O custo do que já foi processado/)).toBeTruthy();
+    view.fixture.componentRef.setInput(
+      'turn',
+      aTurn({ interrupted: true, billing: 'subscription', usd: 0 }),
+    );
+    await view.fixture.whenStable();
+    expect(screen.queryByText(/O custo do que já foi processado/)).toBeNull();
+  });
+
+  it.each([
+    ['CLI_LOGIN_REQUIRED', /não está logado/],
+    ['PROVIDER_UNAVAILABLE', /não respondeu agora/],
+    ['LLM_KEY_REJECTED', /chave de API não foi aceita/],
+    ['LLM_NOT_CONFIGURED', /Escolha um em ⚙ Configurações/],
+  ] as const)('explains the runner failure %s', async (error, text) => {
+    await renderMessage(aTurn({ phase: 'error', text: '', error }));
+    expect(screen.getByRole('alert').textContent).toMatch(text);
   });
 
   it('shows the current step and "Parar" while the agent works', async () => {

@@ -17,7 +17,8 @@ import { citedSources, type ResearchTurn } from './research-turn.js';
 
 /**
  * One question and the agent's answer (KBC-008 FR-3): steps line, streamed markdown with [n]
- * citations, the cited sources, the AI notice with the cost, and "Parar" while it works.
+ * citations, the cited sources, the AI notice with the cost (or the subscription), and "Parar"
+ * while it works.
  */
 @Component({
   selector: 'app-research-message',
@@ -43,7 +44,11 @@ export class ResearchMessage {
     renderAnswer(this.turn().text, this.turn().sources),
   );
   protected readonly cited = computed(() => citedSources(this.turn()));
-  /** Per-token providers report what the turn cost; a subscription reports nothing (zero). */
+  /** A subscription turn costs nothing per token and stays out of today's spend (KBC-007 BR-2). */
+  protected readonly subscription = computed(
+    () => this.turn().billing === 'subscription',
+  );
+  /** Per-token providers report what the turn cost. */
   protected readonly costLabel = computed(() => {
     const usd = this.turn().usd;
     return usd ? formatCost(usd) : '';
