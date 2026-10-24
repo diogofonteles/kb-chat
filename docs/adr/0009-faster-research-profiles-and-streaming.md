@@ -19,6 +19,13 @@ With the Claude subscription and the CLI's default model (Opus 5.5), "quais são
 | Prompt | one parallel round of search and `find_text`, one batched read, a focused answer | ADR 0006's prompt |
 | Claude Code effort | `--effort=low` | the CLI's default |
 
+**Auto-escalation from fast to deep** (owner-aligned decision, 2026-10-24: the reader should never get "not in the collection" when a deeper pass would find it). With Settings' "Aprofundar automaticamente" on (the default), the fast prompt tells the model that, when its research cannot fully answer from the collection (nothing found, an incomplete list, doubt), it must write only a line with `<<APROFUNDAR>>` and a short reason. The runner then:
+- detects the marker (the answer stream holds a segment that starts with `<` until its call ends), or, as a safety net, a fast answer that gives up on the collection ("não nomeia", "não encontrei", "não traz", "não há informação");
+- takes back anything shown (`retract`), emits a `deepen` step ("Aprofundando a pesquisa…") and goes on in the **same turn** with the deep profile;
+- in-API loop: the same messages (every tool result stays), the deep model and the deep prompt, a note with the reason, and the rest of the deep budget (15 steps in all), with the same `[n]` numbering;
+- subscription CLIs: a second CLI run with the deep model, the same turn tools (so the same numbering), the rest of the deep budget, and the fast pass's findings (its reason, its steps and the numbered documents) in the input;
+- `done` carries the deep model and `escalated: true`. A deep turn, or a turn with the setting off, never escalates.
+
 **A fast and a deep model per provider** (replaces ADR 0007's single `ai.model`). Settings keep `ai.models[provider] = { fast?, deep? }`, so switching providers and back keeps each choice. A file written before this ADR reads its single `model` as both profiles of its provider. The subscription CLIs accept only an allowlist (contract `MODEL_ALLOWLISTS`): Claude Code `sonnet`, `opus`, `haiku`, `fable` and their full ids; Codex `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`. Per-token providers take any id that passes ADR 0007's regex.
 
 | Provider | Fast | Deep |
@@ -60,7 +67,8 @@ The retracted text moves, collapsed, into the steps list as a muted "Pensando: �
 
 - Good: the first answer text no longer waits for 800 characters; the default profile answers in about half the time of the deep one; the owner can pick the model per profile for every provider, subscriptions included.
 - Bad: a reader may briefly see text that is then taken back. Mitigations: narration-looking sentences are held, the prompt still asks for no narration, and the text stays visible as a thought.
-- Bad: in the fast profile, Sonnet may stop at "o acervo não nomeia" for questions whose answer needs more than 6 steps; the deep profile is the way to dig further.
+- Bad: an escalated answer takes about as long as a deep one, plus the fast pass. Questions the fast pass settles stay fast.
+- Measured before auto-escalation: in the fast profile, Sonnet stopped at "o acervo não nomeia" on the five-principles questions (0/2), although `find_text` had shown the list; escalation hands those turns to the deep profile.
 - Measured on 2026-10-24, real vault, Claude subscription, 10 questions (`work/KBC-011/eval-*.md`, two runs per profile). Fast (Sonnet): median first text 10.8 s and 11.3 s, median total 12.1 s and 12.4 s (longest 14.6 s), 8/10 cite the expected document in both runs, and the five principles are not named (0/2). Deep (Opus): median first text 22.7 s and 17.8 s, median total 30.2 s and 26.0 s, 9/10 and 10/10 cite, and both five-principles answers name all five. Before: about 18 s to the first text and 32 s in all on the owner's question; KBC-008's OpenRouter run had a median first text of 21.7 s and a median total of 36.8 s.
 - Where the fast profile's time goes (step timings in the report): about 2.5 s to the first tool result (0.5 s of CLI start, one model round), two or three rounds of parallel tools by about 5 s, then 4–6 s before the final call writes its first character, with no visible thinking blocks. Smaller reads (5,000 characters), `--effort=low` and `MAX_THINKING_TOKENS=0` left that last wait unchanged, so the first text lands at about 10–11 s: KBC-011 NFR-1 (≤ 10 s) is missed by under a second, NFR-2 (≤ 20 s) is met.
 - The research event contract changes (`token.segment`, `retract`); the web is the only client.

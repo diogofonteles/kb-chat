@@ -23,6 +23,7 @@ Medição no acervo real, com a assinatura do Claude e a pergunta "quais são os
 - **A resposta aparece assim que começa**: sem a retenção de 800 caracteres, nos dois executores (o laço na API e os CLIs das assinaturas). Texto escrito antes de uma chamada de ferramenta sai da resposta e vai, recolhido, para a linha de passos como "Pensando: …".
 - **Menos idas e voltas**: resultados de busca com resumo e trecho mais longos (≈ 400 caracteres), a ferramenta `read_documents` (até 4 documentos numa chamada) e chamadas de ferramenta em paralelo.
 - **Aquecimento**: o cache do `find_text` do acervo inicial é montado quando a API sobe.
+- **Aprofundamento automático** (decisão de 2026-10-24, alinhada ao dono: nunca responder "não está no acervo" quando uma pesquisa mais funda acharia): uma resposta Rápida que não resolve a pergunta pelo acervo continua, na mesma resposta, com o perfil Profundo. Liga e desliga em Configurações ("Aprofundar automaticamente", ligado por padrão).
 - `agent-eval` com `--profile fast|deep`, tempo até o primeiro texto e as ferramentas do acervo servidas ao CLI pelo próprio script.
 
 **Out:**
@@ -37,6 +38,7 @@ Medição no acervo real, com a assinatura do Claude e a pergunta "quais são os
 - BR-4: o texto da resposta aparece assim que o modelo começa a escrever. Só a primeira frase pode ficar retida (no máximo ~120 caracteres), para descartar um preâmbulo sobre o próprio trabalho ("Tenho tudo o que preciso.").
 - BR-5: se o texto já mostrado era o agente pensando alto (a chamada pediu ferramentas depois), ele sai da resposta e aparece recolhido na linha de passos como "Pensando: …". O histórico salvo guarda só o texto da resposta.
 - BR-6: cada provedor guarda os próprios modelos; trocar de provedor e voltar recupera a escolha.
+- BR-7 *(emenda 2026-10-24)*: com "Aprofundar automaticamente" ligado, quando a pesquisa Rápida não consegue responder por completo pelo acervo (o modelo escreve só o marcador `<<APROFUNDAR>>` com um motivo, ou a resposta diz que o acervo "não nomeia", "não traz", "não há informação", ou "não encontrei"), o texto mostrado sai, aparece o passo "Aprofundando a pesquisa…" e a mesma resposta continua com o modelo profundo, até 15 passos no total, aproveitando o que já foi achado. O leitor nunca vê o marcador.
 
 ## Functional requirements
 - FR-1: `POST /api/v1/topics/:topic/research` recebe `profile: 'fast' | 'deep'` (padrão `fast`).
@@ -47,13 +49,15 @@ Medição no acervo real, com a assinatura do Claude e a pergunta "quais são os
 - FR-6: `search_collection` e `find_text` trazem resumo e trecho de ≈ 400 caracteres; o trecho do `find_text` vai mais adiante do que antes da ocorrência. `read_documents(documents[], around?)` lê até 4 documentos, até 6.000 caracteres cada, com um passo "Lendo …" por documento.
 - FR-7: as ferramentas MCP declaram `readOnlyHint`, e o prompt pede chamadas em paralelo e leituras em lote.
 - FR-8: a API monta o cache do `find_text` do acervo inicial ao subir e registra quanto tempo levou.
-- FR-9: `agent-eval` aceita `--profile fast|deep`, serve as ferramentas do acervo ao CLI num endpoint MCP próprio e informa o tempo até o primeiro texto, o tempo de cada passo e os textos recolhidos.
+- FR-9: `agent-eval` aceita `--profile fast|deep`, serve as ferramentas do acervo ao CLI num endpoint MCP próprio e informa o tempo até o primeiro texto, o tempo de cada passo, os textos recolhidos e quantas respostas foram aprofundadas.
+- FR-10: o passo de aprofundamento é `step { kind: 'deepen' }`; `done` traz o modelo profundo e `escalated: true`; `preferences.autoDeepen` (padrão `true`) liga o aprofundamento. No laço da API, a mesma conversa continua com o modelo profundo; nos CLIs, uma segunda execução recebe o que a primeira achou (motivo, passos e documentos numerados) e mantém a numeração [n].
 
 ## Non-functional requirements
 - NFR-1: no perfil Rápido (padrão), mediana do tempo até o primeiro texto ≤ 10 s no conjunto de 10 perguntas (`apps/api/eval/hermetismo-questions.json`).
 - NFR-2: no perfil Rápido, mediana do tempo total ≤ 20 s no mesmo conjunto.
 - NFR-3: no perfil Rápido, ≥ 8/10 respostas citam o documento esperado.
 - NFR-4: no perfil Profundo, a resposta a "quais são os 5 princípios ocultos" nomeia descontinuidade, limite, movimento, espaço e tempo.
+- NFR-5 *(emenda 2026-10-24)*: no perfil Rápido com aprofundamento automático (o padrão), as duas perguntas sobre os 5 princípios ocultos nomeiam os cinco (2/2).
 
 ## Acceptance criteria
 - **AC-1 (FR-1, BR-1)**
@@ -101,13 +105,25 @@ Medição no acervo real, com a assinatura do Claude e a pergunta "quais são os
   - When o `agent-eval` roda com `--profile fast` e com `--profile deep`
   - Then os relatórios ficam em `work/KBC-011/eval-fast.md` e `eval-deep.md`, com as metas acima
 
+- **AC-11 (BR-7, FR-10)**
+  - Given o perfil Rápido, o aprofundamento ligado e um modelo que responde `<<APROFUNDAR>> a lista ficou incompleta`
+  - When a resposta termina
+  - Then o leitor não vê o marcador, aparece "Aprofundando a pesquisa…" e o modelo profundo continua com os resultados já obtidos
+  - And `done` traz o modelo profundo e `escalated: true`
+- **AC-12 (BR-7)**
+  - Given uma resposta Rápida "O acervo não nomeia os cinco princípios."
+  - When ela termina
+  - Then o texto é retirado e a resposta continua no perfil Profundo
+  - And, com "Aprofundar automaticamente" desligado ou no perfil Profundo, a resposta fica como está
+
 ## Test strategy
 | AC | Nível |
 |---|---|
 | AC-1, AC-2, AC-3 (API), AC-7, AC-8 | Unitário e integração da API (stub com roteiro, CLI falso) |
 | AC-5 (API), AC-6, AC-9 | Integração da API (`settings.integration`, `eval-session`) |
 | AC-3 (web), AC-4, AC-5 (web) | Unitário web + E2E Playwright (stub) |
-| AC-10 | `agent-eval` no acervo real com a assinatura (sem custo por token) |
+| AC-11, AC-12 | Unitário da API (stub com dois modelos, CLI falso em duas execuções) + unitário web + E2E da opção em Configurações |
+| AC-10, NFR-5 | `agent-eval` no acervo real com a assinatura (sem custo por token) |
 
 ## References
 - ADR 0009 (pesquisa mais rápida: perfis, streaming com retirada), que emenda o ADR 0006 (regra de narração, teto de passos) e o ADR 0007 (modelo por provedor).
