@@ -1,7 +1,7 @@
 ---
 id: KBC-011
 title: Pesquisa mais rápida
-status: in-progress
+status: in-review
 slice: release-1
 outcome: a resposta começa a aparecer em até 10 s e termina em até 20 s no modo padrão, sem perder as citações
 depends_on: [KBC-008]
