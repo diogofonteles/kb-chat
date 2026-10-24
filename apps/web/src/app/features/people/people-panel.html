@@ -10,7 +10,9 @@
       autocomplete="off"
       inputmode="email"
       required
-      aria-describedby="invite-hint"
+      [attr.aria-describedby]="
+        inviteError() ? 'invite-error invite-hint' : 'invite-hint'
+      "
       [attr.aria-invalid]="inviteError() ? 'true' : null"
       [attr.aria-errormessage]="inviteError() ? 'invite-error' : null"
       [value]="email()"
@@ -28,7 +30,8 @@
 </form>
 @if (inviteError()) {
   <p id="invite-error" class="invite-error" role="alert">
-    {{ inviteError() }}
+    <span class="visually-hidden" i18n="@@people.errorPrefix">Erro:</span>
+    <span aria-hidden="true">⚠</span>&ngsp;{{ inviteError() }}
   </p>
 }
 <p id="invite-hint" class="hint" i18n="@@people.inviteHint">

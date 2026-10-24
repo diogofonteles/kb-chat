@@ -33,6 +33,23 @@ describe('FsConversationStore', () => {
     });
   });
 
+  it.each([
+    ['on disk', () => createStore().store],
+    ['in memory', () => new MemoryConversationStore()],
+  ])(
+    "refuses to save over another person's conversation (%s)",
+    async (_where, make) => {
+      const store = make();
+      const conversation = aSearchConversation();
+      expect(await store.put('owner', conversation)).toBe(true);
+
+      expect(
+        await store.put('guest', { ...conversation, title: 'tomada' }),
+      ).toBe(false);
+      expect(await store.get('owner', conversation.id)).toEqual(conversation);
+    },
+  );
+
   it('replaces a conversation atomically, leaving no temp file behind', async () => {
     const { dir, store } = createStore();
     const conversation = aSearchConversation();
