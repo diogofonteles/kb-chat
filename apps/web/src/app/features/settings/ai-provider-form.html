@@ -91,24 +91,49 @@
   }
 
   @if (!compact() && current.info.billing !== 'none') {
-    <div class="field">
-      <label class="field-label" for="ai-model" i18n="@@ai.model">Modelo</label>
-      <input
-        id="ai-model"
-        class="input"
-        list="ai-models"
-        autocomplete="off"
-        [value]="draft().model"
-        [placeholder]="modelPlaceholder()"
-        (input)="setModel(modelInput.value)"
-        #modelInput
-      />
-      <datalist id="ai-models">
-        @for (name of current.info.models; track name) {
-          <option [value]="name"></option>
+    @for (field of modelFields(); track field.key) {
+      <div class="field">
+        <label class="field-label" [for]="field.id">{{ field.label }}</label>
+        @if (current.info.freeModel) {
+          <input
+            class="input"
+            autocomplete="off"
+            spellcheck="false"
+            [id]="field.id"
+            [attr.list]="field.id + '-list'"
+            [value]="field.value"
+            [placeholder]="field.defaultLabel"
+            (input)="setModel(field.key, modelInput.value)"
+            #modelInput
+          />
+          <datalist [id]="field.id + '-list'">
+            @for (name of current.info.models; track name) {
+              <option [value]="name"></option>
+            }
+          </datalist>
+        } @else {
+          <select
+            class="input"
+            [id]="field.id"
+            (change)="setModel(field.key, modelSelect.value)"
+            #modelSelect
+          >
+            <option value="" [selected]="field.value === ''">
+              {{ field.defaultLabel }}
+            </option>
+            @for (name of current.info.models; track name) {
+              <option [value]="name" [selected]="name === field.value">
+                {{ name }}
+              </option>
+            }
+          </select>
         }
-      </datalist>
-    </div>
+      </div>
+    }
+    <p class="hint" i18n="@@ai.modelsHint">
+      O modelo rápido responde no modo “Rápido” da pesquisa; o profundo, no
+      “Profundo”.
+    </p>
   }
 
   @if (!compact() && current.info.billing === 'per-token') {

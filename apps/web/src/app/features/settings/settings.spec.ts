@@ -50,7 +50,9 @@ describe('ai draft', () => {
     ).toBe('none');
     expect(
       suggestedProvider(
-        aSettingsView({ ai: { provider: 'openai', keys: {}, dailyCapUsd: 1 } }),
+        aSettingsView({
+          ai: { provider: 'openai', models: {}, keys: {}, dailyCapUsd: 1 },
+        }),
         withClaude,
       ),
     ).toBe('openai');
@@ -64,7 +66,7 @@ describe('ai draft', () => {
     };
     expect(aiUpdateFrom(draft)).toEqual({
       provider: 'anthropic',
-      model: null,
+      models: { anthropic: { fast: null, deep: null } },
       dailyCapUsd: 1,
       keys: { anthropic: 'sk-ant-1' },
     });
@@ -72,11 +74,16 @@ describe('ai draft', () => {
       aiUpdateFrom({
         ...draft,
         provider: 'claude-subscription',
-        model: 'opus',
+        fastModel: 'haiku',
+        deepModel: 'opus',
       }),
     ).toEqual({
       provider: 'claude-subscription',
-      model: 'opus',
+      models: { 'claude-subscription': { fast: 'haiku', deep: 'opus' } },
+      dailyCapUsd: 1,
+    });
+    expect(aiUpdateFrom({ ...draft, provider: 'none' })).toEqual({
+      provider: 'none',
       dailyCapUsd: 1,
     });
   });
@@ -143,11 +150,16 @@ describe('first-run wizard (AC-1)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }));
     const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
     expect(put.request.body).toEqual({
-      ai: { provider: 'claude-subscription', model: null, dailyCapUsd: 1 },
+      ai: {
+        provider: 'claude-subscription',
+        models: { 'claude-subscription': { fast: null, deep: null } },
+        dailyCapUsd: 1,
+      },
       preferences: {
         searchMode: 'all',
         theme: 'dark',
         defaultView: 'search',
+        researchProfile: 'fast',
         defaultTopic: 'hermetismo',
       },
     });
@@ -157,6 +169,7 @@ describe('first-run wizard (AC-1)', () => {
           searchMode: 'all',
           theme: 'dark',
           defaultView: 'search',
+          researchProfile: 'fast',
         },
       }),
     );
@@ -211,10 +224,48 @@ describe('Configurações', () => {
     expect(screen.getByText(/KB_CHAT_CODEX=on/)).toBeTruthy();
   });
 
+  it('offers a fast and a deep model per provider: a list for the Claude subscription (KBC-011)', async () => {
+    const view = aSettingsView({
+      ai: {
+        provider: 'claude-subscription',
+        models: { 'claude-subscription': { deep: 'haiku' } },
+        keys: {},
+        dailyCapUsd: 1,
+      },
+    });
+    const list = aProviderList({
+      'claude-subscription': { available: true, reason: null },
+    });
+    const { http, fixture } = await openSettings(view, list);
+    const fast = screen.getByLabelText('Modelo rápido') as HTMLSelectElement;
+    const deep = screen.getByLabelText('Modelo profundo') as HTMLSelectElement;
+    expect(fast.tagName).toBe('SELECT');
+    expect(fast.value).toBe('');
+    expect(fast.selectedOptions[0]?.textContent?.trim()).toBe('Padrão: sonnet');
+    expect(deep.value).toBe('haiku');
+    fireEvent.change(fast, { target: { value: 'opus' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
+    expect(put.request.body.ai.models).toEqual({
+      'claude-subscription': { fast: 'opus', deep: 'haiku' },
+    });
+    put.flush(view);
+    TestBed.tick();
+    http.expectOne('/api/v1/ai/providers').flush(list);
+    await fixture.whenStable();
+    // A per-token provider takes any id, with suggestions.
+    fireEvent.click(screen.getByRole('radio', { name: /OpenRouter/ }));
+    await fixture.whenStable();
+    const free = screen.getByLabelText('Modelo rápido') as HTMLInputElement;
+    expect(free.tagName).toBe('INPUT');
+    expect(free.placeholder).toBe('Padrão: deepseek/deepseek-v4-flash');
+  });
+
   it('shows only the masked key and removes it (AC-2)', async () => {
     const view = aSettingsView({
       ai: {
         provider: 'openrouter',
+        models: {},
         keys: { openrouter: { set: true, last4: 'abcd' } },
         dailyCapUsd: 1,
       },
@@ -229,7 +280,7 @@ describe('Configurações', () => {
     expect(put.request.body).toEqual({ ai: { keys: { openrouter: null } } });
     put.flush(
       aSettingsView({
-        ai: { provider: 'openrouter', keys: {}, dailyCapUsd: 1 },
+        ai: { provider: 'openrouter', models: {}, keys: {}, dailyCapUsd: 1 },
       }),
     );
     TestBed.tick();
@@ -283,7 +334,7 @@ describe('Configurações', () => {
     expect(put.request.body).toEqual({
       ai: {
         provider: 'anthropic',
-        model: null,
+        models: { anthropic: { fast: null, deep: null } },
         dailyCapUsd: 2.5,
         keys: { anthropic: 'sk-ant-key-9999' },
       },
@@ -311,6 +362,7 @@ describe('Configurações', () => {
           searchMode: 'exact',
           theme: 'auto',
           defaultView: 'search',
+          researchProfile: 'fast',
         },
       }),
     );

@@ -5,11 +5,15 @@ import type {
   SettingsView,
 } from '@kb-chat/contracts';
 
+/** The fast and deep model being edited; '' = the provider's default. */
+export interface DraftModels {
+  readonly fastModel: string;
+  readonly deepModel: string;
+}
+
 /** What the AI form edits before "Salvar" (the key is typed here and never read back). */
-export interface AiDraft {
+export interface AiDraft extends DraftModels {
   readonly provider: AiProvider;
-  /** '' = the provider's default model. */
-  readonly model: string;
   /** '' = keep the saved key. */
   readonly key: string;
   readonly dailyCapUsd: number;
@@ -30,13 +34,23 @@ export function suggestedProvider(
   return active && active !== 'stub' ? active : 'none';
 }
 
+/** The models saved for a provider (each provider keeps its own, KBC-011). */
+export function savedModels(
+  view: SettingsView | null,
+  provider: AiProvider,
+): DraftModels {
+  const saved = provider === 'none' ? undefined : view?.ai.models[provider];
+  return { fastModel: saved?.fast ?? '', deepModel: saved?.deep ?? '' };
+}
+
 export function aiDraftFrom(
   view: SettingsView,
   list: ProviderList | null,
 ): AiDraft {
+  const provider = suggestedProvider(view, list);
   return {
-    provider: suggestedProvider(view, list),
-    model: view.ai.model ?? '',
+    provider,
+    ...savedModels(view, provider),
     key: '',
     dailyCapUsd: view.ai.dailyCapUsd,
   };
@@ -53,9 +67,20 @@ export function aiUpdateFrom(
     draft.provider === 'openai'
       ? draft.provider
       : null;
+  const models =
+    draft.provider === 'none'
+      ? {}
+      : {
+          models: {
+            [draft.provider]: {
+              fast: draft.fastModel.trim() || null,
+              deep: draft.deepModel.trim() || null,
+            },
+          },
+        };
   return {
     provider: draft.provider,
-    model: draft.model.trim() || null,
+    ...models,
     dailyCapUsd: draft.dailyCapUsd,
     ...(key && keyProvider ? { keys: { [keyProvider]: key } } : {}),
   };

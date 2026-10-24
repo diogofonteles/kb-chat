@@ -9,8 +9,10 @@ import {
 } from '@angular/core';
 import {
   DEFAULT_VIEWS,
+  RESEARCH_PROFILES,
   THEMES,
   defaultViewSchema,
+  researchProfileSchema,
   searchModeSchema,
   themeSchema,
   topicListSchema,
@@ -18,18 +20,23 @@ import {
 } from '@kb-chat/contracts';
 import { topicsUrl } from '@core/api/kb-api.js';
 import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
+import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_COPY, VIEW_COPY } from './provider-copy.js';
 
-export type PreferenceField = 'view' | 'mode' | 'topic' | 'theme';
+export type PreferenceField = 'view' | 'profile' | 'mode' | 'topic' | 'theme';
 
 const ALL_FIELDS: readonly PreferenceField[] = [
   'view',
+  'profile',
   'topic',
   'mode',
   'theme',
 ];
 
-/** Default view, collection, search mode and theme (KBC-007); one field per wizard step. */
+/**
+ * Default view, research profile (KBC-011), collection, search mode and theme (KBC-007);
+ * one field per wizard step.
+ */
 @Component({
   selector: 'app-preferences-form',
   imports: [DecimalPipe],
@@ -55,6 +62,11 @@ export class PreferencesForm {
     value,
     label: VIEW_COPY[value](),
   }));
+  protected readonly profiles = RESEARCH_PROFILES.map((value) => ({
+    value,
+    label: PROFILE_COPY[value].label(),
+    help: PROFILE_COPY[value].help(),
+  }));
   protected readonly modes = MODE_OPTIONS;
   protected readonly themes = THEMES.map((value) => ({
     value,
@@ -71,6 +83,12 @@ export class PreferencesForm {
       this.preferences.update((p) => ({ ...p, defaultView: parsed.data }));
   }
 
+  protected setProfile(value: string): void {
+    const parsed = researchProfileSchema.safeParse(value);
+    if (parsed.success)
+      this.preferences.update((p) => ({ ...p, researchProfile: parsed.data }));
+  }
+
   protected setMode(value: string): void {
     const parsed = searchModeSchema.safeParse(value);
     if (parsed.success)
@@ -85,11 +103,10 @@ export class PreferencesForm {
 
   /** '' = the largest collection (or KB_TOPIC), as before. */
   protected setTopic(value: string): void {
-    this.preferences.update((p) => ({
-      searchMode: p.searchMode,
-      theme: p.theme,
-      defaultView: p.defaultView,
-      ...(value ? { defaultTopic: value } : {}),
-    }));
+    this.preferences.update((p) => {
+      const next = { ...p };
+      delete next.defaultTopic;
+      return value ? { ...next, defaultTopic: value } : next;
+    });
   }
 }
