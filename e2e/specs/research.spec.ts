@@ -195,3 +195,87 @@ test('KBC-007 AC-4: a subscription turn shows "Incluído na sua assinatura" inst
   await expect(answer.getByText(/Custo:/)).toHaveCount(0);
   await expect(answer.getByRole('link', { name: /^Fonte 1:/ })).toBeVisible();
 });
+
+test('a question stopped before any text stays in the history and restores as interrupted', async ({
+  page,
+}) => {
+  // The agent never answers: "Parar" ends the turn before its first text.
+  await page.route('**/api/v1/topics/*/research', () => undefined);
+  const question = `parada antes ${Date.now()}`;
+  await page.getByLabel('Sua pergunta').fill(question);
+  await page.getByRole('button', { name: 'Perguntar' }).click();
+  await page.getByRole('button', { name: 'Parar' }).click();
+  const stopped = page.locator('app-research-message').last();
+  await expect(
+    stopped.getByText('Resposta interrompida antes de começar.'),
+  ).toBeVisible();
+  await expect(
+    stopped.getByText(/O custo do que já foi processado/),
+  ).toHaveCount(0);
+  await expect(
+    stopped.getByRole('button', { name: 'Tentar de novo' }),
+  ).toBeVisible();
+  await (
+    await sidebar(page)
+  )
+    .getByRole('button', { name: /Nova conversa/ })
+    .click();
+  await (
+    await sidebar(page)
+  )
+    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('button', { name: new RegExp(question) })
+    .click();
+  await expect(
+    page
+      .locator('app-research-message')
+      .getByText('Resposta interrompida antes de começar.'),
+  ).toBeVisible();
+});
+
+test('a wide table in an answer scrolls sideways inside the answer', async ({
+  page,
+}) => {
+  const table = [
+    '| Princípio | Fonte | Polaridade | Vibração | Correspondência | Descrição |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| Mentalismo | Caibalion | Opostos | Movimento | Analogia | O Todo é mente [1] |',
+  ].join('\n');
+  const events = [
+    {
+      type: 'sources',
+      sources: [{ n: 1, id: 'raw/articles/a-lei-do-ritmo.md', title: 'A Lei' }],
+    },
+    { type: 'token', text: `Segundo o acervo:\n\n${table}` },
+    {
+      type: 'done',
+      usd: 0.001,
+      billing: 'per-token',
+      model: 'stub/model',
+      interrupted: false,
+      steps: 1,
+    },
+  ];
+  await page.route('**/api/v1/topics/*/research', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(''),
+    }),
+  );
+  const answer = await research(page, 'tabela');
+  const box = answer.locator('.table-scroll');
+  await expect(box.getByRole('table')).toBeVisible();
+  const fits = await box.evaluate(
+    (element) => element.scrollWidth <= element.clientWidth,
+  );
+  if (!desktop(page)) expect(fits).toBe(false);
+  await expect(answer.getByRole('cell', { name: 'Mentalismo' })).toBeVisible();
+  const cell = answer.getByRole('cell', { name: 'Mentalismo' });
+  // One line per word: the word is never split across lines.
+  const { height, lineHeight } = await cell.evaluate((element) => ({
+    height: element.getBoundingClientRect().height,
+    lineHeight: parseFloat(getComputedStyle(element).lineHeight),
+  }));
+  expect(height).toBeLessThan(lineHeight * 2 + 16);
+});

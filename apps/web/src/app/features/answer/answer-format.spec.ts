@@ -15,6 +15,15 @@ describe('answer formatting', () => {
     expect(renderAnswer('sem fonte [9]')).toContain('[9]');
   });
 
+  it('wraps a Markdown table in a box that scrolls sideways, and only Markdown tables', () => {
+    const html = renderAnswer(
+      '| Princípio | Fonte |\n| --- | --- |\n| Ritmo | [1] |\n\n<table>x</table>',
+    );
+    expect(html).toContain('<div class="table-scroll"><table>');
+    expect(html.match(/table-scroll/g)).toHaveLength(1);
+    expect(html).toContain('&lt;table&gt;');
+  });
+
   it('formats costs in pt-BR', () => {
     expect(formatCost(0.00042)).toMatch(/^US\$\s0,0004$/);
   });

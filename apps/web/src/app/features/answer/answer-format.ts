@@ -31,7 +31,10 @@ export function renderAnswer(
   text: string,
   sources: readonly AnswerSource[] = [],
 ): string {
-  const html = answerMarkdown.parse(text) as string;
+  // Raw HTML in the text is escaped above, so every <table> here is Markdown's own.
+  const html = (answerMarkdown.parse(text) as string)
+    .replaceAll('<table>', '<div class="table-scroll"><table>')
+    .replaceAll('</table>', '</table></div>');
   return html.replace(/\[(\d{1,2})\]/g, (match, n: string) => {
     const source = sources.find((s) => s.n === Number(n));
     if (!source) return match;

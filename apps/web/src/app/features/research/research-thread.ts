@@ -28,6 +28,8 @@ import type { ResearchTurn } from './research-turn.js';
   styles: `
     :host {
       display: grid;
+      /* A wide answer (a table) scrolls in its own box, never widens the thread. */
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--space-8);
     }
   `,
