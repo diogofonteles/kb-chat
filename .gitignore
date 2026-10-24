@@ -1,3 +1,11 @@
-
-# devflow-harness: local work-item state
 /work/
+node_modules/
+dist/
+coverage/
+.nx/
+.angular/
+test-results/
+playwright-report/
+.env
+*.log
+.DS_Store

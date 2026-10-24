@@ -1,0 +1,81 @@
+<div class="layout" [class.with-panel]="opened()">
+  <main class="conversation">
+    <header class="topbar">
+      <span class="brand" aria-hidden="true">✦</span>
+      @if (topic(); as current) {
+      <h1 class="topic">
+        {{ current.title }}
+        <span class="count" i18n="@@page.count"
+          >{{ current.documentCount | number }} documentos</span
+        >
+      </h1>
+      } @else {
+      <h1 class="topic" i18n="@@page.title">kb-chat</h1>
+      }
+    </header>
+
+    <section
+      class="thread"
+      aria-live="polite"
+      aria-label="Conversa"
+      i18n-aria-label="@@page.thread"
+    >
+      @if (isEmpty()) {
+      <div class="welcome">
+        <p class="greeting" i18n="@@page.greeting">
+          O que você quer estudar hoje?
+        </p>
+        @if (topicsError()) {
+        <div class="notice" role="alert">
+          <p>{{ topicsError() }}</p>
+          <button
+            type="button"
+            class="secondary"
+            (click)="reloadTopics()"
+            i18n="@@page.retry"
+          >
+            Tentar de novo
+          </button>
+        </div>
+        } @else if (noTopics()) {
+        <p class="notice" role="alert" i18n="@@page.noTopics">
+          Nenhum acervo kb encontrado no vault configurado (KB_VAULT).
+        </p>
+        } @else {
+        <p class="hint" i18n="@@page.hint">
+          Pergunte em linguagem natural. Dica: pressione / para escrever.
+        </p>
+        }
+      </div>
+      } @for (message of messages(); track message.id) {
+      <app-result-message
+        [message]="message"
+        [topicTitle]="topic()?.title ?? ''"
+        [activeId]="opened()?.id ?? null"
+        (opened)="openHit($event, message)"
+        (retried)="retry(message)"
+        (modeSwitched)="askAgainIn(message, $event)"
+      />
+      }
+    </section>
+
+    <div class="composer-dock">
+      <app-composer
+        [mode]="store.mode()"
+        (modeChange)="changeMode($event)"
+        [disabled]="!topic()"
+        (submitted)="ask($event)"
+      />
+    </div>
+  </main>
+
+  @if (opened(); as doc) {
+  <app-document-panel
+    class="panel"
+    [topic]="doc.topic"
+    [documentId]="doc.id"
+    [fallbackTitle]="doc.title"
+    (closed)="closeDocument()"
+  />
+  }
+</div>

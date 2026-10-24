@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The build resolves @kb-chat/contracts against its built d.ts so only api
+    // sources are emitted; the runtime import resolves to libs/contracts/dist
+    // through the workspace symlink. Typecheck keeps the source alias.
+    "rootDir": "src",
+    "paths": {
+      "@kb-chat/contracts": ["libs/contracts/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/e2e/**", "src/scripts/**"]
+}

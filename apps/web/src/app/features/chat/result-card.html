@@ -1,0 +1,20 @@
+<button
+  type="button"
+  class="card"
+  [class.active]="active()"
+  [attr.aria-pressed]="active()"
+  (click)="opened.emit(hit())"
+>
+  <span class="title">{{ hit().title }}</span>
+  <span class="snippet">{{ hit().snippet }}</span>
+  @if (facets()) {
+  <span class="facets">{{ facets() }}</span>
+  } @if (concepts()) {
+  <span class="concepts">
+    <span i18n="@@card.concepts">Assuntos:</span> {{ concepts() }} @if
+    (extraConcepts()) {
+    <span>(+{{ extraConcepts() }})</span>
+    }
+  </span>
+  }
+</button>
