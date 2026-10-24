@@ -6,3 +6,5 @@ export * from './health.js';
 export * from './search.js';
 export * from './topics.js';
 export * from './usage.js';
+export * from './research.js';
+export * from './conversations.js';

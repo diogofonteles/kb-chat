@@ -40,3 +40,50 @@ export interface LlmPort {
     options: LlmStreamOptions,
   ): AsyncIterable<LlmChunk>;
 }
+
+/** A tool the model may call (ADR 0006); `parameters` is a JSON Schema object. */
+export interface ToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly parameters: Readonly<Record<string, unknown>>;
+}
+
+export interface ToolCall {
+  readonly id: string;
+  readonly name: string;
+  /** Arguments as the model wrote them (JSON text, possibly invalid). */
+  readonly arguments: string;
+}
+
+/** Messages of a tool-calling conversation. */
+export type AgentMessage =
+  | LlmMessage
+  | {
+      readonly role: 'assistant';
+      readonly content: string;
+      readonly toolCalls: readonly ToolCall[];
+    }
+  | {
+      readonly role: 'tool';
+      readonly toolCallId: string;
+      readonly content: string;
+    };
+
+export type AgentChunk =
+  | LlmChunk
+  /** A complete tool call, emitted once its arguments finished streaming. */
+  | { readonly type: 'tool_call'; readonly call: ToolCall };
+
+export interface AgentStreamOptions extends LlmStreamOptions {
+  /** "none" forces a final text answer (used when the step cap is reached). */
+  readonly toolChoice?: 'auto' | 'none';
+}
+
+/** A model with native tool calling (OpenRouter, OpenAI, Anthropic; the stub in tests). */
+export interface AgentLlmPort extends LlmPort {
+  streamAgent(
+    messages: readonly AgentMessage[],
+    tools: readonly ToolDefinition[],
+    options: AgentStreamOptions,
+  ): AsyncIterable<AgentChunk>;
+}
