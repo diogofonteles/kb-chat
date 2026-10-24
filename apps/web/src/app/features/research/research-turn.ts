@@ -12,16 +12,33 @@ import {
   type ResearchErrorCode,
 } from './research-errors.js';
 
+/** Text the agent wrote before calling tools, moved from the answer into the steps (ADR 0009). */
+export interface ThoughtStep {
+  readonly kind: 'thought';
+  readonly text: string;
+}
+
+/** A line of the steps list: a tool step, or the agent thinking aloud. */
+export type TurnStep = ResearchStep | ThoughtStep;
+
+/** Answer text from one model call; a retracted segment leaves the answer. */
+export interface AnswerSegment {
+  readonly segment: number;
+  readonly text: string;
+}
+
 /** One question and the agent's answer, as shown in the "Pesquisa com IA" thread. */
 export interface ResearchTurn {
   readonly id: number;
   readonly question: string;
   readonly phase: 'streaming' | 'done' | 'error';
+  /** The answer: the segments shown and not retracted, joined. */
   readonly text: string;
+  readonly segments: readonly AnswerSegment[];
   /** Every document the agent read, numbered; [n] in the text points to one of them. */
   readonly sources: readonly AnswerSource[];
   /** What the agent did, live; a restored turn only keeps the count. */
-  readonly steps: readonly ResearchStep[];
+  readonly steps: readonly TurnStep[];
   readonly stepCount: number;
   readonly usd: number | null;
   /** A subscription turn shows "Incluído na sua assinatura" instead of a cost (KBC-007 BR-2). */
@@ -40,6 +57,7 @@ export function startTurn(id: number, question: string): ResearchTurn {
     question,
     phase: 'streaming',
     text: '',
+    segments: [],
     sources: [],
     steps: [],
     stepCount: 0,
@@ -50,6 +68,45 @@ export function startTurn(id: number, question: string): ResearchTurn {
     error: null,
     at: new Date().toISOString(),
     restored: false,
+  };
+}
+
+/** A retracted thought, one line and short: the steps list stays discreet. */
+const THOUGHT_CHARS = 160;
+
+function thoughtOf(text: string): ThoughtStep {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const short =
+    flat.length > THOUGHT_CHARS ? `${flat.slice(0, THOUGHT_CHARS - 1)}…` : flat;
+  return { kind: 'thought', text: short };
+}
+
+const joined = (segments: readonly AnswerSegment[]): string =>
+  segments.map((s) => s.text).join('');
+
+function appendToken(
+  turn: ResearchTurn,
+  { text, segment }: { text: string; segment: number },
+): ResearchTurn {
+  const last = turn.segments.at(-1);
+  const segments =
+    last?.segment === segment
+      ? [...turn.segments.slice(0, -1), { segment, text: last.text + text }]
+      : [...turn.segments, { segment, text }];
+  return { ...turn, segments, text: joined(segments) };
+}
+
+/** The segment leaves the answer and shows, collapsed, among the steps as "Pensando: …". */
+function retractSegment(turn: ResearchTurn, segment: number): ResearchTurn {
+  const taken = turn.segments.find((s) => s.segment === segment);
+  if (!taken) return turn;
+  const segments = turn.segments.filter((s) => s.segment !== segment);
+  const thought = thoughtOf(taken.text);
+  return {
+    ...turn,
+    segments,
+    text: joined(segments),
+    steps: thought.text ? [...turn.steps, thought] : turn.steps,
   };
 }
 
@@ -66,7 +123,8 @@ const HANDLERS: {
     stepCount: turn.stepCount + 1,
   }),
   sources: (turn, e) => ({ ...turn, sources: e.sources }),
-  token: (turn, e) => ({ ...turn, text: turn.text + e.text }),
+  token: appendToken,
+  retract: (turn, e) => retractSegment(turn, e.segment),
   // A finished answer without text is a provider failure, not an empty success.
   done: (turn, e) => ({
     ...turn,
@@ -148,6 +206,7 @@ export function fromSavedTurn(
     question: saved.question,
     phase: 'done',
     text: saved.answer,
+    segments: [{ segment: 0, text: saved.answer }],
     sources: saved.sources,
     steps: [],
     stepCount: saved.steps,

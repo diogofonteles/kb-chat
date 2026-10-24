@@ -75,7 +75,7 @@ async function send(page: Page, question: string, button: string) {
 async function answer(page: Page, index: number, text: string) {
   const stream = page.streams[index] as Subject<ResearchEvent>;
   stream.next({ type: 'sources', sources: [SOURCE] });
-  stream.next({ type: 'token', text });
+  stream.next({ type: 'token', text, segment: 0 });
   stream.next({
     type: 'done',
     usd: 0.001,
@@ -196,6 +196,27 @@ describe('ChatPage research view (KBC-008)', () => {
     expect(page.api.research).toHaveBeenCalledWith('hermetismo', {
       question: 'O que o acervo diz sobre Cabala?',
       history: [],
+      profile: 'fast',
+    });
+  });
+
+  it('asks with the profile of the "Rápido | Profundo" toggle (KBC-011)', async () => {
+    const page = await renderPage();
+    const fast = screen.getByRole('radio', {
+      name: 'Rápido',
+    }) as HTMLInputElement;
+    expect(fast.checked).toBe(true);
+    expect(screen.getByText(/Responde em segundos/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: 'Profundo' }));
+    await page.fixture.whenStable();
+    expect(
+      screen.getByText(/Pesquisa mais e usa o modelo mais forte/),
+    ).toBeTruthy();
+    await send(page, 'quais são os 5 princípios ocultos', 'Perguntar');
+    expect(page.api.research).toHaveBeenLastCalledWith('hermetismo', {
+      question: 'quais são os 5 princípios ocultos',
+      history: [],
+      profile: 'deep',
     });
   });
 

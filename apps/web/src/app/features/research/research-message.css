@@ -104,6 +104,12 @@ p.steps {
   list-style: none;
 }
 
+/* What the agent wrote before a tool call: kept, but quieter than the steps (ADR 0009). */
+.steps li.thought {
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
 .answer {
   font-family: var(--font-reading);
   font-size: 1.0625rem;

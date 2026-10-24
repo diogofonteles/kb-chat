@@ -14,7 +14,7 @@ import {
 } from '@features/answer/answer-format.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { aiErrorMessage } from './research-errors.js';
-import { describeSteps } from './research-steps.js';
+import { describeSteps, stepText } from './research-steps.js';
 import { citedSources, type ResearchTurn } from './research-turn.js';
 
 /**
@@ -43,6 +43,13 @@ export class ResearchMessage {
     () => this.turn().phase === 'streaming',
   );
   protected readonly stepsLine = computed(() => describeSteps(this.turn()));
+  /** The expanded list: tool steps, and what the agent thought aloud, shown muted (ADR 0009). */
+  protected readonly stepItems = computed(() =>
+    this.turn().steps.map((step) => ({
+      text: stepText(step),
+      thought: step.kind === 'thought',
+    })),
+  );
   protected readonly html = computed(() =>
     renderAnswer(this.turn().text, this.turn().sources),
   );

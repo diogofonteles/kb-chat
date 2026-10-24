@@ -43,6 +43,36 @@ async function renderMessage(turn: ResearchTurn, last = true) {
 }
 
 describe('ResearchMessage', () => {
+  it('lists what the agent thought aloud among the steps, apart from the answer (ADR 0009)', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'thought', text: 'Os textos sobre isso são dois.' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+        ],
+      }),
+    );
+    const thought = screen.getByText(
+      'Pensando: Os textos sobre isso são dois.',
+    );
+    expect(thought.tagName).toBe('LI');
+    // The summary counts only what the agent did.
+    expect(screen.getByText('Leu 1 documento')).toBeTruthy();
+  });
+
+  it('shows the thought as the live step while the agent works', async () => {
+    await renderMessage(
+      aTurn({
+        phase: 'streaming',
+        text: '',
+        steps: [{ kind: 'thought', text: 'Vou ler dois textos.' }],
+      }),
+    );
+    expect(screen.getAllByText('Pensando: Vou ler dois textos.')).toHaveLength(
+      2,
+    );
+  });
+
   it('opens the cited document from [n] and from the sources list (AC-3)', async () => {
     const view = await renderMessage(aTurn());
     fireEvent.click(screen.getByRole('link', { name: 'Fonte 2: O Caibalion' }));
