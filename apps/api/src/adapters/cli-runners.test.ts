@@ -59,6 +59,7 @@ async function collect(
     topic: 'hermetismo',
     question: 'O que é o ritmo?',
     history: [{ question: 'Antes', answer: 'Resposta anterior' }],
+    profile: 'fast',
     signal,
   }))
     events.push(event);
@@ -98,7 +99,7 @@ describe('ClaudeCliRunner', () => {
         ],
       },
       // The narration before the tool call and the leading "Tenho tudo…" are dropped.
-      { type: 'token', text: 'Segundo o acervo, tudo flui [1].' },
+      { type: 'token', text: 'Segundo o acervo, tudo flui [1].', segment: 1 },
       {
         type: 'done',
         usd: 0,
@@ -110,6 +111,22 @@ describe('ClaudeCliRunner', () => {
     ]);
     expect(tools.calls).toHaveLength(1);
     expect(turns.size).toBe(0);
+  });
+
+  it('streams text written before a tool call at once, then retracts it (ADR 0009)', async () => {
+    const events = await collect(claude(await fakeHome({ mode: 'aloud' })));
+    expect(events.slice(0, 2)).toEqual([
+      {
+        type: 'token',
+        text: 'Os textos sobre o ritmo parecem ser dois. ',
+        segment: 0,
+      },
+      { type: 'retract', segment: 0 },
+    ]);
+    expect(events.filter((e) => e.type === 'token').at(-1)).toMatchObject({
+      text: 'Segundo o acervo, tudo flui [1].',
+      segment: 1,
+    });
   });
 
   it('starts claude without ANTHROPIC_API_KEY, with the question on stdin (AC-7)', async () => {
@@ -149,6 +166,7 @@ describe('ClaudeCliRunner', () => {
       topic: 'hermetismo',
       question: 'q',
       history: [],
+      profile: 'deep',
       signal: abort.signal,
     })) {
       events.push(event);
@@ -177,6 +195,7 @@ describe('ClaudeCliRunner', () => {
       topic: 'hermetismo',
       question: 'q',
       history: [],
+      profile: 'deep',
       signal: abort.signal,
     })) {
       events.push(event);

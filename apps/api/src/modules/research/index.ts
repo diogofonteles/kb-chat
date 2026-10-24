@@ -1,11 +1,13 @@
 export { researchRoutes, type ResearchRouteOptions } from './routes.js';
-export {
-  NARRATION_HOLD_CHARS,
-  ToolLoopRunner,
-  type ToolLoopRunnerDeps,
-} from './tool-loop-runner.js';
+export { ToolLoopRunner, type ToolLoopRunnerDeps } from './tool-loop-runner.js';
 export { preambleLength } from './answer-preamble.js';
-export { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
+export { AnswerStream, PREAMBLE_WINDOW_CHARS } from './answer-stream.js';
+export {
+  FAST_TOOL_STEPS,
+  MAX_OUTPUT_TOKENS,
+  MAX_TOOL_STEPS,
+  PROFILE_STEPS,
+} from './limits.js';
 export {
   ResearchTools,
   type PreparedCall,

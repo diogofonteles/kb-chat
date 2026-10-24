@@ -8,7 +8,7 @@ import { FakeResearchTools } from '../../test/fake-research-tools.js';
 import { registerErrorHandler } from '../error-handler.js';
 import { createKbMcpServer } from './kb-mcp-server.js';
 import { mcpRoutes } from './mcp-routes.js';
-import { McpTurnRegistry, STEP_CAP_TEXT } from './mcp-turns.js';
+import { McpTurnRegistry, stepCapText } from './mcp-turns.js';
 
 async function connect(server: ReturnType<typeof createKbMcpServer>) {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
@@ -29,6 +29,7 @@ describe('kb MCP server', () => {
       expect.objectContaining({
         name: 'search_collection',
         inputSchema: expect.objectContaining({ required: ['query'] }),
+        annotations: { readOnlyHint: true, openWorldHint: false },
       }),
     ]);
     const result = await client.callTool({
@@ -40,7 +41,7 @@ describe('kb MCP server', () => {
     ]);
     expect(onResult).toHaveBeenCalledWith(
       expect.objectContaining({
-        step: { kind: 'search', text: 'Buscando “ritmo”' },
+        steps: [{ kind: 'search', text: 'Buscando “ritmo”' }],
       }),
     );
   });
@@ -58,7 +59,7 @@ describe('kb MCP server', () => {
     await turn?.tools.call('search_collection', { query: 'a' });
     await expect(
       turn?.tools.call('search_collection', { query: 'b' }),
-    ).rejects.toThrow(STEP_CAP_TEXT);
+    ).rejects.toThrow(stepCapText(1));
     expect(turn?.tools.definitions()).toHaveLength(1);
     opened.close();
     expect(turns.get(opened.token)).toBeUndefined();

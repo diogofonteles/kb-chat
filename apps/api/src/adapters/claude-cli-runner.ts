@@ -18,6 +18,7 @@ import {
 import {
   defaultSubscriptionPrompt,
   subscriptionTurnInput,
+  type SubscriptionPrompt,
 } from './subscription-prompt.js';
 
 /** Claude Code's `--output-format stream-json` lines that matter here (verified on 2.1.x). */
@@ -96,8 +97,8 @@ export interface ClaudeCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   /** An alias ("opus", "sonnet", "fable") or a full model name; default: the CLI's. */
   readonly model?: string;
   readonly tools?: ResearchToolsFactory;
-  /** The research rules for a topic; default: defaultSubscriptionPrompt. */
-  readonly systemPrompt?: (topic: string) => string;
+  /** The research rules for a topic and profile; default: defaultSubscriptionPrompt. */
+  readonly systemPrompt?: SubscriptionPrompt;
 }
 
 /**
@@ -154,7 +155,7 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
       launch: async (access, input) => ({
         args: claudeArgs(await writeClaudeMcpConfig(access), {
           model: options.model,
-          systemPrompt: prompt(input.topic),
+          systemPrompt: prompt(input.topic, input.profile),
         }),
       }),
       input: (input) => subscriptionTurnInput(input.question, input.history),

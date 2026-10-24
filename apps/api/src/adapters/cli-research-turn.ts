@@ -2,19 +2,19 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AiTestCode, ResearchEvent } from '@kb-chat/contracts';
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
+import { AnswerStream, PROFILE_STEPS } from '../modules/research/index.js';
 import { MCP_BEARER_PATH, mcpTurnPath } from '../mcp/mcp-routes.js';
 import type { ResearchInput } from '../ports/research-runner.js';
 import type {
   ResearchToolResult,
   ResearchToolsPort,
 } from '../ports/research-tools.js';
-import { CliAnswer } from './cli-answer.js';
 import { EventQueue } from './event-queue.js';
 import { spawnCli, subscriptionEnv, type CliProcess } from './cli-process.js';
 
 /** What one stdout line of a CLI means. */
 export interface CliLine {
-  /** Answer text, held by the narration rule before it is shown. */
+  /** Answer text; it streams at once and is retracted if its message calls tools (ADR 0009). */
   readonly text?: string;
   /** How the model's message ended, when the CLI says so: with tool calls or as an answer. */
   readonly messageEnd?: 'tool_use' | 'answer';
@@ -92,9 +92,7 @@ function finalEvent(state: TurnState, aborted: boolean): ResearchEvent {
 class CliTurn {
   readonly queue = new EventQueue<ResearchEvent>();
   readonly state: TurnState;
-  private readonly answer = new CliAnswer((text) =>
-    this.queue.push({ type: 'token', text }),
-  );
+  private readonly answer = new AnswerStream();
 
   constructor(
     private readonly dialect: CliDialect,
@@ -103,10 +101,10 @@ class CliTurn {
     this.state = { model, steps: 0, sourcesSent: 0, result: undefined };
   }
 
-  onToolResult({ step, sources }: ResearchToolResult): void {
-    this.answer.toolCalled();
+  onToolResult({ steps, sources }: ResearchToolResult): void {
+    this.push(this.answer.toolCalled());
     this.state.steps += 1;
-    if (step) this.queue.push({ type: 'step', step });
+    for (const step of steps) this.queue.push({ type: 'step', step });
     if (sources.length === this.state.sourcesSent) return;
     this.state.sourcesSent = sources.length;
     this.queue.push({ type: 'sources', sources: [...sources] });
@@ -118,7 +116,7 @@ class CliTurn {
   }
 
   finish(aborted: boolean): void {
-    this.answer.ended();
+    this.push(this.answer.ended());
     this.queue.push(finalEvent(this.state, aborted));
     this.queue.end();
   }
@@ -127,9 +125,13 @@ class CliTurn {
     const parsed = this.dialect.parse(line);
     if (parsed.model) this.state.model = parsed.model;
     if (parsed.result) this.state.result = parsed.result;
-    if (parsed.text) this.answer.text(parsed.text);
-    if (parsed.messageEnd === 'tool_use') this.answer.toolCalled();
-    if (parsed.messageEnd === 'answer') this.answer.ended();
+    if (parsed.text) this.push(this.answer.text(parsed.text));
+    if (parsed.messageEnd === 'tool_use') this.push(this.answer.toolCalled());
+    if (parsed.messageEnd === 'answer') this.push(this.answer.ended());
+  }
+
+  private push(events: readonly ResearchEvent[]): void {
+    for (const event of events) this.queue.push(event);
   }
 }
 
@@ -171,9 +173,11 @@ async function openTurn(
   dialect: CliDialect,
   { input, turn }: { readonly input: TurnInput; readonly turn: CliTurn },
 ) {
-  const endpoint = options.turns.open(input.tools, {
-    onResult: (result) => turn.onToolResult(result),
-  });
+  const endpoint = options.turns.open(
+    input.tools,
+    { onResult: (result) => turn.onToolResult(result) },
+    PROFILE_STEPS[input.profile],
+  );
   let dir: string | undefined;
   try {
     const access = await turnAccess(options, endpoint.token);

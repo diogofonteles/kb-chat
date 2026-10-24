@@ -21,6 +21,7 @@ import {
 import {
   defaultSubscriptionPrompt,
   subscriptionTurnInput,
+  type SubscriptionPrompt,
 } from './subscription-prompt.js';
 
 /**
@@ -63,8 +64,8 @@ export function parseCodexLine(text: string): CliLine {
 export interface CodexCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   readonly model?: string;
   readonly tools?: ResearchToolsFactory;
-  /** The research rules for a topic; default: defaultSubscriptionPrompt. */
-  readonly systemPrompt?: (topic: string) => string;
+  /** The research rules for a topic and profile; default: defaultSubscriptionPrompt. */
+  readonly systemPrompt?: SubscriptionPrompt;
 }
 
 /** The variable that carries the turn token to Codex (sent as `Authorization: Bearer`). */
@@ -152,7 +153,7 @@ export class CodexCliRunner implements ResearchRunnerPort {
       launch: (access) => this.launch(access),
       // Codex has no system-prompt flag: the instructions lead the input.
       input: (input) =>
-        `${prompt(input.topic)}\n\n${subscriptionTurnInput(input.question, input.history)}`,
+        `${prompt(input.topic, input.profile)}\n\n${subscriptionTurnInput(input.question, input.history)}`,
       parse: parseCodexLine,
     };
   }

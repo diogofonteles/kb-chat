@@ -2,6 +2,7 @@ import {
   researchRequestSchema,
   topicSlugSchema,
   type ResearchEvent,
+  type ResearchProfile,
 } from '@kb-chat/contracts';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -12,9 +13,9 @@ import type { ResearchRunnerPort } from '../../ports/research-runner.js';
 export interface ResearchRouteOptions {
   /**
    * The runner of this turn, asked again on every request: the provider in Settings may
-   * have changed since the last one (KBC-007 FR-5).
+   * have changed since the last one (KBC-007 FR-5), and each profile has its model (KBC-011).
    */
-  readonly runner: () => ResearchRunnerPort;
+  readonly runner: (profile: ResearchProfile) => ResearchRunnerPort;
   /** False for a topic the catalog does not know (refused before streaming). */
   readonly hasTopic: (topic: string) => boolean;
 }
@@ -87,7 +88,7 @@ export const researchRoutes =
         researchOptions,
         async (request, reply) => {
           const { topic } = request.params;
-          const current = runner();
+          const current = runner(request.body.profile);
           if (!current.configured())
             throw new AppError(
               'LLM_NOT_CONFIGURED',

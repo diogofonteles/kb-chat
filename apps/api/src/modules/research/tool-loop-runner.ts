@@ -18,21 +18,11 @@ import {
   FINAL_ANSWER_NOTE,
   buildResearchMessages,
 } from './prompt.js';
-import { MAX_OUTPUT_TOKENS, MAX_TOOL_STEPS } from './limits.js';
-import { PREAMBLE_HOLD_CHARS, preambleLength } from './answer-preamble.js';
+import { AnswerStream } from './answer-stream.js';
+import { MAX_OUTPUT_TOKENS, PROFILE_STEPS } from './limits.js';
 import { SourceBook } from './source-book.js';
 import type { ResearchTools } from './tools.js';
 
-/**
- * Narration rule (ADR 0006): the reader never sees text from a model call that ends with
- * tool calls ("Vou ler os documentos…"). Each call's text is buffered; it is dropped when
- * the call asks for tools and shown when it does not. Waiting for the end of every call
- * would kill the streaming of the answer, so once the buffer passes this size with no tool
- * call yet, the call is taken as the answer: its text streams from then on and any tool call
- * it asks for afterwards is ignored. Narration in the real eval stayed under ~450
- * characters; answers run to thousands, so 800 leaves a margin at ~2-4 s of delay.
- */
-export const NARRATION_HOLD_CHARS = 800;
 const SKIPPED_CALL =
   'Não executada: o limite de passos desta resposta foi atingido.';
 
@@ -46,27 +36,23 @@ interface Turn {
   readonly input: ResearchInput;
   readonly book: SourceBook;
   readonly messages: AgentMessage[];
+  readonly answer: AnswerStream;
+  /** The profile's step budget (KBC-011). */
+  readonly maxSteps: number;
   steps: number;
   calls: number;
   sourcesSent: number;
-  shownText: string;
   inputTokens: number;
   outputTokens: number;
   usd: number;
 }
 
 interface CallResult {
+  /** Everything the model wrote, kept in its context even when it was not the answer. */
   text: string;
-  /** True once the call is taken as the answer: its text streams from then on. */
-  started: boolean;
-  /** Characters of `text` already streamed to the reader (or dropped as preamble). */
-  shownLength: number;
   readonly toolCalls: ToolCall[];
   usage: LlmUsage | null;
 }
-
-/** True once the call's text started streaming: the call is the answer. */
-const isAnswer = (call: CallResult): boolean => call.started;
 
 /** A key the provider refused is the reader's to fix in Settings (KBC-007). */
 function errorCode(err: unknown): string {
@@ -87,8 +73,9 @@ const promptText = (messages: readonly AgentMessage[]): string =>
 
 /**
  * The research agent's loop in the API (ADR 0006): the model searches, reads and follows
- * relations through the tools, up to MAX_TOOL_STEPS, then answers. The spend is guarded
- * before every model call and recorded once per turn.
+ * relations through the tools, up to the profile's step budget (ADR 0009), then answers.
+ * Text streams at once and is retracted when its call asks for tools (AnswerStream). The
+ * spend is guarded before every model call and recorded once per turn.
  */
 export class ToolLoopRunner implements ResearchRunnerPort {
   constructor(private readonly deps: ToolLoopRunnerDeps) {}
@@ -131,10 +118,11 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       input,
       book: new SourceBook(),
       messages: buildResearchMessages({ ...input, topicTitle }),
+      answer: new AnswerStream(),
+      maxSteps: PROFILE_STEPS[input.profile],
       steps: 0,
       calls: 0,
       sourcesSent: 0,
-      shownText: '',
       inputTokens: 0,
       outputTokens: 0,
       usd: 0,
@@ -144,7 +132,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   private async *loop(turn: Turn): AsyncIterable<ResearchEvent> {
     for (;;) {
       if (turn.input.signal.aborted) return;
-      const final = turn.steps >= MAX_TOOL_STEPS;
+      const final = turn.steps >= turn.maxSteps;
       if (final)
         turn.messages.push({ role: 'system', content: FINAL_ANSWER_NOTE });
       await this.guard(turn);
@@ -170,13 +158,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn: Turn,
     final: boolean,
   ): AsyncGenerator<ResearchEvent, CallResult> {
-    const call: CallResult = {
-      text: '',
-      started: false,
-      shownLength: 0,
-      toolCalls: [],
-      usage: null,
-    };
+    const call: CallResult = { text: '', toolCalls: [], usage: null };
     const prompt = promptText(turn.messages);
     turn.calls += 1;
     try {
@@ -187,8 +169,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       await this.account(turn, call, prompt);
     }
     // The forced last call is the answer even if the provider ignored "none" (OpenRouter).
-    if (final || call.toolCalls.length === 0)
-      yield* this.flush(turn, call, true);
+    if (final || call.toolCalls.length === 0) yield* turn.answer.ended();
     return call;
   }
 
@@ -210,6 +191,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       yield* this.take(turn, call, { chunk, final });
   }
 
+  /**
+   * One chunk of a model call: text streams at once (AnswerStream); a tool call retracts
+   * what the call already showed. The forced last call ignores tool calls.
+   */
   private *take(
     turn: Turn,
     call: CallResult,
@@ -217,41 +202,19 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   ): Iterable<ResearchEvent> {
     if (chunk.type === 'usage') call.usage = chunk.usage;
     else if (chunk.type === 'tool_call') {
-      if (!isAnswer(call)) call.toolCalls.push(chunk.call);
+      if (final) return;
+      call.toolCalls.push(chunk.call);
+      yield* turn.answer.toolCalled();
     } else {
       call.text += chunk.text;
-      const holding =
-        call.toolCalls.length > 0 || call.text.length < NARRATION_HOLD_CHARS;
-      if (final || isAnswer(call) || !holding) yield* this.flush(turn, call);
+      // Text after a tool call in the same call is the model's, not the reader's.
+      if (call.toolCalls.length === 0) yield* turn.answer.text(chunk.text);
     }
-  }
-
-  /**
-   * Streams the call's text not shown yet; only one call per turn is ever shown (the one
-   * taken as the answer). The answer's first characters are held until a preamble about the agent's own work can be
-   * recognized and dropped ("Tenho tudo o que preciso. Vou compor a resposta.").
-   */
-  private *flush(
-    turn: Turn,
-    call: CallResult,
-    ended = false,
-  ): Iterable<ResearchEvent> {
-    if (!call.started) {
-      if (!ended && call.text.length < PREAMBLE_HOLD_CHARS) return;
-      call.started = true;
-      call.shownLength = preambleLength(call.text);
-    }
-    const fresh = call.text.slice(call.shownLength);
-    if (!fresh) return;
-    call.shownLength = call.text.length;
-    turn.shownText += fresh;
-    yield { type: 'token', text: fresh };
   }
 
   private async *ensureAnswer(turn: Turn): AsyncIterable<ResearchEvent> {
-    if (turn.shownText.trim() || turn.input.signal.aborted) return;
-    turn.shownText = EMPTY_ANSWER;
-    yield { type: 'token', text: EMPTY_ANSWER };
+    if (turn.answer.shown.trim() || turn.input.signal.aborted) return;
+    yield* turn.answer.say(EMPTY_ANSWER);
   }
 
   private async *runTools(
@@ -259,9 +222,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     call: CallResult,
   ): AsyncIterable<ResearchEvent> {
     const context = { topic: turn.input.topic, book: turn.book };
-    const runnable = call.toolCalls.slice(0, MAX_TOOL_STEPS - turn.steps);
+    const runnable = call.toolCalls.slice(0, turn.maxSteps - turn.steps);
     const prepared = runnable.map((c) => this.deps.tools.prepare(c, context));
-    for (const { step } of prepared) if (step) yield { type: 'step', step };
+    for (const { steps } of prepared)
+      for (const step of steps) yield { type: 'step', step };
     const outputs = await Promise.all(prepared.map((p) => p.run()));
     turn.steps += runnable.length;
     turn.messages.push(

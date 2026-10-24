@@ -7,12 +7,14 @@ import type {
 } from '../ports/research-tools.js';
 import type { KbMcpHooks } from './kb-mcp-server.js';
 
-/** The same step cap as the in-API loop (ADR 0006: 15 tool steps per answer). */
+/** The deep profile's step cap, as in the in-API loop (ADR 0006: 15 tool steps per answer). */
 export const MAX_TURN_STEPS = MAX_TOOL_STEPS;
 /** A turn that was never closed (a crashed CLI) stops answering after this. */
 const TURN_TTL_MS = 15 * 60_000;
 
-export const STEP_CAP_TEXT = `Limite de ${MAX_TURN_STEPS} passos atingido. Não chame mais ferramentas: responda agora com o que já encontrou e diga o que faltou.`;
+/** Said to the CLI when the turn's step budget is spent (its profile's, KBC-011). */
+export const stepCapText = (maxSteps: number): string =>
+  `Limite de ${maxSteps} passos atingido. Não chame mais ferramentas: responda agora com o que já encontrou e diga o que faltou.`;
 
 export interface McpTurn {
   readonly tools: ResearchToolsPort;
@@ -40,7 +42,7 @@ class CappedTools implements ResearchToolsPort {
 
   async call(name: string, args: unknown): Promise<ResearchToolResult> {
     this.steps += 1;
-    if (this.steps > this.maxSteps) throw new Error(STEP_CAP_TEXT);
+    if (this.steps > this.maxSteps) throw new Error(stepCapText(this.maxSteps));
     return this.inner.call(name, args);
   }
 }

@@ -78,5 +78,16 @@ export async function collectEvents(
   return all;
 }
 
-export const answerText = (events: readonly ResearchEvent[]): string =>
-  events.map((e) => (e.type === 'token' ? e.text : '')).join('');
+/** The answer as the reader ends up seeing it: tokens by segment, minus the retracted ones. */
+export function answerText(events: readonly ResearchEvent[]): string {
+  const segments = new Map<number, string>();
+  for (const event of events) {
+    if (event.type === 'token')
+      segments.set(
+        event.segment,
+        (segments.get(event.segment) ?? '') + event.text,
+      );
+    if (event.type === 'retract') segments.delete(event.segment);
+  }
+  return [...segments.values()].join('');
+}

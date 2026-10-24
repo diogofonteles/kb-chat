@@ -17,8 +17,14 @@ export type StubReply =
         readonly name: string;
         readonly arguments: Record<string, unknown>;
       }[];
+      /** Written before the tool calls: the agent thinking aloud, then retracted (ADR 0009). */
+      readonly thought?: string;
     }
   | { readonly text: string };
+
+/** The default script's thought before it reads (E2E shows it as "Pensando: …"). */
+export const STUB_THOUGHT =
+  'Um dos documentos parece tratar disso; confiro o trecho. ';
 
 export interface StubLlmOptions {
   readonly answer?: string;
@@ -71,6 +77,7 @@ function defaultReply(messages: AgentHistory): StubReply {
   const first = firstReference(messages);
   if (call === 2 && first)
     return {
+      thought: STUB_THOUGHT,
       toolCalls: [
         {
           name: 'read_document',
@@ -146,6 +153,7 @@ export class StubLlmAdapter implements AgentLlmPort {
       yield* this.words(reply.text, messages, options);
       return;
     }
+    if (reply.thought) yield* this.words(reply.thought, messages, options);
     for (const [index, call] of reply.toolCalls.entries())
       yield {
         type: 'tool_call',

@@ -69,6 +69,7 @@ async function askCli(
     topic: '',
     question: TEST_QUESTION,
     history: [],
+    profile: 'fast',
     signal,
   });
   for await (const event of events) {

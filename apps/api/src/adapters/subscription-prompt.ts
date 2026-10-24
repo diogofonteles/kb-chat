@@ -1,5 +1,11 @@
 import { researchSystemPrompt } from '../modules/research/index.js';
-import type { ResearchTurn } from '@kb-chat/contracts';
+import type { ResearchProfile, ResearchTurn } from '@kb-chat/contracts';
+
+/** The research rules of a topic and profile for a subscription CLI. */
+export type SubscriptionPrompt = (
+  topic: string,
+  profile: ResearchProfile,
+) => string;
 
 /**
  * The research rules of a subscription turn (ADR 0006/0007): the same prompt as the
@@ -7,8 +13,8 @@ import type { ResearchTurn } from '@kb-chat/contracts';
  * absence, cite [n], mark "(fora do acervo)" and never narrate. The composition root passes
  * one with the topic's title; this default names the topic by its slug.
  */
-export const defaultSubscriptionPrompt = (topic: string): string =>
-  researchSystemPrompt(topic);
+export const defaultSubscriptionPrompt: SubscriptionPrompt = (topic, profile) =>
+  researchSystemPrompt(topic, profile);
 
 const escape = (text: string): string =>
   text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');

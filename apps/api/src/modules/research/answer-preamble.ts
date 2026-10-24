@@ -13,13 +13,6 @@ const PREAMBLE_PATTERNS: readonly RegExp[] = [
 /** "Tenho tudo. Vou compor a resposta.\n\n---\n\n" is three pieces; more is not a preamble. */
 const MAX_PIECES = 4;
 
-/**
- * Characters the answer holds back before the first token is shown, so the preamble can be
- * recognized as a whole; the narration hold (800) is longer, so this only delays the forced
- * last call, which streams at once.
- */
-export const PREAMBLE_HOLD_CHARS = 300;
-
 const leadingSpace = (text: string): number =>
   text.length - text.trimStart().length;
 
