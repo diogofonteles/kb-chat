@@ -82,6 +82,12 @@ test('AC-2: a follow-up carries the previous question and answer, and answers be
     messages.nth(1).boundingBox(),
   ]);
   expect(top && bottom && top.y < bottom.y).toBe(true);
+  // The conversation scrolls inside its column; the page itself never grows (owner's review).
+  const page_ = await page.evaluate(() => ({
+    scroll: document.scrollingElement?.scrollHeight ?? 0,
+    view: window.innerHeight,
+  }));
+  expect(page_.scroll).toBeLessThanOrEqual(page_.view);
 });
 
 test('AC-3: a citation opens its document in the panel', async ({ page }) => {

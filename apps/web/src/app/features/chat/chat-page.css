@@ -94,6 +94,9 @@
 }
 
 .thread {
+  /* Containing block for absolutely positioned descendants (the visually hidden live
+     regions): without it they escape the scroller and stretch the page itself. */
+  position: relative;
   display: grid;
   align-content: start;
   gap: var(--space-8);
