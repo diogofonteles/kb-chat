@@ -19,10 +19,15 @@ describe('splitIntoChunks', () => {
 });
 
 describe('sectionIndex', () => {
-  it('lists headings with their chunk', () => {
-    expect(sectionIndex(['# Um\n\ntexto', 'texto\n\n## Dois ##'])).toEqual([
-      { title: 'Um', chunk: 0 },
-      { title: 'Dois', chunk: 1 },
+  it('lists real headings with their chunk and skips stray "#" lines', () => {
+    expect(
+      sectionIndex([
+        '# Início\n\ntexto\n\n# t\n\n#\nShin',
+        'texto\n\n## Segunda parte ##',
+      ]),
+    ).toEqual([
+      { title: 'Início', chunk: 0 },
+      { title: 'Segunda parte', chunk: 1 },
     ]);
   });
 });

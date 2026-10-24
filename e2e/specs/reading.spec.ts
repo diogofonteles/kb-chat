@@ -65,9 +65,9 @@ test('AC-7: a subject in the panel filters the conversation', async ({
 
 test('AC-8: an audio transcription carries its badge', async ({ page }) => {
   await openFirst(page, 'sephiroth', /A Árvore da Vida/);
-  await expect(
-    page.getByRole('dialog').getByText(/Transcrição automática de áudio/),
-  ).toBeVisible();
+  await expect(page.getByRole('dialog').locator('.badge')).toContainText(
+    'Transcrição automática de áudio',
+  );
 });
 
 test('NFR-1: a 200 KB document opens with its highlight in under 500 ms', async ({
@@ -126,4 +126,16 @@ test('documents with ids longer than 100 characters open', async ({ page }) => {
   await expect(page.getByRole('dialog')).toContainText(
     'Texto com nome de arquivo longo.',
   );
+});
+
+test('the occurrence tools stay on screen while stepping through a long document', async ({
+  page,
+}) => {
+  await openFirst(page, 'respiração consciente', /Tratado Longo/);
+  const panel = page.getByRole('dialog');
+  const next = panel.getByRole('button', { name: 'Próxima ocorrência' });
+  for (let i = 0; i < 5; i += 1) await next.click();
+  await expect(panel.getByText(/^6 de \d+ ocorrências/)).toBeVisible();
+  await expect(next).toBeInViewport();
+  await expect(panel.locator('mark.current')).toBeInViewport();
 });

@@ -11,6 +11,7 @@ import {
   linkedSignal,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { documentSchema, type DocumentRef } from '@kb-chat/contracts';
@@ -22,11 +23,17 @@ import {
   splitIntoChunks,
   type SectionLink,
 } from '@core/markdown/chunks.js';
-import { highlightTerms, markTerms } from '@core/markdown/highlight.js';
+import {
+  countTerms,
+  highlightTerms,
+  markTerms,
+} from '@core/markdown/highlight.js';
 import { headingId, renderMarkdown } from '@core/markdown/render-markdown.js';
 import { SeeAlsoSection } from './see-also.js';
 
 const FEEDBACK_MS = 2000;
+
+const countMarks = (html: string): number => html.split('<mark>').length - 1;
 
 const foldText = (text: string): string =>
   text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
@@ -107,41 +114,53 @@ export class DocumentPanel {
   private readonly terms = computed(() =>
     highlightTerms(this.highlight() ?? ''),
   );
-  /** Long documents render a chunk at a time ("Continuar lendo") to stay responsive. */
+  /** Long documents render a window of chunks to stay responsive (KBC-003). */
   private readonly chunks = computed(() =>
     splitIntoChunks(this.loaded()?.body ?? ''),
   );
-  /** Rendered up to the chunk with the first occurrence, so the highlight is on screen. */
-  protected readonly shownChunks = linkedSignal({
+  /** Each chunk is rendered and highlighted once per document (cache reset with the chunks). */
+  private readonly chunkCache = computed(() => {
+    this.chunks();
+    this.terms();
+    return new Map<number, string>();
+  });
+  /** Chunks on screen: starts at the one with the first occurrence and grows both ways. */
+  protected readonly range = linkedSignal({
     source: this.chunks,
-    computation: (chunks) =>
-      1 + Math.max(0, firstChunkWith(chunks, this.terms())),
+    computation: (chunks) => {
+      const first = Math.max(0, firstChunkWith(chunks, this.terms()));
+      return { start: first, end: first + 1 };
+    },
   });
-  protected readonly remainingPercent = computed(() => {
-    const chunks = this.chunks();
-    const shown = chunks.slice(0, this.shownChunks()).join('').length;
-    const total = chunks.join('').length || 1;
-    return Math.round(((total - shown) / total) * 100);
-  });
+  protected readonly remainingPercent = computed(() =>
+    this.percentOf(this.range().end, this.chunks().length),
+  );
+  protected readonly earlierPercent = computed(() =>
+    this.percentOf(0, this.range().start),
+  );
   protected readonly sections = computed(() =>
     this.chunks().length > 1 ? sectionIndex(this.chunks()) : [],
   );
-  private readonly pendingSection = signal<string | null>(null);
+  private readonly pendingSection = signal<{ id: string } | null>(null);
 
-  protected readonly html = computed(() =>
-    markTerms(
-      renderMarkdown(this.chunks().slice(0, this.shownChunks()).join('\n\n')),
-      this.terms(),
-    ),
-  );
-  protected readonly matches = computed(
-    () => this.html().split('<mark>').length - 1,
+  protected readonly html = computed(() => {
+    const { start, end } = this.range();
+    return Array.from({ length: end - start }, (_, k) =>
+      this.chunkHtml(start + k),
+    ).join('');
+  });
+  /** Occurrences on screen and in the whole document (the counter shows both). */
+  protected readonly matches = computed(() => countMarks(this.html()));
+  protected readonly totalMatches = computed(() =>
+    countTerms(this.loaded()?.body ?? '', this.terms()),
   );
   /** Occurrence in focus; back to the first one on every new document. */
   protected readonly current = linkedSignal({
     source: this.documentId,
     computation: () => 0,
   });
+  /** Bumped only when the reader moves between occurrences: reading more never scrolls back. */
+  private readonly focusRequest = signal(0);
   protected readonly copyState = linkedSignal<string, CopyState>({
     source: this.documentId,
     computation: () => 'idle',
@@ -158,44 +177,62 @@ export class DocumentPanel {
       this.host.scrollTop = 0;
       this.heading().nativeElement.focus({ preventScroll: true });
     });
-    // The occurrence in focus is outlined and scrolled into view (DOM-only work).
+    // The occurrence in focus is outlined (DOM-only work).
     afterRenderEffect(() => {
-      const marks = this.marks();
-      marks.forEach((mark, index) =>
-        mark.classList.toggle('current', index === this.current()),
+      const current = this.current();
+      this.marks().forEach((mark, index) =>
+        mark.classList.toggle('current', index === current),
       );
-      marks[this.current()]?.scrollIntoView({ block: 'center' });
+    });
+    // Scrolled into view when a document arrives and on ▲▼ only (never on "Continuar lendo").
+    afterRenderEffect(() => {
+      this.loaded();
+      this.focusRequest();
+      untracked(() =>
+        this.marks()[this.current()]?.scrollIntoView({ block: 'center' }),
+      );
     });
     // A section picked in the index scrolls into view once its chunk is rendered.
-    afterRenderEffect(() => {
-      const id = this.pendingSection();
-      if (!id) return;
-      // Angular's sanitizer drops id attributes from [innerHTML]: match headings by their text.
-      const headings =
-        this.bodyRef()?.nativeElement.querySelectorAll<HTMLElement>(
-          'h3, h4, h5',
-        ) ?? [];
-      [...headings]
-        .find((h) => headingId(h.innerHTML) === id)
-        ?.scrollIntoView({ block: 'start' });
-    });
+    afterRenderEffect(() => this.scrollToSection(this.pendingSection()));
   }
 
+  /** ▼ past the last occurrence on screen reads on into the next chunk; otherwise it wraps. */
   protected step(delta: 1 | -1): void {
     const count = this.matches();
-    if (count > 0)
-      this.current.update((index) => (index + delta + count) % count);
+    if (count === 0) return;
+    const next = this.current() + delta;
+    if (next >= count && this.range().end < this.chunks().length) {
+      this.readMore();
+    } else {
+      this.current.set((next + count) % count);
+    }
+    this.focusRequest.update((n) => n + 1);
   }
 
   protected readMore(): void {
-    this.shownChunks.update((shown) =>
-      Math.min(shown + 1, this.chunks().length),
+    this.range.update(({ start, end }) => ({
+      start,
+      end: Math.min(end + 1, this.chunks().length),
+    }));
+  }
+
+  /** Shows the chunk before the window; the occurrence in focus keeps its place. */
+  protected readEarlier(): void {
+    const { start, end } = this.range();
+    if (start === 0) return;
+    this.current.update(
+      (index) => index + countMarks(this.chunkHtml(start - 1)),
     );
+    this.range.set({ start: start - 1, end });
   }
 
   protected goToSection(section: SectionLink): void {
-    this.shownChunks.update((shown) => Math.max(shown, section.chunk + 1));
-    this.pendingSection.set(headingId(section.title));
+    this.range.update(({ start, end }) => ({
+      start: Math.min(start, section.chunk),
+      end: Math.max(end, section.chunk + 1),
+    }));
+    // A new object every time, so picking the same section again scrolls again.
+    this.pendingSection.set({ id: headingId(section.title) });
   }
 
   protected async copyPassage(): Promise<void> {
@@ -213,6 +250,37 @@ export class DocumentPanel {
   private flashCopy(state: CopyState): void {
     this.copyState.set(state);
     setTimeout(() => this.copyState.set('idle'), FEEDBACK_MS);
+  }
+
+  private chunkHtml(index: number): string {
+    const cache = this.chunkCache();
+    let html = cache.get(index);
+    if (html === undefined) {
+      html = markTerms(
+        renderMarkdown(this.chunks()[index] ?? ''),
+        this.terms(),
+      );
+      cache.set(index, html);
+    }
+    return html;
+  }
+
+  /** Angular's sanitizer drops id attributes from [innerHTML]: headings are matched by text. */
+  private scrollToSection(pending: { id: string } | null): void {
+    if (!pending) return;
+    const headings =
+      this.bodyRef()?.nativeElement.querySelectorAll<HTMLElement>(
+        'h3, h4, h5',
+      ) ?? [];
+    [...headings]
+      .find((h) => headingId(h.innerHTML) === pending.id)
+      ?.scrollIntoView({ block: 'start' });
+  }
+
+  private percentOf(from: number, to: number): number {
+    const chunks = this.chunks();
+    const total = chunks.join('').length || 1;
+    return Math.round((chunks.slice(from, to).join('').length / total) * 100);
   }
 
   private marks(): HTMLElement[] {

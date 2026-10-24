@@ -3,6 +3,7 @@
     class="conversation"
     [class.covered]="opened()"
     [class.empty]="isEmpty()"
+    [attr.inert]="covered() ? '' : null"
   >
     <header class="topbar">
       <span class="brand" aria-hidden="true">✦</span>

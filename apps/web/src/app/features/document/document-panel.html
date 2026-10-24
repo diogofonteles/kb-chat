@@ -26,6 +26,11 @@
             other {{{ matches() }} ocorrências}
           }</span
         >
+        @if (totalMatches() > matches()) {
+          <span class="counter" i18n="@@panel.totalMatches"
+            >({{ totalMatches() }} no documento)</span
+          >
+        }
         <button
           type="button"
           class="tool"
@@ -134,6 +139,17 @@
         }
       </ul>
     </details>
+  }
+  @if (earlierPercent() > 0) {
+    <button
+      type="button"
+      class="read-more"
+      (click)="readEarlier()"
+      i18n="@@panel.readEarlier"
+    >
+      Mostrar o trecho anterior ({{ earlierPercent() }}% do documento antes
+      deste ponto)
+    </button>
   }
   <div class="body" #body [innerHTML]="html()"></div>
   @if (remainingPercent() > 0) {

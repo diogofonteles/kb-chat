@@ -12,8 +12,7 @@ const marked = new Marked({
     },
   },
   renderer: {
-    // Document headings sit under the panel's h2 (axe heading-order) and get ids for the
-    // section index of long documents.
+    // Document headings sit under the panel's h2 (axe heading-order).
     heading({ tokens, depth }) {
       const level = Math.min(6, depth + 2);
       const text = this.parser.parseInline(tokens);

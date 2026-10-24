@@ -81,9 +81,10 @@ const SKIPPED = new Set(['code', 'pre', 'a', 'script', 'style']);
 const TAG = /^<\/?([a-z0-9]+)/i;
 
 function wordPattern(terms: readonly string[]): RegExp {
-  // Whole words that start with a term: "sétupla" also marks "sétuplas".
+  // Whole words that start with a term ("sétupla" also marks "sétuplas"); never inside an
+  // HTML entity such as "&amp;".
   return new RegExp(
-    `(?<![\\p{L}\\p{N}])((?:${terms.map(accentInsensitive).join('|')})[\\p{L}\\p{N}]*)`,
+    `(?<![&\\p{L}\\p{N}])((?:${terms.map(accentInsensitive).join('|')})[\\p{L}\\p{N}]*)`,
     'giu',
   );
 }
@@ -108,4 +109,10 @@ export function markTerms(html: string, terms: readonly string[]): string {
       return skipped > 0 ? part : part.replace(pattern, '<mark>$1</mark>');
     })
     .join('');
+}
+
+/** Occurrences of the terms in plain text (the whole document, before rendering). */
+export function countTerms(text: string, terms: readonly string[]): number {
+  if (terms.length === 0) return 0;
+  return text.match(wordPattern(terms))?.length ?? 0;
 }

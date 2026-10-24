@@ -28,9 +28,9 @@ export interface SectionLink {
 /** Markdown headings (#, ##, ###) and the chunk each one lives in, for the section index. */
 export function sectionIndex(chunks: readonly string[]): SectionLink[] {
   return chunks.flatMap((chunk, index) =>
-    [...chunk.matchAll(/^#{1,3}\s+(.+?)\s*#*\s*$/gm)].map((match) => ({
-      title: (match[1] ?? '').trim(),
-      chunk: index,
-    })),
+    [...chunk.matchAll(/^#{1,3}[ \t]+(.+?)[ \t]*#*[ \t]*$/gm)]
+      .map((match) => ({ title: (match[1] ?? '').trim(), chunk: index }))
+      // Empty "#" lines must not swallow the next line; very short ones ("# t") are noise.
+      .filter((section) => /\p{L}{3,}/u.test(section.title)),
   );
 }
