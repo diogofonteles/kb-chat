@@ -153,6 +153,7 @@ test.describe('paging and empty filters', () => {
 
   test('the results page never scrolls sideways, even with active filters', async ({
     page,
+    viewport,
   }) => {
     await askSemantic(page, 'natureza');
     await expect(page.locator('app-result-card').first()).toBeVisible();
@@ -161,7 +162,25 @@ test.describe('paging and empty filters', () => {
         () => document.documentElement.scrollWidth - window.innerWidth,
       );
     expect(await overflow()).toBeLessThanOrEqual(0);
-    await page.goto('/');
+    const phone = (viewport?.width ?? 0) < 1024;
+    await page
+      .getByRole('button', {
+        name: phone ? 'Filtros' : /^Assuntos/,
+        exact: phone,
+      })
+      .click();
+    await page
+      .getByRole('checkbox', { name: /Cosmologia Espiritual e Metafísica/ })
+      .check();
+    if (phone) await page.getByRole('button', { name: 'Aplicar' }).click();
+    await expect(
+      page.getByRole('button', { name: /Remover Assuntos/ }),
+    ).toBeVisible();
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    if (phone)
+      await expect(
+        page.getByRole('button', { name: 'Filtros (1)' }),
+      ).toBeInViewport();
   });
 });
 
