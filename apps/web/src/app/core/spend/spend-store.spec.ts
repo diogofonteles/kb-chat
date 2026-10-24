@@ -17,6 +17,8 @@ function createStore(spendToday: () => unknown) {
 const settle = () => TestBed.inject(ApplicationRef).whenStable();
 
 describe('SpendStore (KBC-005 FR-5)', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('shows today’s spend against the cap and reloads on refresh', async () => {
     const values = [
       { usd: 0.03, capUsd: 1, configured: true },
@@ -52,7 +54,6 @@ describe('SpendStore (KBC-005 FR-5)', () => {
     vi.advanceTimersByTime(1000);
     await settle();
     expect(spendToday).toHaveBeenCalledTimes(2);
-    vi.useRealTimers();
   });
 
   it('formats dollars in pt-BR with two decimals', () => {

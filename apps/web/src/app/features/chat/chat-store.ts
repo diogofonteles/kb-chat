@@ -277,6 +277,8 @@ export class ChatStore {
   }
 
   private reset(): void {
+    // A restored conversation is saved again (and moves to the top) once its searches settle.
+    this.rememberedKey = '';
     this.close();
     this.conversationState.set(newConversationId());
     this.resets.next({ type: 'reset' });

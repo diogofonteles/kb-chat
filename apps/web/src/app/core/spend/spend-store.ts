@@ -29,7 +29,10 @@ export class SpendStore {
       : '';
   });
 
-  /** Reloads now or after `delayMs` (the server records a stopped answer's cost a moment later). */
+  /**
+   * Reloads now or after `delayMs` (the server records a stopped answer's cost a moment later).
+   * Overlapping reloads are harmless: the resource keeps only the latest response.
+   */
   refresh(delayMs = 0): void {
     if (delayMs === 0) this.today.reload();
     else setTimeout(() => this.today.reload(), delayMs);

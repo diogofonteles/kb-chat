@@ -6,13 +6,16 @@
     <title>kb-chat</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <!-- Applies the remembered theme before the first paint (ThemeStore takes over after boot). -->
+    <!-- Applies the remembered theme before the first paint; ThemeStore takes over after boot.
+         The key and the theme names must match core/theme/theme-store.ts. -->
     <script>
-      try {
-        var theme = localStorage.getItem('kb-chat.theme');
-        if (theme === 'light' || theme === 'dark' || theme === 'esoteric')
-          document.documentElement.setAttribute('data-theme', theme);
-      } catch (error) {}
+      (function () {
+        try {
+          var theme = localStorage.getItem('kb-chat.theme');
+          if (theme === 'light' || theme === 'dark' || theme === 'esoteric')
+            document.documentElement.setAttribute('data-theme', theme);
+        } catch (error) {}
+      })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
