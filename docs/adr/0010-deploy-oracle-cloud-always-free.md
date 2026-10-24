@@ -42,23 +42,27 @@ The instance can be rebuilt without losing data, and the reserved public IP surv
 - the promotion flow is `develop → main`, and `main` is the owner's release decision.
 
 **The vault never goes through GitHub.**
-- `deploy/scripts/sync-vault.sh`, run on the Mac, uses rsync over SSH to send the topic folders. It refuses a vault with no topics, caps deletions with `--max-delete` and has a dry run.
+- `deploy/scripts/sync-vault.sh`, run on the Mac, uses rsync over SSH to send the topic folders. It refuses a vault with no topics and has a dry run. It counts the deletions with an rsync dry run first and refuses before sending anything when they pass `--max-delete`.
 - It then sends a consistent SQLite snapshot of the QMD index and the QMD config, with paths rewritten to `/vault`.
-- On the VM, `install-index.sh` swaps the index in and restarts the API.
+- On the VM, `install-index.sh` swaps the index in and restarts the API; if the smoke fails, the previous index goes back.
 - Embeddings stay on the Mac (Metal); the VM only queries.
 
 **Deploy = merge to `main`.** `.github/workflows/deploy.yml` runs in three steps:
 
 1. **Build.** It builds both images natively on `ubuntu-24.04-arm` (available to private repositories since 2026-01) and pushes them to GHCR, tagged with the commit SHA.
-2. **Deploy.** It connects over SSH with a key whose `authorized_keys` entry forces `ci-gate.sh`. That key can only ask for `deploy <sha> <user>`, `smoke` or `release`. The registry token is the job's short-lived `GITHUB_TOKEN`, sent on stdin; the VM logs out after pulling.
-3. **Check.** It checks that the live release equals the commit SHA, then smokes from the internet.
+2. **Deploy.** It connects over SSH with a key whose `authorized_keys` entry is `restrict,command="…/ci-gate.sh"`. That key can only ask for `deploy <sha> <user>`, `smoke` or `release`. The registry token is the job's short-lived `GITHUB_TOKEN`, sent on stdin; the VM logs out after pulling.
+3. **Check.** It checks that the image tag the containers actually run (`docker ps`, not `release.env`) equals the commit SHA, then smokes from the internet.
+
+The actions are pinned by commit SHA and kept current by Dependabot. Both jobs run only on `refs/heads/main`, a manual run included.
 
 On the VM, `deploy.sh` runs the release:
 
+- it holds a lock (`flock`) shared with `rollback.sh`, `install-index.sh` and `restore-state.sh`;
 - it refuses an `.env` without `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID` or `KB_CHAT_OWNER_EMAIL`;
-- it installs the `compose.yml` and scripts shipped inside that release's API image;
-- it runs `docker compose up --wait` and the smoke;
-- when the smoke fails, it puts the previous release back.
+- it pulls without touching `release.env`, then refuses images whose `org.opencontainers.image.revision` label is not the requested SHA;
+- it copies the `compose.yml` and scripts shipped inside that release's API image to a staging folder and swaps them in by rename;
+- it runs `docker compose up --wait`, checks the running tag and runs the smoke;
+- any failure in those steps (deploy files, `up`, running tag, smoke) puts the previous release back, and an exit trap restores `release.env` if the script is interrupted.
 
 The smoke checks four things:
 - `/health`;
@@ -66,13 +70,16 @@ The smoke checks four things:
 - `/mcp` is 404 from outside;
 - `/api/v1/topics` is 401 without a session.
 
-The last five releases' images stay on the VM. `rollback.sh` returns to any of them without the registry.
+The images of the last five live releases stay on the VM. `rollback.sh` returns to any of them without the registry. A release rolled back from is recorded in `rolled-back.list`, so a second rollback keeps going back instead of returning to it; a new deploy of that SHA clears the mark.
 
 **Backups.**
-- A systemd timer runs `backup-state.sh` every day. It encrypts `state/`, `claude/` and the `.env` with `age` to the owner's public key, then uploads the archive to a private Object Storage bucket with the instance principal: a dynamic group, and a policy limited to that bucket, so no API key sits on the VM.
-- Archives older than 30 days are deleted.
-- Restore decrypts on the Mac and streams the archive to `restore-state.sh`, which keeps the previous state aside.
+- A systemd timer runs `backup-state.sh` every day. It streams `state/`, `claude/` and the `.env` through `tar | age` to the owner's public key (no plaintext archive on disk), then uploads the result to a private Object Storage bucket with the instance principal, so no API key sits on the VM.
+- The dynamic group matches the kb-chat compartment, so a rebuilt VM keeps its rights. The policy grants only `OBJECT_CREATE` and `OBJECT_INSPECT` on that bucket, and uploads use `--no-overwrite`: a compromised VM cannot delete or replace backups.
+- The bucket's lifecycle policy deletes `state/` objects after 30 days, applied by the Object Storage service, not the VM.
+- Restore decrypts on the Mac and streams the archive to `restore-state.sh`. It refuses links and unexpected paths, extracts to a staging folder, and keeps the previous state aside.
 - A daily timer deletes session files untouched for 31 days. Sessions expire 30 days after their last refresh, and each refresh rewrites the file.
+
+**First boot.** The subnet has no NAT gateway, so the reserved public IP is the VM's only way out. `provision.sh` binds it right after the launch, before the block volume. cloud-init uses no module that needs the network. A single `kb-chat-setup` script waits for egress, mounts the data volume, installs the packages (checking Docker's signing key fingerprint), and writes the done marker only after it verifies the mount, Docker, the compose plugin and the OCI CLI. A missing volume fails the setup: there is no fallback to the boot volume. `docker.service` has `RequiresMountsFor=/srv/kb-chat`, so after a reboot the containers never start on an empty mount point.
 
 **Host hardening (cloud-init).**
 - SSH: keys only, no root login, `AllowUsers ubuntu deploy`.
@@ -80,13 +87,14 @@ The last five releases' images stay on the VM. `rollback.sh` returns to any of t
 - fail2ban guards sshd.
 - unattended-upgrades applies security updates and reboots at 05:30 UTC when a kernel update needs it.
 - Docker logs rotate, and a 4 GB swap file is added.
+- The VCN is IPv4 only. With Docker's userland proxy on, IPv6 or hairpin traffic would reach Caddy from the bridge gateway, putting those clients in one rate-limit bucket. That is acceptable while there is no IPv6.
 - iptables accepts 80/443 before Oracle's REJECT rule.
 - The security list allows only 22 (from `SSH_SOURCE_CIDR`), 80 and 443.
 
 A security list on the subnet is chosen over an NSG: there is one VNIC and one role, so per-VNIC rules buy nothing.
 
 **Cost guard.**
-- `deploy/oci/provision.sh` refuses sizes above the allowance.
+- `deploy/oci/provision.sh` refuses sizes above the allowance, and anything that is not a positive integer (`3.0`, `2.5`, `0`).
 - It creates a US$ 1 monthly budget with an alert at the first cent.
 - The recommended mitigation for idle reclamation is converting to PAYG, which keeps Always Free resources free and is never stopped as idle. No CPU or memory burner is installed.
 
@@ -143,19 +151,21 @@ Legend: Deployment_Node = machine, runtime or network boundary. Container = runn
 | XSS stealing the session or calling the API | CSP with hashed inline code only, no `unsafe-inline` scripts; `frame-ancestors 'none'`; markdown sanitized (ADR 0004) |
 | Reaching the MCP turn endpoint from outside | Caddy 404 on `/mcp*`, API refuses non-loopback sockets, per-turn token (ADR 0007) |
 | DNS rebinding or a forged `Host` | `ALLOWED_HOSTS` = the domain plus loopback |
-| A stolen CI key | Forced command: only `deploy <sha>`, `smoke`, `release`; no shell, no forwarding; sudo limited to two scripts; images must exist in GHCR for the repository |
+| A stolen CI key | `restrict` + forced command: only `deploy <sha>`, `smoke`, `release`; no shell, no forwarding; sudo limited to two scripts; images must exist in GHCR for the repository |
+| A GHCR push is root on the VM: `deploy.sh` runs, as root, the compose file and scripts taken from the API image, so anyone who can push `kb-chat-api` (a workflow with `packages: write`, a compromised action) controls the host | `packages: write` only in the build job of `deploy.yml`; every action pinned by commit SHA (Dependabot updates); deploys only from `main`; `deploy.sh` refuses images whose `org.opencontainers.image.revision` label is not the requested SHA, and the SHA must be the commit the workflow built. A signed provenance check (`gh attestation verify`) is the next step if more workflows ever get `packages: write` |
 | Leaked registry credentials on the VM | None stored: the job token lives for minutes and the VM logs out after the pull |
 | Secrets in git or logs | Only in the root-owned `.env` (0600) and GitHub environment secrets; `.env` and `oci.env` ignored; pino redaction (ADR 0007) |
 | Brute force on SSH | Keys only, fail2ban, `AllowUsers`; optional `SSH_SOURCE_CIDR` |
 | Unpatched host | unattended-upgrades with automatic reboot; Docker from its official repository |
 | Lost data (instance reclaimed or rebuilt) | Data on a separate block volume, reserved IP, daily encrypted off-VM backup, vault and index rebuildable from the Mac |
 | A backup leaks | `age` encryption to a key that is never on the VM; private bucket; policy limited to that bucket |
-| A wrong sync wipes the vault | Refuses an empty vault, `--max-delete`, dry run, read-only mount in the API |
+| A compromised VM erases the backups | The VM may only create and inspect objects; no overwrite; retention is the bucket's lifecycle policy |
+| A wrong sync wipes the vault | Refuses an empty vault; counts deletions with a dry run and refuses above `--max-delete` before sending; read-only mount in the API |
 | Terms violation with the Claude subscription | Only the owner, signed in to the unmodified Claude Code binary (KBC-010 BR-5); guests bring their own keys |
 
 3. **Did we do a good job?**
    - Smoke checks (401, `/mcp` 404, CSP and HSTS) run on every deploy.
-   - Unit tests cover the loopback-only MCP and the config defaults.
+   - Unit and integration tests cover the loopback-only MCP, the config defaults and `TRUST_PROXY` (`buildApp` + `inject` with forged `X-Forwarded-For`).
    - Revisit with any new public route, a second instance, or a change in Oracle's limits.
 
 ## Operability (CS-21 to CS-25)
@@ -215,7 +225,8 @@ Legend: Deployment_Node = machine, runtime or network boundary. Container = runn
 ## Consequences
 
 - New operational duties for the owner: the account, DNS, the Google origin, the Claude login and vault syncs (KBC-012 lists them).
-- The API gained `HOST` and `TRUST_PROXY` (defaults keep the local behaviour) and the loopback-only MCP check.
+- The API gained `HOST` and `TRUST_PROXY` (defaults keep the local behaviour) and the loopback-only MCP check. The subscription CLI also receives `DISABLE_AUTOUPDATER`: the image pins its version.
+- The global CLIs in the API image (`qmd`, `kb`, Claude Code) are installed with `pnpm add -g` (pnpm 9.15.0 under `/opt/clis`), like the workspace, with pinned versions.
 - Production images are arm64 only; an amd64 host would need `platforms: linux/amd64,linux/arm64` in the workflow.
 - A release changes `compose.yml` and the scripts together with the code: they ship inside the API image.
 - Compliance check (AD-15):

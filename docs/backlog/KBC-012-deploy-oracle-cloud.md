@@ -84,8 +84,9 @@ Pedido de 2026-10-24: "Prepare a produção na Oracle Cloud Infrastructure (OCI)
   - roda o smoke pela internet.
 - FR-4: `deploy/scripts/deploy.sh` executa a versão na VM:
   - recusa um `.env` sem `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID` ou `KB_CHAT_OWNER_EMAIL`;
+  - recusa imagens cuja revisão não é o SHA pedido;
   - instala o `compose.yml` e os scripts da própria versão;
-  - roda o smoke e, se falhar, volta à versão anterior.
+  - confere a tag em execução, roda o smoke e, se algo falhar (inclusive o `compose up`), volta à versão anterior.
 - FR-5: `deploy/scripts/smoke.sh` confere:
   - `/health`;
   - o SPA com CSP, HSTS e `nosniff`;
@@ -93,7 +94,7 @@ Pedido de 2026-10-24: "Prepare a produção na Oracle Cloud Infrastructure (OCI)
   - `/api/v1/topics` 401 sem sessão.
 - FR-6: `deploy/scripts/rollback.sh` volta para a versão anterior (ou um SHA dado) com as imagens guardadas na VM.
 - FR-7: `deploy/scripts/sync-vault.sh` envia o acervo e um snapshot consistente do índice QMD, com os caminhos trocados para `/vault`. `install-index.sh` troca o índice e reinicia a API.
-- FR-8: `deploy/scripts/backup-state.sh` envia diariamente o estado criptografado e apaga o que passou de 30 dias. `restore-state.sh` restaura e guarda o estado anterior.
+- FR-8: `deploy/scripts/backup-state.sh` envia diariamente o estado criptografado; a VM só cria objetos, e a lifecycle policy do bucket apaga o que passou de 30 dias. `restore-state.sh` restaura e guarda o estado anterior.
 - FR-9: a API aceita `HOST` (padrão `127.0.0.1`) e `TRUST_PROXY` (padrão nenhum). O endpoint MCP recusa conexões que não venham do loopback.
 
 ## Non-functional requirements
@@ -133,7 +134,7 @@ Pedido de 2026-10-24: "Prepare a produção na Oracle Cloud Infrastructure (OCI)
 - **AC-6 (FR-7)**
   - Given um acervo de origem sem tópicos, ou uma sincronização que apagaria mais que `--max-delete`
   - When o script roda
-  - Then ele para antes de enviar o índice
+  - Then ele recusa antes de enviar ou apagar qualquer arquivo
 - **AC-7 (FR-8, NFR-5)**
   - Given o timer diário
   - When ele roda

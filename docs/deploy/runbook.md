@@ -53,7 +53,7 @@ deploy/oci/provision.sh --env ~/.config/kb-chat/oci.env --apply    # cria o que 
 - **"Out of host capacity"**: é falta temporária de A1 na região. Tente outro `AVAILABILITY_DOMAIN` ou mais tarde, e rode de novo; ele continua de onde parou.
 - Anote o **IP público reservado** e o **namespace** impressos no fim.
 
-Espere o cloud-init terminar, uns 5–10 min:
+Espere o cloud-init terminar, uns 5–10 min. O script `kb-chat-setup` espera a saída para a internet (o IP reservado), monta o volume e só grava o marcador de pronto quando Docker, compose, OCI CLI e o volume estão confirmados. Sem o marcador, veja `/var/log/cloud-init-output.log`:
 
 ```bash
 ssh ubuntu@<IP> 'cloud-init status --wait; test -f /var/lib/kb-chat-cloud-init-done && echo pronto'
@@ -85,7 +85,6 @@ sudo tee /srv/kb-chat/deploy/backup.env >/dev/null <<'EOF'
 BACKUP_BUCKET=kb-chat-backups
 BACKUP_NAMESPACE=<namespace do passo 3>
 BACKUP_AGE_RECIPIENT=age1...
-BACKUP_KEEP_DAYS=30
 EOF
 sudo chmod 0600 /srv/kb-chat/deploy/backup.env
 sudo /srv/kb-chat/deploy/scripts/backup-state.sh --dry-run
@@ -127,7 +126,8 @@ deploy/scripts/sync-vault.sh --host ubuntu@<IP> --with-models   # 1ª vez: tamb�
 - O primeiro envio leva ~325 MB do tópico e ~720 MB do índice.
 - Depois de `kb ingest` + `qmd embed` no Mac, rode de novo sem `--with-models`: só vão as diferenças.
 - O script recusa um acervo sem tópicos.
-- Com mais de `--max-delete` (200) remoções, ele para antes de mexer no índice.
+- Ele conta as remoções num dry-run antes de tudo. Com mais de `--max-delete` (200), recusa sem enviar nada nem apagar nada. Confira o acervo e, se for isso mesmo, rode de novo com `--max-delete <n>`.
+- Se o índice novo falhar no smoke, o anterior volta sozinho.
 
 ## 8. Primeiro deploy
 
@@ -166,16 +166,17 @@ O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, e
 | O quê | Como |
 |---|---|
 | Publicar | merge em `main` (o dono decide) |
-| Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico) |
+| Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico). Um segundo rollback continua voltando (C → B → A), nunca volta para a versão da qual saiu |
+| O que está no ar | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --running` (a tag das imagens em execução) |
 | Atualizar o acervo | `deploy/scripts/sync-vault.sh --host ubuntu@<IP>` |
 | Logs | `ssh ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env logs -f --tail 200'` |
 | Saúde | `curl -s https://kb.<seu-domínio>/health` (`degraded` = QMD parado, busca pelo `kb`) |
 | Uso de recursos | `ssh ubuntu@<IP> 'sudo docker stats --no-stream; free -h; df -h /srv/kb-chat'` |
-| Backups | `systemctl list-timers kb-chat-*`; `journalctl -u kb-chat-backup` |
+| Backups | `systemctl list-timers kb-chat-*`; `journalctl -u kb-chat-backup`. A VM só cria objetos: a retenção de 30 dias é a lifecycle policy do bucket (`BACKUP_KEEP_DAYS` no `oci.env`) |
 | Sessões abandonadas | timer `kb-chat-sweep-sessions` (diário, apaga arquivos sem uso há 31 dias) |
 | Atualizações do sistema | unattended-upgrades, com reboot às 05:30 UTC quando precisa; os contêineres voltam sozinhos |
 
-O deploy falhou no smoke? O `deploy.sh` já voltou para a versão anterior, e o workflow fica vermelho. Leia `gh run view <run> --log-failed` e os logs da API antes de tentar de novo.
+O deploy falhou (imagem com a revisão errada, `compose up`, tag em execução diferente, smoke)? O `deploy.sh` já voltou para a versão anterior, e o workflow fica vermelho. Leia `gh run view <run> --log-failed` e os logs da API antes de tentar de novo.
 
 ## 11. Restaurar o estado
 
@@ -186,6 +187,7 @@ age --decrypt --identity ~/.config/kb-chat/backup-age.key backup.age |
   ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/restore-state.sh -
 ```
 
+- O arquivo é extraído numa pasta temporária primeiro; links e caminhos inesperados são recusados.
 - O estado atual fica guardado em `/srv/kb-chat/state.before-restore-<stamp>`.
 - O acervo e o índice não estão no backup: a fonte é o Mac, use `sync-vault.sh`.
 
