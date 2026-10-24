@@ -17,7 +17,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | ID | Título | Fatia | Status | Depende de |
 |---|---|---|---|---|
 | [KBC-001](KBC-001-walking-skeleton-search-and-read.md) | Perguntar e abrir um documento (esqueleto) | walking-skeleton | done | — |
-| [KBC-002](KBC-002-filter-chips-and-grouped-results.md) | Filtrar resultados por facetas com contagens | release-1 | ready | KBC-001 |
+| [KBC-002](KBC-002-filter-chips-and-grouped-results.md) | Filtrar resultados por facetas com contagens | release-1 | done | KBC-001 |
 | [KBC-003](KBC-003-document-panel-highlight-and-see-also.md) | Ler com trecho destacado e "Veja também" | release-1 | ready | KBC-001 |
 | [KBC-004](KBC-004-grounded-ai-answer.md) | Responder com IA citando as fontes | release-1 | ready | KBC-001 |
 | [KBC-005](KBC-005-sidebar-topics-history-themes.md) | Lateral: acervo, histórico, temas e gasto | release-1 | ready | KBC-001, KBC-004 |

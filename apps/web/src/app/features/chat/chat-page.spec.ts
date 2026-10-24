@@ -109,7 +109,7 @@ describe('ChatPage', () => {
       .flush(aDocument());
     await view.fixture.whenStable();
     const panel = screen.getByRole('dialog');
-    expect(panel.querySelector('h1')?.textContent).toBe('A LEI DO RITMO');
+    expect(panel.querySelector('.body h3')?.textContent).toBe('A LEI DO RITMO');
     expect(screen.getByText('O texto explora a Lei do Ritmo.')).toBeTruthy();
     fireEvent.keyDown(panel, { key: 'Escape' });
     await view.fixture.whenStable();

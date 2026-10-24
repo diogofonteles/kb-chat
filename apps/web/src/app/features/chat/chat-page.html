@@ -1,5 +1,10 @@
 <div class="layout" [class.with-panel]="opened()">
-  <main class="conversation" [class.covered]="opened()">
+  <main
+    class="conversation"
+    [class.covered]="opened()"
+    [class.empty]="isEmpty()"
+    [attr.inert]="covered() ? '' : null"
+  >
     <header class="topbar">
       <span class="brand" aria-hidden="true">✦</span>
       @if (topic(); as current) {
@@ -87,7 +92,12 @@
       [topic]="doc.topic"
       [documentId]="doc.id"
       [fallbackTitle]="doc.title"
+      [highlight]="doc.question"
+      [canGoBack]="store.canGoBack()"
       (closed)="closeDocument()"
+      (back)="store.back()"
+      (navigated)="store.openWithin($event)"
+      (conceptSelected)="filterByConcept($event)"
     />
   }
 </div>

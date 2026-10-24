@@ -7,7 +7,9 @@ import {
   type SearchFilters,
 } from '@kb-chat/contracts';
 import type { IndexHit } from '../../ports/search-index.js';
-import type { CatalogEntry } from '../catalog/index.js';
+import { copyKey, type CatalogEntry } from '../catalog/index.js';
+
+export { copyKey };
 
 export interface Candidate {
   readonly hit: IndexHit;
@@ -36,15 +38,6 @@ export interface RefinedPage {
   readonly hiddenOffTopic: number;
   readonly facets: ResultFacets;
 }
-
-/** "A  Natureza Sétupla" and "a natureza setupla" share one key (KBC-002 BR-4). */
-export const copyKey = (title: string): string =>
-  title
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
 
 /** Groups candidates by normalized title, keeping the index order of the best member. */
 export function groupCopies(candidates: readonly Candidate[]): CopyGroup[] {

@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -38,7 +39,15 @@ async function registerRoutes(
       ratePerMinute: config.SEARCH_RATE_LIMIT,
     }),
   );
-  await app.register(documentRoutes(new DocumentsService({ catalog, vault })));
+  await app.register(
+    documentRoutes(
+      new DocumentsService({
+        catalog,
+        vault,
+        vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
+      }),
+    ),
+  );
 }
 
 /** Assembles the API; only `main` listens (ND-01). */
@@ -47,6 +56,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (!deps.catalog) await catalog.load();
 
   const app = Fastify({
+    // Document ids are vault paths; Fastify's default (100 characters) refused 104 real ones.
+    maxParamLength: 1024,
     loggerInstance: deps.logger ?? createLogger(deps.config.LOG_LEVEL),
   });
   app.setValidatorCompiler(validatorCompiler);

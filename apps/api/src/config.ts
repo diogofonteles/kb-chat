@@ -26,6 +26,8 @@ export const configSchema = z.object({
   KB_TOPIC: z.string().min(1).optional(),
   /** Searches per minute per client (local single user: generous, ND-22). */
   SEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(120),
+  /** Obsidian vault name for "Abrir no Obsidian"; default: the vault folder's name. */
+  OBSIDIAN_VAULT: z.string().min(1).optional(),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

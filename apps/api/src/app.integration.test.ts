@@ -55,7 +55,7 @@ describe('GET /api/v1/topics', () => {
     expect(response.json()).toEqual({
       items: [
         { slug: 'alquimia', title: 'Alquimia Prática', documentCount: 1 },
-        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 19 },
+        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 22 },
       ],
       defaultSlug: null,
     });
@@ -196,7 +196,7 @@ describe('GET /health', () => {
     expect(response.json()).toEqual({
       status: 'ok',
       search: 'ok',
-      catalog: { documents: 20 },
+      catalog: { documents: 23 },
     });
   });
 });
@@ -263,5 +263,116 @@ describe('facet filters (KBC-002)', () => {
     const response = await searchWith({ q: 'x', filters: { path: '/etc' } });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('VALIDATION_FAILED');
+  });
+});
+
+describe('document panel data (KBC-003)', () => {
+  const doc = (id: string, suffix = '') =>
+    app.inject({
+      method: 'GET',
+      url: `/api/v1/topics/hermetismo/documents/${encodeURIComponent(id)}${suffix}`,
+      headers: HOST,
+    });
+
+  it('returns see-also groups, origin and the Obsidian link of a source', async () => {
+    const body = (await doc('raw/articles/arvore-da-vida.md')).json();
+    expect(body.seeAlso.exampleOf).toMatchObject({
+      items: [{ id: 'wiki/concepts/Cabala.md', title: 'Cabala' }],
+      total: 1,
+    });
+    expect(body.seeAlso.related).toEqual({ items: [], total: 0 });
+    expect(body.origin).toBe('audio');
+    expect(body.obsidianUrl).toBe(
+      'obsidian://open?vault=vault&file=hermetismo%2Fraw%2Farticles%2Farvore-da-vida',
+    );
+  });
+
+  it('lists the documents pointing to a concept article, with its criterion', async () => {
+    const body = (await doc('wiki/concepts/Cabala.md')).json();
+    expect(body.criterion).toMatch(/Árvore da Vida/);
+    expect(
+      body.seeAlso.examples.items.map((r: { id: string }) => r.id),
+    ).toEqual(['raw/articles/arvore-da-vida.md']);
+    expect(body.seeAlso.relatedFrom.total).toBe(1);
+  });
+
+  it('pages a see-also group and validates the group name', async () => {
+    const page = (
+      await doc(
+        'wiki/concepts/Cabala.md',
+        '/relations/examples?offset=0&limit=1',
+      )
+    ).json();
+    expect(page).toMatchObject({
+      items: [
+        {
+          id: 'raw/articles/arvore-da-vida.md',
+          title: 'A Árvore da Vida',
+          genre: 'talk_or_interview',
+        },
+      ],
+      total: 1,
+      nextOffset: null,
+    });
+    const bad = await doc('wiki/concepts/Cabala.md', '/relations/everything');
+    expect(bad.statusCode).toBe(400);
+  });
+});
+
+describe('see-also paging, copies and long ids (KBC-003 review)', () => {
+  const get = (url: string) =>
+    app.inject({ method: 'GET', url, headers: HOST });
+  const doc = (id: string) =>
+    `/api/v1/topics/hermetismo/documents/${encodeURIComponent(id)}`;
+
+  it('previews 5 references with the total and their facets (BR-3, FR-3)', async () => {
+    const body = (await get(doc('wiki/concepts/Ritmo.md'))).json();
+    expect(body.seeAlso.examples.total).toBe(12);
+    expect(body.seeAlso.examples.items).toHaveLength(5);
+    expect(body.seeAlso.examples.items[0]).toMatchObject({
+      genre: 'article_or_essay',
+      depth: 1,
+      relevance: 'adjacent',
+    });
+  });
+
+  it('pages a group with nextOffset until the end', async () => {
+    const first = (
+      await get(
+        `${doc('wiki/concepts/Ritmo.md')}/relations/examples?offset=5&limit=5`,
+      )
+    ).json();
+    expect(first.items).toHaveLength(5);
+    expect(first.nextOffset).toBe(10);
+    const last = (
+      await get(
+        `${doc('wiki/concepts/Ritmo.md')}/relations/examples?offset=10&limit=5`,
+      )
+    ).json();
+    expect(last.items).toHaveLength(2);
+    expect(last.nextOffset).toBeNull();
+  });
+
+  it('collapses copies and matches concept names case-insensitively', async () => {
+    const body = (await get(doc('wiki/concepts/Cabala.md'))).json();
+    expect(body.seeAlso.relatedFrom.total).toBe(1);
+  });
+
+  it('answers 404 and 400 on the relations route', async () => {
+    expect(
+      (await get(`${doc('raw/articles/nope.md')}/relations/examples`))
+        .statusCode,
+    ).toBe(404);
+    expect((await get(`${doc('../x.md')}/relations/examples`)).statusCode).toBe(
+      400,
+    );
+  });
+
+  it('opens documents whose ids are longer than 100 characters', async () => {
+    const id =
+      'raw/articles/um-titulo-muito-longo-de-apostila-convertida-sobre-os-principios-hermeticos-e-a-tradicao-egipcia-volume-dois.md';
+    const response = await get(doc(id));
+    expect(response.statusCode).toBe(200);
+    expect(response.json().title).toBe('Um Título Muito Longo');
   });
 });

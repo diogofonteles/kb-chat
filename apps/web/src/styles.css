@@ -51,3 +51,16 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Document text is rendered with [innerHTML], outside component style encapsulation. */
+app-document-panel .body mark {
+  padding: 0 0.1em;
+  border-radius: 0.2em;
+  background: var(--color-mark);
+  color: inherit;
+}
+
+app-document-panel .body mark.current {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

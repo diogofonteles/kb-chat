@@ -59,3 +59,12 @@ export function titleFromId(id: string): string {
     base.replace(/\.md$/, '').replace(/-\d+$/, '').replace(/-/g, ' '),
   );
 }
+
+/** "A  Natureza Sétupla" and "a natureza setupla" share one key: near-identical copies (KBC-002 BR-4). */
+export const copyKey = (title: string): string =>
+  title
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();

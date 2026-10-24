@@ -46,6 +46,10 @@ export class ChatPage {
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
   protected readonly isEmpty = computed(() => this.messages().length === 0);
+  /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
+  protected readonly covered = computed(
+    () => this.opened() !== null && !this.isDesktop(),
+  );
   protected readonly topicsError = computed(() => {
     const err = this.store.topics.error();
     return err ? errorMessage(toUiErrorCode(err)) : '';
@@ -64,6 +68,10 @@ export class ChatPage {
     return `${last.question}: ${outcome}`;
   });
 
+  private isDesktop(): boolean {
+    return this.view?.matchMedia?.(DESKTOP_QUERY).matches ?? true;
+  }
+
   constructor() {
     // The question box starts focused on desktop; on phones it would pop the keyboard.
     afterNextRender(() => {
@@ -81,7 +89,19 @@ export class ChatPage {
   }
 
   protected openHit(doc: DocumentRef, message: ChatMessage): void {
-    this.store.open(message.topic, doc);
+    this.store.open(message.topic, doc, message);
+  }
+
+  /** A subject chip in the panel filters the message that opened it (KBC-003 FR-5). */
+  protected filterByConcept(concept: string): void {
+    const message = this.messages().find(
+      (m) => m.id === this.opened()?.messageId,
+    );
+    if (!message || message.filters.concepts.includes(concept)) return;
+    this.store.refine(message, {
+      ...message.filters,
+      concepts: [...message.filters.concepts, concept],
+    });
   }
 
   protected refine(message: ChatMessage, filters: SearchFilters): void {

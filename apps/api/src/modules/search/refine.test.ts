@@ -16,6 +16,9 @@ const entry = (
   depth: 1,
   relevance: 'core',
   concepts: [],
+  criterion: null,
+  origin: null,
+  relations: { exampleOf: [], extends: [], related: [] },
   ...overrides,
 });
 const candidate = (e: CatalogEntry, score = 1): Candidate => ({

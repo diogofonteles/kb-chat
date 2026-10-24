@@ -22,3 +22,10 @@ if (
     this.dispatchEvent(new Event('close'));
   };
 }
+
+// jsdom does not lay out pages; scrolling is a no-op there (covered by Playwright).
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {
+    // no layout in jsdom
+  };
+}

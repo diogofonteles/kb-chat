@@ -4,15 +4,26 @@ import {
   relevanceSchema,
   type DepthLevel,
   type DocumentFacets,
+  type DocumentOrigin,
   type Genre,
   type Relevance,
 } from '@kb-chat/contracts';
 import { titleFromId, toDisplayTitle } from './titles.js';
 
+/** Concept names a document points to through kb's relation lists (unresolved). */
+export interface RelationNames {
+  readonly exampleOf: readonly string[];
+  readonly extends: readonly string[];
+  readonly related: readonly string[];
+}
+
 export interface CatalogEntry extends DocumentFacets {
   readonly id: string;
   readonly title: string;
   readonly summary: string | null;
+  readonly criterion: string | null;
+  readonly origin: DocumentOrigin;
+  readonly relations: RelationNames;
 }
 
 const WIKILINK = /^\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]$/;
@@ -45,6 +56,14 @@ function toDepth(value: unknown): DepthLevel | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** Converted audio and OCR texts carry their pipeline folder in kb's `source_path`. */
+function toOrigin(sourcePath: string | null): DocumentOrigin {
+  if (!sourcePath) return null;
+  if (/(^|\/)audio(-vad)?\//.test(sourcePath)) return 'audio';
+  if (/(^|\/)ocr\//.test(sourcePath)) return 'ocr';
+  return null;
+}
+
 function toConcepts(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const names = value
@@ -67,5 +86,12 @@ export function toCatalogEntry(
     depth: toDepth(data['depth']),
     relevance: toRelevance(data['relevance']),
     concepts: toConcepts(data['concepts']),
+    criterion: toStringOrNull(data['criterion']),
+    origin: toOrigin(toStringOrNull(data['source_path'])),
+    relations: {
+      exampleOf: toConcepts(data['example_of']),
+      extends: toConcepts(data['extends']),
+      related: toConcepts(data['related']),
+    },
   };
 }

@@ -1,9 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
+  relationPageSchema,
   searchResponseSchema,
+  type RelationPage,
   type SearchRequest,
   type SearchResponse,
+  type SeeAlsoGroupName,
 } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
 
@@ -27,4 +30,22 @@ export class KbApi {
       .post(searchesUrl(topic), request)
       .pipe(map((body) => searchResponseSchema.parse(body)));
   }
+
+  relations(
+    topic: string,
+    id: string,
+    page: { group: SeeAlsoGroupName; offset: number; limit: number },
+  ): Observable<RelationPage> {
+    return this.http
+      .get(relationsUrl(topic, id, page.group), {
+        params: { offset: page.offset, limit: page.limit },
+      })
+      .pipe(map((body) => relationPageSchema.parse(body)));
+  }
 }
+
+export const relationsUrl = (
+  topic: string,
+  id: string,
+  group: string,
+): string => `${documentUrl(topic, id)}/relations/${group}`;

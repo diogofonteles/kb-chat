@@ -11,7 +11,25 @@ const marked = new Marked({
       return undefined;
     },
   },
+  renderer: {
+    // Document headings sit under the panel's h2 (axe heading-order).
+    heading({ tokens, depth }) {
+      const level = Math.min(6, depth + 2);
+      const text = this.parser.parseInline(tokens);
+      return `<h${level}>${text}</h${level}>\n`;
+    },
+  },
 });
+
+/** Stable id for a heading's HTML text: "Os Sete Princípios" → "secao-os-sete-principios". */
+export function headingId(html: string): string {
+  const plain = html
+    .replace(/<[^>]+>/g, '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+  return `secao-${plain.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
 
 /**
  * Markdown → HTML. The result is bound with [innerHTML], which Angular sanitizes

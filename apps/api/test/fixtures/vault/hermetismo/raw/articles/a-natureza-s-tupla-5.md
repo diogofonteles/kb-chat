@@ -7,6 +7,8 @@ relevance: core
 summary: Outra cópia da aula sobre a natureza sétupla.
 concepts:
   - '[[Cosmologia Espiritual e Metafísica]]'
+related:
+  - '[[cabala]]'
 ---
 
 A NATUREZA SÉTUPLA (cópia)

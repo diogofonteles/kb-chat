@@ -19,6 +19,21 @@
   min-height: 0;
 }
 
+/* First screen: greeting and question box centered together (like a chat home);
+   after the first question the box docks at the bottom. */
+.conversation.empty {
+  grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1.25fr);
+}
+
+.conversation.empty .thread {
+  align-content: end;
+  padding-bottom: var(--space-6);
+}
+
+.conversation.empty .welcome {
+  padding-top: 0;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -73,6 +88,10 @@
 }
 
 .hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 0.35em;
   margin: 0;
   color: var(--color-text-muted);
 }
