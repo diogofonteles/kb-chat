@@ -1,0 +1,69 @@
+<article class="exchange" [attr.aria-busy]="message().status === 'loading'">
+  <p class="question">
+    <span class="visually-hidden" i18n="@@message.you">Você perguntou:</span>
+    {{ message().question }}
+  </p>
+
+  @switch (message().status) {
+    @case ('loading') {
+      <div class="answer">
+        <p class="status" i18n="@@message.searching">
+          Buscando em {{ topicTitle() }}…
+        </p>
+        <div class="skeletons" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    }
+    @case ('error') {
+      <div class="answer error" role="alert">
+        <p>{{ error() }}</p>
+        <button
+          type="button"
+          class="secondary"
+          (click)="retried.emit()"
+          i18n="@@message.retry"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    }
+    @default {
+      <div class="answer">
+        @if (items().length > 0) {
+          <p class="summary">
+            {{ count() }} · {{ modeName() }} ·
+            {{ seconds() | number: '1.1-1' }} s
+          </p>
+          <ol class="cards">
+            @for (hit of items(); track hit.id) {
+              <li>
+                <app-result-card
+                  [hit]="hit"
+                  [active]="hit.id === activeId()"
+                  (opened)="opened.emit($event)"
+                />
+              </li>
+            }
+          </ol>
+        } @else {
+          <div class="empty">
+            <p i18n="@@message.empty">
+              Nada encontrado para "{{ message().question }}".
+            </p>
+            @if (canTrySemantic()) {
+              <button
+                type="button"
+                class="secondary"
+                (click)="modeSwitched.emit('semantic')"
+                i18n="@@message.trySemantic"
+              >
+                Buscar por significado
+              </button>
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+</article>

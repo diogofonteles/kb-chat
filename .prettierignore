@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.nx
+.angular
+pnpm-lock.yaml
+.claude
+work
+docs
+CLAUDE.md
+test-results
+playwright-report

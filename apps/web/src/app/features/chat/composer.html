@@ -1,0 +1,60 @@
+<form class="composer" (submit)="$event.preventDefault(); send()">
+  <label class="visually-hidden" for="question" i18n="@@composer.label"
+    >Sua pergunta</label
+  >
+  <div class="field">
+    <textarea
+      #field
+      id="question"
+      rows="1"
+      [maxLength]="maxLength"
+      [value]="text()"
+      (input)="updateText($event)"
+      (keydown)="sendOnEnter($event)"
+      placeholder="ex.: o que é a natureza sétupla?"
+      i18n-placeholder="@@composer.placeholder"
+      aria-describedby="mode-help"
+    ></textarea>
+    @if (text()) {
+      <button
+        type="button"
+        class="clear"
+        (click)="clear()"
+        aria-label="Limpar pergunta"
+        i18n-aria-label="@@composer.clear"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    }
+  </div>
+  <div class="actions">
+    <label class="mode">
+      <span class="mode-label" i18n="@@composer.mode">Como buscar</span>
+      <select [value]="mode()" (change)="selectMode($event)">
+        @for (option of modes; track option.value) {
+          <option [value]="option.value" [selected]="option.value === mode()">
+            {{ option.label }}
+          </option>
+        }
+      </select>
+    </label>
+    <span id="mode-help" class="help">{{ modeHelp() }}</span>
+    @if (nearLimit()) {
+      <span class="limit" aria-live="polite" i18n="@@composer.limit"
+        >{{ text().length }}/{{ maxLength }}</span
+      >
+    }
+    <button
+      type="submit"
+      class="send"
+      [disabled]="!canSend()"
+      [attr.aria-describedby]="canSend() ? null : 'send-hint'"
+      i18n="@@composer.send"
+    >
+      Buscar
+    </button>
+    @if (!canSend()) {
+      <span id="send-hint" class="visually-hidden">{{ sendHint() }}</span>
+    }
+  </div>
+</form>

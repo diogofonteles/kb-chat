@@ -82,7 +82,10 @@
       "allow": []
     },
     "secret": {
-      "allowedFiles": []
+      "allowedFiles": [
+        "pnpm-lock.yaml"
+      ],
+      "_note": "pnpm-lock.yaml lists the npm package \"js-tokens\", which the secret pattern flags as an assignment"
     }
   },
   "secrets": [

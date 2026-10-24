@@ -1,0 +1,32 @@
+{
+  "name": "kb-chat",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @kb-chat/api dev",
+    "dev:web": "pnpm --filter @kb-chat/web start",
+    "typecheck": "nx run-many -t typecheck",
+    "test": "nx run-many -t test",
+    "build": "nx run-many -t build",
+    "lint": "nx run-many -t lint",
+    "e2e": "pnpm --filter @kb-chat/e2e e2e",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.4",
+    "angular-eslint": "21.4.0",
+    "eslint": "9.39.4",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-import-resolver-typescript": "4.4.5",
+    "eslint-plugin-boundaries": "7.0.1",
+    "nx": "21.0.3",
+    "prettier": "3.9.4",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.63.0"
+  }
+}
