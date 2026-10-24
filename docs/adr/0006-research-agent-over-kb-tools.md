@@ -19,14 +19,16 @@ Answers come from a **research agent**: a tool-calling loop over the collection,
 | Tool | Does |
 |---|---|
 | `search_collection(query, mode, subjects?)` | Keyword, meaning or hybrid search over the index. Returns per hit: id, title, kb summary, snippet, subjects and genre. |
+| `find_text(phrase, limit ≤ 20)` | Literal, accent- and case-insensitive phrase search over the body and kb summary of **every** cataloged document of the topic, like `grep`. Alternatives are joined with ` \| `. Returns per document: [n], title, occurrences per alternative and the passage around the first one (± 200 characters), ranked by occurrences. |
 | `list_subjects(query?)` | The collection's subjects with document counts. |
 | `read_document(id, around?, offset?)` | The kb summary and frontmatter, plus a window of the body (≤ 12,000 characters). The window centers on the occurrences of `around` when it is given. |
 | `related_documents(id)` | The kb relations ("veja também"): examples, extensions and related documents. |
 
 **Loop.** A provider with native tool calling (OpenRouter, OpenAI, Anthropic) runs the loop in the API:
-- at most 10 tool steps and 2,000 output tokens per answer;
+- at most 15 tool steps per answer and 2,000 output tokens per model call;
 - the model's reasoning stays on;
-- the conversation is sent as prior user/assistant turns (text only, not tool results).
+- the conversation is sent as prior user/assistant turns (text only, not tool results);
+- **narration is never shown**: each model call's text is buffered. A call that ends with tool calls has its text dropped for the reader (the model keeps it in its context). A call that does not is the answer and is shown. To keep the answer streaming, once the buffer passes 800 characters with no tool call yet, the call is taken as the answer: its text streams from then on and any tool call it asks for afterwards is ignored. Narration in the real eval stayed under ~450 characters, so the hold costs the answer a few seconds before its first token and never leaks a preamble. The forced last call (no tools) streams at once.
 
 **Claude subscription.** Claude Code (`claude -p`) runs the loop itself:
 - the same tools are served to it as an **MCP server** (`kb-chat mcp`, stdio);
@@ -34,6 +36,7 @@ Answers come from a **research agent**: a tool-calling loop over the collection,
 
 **Prompt.**
 - Search, re-phrase and read before answering. Never ask the reader to search again.
+- Use `find_text` for exact phrases, names, lists and numbers ("cinco princípios", "doze princípios"), with synonyms and variants in one call (ocultos, secretos, velados, universais, adicionais). Never conclude that the collection lacks something without `find_text`.
 - Cite collection facts with `[n]`; `n` numbers the documents the agent read.
 - Knowledge from outside the collection is allowed when it helps. It is marked "(fora do acervo)" and never presented as coming from the documents.
 
@@ -45,6 +48,8 @@ Answers come from a **research agent**: a tool-calling loop over the collection,
 - Per-token providers keep ADR 0004's controls: the ledger, the daily cap and the credit check.
 - The cap is checked before every step, not only once. The estimate shown is the typical cost of the configured model, not a precise number.
 
+**`find_text` cache.** Ranked search only surfaces documents about the question's theme; the answer to "quais são os 5 princípios ocultos" sits in a document about space-time (`a-setuplicidade-do-espa-o-tempo`). `find_text` scans a per-topic, in-memory folded copy of the text (summary + body, one line, no markdown emphasis, accents and case folded, Latin-1 so V8 keeps it one byte per character). It is built lazily on first use and warmed at the start of every research turn, while the model thinks. It is keyed by the catalog object, so a catalog reload rebuilds it. Passages come from re-reading only the hit files. On the real vault (4,235 documents, 178 MB of markdown): about 4 s to build, about 200 MB of heap, and 70–500 ms per search with up to four alternatives.
+
 ## Options considered
 
 1. **Agent with tools (chosen).** It answers what one retrieval misses, re-phrases by itself and uses relations and summaries. It costs a few cents with a cheap model and is free with a subscription. Latency grows with the number of steps; the steps are shown while it works.
@@ -55,5 +60,6 @@ Answers come from a **research agent**: a tool-calling loop over the collection,
 
 - Good: follow-ups keep context, and missing passages are searched for instead of reported. The same tool layer serves the in-API loop, Claude Code and, later, other MCP clients.
 - Bad: cost and time vary per answer. Mitigations: the step cap, the per-step cap check, the visible steps and "Parar".
+- Bad: the `find_text` cache holds the folded text of a topic in memory (about 200 MB for 4,235 documents). Acceptable for a single-owner local app; a larger vault would need an on-disk index instead.
 - The model default moves to `deepseek/deepseek-v4-pro`, which supports tools and costs about US$ 0.23 per million input tokens. It stays overridable by `KB_CHAT_MODEL` and, after KBC-007, by Settings.
 - The search-only mode stays for readers without a provider.
