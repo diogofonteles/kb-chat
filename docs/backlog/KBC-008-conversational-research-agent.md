@@ -36,7 +36,8 @@ Pedido do dono em 2026-10-24, depois de usar a release 1: "esperava que continua
 - BR-6: a visão "Buscar documentos" nunca chama a IA. A visão "Pesquisa com IA" não mostra cartões de busca, só os documentos que o agente usou.
 
 ## Functional requirements
-- FR-1: `POST /api/v1/topics/:topic/conversations/turns` deve receber `{ question, history: [{question, answer}], mode }` e transmitir por SSE os eventos `step`, `sources`, `token`, `done` e `error`.
+- FR-1 *(emenda 2026-10-24)*: `POST /api/v1/topics/:topic/research` deve receber `{ question, history: [{question, answer}] }` e transmitir por SSE os eventos `step`, `sources`, `token`, `done` e `error`. Não há `mode`: o agente escolhe o modo de cada busca. A conversa é salva no histórico da API local (`PUT /api/v1/conversations/:id`, KBC-005 BR-1).
+  - *Texto original:* `POST /api/v1/topics/:topic/conversations/turns` com `{ question, history, mode }`.
 - FR-2: o agente deve usar as ferramentas do BR-1 com o provedor configurado (OpenRouter com tool calling; stub com roteiro nos testes).
 - FR-3: na visão com IA, cada pergunta deve gerar uma resposta em streaming com:
   - a linha de passos ("Pesquisou 3 vezes · leu 4 documentos"), que se expande;
