@@ -128,6 +128,8 @@ interface CliTurnSetup {
   /** Shared by both passes, so segment numbers never repeat in one turn. */
   readonly answer: AnswerStream;
   readonly canDeepen: boolean;
+  /** What the reader asked: what a give-up answer would deny. */
+  readonly question: string;
 }
 
 /** The live state of one CLI pass: its events, the CLI's verdict and the steps taken. */
@@ -169,7 +171,8 @@ class CliTurn {
   /** The message ended without tools: the answer, or the fast pass asking to go deeper. */
   private endAnswer(): void {
     const { answer, canDeepen } = this.setup;
-    const reason = canDeepen ? deepenReason(answer.current) : null;
+    const { question } = this.setup;
+    const reason = canDeepen ? deepenReason(answer.current, question) : null;
     if (reason !== null && this.state.deepen === null) {
       this.state.deepen = reason;
       this.push(answer.toolCalled());
@@ -266,12 +269,9 @@ async function* runPass(
   pass: Omit<OpenPass, 'turn'> & { readonly answer: AnswerStream },
 ): AsyncGenerator<ResearchEvent, TurnState> {
   const { input } = pass;
-  const turn = new CliTurn({
-    ...pass,
-    dialect,
-    model: input.model ?? options.model,
-    canDeepen: input.canDeepen,
-  });
+  const { canDeepen, question } = input;
+  const model = input.model ?? options.model;
+  const turn = new CliTurn({ ...pass, dialect, model, canDeepen, question });
   const opened = { ...pass, turn };
   const { cli, endpoint, close } = await openTurn(options, dialect, opened);
   const unwatch = stopOnAbort(input.signal, () => {

@@ -208,7 +208,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn: Turn,
     call: CallResult,
   ): AsyncGenerator<ResearchEvent, boolean> {
-    const reason = deepenReason(turn.answer.current);
+    const reason = deepenReason(turn.answer.current, turn.input.question);
     const deep = turn.deepen;
     if (!deep || reason === null || turn.input.signal.aborted) return false;
     yield* turn.answer.toolCalled();

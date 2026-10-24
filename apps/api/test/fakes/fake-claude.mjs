@@ -118,7 +118,7 @@ if (mode === 'sleep' || mode === 'stubborn') {
     delta('Achei só parte da lista. <');
     delta('<APROFUNDAR>> faltam dois');
   } else if (mode === 'absent' && !deep)
-    delta('O acervo não nomeia os cinco princípios. ');
+    delta('O acervo não traz essa lista. ');
   else {
     delta('Tenho tudo o que preciso. ');
     delta('Segundo o acervo, ');

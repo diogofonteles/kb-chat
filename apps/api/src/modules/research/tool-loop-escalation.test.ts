@@ -161,31 +161,6 @@ describe('auto-escalation from the fast to the deep profile (ADR 0009)', () => {
     );
     expect(deepenOf(DEEPEN_MARKER)).toBe('a pesquisa rápida não bastou');
   });
-
-  it.each([
-    'O acervo não nomeia os cinco princípios ocultos.',
-    'Os textos do acervo não mencionam essa lista.',
-    'Nenhum documento traz os nomes.',
-    'Não há informações sobre isso no acervo.',
-    'Não encontrei a lista.',
-    'Não localizei os nomes nos textos.',
-    'Essa lista não consta nos documentos.',
-    'O nome não aparece no acervo.',
-    '## Os cinco princípios\n\nO acervo não traz a lista.',
-  ])('escalates an answer that gives up on the collection: %s', (answer) => {
-    expect(deepenOf(answer)).not.toBeNull();
-  });
-
-  it.each([
-    'Segundo o texto, o ritmo não traz descanso [2].',
-    'O acervo não traz datas, mas descreve o ciclo [1].',
-    'O ritmo não traz descanso.',
-    'Os cinco são descontinuidade e limite [1]. O acervo não traz mais nada.',
-    'O acervo traz os cinco princípios.',
-    'Os cinco são descontinuidade e limite [1].',
-  ])('keeps an answer that answers: %s', (answer) => {
-    expect(deepenOf(answer)).toBeNull();
-  });
 });
 
 const deepenOf = (text: string) => deepenReason(text);

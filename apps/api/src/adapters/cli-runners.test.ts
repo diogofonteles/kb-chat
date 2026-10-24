@@ -189,7 +189,7 @@ describe('ClaudeCliRunner auto-escalation (ADR 0009)', () => {
     const off = await collect(
       escalating(await fakeHome({ mode: 'absent' }), false),
     );
-    expect(answerText(off)).toBe('O acervo não nomeia os cinco princípios. ');
+    expect(answerText(off)).toBe('O acervo não traz essa lista. ');
     expect(off.at(-1)).not.toHaveProperty('escalated');
   });
 });

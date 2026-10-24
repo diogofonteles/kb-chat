@@ -4,10 +4,6 @@ import { absenceIn } from './absence.js';
 /** What a fast pass writes, alone, when the collection did not settle the question. */
 export const DEEPEN_MARKER = '<<APROFUNDAR>>';
 
-/** The marker taken out of a text the reader sees. */
-export const withoutMarker = (text: string): string =>
-  text.split(DEEPEN_MARKER).join('');
-
 /** What the model wrote before the marker (its reason is not part of the conversation). */
 export function beforeMarker(text: string): string {
   const at = text.indexOf(DEEPEN_MARKER);
@@ -20,14 +16,17 @@ export const DEEPEN_STEP: ResearchStep = {
   text: 'Aprofundando a pesquisa…',
 };
 
-/** Why a fast answer must go deeper, or null when it is an answer. */
-export function deepenReason(answer: string): string | null {
+/**
+ * Why a fast answer must go deeper, or null when it is an answer: the marker (the main
+ * path), or, as a best-effort backstop, an opening that gives up on the collection.
+ */
+export function deepenReason(answer: string, question = ''): string | null {
   const at = answer.indexOf(DEEPEN_MARKER);
   if (at >= 0) {
     const reason = answer.slice(at + DEEPEN_MARKER.length).trim();
     return reason.split('\n')[0]?.trim() || 'a pesquisa rápida não bastou';
   }
-  const absence = absenceIn(answer);
+  const absence = absenceIn(answer, question);
   return absence ? `a resposta dizia “${absence}”` : null;
 }
 
