@@ -20,6 +20,7 @@ import { httpResource } from '@angular/common/http';
 import { suggestionListSchema } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { suggestionsUrl } from '@core/api/kb-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { DocumentPanel } from '@features/document/document-panel.js';
 import { Sidebar, type SidebarAction } from '@features/sidebar/sidebar.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
@@ -66,6 +67,11 @@ export class ChatPage {
   protected readonly store = inject(ChatStore);
   protected readonly views = inject(ViewStore);
   protected readonly research = inject(ResearchStore);
+  private readonly session = inject(SessionStore);
+  /** A member sees only the collections a master granted (KBC-010). */
+  protected readonly guest = computed(
+    () => this.session.me()?.role === 'member',
+  );
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
   private readonly composer = viewChild.required(Composer);

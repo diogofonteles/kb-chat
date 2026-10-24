@@ -1,0 +1,152 @@
+:host {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.invite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.label {
+  font-weight: 600;
+}
+
+input[type='email'] {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.primary,
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+
+.primary {
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.hint,
+.muted {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.notice {
+  margin: 0;
+  min-height: 1.25em;
+  color: var(--color-accent-strong);
+}
+
+.notice.error {
+  color: var(--color-danger);
+}
+
+.alert p {
+  margin: 0 0 var(--space-2);
+}
+
+.people {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.row {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: var(--target);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--color-surface-muted);
+}
+
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.email,
+.meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+}
+
+.badge {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-accent-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+.editor {
+  padding: 0 var(--space-4) var(--space-4);
+}

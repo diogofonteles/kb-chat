@@ -21,6 +21,9 @@ import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { ResearchStore } from '@features/research/research-store.js';
 import { SettingsButton } from '@features/settings/settings-button.js';
+import { SettingsStore } from '@features/settings/settings-store.js';
+import { GoogleIdentity } from '@core/auth/google-identity.js';
+import { SessionStore } from '@core/auth/session-store.js';
 
 export type SidebarAction = 'new' | 'restore' | 'topic';
 
@@ -55,6 +58,9 @@ export class Sidebar {
   protected readonly history = inject(HistoryStore);
   protected readonly spend = inject(SpendStore);
   private readonly themes = inject(ThemeStore);
+  protected readonly session = inject(SessionStore);
+  private readonly google = inject(GoogleIdentity);
+  private readonly settings = inject(SettingsStore);
   /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
   private readonly restorer = inject(RESEARCH_RESTORER);
   /** A newer click cancels the load of the previous one. */
@@ -63,6 +69,11 @@ export class Sidebar {
   readonly acted = output<SidebarAction>();
 
   protected readonly theme = this.themes.theme;
+  /** The signed-in person's initial, when Google gave no picture. */
+  protected readonly initial = computed(() => {
+    const me = this.session.me();
+    return (me?.name || me?.email || '?').charAt(0).toUpperCase();
+  });
   protected readonly themeOptions = THEMES.map((value) => ({
     value,
     label: THEME_LABELS[value](),
@@ -118,6 +129,17 @@ export class Sidebar {
   protected changeTopic(slug: string): void {
     this.chat.selectTopic(slug);
     this.acted.emit('topic');
+  }
+
+  /** "Pessoas e permissões" (masters): the Configurações section of its own. */
+  protected openPeople(): void {
+    this.settings.openSettings('people');
+  }
+
+  protected signOut(): void {
+    this.google.disableAutoSelect();
+    // The page starts over at the login screen once the session is gone (SessionStore).
+    this.session.signOut().subscribe();
   }
 
   protected changeTheme(value: string): void {

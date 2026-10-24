@@ -1,0 +1,87 @@
+@let who = person();
+@if (isMaster()) {
+  <p class="note" i18n="@@people.masterNote">
+    Masters veem todos os acervos e usam todas as funcionalidades.
+  </p>
+}
+
+<fieldset class="group" [disabled]="busy() || isMaster()">
+  <legend class="legend" i18n="@@people.collections">Acervos</legend>
+  @for (topic of collections(); track topic.slug) {
+    <label class="check">
+      <input
+        #box
+        type="checkbox"
+        [checked]="topic.checked"
+        (change)="toggleTopic(topic.slug, box.checked)"
+      />
+      <span>{{ topic.title }}</span>
+    </label>
+  } @empty {
+    <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
+  }
+</fieldset>
+
+<fieldset class="group" [disabled]="busy() || isMaster()">
+  <legend class="legend" i18n="@@people.features">Funcionalidades</legend>
+  @for (feature of features(); track feature.id) {
+    <label class="check">
+      <input
+        #box
+        type="checkbox"
+        [checked]="feature.checked"
+        (change)="toggleFeature(feature.id, box.checked)"
+      />
+      <span>{{ feature.label }}</span>
+    </label>
+  }
+</fieldset>
+
+<div class="actions">
+  <button
+    type="button"
+    class="secondary"
+    [disabled]="busy()"
+    (click)="toggleMaster()"
+  >
+    @if (isMaster()) {
+      <span i18n="@@people.unmakeMaster">Remover master</span>
+    } @else {
+      <span i18n="@@people.makeMaster">Tornar master</span>
+    }
+  </button>
+  @if (!who.isOwner) {
+    @if (confirming()) {
+      <p class="confirm" i18n="@@people.confirmRevoke">
+        Revogar o acesso de {{ who.email }}? A pessoa sai na hora.
+      </p>
+      <button
+        type="button"
+        class="danger"
+        [disabled]="busy()"
+        (click)="confirmRevoke()"
+        i18n="@@people.revokeConfirm"
+      >
+        Revogar
+      </button>
+      <button
+        type="button"
+        class="link"
+        (click)="confirming.set(false)"
+        i18n="@@people.cancel"
+      >
+        Cancelar
+      </button>
+    } @else {
+      <button
+        type="button"
+        class="link danger-text"
+        [disabled]="busy()"
+        (click)="confirming.set(true)"
+        i18n="@@people.revoke"
+      >
+        Revogar acesso
+      </button>
+    }
+  }
+</div>
