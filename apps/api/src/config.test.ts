@@ -20,4 +20,15 @@ describe('loadConfig', () => {
     ]);
     expect(() => loadConfig({ PORT: 'abc' })).toThrow(/Invalid configuration/);
   });
+
+  it('listens on loopback unless HOST says otherwise, and trusts no proxy by default', () => {
+    expect(loadConfig({})).toMatchObject({ HOST: '127.0.0.1' });
+    expect(loadConfig({}).TRUST_PROXY).toBeUndefined();
+    expect(
+      loadConfig({ HOST: '0.0.0.0', TRUST_PROXY: 'uniquelocal' }),
+    ).toMatchObject({ HOST: '0.0.0.0', TRUST_PROXY: 'uniquelocal' });
+    expect(() => loadConfig({ HOST: 'example.com' })).toThrow(
+      /Invalid configuration/,
+    );
+  });
 });

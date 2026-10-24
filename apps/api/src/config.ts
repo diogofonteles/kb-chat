@@ -12,8 +12,18 @@ const csv = z
 
 export const configSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  /**
+   * Interface the API listens on. Loopback by default (ADR 0005); the container sets
+   * 0.0.0.0 so the reverse proxy on the private network reaches it (ADR 0010).
+   */
+  HOST: z.union([z.ipv4(), z.ipv6()]).default('127.0.0.1'),
   WEB_ORIGIN: z.url().default('http://localhost:4200'),
   ALLOWED_HOSTS: csv.default(['localhost', '127.0.0.1']),
+  /**
+   * Proxies whose X-Forwarded-For is trusted for request.ip (rate limits, ND-21), in
+   * Fastify's trustProxy syntax (e.g. "uniquelocal"); unset trusts none.
+   */
+  TRUST_PROXY: z.string().min(1).optional(),
   KB_VAULT: z
     .string()
     .min(1)

@@ -275,6 +275,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     // Document ids are vault paths; Fastify's default (100 characters) refused 104 real ones.
     maxParamLength: 1024,
+    // Behind the reverse proxy (ADR 0010), request.ip comes from X-Forwarded-For.
+    trustProxy: deps.config.TRUST_PROXY ?? false,
     loggerInstance: deps.logger ?? createLogger(deps.config.LOG_LEVEL),
   });
   app.setValidatorCompiler(validatorCompiler);
