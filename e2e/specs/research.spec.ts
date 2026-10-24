@@ -55,6 +55,37 @@ test('opens in the research view with the provider configured, and remembers the
   ).toBeChecked();
 });
 
+test('KBC-011: "Rápido | Profundo" picks the profile of the next question and is remembered', async ({
+  page,
+}) => {
+  await expect(page.getByRole('radio', { name: 'Rápido' })).toBeChecked();
+  await page.getByRole('radio', { name: 'Profundo' }).check();
+  await expect(page.getByRole('radio', { name: 'Profundo' })).toBeChecked();
+  const asked = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' && request.url().endsWith('/research'),
+  );
+  await research(page, 'natureza sétupla');
+  expect(((await asked).postDataJSON() as { profile: string }).profile).toBe(
+    'deep',
+  );
+  await page.reload();
+  await expect(page.getByRole('radio', { name: 'Profundo' })).toBeChecked();
+});
+
+test('ADR 0009: text written before a tool call leaves the answer and shows among the steps', async ({
+  page,
+}) => {
+  const answer = await research(page, 'natureza sétupla');
+  await expect(answer.locator('.answer')).not.toContainText('confiro');
+  await answer.getByText(/Pesquisou 2 vezes · leu 1 documento/).click();
+  await expect(
+    answer.getByText(
+      'Pensando: Um dos documentos parece tratar disso; confiro o trecho.',
+    ),
+  ).toBeVisible();
+});
+
 test('AC-2: a follow-up carries the previous question and answer, and answers below', async ({
   page,
 }) => {
@@ -171,7 +202,7 @@ test('KBC-007 AC-4: a subscription turn shows "Incluído na sua assinatura" inst
         { n: 1, id: 'raw/articles/a-lei-do-ritmo.md', title: 'A Lei do Ritmo' },
       ],
     },
-    { type: 'token', text: 'Segundo o acervo, tudo flui [1].' },
+    { type: 'token', text: 'Segundo o acervo, tudo flui [1].', segment: 0 },
     {
       type: 'done',
       usd: 0,
@@ -246,7 +277,7 @@ test('a wide table in an answer scrolls sideways inside the answer', async ({
       type: 'sources',
       sources: [{ n: 1, id: 'raw/articles/a-lei-do-ritmo.md', title: 'A Lei' }],
     },
-    { type: 'token', text: `Segundo o acervo:\n\n${table}` },
+    { type: 'token', text: `Segundo o acervo:\n\n${table}`, segment: 0 },
     {
       type: 'done',
       usd: 0.001,
