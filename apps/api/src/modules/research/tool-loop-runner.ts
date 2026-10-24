@@ -1,0 +1,284 @@
+import type { ResearchEvent } from '@kb-chat/contracts';
+import { AppError } from '../../app-error.js';
+import type {
+  AgentChunk,
+  AgentLlmPort,
+  AgentMessage,
+  LlmUsage,
+  ToolCall,
+} from '../../ports/llm.js';
+import type {
+  ResearchInput,
+  ResearchRunnerPort,
+} from '../../ports/research-runner.js';
+import { tokensOf, type SpendService } from '../spend/index.js';
+import {
+  EMPTY_ANSWER,
+  FINAL_ANSWER_NOTE,
+  buildResearchMessages,
+} from './prompt.js';
+import { SourceBook } from './source-book.js';
+import type { ResearchTools } from './tools.js';
+
+/** Tool calls per answer (BR-3); then one last call without tools writes the answer. */
+export const MAX_TOOL_STEPS = 10;
+/** Output budget of each model call. */
+export const MAX_OUTPUT_TOKENS = 2_000;
+/**
+ * Text a model writes before deciding to call tools ("Vou pesquisar…") is held back up to
+ * this size, so the reader only sees the answer; longer text streams right away.
+ */
+const PREAMBLE_CHARS = 160;
+const SKIPPED_CALL =
+  'Não executada: o limite de passos desta resposta foi atingido.';
+
+export interface ToolLoopRunnerDeps {
+  readonly llm: AgentLlmPort;
+  readonly tools: ResearchTools;
+  readonly spend: SpendService;
+}
+
+interface Turn {
+  readonly input: ResearchInput;
+  readonly book: SourceBook;
+  readonly messages: AgentMessage[];
+  steps: number;
+  calls: number;
+  sourcesSent: number;
+  shownText: string;
+  inputTokens: number;
+  outputTokens: number;
+  usd: number;
+}
+
+interface CallResult {
+  text: string;
+  /** Characters of `text` already streamed to the reader. */
+  shownLength: number;
+  readonly toolCalls: ToolCall[];
+  usage: LlmUsage | null;
+}
+
+type Done = Extract<ResearchEvent, { type: 'done' }>;
+
+const promptText = (messages: readonly AgentMessage[]): string =>
+  messages
+    .map((m) =>
+      m.role === 'assistant'
+        ? m.content + m.toolCalls.map((c) => c.arguments).join('')
+        : m.content,
+    )
+    .join('\n');
+
+/**
+ * The research agent's loop in the API (ADR 0006): the model searches, reads and follows
+ * relations through the tools, up to MAX_TOOL_STEPS, then answers. The spend is guarded
+ * before every model call and recorded once per turn.
+ */
+export class ToolLoopRunner implements ResearchRunnerPort {
+  constructor(private readonly deps: ToolLoopRunnerDeps) {}
+
+  get model(): string {
+    return this.deps.llm.model;
+  }
+
+  get billing(): 'per-token' | 'subscription' {
+    return this.deps.llm.billing;
+  }
+
+  configured(): boolean {
+    return this.deps.llm.configured();
+  }
+
+  async *run(input: ResearchInput): AsyncIterable<ResearchEvent> {
+    const topicTitle = this.deps.tools.topicTitle(input.topic);
+    if (topicTitle === null) {
+      yield { type: 'error', code: 'TOPIC_NOT_FOUND' };
+      return;
+    }
+    const turn = this.startTurn(input, topicTitle);
+    try {
+      yield* this.loop(turn);
+    } catch (err) {
+      if (!input.signal.aborted) {
+        await this.record(turn, true);
+        yield {
+          type: 'error',
+          code: err instanceof AppError ? err.code : 'INTERNAL',
+        };
+        return;
+      }
+    }
+    yield await this.record(turn, input.signal.aborted);
+  }
+
+  private startTurn(input: ResearchInput, topicTitle: string): Turn {
+    return {
+      input,
+      book: new SourceBook(),
+      messages: buildResearchMessages({ ...input, topicTitle }),
+      steps: 0,
+      calls: 0,
+      sourcesSent: 0,
+      shownText: '',
+      inputTokens: 0,
+      outputTokens: 0,
+      usd: 0,
+    };
+  }
+
+  private async *loop(turn: Turn): AsyncIterable<ResearchEvent> {
+    for (;;) {
+      if (turn.input.signal.aborted) return;
+      const final = turn.steps >= MAX_TOOL_STEPS;
+      if (final)
+        turn.messages.push({ role: 'system', content: FINAL_ANSWER_NOTE });
+      await this.guard(turn);
+      const call = yield* this.callModel(turn, final);
+      if (final || call.toolCalls.length === 0) {
+        yield* this.ensureAnswer(turn);
+        return;
+      }
+      yield* this.runTools(turn, call);
+    }
+  }
+
+  /** Daily cap and credit before every model call, counting what this turn already spent. */
+  private async guard(turn: Turn): Promise<void> {
+    const estimate = await this.deps.spend.estimate(
+      promptText(turn.messages),
+      MAX_OUTPUT_TOKENS,
+    );
+    await this.deps.spend.guard(turn.usd + estimate);
+  }
+
+  private async *callModel(
+    turn: Turn,
+    final: boolean,
+  ): AsyncGenerator<ResearchEvent, CallResult> {
+    const call: CallResult = {
+      text: '',
+      shownLength: 0,
+      toolCalls: [],
+      usage: null,
+    };
+    const prompt = promptText(turn.messages);
+    turn.calls += 1;
+    try {
+      yield* this.consume(turn, call, final);
+    } catch (err) {
+      if (!turn.input.signal.aborted) throw err;
+    } finally {
+      await this.account(turn, call, prompt);
+    }
+    if (call.toolCalls.length === 0) yield* this.flush(turn, call);
+    return call;
+  }
+
+  private async *consume(
+    turn: Turn,
+    call: CallResult,
+    final: boolean,
+  ): AsyncIterable<ResearchEvent> {
+    const chunks = this.deps.llm.streamAgent(
+      turn.messages,
+      this.deps.tools.definitions,
+      {
+        maxTokens: MAX_OUTPUT_TOKENS,
+        signal: turn.input.signal,
+        toolChoice: final ? 'none' : 'auto',
+      },
+    );
+    for await (const chunk of chunks)
+      yield* this.take(turn, call, { chunk, final });
+  }
+
+  private *take(
+    turn: Turn,
+    call: CallResult,
+    { chunk, final }: { chunk: AgentChunk; final: boolean },
+  ): Iterable<ResearchEvent> {
+    if (chunk.type === 'usage') call.usage = chunk.usage;
+    else if (chunk.type === 'tool_call') call.toolCalls.push(chunk.call);
+    else {
+      call.text += chunk.text;
+      if (final || call.shownLength > 0 || call.text.length >= PREAMBLE_CHARS)
+        yield* this.flush(turn, call);
+    }
+  }
+
+  /** Streams the call's text not shown yet, apart from earlier text by a blank line. */
+  private *flush(turn: Turn, call: CallResult): Iterable<ResearchEvent> {
+    const fresh = call.text.slice(call.shownLength);
+    if (!fresh) return;
+    const separator = call.shownLength === 0 && turn.shownText ? '\n\n' : '';
+    call.shownLength = call.text.length;
+    turn.shownText += separator + fresh;
+    yield { type: 'token', text: separator + fresh };
+  }
+
+  private async *ensureAnswer(turn: Turn): AsyncIterable<ResearchEvent> {
+    if (turn.shownText.trim() || turn.input.signal.aborted) return;
+    turn.shownText = EMPTY_ANSWER;
+    yield { type: 'token', text: EMPTY_ANSWER };
+  }
+
+  private async *runTools(
+    turn: Turn,
+    call: CallResult,
+  ): AsyncIterable<ResearchEvent> {
+    const context = { topic: turn.input.topic, book: turn.book };
+    const runnable = call.toolCalls.slice(0, MAX_TOOL_STEPS - turn.steps);
+    const prepared = runnable.map((c) => this.deps.tools.prepare(c, context));
+    for (const { step } of prepared) if (step) yield { type: 'step', step };
+    const outputs = await Promise.all(prepared.map((p) => p.run()));
+    turn.steps += runnable.length;
+    turn.messages.push(
+      { role: 'assistant', content: call.text, toolCalls: call.toolCalls },
+      ...call.toolCalls.map((c, i) => ({
+        role: 'tool' as const,
+        toolCallId: c.id,
+        content: outputs[i] ?? SKIPPED_CALL,
+      })),
+    );
+    if (turn.book.size === turn.sourcesSent) return;
+    turn.sourcesSent = turn.book.size;
+    yield { type: 'sources', sources: turn.book.list() };
+  }
+
+  /** Real usage when reported; otherwise counted from the prompt and the output. */
+  private async account(
+    turn: Turn,
+    call: CallResult,
+    prompt: string,
+  ): Promise<void> {
+    const usage = call.usage ?? {
+      inputTokens: tokensOf(prompt),
+      outputTokens: tokensOf(
+        call.text + call.toolCalls.map((c) => c.arguments).join(''),
+      ),
+      usd: null,
+    };
+    turn.inputTokens += usage.inputTokens;
+    turn.outputTokens += usage.outputTokens;
+    turn.usd += await this.deps.spend.costOf(usage);
+  }
+
+  /** One ledger entry per turn with the summed usage (nothing spent, nothing recorded). */
+  private async record(turn: Turn, interrupted: boolean): Promise<Done> {
+    if (turn.calls > 0)
+      await this.deps.spend.record({
+        inputTokens: turn.inputTokens,
+        outputTokens: turn.outputTokens,
+        usd: turn.usd,
+        interrupted,
+      });
+    return {
+      type: 'done',
+      usd: turn.usd,
+      model: this.deps.llm.model,
+      interrupted,
+      steps: turn.steps,
+    };
+  }
+}
