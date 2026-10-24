@@ -17,6 +17,8 @@ import type {
 import type { AiDraft } from './ai-draft.js';
 import {
   BILLING_COPY,
+  NOT_ENABLED,
+  NOT_INSTALLED,
   PROVIDER_COPY,
   PROVIDER_ORDER,
   TEST_COPY,
@@ -28,8 +30,8 @@ interface ProviderOption {
   readonly name: string;
   readonly description: string;
   readonly billing: string;
-  /** Install and login steps when the CLI is missing (BR-3, AC-3). */
-  readonly install: string | null;
+  /** Why the card cannot be chosen and what to do (BR-3, AC-3); null when it can. */
+  readonly blocked: { readonly label: string; readonly steps: string } | null;
 }
 
 type TestState =
@@ -38,6 +40,15 @@ type TestState =
   | { readonly kind: 'done'; readonly result: AiTestResult }
   | { readonly kind: 'failed' };
 
+function blockedBy(info: ProviderInfo): ProviderOption['blocked'] {
+  const copy = PROVIDER_COPY[info.id];
+  if (info.reason === 'cli-missing' && copy.install)
+    return { label: NOT_INSTALLED(), steps: copy.install() };
+  if (info.reason === 'not-enabled' && copy.enable)
+    return { label: NOT_ENABLED(), steps: copy.enable() };
+  return null;
+}
+
 const toOption = (info: ProviderInfo): ProviderOption => {
   const copy = PROVIDER_COPY[info.id];
   return {
@@ -45,7 +56,7 @@ const toOption = (info: ProviderInfo): ProviderOption => {
     name: copy.name(),
     description: copy.description(),
     billing: BILLING_COPY[info.billing](),
-    install: info.reason === 'cli-missing' ? (copy.install?.() ?? null) : null,
+    blocked: blockedBy(info),
   };
 };
 

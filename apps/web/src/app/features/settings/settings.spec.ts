@@ -196,6 +196,21 @@ describe('Configurações', () => {
     expect(screen.getByText(/Instale o Claude Code/)).toBeTruthy();
   });
 
+  it('shows the ChatGPT subscription off on this server, with how to enable it', async () => {
+    await openSettings(
+      aSettingsView(),
+      aProviderList({
+        'chatgpt-subscription': { available: false, reason: 'not-enabled' },
+      }),
+    );
+    const codex = screen.getByRole('radio', {
+      name: /Assinatura do ChatGPT/,
+    }) as HTMLInputElement;
+    expect(codex.disabled).toBe(true);
+    expect(screen.getByText('Desativado.')).toBeTruthy();
+    expect(screen.getByText(/KB_CHAT_CODEX=on/)).toBeTruthy();
+  });
+
   it('shows only the masked key and removes it (AC-2)', async () => {
     const view = aSettingsView({
       ai: {

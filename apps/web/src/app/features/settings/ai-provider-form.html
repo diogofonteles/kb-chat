@@ -13,7 +13,7 @@
     <label
       class="card"
       [class.selected]="option.info.id === draft().provider"
-      [class.disabled]="option.install !== null"
+      [class.disabled]="option.blocked !== null"
     >
       <input
         type="radio"
@@ -21,7 +21,7 @@
         class="radio"
         [value]="option.info.id"
         [checked]="option.info.id === draft().provider"
-        [disabled]="option.install !== null"
+        [disabled]="option.blocked !== null"
         (change)="choose(option.info.id)"
       />
       <span class="card-body">
@@ -34,12 +34,10 @@
           >
         </span>
         <span class="card-hint">{{ option.description }}</span>
-        @if (option.install) {
+        @if (option.blocked; as blocked) {
           <span class="card-install">
-            <span class="unavailable" i18n="@@ai.notInstalled"
-              >Não instalado.</span
-            >
-            {{ option.install }}
+            <span class="unavailable">{{ blocked.label }}</span>
+            {{ blocked.steps }}
           </span>
         }
       </span>

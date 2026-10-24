@@ -11,7 +11,12 @@ export interface ProviderCopy {
   readonly description: () => string;
   /** How to install and log in, for a subscription whose CLI is missing (BR-3). */
   readonly install?: () => string;
+  /** Why it is off and how to turn it on, for a provider off on this server. */
+  readonly enable?: () => string;
 }
+
+export const NOT_INSTALLED = () => $localize`:@@ai.notInstalled:Não instalado.`;
+export const NOT_ENABLED = () => $localize`:@@ai.notEnabled:Desativado.`;
 
 /** pt-BR copy of each provider (KBC-007 scope); the API only knows the ids. */
 export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
@@ -28,6 +33,8 @@ export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
       $localize`:@@provider.chatgptHint:Usa o Codex CLI já logado neste computador.`,
     install: () =>
       $localize`:@@provider.chatgptInstall:Instale o Codex CLI (developers.openai.com/codex), rode codex login no Terminal e escolha “Sign in with ChatGPT”.`,
+    enable: () =>
+      $localize`:@@provider.chatgptEnable:Por segurança, fica desligado: o Codex CLI pode ler outros arquivos deste computador. Para usar mesmo assim, inicie o servidor com KB_CHAT_CODEX=on.`,
   },
   anthropic: {
     name: () => $localize`:@@provider.anthropic:Anthropic API`,
