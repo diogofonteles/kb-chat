@@ -13,6 +13,7 @@ export const aSettingsView = (
     theme: 'auto',
     defaultView: 'research',
     researchProfile: 'fast',
+    autoDeepen: true,
   },
   ai: { provider: null, models: {}, keys: {}, dailyCapUsd: 1 },
   ...overrides,

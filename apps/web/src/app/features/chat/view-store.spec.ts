@@ -32,6 +32,7 @@ const withDefaultView = (defaultView: DefaultView): SettingsView =>
       theme: 'auto',
       defaultView,
       researchProfile: 'fast',
+      autoDeepen: true,
     },
   });
 

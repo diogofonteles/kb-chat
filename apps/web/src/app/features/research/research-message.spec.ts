@@ -60,6 +60,24 @@ describe('ResearchMessage', () => {
     expect(screen.getByText('Leu 1 documento')).toBeTruthy();
   });
 
+  it('says when a fast answer went on with the deep research (ADR 0009)', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'search', text: 'Buscando “princípios ocultos”' },
+          { kind: 'deepen', text: 'Aprofundando a pesquisa…' },
+          { kind: 'read', text: 'Lendo “Os Princípios”' },
+        ],
+      }),
+    );
+    expect(
+      screen.getByText(
+        'Pesquisou 1 vez · leu 1 documento · aprofundou a pesquisa',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Aprofundando a pesquisa…').tagName).toBe('LI');
+  });
+
   it('shows the thought as the live step while the agent works', async () => {
     await renderMessage(
       aTurn({

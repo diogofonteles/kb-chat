@@ -62,6 +62,25 @@
   </fieldset>
 }
 
+@if (shows('deepen')) {
+  <div class="field">
+    <label class="check">
+      <input
+        type="checkbox"
+        [checked]="preferences().autoDeepen"
+        (change)="setAutoDeepen(deepenBox.checked)"
+        aria-describedby="pref-deepen-hint"
+        #deepenBox
+      />
+      <span i18n="@@prefs.autoDeepen">Aprofundar automaticamente</span>
+    </label>
+    <p id="pref-deepen-hint" class="hint" i18n="@@prefs.autoDeepenHint">
+      Quando a pesquisa rápida não basta para responder pelo acervo, a IA
+      continua com a pesquisa profunda na mesma resposta.
+    </p>
+  </div>
+}
+
 @if (shows('topic')) {
   <div class="field">
     <label class="field-label" for="pref-topic" i18n="@@prefs.topic"

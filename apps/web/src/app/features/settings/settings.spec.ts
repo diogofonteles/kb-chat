@@ -160,6 +160,7 @@ describe('first-run wizard (AC-1)', () => {
         theme: 'dark',
         defaultView: 'search',
         researchProfile: 'fast',
+        autoDeepen: true,
         defaultTopic: 'hermetismo',
       },
     });
@@ -170,6 +171,7 @@ describe('first-run wizard (AC-1)', () => {
           theme: 'dark',
           defaultView: 'search',
           researchProfile: 'fast',
+          autoDeepen: true,
         },
       }),
     );
@@ -363,6 +365,7 @@ describe('Configurações', () => {
           theme: 'auto',
           defaultView: 'search',
           researchProfile: 'fast',
+          autoDeepen: true,
         },
       }),
     );
@@ -372,6 +375,14 @@ describe('Configurações', () => {
     expect(localStorage.getItem('kb-chat.search-mode')).toBe('exact');
     // The saved default view applies to the next page in this browser.
     expect(localStorage.getItem('kb-chat.view')).toBe('search');
+    // "Aprofundar automaticamente" is on by default and saves when turned off (ADR 0009).
+    const deepen = screen.getByRole('checkbox', {
+      name: 'Aprofundar automaticamente',
+    }) as HTMLInputElement;
+    expect(deepen.checked).toBe(true);
+    fireEvent.click(deepen);
+    const off = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
+    expect(off.request.body.preferences).toMatchObject({ autoDeepen: false });
   });
 
   it('tells where the data lives and reopens the wizard', async () => {

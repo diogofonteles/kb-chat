@@ -18,6 +18,7 @@ const SETTINGS_VIEW = {
     theme: 'auto',
     defaultView: 'research',
     researchProfile: 'fast',
+    autoDeepen: true,
   },
   ai: { provider: null, models: {}, keys: {}, dailyCapUsd: 1 },
 };
@@ -115,6 +116,16 @@ test('KBC-011: each provider shows a fast and a deep model with its defaults', a
     'placeholder',
     'Padrão: claude-sonnet-5-5',
   );
+});
+
+test('ADR 0009: "Aprofundar automaticamente" is on by default in Preferências', async ({
+  page,
+}) => {
+  const dialog = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Preferências' }).click();
+  await expect(
+    dialog.getByRole('checkbox', { name: 'Aprofundar automaticamente' }),
+  ).toBeChecked();
 });
 
 test('AC-1: the wizard shows on the first run and not again after "Concluir"', async ({

@@ -38,9 +38,13 @@ export function describeSteps(turn: ResearchTurn): string {
   }
   const searches = countOf(turn.steps, 'search');
   const reads = countOf(turn.steps, 'read');
+  const deepened = turn.steps.some((step) => step.kind === 'deepen');
   const parts = [
     ...(searches > 0 ? [searched(searches)] : []),
     ...(reads > 0 ? [read(reads)] : []),
+    ...(deepened
+      ? [$localize`:@@research.deepened:aprofundou a pesquisa`]
+      : []),
   ];
   const line = parts.join(' · ');
   if (line) return line.charAt(0).toUpperCase() + line.slice(1);

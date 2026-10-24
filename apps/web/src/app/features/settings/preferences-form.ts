@@ -23,11 +23,13 @@ import { MODE_OPTIONS } from '@core/i18n/facet-labels.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_COPY, VIEW_COPY } from './provider-copy.js';
 
-export type PreferenceField = 'view' | 'profile' | 'mode' | 'topic' | 'theme';
+export type PreferenceField =
+  'view' | 'profile' | 'deepen' | 'mode' | 'topic' | 'theme';
 
 const ALL_FIELDS: readonly PreferenceField[] = [
   'view',
   'profile',
+  'deepen',
   'topic',
   'mode',
   'theme',
@@ -87,6 +89,10 @@ export class PreferencesForm {
     const parsed = researchProfileSchema.safeParse(value);
     if (parsed.success)
       this.preferences.update((p) => ({ ...p, researchProfile: parsed.data }));
+  }
+
+  protected setAutoDeepen(on: boolean): void {
+    this.preferences.update((p) => ({ ...p, autoDeepen: on }));
   }
 
   protected setMode(value: string): void {
