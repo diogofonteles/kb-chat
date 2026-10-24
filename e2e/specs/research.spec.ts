@@ -48,7 +48,7 @@ test('opens in the research view with the provider configured, and remembers the
     page.getByText('O que você quer pesquisar no acervo?'),
   ).toBeVisible();
   await expect(page.getByLabel('Como buscar')).toHaveCount(0);
-  await page.getByText('Buscar documentos').click();
+  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
   await page.reload();
   await expect(
     page.getByRole('radio', { name: 'Buscar documentos' }),
@@ -99,14 +99,14 @@ test('AC-5: each view keeps its conversation when switching back and forth', asy
   page,
 }) => {
   await research(page, 'natureza sétupla');
-  await page.getByText('Buscar documentos').click();
+  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('app-result-card').first()).toBeVisible();
-  await page.getByText('Pesquisa com IA').click();
+  await page.getByRole('radio', { name: /Pesquisa com IA/ }).check();
   await expect(page.getByText(/Segundo o acervo/)).toBeVisible();
   await expect(page.locator('app-result-card')).toHaveCount(0);
-  await page.getByText('Buscar documentos').click();
+  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
   await expect(page.locator('app-result-card').first()).toBeVisible();
 });
 
@@ -114,13 +114,13 @@ test('AC-6: the search view never calls the AI, and the research view shows no c
   page,
 }) => {
   const researchCalls = countResearchCalls(page);
-  await page.getByText('Buscar documentos').click();
+  await page.getByRole('radio', { name: 'Buscar documentos' }).check();
   await page.getByLabel('Sua pergunta').fill('ritmo');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('app-result-card').first()).toBeVisible();
   expect(researchCalls()).toBe(0);
   await expect(page.getByText(/Resposta gerada por IA/)).toHaveCount(0);
-  await page.getByText('Pesquisa com IA').click();
+  await page.getByRole('radio', { name: /Pesquisa com IA/ }).check();
   await research(page, 'ritmo');
   expect(researchCalls()).toBe(1);
   await expect(page.locator('app-result-card')).toHaveCount(0);
