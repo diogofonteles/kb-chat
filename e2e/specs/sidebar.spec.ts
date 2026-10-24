@@ -184,9 +184,32 @@ test('AC-6: the esoteric theme survives a reload', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'esoteric');
 });
 
+/** "US$ 0,05" as the page writes it, as a pattern (any space as \s). */
+const dollars = (usd: number): string =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' })
+    .format(usd)
+    .replace('$', '\\$')
+    .replace(/\s/g, '\\s');
+
 test('AC-8: shows today’s AI spend against the cap', async ({ page }) => {
+  // Research tests of the same run spend too: the panel must show what the API answered.
+  const served = new Promise<{ usd: number; capUsd: number }>((resolve) => {
+    void page.route('**/api/v1/spend/today', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as { usd: number; capUsd: number };
+      resolve(body);
+      await route.fulfill({ response, json: body });
+    });
+  });
+  await page.reload();
+  const { usd, capUsd } = await served;
+  // The server starts the day at the seeded US$ 0.03 (e2e/server.ts) and a cap of US$ 1.
+  expect(usd).toBeGreaterThanOrEqual(0.03);
+  expect(capUsd).toBe(1);
   await expect(
-    (await sidebar(page)).getByText(/US\$\s0,03 de US\$\s1,00/),
+    (await sidebar(page)).getByText(
+      new RegExp(`^${dollars(usd)} de ${dollars(capUsd)}$`),
+    ),
   ).toBeVisible();
 });
 
