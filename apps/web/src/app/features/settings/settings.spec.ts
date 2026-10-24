@@ -295,7 +295,7 @@ describe('Configurações', () => {
         preferences: {
           searchMode: 'exact',
           theme: 'auto',
-          defaultView: 'research',
+          defaultView: 'search',
         },
       }),
     );
@@ -303,6 +303,8 @@ describe('Configurações', () => {
     http.expectOne('/api/v1/ai/providers').flush(aProviderList());
     await fixture.whenStable();
     expect(localStorage.getItem('kb-chat.search-mode')).toBe('exact');
+    // The saved default view applies to the next page in this browser.
+    expect(localStorage.getItem('kb-chat.view')).toBe('search');
   });
 
   it('tells where the data lives and reopens the wizard', async () => {

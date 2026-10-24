@@ -10,6 +10,7 @@ import type {
 import { SettingsApi } from '@core/api/settings-api.js';
 import { ThemeStore } from '@core/theme/theme-store.js';
 import { writeModePreference } from '@features/chat/mode-preference.js';
+import { writeViewPreference } from '@features/chat/view-preference.js';
 import { tap, type Observable } from 'rxjs';
 
 export type SettingsPanel = 'settings' | 'onboarding';
@@ -118,10 +119,11 @@ export class SettingsStore {
     }
   }
 
-  /** Saving from Settings or the wizard sets this browser's choices too. */
+  /** Saving from Settings or the wizard sets this browser's choices too (the view on the next page). */
   private applyLocal(view: SettingsView): void {
     if (!view.exists) return;
     this.themes.set(view.preferences.theme);
     writeModePreference(this.storage, view.preferences.searchMode);
+    writeViewPreference(this.storage, view.preferences.defaultView);
   }
 }
