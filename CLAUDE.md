@@ -31,7 +31,7 @@ pnpm dev:api     # http://127.0.0.1:3000/health (reads KB_VAULT, default ~/dev/p
 pnpm dev:web     # http://localhost:4200 (proxies /api to :3000)
 ```
 
-Variables: [`.env.example`](.env.example) (all optional). `OPENROUTER_API_KEY` is only needed for AI answers (KBC-004).
+Variables: [`.env.example`](.env.example) (all optional). The AI provider is chosen in ⚙ Configurações (KBC-007, ADR 0007); with none chosen, the Claude subscription answers when `claude` is on PATH, then the env keys (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
 
 ## Quality
 

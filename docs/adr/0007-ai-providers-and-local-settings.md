@@ -31,9 +31,11 @@ The API reads a principal's file once and keeps it in memory. Routes take the pr
 5. none (search only).
  `DynamicLlm` and `DynamicResearchRunner` delegate to it, so a switch applies on the next answer without a restart (FR-5). Built adapters are reused while the choice is unchanged; a replaced key leaves memory.
 
+The research route asks the registry for the runner of each turn. A per-token runner is the in-API tool loop over that provider's model; it checks the principal's daily cap from Settings (`ProviderRegistry.dailyCapUsd`) before every model call and writes one ledger entry per turn. A subscription turn skips the cap and the ledger. The `done` event carries `billing` (`per-token` | `subscription`), so the web shows the cost or "Incluído na sua assinatura", and saved turns keep it (older ones read as `per-token`).
+
 | Provider | Adapter | Billing | Default model (price US$/M in, out) |
 |---|---|---|---|
-| OpenRouter | `OpenRouterAdapter` (KBC-008 adds tools) | per token, ledger and cap (ADR 0004) | vault's `kb.toml` model |
+| OpenRouter | `OpenRouterAdapter` (with tools, KBC-008) | per token, ledger and cap (ADR 0004) | `KB_CHAT_MODEL`, else `deepseek/deepseek-v4-pro` (ADR 0006: the research agent needs tool calling, so the vault's `kb.toml` model no longer applies) |
 | Anthropic API | `AnthropicAdapter`, official SDK, Messages streaming with tools | per token | `claude-opus-5-5` (4, 20); Sonnet 5.5 (2, 10), Haiku 5.5 (0.10, 0.50), Fable 5.1 (10, 50) |
 | OpenAI API | `OpenAiAdapter`, Chat Completions streaming with tools | per token | `gpt-5.4-mini` (0.75, 4.50); GPT-5.4 (2.50, 15), GPT-5.5 (5, 30) |
 | Claude subscription | `ClaudeCliRunner` (`claude -p`) | subscription: no ledger entry, no cap (BR-2) | the CLI's own; aliases `opus`, `sonnet`, `fable`, `haiku` |
@@ -57,8 +59,9 @@ The Anthropic adapter:
 **The tools over MCP.** ADR 0006 named a stdio `kb-chat mcp` server, started per turn. A per-turn process would load the catalog and start QMD every time (seconds to minutes, ADR 0002). So the API serves the same tools itself:
 - **Endpoint.** A per-turn **Streamable HTTP MCP endpoint**, `/mcp/turns/<token>`, stateless, bound to `127.0.0.1` behind the Host guard.
 - **Token.** 24 random bytes, valid only while the turn runs, with a 15-minute safety TTL; an unknown token gets 404.
-- **Shared code.** The endpoint calls the same `ResearchToolsPort` as the in-API loop, with that turn's source numbering. Each tool call becomes a `step` and a `sources` event in-process, and the CLI's text deltas become `token` events.
-- **Step cap.** After 10 tool steps, tools answer with an instruction to finish (KBC-008 BR-3).
+- **Shared code.** The endpoint serves the research module's own `ResearchTools` (ADR 0006, `find_text` included) through `TurnResearchTools`, an adapter to `ResearchToolsPort` with that turn's source numbering; the in-API loop and the CLIs share one instance and one `find_text` cache, warmed when the turn starts. Each tool call becomes a `step` and, when new documents were numbered, a `sources` event in-process; the CLI's text deltas become `token` events.
+- **Same rules.** The CLIs get the in-API loop's system prompt (`researchSystemPrompt`, with the topic's title): search first, `find_text` before concluding absence, cite `[n]`, mark "(fora do acervo)", no narration. Claude Code takes it with `--system-prompt`; Codex reads it at the head of its input.
+- **Step cap.** After 15 tool steps, the in-API loop's cap (ADR 0006), tools answer with an instruction to finish.
 - **stdio.** `serveKbMcpStdio` remains for other MCP clients.
 
 **Connection test.** `POST /api/v1/settings/ai/test` sends a minimal question with a typed or saved key, or runs the CLI with no tools (which proves the login and the MCP connection). It stops at 20 s (NFR-1). The outcome is data, `{ ok, code }`: `LLM_KEY_REJECTED`, `LLM_NOT_CONFIGURED`, `PROVIDER_TIMEOUT`, `PROVIDER_UNAVAILABLE`, `CLI_MISSING` or `CLI_LOGIN_REQUIRED`. `GET /api/v1/ai/providers` reports, per provider, the key source (Settings or env) and whether the CLI is on PATH; it looks the CLI up without a shell.
