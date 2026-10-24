@@ -16,10 +16,6 @@ import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
 import { AnswersApi } from '@core/api/answers-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
-import {
-  RESEARCH_RESTORER,
-  type ResearchRestorer,
-} from '@core/history/research-restorer.js';
 import type { ResearchConversation } from '@kb-chat/contracts';
 import { EMPTY, of } from 'rxjs';
 import {
@@ -518,15 +514,21 @@ describe('ChatPage side panel (KBC-005)', () => {
   it('hands a research conversation to the research view without searching (KBC-008 FR-6)', async () => {
     const research = aResearchConversation('quais são os princípios');
     conversations.saved.set(research.id, research);
-    const restorer: ResearchRestorer = { restore: vi.fn() };
-    const view = await renderPage([
-      { provide: RESEARCH_RESTORER, useValue: restorer },
-    ]);
+    const answers = { ...FAKE_ANSWERS.useValue, research: vi.fn(() => EMPTY) };
+    const view = await renderPage([{ provide: AnswersApi, useValue: answers }]);
     fireEvent.click(
       screen.getByRole('button', { name: /quais são os princípios/ }),
     );
     await view.fixture.whenStable();
-    expect(restorer.restore).toHaveBeenCalledWith(research);
+    expect(
+      (
+        screen.getByRole('radio', {
+          name: /Pesquisa com IA/,
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    expect(screen.getByText(/Mentalismo, correspondência/)).toBeTruthy();
+    expect(answers.research).not.toHaveBeenCalled();
     view.http.expectNone(SEARCH_URL);
   });
 

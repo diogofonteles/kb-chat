@@ -54,8 +54,8 @@ export class Sidebar {
   protected readonly history = inject(HistoryStore);
   protected readonly spend = inject(SpendStore);
   private readonly themes = inject(ThemeStore);
-  /** Research conversations go to the research view (KBC-008 FR-6); no-op until it exists. */
-  private readonly research = inject(RESEARCH_RESTORER);
+  /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */
+  private readonly restorer = inject(RESEARCH_RESTORER);
   /** A newer click cancels the load of the previous one. */
   private readonly opens = new Subject<string>();
   /** The parent closes the drawer and moves focus after each action. */
@@ -99,7 +99,7 @@ export class Sidebar {
   /** Search re-runs its asks; research shows what was saved, never calling the AI again. */
   private restoreLoaded(conversation: Conversation): void {
     if (conversation.kind === 'search') this.chat.restore(conversation);
-    else this.research.restore(conversation);
+    else this.restorer.restore(conversation);
     this.acted.emit('restore');
   }
 

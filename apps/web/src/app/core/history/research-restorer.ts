@@ -5,10 +5,9 @@ import type { ResearchConversation } from '@kb-chat/contracts';
  * Seam for "Pesquisa com IA" conversations in the history (KBC-008 FR-6, AC-9).
  *
  * The side panel loads the full conversation from the API and hands it here; the research
- * view shows the saved answers and sources and never calls the AI again. Until that view
- * exists the default does nothing. The research view provides it where the side panel can
- * see it (the chat page or its route), e.g.
- * `{ provide: RESEARCH_RESTORER, useExisting: ResearchStore }`.
+ * view shows the saved answers and sources and never calls the AI again. The chat page
+ * binds it to its ResearchStore (`provideResearchRestorer`); the root default does nothing,
+ * for pages without a research view.
  */
 export interface ResearchRestorer {
   restore(conversation: ResearchConversation): void;

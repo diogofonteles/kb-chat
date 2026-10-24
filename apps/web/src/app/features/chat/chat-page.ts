@@ -24,6 +24,8 @@ import { DocumentPanel } from '@features/document/document-panel.js';
 import { Sidebar, type SidebarAction } from '@features/sidebar/sidebar.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
 import { ChatStore } from './chat-store.js';
+import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
+import { provideResearchRestorer } from '@features/research/research-restorer.js';
 import { Composer } from './composer.js';
 import { describeForAnnouncement } from './result-count.js';
 import { ResultMessage } from './result-message.js';
@@ -49,7 +51,12 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
     Sidebar,
     DecimalPipe,
   ],
-  providers: [ChatStore, ViewStore, ResearchStore],
+  providers: [
+    ChatStore,
+    ViewStore,
+    ResearchStore,
+    provideResearchRestorer(RESEARCH_RESTORER),
+  ],
   templateUrl: './chat-page.html',
   styleUrl: './chat-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
