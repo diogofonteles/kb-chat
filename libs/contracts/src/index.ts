@@ -9,3 +9,4 @@ export * from './research.js';
 export * from './conversations.js';
 export * from './settings.js';
 export * from './spend.js';
+export * from './auth.js';
