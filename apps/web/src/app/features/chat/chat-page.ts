@@ -81,7 +81,19 @@ export class ChatPage {
   }
 
   protected openHit(doc: DocumentRef, message: ChatMessage): void {
-    this.store.open(message.topic, doc);
+    this.store.open(message.topic, doc, message);
+  }
+
+  /** A subject chip in the panel filters the message that opened it (KBC-003 FR-5). */
+  protected filterByConcept(concept: string): void {
+    const message = this.messages().find(
+      (m) => m.id === this.opened()?.messageId,
+    );
+    if (!message || message.filters.concepts.includes(concept)) return;
+    this.store.refine(message, {
+      ...message.filters,
+      concepts: [...message.filters.concepts, concept],
+    });
   }
 
   protected refine(message: ChatMessage, filters: SearchFilters): void {

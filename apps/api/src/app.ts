@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -38,7 +39,15 @@ async function registerRoutes(
       ratePerMinute: config.SEARCH_RATE_LIMIT,
     }),
   );
-  await app.register(documentRoutes(new DocumentsService({ catalog, vault })));
+  await app.register(
+    documentRoutes(
+      new DocumentsService({
+        catalog,
+        vault,
+        vaultName: basename(config.KB_VAULT),
+      }),
+    ),
+  );
 }
 
 /** Assembles the API; only `main` listens (ND-01). */

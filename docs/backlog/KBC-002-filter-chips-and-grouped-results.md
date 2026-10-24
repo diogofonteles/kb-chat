@@ -1,7 +1,7 @@
 ---
 id: KBC-002
 title: Filtrar resultados por facetas com contagens
-status: ready
+status: done
 slice: release-1
 outcome: % de sessões com filtro; % de buscas que abrem documento
 depends_on: [KBC-001]

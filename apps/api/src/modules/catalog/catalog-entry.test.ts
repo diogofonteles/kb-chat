@@ -25,6 +25,9 @@ describe('toCatalogEntry', () => {
       depth: 1,
       relevance: 'core',
       concepts: ['Cabala', 'Gnosticismo'],
+      criterion: null,
+      origin: null,
+      relations: { exampleOf: [], extends: [], related: [] },
     });
   });
 
@@ -46,6 +49,39 @@ describe('toCatalogEntry', () => {
 
   it('treats a non-numeric depth as unknown', () => {
     expect(toCatalogEntry('a.md', { depth: 'deep' }).depth).toBeNull();
+  });
+});
+
+describe('relations, criterion and origin', () => {
+  it('reads kb relation lists as concept names', () => {
+    const entry = toCatalogEntry('raw/a.md', {
+      example_of: ['[[Cabala]]'],
+      extends: ['[[hermetismo/wiki/concepts/Alquimia]]'],
+      related: 'not a list',
+      criterion: 'Documentos sobre a Cabala.',
+    });
+    expect(entry.relations).toEqual({
+      exampleOf: ['Cabala'],
+      extends: ['Alquimia'],
+      related: [],
+    });
+    expect(entry.criterion).toBe('Documentos sobre a Cabala.');
+  });
+
+  it('marks audio transcriptions and OCR texts from the source path', () => {
+    expect(
+      toCatalogEntry('a.md', { source_path: '_convert/ready/audio/x.wav.txt' })
+        .origin,
+    ).toBe('audio');
+    expect(
+      toCatalogEntry('a.md', {
+        source_path: '_convert/ready/ocr/Livros/x.pdf.txt',
+      }).origin,
+    ).toBe('ocr');
+    expect(
+      toCatalogEntry('a.md', { source_path: '_convert/Temas-docs/x.txt' })
+        .origin,
+    ).toBeNull();
   });
 });
 

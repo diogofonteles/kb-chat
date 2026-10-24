@@ -1,28 +1,99 @@
 <header class="head">
-  <button
-    type="button"
-    class="close"
-    (click)="closed.emit()"
-    aria-label="Fechar documento"
-    i18n-aria-label="@@panel.close"
-  >
-    <span class="close-mobile" aria-hidden="true">←</span
-    ><span class="close-desktop" aria-hidden="true">×</span>
-    <span class="close-text" aria-hidden="true" i18n="@@panel.back"
-      >Voltar</span
+  <div class="head-actions">
+    @if (canGoBack()) {
+      <button
+        type="button"
+        class="nav"
+        (click)="back.emit()"
+        i18n="@@panel.backDoc"
+      >
+        ← Voltar
+      </button>
+    }
+    <button
+      type="button"
+      class="close"
+      (click)="closed.emit()"
+      aria-label="Fechar documento"
+      i18n-aria-label="@@panel.close"
     >
-  </button>
+      <span class="close-mobile" aria-hidden="true" i18n="@@panel.toResults"
+        >← Resultados</span
+      ><span class="close-desktop" aria-hidden="true">×</span>
+    </button>
+  </div>
   <h2 id="document-title" #heading tabindex="-1">{{ title() }}</h2>
 </header>
 
 <div class="meta">
-  @if (facets()) {
-    <p class="facets">{{ facets() }}</p>
-  }
-  @if (concepts()) {
-    <p class="concepts">
-      <span i18n="@@panel.concepts">Assuntos:</span> {{ concepts() }}
-    </p>
+  @if (loaded(); as doc) {
+    @if (doc.origin === 'audio') {
+      <p class="badge" i18n="@@panel.originAudio">
+        Transcrição automática de áudio — pode conter erros de reconhecimento.
+      </p>
+    } @else if (doc.origin === 'ocr') {
+      <p class="badge" i18n="@@panel.originOcr">
+        Texto extraído de imagem (OCR) — pode conter erros de leitura.
+      </p>
+    }
+    @if (facets()) {
+      <p class="facets">{{ facets() }}</p>
+    }
+    @if (conceptButtons().length > 0) {
+      <div class="concepts">
+        <span i18n="@@panel.concepts">Assuntos:</span>
+        @for (concept of conceptButtons(); track concept.name) {
+          <button
+            type="button"
+            class="concept"
+            (click)="conceptSelected.emit(concept.name)"
+            [attr.aria-label]="concept.label"
+          >
+            {{ concept.name }}
+          </button>
+        }
+      </div>
+    }
+    <div class="tools">
+      @if (matches() > 0) {
+        <span class="counter" aria-live="polite" i18n="@@panel.matches"
+          >{{ current() + 1 }} de
+          {matches(), plural,
+            =1 {1 ocorrência}
+            other {{{ matches() }} ocorrências}
+          }</span
+        >
+        <button
+          type="button"
+          class="tool"
+          (click)="step(-1)"
+          aria-label="Ocorrência anterior"
+          i18n-aria-label="@@panel.prev"
+        >
+          ▲
+        </button>
+        <button
+          type="button"
+          class="tool"
+          (click)="step(1)"
+          aria-label="Próxima ocorrência"
+          i18n-aria-label="@@panel.next"
+        >
+          ▼
+        </button>
+      }
+      <button
+        type="button"
+        class="tool text"
+        (click)="copyPassage()"
+        i18n="@@panel.copy"
+      >
+        {copied(), select, true {Copiado} other {Copiar trecho}}
+      </button>
+      <a class="tool text" [href]="doc.obsidianUrl" i18n="@@panel.obsidian"
+        >Abrir no Obsidian</a
+      >
+    </div>
   }
 </div>
 
@@ -33,11 +104,23 @@
 } @else if (document.error()) {
   <p class="error" role="alert">{{ errorText() }}</p>
 } @else if (loaded(); as doc) {
+  @if (doc.criterion) {
+    <p class="criterion">
+      <strong i18n="@@panel.criterion">Sobre este assunto:</strong>
+      {{ doc.criterion }}
+    </p>
+  }
   @if (doc.summary) {
     <details class="summary" open>
       <summary i18n="@@panel.summary">Resumo</summary>
       <p>{{ doc.summary }}</p>
     </details>
   }
-  <div class="body" [innerHTML]="html()"></div>
+  <div class="body" #body [innerHTML]="html()"></div>
+  <app-see-also
+    [topic]="topic()"
+    [documentId]="documentId()"
+    [seeAlso]="doc.seeAlso"
+    (opened)="navigated.emit($event)"
+  />
 }

@@ -1,10 +1,12 @@
 import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
 import { toCatalogEntry, type CatalogEntry } from './catalog-entry.js';
+import { RelationIndex } from './relations.js';
 import { splitFrontmatter } from './frontmatter.js';
 
 export interface TopicCatalog {
   readonly topic: TopicFolder;
   readonly entries: ReadonlyMap<string, CatalogEntry>;
+  readonly relations: RelationIndex;
 }
 
 const READ_CONCURRENCY = 64;
@@ -34,7 +36,7 @@ async function loadTopicCatalog(
   });
   const byId = new Map<string, CatalogEntry>();
   for (const entry of entries) if (entry) byId.set(entry.id, entry);
-  return { topic, entries: byId };
+  return { topic, entries: byId, relations: new RelationIndex(byId.values()) };
 }
 
 /** In-memory facet catalog of every topic in the vault, derived from frontmatter (ADR 0003). */

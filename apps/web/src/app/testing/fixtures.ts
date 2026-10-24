@@ -50,6 +50,21 @@ export const aDocument = (overrides: Partial<KbDocument> = {}): KbDocument => ({
   depth: 2,
   relevance: 'core',
   concepts: ['Cabala'],
+  criterion: null,
+  origin: null,
+  obsidianUrl:
+    'obsidian://open?vault=hermetismo&file=hermetismo%2Fraw%2Farticles%2Fa-lei-do-ritmo',
+  seeAlso: {
+    exampleOf: {
+      items: [{ id: 'wiki/concepts/Cabala.md', title: 'Cabala' }],
+      total: 1,
+    },
+    extends: { items: [], total: 0 },
+    related: { items: [], total: 0 },
+    examples: { items: [], total: 0 },
+    extendedBy: { items: [], total: 0 },
+    relatedFrom: { items: [], total: 0 },
+  },
   ...overrides,
 });
 

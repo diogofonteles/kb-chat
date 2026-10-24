@@ -55,7 +55,7 @@ describe('GET /api/v1/topics', () => {
     expect(response.json()).toEqual({
       items: [
         { slug: 'alquimia', title: 'Alquimia Prática', documentCount: 1 },
-        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 19 },
+        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 20 },
       ],
       defaultSlug: null,
     });
@@ -196,7 +196,7 @@ describe('GET /health', () => {
     expect(response.json()).toEqual({
       status: 'ok',
       search: 'ok',
-      catalog: { documents: 20 },
+      catalog: { documents: 21 },
     });
   });
 });
@@ -263,5 +263,54 @@ describe('facet filters (KBC-002)', () => {
     const response = await searchWith({ q: 'x', filters: { path: '/etc' } });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('VALIDATION_FAILED');
+  });
+});
+
+describe('document panel data (KBC-003)', () => {
+  const doc = (id: string, suffix = '') =>
+    app.inject({
+      method: 'GET',
+      url: `/api/v1/topics/hermetismo/documents/${encodeURIComponent(id)}${suffix}`,
+      headers: HOST,
+    });
+
+  it('returns see-also groups, origin and the Obsidian link of a source', async () => {
+    const body = (await doc('raw/articles/arvore-da-vida.md')).json();
+    expect(body.seeAlso.exampleOf).toEqual({
+      items: [{ id: 'wiki/concepts/Cabala.md', title: 'Cabala' }],
+      total: 1,
+    });
+    expect(body.seeAlso.related).toEqual({ items: [], total: 0 });
+    expect(body.origin).toBe('audio');
+    expect(body.obsidianUrl).toBe(
+      'obsidian://open?vault=vault&file=hermetismo%2Fraw%2Farticles%2Farvore-da-vida',
+    );
+  });
+
+  it('lists the documents pointing to a concept article, with its criterion', async () => {
+    const body = (await doc('wiki/concepts/Cabala.md')).json();
+    expect(body.criterion).toMatch(/Árvore da Vida/);
+    expect(
+      body.seeAlso.examples.items.map((r: { id: string }) => r.id),
+    ).toEqual(['raw/articles/arvore-da-vida.md']);
+    expect(body.seeAlso.relatedFrom.total).toBe(1);
+  });
+
+  it('pages a see-also group and validates the group name', async () => {
+    const page = (
+      await doc(
+        'wiki/concepts/Cabala.md',
+        '/relations/examples?offset=0&limit=1',
+      )
+    ).json();
+    expect(page).toEqual({
+      items: [
+        { id: 'raw/articles/arvore-da-vida.md', title: 'A Árvore da Vida' },
+      ],
+      total: 1,
+      nextOffset: null,
+    });
+    const bad = await doc('wiki/concepts/Cabala.md', '/relations/everything');
+    expect(bad.statusCode).toBe(400);
   });
 });

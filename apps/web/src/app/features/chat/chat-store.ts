@@ -48,6 +48,10 @@ export interface OpenDocument {
   readonly topic: string;
   readonly id: string;
   readonly title: string;
+  /** The message whose result opened the panel (filters by subject apply to it). */
+  readonly messageId: number | null;
+  /** Its question, highlighted in the text. */
+  readonly question: string | null;
 }
 
 /** localStorage access itself can throw (blocked site data); the app then runs without it. */
@@ -111,6 +115,9 @@ export class ChatStore {
 
   private readonly openState = signal<OpenDocument | null>(null);
   readonly openDocument = this.openState.asReadonly();
+  /** Documents left through "Veja também", for "← Voltar" inside the panel. */
+  private readonly historyState = signal<readonly OpenDocument[]>([]);
+  readonly canGoBack = computed(() => this.historyState().length > 0);
 
   constructor() {
     effect(() => writeModePreference(this.storage, this.modeState()));
@@ -152,11 +159,39 @@ export class ChatStore {
     this.mores.next(message);
   }
 
-  open(topic: string, doc: DocumentRef): void {
-    this.openState.set({ topic, id: doc.id, title: doc.title });
+  open(
+    topic: string,
+    doc: DocumentRef,
+    from?: Pick<ChatMessage, 'id' | 'question'>,
+  ): void {
+    this.historyState.set([]);
+    this.openState.set({
+      topic,
+      id: doc.id,
+      title: doc.title,
+      messageId: from?.id ?? null,
+      question: from?.question ?? null,
+    });
+  }
+
+  /** Opens a related document in the same panel, remembering the current one. */
+  openWithin(doc: DocumentRef): void {
+    const current = this.openState();
+    if (!current) return;
+    this.historyState.update((history) => [...history, current]);
+    this.openState.set({ ...current, id: doc.id, title: doc.title });
+  }
+
+  back(): void {
+    const history = this.historyState();
+    const previous = history.at(-1);
+    if (!previous) return;
+    this.historyState.set(history.slice(0, -1));
+    this.openState.set(previous);
   }
 
   close(): void {
+    this.historyState.set([]);
     this.openState.set(null);
   }
 

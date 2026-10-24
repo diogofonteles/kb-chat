@@ -1,0 +1,29 @@
+@if (groups().length > 0) {
+  <section class="see-also" aria-labelledby="see-also-title">
+    <h3 id="see-also-title" i18n="@@seeAlso.title">Veja também</h3>
+    @for (group of groups(); track group.name) {
+      <div class="group">
+        <h4>{{ group.title }}</h4>
+        <ul>
+          @for (ref of group.items; track ref.id) {
+            <li>
+              <button type="button" class="ref" (click)="opened.emit(ref)">
+                {{ ref.title }}
+              </button>
+            </li>
+          }
+        </ul>
+        @if (group.items.length < group.total) {
+          <button
+            type="button"
+            class="more"
+            (click)="showMore(group)"
+            i18n="@@seeAlso.more"
+          >
+            Ver todos ({{ group.total }})
+          </button>
+        }
+      </div>
+    }
+  </section>
+}

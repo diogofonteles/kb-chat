@@ -8,6 +8,9 @@ summary: A aula apresenta a natureza sétupla do ser humano e a escala de sete p
 concepts:
   - '[[Cosmologia Espiritual e Metafísica]]'
   - '[[hermetismo/wiki/concepts/Cabala]]'
+related:
+  - '[[Cabala]]'
+  - '[[Inexistente]]'
 ---
 
 A NATUREZA SÉTUPLA
