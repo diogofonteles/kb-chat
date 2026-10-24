@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Playwright E2E: the web app against the API on the fixture vault (in-process index, no QMD).",
   "scripts": {
-    "test": "playwright test",
+    "e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

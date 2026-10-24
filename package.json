@@ -13,7 +13,7 @@
     "test": "nx run-many -t test",
     "build": "nx run-many -t build",
     "lint": "nx run-many -t lint",
-    "e2e": "pnpm --filter @kb-chat/e2e test",
+    "e2e": "pnpm --filter @kb-chat/e2e e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
