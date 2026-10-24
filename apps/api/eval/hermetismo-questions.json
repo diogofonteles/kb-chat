@@ -6,30 +6,30 @@
   {
     "question": "me diga então quais são os 5 princípios ocultos",
     "followUp": true,
-    "expected": [
-      "princ-pios-herm-ticos",
-      "ilus-o-do-movimento",
-      "setuplicidade"
-    ]
+    "expected": ["a-setuplicidade-do-espa-o-tempo"],
+    "mustMention": ["descontinuidade", "limite", "movimento", "espaço", "tempo"]
   },
   {
     "question": "quais são os 5 princípios ocultos",
-    "expected": [
-      "princ-pios-herm-ticos",
-      "ilus-o-do-movimento",
-      "setuplicidade"
-    ]
+    "expected": ["a-setuplicidade-do-espa-o-tempo"],
+    "mustMention": ["descontinuidade", "limite", "movimento", "espaço", "tempo"]
   },
   {
     "question": "o que é a natureza sétupla do homem?",
     "expected": ["natureza-s-tupla", "setupl"]
   },
-  { "question": "explique a lei do ritmo", "expected": ["ritmo"] },
+  {
+    "question": "explique a lei do ritmo",
+    "expected": ["ritmo"]
+  },
   {
     "question": "o que o acervo diz sobre o princípio de correspondência?",
     "expected": ["correspond"]
   },
-  { "question": "quem foi Hermes Trismegisto?", "expected": ["hermes"] },
+  {
+    "question": "quem foi Hermes Trismegisto?",
+    "expected": ["hermes"]
+  },
   {
     "question": "qual a relação entre o hermetismo e a alquimia?",
     "expected": ["alquim"]

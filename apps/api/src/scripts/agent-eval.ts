@@ -24,6 +24,8 @@ const questionsSchema = z.array(
     followUp: z.boolean().default(false),
     /** Fragments of the id or title of a document that holds the answer. */
     expected: z.array(z.string().min(1)).default([]),
+    /** Words the answer text itself must name (accent- and case-insensitive). */
+    mustMention: z.array(z.string().min(1)).default([]),
   }),
 );
 type Question = z.infer<typeof questionsSchema>[number];
@@ -34,7 +36,10 @@ interface Outcome {
   readonly steps: readonly string[];
   readonly cited: readonly string[];
   readonly hit: boolean | null;
+  /** The mustMention words missing from the answer; null when none were asked. */
+  readonly missing: readonly string[] | null;
   readonly firstStepMs: number | null;
+  readonly firstTokenMs: number | null;
   readonly totalMs: number;
   readonly usd: number;
   readonly error: string | null;
@@ -81,6 +86,7 @@ interface Collected {
   usd: number;
   error: string | null;
   firstStepMs: number | null;
+  firstTokenMs: number | null;
 }
 
 function collect(
@@ -88,7 +94,10 @@ function collect(
   event: ResearchEvent,
   startedAt: number,
 ): void {
-  if (event.type === 'token') state.answer += event.text;
+  if (event.type === 'token') {
+    state.answer += event.text;
+    state.firstTokenMs ??= Math.round(performance.now() - startedAt);
+  }
   if (event.type === 'step') {
     state.steps.push(event.step.text);
     state.firstStepMs ??= Math.round(performance.now() - startedAt);
@@ -116,6 +125,11 @@ const isHit = (question: Question, cited: readonly string[]): boolean | null =>
         ),
       );
 
+const missingWords = (question: Question, answer: string): string[] | null =>
+  question.mustMention.length === 0
+    ? null
+    : question.mustMention.filter((word) => !fold(answer).includes(fold(word)));
+
 async function runTurn(
   runner: ToolLoopRunner,
   question: Question,
@@ -128,6 +142,7 @@ async function runTurn(
     usd: 0,
     error: null,
     firstStepMs: null,
+    firstTokenMs: null,
   };
   const startedAt = performance.now();
   const input = {
@@ -154,7 +169,9 @@ async function ask(
     steps: state.steps,
     cited,
     hit: isHit(question, cited),
+    missing: missingWords(question, state.answer),
     firstStepMs: state.firstStepMs,
+    firstTokenMs: state.firstTokenMs,
     totalMs: Math.round(performance.now() - startedAt),
     usd: state.usd,
     error: state.error,
@@ -166,12 +183,23 @@ const yesNo = (hit: boolean | null): string =>
 const seconds = (ms: number | null): string =>
   ms === null ? '—' : `${(ms / 1000).toFixed(1)} s`;
 
+function mentionLine(outcome: Outcome): string[] {
+  if (outcome.missing === null) return [];
+  const words = outcome.question.mustMention
+    .map((word) => `${word} ${outcome.missing?.includes(word) ? '✗' : '✓'}`)
+    .join(', ');
+  return [
+    `- A resposta nomeia: ${outcome.missing.length === 0 ? 'sim' : 'não'} (${words})`,
+  ];
+}
+
 function outcomeSection(outcome: Outcome, index: number): string {
   return [
     `## ${index + 1}. ${outcome.question.question}${outcome.question.followUp ? ' (seguimento)' : ''}`,
     '',
     `- Cita o documento esperado: ${yesNo(outcome.hit)} (esperado: ${outcome.question.expected.join(', ') || '—'})`,
-    `- Primeiro passo: ${seconds(outcome.firstStepMs)} · total: ${seconds(outcome.totalMs)} · custo: US$ ${outcome.usd.toFixed(4)}${outcome.error ? ` · erro: ${outcome.error}` : ''}`,
+    ...mentionLine(outcome),
+    `- Primeiro passo: ${seconds(outcome.firstStepMs)} · primeiro texto: ${seconds(outcome.firstTokenMs)} · total: ${seconds(outcome.totalMs)} · custo: US$ ${outcome.usd.toFixed(4)}${outcome.error ? ` · erro: ${outcome.error}` : ''}`,
     `- Passos (${outcome.steps.length}): ${outcome.steps.join(' → ') || '—'}`,
     '',
     '### Resposta',
@@ -193,6 +221,8 @@ function summary(outcomes: readonly Outcome[], model: string): string {
   const usd = outcomes.reduce((sum, o) => sum + o.usd, 0);
   const totals = outcomes.map((o) => o.totalMs).sort((a, b) => a - b);
   const median = totals[Math.floor(totals.length / 2)] ?? 0;
+  const mentionJudged = outcomes.filter((o) => o.missing !== null);
+  const mentionOk = mentionJudged.filter((o) => o.missing?.length === 0);
   return [
     '# Avaliação do agente de pesquisa (KBC-008)',
     '',
@@ -200,6 +230,7 @@ function summary(outcomes: readonly Outcome[], model: string): string {
     `- Citam o documento esperado: ${hits}/${judged.length} (meta: ≥ 8/10, NFR-3)`,
     `- Custo total: US$ ${usd.toFixed(4)} · médio: US$ ${(usd / Math.max(1, outcomes.length)).toFixed(4)} (meta: ≤ US$ 0,02, NFR-2)`,
     `- Tempo total mediano: ${seconds(median)} · maior: ${seconds(totals.at(-1) ?? 0)} (meta: ≤ 60 s, NFR-1)`,
+    `- Respostas que nomeiam os termos exigidos: ${mentionOk.length}/${mentionJudged.length}`,
     `- Erros: ${outcomes.filter((o) => o.error).length}`,
     '',
   ].join('\n');
