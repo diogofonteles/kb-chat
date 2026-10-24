@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "e2e:server": "tsx src/e2e/server.ts",
     "latency": "tsx src/scripts/latency.ts",
-    "usage-report": "tsx src/scripts/usage-report.ts"
+    "usage-report": "tsx src/scripts/usage-report.ts",
+    "agent-eval": "tsx src/scripts/agent-eval.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.1",
