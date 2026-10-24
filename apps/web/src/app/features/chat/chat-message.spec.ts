@@ -27,6 +27,8 @@ describe('reduceChat', () => {
         response: null,
         error: null,
         loadingMore: false,
+        moreFailed: false,
+        filterOrder: [],
       },
     ]);
   });
@@ -116,6 +118,29 @@ describe('reduceChat', () => {
       response: aResponse(),
     });
     expect(more[0]?.response?.items).toHaveLength(1);
+  });
+});
+
+describe('filter order', () => {
+  it('keeps the application order and drops removed filters', () => {
+    const genre = { ...NO_FILTERS, genres: ['paper' as const] };
+    const both = { ...genre, depths: [2 as const] };
+    let messages = start({ ...ask, filters: genre });
+    messages = reduceChat(messages, {
+      type: 'started',
+      ask: { ...ask, rev: 2, filters: both },
+    });
+    expect(messages[0]?.filterOrder).toEqual(['genres:paper', 'depths:2']);
+    messages = reduceChat(messages, {
+      type: 'started',
+      ask: { ...ask, rev: 3, filters: { ...NO_FILTERS, depths: [2] } },
+    });
+    expect(messages[0]?.filterOrder).toEqual(['depths:2']);
+  });
+
+  it('flags a failed further page', () => {
+    const failed = reduceChat(start(), { type: 'more-failed', id: 1, rev: 1 });
+    expect(failed[0]).toMatchObject({ loadingMore: false, moreFailed: true });
   });
 });
 

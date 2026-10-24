@@ -30,6 +30,7 @@
           [facets]="current.facets"
           [filters]="message().filters"
           [hiddenOffTopic]="current.hiddenOffTopic"
+          [order]="message().filterOrder"
           (filtersChange)="filtersChanged.emit($event)"
         />
       }
@@ -45,6 +46,11 @@
             </li>
           }
         </ol>
+        @if (message().moreFailed) {
+          <p class="more-error" role="alert" i18n="@@message.moreFailed">
+            Não consegui carregar mais resultados.
+          </p>
+        }
         @if (current.nextOffset !== null) {
           <button
             type="button"

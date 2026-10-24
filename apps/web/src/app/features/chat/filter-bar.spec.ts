@@ -103,6 +103,63 @@ describe('FilterBar (desktop popovers)', () => {
   });
 });
 
+describe('FilterBar focus', () => {
+  it('returns focus to the facet chip when Escape closes its popover', async () => {
+    const view = await renderBar();
+    const chip = screen.getByRole('button', { name: /^Profundidade/ });
+    fireEvent.click(chip);
+    await view.fixture.whenStable();
+    fireEvent.keyDown(screen.getByRole('checkbox'), { key: 'Escape' });
+    await view.fixture.whenStable();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(document.activeElement).toBe(chip);
+  });
+
+  it('keeps focus in the bar after removing an active filter', async () => {
+    await renderBar({ ...NO_FILTERS, depths: [1] });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Remover Profundidade: Intermediário',
+      }),
+    );
+    expect(document.activeElement).toBe(
+      screen.getByText('Filtros').closest('button'),
+    );
+  });
+
+  it('closes the popover when focus leaves the facet', async () => {
+    const view = await renderBar();
+    const chip = screen.getByRole('button', { name: /^Profundidade/ });
+    fireEvent.click(chip);
+    await view.fixture.whenStable();
+    fireEvent.focusOut(screen.getByRole('checkbox'), {
+      relatedTarget: screen.getByRole('button', { name: /^Assuntos/ }),
+    });
+    await view.fixture.whenStable();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('lists the most recently applied filter first', async () => {
+    const filters = {
+      ...NO_FILTERS,
+      concepts: ['Assunto 1'],
+      genres: ['paper' as const],
+    };
+    await render(FilterBar, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        facets: FACETS,
+        filters,
+        order: ['genres:paper', 'concepts:Assunto 1'],
+      },
+    });
+    const removers = screen.getAllByRole('button', { name: /^Remover/ });
+    expect(removers[0]?.getAttribute('aria-label')).toBe(
+      'Remover Assuntos: Assunto 1',
+    );
+  });
+});
+
 describe('FilterBar (mobile sheet)', () => {
   it('collects choices in a draft and applies them only on Aplicar', async () => {
     const view = await renderBar();

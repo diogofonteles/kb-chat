@@ -73,8 +73,15 @@ export function toFacetGroups(
   }).filter((group) => group.options.length > 0);
 }
 
-export function activeFilters(filters: SearchFilters): ActiveFilter[] {
-  return FACET_ORDER.flatMap((key) =>
+/**
+ * Active filters as removable chips; with an application order ("facet:value" keys,
+ * newest last), the most recently applied comes first (KBC-002 AC-11).
+ */
+export function activeFilters(
+  filters: SearchFilters,
+  order: readonly string[] = [],
+): ActiveFilter[] {
+  const active = FACET_ORDER.flatMap((key) =>
     selectedValues(filters, key).map((value) => {
       const label = `${FACET_TITLES[key]}: ${facetValueLabel(key, value)}`;
       return {
@@ -85,6 +92,11 @@ export function activeFilters(filters: SearchFilters): ActiveFilter[] {
       };
     }),
   );
+  const rank = (filter: ActiveFilter): number =>
+    order.indexOf(`${filter.key}:${filter.value}`);
+  return order.length === 0
+    ? active
+    : [...active].sort((a, b) => rank(b) - rank(a));
 }
 
 /** Returns new filters with the value added or removed (filters are never mutated). */

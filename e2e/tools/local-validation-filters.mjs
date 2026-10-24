@@ -10,14 +10,16 @@ const ask = async (page) => {
   await page.locator('app-result-card').first().waitFor();
 };
 
-const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const desktop = await browser.newPage({
+  viewport: { width: 1440, height: 900 },
+});
 await ask(desktop);
 await desktop.getByRole('button', { name: /^Assuntos/ }).click();
 await desktop.screenshot({ path: `${out}/desktop-1-popover.png` });
 await desktop.getByRole('checkbox', { name: /Forças Negativas/ }).check();
-await desktop.getByText(/Atualizando/).waitFor({ state: 'detached' }).catch(() => undefined);
+await desktop.getByRole('button', { name: /Remover Assuntos/ }).waitFor();
 await desktop.keyboard.press('Escape');
-await desktop.waitForTimeout(400);
+await desktop.locator('.popover').waitFor({ state: 'detached' });
 await desktop.screenshot({ path: `${out}/desktop-2-filtered.png` });
 
 const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });

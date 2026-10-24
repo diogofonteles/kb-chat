@@ -5,6 +5,7 @@ import type {
   TopicFacets,
 } from '@kb-chat/contracts';
 import { MAX_RESULTS, searchRequestSchema } from '@kb-chat/contracts';
+import type { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type {
   IndexHit,
@@ -46,7 +47,7 @@ export const toCollection = (topic: string): string =>
 export const normalizeQuestion = (q: string): string =>
   q.replace(/\s+/g, ' ').trim();
 
-type SearchFilterQuery = ReturnType<typeof searchRequestSchema.parse>;
+type SearchFilterQuery = z.output<typeof searchRequestSchema>;
 
 export class SearchService {
   constructor(private readonly deps: SearchServiceDeps) {}

@@ -1,53 +1,56 @@
-<button
-  type="button"
-  class="card"
-  [attr.data-doc-id]="hit().id"
-  [class.active]="active()"
-  [attr.aria-pressed]="active()"
-  (click)="opened.emit(hit())"
->
-  <span class="title">{{ hit().title }}</span>
-  <span class="snippet">{{ hit().snippet }}</span>
-  @if (facets()) {
-    <span class="facets">{{ facets() }}</span>
-  }
-  @if (concepts()) {
-    <span class="concepts">
-      <span i18n="@@card.concepts">Assuntos:</span> {{ concepts() }}
-      @if (extraConcepts()) {
-        <span>(+{{ extraConcepts() }})</span>
-      }
-    </span>
-  }
-</button>
-@if (hit().copies.length > 0) {
+<div class="frame" [class.active]="active()">
   <button
     type="button"
-    class="copies-toggle"
-    [attr.aria-expanded]="copiesOpen()"
-    [attr.aria-controls]="copiesId()"
-    (click)="toggleCopies()"
-    i18n="@@card.copies"
+    class="card"
+    [attr.data-doc-id]="hit().id"
+    [attr.aria-pressed]="active()"
+    (click)="opened.emit(hit())"
   >
-    {hit().copies.length, plural,
-      =1 {+1 cópia}
-      other {+{{ hit().copies.length }} cópias}
+    <span class="title">{{ hit().title }}</span>
+    <span class="snippet">{{ hit().snippet }}</span>
+    @if (facets()) {
+      <span class="facets">{{ facets() }}</span>
+    }
+    @if (concepts()) {
+      <span class="concepts">
+        <span i18n="@@card.concepts">Assuntos:</span> {{ concepts() }}
+        @if (extraConcepts()) {
+          <span>(+{{ extraConcepts() }})</span>
+        }
+      </span>
     }
   </button>
-  @if (copiesOpen()) {
-    <ul class="copies" [id]="copiesId()">
-      @for (copy of hit().copies; track copy.id) {
-        <li>
-          <button
-            type="button"
-            class="copy"
-            [attr.data-doc-id]="copy.id"
-            (click)="opened.emit(copy)"
-          >
-            {{ copy.title }} <span class="copy-path">{{ copy.id }}</span>
-          </button>
-        </li>
+  @if (hit().copies.length > 0) {
+    <div class="copies-area">
+      <button
+        type="button"
+        class="copies-toggle"
+        [attr.aria-expanded]="copiesOpen()"
+        [attr.aria-controls]="copiesOpen() ? copiesId() : null"
+        (click)="toggleCopies()"
+        i18n="@@card.copies"
+      >
+        {hit().copies.length, plural,
+          =1 {+1 cópia}
+          other {+{{ hit().copies.length }} cópias}
+        }
+      </button>
+      @if (copiesOpen()) {
+        <ul class="copies" [id]="copiesId()">
+          @for (copy of hit().copies; track copy.id) {
+            <li>
+              <button
+                type="button"
+                class="copy"
+                [attr.data-doc-id]="copy.id"
+                (click)="opened.emit(copy)"
+              >
+                {{ copy.title }} <span class="copy-path">{{ copy.id }}</span>
+              </button>
+            </li>
+          }
+        </ul>
       }
-    </ul>
+    </div>
   }
-}
+</div>

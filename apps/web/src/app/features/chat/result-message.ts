@@ -59,7 +59,7 @@ export class ResultMessage {
     hasFilters(this.message().filters),
   );
   protected readonly removable = computed(() =>
-    activeFilters(this.message().filters),
+    activeFilters(this.message().filters, this.message().filterOrder),
   );
   protected readonly canTrySemantic = computed(
     () => this.message().mode !== 'semantic',

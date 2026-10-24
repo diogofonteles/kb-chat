@@ -1,14 +1,9 @@
-import type { SearchFilters } from '@kb-chat/contracts';
+import { EMPTY_FILTERS, type SearchFilters } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import type { CatalogEntry } from '../catalog/index.js';
 import { copyKey, groupCopies, refine, type Candidate } from './refine.js';
 
-const NO_FILTERS: SearchFilters = {
-  concepts: [],
-  genres: [],
-  depths: [],
-  relevances: [],
-};
+const NO_FILTERS: SearchFilters = EMPTY_FILTERS;
 
 const entry = (
   id: string,
@@ -90,10 +85,17 @@ describe('refine', () => {
     });
   });
 
-  it('shows off-topic when it is selected', () => {
+  it('adds off-topic to the results when it is selected', () => {
     const result = run(all, { relevances: ['off_topic'] });
-    expect(result.page.map((g) => g.lead.entry.id)).toEqual(['4.md']);
+    expect(result.page.map((g) => g.lead.entry.id)).toEqual([
+      '1.md',
+      '2.md',
+      '3.md',
+      '4.md',
+    ]);
     expect(result.hiddenOffTopic).toBe(0);
+    const narrowed = run(all, { relevances: ['adjacent', 'off_topic'] });
+    expect(narrowed.page.map((g) => g.lead.entry.id)).toEqual(['4.md']);
   });
 
   it('counts each facet over the results filtered by the other facets (disjunctive)', () => {

@@ -10,6 +10,12 @@
   gap: var(--space-2);
 }
 
+.facets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .facet {
   position: relative;
 }
@@ -121,12 +127,33 @@
 }
 
 .sheet {
+  /* Full-screen modal: undo the user-agent dialog box (margins, max sizes, padding). */
+  box-sizing: border-box;
   position: fixed;
   inset: 0;
-  z-index: 20;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.sheet[open] {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  background: var(--color-bg);
+}
+
+.sheet::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+
+.sheet-head .hidden-note {
+  margin: var(--space-1) 0 0;
 }
 
 .sheet-head {
@@ -141,6 +168,8 @@
 }
 
 .sheet-body {
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--space-2) var(--space-4);
 }
@@ -160,7 +189,7 @@ legend {
 
 .sheet-foot {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--color-border);
@@ -187,11 +216,28 @@ legend {
 }
 
 @media (max-width: 1023px) {
-  .facet {
-    display: none;
+  /* Phones: facet chips scroll in one row and open the sheet (screens.md T2). */
+  .bar {
+    flex-wrap: nowrap;
+  }
+
+  .facets {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .sheet-button {
     display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  .bar .hidden-note {
+    display: none;
   }
 }

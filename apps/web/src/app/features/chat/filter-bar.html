@@ -4,55 +4,67 @@
   aria-label="Filtros"
   i18n-aria-label="@@filters.label"
 >
-  @for (group of groups(); track group.key) {
-    <div class="facet">
-      <button
-        type="button"
-        class="chip"
-        [class.on]="group.selectedCount > 0"
-        [attr.aria-expanded]="openKey() === group.key"
-        [attr.aria-controls]="'facet-' + group.key"
-        (click)="togglePopover(group.key)"
-      >
-        {{ group.title }}
-        @if (group.selectedCount > 0) {
-          <span>({{ group.selectedCount }})</span>
-        }
-        <span aria-hidden="true">▾</span>
-      </button>
-      @if (openKey() === group.key) {
-        <div
-          class="popover"
-          [id]="'facet-' + group.key"
-          role="group"
-          [attr.aria-label]="group.title"
+  <div class="facets">
+    @for (group of groups(); track group.key) {
+      <div class="facet" #facet (focusout)="closeOnFocusOut($event, facet)">
+        <button
+          #chip
+          type="button"
+          class="chip"
+          [class.on]="group.selectedCount > 0"
+          [attr.aria-expanded]="openKey() === group.key"
+          [attr.aria-controls]="
+            openKey() === group.key ? 'facet-' + group.key : null
+          "
+          (click)="openFacet(group.key)"
+          (keydown.escape)="closePopover(chip)"
         >
-          @for (option of visibleOptions(group); track option.value) {
-            <label class="option">
-              <input
-                type="checkbox"
-                [checked]="option.selected"
-                (change)="toggle(group.key, option.value)"
-              />
-              <span class="option-label">{{ option.label }}</span>
-              <span class="option-count">{{ option.count }}</span>
-            </label>
+          {{ group.title }}
+          @if (group.selectedCount > 0) {
+            <span>({{ group.selectedCount }})</span>
           }
-          @if (hiddenOptions(group) > 0) {
-            <button
-              type="button"
-              class="link"
-              (click)="expand(group.key)"
-              i18n="@@filters.showAll"
-            >
-              Ver todos ({{ group.options.length }})
-            </button>
-          }
-        </div>
-      }
-    </div>
-  }
-  <button type="button" class="chip sheet-button" (click)="openSheet()">
+          <span aria-hidden="true">▾</span>
+        </button>
+        @if (openKey() === group.key) {
+          <div
+            class="popover"
+            [id]="'facet-' + group.key"
+            role="group"
+            [attr.aria-label]="group.title"
+            (keydown.escape)="closePopover(chip)"
+          >
+            @for (option of visibleOptions(group); track option.value) {
+              <label class="option">
+                <input
+                  type="checkbox"
+                  [checked]="option.selected"
+                  (change)="toggle(group.key, option.value)"
+                />
+                <span class="option-label">{{ option.label }}</span>
+                <span class="option-count">{{ option.count }}</span>
+              </label>
+            }
+            @if (hiddenOptions(group) > 0) {
+              <button
+                type="button"
+                class="link"
+                (click)="expand(group.key)"
+                i18n="@@filters.showAll"
+              >
+                Ver todos ({{ group.options.length }})
+              </button>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+  <button
+    #sheetButton
+    type="button"
+    class="chip sheet-button"
+    (click)="openSheet()"
+  >
     <span i18n="@@filters.open">Filtros</span>
     @if (activeCount() > 0) {
       <span>({{ activeCount() }})</span>
@@ -92,14 +104,24 @@
 }
 
 @if (sheetOpen()) {
-  <div
+  <dialog
+    #sheet
     class="sheet"
-    role="dialog"
-    aria-modal="true"
     aria-labelledby="filters-sheet-title"
+    (close)="sheetClosed()"
   >
     <header class="sheet-head">
       <h2 id="filters-sheet-title" i18n="@@filters.sheetTitle">Filtros</h2>
+      @if (hiddenOffTopic() > 0) {
+        <p class="hidden-note" i18n="@@filters.hiddenOffTopicSheet">
+          {hiddenOffTopic(), plural,
+            =1 {1 resultado oculto por estar fora do tema}
+            other {
+              {{ hiddenOffTopic() }} resultados ocultos por estarem fora do tema
+            }
+          }
+        </p>
+      }
     </header>
     <div class="sheet-body">
       @for (group of draftGroups(); track group.key) {
@@ -133,7 +155,7 @@
       <button
         type="button"
         class="cancel"
-        (click)="closeAll()"
+        (click)="cancelSheet()"
         i18n="@@filters.cancel"
       >
         Cancelar
@@ -147,5 +169,5 @@
         Aplicar
       </button>
     </footer>
-  </div>
+  </dialog>
 }

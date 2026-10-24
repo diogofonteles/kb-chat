@@ -55,7 +55,7 @@ describe('GET /api/v1/topics', () => {
     expect(response.json()).toEqual({
       items: [
         { slug: 'alquimia', title: 'Alquimia Prática', documentCount: 1 },
-        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 7 },
+        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 19 },
       ],
       defaultSlug: null,
     });
@@ -196,7 +196,7 @@ describe('GET /health', () => {
     expect(response.json()).toEqual({
       status: 'ok',
       search: 'ok',
-      catalog: { documents: 8 },
+      catalog: { documents: 20 },
     });
   });
 });
@@ -252,7 +252,8 @@ describe('facet filters (KBC-002)', () => {
       headers: HOST,
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().concepts.slice(0, 2)).toEqual([
+    expect(response.json().concepts.slice(0, 3)).toEqual([
+      { value: 'Hermetismo e Filosofia Hermética', count: 13 },
       { value: 'Cabala', count: 2 },
       { value: 'Cosmologia Espiritual e Metafísica', count: 2 },
     ]);

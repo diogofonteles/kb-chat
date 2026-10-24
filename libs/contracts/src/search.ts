@@ -16,7 +16,8 @@ export const MAX_RESULTS = 50;
 
 /**
  * Facet filters: values of one facet combine with OR, different facets with AND.
- * Off-topic documents are hidden unless `relevances` explicitly includes "off_topic".
+ * Off-topic documents are hidden unless `relevances` includes "off_topic", which adds
+ * them to whatever the other relevance values select (none selected = any relevance).
  */
 export const searchFiltersSchema = z.strictObject({
   concepts: z.array(z.string().min(1).max(200)).max(50).default([]),
@@ -27,17 +28,20 @@ export const searchFiltersSchema = z.strictObject({
 export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 export type SearchFiltersInput = z.input<typeof searchFiltersSchema>;
 
+/** No facet selected: every result except off-topic (KBC-002 BR-2). */
+export const EMPTY_FILTERS: SearchFilters = {
+  concepts: [],
+  genres: [],
+  depths: [],
+  relevances: [],
+};
+
 export const searchRequestSchema = z.strictObject({
   q: z.string().trim().min(1).max(500),
   mode: searchModeSchema.default('all'),
   limit: z.number().int().min(1).max(MAX_RESULTS).default(10),
   offset: z.number().int().min(0).max(MAX_RESULTS).default(0),
-  filters: searchFiltersSchema.default({
-    concepts: [],
-    genres: [],
-    depths: [],
-    relevances: [],
-  }),
+  filters: searchFiltersSchema.default(EMPTY_FILTERS),
 });
 export type SearchRequest = z.input<typeof searchRequestSchema>;
 

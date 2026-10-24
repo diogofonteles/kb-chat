@@ -9,6 +9,8 @@ const base: ChatMessage = {
   rev: 1,
   filters: NO_FILTERS,
   loadingMore: false,
+  moreFailed: false,
+  filterOrder: [],
   topic: 'hermetismo',
   question: 'xyzzy',
   mode: 'semantic',
@@ -77,5 +79,22 @@ describe('ResultMessage', () => {
     expect(screen.getByText('Atualizando…')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
     expect(moreRequested).toHaveBeenCalledOnce();
+  });
+
+  it('reports a failed further page next to "Mostrar mais"', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        message: {
+          ...base,
+          moreFailed: true,
+          response: aResponse([aHit()], { nextOffset: 10 }),
+        },
+      },
+    });
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /Não consegui carregar mais/,
+    );
+    expect(screen.getByRole('button', { name: 'Mostrar mais' })).toBeTruthy();
   });
 });

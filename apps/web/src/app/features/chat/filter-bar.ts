@@ -1,13 +1,17 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
   ElementRef,
+  Injector,
+  afterNextRender,
   computed,
   inject,
   input,
   linkedSignal,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import type { ResultFacets, SearchFilters } from '@kb-chat/contracts';
 import type { FacetKey } from '@core/i18n/facet-labels.js';
@@ -24,28 +28,34 @@ import {
 
 /** Options listed before "Ver todos" (UP-15: few choices at once). */
 const VISIBLE_OPTIONS = 12;
+const MOBILE_QUERY = '(max-width: 1023px)';
 
 /**
  * Facet chips over a result list (screens.md T2). Desktop: one popover per facet,
- * applied on each change. Mobile: one "Filtros" sheet with Aplicar/Cancelar (SL-21).
+ * applied on each change. Mobile: the chips scroll and open one "Filtros" sheet with
+ * Aplicar/Cancelar (SL-21), a native modal dialog that traps and restores focus.
  */
 @Component({
   selector: 'app-filter-bar',
   templateUrl: './filter-bar.html',
   styleUrl: './filter-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    '(document:click)': 'closeOnOutsideClick($event)',
-    '(document:keydown.escape)': 'closeAll()',
-  },
+  host: { '(document:click)': 'closeOnOutsideClick($event)' },
 })
 export class FilterBar {
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  private readonly view = inject(DOCUMENT).defaultView;
+  private readonly injector = inject(Injector);
+  private readonly sheet = viewChild<ElementRef<HTMLDialogElement>>('sheet');
+  private readonly sheetButton =
+    viewChild.required<ElementRef<HTMLButtonElement>>('sheetButton');
 
   readonly facets = input.required<ResultFacets>();
   readonly filters = input.required<SearchFilters>();
   readonly hiddenOffTopic = input(0);
+  /** Application order of the active filters ("facet:value", newest last). */
+  readonly order = input<readonly string[]>([]);
   readonly filtersChange = output<SearchFilters>();
 
   protected readonly openKey = signal<FacetKey | null>(null);
@@ -60,7 +70,9 @@ export class FilterBar {
   protected readonly draftGroups = computed(() =>
     toFacetGroups(this.facets(), this.draft()),
   );
-  protected readonly active = computed(() => activeFilters(this.filters()));
+  protected readonly active = computed(() =>
+    activeFilters(this.filters(), this.order()),
+  );
   protected readonly activeCount = computed(() => countActive(this.filters()));
 
   protected visibleOptions(group: FacetGroup): readonly FacetOption[] {
@@ -79,7 +91,12 @@ export class FilterBar {
     this.expanded.update((keys) => new Set([...keys, key]));
   }
 
-  protected togglePopover(key: FacetKey): void {
+  /** Desktop opens the facet's popover; phones open the sheet (no popovers at that width). */
+  protected openFacet(key: FacetKey): void {
+    if (this.view?.matchMedia?.(MOBILE_QUERY).matches) {
+      this.openSheet();
+      return;
+    }
     this.openKey.update((open) => (open === key ? null : key));
   }
 
@@ -89,6 +106,8 @@ export class FilterBar {
 
   protected remove(filter: ActiveFilter): void {
     this.toggle(filter.key, filter.value);
+    // The removed chip disappears: keep focus in the bar instead of dropping it on <body>.
+    this.sheetButton().nativeElement.focus();
   }
 
   protected toggleDraft(key: FacetKey, value: FacetValue): void {
@@ -98,16 +117,37 @@ export class FilterBar {
   protected openSheet(): void {
     this.draft.set(this.filters());
     this.sheetOpen.set(true);
+    // showModal() makes the rest of the page inert, traps focus and closes on Escape.
+    afterNextRender(() => this.sheet()?.nativeElement.showModal(), {
+      injector: this.injector,
+    });
   }
 
   protected applySheet(): void {
-    this.sheetOpen.set(false);
     this.filtersChange.emit(this.draft());
+    this.sheet()?.nativeElement.close();
   }
 
-  protected closeAll(): void {
-    this.openKey.set(null);
+  protected cancelSheet(): void {
+    this.sheet()?.nativeElement.close();
+  }
+
+  /** Native "close" (Aplicar, Cancelar or Escape): unmount and return focus to "Filtros". */
+  protected sheetClosed(): void {
     this.sheetOpen.set(false);
+    this.sheetButton().nativeElement.focus();
+  }
+
+  protected closePopover(chip: HTMLElement): void {
+    if (!this.openKey()) return;
+    this.openKey.set(null);
+    chip.focus();
+  }
+
+  /** Tabbing out of a facet (chip + popover) closes its popover (QA-3). */
+  protected closeOnFocusOut(event: FocusEvent, facet: HTMLElement): void {
+    const next = event.relatedTarget as Node | null;
+    if (next && !facet.contains(next)) this.openKey.set(null);
   }
 
   protected closeOnOutsideClick(event: MouseEvent): void {

@@ -29,6 +29,7 @@ import {
   scan,
   startWith,
   switchMap,
+  timer,
   type Observable,
 } from 'rxjs';
 import {
@@ -39,6 +40,9 @@ import {
   type ChatMessage,
 } from './chat-message.js';
 import { readModePreference, writeModePreference } from './mode-preference.js';
+
+/** Chip clicks within this window become one search (QA-7). */
+const REFINE_DEBOUNCE_MS = 250;
 
 export interface OpenDocument {
   readonly topic: string;
@@ -140,7 +144,7 @@ export class ChatStore {
 
   /** Re-runs the same message with new filters (the conversation does not grow). */
   refine(message: ChatMessage, filters: SearchFilters): void {
-    this.rerun(message, filters);
+    this.rerun(message, filters, REFINE_DEBOUNCE_MS);
   }
 
   loadMore(message: ChatMessage): void {
@@ -156,26 +160,38 @@ export class ChatStore {
     this.openState.set(null);
   }
 
-  private rerun(message: ChatMessage, filters: SearchFilters): void {
+  private rerun(
+    message: ChatMessage,
+    filters: SearchFilters,
+    delayMs = 0,
+  ): void {
     const { id, topic, question, mode } = message;
-    this.asks.next({ id, rev: this.nextRev++, topic, question, mode, filters });
+    this.asks.next({
+      id,
+      rev: this.nextRev++,
+      topic,
+      question,
+      mode,
+      filters,
+      delayMs,
+    });
   }
 
   private run(ask: Ask): Observable<ChatEvent> {
     const { id, rev } = ask;
-    return this.api
-      .search(ask.topic, {
-        q: ask.question,
-        mode: ask.mode,
-        filters: ask.filters,
-      })
-      .pipe(
-        map((response): ChatEvent => ({ type: 'done', id, rev, response })),
-        catchError((err: unknown) =>
-          of<ChatEvent>({ type: 'failed', id, rev, error: toUiErrorCode(err) }),
-        ),
-        startWith<ChatEvent>({ type: 'started', ask }),
-      );
+    const request = { q: ask.question, mode: ask.mode, filters: ask.filters };
+    const search = this.api.search(ask.topic, request);
+    // A refine waits briefly; switchMap cancels the timer when another chip click arrives (QA-7).
+    const delayed = ask.delayMs
+      ? timer(ask.delayMs).pipe(switchMap(() => search))
+      : search;
+    return delayed.pipe(
+      map((response): ChatEvent => ({ type: 'done', id, rev, response })),
+      catchError((err: unknown) =>
+        of<ChatEvent>({ type: 'failed', id, rev, error: toUiErrorCode(err) }),
+      ),
+      startWith<ChatEvent>({ type: 'started', ask }),
+    );
   }
 
   private runMore(message: ChatMessage): Observable<ChatEvent> {

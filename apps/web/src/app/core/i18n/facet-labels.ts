@@ -1,4 +1,5 @@
 import type {
+  SearchFilters,
   DepthLevel,
   Genre,
   Relevance,
@@ -72,7 +73,8 @@ export function describeFacets(facets: {
   return parts.filter((part): part is string => part !== null).join(' · ');
 }
 
-export type FacetKey = 'concepts' | 'genres' | 'depths' | 'relevances';
+/** The facets a search can filter by (single source: the search contract). */
+export type FacetKey = keyof SearchFilters;
 
 export const FACET_TITLES: Record<FacetKey, string> = {
   concepts: $localize`:@@facet.concepts:Assuntos`,

@@ -98,3 +98,80 @@ test.describe('mobile filter sheet', () => {
     ).toBeVisible();
   });
 });
+
+test.describe('paging and empty filters', () => {
+  test('AC-9: "Mostrar mais" appends results until the end', async ({
+    page,
+  }) => {
+    await askSemantic(page, 'ritmo');
+    await expect(page.getByText(/10 de 13 documentos ·/)).toBeVisible();
+    await expect(page.locator('app-result-card')).toHaveCount(10);
+    await page.getByRole('button', { name: 'Mostrar mais' }).click();
+    await expect(page.locator('app-result-card')).toHaveCount(13);
+    await expect(
+      page.getByRole('button', { name: 'Mostrar mais' }),
+    ).toHaveCount(0);
+  });
+
+  test('AC-11: an empty filtered result offers to remove a filter', async ({
+    page,
+  }) => {
+    await askSemantic(page, 'ritmo');
+    await expect(page.locator('app-result-card').first()).toBeVisible();
+    // The real counts never lead to zero; this request simulates an index that changed meanwhile.
+    await page.route('**/searches', async (route) => {
+      const body = route.request().postDataJSON() as {
+        filters: { genres: string[] };
+      };
+      if (body.filters.genres.length === 0) return route.continue();
+      const response = await route.fetch();
+      const json = await response.json();
+      return route.fulfill({
+        response,
+        json: { ...json, items: [], total: 0, nextOffset: null },
+      });
+    });
+    await page
+      .getByRole('button', { name: /Tipo de texto|Filtros/ })
+      .first()
+      .click();
+    await page
+      .getByRole('checkbox', { name: /Texto\/apostila/ })
+      .first()
+      .check();
+    const apply = page.getByRole('button', { name: 'Aplicar' });
+    if (await apply.isVisible()) await apply.click();
+    await expect(
+      page.getByText('Nada encontrado para "ritmo" com estes filtros.'),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Remover Tipo de texto: Texto/apostila' })
+      .last()
+      .click();
+    await expect(page.locator('app-result-card').first()).toBeVisible();
+  });
+});
+
+test.describe('mobile sheet focus', () => {
+  test.skip(
+    ({ viewport }) => (viewport?.width ?? 0) >= 1024,
+    'the sheet is the mobile layout',
+  );
+
+  test('the sheet traps focus and returns it to "Filtros" on Escape', async ({
+    page,
+  }) => {
+    await askSemantic(page, 'natureza');
+    const trigger = page.getByRole('button', { name: 'Filtros', exact: true });
+    await trigger.click();
+    const sheet = page.getByRole('dialog', { name: 'Filtros' });
+    await expect(sheet).toBeVisible();
+    for (let i = 0; i < 12; i += 1) await page.keyboard.press('Tab');
+    expect(
+      await sheet.evaluate((el) => el.contains(document.activeElement)),
+    ).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+});

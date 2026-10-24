@@ -213,6 +213,8 @@ describe('ChatPage refining', () => {
     await view.fixture.whenStable();
     fireEvent.click(screen.getByRole('checkbox', { name: /Texto\/apostila/ }));
     await view.fixture.whenStable();
+    // Chip changes are debounced (250 ms) so rapid clicks send one search.
+    await new Promise((resolve) => setTimeout(resolve, 300));
     const refined = view.http.expectOne(SEARCH_URL);
     expect(refined.request.body.filters.genres).toEqual(['article_or_essay']);
     refined.flush(aResponse([aHit()], { nextOffset: 10, total: 12 }));

@@ -1,16 +1,12 @@
-import type {
-  SearchFilters,
-  SearchMode,
-  SearchResponse,
+import {
+  EMPTY_FILTERS,
+  type SearchFilters,
+  type SearchMode,
+  type SearchResponse,
 } from '@kb-chat/contracts';
 import type { UiErrorCode } from '@core/api/api-error.js';
 
-export const NO_FILTERS: SearchFilters = {
-  concepts: [],
-  genres: [],
-  depths: [],
-  relevances: [],
-};
+export const NO_FILTERS: SearchFilters = EMPTY_FILTERS;
 
 export interface Ask {
   readonly id: number;
@@ -20,6 +16,8 @@ export interface Ask {
   readonly question: string;
   readonly mode: SearchMode;
   readonly filters: SearchFilters;
+  /** Wait before hitting the API, so rapid chip clicks send one search (QA-7). */
+  readonly delayMs?: number;
 }
 
 export interface ChatMessage extends Ask {
@@ -27,6 +25,9 @@ export interface ChatMessage extends Ask {
   readonly response: SearchResponse | null;
   readonly error: UiErrorCode | null;
   readonly loadingMore: boolean;
+  readonly moreFailed: boolean;
+  /** "facet:value" keys in the order the reader applied them (newest last). */
+  readonly filterOrder: readonly string[];
 }
 
 export type ChatEvent =
@@ -54,22 +55,46 @@ export type ChatEvent =
 
 type Messages = readonly ChatMessage[];
 
-const toLoading = (ask: Ask): ChatMessage => ({
-  ...ask,
-  status: 'loading',
-  response: null,
-  error: null,
-  loadingMore: false,
-});
+export const filterKey = (facet: string, value: string | number): string =>
+  `${facet}:${value}`;
 
-/** A re-run keeps the previous results on screen (with the filter bar) until the new ones arrive. */
+const filterKeys = (filters: SearchFilters): string[] =>
+  Object.entries(filters).flatMap(([facet, values]) =>
+    (values as readonly (string | number)[]).map((value) =>
+      filterKey(facet, value),
+    ),
+  );
+
+/** Keeps the previous order of filters still selected and appends the new ones. */
+function nextOrder(
+  previous: readonly string[],
+  filters: SearchFilters,
+): string[] {
+  const current = filterKeys(filters);
+  return [
+    ...previous.filter((key) => current.includes(key)),
+    ...current.filter((key) => !previous.includes(key)),
+  ];
+}
+
+function toLoading(ask: Ask, previous?: ChatMessage): ChatMessage {
+  return {
+    ...ask,
+    status: 'loading',
+    // A re-run keeps the previous results on screen (with the filter bar) until the new ones arrive.
+    response: previous?.response ?? null,
+    error: null,
+    loadingMore: false,
+    moreFailed: false,
+    filterOrder: nextOrder(previous?.filterOrder ?? [], ask.filters),
+  };
+}
+
 function upsert(messages: Messages, ask: Ask): Messages {
-  const exists = messages.some((message) => message.id === ask.id);
-  if (!exists) return [...messages, toLoading(ask)];
+  const previous = messages.find((message) => message.id === ask.id);
+  if (!previous) return [...messages, toLoading(ask)];
   return messages.map((message) =>
-    message.id === ask.id
-      ? { ...toLoading(ask), response: message.response }
-      : message,
+    message.id === ask.id ? toLoading(ask, previous) : message,
   );
 }
 
@@ -105,13 +130,15 @@ const HANDLERS: {
   done: (m, e) =>
     patchRun(m, e, () => ({ status: 'done', response: e.response })),
   failed: (m, e) => patchRun(m, e, () => ({ status: 'error', error: e.error })),
-  'more-started': (m, e) => patchRun(m, e, () => ({ loadingMore: true })),
+  'more-started': (m, e) =>
+    patchRun(m, e, () => ({ loadingMore: true, moreFailed: false })),
   'more-done': (m, e) =>
     patchRun(m, e, (message) => ({
       loadingMore: false,
       response: appendPage(message.response, e.response),
     })),
-  'more-failed': (m, e) => patchRun(m, e, () => ({ loadingMore: false })),
+  'more-failed': (m, e) =>
+    patchRun(m, e, () => ({ loadingMore: false, moreFailed: true })),
 };
 
 /** Pure reducer of the conversation; a re-run (retry or new filters) replaces its message in place. */

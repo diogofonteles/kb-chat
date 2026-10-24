@@ -69,10 +69,13 @@ const FACET_TESTS: Record<
   depths: (f, s) =>
     s.depths.length === 0 || (f.depth !== null && s.depths.includes(f.depth)),
   relevances: (f, s) => {
-    if (s.relevances.length > 0)
-      return f.relevance !== null && s.relevances.includes(f.relevance);
-    // Off-topic stays hidden unless explicitly selected (KBC-002 BR-2).
-    return f.relevance !== 'off_topic';
+    // "Fora do tema" adds the hidden off-topic documents (KBC-002 BR-2, decision 2026-10-24).
+    if (f.relevance === 'off_topic') return s.relevances.includes('off_topic');
+    const others = s.relevances.filter((value) => value !== 'off_topic');
+    return (
+      others.length === 0 ||
+      (f.relevance !== null && others.includes(f.relevance))
+    );
   },
 };
 const FACET_KEYS = Object.keys(FACET_TESTS) as FacetKey[];
