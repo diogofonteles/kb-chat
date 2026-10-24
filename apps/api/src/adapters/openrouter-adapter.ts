@@ -1,10 +1,15 @@
 import { z } from 'zod';
 import type {
+  AgentChunk,
+  AgentLlmPort,
+  AgentMessage,
+  AgentStreamOptions,
   LlmChunk,
   LlmMessage,
-  LlmPort,
   LlmPrice,
   LlmStreamOptions,
+  ToolCall,
+  ToolDefinition,
 } from '../ports/llm.js';
 
 const API = 'https://openrouter.ai/api/v1';
@@ -29,7 +34,25 @@ const chunkSchema = z.looseObject({
   choices: z
     .array(
       z.looseObject({
-        delta: z.looseObject({ content: z.string().nullish() }).optional(),
+        delta: z
+          .looseObject({
+            content: z.string().nullish(),
+            tool_calls: z
+              .array(
+                z.looseObject({
+                  index: z.number().int().nonnegative(),
+                  id: z.string().nullish(),
+                  function: z
+                    .looseObject({
+                      name: z.string().nullish(),
+                      arguments: z.string().nullish(),
+                    })
+                    .optional(),
+                }),
+              )
+              .nullish(),
+          })
+          .optional(),
       }),
     )
     .optional(),
@@ -45,7 +68,80 @@ const chunkSchema = z.looseObject({
 export interface OpenRouterOptions {
   readonly apiKey: string | undefined;
   readonly model: string;
+  /**
+   * Model reasoning (thinking). Off by default: with a 2,000-token budget per call a
+   * reasoning model may spend it all thinking and return no text (seen with
+   * deepseek-v4-flash at 800 tokens), and DeepSeek's thinking mode expects its reasoning
+   * sent back on every tool turn, which the OpenAI wire format here does not carry.
+   * The search-read loop gives the model room to think between steps instead.
+   */
+  readonly reasoning?: boolean;
   readonly fetch?: typeof fetch;
+}
+
+type Chunk = z.infer<typeof chunkSchema>;
+type ToolCallDelta = NonNullable<
+  NonNullable<NonNullable<Chunk['choices']>[number]['delta']>['tool_calls']
+>[number];
+
+/** AgentMessage → OpenAI chat format (assistant tool_calls, role "tool" with tool_call_id). */
+export function toWireMessage(message: AgentMessage): Record<string, unknown> {
+  if (message.role === 'tool')
+    return {
+      role: 'tool',
+      tool_call_id: message.toolCallId,
+      content: message.content,
+    };
+  if (message.role !== 'assistant' || message.toolCalls.length === 0)
+    return { role: message.role, content: message.content };
+  return {
+    role: 'assistant',
+    content: message.content || null,
+    tool_calls: message.toolCalls.map((call) => ({
+      id: call.id,
+      type: 'function',
+      function: { name: call.name, arguments: call.arguments },
+    })),
+  };
+}
+
+const toWireTool = (tool: ToolDefinition) => ({
+  type: 'function',
+  function: {
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+  },
+});
+
+/** Streamed `delta.tool_calls` fragments, joined by index into complete calls. */
+export class ToolCallAccumulator {
+  private readonly parts = new Map<
+    number,
+    { id: string; name: string; arguments: string }
+  >();
+
+  add(delta: ToolCallDelta): void {
+    const part = this.parts.get(delta.index) ?? {
+      id: '',
+      name: '',
+      arguments: '',
+    };
+    if (delta.id) part.id = delta.id;
+    part.name += delta.function?.name ?? '';
+    part.arguments += delta.function?.arguments ?? '';
+    this.parts.set(delta.index, part);
+  }
+
+  /** The complete calls in index order; a call without an id gets one from its index. */
+  drain(): ToolCall[] {
+    const calls = [...this.parts.entries()]
+      .sort(([a], [b]) => a - b)
+      .filter(([, part]) => part.name)
+      .map(([index, part]) => ({ ...part, id: part.id || `call_${index}` }));
+    this.parts.clear();
+    return calls;
+  }
 }
 
 /** Splits an SSE byte stream into the JSON payloads of its `data:` lines. */
@@ -68,7 +164,7 @@ function* dataPayloads(lines: readonly string[]): Iterable<string> {
 }
 
 /** OpenRouter chat completions with streaming and the real cost in the final usage chunk (ADR 0004). */
-export class OpenRouterAdapter implements LlmPort {
+export class OpenRouterAdapter implements AgentLlmPort {
   readonly model: string;
   readonly billing = 'per-token' as const;
   private readonly fetch: typeof fetch;
@@ -124,30 +220,68 @@ export class OpenRouterAdapter implements LlmPort {
     messages: readonly LlmMessage[],
     options: LlmStreamOptions,
   ): AsyncIterable<LlmChunk> {
+    for await (const chunk of this.streamAgent(messages, [], options))
+      if (chunk.type !== 'tool_call') yield chunk;
+  }
+
+  /** Streams text and usage, and each tool call once its arguments are complete. */
+  async *streamAgent(
+    messages: readonly AgentMessage[],
+    tools: readonly ToolDefinition[],
+    options: AgentStreamOptions,
+  ): AsyncIterable<AgentChunk> {
+    const body = await this.post(
+      this.requestBody(messages, tools, options),
+      options.signal,
+    );
+    const calls = new ToolCallAccumulator();
+    for await (const data of sseData(body)) {
+      if (data === '[DONE]') break;
+      yield* toChunks(data, calls);
+    }
+    for (const call of calls.drain()) yield { type: 'tool_call', call };
+  }
+
+  private requestBody(
+    messages: readonly AgentMessage[],
+    tools: readonly ToolDefinition[],
+    options: AgentStreamOptions,
+  ): Record<string, unknown> {
+    const toolFields =
+      tools.length === 0
+        ? {}
+        : {
+            tools: tools.map(toWireTool),
+            tool_choice: options.toolChoice ?? 'auto',
+            parallel_tool_calls: true,
+          };
+    return {
+      model: this.model,
+      messages: messages.map(toWireMessage),
+      ...toolFields,
+      max_tokens: options.maxTokens,
+      stream: true,
+      usage: { include: true },
+      reasoning: { enabled: this.options.reasoning ?? false },
+    };
+  }
+
+  private async post(
+    body: Record<string, unknown>,
+    signal: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array>> {
     const response = await this.fetch(`${API}/chat/completions`, {
       method: 'POST',
       headers: { ...this.headers(), 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        max_tokens: options.maxTokens,
-        stream: true,
-        usage: { include: true },
-        // Reasoning models spend the output budget thinking and may return no text (seen with
-        // deepseek-v4-flash at 800 tokens); grounded answers do not need it.
-        reasoning: { enabled: false },
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.any([
-        options.signal,
+        signal,
         AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       ]),
     });
     if (!response.ok || !response.body)
       throw new Error(`OpenRouter answered ${response.status}`);
-    for await (const data of sseData(response.body)) {
-      if (data === '[DONE]') return;
-      yield* toChunks(data);
-    }
+    return response.body;
   }
 
   private headers(): Record<string, string> {
@@ -158,7 +292,10 @@ export class OpenRouterAdapter implements LlmPort {
   }
 }
 
-function* toChunks(data: string): Iterable<LlmChunk> {
+function* toChunks(
+  data: string,
+  calls: ToolCallAccumulator,
+): Iterable<LlmChunk> {
   const parsed = chunkSchema.safeParse(JSON.parse(data));
   if (!parsed.success) return;
   // OpenRouter reports mid-stream provider failures as a chunk with `error`.
@@ -166,8 +303,9 @@ function* toChunks(data: string): Iterable<LlmChunk> {
     throw new Error(
       `OpenRouter stream error: ${parsed.data.error.message ?? 'unknown'}`,
     );
-  const text = parsed.data.choices?.[0]?.delta?.content;
-  if (text) yield { type: 'token', text };
+  const delta = parsed.data.choices?.[0]?.delta;
+  for (const part of delta?.tool_calls ?? []) calls.add(part);
+  if (delta?.content) yield { type: 'token', text: delta.content };
   const usage = parsed.data.usage;
   if (usage) {
     yield {

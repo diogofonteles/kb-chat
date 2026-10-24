@@ -28,10 +28,15 @@ export const configSchema = z.object({
   SEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(120),
   /** Obsidian vault name for "Abrir no Obsidian"; default: the vault folder's name. */
   OBSIDIAN_VAULT: z.string().min(1).optional(),
-  /** Paid provider key for AI answers; without it answers are disabled (LLM_NOT_CONFIGURED). */
+  /** Paid provider key for the research agent; without it AI is disabled (LLM_NOT_CONFIGURED). */
   OPENROUTER_API_KEY: z.string().min(1).optional(),
-  /** Model for answers; default: the vault's kb.toml [generation] model. */
+  /** Model of the research agent (needs tool calling); default deepseek/deepseek-v4-pro (ADR 0006). */
   KB_CHAT_MODEL: z.string().min(1).optional(),
+  /** Model reasoning on each agent call; off by default (see OpenRouterAdapter). */
+  KB_CHAT_REASONING: z
+    .enum(['on', 'off'])
+    .default('off')
+    .transform((value) => value === 'on'),
   KB_CHAT_LLM: z.enum(['openrouter', 'stub']).default('openrouter'),
   KB_CHAT_DAILY_CAP_USD: z.coerce.number().min(0).default(1),
   /** Local state (spend ledger, usage log, settings). */

@@ -1,30 +1,17 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { OpenRouterAdapter } from './adapters/openrouter-adapter.js';
 import { StubLlmAdapter } from './adapters/stub-llm-adapter.js';
 import type { AppConfig } from './config.js';
-import type { LlmPort } from './ports/llm.js';
+import type { AgentLlmPort } from './ports/llm.js';
 
-export const FALLBACK_MODEL = 'deepseek/deepseek-v4-flash';
+/** Research agent default (ADR 0006): tool calling at about US$ 0.23 per million input tokens. */
+export const DEFAULT_MODEL = 'deepseek/deepseek-v4-pro';
 
-/** The kb vault's generation model (kb.toml [generation] model), reused for answers. */
-export async function vaultGenerationModel(
-  vaultRoot: string,
-): Promise<string | null> {
-  const toml = await readFile(join(vaultRoot, 'kb.toml'), 'utf8').catch(
-    () => '',
-  );
-  const section =
-    toml.split(/^\[/m).find((block) => block.startsWith('generation]')) ?? '';
-  return /^\s*model\s*=\s*"([^"]+)"/m.exec(section)?.[1] ?? null;
-}
-
-/** Composition of the AI provider from config (ADR 0004; more providers in KBC-007). */
-export async function createLlm(config: AppConfig): Promise<LlmPort> {
+/** Composition of the AI provider from config (ADR 0006; more providers in KBC-007). */
+export function createLlm(config: AppConfig): AgentLlmPort {
   if (config.KB_CHAT_LLM === 'stub') return new StubLlmAdapter();
-  const model =
-    config.KB_CHAT_MODEL ??
-    (await vaultGenerationModel(config.KB_VAULT)) ??
-    FALLBACK_MODEL;
-  return new OpenRouterAdapter({ apiKey: config.OPENROUTER_API_KEY, model });
+  return new OpenRouterAdapter({
+    apiKey: config.OPENROUTER_API_KEY,
+    model: config.KB_CHAT_MODEL ?? DEFAULT_MODEL,
+    reasoning: config.KB_CHAT_REASONING,
+  });
 }

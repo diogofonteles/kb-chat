@@ -13,7 +13,7 @@ const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
 const index = await createSearchIndex({ config, vault, log: logger });
-const llm = await createLlm(config);
+const llm = createLlm(config);
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
 );
