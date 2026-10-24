@@ -1,10 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
+  inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   FEATURES,
@@ -29,11 +34,17 @@ const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PersonEditor {
+  private readonly injector = inject(Injector);
   readonly person = input.required<Person>();
   readonly topics = input.required<readonly Topic[]>();
   readonly busy = input(false);
   readonly changed = output<PersonUpdate>();
   readonly revoked = output();
+
+  private readonly confirmButton =
+    viewChild<ElementRef<HTMLButtonElement>>('confirmButton');
+  private readonly revokeButton =
+    viewChild<ElementRef<HTMLButtonElement>>('revokeButton');
 
   protected readonly confirming = signal(false);
   protected readonly isMaster = computed(() => this.person().role === 'master');
@@ -63,6 +74,25 @@ export class PersonEditor {
 
   protected toggleMaster(): void {
     this.changed.emit({ role: this.isMaster() ? 'member' : 'master' });
+  }
+
+  /** The asked-for button replaces the one that had focus: focus follows it (WCAG 2.4.3). */
+  protected askRevoke(): void {
+    this.confirming.set(true);
+    this.focusAfterRender(() => this.confirmButton());
+  }
+
+  protected cancelRevoke(): void {
+    this.confirming.set(false);
+    this.focusAfterRender(() => this.revokeButton());
+  }
+
+  private focusAfterRender(
+    target: () => ElementRef<HTMLButtonElement> | undefined,
+  ): void {
+    afterNextRender(() => target()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   protected confirmRevoke(): void {

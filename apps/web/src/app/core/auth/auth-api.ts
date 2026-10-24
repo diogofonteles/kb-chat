@@ -5,10 +5,12 @@ import {
   meSchema,
   personListSchema,
   personSchema,
+  spendByPersonSchema,
   type AuthConfig,
   type Me,
   type Person,
   type PersonUpdate,
+  type SpendByPerson,
 } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
 
@@ -72,5 +74,12 @@ export class PeopleApi {
 
   revoke(id: string): Observable<void> {
     return this.http.delete(personUrl(id)).pipe(map(() => undefined));
+  }
+
+  /** The owner only (BR-6): today's AI spend of each person, never their content. */
+  spendByPerson(): Observable<SpendByPerson> {
+    return this.http
+      .get('/api/v1/spend/people')
+      .pipe(map((body) => spendByPersonSchema.parse(body)));
   }
 }

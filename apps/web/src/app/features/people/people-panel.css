@@ -154,3 +154,12 @@ input[type='email'] {
 .person > .notice {
   padding: 0 var(--space-4) var(--space-4);
 }
+
+.invite-error {
+  margin: 0;
+  color: var(--color-danger);
+}
+
+input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}

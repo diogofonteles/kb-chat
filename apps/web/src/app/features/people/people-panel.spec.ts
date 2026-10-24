@@ -3,12 +3,13 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import type { Person } from '@kb-chat/contracts';
 import { authInterceptor } from '@core/auth/auth-interceptor.js';
-import { RELOAD_PAGE } from '@core/auth/session-store.js';
+import { RELOAD_PAGE, SessionStore } from '@core/auth/session-store.js';
+import { anOwner } from '../../testing/session-fixtures.js';
 import { TOPICS } from '../../testing/fixtures.js';
 import { PeoplePanel } from './people-panel.js';
 
@@ -199,6 +200,44 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     expect(screen.queryByRole('group', { name: 'Acervos' })).toBeNull();
   });
 
+  it('shows a failed invite under the e-mail field and keeps what was typed (MA-23)', async () => {
+    const { http, fixture } = await renderPanel([owner, aPerson()]);
+    const field = screen.getByLabelText('Convidar por e-mail (conta Google)');
+    fireEvent.input(field, { target: { value: 'guest@example.com' } });
+    await fixture.whenStable();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Convidar' }));
+    http
+      .expectOne('/api/v1/people')
+      .flush(
+        { error: { code: 'ALREADY_INVITED', message: 'x' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await fixture.whenStable();
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Este e-mail já foi convidado.',
+    );
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect((field as HTMLInputElement).value).toBe('guest@example.com');
+    fireEvent.input(field, { target: { value: 'other@example.com' } });
+    await fixture.whenStable();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('moves focus to the confirmation and back when revoking', async () => {
+    const { fixture } = await renderPanel();
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revogar acesso' }));
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent?.trim()).toBe('Revogar');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent?.trim()).toBe('Revogar acesso');
+  });
+
   it('offers to try again when the list does not load', async () => {
     const result = await render(PeoplePanel, {
       providers: [
@@ -218,5 +257,31 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     http.expectOne('/api/v1/people').flush({ items: [owner] });
     await result.fixture.whenStable();
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  });
+});
+
+describe('PeoplePanel for the owner (BR-6)', () => {
+  it("shows each person's AI spend today", async () => {
+    const result = await render(PeoplePanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: SessionStore, useValue: { me: signal(anOwner()) } },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/v1/people').flush({ items: [owner, aPerson()] });
+    http.expectOne('/api/v1/topics').flush(TOPICS);
+    http.expectOne('/api/v1/spend/people').flush({
+      items: [
+        { email: 'owner@example.com', usd: 0 },
+        { email: 'guest@example.com', usd: 0.5 },
+      ],
+    });
+    await result.fixture.whenStable();
+
+    expect(row(/Guest/).textContent).toContain('Gasto de IA hoje: US$');
+    expect(row(/Guest/).textContent).toContain('0,50');
   });
 });

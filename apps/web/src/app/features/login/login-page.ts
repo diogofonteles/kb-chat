@@ -71,17 +71,23 @@ export class LoginPage {
     });
   }
 
+  /** Google warns when initialize runs twice: once per client id, then only the button. */
+  private initializedFor: string | null = null;
+
   private renderButton(
     accounts: GoogleAccountsId,
     host: HTMLElement,
     clientId: string,
   ): void {
-    accounts.initialize({
-      client_id: clientId,
-      callback: ({ credential }) => credential && this.signIn(credential),
-      cancel_on_tap_outside: true,
-      ux_mode: 'popup',
-    });
+    if (this.initializedFor !== clientId) {
+      accounts.initialize({
+        client_id: clientId,
+        callback: ({ credential }) => credential && this.signIn(credential),
+        cancel_on_tap_outside: true,
+        ux_mode: 'popup',
+      });
+      this.initializedFor = clientId;
+    }
     accounts.renderButton(host, {
       type: 'standard',
       theme: 'outline',

@@ -56,6 +56,7 @@
         Revogar o acesso de {{ who.email }}? A pessoa sai na hora.
       </p>
       <button
+        #confirmButton
         type="button"
         class="danger"
         [disabled]="busy()"
@@ -67,17 +68,18 @@
       <button
         type="button"
         class="link"
-        (click)="confirming.set(false)"
+        (click)="cancelRevoke()"
         i18n="@@people.cancel"
       >
         Cancelar
       </button>
     } @else {
       <button
+        #revokeButton
         type="button"
         class="link danger-text"
         [disabled]="busy()"
-        (click)="confirming.set(true)"
+        (click)="askRevoke()"
         i18n="@@people.revoke"
       >
         Revogar acesso

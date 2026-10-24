@@ -4,6 +4,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  LOCALE_ID,
   computed,
   inject,
   signal,
@@ -17,10 +18,18 @@ import {
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { topicsUrl } from '@core/api/kb-api.js';
 import { PeopleApi } from '@core/auth/auth-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
+import { formatSpend } from '@core/spend/spend-store.js';
 import type { Observable } from 'rxjs';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
+
+interface Outcome<T> {
+  readonly done: (value: T) => string;
+  /** Where a failure shows; default: next to the person it was about. */
+  readonly failed?: (text: string) => void;
+}
 
 /**
  * "Pessoas e permissões" (KBC-010 FR-3, screens.md T9): invite by e-mail, then per person
@@ -36,8 +45,24 @@ type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
 export class PeoplePanel {
   private readonly api = inject(PeopleApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly session = inject(SessionStore);
+  private readonly locale = inject(LOCALE_ID);
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
+  /** Each person's AI spend today, shown to the owner only (BR-6). */
+  private readonly spend = rxResource({
+    params: () => this.session.me()?.isOwner || undefined,
+    stream: () => this.api.spendByPerson(),
+  });
+  private readonly spendByEmail = computed(
+    () =>
+      new Map(
+        (this.spend.hasValue() ? this.spend.value().items : []).map((item) => [
+          item.email,
+          item.usd,
+        ]),
+      ),
+  );
   private readonly topicList = httpResource(() => topicsUrl(), {
     parse: (body) => topicListSchema.parse(body),
   });
@@ -51,6 +76,8 @@ export class PeoplePanel {
     this.people.hasValue() ? this.people.value() : [],
   );
   protected readonly email = signal('');
+  /** Why the last invite failed, shown under the e-mail field (MA-23). */
+  protected readonly inviteError = signal('');
   protected readonly openId = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly notice = signal<Notice>(null);
@@ -60,32 +87,44 @@ export class PeoplePanel {
     this.notice.set(null);
   }
 
+  protected typeEmail(value: string): void {
+    this.email.set(value);
+    this.inviteError.set('');
+  }
+
   protected invite(event: Event): void {
     event.preventDefault();
     const email = this.email().trim();
     if (!email) return;
-    this.run(this.api.invite(email), (invited) => {
-      this.people.update((all) => [...(all ?? []), invited]);
-      this.email.set('');
-      this.openId.set(invited.id);
-      return $localize`:@@people.invited:Convite criado. ${invited.email}:email: já pode entrar com essa conta Google.`;
+    this.run(this.api.invite(email), {
+      done: (invited) => {
+        this.people.update((all) => [...(all ?? []), invited]);
+        this.email.set('');
+        this.openId.set(invited.id);
+        return $localize`:@@people.invited:Convite criado. ${invited.email}:email: já pode entrar com essa conta Google.`;
+      },
+      failed: (text) => this.inviteError.set(text),
     });
   }
 
   protected change(person: Person, patch: PersonUpdate): void {
-    this.run(this.api.update(person.id, patch), (updated) => {
-      this.replace(updated);
-      return $localize`:@@people.saved:Salvo.`;
+    this.run(this.api.update(person.id, patch), {
+      done: (updated) => {
+        this.replace(updated);
+        return $localize`:@@people.saved:Salvo.`;
+      },
     });
   }
 
   protected revoke(person: Person): void {
-    this.run(this.api.revoke(person.id), () => {
-      this.people.update((all) =>
-        (all ?? []).filter((p) => p.id !== person.id),
-      );
-      this.openId.set(null);
-      return $localize`:@@people.revokedNotice:Acesso de ${person.email}:email: revogado.`;
+    this.run(this.api.revoke(person.id), {
+      done: () => {
+        this.people.update((all) =>
+          (all ?? []).filter((p) => p.id !== person.id),
+        );
+        this.openId.set(null);
+        return $localize`:@@people.revokedNotice:Acesso de ${person.email}:email: revogado.`;
+      },
     });
   }
 
@@ -98,27 +137,35 @@ export class PeoplePanel {
       : $localize`:@@people.noCollection:Nenhum acervo`;
   }
 
+  /** "Gasto de IA hoje: US$ 0,50" for the owner; '' for anyone else. */
+  protected spendOf(person: Person): string {
+    const usd = this.spendByEmail().get(person.email);
+    return usd === undefined
+      ? ''
+      : $localize`:@@people.spendToday:Gasto de IA hoje: ${formatSpend(usd, this.locale)}:amount:`;
+  }
+
   private replace(updated: Person): void {
     this.people.update((all) =>
       (all ?? []).map((p) => (p.id === updated.id ? updated : p)),
     );
   }
 
-  /** One change at a time; its outcome is announced next to the list. */
-  private run<T>(call: Observable<T>, done: (value: T) => string): void {
+  /** One change at a time; its outcome is announced next to what it changed. */
+  private run<T>(call: Observable<T>, outcome: Outcome<T>): void {
     this.busy.set(true);
     this.notice.set(null);
+    const failed =
+      outcome.failed ??
+      ((text: string) => this.notice.set({ kind: 'error', text }));
     call.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (value) => {
         this.busy.set(false);
-        this.notice.set({ kind: 'ok', text: done(value) });
+        this.notice.set({ kind: 'ok', text: outcome.done(value) });
       },
       error: (err: unknown) => {
         this.busy.set(false);
-        this.notice.set({
-          kind: 'error',
-          text: errorMessage(toUiErrorCode(err)),
-        });
+        failed(errorMessage(toUiErrorCode(err)));
       },
     });
   }

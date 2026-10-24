@@ -10,8 +10,11 @@
       autocomplete="off"
       inputmode="email"
       required
+      aria-describedby="invite-hint"
+      [attr.aria-invalid]="inviteError() ? 'true' : null"
+      [attr.aria-errormessage]="inviteError() ? 'invite-error' : null"
       [value]="email()"
-      (input)="email.set(emailInput.value)"
+      (input)="typeEmail(emailInput.value)"
     />
   </label>
   <button
@@ -23,7 +26,12 @@
     Convidar
   </button>
 </form>
-<p class="hint" i18n="@@people.inviteHint">
+@if (inviteError()) {
+  <p id="invite-error" class="invite-error" role="alert">
+    {{ inviteError() }}
+  </p>
+}
+<p id="invite-hint" class="hint" i18n="@@people.inviteHint">
   Quem é convidado começa com "Buscar documentos" e nenhum acervo.
 </p>
 
@@ -70,6 +78,9 @@
               <span class="badge" i18n="@@people.owner">Dono</span>
             }
             <span class="topics">{{ topicNames(person) }}</span>
+            @if (spendOf(person); as spent) {
+              <span class="spent">{{ spent }}</span>
+            }
             <span class="last">
               @if (person.lastLoginAt) {
                 <ng-container i18n="@@people.lastLogin"
