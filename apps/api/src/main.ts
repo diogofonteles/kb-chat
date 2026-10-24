@@ -66,3 +66,21 @@ app.log.info(
   { vault: config.KB_VAULT, search: index.status() },
   'kb-chat api ready',
 );
+
+// find_text's folded copy of the start collection takes seconds on a big vault: build it
+// now, in the background, so the first answer does not wait for it (KBC-011).
+const startTopic =
+  ai.settings.snapshot(OWNER)?.preferences.defaultTopic ??
+  config.KB_TOPIC ??
+  catalog.topics()[0]?.topic.slug;
+if (startTopic) {
+  const startedAt = performance.now();
+  agent.tools.warm(startTopic).then(
+    () =>
+      app.log.info(
+        { topic: startTopic, ms: Math.round(performance.now() - startedAt) },
+        'find_text cache ready',
+      ),
+    (err: unknown) => app.log.warn({ err }, 'find_text cache warm-up failed'),
+  );
+}
