@@ -1,0 +1,18 @@
+# Build context of apps/api/Dockerfile and apps/web/Dockerfile (repository root).
+**/node_modules
+**/dist
+**/coverage
+**/.angular
+.nx
+.git
+.github
+.claude
+work
+docs
+e2e
+test-results
+playwright-report
+**/*.log
+.env
+**/.env
+deploy/.env
