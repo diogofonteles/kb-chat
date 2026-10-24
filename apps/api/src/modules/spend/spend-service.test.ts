@@ -19,7 +19,12 @@ const service = (llm: LlmPort, dailyCapUsd = 1) => {
   const ledger = new MemorySpendLedger();
   return {
     ledger,
-    spend: new SpendService({ llm, ledger, dailyCapUsd, principal: 'owner' }),
+    spend: new SpendService({
+      llm,
+      ledger,
+      dailyCapUsd: () => dailyCapUsd,
+      principal: 'owner',
+    }),
   };
 };
 
@@ -67,12 +72,42 @@ describe('SpendService', () => {
     await expect(broke.spend.guard(0.001)).resolves.toBeUndefined();
   });
 
-  it('costs nothing and never refuses on a subscription', async () => {
-    const { spend } = service(subscription, 0);
+  it('costs nothing, never refuses and records nothing on a subscription', async () => {
+    const { spend, ledger } = service(subscription, 0);
     expect(await spend.estimate('long prompt', 2000)).toBe(0);
     await expect(spend.guard(5)).resolves.toBeUndefined();
     expect(
       await spend.costOf({ inputTokens: 9, outputTokens: 9, usd: 3 }),
     ).toBe(0);
+    await spend.record({
+      inputTokens: 9,
+      outputTokens: 9,
+      usd: 0,
+      interrupted: false,
+    });
+    expect(ledger.entries).toEqual([]);
+  });
+
+  it('reads the cap and the availability on every call', async () => {
+    let cap = 1;
+    let available = false;
+    const ledger = new MemorySpendLedger();
+    const spend = new SpendService({
+      llm: new StubLlmAdapter(),
+      ledger,
+      dailyCapUsd: () => cap,
+      configured: () => available,
+      principal: 'owner',
+    });
+    expect(await spend.today()).toMatchObject({ capUsd: 1, configured: false });
+    cap = 0.1;
+    available = true;
+    expect(await spend.today()).toMatchObject({
+      capUsd: 0.1,
+      configured: true,
+    });
+    await expect(spend.guard(0.2)).rejects.toMatchObject({
+      code: 'DAILY_CAP_REACHED',
+    });
   });
 });

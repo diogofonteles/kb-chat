@@ -10,7 +10,11 @@ import { AppError } from '../../app-error.js';
 import type { ResearchRunnerPort } from '../../ports/research-runner.js';
 
 export interface ResearchRouteOptions {
-  readonly runner: ResearchRunnerPort;
+  /**
+   * The runner of this turn, asked again on every request: the provider in Settings may
+   * have changed since the last one (KBC-007 FR-5).
+   */
+  readonly runner: () => ResearchRunnerPort;
   /** False for a topic the catalog does not know (refused before streaming). */
   readonly hasTopic: (topic: string) => boolean;
 }
@@ -82,7 +86,8 @@ export const researchRoutes =
         researchOptions,
         async (request, reply) => {
           const { topic } = request.params;
-          if (!runner.configured())
+          const current = runner();
+          if (!current.configured())
             throw new AppError(
               'LLM_NOT_CONFIGURED',
               'No AI provider configured',
@@ -90,7 +95,7 @@ export const researchRoutes =
           if (!hasTopic(topic))
             throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
           const call = { topic, body: request.body };
-          return streamResearch(runner, call, { request, reply });
+          return streamResearch(current, call, { request, reply });
         },
       );
   };

@@ -1,8 +1,7 @@
 import type { AppConfig } from '../config.js';
 import { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import { SettingsService } from '../modules/settings/index.js';
-import type { AgentLlmPort } from '../ports/llm.js';
-import type { ResearchRunnerPort } from '../ports/research-runner.js';
+import type { PerTokenRunnerFactory } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import type { SettingsStorePort } from '../ports/settings-store.js';
 import { DynamicLlm, DynamicResearchRunner } from './dynamic-ports.js';
@@ -19,8 +18,12 @@ export interface AiProvidersOptions {
   /** PATH for the CLI lookup and what the CLIs inherit (process.env in main). */
   readonly env: NodeJS.ProcessEnv;
   readonly fetch?: typeof fetch;
+  /** The research tools of a turn (KBC-008), served to the subscription CLIs over MCP. */
   readonly tools?: ResearchToolsFactory;
-  readonly perTokenRunner?: (llm: AgentLlmPort) => ResearchRunnerPort;
+  /** The in-API tool loop over a per-token model (KBC-008). */
+  readonly perTokenRunner?: PerTokenRunnerFactory;
+  /** The research rules for a topic, for the subscription CLIs (the module's prompt). */
+  readonly systemPrompt?: (topic: string) => string;
   readonly warn?: (message: string) => void;
 }
 
@@ -62,6 +65,7 @@ export async function createAiProviders(
     fetch: options.fetch,
     tools: options.tools,
     perTokenRunner: options.perTokenRunner,
+    systemPrompt: options.systemPrompt,
   });
   await registry.refreshCliLookup();
   return {

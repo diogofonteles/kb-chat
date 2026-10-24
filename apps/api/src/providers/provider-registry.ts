@@ -19,8 +19,11 @@ import type {
   ProviderCatalog,
   SettingsService,
 } from '../modules/settings/index.js';
-import type { AgentLlmPort, LlmPort } from '../ports/llm.js';
-import type { ResearchRunnerPort } from '../ports/research-runner.js';
+import type { LlmPort } from '../ports/llm.js';
+import type {
+  PerTokenRunnerFactory,
+  ResearchRunnerPort,
+} from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { findExecutable } from './command-locator.js';
 import { NO_TOOLS, testConnection } from './connection-test.js';
@@ -45,9 +48,9 @@ export interface ProviderRegistryOptions {
   /** The research tools (KBC-008); without them subscriptions cannot research. */
   readonly tools?: ResearchToolsFactory;
   /** The in-API tool loop (KBC-008) over a per-token model. */
-  readonly perTokenRunner?: (llm: AgentLlmPort) => ResearchRunnerPort;
-  /** System prompt for the subscription CLIs; default: SUBSCRIPTION_RESEARCH_PROMPT. */
-  readonly systemPrompt?: string;
+  readonly perTokenRunner?: PerTokenRunnerFactory;
+  /** The research rules for a topic, for the subscription CLIs; default: the module's, by slug. */
+  readonly systemPrompt?: (topic: string) => string;
 }
 
 /** A provider resolved for one principal: which one, its model and its key. */
@@ -117,7 +120,7 @@ export class ProviderRegistry implements ProviderCatalog {
   researchRunner(principal: string): ResearchRunnerPort {
     const choice = this.choice(principal);
     return this.cached(choiceId('runner', principal, choice), () =>
-      this.buildRunner(choice),
+      this.buildRunner(choice, principal),
     ) as ResearchRunnerPort;
   }
 
@@ -141,7 +144,7 @@ export class ProviderRegistry implements ProviderCatalog {
       signal,
       locate: () => this.locateCli(request.provider),
       llm: () => this.buildLlm(choice),
-      runner: () => this.buildRunner(choice, () => NO_TOOLS),
+      runner: () => this.buildRunner(choice, principal, () => NO_TOOLS),
     });
   }
 
@@ -161,6 +164,7 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private buildRunner(
     choice: ProviderChoice,
+    principal: string,
     tools = this.options.tools,
   ): ResearchRunnerPort {
     if (choice.provider === 'claude-subscription')
@@ -169,7 +173,11 @@ export class ProviderRegistry implements ProviderCatalog {
       return new CodexCliRunner(this.cliOptions('codex', choice, tools));
     const llm = this.buildLlm(choice);
     const loop = this.options.perTokenRunner;
-    return loop && isAgentLlm(llm) ? loop(llm) : new DisabledResearchRunner();
+    if (!loop || !isAgentLlm(llm)) return new DisabledResearchRunner();
+    return loop(llm, {
+      principal,
+      dailyCapUsd: () => this.dailyCapUsd(principal),
+    });
   }
 
   private cliOptions(

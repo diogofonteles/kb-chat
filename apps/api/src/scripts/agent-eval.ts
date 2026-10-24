@@ -70,7 +70,7 @@ async function composeRunner() {
   const spend = new SpendService({
     llm,
     ledger,
-    dailyCapUsd: config.KB_CHAT_DAILY_CAP_USD,
+    dailyCapUsd: () => config.KB_CHAT_DAILY_CAP_USD,
     principal: OWNER,
   });
   const search = new SearchService({ catalog, index, vault });

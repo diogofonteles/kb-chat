@@ -6,12 +6,16 @@ import type { FastifyInstance } from 'fastify';
 import pino from 'pino';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FAKES_DIR, FIXTURE_VAULT } from '../../../test/fixture-paths.js';
+import { researchEventSchema, type ResearchEvent } from '@kb-chat/contracts';
 import { FsVaultAdapter } from '../../adapters/fs-vault-adapter.js';
 import { JsonSettingsStore } from '../../adapters/json-settings-store.js';
+import { MemorySpendLedger } from '../../adapters/memory-spend-ledger.js';
 import { OWNER, buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
 import { createAiProviders } from '../../providers/create-ai-providers.js';
+import { createResearchAgent } from '../../research-agent-factory.js';
 import { createSearchIndex } from '../../search-index-factory.js';
+import { CatalogRegistry } from '../catalog/index.js';
 import { freePort } from '../../../test/free-port.js';
 
 const HOST = { host: 'localhost:3000' };
@@ -22,6 +26,7 @@ interface TestApp {
   readonly state: string;
   readonly logs: string[];
   readonly port: number;
+  readonly ledger: MemorySpendLedger;
 }
 
 let current: FastifyInstance | null = null;
@@ -62,26 +67,38 @@ async function start(
       done();
     },
   });
+  const index = await createSearchIndex({
+    config,
+    vault,
+    log: { warn: () => undefined },
+  });
+  const ledger = new MemorySpendLedger();
+  const catalog = new CatalogRegistry(vault);
+  await catalog.load();
+  // Bound like main: the same research tools for the in-API loop and the CLIs.
+  const agent = createResearchAgent({ catalog, index, vault, ledger });
   const ai = await createAiProviders({
     config,
     principal: OWNER,
     store: new JsonSettingsStore(join(state, 'settings')),
     env: { PATH: pathEnv },
     fetch: fakeFetch,
+    tools: agent.toolsFor,
+    perTokenRunner: agent.perTokenRunner,
+    systemPrompt: agent.systemPrompt,
   });
   const app = await buildApp({
     config,
     vault,
-    index: await createSearchIndex({
-      config,
-      vault,
-      log: { warn: () => undefined },
-    }),
+    index,
+    catalog,
+    agent,
     ai,
+    ledger,
     logger: pino({ level: 'info' }, sink),
   });
   current = app;
-  return { app, state, logs, port: config.PORT };
+  return { app, state, logs, port: config.PORT, ledger };
 }
 
 const put = (app: FastifyInstance, payload: object) =>
@@ -273,5 +290,59 @@ describe('POST /api/v1/settings/ai/test', () => {
       ok: true,
       model: 'claude-subscription',
     });
+  });
+});
+
+describe('POST /api/v1/topics/:topic/research with the provider in Settings', () => {
+  const research = (app: FastifyInstance) =>
+    app.inject({
+      method: 'POST',
+      url: '/api/v1/topics/hermetismo/research',
+      headers: HOST,
+      payload: { question: 'O que é o ritmo?' },
+    });
+  const events = (body: string): ResearchEvent[] =>
+    body
+      .split('\n\n')
+      .filter((block) => block.startsWith('data: '))
+      .map((block) => researchEventSchema.parse(JSON.parse(block.slice(6))));
+
+  it('runs the turn on the Claude subscription over the real tools, outside the ledger (AC-4)', async () => {
+    const { app, port, ledger } = await start(
+      { CLAUDE_BIN: join(FAKES_DIR, 'fake-claude.mjs') },
+      process.env.PATH ?? '',
+    );
+    await app.listen({ host: '127.0.0.1', port });
+    await put(app, { ai: { provider: 'claude-subscription' } });
+    const stream = events((await research(app)).body);
+    expect(stream.find((e) => e.type === 'step')).toEqual({
+      type: 'step',
+      step: { kind: 'search', text: 'Buscando “ritmo”' },
+    });
+    const sources = stream.find((e) => e.type === 'sources');
+    expect(sources?.type === 'sources' && sources.sources[0]?.n).toBe(1);
+    expect(stream.at(-1)).toMatchObject({
+      type: 'done',
+      usd: 0,
+      billing: 'subscription',
+      steps: 1,
+    });
+    expect(ledger.entries).toEqual([]);
+    expect((await get(app, '/api/v1/spend/today')).json()).toMatchObject({
+      usd: 0,
+      configured: true,
+    });
+  });
+
+  it("checks a per-token turn against the principal's daily cap in Settings", async () => {
+    const { app, ledger } = await start({ KB_CHAT_LLM: 'stub' });
+    await put(app, { ai: { dailyCapUsd: 0 } });
+    expect(events((await research(app)).body)).toEqual([
+      { type: 'error', code: 'DAILY_CAP_REACHED' },
+    ]);
+    await put(app, { ai: { dailyCapUsd: 1 } });
+    const done = events((await research(app)).body).at(-1);
+    expect(done).toMatchObject({ type: 'done', billing: 'per-token' });
+    expect(ledger.entries).toHaveLength(1);
   });
 });

@@ -1,4 +1,5 @@
 import type { ResearchEvent, ResearchTurn } from '@kb-chat/contracts';
+import type { AgentLlmPort } from './llm.js';
 
 export interface ResearchInput {
   readonly topic: string;
@@ -18,3 +19,15 @@ export interface ResearchRunnerPort {
   configured(): boolean;
   run(input: ResearchInput): AsyncIterable<ResearchEvent>;
 }
+
+/** Whose spend a per-token turn checks and records, with the cap read on every check. */
+export interface SpendScope {
+  readonly principal: string;
+  readonly dailyCapUsd: () => number;
+}
+
+/** Builds the in-API tool loop (KBC-008) over a per-token model. */
+export type PerTokenRunnerFactory = (
+  llm: AgentLlmPort,
+  scope: SpendScope,
+) => ResearchRunnerPort;

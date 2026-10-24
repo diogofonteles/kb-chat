@@ -58,7 +58,7 @@ export async function fixtureRunner(
   const spend = new SpendService({
     llm,
     ledger,
-    dailyCapUsd,
+    dailyCapUsd: () => dailyCapUsd,
     principal: 'owner',
   });
   const runner = new ToolLoopRunner({

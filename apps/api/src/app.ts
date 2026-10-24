@@ -11,17 +11,14 @@ import { registerErrorHandler } from './error-handler.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
 import { DocumentsService, documentRoutes } from './modules/documents/index.js';
-import {
-  ResearchTools,
-  ToolLoopRunner,
-  researchRoutes,
-} from './modules/research/index.js';
+import { researchRoutes } from './modules/research/index.js';
 import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
-import { SearchService, searchRoutes } from './modules/search/index.js';
+import { searchRoutes } from './modules/search/index.js';
 import { topicRoutes } from './modules/topics/index.js';
 import hostGuard from './plugins/host-guard.js';
 import type { AgentLlmPort } from './ports/llm.js';
+import type { ResearchRunnerPort } from './ports/research-runner.js';
 import type { SearchIndexPort } from './ports/search-index.js';
 import type { SpendLedgerPort } from './ports/spend-ledger.js';
 import type { UsageLogPort } from './ports/usage-log.js';
@@ -42,6 +39,10 @@ import {
   createAiProviders,
   type AiProviders,
 } from './providers/create-ai-providers.js';
+import {
+  createResearchAgent,
+  type ResearchAgent,
+} from './research-agent-factory.js';
 
 /** The only principal until release 2 adds logins (ADR 0005). */
 export const OWNER = 'owner';
@@ -50,7 +51,10 @@ export interface AppDeps {
   readonly config: AppConfig;
   readonly vault: VaultReaderPort;
   readonly index: SearchIndexPort;
-  /** AI provider with tool calling; without one, research is disabled (LLM_NOT_CONFIGURED). */
+  /**
+   * A fixed model for every research turn (tests with a scripted stub). Without it, each
+   * turn takes the runner of the provider in Settings (ai.registry, KBC-007 FR-5).
+   */
   readonly llm?: AgentLlmPort;
   readonly ledger?: SpendLedgerPort;
   /** Local usage log (KBC-006); in memory when not given. */
@@ -61,42 +65,56 @@ export interface AppDeps {
   readonly logger?: FastifyBaseLogger;
   /** Settings and AI providers (KBC-007); in memory, from the environment, when not given. */
   readonly ai?: AiProviders;
+  /**
+   * The research tools and loop the providers were built with (main and the E2E server);
+   * built here, over `catalog`, when not given.
+   */
+  readonly agent?: ResearchAgent;
 }
 
 type FullDeps = AppDeps & {
   ai: AiProviders;
+  agent: ResearchAgent;
   catalog: CatalogRegistry;
-  llm: AgentLlmPort;
   ledger: SpendLedgerPort;
   usage: UsageLogPort;
   conversations: ConversationStorePort;
 };
 
-/** The research agent (ADR 0006) and the spend controls it shares with the side panel. */
+/**
+ * The research agent (ADR 0006) with the runner of the current provider, asked per turn
+ * (ADR 0007), and the spend controls it shares with the side panel: per-token turns check
+ * the principal's daily cap from Settings, subscription turns skip the ledger and the cap.
+ */
 async function registerResearch(
   app: FastifyInstance,
   deps: FullDeps,
-  search: SearchService,
 ): Promise<void> {
-  const { config, vault, llm, ledger, catalog } = deps;
-  const spend = new SpendService({
-    llm,
-    ledger,
-    dailyCapUsd: config.KB_CHAT_DAILY_CAP_USD,
+  const { ai, agent, ledger, catalog } = deps;
+  const scope = {
     principal: OWNER,
+    dailyCapUsd: () => ai.registry.dailyCapUsd(OWNER),
+  };
+  const fixed = deps.llm && agent.perTokenRunner(deps.llm, scope);
+  const runner = (): ResearchRunnerPort =>
+    fixed ?? ai.registry.researchRunner(OWNER);
+  const spend = new SpendService({
+    llm: deps.llm ?? ai.llm,
+    ledger,
+    ...scope,
+    configured: () => runner().configured(),
   });
   await app.register(spendRoutes(spend));
-  const tools = new ResearchTools({ search, catalog, vault });
-  const runner = new ToolLoopRunner({ llm, tools, spend });
   const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
   await app.register(researchRoutes({ runner, hasTopic }));
 }
 
-async function registerRoutes(
+/** Health, topics (with the Settings default collection) and the free search. */
+async function registerSearch(
   app: FastifyInstance,
   deps: FullDeps,
 ): Promise<void> {
-  const { config, vault, index, catalog } = deps;
+  const { config, index, catalog } = deps;
   await app.register(healthRoutes({ catalog, index }));
   const preferences = () => deps.ai.settings.snapshot(OWNER)?.preferences;
   await app.register(
@@ -105,11 +123,21 @@ async function registerRoutes(
       preferredTopic: () => preferences()?.defaultTopic ?? config.KB_TOPIC,
     }),
   );
-  const search = new SearchService({ catalog, index, vault });
   await app.register(
-    searchRoutes({ service: search, ratePerMinute: config.SEARCH_RATE_LIMIT }),
+    searchRoutes({
+      service: deps.agent.search,
+      ratePerMinute: config.SEARCH_RATE_LIMIT,
+    }),
   );
-  await registerResearch(app, deps, search);
+}
+
+async function registerRoutes(
+  app: FastifyInstance,
+  deps: FullDeps,
+): Promise<void> {
+  const { config, vault, catalog } = deps;
+  await registerSearch(app, deps);
+  await registerResearch(app, deps);
   const documents = new DocumentsService({
     catalog,
     vault,
@@ -143,19 +171,47 @@ async function registerSettings(
 }
 
 /** Settings in memory and providers from the environment only (tests). */
-const inMemoryAi = (config: AppConfig): Promise<AiProviders> =>
+const inMemoryAi = (
+  config: AppConfig,
+  agent: ResearchAgent,
+): Promise<AiProviders> =>
   createAiProviders({
     config,
     store: new MemorySettingsStore(),
     principal: OWNER,
     env: {},
+    tools: agent.toolsFor,
+    perTokenRunner: agent.perTokenRunner,
+    systemPrompt: agent.systemPrompt,
   });
+
+/** Fills what the caller left out: in-memory stores, the agent and the providers. */
+async function completeDeps(deps: AppDeps): Promise<FullDeps> {
+  const catalog = deps.catalog ?? new CatalogRegistry(deps.vault);
+  if (!deps.catalog) await catalog.load();
+  const ledger = deps.ledger ?? new MemorySpendLedger();
+  const agent =
+    deps.agent ??
+    createResearchAgent({
+      catalog,
+      index: deps.index,
+      vault: deps.vault,
+      ledger,
+    });
+  return {
+    ...deps,
+    ai: deps.ai ?? (await inMemoryAi(deps.config, agent)),
+    agent,
+    catalog,
+    ledger,
+    usage: deps.usage ?? new MemoryUsageLog(),
+    conversations: deps.conversations ?? new MemoryConversationStore(),
+  };
+}
 
 /** Assembles the API; only `main` listens (ND-01). */
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
-  const catalog = deps.catalog ?? new CatalogRegistry(deps.vault);
-  if (!deps.catalog) await catalog.load();
-
+  const full = await completeDeps(deps);
   const app = Fastify({
     // Document ids are vault paths; Fastify's default (100 characters) refused 104 real ones.
     maxParamLength: 1024,
@@ -168,16 +224,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(hostGuard, { allowedHosts: deps.config.ALLOWED_HOSTS });
   await app.register(cors, { origin: [deps.config.WEB_ORIGIN] });
   await app.register(rateLimit, { global: false });
-  const ai = deps.ai ?? (await inMemoryAi(deps.config));
-  await registerRoutes(app, {
-    ...deps,
-    ai,
-    catalog,
-    llm: deps.llm ?? ai.llm,
-    ledger: deps.ledger ?? new MemorySpendLedger(),
-    usage: deps.usage ?? new MemoryUsageLog(),
-    conversations: deps.conversations ?? new MemoryConversationStore(),
-  });
+  await registerRoutes(app, full);
 
   app.addHook('onClose', async () => deps.index.close());
   return app;

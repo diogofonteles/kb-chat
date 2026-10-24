@@ -12,7 +12,10 @@ export const tokensOf = (text: string): number =>
 export interface SpendServiceDeps {
   readonly llm: LlmPort;
   readonly ledger: SpendLedgerPort;
-  readonly dailyCapUsd: number;
+  /** Read on every check: Settings may change it between turns (KBC-007). */
+  readonly dailyCapUsd: () => number;
+  /** Whether research can run now (the side panel's `configured`); default: the model's own. */
+  readonly configured?: () => boolean;
   /** Who spends (ADR 0005: the owner until release 2 adds logins). */
   readonly principal: string;
 }
@@ -46,7 +49,7 @@ export class SpendService {
   async guard(estimateUsd: number): Promise<void> {
     if (this.deps.llm.billing === 'subscription') return;
     const spent = await this.deps.ledger.spentToday(this.deps.principal);
-    if (spent + estimateUsd > this.deps.dailyCapUsd)
+    if (spent + estimateUsd > this.deps.dailyCapUsd())
       throw new AppError('DAILY_CAP_REACHED', 'Daily AI spend cap reached');
     const balance = await this.deps.llm.balance();
     if (balance !== null && balance < estimateUsd)
@@ -61,7 +64,9 @@ export class SpendService {
     return usage.inputTokens * price.input + usage.outputTokens * price.output;
   }
 
+  /** A subscription turn costs nothing per token: no ledger entry (KBC-007 BR-2). */
   async record(spend: TurnSpend): Promise<void> {
+    if (this.deps.llm.billing === 'subscription') return;
     await this.deps.ledger.append({
       ts: new Date().toISOString(),
       principal: this.deps.principal,
@@ -73,8 +78,8 @@ export class SpendService {
   async today(): Promise<SpendToday> {
     return {
       usd: await this.deps.ledger.spentToday(this.deps.principal),
-      capUsd: this.deps.dailyCapUsd,
-      configured: this.deps.llm.configured(),
+      capUsd: this.deps.dailyCapUsd(),
+      configured: this.deps.configured?.() ?? this.deps.llm.configured(),
     };
   }
 }

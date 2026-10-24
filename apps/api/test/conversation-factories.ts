@@ -43,6 +43,7 @@ export const aResearchConversation = (
         sources: [],
         steps: 4,
         usd: 0.012,
+        billing: 'per-token',
         model: 'stub/model',
         interrupted: false,
         at: STAMP,

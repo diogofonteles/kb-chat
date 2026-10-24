@@ -11,6 +11,8 @@ import { JsonlUsageLog } from '../adapters/jsonl-usage-log.js';
 import { FsConversationStore } from '../adapters/fs-conversation-store.js';
 import { JsonSettingsStore } from '../adapters/json-settings-store.js';
 import { createAiProviders } from '../providers/create-ai-providers.js';
+import { CatalogRegistry } from '../modules/catalog/index.js';
+import { createResearchAgent } from '../research-agent-factory.js';
 import { createSearchIndex } from '../search-index-factory.js';
 
 // E2E server: the fixture vault and the in-process index, no QMD or models.
@@ -27,6 +29,12 @@ const config = loadConfig({
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
 const index = await createSearchIndex({ config, vault, log: logger });
+const ledger = new JsonlSpendLedger(
+  join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
+);
+const catalog = new CatalogRegistry(vault);
+await catalog.load();
+const agent = createResearchAgent({ catalog, index, vault, ledger });
 // Providers answer through a fake HTTP layer: a key ending in "valid" is accepted, any other
 // gets 401 (KBC-007 AC-5). Nothing leaves this computer.
 const fakeProviderFetch: typeof fetch = async (_url, init) => {
@@ -52,10 +60,10 @@ const ai = await createAiProviders({
   // No claude or codex on this PATH: subscriptions show as not installed.
   env: { PATH: '/usr/bin:/bin' },
   fetch: fakeProviderFetch,
+  tools: agent.toolsFor,
+  perTokenRunner: agent.perTokenRunner,
+  systemPrompt: agent.systemPrompt,
 });
-const ledger = new JsonlSpendLedger(
-  join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
-);
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).
 await ledger.append({
   ts: new Date().toISOString(),
@@ -76,7 +84,8 @@ const app = await buildApp({
   vault,
   index,
   logger,
-  llm: ai.llm,
+  catalog,
+  agent,
   ai,
   ledger,
   usage,
