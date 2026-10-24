@@ -38,6 +38,17 @@ CI_KEY_FILE="${CI_SSH_PUBLIC_KEY_FILE/#\~/$HOME}"
 [ -f "$CI_KEY_FILE" ] || { echo "provision: missing $CI_KEY_FILE" >&2; exit 2; }
 
 # Always Free guard: refuse sizes above the allowance instead of creating billable resources.
+# Positive integers first: "3.0" or "2.5" would make the numeric test error out and pass.
+for name in OCPUS MEMORY_GB BOOT_VOLUME_GB DATA_VOLUME_GB BUDGET_USD; do
+  if ! [[ "${!name}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "provision: $name must be a positive integer (got '${!name}')" >&2
+    exit 2
+  fi
+done
+if [ "$BOOT_VOLUME_GB" -lt 47 ] || [ "$DATA_VOLUME_GB" -lt 50 ]; then
+  echo "provision: the boot volume needs at least 47 GB and a block volume at least 50 GB" >&2
+  exit 2
+fi
 if [ "$OCPUS" -gt 2 ] || [ "$MEMORY_GB" -gt 12 ] || [ $((BOOT_VOLUME_GB + DATA_VOLUME_GB)) -gt 200 ]; then
   echo "provision: OCPUS<=2, MEMORY_GB<=12 and boot+data<=200 GB keep this inside Always Free" >&2
   exit 2
@@ -136,7 +147,16 @@ say "  image: latest Canonical Ubuntu 24.04 aarch64 for $SHAPE ($image_id), AD $
 user_data="$(mktemp)"
 trap 'rm -f "$user_data"' EXIT
 ci_key="$(tr -d '\n' <"$CI_KEY_FILE")"
-sed "s#__CI_SSH_PUBLIC_KEY__#$ci_key#" "$HERE/../cloud-init.yaml" >"$user_data"
+# One public key line; the comment may hold any text but no backslash or quote.
+if ! [[ "$ci_key" =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+(\ [^\\\"]*)?$ ]]; then
+  echo "provision: $CI_KEY_FILE is not a single ssh-ed25519 public key" >&2
+  exit 2
+fi
+# Literal replacement (no sed/regex: "&" or "#" in the key comment stay as they are).
+awk -v key="$ci_key" -v mark="__CI_SSH_PUBLIC_KEY__" '{
+  while ((i = index($0, mark)) > 0) $0 = substr($0, 1, i - 1) key substr($0, i + length(mark))
+  print
+}' "$HERE/../cloud-init.yaml" >"$user_data"
 
 instance_id="$(find_id compute instance list --compartment-id "$COMPARTMENT_OCID" --display-name "$NAME_PREFIX-vm")"
 if [ -z "$instance_id" ]; then
@@ -149,6 +169,35 @@ if [ -z "$instance_id" ]; then
     --ssh-authorized-keys-file "$OWNER_KEY_FILE" --user-data-file "$user_data" \
     --wait-for-state RUNNING)"
 else say "  exists: instance ($instance_id); cloud-init only runs on its first boot"; fi
+
+# Reserved public IP on the primary private IP, bound right after the launch: the subnet has
+# no NAT gateway, so this address is the VM's only way out (cloud-init waits for it).
+# It survives an instance rebuild and is re-bound to the new VM.
+pip_name="$NAME_PREFIX-ip"
+private_ip_id=""
+if [[ "$instance_id" == ocid* ]]; then
+  vnic_id="$("${OCI[@]}" compute vnic-attachment list --compartment-id "$COMPARTMENT_OCID" --instance-id "$instance_id" \
+    --query 'data[0]."vnic-id"' --raw-output)"
+  private_ip_id="$("${OCI[@]}" network private-ip list --vnic-id "$vnic_id" --query 'data[0].id' --raw-output)"
+fi
+pip_json="$("${OCI[@]}" network public-ip list --compartment-id "$COMPARTMENT_OCID" --scope REGION \
+  --lifetime RESERVED --all --query "data[?\"display-name\" == '$pip_name'] | [0]" 2>/dev/null || true)"
+pip_id="$(jq -r '.id // empty' <<<"${pip_json:-null}" 2>/dev/null || true)"
+reserved="$(jq -r '."ip-address" // empty' <<<"${pip_json:-null}" 2>/dev/null || true)"
+bound_to="$(jq -r '."private-ip-id" // empty' <<<"${pip_json:-null}" 2>/dev/null || true)"
+if [ -z "$pip_id" ]; then
+  create "reserved public IP $pip_name, bound to the VM" network public-ip create --compartment-id "$COMPARTMENT_OCID" \
+    --lifetime RESERVED --display-name "$pip_name" --private-ip-id "${private_ip_id:-dry-run}" >/dev/null
+  if [ "$APPLY" -eq 1 ]; then
+    reserved="$("${OCI[@]}" network public-ip list --compartment-id "$COMPARTMENT_OCID" --scope REGION \
+      --lifetime RESERVED --all --query "data[?\"display-name\" == '$pip_name'] | [0].\"ip-address\"" --raw-output)"
+  fi
+elif [ -n "$private_ip_id" ] && [ "$bound_to" != "$private_ip_id" ]; then
+  say "  exists: reserved public IP $reserved, bound elsewhere; re-binding it to the VM"
+  if [ "$APPLY" -eq 1 ]; then
+    "${OCI[@]}" network public-ip update --public-ip-id "$pip_id" --private-ip-id "$private_ip_id" >/dev/null
+  else plan "re-bind $pip_name to $private_ip_id"; fi
+else say "  exists: reserved public IP $reserved"; fi
 
 vol_id="$(find_id bv volume list --compartment-id "$COMPARTMENT_OCID" --display-name "$NAME_PREFIX-data")"
 if [ -z "$vol_id" ]; then
@@ -170,25 +219,6 @@ if [ -z "$attached" ]; then
     --device /dev/oracleoci/oraclevdb --wait-for-state ATTACHED >/dev/null
 else say "  exists: volume attachment ($attached)"; fi
 
-# Reserved public IP on the primary private IP, so the address survives an instance rebuild.
-pip_name="$NAME_PREFIX-ip"
-reserved="$("${OCI[@]}" network public-ip list --compartment-id "$COMPARTMENT_OCID" --scope REGION \
-  --lifetime RESERVED --all --query "data[?\"display-name\" == '$pip_name'] | [0].\"ip-address\"" --raw-output 2>/dev/null | grep -E '^[0-9.]+$' || true)"
-if [ -z "$reserved" ]; then
-  private_ip_id=""
-  if [ "$APPLY" -eq 1 ]; then
-    vnic_id="$("${OCI[@]}" compute vnic-attachment list --compartment-id "$COMPARTMENT_OCID" --instance-id "$instance_id" \
-      --query 'data[0]."vnic-id"' --raw-output)"
-    private_ip_id="$("${OCI[@]}" network private-ip list --vnic-id "$vnic_id" --query 'data[0].id' --raw-output)"
-  fi
-  create "reserved public IP $pip_name" network public-ip create --compartment-id "$COMPARTMENT_OCID" \
-    --lifetime RESERVED --display-name "$pip_name" --private-ip-id "${private_ip_id:-dry-run}" >/dev/null
-  if [ "$APPLY" -eq 1 ]; then
-    reserved="$("${OCI[@]}" network public-ip list --compartment-id "$COMPARTMENT_OCID" --scope REGION \
-      --lifetime RESERVED --all --query "data[?\"display-name\" == '$pip_name'] | [0].\"ip-address\"" --raw-output)"
-  fi
-else say "  exists: reserved public IP $reserved"; fi
-
 # --- Backups -------------------------------------------------------------------------
 say "backups:"
 namespace="$("${OCI[@]}" os ns get --query data --raw-output)"
@@ -203,22 +233,42 @@ fi
 dg_name="$NAME_PREFIX-vm"
 dg_id="$(find_id iam dynamic-group list --compartment-id "$TENANCY_OCID" --name "$dg_name")"
 if [ -z "$dg_id" ]; then
-  create "dynamic group $dg_name (this instance)" iam dynamic-group create --compartment-id "$TENANCY_OCID" \
+  # By compartment, not instance id: a rebuilt VM keeps its backup rights. The compartment
+  # holds only this instance.
+  create "dynamic group $dg_name (instances of the kb-chat compartment)" iam dynamic-group create --compartment-id "$TENANCY_OCID" \
     --name "$dg_name" --description "kb-chat VM (instance principal for backups)" \
-    --matching-rule "ALL {instance.id = '$instance_id'}" >/dev/null
+    --matching-rule "ALL {instance.compartment.id = '$COMPARTMENT_OCID'}" >/dev/null
 else say "  exists: dynamic group $dg_name"; fi
 
 policy_name="$NAME_PREFIX-backups"
 policy_id="$(find_id iam policy list --compartment-id "$COMPARTMENT_OCID" --name "$policy_name")"
-statements="$(jq -cn --arg dg "$dg_name" --arg b "$BACKUP_BUCKET" '[
-  "Allow dynamic-group \($dg) to manage objects in compartment id '"$COMPARTMENT_OCID"' where target.bucket.name = '\''\($b)'\''",
-  "Allow dynamic-group \($dg) to read buckets in compartment id '"$COMPARTMENT_OCID"' where target.bucket.name = '\''\($b)'\''"
+# The VM may only add and list backups: no delete, no overwrite (put uses --no-overwrite), so
+# a compromised VM cannot erase them. Retention is the bucket's lifecycle policy, which the
+# Object Storage service applies (it needs its own statement).
+statements="$(jq -cn --arg dg "$dg_name" --arg b "$BACKUP_BUCKET" --arg c "$COMPARTMENT_OCID" --arg r "$REGION" '[
+  "Allow dynamic-group \($dg) to manage objects in compartment id \($c) where all {target.bucket.name = '\''\($b)'\'', any {request.permission = '\''OBJECT_CREATE'\'', request.permission = '\''OBJECT_INSPECT'\''}}",
+  "Allow service objectstorage-\($r) to manage object-family in compartment id \($c)"
 ]')"
 if [ -z "$policy_id" ]; then
-  create "policy $policy_name (the VM manages objects of $BACKUP_BUCKET only)" iam policy create \
+  create "policy $policy_name (VM: create/inspect objects of $BACKUP_BUCKET only; lifecycle service)" iam policy create \
     --compartment-id "$COMPARTMENT_OCID" --name "$policy_name" \
     --description "kb-chat VM writes its encrypted state backups" --statements "$statements" >/dev/null
-else say "  exists: policy $policy_name"; fi
+else
+  say "  exists: policy $policy_name; statements are reset to the ones above on --apply"
+  if [ "$APPLY" -eq 1 ]; then
+    "${OCI[@]}" iam policy update --policy-id "$policy_id" --statements "$statements" --version-date "" --force >/dev/null
+  fi
+fi
+
+keep_days="${BACKUP_KEEP_DAYS:-30}"
+[[ "$keep_days" =~ ^[1-9][0-9]*$ ]] || { echo "provision: BACKUP_KEEP_DAYS must be a positive integer" >&2; exit 2; }
+lifecycle="$(jq -cn --argjson d "$keep_days" '[{name: "expire-state-backups", action: "DELETE",
+  timeAmount: $d, timeUnit: "DAYS", isEnabled: true, objectNameFilter: {inclusionPrefixes: ["state/"]}}]')"
+if [ "$APPLY" -eq 1 ]; then
+  "${OCI[@]}" os object-lifecycle-policy put --namespace "$namespace" --bucket-name "$BACKUP_BUCKET" \
+    --items "$lifecycle" --force >/dev/null
+  say "  lifecycle: state/ objects deleted after $keep_days days"
+else plan "lifecycle policy on $BACKUP_BUCKET: delete state/ objects after $keep_days days"; fi
 
 # --- Cost guard ----------------------------------------------------------------------
 say "cost guard:"
