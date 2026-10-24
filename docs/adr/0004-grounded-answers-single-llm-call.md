@@ -9,7 +9,7 @@
 
 ## Decision
 
-`answers` takes the current query and filters and runs the same search. It selects up to 8 passages, each capped at about 1,500 characters (expanded from the hit with `qmd get` line ranges), and makes **one streaming chat completion** through OpenRouter.
+`answers` takes the current query and filters and runs the same search. It selects up to 8 passages: for each found document, the window of consecutive paragraphs (≤ 2,500 characters) with the most occurrences of the question's words, prefixed by the document's kb summary (revised 2026-10-24: the first occurrence was often only the title), and makes **one streaming chat completion** through OpenRouter, with model reasoning disabled (a reasoning model spent its whole 800-token budget thinking and returned no text) and at most 800 output tokens.
 
 - The model defaults to the vault's `kb.toml` generation model (currently `deepseek/deepseek-v4-flash`), overridable by `KB_CHAT_MODEL`.
 - The system prompt treats passages as quoted data, requires a `[n]` citation per claim, and requires "o acervo não traz informação suficiente" when the passages do not support an answer.

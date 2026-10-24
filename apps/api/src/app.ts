@@ -8,46 +8,81 @@ import {
 } from 'fastify-type-provider-zod';
 import type { AppConfig } from './config.js';
 import { registerErrorHandler } from './error-handler.js';
+import { DisabledLlm } from './adapters/disabled-llm.js';
+import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
+import { AnswersService, answerRoutes } from './modules/answers/index.js';
 import { DocumentsService, documentRoutes } from './modules/documents/index.js';
 import { healthRoutes } from './modules/health/index.js';
 import { SearchService, searchRoutes } from './modules/search/index.js';
 import { topicRoutes } from './modules/topics/index.js';
 import hostGuard from './plugins/host-guard.js';
+import type { LlmPort } from './ports/llm.js';
 import type { SearchIndexPort } from './ports/search-index.js';
+import type { SpendLedgerPort } from './ports/spend-ledger.js';
 import type { VaultReaderPort } from './ports/vault-reader.js';
 import { createLogger } from './logger.js';
+
+/** The only principal until release 2 adds logins (ADR 0005). */
+export const OWNER = 'owner';
 
 export interface AppDeps {
   readonly config: AppConfig;
   readonly vault: VaultReaderPort;
   readonly index: SearchIndexPort;
+  /** AI provider; without one, answers are disabled (LLM_NOT_CONFIGURED). */
+  readonly llm?: LlmPort;
+  readonly ledger?: SpendLedgerPort;
   readonly catalog?: CatalogRegistry;
   readonly logger?: FastifyBaseLogger;
 }
 
+type FullDeps = AppDeps & {
+  catalog: CatalogRegistry;
+  llm: LlmPort;
+  ledger: SpendLedgerPort;
+};
+
+async function registerAnswers(
+  app: FastifyInstance,
+  deps: FullDeps,
+  search: SearchService,
+): Promise<void> {
+  const { config, vault, llm, ledger } = deps;
+  const service = new AnswersService({
+    search,
+    vault,
+    llm,
+    ledger,
+    dailyCapUsd: config.KB_CHAT_DAILY_CAP_USD,
+    principal: OWNER,
+  });
+  const spendToday = async () => ({
+    usd: await ledger.spentToday(OWNER),
+    capUsd: config.KB_CHAT_DAILY_CAP_USD,
+    configured: llm.configured(),
+  });
+  await app.register(answerRoutes({ service, spendToday }));
+}
+
 async function registerRoutes(
   app: FastifyInstance,
-  deps: AppDeps & { catalog: CatalogRegistry },
+  deps: FullDeps,
 ): Promise<void> {
   const { config, vault, index, catalog } = deps;
   await app.register(healthRoutes({ catalog, index }));
   await app.register(topicRoutes({ catalog, preferredTopic: config.KB_TOPIC }));
+  const search = new SearchService({ catalog, index, vault });
   await app.register(
-    searchRoutes({
-      service: new SearchService({ catalog, index, vault }),
-      ratePerMinute: config.SEARCH_RATE_LIMIT,
-    }),
+    searchRoutes({ service: search, ratePerMinute: config.SEARCH_RATE_LIMIT }),
   );
-  await app.register(
-    documentRoutes(
-      new DocumentsService({
-        catalog,
-        vault,
-        vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
-      }),
-    ),
-  );
+  await registerAnswers(app, deps, search);
+  const documents = new DocumentsService({
+    catalog,
+    vault,
+    vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
+  });
+  await app.register(documentRoutes(documents));
 }
 
 /** Assembles the API; only `main` listens (ND-01). */
@@ -67,7 +102,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(hostGuard, { allowedHosts: deps.config.ALLOWED_HOSTS });
   await app.register(cors, { origin: [deps.config.WEB_ORIGIN] });
   await app.register(rateLimit, { global: false });
-  await registerRoutes(app, { ...deps, catalog });
+  await registerRoutes(app, {
+    ...deps,
+    catalog,
+    llm: deps.llm ?? new DisabledLlm(),
+    ledger: deps.ledger ?? new MemorySpendLedger(),
+  });
 
   app.addHook('onClose', async () => deps.index.close());
   return app;

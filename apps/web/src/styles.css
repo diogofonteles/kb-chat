@@ -64,3 +64,17 @@ app-document-panel .body mark.current {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
+
+/* AI answer text is rendered with [innerHTML]: citation links styled globally. */
+app-ai-answer .answer a.cite {
+  color: var(--color-accent-strong);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  font-weight: 600;
+  text-decoration: none;
+  vertical-align: super;
+}
+
+app-ai-answer .answer p {
+  margin: 0 0 0.75em;
+}

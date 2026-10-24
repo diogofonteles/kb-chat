@@ -28,6 +28,18 @@ export const configSchema = z.object({
   SEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(120),
   /** Obsidian vault name for "Abrir no Obsidian"; default: the vault folder's name. */
   OBSIDIAN_VAULT: z.string().min(1).optional(),
+  /** Paid provider key for AI answers; without it answers are disabled (LLM_NOT_CONFIGURED). */
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  /** Model for answers; default: the vault's kb.toml [generation] model. */
+  KB_CHAT_MODEL: z.string().min(1).optional(),
+  KB_CHAT_LLM: z.enum(['openrouter', 'stub']).default('openrouter'),
+  KB_CHAT_DAILY_CAP_USD: z.coerce.number().min(0).default(1),
+  /** Local state (spend ledger, usage log, settings). */
+  KB_CHAT_STATE_DIR: z
+    .string()
+    .min(1)
+    .default('~/.kb-chat')
+    .transform(expandHome),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

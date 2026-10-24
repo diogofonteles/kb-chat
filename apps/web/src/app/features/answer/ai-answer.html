@@ -1,0 +1,153 @@
+<section
+  class="ai"
+  aria-labelledby="ai-title"
+  [attr.aria-busy]="run().phase === 'streaming'"
+>
+  <header class="ai-head">
+    <h2 id="ai-title">
+      <span aria-hidden="true">✦</span>
+      <span i18n="@@ai.title">Resposta com IA</span>
+    </h2>
+    @if (run().phase === 'streaming') {
+      <button type="button" class="secondary" (click)="stop()" i18n="@@ai.stop">
+        Parar
+      </button>
+    }
+  </header>
+  @if (considering()) {
+    <p class="note" i18n="@@ai.considering">
+      Considerando: {{ considering() }}
+    </p>
+  }
+  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+
+  @switch (run().phase) {
+    @case ('idle') {
+      @if (unavailable()) {
+        <button
+          type="button"
+          class="primary"
+          disabled
+          aria-describedby="ai-unavailable"
+          i18n="@@ai.answer"
+        >
+          Responder com IA
+        </button>
+        <p id="ai-unavailable" class="note" i18n="@@ai.unavailable">
+          Para receber uma resposta escrita a partir do acervo, configure um
+          provedor de IA: a chave do OpenRouter no servidor (OPENROUTER_API_KEY)
+          ou, em breve, sua assinatura do Claude ou do ChatGPT.
+        </p>
+      } @else {
+        <p class="note" i18n="@@ai.pitch">
+          Uma síntese escrita a partir dos documentos encontrados, com as fontes
+          citadas.
+        </p>
+        <button
+          type="button"
+          class="primary"
+          (click)="start()"
+          [disabled]="estimate.isLoading()"
+        >
+          <span i18n="@@ai.answer">Responder com IA</span>&ngsp;
+          @if (priceLabel()) {
+            <span class="price">· {{ priceLabel() }}</span>
+          }
+        </button>
+        @if (errorText()) {
+          <p class="note" role="alert">{{ errorText() }}</p>
+        }
+      }
+    }
+    @case ('error') {
+      <p class="error" role="alert">
+        {{ errorText() }}
+        @if (run().error === 'LLM_INSUFFICIENT_CREDIT') {
+          <a
+            href="https://openrouter.ai/settings/credits"
+            target="_blank"
+            rel="noopener"
+            i18n="@@ai.addCredits"
+            >Adicionar créditos</a
+          >
+        }
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="start()"
+        i18n="@@ai.retry"
+      >
+        Tentar de novo
+      </button>
+    }
+    @default {
+      @if (run().text) {
+        <div class="answer" [innerHTML]="html()"></div>
+      } @else if (run().phase === 'streaming') {
+        <p class="status" role="status" i18n="@@ai.writing">
+          {run().sources.length, plural,
+            =0 {Escolhendo trechos…}
+            other {
+              Lendo {{ run().sources.length }} trechos e escrevendo a resposta…
+            }
+          }
+        </p>
+      }
+      @if (run().phase === 'done') {
+        @if (run().interrupted) {
+          <p class="note" i18n="@@ai.interrupted">
+            {run().text ? 1 : 0, select,
+              1 {(interrompida)}
+              other {Resposta interrompida antes de começar.}
+            }
+          </p>
+          <p class="note" i18n="@@ai.partialCost">
+            O custo do que já foi processado entra no gasto do dia.
+          </p>
+          <button
+            type="button"
+            class="secondary"
+            (click)="start()"
+            i18n="@@ai.retry"
+          >
+            Tentar de novo
+          </button>
+        }
+        @if (insufficient()) {
+          <p class="note" i18n="@@ai.tryAnother">
+            Dica: refaça a busca com outras palavras ou troque "Como buscar"
+            para "Por significado".
+          </p>
+        }
+        @if (run().sources.length > 0 && run().text) {
+          <div class="sources">
+            <h3 i18n="@@ai.sources">Fontes</h3>
+            <ol>
+              @for (source of run().sources; track source.n) {
+                <li>
+                  <button
+                    type="button"
+                    class="source"
+                    (click)="opened.emit(source)"
+                  >
+                    {{ source.title }}
+                  </button>
+                </li>
+              }
+            </ol>
+          </div>
+        }
+        <p class="footer">
+          <span i18n="@@ai.disclaimer"
+            >Resposta gerada por IA a partir do acervo; confira nas
+            fontes.</span
+          >
+          @if (costLabel()) {
+            <span i18n="@@ai.cost">Custo: {{ costLabel() }}</span>
+          }
+        </p>
+      }
+    }
+  }
+</section>
