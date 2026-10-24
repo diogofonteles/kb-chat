@@ -170,7 +170,9 @@ export class ProviderRegistry implements ProviderCatalog {
     if (choice.provider === 'claude-subscription')
       return new ClaudeCliRunner(this.cliOptions('claude', choice, tools));
     if (choice.provider === 'chatgpt-subscription')
-      return new CodexCliRunner(this.cliOptions('codex', choice, tools));
+      return this.options.config.KB_CHAT_CODEX
+        ? new CodexCliRunner(this.cliOptions('codex', choice, tools))
+        : new DisabledResearchRunner();
     const llm = this.buildLlm(choice);
     const loop = this.options.perTokenRunner;
     if (!loop || !isAgentLlm(llm)) return new DisabledResearchRunner();
@@ -254,6 +256,8 @@ export class ProviderRegistry implements ProviderCatalog {
     cliFound: boolean,
   ): ProviderInfo['reason'] {
     if (PROVIDERS[id].cliBin && !cliFound) return 'cli-missing';
+    if (id === 'chatgpt-subscription' && !this.options.config.KB_CHAT_CODEX)
+      return 'not-enabled';
     if (isKeyProvider(id) && this.keySource(principal, id) === null)
       return 'key-missing';
     return null;

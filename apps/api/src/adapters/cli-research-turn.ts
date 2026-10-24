@@ -1,7 +1,8 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { AiTestCode, ResearchEvent } from '@kb-chat/contracts';
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
-import { mcpTurnPath } from '../mcp/mcp-routes.js';
+import { MCP_BEARER_PATH, mcpTurnPath } from '../mcp/mcp-routes.js';
 import type { ResearchInput } from '../ports/research-runner.js';
 import type {
   ResearchToolResult,
@@ -23,10 +24,28 @@ export interface CliLine {
     { readonly ok: true } | { readonly ok: false; readonly code: AiTestCode };
 }
 
+/** How a CLI reaches the turn's MCP endpoint; the token never goes through argv. */
+export interface TurnAccess {
+  /** The endpoint with the token in its path (for a 0600 config file). */
+  readonly url: string;
+  /** The endpoint that takes the token as `Authorization: Bearer` (for an env variable). */
+  readonly bearerUrl: string;
+  readonly token: string;
+  /** A private folder (0700) of this turn only, removed when it ends. */
+  readonly dir: string;
+}
+
+/** What a CLI is started with for one turn. */
+export interface CliLaunch {
+  readonly args: readonly string[];
+  /** Added to the allowlisted environment. */
+  readonly env?: Readonly<Record<string, string>>;
+}
+
 /** How one official CLI is called and read (Claude Code, Codex). */
 export interface CliDialect {
   readonly name: string;
-  args(mcpUrl: string, input: ResearchInput): readonly string[];
+  launch(access: TurnAccess, input: ResearchInput): Promise<CliLaunch>;
   input(input: ResearchInput): string;
   parse(line: string): CliLine;
 }
@@ -40,6 +59,8 @@ export interface CliTurnOptions {
   readonly workDir: string;
   readonly env: NodeJS.ProcessEnv;
   readonly model: string;
+  /** SIGTERM → SIGKILL delay on abort; default KILL_GRACE_MS. */
+  readonly killGraceMs?: number;
 }
 
 interface TurnState {
@@ -114,28 +135,69 @@ class CliTurn {
 
 type TurnInput = ResearchInput & { readonly tools: ResearchToolsPort };
 
+async function turnAccess(
+  options: CliTurnOptions,
+  token: string,
+): Promise<TurnAccess> {
+  await mkdir(options.workDir, { recursive: true, mode: 0o700 });
+  const dir = await mkdtemp(join(options.workDir, 'turn-'));
+  return {
+    url: `${options.apiBaseUrl}${mcpTurnPath(token)}`,
+    bearerUrl: `${options.apiBaseUrl}${MCP_BEARER_PATH}`,
+    token,
+    dir,
+  };
+}
+
 async function startCli(
   options: CliTurnOptions,
   dialect: CliDialect,
-  call: { readonly input: TurnInput; readonly token: string },
+  call: { readonly input: TurnInput; readonly access: TurnAccess },
 ): Promise<CliProcess> {
-  await mkdir(options.workDir, { recursive: true, mode: 0o700 });
+  const launch = await dialect.launch(call.access, call.input);
   return spawnCli({
     bin: options.bin,
-    args: dialect.args(
-      `${options.apiBaseUrl}${mcpTurnPath(call.token)}`,
-      call.input,
-    ),
+    args: launch.args,
     cwd: options.workDir,
-    env: subscriptionEnv(options.env),
+    env: { ...subscriptionEnv(options.env), ...launch.env },
     input: dialect.input(call.input),
+    killGraceMs: options.killGraceMs,
   });
+}
+
+/** The turn's endpoint, its private folder and its CLI; nothing outlives the turn. */
+async function openTurn(
+  options: CliTurnOptions,
+  dialect: CliDialect,
+  { input, turn }: { readonly input: TurnInput; readonly turn: CliTurn },
+) {
+  const endpoint = options.turns.open(input.tools, {
+    onResult: (result) => turn.onToolResult(result),
+  });
+  let dir: string | undefined;
+  try {
+    const access = await turnAccess(options, endpoint.token);
+    dir = access.dir;
+    const cli = await startCli(options, dialect, { input, access });
+    const turnDir = dir;
+    const close = () => {
+      cli.kill();
+      endpoint.close();
+      void rm(turnDir, { recursive: true, force: true });
+    };
+    return { cli, endpoint, close };
+  } catch (err) {
+    endpoint.close();
+    if (dir) await rm(dir, { recursive: true, force: true });
+    throw err;
+  }
 }
 
 /**
  * One research turn run by a subscription CLI (KBC-007 FR-4): the tools are served to it
  * over the turn's MCP endpoint, its stdout becomes tokens, and each tool call it makes
- * becomes a step and a sources event. Aborting kills the CLI's process group.
+ * becomes a step and a sources event. Aborting closes the endpoint at once and kills the
+ * CLI's process group (SIGTERM, then SIGKILL).
  */
 export async function* runCliTurn(
   options: CliTurnOptions,
@@ -143,14 +205,14 @@ export async function* runCliTurn(
   input: TurnInput,
 ): AsyncIterable<ResearchEvent> {
   const turn = new CliTurn(dialect, options.model);
-  const endpoint = options.turns.open(input.tools, {
-    onResult: (result) => turn.onToolResult(result),
-  });
-  const cli = await startCli(options, dialect, {
+  const { cli, endpoint, close } = await openTurn(options, dialect, {
     input,
-    token: endpoint.token,
+    turn,
   });
-  const abort = () => cli.kill();
+  const abort = () => {
+    endpoint.close();
+    cli.kill();
+  };
   input.signal.addEventListener('abort', abort, { once: true });
   void turn
     .read(cli)
@@ -160,7 +222,6 @@ export async function* runCliTurn(
     yield* turn.queue;
   } finally {
     input.signal.removeEventListener('abort', abort);
-    cli.kill();
-    endpoint.close();
+    close();
   }
 }

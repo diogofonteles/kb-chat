@@ -1,14 +1,25 @@
 #!/usr/bin/env node
 // Fake `claude -p --output-format stream-json`: calls the kb MCP endpoint named in
 // --mcp-config like Claude Code would, then streams an answer citing [1].
-// FAKE_CLAUDE_MODE: answer (default) | sleep | login. FAKE_CLAUDE_REPORT: a file that
+// $HOME/fake-cli.json { mode, report } — mode: answer (default) | sleep | stubborn (ignores SIGTERM) | login. report: a file that
 // receives { args, stdin, env } with the names of the credential variables it saw.
-import { writeFileSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
+// The CLI gets only allowlisted variables, so the test settings come from $HOME.
+const fake = (() => {
+  try {
+    return JSON.parse(
+      readFileSync(join(process.env.HOME ?? '', 'fake-cli.json'), 'utf8'),
+    );
+  } catch {
+    return {};
+  }
+})();
 const args = process.argv.slice(2);
-const mode = process.env.FAKE_CLAUDE_MODE ?? 'answer';
+const mode = fake.mode ?? 'answer';
 const emit = (line) => process.stdout.write(`${JSON.stringify(line)}\n`);
 const delta = (text) =>
   emit({
@@ -23,15 +34,22 @@ const delta = (text) =>
 let stdin = '';
 for await (const chunk of process.stdin) stdin += chunk;
 
-if (process.env.FAKE_CLAUDE_REPORT) {
+if (fake.report) {
+  const configPath = args[args.indexOf('--mcp-config') + 1];
   const seen = [
     'ANTHROPIC_API_KEY',
     'ANTHROPIC_AUTH_TOKEN',
     'OPENAI_API_KEY',
   ].filter((name) => name in process.env);
   writeFileSync(
-    process.env.FAKE_CLAUDE_REPORT,
-    JSON.stringify({ args, stdin, env: seen }),
+    fake.report,
+    JSON.stringify({
+      args,
+      stdin,
+      env: seen,
+      envNames: Object.keys(process.env),
+      configMode: statSync(configPath).mode & 0o777,
+    }),
   );
 }
 
@@ -52,7 +70,8 @@ const stop = (reason) =>
     event: { type: 'message_delta', delta: { stop_reason: reason } },
   });
 
-if (mode === 'sleep') {
+if (mode === 'stubborn') process.on('SIGTERM', () => undefined);
+if (mode === 'sleep' || mode === 'stubborn') {
   // Past the narration hold, so it streams before the reader stops it.
   delta('Pensando no acervo. '.repeat(50));
   setInterval(() => undefined, 1000);
@@ -60,7 +79,8 @@ if (mode === 'sleep') {
   // Narration before the tool call, as Claude writes it: never shown (ADR 0006).
   delta('Vou procurar no acervo. ');
   stop('tool_use');
-  const config = JSON.parse(args[args.indexOf('--mcp-config') + 1]);
+  const configPath = args[args.indexOf('--mcp-config') + 1];
+  const config = JSON.parse(readFileSync(configPath, 'utf8'));
   const client = new Client({ name: 'fake-claude', version: '0.0.0' });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(config.mcpServers.kb.url)),

@@ -44,6 +44,14 @@ export const configSchema = z.object({
   /** Official CLIs for the subscriptions (KBC-007): a name looked up on PATH, or a path. */
   CLAUDE_BIN: z.string().min(1).default('claude'),
   CODEX_BIN: z.string().min(1).default('codex'),
+  /**
+   * The ChatGPT subscription through Codex stays off unless enabled: Codex cannot be
+   * limited to the kb tools the way Claude Code is (ADR 0007).
+   */
+  KB_CHAT_CODEX: z
+    .enum(['on', 'off'])
+    .default('off')
+    .transform((value) => value === 'on'),
   KB_CHAT_DAILY_CAP_USD: z.coerce.number().min(0).default(1),
   /** Local state (spend ledger, usage log, settings). */
   KB_CHAT_STATE_DIR: z

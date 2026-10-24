@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { AiTestCode, ResearchEvent } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { KB_MCP_SERVER } from '../mcp/kb-mcp-server.js';
@@ -11,6 +13,7 @@ import {
   type CliDialect,
   type CliLine,
   type CliTurnOptions,
+  type TurnAccess,
 } from './cli-research-turn.js';
 import {
   defaultSubscriptionPrompt,
@@ -97,26 +100,39 @@ export interface ClaudeCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   readonly systemPrompt?: (topic: string) => string;
 }
 
+/**
+ * Writes the turn's MCP config into its private folder (0600): the URL carries the turn
+ * token, which must not show in `ps` through argv.
+ */
+export async function writeClaudeMcpConfig(
+  access: TurnAccess,
+): Promise<string> {
+  const path = join(access.dir, 'mcp.json');
+  const config = {
+    mcpServers: { [KB_MCP_SERVER]: { type: 'http', url: access.url } },
+  };
+  await writeFile(path, JSON.stringify(config), { mode: 0o600 });
+  return path;
+}
+
 /** The arguments of a research turn: only the kb MCP tools, no built-ins, no user settings. */
 export function claudeArgs(
-  mcpUrl: string,
+  mcpConfigPath: string,
   options: { readonly model?: string; readonly systemPrompt: string },
 ): string[] {
-  const mcpConfig = JSON.stringify({
-    mcpServers: { [KB_MCP_SERVER]: { type: 'http', url: mcpUrl } },
-  });
   return [
     '-p',
     ...['--output-format', 'stream-json', '--verbose'],
     '--include-partial-messages',
     ...['--tools', ''],
     ...['--allowedTools', `mcp__${KB_MCP_SERVER}`],
-    ...['--mcp-config', mcpConfig, '--strict-mcp-config'],
+    ...['--mcp-config', mcpConfigPath, '--strict-mcp-config'],
     ...['--setting-sources', ''],
     '--no-session-persistence',
     ...['--permission-prompts', 'none'],
     ...['--system-prompt', options.systemPrompt],
-    ...(options.model ? ['--model', options.model] : []),
+    // "--model=x": a value can never be read as another flag.
+    ...(options.model ? [`--model=${options.model}`] : []),
   ];
 }
 
@@ -135,11 +151,12 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
     const prompt = options.systemPrompt ?? defaultSubscriptionPrompt;
     this.dialect = {
       name: 'claude',
-      args: (url, input) =>
-        claudeArgs(url, {
+      launch: async (access, input) => ({
+        args: claudeArgs(await writeClaudeMcpConfig(access), {
           model: options.model,
           systemPrompt: prompt(input.topic),
         }),
+      }),
       input: (input) => subscriptionTurnInput(input.question, input.history),
       parse: parseClaudeLine,
     };

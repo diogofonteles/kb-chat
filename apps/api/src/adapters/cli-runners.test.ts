@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ResearchEvent } from '@kb-chat/contracts';
@@ -40,6 +40,16 @@ afterAll(async () => {
   await server.close();
 });
 
+/** A HOME whose fake-cli.json sets the fake CLI's mode and report file. */
+async function fakeHome(settings: {
+  readonly mode?: string;
+  readonly report?: string;
+}): Promise<NodeJS.ProcessEnv> {
+  const home = await mkdtemp(join(tmpdir(), 'kbchat-home-'));
+  await writeFile(join(home, 'fake-cli.json'), JSON.stringify(settings));
+  return { HOME: home };
+}
+
 async function collect(
   runner: ResearchRunnerPort,
   signal = new AbortController().signal,
@@ -55,14 +65,19 @@ async function collect(
   return events;
 }
 
-function claude(env: NodeJS.ProcessEnv = {}, tools = new FakeResearchTools()) {
+function claude(
+  env: NodeJS.ProcessEnv = {},
+  tools = new FakeResearchTools(),
+  dir = workDir,
+) {
   return new ClaudeCliRunner({
     bin: join(FAKES_DIR, 'fake-claude.mjs'),
     apiBaseUrl,
     turns,
-    workDir,
+    workDir: dir,
     env: { ...process.env, ...env },
     tools: () => tools,
+    killGraceMs: 200,
   });
 }
 
@@ -103,11 +118,15 @@ describe('ClaudeCliRunner', () => {
       claude({
         ANTHROPIC_API_KEY: 'sk-ant-must-not-leak',
         ANTHROPIC_AUTH_TOKEN: 'token',
-        FAKE_CLAUDE_REPORT: report,
+        KB_CHAT_UNRELATED_SECRET: 'server-only',
+        ...(await fakeHome({ report })),
       }),
     );
     const seen = JSON.parse(await readFile(report, 'utf8'));
     expect(seen.env).toEqual([]);
+    // The MCP URL (with the turn token) is in a 0600 file, never in argv.
+    expect(seen.configMode).toBe(0o600);
+    expect(JSON.stringify(seen.args)).not.toContain('/mcp/turns/');
     expect(seen.stdin).toContain('<question>O que é o ritmo?</question>');
     expect(seen.stdin).toContain('<answer>Resposta anterior</answer>');
     expect(seen.args).toEqual(
@@ -119,12 +138,42 @@ describe('ClaudeCliRunner', () => {
     expect(prompt).toContain('“hermetismo”');
     expect(prompt).toContain('find_text');
     expect(prompt).toContain('(fora do acervo)');
+    expect(seen.envNames).toContain('PATH');
+    expect(seen.envNames).not.toContain('KB_CHAT_UNRELATED_SECRET');
+  });
+
+  it('kills a CLI that ignores SIGTERM and closes the endpoint on abort', async () => {
+    const abort = new AbortController();
+    const events: ResearchEvent[] = [];
+    for await (const event of claude(await fakeHome({ mode: 'stubborn' })).run({
+      topic: 'hermetismo',
+      question: 'q',
+      history: [],
+      signal: abort.signal,
+    })) {
+      events.push(event);
+      if (event.type === 'token') {
+        abort.abort();
+        expect(turns.size).toBe(0);
+      }
+    }
+    expect(events.at(-1)).toMatchObject({ type: 'done', interrupted: true });
+  });
+
+  it('closes the turn endpoint when the CLI cannot start', async () => {
+    const blocker = join(workDir, 'not-a-folder');
+    await writeFile(blocker, '');
+    const run = collect(
+      claude({}, new FakeResearchTools(), join(blocker, 'x')),
+    );
+    await expect(run).rejects.toThrow();
+    expect(turns.size).toBe(0);
   });
 
   it('kills the CLI and ends as interrupted when the reader stops (abort)', async () => {
     const abort = new AbortController();
     const events: ResearchEvent[] = [];
-    for await (const event of claude({ FAKE_CLAUDE_MODE: 'sleep' }).run({
+    for await (const event of claude(await fakeHome({ mode: 'sleep' })).run({
       topic: 'hermetismo',
       question: 'q',
       history: [],
@@ -141,7 +190,7 @@ describe('ClaudeCliRunner', () => {
   });
 
   it('reports CLI_LOGIN_REQUIRED when claude is not logged in', async () => {
-    const events = await collect(claude({ FAKE_CLAUDE_MODE: 'login' }));
+    const events = await collect(claude(await fakeHome({ mode: 'login' })));
     expect(events.at(-1)).toEqual({
       type: 'error',
       code: 'CLI_LOGIN_REQUIRED',
@@ -165,15 +214,44 @@ describe('ClaudeCliRunner', () => {
 });
 
 describe('CodexCliRunner', () => {
-  const codex = (env: NodeJS.ProcessEnv = {}) =>
+  const codex = (env: NodeJS.ProcessEnv = {}, dir = workDir) =>
     new CodexCliRunner({
       bin: join(FAKES_DIR, 'fake-codex.mjs'),
       apiBaseUrl,
       turns,
-      workDir,
+      workDir: dir,
       env: { ...process.env, ...env },
       tools: () => new FakeResearchTools(),
     });
+
+  it('runs Codex on a private CODEX_HOME with only the owner login, the token by env', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kbchat-codex-'));
+    const ownerHome = join(dir, 'owner-codex');
+    await mkdir(ownerHome);
+    await writeFile(join(ownerHome, 'auth.json'), '{"login":"owner"}');
+    await writeFile(join(ownerHome, 'config.toml'), '[mcp_servers.other]');
+    const report = join(dir, 'report.json');
+    const workDirOfCodex = join(dir, 'work');
+    const events = await collect(
+      codex(
+        { CODEX_HOME: ownerHome, ...(await fakeHome({ report })) },
+        workDirOfCodex,
+      ),
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'done' });
+    const seen = JSON.parse(await readFile(report, 'utf8'));
+    const home = join(workDirOfCodex, 'home');
+    expect(seen.codexHome).toBe(home);
+    expect(await readFile(join(home, 'auth.json'), 'utf8')).toBe(
+      '{"login":"owner"}',
+    );
+    expect((await stat(join(home, 'auth.json'))).mode & 0o777).toBe(0o600);
+    await expect(stat(join(home, 'config.toml'))).rejects.toThrow();
+    expect(JSON.stringify(seen.args)).not.toContain('/mcp/turns/');
+    expect(seen.args).toEqual(
+      expect.arrayContaining(['-c', 'features.shell_tool=false']),
+    );
+  });
 
   it('streams a Codex turn with its MCP step and free cost', async () => {
     const events = await collect(codex());
@@ -187,7 +265,7 @@ describe('CodexCliRunner', () => {
   });
 
   it('reports a failed turn', async () => {
-    const events = await collect(codex({ FAKE_CODEX_MODE: 'fail' }));
+    const events = await collect(codex(await fakeHome({ mode: 'fail' })));
     expect(events.at(-1)).toEqual({
       type: 'error',
       code: 'CLI_LOGIN_REQUIRED',
@@ -254,7 +332,7 @@ describe('CLI dialects', () => {
   });
 
   it('builds argument lists with only the kb tools and no shell', () => {
-    const args = claudeArgs('http://127.0.0.1:1/mcp/turns/t', {
+    const args = claudeArgs('/turn/mcp.json', {
       model: 'opus',
       systemPrompt: 'rules',
     });
@@ -266,15 +344,10 @@ describe('CLI dialects', () => {
         '--allowedTools',
         'mcp__kb',
         '--no-session-persistence',
-        '--model',
-        'opus',
+        '--model=opus',
       ]),
     );
-    expect(JSON.parse(args[args.indexOf('--mcp-config') + 1] ?? '')).toEqual({
-      mcpServers: {
-        kb: { type: 'http', url: 'http://127.0.0.1:1/mcp/turns/t' },
-      },
-    });
+    expect(args[args.indexOf('--mcp-config') + 1]).toBe('/turn/mcp.json');
     expect(codexArgs('http://x', 'gpt-5.5')).toEqual(
       expect.arrayContaining([
         'exec',
@@ -283,21 +356,24 @@ describe('CLI dialects', () => {
         'read-only',
         '-c',
         'mcp_servers.kb.url="http://x"',
-        '--model',
-        'gpt-5.5',
+        '-c',
+        'mcp_servers.kb.bearer_token_env_var="KB_CHAT_MCP_TOKEN"',
+        '--model=gpt-5.5',
         '-',
       ]),
     );
   });
 
-  it('drops every API credential from the CLI environment (BR-7)', () => {
+  it('hands the CLI only allowlisted variables, never an API credential (BR-7)', () => {
     expect(
       subscriptionEnv({
         PATH: '/bin',
+        HOME: '/Users/owner',
         ANTHROPIC_API_KEY: 'a',
         OPENAI_API_KEY: 'b',
         OPENROUTER_API_KEY: 'c',
+        KB_CHAT_STATE_DIR: '/state',
       }),
-    ).toEqual({ PATH: '/bin' });
+    ).toEqual({ PATH: '/bin', HOME: '/Users/owner' });
   });
 });

@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Writable } from 'node:stream';
-import Fastify from 'fastify';
+import Fastify, { type FastifyBaseLogger } from 'fastify';
 import { pino } from 'pino';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeResearchTools } from '../../test/fake-research-tools.js';
@@ -88,7 +88,8 @@ describe('MCP turn endpoint', () => {
         done();
       },
     });
-    const app = Fastify({ loggerInstance: pino({ level: 'info' }, sink) });
+    const logger: FastifyBaseLogger = pino({ level: 'info' }, sink);
+    const app = Fastify({ loggerInstance: logger });
     registerErrorHandler(app);
     const turns = new McpTurnRegistry();
     const opened = turns.open(new FakeResearchTools(), {}, 5);

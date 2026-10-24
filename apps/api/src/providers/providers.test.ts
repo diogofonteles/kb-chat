@@ -117,25 +117,46 @@ describe('ProviderRegistry', () => {
 
   it('builds subscription runners and refuses research without the tool loop', async () => {
     const ai = await createAiProviders({
-      config: config({ KB_CHAT_LLM: 'stub' }),
+      config: config({ KB_CHAT_LLM: 'stub', KB_CHAT_CODEX: 'on' }),
       store: new MemorySettingsStore(),
       principal: 'owner',
       env: {},
     });
-    expect(ai.registry.researchRunner('owner')).toBeInstanceOf(
-      DisabledResearchRunner,
-    );
-    expect(ai.research.configured()).toBe(false);
+    const runner = () => ai.registry.researchRunner('owner');
+    expect(runner()).toBeInstanceOf(DisabledResearchRunner);
+    expect(runner().configured()).toBe(false);
     await ai.settings.update('owner', {
       ai: { provider: 'claude-subscription', model: 'opus' },
     });
-    expect(ai.research.billing).toBe('subscription');
-    expect(ai.research.model).toBe('opus');
+    expect(runner().billing).toBe('subscription');
+    expect(runner().model).toBe('opus');
     await ai.settings.update('owner', {
       ai: { provider: 'chatgpt-subscription' },
     });
-    expect(ai.research.model).toBe('codex');
+    expect(runner().model).toBe('codex');
     expect(ai.registry.dailyCapUsd('owner')).toBe(1);
+  });
+
+  it('keeps the ChatGPT subscription off until KB_CHAT_CODEX=on (ADR 0007)', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'kbchat-path-'));
+    await writeFile(join(folder, 'codex'), '#!/bin/sh\n');
+    await chmod(join(folder, 'codex'), 0o755);
+    const ai = await createAiProviders({
+      config: config({ KB_CHAT_LLM: 'stub' }),
+      store: new MemorySettingsStore(),
+      principal: 'owner',
+      env: { PATH: folder },
+    });
+    const codex = (await ai.registry.list('owner')).items.find(
+      (item) => item.id === 'chatgpt-subscription',
+    );
+    expect(codex).toMatchObject({ available: false, reason: 'not-enabled' });
+    await ai.settings.update('owner', {
+      ai: { provider: 'chatgpt-subscription' },
+    });
+    expect(ai.registry.researchRunner('owner')).toBeInstanceOf(
+      DisabledResearchRunner,
+    );
   });
 
   it('runs the per-token tool loop it is given (bound to KBC-008 after the merge)', async () => {
