@@ -1,6 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Writable } from 'node:stream';
 import Fastify from 'fastify';
+import { pino } from 'pino';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeResearchTools } from '../../test/fake-research-tools.js';
 import { registerErrorHandler } from '../error-handler.js';
@@ -75,6 +77,33 @@ describe('MCP turn endpoint', () => {
     });
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe('NOT_FOUND');
+    await app.close();
+  });
+
+  it('never logs the turn token, even at info level (ADR 0007)', async () => {
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk, _encoding, done) {
+        lines.push(String(chunk));
+        done();
+      },
+    });
+    const app = Fastify({ loggerInstance: pino({ level: 'info' }, sink) });
+    registerErrorHandler(app);
+    const turns = new McpTurnRegistry();
+    const opened = turns.open(new FakeResearchTools(), {}, 5);
+    await app.register(mcpRoutes(turns));
+    const response = await app.inject({
+      method: 'POST',
+      url: `/mcp/turns/${opened.token}`,
+      headers: { accept: 'application/json, text/event-stream' },
+      payload: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+    });
+    expect(response.statusCode).toBeLessThan(500);
+    const log = lines.join('');
+    expect(log).toContain('/mcp/turns/***');
+    expect(log).not.toContain(opened.token);
+    opened.close();
     await app.close();
   });
 });

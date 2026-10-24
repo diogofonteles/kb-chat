@@ -1,11 +1,21 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../app-error.js';
 import { createKbMcpServer } from './kb-mcp-server.js';
 import type { McpTurnRegistry } from './mcp-turns.js';
 
 export const mcpTurnPath = (token: string): string => `/mcp/turns/${token}`;
+
+const TOKEN_IN_PATH = /\/mcp\/turns\/[^/?#]*/;
+
+/** The request as logged, with the turn token replaced: the token is never logged (ADR 0007). */
+export const redactedTurnRequest = (request: FastifyRequest) => ({
+  method: request.method,
+  url: request.url.replace(TOKEN_IN_PATH, '/mcp/turns/***'),
+  host: request.host,
+  remoteAddress: request.ip,
+});
 
 const params = z.object({ token: z.string().min(16).max(64) });
 
@@ -16,7 +26,8 @@ const params = z.object({ token: z.string().min(16).max(64) });
 export const mcpRoutes =
   (turns: McpTurnRegistry): FastifyPluginAsync =>
   async (app) => {
-    app.all('/mcp/turns/:token', async (request, reply) => {
+    const options = { logSerializers: { req: redactedTurnRequest } };
+    app.all('/mcp/turns/:token', options, async (request, reply) => {
       const parsed = params.safeParse(request.params);
       const turn = parsed.success ? turns.get(parsed.data.token) : undefined;
       if (!turn) throw new AppError('NOT_FOUND', 'Unknown research turn');
