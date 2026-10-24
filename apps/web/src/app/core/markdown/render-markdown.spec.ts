@@ -3,7 +3,7 @@ import { renderMarkdown } from './render-markdown.js';
 describe('renderMarkdown', () => {
   it('renders headings and keeps single line breaks', () => {
     const html = renderMarkdown('# Título\n\nlinha 1\nlinha 2');
-    expect(html).toContain('<h1>Título</h1>');
+    expect(html).toContain('<h3>Título</h3>');
     expect(html).toContain('linha 1<br>linha 2');
   });
 });

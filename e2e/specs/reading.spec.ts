@@ -88,3 +88,42 @@ test('NFR-1: a 200 KB document opens with its highlight in under 500 ms', async 
   ).toBeInViewport();
   expect(Date.now() - started).toBeLessThan(500);
 });
+
+test('AC-9: "Copiar trecho" copies the paragraph of the current occurrence', async ({
+  page,
+  context,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'clipboard permissions are Chromium-only here',
+  );
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openFirst(page, 'natureza setupla', /A Natureza Sétupla/);
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Copiar trecho' })
+    .click();
+  await expect(
+    page.getByRole('dialog').getByRole('button', { name: 'Copiado' }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(
+    /NATUREZA SÉTUPLA/,
+  );
+});
+
+test('AC-10: a document without relations has no "Veja também"', async ({
+  page,
+}) => {
+  await openFirst(page, 'pitagóricos', /A Lei do Ritmo/);
+  await expect(
+    page.getByRole('dialog').getByRole('heading', { name: 'Veja também' }),
+  ).toHaveCount(0);
+});
+
+test('documents with ids longer than 100 characters open', async ({ page }) => {
+  await openFirst(page, 'nome de arquivo longo', /Um Título Muito Longo/);
+  await expect(page.getByRole('dialog')).toContainText(
+    'Texto com nome de arquivo longo.',
+  );
+});

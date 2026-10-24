@@ -18,9 +18,16 @@ export const SEE_ALSO_GROUPS = [
 export const seeAlsoGroupNameSchema = z.enum(SEE_ALSO_GROUPS);
 export type SeeAlsoGroupName = z.infer<typeof seeAlsoGroupNameSchema>;
 
+/** A related document with the facets needed to judge it before opening (KBC-003 FR-3). */
+export const relatedDocumentSchema = documentRefSchema.extend(
+  documentFacetsSchema.pick({ genre: true, depth: true, relevance: true })
+    .shape,
+);
+export type RelatedDocument = z.infer<typeof relatedDocumentSchema>;
+
 /** Up to 5 references plus the full count, for "ver todos (n)". */
 export const seeAlsoGroupSchema = z.object({
-  items: z.array(documentRefSchema),
+  items: z.array(relatedDocumentSchema),
   total: z.number().int().nonnegative(),
 });
 export type SeeAlsoGroup = z.infer<typeof seeAlsoGroupSchema>;
@@ -55,7 +62,7 @@ export type KbDocument = z.infer<typeof documentSchema>;
 
 /** GET documents/:id/relations/:group — one page of a "Veja também" group. */
 export const relationPageSchema = z.object({
-  items: z.array(documentRefSchema),
+  items: z.array(relatedDocumentSchema),
   total: z.number().int().nonnegative(),
   nextOffset: z.number().int().nonnegative().nullable(),
 });

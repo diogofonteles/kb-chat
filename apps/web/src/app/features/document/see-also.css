@@ -54,3 +54,16 @@ ul {
   color: var(--color-text-muted);
   text-decoration: underline;
 }
+
+.ref-facets {
+  display: block;
+  padding: 0 var(--space-2) var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.failed {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}

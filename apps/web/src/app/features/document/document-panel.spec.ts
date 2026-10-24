@@ -63,7 +63,7 @@ describe('DocumentPanel', () => {
     const view = await renderPanel();
     view.http.expectOne(URL).flush(aDocument());
     await view.fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar documento' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
     expect(view.closed).toHaveBeenCalledOnce();
   });
 
@@ -73,7 +73,7 @@ describe('DocumentPanel', () => {
     await view.fixture.whenStable();
     const host = view.fixture.nativeElement as HTMLElement;
     host.scrollTop = 500;
-    screen.getByRole('button', { name: 'Fechar documento' }).focus();
+    screen.getByRole('button', { name: 'Fechar' }).focus();
     view.fixture.componentRef.setInput('documentId', 'b.md');
     TestBed.tick();
     view.http
@@ -199,6 +199,9 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     const refs = Array.from({ length: 5 }, (_, i) => ({
       id: `d${i}.md`,
       title: `Doc ${i}`,
+      genre: 'paper' as const,
+      depth: 2 as const,
+      relevance: 'core' as const,
     }));
     const empty = { items: [], total: 0 };
     const seeAlso = {
@@ -207,7 +210,9 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
       examples: { items: refs, total: 8 },
     };
     const view = await renderWith({}, aDocument({ concepts: [], seeAlso }));
-    fireEvent.click(screen.getByRole('button', { name: 'Ver todos (8)' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver mais (3 restantes)' }),
+    );
     view.http
       .expectOne(
         (req) =>
@@ -215,7 +220,15 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
           '/api/v1/topics/hermetismo/documents/a.md/relations/examples',
       )
       .flush({
-        items: [{ id: 'd5.md', title: 'Doc 5' }],
+        items: [
+          {
+            id: 'd5.md',
+            title: 'Doc 5',
+            genre: null,
+            depth: null,
+            relevance: null,
+          },
+        ],
         total: 8,
         nextOffset: null,
       });
@@ -235,5 +248,79 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     };
     await renderWith({}, aDocument({ seeAlso }));
     expect(screen.queryByRole('heading', { name: 'Veja também' })).toBeNull();
+  });
+
+  it('renders long documents progressively with a section index', async () => {
+    const paragraph = 'Texto de estudo. '.repeat(500);
+    const long = [
+      '# Primeira parte',
+      ...Array.from({ length: 30 }, () => paragraph),
+      '## Segunda parte',
+      ...Array.from({ length: 30 }, () => paragraph),
+    ].join('\n\n');
+    const view = await renderWith({}, aDocument({ body: long }));
+    expect(
+      screen.getByRole('button', {
+        name: /Continuar lendo \(faltam \d+% do documento\)/,
+      }),
+    ).toBeTruthy();
+    expect(view.container.querySelectorAll('.body h4')).toHaveLength(0);
+    fireEvent.click(screen.getByText('Seções (2)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Segunda parte' }));
+    await view.fixture.whenStable();
+    expect(screen.getByRole('heading', { name: 'Segunda parte' })).toBeTruthy();
+  });
+
+  it('says when the passage could not be copied', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+      configurable: true,
+    });
+    await renderWith(
+      { highlight: 'sétupla' },
+      aDocument({ body: 'A NATUREZA SÉTUPLA\n\nTexto.' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar trecho' }));
+    expect(
+      await screen.findByRole('button', { name: 'Não consegui copiar' }),
+    ).toBeTruthy();
+  });
+
+  it('hides "Copiar trecho" when nothing is highlighted', async () => {
+    await renderWith({ highlight: null });
+    expect(screen.queryByRole('button', { name: 'Copiar trecho' })).toBeNull();
+  });
+
+  it('reports a failed "Ver mais" and keeps the references already shown', async () => {
+    const refs = Array.from({ length: 5 }, (_, i) => ({
+      id: `d${i}.md`,
+      title: `Doc ${i}`,
+      genre: null,
+      depth: null,
+      relevance: null,
+    }));
+    const empty = { items: [], total: 0 };
+    const seeAlso = {
+      ...aDocument().seeAlso,
+      exampleOf: empty,
+      examples: { items: refs, total: 8 },
+    };
+    const view = await renderWith({}, aDocument({ concepts: [], seeAlso }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver mais (3 restantes)' }),
+    );
+    await view.fixture.whenStable();
+    expect(screen.getByRole('button', { name: 'Carregando…' })).toBeTruthy();
+    view.http
+      .expectOne((req) => req.url.endsWith('/relations/examples'))
+      .flush(
+        { error: { code: 'INTERNAL', message: 'x' } },
+        { status: 500, statusText: 'Error' },
+      );
+    await view.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /Não consegui carregar mais/,
+    );
+    expect(screen.getByRole('button', { name: 'Doc 4' })).toBeTruthy();
   });
 });

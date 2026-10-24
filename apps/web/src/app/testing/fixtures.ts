@@ -41,6 +41,26 @@ export const aResponse = (
   ...overrides,
 });
 
+const SEE_ALSO: KbDocument['seeAlso'] = {
+  exampleOf: {
+    items: [
+      {
+        id: 'wiki/concepts/Cabala.md',
+        title: 'Cabala',
+        genre: null,
+        depth: null,
+        relevance: null,
+      },
+    ],
+    total: 1,
+  },
+  extends: { items: [], total: 0 },
+  related: { items: [], total: 0 },
+  examples: { items: [], total: 0 },
+  extendedBy: { items: [], total: 0 },
+  relatedFrom: { items: [], total: 0 },
+};
+
 export const aDocument = (overrides: Partial<KbDocument> = {}): KbDocument => ({
   id: 'raw/articles/a-lei-do-ritmo.md',
   title: 'A Lei do Ritmo',
@@ -54,17 +74,7 @@ export const aDocument = (overrides: Partial<KbDocument> = {}): KbDocument => ({
   origin: null,
   obsidianUrl:
     'obsidian://open?vault=hermetismo&file=hermetismo%2Fraw%2Farticles%2Fa-lei-do-ritmo',
-  seeAlso: {
-    exampleOf: {
-      items: [{ id: 'wiki/concepts/Cabala.md', title: 'Cabala' }],
-      total: 1,
-    },
-    extends: { items: [], total: 0 },
-    related: { items: [], total: 0 },
-    examples: { items: [], total: 0 },
-    extendedBy: { items: [], total: 0 },
-    relatedFrom: { items: [], total: 0 },
-  },
+  seeAlso: SEE_ALSO,
   ...overrides,
 });
 

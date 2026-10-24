@@ -6,3 +6,4 @@ export {
 } from './catalog-entry.js';
 export { RelationIndex } from './relations.js';
 export { splitFrontmatter } from './frontmatter.js';
+export { copyKey } from './titles.js';

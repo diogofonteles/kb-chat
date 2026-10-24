@@ -55,11 +55,6 @@
   background: var(--color-surface-muted);
 }
 
-.close-text,
-.close-mobile {
-  display: none;
-}
-
 h2 {
   margin: 0;
   font-family: var(--font-display);
@@ -201,18 +196,45 @@ h2:focus-visible {
     justify-self: start;
     font-size: 1rem;
   }
-
-  .close-mobile,
-  .close-text {
-    display: inline;
-  }
-
-  .close-desktop {
-    display: none;
-  }
 }
 
 .body :is(pre, code) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.head .tools {
+  padding-top: var(--space-1);
+}
+
+.close-label {
+  font-size: var(--text-sm);
+}
+
+.sections ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section {
+  padding: var(--space-1) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.read-more {
+  margin: 0 var(--space-6) var(--space-6);
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
 }

@@ -28,3 +28,19 @@ describe('markTerms', () => {
     expect(markTerms('c++ e c', ['c++'])).toBe('<mark>c++</mark> e c');
   });
 });
+
+describe('markTerms on rendered HTML', () => {
+  it('marks whole words that start with a term', () => {
+    expect(markTerms('<p>as naturezas sétuplas</p>', ['setupla'])).toBe(
+      '<p>as naturezas <mark>sétuplas</mark></p>',
+    );
+  });
+
+  it('leaves links, inline code and code blocks untouched', () => {
+    const html =
+      '<p><a href="/natureza">natureza</a> e <code>natureza</code> e natureza</p><pre><code>natureza</code></pre>';
+    expect(markTerms(html, ['natureza'])).toBe(
+      '<p><a href="/natureza">natureza</a> e <code>natureza</code> e <mark>natureza</mark></p><pre><code>natureza</code></pre>',
+    );
+  });
+});

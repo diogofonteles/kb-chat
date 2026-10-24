@@ -76,15 +76,36 @@ function accentInsensitive(term: string): string {
     .join('');
 }
 
-/**
- * Wraps each occurrence of the terms in <mark> (case and accent insensitive), at word
- * starts only. The markdown is rendered afterwards and sanitized by Angular, which keeps <mark>.
- */
-export function markTerms(markdown: string, terms: readonly string[]): string {
-  if (terms.length === 0) return markdown;
-  const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}])(${terms.map(accentInsensitive).join('|')})`,
+/** Tags whose content is never highlighted: code keeps its text, links keep their target. */
+const SKIPPED = new Set(['code', 'pre', 'a', 'script', 'style']);
+const TAG = /^<\/?([a-z0-9]+)/i;
+
+function wordPattern(terms: readonly string[]): RegExp {
+  // Whole words that start with a term: "sétupla" also marks "sétuplas".
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}])((?:${terms.map(accentInsensitive).join('|')})[\\p{L}\\p{N}]*)`,
     'giu',
   );
-  return markdown.replace(pattern, '<mark>$1</mark>');
+}
+
+/**
+ * Wraps occurrences of the terms in <mark> inside the rendered HTML, only in text nodes
+ * outside code, pre and links (case and accent insensitive). Angular sanitizes the result.
+ */
+export function markTerms(html: string, terms: readonly string[]): string {
+  if (terms.length === 0) return html;
+  const pattern = wordPattern(terms);
+  let skipped = 0;
+  return html
+    .split(/(<[^>]+>)/)
+    .map((part) => {
+      const tag = TAG.exec(part);
+      if (tag) {
+        const name = (tag[1] ?? '').toLowerCase();
+        if (SKIPPED.has(name)) skipped += part.startsWith('</') ? -1 : 1;
+        return part;
+      }
+      return skipped > 0 ? part : part.replace(pattern, '<mark>$1</mark>');
+    })
+    .join('');
 }

@@ -20,7 +20,7 @@ describe('RelationIndex', () => {
 
   it('resolves forward links to concept articles and drops links without a target (AC-4)', () => {
     const groups = index.groupsOf(tree);
-    expect(groups.exampleOf).toEqual([
+    expect(groups.exampleOf).toMatchObject([
       { id: 'wiki/concepts/Cabala.md', title: 'Cabala' },
     ]);
     expect(groups.related).toEqual([]);

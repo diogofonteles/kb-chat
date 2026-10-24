@@ -1,11 +1,9 @@
 import type {
-  DocumentRef,
   KbDocument,
   RelationPage,
   SeeAlso,
   SeeAlsoGroupName,
 } from '@kb-chat/contracts';
-import { SEE_ALSO_GROUPS } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
@@ -89,13 +87,18 @@ export class DocumentsService {
 
   private seeAlso(catalog: TopicCatalog, entry: CatalogEntry): SeeAlso {
     const groups = catalog.relations.groupsOf(entry);
-    const preview = (refs: readonly DocumentRef[]) => ({
-      items: refs.slice(0, SEE_ALSO_PREVIEW),
-      total: refs.length,
+    const preview = (group: SeeAlsoGroupName) => ({
+      items: groups[group].slice(0, SEE_ALSO_PREVIEW),
+      total: groups[group].length,
     });
-    return Object.fromEntries(
-      SEE_ALSO_GROUPS.map((group) => [group, preview(groups[group])]),
-    ) as SeeAlso;
+    return {
+      exampleOf: preview('exampleOf'),
+      extends: preview('extends'),
+      related: preview('related'),
+      examples: preview('examples'),
+      extendedBy: preview('extendedBy'),
+      relatedFrom: preview('relatedFrom'),
+    };
   }
 
   private obsidianUrl(topic: string, id: string): string {

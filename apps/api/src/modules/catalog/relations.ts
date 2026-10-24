@@ -1,5 +1,6 @@
-import type { DocumentRef, SeeAlsoGroupName } from '@kb-chat/contracts';
+import type { RelatedDocument, SeeAlsoGroupName } from '@kb-chat/contracts';
 import type { CatalogEntry, RelationNames } from './catalog-entry.js';
+import { copyKey } from './titles.js';
 
 const CONCEPTS_FOLDER = 'wiki/concepts/';
 
@@ -11,14 +12,29 @@ const REVERSE: Record<keyof RelationNames, SeeAlsoGroupName> = {
 };
 const FORWARD_KEYS = Object.keys(REVERSE) as (keyof RelationNames)[];
 
-const toRef = (entry: CatalogEntry): DocumentRef => ({
+const toRef = (entry: CatalogEntry): RelatedDocument => ({
   id: entry.id,
   title: entry.title,
+  genre: entry.genre,
+  depth: entry.depth,
+  relevance: entry.relevance,
 });
 
-/** Concept article name as kb links it: the file name without folder and extension. */
+/** Concept article name as kb links it, compared case-insensitively. */
+const conceptKey = (name: string): string => name.trim().toLowerCase();
 const conceptName = (id: string): string =>
-  id.slice(CONCEPTS_FOLDER.length).replace(/\.md$/, '');
+  conceptKey(id.slice(CONCEPTS_FOLDER.length).replace(/\.md$/, ''));
+
+/** One entry per title: copies of the same document and repeated links collapse (SL-25). */
+function uniqueByCopy(refs: readonly RelatedDocument[]): RelatedDocument[] {
+  const seen = new Set<string>();
+  return refs.filter((ref) => {
+    const key = copyKey(ref.title);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 /**
  * Resolves kb wikilinks to concept articles and indexes them both ways (KBC-003 BR-1).
@@ -28,7 +44,7 @@ export class RelationIndex {
   private readonly conceptByName = new Map<string, CatalogEntry>();
   private readonly reverse = new Map<
     string,
-    Map<SeeAlsoGroupName, DocumentRef[]>
+    Map<SeeAlsoGroupName, RelatedDocument[]>
   >();
 
   constructor(entries: Iterable<CatalogEntry>) {
@@ -40,24 +56,24 @@ export class RelationIndex {
     for (const entry of all) this.indexReverse(entry);
   }
 
-  /** The groups shown on one document, each fully listed (callers page them). */
+  /** The groups shown on one document, each fully listed and without copies (callers page them). */
   groupsOf(
     entry: CatalogEntry,
-  ): Record<SeeAlsoGroupName, readonly DocumentRef[]> {
+  ): Record<SeeAlsoGroupName, readonly RelatedDocument[]> {
     const reverse = this.reverse.get(entry.id);
     return {
-      exampleOf: this.resolve(entry.relations.exampleOf),
-      extends: this.resolve(entry.relations.extends),
-      related: this.resolve(entry.relations.related),
-      examples: reverse?.get('examples') ?? [],
-      extendedBy: reverse?.get('extendedBy') ?? [],
-      relatedFrom: reverse?.get('relatedFrom') ?? [],
+      exampleOf: uniqueByCopy(this.resolve(entry.relations.exampleOf)),
+      extends: uniqueByCopy(this.resolve(entry.relations.extends)),
+      related: uniqueByCopy(this.resolve(entry.relations.related)),
+      examples: uniqueByCopy(reverse?.get('examples') ?? []),
+      extendedBy: uniqueByCopy(reverse?.get('extendedBy') ?? []),
+      relatedFrom: uniqueByCopy(reverse?.get('relatedFrom') ?? []),
     };
   }
 
-  private resolve(names: readonly string[]): DocumentRef[] {
+  private resolve(names: readonly string[]): RelatedDocument[] {
     return names.flatMap((name) => {
-      const concept = this.conceptByName.get(name);
+      const concept = this.conceptByName.get(conceptKey(name));
       return concept ? [toRef(concept)] : [];
     });
   }
@@ -75,10 +91,11 @@ export class RelationIndex {
   private addReverse(
     conceptId: string,
     group: SeeAlsoGroupName,
-    ref: DocumentRef,
+    ref: RelatedDocument,
   ): void {
     const groups =
-      this.reverse.get(conceptId) ?? new Map<SeeAlsoGroupName, DocumentRef[]>();
+      this.reverse.get(conceptId) ??
+      new Map<SeeAlsoGroupName, RelatedDocument[]>();
     groups.set(group, [...(groups.get(group) ?? []), ref]);
     this.reverse.set(conceptId, groups);
   }

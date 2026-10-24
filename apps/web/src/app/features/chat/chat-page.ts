@@ -46,6 +46,10 @@ export class ChatPage {
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
   protected readonly isEmpty = computed(() => this.messages().length === 0);
+  /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
+  protected readonly covered = computed(
+    () => this.opened() !== null && !this.isDesktop(),
+  );
   protected readonly topicsError = computed(() => {
     const err = this.store.topics.error();
     return err ? errorMessage(toUiErrorCode(err)) : '';
@@ -63,6 +67,10 @@ export class ChatPage {
       : errorMessage(last.error ?? 'INTERNAL');
     return `${last.question}: ${outcome}`;
   });
+
+  private isDesktop(): boolean {
+    return this.view?.matchMedia?.(DESKTOP_QUERY).matches ?? true;
+  }
 
   constructor() {
     // The question box starts focused on desktop; on phones it would pop the keyboard.

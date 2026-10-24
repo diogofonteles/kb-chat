@@ -10,19 +10,58 @@
         ← Voltar
       </button>
     }
-    <button
-      type="button"
-      class="close"
-      (click)="closed.emit()"
-      aria-label="Fechar documento"
-      i18n-aria-label="@@panel.close"
-    >
-      <span class="close-mobile" aria-hidden="true" i18n="@@panel.toResults"
-        >← Resultados</span
-      ><span class="close-desktop" aria-hidden="true">×</span>
+    <button type="button" class="close" (click)="closed.emit()">
+      <span class="close-label" i18n="@@panel.closeLabel">Fechar</span>
+      <span aria-hidden="true">×</span>
     </button>
   </div>
   <h2 id="document-title" #heading tabindex="-1">{{ title() }}</h2>
+  @if (loaded(); as doc) {
+    <div class="tools">
+      @if (matches() > 0) {
+        <span class="counter" aria-live="polite" i18n="@@panel.matches"
+          >{{ current() + 1 }} de
+          {matches(), plural,
+            =1 {1 ocorrência}
+            other {{{ matches() }} ocorrências}
+          }</span
+        >
+        <button
+          type="button"
+          class="tool"
+          (click)="step(-1)"
+          aria-label="Ocorrência anterior"
+          i18n-aria-label="@@panel.prev"
+        >
+          ▲
+        </button>
+        <button
+          type="button"
+          class="tool"
+          (click)="step(1)"
+          aria-label="Próxima ocorrência"
+          i18n-aria-label="@@panel.next"
+        >
+          ▼
+        </button>
+        <button
+          type="button"
+          class="tool text"
+          (click)="copyPassage()"
+          i18n="@@panel.copy"
+        >
+          {copyState(), select,
+            copied {Copiado}
+            failed {Não consegui copiar}
+            other {Copiar trecho}
+          }
+        </button>
+      }
+      <a class="tool text" [href]="doc.obsidianUrl" i18n="@@panel.obsidian"
+        >Abrir no Obsidian</a
+      >
+    </div>
+  }
 </header>
 
 <div class="meta">
@@ -54,46 +93,6 @@
         }
       </div>
     }
-    <div class="tools">
-      @if (matches() > 0) {
-        <span class="counter" aria-live="polite" i18n="@@panel.matches"
-          >{{ current() + 1 }} de
-          {matches(), plural,
-            =1 {1 ocorrência}
-            other {{{ matches() }} ocorrências}
-          }</span
-        >
-        <button
-          type="button"
-          class="tool"
-          (click)="step(-1)"
-          aria-label="Ocorrência anterior"
-          i18n-aria-label="@@panel.prev"
-        >
-          ▲
-        </button>
-        <button
-          type="button"
-          class="tool"
-          (click)="step(1)"
-          aria-label="Próxima ocorrência"
-          i18n-aria-label="@@panel.next"
-        >
-          ▼
-        </button>
-      }
-      <button
-        type="button"
-        class="tool text"
-        (click)="copyPassage()"
-        i18n="@@panel.copy"
-      >
-        {copied(), select, true {Copiado} other {Copiar trecho}}
-      </button>
-      <a class="tool text" [href]="doc.obsidianUrl" i18n="@@panel.obsidian"
-        >Abrir no Obsidian</a
-      >
-    </div>
   }
 </div>
 
@@ -116,7 +115,37 @@
       <p>{{ doc.summary }}</p>
     </details>
   }
+  @if (sections().length > 0) {
+    <details class="summary sections">
+      <summary i18n="@@panel.sections">
+        Seções ({{ sections().length }})
+      </summary>
+      <ul>
+        @for (section of sections(); track $index) {
+          <li>
+            <button
+              type="button"
+              class="section"
+              (click)="goToSection(section)"
+            >
+              {{ section.title }}
+            </button>
+          </li>
+        }
+      </ul>
+    </details>
+  }
   <div class="body" #body [innerHTML]="html()"></div>
+  @if (remainingPercent() > 0) {
+    <button
+      type="button"
+      class="read-more"
+      (click)="readMore()"
+      i18n="@@panel.readMore"
+    >
+      Continuar lendo (faltam {{ remainingPercent() }}% do documento)
+    </button>
+  }
   <app-see-also
     [topic]="topic()"
     [documentId]="documentId()"

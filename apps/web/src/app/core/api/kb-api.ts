@@ -34,11 +34,11 @@ export class KbApi {
   relations(
     topic: string,
     id: string,
-    page: { group: SeeAlsoGroupName; offset: number },
+    page: { group: SeeAlsoGroupName; offset: number; limit: number },
   ): Observable<RelationPage> {
     return this.http
       .get(relationsUrl(topic, id, page.group), {
-        params: { offset: page.offset, limit: 20 },
+        params: { offset: page.offset, limit: page.limit },
       })
       .pipe(map((body) => relationPageSchema.parse(body)));
   }

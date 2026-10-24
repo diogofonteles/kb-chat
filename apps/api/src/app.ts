@@ -44,7 +44,7 @@ async function registerRoutes(
       new DocumentsService({
         catalog,
         vault,
-        vaultName: basename(config.KB_VAULT),
+        vaultName: config.OBSIDIAN_VAULT ?? basename(config.KB_VAULT),
       }),
     ),
   );
@@ -56,6 +56,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (!deps.catalog) await catalog.load();
 
   const app = Fastify({
+    // Document ids are vault paths; Fastify's default (100 characters) refused 104 real ones.
+    maxParamLength: 1024,
     loggerInstance: deps.logger ?? createLogger(deps.config.LOG_LEVEL),
   });
   app.setValidatorCompiler(validatorCompiler);

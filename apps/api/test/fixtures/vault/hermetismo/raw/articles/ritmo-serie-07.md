@@ -7,6 +7,9 @@ relevance: adjacent
 summary: Lição 07 da série sobre o ritmo nas tradições.
 concepts:
   - '[[Hermetismo e Filosofia Hermética]]'
+example_of:
+  - '[[Ritmo]]'
+  - '[[Ritmo]]'
 ---
 
 Lição 07: o ritmo aparece nas estações, nas marés e na respiração.
