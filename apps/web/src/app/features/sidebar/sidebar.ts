@@ -23,7 +23,11 @@ const THEME_LABELS: Record<Theme, () => string> = {
   esoteric: () => $localize`:@@theme.esoteric:Esotérico`,
 };
 
-/** Side panel: new conversation, history in this browser, collection, theme and spend (screens.md T5). */
+/**
+ * Side panel: new conversation, history in this browser, collection, theme and spend (screens.md T5).
+ * A container of the chat page: it works on the page-scoped ChatStore, shown both as a column
+ * and inside the phone drawer, so passing a dozen inputs and outputs through ChatPage would not help.
+ */
 @Component({
   selector: 'app-sidebar',
   imports: [DecimalPipe],

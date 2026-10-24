@@ -25,7 +25,7 @@ import {
   toUiErrorCode,
   type UiErrorCode,
 } from '@core/api/api-error.js';
-import type { Subscription } from 'rxjs';
+import { finalize, type Subscription } from 'rxjs';
 import {
   citedSource,
   formatCost,
@@ -152,19 +152,26 @@ export class AiAnswer {
     this.run.set({ ...IDLE, phase: 'streaming' });
     this.subscription = this.api
       .answer(this.topic(), this.request(), crypto.randomUUID())
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        // Today's spend follows every answer, also one cut short by "Parar", new filters or a
+        // new conversation (KBC-005 FR-5); a cut-short one is recorded by the server a moment later.
+        finalize(() =>
+          this.spend.refresh(
+            this.run().phase === 'streaming' || this.run().interrupted
+              ? STOP_SETTLE_MS
+              : 0,
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: (event) => this.apply(event),
-        error: (err: unknown) => {
+        error: (err: unknown) =>
           this.run.update((run) => ({
             ...run,
             phase: 'error',
             error: toUiErrorCode(err),
-          }));
-          this.spend.refresh();
-        },
-        // Today's spend in the side panel follows every finished answer (KBC-005 FR-5).
-        complete: () => this.spend.refresh(),
+          })),
       });
   }
 
@@ -172,8 +179,6 @@ export class AiAnswer {
   protected stop(): void {
     this.stopSilently();
     this.run.update((run) => ({ ...run, phase: 'done', interrupted: true }));
-    // The server records the partial cost once it notices the abort: read the spend a bit later.
-    setTimeout(() => this.spend.refresh(), STOP_SETTLE_MS);
   }
 
   protected openCitation(event: MouseEvent): void {

@@ -369,6 +369,11 @@ describe('ChatPage without collections', () => {
 });
 
 describe('ChatPage side panel (KBC-005)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.documentElement.removeAttribute('data-theme');
+  });
+
   it('starts a new conversation and focuses the question box (AC-1)', async () => {
     const view = await renderPage();
     await ask('lei do ritmo', view);
@@ -449,11 +454,9 @@ describe('ChatPage side panel (KBC-005)', () => {
   });
 
   it('says the history is unavailable when storage fails, and search still works (AC-4)', async () => {
-    const getItem = vi
-      .spyOn(Storage.prototype, 'getItem')
-      .mockImplementation(() => {
-        throw new Error('SecurityError');
-      });
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
     const view = await renderPage();
     expect(
       screen.getByText('Histórico indisponível neste navegador.'),
@@ -462,6 +465,5 @@ describe('ChatPage side panel (KBC-005)', () => {
     view.http.expectOne(SEARCH_URL).flush(aResponse());
     await view.fixture.whenStable();
     expect(screen.getByText(/^1 documento · Tudo/)).toBeTruthy();
-    getItem.mockRestore();
   });
 });

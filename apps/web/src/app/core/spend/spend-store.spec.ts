@@ -41,6 +41,20 @@ describe('SpendStore (KBC-005 FR-5)', () => {
     expect(failing.today.error()).toBeTruthy();
   });
 
+  it('can reload a moment later, after the server recorded a stopped answer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const spendToday = vi.fn(() => of({ usd: 0, capUsd: 1, configured: true }));
+    const store = createStore(spendToday);
+    await settle();
+    store.refresh(1000);
+    await settle();
+    expect(spendToday).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1000);
+    await settle();
+    expect(spendToday).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
   it('formats dollars in pt-BR with two decimals', () => {
     expect(formatSpend(0.031)).toMatch(/^US\$\s0,03$/);
   });

@@ -58,11 +58,18 @@ describe('HistoryStore (KBC-005 BR-1)', () => {
     expect(store.available()).toBe(true);
   });
 
-  it('ignores unreadable data from an older version', () => {
-    localStorage.setItem('kb-chat.history', '{"not":"a list"}');
-    const store = createStore();
-    expect(store.conversations()).toEqual([]);
-    expect(store.available()).toBe(true);
+  it('replaces unreadable data on the next save instead of giving up', () => {
+    for (const bad of ['{"not":"a list"}', '{not json']) {
+      TestBed.resetTestingModule();
+      localStorage.setItem('kb-chat.history', bad);
+      const store = createStore();
+      expect(store.conversations()).toEqual([]);
+      expect(store.available()).toBe(true);
+      store.save(aConversation('a'));
+      expect(
+        JSON.parse(localStorage.getItem('kb-chat.history') ?? ''),
+      ).toHaveLength(1);
+    }
   });
 
   it('runs without history when localStorage throws (AC-4)', () => {

@@ -248,8 +248,6 @@ describe('AiAnswer guards (KBC-004 review)', () => {
 });
 
 describe('AiAnswer and the spend of the day (KBC-005 FR-5)', () => {
-  afterEach(() => vi.useRealTimers());
-
   async function started(answer?: unknown) {
     const { api, stream } = setup();
     if (answer) api.answer.mockReturnValueOnce(answer as never);
@@ -265,22 +263,25 @@ describe('AiAnswer and the spend of the day (KBC-005 FR-5)', () => {
     stream.next({ type: 'token', text: 'Texto' });
     stream.next({ type: 'done', usd: 0.0001, model: 'm', interrupted: false });
     stream.complete();
-    expect(spend.refresh).toHaveBeenCalledTimes(1);
+    expect(spend.refresh).toHaveBeenCalledExactlyOnceWith(0);
   });
 
   it('refreshes the spend when an answer fails', async () => {
     const { spend } = await started(throwError(() => new Error('x')));
-    expect(spend.refresh).toHaveBeenCalledTimes(1);
+    expect(spend.refresh).toHaveBeenCalledExactlyOnceWith(0);
   });
 
-  it('refreshes the spend shortly after "Parar"', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout'] });
+  it('refreshes the spend a moment after "Parar"', async () => {
     const { spend, view } = await started();
     fireEvent.click(screen.getByRole('button', { name: 'Parar' }));
     await view.fixture.whenStable();
-    expect(spend.refresh).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1000);
-    expect(spend.refresh).toHaveBeenCalledTimes(1);
+    expect(spend.refresh).toHaveBeenCalledExactlyOnceWith(1000);
+  });
+
+  it('refreshes the spend when the answer is dropped with its conversation', async () => {
+    const { spend, view } = await started();
+    view.fixture.destroy();
+    expect(spend.refresh).toHaveBeenCalledExactlyOnceWith(1000);
   });
 });
 

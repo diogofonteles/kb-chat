@@ -26,6 +26,16 @@ export type Conversation = z.infer<typeof conversationSchema>;
 
 const historySchema = z.array(conversationSchema);
 
+/** Unreadable data (an older version, a manual edit) starts an empty history, replaced on the next save. */
+function parseHistory(raw: string): Conversation[] {
+  try {
+    const parsed = historySchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data.slice(0, MAX_CONVERSATIONS) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Newest first; saving an existing id moves it to the top; the oldest beyond the cap are dropped. */
 export function upsertConversation(
   history: readonly Conversation[],
@@ -57,16 +67,14 @@ export class HistoryStore {
   }
 
   private read(): Conversation[] {
+    let raw: string | null | undefined;
     try {
-      const raw = this.view?.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = historySchema.safeParse(JSON.parse(raw));
-      // Unreadable data from an older version is replaced on the next save, not fatal.
-      return parsed.success ? parsed.data.slice(0, MAX_CONVERSATIONS) : [];
+      raw = this.view?.localStorage.getItem(STORAGE_KEY);
     } catch {
       this.availableState.set(false);
       return [];
     }
+    return raw ? parseHistory(raw) : [];
   }
 
   private write(history: readonly Conversation[]): void {

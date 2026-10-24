@@ -91,8 +91,15 @@ export class ChatPage {
   constructor() {
     const query = this.view?.matchMedia?.(DESKTOP_QUERY);
     const onChange = (event: MediaQueryListEvent) => {
+      const drawer = this.drawer()?.nativeElement;
       this.desktop.set(event.matches);
-      if (event.matches) this.drawer()?.nativeElement.close();
+      // Grown to desktop with the drawer open: it goes away with the Menu button, so focus moves on.
+      if (event.matches && drawer?.open) {
+        drawer.close();
+        afterNextRender(() => this.composer().focus(), {
+          injector: this.injector,
+        });
+      }
     };
     query?.addEventListener('change', onChange);
     inject(DestroyRef).onDestroy(() =>

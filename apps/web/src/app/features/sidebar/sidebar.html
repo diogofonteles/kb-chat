@@ -32,7 +32,9 @@
             "
             (click)="open(conversation)"
           >
-            <span class="question">{{ conversation.asks[0].question }}</span>
+            <span class="question" [title]="conversation.asks[0].question">{{
+              conversation.asks[0].question
+            }}</span>
             <span class="meta">
               {{ titles().get(conversation.topic) ?? conversation.topic }}
               @if (conversation.asks.length > 1) {
@@ -55,9 +57,9 @@
   <label class="field">
     <span class="label" i18n="@@sidebar.topic">Acervo</span>
     <select
+      #topicSelect
       [disabled]="chat.topicList().length === 0"
-      [value]="chat.topicSlug() ?? ''"
-      (change)="changeTopic($any($event.target).value)"
+      (change)="changeTopic(topicSelect.value)"
     >
       @for (topic of chat.topicList(); track topic.slug) {
         <option
@@ -72,7 +74,7 @@
 
   <label class="field">
     <span class="label" i18n="@@sidebar.theme">Tema</span>
-    <select (change)="changeTheme($any($event.target).value)">
+    <select #themeSelect (change)="changeTheme(themeSelect.value)">
       @for (option of themeOptions; track option.value) {
         <option [value]="option.value" [selected]="option.value === theme()">
           {{ option.label }}
@@ -81,7 +83,7 @@
     </select>
   </label>
 
-  <p class="spend" aria-live="polite">
+  <p class="spend">
     <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
     @if (!spend.configured()) {
       <span i18n="@@sidebar.spendOff">IA não configurada</span>
@@ -90,7 +92,7 @@
     } @else if (spend.today.error()) {
       <span i18n="@@sidebar.spendError">Gasto indisponível</span>
     } @else {
-      <span aria-hidden="true">…</span>
+      <span i18n="@@sidebar.spendLoading">Carregando…</span>
     }
   </p>
 </div>

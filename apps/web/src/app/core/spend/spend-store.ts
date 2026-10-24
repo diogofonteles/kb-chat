@@ -1,20 +1,20 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { Injectable, LOCALE_ID, computed, inject } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { AnswersApi } from '@core/api/answers-api.js';
 
-const usd = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-export const formatSpend = (value: number): string => usd.format(value);
+export const formatSpend = (value: number, locale = 'pt-BR'): string =>
+  new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 
 /** Today's AI spend for the side panel (KBC-005 FR-5); refreshed after every answer. */
 @Injectable({ providedIn: 'root' })
 export class SpendStore {
   private readonly api = inject(AnswersApi);
+  private readonly locale = inject(LOCALE_ID);
 
   readonly today = rxResource({ stream: () => this.api.spendToday() });
   private readonly value = computed(() =>
@@ -25,11 +25,13 @@ export class SpendStore {
   readonly label = computed(() => {
     const spend = this.value();
     return spend
-      ? $localize`:@@spend.amount:${formatSpend(spend.usd)}:spent: de ${formatSpend(spend.capUsd)}:cap:`
+      ? $localize`:@@spend.amount:${formatSpend(spend.usd, this.locale)}:spent: de ${formatSpend(spend.capUsd, this.locale)}:cap:`
       : '';
   });
 
-  refresh(): void {
-    this.today.reload();
+  /** Reloads now or after `delayMs` (the server records a stopped answer's cost a moment later). */
+  refresh(delayMs = 0): void {
+    if (delayMs === 0) this.today.reload();
+    else setTimeout(() => this.today.reload(), delayMs);
   }
 }

@@ -7,7 +7,6 @@ import {
   inject,
   linkedSignal,
   signal,
-  untracked,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -34,6 +33,7 @@ import {
   scan,
   startWith,
   switchMap,
+  tap,
   timer,
   type Observable,
 } from 'rxjs';
@@ -85,9 +85,9 @@ function toConversation(
   id: string,
   messages: readonly ChatMessage[],
 ): Conversation | null {
-  const settled = messages.filter((message) => message.status !== 'loading');
   const first = messages[0];
-  if (!first || settled.length === 0) return null;
+  if (!first || messages.every((message) => message.status === 'loading'))
+    return null;
   return {
     id,
     topic: first.topic,
@@ -112,6 +112,7 @@ export class ChatStore {
   private readonly resets = new Subject<ChatEvent>();
   private nextId = 1;
   private nextRev = 1;
+  private rememberedKey = '';
 
   readonly topics = httpResource(topicsUrl, {
     parse: (body) => topicListSchema.parse(body),
@@ -140,7 +141,10 @@ export class ChatStore {
         mergeMap((runs) => runs.pipe(switchMap((ask) => this.run(ask)))),
       ),
       this.mores.pipe(mergeMap((message) => this.runMore(message))),
-    ).pipe(scan(reduceChat, [] as readonly ChatMessage[])),
+    ).pipe(
+      scan(reduceChat, [] as readonly ChatMessage[]),
+      tap((messages) => this.remember(messages)),
+    ),
     { initialValue: [] as readonly ChatMessage[] },
   );
 
@@ -159,14 +163,20 @@ export class ChatStore {
 
   constructor() {
     effect(() => writeModePreference(this.storage, this.modeState()));
-    // Every finished question updates the conversation in the history.
-    effect(() => {
-      const conversation = toConversation(
-        this.conversationState(),
-        this.messages(),
-      );
-      if (conversation) untracked(() => this.history.save(conversation));
-    });
+  }
+
+  /** Writes the conversation to the history when its summary changed (not on every page or chip). */
+  private remember(messages: readonly ChatMessage[]): void {
+    const conversation = toConversation(this.conversationState(), messages);
+    if (!conversation) return;
+    const key = JSON.stringify([
+      conversation.id,
+      conversation.topic,
+      conversation.asks,
+    ]);
+    if (key === this.rememberedKey) return;
+    this.rememberedKey = key;
+    this.history.save(conversation);
   }
 
   /** "+ Nova conversa" (FR-1): an empty conversation in the same collection. */
