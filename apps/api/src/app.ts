@@ -11,13 +11,18 @@ import { registerErrorHandler } from './error-handler.js';
 import { DisabledLlm } from './adapters/disabled-llm.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
-import { AnswersService, answerRoutes } from './modules/answers/index.js';
 import { DocumentsService, documentRoutes } from './modules/documents/index.js';
+import {
+  ResearchTools,
+  ToolLoopRunner,
+  researchRoutes,
+} from './modules/research/index.js';
+import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
 import { SearchService, searchRoutes } from './modules/search/index.js';
 import { topicRoutes } from './modules/topics/index.js';
 import hostGuard from './plugins/host-guard.js';
-import type { LlmPort } from './ports/llm.js';
+import type { AgentLlmPort } from './ports/llm.js';
 import type { SearchIndexPort } from './ports/search-index.js';
 import type { SpendLedgerPort } from './ports/spend-ledger.js';
 import type { UsageLogPort } from './ports/usage-log.js';
@@ -33,8 +38,8 @@ export interface AppDeps {
   readonly config: AppConfig;
   readonly vault: VaultReaderPort;
   readonly index: SearchIndexPort;
-  /** AI provider; without one, answers are disabled (LLM_NOT_CONFIGURED). */
-  readonly llm?: LlmPort;
+  /** AI provider with tool calling; without one, research is disabled (LLM_NOT_CONFIGURED). */
+  readonly llm?: AgentLlmPort;
   readonly ledger?: SpendLedgerPort;
   /** Local usage log (KBC-006); in memory when not given. */
   readonly usage?: UsageLogPort;
@@ -44,31 +49,29 @@ export interface AppDeps {
 
 type FullDeps = AppDeps & {
   catalog: CatalogRegistry;
-  llm: LlmPort;
+  llm: AgentLlmPort;
   ledger: SpendLedgerPort;
   usage: UsageLogPort;
 };
 
-async function registerAnswers(
+/** The research agent (ADR 0006) and the spend controls it shares with the side panel. */
+async function registerResearch(
   app: FastifyInstance,
   deps: FullDeps,
   search: SearchService,
 ): Promise<void> {
-  const { config, vault, llm, ledger } = deps;
-  const service = new AnswersService({
-    search,
-    vault,
+  const { config, vault, llm, ledger, catalog } = deps;
+  const spend = new SpendService({
     llm,
     ledger,
     dailyCapUsd: config.KB_CHAT_DAILY_CAP_USD,
     principal: OWNER,
   });
-  const spendToday = async () => ({
-    usd: await ledger.spentToday(OWNER),
-    capUsd: config.KB_CHAT_DAILY_CAP_USD,
-    configured: llm.configured(),
-  });
-  await app.register(answerRoutes({ service, spendToday }));
+  await app.register(spendRoutes(spend));
+  const tools = new ResearchTools({ search, catalog, vault });
+  const runner = new ToolLoopRunner({ llm, tools, spend });
+  const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
+  await app.register(researchRoutes({ runner, hasTopic }));
 }
 
 async function registerRoutes(
@@ -82,7 +85,7 @@ async function registerRoutes(
   await app.register(
     searchRoutes({ service: search, ratePerMinute: config.SEARCH_RATE_LIMIT }),
   );
-  await registerAnswers(app, deps, search);
+  await registerResearch(app, deps, search);
   const documents = new DocumentsService({
     catalog,
     vault,

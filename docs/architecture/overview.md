@@ -94,7 +94,8 @@ API modules, organised by business capability:
 | `catalog` | In-memory facet catalog per topic (facets, title, summary, concepts, relations, duplicate groups) | `getCatalog(topic)`, `facetCounts(ids)` |
 | `search` | Search modes, over-fetch and post-filter, duplicate grouping, snippet cleanup | `search(query)` |
 | `documents` | Document body without frontmatter, highlight positions, "see also" | `getDocument(topic, id)` |
-| `answers` | Grounded AI answers, cost estimate, daily cap | `estimate(query)`, `answer(query)` (stream) |
+| `research` | Research agent (ADR 0006): tools over the index, summaries and relations, the tool loop | `ToolLoopRunner.run(turn)` (stream), `ResearchTools` |
+| `spend` | Spend ledger, daily cap and credit checks (ADR 0004) | `SpendService.guard(usd)`, `record(turn)`, `today()` |
 | `usage` | Local event log for the research plan | `record(event)` |
 
 Ports (interfaces in the module) and their adapters (in `adapters/`):
@@ -117,7 +118,7 @@ Dependency rules, enforced by `eslint-plugin-boundaries` or Nx module-boundary t
 - **The vault is owned by kb.** kb-chat is read-only (Q7). The catalog is a derived, rebuildable cache, never a second source of truth.
 - **Frontmatter keys read:** `title`, `summary`, `genre`, `depth`, `relevance`, `concepts`, `example_of`, `extends`, `related`, `type`, `stage`, `ingest_batch`. A missing key means the facet value "(none)" and is hidden in the UI.
 - **Duplicate groups** (same normalized title, e.g. `a-natureza-s-tupla-2.md` and `-5.md`) are computed in the catalog, and search returns the best-scoring member with `duplicates: n`.
-- **Spend ledger and usage events:** owned by `answers` and `usage`, stored under `~/.kb-chat/`, with 90-day retention for events (research plan).
+- **Spend ledger and usage events:** owned by `spend` and `usage`, stored under `~/.kb-chat/`, with 90-day retention for events (research plan).
 
 ## Contracts (CS-01, CS-08, CS-09, CS-11)
 
@@ -129,8 +130,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 | `GET /api/v1/topics/{topic}/facets` | Facet values with collection-wide counts |
 | `POST /api/v1/topics/{topic}/searches` | Body `{ q, mode: all\|exact\|semantic, filters, cursor? }` → `{ items[], facets (counts over the result set), total, nextCursor, tookMs }`; POST because the filters are structured, with no side effect beyond the usage event |
 | `GET /api/v1/topics/{topic}/documents/{id}` | Body markdown without frontmatter, facets, summary, see-also groups, highlight terms |
-| `POST /api/v1/topics/{topic}/answers/estimates` | Cost estimate for an answer to `{ q, filters }` |
-| `POST /api/v1/topics/{topic}/answers` | Streams (SSE) tokens, citations and the final cost; requires an `Idempotency-Key` header (CS-06), because the call spends money |
+| `POST /api/v1/topics/{topic}/research` | One research turn for `{ question, history }`: streams (SSE) `step`, `sources`, `token`, `done` (cost, steps) or `error` (ADR 0006); rate-limited, the daily cap checked before every model call |
 | `GET /api/v1/spend/today` | Spend today and the cap |
 | `GET /health` | Readiness: catalog loaded, QMD alive, LLM configured |
 
@@ -150,7 +150,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
    - Command injection through the query into a spawned process.
 3. **What are we doing about it?**
    - Path confinement with `realpath` checks.
-   - Bind to `127.0.0.1`, strict CORS to the web origin, `Host` header allowlist, `Idempotency-Key` and the daily cap on answers (CS-19).
+   - Bind to `127.0.0.1`, strict CORS to the web origin, `Host` header allowlist, the daily cap checked before every model call of the research agent (CS-19).
    - The key is read only from env, redacted in logs, and never in a response (CS-22).
    - The system prompt treats sources as quoted data; answers render as sanitized markdown, with no HTML or links other than citations.
    - `execFile` with an argument array, never a shell, and the query passed as a single argument.
