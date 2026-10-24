@@ -7,8 +7,13 @@ import {
 } from '../catalog/index.js';
 import { countOccurrences, flatText, foldText } from './folded-text.js';
 
-/** Characters of text kept on each side of the occurrence shown. */
-const SNIPPET_CHARS = 200;
+/**
+ * Characters kept before and after the occurrence shown (KBC-011). The passage leans
+ * forward: what a phrase like "cinco princípios" names usually follows it, so the list
+ * often shows in the passage and the agent needs no read.
+ */
+const SNIPPET_BEFORE = 120;
+const SNIPPET_AFTER = 320;
 const READ_CONCURRENCY = 64;
 
 export interface TextFinderDeps {
@@ -89,8 +94,8 @@ function snippetOf(flat: string, phrase: string): string {
   const needle = foldPhrase(phrase);
   const at = foldText(flat).indexOf(needle);
   if (at < 0) return '';
-  const start = Math.max(0, at - SNIPPET_CHARS);
-  const end = Math.min(flat.length, at + needle.length + SNIPPET_CHARS);
+  const start = Math.max(0, at - SNIPPET_BEFORE);
+  const end = Math.min(flat.length, at + needle.length + SNIPPET_AFTER);
   return `${start > 0 ? '…' : ''}${flat.slice(start, end)}${end < flat.length ? '…' : ''}`;
 }
 

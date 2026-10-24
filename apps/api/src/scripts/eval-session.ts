@@ -85,6 +85,8 @@ export async function openEvalSession(
 export interface EvalTurn {
   readonly answer: string;
   readonly steps: readonly string[];
+  /** When each step came, in ms since the question. */
+  readonly stepMs: readonly number[];
   readonly sources: ReadonlyMap<number, string>;
   /** Segments shown and then taken back (the agent thinking aloud, ADR 0009). */
   readonly retracts: number;
@@ -98,6 +100,7 @@ export interface EvalTurn {
 interface TurnState {
   segments: Map<number, string>;
   steps: string[];
+  stepMs: number[];
   sources: Map<number, string>;
   retracts: number;
   usd: number;
@@ -124,6 +127,7 @@ const COLLECTORS: {
   },
   step: (state, event, elapsed) => {
     state.steps.push(event.step.text);
+    state.stepMs.push(elapsed());
     state.firstStepMs ??= elapsed();
   },
   sources: (state, event) => {
@@ -163,6 +167,7 @@ export async function runEvalTurn(
   const state: TurnState = {
     segments: new Map(),
     steps: [],
+    stepMs: [],
     sources: new Map(),
     retracts: 0,
     usd: 0,

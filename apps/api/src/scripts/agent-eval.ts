@@ -126,7 +126,7 @@ function outcomeSection(outcome: Outcome, index: number): string {
     `- Cita o documento esperado: ${yesNo(outcome.hit)} (esperado: ${outcome.question.expected.join(', ') || '—'})`,
     ...mentionLine(outcome),
     `- Primeiro passo: ${seconds(outcome.firstStepMs)} · primeiro texto: ${seconds(outcome.firstTokenMs)} · total: ${seconds(outcome.totalMs)} · custo: US$ ${outcome.usd.toFixed(4)} · textos recolhidos: ${outcome.retracts}${outcome.error ? ` · erro: ${outcome.error}` : ''}`,
-    `- Passos (${outcome.steps.length}): ${outcome.steps.join(' → ') || '—'}`,
+    `- Passos (${outcome.steps.length}): ${outcome.steps.map((step, i) => `${step} (${seconds(outcome.stepMs[i] ?? null)})`).join(' → ') || '—'}`,
     '',
     '### Resposta',
     '',

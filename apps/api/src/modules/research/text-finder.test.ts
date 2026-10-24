@@ -70,6 +70,27 @@ describe('TextFinder', () => {
     );
   });
 
+  it('leans the passage forward, so a list that follows its phrase shows in it (KBC-011)', async () => {
+    const lead = 'Antes. '.repeat(40);
+    const gap = 'x'.repeat(220);
+    const { finder } = await finderOver(
+      new MemoryVault({
+        'raw/articles/longo.md': doc(
+          'Longo',
+          `${lead}Os cinco princípios ocultos ${gap} são descontinuidade e limite.`,
+        ),
+      }),
+    );
+    const found = await finder.find({
+      topic: 'hermetismo',
+      phrases: ['cinco principios ocultos'],
+      limit: 10,
+    });
+    const snippet = found?.hits[0]?.snippet ?? '';
+    expect(snippet).toContain('descontinuidade e limite');
+    expect(snippet.indexOf('cinco princípios')).toBeLessThanOrEqual(125);
+  });
+
   it('ranks documents by occurrences of any alternative and counts each one', async () => {
     const { finder } = await finderOver(new MemoryVault({ ...DOCS }));
     const found = await finder.find({

@@ -11,6 +11,7 @@ import { mcpRoutes } from '../mcp/mcp-routes.js';
 import { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import {
+  CLAUDE_EFFORT,
   ClaudeCliRunner,
   claudeArgs,
   parseClaudeLine,
@@ -367,6 +368,15 @@ describe('CLI dialects', () => {
       ]),
     );
     expect(args[args.indexOf('--mcp-config') + 1]).toBe('/turn/mcp.json');
+    expect(args.some((arg) => arg.startsWith('--effort'))).toBe(false);
+    // The fast profile thinks less between tool calls (KBC-011).
+    expect(
+      claudeArgs('/m.json', {
+        systemPrompt: 'r',
+        effort: CLAUDE_EFFORT.fast,
+      }),
+    ).toContain('--effort=low');
+    expect(CLAUDE_EFFORT.deep).toBeUndefined();
     expect(codexArgs('http://x', 'gpt-5.5')).toEqual(
       expect.arrayContaining([
         'exec',
