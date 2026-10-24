@@ -22,6 +22,9 @@ export interface AnswerRouteOptions {
 }
 
 const topicParams = z.object({ topic: topicSlugSchema });
+const estimateOptions = {
+  config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+};
 const estimateSchema = {
   params: topicParams,
   body: answerRequestSchema,
@@ -85,10 +88,15 @@ async function streamAnswer(
   context: { request: FastifyRequest; reply: FastifyReply },
 ): Promise<void> {
   const { request, reply } = context;
-  const cached = service.claim(call.key, call.body);
+  const cached = service.claim(call.key, call.topic, call.body);
   if (cached) return replay(cached, reply);
-  const prepared = await prepareOrRelease(service, call);
+  // Watch the client from the start: leaving while passages are chosen must not reach the model.
   const signal = abortOnDisconnect(reply);
+  const prepared = await prepareOrRelease(service, call);
+  if (signal.aborted) {
+    service.release(call.key);
+    return;
+  }
   const send = openStream(reply);
   try {
     for await (const event of service.stream(prepared, {
@@ -121,7 +129,7 @@ export const answerRoutes =
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.post(
       '/api/v1/topics/:topic/answers/estimates',
-      { schema: estimateSchema },
+      { ...estimateOptions, schema: estimateSchema },
       async (request) => service.estimate(request.params.topic, request.body),
     );
     typed.get('/api/v1/spend/today', { schema: spendSchema }, async () =>

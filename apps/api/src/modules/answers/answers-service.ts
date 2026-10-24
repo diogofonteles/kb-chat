@@ -117,9 +117,17 @@ export class AnswersService {
    * Idempotency (CS-06, FR-9): replays a finished answer, refuses a key still streaming
    * (ANSWER_IN_PROGRESS) or reused for another question, otherwise reserves the key.
    */
-  claim(key: string, request: AnswerRequest): readonly AnswerEvent[] | null {
+  claim(
+    key: string,
+    topic: string,
+    request: AnswerRequest,
+  ): readonly AnswerEvent[] | null {
     this.pruneReplays();
-    const hash = JSON.stringify(answerRequestSchema.parse(request));
+    // The topic is part of the question: the same words in another collection are another answer.
+    const hash = JSON.stringify({
+      topic,
+      ...answerRequestSchema.parse(request),
+    });
     const existing = this.replays.get(key);
     if (!existing) {
       this.replays.set(key, { hash, events: null, at: Date.now() });

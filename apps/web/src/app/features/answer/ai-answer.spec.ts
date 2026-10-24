@@ -145,7 +145,9 @@ describe('AiAnswer', () => {
     stream.next(SOURCES);
     stream.next({ type: 'done', usd: 0.0006, model: 'm', interrupted: false });
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert').textContent).toMatch(/Algo deu errado/);
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /Não consegui gerar a resposta agora/,
+    );
   });
 
   it('reports an error event from the stream', async () => {
@@ -230,6 +232,7 @@ describe('AiAnswer guards (KBC-004 review)', () => {
     expect(
       screen.getByText('Resposta interrompida antes de começar.'),
     ).toBeTruthy();
+    expect(screen.getByText(/custo do que já foi processado/)).toBeTruthy();
     expect(screen.queryByText(/Lendo/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     stream.next({ type: 'error', code: 'LLM_INSUFFICIENT_CREDIT' });

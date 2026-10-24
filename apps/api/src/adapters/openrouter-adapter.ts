@@ -11,6 +11,7 @@ const API = 'https://openrouter.ai/api/v1';
 const BALANCE_TTL_MS = 60_000;
 /** A stalled provider must not hold a request (and its reserved key) forever. */
 const REQUEST_TIMEOUT_MS = 90_000;
+const INFO_TIMEOUT_MS = 10_000;
 
 const modelsSchema = z.object({
   data: z.array(
@@ -85,7 +86,9 @@ export class OpenRouterAdapter implements LlmPort {
 
   async price(): Promise<LlmPrice> {
     if (this.cachedPrice) return this.cachedPrice;
-    const response = await this.fetch(`${API}/models`);
+    const response = await this.fetch(`${API}/models`, {
+      signal: AbortSignal.timeout(INFO_TIMEOUT_MS),
+    });
     const model = modelsSchema
       .parse(await response.json())
       .data.find((m) => m.id === this.model);
@@ -105,6 +108,7 @@ export class OpenRouterAdapter implements LlmPort {
       return this.cachedBalance.value;
     const response = await this.fetch(`${API}/credits`, {
       headers: this.headers(),
+      signal: AbortSignal.timeout(INFO_TIMEOUT_MS),
     });
     const parsed = response.ok
       ? creditsSchema.safeParse(await response.json())
