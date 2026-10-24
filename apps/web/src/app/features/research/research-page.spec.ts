@@ -17,10 +17,13 @@ import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatPage } from '@features/chat/chat-page.js';
 import { Subject, of } from 'rxjs';
 import { aDocument, aResponse, TOPICS } from '../../testing/fixtures.js';
+import { FakeConversationsServer } from '../../testing/fake-conversations.js';
 
 const SEARCH_URL = '/api/v1/topics/hermetismo/searches';
 const SOURCE = { n: 1, id: 'raw/articles/a-lei-do-ritmo.md', title: 'Ritmo' };
 
+/** The local API's conversation history; each render starts with an empty one. */
+let conversations = new FakeConversationsServer();
 const fakeStart: HttpInterceptorFn = (request, next) =>
   request.url.endsWith('/suggestions')
     ? of(
@@ -29,10 +32,11 @@ const fakeStart: HttpInterceptorFn = (request, next) =>
           body: { items: [{ concept: 'Cabala', count: 3 }] },
         }),
       )
-    : next(request);
+    : conversations.interceptor(request, next);
 
 async function renderPage({ configured = true } = {}) {
   localStorage.clear();
+  conversations = new FakeConversationsServer();
   const streams: Subject<ResearchEvent>[] = [];
   const api = {
     research: vi.fn(() => {
@@ -112,6 +116,23 @@ describe('ChatPage research view (KBC-008)', () => {
     // BR-6: the research view never shows search cards, and never searched.
     expect(page.container.querySelector('app-result-card')).toBeNull();
     page.http.expectNone(SEARCH_URL);
+  });
+
+  it('saves the answered research in the history, labelled as IA (FR-6)', async () => {
+    const page = await renderPage();
+    await send(page, 'o que é o ritmo?', 'Perguntar');
+    await answer(page, 0, 'Tudo flui [1].');
+    const [saved, ...others] = [...conversations.saved.values()];
+    expect(others).toEqual([]);
+    expect(saved).toMatchObject({
+      kind: 'research',
+      topic: 'hermetismo',
+      turns: [{ question: 'o que é o ritmo?', answer: 'Tudo flui [1].' }],
+    });
+    const history = screen.getByRole('navigation', { name: 'Histórico' });
+    expect(history.textContent?.replace(/\s+/g, ' ')).toContain(
+      'o que é o ritmo? IA · Hermetismo',
+    );
   });
 
   it('opens the cited document in the panel (AC-3)', async () => {
