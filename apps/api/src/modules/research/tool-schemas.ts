@@ -131,7 +131,7 @@ const DESCRIPTIONS: Record<ToolName, string> = {
     'Lista os assuntos (conceitos do kb) do acervo, com quantos documentos cada um tem.',
   read_document:
     'Lê um documento: resumo do kb, facetas e uma janela de até 12.000 caracteres do texto, centrada em `around` ou a partir de `offset`.',
-  read_documents: `Lê de uma vez até ${MAX_BATCH_DOCUMENTS} documentos: de cada um, o resumo do kb e uma janela de até 6.000 caracteres do texto, centrada em \`around\`. Prefira a read_document quando for ler mais de um documento.`,
+  read_documents: `Lê de uma vez até ${MAX_BATCH_DOCUMENTS} documentos: de cada um, o resumo do kb e uma janela de até 6.000 caracteres do texto, centrada em \`around\`. Use no lugar de read_document quando for ler mais de um documento.`,
   related_documents:
     'Lista as ligações do kb de um documento (é exemplo de, estende, relacionados, exemplos) como documentos numerados.',
 };

@@ -57,7 +57,8 @@ export function parseCodexLine(text: string): CliLine {
     line.type === 'item.completed' && line.item?.type === 'agent_message'
       ? line.item.text
       : undefined;
-  // Codex sends each message whole; a message before a tool call is dropped as narration.
+  // Codex sends each message whole: one before a tool call is shown, then retracted when
+  // the tool result arrives (ADR 0009).
   return message ? { text: `${message}\n\n` } : {};
 }
 

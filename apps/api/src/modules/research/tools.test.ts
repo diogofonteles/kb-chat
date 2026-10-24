@@ -36,6 +36,10 @@ describe('ResearchTools definitions', () => {
       'read_documents',
       'related_documents',
     ]);
+    // Batched reads are the preferred way to read several documents (KBC-011 FR-6).
+    expect(
+      tools.definitions.find((t) => t.name === 'read_documents')?.description,
+    ).toContain('Use no lugar de read_document quando for ler mais de um');
     const search = tools.definitions[0]?.parameters;
     expect(search).toMatchObject({
       type: 'object',
