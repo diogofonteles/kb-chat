@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type {
   AiProvider,
@@ -66,8 +67,16 @@ interface ChoiceOverride {
   readonly key?: string;
 }
 
-const choiceId = (kind: string, principal: string, c: ProviderChoice) =>
-  [kind, principal, c.provider, c.model ?? '', c.key ?? ''].join('|');
+/** A key's fingerprint for cache ids: the key itself is kept only by the adapter. */
+const fingerprint = (key: string | undefined): string =>
+  key ? createHash('sha256').update(key).digest('base64url').slice(0, 16) : '';
+
+export const choiceId = (
+  kind: string,
+  principal: string,
+  c: ProviderChoice,
+): string =>
+  [kind, principal, c.provider, c.model ?? '', fingerprint(c.key)].join('|');
 
 /**
  * The AI provider of each principal (KBC-007, ADR 0007): their Settings first, then the

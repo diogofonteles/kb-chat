@@ -14,6 +14,7 @@ import type { LlmPort } from '../ports/llm.js';
 import { findExecutable } from './command-locator.js';
 import { testConnection } from './connection-test.js';
 import { createAiProviders } from './create-ai-providers.js';
+import { choiceId } from './provider-registry.js';
 import { DisabledResearchRunner, DynamicLlm } from './dynamic-ports.js';
 
 const config = (env: Record<string, string> = {}) =>
@@ -171,6 +172,17 @@ describe('ProviderRegistry', () => {
     // The stub has no streamAgent until KBC-008 adds it: without tool calling, no loop.
     expect(ai.registry.researchRunner('owner')).toBeInstanceOf(
       DisabledResearchRunner,
+    );
+  });
+});
+
+describe('provider cache ids', () => {
+  it('carry a fingerprint of the key, never the key itself', () => {
+    const choice = { provider: 'openai', model: 'gpt-5.5' } as const;
+    const id = choiceId('llm', 'owner', { ...choice, key: 'sk-openai-full-9' });
+    expect(id).not.toContain('sk-openai-full-9');
+    expect(id).not.toBe(
+      choiceId('llm', 'owner', { ...choice, key: 'sk-openai-other-8' }),
     );
   });
 });
