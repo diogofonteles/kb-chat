@@ -7,8 +7,8 @@
 #   qmd    search index over MCP (primary search)
 #   kb     fallback search when qmd is down (`kb search`)
 #   claude Claude Code, only for the owner's subscription (KBC-007, KBC-010 BR-5)
-# The workspace itself is installed with pnpm only (project rule). These global CLIs are
-# installed with npm, which is each tool's documented installer; versions are pinned.
+# Everything, the workspace and these global CLIs, is installed with pnpm (project rule);
+# versions are pinned.
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 
@@ -38,12 +38,19 @@ ARG INSTALL_CLAUDE=true
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-RUN npm install -g --prefix /opt/clis --no-fund --no-audit \
-      "@tobilu/qmd@${QMD_VERSION}" "@compozy/kb@${KB_VERSION}" \
+# pnpm 9 (the workspace's version) runs the CLIs' install scripts, which fetch their native
+# binaries. Global packages and their shims live under /opt/clis, copied as is below.
+ENV PNPM_HOME=/opt/clis/bin
+ENV PATH=/opt/clis/bin:$PATH
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate \
+  && pnpm config set --global global-dir /opt/clis/global \
+  && pnpm config set --global global-bin-dir /opt/clis/bin \
+  && pnpm config set --global store-dir /tmp/pnpm-store \
+  && pnpm add -g "@tobilu/qmd@${QMD_VERSION}" "@compozy/kb@${KB_VERSION}" \
   && if [ "$INSTALL_CLAUDE" = "true" ]; then \
-       npm install -g --prefix /opt/clis --no-fund --no-audit "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
+       pnpm add -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
      fi \
-  && npm cache clean --force
+  && rm -rf /tmp/pnpm-store
 
 # --- Runtime: non-root, tini as PID 1 (the CLIs run in their own process groups) ---
 FROM ${NODE_IMAGE} AS runtime
@@ -65,7 +72,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     KB_VAULT=/vault \
     KB_CHAT_STATE_DIR=/data/state \
-    CLAUDE_CONFIG_DIR=/home/app/.claude
+    CLAUDE_CONFIG_DIR=/home/app/.claude \
+    DISABLE_AUTOUPDATER=1
 
 WORKDIR /app
 COPY --from=build --chown=app:app /out .

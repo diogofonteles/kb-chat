@@ -513,7 +513,8 @@ describe('CLI dialects', () => {
         OPENAI_API_KEY: 'b',
         OPENROUTER_API_KEY: 'c',
         KB_CHAT_STATE_DIR: '/state',
+        DISABLE_AUTOUPDATER: '1',
       }),
-    ).toEqual({ PATH: '/bin', HOME: '/Users/owner' });
+    ).toEqual({ PATH: '/bin', HOME: '/Users/owner', DISABLE_AUTOUPDATER: '1' });
   });
 });
