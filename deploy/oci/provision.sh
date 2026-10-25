@@ -40,8 +40,9 @@ CI_KEY_FILE="${CI_SSH_PUBLIC_KEY_FILE/#\~/$HOME}"
 # Always Free guard: refuse sizes above the allowance instead of creating billable resources.
 # Positive integers first: "3.0" or "2.5" would make the numeric test error out and pass.
 for name in OCPUS MEMORY_GB BOOT_VOLUME_GB DATA_VOLUME_GB BUDGET_USD; do
-  if ! [[ "${!name}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "provision: $name must be a positive integer (got '${!name}')" >&2
+  # At most 4 digits: bigger values are wrong anyway and would overflow shell arithmetic.
+  if ! [[ "${!name}" =~ ^[1-9][0-9]{0,3}$ ]]; then
+    echo "provision: $name must be an integer from 1 to 9999 (got '${!name}')" >&2
     exit 2
   fi
 done
@@ -247,7 +248,8 @@ policy_id="$(find_id iam policy list --compartment-id "$COMPARTMENT_OCID" --name
 # Object Storage service applies (it needs its own statement).
 statements="$(jq -cn --arg dg "$dg_name" --arg b "$BACKUP_BUCKET" --arg c "$COMPARTMENT_OCID" --arg r "$REGION" '[
   "Allow dynamic-group \($dg) to manage objects in compartment id \($c) where all {target.bucket.name = '\''\($b)'\'', any {request.permission = '\''OBJECT_CREATE'\'', request.permission = '\''OBJECT_INSPECT'\''}}",
-  "Allow service objectstorage-\($r) to manage object-family in compartment id \($c)"
+  "Allow service objectstorage-\($r) to manage object-family in compartment id \($c)",
+  "Allow dynamic-group \($dg) to use metrics in compartment id \($c) where target.metrics.namespace = '\''kb_chat'\''"
 ]')"
 if [ -z "$policy_id" ]; then
   create "policy $policy_name (VM: create/inspect objects of $BACKUP_BUCKET only; lifecycle service)" iam policy create \
@@ -261,7 +263,7 @@ else
 fi
 
 keep_days="${BACKUP_KEEP_DAYS:-30}"
-[[ "$keep_days" =~ ^[1-9][0-9]*$ ]] || { echo "provision: BACKUP_KEEP_DAYS must be a positive integer" >&2; exit 2; }
+[[ "$keep_days" =~ ^[1-9][0-9]{0,3}$ ]] || { echo "provision: BACKUP_KEEP_DAYS must be an integer from 1 to 9999" >&2; exit 2; }
 lifecycle="$(jq -cn --argjson d "$keep_days" '[{name: "expire-state-backups", action: "DELETE",
   timeAmount: $d, timeUnit: "DAYS", isEnabled: true, objectNameFilter: {inclusionPrefixes: ["state/"]}}]')"
 if [ "$APPLY" -eq 1 ]; then
@@ -269,6 +271,29 @@ if [ "$APPLY" -eq 1 ]; then
     --items "$lifecycle" --force >/dev/null
   say "  lifecycle: state/ objects deleted after $keep_days days"
 else plan "lifecycle policy on $BACKUP_BUCKET: delete state/ objects after $keep_days days"; fi
+
+# Lifecycle deletion keeps running even if backups stop. The backup script posts a
+# backup_success heartbeat; this absence alarm e-mails the owner when none arrived for 48 h
+# (Monitoring and Notifications e-mail stay inside the free allowance).
+topic_name="$NAME_PREFIX-alerts"
+topic_id="$("${OCI[@]}" ons topic list --compartment-id "$COMPARTMENT_OCID" --name "$topic_name" --all \
+  --query 'data[0]."topic-id"' --raw-output 2>/dev/null | grep '^ocid' || true)"
+if [ -z "$topic_id" ]; then
+  topic_id="$(create "notification topic $topic_name" ons topic create --compartment-id "$COMPARTMENT_OCID" \
+    --name "$topic_name" --description "kb-chat operational alerts")"
+  create "e-mail subscription $BUDGET_ALERT_EMAIL (confirm the e-mail Oracle sends)" ons subscription create \
+    --compartment-id "$COMPARTMENT_OCID" --topic-id "$topic_id" --protocol EMAIL \
+    --subscription-endpoint "$BUDGET_ALERT_EMAIL" >/dev/null
+else say "  exists: notification topic $topic_name"; fi
+alarm_name="$NAME_PREFIX-backup-missing"
+alarm_id="$(find_id monitoring alarm list --compartment-id "$COMPARTMENT_OCID" --display-name "$alarm_name")"
+if [ -z "$alarm_id" ]; then
+  create "alarm $alarm_name (no backup_success for 48 h)" monitoring alarm create --compartment-id "$COMPARTMENT_OCID" \
+    --display-name "$alarm_name" --metric-compartment-id "$COMPARTMENT_OCID" --namespace kb_chat \
+    --query-text 'backup_success[1h]{resourceId = "kb-chat-vm"}.absent(48h)' --severity CRITICAL \
+    --destinations "[\"$topic_id\"]" --is-enabled true \
+    --body "No kb-chat state backup for 48 h. Backups older than ${keep_days} days are deleted by the bucket lifecycle: fix it before the last one expires (docs/deploy/runbook.md)." >/dev/null
+else say "  exists: alarm $alarm_name"; fi
 
 # --- Cost guard ----------------------------------------------------------------------
 say "cost guard:"

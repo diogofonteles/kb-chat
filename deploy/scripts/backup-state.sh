@@ -12,6 +12,10 @@
 # Settings (root-owned, /srv/kb-chat/deploy/backup.env):
 #   BACKUP_BUCKET=kb-chat-backups  BACKUP_NAMESPACE=<tenancy namespace>
 #   BACKUP_AGE_RECIPIENT=age1...
+#   BACKUP_REGION=sa-saopaulo-1    BACKUP_COMPARTMENT_OCID=ocid1.compartment...   (the alarm metric)
+# Health: success writes "ok <time>" to deploy/backup-status and posts the backup_success
+# metric (an OCI absence alarm e-mails the owner when it stops); a failure is recorded by
+# kb-chat-backup-failed.service (OnFailure=). deploy.sh --status reports both.
 #   sudo backup-state.sh [--dry-run]
 set -euo pipefail
 
@@ -58,3 +62,17 @@ fi
 "${OCI[@]}" os object put --namespace "$BACKUP_NAMESPACE" --bucket-name "$BACKUP_BUCKET" \
   --name "$object" --file "$work/state.age" --no-overwrite >/dev/null
 log "uploaded $object ($size)"
+
+date -u +"ok %Y-%m-%dT%H:%M:%SZ" >"$ROOT/deploy/backup-status"
+
+# The heartbeat of the absence alarm (deploy/oci/provision.sh). Best effort: if it cannot be
+# posted, the alarm fires, which is the right signal.
+if [ -n "${BACKUP_REGION:-}" ] && [ -n "${BACKUP_COMPARTMENT_OCID:-}" ]; then
+  metric="$(printf '[{"namespace":"kb_chat","compartmentId":"%s","name":"backup_success","dimensions":{"resourceId":"kb-chat-vm"},"datapoints":[{"timestamp":"%s","value":1}]}]' \
+    "$BACKUP_COMPARTMENT_OCID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+  "${OCI[@]}" monitoring metric-data post --metric-data "$metric" \
+    --endpoint "https://telemetry-ingestion.$BACKUP_REGION.oraclecloud.com" >/dev/null ||
+    log "could not post the backup_success metric; the absence alarm will fire"
+else
+  log "BACKUP_REGION/BACKUP_COMPARTMENT_OCID unset: no heartbeat for the absence alarm"
+fi

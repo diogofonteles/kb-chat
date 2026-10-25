@@ -126,8 +126,10 @@ write_files:
       /usr/local/sbin/kb-chat-mount-volume
 
       log "installing packages"
-      apt-get update
-      apt-get -y upgrade
+      # First boot: apt-daily/unattended-upgrades may hold the dpkg lock for a while.
+      apt_get() { apt-get -o DPkg::Lock::Timeout=600 "$@"; }
+      apt_get update
+      apt_get -y upgrade
       install -d -m 0755 /etc/apt/keyrings
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
       fingerprint="$(gpg --show-keys --with-colons /etc/apt/keyrings/docker.asc | awk -F: '/^fpr/ { print $10; exit }')"
@@ -138,8 +140,8 @@ write_files:
         > /etc/apt/sources.list.d/docker.list
       echo "iptables-persistent iptables-persistent/autosave_v4 boolean false" | debconf-set-selections
       echo "iptables-persistent iptables-persistent/autosave_v6 boolean false" | debconf-set-selections
-      apt-get update
-      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin \
+      apt_get update
+      apt_get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin \
         fail2ban unattended-upgrades netfilter-persistent iptables-persistent age zstd rsync pipx jq
 
       log "layout under /srv/kb-chat (app folders owned by uid 10001)"
@@ -195,13 +197,25 @@ write_files:
       Description=kb-chat encrypted state backup to OCI Object Storage
       Wants=network-online.target
       After=network-online.target docker.service
-      ConditionPathExists=/srv/kb-chat/deploy/backup.env
+      # No ConditionPathExists: missing settings must fail loudly, not skip in silence.
+      OnFailure=kb-chat-backup-failed.service
 
       [Service]
       Type=oneshot
       Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       ExecStart=/srv/kb-chat/deploy/scripts/backup-state.sh
       Nice=10
+  # A failed backup is recorded where deploy.sh --status (and the deploy workflow) read it,
+  # and logged at error level; the OCI absence alarm covers a VM that stopped altogether.
+  - path: /etc/systemd/system/kb-chat-backup-failed.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Record a failed kb-chat backup
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/sh -c 'date -u +"failed %%Y-%%m-%%dT%%H:%%M:%%SZ" > /srv/kb-chat/deploy/backup-status; logger -p user.err -t kb-chat-backup "state backup failed: journalctl -u kb-chat-backup"'
   - path: /etc/systemd/system/kb-chat-backup.timer
     permissions: '0644'
     content: |
