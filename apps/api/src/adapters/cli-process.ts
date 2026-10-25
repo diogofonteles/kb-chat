@@ -92,6 +92,8 @@ const CLI_ENV_ALLOWLIST = [
   'XDG_DATA_HOME',
   'XDG_CACHE_HOME',
   'CLAUDE_CONFIG_DIR',
+  // The container pins the CLI's version; it must not try to update itself (ADR 0010).
+  'DISABLE_AUTOUPDATER',
   'HTTPS_PROXY',
   'HTTP_PROXY',
   'NO_PROXY',

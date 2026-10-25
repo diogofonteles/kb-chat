@@ -26,6 +26,16 @@ function bearerToken(request: FastifyRequest): string | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/**
+ * Only the CLIs the API itself spawns call this endpoint, over loopback. A request that
+ * arrives from the network (the reverse proxy, another container) is refused even with a
+ * valid token (ADR 0010). The socket address, not request.ip: X-Forwarded-For is not trusted here.
+ */
+export const isLoopbackRequest = (request: FastifyRequest): boolean =>
+  LOOPBACK.has(request.socket.remoteAddress ?? '');
+
 function tokenOf(request: FastifyRequest): string | undefined {
   const parsed = params.safeParse(request.params);
   return parsed.success ? parsed.data.token : bearerToken(request);
@@ -40,7 +50,7 @@ export const mcpRoutes =
   (turns: McpTurnRegistry): FastifyPluginAsync =>
   async (app) => {
     const handler = async (request: FastifyRequest, reply: FastifyReply) => {
-      const token = tokenOf(request);
+      const token = isLoopbackRequest(request) ? tokenOf(request) : undefined;
       const turn = token === undefined ? undefined : turns.get(token);
       if (!turn) throw new AppError('NOT_FOUND', 'Unknown research turn');
       const server = createKbMcpServer(turn.tools, turn.hooks);

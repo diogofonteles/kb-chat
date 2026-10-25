@@ -78,7 +78,7 @@ const shutdown = async (): Promise<void> => {
 process.once('SIGTERM', () => void shutdown());
 process.once('SIGINT', () => void shutdown());
 
-await app.listen({ host: '127.0.0.1', port: config.PORT });
+await app.listen({ host: config.HOST, port: config.PORT });
 app.log.info(
   { vault: config.KB_VAULT, search: index.status() },
   'kb-chat api ready',

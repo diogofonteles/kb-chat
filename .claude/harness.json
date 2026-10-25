@@ -109,7 +109,27 @@
     ],
     "e2e": "pnpm e2e (Playwright, stub API fixtures) for the touched flow",
     "contracts": "zod schemas in @kb-chat/contracts (libs/contracts)",
-    "rollout": "local only in release 1: API before web; promotion develop -> main is the owner's release decision"
+    "rollout": "develop -> main is the owner's release decision; main deploys to production (OCI, deploy.yml: arm64 images by SHA, smoke, automatic rollback); rollback: deploy/scripts/rollback.sh on the VM (docs/deploy/runbook.md)"
   },
-  "warnings": []
+  "warnings": [],
+  "environments": {
+    "production": {
+      "_note": "Production only (ADR 0010): one OCI Always Free A1 VM; the owner's Mac is staging. Deploy = merge to main, the owner's decision. The URL is the KB_CHAT_DOMAIN GitHub variable (unset until the owner picks the domain). flyApp is the schema's app id field (the schema is Fly-shaped); here it names the Compose service image.",
+      "branch": "main",
+      "deployWorkflow": "deploy.yml",
+      "apps": [
+        {
+          "flyApp": "kb-chat-web",
+          "url": "https://KB_CHAT_DOMAIN",
+          "smoke": "/ contains \"<app-root\" with Content-Security-Policy and Strict-Transport-Security headers; /api/v1/topics answers 401 without a session; POST /mcp/turn answers 404"
+        },
+        {
+          "flyApp": "kb-chat-api",
+          "url": "https://KB_CHAT_DOMAIN",
+          "smoke": "/health contains \"status\":\"ok\""
+        }
+      ],
+      "readOnly": true
+    }
+  }
 }

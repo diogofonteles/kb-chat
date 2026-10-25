@@ -13,7 +13,7 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 ## Architecture (reference)
 
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — drivers, C4, modules, contracts, threat model
-- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam (superseded) · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract)
+- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam (superseded) · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract) · 0010 production on OCI Always Free (Compose, Caddy)
 - Screens: [`docs/design/screens.md`](docs/design/screens.md) · Backlog: [`docs/backlog/README.md`](docs/backlog/README.md)
 
 ## Stack
@@ -32,6 +32,19 @@ pnpm dev:web     # http://localhost:4200 (proxies /api to :3000)
 ```
 
 Variables: [`.env.example`](.env.example), loaded from the repository root `.env` (gitignored). `GOOGLE_CLIENT_ID` and `KB_CHAT_OWNER_EMAIL` are required: sign-in with Google is mandatory (KBC-010, ADR 0008), and Google only accepts the button on the client's authorized origins (`http://localhost:4200`). A git worktree has no `.env`: copy the main checkout's. The AI provider is chosen in ⚙ Configurações (KBC-007, ADR 0007); with none chosen, the Claude subscription answers when `claude` is on PATH, then the env keys (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
+
+## Deploy (production, ADR 0010)
+
+- Production only: one OCI Always Free A1 VM (2 OCPU, 12 GB); the Mac is staging. Merge to `main` (the owner's decision) runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): arm64 images in GHCR tagged by SHA, SSH deploy, smoke, automatic rollback.
+- Files: [`deploy/`](deploy/) (compose, Caddyfile, cloud-init, scripts, `oci/` provisioning), `apps/api/Dockerfile`, `apps/web/Dockerfile`. Step by step: [`docs/deploy/runbook.md`](docs/deploy/runbook.md).
+- Local image smoke (ports 8080/8443; fixture vault indexed by QMD in the container, see the runbook):
+
+```bash
+docker build -f apps/api/Dockerfile -t kb-chat-api:local . && docker build -f apps/web/Dockerfile -t kb-chat-web:local .
+KB_CHAT_TAG=local KB_CHAT_REGISTRY=docker.io/library KB_CHAT_DOMAIN=localhost KB_CHAT_DATA=<dir> HTTP_PORT=8080 HTTPS_PORT=8443 \
+  WEB_ORIGIN=https://localhost:8443 GOOGLE_CLIENT_ID=<id> KB_CHAT_OWNER_EMAIL=<email> docker compose -f deploy/compose.yml up -d --wait
+SMOKE_INSECURE=1 deploy/scripts/smoke.sh https://localhost:8443
+```
 
 ## Quality
 
