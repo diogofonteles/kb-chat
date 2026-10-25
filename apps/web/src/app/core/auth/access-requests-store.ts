@@ -32,9 +32,10 @@ export class AccessRequestsStore {
       .subscribe(() => this.reload());
   }
 
-  /** Fetches again once loaded (the first load runs by itself for a master). */
+  /** Fetches again once loaded or failed (the first load runs by itself for a master). */
   reload(): void {
-    if (this.requests.hasValue()) this.requests.reload();
+    if (this.requests.hasValue() || this.requests.error())
+      this.requests.reload();
   }
 
   approve(id: string): Observable<Person> {

@@ -116,6 +116,9 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Esse código não confere ou já venceu',
     );
+    fireEvent.click(button('Trocar e-mail'));
+    await fixture.whenStable();
+    expect(button('Enviar código')).toBeTruthy();
   });
 
   it('offers SMS when it is configured and sends the phone as typed', async () => {

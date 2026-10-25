@@ -112,13 +112,12 @@
       >
         Reenviar código
       </button>
-      <button
-        type="button"
-        class="link"
-        (click)="change()"
-        i18n="@@login.change"
-      >
-        Trocar
+      <button type="button" class="link" (click)="change()">
+        @if (channel() === 'sms') {
+          <ng-container i18n="@@login.changePhone">Trocar celular</ng-container>
+        } @else {
+          <ng-container i18n="@@signUp.changeEmail">Trocar e-mail</ng-container>
+        }
       </button>
     </div>
   </form>

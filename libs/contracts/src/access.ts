@@ -15,13 +15,18 @@ export const codeChannelSchema = z.enum(CODE_CHANNELS);
 export type CodeChannel = z.infer<typeof codeChannelSchema>;
 
 const emailSchema = z.email().max(254);
-/** A name goes into the masters' email: no line breaks or other control characters. */
+/**
+ * A name goes into the masters' email: no control characters, line or paragraph separators,
+ * nor bidirectional overrides that would reorder the text around it.
+ */
 const nameSchema = z
   .string()
   .trim()
   .min(1)
   .max(80)
-  .regex(/^\P{Cc}+$/u, { error: 'Control characters are not allowed' });
+  .regex(/^[^\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]+$/u, {
+    error: 'Control characters are not allowed',
+  });
 
 /** POST /api/v1/access-requests/signup: the form of "Pedir acesso sem conta Google". */
 export const signUpRequestSchema = z.object({

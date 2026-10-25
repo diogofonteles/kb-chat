@@ -48,6 +48,23 @@ describe('access contracts (KBC-014)', () => {
         phone: '81999990000',
       }).success,
     ).toBe(false);
+    for (const lastName of ['Lima\u2028x', 'Lima\u202Ex', 'Lima\u2066x'])
+      expect(
+        signUpRequestSchema.safeParse({
+          email: 'ana@example.com',
+          firstName: 'Ana',
+          lastName,
+          phone: '81999990000',
+        }).success,
+      ).toBe(false);
+    expect(
+      signUpRequestSchema.safeParse({
+        email: 'ana@example.com',
+        firstName: 'Maria Luísa',
+        lastName: "D'Ávila",
+        phone: '81999990000',
+      }).success,
+    ).toBe(true);
   });
 
   it('takes exactly six digits as a code', () => {
