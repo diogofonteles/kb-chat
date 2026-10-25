@@ -13,6 +13,19 @@ DEPLOY_DIR="${KB_CHAT_DEPLOY_DIR:-/srv/kb-chat/deploy}"
 RELEASES="$DEPLOY_DIR/releases.log"
 ROLLED_BACK="$DEPLOY_DIR/rolled-back.list"
 
+# The deploy lock, taken before reading any state: a CI deploy cannot change the live
+# release between choosing the target and switching to it. The fd and KB_CHAT_LOCKED carry
+# over the exec to deploy.sh, which then does not lock again.
+if [ "${1:-}" != "--list" ] && [ -z "${KB_CHAT_LOCKED:-}" ]; then
+  if command -v flock >/dev/null; then
+    exec 9>"$DEPLOY_DIR/.lock"
+    flock -w 300 9 || { echo "rollback: another deploy holds $DEPLOY_DIR/.lock" >&2; exit 1; }
+    export KB_CHAT_LOCKED=1
+  else
+    echo "rollback: flock not found; running without the deploy lock" >&2
+  fi
+fi
+
 current="$("$DEPLOY_DIR/scripts/deploy.sh" --running)"
 case "$current" in
   "" | mixed:*) current="$(sed -n 's/^KB_CHAT_TAG=//p' "$DEPLOY_DIR/release.env" 2>/dev/null || true)" ;;
