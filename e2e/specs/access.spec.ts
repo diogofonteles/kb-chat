@@ -115,7 +115,7 @@ test.describe('without a session', () => {
     await expect.poll(() => sentCount(page.request, email)).toBe(2);
     await page.goto('/');
     await page.getByRole('button', { name: 'Entrar com código' }).click();
-    await page.getByLabel('E-mail').fill(email);
+    await page.getByLabel('Seu e-mail').fill(email);
     await page.getByRole('button', { name: 'Enviar código' }).click();
     await shoot(page, 'code-sent');
     const code = await codeSentTo(page.request, email, 2);

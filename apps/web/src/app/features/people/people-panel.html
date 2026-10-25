@@ -63,8 +63,10 @@
     @for (person of list(); track person.id) {
       <li class="person">
         <button
+          #row
           type="button"
           class="row"
+          [attr.data-id]="person.id"
           [attr.aria-expanded]="openId() === person.id"
           [attr.aria-controls]="'person-' + person.id"
           (click)="toggle(person)"

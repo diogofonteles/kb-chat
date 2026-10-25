@@ -4,10 +4,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
   LOCALE_ID,
+  afterNextRender,
   computed,
   inject,
   signal,
+  viewChildren,
 } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -48,6 +52,8 @@ export class PeoplePanel {
   private readonly destroyRef = inject(DestroyRef);
   private readonly session = inject(SessionStore);
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
+  private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
   /** Each person's AI spend today, shown to the owner only (BR-6). */
@@ -116,6 +122,14 @@ export class PeoplePanel {
       kind: 'ok',
       text: $localize`:@@people.approvedNotice:Acesso aprovado. Escolha os acervos de ${person.name || person.email}:name:.`,
     });
+    // The request's buttons are gone: focus moves to the new person, scrolled into view.
+    afterNextRender(
+      () =>
+        this.rows()
+          .find((row) => row.nativeElement.dataset['id'] === person.id)
+          ?.nativeElement.focus(),
+      { injector: this.injector },
+    );
   }
 
   protected change(person: Person, patch: PersonUpdate): void {

@@ -59,7 +59,7 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     fireEvent.click(button('Entrar com código'));
     await fixture.whenStable();
     expect(screen.queryByRole('radio')).toBeNull();
-    type('E-mail', 'ana@example.com');
+    type('Seu e-mail', 'ana@example.com');
     fireEvent.click(button('Enviar código'));
     const send = http.expectOne('/api/v1/auth/code');
     expect(send.request.body).toEqual({
@@ -91,7 +91,7 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     fireEvent.click(button('Entrar com código'));
     await fixture.whenStable();
 
-    type('E-mail', 'ana@');
+    type('Seu e-mail', 'ana@');
     fireEvent.click(button('Enviar código'));
     await fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain(
@@ -99,7 +99,7 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     );
     http.expectNone('/api/v1/auth/code');
 
-    type('E-mail', 'ana@example.com');
+    type('Seu e-mail', 'ana@example.com');
     fireEvent.click(button('Enviar código'));
     http.expectOne('/api/v1/auth/code').flush({});
     await fixture.whenStable();
@@ -125,7 +125,7 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: 'SMS' }));
     await fixture.whenStable();
-    type('Celular', '(81) 99999-0000');
+    type('Seu celular', '(81) 99999-0000');
     fireEvent.click(button('Enviar código'));
     expect(http.expectOne('/api/v1/auth/code').request.body).toEqual({
       identifier: '(81) 99999-0000',
@@ -137,7 +137,7 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
     const { http, fixture } = await renderLogin();
     fireEvent.click(button('Entrar com código'));
     await fixture.whenStable();
-    type('E-mail', 'ana@example.com');
+    type('Seu e-mail', 'ana@example.com');
     fireEvent.click(button('Enviar código'));
     http
       .expectOne('/api/v1/auth/code')

@@ -249,7 +249,7 @@ Mesma tela e cartão de T8 (centralizado, uma coluna, MA-17). "← Voltar" no to
 3. Sucesso: "Solicitação enviada. Um master vai analisar; você recebe um e-mail quando for aprovado."
 
 **Entrar com código**
-1. Quando o SMS está ligado: "Receber o código por" com rádios **E-mail** / **SMS** (MA-19); sem SMS, só o campo **E-mail** (BR-9). "Enviar código".
+1. Quando o SMS está ligado: "Receber o código por" com rádios **E-mail** / **SMS** (MA-19); sem SMS, só o campo **Seu e-mail** (BR-9; com SMS, **Seu e-mail** ou **Seu celular**). "Enviar código".
 2. "Se houver um acesso para …, enviamos um código." Campo **Código** e "Entrar"; "Reenviar código" e "Trocar".
 3. Entrou: o app abre como no Google.
 
