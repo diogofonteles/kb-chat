@@ -59,20 +59,54 @@ Espere o cloud-init terminar, uns 5–10 min. O script `kb-chat-setup` espera a 
 ssh ubuntu@<IP> 'cloud-init status --wait; test -f /var/lib/kb-chat-cloud-init-done && echo pronto'
 ```
 
-## 4. 👤 DONO — DNS e Google
+## 4. 👤 DONO — domínio e Google
 
-1. **DNS:** crie um registro `A` de `kb.<seu-domínio>` apontando para o IP reservado (TTL 300). Confira com `dig +short kb.<seu-domínio>`.
-2. **Google:** no [Console de credenciais](https://console.cloud.google.com/apis/credentials), no cliente OAuth do kb-chat, adicione `https://kb.<seu-domínio>` em **Authorized JavaScript origins**. Mantenha `http://localhost:4200` para o uso local.
+O site precisa de um nome que aponte para o IP reservado. Escolha **um** caminho:
 
-## 4b. 👤 DONO — e-mail dos códigos (Resend)
+**A. Gratuito: subdomínio do DuckDNS** (ex.: `nova-alexandria.duckdns.org`)
 
-O kb-chat manda por e-mail os códigos de entrada e de cadastro e os avisos de solicitação de acesso (KBC-014, ADR 0011). Sem isso a API não sobe em produção.
+1. Entre em [duckdns.org](https://www.duckdns.org) com uma das contas oferecidas (GitHub, Google etc.).
+2. Em *add domain*, crie o subdomínio (ex.: `nova-alexandria`). No campo *current ip* da linha dele, coloque o **IP reservado** do passo 3 e clique em *update ip*.
+3. Confira: `dig +short nova-alexandria.duckdns.org` responde o IP reservado. Como o IP reservado não muda, não é preciso rodar o atualizador do DuckDNS nem guardar o token dele na VM.
+4. O Caddy pede o certificado ao Let's Encrypt pelo desafio HTTP-01 na porta 80 (já aberta pelo `provision.sh` e pelo cloud-init); o DuckDNS não precisa de registro `TXT`. O e-mail não depende desse domínio (passo 4b): o DuckDNS não dá `MX` nem `TXT`, por isso os códigos saem pelo Gmail.
+5. Use `nova-alexandria.duckdns.org` como `KB_CHAT_DOMAIN` (passo 5) e na variável do GitHub (passo 6).
 
-1. Crie a conta em [resend.com](https://resend.com) (camada gratuita: 3.000 e-mails por mês, 100 por dia).
-2. Em *Domains → Add Domain*, adicione o domínio de envio (ex.: `<seu-domínio>`) e crie no DNS os registros que o Resend mostrar (SPF/DKIM `TXT` e `MX` de retorno). Espere o status **Verified**.
-3. Em *API Keys → Create API Key*, crie uma chave com permissão **Sending access** só para esse domínio. Ela aparece uma vez: copie direto para o `.env` da VM (passo 5), nunca para um arquivo do repositório ou um chat.
-4. No `.env` da VM: `RESEND_API_KEY=<a chave>` e `KB_CHAT_EMAIL_FROM=kb-chat <nao-responda@<seu-domínio>>` (o endereço precisa ser do domínio verificado).
-5. Depois do deploy, peça um código em "Entrar com código" com o seu e-mail e confira a chegada (e a pasta de spam). Em *Emails* no painel do Resend aparece cada envio.
+**B. Domínio próprio:** crie um registro `A` de `kb.<seu-domínio>` apontando para o IP reservado (TTL 300). Confira com `dig +short kb.<seu-domínio>`.
+
+**Google:** no [Console de credenciais](https://console.cloud.google.com/apis/credentials), no cliente OAuth do kb-chat, adicione `https://<o host escolhido>` (ex.: `https://nova-alexandria.duckdns.org`) em **Authorized JavaScript origins**. Mantenha `http://localhost:4200` para o uso local.
+
+Nos passos seguintes, `kb.<seu-domínio>` significa o host escolhido aqui.
+
+## 4b. 👤 DONO — e-mail dos códigos (Gmail, gratuito)
+
+O kb-chat manda por e-mail os códigos de entrada e de cadastro e os avisos de solicitação de acesso (KBC-014, ADR 0011). Sem um provedor completo a API não sobe em produção. O caminho gratuito é o SMTP do Gmail com uma senha de app (ADR 0012): envia para qualquer pessoa, até cerca de 500 destinatários por dia, e o remetente é a própria conta Gmail.
+
+1. **Crie uma conta Gmail só para o envio** (ex.: `nova.alexandria.avisos@gmail.com`). Uma senha de app dá acesso amplo à conta; numa conta dedicada, um vazamento não expõe o seu e-mail pessoal.
+2. Nessa conta, ligue a **verificação em duas etapas** ([myaccount.google.com/security](https://myaccount.google.com/security)). Sem ela o Google não oferece senha de app.
+3. Crie uma **senha de app** em [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (nome: `nova-alexandria`). Ela aparece uma vez, com 16 letras. Não cole em chat, em arquivo do repositório nem em argumento de comando.
+4. Depois do passo 5 (o `.env` já existe na VM), grave o par no `.env` digitando a senha sem eco:
+
+   ```bash
+   ssh ubuntu@<IP>
+   ENV=/srv/kb-chat/deploy/.env
+   sudo sed -i '/^SMTP_USER=/d; /^SMTP_PASSWORD=/d' "$ENV"
+   echo 'SMTP_USER=nova.alexandria.avisos@gmail.com' | sudo tee -a "$ENV" >/dev/null
+   read -rsp 'Senha de app: ' SMTP_PW; echo
+   printf 'SMTP_PASSWORD=%s\n' "${SMTP_PW// /}" | sudo tee -a "$ENV" >/dev/null; unset SMTP_PW
+   sudo grep -c '^SMTP_PASSWORD=.' "$ENV"   # 1 (conta a linha sem mostrar o valor)
+   ```
+
+   `SMTP_HOST` (`smtp.gmail.com`) e `SMTP_PORT` (`465`, TLS desde o início) já são o padrão. O remetente fica `Nova Alexandria <SMTP_USER>`; para mudar o nome, use `KB_CHAT_EMAIL_FROM=Nome <a mesma conta>` (o Gmail troca qualquer outro endereço pelo da conta). Vindo do Resend, apague o `KB_CHAT_EMAIL_FROM` antigo, senão ele continua valendo como remetente.
+5. Depois do deploy, peça um código em "Entrar com código" com o seu e-mail e confira a chegada (e a pasta de spam). A pasta *Enviados* da conta dedicada mostra cada envio.
+6. Se o envio falhar, o log da API mostra só os códigos (ex.: `SMTP refused the email (EAUTH 535)` = senha de app errada ou revogada). Para trocar a senha, revogue a antiga em *apppasswords*, crie outra, repita o item 4 e recrie o contêiner da API (ele só lê o `.env` ao ser criado):
+
+   ```bash
+   cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env up -d api
+   ```
+
+   Depois peça um código de novo para conferir.
+
+**Alternativa: Resend** (quando houver um domínio próprio verificado). Deixe `SMTP_USER` e `SMTP_PASSWORD` vazios, crie a conta em [resend.com](https://resend.com) (3.000 e-mails por mês, 100 por dia), adicione o domínio em *Domains*, crie no DNS os registros que ele mostrar (SPF/DKIM `TXT` e `MX` de retorno) e espere **Verified**; crie uma chave **Sending access** só para esse domínio e grave `RESEND_API_KEY` (pelo mesmo `read -s`) e `KB_CHAT_EMAIL_FROM=kb-chat <nao-responda@<seu-domínio>>`. Sem domínio verificado o Resend só entrega para o dono da conta. Com o par SMTP preenchido, o Gmail tem prioridade.
 
 SMS fica desligado (`KB_CHAT_SMS=off`): nenhum provedor é gratuito para o Brasil. Para ligar, escolha um provedor (ADR 0011 lista as opções e os preços) e peça o adaptador.
 
@@ -84,7 +118,7 @@ ssh ubuntu@<IP>
 sudo nano /srv/kb-chat/deploy/.env     # root, 0600: preencha a partir de deploy/.env.example
 ```
 
-Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL`, `RESEND_API_KEY` e `KB_CHAT_EMAIL_FROM` (passo 4b). Sem eles, `deploy.sh` recusa e a API não sobe.
+Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL` e **um** provedor de e-mail completo (passo 4b): `SMTP_USER` + `SMTP_PASSWORD` (Gmail) ou `RESEND_API_KEY` + `KB_CHAT_EMAIL_FROM`. Sem eles, ou com só metade do par SMTP, `deploy.sh` recusa e a API não sobe. Segredos (senha de app, chaves) entram pelo `read -s` do passo 4b, não pelo `nano` com a tela compartilhada.
 
 - `WEB_ORIGIN` fica `https://$KB_CHAT_DOMAIN` (é a origem que o CSRF aceita).
 - `ALLOWED_HOSTS` e `TRUST_PROXY` vêm do `compose.yml`.

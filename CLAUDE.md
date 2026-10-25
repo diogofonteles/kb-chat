@@ -13,7 +13,7 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 ## Architecture (reference)
 
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — drivers, C4, modules, contracts, threat model
-- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam (superseded) · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract) · 0010 production on OCI Always Free (Compose, Caddy) · 0011 access requests and one-time codes (Resend, SMS off)
+- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam (superseded) · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract) · 0010 production on OCI Always Free (Compose, Caddy) · 0011 access requests and one-time codes (Resend, SMS off) · 0012 Gmail SMTP as the free email provider
 - Screens: [`docs/design/screens.md`](docs/design/screens.md) (T10: request access, code sign-in) · Backlog: [`docs/backlog/README.md`](docs/backlog/README.md)
 
 ## Stack
@@ -31,7 +31,7 @@ pnpm dev:api     # http://127.0.0.1:3000/health (reads the root .env; KB_VAULT d
 pnpm dev:web     # http://localhost:4200 (proxies /api to :3000)
 ```
 
-Variables: [`.env.example`](.env.example), loaded from the repository root `.env` (gitignored). `GOOGLE_CLIENT_ID` and `KB_CHAT_OWNER_EMAIL` are required: sign-in with Google is mandatory (KBC-010, ADR 0008), and Google only accepts the button on the client's authorized origins (`http://localhost:4200`). A git worktree has no `.env`: copy the main checkout's. Access requests and one-time code sign-in (KBC-014, ADR 0011) send email through Resend (`RESEND_API_KEY`, `KB_CHAT_EMAIL_FROM`); without a key the codes are printed in the API log (development only), and with `NODE_ENV=production` the API refuses to start without both. SMS is off (`KB_CHAT_SMS=off`; `log` for development). The AI provider is chosen in ⚙ Configurações (KBC-007, ADR 0007); with none chosen, the Claude subscription answers when `claude` is on PATH, then the env keys (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
+Variables: [`.env.example`](.env.example), loaded from the repository root `.env` (gitignored). `GOOGLE_CLIENT_ID` and `KB_CHAT_OWNER_EMAIL` are required: sign-in with Google is mandatory (KBC-010, ADR 0008), and Google only accepts the button on the client's authorized origins (`http://localhost:4200`). A git worktree has no `.env`: copy the main checkout's. Access requests and one-time code sign-in (KBC-014, ADR 0011/0012) send email through Gmail SMTP with an app password (`SMTP_USER`, `SMTP_PASSWORD`; `SMTP_HOST`/`SMTP_PORT` default `smtp.gmail.com`/465) or, without that pair, Resend (`RESEND_API_KEY`, `KB_CHAT_EMAIL_FROM`); with neither the codes are printed in the API log (development only). With `NODE_ENV=production` the API refuses to start without one complete provider, and half of the SMTP pair stops it in any environment. SMS is off (`KB_CHAT_SMS=off`; `log` for development). The AI provider is chosen in ⚙ Configurações (KBC-007, ADR 0007); with none chosen, the Claude subscription answers when `claude` is on PATH, then the env keys (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
 
 ## Deploy (production, ADR 0010)
 
@@ -43,7 +43,7 @@ Variables: [`.env.example`](.env.example), loaded from the repository root `.env
 docker build -f apps/api/Dockerfile -t kb-chat-api:local . && docker build -f apps/web/Dockerfile -t kb-chat-web:local .
 KB_CHAT_TAG=local KB_CHAT_REGISTRY=docker.io/library KB_CHAT_DOMAIN=localhost KB_CHAT_DATA=<dir> HTTP_PORT=8080 HTTPS_PORT=8443 \
   WEB_ORIGIN=https://localhost:8443 GOOGLE_CLIENT_ID=<id> KB_CHAT_OWNER_EMAIL=<email> \
-  RESEND_API_KEY=<key> KB_CHAT_EMAIL_FROM='kb-chat <a@example.com>' docker compose -f deploy/compose.yml up -d --wait
+  SMTP_USER=smoke@example.com SMTP_PASSWORD=unused docker compose -f deploy/compose.yml up -d --wait
 SMOKE_INSECURE=1 deploy/scripts/smoke.sh https://localhost:8443
 ```
 

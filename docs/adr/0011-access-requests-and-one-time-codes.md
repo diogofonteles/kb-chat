@@ -1,6 +1,6 @@
 # 0011 — Access requests, sign-up without Google and one-time codes by email or SMS
 
-- Status: accepted (2026-10-25), implemented by KBC-014
+- Status: accepted (2026-10-25), implemented by KBC-014; Delivery amended by [0012](0012-gmail-smtp-email-provider.md) (Gmail SMTP as the free provider)
 - Amends: [0008](0008-google-login-and-permissions.md) (who gets in, the public routes, the principal)
 - Drivers: the owner's request (2026-10-25), Q-security (no session before approval, no account enumeration), zero running cost
 
