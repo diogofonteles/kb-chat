@@ -1,7 +1,7 @@
 ---
 id: KBC-016
 title: Dar ao produto o nome "Nova Alexandria" em todo texto que a pessoa vê
-status: in-review
+status: done
 slice: release-1
 outcome: quem abre o site, recebe um e-mail ou lê a documentação do produto vê o nome "Nova Alexandria", nunca "kb-chat"
 depends_on: [KBC-014, KBC-015]
