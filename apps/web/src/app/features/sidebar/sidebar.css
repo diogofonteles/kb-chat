@@ -230,3 +230,16 @@ select {
 .sign-out:hover {
   border-color: var(--color-text-muted);
 }
+
+.people-button .count {
+  min-width: 1.5rem;
+  margin-inline-start: auto;
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5rem;
+  text-align: center;
+}

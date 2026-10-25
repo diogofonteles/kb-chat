@@ -7,9 +7,15 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import type { Feature, Me } from '@kb-chat/contracts';
+import {
+  apiErrorSchema,
+  notInvitedDetailsSchema,
+  type Feature,
+  type Me,
+  type NotInvitedDetails,
+} from '@kb-chat/contracts';
 import { toUiErrorCode, type UiErrorCode } from '@core/api/api-error.js';
-import { catchError, of, tap, type Observable } from 'rxjs';
+import { catchError, map, of, tap, type Observable } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthApi } from './auth-api.js';
 import { SessionEvents } from './session-events.js';
@@ -18,7 +24,11 @@ import { SessionEvents } from './session-events.js';
 export type SessionState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'signed-out' }
-  | { readonly kind: 'not-invited' }
+  | {
+      readonly kind: 'not-invited';
+      /** The ticket for "Solicitar acesso" and where the request stands (KBC-014). */
+      readonly details: NotInvitedDetails | null;
+    }
   | { readonly kind: 'failed'; readonly code: UiErrorCode }
   | { readonly kind: 'signed-in'; readonly me: Me };
 
@@ -36,6 +46,16 @@ export const RELOAD_PAGE = new InjectionToken<() => void>('RELOAD_PAGE', {
 
 const isUnauthenticated = (err: unknown): boolean =>
   err instanceof HttpErrorResponse && err.status === 401;
+
+/** The ticket and request state that come with a not-invited answer, if any. */
+function notInvitedDetailsOf(err: unknown): NotInvitedDetails | null {
+  if (!(err instanceof HttpErrorResponse)) return null;
+  const envelope = apiErrorSchema.safeParse(err.error);
+  const details = notInvitedDetailsSchema.safeParse(
+    envelope.success ? envelope.data.error.details : undefined,
+  );
+  return details.success ? details.data : null;
+}
 
 /**
  * Who is signed in (KBC-010 FR-2): the shell shows the login screen until /me answers, and
@@ -82,6 +102,17 @@ export class SessionStore {
     );
   }
 
+  /** A one-time code (KBC-014): signed in, or the reason it was refused, for the form. */
+  verifyCode(identifier: string, code: string): Observable<UiErrorCode | null> {
+    return this.api.verifyCode(identifier, code).pipe(
+      map((me) => {
+        this.settle(me);
+        return null;
+      }),
+      catchError((err: unknown) => of(toUiErrorCode(err))),
+    );
+  }
+
   signOut(): Observable<void> {
     return this.api.signOut().pipe(
       catchError(() => of(undefined)),
@@ -114,7 +145,7 @@ export class SessionStore {
     if (isUnauthenticated(err)) return { kind: 'signed-out' };
     const code = toUiErrorCode(err);
     return code === 'NOT_INVITED'
-      ? { kind: 'not-invited' }
+      ? { kind: 'not-invited', details: notInvitedDetailsOf(err) }
       : { kind: 'failed', code };
   }
 }

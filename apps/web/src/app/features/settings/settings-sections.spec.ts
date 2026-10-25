@@ -75,6 +75,7 @@ describe('Configurações per permission (KBC-010)', () => {
     http.expectOne('/api/v1/people').flush({ items: [] });
     http.expectOne('/api/v1/topics').flush({ items: [], defaultSlug: null });
     http.expectOne('/api/v1/spend/people').flush({ items: [] });
+    http.expectOne('/api/v1/access-requests').flush({ items: [] });
     await fixture.whenStable();
   });
 });

@@ -81,6 +81,16 @@ export const configSchema = z.object({
     .optional(),
   /** Sign-in attempts per minute per client. */
   AUTH_RATE_LIMIT: z.coerce.number().int().min(1).default(10),
+  /** `production` makes the API refuse to start without a real email provider (ADR 0011). */
+  NODE_ENV: z
+    .enum(['development', 'production', 'test'])
+    .default('development'),
+  /** Resend API key (secret) for one-time codes and access notices; empty → the API log (dev). */
+  RESEND_API_KEY: z.string().min(1).optional(),
+  /** The sender, on a domain verified in Resend: "kb-chat <nao-responda@example.com>". */
+  KB_CHAT_EMAIL_FROM: z.string().min(3).optional(),
+  /** SMS codes: off (default; no free provider for Brazil, ADR 0011) | log (development). */
+  KB_CHAT_SMS: z.enum(['off', 'log']).default('off'),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
@@ -103,6 +113,29 @@ export function assertSignInConfigured(
   if (missing.length > 0)
     throw new Error(
       `Sign-in is not configured: set ${missing.join(' and ')} in the repository's .env`,
+    );
+}
+
+const LOOPBACK = new Set(['127.0.0.1', '::1']);
+
+/**
+ * Production sends real email (ADR 0011): without Resend the codes would only reach the
+ * log, so the API does not start; the SMS log adapter is refused there too.
+ */
+export function assertDeliveryConfigured(config: AppConfig): void {
+  // Listening beyond loopback is a deployment even when NODE_ENV was forgotten: fail closed.
+  const exposed = !LOOPBACK.has(config.HOST);
+  if (config.NODE_ENV !== 'production' && !exposed) return;
+  const missing = (['RESEND_API_KEY', 'KB_CHAT_EMAIL_FROM'] as const).filter(
+    (name) => !config[name],
+  );
+  if (missing.length > 0)
+    throw new Error(
+      `Email delivery is not configured for production: set ${missing.join(' and ')}`,
+    );
+  if (config.KB_CHAT_SMS === 'log')
+    throw new Error(
+      'KB_CHAT_SMS=log writes codes to the log: not in production',
     );
 }
 

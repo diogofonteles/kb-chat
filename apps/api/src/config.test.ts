@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config.js';
+import { assertDeliveryConfigured, loadConfig } from './config.js';
 
 describe('loadConfig', () => {
   it('applies defaults and expands the home directory', () => {
@@ -30,5 +30,51 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ HOST: 'example.com' })).toThrow(
       /Invalid configuration/,
     );
+  });
+});
+
+describe('assertDeliveryConfigured (KBC-014 FR-7, AC-13)', () => {
+  const production = { NODE_ENV: 'production' };
+
+  it('stops a production API without Resend', () => {
+    expect(() => assertDeliveryConfigured(loadConfig(production))).toThrow(
+      'set RESEND_API_KEY and KB_CHAT_EMAIL_FROM',
+    );
+    expect(() =>
+      assertDeliveryConfigured(
+        loadConfig({ ...production, RESEND_API_KEY: 'k' }),
+      ),
+    ).toThrow('set KB_CHAT_EMAIL_FROM');
+  });
+
+  it('treats an API listening beyond loopback as production, NODE_ENV or not', () => {
+    expect(() =>
+      assertDeliveryConfigured(loadConfig({ HOST: '0.0.0.0' })),
+    ).toThrow('set RESEND_API_KEY');
+  });
+
+  it('refuses the SMS log adapter in production', () => {
+    const config = loadConfig({
+      ...production,
+      RESEND_API_KEY: 'k',
+      KB_CHAT_EMAIL_FROM: 'kb-chat <a@example.com>',
+      KB_CHAT_SMS: 'log',
+    });
+    expect(() => assertDeliveryConfigured(config)).toThrow(/not in production/);
+  });
+
+  it('lets development run on the log adapters', () => {
+    const config = loadConfig({ KB_CHAT_SMS: 'log' });
+    expect(config.NODE_ENV).toBe('development');
+    expect(() => assertDeliveryConfigured(config)).not.toThrow();
+    expect(() =>
+      assertDeliveryConfigured(
+        loadConfig({
+          ...production,
+          RESEND_API_KEY: 'k',
+          KB_CHAT_EMAIL_FROM: 'kb-chat <a@example.com>',
+        }),
+      ),
+    ).not.toThrow();
   });
 });

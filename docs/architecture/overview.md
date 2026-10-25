@@ -101,7 +101,8 @@ API modules, organised by business capability:
 | `spend` | Spend ledger, daily cap and credit checks (ADR 0004) | `SpendService.guard(usd)`, `record(turn)`, `today()` |
 | `usage` | Local event log for the research plan | `record(event)` |
 | `conversations` | The complete conversation history (search and research), no cap, keyed by principal | `list(principal, filter)`, `get(principal, id)`, `save(principal, conversation)`, `remove(principal, id)` |
-| `auth` | Google sign-in, sessions, people and their permissions (ADR 0008) | `PeopleService`, `SessionService`, `authRoutes`, `peopleRoutes`, `principalOf(request)`, `RouteAccess` |
+| `auth` | Google sign-in, one-time code sign-in, sessions, people and their permissions (ADR 0008, ADR 0011) | `PeopleService`, `SessionService`, `OneTimeCodes`, `SendLimits`, `RequestTickets`, `Notifier`, `authRoutes`, `codeRoutes`, `peopleRoutes`, `principalOf(request)`, `RouteAccess` |
+| `access-requests` | Asking for access (form or Google) and the masters' decisions (KBC-014, ADR 0011); depends on `auth` through its barrel | `AccessRequestService`, `SignUpFlow`, `accessRequestRoutes` |
 
 Ports (interfaces in the module) and their adapters (in `adapters/`):
 
@@ -111,6 +112,7 @@ Ports (interfaces in the module) and their adapters (in `adapters/`):
 - `LedgerPort` → `JsonlLedgerAdapter`.
 - `IdentityVerifierPort` → `GoogleIdTokenVerifier` (JWKS cached per Cache-Control; the E2E server uses its own test keys).
 - `PeopleStorePort` → `JsonPeopleStore` (`people.json`, 0600); `SessionStorePort` → `FsSessionStore` (`sessions/<sha256>.json`, 0600).
+- `DocumentStorePort` → `JsonDocumentStore` (`codes.json`, `access-requests.json`, 0600, atomic); `EmailSenderPort` → `ResendEmailSender` (production), `LogEmailSender` (development), `MemoryOutbox` (tests, E2E); `SmsSenderPort` → `LogSmsSender` (development only; no production provider yet, ADR 0011).
 - The access guard (`plugins/auth-guard.ts`) reads each route's `config.access`; `plugins/route-access.ts` refuses an `/api/v1` route without one (ADR 0008, replacing ADR 0005's seam).
 
 Dependency rules, enforced by `eslint-plugin-boundaries` or Nx module-boundary tags in CI (SB-06, QA-15):
@@ -127,6 +129,7 @@ Dependency rules, enforced by `eslint-plugin-boundaries` or Nx module-boundary t
 - **Duplicate groups** (same normalized title, e.g. `a-natureza-s-tupla-2.md` and `-5.md`) are computed in the catalog, and search returns the best-scoring member with `duplicates: n`.
 - **Spend ledger and usage events:** owned by `spend` and `usage`, stored under `~/.kb-chat/`, with 90-day retention for events (research plan).
 - **People and sessions:** owned by `auth`: `~/.kb-chat/people.json` and `~/.kb-chat/sessions/` (0600). Every per-person store is keyed by principal: the Google `sub`, except the owner, who keeps the `owner` alias of the data written before logins.
+- **Access requests and one-time codes:** owned by `access-requests` and `auth`: `~/.kb-chat/access-requests.json` (pending and recently refused requests, with name, email and phone) and `~/.kb-chat/codes.json` (salted scrypt hashes only, 10 min), both 0600 (ADR 0011).
 - **Conversations:** owned by `conversations`, one JSON file per conversation in `~/.kb-chat/conversations/<uuid>.json` (mode 0600, written to a temp file and renamed), kept forever; unreadable files are skipped with a warning.
 
 ## Contracts (CS-01, CS-08, CS-09, CS-11)
@@ -147,11 +150,14 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 | `GET /api/v1/auth/config` | Public: the Google client id for the sign-in button |
 | `POST /api/v1/auth/google` | Public, rate-limited: `{ credential }` (Google ID token) → the person (`Me`) and the session cookie; 403 `NOT_INVITED` |
 | `POST /api/v1/auth/logout` | Ends the session (204) |
+| `POST /api/v1/auth/code`, `POST /api/v1/auth/code/verify` | Public, limited: a one-time code by email or SMS (always 202) and its exchange for the session (400 `INVALID_CODE`) (ADR 0011) |
+| `POST /api/v1/access-requests/signup`, `.../signup/verify`, `.../google` | Public, limited: ask for access with the form (email code first) or with the ticket of a not-invited Google sign-in |
+| `GET /api/v1/access-requests`, `POST .../{id}/approve`, `POST .../{id}/refuse` | Masters only: pending requests, approve (the person with the invite defaults), refuse (24 h before asking again) |
 | `GET /api/v1/me` | Who is signed in: email, name, picture, role, features, visible collections, `isOwner` |
 | `GET` / `POST /api/v1/people`, `PATCH` / `DELETE /api/v1/people/{id}` | Masters only: list, invite, change collections, features and role, revoke (409 `LAST_MASTER`, `OWNER_PROTECTED`, `ALREADY_INVITED`) |
 | `GET /health` | Readiness: catalog loaded, QMD alive, LLM configured |
 
-- **Errors:** one shape, `{ error: { code, message, details? } }`. Stable codes: `TOPIC_NOT_FOUND`, `INDEX_MISSING`, `SEARCH_UNAVAILABLE`, `DOCUMENT_NOT_FOUND`, `LLM_NOT_CONFIGURED`, `LLM_INSUFFICIENT_CREDIT`, `DAILY_CAP_REACHED`, `VALIDATION_FAILED`, and for sign-in and permissions `UNAUTHENTICATED` (401), `FORBIDDEN`, `NOT_INVITED`, `CSRF_REJECTED` (403), `LAST_MASTER`, `OWNER_PROTECTED`, `ALREADY_INVITED` (409), `AUTH_UNAVAILABLE` (503).
+- **Errors:** one shape, `{ error: { code, message, details? } }`. Stable codes: `TOPIC_NOT_FOUND`, `INDEX_MISSING`, `SEARCH_UNAVAILABLE`, `DOCUMENT_NOT_FOUND`, `LLM_NOT_CONFIGURED`, `LLM_INSUFFICIENT_CREDIT`, `DAILY_CAP_REACHED`, `VALIDATION_FAILED`, and for sign-in and permissions `UNAUTHENTICATED` (401), `FORBIDDEN`, `NOT_INVITED`, `CSRF_REJECTED` (403), `LAST_MASTER`, `OWNER_PROTECTED`, `ALREADY_INVITED` (409), `AUTH_UNAVAILABLE` (503), and for access requests `INVALID_CODE`, `REQUEST_EXPIRED` (400), `ALREADY_REQUESTED` (409), `REQUEST_COOLDOWN` (429).
 - **Access:** every `/api/v1` route except sign-in needs a session; collection routes answer 404 for a collection the person cannot see, feature and people routes 403 (ADR 0008). No stack traces (CS-08). The web maps each code to the pt-BR copy in `screens.md`.
 - **Pagination:** opaque cursor, default 10, max 50 (CS-09).
 - **Filters:** filter fields are allowlisted to the facets above (CS-10).
@@ -193,9 +199,16 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
    - `config.rateLimit` on sign-in; the log carries the person id, never the token or the email.
 4. **Did we do a good job?** Tests: token verification with a local key and a fake JWKS (no network), the guard matrix per route kind, the route-coverage check (NFR-2), revocation, the last master, CSRF and the owner migration (`auth.integration.test.ts`, `route-access.test.ts`); E2E AC-1 to AC-7 at 1440 and 390.
 
+### Access requests and one-time codes (KBC-014, ADR 0011)
+
+1. **What are we building?** Public routes that send codes by email (SMS later), create access requests and open sessions with a code.
+2. **What can go wrong?** Account enumeration through answers or timing; guessing a 6-digit code; email or SMS bombing through the send routes; a copy of `codes.json` giving codes back; reusing a Google credential or forging the request ticket; a pending, refused or revoked person getting a session; codes in production logs.
+3. **What are we doing about it?** Same 202 body for every account state and delivery after the reply; 5 attempts per code, 10 min, single use, a new code replaces the old; 1/min and 5/h per email or phone, 5/min and 20/h per address, verify routes rate-limited; scrypt with a salt per code and `timingSafeEqual`; HMAC-signed, 15 min, single-use tickets with a boot-time key; sessions only for people in `people.json`, checked again at verify time; the API refuses to start in production without Resend or with the SMS log adapter.
+4. **Did we do a good job?** Tests: `one-time-codes.test.ts`, `send-limits.test.ts`, `request-ticket.test.ts`, `request-rules.test.ts`, `access-requests.integration.test.ts` (enumeration, approval gate, revocation after send, cooldown, permissions), `route-access.test.ts`; E2E `access.spec.ts` at 1440 and 390.
+
 ## Operability (CS-21 to CS-25)
 
-- **Config by env:** `GOOGLE_CLIENT_ID` and `KB_CHAT_OWNER_EMAIL` (required; read from the repository root `.env` by `pnpm dev:api`), `AUTH_RATE_LIMIT`, `KB_VAULT` (default `~/dev/personal/hermetismo`), `QMD_BIN`, `KB_BIN`, `OPENROUTER_API_KEY`, `KB_CHAT_MODEL` (default: the vault's `kb.toml` generation model), `KB_CHAT_DAILY_CAP_USD` (default 1), `PORT`, `WEB_ORIGIN`.
+- **Config by env:** `RESEND_API_KEY` and `KB_CHAT_EMAIL_FROM` (required with `NODE_ENV=production`), `KB_CHAT_SMS` (`off` | `log`), `GOOGLE_CLIENT_ID` and `KB_CHAT_OWNER_EMAIL` (required; read from the repository root `.env` by `pnpm dev:api`), `AUTH_RATE_LIMIT`, `KB_VAULT` (default `~/dev/personal/hermetismo`), `QMD_BIN`, `KB_BIN`, `OPENROUTER_API_KEY`, `KB_CHAT_MODEL` (default: the vault's `kb.toml` generation model), `KB_CHAT_DAILY_CAP_USD` (default 1), `PORT`, `WEB_ORIGIN`.
 - **Hosting (ADR 0010):** production runs as a Docker Compose project on one OCI Always Free VM, Caddy in front. The container sets `HOST=0.0.0.0` and `TRUST_PROXY=uniquelocal`; the MCP turn endpoint refuses non-loopback sockets. Deployment diagram, threat model and runbook: ADR 0010 and `docs/deploy/runbook.md`.
 - **Logs:** structured pino to stdout with a correlation id, route, status and latency.
 - **Health:** `/health` reports catalog, QMD and LLM status, which the web uses for the "server is down" states.

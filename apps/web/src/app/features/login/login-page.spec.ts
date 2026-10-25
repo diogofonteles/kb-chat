@@ -65,7 +65,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     const { http, fixture } = await renderLogin(of(google.accounts));
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     expect(google.calls.clientId).toBe('client-123');
@@ -89,7 +89,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     const { http, fixture } = await renderLogin(of(google.accounts), disable);
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     google.calls.callback?.({ credential: 'google-id-token' });
@@ -101,13 +101,17 @@ describe('LoginPage (KBC-010, T8)', () => {
       );
     await fixture.whenStable();
 
-    expect(screen.getByRole('alert').textContent).toContain(
-      'Seu acesso ainda não foi liberado; peça a um master.',
-    );
+    expect(
+      screen.getByText('Seu acesso ainda não foi liberado; peça a um master.'),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
     await fixture.whenStable();
     expect(disable).toHaveBeenCalled();
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(
+      screen.queryByText(
+        'Seu acesso ainda não foi liberado; peça a um master.',
+      ),
+    ).toBeNull();
   });
 
   it('shows a sign-in failure next to the button', async () => {
@@ -115,7 +119,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     const { http, fixture } = await renderLogin(of(google.accounts));
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     google.calls.callback?.({ credential: 'google-id-token' });
@@ -134,7 +138,9 @@ describe('LoginPage (KBC-010, T8)', () => {
 
   it('explains a missing client id', async () => {
     const { http, fixture } = await renderLogin(of(fakeGoogle().accounts));
-    http.expectOne('/api/v1/auth/config').flush({ googleClientId: null });
+    http
+      .expectOne('/api/v1/auth/config')
+      .flush({ googleClientId: null, codeChannels: ['email'] });
     await fixture.whenStable();
 
     expect(screen.getByRole('alert').textContent).toContain('GOOGLE_CLIENT_ID');
@@ -146,7 +152,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     );
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     expect(screen.getByRole('alert').textContent).toContain(
@@ -155,6 +161,6 @@ describe('LoginPage (KBC-010, T8)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
   });
 });

@@ -100,6 +100,56 @@ export function invite(
   return { people: [...people, invited], result: invited };
 }
 
+/** What an approved access request carries over to the person (KBC-014 BR-6). */
+export interface ApprovedRequest {
+  readonly email: string;
+  readonly name: string;
+  readonly phone: string | null;
+  /** A Google request binds its account at once. */
+  readonly sub: string | null;
+  readonly picture: string | null;
+  readonly approvedBy: string;
+}
+
+export function approve(
+  people: readonly StoredPerson[],
+  approved: ApprovedRequest,
+  context: { readonly now: string; readonly newId: () => string },
+): PeopleChange<StoredPerson> {
+  const { sub, approvedBy, ...rest } = approved;
+  const { people: withInvite, result } = invite(
+    people,
+    { email: approved.email, invitedBy: approvedBy },
+    context,
+  );
+  if (sub !== null && people.some((p) => p.sub === sub))
+    throw new AppError('ALREADY_INVITED', 'This account already has access');
+  const person: StoredPerson = {
+    ...result,
+    ...rest,
+    email: result.email,
+    sub,
+    // A form person has no Google account: the id is their principal from now on.
+    ...(sub === null && { principal: result.id }),
+  };
+  return { people: replace(withInvite, person), result: person };
+}
+
+/** The first code sign-in fixes whose data this is, so a later Google link keeps it. */
+export function codeSignIn(
+  people: readonly StoredPerson[],
+  id: string,
+  now: string,
+): PeopleChange<StoredPerson> {
+  const person = find(people, id);
+  const signedIn: StoredPerson = {
+    ...person,
+    principal: person.principal ?? person.sub ?? person.id,
+    lastLoginAt: now,
+  };
+  return { people: replace(people, signedIn), result: signedIn };
+}
+
 function find(people: readonly StoredPerson[], id: string): StoredPerson {
   const person = people.find((p) => p.id === id);
   if (!person) throw new AppError('NOT_FOUND', 'Unknown person');

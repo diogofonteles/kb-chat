@@ -4,10 +4,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
   LOCALE_ID,
+  afterNextRender,
   computed,
   inject,
   signal,
+  viewChildren,
 } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -21,6 +25,7 @@ import { PeopleApi } from '@core/auth/auth-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatSpend } from '@core/spend/spend-store.js';
 import type { Observable } from 'rxjs';
+import { AccessRequestsList } from './access-requests-list.js';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -37,7 +42,7 @@ interface Outcome<T> {
  */
 @Component({
   selector: 'app-people-panel',
-  imports: [PersonEditor, DatePipe, NgTemplateOutlet],
+  imports: [PersonEditor, AccessRequestsList, DatePipe, NgTemplateOutlet],
   templateUrl: './people-panel.html',
   styleUrl: './people-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,6 +52,8 @@ export class PeoplePanel {
   private readonly destroyRef = inject(DestroyRef);
   private readonly session = inject(SessionStore);
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
+  private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
   /** Each person's AI spend today, shown to the owner only (BR-6). */
@@ -101,10 +108,28 @@ export class PeoplePanel {
         this.people.update((all) => [...(all ?? []), invited]);
         this.email.set('');
         this.openId.set(invited.id);
-        return $localize`:@@people.invited:Convite criado. ${invited.email}:email: já pode entrar com essa conta Google.`;
+        return $localize`:@@people.invited:Convite criado. ${invited.email}:email: já pode entrar com o Google ou com um código por e-mail.`;
       },
       failed: (text) => this.inviteError.set(text),
     });
+  }
+
+  /** An approved request is a new person: their editor opens to choose the rest (BR-6). */
+  protected welcome(person: Person): void {
+    this.people.update((all) => [...(all ?? []), person]);
+    this.openId.set(person.id);
+    this.notice.set({
+      kind: 'ok',
+      text: $localize`:@@people.approvedNotice:Acesso aprovado. Escolha os acervos de ${person.name || person.email}:name:.`,
+    });
+    // The request's buttons are gone: focus moves to the new person, scrolled into view.
+    afterNextRender(
+      () =>
+        this.rows()
+          .find((row) => row.nativeElement.dataset['id'] === person.id)
+          ?.nativeElement.focus(),
+      { injector: this.injector },
+    );
   }
 
   protected change(person: Person, patch: PersonUpdate): void {

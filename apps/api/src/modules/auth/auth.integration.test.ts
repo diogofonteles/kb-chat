@@ -174,6 +174,7 @@ describe('sign-in (BR-1, BR-2)', () => {
     expect((await anonymous('GET', '/health')).statusCode).toBe(200);
     expect((await anonymous('GET', '/api/v1/auth/config')).json()).toEqual({
       googleClientId: TEST_CLIENT_ID,
+      codeChannels: ['email'],
     });
   });
 

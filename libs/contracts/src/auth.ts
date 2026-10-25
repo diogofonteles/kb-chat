@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { codeChannelSchema } from './access.js';
 import { topicSlugSchema } from './topics.js';
 
 /**
@@ -25,9 +26,13 @@ export const DEFAULT_INVITE_FEATURES: readonly Feature[] = ['search'];
 export const CSRF_HEADER = 'x-requested-with';
 export const CSRF_HEADER_VALUE = 'kb-chat';
 
-/** GET /api/v1/auth/config: the public Google client id the web signs in with. */
+/**
+ * GET /api/v1/auth/config: the public Google client id the web signs in with, and where a
+ * one-time sign-in code can go (KBC-014: `sms` only with a provider).
+ */
 export const authConfigSchema = z.object({
   googleClientId: z.string().min(1).nullable(),
+  codeChannels: z.array(codeChannelSchema),
 });
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 
@@ -65,6 +70,8 @@ export const personSchema = z.object({
   topics: z.array(topicSlugSchema),
   features: z.array(featureSchema),
   isOwner: z.boolean(),
+  /** E.164, from an access request (KBC-014); null for invites. */
+  phone: z.string().nullable(),
   invitedBy: z.string(),
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),

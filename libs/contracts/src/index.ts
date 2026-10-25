@@ -10,3 +10,5 @@ export * from './conversations.js';
 export * from './settings.js';
 export * from './spend.js';
 export * from './auth.js';
+export * from './access.js';
+export * from './phone.js';

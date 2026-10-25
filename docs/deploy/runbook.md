@@ -64,6 +64,18 @@ ssh ubuntu@<IP> 'cloud-init status --wait; test -f /var/lib/kb-chat-cloud-init-d
 1. **DNS:** crie um registro `A` de `kb.<seu-domínio>` apontando para o IP reservado (TTL 300). Confira com `dig +short kb.<seu-domínio>`.
 2. **Google:** no [Console de credenciais](https://console.cloud.google.com/apis/credentials), no cliente OAuth do kb-chat, adicione `https://kb.<seu-domínio>` em **Authorized JavaScript origins**. Mantenha `http://localhost:4200` para o uso local.
 
+## 4b. 👤 DONO — e-mail dos códigos (Resend)
+
+O kb-chat manda por e-mail os códigos de entrada e de cadastro e os avisos de solicitação de acesso (KBC-014, ADR 0011). Sem isso a API não sobe em produção.
+
+1. Crie a conta em [resend.com](https://resend.com) (camada gratuita: 3.000 e-mails por mês, 100 por dia).
+2. Em *Domains → Add Domain*, adicione o domínio de envio (ex.: `<seu-domínio>`) e crie no DNS os registros que o Resend mostrar (SPF/DKIM `TXT` e `MX` de retorno). Espere o status **Verified**.
+3. Em *API Keys → Create API Key*, crie uma chave com permissão **Sending access** só para esse domínio. Ela aparece uma vez: copie direto para o `.env` da VM (passo 5), nunca para um arquivo do repositório ou um chat.
+4. No `.env` da VM: `RESEND_API_KEY=<a chave>` e `KB_CHAT_EMAIL_FROM=kb-chat <nao-responda@<seu-domínio>>` (o endereço precisa ser do domínio verificado).
+5. Depois do deploy, peça um código em "Entrar com código" com o seu e-mail e confira a chegada (e a pasta de spam). Em *Emails* no painel do Resend aparece cada envio.
+
+SMS fica desligado (`KB_CHAT_SMS=off`): nenhum provedor é gratuito para o Brasil. Para ligar, escolha um provedor (ADR 0011 lista as opções e os preços) e peça o adaptador.
+
 ## 5. Instalar os arquivos de deploy e o `.env` na VM
 
 ```bash
@@ -72,7 +84,7 @@ ssh ubuntu@<IP>
 sudo nano /srv/kb-chat/deploy/.env     # root, 0600: preencha a partir de deploy/.env.example
 ```
 
-Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL`. Sem eles, `deploy.sh` recusa e a API não sobe.
+Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL`, `RESEND_API_KEY` e `KB_CHAT_EMAIL_FROM` (passo 4b). Sem eles, `deploy.sh` recusa e a API não sobe.
 
 - `WEB_ORIGIN` fica `https://$KB_CHAT_DOMAIN` (é a origem que o CSRF aceita).
 - `ALLOWED_HOSTS` e `TRUST_PROXY` vêm do `compose.yml`.

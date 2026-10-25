@@ -3,6 +3,8 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
+  afterNextRender,
   afterRenderEffect,
   computed,
   inject,
@@ -17,6 +19,12 @@ import {
   type GoogleAccountsId,
 } from '@core/auth/google-identity.js';
 import { SessionStore } from '@core/auth/session-store.js';
+import { CodeSignIn } from './code-sign-in.js';
+import { GoogleAccessRequest } from './google-access-request.js';
+import { SignUpForm } from './sign-up-form.js';
+
+/** What the login card shows: the sign-in options, a code sign-in or the sign-up form. */
+type Mode = 'start' | 'code' | 'signup';
 
 /**
  * "Entrar com Google" (KBC-010, screens.md T8): the Google Identity Services button, the
@@ -24,6 +32,7 @@ import { SessionStore } from '@core/auth/session-store.js';
  */
 @Component({
   selector: 'app-login-page',
+  imports: [CodeSignIn, GoogleAccessRequest, SignUpForm],
   templateUrl: './login-page.html',
   styleUrl: './login-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,12 +43,18 @@ export class LoginPage {
   private readonly session = inject(SessionStore);
   private readonly destroyRef = inject(DestroyRef);
   private readonly button = viewChild<ElementRef<HTMLElement>>('button');
+  private readonly codeButton =
+    viewChild<ElementRef<HTMLElement>>('codeButton');
+  private readonly signUpButton =
+    viewChild<ElementRef<HTMLElement>>('signUpButton');
+  private readonly injector = inject(Injector);
 
   private readonly config = rxResource({ stream: () => this.api.config() });
   private readonly accounts = rxResource({
     stream: () => this.google.accounts$,
   });
   protected readonly signingIn = signal(false);
+  protected readonly mode = signal<Mode>('start');
 
   protected readonly clientId = computed(() =>
     this.config.hasValue() ? this.config.value().googleClientId : undefined,
@@ -56,6 +71,16 @@ export class LoginPage {
   );
   protected readonly notInvited = computed(
     () => this.session.state().kind === 'not-invited',
+  );
+  protected readonly notInvitedDetails = computed(() => {
+    const state = this.session.state();
+    return state.kind === 'not-invited' ? state.details : null;
+  });
+  /** Email always; SMS only with a provider (KBC-014 BR-9). */
+  protected readonly codeChannels = computed(() =>
+    this.config.hasValue()
+      ? this.config.value().codeChannels
+      : (['email'] as const),
   );
   protected readonly failure = computed(() => {
     const state = this.session.state();
@@ -111,6 +136,17 @@ export class LoginPage {
   protected leave(): void {
     this.google.disableAutoSelect();
     this.session.reset();
+  }
+
+  protected show(mode: Mode): void {
+    const from = this.mode();
+    this.mode.set(mode);
+    if (mode !== 'start') return;
+    // Back from a form: focus returns to the button that opened it (WCAG 2.4.3).
+    const origin = from === 'code' ? this.codeButton : this.signUpButton;
+    afterNextRender(() => origin()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   protected retry(): void {

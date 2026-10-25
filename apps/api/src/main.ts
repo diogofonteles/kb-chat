@@ -2,7 +2,13 @@ import { join } from 'node:path';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { OWNER, buildApp } from './app.js';
 import { applyUsageRetention } from './modules/usage/index.js';
-import { assertSignInConfigured, loadConfig } from './config.js';
+import {
+  assertDeliveryConfigured,
+  assertSignInConfigured,
+  loadConfig,
+} from './config.js';
+import { JsonDocumentStore } from './adapters/json-document-store.js';
+import { createDelivery } from './delivery-factory.js';
 import { JsonPeopleStore } from './adapters/json-people-store.js';
 import { FsSessionStore } from './adapters/fs-session-store.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
@@ -19,6 +25,7 @@ import { createSearchIndex } from './search-index-factory.js';
 
 const config = loadConfig();
 assertSignInConfigured(config);
+assertDeliveryConfigured(config);
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
 const index = await createSearchIndex({ config, vault, log: logger });
@@ -57,9 +64,18 @@ const auth = {
   }),
   verifier: createGoogleVerifier(config.GOOGLE_CLIENT_ID),
 };
+// Access requests and one-time codes by email or SMS (KBC-014, ADR 0011).
+const access = {
+  codes: new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'codes.json')),
+  requests: new JsonDocumentStore(
+    join(config.KB_CHAT_STATE_DIR, 'access-requests.json'),
+  ),
+  delivery: createDelivery(config, logger),
+};
 const app = await buildApp({
   config,
   auth,
+  access,
   vault,
   index,
   logger,

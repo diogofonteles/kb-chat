@@ -209,7 +209,8 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 **Objetivo:** entrar com a própria conta Google em um clique. **Sucesso:** do botão ao app sem digitar nada.
 
 - Tela própria, centralizada, antes de qualquer outra (login obrigatório, inclusive no Mac do dono): "kb-chat" (título), uma linha de descrição, o botão do Google "Fazer login com o Google" (Google Identity Services) e a nota "Suas conversas e configurações ficam no servidor do kb-chat."
-- Sem convite: "Seu acesso ainda não foi liberado; peça a um master." com "Sair" (volta ao botão, sem o login automático do Google).
+- Abaixo do botão do Google, separado por "ou": **Entrar com código** (botão secundário) e o link **Pedir acesso sem conta Google** (T10, KBC-014).
+- Sem convite (Google): "Seu acesso ainda não foi liberado." com **Solicitar acesso** (primário) e "Sair" (volta ao botão, sem o login automático do Google). Solicitar abre, no mesmo cartão, o e-mail do Google (só leitura), o campo **Celular (opcional)** e "Enviar solicitação"; depois: "Solicitação enviada. Você recebe um e-mail quando um master aprovar." Se já houver uma solicitação: "Sua solicitação está em análise." ou "Sua solicitação foi recusada. Você pode pedir de novo a partir de dd/mm às hh:mm." (KBC-014 BR-7).
 - Qualquer resposta 401 depois disso (sessão revogada ou vencida) recarrega a página e volta a esta tela; nada da pessoa anterior fica na memória (BR-6).
 
 | Estado | Mostra |
@@ -219,16 +220,48 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 | Script do Google indisponível | "Não consegui carregar o botão do Google…" + "Tentar de novo" |
 | Entrando | "Entrando…" |
 | Falha na verificação | a mensagem do erro (ex.: "Não consegui confirmar o login com o Google agora…") |
+| Ticket vencido (mais de 15 min na tela) | "Esta tela ficou aberta tempo demais. Entre com o Google de novo para pedir acesso." |
 
 ## T9. Pessoas e permissões (KBC-010, só masters)
 
 - Seção de ⚙ Configurações, aberta também pela lateral ("Pessoas e permissões", acima de ⚙). Some para quem não é master; a seção IA some para quem não tem "Configurações de IA próprias".
-- **Convidar por e-mail (conta Google)** (rótulo acima do campo) + "Convidar"; dica: quem é convidado começa com "Buscar documentos" e nenhum acervo (BR-3).
+- **Convidar por e-mail** (rótulo acima do campo) + "Convidar"; dica: quem é convidado começa com "Buscar documentos" e nenhum acervo (BR-3).
+- **Solicitações pendentes** (KBC-014), acima da lista, só quando houver alguma: título com a contagem; por solicitação, nome, e-mail, celular (ou "sem celular"), origem ("Google" ou "Cadastro") e data. Ações lado a lado (MA-04): **Aprovar** (primário) e **Recusar** (secundário).
+  - Aprovar: a pessoa entra na lista com "Buscar documentos" e nenhum acervo, o editor dela abre e o status diz "Acesso aprovado. Escolha os acervos de … ." (BR-6).
+  - Recusar pede confirmação na linha (MA-27): "Recusar a solicitação de …? A pessoa só poderá pedir de novo em 24 horas." · "Recusar" · "Cancelar"; o foco segue o botão (WCAG 2.4.3).
+  - Erros na própria linha (MA-23), ex.: "Este e-mail já foi convidado.".
+- A lateral mostra no botão "Pessoas e permissões" um selo com o número de solicitações pendentes (só masters; nome acessível "3 solicitações pendentes"); o selo some com zero.
 - Lista: nome (ou e-mail), e-mail, selos "Master" e "Dono", acervos, último acesso ("Ainda não entrou") e, só para o dono, "Gasto de IA hoje: US$ …" (BR-6). Um convite recusado aparece logo abaixo do campo de e-mail. Abrir uma pessoa mostra:
   - **Acervos** e **Funcionalidades** (Buscar documentos, Pesquisa com IA, Montar/ampliar acervo, Configurações de IA próprias), caixas de seleção que salvam ao mudar ("Salvo."). Para um master aparecem marcadas e desabilitadas: "Masters veem todos os acervos e usam todas as funcionalidades."
   - "Tornar master" / "Remover master"; recusas em texto claro: "Deve restar ao menos um master.", "A conta do dono não pode ser rebaixada nem removida."
   - "Revogar acesso" pede confirmação ("Revogar o acesso de … ? A pessoa sai na hora." · "Revogar" · "Cancelar"); a conta do dono não tem essa ação.
 - A lateral mostra a pessoa (foto ou inicial, nome, e-mail) e "Sair". A visão "Pesquisa com IA" e os acervos não liberados não aparecem; um convidado sem acervo vê "Nenhum acervo foi liberado para você ainda; peça a um master."
+
+## T10. Pedir acesso e entrar com código (KBC-014)
+
+**Objetivo:** quem não tem convite pede acesso; quem foi aprovado entra sem senha. **Sucesso:** pedir acesso em um formulário e um código; entrar em dois passos (identificador, código).
+
+Mesma tela e cartão de T8 (centralizado, uma coluna, MA-17). "← Voltar" no topo do cartão leva ao botão do Google.
+
+**Pedir acesso sem conta Google**
+1. Campos com rótulo acima (MA-16): **E-mail**, **Nome**, **Sobrenome** (lado a lado só a partir de 480 px), **Celular** com a dica "Com DDD. Ex.: (81) 99999-0000. Sem código de país, usamos +55." antes do campo (MA-20). Teclados: `email`, `tel` (MA-12). "Enviar código" (primário).
+2. Resposta sempre igual (KBC-014 BR-3): "Se o e-mail puder ser usado, enviamos um código de 6 dígitos para …". Campo **Código** (`inputmode="numeric"`, `autocomplete="one-time-code"`, 6 dígitos) e "Confirmar"; "Reenviar código" e "Trocar e-mail" como links.
+3. Sucesso: "Solicitação enviada. Um master vai analisar; você recebe um e-mail quando for aprovado."
+
+**Entrar com código**
+1. Quando o SMS está ligado: "Receber o código por" com rádios **E-mail** / **SMS** (MA-19); sem SMS, só o campo **Seu e-mail** (BR-9; com SMS, **Seu e-mail** ou **Seu celular**). "Enviar código".
+2. "Se houver um acesso para …, enviamos um código." Campo **Código** e "Entrar"; "Reenviar código" e "Trocar".
+3. Entrou: o app abre como no Google.
+
+| Estado | Mostra |
+|---|---|
+| Enviando / Confirmando | botão desabilitado e "Enviando…" / "Confirmando…" na linha de status |
+| Campo com erro | ao lado do campo, com ícone e texto (MA-23): "Digite um e-mail válido, como nome@exemplo.com.", "Digite o celular com DDD.", "Digite seu nome.", "O código tem 6 dígitos." |
+| Código errado ou vencido | "Esse código não confere ou já venceu. Confira os 6 dígitos ou peça um novo." (MA-25) |
+| Muitos pedidos | "Muitos pedidos em pouco tempo. Espere um minuto e tente de novo." |
+| Servidor fora | a mensagem de servidor indisponível + o que foi digitado continua (MA-26) |
+
+Acessibilidade: o foco vai para o campo do código quando ele aparece; status em `role="status"`, erros com `aria-invalid` e `aria-describedby`; alvos ≥ 44 px.
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 

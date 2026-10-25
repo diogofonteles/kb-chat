@@ -22,6 +22,7 @@ const aPerson = (overrides: Partial<Person> = {}): Person => ({
   topics: [],
   features: ['search'],
   isOwner: false,
+  phone: null,
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-24T10:00:00.000Z',
   lastLoginAt: null,
@@ -71,7 +72,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
 
   it('invites by e-mail and opens the new person', async () => {
     const { http, fixture } = await renderPanel([owner]);
-    const field = screen.getByLabelText('Convidar por e-mail (conta Google)');
+    const field = screen.getByLabelText('Convidar por e-mail');
     fireEvent.input(field, { target: { value: 'new@example.com' } });
     await fixture.whenStable();
 
@@ -202,7 +203,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
 
   it('shows a failed invite under the e-mail field and keeps what was typed (MA-23)', async () => {
     const { http, fixture } = await renderPanel([owner, aPerson()]);
-    const field = screen.getByLabelText('Convidar por e-mail (conta Google)');
+    const field = screen.getByLabelText('Convidar por e-mail');
     fireEvent.input(field, { target: { value: 'guest@example.com' } });
     await fixture.whenStable();
 
@@ -267,12 +268,16 @@ describe('PeoplePanel for the owner (BR-6)', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: SessionStore, useValue: { me: signal(anOwner()) } },
+        {
+          provide: SessionStore,
+          useValue: { me: signal(anOwner()), isMaster: signal(true) },
+        },
       ],
     });
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/v1/people').flush({ items: [owner, aPerson()] });
     http.expectOne('/api/v1/topics').flush(TOPICS);
+    http.expectOne('/api/v1/access-requests').flush({ items: [] });
     http.expectOne('/api/v1/spend/people').flush({
       items: [
         { email: 'owner@example.com', usd: 0 },
