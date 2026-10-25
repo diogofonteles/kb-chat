@@ -64,6 +64,6 @@ The owner picks one; the cheapest real options are WhatsApp authentication templ
 ## Consequences
 
 - Five new public routes, each rate-limited, all answering the same for every account state.
-- New env vars: `RESEND_API_KEY` (secret), `KB_CHAT_EMAIL_FROM`, `KB_CHAT_SMS`, and `NODE_ENV=production` in the container (already set by the API image of ADR 0010). Deploy must add the first two before this reaches production, or the API will not start.
+- New env vars: `RESEND_API_KEY` (secret), `KB_CHAT_EMAIL_FROM`, `KB_CHAT_SMS`, and `NODE_ENV=production` in the container (already set by the API image of ADR 0010). `deploy/compose.yml` and `deploy/scripts/deploy.sh` refuse to start without the first two; the owner creates the Resend account and verifies the sending domain (runbook, step 4b).
 - Send limits and spent tickets live in memory: a restart resets them (the code's own attempt limit and lifetime stay on disk).
 - `codes.json` keeps at most one live code per identifier and purpose; expired ones are dropped on each write.
