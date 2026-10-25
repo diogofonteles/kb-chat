@@ -23,6 +23,7 @@ Pedido do dono em 2026-10-25: o nome é **Nova Alexandria**. A Biblioteca de Ale
 - Nome do remetente nos exemplos de configuração (`KB_CHAT_EMAIL_FROM`) e no remetente de teste do Resend; título do app enviado ao OpenRouter (`x-title`).
 - Testes unitários, de integração e E2E que conferem o nome antigo.
 - Documentação para o usuário: introdução do `README`, visão, contexto e telas (`docs/product`, `docs/design/screens.md`).
+- Política de privacidade pública em `/privacidade` (acréscimo do dono em 2026-10-25: o Google exige o link para publicar a tela de consentimento OAuth "Nova Alexandria"): abre sem sessão, link "Privacidade" na tela de entrada, texto curto em pt-BR fiel ao que o app faz, contato do dono vindo da configuração (`KB_CHAT_OWNER_EMAIL` em `GET /api/v1/auth/config`, campo `privacyContactEmail`), data de "Última atualização"; Caddy serve a rota com o mesmo CSP e o smoke de produção confere a rota.
 
 **Out:**
 - Nome do repositório, pacotes (`@kb-chat/*`), variáveis de ambiente (`KB_CHAT_*`), pasta de estado (`~/.kb-chat`), chaves do `localStorage`, cookie de sessão, valor do cabeçalho CSRF, ids dos servidores MCP, imagens e serviços Docker, caminhos da VM (`/srv/kb-chat`), recursos da OCI e o histórico das ADRs.
@@ -32,6 +33,7 @@ Pedido do dono em 2026-10-25: o nome é **Nova Alexandria**. A Biblioteca de Ale
 ## Business rules
 - BR-1: o nome do produto em texto para o usuário é sempre "Nova Alexandria", com as duas iniciais maiúsculas.
 - BR-2: o nome é feminino em português ("a Nova Alexandria"): "da", "na", "à", "pela"; pronome "ela".
+- BR-4: a política só afirma o que o código faz (dados, prestadores, prazos) e o básico da LGPD; nenhum e-mail pessoal fica escrito no repositório.
 - BR-3: identificadores internos continuam `kb-chat` (lista em Out), para não quebrar sessões, preferências salvas, deploy nem integrações.
 
 ## Functional requirements
@@ -40,6 +42,9 @@ Pedido do dono em 2026-10-25: o nome é **Nova Alexandria**. A Biblioteca de Ale
 - FR-3: o cabeçalho do chat sem acervo, o assistente de início ("Boas-vindas à Nova Alexandria"), as Preferências ("Ao abrir a Nova Alexandria"), o provedor de IA e o Sobre usam o novo nome com a concordância certa. (BR-1, BR-2)
 - FR-4: todos os e-mails e o SMS usam o novo nome no assunto, no corpo e na assinatura "— Nova Alexandria". (BR-1, BR-2)
 - FR-5: nenhum identificador da lista Out muda. (BR-3)
+- FR-6: `/privacidade` mostra a política com ou sem sessão; a tela de entrada tem o link "Privacidade"; a política leva de volta ao início. (BR-4)
+- FR-7: `GET /api/v1/auth/config` (público) devolve `privacyContactEmail` (o `KB_CHAT_OWNER_EMAIL`, ou `null`); a política mostra esse e-mail como `mailto:` ou, sem ele, "fale com o administrador que aprovou o seu acesso". (BR-4)
+- FR-8: o smoke de produção confere que `/privacidade` serve a SPA sem sessão; o Caddy a serve com `Cache-Control: no-cache` como `/`. (FR-6)
 
 ## Non-functional requirements
 - NFR-1: nenhum "kb-chat" visível ao usuário no código do site e da API (verificado por `git grep`, com as sobras internas listadas).
@@ -72,6 +77,23 @@ Pedido do dono em 2026-10-25: o nome é **Nova Alexandria**. A Biblioteca de Ale
   - When se busca "kb-chat" no site e na API
   - Then só aparecem identificadores internos da lista Out e comentários; as chaves `kb-chat.*` do `localStorage` e o cookie `kbchat_session` continuam iguais (preferências e sessões existentes seguem valendo)
 
+- **AC-7 (FR-6, FR-7)**
+  - Given uma pessoa sem sessão
+  - When ela abre `/privacidade`
+  - Then vê o título da aba "Privacidade — Nova Alexandria", o h1 "Política de privacidade", as seções, o contato do dono como `mailto:` e a data de atualização, sem o botão do Google, e o axe não acha violações sérias
+- **AC-8 (FR-6)**
+  - Given a tela de entrada
+  - When a pessoa clica em "Privacidade" e depois em "Voltar à Nova Alexandria"
+  - Then vai para `/privacidade` e volta à entrada, com o título da aba "Nova Alexandria" de novo; com sessão, volta ao chat
+- **AC-9 (FR-7)**
+  - Given a API sem `KB_CHAT_OWNER_EMAIL` exposto (contato `null`)
+  - When a política abre
+  - Then não há link de e-mail e aparece "fale com o administrador que aprovou o seu acesso"
+- **AC-10 (FR-8)**
+  - Given a produção depois do deploy
+  - When o smoke roda
+  - Then `/privacidade` responde 200 com a SPA
+
 ## Test strategy
 | AC | Level | Notes |
 |---|---|---|
@@ -81,9 +103,13 @@ Pedido do dono em 2026-10-25: o nome é **Nova Alexandria**. A Biblioteca de Ale
 | AC-4 | integração (API) | `access-requests.integration.test` com o remetente de log |
 | AC-5 | unitário | `notifier.test` |
 | AC-6 | `git grep` + testes existentes de `localStorage`/cookie | validação local |
+| AC-7 | E2E (`privacy.spec.ts`) + unitário (`privacy-page.spec`, `session-shell.spec`) + integração (`auth.integration.test`: `privacyContactEmail`) | 1440 e 390 |
+| AC-8 | E2E (`privacy.spec.ts`) + unitário (`login-page.spec`: link) | |
+| AC-9 | unitário (`privacy-page.spec`) | |
+| AC-10 | script (`deploy/scripts/smoke.sh`, `check_privacy`) | roda no deploy de `main` |
 
 ## References
-Telas: `docs/design/screens.md` (T10 entrada, Configurações, assistente) · ADRs: `docs/adr/0011-access-requests-and-one-time-codes.md`, `docs/adr/0012-gmail-smtp-email-provider.md`
+Telas: `docs/design/screens.md` (T10 entrada, Configurações, assistente, T11 privacidade) · Runbook: `docs/deploy/runbook.md` (tela de consentimento OAuth) · ADRs: `docs/adr/0011-access-requests-and-one-time-codes.md`, `docs/adr/0012-gmail-smtp-email-provider.md`
 
 ## Open questions
 Nenhuma. Premissa: o ícone atual continua (não mostra "kb"); um ícone próprio da marca pode vir num item futuro.

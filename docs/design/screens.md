@@ -263,6 +263,13 @@ Mesma tela e cartão de T8 (centralizado, uma coluna, MA-17). "← Voltar" no to
 
 Acessibilidade: o foco vai para o campo do código quando ele aparece; status em `role="status"`, erros com `aria-invalid` e `aria-describedby`; alvos ≥ 44 px.
 
+## T11. Política de privacidade (KBC-016, pública)
+
+- Rota `/privacidade`, aberta com ou sem sessão (a tela de consentimento do Google aponta para ela). Link discreto "Privacidade" abaixo da nota da tela de entrada.
+- Coluna de leitura (até 42rem, serifa de leitura): "Nova Alexandria" (marca, discreta), h1 "Política de privacidade", introdução e as seções h2 "Quais dados guardamos", "Para que usamos", "Quem participa", "Por quanto tempo", "Seus direitos"; "Última atualização" e o link "Voltar à Nova Alexandria".
+- Contato para pedidos sobre os dados: o e-mail do dono (`KB_CHAT_OWNER_EMAIL`, por `GET /api/v1/auth/config`) como link `mailto:`; sem ele (ou enquanto carrega), "fale com o administrador que aprovou o seu acesso".
+- Título da aba: "Privacidade — Nova Alexandria"; nas outras telas, "Nova Alexandria".
+
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
 Tokens DTCG em `apps/web/src/styles/tokens.json` (cores; `scripts/tokens.mjs` gera o CSS) com três conjuntos: `light`, `dark` e `esoteric`. No máximo 3 tamanhos de tipo por tela. O vermelho fica reservado para erros.

@@ -73,7 +73,7 @@ O site precisa de um nome que aponte para o IP reservado. Escolha **um** caminho
 
 **B. Domínio próprio:** crie um registro `A` de `kb.<seu-domínio>` apontando para o IP reservado (TTL 300). Confira com `dig +short kb.<seu-domínio>`.
 
-**Google:** no [Console de credenciais](https://console.cloud.google.com/apis/credentials), no cliente OAuth do kb-chat, adicione `https://<o host escolhido>` (ex.: `https://nova-alexandria.duckdns.org`) em **Authorized JavaScript origins**. Mantenha `http://localhost:4200` para o uso local.
+**Google:** no [Console de credenciais](https://console.cloud.google.com/apis/credentials), no cliente OAuth do kb-chat, adicione `https://<o host escolhido>` (ex.: `https://nova-alexandria.duckdns.org`) em **Authorized JavaScript origins**. Mantenha `http://localhost:4200` para o uso local. Na **tela de consentimento OAuth**, o nome do app é **Nova Alexandria** e o link da política de privacidade é `https://<o host escolhido>/privacidade` (página pública, KBC-016; o contato mostrado é `KB_CHAT_OWNER_EMAIL`).
 
 Nos passos seguintes, `kb.<seu-domínio>` significa o host escolhido aqui.
 
