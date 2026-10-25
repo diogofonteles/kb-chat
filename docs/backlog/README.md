@@ -28,7 +28,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-010](KBC-010-google-login-and-permissions.md) | Login com conta Google e acesso por permissões (funcionalidades e acervos) | release-1 | done | KBC-007, KBC-008 |
 | [KBC-012](KBC-012-deploy-oracle-cloud.md) | Publicar em produção na Oracle Cloud (Always Free): VM ARM, Compose, Caddy com HTTPS, deploy por merge em `main`, backup criptografado | release-1 | in-review | KBC-010 |
 | [KBC-014](KBC-014-access-requests-and-code-sign-in.md) | Solicitar acesso, cadastro sem Google e entrada com código por e-mail ou SMS | release-1 | in-review | KBC-010 |
-| [KBC-015](KBC-015-gmail-smtp-email-delivery.md) | Enviar os e-mails de código e de aprovação pelo SMTP do Gmail (produção 100% gratuita) | release-1 | in-review | KBC-014 |
+| [KBC-015](KBC-015-gmail-smtp-email-delivery.md) | Enviar os e-mails de código e de aprovação pelo SMTP do Gmail (produção 100% gratuita) | release-1 | done | KBC-014 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
 ## Definição de pronto (global)

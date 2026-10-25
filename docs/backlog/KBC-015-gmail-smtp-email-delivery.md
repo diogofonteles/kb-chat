@@ -1,7 +1,7 @@
 ---
 id: KBC-015
 title: Enviar os e-mails de código e de aprovação pelo SMTP do Gmail (produção 100% gratuita)
-status: in-review
+status: done
 slice: release-1
 outcome: a produção envia códigos e avisos para qualquer pessoa sem domínio próprio e sem custo
 depends_on: [KBC-014]
