@@ -41,15 +41,16 @@ test.describe('signed out', () => {
   }) => {
     await page.goto('/');
 
+    await expect(page).toHaveTitle('Nova Alexandria');
     await expect(
-      page.getByRole('heading', { level: 1, name: 'kb-chat' }),
+      page.getByRole('heading', { level: 1, name: 'Nova Alexandria' }),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Fazer login com o Google' }),
     ).toBeVisible();
     await expect(
       page.getByText(
-        'Suas conversas e configurações ficam no servidor do kb-chat.',
+        'Suas conversas e configurações ficam no servidor da Nova Alexandria.',
       ),
     ).toBeVisible();
     expect((await page.request.get('/api/v1/topics')).status()).toBe(401);

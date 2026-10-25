@@ -42,6 +42,8 @@ export interface AuthRouteDeps {
   readonly topics: () => readonly string[];
   /** Where a one-time sign-in code can go (KBC-014 BR-9). */
   readonly codeChannels: readonly CodeChannel[];
+  /** Public: the contact the privacy policy names (KBC-016). */
+  readonly privacyContactEmail: string | null;
   /** The ticket and request state of a not-invited Google account (ADR 0011). */
   readonly notInvited?: (
     identity: VerifiedIdentity,
@@ -104,6 +106,7 @@ function registerSession(app: FastifyInstance, deps: AuthRouteDeps) {
     async () => ({
       googleClientId: deps.googleClientId,
       codeChannels: [...deps.codeChannels],
+      privacyContactEmail: deps.privacyContactEmail,
     }),
   );
   typed.get(

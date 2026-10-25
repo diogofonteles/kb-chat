@@ -183,7 +183,7 @@ describe('log adapters (development only)', () => {
     await new LogEmailSender(log).send(message);
     await new LogSmsSender(log).send({
       to: '+5581999990000',
-      text: 'kb-chat: 123456',
+      text: 'Nova Alexandria: 123456',
     });
 
     expect(warn).toHaveBeenCalledWith(

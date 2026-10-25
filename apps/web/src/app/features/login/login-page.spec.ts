@@ -1,3 +1,4 @@
+import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -47,6 +48,7 @@ async function renderLogin(
   const result = await render(LoginPage, {
     providers: [
       provideZonelessChangeDetection(),
+      provideRouter([]),
       provideHttpClient(),
       provideHttpClientTesting(),
       {
@@ -63,9 +65,11 @@ describe('LoginPage (KBC-010, T8)', () => {
   it('renders the Google button with the configured client id and signs in with its credential', async () => {
     const google = fakeGoogle();
     const { http, fixture } = await renderLogin(of(google.accounts));
-    http
-      .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: 'client-123',
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
     await fixture.whenStable();
 
     expect(google.calls.clientId).toBe('client-123');
@@ -87,9 +91,11 @@ describe('LoginPage (KBC-010, T8)', () => {
     const google = fakeGoogle();
     const disable = vi.fn();
     const { http, fixture } = await renderLogin(of(google.accounts), disable);
-    http
-      .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: 'client-123',
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
     await fixture.whenStable();
 
     google.calls.callback?.({ credential: 'google-id-token' });
@@ -117,9 +123,11 @@ describe('LoginPage (KBC-010, T8)', () => {
   it('shows a sign-in failure next to the button', async () => {
     const google = fakeGoogle();
     const { http, fixture } = await renderLogin(of(google.accounts));
-    http
-      .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: 'client-123',
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
     await fixture.whenStable();
 
     google.calls.callback?.({ credential: 'google-id-token' });
@@ -138,9 +146,11 @@ describe('LoginPage (KBC-010, T8)', () => {
 
   it('explains a missing client id', async () => {
     const { http, fixture } = await renderLogin(of(fakeGoogle().accounts));
-    http
-      .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: null, codeChannels: ['email'] });
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: null,
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
     await fixture.whenStable();
 
     expect(screen.getByRole('alert').textContent).toContain('GOOGLE_CLIENT_ID');
@@ -150,17 +160,36 @@ describe('LoginPage (KBC-010, T8)', () => {
     const { http, fixture } = await renderLogin(
       throwError(() => new Error('blocked')),
     );
-    http
-      .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: 'client-123',
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
     await fixture.whenStable();
 
     expect(screen.getByRole('alert').textContent).toContain(
       'Não consegui carregar o botão do Google',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
-    http
-      .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: 'client-123',
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
+  });
+
+  it('links to the public privacy policy (KBC-016)', async () => {
+    const google = fakeGoogle();
+    const { http, fixture } = await renderLogin(of(google.accounts));
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: 'client-123',
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
+    await fixture.whenStable();
+
+    expect(
+      screen.getByRole('link', { name: 'Privacidade' }).getAttribute('href'),
+    ).toBe('/privacidade');
   });
 });

@@ -105,6 +105,7 @@ describe('first-run wizard (AC-1)', () => {
       aSettingsView({ exists: false }),
     );
     expect(dialog()?.open).toBe(true);
+    expect(screen.getByText('Boas-vindas à Nova Alexandria')).toBeTruthy();
     expect(screen.getByText('Como a IA vai responder?')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Pular' }));
     const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
@@ -370,6 +371,8 @@ describe('Configurações', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Preferências' }));
     TestBed.tick();
     http.expectOne('/api/v1/topics').flush(TOPICS);
+    await fixture.whenStable();
+    expect(screen.getByText('Ao abrir a Nova Alexandria')).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Como buscar/), {
       target: { value: 'exact' },
     });
@@ -411,7 +414,12 @@ describe('Configurações', () => {
     await fixture.whenStable();
     expect(
       screen.getByText(
-        /Suas conversas e configurações ficam no servidor do kb-chat/,
+        /Suas conversas e configurações ficam no servidor da Nova Alexandria/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /a Nova Alexandria usa o Claude Code ou o Codex já logados no servidor\. Ela nunca recebe/,
       ),
     ).toBeTruthy();
     fireEvent.click(

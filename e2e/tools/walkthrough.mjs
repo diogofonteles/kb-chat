@@ -6,7 +6,7 @@ const step = (text) => console.log(`▶ ${text}`);
 const browser = await chromium.launch({ headless: false, slowMo: 450 });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
-step('Abrir o kb-chat');
+step('Abrir a Nova Alexandria');
 await page.goto(BASE);
 await expect(page.getByText('O que você quer estudar hoje?')).toBeVisible();
 

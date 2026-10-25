@@ -23,14 +23,14 @@ export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
   'claude-subscription': {
     name: () => $localize`:@@provider.claude:Assinatura do Claude`,
     description: () =>
-      $localize`:@@provider.claudeHint:Usa o Claude Code já logado no servidor do kb-chat, com todo o acervo como ferramenta.`,
+      $localize`:@@provider.claudeHint:Usa o Claude Code já logado no servidor da Nova Alexandria, com todo o acervo como ferramenta.`,
     install: () =>
       $localize`:@@provider.claudeInstall:Instale o Claude Code (claude.ai/code), abra o Terminal, rode claude e faça /login com a sua conta do Claude.`,
   },
   'chatgpt-subscription': {
     name: () => $localize`:@@provider.chatgpt:Assinatura do ChatGPT`,
     description: () =>
-      $localize`:@@provider.chatgptHint:Usa o Codex CLI já logado no servidor do kb-chat.`,
+      $localize`:@@provider.chatgptHint:Usa o Codex CLI já logado no servidor da Nova Alexandria.`,
     install: () =>
       $localize`:@@provider.chatgptInstall:Instale o Codex CLI (developers.openai.com/codex), rode codex login no Terminal e escolha “Sign in with ChatGPT”.`,
     enable: () =>
@@ -86,7 +86,7 @@ export const TEST_COPY: Record<AiTestCode, () => string> = {
   PROVIDER_UNAVAILABLE: () =>
     $localize`:@@aiTest.unavailable:O provedor não respondeu agora. Tente de novo em instantes.`,
   CLI_MISSING: () =>
-    $localize`:@@aiTest.cliMissing:A ferramenta não foi encontrada no servidor do kb-chat.`,
+    $localize`:@@aiTest.cliMissing:A ferramenta não foi encontrada no servidor da Nova Alexandria.`,
   CLI_LOGIN_REQUIRED: () =>
     $localize`:@@aiTest.cliLogin:A ferramenta não está logada. No Terminal, rode claude e use /login (ou codex login).`,
 };

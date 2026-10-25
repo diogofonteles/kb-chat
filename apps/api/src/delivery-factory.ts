@@ -10,7 +10,7 @@ import type { SmsSenderPort } from './ports/sms-sender.js';
 const SMTP_SENDER_NAME = 'Nova Alexandria';
 
 /** Resend's test sender: it delivers only to the Resend account's own address. */
-const RESEND_TEST_FROM = 'kb-chat <onboarding@resend.dev>';
+const RESEND_TEST_FROM = 'Nova Alexandria <onboarding@resend.dev>';
 
 export interface Delivery {
   readonly email: EmailSenderPort;
