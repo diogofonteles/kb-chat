@@ -49,20 +49,21 @@ The instance can be rebuilt without losing data, and the reserved public IP surv
 
 **Deploy = merge to `main`.** `.github/workflows/deploy.yml` runs in three steps:
 
-1. **Build.** It builds both images natively on `ubuntu-24.04-arm` (available to private repositories since 2026-01) and pushes them to GHCR, tagged with the commit SHA.
-2. **Deploy.** It connects over SSH with a key whose `authorized_keys` entry is `restrict,command="…/ci-gate.sh"`. That key can only ask for `deploy <sha> <user>`, `smoke` or `release`. The registry token is the job's short-lived `GITHUB_TOKEN`, sent on stdin; the VM logs out after pulling.
+1. **Build.** One job builds both images natively on `ubuntu-24.04-arm` (available to private repositories since 2026-01), pushes them to GHCR tagged with the commit SHA, and outputs their two digests.
+2. **Deploy.** It connects over SSH with a key whose `authorized_keys` entry is `restrict,command="…/ci-gate.sh"`. That key can only ask for `deploy <sha> <user> <api-digest> <web-digest>`, `smoke`, `release` or `status`. The registry token is the job's short-lived `GITHUB_TOKEN`, sent on stdin; the VM logs out after pulling. The deploy runs in its own session (`setsid`) and writes `deploy.log`, which `ci-gate.sh` streams back. A dropped SSH session (a cancelled or timed-out job) does not interrupt it, and it also ignores SIGHUP and SIGPIPE.
 3. **Check.** It checks that the image tag the containers actually run (`docker ps`, not `release.env`) equals the commit SHA, then smokes from the internet.
 
 The actions are pinned by commit SHA and kept current by Dependabot. Both jobs run only on `refs/heads/main`, a manual run included.
 
 On the VM, `deploy.sh` runs the release:
 
-- it holds a lock (`flock`) shared with `rollback.sh`, `install-index.sh` and `restore-state.sh`;
+- it holds a lock (`flock`) shared with `rollback.sh`, `install-index.sh` and `restore-state.sh`. `rollback.sh` takes it before reading the live release and choosing its target, and passes it on to `deploy.sh`;
 - it refuses an `.env` without `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID` or `KB_CHAT_OWNER_EMAIL`;
-- it pulls without touching `release.env`, then refuses images whose `org.opencontainers.image.revision` label is not the requested SHA;
+- it pulls **by digest** (`image@sha256:…`, the digests the build job reported), tags the result `<sha>` locally and checks the tag's `RepoDigests`, all without touching `release.env`. A manual deploy or a rollback uses images already on the VM, which were pulled by digest when they first went live;
+- as a sanity check, it refuses images whose `org.opencontainers.image.revision` label is not the requested SHA. That only catches a tag that points at another commit's build: whoever builds an image writes its label;
 - it copies the `compose.yml` and scripts shipped inside that release's API image to a staging folder and swaps them in by rename;
 - it runs `docker compose up --wait`, checks the running tag and runs the smoke;
-- any failure in those steps (deploy files, `up`, running tag, smoke) puts the previous release back, and an exit trap restores `release.env` if the script is interrupted.
+- any failure in those steps (deploy files, `up`, running tag, smoke) puts the previous release back. If the script stops mid-release, an exit trap makes `release.env` name what is actually running.
 
 The smoke checks four things:
 - `/health`;
@@ -76,6 +77,12 @@ The images of the last five live releases stay on the VM. `rollback.sh` returns 
 - A systemd timer runs `backup-state.sh` every day. It streams `state/`, `claude/` and the `.env` through `tar | age` to the owner's public key (no plaintext archive on disk), then uploads the result to a private Object Storage bucket with the instance principal, so no API key sits on the VM.
 - The dynamic group matches the kb-chat compartment, so a rebuilt VM keeps its rights. The policy grants only `OBJECT_CREATE` and `OBJECT_INSPECT` on that bucket, and uploads use `--no-overwrite`: a compromised VM cannot delete or replace backups.
 - The bucket's lifecycle policy deletes `state/` objects after 30 days, applied by the Object Storage service, not the VM.
+- **Backup failures are visible.** Each run leaves a trace:
+  - a success writes `ok <time>` to `deploy/backup-status` and posts a `backup_success` heartbeat metric;
+  - a failure runs `kb-chat-backup-failed.service` (`OnFailure=`), which writes `failed <time>` and logs at error level. The unit has no `ConditionPathExists`, so missing settings fail instead of skipping.
+
+  `deploy.sh --status` (`ci-gate status`) reports `ok`, `failed`, `stale` (older than 48 h) or `never`, and every deploy run prints a warning when it is not `ok`. An OCI Monitoring absence alarm (`backup_success[1h]{…}.absent(48h)`) e-mails the owner through a Notifications topic when no heartbeat arrives for 48 h, which also covers a VM that stopped or was reclaimed. Monitoring and Notifications e-mail stay inside the free allowance.
+- **Residual risk (accepted).** The lifecycle policy deletes by age whether or not newer backups exist. If backups stop and every warning is ignored for the 28 days after the alarm, the last backup expires. The live state on the block volume is still there, so data is lost only if the volume is also lost in that window. A longer `BACKUP_KEEP_DAYS` widens the window, and a retention rule would forbid deletion, at the cost of storage inside the 20 GB.
 - Restore decrypts on the Mac and streams the archive to `restore-state.sh`. It refuses links and unexpected paths, extracts to a staging folder, and keeps the previous state aside.
 - A daily timer deletes session files untouched for 31 days. Sessions expire 30 days after their last refresh, and each refresh rewrites the file.
 
@@ -152,7 +159,7 @@ Legend: Deployment_Node = machine, runtime or network boundary. Container = runn
 | Reaching the MCP turn endpoint from outside | Caddy 404 on `/mcp*`, API refuses non-loopback sockets, per-turn token (ADR 0007) |
 | DNS rebinding or a forged `Host` | `ALLOWED_HOSTS` = the domain plus loopback |
 | A stolen CI key | `restrict` + forced command: only `deploy <sha>`, `smoke`, `release`; no shell, no forwarding; sudo limited to two scripts; images must exist in GHCR for the repository |
-| A GHCR push is root on the VM: `deploy.sh` runs, as root, the compose file and scripts taken from the API image, so anyone who can push `kb-chat-api` (a workflow with `packages: write`, a compromised action) controls the host | `packages: write` only in the build job of `deploy.yml`; every action pinned by commit SHA (Dependabot updates); deploys only from `main`; `deploy.sh` refuses images whose `org.opencontainers.image.revision` label is not the requested SHA, and the SHA must be the commit the workflow built. A signed provenance check (`gh attestation verify`) is the next step if more workflows ever get `packages: write` |
+| A GHCR push is root on the VM: `deploy.sh` runs, as root, the compose file and scripts taken from the API image, so anyone who can push `kb-chat-api` (a workflow with `packages: write`, a compromised action) controls the host | The VM pulls the exact digests the build job of the same run produced, so overwriting `:<sha>` in the registry afterwards changes nothing. `packages: write` exists only in that build job; every action is pinned by commit SHA (Dependabot updates); deploys run only from `main`. The revision label is only a sanity check against a mis-tagged image, not a defence. **Accepted residual risk:** a compromise of the build job itself (a pinned action, the runner, the Dockerfile's base images) still yields root on the VM; signed provenance (`gh attestation verify`) is the next step if that risk grows |
 | Leaked registry credentials on the VM | None stored: the job token lives for minutes and the VM logs out after the pull |
 | Secrets in git or logs | Only in the root-owned `.env` (0600) and GitHub environment secrets; `.env` and `oci.env` ignored; pino redaction (ADR 0007) |
 | Brute force on SSH | Keys only, fail2ban, `AllowUsers`; optional `SSH_SOURCE_CIDR` |
@@ -160,6 +167,7 @@ Legend: Deployment_Node = machine, runtime or network boundary. Container = runn
 | Lost data (instance reclaimed or rebuilt) | Data on a separate block volume, reserved IP, daily encrypted off-VM backup, vault and index rebuildable from the Mac |
 | A backup leaks | `age` encryption to a key that is never on the VM; private bucket; policy limited to that bucket |
 | A compromised VM erases the backups | The VM may only create and inspect objects; no overwrite; retention is the bucket's lifecycle policy |
+| Backups stop in silence and the lifecycle expires the last one | `OnFailure=` marker and error log, `--status` and a warning on every deploy, OCI absence alarm by e-mail after 48 h; residual risk recorded above |
 | A wrong sync wipes the vault | Refuses an empty vault; counts deletions with a dry run and refuses above `--max-delete` before sending; read-only mount in the API |
 | Terms violation with the Claude subscription | Only the owner, signed in to the unmodified Claude Code binary (KBC-010 BR-5); guests bring their own keys |
 

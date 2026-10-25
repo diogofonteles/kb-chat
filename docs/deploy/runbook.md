@@ -85,10 +85,15 @@ sudo tee /srv/kb-chat/deploy/backup.env >/dev/null <<'EOF'
 BACKUP_BUCKET=kb-chat-backups
 BACKUP_NAMESPACE=<namespace do passo 3>
 BACKUP_AGE_RECIPIENT=age1...
+BACKUP_REGION=<região, ex. sa-saopaulo-1>
+BACKUP_COMPARTMENT_OCID=<OCID do compartimento kb-chat>
 EOF
 sudo chmod 0600 /srv/kb-chat/deploy/backup.env
 sudo /srv/kb-chat/deploy/scripts/backup-state.sh --dry-run
+sudo systemctl start kb-chat-backup && sudo /srv/kb-chat/deploy/scripts/deploy.sh --status   # backup=ok ...
 ```
+
+👤 **DONO:** confirme o e-mail "Oracle Cloud Notifications" que chega depois do `provision.sh --apply`. Sem a confirmação, o alarme "backup ausente há 48 h" não chega.
 
 ## 6. 👤 DONO — ambiente `production` no GitHub
 
@@ -167,12 +172,12 @@ O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, e
 |---|---|
 | Publicar | merge em `main` (o dono decide) |
 | Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico). Um segundo rollback continua voltando (C → B → A), nunca volta para a versão da qual saiu |
-| O que está no ar | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --running` (a tag das imagens em execução) |
+| O que está no ar | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --status` (tag das imagens em execução e saúde do backup: `ok`, `failed`, `stale` ou `never`) |
 | Atualizar o acervo | `deploy/scripts/sync-vault.sh --host ubuntu@<IP>` |
 | Logs | `ssh ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env logs -f --tail 200'` |
 | Saúde | `curl -s https://kb.<seu-domínio>/health` (`degraded` = QMD parado, busca pelo `kb`) |
 | Uso de recursos | `ssh ubuntu@<IP> 'sudo docker stats --no-stream; free -h; df -h /srv/kb-chat'` |
-| Backups | `systemctl list-timers kb-chat-*`; `journalctl -u kb-chat-backup`. A VM só cria objetos: a retenção de 30 dias é a lifecycle policy do bucket (`BACKUP_KEEP_DAYS` no `oci.env`) |
+| Backups | `systemctl list-timers kb-chat-*`; `journalctl -u kb-chat-backup`. Uma falha grava `failed` em `deploy/backup-status`, e todo deploy mostra um aviso. Sem backup por 48 h, o alarme do OCI manda e-mail. Há 28 dias para agir antes de a lifecycle apagar o último backup. A VM só cria objetos: a retenção de 30 dias é a lifecycle policy do bucket (`BACKUP_KEEP_DAYS` no `oci.env`) |
 | Sessões abandonadas | timer `kb-chat-sweep-sessions` (diário, apaga arquivos sem uso há 31 dias) |
 | Atualizações do sistema | unattended-upgrades, com reboot às 05:30 UTC quando precisa; os contêineres voltam sozinhos |
 
