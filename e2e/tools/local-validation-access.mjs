@@ -24,7 +24,9 @@ async function codeFor(to, seen = 0) {
 const countFor = async (to) =>
   (await readFile(apiLog, 'utf8'))
     .split('\n')
-    .filter((line) => line.includes('not sent') && line.includes(`"to":"${to}"`)).length;
+    .filter(
+      (line) => line.includes('not sent') && line.includes(`"to":"${to}"`),
+    ).length;
 
 async function signInWithCode(page, email) {
   await page.goto(base);
@@ -40,16 +42,21 @@ async function signInWithCode(page, email) {
 const browser = await chromium.launch();
 // One owner session for both widths: sends are limited per email and per address (BR-5).
 const ownerContext = await browser.newContext();
-await ownerContext.route('https://accounts.google.com/**', (route) => route.abort());
+await ownerContext.route('https://accounts.google.com/**', (route) =>
+  route.abort(),
+);
 await signInWithCode(await ownerContext.newPage(), ownerEmail);
 for (const { name, width, height } of [
   { name: 'desktop', width: 1440, height: 900 },
   { name: 'mobile', width: 390, height: 844 },
 ]) {
-  const shot = (page, step) => page.screenshot({ path: `${out}/${name}-${step}.png`, fullPage: true });
+  const shot = (page, step) =>
+    page.screenshot({ path: `${out}/${name}-${step}.png`, fullPage: true });
   const email = `lv-${name}-${Date.now()}@example.com`;
   const person = await browser.newPage({ viewport: { width, height } });
-  await person.route('https://accounts.google.com/**', (route) => route.abort());
+  await person.route('https://accounts.google.com/**', (route) =>
+    route.abort(),
+  );
   await person.goto(base);
   await person.getByRole('button', { name: 'Entrar com código' }).waitFor();
   await shot(person, '1-login');
@@ -58,7 +65,9 @@ for (const { name, width, height } of [
   await shot(person, '2-code-channels');
 
   await person.getByRole('button', { name: '← Voltar' }).click();
-  await person.getByRole('button', { name: 'Pedir acesso sem conta Google' }).click();
+  await person
+    .getByRole('button', { name: 'Pedir acesso sem conta Google' })
+    .click();
   await person.getByLabel('Celular').fill('12');
   await person.getByRole('button', { name: 'Enviar código' }).click();
   await shot(person, '3-signup-errors');
@@ -80,7 +89,9 @@ for (const { name, width, height } of [
   if (width < 1024) await owner.getByRole('button', { name: 'Menu' }).click();
   await shot(owner, '6-badge');
   await owner.getByRole('button', { name: /Pessoas e permissões/ }).click();
-  await owner.getByRole('heading', { name: /Solicitações pendentes/ }).waitFor();
+  await owner
+    .getByRole('heading', { name: /Solicitações pendentes/ })
+    .waitFor();
   // Let the dialog's opening fade finish before the picture.
   await owner.waitForTimeout(500);
   await shot(owner, '7-requests');
@@ -93,7 +104,9 @@ for (const { name, width, height } of [
   await shot(owner, '9-approved');
 
   await signInWithCode(person, email);
-  await person.getByText('Nenhum acervo foi liberado para você ainda').waitFor();
+  await person
+    .getByText('Nenhum acervo foi liberado para você ainda')
+    .waitFor();
   await shot(person, '10-signed-in');
   await person.close();
   await owner.close();

@@ -75,9 +75,9 @@ test.describe('signed out', () => {
       .getByRole('button', { name: 'Fazer login com o Google' })
       .click();
 
-    await expect(page.getByRole('alert')).toHaveText(
-      'Seu acesso ainda não foi liberado.',
-    );
+    await expect(
+      page.getByText('Seu acesso ainda não foi liberado.'),
+    ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Solicitar acesso' }),
     ).toBeVisible();
@@ -211,7 +211,7 @@ test('a master grants collections and features on "Pessoas e permissões"', asyn
     dialog.getByRole('heading', { name: 'Pessoas e permissões' }),
   ).toBeVisible();
 
-  await dialog.getByLabel('Convidar por e-mail (conta Google)').fill(email);
+  await dialog.getByLabel('Convidar por e-mail').fill(email);
   await dialog.getByRole('button', { name: 'Convidar' }).click();
   await expect(dialog.getByRole('status').first()).toContainText(
     `${email} já pode entrar`,

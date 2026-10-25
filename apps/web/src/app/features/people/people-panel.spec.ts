@@ -72,7 +72,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
 
   it('invites by e-mail and opens the new person', async () => {
     const { http, fixture } = await renderPanel([owner]);
-    const field = screen.getByLabelText('Convidar por e-mail (conta Google)');
+    const field = screen.getByLabelText('Convidar por e-mail');
     fireEvent.input(field, { target: { value: 'new@example.com' } });
     await fixture.whenStable();
 
@@ -203,7 +203,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
 
   it('shows a failed invite under the e-mail field and keeps what was typed (MA-23)', async () => {
     const { http, fixture } = await renderPanel([owner, aPerson()]);
-    const field = screen.getByLabelText('Convidar por e-mail (conta Google)');
+    const field = screen.getByLabelText('Convidar por e-mail');
     fireEvent.input(field, { target: { value: 'guest@example.com' } });
     await fixture.whenStable();
 

@@ -3,6 +3,8 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
+  afterNextRender,
   afterRenderEffect,
   computed,
   inject,
@@ -41,6 +43,11 @@ export class LoginPage {
   private readonly session = inject(SessionStore);
   private readonly destroyRef = inject(DestroyRef);
   private readonly button = viewChild<ElementRef<HTMLElement>>('button');
+  private readonly codeButton =
+    viewChild<ElementRef<HTMLElement>>('codeButton');
+  private readonly signUpButton =
+    viewChild<ElementRef<HTMLElement>>('signUpButton');
+  private readonly injector = inject(Injector);
 
   private readonly config = rxResource({ stream: () => this.api.config() });
   private readonly accounts = rxResource({
@@ -132,7 +139,14 @@ export class LoginPage {
   }
 
   protected show(mode: Mode): void {
+    const from = this.mode();
     this.mode.set(mode);
+    if (mode !== 'start') return;
+    // Back from a form: focus returns to the button that opened it (WCAG 2.4.3).
+    const origin = from === 'code' ? this.codeButton : this.signUpButton;
+    afterNextRender(() => origin()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   protected retry(): void {

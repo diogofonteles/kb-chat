@@ -156,6 +156,32 @@ describe('Entrar com código (KBC-014 FR-5, T10)', () => {
   });
 });
 
+describe('focus between the login forms (WCAG 2.4.3)', () => {
+  it('moves to the form title on open and back to its button on "Voltar"', async () => {
+    const { fixture } = await renderLogin();
+
+    fireEvent.click(button('Entrar com código'));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: 'Entrar com código' }),
+    );
+    fireEvent.click(button('← Voltar'));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(button('Entrar com código'));
+
+    fireEvent.click(button('Pedir acesso sem conta Google'));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: 'Pedir acesso sem conta Google' }),
+    );
+    fireEvent.click(button('← Voltar'));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      button('Pedir acesso sem conta Google'),
+    );
+  });
+});
+
 describe('Pedir acesso sem conta Google (KBC-014 FR-1, FR-2, T10)', () => {
   it('AC-11: checks every field before sending, phone included', async () => {
     const { http, fixture } = await renderLogin();
@@ -268,9 +294,7 @@ describe('Google sem convite (KBC-014 FR-3, T8)', () => {
 
   it('AC-8: asks for access with the ticket and an optional phone', async () => {
     const { http, fixture } = await signInNotInvited({ status: 'none' });
-    expect(screen.getByRole('alert').textContent).toContain(
-      'Seu acesso ainda não foi liberado.',
-    );
+    expect(screen.getByText('Seu acesso ainda não foi liberado.')).toBeTruthy();
 
     fireEvent.click(button('Solicitar acesso'));
     await fixture.whenStable();
@@ -319,9 +343,7 @@ describe('Google sem convite (KBC-014 FR-3, T8)', () => {
 
   it('says a request is pending, or refused with the time to ask again', async () => {
     await signInNotInvited({ status: 'pending' });
-    expect(screen.getByRole('alert').textContent).toContain(
-      'Sua solicitação está em análise.',
-    );
+    expect(screen.getByText('Sua solicitação está em análise.')).toBeTruthy();
     expect(
       screen.queryByRole('button', { name: 'Solicitar acesso' }),
     ).toBeNull();
@@ -332,8 +354,8 @@ describe('Google sem convite (KBC-014 FR-3, T8)', () => {
       status: 'refused',
       retryAt: '2026-10-26T13:30:00.000Z',
     });
-    expect(screen.getByRole('alert').textContent).toMatch(
-      /recusada.*a partir de 26\/10 às \d\d:30/s,
-    );
+    expect(
+      screen.getByText(/recusada/).textContent?.replace(/\s+/g, ' '),
+    ).toContain('a partir de 26/10 às 10:30 (horário de Brasília).');
   });
 });

@@ -108,7 +108,7 @@ export class PeoplePanel {
         this.people.update((all) => [...(all ?? []), invited]);
         this.email.set('');
         this.openId.set(invited.id);
-        return $localize`:@@people.invited:Convite criado. ${invited.email}:email: já pode entrar com essa conta Google.`;
+        return $localize`:@@people.invited:Convite criado. ${invited.email}:email: já pode entrar com o Google ou com um código por e-mail.`;
       },
       failed: (text) => this.inviteError.set(text),
     });

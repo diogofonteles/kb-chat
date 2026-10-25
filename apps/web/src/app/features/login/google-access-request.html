@@ -1,5 +1,5 @@
 @let request = state();
-<div class="sent" role="alert">
+<div class="sent" role="status">
   @if (!request) {
     <p i18n="@@login.notInvited">
       Seu acesso ainda não foi liberado; peça a um master.
@@ -13,7 +13,7 @@
   } @else if (retryAt(); as retry) {
     <p i18n="@@access.refused">
       Sua solicitação foi recusada. Você pode pedir de novo a partir de
-      {{ retry | date: "dd/MM 'às' HH:mm" }}.
+      {{ retry | date: "dd/MM 'às' HH:mm" : BRASILIA }} (horário de Brasília).
     </p>
   } @else {
     <p i18n="@@access.notYet">Seu acesso ainda não foi liberado.</p>

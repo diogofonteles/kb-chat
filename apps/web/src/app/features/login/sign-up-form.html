@@ -6,7 +6,9 @@
 >
   ← Voltar
 </button>
-<h2 class="title" i18n="@@signUp.title">Pedir acesso sem conta Google</h2>
+<h2 #title tabindex="-1" class="title" i18n="@@signUp.title">
+  Pedir acesso sem conta Google
+</h2>
 
 @switch (step()) {
   @case ('form') {
@@ -188,7 +190,11 @@
 
 <p class="status" role="status">
   @if (busy()) {
-    <span i18n="@@login.working">Enviando…</span>
+    @if (step() === 'code') {
+      <span i18n="@@login.confirming">Confirmando…</span>
+    } @else {
+      <span i18n="@@login.working">Enviando…</span>
+    }
   }
 </p>
 @if (failure()) {

@@ -78,7 +78,7 @@ describe('Solicitações pendentes (KBC-014 FR-4, T9)', () => {
     expect(
       screen.getByRole('heading', { name: 'Solicitações pendentes (2)' }),
     ).toBeTruthy();
-    expect(requestRow('Ana Lima').textContent).toContain('+5581999990000');
+    expect(requestRow('Ana Lima').textContent).toContain('+55 81 99999-0000');
     expect(requestRow('Ana Lima').textContent).toContain('Cadastro');
     expect(requestRow('Bia Souza').textContent).toContain('sem celular');
     expect(requestRow('Bia Souza').textContent).toContain('Google');

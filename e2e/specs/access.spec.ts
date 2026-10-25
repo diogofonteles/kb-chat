@@ -100,7 +100,7 @@ test.describe('without a session', () => {
     const dialog = await openPeople(owner);
     const item = requestItem(dialog, email);
     await expect(item).toContainText('Ana Lima');
-    await expect(item).toContainText('+5581999990000');
+    await expect(item).toContainText('+55 81 99999-0000');
     await shoot(owner, 'requests');
     await item.getByRole('button', { name: 'Aprovar' }).click();
     await expect(
@@ -164,9 +164,9 @@ test.describe('without a session', () => {
     await page
       .getByRole('button', { name: 'Fazer login com o Google' })
       .click();
-    await expect(page.getByRole('alert')).toHaveText(
-      'Sua solicitação está em análise.',
-    );
+    await expect(
+      page.getByText('Sua solicitação está em análise.'),
+    ).toBeVisible();
   });
 });
 
@@ -200,9 +200,11 @@ test('a master refuses a request, and the person is told when to ask again', asy
   await person
     .getByRole('button', { name: 'Fazer login com o Google' })
     .click();
-  await expect(person.getByRole('alert')).toContainText(
-    'Sua solicitação foi recusada. Você pode pedir de novo a partir de',
-  );
+  await expect(
+    person.getByText(
+      /Sua solicitação foi recusada\. Você pode pedir de novo a partir de .* \(horário de Brasília\)/,
+    ),
+  ).toBeVisible();
   await expect(
     person.getByRole('button', { name: 'Solicitar acesso' }),
   ).toHaveCount(0);

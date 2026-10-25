@@ -4,14 +4,15 @@
       Solicitações pendentes ({{ store.count() }})
     </h4>
     <ul class="list">
-      @for (request of store.list(); track request.id) {
+      @for (row of rows(); track row.request.id) {
+        @let request = row.request;
         <li class="request">
           <div class="who">
-            <span class="name">{{ nameOf(request) }}</span>
+            <span class="name">{{ row.name }}</span>
             <span class="detail">{{ request.email }}</span>
             <span class="detail">
-              @if (request.phone) {
-                {{ request.phone }}
+              @if (row.phone) {
+                {{ row.phone }}
               } @else {
                 <ng-container i18n="@@requests.noPhone"
                   >sem celular</ng-container
@@ -28,8 +29,8 @@
           </div>
           @if (confirmingId() === request.id) {
             <p class="confirm" i18n="@@requests.confirmRefuse">
-              Recusar a solicitação de {{ nameOf(request) }}? A pessoa só poderá
-              pedir de novo em 24 horas.
+              Recusar a solicitação de {{ row.name }}? A pessoa só poderá pedir
+              de novo em 24 horas.
             </p>
             <div class="actions">
               <button

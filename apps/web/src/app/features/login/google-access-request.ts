@@ -35,6 +35,8 @@ export class GoogleAccessRequest {
   readonly details = input.required<NotInvitedDetails | null>();
   readonly left = output();
 
+  /** The emails use Brasília time too (ADR 0011); Brazil keeps no daylight saving time. */
+  protected readonly BRASILIA = '-0300';
   protected readonly step = signal<Step>('notice');
   protected readonly phone = signal('');
   protected readonly phoneProblem = signal('');

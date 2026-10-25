@@ -48,6 +48,12 @@ export class CodeSignIn {
 
   private readonly codeInput =
     viewChild<ElementRef<HTMLInputElement>>('codeInput');
+  private readonly title = viewChild<ElementRef<HTMLElement>>('title');
+
+  constructor() {
+    // The button that opened this form is gone: focus moves to its title (WCAG 2.4.3).
+    afterNextRender(() => this.title()?.nativeElement.focus());
+  }
 
   protected readonly step = signal<Step>('identify');
   protected readonly channel = signal<CodeChannel>('email');

@@ -101,13 +101,17 @@ describe('LoginPage (KBC-010, T8)', () => {
       );
     await fixture.whenStable();
 
-    expect(screen.getByRole('alert').textContent).toContain(
-      'Seu acesso ainda não foi liberado; peça a um master.',
-    );
+    expect(
+      screen.getByText('Seu acesso ainda não foi liberado; peça a um master.'),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
     await fixture.whenStable();
     expect(disable).toHaveBeenCalled();
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(
+      screen.queryByText(
+        'Seu acesso ainda não foi liberado; peça a um master.',
+      ),
+    ).toBeNull();
   });
 
   it('shows a sign-in failure next to the button', async () => {

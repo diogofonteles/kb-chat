@@ -1,7 +1,8 @@
+import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, inject } from '@angular/core';
-import { rxResource } from '@angular/core/rxjs-interop';
+import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { AccessRequest, Person } from '@kb-chat/contracts';
-import { tap, type Observable } from 'rxjs';
+import { EMPTY, fromEvent, tap, type Observable } from 'rxjs';
 import { AccessRequestsApi } from './access-api.js';
 import { SessionStore } from './session-store.js';
 
@@ -22,6 +23,14 @@ export class AccessRequestsStore {
     this.requests.hasValue() ? this.requests.value() : [],
   );
   readonly count = computed(() => this.list().length);
+
+  constructor() {
+    // A master who comes back to the tab sees requests made meanwhile (the sidebar badge).
+    const view = inject(DOCUMENT).defaultView;
+    (view ? fromEvent(view, 'focus') : EMPTY)
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.reload());
+  }
 
   /** Fetches again once loaded (the first load runs by itself for a master). */
   reload(): void {
