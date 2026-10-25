@@ -26,18 +26,18 @@ permissions:
 
 jobs:
   images:
-    name: Build ${{ matrix.image }} (linux/arm64)
+    name: Build images (linux/arm64)
     # A manual run from another branch must not reach production.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: true
-      matrix:
-        image: [api, web]
+    # The digests this job pushed: the VM pulls exactly these, not whatever :<sha> points to.
+    outputs:
+      api-digest: ${{ steps.api.outputs.digest }}
+      web-digest: ${{ steps.web.outputs.digest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -46,18 +46,32 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      - id: api
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
-          file: apps/${{ matrix.image }}/Dockerfile
+          file: apps/api/Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/kb-chat-${{ matrix.image }}:${{ github.sha }}
+          tags: ghcr.io/${{ github.repository_owner }}/kb-chat-api:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - id: web
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/kb-chat-web:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
 
   deploy:
     name: Deploy to production (OCI)
@@ -110,11 +124,13 @@ jobs:
           # Any user name works with the job token; the owner's passes ci-gate's check (a
           # bot actor such as dependabot[bot] would not).
           REGISTRY_USER: ${{ github.repository_owner }}
+          API_DIGEST: ${{ needs.images.outputs.api-digest }}
+          WEB_DIGEST: ${{ needs.images.outputs.web-digest }}
         run: |
           # The token only lives while this job runs; the VM logs out after pulling.
           printf '%s' "$REGISTRY_TOKEN" |
             ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-              "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA $REGISTRY_USER"
+              "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA $REGISTRY_USER $API_DIGEST $WEB_DIGEST"
 
       - name: The running containers are this commit
         run: |
@@ -127,6 +143,17 @@ jobs:
 
       - name: Smoke from the internet
         run: bash deploy/scripts/smoke.sh "https://$KB_CHAT_DOMAIN"
+
+      - name: Backup health
+        if: always()
+        run: |
+          status="$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" status || true)"
+          echo "$status"
+          backup="$(sed -n 's/^backup=//p' <<<"$status")"
+          case "$backup" in
+            ok*) ;;
+            *) echo "::warning::state backup is '${backup:-unknown}': check kb-chat-backup on the VM (docs/deploy/runbook.md)" ;;
+          esac
 
       - name: Summary
         if: always()

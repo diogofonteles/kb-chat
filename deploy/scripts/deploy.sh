@@ -4,7 +4,9 @@
 # smoke) puts the previous release back (ADR 0010).
 #   sudo /srv/kb-chat/deploy/scripts/deploy.sh <sha>                 # images already on the VM
 #   echo "$TOKEN" | sudo .../deploy.sh <sha> --login <user>           # what CI sends (short-lived token)
+#   ... deploy.sh <sha> --login <user> --digests <api> <web> --log    # CI: pull by digest, log to file
 #   sudo .../deploy.sh --running                                      # the tag the containers run
+#   sudo .../deploy.sh --status                                       # running tag + backup health
 # Runs as root: it reads the root-owned .env and talks to the Docker daemon.
 set -euo pipefail
 
@@ -16,11 +18,12 @@ PROJECT="kb-chat"
 KEEP_IMAGES=5
 
 usage() {
-  echo "usage: deploy.sh <git-sha> [--login <registry-user>] [--no-rollback] | --running" >&2
+  echo "usage: deploy.sh <git-sha> [--login <user>] [--digests <api-digest> <web-digest>] [--no-rollback] [--log] | --running | --status" >&2
   exit 2
 }
 
-log() { printf '%s deploy: %s\n' "$(date -u +%FT%TZ)" "$*"; }
+# Never fatal: with the CI's SSH session gone, a write to stdout must not stop a deploy.
+log() { printf '%s deploy: %s\n' "$(date -u +%FT%TZ)" "$*" || true; }
 
 # One deploy, rollback, index swap or restore at a time (they all rewrite release.env or
 # restart the stack). A parent that already holds the lock exports KB_CHAT_LOCKED.
@@ -89,8 +92,10 @@ registry_login() {
   printf '%s' "$token" | docker login "$REGISTRY_HOST" -u "$user" --password-stdin >/dev/null
 }
 
-# Both images must say they were built from the requested commit before anything from them
-# runs as root here (ADR 0010: a GHCR push must not be enough to own the VM).
+# Sanity check only: both images must say they were built from the requested commit. It
+# catches a tag that points at another commit's build. It is no defence against a malicious
+# push (whoever builds the image writes the label); against that, CI deploys pull the exact
+# digests its own build job produced (pull_by_digest), see ADR 0010.
 verify_revision() {
   local tag="$1" repo revision
   for repo in kb-chat-api kb-chat-web; do
@@ -101,6 +106,40 @@ verify_revision() {
       return 1
     fi
   done
+}
+
+# Pulls each image by the digest the CI build job reported and tags it <sha> locally, so
+# compose runs exactly those bytes even if the :<sha> tag in the registry was overwritten.
+pull_by_digest() {
+  local tag="$1" api_digest="$2" web_digest="$3" repo digest base
+  for repo in kb-chat-api kb-chat-web; do
+    digest="$api_digest"
+    [ "$repo" = kb-chat-web ] && digest="$web_digest"
+    base="$(image_ref "$repo" "$tag")"
+    base="${base%:*}"
+    docker pull --quiet "$base@$digest" >/dev/null || { log "pull of $base@$digest failed"; return 1; }
+    docker tag "$base@$digest" "$base:$tag"
+    if ! docker image inspect -f '{{join .RepoDigests " "}}' "$base:$tag" | tr ' ' '\n' | grep -qxF "$base@$digest"; then
+      log "$base:$tag is not $digest after the pull"
+      return 1
+    fi
+  done
+}
+
+# Backup health for --status (and the deploy workflow's summary): written by
+# backup-state.sh on success and by kb-chat-backup-failed.service on failure.
+backup_status() {
+  local file="$DEPLOY_DIR/backup-status" state when age
+  if [ ! -f "$file" ]; then
+    echo "never"
+    return 0
+  fi
+  read -r state when <"$file" || true
+  if [ "$state" = "ok" ] && age="$(($(date -u +%s) - $(date -u -d "$when" +%s 2>/dev/null || echo 0)))" &&
+    [ "$age" -gt $((48 * 3600)) ]; then
+    state="stale"
+  fi
+  echo "$state $when"
 }
 
 # compose.yml and these scripts travel inside the API image (/app/deploy), so each release
@@ -181,10 +220,16 @@ PREVIOUS=""
 CHANGING=0
 LOGGED_IN=0
 on_exit() {
-  local rc=$?
-  if [ "$CHANGING" -eq 1 ] && [ -n "$PREVIOUS" ] && [ "$(release_file_tag)" != "$PREVIOUS" ]; then
-    log "interrupted; release.env back to $PREVIOUS"
-    write_release "$PREVIOUS" || true
+  local rc=$? live
+  if [ "$CHANGING" -eq 1 ]; then
+    # Name what actually runs (a target that failed under --no-rollback may still be up);
+    # fall back to the release that was live before.
+    live="$(running_tag)"
+    case "$live" in "" | mixed:*) live="$PREVIOUS" ;; esac
+    if [ -n "$live" ] && [ "$(release_file_tag)" != "$live" ]; then
+      log "stopped mid-release; release.env set to $live (what is running)"
+      write_release "$live" || true
+    fi
   fi
   if [ "$LOGGED_IN" -eq 1 ]; then docker logout "$REGISTRY_HOST" >/dev/null 2>&1 || true; fi
   exit "$rc"
@@ -195,16 +240,31 @@ main() {
     running_tag
     return 0
   fi
-  local sha="${1:-}" login_user="" rollback=1
+  if [ "${1:-}" = "--status" ]; then
+    echo "running=$(running_tag)"
+    echo "backup=$(backup_status)"
+    return 0
+  fi
+  local sha="${1:-}" login_user="" rollback=1 api_digest="" web_digest="" to_log=0
   [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]] || usage
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --login) login_user="${2:-}"; [ -n "$login_user" ] || usage; shift 2 ;;
       --no-rollback) rollback=0; shift ;;
+      --digests)
+        api_digest="${2:-}"
+        web_digest="${3:-}"
+        [[ "$api_digest" =~ ^sha256:[0-9a-f]{64}$ && "$web_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || usage
+        shift 3
+        ;;
+      --log) to_log=1; shift ;;
       *) usage ;;
     esac
   done
+  # A dropped SSH session (CI cancelled or timed out) must not kill a half-done release.
+  trap '' HUP PIPE
+  if [ "$to_log" -eq 1 ]; then exec >>"$DEPLOY_DIR/deploy.log" 2>&1; fi
   [ -f "$DEPLOY_DIR/.env" ] || { log "missing $DEPLOY_DIR/.env (see deploy/.env.example)"; exit 1; }
   # The API does not start without sign-in (KBC-010): refuse before touching the release.
   local name
@@ -225,9 +285,11 @@ main() {
     registry_login "$login_user"
     LOGGED_IN=1
   fi
-  # Only what is not on the VM yet: a rollback to a kept image needs no registry. The tag
-  # comes from the environment, so release.env is untouched until the images are here.
-  if ! KB_CHAT_TAG="$sha" compose pull --quiet --policy missing; then
+  # release.env is untouched until the images are here. CI passes the digests its build
+  # produced; a manual deploy or a rollback uses the images already on the VM (or the tag).
+  if [ -n "$api_digest" ]; then
+    pull_by_digest "$sha" "$api_digest" "$web_digest" || { log "pull failed for $sha; nothing changed"; exit 1; }
+  elif ! KB_CHAT_TAG="$sha" compose pull --quiet --policy missing; then
     log "pull failed for $sha; nothing changed"
     exit 1
   fi
@@ -251,7 +313,7 @@ main() {
       log "rollback to $PREVIOUS failed too; a person must look (docs/deploy/runbook.md)"
     fi
   fi
-  # CHANGING still 1 (no rollback or a failed one): on_exit puts release.env back.
+  # CHANGING still 1 (no rollback or a failed one): on_exit makes release.env name what runs.
   exit 1
 }
 
