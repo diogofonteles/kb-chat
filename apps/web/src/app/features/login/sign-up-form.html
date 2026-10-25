@@ -1,0 +1,196 @@
+<button
+  type="button"
+  class="link back"
+  (click)="back.emit()"
+  i18n="@@login.back"
+>
+  ← Voltar
+</button>
+<h2 class="title" i18n="@@signUp.title">Pedir acesso sem conta Google</h2>
+
+@switch (step()) {
+  @case ('form') {
+    <form (submit)="submit($event)" novalidate>
+      <div class="field">
+        <label class="label" for="signup-email" i18n="@@login.email"
+          >E-mail</label
+        >
+        <input
+          #emailInput
+          id="signup-email"
+          type="email"
+          name="email"
+          autocomplete="email"
+          inputmode="email"
+          [value]="form().email"
+          [attr.aria-invalid]="errors().email ? 'true' : null"
+          [attr.aria-describedby]="errors().email ? 'signup-email-error' : null"
+          (input)="type('email', emailInput.value)"
+        />
+        @if (errors().email; as error) {
+          <p id="signup-email-error" class="field-error" role="alert">
+            <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+          </p>
+        }
+      </div>
+      <div class="names">
+        <div class="field">
+          <label class="label" for="signup-firstName" i18n="@@signUp.firstName"
+            >Nome</label
+          >
+          <input
+            #firstNameInput
+            id="signup-firstName"
+            type="text"
+            name="firstName"
+            autocomplete="given-name"
+            inputmode="text"
+            [value]="form().firstName"
+            [attr.aria-invalid]="errors().firstName ? 'true' : null"
+            [attr.aria-describedby]="
+              errors().firstName ? 'signup-firstName-error' : null
+            "
+            (input)="type('firstName', firstNameInput.value)"
+          />
+          @if (errors().firstName; as error) {
+            <p id="signup-firstName-error" class="field-error" role="alert">
+              <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+            </p>
+          }
+        </div>
+        <div class="field">
+          <label class="label" for="signup-lastName" i18n="@@signUp.lastName"
+            >Sobrenome</label
+          >
+          <input
+            #lastNameInput
+            id="signup-lastName"
+            type="text"
+            name="lastName"
+            autocomplete="family-name"
+            inputmode="text"
+            [value]="form().lastName"
+            [attr.aria-invalid]="errors().lastName ? 'true' : null"
+            [attr.aria-describedby]="
+              errors().lastName ? 'signup-lastName-error' : null
+            "
+            (input)="type('lastName', lastNameInput.value)"
+          />
+          @if (errors().lastName; as error) {
+            <p id="signup-lastName-error" class="field-error" role="alert">
+              <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+            </p>
+          }
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="signup-phone" i18n="@@login.phone"
+          >Celular</label
+        >
+        <p id="signup-phone-hint" class="hint" i18n="@@signUp.phoneHint">
+          Com DDD. Ex.: (81) 99999-0000. Sem código de país, usamos +55.
+        </p>
+        <input
+          #phoneInput
+          id="signup-phone"
+          type="tel"
+          name="phone"
+          autocomplete="tel"
+          inputmode="tel"
+          [value]="form().phone"
+          [attr.aria-invalid]="errors().phone ? 'true' : null"
+          [attr.aria-describedby]="
+            errors().phone
+              ? 'signup-phone-hint signup-phone-error'
+              : 'signup-phone-hint'
+          "
+          (input)="type('phone', phoneInput.value)"
+        />
+        @if (errors().phone; as error) {
+          <p id="signup-phone-error" class="field-error" role="alert">
+            <span aria-hidden="true">⚠</span>&ngsp;{{ error }}
+          </p>
+        }
+      </div>
+      <button
+        type="submit"
+        class="primary"
+        [disabled]="busy()"
+        i18n="@@login.sendCode"
+      >
+        Enviar código
+      </button>
+    </form>
+  }
+  @case ('code') {
+    <p class="sent" role="status" i18n="@@signUp.codeSent">
+      Se o e-mail puder ser usado, enviamos um código de 6 dígitos para
+      {{ email() }}.
+    </p>
+    <form (submit)="confirm($event)" novalidate>
+      <label class="field">
+        <span class="label" i18n="@@login.code">Código</span>
+        <input
+          #codeInput
+          type="text"
+          class="code-input"
+          name="code"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          maxlength="6"
+          [value]="code()"
+          [attr.aria-invalid]="errors().code ? 'true' : null"
+          [attr.aria-describedby]="errors().code ? 'signup-code-error' : null"
+          (input)="typeCode(codeInput.value)"
+        />
+      </label>
+      @if (errors().code) {
+        <p id="signup-code-error" class="field-error" role="alert">
+          <span aria-hidden="true">⚠</span>&ngsp;{{ errors().code }}
+        </p>
+      }
+      <button
+        type="submit"
+        class="primary"
+        [disabled]="busy()"
+        i18n="@@signUp.confirm"
+      >
+        Confirmar
+      </button>
+      <div class="actions">
+        <button
+          type="button"
+          class="link"
+          [disabled]="busy()"
+          (click)="submit()"
+          i18n="@@login.resend"
+        >
+          Reenviar código
+        </button>
+        <button
+          type="button"
+          class="link"
+          (click)="changeEmail()"
+          i18n="@@signUp.changeEmail"
+        >
+          Trocar e-mail
+        </button>
+      </div>
+    </form>
+  }
+  @case ('done') {
+    <p class="done" role="status" i18n="@@signUp.done">
+      Solicitação enviada. Um master vai analisar; você recebe um e-mail quando
+      for aprovado.
+    </p>
+  }
+}
+
+<p class="status" role="status">
+  @if (busy()) {
+    <span i18n="@@login.working">Enviando…</span>
+  }
+</p>
+@if (failure()) {
+  <p class="error" role="alert">{{ failure() }}</p>
+}

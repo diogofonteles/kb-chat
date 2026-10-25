@@ -138,6 +138,17 @@
         <path d="M17 14c2.6 0 4.5 1.8 4.5 4.5" />
       </svg>
       <span i18n="@@sidebar.people">Pessoas e permissões</span>
+      @if (requests.count(); as pending) {
+        <span class="count" aria-hidden="true">{{ pending }}</span>
+        <span
+          class="visually-hidden"
+          i18n="@@sidebar.pendingRequests"
+          >{pending, plural,
+            =1 {1 solicitação pendente}
+            other {{{ pending }} solicitações pendentes}
+          }</span
+        >
+      }
     </button>
   }
   <app-settings-button />

@@ -22,6 +22,7 @@ const aPerson = (overrides: Partial<Person> = {}): Person => ({
   topics: [],
   features: ['search'],
   isOwner: false,
+  phone: null,
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-24T10:00:00.000Z',
   lastLoginAt: null,
@@ -267,12 +268,16 @@ describe('PeoplePanel for the owner (BR-6)', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: SessionStore, useValue: { me: signal(anOwner()) } },
+        {
+          provide: SessionStore,
+          useValue: { me: signal(anOwner()), isMaster: signal(true) },
+        },
       ],
     });
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/v1/people').flush({ items: [owner, aPerson()] });
     http.expectOne('/api/v1/topics').flush(TOPICS);
+    http.expectOne('/api/v1/access-requests').flush({ items: [] });
     http.expectOne('/api/v1/spend/people').flush({
       items: [
         { email: 'owner@example.com', usd: 0 },

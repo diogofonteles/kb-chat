@@ -1,0 +1,90 @@
+@if (store.count() > 0) {
+  <section class="requests" aria-labelledby="requests-title">
+    <h4 id="requests-title" class="title" i18n="@@requests.title">
+      Solicitações pendentes ({{ store.count() }})
+    </h4>
+    <ul class="list">
+      @for (request of store.list(); track request.id) {
+        <li class="request">
+          <div class="who">
+            <span class="name">{{ nameOf(request) }}</span>
+            <span class="detail">{{ request.email }}</span>
+            <span class="detail">
+              @if (request.phone) {
+                {{ request.phone }}
+              } @else {
+                <ng-container i18n="@@requests.noPhone"
+                  >sem celular</ng-container
+                >
+              }
+              ·
+              @if (request.source === 'google') {
+                <ng-container i18n="@@requests.google">Google</ng-container>
+              } @else {
+                <ng-container i18n="@@requests.form">Cadastro</ng-container>
+              }
+              · {{ request.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+            </span>
+          </div>
+          @if (confirmingId() === request.id) {
+            <p class="confirm" i18n="@@requests.confirmRefuse">
+              Recusar a solicitação de {{ nameOf(request) }}? A pessoa só poderá
+              pedir de novo em 24 horas.
+            </p>
+            <div class="actions">
+              <button
+                #confirmRefuse
+                type="button"
+                class="danger"
+                [disabled]="busyId() === request.id"
+                (click)="refuse(request)"
+                i18n="@@requests.refuse"
+              >
+                Recusar
+              </button>
+              <button
+                type="button"
+                class="link"
+                (click)="cancelRefuse()"
+                i18n="@@people.cancel"
+              >
+                Cancelar
+              </button>
+            </div>
+          } @else {
+            <div class="actions">
+              <button
+                type="button"
+                class="primary"
+                [disabled]="busyId() === request.id"
+                (click)="approve(request)"
+                i18n="@@requests.approve"
+              >
+                Aprovar
+              </button>
+              <button
+                #refuseButton
+                type="button"
+                class="secondary"
+                [attr.data-id]="request.id"
+                [disabled]="busyId() === request.id"
+                (click)="askRefuse(request)"
+                i18n="@@requests.refuse"
+              >
+                Recusar
+              </button>
+            </div>
+          }
+          @if (error()?.id === request.id) {
+            <p class="error" role="alert">
+              <span class="visually-hidden" i18n="@@people.errorPrefix"
+                >Erro:</span
+              >
+              <span aria-hidden="true">⚠</span>&ngsp;{{ error()?.text }}
+            </p>
+          }
+        </li>
+      }
+    </ul>
+  </section>
+}

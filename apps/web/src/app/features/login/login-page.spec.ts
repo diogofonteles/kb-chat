@@ -65,7 +65,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     const { http, fixture } = await renderLogin(of(google.accounts));
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     expect(google.calls.clientId).toBe('client-123');
@@ -89,7 +89,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     const { http, fixture } = await renderLogin(of(google.accounts), disable);
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     google.calls.callback?.({ credential: 'google-id-token' });
@@ -115,7 +115,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     const { http, fixture } = await renderLogin(of(google.accounts));
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     google.calls.callback?.({ credential: 'google-id-token' });
@@ -134,7 +134,9 @@ describe('LoginPage (KBC-010, T8)', () => {
 
   it('explains a missing client id', async () => {
     const { http, fixture } = await renderLogin(of(fakeGoogle().accounts));
-    http.expectOne('/api/v1/auth/config').flush({ googleClientId: null });
+    http
+      .expectOne('/api/v1/auth/config')
+      .flush({ googleClientId: null, codeChannels: ['email'] });
     await fixture.whenStable();
 
     expect(screen.getByRole('alert').textContent).toContain('GOOGLE_CLIENT_ID');
@@ -146,7 +148,7 @@ describe('LoginPage (KBC-010, T8)', () => {
     );
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
     await fixture.whenStable();
 
     expect(screen.getByRole('alert').textContent).toContain(
@@ -155,6 +157,6 @@ describe('LoginPage (KBC-010, T8)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     http
       .expectOne('/api/v1/auth/config')
-      .flush({ googleClientId: 'client-123' });
+      .flush({ googleClientId: 'client-123', codeChannels: ['email'] });
   });
 });

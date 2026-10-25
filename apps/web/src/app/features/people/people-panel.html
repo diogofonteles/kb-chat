@@ -38,6 +38,8 @@
   Quem é convidado começa com "Buscar documentos" e nenhum acervo.
 </p>
 
+<app-access-requests-list (approved)="welcome($event)" />
+
 @if (!openId()) {
   <ng-container *ngTemplateOutlet="status" />
 }

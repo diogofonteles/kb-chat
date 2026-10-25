@@ -20,6 +20,7 @@ import { THEMES, ThemeStore, type Theme } from '@core/theme/theme-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { ResearchStore } from '@features/research/research-store.js';
+import { AccessRequestsStore } from '@core/auth/access-requests-store.js';
 import { SettingsButton } from '@features/settings/settings-button.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { GoogleIdentity } from '@core/auth/google-identity.js';
@@ -59,6 +60,8 @@ export class Sidebar {
   protected readonly spend = inject(SpendStore);
   private readonly themes = inject(ThemeStore);
   protected readonly session = inject(SessionStore);
+  /** The count badge on "Pessoas e permissões" (masters, KBC-014). */
+  protected readonly requests = inject(AccessRequestsStore);
   private readonly google = inject(GoogleIdentity);
   private readonly settings = inject(SettingsStore);
   /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */

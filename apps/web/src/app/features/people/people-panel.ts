@@ -21,6 +21,7 @@ import { PeopleApi } from '@core/auth/auth-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatSpend } from '@core/spend/spend-store.js';
 import type { Observable } from 'rxjs';
+import { AccessRequestsList } from './access-requests-list.js';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -37,7 +38,7 @@ interface Outcome<T> {
  */
 @Component({
   selector: 'app-people-panel',
-  imports: [PersonEditor, DatePipe, NgTemplateOutlet],
+  imports: [PersonEditor, AccessRequestsList, DatePipe, NgTemplateOutlet],
   templateUrl: './people-panel.html',
   styleUrl: './people-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -104,6 +105,16 @@ export class PeoplePanel {
         return $localize`:@@people.invited:Convite criado. ${invited.email}:email: já pode entrar com essa conta Google.`;
       },
       failed: (text) => this.inviteError.set(text),
+    });
+  }
+
+  /** An approved request is a new person: their editor opens to choose the rest (BR-6). */
+  protected welcome(person: Person): void {
+    this.people.update((all) => [...(all ?? []), person]);
+    this.openId.set(person.id);
+    this.notice.set({
+      kind: 'ok',
+      text: $localize`:@@people.approvedNotice:Acesso aprovado. Escolha os acervos de ${person.name || person.email}:name:.`,
     });
   }
 

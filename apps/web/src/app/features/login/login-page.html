@@ -6,19 +6,14 @@
     </p>
 
     @if (notInvited()) {
-      <div class="notice" role="alert">
-        <p i18n="@@login.notInvited">
-          Seu acesso ainda não foi liberado; peça a um master.
-        </p>
-      </div>
-      <button
-        type="button"
-        class="secondary"
-        (click)="leave()"
-        i18n="@@login.leave"
-      >
-        Sair
-      </button>
+      <app-google-access-request
+        [details]="notInvitedDetails()"
+        (left)="leave()"
+      />
+    } @else if (mode() === 'code') {
+      <app-code-sign-in [channels]="codeChannels()" (back)="show('start')" />
+    } @else if (mode() === 'signup') {
+      <app-sign-up-form (back)="show('start')" />
     } @else if (notConfigured()) {
       <p class="notice" role="alert" i18n="@@login.notConfigured">
         O login não está configurado: defina GOOGLE_CLIENT_ID no .env e reinicie
@@ -57,6 +52,28 @@
       @if (failure()) {
         <p class="error" role="alert">{{ failure() }}</p>
       }
+    }
+
+    @if (mode() === 'start' && !notInvited()) {
+      <div class="alternatives">
+        <p class="or" i18n="@@login.or">ou</p>
+        <button
+          type="button"
+          class="secondary"
+          (click)="show('code')"
+          i18n="@@login.withCode"
+        >
+          Entrar com código
+        </button>
+        <button
+          type="button"
+          class="link"
+          (click)="show('signup')"
+          i18n="@@login.signUp"
+        >
+          Pedir acesso sem conta Google
+        </button>
+      </div>
     }
 
     <p class="note" i18n="@@login.note">

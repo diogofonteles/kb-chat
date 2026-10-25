@@ -59,7 +59,7 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   FORBIDDEN_HOST: () =>
     $localize`:@@error.forbiddenHost:Acesso recusado pelo servidor.`,
   UNAUTHENTICATED: () =>
-    $localize`:@@error.unauthenticated:Sua sessão terminou. Entre de novo com a sua conta Google.`,
+    $localize`:@@error.unauthenticated:Sua sessão terminou. Entre de novo.`,
   FORBIDDEN: () =>
     $localize`:@@error.forbidden:Você não tem permissão para isto. Peça a um master.`,
   NOT_INVITED: () =>
@@ -74,6 +74,14 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.alreadyInvited:Este e-mail já foi convidado.`,
   AUTH_UNAVAILABLE: () =>
     $localize`:@@error.authUnavailable:Não consegui confirmar o login com o Google agora. Tente de novo em instantes.`,
+  INVALID_CODE: () =>
+    $localize`:@@error.invalidCode:Esse código não confere ou já venceu. Confira os 6 dígitos ou peça um novo.`,
+  REQUEST_EXPIRED: () =>
+    $localize`:@@error.requestExpired:Esta tela ficou aberta tempo demais. Entre com o Google de novo para pedir acesso.`,
+  ALREADY_REQUESTED: () =>
+    $localize`:@@error.alreadyRequested:Sua solicitação está em análise.`,
+  REQUEST_COOLDOWN: () =>
+    $localize`:@@error.requestCooldown:Sua solicitação foi recusada há pouco. Tente de novo amanhã.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

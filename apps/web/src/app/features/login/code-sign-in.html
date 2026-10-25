@@ -1,0 +1,131 @@
+<button
+  type="button"
+  class="link back"
+  (click)="back.emit()"
+  i18n="@@login.back"
+>
+  ← Voltar
+</button>
+<h2 class="title" i18n="@@login.codeTitle">Entrar com código</h2>
+
+@if (step() === 'identify') {
+  <form (submit)="send($event)" novalidate>
+    @if (smsAvailable()) {
+      <fieldset class="channels">
+        <legend i18n="@@login.channel">Receber o código por</legend>
+        <label class="choice">
+          <input
+            type="radio"
+            name="channel"
+            [checked]="channel() === 'email'"
+            (change)="chooseChannel('email')"
+          />
+          <span i18n="@@login.channelEmail">E-mail</span>
+        </label>
+        <label class="choice">
+          <input
+            type="radio"
+            name="channel"
+            [checked]="channel() === 'sms'"
+            (change)="chooseChannel('sms')"
+          />
+          <span i18n="@@login.channelSms">SMS</span>
+        </label>
+      </fieldset>
+    }
+    <label class="field">
+      @if (channel() === 'sms') {
+        <span class="label" i18n="@@login.phone">Celular</span>
+      } @else {
+        <span class="label" i18n="@@login.email">E-mail</span>
+      }
+      <input
+        #identifierInput
+        [type]="channel() === 'sms' ? 'tel' : 'email'"
+        name="identifier"
+        [attr.inputmode]="channel() === 'sms' ? 'tel' : 'email'"
+        [attr.autocomplete]="channel() === 'sms' ? 'tel' : 'email'"
+        [value]="identifier()"
+        [attr.aria-invalid]="fieldError() ? 'true' : null"
+        [attr.aria-describedby]="fieldError() ? 'identifier-error' : null"
+        (input)="typeIdentifier(identifierInput.value)"
+      />
+    </label>
+    @if (fieldError()) {
+      <p id="identifier-error" class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span>&ngsp;{{ fieldError() }}
+      </p>
+    }
+    <button
+      type="submit"
+      class="primary"
+      [disabled]="busy()"
+      i18n="@@login.sendCode"
+    >
+      Enviar código
+    </button>
+  </form>
+} @else {
+  <p class="sent" role="status" i18n="@@login.codeSent">
+    Se houver um acesso para {{ identifier() }}, enviamos um código de 6
+    dígitos.
+  </p>
+  <form (submit)="verify($event)" novalidate>
+    <label class="field">
+      <span class="label" i18n="@@login.code">Código</span>
+      <input
+        #codeInput
+        type="text"
+        class="code-input"
+        name="code"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        maxlength="6"
+        [value]="code()"
+        [attr.aria-invalid]="fieldError() ? 'true' : null"
+        [attr.aria-describedby]="fieldError() ? 'code-error' : null"
+        (input)="typeCode(codeInput.value)"
+      />
+    </label>
+    @if (fieldError()) {
+      <p id="code-error" class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span>&ngsp;{{ fieldError() }}
+      </p>
+    }
+    <button
+      type="submit"
+      class="primary"
+      [disabled]="busy()"
+      i18n="@@login.enter"
+    >
+      Entrar
+    </button>
+    <div class="actions">
+      <button
+        type="button"
+        class="link"
+        [disabled]="busy()"
+        (click)="send()"
+        i18n="@@login.resend"
+      >
+        Reenviar código
+      </button>
+      <button
+        type="button"
+        class="link"
+        (click)="change()"
+        i18n="@@login.change"
+      >
+        Trocar
+      </button>
+    </div>
+  </form>
+}
+<p class="status" role="status">
+  @if (busy()) {
+    <span i18n="@@login.working">Enviando…</span>
+  }
+</p>
+@if (failure()) {
+  <p class="error" role="alert">{{ failure() }}</p>
+}
