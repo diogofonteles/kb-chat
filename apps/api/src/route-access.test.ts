@@ -54,6 +54,12 @@ describe('route access (NFR-2, AC-6)', () => {
         'HEAD /health',
         'POST /api/v1/auth/google',
         'POST /api/v1/auth/logout',
+        // KBC-014 (ADR 0011): asking for access and signing in with a one-time code.
+        'POST /api/v1/access-requests/signup',
+        'POST /api/v1/access-requests/signup/verify',
+        'POST /api/v1/access-requests/google',
+        'POST /api/v1/auth/code',
+        'POST /api/v1/auth/code/verify',
         'GET,HEAD,TRACE,DELETE,OPTIONS,PATCH,PUT,POST /mcp/turn',
         'GET,HEAD,TRACE,DELETE,OPTIONS,PATCH,PUT,POST /mcp/turns/:token',
       ].sort(),
@@ -93,6 +99,11 @@ describe('route access (NFR-2, AC-6)', () => {
       expect(find(method, '/api/v1/people')).toEqual({ master: true });
     for (const method of ['PATCH', 'DELETE'])
       expect(find(method, '/api/v1/people/:id')).toEqual({ master: true });
+    expect(find('GET', '/api/v1/access-requests')).toEqual({ master: true });
+    for (const action of ['approve', 'refuse'])
+      expect(find('POST', `/api/v1/access-requests/:id/${action}`)).toEqual({
+        master: true,
+      });
   });
 
   it('refuses to register an /api/v1 route without an access declaration', async () => {
@@ -119,7 +130,7 @@ describe('route access (NFR-2, AC-6)', () => {
 describe('the E2E identity stays in the E2E server', () => {
   it('main never imports the test identity', async () => {
     const main = await readFile(new URL('./main.ts', import.meta.url), 'utf8');
-    expect(main).not.toMatch(/test-identity|\/e2e\//);
+    expect(main).not.toMatch(/test-identity|outbox|\/e2e\//);
     expect(main).toContain('createGoogleVerifier(config.GOOGLE_CLIENT_ID)');
   });
 });

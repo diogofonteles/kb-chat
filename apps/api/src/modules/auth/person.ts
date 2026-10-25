@@ -29,6 +29,13 @@ export const storedPersonSchema = z.object({
   invitedBy: z.string(),
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),
+  /** E.164, from an access request (KBC-014); a sign-in code may go to it by SMS. */
+  phone: z.string().nullable().optional(),
+  /**
+   * Whose data, once fixed (ADR 0011): a form approval or the first code sign-in sets it,
+   * so linking Google later keeps the same history. Absent: the Google `sub`, else the id.
+   */
+  principal: z.string().min(1).optional(),
 });
 export type StoredPerson = z.infer<typeof storedPersonSchema>;
 
@@ -87,6 +94,7 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   topics: person.topics,
   features: person.features,
   isOwner,
+  phone: person.phone ?? null,
   invitedBy: person.invitedBy,
   createdAt: person.createdAt,
   lastLoginAt: person.lastLoginAt,

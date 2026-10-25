@@ -5,6 +5,7 @@ import type { VerifiedIdentity } from '../../ports/identity-verifier.js';
 import type { PeopleStorePort } from '../../ports/people-store.js';
 import {
   OWNER_PRINCIPAL,
+  isMaster,
   peopleDocumentSchema,
   type StoredPerson,
   type Viewer,
@@ -56,12 +57,39 @@ export class PeopleService {
   /** The owner keeps the `owner` alias of the data written before logins (ADR 0008). */
   viewerOf(person: StoredPerson): Viewer {
     const isOwner = this.isOwner(person);
-    const principal = isOwner ? OWNER_PRINCIPAL : (person.sub ?? person.id);
+    const principal = isOwner
+      ? OWNER_PRINCIPAL
+      : (person.principal ?? person.sub ?? person.id);
     return { person, principal, isOwner };
   }
 
   signIn(identity: VerifiedIdentity): Promise<StoredPerson> {
     return this.change((people) => rules.signIn(people, identity, this.now()));
+  }
+
+  /** The person whose email (lower case) or E.164 phone this is, if any (KBC-014). */
+  async findByIdentifier(identifier: string): Promise<StoredPerson | null> {
+    const people = await this.list();
+    return (
+      people.find((p) => p.email === identifier || p.phone === identifier) ??
+      null
+    );
+  }
+
+  async masterEmails(): Promise<string[]> {
+    return (await this.list()).filter(isMaster).map((p) => p.email);
+  }
+
+  /** An approved access request becomes a person with the invite defaults (BR-6). */
+  approve(approved: rules.ApprovedRequest): Promise<StoredPerson> {
+    return this.change((people) =>
+      rules.approve(people, approved, this.context()),
+    );
+  }
+
+  /** A sign-in with a one-time code: fixes the principal and the last access. */
+  signInWithCode(id: string): Promise<StoredPerson> {
+    return this.change((people) => rules.codeSignIn(people, id, this.now()));
   }
 
   invite(email: string, invitedBy: string): Promise<StoredPerson> {

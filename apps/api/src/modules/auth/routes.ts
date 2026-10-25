@@ -2,6 +2,8 @@ import {
   authConfigSchema,
   googleLoginRequestSchema,
   meSchema,
+  type CodeChannel,
+  type NotInvitedDetails,
 } from '@kb-chat/contracts';
 import type {
   FastifyInstance,
@@ -12,18 +14,21 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
-import type { IdentityVerifierPort } from '../../ports/identity-verifier.js';
+import type {
+  IdentityVerifierPort,
+  VerifiedIdentity,
+} from '../../ports/identity-verifier.js';
 import { PUBLIC, SIGNED_IN, viewerOf } from './access.js';
 import {
   SESSION_COOKIE,
   clearedSessionCookie,
   isSecureHost,
   readCookie,
-  sessionCookie,
 } from './cookie.js';
 import type { PeopleService } from './people-service.js';
 import { toMe } from './person.js';
 import type { SessionService } from './session-service.js';
+import { openSession } from './session-reply.js';
 
 export interface AuthRouteDeps {
   readonly people: PeopleService;
@@ -35,27 +40,42 @@ export interface AuthRouteDeps {
   readonly loginRatePerMinute: number;
   /** Every collection slug in the vault (a master sees them all). */
   readonly topics: () => readonly string[];
+  /** Where a one-time sign-in code can go (KBC-014 BR-9). */
+  readonly codeChannels: readonly CodeChannel[];
+  /** The ticket and request state of a not-invited Google account (ADR 0011). */
+  readonly notInvited?: (
+    identity: VerifiedIdentity,
+  ) => Promise<NotInvitedDetails>;
 }
 
 export const sessionTokenOf = (request: FastifyRequest): string | undefined =>
   readCookie(request.headers.cookie, SESSION_COOKIE);
 
+/** Google answered for an account nobody invited: what "Solicitar acesso" needs (ADR 0011). */
+async function notInvited(
+  deps: AuthRouteDeps,
+  identity: VerifiedIdentity,
+): Promise<AppError> {
+  const details = deps.notInvited ? await deps.notInvited(identity) : undefined;
+  return new AppError('NOT_INVITED', 'This account was not invited', {
+    details,
+  });
+}
+
 async function signIn(
   deps: AuthRouteDeps,
   credential: string,
-  { request, reply }: { request: FastifyRequest; reply: FastifyReply },
+  http: { request: FastifyRequest; reply: FastifyReply },
 ) {
   const identity = await deps.verifier.verify(credential);
   if (!identity.emailVerified)
     throw new AppError('UNAUTHENTICATED', 'The e-mail is not verified');
-  const person = await deps.people.signIn(identity);
-  const token = await deps.sessions.create(person.id);
-  request.log.info({ personId: person.id }, 'signed in');
-  reply.header(
-    'set-cookie',
-    sessionCookie(token, isSecureHost(request.headers.host)),
-  );
-  return toMe(deps.people.viewerOf(person), deps.topics());
+  const person = await deps.people.signIn(identity).catch(async (err) => {
+    if (err instanceof AppError && err.code === 'NOT_INVITED')
+      throw await notInvited(deps, identity);
+    throw err;
+  });
+  return openSession(deps, person, http);
 }
 
 function registerLogin(app: FastifyInstance, deps: AuthRouteDeps) {
@@ -81,7 +101,10 @@ function registerSession(app: FastifyInstance, deps: AuthRouteDeps) {
       config: { access: PUBLIC },
       schema: { response: { 200: authConfigSchema } },
     },
-    async () => ({ googleClientId: deps.googleClientId }),
+    async () => ({
+      googleClientId: deps.googleClientId,
+      codeChannels: [...deps.codeChannels],
+    }),
   );
   typed.get(
     '/api/v1/me',

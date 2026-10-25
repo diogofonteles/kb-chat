@@ -22,12 +22,26 @@ import csrfGuard from './plugins/csrf-guard.js';
 import hostGuard from './plugins/host-guard.js';
 import routeAccess from './plugins/route-access.js';
 import {
+  Notifier,
   OWNER_PRINCIPAL,
+  OneTimeCodes,
   PeopleService,
+  RequestTickets,
+  SendLimits,
   SessionService,
   authRoutes,
+  codeRoutes,
   peopleRoutes,
 } from './modules/auth/index.js';
+import {
+  AccessRequestService,
+  SignUpFlow,
+  accessRequestRoutes,
+} from './modules/access-requests/index.js';
+import { MemoryDocumentStore } from './adapters/memory-document-store.js';
+import { MemoryOutbox } from './adapters/memory-outbox.js';
+import type { Delivery } from './delivery-factory.js';
+import type { DocumentStorePort } from './ports/document-store.js';
 import { MemoryPeopleStore } from './adapters/memory-people-store.js';
 import { MemorySessionStore } from './adapters/memory-session-store.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
@@ -62,6 +76,13 @@ import {
 /** The owner's principal: the alias of the data written before logins (ADR 0008). */
 export const OWNER = OWNER_PRINCIPAL;
 
+/** Where one-time codes and access requests are kept and how messages go (ADR 0011). */
+export interface AccessDeps {
+  readonly codes: DocumentStorePort;
+  readonly requests: DocumentStorePort;
+  readonly delivery: Delivery;
+}
+
 /** Who may sign in and how (ADR 0008); in memory, verifying with Google, when not given. */
 export interface AuthDeps {
   readonly people: PeopleService;
@@ -93,10 +114,13 @@ export interface AppDeps {
    */
   readonly agent?: ResearchAgent;
   readonly auth?: AuthDeps;
+  /** Codes, requests and delivery (KBC-014); in memory, to an outbox, when not given. */
+  readonly access?: AccessDeps;
 }
 
 type FullDeps = AppDeps & {
   auth: AuthDeps;
+  access: AccessDeps;
   ai: AiProviders;
   agent: ResearchAgent;
   catalog: CatalogRegistry;
@@ -144,7 +168,7 @@ async function registerResearch(
 async function spenders(deps: FullDeps) {
   const { people } = deps.auth;
   return (await people.list())
-    .filter((person) => person.sub !== null)
+    .filter((person) => person.lastLoginAt !== null)
     .map((person) => ({
       email: person.email,
       principal: people.viewerOf(person).principal,
@@ -194,19 +218,77 @@ async function registerRoutes(
   await registerAuth(app, deps);
 }
 
-/** Sign-in, who is signed in and "Pessoas e permissões" (KBC-010, ADR 0008). */
+/** The one-time codes, access requests and messages of KBC-014 (ADR 0011). */
+function buildAccess(deps: FullDeps) {
+  const { access, auth, config } = deps;
+  const notifier = new Notifier({
+    ...access.delivery,
+    webOrigin: config.WEB_ORIGIN,
+  });
+  const codes = new OneTimeCodes({ store: access.codes });
+  const requests = new AccessRequestService({
+    store: access.requests,
+    people: auth.people,
+  });
+  const flow = new SignUpFlow({
+    requests,
+    people: auth.people,
+    codes,
+    notifier,
+  });
+  return {
+    notifier,
+    codes,
+    requests,
+    flow,
+    tickets: new RequestTickets(),
+    limits: new SendLimits(),
+  };
+}
+
+/** Sign-in, who is signed in and "Pessoas e permissões" (KBC-010, ADR 0008; KBC-014). */
 async function registerAuth(app: FastifyInstance, deps: FullDeps) {
   const { config, catalog, auth } = deps;
   const topics = () => catalog.topics().map(({ topic }) => topic.slug);
+  const access = buildAccess(deps);
   await app.register(
     authRoutes({
       ...auth,
       topics,
       googleClientId: config.GOOGLE_CLIENT_ID ?? null,
       loginRatePerMinute: config.AUTH_RATE_LIMIT,
+      codeChannels: access.notifier.smsEnabled ? ['email', 'sms'] : ['email'],
+      notInvited: async (identity) => ({
+        ticket: access.tickets.issue(identity),
+        request: await access.requests.stateFor(identity),
+      }),
     }),
   );
   await app.register(peopleRoutes({ ...auth, topics }));
+  await registerAccess(app, { deps, access, topics });
+}
+
+/** One-time code sign-in and access requests (KBC-014, ADR 0011). */
+async function registerAccess(
+  app: FastifyInstance,
+  wiring: {
+    deps: FullDeps;
+    access: ReturnType<typeof buildAccess>;
+    topics: () => string[];
+  },
+) {
+  const { deps, access, topics } = wiring;
+  const rate = deps.config.AUTH_RATE_LIMIT;
+  await app.register(
+    codeRoutes({ ...deps.auth, ...access, topics, verifyRatePerMinute: rate }),
+  );
+  await app.register(
+    accessRequestRoutes({
+      ...access,
+      people: deps.auth.people,
+      ratePerMinute: rate,
+    }),
+  );
 }
 
 /** Settings, providers and the MCP endpoint of subscription turns (KBC-007, ADR 0007). */
@@ -244,6 +326,12 @@ const inMemoryAuth = (config: AppConfig): AuthDeps => ({
   verifier: createGoogleVerifier(config.GOOGLE_CLIENT_ID ?? ''),
 });
 
+const inMemoryAccess = (): AccessDeps => ({
+  codes: new MemoryDocumentStore(),
+  requests: new MemoryDocumentStore(),
+  delivery: { email: new MemoryOutbox(), sms: null },
+});
+
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
 async function completeDeps(deps: AppDeps): Promise<FullDeps> {
   const catalog = deps.catalog ?? new CatalogRegistry(deps.vault);
@@ -260,6 +348,7 @@ async function completeDeps(deps: AppDeps): Promise<FullDeps> {
   return {
     ...deps,
     auth: deps.auth ?? inMemoryAuth(deps.config),
+    access: deps.access ?? inMemoryAccess(),
     ai: deps.ai ?? (await inMemoryAi(deps.config, agent)),
     agent,
     catalog,

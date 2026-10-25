@@ -18,6 +18,9 @@ import { MemorySessionStore } from '../adapters/memory-session-store.js';
 import { JsonPeopleStore } from '../adapters/json-people-store.js';
 import { PeopleService, SessionService } from '../modules/auth/index.js';
 import { E2E_CLIENT_ID, createTestIdentity } from './test-identity.js';
+import { MemoryDocumentStore } from '../adapters/memory-document-store.js';
+import { MemoryOutbox } from '../adapters/memory-outbox.js';
+import { registerOutbox } from './outbox-routes.js';
 
 /** The owner of the E2E run: a master with the `owner` data the specs expect. */
 export const E2E_OWNER_EMAIL = 'owner@kb-chat.test';
@@ -100,9 +103,17 @@ const auth = {
   sessions: new SessionService({ store: new MemorySessionStore() }),
   verifier: identity.verifier,
 };
+// Codes and notices land in memory; the specs read them under /api/e2e/outbox (KBC-014).
+const outbox = new MemoryOutbox();
+const access = {
+  codes: new MemoryDocumentStore(),
+  requests: new MemoryDocumentStore(),
+  delivery: { email: outbox, sms: null },
+};
 const app = await buildApp({
   config,
   auth,
+  access,
   vault,
   index,
   logger,
@@ -114,4 +125,5 @@ const app = await buildApp({
   conversations,
 });
 identity.register(app);
+registerOutbox(app, outbox);
 await app.listen({ host: '127.0.0.1', port: config.PORT });
