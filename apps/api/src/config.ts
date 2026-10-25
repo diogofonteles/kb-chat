@@ -116,12 +116,16 @@ export function assertSignInConfigured(
     );
 }
 
+const LOOPBACK = new Set(['127.0.0.1', '::1']);
+
 /**
  * Production sends real email (ADR 0011): without Resend the codes would only reach the
  * log, so the API does not start; the SMS log adapter is refused there too.
  */
 export function assertDeliveryConfigured(config: AppConfig): void {
-  if (config.NODE_ENV !== 'production') return;
+  // Listening beyond loopback is a deployment even when NODE_ENV was forgotten: fail closed.
+  const exposed = !LOOPBACK.has(config.HOST);
+  if (config.NODE_ENV !== 'production' && !exposed) return;
   const missing = (['RESEND_API_KEY', 'KB_CHAT_EMAIL_FROM'] as const).filter(
     (name) => !config[name],
   );

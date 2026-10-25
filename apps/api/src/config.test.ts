@@ -47,6 +47,12 @@ describe('assertDeliveryConfigured (KBC-014 FR-7, AC-13)', () => {
     ).toThrow('set KB_CHAT_EMAIL_FROM');
   });
 
+  it('treats an API listening beyond loopback as production, NODE_ENV or not', () => {
+    expect(() =>
+      assertDeliveryConfigured(loadConfig({ HOST: '0.0.0.0' })),
+    ).toThrow('set RESEND_API_KEY');
+  });
+
   it('refuses the SMS log adapter in production', () => {
     const config = loadConfig({
       ...production,

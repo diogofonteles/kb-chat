@@ -34,7 +34,7 @@ Pedido do dono em 2026-10-25: "a pessoa que tentar fazer login não deve consegu
 - BR-2: o cadastro sem Google só vira solicitação depois que o código do e-mail é confirmado.
 - BR-3: as respostas de envio de código e de cadastro nunca revelam se um e-mail ou celular já existe, está pendente ou foi recusado ("Se o e-mail puder ser usado, enviamos um código."). Exceção: no Google, a identidade já é da própria pessoa, então a tela diz se a solicitação dela está em análise ou recusada.
 - BR-4: um código vale 10 minutos, serve uma vez e aceita no máximo 5 tentativas; depois disso é descartado. Pedir um código novo descarta o anterior do mesmo identificador.
-- BR-5: o envio de código é limitado a 1 por minuto e 5 por hora por e-mail ou celular, e a 5 por minuto e 20 por hora por endereço de rede.
+- BR-5: o envio de código é limitado a 1 por minuto e 5 por hora por e-mail ou celular (contados à parte para cadastro e para entrada), e a 5 por minuto e 20 por hora por endereço de rede.
 - BR-6: aprovar cria a pessoa com os padrões do convite (BR-3 do KBC-010: "Buscar documentos" em nenhum acervo); o master escolhe o resto no editor que abre em seguida.
 - BR-7: quem foi recusado só pode pedir de novo 24 horas depois da recusa.
 - BR-8: o celular é guardado no formato E.164; sem código de país, vale o do Brasil (+55).

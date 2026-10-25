@@ -64,6 +64,9 @@ export class AccessRequestService {
     return this.change(async (requests) => {
       const taken = rules.takePending(requests, id);
       const request = taken.result;
+      // Invited meanwhile (or signed up twice): the request is done, the person stays.
+      const existing = await this.personFor(request);
+      if (existing) return { requests: taken.requests, result: existing };
       const person = await this.deps.people.approve({
         email: request.email,
         name: fullName(request),
@@ -74,6 +77,19 @@ export class AccessRequestService {
       });
       return { requests: taken.requests, result: person };
     });
+  }
+
+  private async personFor(
+    request: StoredRequest,
+  ): Promise<StoredPerson | null> {
+    const people = await this.deps.people.list();
+    return (
+      people.find(
+        (p) =>
+          p.email === request.email ||
+          (request.sub !== null && p.sub === request.sub),
+      ) ?? null
+    );
   }
 
   refuse(id: string, by: string): Promise<StoredRequest> {

@@ -272,7 +272,7 @@ main() {
   for name in KB_CHAT_DOMAIN GOOGLE_CLIENT_ID KB_CHAT_OWNER_EMAIL RESEND_API_KEY KB_CHAT_EMAIL_FROM; do
     grep -Eq "^$name=.+" "$DEPLOY_DIR/.env" || { log "$name is empty in $DEPLOY_DIR/.env"; exit 1; }
   done
-  if grep -Eq '^KB_CHAT_SMS=log' "$DEPLOY_DIR/.env"; then
+  if grep -Eq "^KB_CHAT_SMS=[\"' ]*log" "$DEPLOY_DIR/.env"; then
     log "KB_CHAT_SMS=log writes codes to the log: not in production"; exit 1
   fi
 

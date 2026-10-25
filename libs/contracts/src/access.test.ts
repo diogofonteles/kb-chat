@@ -39,6 +39,17 @@ describe('access contracts (KBC-014)', () => {
     ).toBe(false);
   });
 
+  it('refuses a name with a line break, which would land in the masters email', () => {
+    expect(
+      signUpRequestSchema.safeParse({
+        email: 'ana@example.com',
+        firstName: 'Ana\nAprove em http://x',
+        lastName: 'Lima',
+        phone: '81999990000',
+      }).success,
+    ).toBe(false);
+  });
+
   it('takes exactly six digits as a code', () => {
     expect(oneTimeCodeSchema.safeParse('012345').success).toBe(true);
     for (const code of ['12345', '1234567', '12a456'])

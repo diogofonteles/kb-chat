@@ -67,13 +67,16 @@ export class PeopleService {
     return this.change((people) => rules.signIn(people, identity, this.now()));
   }
 
-  /** The person whose email (lower case) or E.164 phone this is, if any (KBC-014). */
+  /**
+   * The person whose email (lower case) or E.164 phone this is, if any (KBC-014). A phone
+   * shared by two people names nobody: phones are not verified yet (ADR 0011).
+   */
   async findByIdentifier(identifier: string): Promise<StoredPerson | null> {
     const people = await this.list();
-    return (
-      people.find((p) => p.email === identifier || p.phone === identifier) ??
-      null
-    );
+    const byEmail = people.find((p) => p.email === identifier);
+    if (byEmail) return byEmail;
+    const byPhone = people.filter((p) => p.phone === identifier);
+    return byPhone.length === 1 ? (byPhone[0] ?? null) : null;
   }
 
   async masterEmails(): Promise<string[]> {

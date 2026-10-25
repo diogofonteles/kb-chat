@@ -3,7 +3,6 @@ import {
   randomInt,
   scrypt,
   timingSafeEqual,
-  type BinaryLike,
   type ScryptOptions,
 } from 'node:crypto';
 import { codeChannelSchema, type CodeChannel } from '@kb-chat/contracts';
@@ -53,6 +52,8 @@ export interface OneTimeCodesDeps {
   readonly now?: () => Date;
   /** Six digits; random unless a test fixes them. */
   readonly generate?: () => string;
+  /** Observes every hash of a guess (tests prove the work is the same with or without a code). */
+  readonly onHash?: (code: string) => void;
 }
 
 const sixRandomDigits = (): string =>
@@ -60,10 +61,19 @@ const sixRandomDigits = (): string =>
 
 const hashOf = (code: string, salt: string): Promise<Buffer> =>
   new Promise((resolve, reject) =>
-    scrypt(code as BinaryLike, salt, HASH_BYTES, SCRYPT, (err, key) =>
+    scrypt(code, salt, HASH_BYTES, SCRYPT, (err, key) =>
       err ? reject(err) : resolve(key),
     ),
   );
+
+/**
+ * Compared against when no live code exists: the guess is hashed all the same, so the reply
+ * takes as long for an unknown email as for a person (BR-3, NFR-3).
+ */
+const DECOY: Pick<StoredCode, 'salt' | 'hash'> = {
+  salt: randomBytes(16).toString('base64url'),
+  hash: randomBytes(HASH_BYTES).toString('base64url'),
+};
 
 const sameKey = (code: StoredCode, key: CodeKey): boolean =>
   code.purpose === key.purpose && code.identifier === key.identifier;
@@ -119,7 +129,10 @@ export class OneTimeCodes {
         (c) => sameKey(c, key) && Date.parse(c.expiresAt) > this.now(),
       );
       const others = this.live(doc, key);
-      if (!entry) return { doc: { version: 1, codes: others }, result: null };
+      if (!entry) {
+        await this.matches(DECOY, code);
+        return { doc: { version: 1, codes: others }, result: null };
+      }
       if (await this.matches(entry, code))
         return { doc: { version: 1, codes: others }, result: entry };
       const tried = { ...entry, attempts: entry.attempts + 1 };
@@ -128,7 +141,11 @@ export class OneTimeCodes {
     });
   }
 
-  private async matches(entry: StoredCode, code: string): Promise<boolean> {
+  private async matches(
+    entry: Pick<StoredCode, 'salt' | 'hash'>,
+    code: string,
+  ): Promise<boolean> {
+    this.deps.onHash?.(code);
     const expected = Buffer.from(entry.hash, 'base64url');
     const actual = await hashOf(code, entry.salt);
     return (

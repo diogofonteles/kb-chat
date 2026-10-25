@@ -22,17 +22,18 @@ ADR 0008 lets in only the owner and people a master invited by email, and only w
 **One-time codes** (`auth` module, `KB_CHAT_STATE_DIR/codes.json`, 0600, atomic)
 - 6 random digits (`crypto.randomInt`), valid 10 minutes, single use, at most 5 attempts, one live code per identifier and purpose (a new one replaces it).
 - Stored only as `scrypt(code, salt)` with a random 16-byte salt per code (N = 2^14): a copy of the file does not give the codes back within their lifetime. Compared with `timingSafeEqual`.
-- Send limits, in memory (one API process, ND-22): 1 per minute and 5 per hour per identifier; 5 per minute and 20 per hour per client address (`request.ip`, correct behind the proxy once `TRUST_PROXY` is set, ADR 0010). Verifying is also capped per address by `@fastify/rate-limit`.
+- Send limits, in memory (one API process, ND-22): 1 per minute and 5 per hour per identifier and purpose (a sign-up code and a sign-in code count apart, so an approval minutes after the sign-up does not block the first sign-in); 5 per minute and 20 per hour per client address (`request.ip`, correct behind the proxy once `TRUST_PROXY` is set, ADR 0010). Verifying is also capped per address by `@fastify/rate-limit`.
 - `POST /api/v1/auth/code { identifier, channel }` (public) always answers `202 {}`; when the identifier is a person's email (or phone, for SMS) a sign-in code goes out. `POST /api/v1/auth/code/verify { identifier, code }` opens the same session as Google (cookie, CSRF and revocation of ADR 0008) or answers `400 INVALID_CODE`.
-- No enumeration by timing either: the reply is sent before the code is hashed and delivered, in every case.
-- Any person in "Pessoas e permissões" may sign in with a code (the code proves the mailbox, as Google does); SMS only for a person with a phone.
+- No enumeration by timing either: the reply is sent before the code is hashed and delivered, in every case, and a verify with no live code still hashes the guess against a decoy.
+- Any person in "Pessoas e permissões" may sign in with a code (the code proves the mailbox, as Google does); SMS only for a person with a phone, and a phone two people share reaches nobody.
+- **Phones are not verified yet.** Before an SMS provider is turned on, the sign-up must confirm the phone with an SMS code too (otherwise someone could type another person's number); until then SMS stays off in production.
 
 **Principal:** a person may now have no Google `sub`. The stored person gains an optional `principal`, fixed at a form approval (the person id) and at the first code sign-in (`sub ?? id`); it wins over `sub` afterwards. A code person who later signs in with Google under the same verified email is matched by the existing invite rule (`sub` still null), so linking Google keeps their history, settings and keys. The owner keeps `owner`.
 
 **Delivery**
 - Ports `EmailSenderPort` and `SmsSenderPort` (`send(message)`); the messages are pt-BR text built in one place (`auth/messages.ts`).
 - Email: Resend's HTTP API (`POST https://api.resend.com/emails`, 8 s timeout), the provider of the owner's other app, free tier 3 000 emails a month and 100 a day. Env: `RESEND_API_KEY` (secret) and `KB_CHAT_EMAIL_FROM` (a sender on a domain verified in Resend, e.g. `kb-chat <nao-responda@example.com>`). Without a key, a log adapter writes each message (code included) to the API log, for development only.
-- The API refuses to start with `NODE_ENV=production` and no `RESEND_API_KEY` or `KB_CHAT_EMAIL_FROM`, or with the SMS log adapter.
+- The API refuses to start with `NODE_ENV=production` (or listening beyond loopback, `HOST`, in case `NODE_ENV` was forgotten) and no `RESEND_API_KEY` or `KB_CHAT_EMAIL_FROM`, or with the SMS log adapter.
 - SMS: `KB_CHAT_SMS` = `off` (default) or `log` (development: the message goes to the API log). `GET /api/v1/auth/config` lists the code channels (`email`, plus `sms` when on); the web hides SMS otherwise. **SMS ships off in production: the owner must pick a provider** (below).
 - The E2E server uses an in-memory outbox and reads it under `/api/e2e/outbox`, like its test identity (main never imports it).
 

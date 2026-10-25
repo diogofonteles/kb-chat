@@ -99,4 +99,25 @@ describe('OneTimeCodes (KBC-014 BR-4, NFR-1)', () => {
     );
     for (const code of codes) expect(code).toMatch(/^\d{6}$/);
   });
+
+  it('hashes a guess even when there is no live code, so timing tells nothing (BR-3, NFR-3)', async () => {
+    const hashed: string[] = [];
+    const service = new OneTimeCodes({
+      store: new MemoryDocumentStore(),
+      generate: () => '123456',
+      onHash: (code) => hashed.push(code),
+    });
+    await service.issue(LOGIN, { channel: 'email' });
+    hashed.length = 0;
+
+    expect(await service.verify(LOGIN, '000000')).toBeNull();
+    expect(
+      await service.verify(
+        { purpose: 'login', identifier: 'nobody@example.com' },
+        '000000',
+      ),
+    ).toBeNull();
+
+    expect(hashed).toEqual(['000000', '000000']);
+  });
 });

@@ -258,20 +258,22 @@ describe('no account enumeration (BR-3, NFR-3)', () => {
       expect(response.statusCode).toBe(202);
       expect(response.body).toBe('{}');
     }
-    await settle();
-    expect(
-      started.outbox
-        .to('known@example.com')
-        .map((m) => 'subject' in m && m.subject),
-    ).toEqual([
-      'Você já tem acesso ao kb-chat',
-      'Seu código de acesso ao kb-chat',
-    ]);
-    expect(started.outbox.to('pending@example.com').at(-1)).toMatchObject({
-      subject: 'Sua solicitação de acesso ao kb-chat está em análise',
-    });
-    expect(started.outbox.to('new@example.com').at(-1)).toMatchObject({
-      subject: 'Confirme seu e-mail no kb-chat',
+    // Deliveries run after the replies; wait until all three went out.
+    await vi.waitFor(() => {
+      expect(
+        started.outbox
+          .to('known@example.com')
+          .map((m) => 'subject' in m && m.subject),
+      ).toEqual([
+        'Você já tem acesso ao kb-chat',
+        'Seu código de acesso ao kb-chat',
+      ]);
+      expect(started.outbox.to('pending@example.com').at(-1)).toMatchObject({
+        subject: 'Sua solicitação de acesso ao kb-chat está em análise',
+      });
+      expect(started.outbox.to('new@example.com').at(-1)).toMatchObject({
+        subject: 'Confirme seu e-mail no kb-chat',
+      });
     });
   });
 
@@ -441,6 +443,49 @@ describe('approval gate and decisions (BR-1, BR-6, BR-7)', () => {
     });
 
     expect(attempt.json().error.code).toBe('INVALID_CODE');
+  });
+
+  it('approving a request whose email was invited meanwhile clears it and returns that person', async () => {
+    const started = await start();
+    const owner = await ownerSession(started);
+    await signUp(started, 'ana@example.com');
+    const [request] = await pendingList(started, owner);
+    const invited = (
+      await postAs(owner)(started.app, '/api/v1/people', {
+        email: 'ana@example.com',
+      })
+    ).json();
+
+    const approved = await postAs(owner)(
+      started.app,
+      `/api/v1/access-requests/${request?.id}/approve`,
+      {},
+    );
+
+    expect(approved.statusCode).toBe(201);
+    expect(approved.json().id).toBe(invited.id);
+    expect(await pendingList(started, owner)).toEqual([]);
+  });
+
+  it('SMS reaches nobody when two people share a phone (ADR 0011)', async () => {
+    const started = await start({ sms: true });
+    const owner = await ownerSession(started);
+    for (const email of ['ana@example.com', 'bia@example.com'])
+      await signUp(started, email);
+    for (const request of await pendingList(started, owner))
+      await postAs(owner)(
+        started.app,
+        `/api/v1/access-requests/${request.id}/approve`,
+        {},
+      );
+
+    await post(started.app, '/api/v1/auth/code', {
+      identifier: '81999990000',
+      channel: 'sms',
+    });
+    await settle();
+
+    expect(started.outbox.sms).toEqual([]);
   });
 
   it('AC-10: only masters list, approve and refuse', async () => {
