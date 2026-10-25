@@ -72,7 +72,8 @@ create() {
     echo "dry-run-$what"
     return 0
   fi
-  "${OCI[@]}" "$@" --query 'data.id' --raw-output
+  # Most resources expose data.id; a few (notification topics) name it differently.
+  "${OCI[@]}" "$@" --query "${CREATE_QUERY:-data.id}" --raw-output
 }
 
 # First OCID whose display name matches, or empty. (JMESPath literals use backticks.)
@@ -279,12 +280,22 @@ topic_name="$NAME_PREFIX-alerts"
 topic_id="$("${OCI[@]}" ons topic list --compartment-id "$COMPARTMENT_OCID" --name "$topic_name" --all \
   --query 'data[0]."topic-id"' --raw-output 2>/dev/null | grep '^ocid' || true)"
 if [ -z "$topic_id" ]; then
-  topic_id="$(create "notification topic $topic_name" ons topic create --compartment-id "$COMPARTMENT_OCID" \
-    --name "$topic_name" --description "kb-chat operational alerts")"
+  # A notification topic's OCID is data."topic-id", not data.id.
+  topic_id="$(CREATE_QUERY='data."topic-id"' create "notification topic $topic_name" ons topic create \
+    --compartment-id "$COMPARTMENT_OCID" --name "$topic_name" --description "kb-chat operational alerts")"
+else say "  exists: notification topic $topic_name"; fi
+[ -n "$topic_id" ] || { echo "provision: notification topic $topic_name returned no OCID" >&2; exit 1; }
+# The subscription is checked on every run, so a run that stopped after the topic still gets it.
+subscription_id=""
+if [ "$APPLY" -eq 1 ]; then
+  subscription_id="$("${OCI[@]}" ons subscription list --compartment-id "$COMPARTMENT_OCID" --topic-id "$topic_id" --all \
+    --query "data[?endpoint=='$BUDGET_ALERT_EMAIL' && \"lifecycle-state\"!='DELETED'] | [0].id" --raw-output 2>/dev/null | grep '^ocid' || true)"
+fi
+if [ -z "$subscription_id" ]; then
   create "e-mail subscription $BUDGET_ALERT_EMAIL (confirm the e-mail Oracle sends)" ons subscription create \
     --compartment-id "$COMPARTMENT_OCID" --topic-id "$topic_id" --protocol EMAIL \
     --subscription-endpoint "$BUDGET_ALERT_EMAIL" >/dev/null
-else say "  exists: notification topic $topic_name"; fi
+else say "  exists: e-mail subscription $BUDGET_ALERT_EMAIL"; fi
 alarm_name="$NAME_PREFIX-backup-missing"
 alarm_id="$(find_id monitoring alarm list --compartment-id "$COMPARTMENT_OCID" --display-name "$alarm_name")"
 if [ -z "$alarm_id" ]; then
