@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const API_PORT = '3117';
-const WEB_PORT = '4317';
+// Overridable so a second checkout (a worktree) can run beside the default ports.
+const API_PORT = process.env['KBC_E2E_API_PORT'] ?? '3117';
+const WEB_PORT = process.env['KBC_E2E_WEB_PORT'] ?? '4317';
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 
 /**
@@ -45,7 +46,8 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: `pnpm --filter @kb-chat/web exec ng serve --port ${WEB_PORT} --proxy-config ../../e2e/proxy.e2e.json`,
+      command: `pnpm --filter @kb-chat/web exec ng serve --port ${WEB_PORT} --proxy-config ../../e2e/proxy.e2e.mjs`,
+      env: { KBC_E2E_API_PORT: API_PORT },
       url: WEB_ORIGIN,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,

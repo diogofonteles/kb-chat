@@ -62,7 +62,7 @@ test.describe('signed out', () => {
     expect((await page.request.get('/api/v1/topics')).status()).toBe(200);
   });
 
-  test('AC-2: an account that was not invited is told to ask a master, and can leave', async ({
+  test('AC-2: an account that was not invited is told so, may ask for access, and can leave', async ({
     page,
   }) => {
     const stranger = uniqueEmail('stranger');
@@ -76,8 +76,11 @@ test.describe('signed out', () => {
       .click();
 
     await expect(page.getByRole('alert')).toHaveText(
-      'Seu acesso ainda não foi liberado; peça a um master.',
+      'Seu acesso ainda não foi liberado.',
     );
+    await expect(
+      page.getByRole('button', { name: 'Solicitar acesso' }),
+    ).toBeVisible();
     await shoot(page, 'not-invited');
     await page.getByRole('button', { name: 'Sair' }).click();
     await expect(

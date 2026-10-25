@@ -9,7 +9,7 @@ import {
 
 /** The E2E server's owner (apps/api/src/e2e/server.ts): a master with the seeded data. */
 export const OWNER_EMAIL = 'owner@kb-chat.test';
-export const WEB_ORIGIN = 'http://localhost:4317';
+export const WEB_ORIGIN = `http://localhost:${process.env['KBC_E2E_WEB_PORT'] ?? '4317'}`;
 /** The CSRF header every state-changing call carries (ADR 0008). */
 export const CSRF = { 'x-requested-with': 'kb-chat' };
 
@@ -113,6 +113,39 @@ export async function pageAs(
   await fakeGoogle(page);
   await signIn(page.request, email);
   return page;
+}
+
+/**
+ * The six-digit code of the newest message to `to` (KBC-014), read from the E2E server's
+ * outbox once more than `seen` messages arrived (delivery runs after the reply).
+ */
+export async function codeSentTo(
+  api: APIRequestContext,
+  to: string,
+  seen = 0,
+): Promise<string> {
+  const read = async () => {
+    const response = await api.get(
+      `/api/e2e/outbox?to=${encodeURIComponent(to)}`,
+    );
+    return ((await response.json()) as { items: { text: string }[] }).items;
+  };
+  await expect.poll(async () => (await read()).length).toBeGreaterThan(seen);
+  const text = (await read()).at(-1)?.text ?? '';
+  const code = /\b(\d{6})\b/.exec(text)?.[1];
+  if (!code) throw new Error(`no code in the message to ${to}`);
+  return code;
+}
+
+/** How many messages went to `to` so far. */
+export async function sentCount(
+  api: APIRequestContext,
+  to: string,
+): Promise<number> {
+  const response = await api.get(
+    `/api/e2e/outbox?to=${encodeURIComponent(to)}`,
+  );
+  return ((await response.json()) as { items: unknown[] }).items.length;
 }
 
 /** A unique test e-mail, so parallel runs never share a person. */
