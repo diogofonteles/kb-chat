@@ -9,7 +9,10 @@ import { provideRouter } from '@angular/router';
 import { render, screen } from '@testing-library/angular';
 import { PrivacyPage } from './privacy-page.js';
 
-async function renderPolicy(privacyContactEmail: string | null) {
+async function renderPolicy(
+  privacyContactEmail: string | null,
+  failConfig = false,
+) {
   const result = await render(PrivacyPage, {
     providers: [
       provideZonelessChangeDetection(),
@@ -19,11 +22,15 @@ async function renderPolicy(privacyContactEmail: string | null) {
     ],
   });
   const http = TestBed.inject(HttpTestingController);
-  http.expectOne('/api/v1/auth/config').flush({
-    googleClientId: 'client-1',
-    codeChannels: ['email'],
-    privacyContactEmail,
-  });
+  const config = http.expectOne('/api/v1/auth/config');
+  if (failConfig)
+    config.flush('down', { status: 500, statusText: 'Server Error' });
+  else
+    config.flush({
+      googleClientId: 'client-1',
+      codeChannels: ['email'],
+      privacyContactEmail,
+    });
   await result.fixture.whenStable();
   return { ...result, http };
 }
@@ -56,7 +63,9 @@ describe('PrivacyPage (KBC-016)', () => {
     expect(
       screen.getByText(/mesmo depois que um acesso é retirado/),
     ).toBeTruthy();
-    expect(screen.getByText(/Registros de uso: até 90 dias/)).toBeTruthy();
+    expect(
+      screen.getByText(/Registros de uso: os com mais de 90 dias/),
+    ).toBeTruthy();
     expect(
       screen.getByText(/Última atualização: 25 de outubro de 2026/),
     ).toBeTruthy();
@@ -81,6 +90,20 @@ describe('PrivacyPage (KBC-016)', () => {
     await renderPolicy(null);
 
     expect(screen.queryByRole('link', { name: /@/ })).toBeNull();
+    expect(
+      screen.getByText(/fale com o administrador que aprovou o seu acesso/),
+    ).toBeTruthy();
+  });
+
+  it('still shows the policy and the fallback contact when the config fails', async () => {
+    await renderPolicy('dono@example.com', true);
+
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'Política de privacidade',
+      }),
+    ).toBeTruthy();
     expect(
       screen.getByText(/fale com o administrador que aprovou o seu acesso/),
     ).toBeTruthy();

@@ -5,7 +5,7 @@ const TIMEOUT_MS = 8_000;
 
 export interface ResendOptions {
   readonly apiKey: string;
-  /** A sender on a domain verified in Resend, e.g. "kb-chat <nao-responda@example.com>". */
+  /** A sender on a domain verified in Resend, e.g. "Nova Alexandria <nao-responda@example.com>". */
   readonly from: string;
   readonly fetch?: typeof fetch;
 }

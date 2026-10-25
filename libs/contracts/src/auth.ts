@@ -34,7 +34,8 @@ export const CSRF_HEADER_VALUE = 'kb-chat';
 export const authConfigSchema = z.object({
   googleClientId: z.string().min(1).nullable(),
   codeChannels: z.array(codeChannelSchema),
-  privacyContactEmail: z.email().nullable(),
+  // Defaults to null so a web newer than its API still reads the config.
+  privacyContactEmail: z.email().nullable().default(null),
 });
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 

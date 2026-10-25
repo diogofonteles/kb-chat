@@ -19,8 +19,11 @@
 }
 
 .brand {
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
   color: var(--color-text-muted);
+  text-decoration: none;
   font-family: var(--font-display);
   font-size: var(--text-lg);
   font-weight: 600;
@@ -72,8 +75,10 @@ a:focus-visible {
 .updated {
   margin: var(--space-8) 0 var(--space-4);
   color: var(--color-text-muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
+}
+
+.pending {
+  color: var(--color-text-muted);
 }
 
 .back {

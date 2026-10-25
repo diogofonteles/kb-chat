@@ -10,11 +10,11 @@ export const routes: Routes = [
       import('./features/chat/chat-page.js').then((m) => m.ChatPage),
   },
   {
-    // Public (KBC-016): the shell renders it with or without a session.
+    // Public (KBC-016): the shell renders the policy itself, with or without a session;
+    // the route only gives the address and the tab title.
     path: PRIVACY_PATH,
     title: $localize`:@@route.privacyTitle:Privacidade — Nova Alexandria`,
-    loadComponent: () =>
-      import('./features/privacy/privacy-page.js').then((m) => m.PrivacyPage),
+    children: [],
   },
   { path: '**', redirectTo: '' },
 ];

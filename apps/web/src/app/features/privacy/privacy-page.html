@@ -1,6 +1,6 @@
 <main class="privacy" aria-labelledby="privacy-title">
   <article class="policy">
-    <p class="brand" i18n="@@privacy.brand">Nova Alexandria</p>
+    <a class="brand" routerLink="/" i18n="@@privacy.brand">Nova Alexandria</a>
     <h1 id="privacy-title" i18n="@@privacy.title">Política de privacidade</h1>
     <p class="lead" i18n="@@privacy.intro">
       A Nova Alexandria é uma biblioteca de pesquisa de acesso restrito: só
@@ -75,8 +75,8 @@
         <li i18n="@@privacy.partyGoogle">
           <strong>Google:</strong> o login com a conta Google, o envio dos
           e-mails de código e de aviso (Gmail) e as fontes do site (Google
-          Fonts). Se o administrador trocar o envio de e-mails pelo Resend, é
-          ele quem os envia.
+          Fonts). Se o administrador passar a enviar os e-mails pelo Resend (um
+          serviço de envio de e-mails), é o Resend quem os envia.
         </li>
         <li i18n="@@privacy.partyAi">
           <strong>Provedor de IA escolhido nas Configurações</strong>
@@ -102,8 +102,8 @@
           retirado, até você pedir que sejam apagados.
         </li>
         <li i18n="@@privacy.retentionUsage">
-          Registros de uso: até 90 dias; os mais antigos são apagados quando o
-          servidor reinicia, ou antes, se você pedir.
+          Registros de uso: os com mais de 90 dias são apagados sempre que o
+          servidor reinicia; antes disso, se você pedir.
         </li>
         <li i18n="@@privacy.retentionShort">
           Códigos de entrada: 10 minutos. Sessões: 30 dias depois do último uso.
@@ -121,7 +121,13 @@
         Pela LGPD, você pode pedir para ver, corrigir ou apagar os seus dados, e
         pedir o fim do seu acesso a qualquer momento.
       </p>
-      @if (contact(); as email) {
+      <p i18n="@@privacy.controller">
+        O responsável pelos dados é o administrador da Nova Alexandria, que
+        aprova os acessos.
+      </p>
+      @if (loading()) {
+        <p class="pending" aria-hidden="true">…</p>
+      } @else if (contact(); as email) {
         <p i18n="@@privacy.contact">
           Para isso, escreva para <a [href]="'mailto:' + email">{{ email }}</a
           >.

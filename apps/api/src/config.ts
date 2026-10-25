@@ -96,7 +96,7 @@ export const configSchema = z
     /** Resend API key (secret) for one-time codes and access notices; empty → the API log (dev). */
     RESEND_API_KEY: blankAsUnset(z.string().min(1).optional()),
     /**
-     * The sender. Resend: an address on a verified domain, "kb-chat <nao-responda@example.com>".
+     * The sender. Resend: an address on a verified domain, "Nova Alexandria <nao-responda@example.com>".
      * SMTP: optional, default "Nova Alexandria <SMTP_USER>" (Gmail sends only as the account itself).
      */
     KB_CHAT_EMAIL_FROM: blankAsUnset(z.string().min(3).optional()),

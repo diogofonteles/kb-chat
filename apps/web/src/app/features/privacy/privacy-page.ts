@@ -24,7 +24,8 @@ export class PrivacyPage {
   private readonly api = inject(AuthApi);
   private readonly config = rxResource({ stream: () => this.api.config() });
 
-  /** Null while loading, on error or when the API names no contact. */
+  protected readonly loading = this.config.isLoading;
+  /** Null on error or when the API names no contact. */
   protected readonly contact = computed(() =>
     this.config.hasValue() ? this.config.value().privacyContactEmail : null,
   );
