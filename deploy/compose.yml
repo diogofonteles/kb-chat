@@ -36,10 +36,16 @@ services:
       # Sign-in is required (KBC-010): compose refuses to start without them.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID (.env)}
       KB_CHAT_OWNER_EMAIL: ${KB_CHAT_OWNER_EMAIL:?set KB_CHAT_OWNER_EMAIL (.env)}
-      # One-time codes and access notices go by email (KBC-014, ADR 0011): the image runs with
-      # NODE_ENV=production, where the API refuses to start without Resend.
-      RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY (.env)}
-      KB_CHAT_EMAIL_FROM: ${KB_CHAT_EMAIL_FROM:?set KB_CHAT_EMAIL_FROM (.env)}
+      # One-time codes and access notices go by email (KBC-014, ADR 0011/0012): the image runs
+      # with NODE_ENV=production, where the API refuses to start without one complete provider:
+      # Gmail SMTP (SMTP_USER + SMTP_PASSWORD, the free path) or Resend (RESEND_API_KEY +
+      # KB_CHAT_EMAIL_FROM). Blank values count as unset; deploy.sh checks the pair first.
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      KB_CHAT_EMAIL_FROM: ${KB_CHAT_EMAIL_FROM:-}
       # SMS codes stay off until the owner picks a provider (ADR 0011); `log` is refused here.
       KB_CHAT_SMS: ${KB_CHAT_SMS:-off}
     volumes:

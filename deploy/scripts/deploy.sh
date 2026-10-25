@@ -235,6 +235,27 @@ on_exit() {
   exit "$rc"
 }
 
+env_set() { grep -Eq "^$1=.+" "$DEPLOY_DIR/.env"; }
+
+# Sign-in settings plus one complete email provider: Gmail SMTP (SMTP_USER + SMTP_PASSWORD)
+# or Resend (RESEND_API_KEY + KB_CHAT_EMAIL_FROM). Half of the SMTP pair is a typo.
+check_env() {
+  local name
+  for name in KB_CHAT_DOMAIN GOOGLE_CLIENT_ID KB_CHAT_OWNER_EMAIL; do
+    env_set "$name" || { log "$name is empty in $DEPLOY_DIR/.env"; return 1; }
+  done
+  if env_set SMTP_USER && ! env_set SMTP_PASSWORD; then
+    log "SMTP_USER is set without SMTP_PASSWORD in $DEPLOY_DIR/.env"; return 1
+  fi
+  if env_set SMTP_PASSWORD && ! env_set SMTP_USER; then
+    log "SMTP_PASSWORD is set without SMTP_USER in $DEPLOY_DIR/.env"; return 1
+  fi
+  if ! env_set SMTP_USER && ! { env_set RESEND_API_KEY && env_set KB_CHAT_EMAIL_FROM; }; then
+    log "no email provider in $DEPLOY_DIR/.env: set SMTP_USER and SMTP_PASSWORD (Gmail), or RESEND_API_KEY and KB_CHAT_EMAIL_FROM"
+    return 1
+  fi
+}
+
 main() {
   if [ "${1:-}" = "--running" ]; then
     running_tag
@@ -267,11 +288,8 @@ main() {
   if [ "$to_log" -eq 1 ]; then exec >>"$DEPLOY_DIR/deploy.log" 2>&1; fi
   [ -f "$DEPLOY_DIR/.env" ] || { log "missing $DEPLOY_DIR/.env (see deploy/.env.example)"; exit 1; }
   # The API does not start without sign-in (KBC-010) nor, in production, without an email
-  # provider for one-time codes (KBC-014, ADR 0011): refuse before touching the release.
-  local name
-  for name in KB_CHAT_DOMAIN GOOGLE_CLIENT_ID KB_CHAT_OWNER_EMAIL RESEND_API_KEY KB_CHAT_EMAIL_FROM; do
-    grep -Eq "^$name=.+" "$DEPLOY_DIR/.env" || { log "$name is empty in $DEPLOY_DIR/.env"; exit 1; }
-  done
+  # provider for one-time codes (KBC-014, ADR 0011/0012): refuse before touching the release.
+  check_env || exit 1
   if grep -Eq "^KB_CHAT_SMS=[\"' ]*log" "$DEPLOY_DIR/.env"; then
     log "KB_CHAT_SMS=log writes codes to the log: not in production"; exit 1
   fi
