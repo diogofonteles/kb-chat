@@ -54,7 +54,7 @@ describe('Notifier (KBC-014, ADR 0011)', () => {
     expect(outbox.emails[0]?.text).toContain(origin);
     expect(outbox.sms[0]).toEqual({
       to: '+5581999990000',
-      text: 'kb-chat: seu código de acesso é 123456. Vale por 10 minutos.',
+      text: 'Nova Alexandria: seu código de acesso é 123456. Vale por 10 minutos.',
     });
   });
 });

@@ -1,7 +1,7 @@
 import type { CodePurpose } from './one-time-codes.js';
 
 /**
- * The pt-BR texts kb-chat sends by email or SMS (KBC-014, ADR 0011), in one place. Plain
+ * The pt-BR texts the product ("Nova Alexandria", KBC-016) sends by email or SMS (KBC-014, ADR 0011), in one place. Plain
  * text: nothing the person typed is ever read as markup.
  */
 export interface Text {
@@ -9,17 +9,17 @@ export interface Text {
   readonly text: string;
 }
 
-const SIGNATURE = '\n\n— kb-chat';
+const SIGNATURE = '\n\n— Nova Alexandria';
 
 const CODE_SUBJECT: Record<CodePurpose, string> = {
-  signup: 'Confirme seu e-mail no kb-chat',
-  login: 'Seu código de acesso ao kb-chat',
+  signup: 'Confirme seu e-mail na Nova Alexandria',
+  login: 'Seu código de acesso à Nova Alexandria',
 };
 
 const CODE_LEAD: Record<CodePurpose, string> = {
   signup:
     'Use este código para confirmar seu e-mail e enviar sua solicitação de acesso',
-  login: 'Use este código para entrar no kb-chat',
+  login: 'Use este código para entrar na Nova Alexandria',
 };
 
 export const codeEmail = (purpose: CodePurpose, code: string): Text => ({
@@ -28,20 +28,20 @@ export const codeEmail = (purpose: CodePurpose, code: string): Text => ({
 });
 
 export const codeSms = (code: string): string =>
-  `kb-chat: seu código de acesso é ${code}. Vale por 10 minutos.`;
+  `Nova Alexandria: seu código de acesso é ${code}. Vale por 10 minutos.`;
 
 export const alreadyHasAccess = (origin: string): Text => ({
-  subject: 'Você já tem acesso ao kb-chat',
+  subject: 'Você já tem acesso à Nova Alexandria',
   text: `Recebemos um pedido de acesso para este e-mail, mas ele já tem acesso. Entre em ${origin} com o Google ou com um código por e-mail.${SIGNATURE}`,
 });
 
 export const requestPending = (): Text => ({
-  subject: 'Sua solicitação de acesso ao kb-chat está em análise',
+  subject: 'Sua solicitação de acesso à Nova Alexandria está em análise',
   text: `Já existe uma solicitação de acesso para este e-mail. Você recebe outro e-mail quando um master aprovar.${SIGNATURE}`,
 });
 
 export const requestCooldown = (retryAt: string): Text => ({
-  subject: 'Sua solicitação de acesso ao kb-chat',
+  subject: 'Sua solicitação de acesso à Nova Alexandria',
   text: `A última solicitação deste e-mail foi recusada. Você pode pedir de novo a partir de ${formatDateTime(retryAt)} (horário de Brasília).${SIGNATURE}`,
 });
 
@@ -60,7 +60,7 @@ export const newRequestForMasters = (
   subject:
     `Nova solicitação de acesso: ${request.firstName} ${request.lastName}`.trim(),
   text: [
-    'Alguém pediu acesso ao kb-chat:',
+    'Alguém pediu acesso à Nova Alexandria:',
     '',
     `Nome: ${`${request.firstName} ${request.lastName}`.trim()}`,
     `E-mail: ${request.email}`,
@@ -72,8 +72,8 @@ export const newRequestForMasters = (
 });
 
 export const approved = (firstName: string, origin: string): Text => ({
-  subject: 'Seu acesso ao kb-chat foi aprovado',
-  text: `Olá${firstName ? `, ${firstName}` : ''}! Seu acesso ao kb-chat foi aprovado. Entre em ${origin} com o Google ou com um código enviado para este e-mail.${SIGNATURE}`,
+  subject: 'Seu acesso à Nova Alexandria foi aprovado',
+  text: `Olá${firstName ? `, ${firstName}` : ''}! Seu acesso à Nova Alexandria foi aprovado. Entre em ${origin} com o Google ou com um código enviado para este e-mail.${SIGNATURE}`,
 });
 
 function formatDateTime(iso: string): string {

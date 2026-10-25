@@ -294,7 +294,7 @@ export class OpenRouterAdapter implements AgentLlmPort {
   private headers(): Record<string, string> {
     return {
       authorization: `Bearer ${this.options.apiKey ?? ''}`,
-      'x-title': 'kb-chat',
+      'x-title': 'Nova Alexandria',
     };
   }
 }

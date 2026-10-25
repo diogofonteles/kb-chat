@@ -16,7 +16,7 @@ import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
 import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
-import type { ResearchConversation } from '@kb-chat/contracts';
+import type { ResearchConversation, TopicList } from '@kb-chat/contracts';
 import { EMPTY, of } from 'rxjs';
 import {
   FakeConversationsServer,
@@ -46,6 +46,7 @@ const usage = { track: vi.fn() };
 
 async function renderPage(
   extraProviders: { provide: unknown; useValue: unknown }[] = [],
+  topics: TopicList = TOPICS,
 ) {
   localStorage.clear();
   // A configured provider opens the research view; these tests start in the search view.
@@ -62,7 +63,7 @@ async function renderPage(
     ],
   });
   const http = TestBed.inject(HttpTestingController);
-  http.expectOne('/api/v1/topics').flush(TOPICS);
+  http.expectOne('/api/v1/topics').flush(topics);
   await view.fixture.whenStable();
   return { ...view, http };
 }
@@ -87,6 +88,13 @@ describe('ChatPage', () => {
     );
     expect(screen.getByText(/4\.235 documentos/)).toBeTruthy();
     expect(screen.getByText('O que você quer estudar hoje?')).toBeTruthy();
+  });
+
+  it('shows the product name as the title while no collection is open (KBC-016 AC-3)', async () => {
+    await renderPage([], { items: [], defaultSlug: null });
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Nova Alexandria' }),
+    ).toBeTruthy();
   });
 
   it('asks, shows a searching state and then the result cards', async () => {

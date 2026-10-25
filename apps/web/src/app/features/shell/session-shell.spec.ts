@@ -65,11 +65,11 @@ describe('SessionShell (KBC-010 BR-1)', () => {
 
     expect(container.querySelector('router-outlet')).toBeNull();
     expect(
-      screen.getByRole('heading', { level: 1, name: 'kb-chat' }),
+      screen.getByRole('heading', { level: 1, name: 'Nova Alexandria' }),
     ).toBeTruthy();
     expect(
       screen.getByText(
-        'Suas conversas e configurações ficam no servidor do kb-chat.',
+        'Suas conversas e configurações ficam no servidor da Nova Alexandria.',
       ),
     ).toBeTruthy();
   });

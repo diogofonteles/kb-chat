@@ -268,14 +268,14 @@ describe('no account enumeration (BR-3, NFR-3)', () => {
           .to('known@example.com')
           .map((m) => 'subject' in m && m.subject),
       ).toEqual([
-        'Você já tem acesso ao kb-chat',
-        'Seu código de acesso ao kb-chat',
+        'Você já tem acesso à Nova Alexandria',
+        'Seu código de acesso à Nova Alexandria',
       ]);
       expect(started.outbox.to('pending@example.com').at(-1)).toMatchObject({
-        subject: 'Sua solicitação de acesso ao kb-chat está em análise',
+        subject: 'Sua solicitação de acesso à Nova Alexandria está em análise',
       });
       expect(started.outbox.to('new@example.com').at(-1)).toMatchObject({
-        subject: 'Confirme seu e-mail no kb-chat',
+        subject: 'Confirme seu e-mail na Nova Alexandria',
       });
     });
   });
@@ -365,7 +365,7 @@ describe('approval gate and decisions (BR-1, BR-6, BR-7)', () => {
     expect(await pendingList(started, owner)).toEqual([]);
     await vi.waitFor(() =>
       expect(started.outbox.to('ana@example.com').at(-1)).toMatchObject({
-        subject: 'Seu acesso ao kb-chat foi aprovado',
+        subject: 'Seu acesso à Nova Alexandria foi aprovado',
       }),
     );
 
