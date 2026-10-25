@@ -5,7 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router, type Routes } from '@angular/router';
 import { render, screen } from '@testing-library/angular';
 import { authInterceptor } from '@core/auth/auth-interceptor.js';
 import { GoogleIdentity } from '@core/auth/google-identity.js';
@@ -15,11 +15,17 @@ import { routes } from '../../app.routes.js';
 import { anOwner } from '../../testing/session-fixtures.js';
 import { SessionShell } from './session-shell.js';
 
-async function renderApp() {
+const CONFIG = {
+  googleClientId: 'client',
+  codeChannels: ['email'],
+  privacyContactEmail: null,
+};
+
+async function renderApp(appRoutes: Routes = []) {
   const result = await render(SessionShell, {
     providers: [
       provideZonelessChangeDetection(),
-      provideRouter([]),
+      provideRouter(appRoutes),
       provideHttpClient(withInterceptors([authInterceptor])),
       provideHttpClientTesting(),
       {
@@ -72,5 +78,34 @@ describe('SessionShell (KBC-010 BR-1)', () => {
         'Suas conversas e configurações ficam no servidor da Nova Alexandria.',
       ),
     ).toBeTruthy();
+  });
+
+  it('shows the privacy policy at /privacidade without a session (KBC-016)', async () => {
+    const { http, fixture } = await renderApp(routes);
+    http
+      .expectOne('/api/v1/me')
+      .flush(
+        { error: { code: 'UNAUTHENTICATED', message: 'x' } },
+        { status: 401, statusText: 'Unauthorized' },
+      );
+    TestBed.tick();
+    http.expectOne('/api/v1/auth/config').flush(CONFIG);
+    await fixture.whenStable();
+
+    expect(await TestBed.inject(Router).navigateByUrl('/privacidade')).toBe(
+      true,
+    );
+    await vi.waitFor(() => http.expectOne('/api/v1/auth/config').flush(CONFIG));
+    await fixture.whenStable();
+
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'Política de privacidade',
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('heading', { level: 1, name: 'Nova Alexandria' }),
+    ).toBeNull();
   });
 });

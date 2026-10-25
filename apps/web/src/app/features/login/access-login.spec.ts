@@ -1,3 +1,4 @@
+import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -28,6 +29,7 @@ async function renderLogin(codeChannels: CodeChannel[] = ['email']) {
   const result = await render(LoginPage, {
     providers: [
       provideZonelessChangeDetection(),
+      provideRouter([]),
       provideHttpClient(),
       provideHttpClientTesting(),
       {
@@ -41,9 +43,11 @@ async function renderLogin(codeChannels: CodeChannel[] = ['email']) {
     ],
   });
   const http = TestBed.inject(HttpTestingController);
-  http
-    .expectOne('/api/v1/auth/config')
-    .flush({ googleClientId: 'client-1', codeChannels });
+  http.expectOne('/api/v1/auth/config').flush({
+    googleClientId: 'client-1',
+    codeChannels,
+    privacyContactEmail: null,
+  });
   await result.fixture.whenStable();
   return { ...result, http, google: () => callback };
 }

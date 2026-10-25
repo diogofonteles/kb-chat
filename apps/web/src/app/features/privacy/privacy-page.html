@@ -1,0 +1,135 @@
+<main class="privacy" aria-labelledby="privacy-title">
+  <article class="policy">
+    <p class="brand" i18n="@@privacy.brand">Nova Alexandria</p>
+    <h1 id="privacy-title" i18n="@@privacy.title">Política de privacidade</h1>
+    <p class="lead" i18n="@@privacy.intro">
+      A Nova Alexandria é uma biblioteca de pesquisa de acesso restrito: só
+      entra quem um administrador aprova. Esta página explica quais dados
+      pessoais ela guarda, para quê, quem participa do serviço e como pedir que
+      os seus dados sejam apagados, conforme a Lei Geral de Proteção de Dados
+      (LGPD, Lei 13.709/2018).
+    </p>
+
+    <section aria-labelledby="privacy-data">
+      <h2 id="privacy-data" i18n="@@privacy.dataTitle">
+        Quais dados guardamos
+      </h2>
+      <ul>
+        <li i18n="@@privacy.dataAccount">
+          <strong>Conta:</strong> se você entra com o Google, o nome, o e-mail e
+          a foto da conta Google; se pede acesso pelo formulário, o nome, o
+          sobrenome, o e-mail e o celular que você informa.
+        </li>
+        <li i18n="@@privacy.dataRequests">
+          <strong>Pedidos e permissões:</strong> os pedidos de acesso (com a
+          data e a resposta) e o que cada pessoa pode usar: acervos,
+          funcionalidades e papel.
+        </li>
+        <li i18n="@@privacy.dataCodes">
+          <strong>Códigos de entrada:</strong> guardados só como resumo
+          criptográfico (nunca o código em si); valem 10 minutos e servem uma
+          vez.
+        </li>
+        <li i18n="@@privacy.dataSession">
+          <strong>Sessão:</strong> um cookie de sessão, necessário para manter
+          você conectado. Não usamos cookies de publicidade nem de rastreamento.
+        </li>
+        <li i18n="@@privacy.dataConversations">
+          <strong>Conversas:</strong> o histórico completo das suas buscas e
+          pesquisas com IA fica no servidor, para você retomar quando quiser.
+        </li>
+        <li i18n="@@privacy.dataUsage">
+          <strong>Uso e gasto:</strong> um registro das buscas (pergunta, modo,
+          número de resultados e tempo) e do gasto com IA (modelo e custo), para
+          medir o uso e respeitar o teto de gasto diário.
+        </li>
+        <li i18n="@@privacy.dataSettings">
+          <strong>Configurações:</strong> suas preferências e, se você
+          cadastrar, chaves de API de provedores de IA, num arquivo que só o
+          servidor lê.
+        </li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="privacy-purpose">
+      <h2 id="privacy-purpose" i18n="@@privacy.purposeTitle">
+        Para que usamos
+      </h2>
+      <p i18n="@@privacy.purpose">
+        Para controlar quem entra e o que cada pessoa pode ver, para prestar o
+        serviço de busca e de pesquisa com IA, para enviar os códigos de entrada
+        e os avisos sobre pedidos de acesso, e para acompanhar o uso e o gasto
+        do serviço. Não usamos os seus dados para publicidade.
+      </p>
+    </section>
+
+    <section aria-labelledby="privacy-parties">
+      <h2 id="privacy-parties" i18n="@@privacy.partiesTitle">Quem participa</h2>
+      <p i18n="@@privacy.noSale">
+        Não vendemos nem compartilhamos os seus dados para outros fins. Só estes
+        serviços participam, cada um no seu papel:
+      </p>
+      <ul>
+        <li i18n="@@privacy.partyGoogle">
+          <strong>Google:</strong> o login com a conta Google, o envio dos
+          e-mails de código e de aviso (Gmail) e as fontes do site (Google
+          Fonts).
+        </li>
+        <li i18n="@@privacy.partyAi">
+          <strong>Provedor de IA escolhido nas Configurações</strong>
+          (Anthropic, OpenAI ou OpenRouter): recebe a sua pergunta, o histórico
+          da conversa e os trechos do acervo usados na resposta, só quando você
+          usa a pesquisa com IA.
+        </li>
+        <li i18n="@@privacy.partyOracle">
+          <strong>Oracle Cloud:</strong> hospeda o servidor e as cópias de
+          segurança, na região de São Paulo.
+        </li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="privacy-retention">
+      <h2 id="privacy-retention" i18n="@@privacy.retentionTitle">
+        Por quanto tempo
+      </h2>
+      <ul>
+        <li i18n="@@privacy.retentionAccount">
+          Conta, permissões, conversas e registros de uso: enquanto o seu acesso
+          existir, ou até você pedir que sejam apagados.
+        </li>
+        <li i18n="@@privacy.retentionShort">
+          Códigos de entrada: 10 minutos. Sessões: 30 dias depois do último uso.
+        </li>
+        <li i18n="@@privacy.retentionBackups">
+          Cópias de segurança: feitas todo dia, criptografadas e guardadas por
+          30 dias; depois disso são apagadas automaticamente.
+        </li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="privacy-rights">
+      <h2 id="privacy-rights" i18n="@@privacy.rightsTitle">Seus direitos</h2>
+      <p i18n="@@privacy.rights">
+        Pela LGPD, você pode pedir para ver, corrigir ou apagar os seus dados, e
+        pedir o fim do seu acesso a qualquer momento.
+      </p>
+      @if (contact(); as email) {
+        <p i18n="@@privacy.contact">
+          Para isso, escreva para <a [href]="'mailto:' + email">{{ email }}</a
+          >.
+        </p>
+      } @else {
+        <p i18n="@@privacy.contactFallback">
+          Para isso, fale com o administrador que aprovou o seu acesso.
+        </p>
+      }
+    </section>
+
+    <p class="updated" i18n="@@privacy.updated">
+      Última atualização: 25 de outubro de 2026.
+    </p>
+    <a class="back" routerLink="/" i18n="@@privacy.back"
+      >Voltar à Nova Alexandria</a
+    >
+  </article>
+</main>

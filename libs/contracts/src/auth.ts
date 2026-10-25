@@ -27,12 +27,14 @@ export const CSRF_HEADER = 'x-requested-with';
 export const CSRF_HEADER_VALUE = 'kb-chat';
 
 /**
- * GET /api/v1/auth/config: the public Google client id the web signs in with, and where a
- * one-time sign-in code can go (KBC-014: `sms` only with a provider).
+ * GET /api/v1/auth/config: the public Google client id the web signs in with, where a
+ * one-time sign-in code can go (KBC-014: `sms` only with a provider) and the contact the
+ * public privacy policy names for data requests (KBC-016: the owner's email, from config).
  */
 export const authConfigSchema = z.object({
   googleClientId: z.string().min(1).nullable(),
   codeChannels: z.array(codeChannelSchema),
+  privacyContactEmail: z.email().nullable(),
 });
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 

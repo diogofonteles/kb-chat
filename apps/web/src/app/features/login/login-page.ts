@@ -12,6 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { errorMessage } from '@core/api/api-error.js';
 import { AuthApi } from '@core/auth/auth-api.js';
 import {
@@ -32,7 +33,7 @@ type Mode = 'start' | 'code' | 'signup';
  */
 @Component({
   selector: 'app-login-page',
-  imports: [CodeSignIn, GoogleAccessRequest, SignUpForm],
+  imports: [CodeSignIn, GoogleAccessRequest, SignUpForm, RouterLink],
   templateUrl: './login-page.html',
   styleUrl: './login-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

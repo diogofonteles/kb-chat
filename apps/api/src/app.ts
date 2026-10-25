@@ -258,6 +258,7 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
       googleClientId: config.GOOGLE_CLIENT_ID ?? null,
       loginRatePerMinute: config.AUTH_RATE_LIMIT,
       codeChannels: access.notifier.smsEnabled ? ['email', 'sms'] : ['email'],
+      privacyContactEmail: config.KB_CHAT_OWNER_EMAIL ?? null,
       notInvited: async (identity) => ({
         ticket: access.tickets.issue(identity),
         request: await access.requests.stateFor(identity),

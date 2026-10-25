@@ -6,7 +6,8 @@
 #   SMOKE_INSECURE=1 smoke.sh https://localhost:8443          # Caddy's local CA
 #   SMOKE_RESOLVE=kb.example.com:443:127.0.0.1 smoke.sh       # from the VM itself
 # Checks: /health answers with a status; the SPA shell loads with the security headers;
-# /mcp is not served publicly; without a session the API refuses (401) once sign-in is on.
+# /mcp is not served publicly; without a session the API refuses (401) once sign-in is on;
+# the public privacy policy (/privacidade, KBC-016) is served without a session.
 #   SMOKE_URL=...    base URL when no argument is given
 #   SMOKE_AUTH=off   skips the 401 check (a build without KBC-010)
 #   SMOKE_STRICT=1   also fails when /health reports "degraded" (qmd down, kb fallback)
@@ -84,6 +85,12 @@ status_of() {
   "${CURL[@]}" -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || echo 000
 }
 
+check_privacy() {
+  local body
+  body="$("${CURL[@]}" -f "$BASE/privacidade" 2>/dev/null)" || { fail "/privacidade did not answer 200"; return; }
+  if grep -q '<app-root' <<<"$body"; then pass "/privacidade serves the SPA shell without a session"; else fail "/privacidade is not the SPA shell"; fi
+}
+
 check_mcp_hidden() {
   local code
   # The real route shape (/mcp/turns/:token), with a token that cannot exist.
@@ -100,6 +107,7 @@ check_auth() {
 
 check_health
 check_shell
+check_privacy
 check_mcp_hidden
 check_auth
 

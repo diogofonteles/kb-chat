@@ -175,6 +175,7 @@ describe('sign-in (BR-1, BR-2)', () => {
     expect((await anonymous('GET', '/api/v1/auth/config')).json()).toEqual({
       googleClientId: TEST_CLIENT_ID,
       codeChannels: ['email'],
+      privacyContactEmail: OWNER_EMAIL,
     });
   });
 
