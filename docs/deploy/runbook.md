@@ -96,9 +96,15 @@ O kb-chat manda por e-mail os códigos de entrada e de cadastro e os avisos de s
    sudo grep -c '^SMTP_PASSWORD=.' "$ENV"   # 1 (conta a linha sem mostrar o valor)
    ```
 
-   `SMTP_HOST` (`smtp.gmail.com`) e `SMTP_PORT` (`465`, TLS desde o início) já são o padrão. O remetente fica `Nova Alexandria <SMTP_USER>`; para mudar o nome, use `KB_CHAT_EMAIL_FROM=Nome <a mesma conta>` (o Gmail troca qualquer outro endereço pelo da conta).
+   `SMTP_HOST` (`smtp.gmail.com`) e `SMTP_PORT` (`465`, TLS desde o início) já são o padrão. O remetente fica `Nova Alexandria <SMTP_USER>`; para mudar o nome, use `KB_CHAT_EMAIL_FROM=Nome <a mesma conta>` (o Gmail troca qualquer outro endereço pelo da conta). Vindo do Resend, apague o `KB_CHAT_EMAIL_FROM` antigo, senão ele continua valendo como remetente.
 5. Depois do deploy, peça um código em "Entrar com código" com o seu e-mail e confira a chegada (e a pasta de spam). A pasta *Enviados* da conta dedicada mostra cada envio.
-6. Se o envio falhar, o log da API mostra só os códigos (ex.: `SMTP refused the email (EAUTH 535)` = senha de app errada ou revogada). Para trocar a senha, revogue a antiga em *apppasswords*, crie outra e repita o item 4.
+6. Se o envio falhar, o log da API mostra só os códigos (ex.: `SMTP refused the email (EAUTH 535)` = senha de app errada ou revogada). Para trocar a senha, revogue a antiga em *apppasswords*, crie outra, repita o item 4 e recrie o contêiner da API (ele só lê o `.env` ao ser criado):
+
+   ```bash
+   cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env up -d api
+   ```
+
+   Depois peça um código de novo para conferir.
 
 **Alternativa: Resend** (quando houver um domínio próprio verificado). Deixe `SMTP_USER` e `SMTP_PASSWORD` vazios, crie a conta em [resend.com](https://resend.com) (3.000 e-mails por mês, 100 por dia), adicione o domínio em *Domains*, crie no DNS os registros que ele mostrar (SPF/DKIM `TXT` e `MX` de retorno) e espere **Verified**; crie uma chave **Sending access** só para esse domínio e grave `RESEND_API_KEY` (pelo mesmo `read -s`) e `KB_CHAT_EMAIL_FROM=kb-chat <nao-responda@<seu-domínio>>`. Sem domínio verificado o Resend só entrega para o dono da conta. Com o par SMTP preenchido, o Gmail tem prioridade.
 

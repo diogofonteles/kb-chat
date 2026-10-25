@@ -43,7 +43,7 @@ Variables: [`.env.example`](.env.example), loaded from the repository root `.env
 docker build -f apps/api/Dockerfile -t kb-chat-api:local . && docker build -f apps/web/Dockerfile -t kb-chat-web:local .
 KB_CHAT_TAG=local KB_CHAT_REGISTRY=docker.io/library KB_CHAT_DOMAIN=localhost KB_CHAT_DATA=<dir> HTTP_PORT=8080 HTTPS_PORT=8443 \
   WEB_ORIGIN=https://localhost:8443 GOOGLE_CLIENT_ID=<id> KB_CHAT_OWNER_EMAIL=<email> \
-  SMTP_USER=<gmail> SMTP_PASSWORD=<app-password> docker compose -f deploy/compose.yml up -d --wait
+  SMTP_USER=smoke@example.com SMTP_PASSWORD=unused docker compose -f deploy/compose.yml up -d --wait
 SMOKE_INSECURE=1 deploy/scripts/smoke.sh https://localhost:8443
 ```
 

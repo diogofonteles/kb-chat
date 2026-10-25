@@ -235,7 +235,16 @@ on_exit() {
   exit "$rc"
 }
 
-env_set() { grep -Eq "^$1=.+" "$DEPLOY_DIR/.env"; }
+# True when NAME has a non-blank effective value: the last NAME= line (as compose reads it),
+# trimmed and without surrounding quotes, so NAME="" or NAME=<spaces> count as unset.
+env_set() {
+  local value
+  value="$(env_value "$1")"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  case "$value" in \"*\") value="${value:1:${#value}-2}" ;; \'*\') value="${value:1:${#value}-2}" ;; esac
+  [ -n "${value//[[:space:]]/}" ]
+}
 
 # Sign-in settings plus one complete email provider: Gmail SMTP (SMTP_USER + SMTP_PASSWORD)
 # or Resend (RESEND_API_KEY + KB_CHAT_EMAIL_FROM). Half of the SMTP pair is a typo.
