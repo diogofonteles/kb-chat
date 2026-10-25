@@ -1,4 +1,6 @@
-# Visão — kb-chat
+# Visão — Nova Alexandria
+
+Nome do produto decidido pelo dono em 2026-10-25 (KBC-016): **Nova Alexandria**. A Biblioteca de Alexandria guardava o conhecimento do mundo antigo, e é em Alexandria que surge o Corpus Hermeticum: uma biblioteca de conhecimento universal com núcleo esotérico (o hermetismo) que também vai guardar outras ciências. O repositório e os identificadores internos continuam `kb-chat`.
 
 ## Por que estamos aqui (KB-01)
 
@@ -8,7 +10,7 @@ Pesquisar o que já foi ingerido no kb, pelo navegador e numa conversa, sem prec
 
 > **Para** quem estuda um acervo ingerido no kb (começando pelo dono e o hermetismo)
 > **que** precisa achar ensinamentos espalhados em milhares de apostilas, mas só consegue pelo terminal,
-> **o kb-chat é** uma página de pesquisa em forma de chat
+> **a Nova Alexandria é** uma página de pesquisa em forma de chat
 > **que** encontra trechos e documentos por palavra ou por significado, com filtros visuais, e, quando pedido, escreve uma resposta citando as fontes.
 > **Diferente** de digitar `kb search` e `kb find` com flags no terminal ou de abrir arquivos no Obsidian,
 > **nosso produto** entende a pergunta em linguagem natural, mostra os filtros como chips clicáveis e leva direto ao trecho de origem.
