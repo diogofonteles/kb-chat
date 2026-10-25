@@ -1,6 +1,7 @@
 import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import nodemailer from 'nodemailer';
 import { describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../logger.js';
 import { JsonDocumentStore } from './json-document-store.js';
@@ -159,8 +160,18 @@ describe('SmtpEmailSender (KBC-015, ADR 0012)', () => {
     );
   });
 
-  it('builds a real nodemailer transport when none is injected', () => {
-    expect(() => new SmtpEmailSender(gmail)).not.toThrow();
+  it('builds a real nodemailer SMTP transport when none is injected', () => {
+    const createTransport = vi.spyOn(nodemailer, 'createTransport');
+
+    new SmtpEmailSender(gmail);
+
+    expect(createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+      }),
+    );
   });
 });
 

@@ -5,7 +5,7 @@ export interface EmailMessage {
   readonly text: string;
 }
 
-/** Resend in production; the API log in development; an outbox in tests and E2E. */
+/** Gmail SMTP or Resend in production (ADR 0012); the API log in development; an outbox in tests and E2E. */
 export interface EmailSenderPort {
   /** Throws when the provider refuses or does not answer. */
   send(message: EmailMessage): Promise<void>;

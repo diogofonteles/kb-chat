@@ -107,7 +107,7 @@ export const configSchema = z
       z.coerce.number().int().min(1).max(65535).default(465),
     ),
     /** The Gmail account that sends; set together with SMTP_PASSWORD. */
-    SMTP_USER: blankAsUnset(z.string().min(1).optional()),
+    SMTP_USER: blankAsUnset(z.email().optional()),
     /** Its app password (secret, myaccount.google.com/apppasswords); set with SMTP_USER. */
     SMTP_PASSWORD: blankAsUnset(z.string().min(1).optional()),
     /** SMS codes: off (default; no free provider for Brazil, ADR 0011) | log (development). */
@@ -154,7 +154,7 @@ export function assertSignInConfigured(
 const LOOPBACK = new Set(['127.0.0.1', '::1']);
 
 /** True when one email provider has everything it needs (ADR 0011, ADR 0012). */
-export function hasEmailProvider(config: AppConfig): boolean {
+function hasEmailProvider(config: AppConfig): boolean {
   const smtp = Boolean(config.SMTP_USER && config.SMTP_PASSWORD);
   const resend = Boolean(config.RESEND_API_KEY && config.KB_CHAT_EMAIL_FROM);
   return smtp || resend;

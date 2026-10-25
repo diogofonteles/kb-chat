@@ -74,6 +74,12 @@ describe('SMTP settings (KBC-015 AC-5)', () => {
     ).toThrow(/SMTP_PASSWORD/);
   });
 
+  it('refuses an SMTP_USER that is not an email address', () => {
+    expect(() =>
+      loadConfig({ SMTP_USER: 'kbchat', SMTP_PASSWORD: 'app-password' }),
+    ).toThrow(/Invalid configuration/);
+  });
+
   it('never echoes the SMTP password in a configuration error', () => {
     expect(() =>
       loadConfig({ SMTP_PASSWORD: 'app-password-secret', PORT: 'abc' }),
