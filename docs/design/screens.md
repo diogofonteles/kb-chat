@@ -167,7 +167,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 
 ## T5. Lateral: conversa, histórico, acervo e tema
 
-- **+ Nova conversa** e o **histórico completo**, guardado pela API local neste computador e rotulado "neste computador": todas as conversas das duas visões, sem limite (KBC-005 BR-1, emenda 2026-10-24). Restaurar uma conversa com IA mostra as respostas salvas sem chamar a IA.
+- **+ Nova conversa** e o **histórico completo**, guardado pela API local neste computador e rotulado "salvo no servidor": todas as conversas das duas visões, sem limite (KBC-005 BR-1, emenda 2026-10-24). Restaurar uma conversa com IA mostra as respostas salvas sem chamar a IA.
 - Uma conversa que ainda não chegou à API fica guardada no navegador e é reenviada sozinha; enquanto isso, a lateral avisa "Ainda não consegui salvar uma conversa no histórico…".
 - **Acervo ▾**: lista de `kb topic list` com a contagem de documentos. Trocar de acervo inicia uma conversa nova (aviso inline, sem modal).
 - **Tema**: "Automático (claro/escuro)" · "Claro" · "Escuro" · "Esotérico", lembrado no navegador.
@@ -208,7 +208,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 
 **Objetivo:** entrar com a própria conta Google em um clique. **Sucesso:** do botão ao app sem digitar nada.
 
-- Tela própria, centralizada, antes de qualquer outra (login obrigatório, inclusive no Mac do dono): "kb-chat" (título), uma linha de descrição, o botão do Google "Fazer login com o Google" (Google Identity Services) e a nota "Seus dados ficam neste computador."
+- Tela própria, centralizada, antes de qualquer outra (login obrigatório, inclusive no Mac do dono): "kb-chat" (título), uma linha de descrição, o botão do Google "Fazer login com o Google" (Google Identity Services) e a nota "Suas conversas e configurações ficam no servidor do kb-chat."
 - Sem convite: "Seu acesso ainda não foi liberado; peça a um master." com "Sair" (volta ao botão, sem o login automático do Google).
 - Qualquer resposta 401 depois disso (sessão revogada ou vencida) recarrega a página e volta a esta tela; nada da pessoa anterior fica na memória (BR-6).
 

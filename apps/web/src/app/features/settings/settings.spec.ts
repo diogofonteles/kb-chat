@@ -409,7 +409,11 @@ describe('Configurações', () => {
     const { fixture } = await openSettings();
     fireEvent.click(screen.getByRole('button', { name: 'Sobre' }));
     await fixture.whenStable();
-    expect(screen.getByText(/Seus dados ficam neste computador/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Suas conversas e configurações ficam no servidor do kb-chat/,
+      ),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Rever o assistente de início' }),
     );

@@ -515,7 +515,7 @@ describe('ChatPage side panel (KBC-005)', () => {
       conversations.saved.set(saved.id, saved);
     await renderPage();
     const history = screen.getByRole('navigation', { name: 'Histórico' });
-    expect(screen.getByText('neste computador')).toBeTruthy();
+    expect(screen.getByText('salvo no servidor')).toBeTruthy();
     const items = within(history).getAllByRole('button');
     expect(
       items.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),

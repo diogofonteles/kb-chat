@@ -48,7 +48,9 @@ test.describe('signed out', () => {
       page.getByRole('button', { name: 'Fazer login com o Google' }),
     ).toBeVisible();
     await expect(
-      page.getByText('Seus dados ficam neste computador.'),
+      page.getByText(
+        'Suas conversas e configurações ficam no servidor do kb-chat.',
+      ),
     ).toBeVisible();
     expect((await page.request.get('/api/v1/topics')).status()).toBe(401);
     await shoot(page, 'login');
