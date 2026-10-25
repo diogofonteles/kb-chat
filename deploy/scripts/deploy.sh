@@ -266,11 +266,15 @@ main() {
   trap '' HUP PIPE
   if [ "$to_log" -eq 1 ]; then exec >>"$DEPLOY_DIR/deploy.log" 2>&1; fi
   [ -f "$DEPLOY_DIR/.env" ] || { log "missing $DEPLOY_DIR/.env (see deploy/.env.example)"; exit 1; }
-  # The API does not start without sign-in (KBC-010): refuse before touching the release.
+  # The API does not start without sign-in (KBC-010) nor, in production, without an email
+  # provider for one-time codes (KBC-014, ADR 0011): refuse before touching the release.
   local name
-  for name in KB_CHAT_DOMAIN GOOGLE_CLIENT_ID KB_CHAT_OWNER_EMAIL; do
+  for name in KB_CHAT_DOMAIN GOOGLE_CLIENT_ID KB_CHAT_OWNER_EMAIL RESEND_API_KEY KB_CHAT_EMAIL_FROM; do
     grep -Eq "^$name=.+" "$DEPLOY_DIR/.env" || { log "$name is empty in $DEPLOY_DIR/.env"; exit 1; }
   done
+  if grep -Eq '^KB_CHAT_SMS=log' "$DEPLOY_DIR/.env"; then
+    log "KB_CHAT_SMS=log writes codes to the log: not in production"; exit 1
+  fi
 
   take_lock
   trap on_exit EXIT

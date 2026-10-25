@@ -36,6 +36,12 @@ services:
       # Sign-in is required (KBC-010): compose refuses to start without them.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID (.env)}
       KB_CHAT_OWNER_EMAIL: ${KB_CHAT_OWNER_EMAIL:?set KB_CHAT_OWNER_EMAIL (.env)}
+      # One-time codes and access notices go by email (KBC-014, ADR 0011): the image runs with
+      # NODE_ENV=production, where the API refuses to start without Resend.
+      RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY (.env)}
+      KB_CHAT_EMAIL_FROM: ${KB_CHAT_EMAIL_FROM:?set KB_CHAT_EMAIL_FROM (.env)}
+      # SMS codes stay off until the owner picks a provider (ADR 0011); `log` is refused here.
+      KB_CHAT_SMS: ${KB_CHAT_SMS:-off}
     volumes:
       # The vault is read-only for the API (Q7); rsync from the owner's Mac writes it.
       - ${KB_CHAT_DATA:-/srv/kb-chat}/vault:/vault:ro
