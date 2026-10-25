@@ -33,33 +33,75 @@ describe('loadConfig', () => {
   });
 });
 
-describe('assertDeliveryConfigured (KBC-014 FR-7, AC-13)', () => {
-  const production = { NODE_ENV: 'production' };
+describe('SMTP settings (KBC-015 AC-5)', () => {
+  it('defaults to Gmail on 465', () => {
+    expect(loadConfig({})).toMatchObject({
+      SMTP_HOST: 'smtp.gmail.com',
+      SMTP_PORT: 465,
+    });
+    expect(loadConfig({ SMTP_PORT: '587' }).SMTP_PORT).toBe(587);
+  });
 
-  it('stops a production API without Resend', () => {
+  it('refuses half of the SMTP pair in any environment', () => {
+    expect(() => loadConfig({ SMTP_USER: 'kbchat@gmail.com' })).toThrow(
+      /SMTP_PASSWORD/,
+    );
+    expect(() => loadConfig({ SMTP_PASSWORD: 'app-password' })).toThrow(
+      /SMTP_USER/,
+    );
+    expect(() =>
+      loadConfig({ SMTP_PASSWORD: 'app-password', NODE_ENV: 'production' }),
+    ).toThrow(/Invalid configuration/);
+  });
+
+  it('never echoes the SMTP password in a configuration error', () => {
+    expect(() =>
+      loadConfig({ SMTP_PASSWORD: 'app-password-secret', PORT: 'abc' }),
+    ).toThrow(/Invalid configuration/);
+    expect(() =>
+      loadConfig({ SMTP_PASSWORD: 'app-password-secret', PORT: 'abc' }),
+    ).not.toThrow(/app-password-secret/);
+  });
+});
+
+describe('assertDeliveryConfigured (KBC-014 FR-7, KBC-015 AC-6)', () => {
+  const production = { NODE_ENV: 'production' };
+  const smtp = { SMTP_USER: 'kbchat@gmail.com', SMTP_PASSWORD: 'app-password' };
+  const resend = {
+    RESEND_API_KEY: 'k',
+    KB_CHAT_EMAIL_FROM: 'kb-chat <a@example.com>',
+  };
+  const bothPaths =
+    'set SMTP_USER and SMTP_PASSWORD (Gmail), or RESEND_API_KEY and KB_CHAT_EMAIL_FROM';
+
+  it('stops a production API without a complete email provider', () => {
     expect(() => assertDeliveryConfigured(loadConfig(production))).toThrow(
-      'set RESEND_API_KEY and KB_CHAT_EMAIL_FROM',
+      bothPaths,
     );
     expect(() =>
       assertDeliveryConfigured(
         loadConfig({ ...production, RESEND_API_KEY: 'k' }),
       ),
-    ).toThrow('set KB_CHAT_EMAIL_FROM');
+    ).toThrow(bothPaths);
+  });
+
+  it('starts production with only the Gmail SMTP pair, or only Resend', () => {
+    expect(() =>
+      assertDeliveryConfigured(loadConfig({ ...production, ...smtp })),
+    ).not.toThrow();
+    expect(() =>
+      assertDeliveryConfigured(loadConfig({ ...production, ...resend })),
+    ).not.toThrow();
   });
 
   it('treats an API listening beyond loopback as production, NODE_ENV or not', () => {
     expect(() =>
       assertDeliveryConfigured(loadConfig({ HOST: '0.0.0.0' })),
-    ).toThrow('set RESEND_API_KEY');
+    ).toThrow(bothPaths);
   });
 
   it('refuses the SMS log adapter in production', () => {
-    const config = loadConfig({
-      ...production,
-      RESEND_API_KEY: 'k',
-      KB_CHAT_EMAIL_FROM: 'kb-chat <a@example.com>',
-      KB_CHAT_SMS: 'log',
-    });
+    const config = loadConfig({ ...production, ...smtp, KB_CHAT_SMS: 'log' });
     expect(() => assertDeliveryConfigured(config)).toThrow(/not in production/);
   });
 
@@ -67,14 +109,5 @@ describe('assertDeliveryConfigured (KBC-014 FR-7, AC-13)', () => {
     const config = loadConfig({ KB_CHAT_SMS: 'log' });
     expect(config.NODE_ENV).toBe('development');
     expect(() => assertDeliveryConfigured(config)).not.toThrow();
-    expect(() =>
-      assertDeliveryConfigured(
-        loadConfig({
-          ...production,
-          RESEND_API_KEY: 'k',
-          KB_CHAT_EMAIL_FROM: 'kb-chat <a@example.com>',
-        }),
-      ),
-    ).not.toThrow();
   });
 });
