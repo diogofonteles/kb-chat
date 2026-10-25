@@ -70,8 +70,10 @@ VAULT_FILTERS=(--exclude='/_*/' --exclude='/.*' --exclude='/*.sh' --exclude='.DS
 
 # Count the deletions with a dry run first and refuse before touching the VM: rsync's own
 # --max-delete only stops after deleting that many files.
-deletions="$("${RSYNC[@]}" --dry-run --delete "${VAULT_FILTERS[@]}" "$VAULT/" "$HOST:$REMOTE_ROOT/vault/" |
-  grep -c '^\*deleting' || true)"
+# A failed dry run (SSH down, rsync missing on the VM) aborts: it must never count as 0.
+plan="$("${RSYNC[@]}" --dry-run --delete "${VAULT_FILTERS[@]}" "$VAULT/" "$HOST:$REMOTE_ROOT/vault/")" ||
+  die "the dry run to count deletions failed; nothing was sent"
+deletions="$(grep -c '^\*deleting' <<<"$plan" || true)"
 if [ "$deletions" -gt "$MAX_DELETE" ]; then
   die "would delete $deletions files on the VM (limit $MAX_DELETE); nothing was sent. Check the vault, then pass --max-delete $deletions"
 fi

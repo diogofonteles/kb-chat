@@ -25,7 +25,10 @@ if grep -vqE '^(state|claude)(/|$)|^deploy/(\.env|release\.env|releases\.log)$' 
   exit 1
 fi
 # Regular files and folders only: a link could point the restore outside $ROOT.
-if tar --zstd -tvf "$work/state.tar.zst" | grep -qvE '^[-d]'; then
+# The listing goes to a file first: `grep -q` on a pipe could stop tar early and, with
+# pipefail, hide the very link it found.
+tar --zstd -tvf "$work/state.tar.zst" >"$work/vlist"
+if grep -qvE '^[-d]' "$work/vlist"; then
   echo "restore: the archive holds links or special files" >&2
   exit 1
 fi
