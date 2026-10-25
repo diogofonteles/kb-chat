@@ -28,6 +28,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-010](KBC-010-google-login-and-permissions.md) | Login com conta Google e acesso por permissões (funcionalidades e acervos) | release-1 | done | KBC-007, KBC-008 |
 | [KBC-012](KBC-012-deploy-oracle-cloud.md) | Publicar em produção na Oracle Cloud (Always Free): VM ARM, Compose, Caddy com HTTPS, deploy por merge em `main`, backup criptografado | release-1 | in-review | KBC-010 |
 | [KBC-014](KBC-014-access-requests-and-code-sign-in.md) | Solicitar acesso, cadastro sem Google e entrada com código por e-mail ou SMS | release-1 | in-review | KBC-010 |
+| [KBC-015](KBC-015-gmail-smtp-email-delivery.md) | Enviar os e-mails de código e de aprovação pelo SMTP do Gmail (produção 100% gratuita) | release-1 | in-review | KBC-014 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
 ## Definição de pronto (global)
@@ -47,4 +48,5 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 - 2026-10-24: o dono tornou requisito o login com conta Google e o acesso a funcionalidades e acervos por permissão (KBC-010, ADR 0008). Entra antes do KBC-009 e substitui o "usuário único local" da ADR 0005.
 - 2026-10-24 (pedido do dono): a produção vai para uma VM Always Free da OCI (KBC-012, ADR 0010). Só produção fica hospedada; o Mac do dono é o staging. Tudo pronto para rodar; a conta OCI, o domínio e os logins são do dono.
 - 2026-10-25: o dono pediu que ninguém entre sem aprovação, com cadastro sem Google e entrada por código (KBC-014, ADR 0011). O SMS sai desligado até o dono escolher um provedor (nenhum é gratuito no Brasil).
+- 2026-10-25: o dono quer a produção 100% gratuita e não vai comprar domínio. Os e-mails saem pelo SMTP do Gmail com senha de app (KBC-015, ADR 0012) e o site roda num subdomínio do DuckDNS; o Resend fica como alternativa para quando houver domínio.
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.
