@@ -5,6 +5,13 @@ import { z } from 'zod';
 const expandHome = (path: string): string =>
   path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : resolve(path);
 
+/**
+ * Compose passes `NAME=` (or `${NAME:-}`) as an empty string: for the optional email
+ * settings, blank means unset, so a deploy .env may leave the unused provider empty.
+ */
+const blankAsUnset = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema);
+
 const csv = z
   .string()
   .transform((value) => value.split(',').map((item) => item.trim()))
@@ -87,20 +94,22 @@ export const configSchema = z
       .enum(['development', 'production', 'test'])
       .default('development'),
     /** Resend API key (secret) for one-time codes and access notices; empty → the API log (dev). */
-    RESEND_API_KEY: z.string().min(1).optional(),
+    RESEND_API_KEY: blankAsUnset(z.string().min(1).optional()),
     /**
      * The sender. Resend: an address on a verified domain, "kb-chat <nao-responda@example.com>".
-     * SMTP: optional, default "kb-chat <SMTP_USER>" (Gmail sends only as the account itself).
+     * SMTP: optional, default "Nova Alexandria <SMTP_USER>" (Gmail sends only as the account itself).
      */
-    KB_CHAT_EMAIL_FROM: z.string().min(3).optional(),
+    KB_CHAT_EMAIL_FROM: blankAsUnset(z.string().min(3).optional()),
     /** SMTP server of the free email path (KBC-015, ADR 0012): Gmail by default. */
-    SMTP_HOST: z.string().min(1).default('smtp.gmail.com'),
+    SMTP_HOST: blankAsUnset(z.string().min(1).default('smtp.gmail.com')),
     /** 465 speaks TLS from the start; any other port must offer STARTTLS. */
-    SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
+    SMTP_PORT: blankAsUnset(
+      z.coerce.number().int().min(1).max(65535).default(465),
+    ),
     /** The Gmail account that sends; set together with SMTP_PASSWORD. */
-    SMTP_USER: z.string().min(1).optional(),
+    SMTP_USER: blankAsUnset(z.string().min(1).optional()),
     /** Its app password (secret, myaccount.google.com/apppasswords); set with SMTP_USER. */
-    SMTP_PASSWORD: z.string().min(1).optional(),
+    SMTP_PASSWORD: blankAsUnset(z.string().min(1).optional()),
     /** SMS codes: off (default; no free provider for Brazil, ADR 0011) | log (development). */
     KB_CHAT_SMS: z.enum(['off', 'log']).default('off'),
     LOG_LEVEL: z

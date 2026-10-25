@@ -64,7 +64,7 @@ describe('SmtpEmailSender (KBC-015, ADR 0012)', () => {
     port: 465,
     user: 'kbchat@gmail.com',
     password: 'app-password-secret',
-    from: 'kb-chat <kbchat@gmail.com>',
+    from: 'Nova Alexandria <kbchat@gmail.com>',
   };
 
   function fakeTransport(sendMail: () => Promise<unknown> = async () => ({})) {
@@ -89,7 +89,7 @@ describe('SmtpEmailSender (KBC-015, ADR 0012)', () => {
     await sender.send(message);
 
     expect(transport.sent).toEqual([
-      { from: 'kb-chat <kbchat@gmail.com>', ...message },
+      { from: 'Nova Alexandria <kbchat@gmail.com>', ...message },
     ]);
   });
 

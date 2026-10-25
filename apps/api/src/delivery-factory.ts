@@ -6,6 +6,9 @@ import { SmtpEmailSender } from './adapters/smtp-email-sender.js';
 import type { EmailSenderPort } from './ports/email-sender.js';
 import type { SmsSenderPort } from './ports/sms-sender.js';
 
+/** Display name of the Gmail sender (the product name, KBC-015). */
+const SMTP_SENDER_NAME = 'Nova Alexandria';
+
 /** Resend's test sender: it delivers only to the Resend account's own address. */
 const RESEND_TEST_FROM = 'kb-chat <onboarding@resend.dev>';
 
@@ -38,7 +41,9 @@ function createEmailSender(
       port: config.SMTP_PORT,
       user: config.SMTP_USER,
       password: config.SMTP_PASSWORD,
-      from: config.KB_CHAT_EMAIL_FROM ?? `kb-chat <${config.SMTP_USER}>`,
+      from:
+        config.KB_CHAT_EMAIL_FROM ??
+        `${SMTP_SENDER_NAME} <${config.SMTP_USER}>`,
     });
   if (config.RESEND_API_KEY)
     return new ResendEmailSender({

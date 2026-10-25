@@ -54,6 +54,26 @@ describe('SMTP settings (KBC-015 AC-5)', () => {
     ).toThrow(/Invalid configuration/);
   });
 
+  it('reads blank email settings as unset (compose passes NAME= as "")', () => {
+    const config = loadConfig({
+      SMTP_HOST: '',
+      SMTP_PORT: '',
+      SMTP_USER: '',
+      SMTP_PASSWORD: '',
+      RESEND_API_KEY: '',
+      KB_CHAT_EMAIL_FROM: '',
+    });
+    expect(config).toMatchObject({
+      SMTP_HOST: 'smtp.gmail.com',
+      SMTP_PORT: 465,
+    });
+    expect(config.SMTP_USER).toBeUndefined();
+    expect(config.RESEND_API_KEY).toBeUndefined();
+    expect(() =>
+      loadConfig({ SMTP_USER: 'kbchat@gmail.com', SMTP_PASSWORD: '' }),
+    ).toThrow(/SMTP_PASSWORD/);
+  });
+
   it('never echoes the SMTP password in a configuration error', () => {
     expect(() =>
       loadConfig({ SMTP_PASSWORD: 'app-password-secret', PORT: 'abc' }),

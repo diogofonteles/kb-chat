@@ -21,7 +21,9 @@ describe('createDelivery (KBC-015 AC-4)', () => {
 
   it('sends from the Gmail account by default', () => {
     const { email } = createDelivery(loadConfig(smtp), log);
-    expect((email as SmtpEmailSender).from).toBe('kb-chat <kbchat@gmail.com>');
+    expect((email as SmtpEmailSender).from).toBe(
+      'Nova Alexandria <kbchat@gmail.com>',
+    );
     const custom = createDelivery(
       loadConfig({ ...smtp, KB_CHAT_EMAIL_FROM: 'Kb <kbchat@gmail.com>' }),
       log,

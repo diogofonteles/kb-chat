@@ -19,7 +19,7 @@ export interface SmtpOptions {
   readonly user: string;
   /** A Gmail app password (secret): never logged nor put in an error. */
   readonly password: string;
-  /** Gmail sends only as the account itself, e.g. "kb-chat <kbchat@gmail.com>". */
+  /** Gmail sends only as the account itself, e.g. "Nova Alexandria <kbchat@gmail.com>". */
   readonly from: string;
   readonly createTransport?: SmtpTransportFactory;
 }
