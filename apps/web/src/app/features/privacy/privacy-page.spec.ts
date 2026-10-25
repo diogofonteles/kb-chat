@@ -64,7 +64,7 @@ describe('PrivacyPage (KBC-016)', () => {
       screen.getByText(/mesmo depois que um acesso é retirado/),
     ).toBeTruthy();
     expect(
-      screen.getByText(/Registros de uso: os com mais de 90 dias/),
+      screen.getByText(/Registros de uso: os que passam de 90 dias/),
     ).toBeTruthy();
     expect(
       screen.getByText(/Última atualização: 25 de outubro de 2026/),

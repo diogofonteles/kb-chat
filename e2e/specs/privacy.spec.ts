@@ -61,6 +61,15 @@ test.describe('signed out', () => {
       page.getByRole('heading', { level: 1, name: 'Nova Alexandria' }),
     ).toBeVisible();
     await expect(page).toHaveTitle('Nova Alexandria');
+
+    await page.goBack();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Política de privacidade' }),
+    ).toBeVisible();
+    await page.goBack();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Nova Alexandria' }),
+    ).toBeVisible();
   });
 });
 

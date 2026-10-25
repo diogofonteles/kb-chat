@@ -4,7 +4,11 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { Component, provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import {
+  type ComponentFixture,
+  DeferBlockState,
+  TestBed,
+} from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { render, screen } from '@testing-library/angular';
 import { authInterceptor } from '@core/auth/auth-interceptor.js';
@@ -41,12 +45,14 @@ function signOut(http: HttpTestingController): void {
 
 async function showsPolicy(
   http: HttpTestingController,
-  fixture: { whenStable: () => Promise<unknown> },
+  fixture: ComponentFixture<unknown>,
 ): Promise<void> {
-  await vi.waitFor(() => {
-    TestBed.tick();
-    http.expectOne('/api/v1/auth/config').flush(CONFIG);
-  });
+  // The policy loads in its own chunk (@defer): complete the block, then its config call.
+  TestBed.tick();
+  for (const block of await fixture.getDeferBlocks())
+    await block.render(DeferBlockState.Complete);
+  TestBed.tick();
+  http.expectOne('/api/v1/auth/config').flush(CONFIG);
   await fixture.whenStable();
   expect(
     screen.getByRole('heading', { level: 1, name: 'Política de privacidade' }),
@@ -170,6 +176,8 @@ describe('SessionShell (KBC-010 BR-1)', () => {
     await router.navigateByUrl('/');
     await fixture.whenStable();
     expect(screen.getByText('protected page')).toBeTruthy();
+    // Built once on the way in and once on the way back, never twice per visit.
+    expect(probeBuilt).toBe(2);
     expect(
       screen.queryByRole('heading', {
         level: 1,

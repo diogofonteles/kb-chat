@@ -25,14 +25,18 @@ import { SettingsHost } from '@features/settings/settings-host.js';
  * Who is signed in decides between the login screen and the app (KBC-010 BR-1). A public
  * page (the privacy policy, KBC-016) shows either way, rendered here rather than in the
  * router outlet: the outlet only exists with a session, so a protected page is never built
- * without one. Settings load in their own chunk.
+ * without one. Settings and the policy load in their own chunks.
  */
 @Component({
   selector: 'app-session-shell',
   imports: [RouterOutlet, SettingsHost, LoginPage, PrivacyPage],
   template: `
     @if (publicPage()) {
-      <app-privacy-page />
+      @defer (on immediate) {
+        <app-privacy-page />
+      } @placeholder {
+        <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
+      }
     } @else if (signedIn()) {
       <router-outlet />
       @defer (on immediate) {
