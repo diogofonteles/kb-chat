@@ -67,6 +67,10 @@ describe('SessionShell (KBC-010 BR-1)', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'kb-chat' }),
     ).toBeTruthy();
-    expect(screen.getByText('Seus dados ficam neste computador.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Suas conversas e configurações ficam no servidor do kb-chat.',
+      ),
+    ).toBeTruthy();
   });
 });
