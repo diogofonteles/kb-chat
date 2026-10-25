@@ -54,6 +54,9 @@ describe('PrivacyPage (KBC-016)', () => {
     expect(screen.getByText(/região de São Paulo/)).toBeTruthy();
     expect(screen.getByText(/guardadas por 30 dias/)).toBeTruthy();
     expect(
+      screen.getByText(/mesmo depois que um acesso é retirado/),
+    ).toBeTruthy();
+    expect(
       screen.getByText(/Última atualização: 25 de outubro de 2026/),
     ).toBeTruthy();
     expect(

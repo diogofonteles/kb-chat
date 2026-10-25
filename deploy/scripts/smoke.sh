@@ -86,9 +86,12 @@ status_of() {
 }
 
 check_privacy() {
-  local body
-  body="$("${CURL[@]}" -f "$BASE/privacidade" 2>/dev/null)" || { fail "/privacidade did not answer 200"; return; }
+  local headers body
+  headers="$(mktemp)"
+  body="$("${CURL[@]}" -f -D "$headers" "$BASE/privacidade" 2>/dev/null)" || { fail "/privacidade did not answer 200"; rm -f "$headers"; return; }
   if grep -q '<app-root' <<<"$body"; then pass "/privacidade serves the SPA shell without a session"; else fail "/privacidade is not the SPA shell"; fi
+  if grep -qi '^cache-control:.*no-cache' "$headers"; then pass "/privacidade is not cached"; else fail "/privacidade without Cache-Control: no-cache"; fi
+  rm -f "$headers"
 }
 
 check_mcp_hidden() {

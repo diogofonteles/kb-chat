@@ -72,9 +72,13 @@ test('a signed-in person also reads the policy and goes back to the chat', async
     page.getByRole('heading', { level: 1, name: 'Política de privacidade' }),
   ).toBeVisible();
 
+  await expect(page).toHaveTitle('Privacidade — Nova Alexandria');
+
   await page.getByRole('link', { name: 'Voltar à Nova Alexandria' }).click();
-  await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(
-    'Política de privacidade',
-  );
   await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Política de privacidade' }),
+  ).toHaveCount(0);
+  await expect(page).toHaveTitle('Nova Alexandria');
 });
