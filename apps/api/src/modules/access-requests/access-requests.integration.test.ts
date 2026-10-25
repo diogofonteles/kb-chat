@@ -165,8 +165,11 @@ async function pendingList(started: Started, owner: Record<string, string>) {
   }[];
 }
 
-/** Settles every delivery queued after the replies so far. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+/**
+ * Gives deliveries queued after the replies time to run, for checks that nothing was sent
+ * (a positive check waits for its message with vi.waitFor instead).
+ */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
 
 describe('sign-up without Google (KBC-014 FR-1, FR-2)', () => {
   it('AC-1: the confirmed form becomes a pending request and masters get an email', async () => {
@@ -290,6 +293,10 @@ describe('no account enumeration (BR-3, NFR-3)', () => {
 
     expect(second.statusCode).toBe(429);
     expect(second.json().error.code).toBe('RATE_LIMITED');
+    // The first code arrives (delivery runs after the reply); no second one follows it.
+    await vi.waitFor(() =>
+      expect(started.outbox.to(OWNER_EMAIL)).toHaveLength(1),
+    );
     await settle();
     expect(started.outbox.to(OWNER_EMAIL)).toHaveLength(1);
   });
