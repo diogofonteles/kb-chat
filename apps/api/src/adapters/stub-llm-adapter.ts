@@ -39,6 +39,33 @@ export interface StubLlmOptions {
   readonly model?: string;
   /** What the forced last call (toolChoice "none") writes; default: an answer citing [n]. */
   readonly finalText?: string;
+  /** A sub-researcher's replies by call position in its own conversation (ADR 0014). */
+  readonly subScript?: readonly StubReply[];
+  /** Milliseconds each agent call waits before replying (parallelism tests). */
+  readonly callDelayMs?: number;
+}
+
+/** How a sub-researcher's system prompt starts (prompt.ts, subAgentSystemPrompt). */
+const SUB_AGENT_PROMPT = 'Você é um sub-pesquisador';
+
+const isSubAgent = (messages: AgentHistory): boolean =>
+  messages[0]?.content.startsWith(SUB_AGENT_PROMPT) ?? false;
+
+/** The default orchestrator's first move when it may delegate: two tasks on the question. */
+function delegateReply(question: string): StubReply {
+  return {
+    toolCalls: [
+      {
+        name: 'delegate',
+        arguments: {
+          tasks: [
+            { title: 'Primeira parte', task: question },
+            { title: 'Segunda parte', task: question },
+          ],
+        },
+      },
+    ],
+  };
 }
 
 const DEFAULT_ANSWER = 'Segundo o acervo, a natureza é sétupla [1].';
@@ -96,7 +123,13 @@ const search = (query: string, mode: string): StubReply => ({
   toolCalls: [{ name: 'search_collection', arguments: { query, mode } }],
 });
 
+/** "“Título” trata do assunto [n]" as a sub-researcher's report says it. */
+const REPORTED = /“([^”]+)” trata do assunto \[(\d+)\]/;
+
 function finalText(messages: AgentHistory): string {
+  const reported = REPORTED.exec(lastToolOutput(messages));
+  if (reported)
+    return `Segundo o acervo, “${reported[1]}” trata do assunto [${reported[2]}].`;
   const read = firstReference(messages);
   return read
     ? `Segundo o acervo, “${read.title}” trata do assunto [${read.n}].`
@@ -114,6 +147,12 @@ export class StubLlmAdapter implements AgentLlmPort {
   lastMessages: readonly AgentMessage[] = [];
   /** Options of every agent call, for assertions (toolChoice, maxTokens). */
   readonly agentCalls: AgentStreamOptions[] = [];
+  /** Sub-researcher calls made, and the most that ran at once (ADR 0014). */
+  subCalls = 0;
+  maxActive = 0;
+  /** The tool names the orchestrator (not a sub-researcher) saw on its last call. */
+  lastTools: string[] = [];
+  private active = 0;
   calls = 0;
   yielded = 0;
 
@@ -148,13 +187,28 @@ export class StubLlmAdapter implements AgentLlmPort {
 
   async *streamAgent(
     messages: readonly AgentMessage[],
-    _tools: readonly ToolDefinition[],
+    tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
-    this.lastMessages = [...messages];
-    this.calls += 1;
-    this.agentCalls.push(options);
-    const reply = this.reply(messages, options);
+    this.active += 1;
+    this.maxActive = Math.max(this.maxActive, this.active);
+    try {
+      yield* this.agentReply(messages, tools, options);
+    } finally {
+      this.active -= 1;
+    }
+  }
+
+  private async *agentReply(
+    messages: readonly AgentMessage[],
+    tools: readonly ToolDefinition[],
+    options: AgentStreamOptions,
+  ): AsyncIterable<AgentChunk> {
+    if (this.options.callDelayMs)
+      await new Promise((resolve) =>
+        setTimeout(resolve, this.options.callDelayMs),
+      );
+    const reply = this.replyTo(messages, tools, options);
     if ('text' in reply) {
       yield* this.words(reply.text, messages, options);
       return;
@@ -175,12 +229,46 @@ export class StubLlmAdapter implements AgentLlmPort {
     };
   }
 
-  private reply(
+  /** Records the call and picks the reply: a sub-researcher's, or the orchestrator's. */
+  private replyTo(
+    messages: readonly AgentMessage[],
+    tools: readonly ToolDefinition[],
+    options: AgentStreamOptions,
+  ): StubReply {
+    const sub = isSubAgent(messages);
+    if (sub) this.subCalls += 1;
+    else {
+      this.lastMessages = [...messages];
+      this.lastTools = tools.map((tool) => tool.name);
+    }
+    this.calls += 1;
+    this.agentCalls.push(options);
+    const canDelegate = tools.some((tool) => tool.name === 'delegate');
+    return sub
+      ? this.subReply(messages, options)
+      : this.reply(messages, { ...options, canDelegate });
+  }
+
+  private subReply(
     messages: AgentHistory,
     options: AgentStreamOptions,
   ): StubReply {
+    if (options.toolChoice === 'none') return { text: finalText(messages) };
+    const scripted = this.options.subScript;
+    if (!scripted) return defaultReply(messages);
+    return scripted[callsInTurn(messages)] ?? { text: finalText(messages) };
+  }
+
+  private reply(
+    messages: AgentHistory,
+    options: AgentStreamOptions & { readonly canDelegate: boolean },
+  ): StubReply {
     if (options.toolChoice === 'none')
       return { text: this.options.finalText ?? finalText(messages) };
+    if (!this.options.script && options.canDelegate)
+      return callsInTurn(messages) === 0
+        ? delegateReply(messages[lastUserIndex(messages)]?.content ?? '')
+        : { text: finalText(messages) };
     if (!this.options.script) return defaultReply(messages);
     return (
       this.options.script[callsInTurn(messages)] ?? {

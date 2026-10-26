@@ -15,6 +15,25 @@ const EXHAUSTIVE_MINUTES = 30;
 /** Estimated prompt tokens past which the exhaustive loop compacts old tool results. */
 const EXHAUSTIVE_COMPACT_TOKENS = 60_000;
 
+/** How an exhaustive orchestrator may delegate to sub-researchers (KBC-018, ADR 0014). */
+export interface DelegationBudget {
+  /** Sub-researchers running at once. */
+  readonly parallel: number;
+  /** Tool steps of one sub-researcher. */
+  readonly steps: number;
+  /** Output tokens per sub-researcher call. */
+  readonly outputTokens: number;
+  /** Tool steps of all the turn's sub-researchers together. */
+  readonly totalSteps: number;
+}
+
+export const DELEGATION: DelegationBudget = {
+  parallel: 3,
+  steps: 25,
+  outputTokens: 4_000,
+  totalSteps: 300,
+};
+
 /** How far one research profile may go (KBC-011, KBC-017). */
 export interface ProfileBudget {
   /** Tool calls per answer. */
@@ -27,6 +46,8 @@ export interface ProfileBudget {
   readonly maxMinutes: number | null;
   /** Estimated prompt tokens past which old tool results are compacted; null: never. */
   readonly compactTokens: number | null;
+  /** Sub-researchers the profile may delegate to (ADR 0014); null: none. */
+  readonly delegation: DelegationBudget | null;
 }
 
 export type ResearchBudgets = Readonly<Record<ResearchProfile, ProfileBudget>>;
@@ -43,6 +64,7 @@ const shortBudget = (steps: number): ProfileBudget => ({
   guardOutputTokens: MAX_OUTPUT_TOKENS,
   maxMinutes: null,
   compactTokens: null,
+  delegation: null,
 });
 
 /** The budgets of every profile; the exhaustive one takes the server's settings. */
@@ -59,6 +81,7 @@ export function researchBudgets(
       guardOutputTokens: Math.min(outputTokens, EXHAUSTIVE_GUARD_OUTPUT_TOKENS),
       maxMinutes: EXHAUSTIVE_MINUTES,
       compactTokens: EXHAUSTIVE_COMPACT_TOKENS,
+      delegation: DELEGATION,
     },
   };
 }

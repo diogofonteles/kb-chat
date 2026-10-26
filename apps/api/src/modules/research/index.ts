@@ -33,4 +33,5 @@ export {
   buildResearchMessages,
   OUTSIDE_MARK,
   researchSystemPrompt,
+  subAgentSystemPrompt,
 } from './prompt.js';

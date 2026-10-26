@@ -30,10 +30,29 @@ import {
 import { KEEP_TOOL_RESULTS, compactToolResults } from './compaction.js';
 import {
   DEFAULT_BUDGETS,
+  DELEGATION,
+  type DelegationBudget,
   type ProfileBudget,
   type ResearchBudgets,
 } from './limits.js';
+import {
+  DELEGATE_DEFINITION,
+  DELEGATE_TOOL,
+  delegateArgsSchema,
+} from './delegate.js';
+import { EventPipe } from './event-pipe.js';
 import { SourceBook } from './source-book.js';
+import {
+  delegateSteps,
+  inPool,
+  numberTasks,
+  promptText,
+  reportsText,
+  runSubAgent,
+  type SubAgentHost,
+  type SubTask,
+} from './subagents.js';
+import { failed, parsedArgs, type PreparedCall } from './tool-context.js';
 import type { ResearchTools } from './tools.js';
 
 /** The "answer now" notes of a spent budget: dropped when the deep model takes over. */
@@ -82,6 +101,9 @@ interface Turn {
   deepen: LoopEngine | null;
   escalated: boolean;
   steps: number;
+  /** Sub-researchers numbered so far and the tool steps they took (ADR 0014). */
+  agents: number;
+  subSteps: number;
   sourcesSent: number;
   /** What each model spent; an escalated turn has two (one ledger entry each). */
   readonly spent: Map<LoopEngine, Spent>;
@@ -109,14 +131,26 @@ function errorCode(err: unknown): string {
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
 
-const promptText = (messages: readonly AgentMessage[]): string =>
-  messages
-    .map((m) =>
-      m.role === 'assistant'
-        ? m.content + m.toolCalls.map((c) => c.arguments).join('')
-        : m.content,
-    )
-    .join('\n');
+/** Grants sub-researcher tool steps from the turn's total (ADR 0014). */
+function reserveSubSteps(
+  turn: Turn,
+  { budget, wanted }: { budget: DelegationBudget; wanted: number },
+): number {
+  const granted = Math.max(
+    0,
+    Math.min(wanted, budget.totalSteps - turn.subSteps),
+  );
+  turn.subSteps += granted;
+  return granted;
+}
+
+function parseJson(raw: string): unknown {
+  try {
+    return raw.trim() ? JSON.parse(raw) : {};
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The research agent's loop in the API (ADR 0006): the model searches, reads and follows
@@ -186,6 +220,8 @@ export class ToolLoopRunner implements ResearchRunnerPort {
           ? null
           : Date.now() + budget.maxMinutes * 60_000,
       steps: 0,
+      agents: 0,
+      subSteps: 0,
       sourcesSent: 0,
       spent: new Map(),
       usd: 0,
@@ -298,12 +334,23 @@ export class ToolLoopRunner implements ResearchRunnerPort {
    * Daily cap and credit before every model call, counting what this turn already spent.
    * The forced last call is priced at its whole output budget: the long answer comes then.
    */
-  private async guard(turn: Turn, final: boolean): Promise<void> {
-    const { llm, spend } = turn.engine;
+  private guard(turn: Turn, final: boolean): Promise<void> {
     const { guardOutputTokens, outputTokens } = turn.budget;
+    return this.guardSpend(turn, {
+      prompt: promptText(turn.messages),
+      outputTokens: final ? outputTokens : guardOutputTokens,
+    });
+  }
+
+  /** One call's estimate against the cap, with what the whole turn (sub-researchers too) spent. */
+  private async guardSpend(
+    turn: Turn,
+    { prompt, outputTokens }: { prompt: string; outputTokens: number },
+  ): Promise<void> {
+    const { llm, spend } = turn.engine;
     const estimate = await spend.estimate(
-      promptText(turn.messages),
-      llm.maxOutputTokens(final ? outputTokens : guardOutputTokens),
+      prompt,
+      llm.maxOutputTokens(outputTokens),
     );
     await spend.guard(turn.usd + estimate);
   }
@@ -331,7 +378,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   ): AsyncIterable<ResearchEvent> {
     const chunks = turn.engine.llm.streamAgent(
       turn.messages,
-      this.deps.tools.definitions,
+      this.definitions(turn),
       {
         maxTokens: turn.budget.outputTokens,
         signal: turn.input.signal,
@@ -372,12 +419,19 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn: Turn,
     call: CallResult,
   ): AsyncIterable<ResearchEvent> {
-    const context = { topic: turn.input.topic, book: turn.book };
     const runnable = call.toolCalls.slice(0, turn.maxSteps - turn.steps);
-    const prepared = runnable.map((c) => this.deps.tools.prepare(c, context));
+    // Sub-researchers stream their steps while the calls run (ADR 0014).
+    const pipe = new EventPipe<ResearchEvent>();
+    const prepared = runnable.map((c) => this.prepare(turn, c, pipe));
     for (const { steps } of prepared)
       for (const step of steps) yield { type: 'step', step };
-    const outputs = await Promise.all(prepared.map((p) => p.run()));
+    const running = Promise.all(prepared.map((p) => p.run())).finally(() =>
+      pipe.end(),
+    );
+    // Handled below, after the pipe drains; this only keeps Node from calling it unhandled.
+    running.catch(() => undefined);
+    yield* pipe;
+    const outputs = await running;
     turn.steps += runnable.length;
     turn.messages.push(
       { role: 'assistant', content: call.text, toolCalls: call.toolCalls },
@@ -390,6 +444,90 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     if (turn.book.size === turn.sourcesSent) return;
     turn.sourcesSent = turn.book.size;
     yield { type: 'sources', sources: turn.book.list() };
+  }
+
+  /** The tools of this turn: the exhaustive orchestrator may also delegate (ADR 0014). */
+  private definitions(turn: Turn) {
+    return turn.budget.delegation
+      ? [...this.deps.tools.definitions, DELEGATE_DEFINITION]
+      : this.deps.tools.definitions;
+  }
+
+  private prepare(
+    turn: Turn,
+    call: ToolCall,
+    pipe: EventPipe<ResearchEvent>,
+  ): PreparedCall {
+    if (call.name !== DELEGATE_TOOL || !turn.budget.delegation)
+      return this.deps.tools.prepare(call, {
+        topic: turn.input.topic,
+        book: turn.book,
+      });
+    const args = parsedArgs(delegateArgsSchema, parseJson(call.arguments));
+    if (typeof args === 'string') return failed(args);
+    const tasks = numberTasks(args, turn.agents + 1);
+    turn.agents += tasks.length;
+    return {
+      steps: delegateSteps(tasks),
+      run: () => this.delegate(turn, { tasks, pipe }),
+    };
+  }
+
+  /**
+   * Runs the tasks on sub-researchers, a few at a time, and returns their reports. A
+   * failure (the daily cap) stops the others; the reader's stop reaches them all.
+   */
+  private async delegate(
+    turn: Turn,
+    {
+      tasks,
+      pipe,
+    }: { tasks: readonly SubTask[]; pipe: EventPipe<ResearchEvent> },
+  ): Promise<string> {
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    turn.input.signal.addEventListener('abort', stop, { once: true });
+    if (turn.input.signal.aborted) stop();
+    const host = this.subHost(turn, { signal: abort.signal, pipe });
+    const parallel = host.budget.parallel;
+    try {
+      const results = await inPool(tasks, parallel, (task) =>
+        runSubAgent(host, task).catch((err: unknown) => {
+          stop();
+          throw err;
+        }),
+      );
+      return reportsText(
+        tasks,
+        results.map((r) => r.report),
+      );
+    } finally {
+      turn.input.signal.removeEventListener('abort', stop);
+    }
+  }
+
+  /** What a sub-researcher borrows from the turn: its model, tools, numbering and spend. */
+  private subHost(
+    turn: Turn,
+    { signal, pipe }: { signal: AbortSignal; pipe: EventPipe<ResearchEvent> },
+  ): SubAgentHost {
+    const budget = turn.budget.delegation ?? DELEGATION;
+    const { llm } = turn.engine;
+    return {
+      llm,
+      tools: this.deps.tools,
+      context: { topic: turn.input.topic, book: turn.book },
+      topicTitle: turn.topicTitle,
+      budget,
+      compactTokens: turn.budget.compactTokens,
+      signal,
+      guard: (prompt, outputTokens) =>
+        this.guardSpend(turn, { prompt, outputTokens }),
+      account: (call, prompt) => this.account(turn, call, prompt),
+      remainingSteps: () => budget.totalSteps - turn.subSteps,
+      reserveSteps: (wanted) => reserveSubSteps(turn, { budget, wanted }),
+      emit: (event) => pipe.push(event),
+    };
   }
 
   /** Real usage when reported; otherwise counted from the prompt and the output. */
@@ -435,7 +573,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       billing: turn.engine.llm.billing,
       model: turn.engine.llm.model,
       interrupted,
-      steps: turn.steps,
+      steps: turn.steps + turn.subSteps,
       ...(turn.escalated ? { escalated: true } : {}),
     };
   }
