@@ -46,7 +46,9 @@ test('AC-2: a member sees no "IA da aplicação" section', async ({
   await member.goto('/');
   await member.getByRole('button', { name: 'Pular' }).click();
   const dialog = await openSettings(member);
-  await expect(dialog.getByRole('button', { name: 'Preferências' })).toBeVisible();
+  await expect(
+    dialog.getByRole('button', { name: 'Preferências' }),
+  ).toBeVisible();
   await expect(
     dialog.getByRole('button', { name: 'IA da aplicação' }),
   ).toHaveCount(0);
@@ -61,19 +63,20 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
   page,
 }) => {
   const owner = await ownerApi();
-  const emails = [
+  const [first, second, third] = [
     uniqueEmail('bulk-a'),
     uniqueEmail('bulk-b'),
     uniqueEmail('bulk-c'),
   ];
-  const ids: string[] = [];
-  for (const email of emails) ids.push(await invite(owner, email));
+  const firstId = await invite(owner, first);
+  const secondId = await invite(owner, second);
+  const thirdId = await invite(owner, third);
 
   await page.goto('/');
   const dialog = await openSettings(page);
   await dialog.getByRole('button', { name: 'Pessoas e permissões' }).click();
-  await dialog.getByLabel(`Selecionar ${emails[0]}`).check();
-  await dialog.getByLabel(`Selecionar ${emails[1]}`).check();
+  await dialog.getByLabel(`Selecionar ${first}`).check();
+  await dialog.getByLabel(`Selecionar ${second}`).check();
   const bar = dialog.getByRole('group', {
     name: 'IA da aplicação para várias pessoas',
   });
@@ -85,25 +88,29 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
   expect(axe.violations).toEqual([]);
   await noHorizontalScroll(page);
 
-  await bar.getByRole('button', { name: 'Aplicar às selecionadas (2)' }).click();
+  await bar
+    .getByRole('button', { name: 'Aplicar às selecionadas (2)' })
+    .click();
   await expect(
     dialog
       .getByRole('status')
       .filter({ hasText: 'IA da aplicação atualizada para 2 pessoa(s).' }),
   ).toBeVisible();
 
-  const { items: list } = (await (await owner.get('/api/v1/people')).json()) as {
+  const { items: list } = (await (
+    await owner.get('/api/v1/people')
+  ).json()) as {
     items: { id: string; ai: { appAi: string; history: { by: string }[] } }[];
   };
   const ai = (id: string) => list.find((person) => person.id === id)?.ai;
-  expect(ai(ids[0]!)?.appAi).toBe('house');
-  expect(ai(ids[1]!)?.appAi).toBe('house');
-  expect(ai(ids[2]!)?.appAi).toBe('default');
-  expect(ai(ids[0]!)?.history.at(-1)?.by).toBe('owner@kb-chat.test');
-  expect(ai(ids[2]!)?.history).toEqual([]);
+  expect(ai(firstId)?.appAi).toBe('house');
+  expect(ai(secondId)?.appAi).toBe('house');
+  expect(ai(thirdId)?.appAi).toBe('default');
+  expect(ai(firstId)?.history.at(-1)?.by).toBe('owner@kb-chat.test');
+  expect(ai(thirdId)?.history).toEqual([]);
 
   // The person's editor shows the AI fieldset and its history (T9).
-  await dialog.getByRole('button', { name: new RegExp(emails[0]!) }).click();
+  await dialog.getByRole('button', { name: new RegExp(first) }).click();
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await expect(fieldset.getByLabel('Qual IA atende esta pessoa')).toHaveValue(
     'house',
@@ -115,7 +122,7 @@ test('AC-12: the master lends the house plan to two of three selected people, wi
   const editorAxe = await new AxeBuilder({ page }).include('dialog').analyze();
   expect(editorAxe.violations).toEqual([]);
   await noHorizontalScroll(page);
-  await owner.patch(`/api/v1/people/${ids[0]}`, {
+  await owner.patch(`/api/v1/people/${firstId}`, {
     data: { ai: { paidFallback: { enabled: false, monthlyCapUsd: 1 } } },
     headers: CSRF,
   });
