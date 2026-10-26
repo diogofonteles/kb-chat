@@ -32,6 +32,11 @@ export interface CodexRunnerOptions {
   readonly allowedClients?: readonly string[];
   /** Where each turn's empty working folder is made; default the system temp folder. */
   readonly tmpRoot?: string;
+  /**
+   * Kill what a former turn left in the container before each turn (the container only:
+   * `codex-runner-main`); never in tests or the E2E server, which share the host.
+   */
+  readonly reapStrays?: boolean;
 }
 
 export interface CodexRunner {
@@ -160,25 +165,54 @@ async function spawnTurn(
   }
 }
 
-/**
- * Processes a former turn detached from its group (re-parented to the container's init) are
- * killed before the next turn starts, so none outlives its turn to read the next token
- * (ADR 0020). Linux only: elsewhere (tests on macOS) there is no /proc to read.
- */
-async function reapStrays(): Promise<void> {
-  if (process.platform !== 'linux') return;
-  const pids = (await readdir('/proc')).filter((name) => /^\d+$/.test(name));
-  for (const pid of pids.map(Number)) {
-    if (pid === 1 || pid === process.pid) continue;
-    const stat = await readFile(`/proc/${pid}/stat`, 'utf8').catch(() => '');
+/** pid → parent pid of every process this user can see (Linux /proc). */
+async function processTree(): Promise<Map<number, number>> {
+  const tree = new Map<number, number>();
+  for (const name of await readdir('/proc')) {
+    if (!/^\d+$/.test(name)) continue;
+    const stat = await readFile(`/proc/${name}/stat`, 'utf8').catch(() => '');
     // Field 4, after the command in parentheses, is the parent pid.
     const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-    if (parent !== 1) continue;
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      // Already gone, or another user's: not ours to reap.
-    }
+    if (Number.isInteger(parent)) tree.set(Number(name), parent);
+  }
+  return tree;
+}
+
+/** Whether the pid comes from a former turn: its ancestry reaches init without the runner. */
+function isStray(tree: Map<number, number>, pid: number): boolean {
+  let current = pid;
+  for (let hops = 0; hops < 64; hops += 1) {
+    if (current === process.pid) return false;
+    const parent = tree.get(current);
+    // `docker exec` and the healthcheck come from outside (parent 0): not a turn's.
+    if (parent === undefined || parent === 0) return false;
+    if (parent === 1) return current !== process.pid;
+    current = parent;
+  }
+  return false;
+}
+
+/**
+ * Kills every process a former turn left behind, with its whole family (ADR 0020): the lock
+ * is held, so no turn runs now, and anything descending from init but not from the runner
+ * would otherwise outlive its turn and read the next one's token. Repeats while it kills.
+ */
+async function reapStrays(): Promise<void> {
+  for (let pass = 0; pass < 3; pass += 1) {
+    const tree = await processTree();
+    const strays = [...tree.keys()].filter(
+      (pid) => pid !== 1 && pid !== process.pid && isStray(tree, pid),
+    );
+    if (strays.length === 0) return;
+    strays.forEach(killQuietly);
+  }
+}
+
+function killQuietly(pid: number): void {
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // Already gone.
   }
 }
 
@@ -196,7 +230,7 @@ async function startTurn(
   }
   let started: { dir: string; cli: CliProcess };
   try {
-    await reapStrays();
+    if (options.reapStrays) await reapStrays();
     started = await spawnTurn(options, turn);
     context.counts.turns += 1;
   } catch (err) {

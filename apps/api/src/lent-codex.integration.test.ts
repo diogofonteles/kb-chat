@@ -131,7 +131,10 @@ describe('Codex, the ChatGPT subscription, in its sandbox (KBC-027)', () => {
     await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
     await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
     await stopCodexRunner();
-    expect((await research(member)).at(-1)).toMatchObject({ type: 'error' });
+    expect((await research(member)).at(-1)).toMatchObject({
+      type: 'error',
+      code: 'CLI_MISSING',
+    });
     expect((await member('GET', '/api/v1/ai/status')).json().source).toBe(
       'none',
     );

@@ -247,6 +247,7 @@ describe('ResearchStore', () => {
     ['LLM_INSUFFICIENT_CREDIT', 'LLM_INSUFFICIENT_CREDIT'],
     ['CLI_LOGIN_REQUIRED', 'CLI_LOGIN_REQUIRED'],
     ['PROVIDER_UNAVAILABLE', 'PROVIDER_UNAVAILABLE'],
+    ['CLI_MISSING', 'CLI_MISSING'],
     ['LLM_KEY_REJECTED', 'LLM_KEY_REJECTED'],
     ['SOMETHING_NEW', 'INTERNAL'],
   ])('maps the stream error %s to %s', (code, expected) => {

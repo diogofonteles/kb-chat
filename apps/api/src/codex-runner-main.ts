@@ -9,6 +9,8 @@ const runner = await startCodexRunner({
   codexHome: config.CODEX_HOME,
   mcpUrl: config.CODEX_MCP_URL,
   allowedClients: config.CODEX_RUNNER_CLIENTS,
+  // Here, in the container, the runner is the only thing besides its turns (ADR 0020).
+  reapStrays: true,
   host: config.CODEX_RUNNER_HOST,
   port: config.CODEX_RUNNER_PORT,
   env: { PATH: config.PATH, LANG: config.LANG },

@@ -286,6 +286,7 @@ describe('ResearchMessage', () => {
   it.each([
     ['CLI_LOGIN_REQUIRED', /não está logado/],
     ['PROVIDER_UNAVAILABLE', /não respondeu agora/],
+    ['CLI_MISSING', /não está disponível agora no servidor/],
     ['LLM_KEY_REJECTED', /chave de API não foi aceita/],
     ['LLM_NOT_CONFIGURED', /Escolha um em ⚙ Configurações/],
   ] as const)('explains the runner failure %s', async (error, text) => {

@@ -149,14 +149,12 @@ const strays = readdirSync('/proc')
   });
 if (leaveStray) {
   const { spawn } = await import('node:child_process');
-  spawn(
-    process.execPath,
-    ['-e', 'setInterval(() => {}, 1000)', 'kbchat-stray'],
-    {
-      detached: true,
-      stdio: 'ignore',
-    },
-  ).unref();
+  // The stray starts a child of its own: the runner must reap the whole family.
+  const family = `require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'kbchat-stray-child'], { stdio: 'ignore' }); setInterval(() => {}, 1000);`;
+  spawn(process.execPath, ['-e', family, 'kbchat-stray'], {
+    detached: true,
+    stdio: 'ignore',
+  }).unref();
 }
 process.stdout.write(
   `${JSON.stringify({
