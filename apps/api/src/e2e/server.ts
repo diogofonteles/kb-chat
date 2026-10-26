@@ -22,6 +22,7 @@ import { JsonPeopleStore } from '../adapters/json-people-store.js';
 import { PeopleService, SessionService } from '../modules/auth/index.js';
 import { E2E_CLIENT_ID, createTestIdentity } from './test-identity.js';
 import { MemoryDocumentStore } from '../adapters/memory-document-store.js';
+import { JsonDocumentStore } from '../adapters/json-document-store.js';
 import { MemoryOutbox } from '../adapters/memory-outbox.js';
 import { registerOutbox } from './outbox-routes.js';
 import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
@@ -98,6 +99,13 @@ const auth = {
   sessions: new SessionService({ store: new MemorySessionStore() }),
   verifier: identity.verifier,
 };
+// Only the people a spec lends it to use the house plan: the other specs keep the stub.
+await new JsonDocumentStore(
+  join(config.KB_CHAT_STATE_DIR, 'house-ai.json'),
+).write({
+  version: 1,
+  defaultAppAi: 'none',
+});
 const house = await createHouseAi({
   stateDir: config.KB_CHAT_STATE_DIR,
   sealer,

@@ -120,7 +120,23 @@ ssh ubuntu@<IP>
 sudo nano /srv/kb-chat/deploy/.env     # root, 0600: preencha a partir de deploy/.env.example
 ```
 
-Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL` e **um** provedor de e-mail completo (passo 4b): `SMTP_USER` + `SMTP_PASSWORD` (Gmail) ou `RESEND_API_KEY` + `KB_CHAT_EMAIL_FROM`. Sem eles, ou com só metade do par SMTP, `deploy.sh` recusa e a API não sobe. Segredos (senha de app, chaves) entram pelo `read -s` do passo 4b, não pelo `nano` com a tela compartilhada.
+Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL`, `KB_CHAT_SECRETS_KEY` (abaixo) e **um** provedor de e-mail completo (passo 4b): `SMTP_USER` + `SMTP_PASSWORD` (Gmail) ou `RESEND_API_KEY` + `KB_CHAT_EMAIL_FROM`. Sem eles, ou com só metade do par SMTP, `deploy.sh` recusa e a API não sobe. Segredos (senha de app, chaves) entram pelo `read -s` do passo 4b, não pelo `nano` com a tela compartilhada.
+
+**Chave mestra dos segredos (`KB_CHAT_SECRETS_KEY`, ADR 0016).** Cifra (AES-256-GCM) toda chave de IA guardada em disco: a da IA da aplicação e as de cada pessoa. Gere **uma vez, na VM**, direto no `.env`, sem mostrar o valor:
+
+```bash
+ENV=/srv/kb-chat/deploy/.env
+# Só gera quando ainda não existe: uma chave nova torna ilegíveis as chaves já salvas.
+if sudo grep -q '^KB_CHAT_SECRETS_KEY=.' "$ENV"; then echo 'já existe: mantida'; else
+  sudo sed -i '/^KB_CHAT_SECRETS_KEY=/d' "$ENV"
+  sudo sh -c "printf 'KB_CHAT_SECRETS_KEY=%s\n' \"\$(openssl rand -base64 32)\" >> $ENV"
+fi
+sudo grep -c '^KB_CHAT_SECRETS_KEY=.' "$ENV"   # 1 (conta a linha sem mostrar o valor)
+```
+
+- 👤 **DONO:** guarde uma cópia no seu gerenciador de senhas (`sudo cat` só nessa hora, numa sessão sua). Sem ela, as chaves salvas ficam ilegíveis e cada pessoa precisa conectar de novo; nunca a troque com chaves salvas (o mesmo vale ao restaurar o estado, passo 11).
+- Ela fica só no `.env`, fora do backup do estado: o backup cifrado do estado sozinho não abre as chaves.
+- **Nenhuma chave de IA vai no `.env`.** A IA da aplicação é conectada na tela (passo 9b); as variáveis `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` não são lidas em produção.
 
 - `WEB_ORIGIN` fica `https://$KB_CHAT_DOMAIN` (é a origem que o CSRF aceita).
 - `ALLOWED_HOSTS` e `TRUST_PROXY` vêm do `compose.yml`.
@@ -217,6 +233,16 @@ ssh -t ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .en
 ```
 
 O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, em ⚙ Configurações → "Assinatura do Claude" → "Testar conexão".
+
+## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
+
+Tudo pela interface (ADR 0016, KBC-022); nada no `.env`.
+
+1. Entre como dono → ⚙ Configurações → **IA da aplicação** → **Conectar OpenRouter**. O OpenRouter pede login e "Authorize"; você volta para a Nova Alexandria com "Conta conectada.". (Alternativa: "Colar uma chave" com uma chave criada em openrouter.ai/settings/keys.) A chave que você usa no Mac fica no Mac: em produção, conecte de novo aqui.
+2. Confira "Pedidos gratuitos hoje: 0 de 50". Com **US$ 10 comprados uma vez** na conta do OpenRouter, o limite dos modelos gratuitos sobe para 1000 por dia (sem gastar os créditos com os modelos `:free`).
+3. "Modelos gratuitos": deixe "Escolher automaticamente". "Modelo pago de reserva": deixe vazio (custo zero).
+4. "Para quem": o padrão "Plano da casa" atende quem não tem IA própria, com 5 pesquisas por dia. Em **Pessoas e permissões**, ajuste por pessoa (IA, "Usar sempre", pesquisas por dia, reserva paga com teto mensal) ou em lote ("Aplicar às selecionadas" / "Aplicar a todos os usuários").
+5. Para você: ⚙ → IA → escolha "Assinatura do Claude" (passo 9) ou outra IA sua.
 
 ## 10. Rotina
 

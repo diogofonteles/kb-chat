@@ -90,9 +90,9 @@
   },
   "secrets": [
     {
-      "name": "OPENROUTER_API_KEY",
+      "name": "KB_CHAT_SECRETS_KEY",
       "source": "env",
-      "usage": "AI answers (api); optional, search works without it",
+      "usage": "Seals the AI keys kept on disk (AES-256-GCM, ADR 0016); required in production, generated on the VM",
       "required": false
     }
   ],

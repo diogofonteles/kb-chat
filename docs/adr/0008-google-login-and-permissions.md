@@ -1,6 +1,7 @@
 # 0008 — Google sign-in and per-person permissions
 
 - Status: accepted (2026-10-24), implemented by KBC-010
+- Amended by: [0016](0016-house-ai-plan-and-secrets-at-rest.md) (guests get the app's AI by default; a master assigns it per person)
 - Supersedes: [0005](0005-local-first-single-user-auth-seam.md)
 - Drivers: the owner's requirement (2026-10-24), sharing the app safely, Q-security
 
