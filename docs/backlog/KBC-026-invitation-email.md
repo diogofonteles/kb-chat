@@ -1,7 +1,7 @@
 ---
 id: KBC-026
 title: "E-mail de convite: enviar, mostrar o status e reenviar"
-status: in-review
+status: done
 slice: release-1
 outcome: quem é convidado recebe um e-mail com o link e o jeito de entrar; o master vê na lista se o convite saiu, falhou ou já virou acesso, e reenvia sem abusar do provedor
 depends_on: [KBC-010, KBC-014, KBC-015]

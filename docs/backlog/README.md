@@ -33,7 +33,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-017](KBC-017-exhaustive-research.md) | Pesquisa exaustiva: busca literal sem teto (modos, páginas, filtros por autor e origem), leitura de livros inteiros e o perfil "Exaustivo" com compactação | release-1 | done | KBC-008, KBC-011 |
 | [KBC-018](KBC-018-research-subagents.md) | Pesquisa exaustiva com sub-pesquisadores em paralelo (orquestrador e trabalhadores, contexto próprio, citações na resposta, progresso agrupado) | release-1 | done | KBC-017 |
 | [KBC-020](KBC-020-authorship-mestre-laercio-and-other-authors.md) | Autoria: Mestre Laércio × outros autores (filtro e selos na busca, fontes agrupadas, ferramentas e prompt da IA que nunca misturam os dois) | release-1 | done | KBC-002, KBC-003, KBC-017 |
-| [KBC-026](KBC-026-invitation-email.md) | E-mail de convite: enviar ao convidar (com opção de não enviar), status "Convite enviado em …" / "Ativo" na lista e "Reenviar convite" com limite | release-1 | in-review | KBC-010, KBC-014, KBC-015 |
+| [KBC-026](KBC-026-invitation-email.md) | E-mail de convite: enviar ao convidar (com opção de não enviar), status "Convite enviado em …" / "Ativo" na lista e "Reenviar convite" com limite | release-1 | done | KBC-010, KBC-014, KBC-015 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
 ## Definição de pronto (global)
