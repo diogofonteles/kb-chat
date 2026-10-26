@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
 import { originFolder } from './doc-filter.js';
-import { pageFooter, pageRange } from './grep-output.js';
+import { PAGE_CHARS, fitting, pageFooter, pageRange } from './grep-output.js';
 import {
   failed,
   parsedArgs,
@@ -38,6 +38,9 @@ function countNames(
   );
 }
 
+const lineOf = ({ name, count }: Counted): string =>
+  `- ${oneLine(name, 160)} (${count} documento(s))`;
+
 function section(
   label: string,
   items: readonly Counted[],
@@ -45,19 +48,15 @@ function section(
 ): string[] {
   const needle = args.query ? foldName(args.query) : '';
   const matching = items.filter(({ name }) => foldName(name).includes(needle));
-  const size = Math.max(
-    0,
-    Math.min(args.head_limit, matching.length - args.offset),
-  );
+  const asked = matching.slice(args.offset, args.offset + args.head_limit);
+  // Half of a page's budget per list: both lists fit in one output (NFR-3).
+  const size = fitting(asked.map(lineOf), PAGE_CHARS / 2);
+
   const page = { offset: args.offset, size, total: matching.length };
   if (matching.length === 0) return [`${label}: nenhuma.`];
   return [
     `${label} (${size} de ${matching.length}): ${pageRange(page)}`,
-    ...matching
-      .slice(page.offset, page.offset + size)
-      .map(
-        ({ name, count }) => `- ${oneLine(name, 160)} (${count} documento(s))`,
-      ),
+    ...asked.slice(0, size).map(lineOf),
     pageFooter(page),
   ];
 }

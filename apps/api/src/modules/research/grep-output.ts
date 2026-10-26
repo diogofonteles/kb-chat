@@ -3,6 +3,23 @@ import { originFolder } from './doc-filter.js';
 import type { DocMatch, Occurrence } from './text-finder.js';
 import { oneLine, quote } from './tool-output.js';
 
+/**
+ * Characters a page may take (NFR-3: every output stays under 60,000, below Claude Code's
+ * MCP output limit): lines past it move to the next page, with an exact offset.
+ */
+export const PAGE_CHARS = 50_000;
+/** How many of the lines fit in the page's character budget (at least one). */
+export function fitting(lines: readonly string[], budget = PAGE_CHARS): number {
+  let used = 0;
+  let count = 0;
+  for (const line of lines) {
+    used += line.length + 1;
+    if (used > budget && count > 0) break;
+    count += 1;
+  }
+  return count;
+}
+
 /** Lines of a files page that also show a passage (the rest stay one compact line). */
 export const PASSAGES_PER_PAGE = 10;
 const PASSAGE_CHARS = 300;

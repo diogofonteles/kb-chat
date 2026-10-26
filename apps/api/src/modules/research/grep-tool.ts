@@ -9,7 +9,9 @@ import {
   type DocFilter,
 } from './doc-filter.js';
 import {
+  PAGE_CHARS,
   PASSAGES_PER_PAGE,
+  fitting,
   countLine,
   fileLine,
   groupLine,
@@ -73,11 +75,6 @@ export function phrasesOf(phrase: string): string[] {
   return [...byFolded.values()].slice(0, MAX_PHRASES);
 }
 
-/**
- * Characters a page may take (NFR-3: every output stays under 60,000, below Claude Code's
- * MCP output limit): lines past it move to the next page, with an exact offset.
- */
-export const PAGE_CHARS = 50_000;
 /** What one content line takes besides its context: position, phrase, separators. */
 const CONTENT_LINE_EXTRA = 120;
 /** Room kept for a passage (or summary) line's " — Trecho: …" part. */
@@ -95,18 +92,6 @@ function pageSize(args: FindArgs, mode: GrepMode): number {
     (PAGE_CHARS * 0.8) / (args.context_chars + CONTENT_LINE_EXTRA),
   );
   return Math.max(1, Math.min(asked, fits));
-}
-
-/** How many of the lines fit in the page's character budget (at least one). */
-function fitting(lines: readonly string[], budget = PAGE_CHARS): number {
-  let used = 0;
-  let count = 0;
-  for (const line of lines) {
-    used += line.length + 1;
-    if (used > budget && count > 0) break;
-    count += 1;
-  }
-  return count;
 }
 
 const pageOf = (

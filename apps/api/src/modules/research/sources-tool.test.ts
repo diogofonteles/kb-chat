@@ -87,4 +87,24 @@ describe('list_sources (KBC-017 AC-6)', () => {
     const none = await run({ kind: 'sources', query: 'xyz' });
     expect(none.output).toBe('Origens: nenhuma.');
   });
+
+  it('keeps the output within the page budget with very long names (NFR-3)', async () => {
+    const docs: Record<string, string> = {};
+    for (let i = 1; i <= 250; i += 1)
+      docs[`raw/articles/l-${i}.md`] = memoryDoc({
+        title: `L ${i}`,
+        body: 'x',
+        entities: [`${'Entidade de nome muito longo '.repeat(6)}${i}`],
+        sourcePath: `_convert/${'Pasta de origem muito longa/'.repeat(10)}${i}/x.txt`,
+      });
+    const tools = await memoryTools(new MemoryVault(docs));
+    const output = await tools
+      .prepare(call({ head_limit: 200 }), {
+        topic: 'hermetismo',
+        book: new SourceBook(),
+      })
+      .run();
+    expect(output.length).toBeLessThan(60_000);
+    expect(output).toMatch(/Próxima página: offset=\d+\./);
+  });
 });
