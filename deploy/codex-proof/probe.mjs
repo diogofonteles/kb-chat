@@ -6,7 +6,17 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const MARK = 'KBCHAT-CANARY';
+// This run's canary comes as the turn's input (random per run), so source files that only
+// mention the word cannot match; nothing else reaches the probe but stdin.
+let MARK = '';
+for await (const chunk of process.stdin) MARK += chunk;
+MARK = MARK.trim();
+if (MARK.length < 24) {
+  process.stdout.write(
+    `${JSON.stringify({ type: 'kbchat.probe', error: 'no canary' })}\n`,
+  );
+  process.exit(2);
+}
 const SKIP = new Set(['/proc', '/sys', '/dev']);
 const MAX_BYTES = 2 * 1024 * 1024;
 const SERVER_VARIABLES = [
@@ -77,7 +87,6 @@ const explicit = [
   '/vault',
 ].filter(hasContent);
 
-for await (const chunk of process.stdin) void chunk;
 process.stdout.write(
   `${JSON.stringify({
     type: 'kbchat.probe',

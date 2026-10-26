@@ -12,7 +12,8 @@ repo="$(cd "$(dirname "$0")/../.." && pwd)"
 work="$(mktemp -d)"
 data="$work/data"
 project="kbchat-codex-proof"
-mark="KBCHAT-CANARY"
+# A fresh canary per run: only the copies planted below carry it.
+mark="KBCHAT-CANARY-$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
 
 cleanup() {
   docker compose -p "$project" --project-directory "$repo/deploy" --env-file "$work/.env" \
@@ -47,7 +48,7 @@ compose() {
 }
 compose up -d --wait --wait-timeout 120 codex
 
-turn='{"args":["exec","--json","-"],"input":"prove","token":"0123456789abcdef0123456789abcdef"}'
+turn="{\"args\":[\"exec\",\"--json\",\"-\"],\"input\":\"$mark\",\"token\":\"0123456789abcdef0123456789abcdef\"}"
 answer="$(compose exec -T codex node -e "
 fetch('http://127.0.0.1:8790/turn', { method: 'POST', headers: { 'content-type': 'application/json' }, body: process.argv[1] })
   .then((r) => r.text()).then((t) => process.stdout.write(t))" "$turn")"
@@ -62,6 +63,7 @@ const leaks = [
   ...probe.serverVariables.map((v) => 'variable ' + v),
   ...probe.serverPathsVisible.map((p) => 'path ' + p),
 ];
+if (probe.error) leaks.push('probe ' + probe.error);
 if (probe.uid !== 10002) leaks.push('uid ' + probe.uid);
 if (leaks.length > 0) { console.error('SANDBOX LEAK: ' + leaks.join(', ')); process.exit(1); }
 console.log('sandbox proof: ok (uid 10002, no canary file, process or variable; env: ' + probe.envNames.join(' ') + ')');
