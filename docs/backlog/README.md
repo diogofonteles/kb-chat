@@ -36,7 +36,8 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-026](KBC-026-invitation-email.md) | E-mail de convite: enviar ao convidar (com opção de não enviar), status "Convite enviado em …" / "Ativo" na lista e "Reenviar convite" com limite | release-1 | done | KBC-010, KBC-014, KBC-015 |
 | [KBC-022](KBC-022-house-ai-plan.md) | Plano da casa: a IA gratuita da aplicação, configurada pelo master na tela (OpenRouter por OAuth, modelos gratuitos ao vivo, cota diária por pessoa, política de acesso à IA por pessoa, chaves cifradas, produção sem chave no .env) | release-1 | done | KBC-007, KBC-010, KBC-017 |
 | [KBC-023](KBC-023-own-ai-guided-setup.md) | Sua IA: cada pessoa traz a própria IA com um guia na tela (OpenRouter em um clique com modelos gratuitos, Gemini gratuito, Claude e OpenAI por chave de API, cartão "Quem atende você agora") | release-1 | done | KBC-007, KBC-022 |
-| [KBC-024](KBC-024-lend-owner-claude-subscription.md) | Assinatura do Claude do dono cedida a pessoas específicas (só o dono cede, confirmação dos termos, nunca padrão, cota diária, aviso à pessoa, auditoria) | release-1 | in-review | KBC-007, KBC-022, KBC-023 |
+| [KBC-024](KBC-024-lend-owner-claude-subscription.md) | Assinatura do Claude do dono cedida a pessoas específicas (só o dono cede, confirmação dos termos, nunca padrão, cota diária, aviso à pessoa, auditoria) | release-1 | done | KBC-007, KBC-022, KBC-023 |
+| [KBC-027](KBC-027-sandboxed-codex-subscription.md) | Assinatura do ChatGPT (Codex) como IA da aplicação, com sandbox obrigatório (contêiner separado e executor, liga/desliga do master, cessão como a do Claude, prova em CI) | release-1 | in-review | KBC-007, KBC-022, KBC-024 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
 ## Definição de pronto (global)

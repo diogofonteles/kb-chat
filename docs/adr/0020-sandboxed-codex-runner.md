@@ -1,0 +1,37 @@
+# 0020 — Codex runs in a sandbox container, through a runner
+
+- Status: accepted (2026-10-26)
+- Amends: [0007](0007-ai-providers-and-local-settings.md) (Codex off unless enabled, best-effort lock-down), [0010](0010-deploy-oracle-cloud-always-free.md) (a third service, a second network), [0019](0019-lend-owner-claude-subscription.md) (a second lent subscription)
+- Drivers: KBC-027; the owner's decision of 2026-10-26 (the ChatGPT subscription as an app AI like Claude; the sandbox is mandatory, with a test proving a Codex turn cannot read the state, the Claude credentials, the deploy `.env` or `KB_CHAT_SECRETS_KEY`; otherwise block)
+
+## Context
+
+ADR 0007 kept Codex off: unlike Claude Code, it cannot be limited to the kb tools. Codex 0.164.0 (2026-10-26) has a shell, unified exec, a browser, computer use, apps, plugins, image generation and sub-agents; feature switches turn many off, but the set changes between versions, and `--sandbox read-only` restricts writes and the network, not reads. A prompt injection in a document could make Codex read any file the API process can read (the sealed keys' master key in the environment, sessions, the Claude login) and put it in an answer saved in the history. Running Codex as another uid inside the API container would need `CAP_SETUID` and still share `/proc`, the environment of PID 1 and the mounted volumes; user namespaces (bubblewrap) are blocked by Docker's default seccomp profile.
+
+## Decision
+
+- **A sandbox container.** Codex runs only in the `codex` service of `deploy/compose.yml`: the API image (which carries `@openai/codex@0.164.0`), run as uid 10002 (`codex`), command `node dist/codex-runner-main.js`. It mounts only `/srv/kb-chat/codex` as `CODEX_HOME`; no `env_file`, no state, no Claude login, no vault, no `KB_CHAT_SECRETS_KEY`; `read_only: true` with a `tmpfs` for `/tmp`, `cap_drop: [ALL]`, `no-new-privileges`, memory and pid limits. It is in the `codex` Compose profile, so it runs only when the owner sets `COMPOSE_PROFILES=codex`.
+- **A runner, not a shell.** `codex-runner` (in the API code) listens on the `codex` network: `POST /turn { args, input, token }` runs the Codex binary with an argument array (no shell), in a fresh folder under `/tmp`, with only `PATH`, `HOME`, `CODEX_HOME`, the locale and the turn token in its environment, and streams its stdout back as lines followed by `{"type":"kbchat.runner.exit","code":n}`; when the API's request ends, the process group is killed (SIGTERM, then SIGKILL). `GET /status` reports whether Codex is logged in (`codex login status`). The API's `CodexCliRunner` uses the runner whenever `KB_CHAT_CODEX_RUNNER_URL` is set; the arguments keep ADR 0007's lock-down and add the newer switches (browser, computer use, apps, plugins, image generation, sub-agents) and `--ignore-user-config`.
+- **MCP across the network, by token.** The `codex` network (172.30.0.0/24) joins only the API (172.30.0.2) and Codex (172.30.0.10). The MCP routes, loopback-only until now, also accept the addresses in `KB_CHAT_MCP_PEERS` (172.30.0.10), still behind the per-turn token; `KB_CHAT_CODEX_MCP_BASE_URL` (http://172.30.0.2:3000) is where Codex reaches them, and that host is in `ALLOWED_HOSTS`.
+- **Production refuses an unsandboxed Codex.** With `NODE_ENV=production`, `KB_CHAT_CODEX=on` without `KB_CHAT_CODEX_RUNNER_URL` stops the API at boot. On the owner's Mac, `KB_CHAT_CODEX=on` keeps ADR 0007's local spawn (his own machine, his own risk).
+- **On and off in the UI.** `house-ai.json` → `codex { enabled, by, at }` (off by default), changed by a master in "IA da aplicação"; the ChatGPT subscription serves only while it is on and the runner (or the local mode) is there. The view shows `{ configured, enabled, loggedIn }`.
+- **Lent like Claude.** `chatgpt-subscription` joins `APP_AIS` and the lent subscriptions of ADR 0019 (owner only, terms confirmed, never a default, the daily quota, the 10-minute pause when logged out, the notice, the audit); its turns are labelled `plan: 'app-chatgpt-subscription'`.
+- **Proof.** CI's "Codex sandbox" job builds the API image, starts the `codex` service from `deploy/compose.yml` with a test override that only swaps the Codex binary for a probe, plants canary copies of the state, the Claude login, the deploy `.env` and the secrets key on the host, sends a turn through the runner and fails if the probe read any of them or found a server variable in its environment. The owner can run the same probe on the VM (runbook 9c).
+
+## Options considered
+
+1. **Sandbox container from the same image, behind a runner (chosen).** Real isolation by the container boundary; one image, so the deploy pipeline still pulls two digests; the proof runs the production Compose definition.
+2. **Another uid inside the API container.** Needs `CAP_SETUID`; shares `/proc` and every volume the API mounts; weaker and harder to prove.
+3. **bubblewrap/namespaces inside the API container.** Blocked by Docker's default seccomp (unprivileged user namespaces); loosening seccomp weakens the API itself.
+4. **A third image for Codex.** Same isolation, but the deploy's forced SSH command carries two digests; changing that contract on the VM during a deploy is risky.
+5. **Codex configuration only (ADR 0007).** Not a sandbox: rejected by the owner's requirement.
+
+## Consequences
+
+- Good: a Codex turn sees only its own home; the API's secrets are in another container.
+- Accepted risk: Codex can read its own `auth.json` (the owner's ChatGPT login) and the turn's token; a prompt injection could put the ChatGPT login in an answer to a person the owner lent it to. Mitigations: the lock-down switches, lending only to trusted people, and `codex logout` on the VM revokes it. OpenAI's terms do not allow serving others with a personal plan either; the confirmation says so (ADR 0019).
+- Accepted risk: the container reaches the internet (Codex needs it) and the cloud's metadata address, like the API.
+- Bad: one more process (the runner idles at ~40 MB) and a second network; the owner opts in with `COMPOSE_PROFILES=codex`.
+- Rollback: an older version does not know `chatgpt-subscription`; revoke every lending of it before downgrading (as ADR 0019).
+- Revisit when: Codex can run with no built-in tools; the VM moves to a runtime with gVisor or Kata.
+- Compliance: the CI proof job; runner integration tests with a fake Codex; MCP peer tests; config refusal test.
