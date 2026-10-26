@@ -562,6 +562,10 @@ describe('Configurações', () => {
       target: { value: 'AIza-my-key-1234' },
     });
     expect(screen.queryByLabelText(/Limite de gasto/)).toBeNull();
+    // The free plan says why no cap applies and what to do with billing on (design review F1).
+    expect(
+      screen.getByText(/No plano gratuito, o limite de gasto não se aplica/),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('radio', { name: /Pago/ }));
     await fixture.whenStable();
     expect(screen.getByLabelText(/Limite de gasto/)).toBeTruthy();

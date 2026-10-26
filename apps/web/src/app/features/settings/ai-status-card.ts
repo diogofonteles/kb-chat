@@ -58,7 +58,11 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
               · {{ planLabel() }}
             }
           </p>
-          @if (current.free) {
+          @if (current.free && current.provider === 'gemini') {
+            <p class="detail" i18n="@@aiStatus.ownFreeGoogle">
+              Gratuito se o faturamento estiver desativado no Google Cloud.
+            </p>
+          } @else if (current.free) {
             <p class="detail" i18n="@@aiStatus.ownFree">Gratuito para você.</p>
           } @else if (spentLabel(); as spent) {
             <p class="detail" i18n="@@aiStatus.ownSpent">

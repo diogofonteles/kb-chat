@@ -76,9 +76,20 @@ describe('AiStatusCard (KBC-022, T6)', () => {
 
   it('says one’s own free models cost nothing', async () => {
     await renderCard(
-      anAiStatus({ source: 'own', provider: 'gemini', free: true }),
+      anAiStatus({ source: 'own', provider: 'openrouter', free: true }),
     );
     expect(document.body.textContent).toContain('Gratuito para você.');
+  });
+
+  it('says the free Google plan is free only with billing off (design review F1)', async () => {
+    await renderCard(
+      anAiStatus({ source: 'own', provider: 'gemini', free: true }),
+    );
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(
+      'Gratuito se o faturamento estiver desativado no Google Cloud.',
+    );
+    expect(text).not.toContain('Gratuito para você.');
   });
 
   it('names one’s own plan and why the last test failed (KBC-023 AC-1, BR-6)', async () => {

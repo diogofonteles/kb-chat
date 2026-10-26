@@ -29,6 +29,7 @@ KBC-022 gave invited people the app's AI. Some will want their own: more researc
 
 - Good: a guest gets a free AI of their own in a minute (OpenRouter free models, or Gemini free) and always sees who pays.
 - Bad: Gemini's free tier may train Google's models on the questions and passages; the guide says so before the key is pasted.
+- Bad: the free tier is what the person declares; with billing on in Google Cloud, Google charges anyway and our ledger counts US$ 0. The card says "free if billing is off" and the plan explains that the daily cap applies only on "Pago" (design review F1).
 - Bad: free models are slower and less capable than paid ones; the guide says so and offers the paid options.
 - Revisit when: Google changes the free tier or the thought-signature contract; OpenRouter changes OAuth; or Anthropic/OpenAI open subscription sign-in to third parties.
 - Compliance: Gemini adapter tests on recorded streams (text, function calls with signatures, errors); the own OAuth against the fake OpenRouter; no real provider call in automated tests.

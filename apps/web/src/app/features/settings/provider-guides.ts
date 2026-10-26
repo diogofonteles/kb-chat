@@ -18,7 +18,7 @@ export interface ProviderGuide {
 
 const TEST_STEP: GuideStep = {
   text: () =>
-    $localize`:@@guide.test:Clique em “Testar conexão” e, se der certo, guarde a escolha.`,
+    $localize`:@@guide.test:Use “Testar conexão” e, se der certo, “Salvar” (no assistente, “Continuar”).`,
 };
 
 /** The guides of "Sua IA" (screens.md T6); providers without one show only their hint. */
@@ -31,7 +31,7 @@ export const PROVIDER_GUIDES: Partial<Record<AiProvider, ProviderGuide>> = {
       },
       {
         text: () =>
-          $localize`:@@guide.app2:Escolha esta opção e clique em “Salvar” para voltar a usá-la a qualquer momento.`,
+          $localize`:@@guide.app2:Escolha esta opção e use “Salvar” para voltar a usá-la a qualquer momento.`,
       },
     ],
     cost: () => $localize`:@@guide.appCost:Gratuito para você.`,
@@ -44,7 +44,7 @@ export const PROVIDER_GUIDES: Partial<Record<AiProvider, ProviderGuide>> = {
     steps: [
       {
         text: () =>
-          $localize`:@@guide.or1:Clique em “Conectar OpenRouter”. Se ainda não tem conta, crie uma no próprio OpenRouter (com Google ou e-mail).`,
+          $localize`:@@guide.or1:Use “Conectar OpenRouter”. Se ainda não tem conta, crie uma no próprio OpenRouter (com Google ou e-mail).`,
       },
       {
         text: () =>
@@ -83,7 +83,7 @@ export const PROVIDER_GUIDES: Partial<Record<AiProvider, ProviderGuide>> = {
       },
       {
         text: () =>
-          $localize`:@@guide.gm2:Clique em “Create API key” (Criar chave de API) e copie a chave, que começa com AIza.`,
+          $localize`:@@guide.gm2:Use “Create API key” (Criar chave de API) e copie a chave, que começa com AIza.`,
       },
       {
         text: () =>

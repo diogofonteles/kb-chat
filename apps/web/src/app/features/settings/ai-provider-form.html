@@ -163,6 +163,14 @@
         >
       </label>
     </fieldset>
+    @if (draft().geminiTier === 'free') {
+      <p class="hint" i18n="@@ai.geminiFreeCap">
+        No plano gratuito, o limite de gasto não se aplica: a Nova Alexandria
+        conta US$ 0. Se o faturamento estiver ativado no Google Cloud, o Google
+        cobra mesmo assim; escolha “Pago” para que o gasto seja contado e
+        limitado.
+      </p>
+    }
   }
 
   @if (current.info.billing === 'per-token') {
@@ -173,8 +181,10 @@
       @if (savedKey(); as saved) {
         <p class="saved-key">
           <span
-            ><span i18n="@@ai.keySaved">Chave salva</span>
-            <code class="masked">••••{{ saved.last4 }}</code></span
+            ><span i18n="@@ai.keySaved">Chave salva:</span>&nbsp;<code
+              class="masked"
+              >••••{{ saved.last4 }}</code
+            ></span
           >
           <button
             type="button"
