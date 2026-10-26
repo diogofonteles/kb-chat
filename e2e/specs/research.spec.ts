@@ -313,6 +313,78 @@ test('KBC-007 AC-4: a subscription turn shows "Incluído na sua assinatura" inst
   await expect(answer.getByRole('link', { name: /^Fonte 1:/ })).toBeVisible();
 });
 
+test('KBC-020 AC-7: cited sources of both groups are listed apart, each with its authorship badge', async ({
+  page,
+}) => {
+  const events = [
+    {
+      type: 'sources',
+      sources: [
+        {
+          n: 1,
+          id: 'raw/articles/a-lei-do-ritmo.md',
+          title: 'A Lei do Ritmo',
+          authorship: 'mestre-laercio',
+          author: 'José Laércio do Egito',
+        },
+        {
+          n: 2,
+          id: 'raw/articles/arvore-da-vida.md',
+          title: 'A Árvore da Vida',
+          authorship: 'outros-autores',
+        },
+      ],
+    },
+    {
+      type: 'token',
+      text: 'Segundo o acervo, o Mestre ensina o ritmo [1]; a Cabala trata da árvore [2].',
+      segment: 0,
+    },
+    {
+      type: 'done',
+      usd: 0,
+      billing: 'subscription',
+      model: 'claude-opus-5-5',
+      interrupted: false,
+      steps: 1,
+    },
+  ];
+  await page.route('**/api/v1/topics/*/research', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: events
+        .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+        .join(''),
+    }),
+  );
+  const answer = await research(page, 'o ritmo e a árvore');
+  await expect(
+    answer.getByRole('heading', { name: 'Mestre Laércio (1)' }),
+  ).toBeVisible();
+  await expect(
+    answer.getByRole('heading', { name: 'Outros autores (1)' }),
+  ).toBeVisible();
+  await expect(
+    answer
+      .getByRole('list', { name: 'Mestre Laércio' })
+      .getByRole('button', { name: /A Lei do Ritmo/ }),
+  ).toContainText('Mestre Laércio');
+  await expect(
+    answer
+      .getByRole('list', { name: 'Outros autores' })
+      .getByRole('button', { name: /A Árvore da Vida/ }),
+  ).toContainText('Outros autores');
+  const axe = await new AxeBuilder({ page })
+    .include('app-research-message')
+    .analyze();
+  expect(
+    axe.violations.filter((v) =>
+      ['serious', 'critical'].includes(v.impact ?? ''),
+    ),
+  ).toEqual([]);
+});
+
 test('a question stopped before any text stays in the history and restores as interrupted', async ({
   page,
 }) => {

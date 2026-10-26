@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
 import { startInSearchView } from './search-view.js';
@@ -213,5 +214,54 @@ test.describe('mobile sheet focus', () => {
     await page.keyboard.press('Escape');
     await expect(sheet).toHaveCount(0);
     await expect(trigger).toBeFocused();
+  });
+});
+
+test.describe('authorship (KBC-020)', () => {
+  test('AC-2/AC-3: "Autoria" keeps only the Mestre or the other authors, and every card says whose it is', async ({
+    page,
+  }) => {
+    await askSemantic(page, 'natureza');
+    await expect(
+      page.getByText(/3 documentos · Por significado/),
+    ).toBeVisible();
+    const control = page.getByRole('radiogroup', { name: 'Autoria' });
+    await expect(
+      control.getByRole('radio', { name: /^Todos 3/ }),
+    ).toBeChecked();
+    await expect(
+      control.getByRole('radio', { name: /Mestre Laércio 1/ }),
+    ).toBeVisible();
+    const cards = page.locator('app-result-card');
+    await expect(cards).toHaveCount(3);
+    await expect(cards.getByText('Mestre Laércio')).toHaveCount(1);
+    await expect(cards.getByText('Outros autores')).toHaveCount(2);
+
+    await control.getByRole('radio', { name: /Outros autores/ }).check();
+    await expect(
+      page.getByText(/2 documentos · Por significado/),
+    ).toBeVisible();
+    await expect(page.locator('app-result-message')).toHaveCount(1);
+    await expect(cards).toHaveCount(2);
+    await expect(cards.getByText('Mestre Laércio')).toHaveCount(0);
+
+    await control.getByRole('radio', { name: /Mestre Laércio/ }).check();
+    await expect(cards).toHaveCount(1);
+    await cards.first().getByRole('button').first().click();
+    const panel = page.getByRole('dialog');
+    await expect(panel.getByText('Mestre Laércio')).toBeVisible();
+    await expect(panel.getByText('José Laércio do Egito')).toBeVisible();
+    await panel.getByRole('button', { name: /Fechar/ }).click();
+
+    await control.getByRole('radio', { name: /^Todos/ }).check();
+    await expect(cards).toHaveCount(3);
+    const axe = await new AxeBuilder({ page })
+      .include('app-result-message')
+      .analyze();
+    expect(
+      axe.violations.filter((v) =>
+        ['serious', 'critical'].includes(v.impact ?? ''),
+      ),
+    ).toEqual([]);
   });
 });
