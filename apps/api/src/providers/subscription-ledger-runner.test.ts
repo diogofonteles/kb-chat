@@ -1,5 +1,5 @@
 import type { ResearchEvent } from '@kb-chat/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import type { SpendEntry, SpendLedgerPort } from '../ports/spend-ledger.js';
 import { SubscriptionLedgerRunner } from './subscription-ledger-runner.js';
@@ -75,13 +75,16 @@ describe('SubscriptionLedgerRunner (KBC-024 AC-2)', () => {
 
   it('records nothing for a turn that failed before it was done', async () => {
     const { entries, ledger } = recordingLedger();
+    const failed = vi.fn();
     const runner = new SubscriptionLedgerRunner({
       inner: innerRunner([{ type: 'error', code: 'CLI_LOGIN_REQUIRED' }]),
       ledger,
       principal: 'sub-ana',
+      failed,
     });
     for await (const event of runner.run(input))
       expect(event.type).toBe('error');
     expect(entries).toEqual([]);
+    expect(failed).toHaveBeenCalledWith('CLI_LOGIN_REQUIRED');
   });
 });

@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   caller,
   closeApp,
@@ -11,7 +11,10 @@ import {
   type Started,
 } from '../test/ai-app-harness.js';
 
-afterEach(closeApp);
+afterEach(async () => {
+  vi.useRealTimers();
+  await closeApp();
+});
 
 const LEND = {
   appAi: 'claude-subscription',
@@ -245,5 +248,43 @@ describe('What only the owner changes on a lent person (KBC-024 F-4)', () => {
     expect(
       (await owner('GET', '/api/v1/house-ai/default')).json().defaultAppAi,
     ).toBe('none');
+  });
+});
+
+describe('The pause after a logged-out CLI (KBC-024 review R2-1)', () => {
+  const lentAvailable = async (owner: ReturnType<typeof caller>) =>
+    (await owner('GET', '/api/v1/house-ai/default')).json()
+      .subscriptionAvailable;
+
+  async function loggedOut() {
+    const started = await start({ claude: true });
+    const { owner, member, memberId } = await withPeople(started);
+    await writeFile(
+      join(started.state, 'fake-cli.json'),
+      JSON.stringify({ mode: 'login' }),
+    );
+    await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
+    await research(member);
+    expect(await lentAvailable(owner)).toBe(false);
+    return { started, owner };
+  }
+
+  it('lends it again ten minutes later', async () => {
+    const { owner } = await loggedOut();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await lentAvailable(owner)).toBe(false);
+    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    expect(await lentAvailable(owner)).toBe(true);
+  });
+
+  it('lends it again as soon as the owner’s connection test passes', async () => {
+    const { started, owner } = await loggedOut();
+    await writeFile(join(started.state, 'fake-cli.json'), JSON.stringify({}));
+    const tested = await owner('POST', '/api/v1/settings/ai/test', {
+      provider: 'claude-subscription',
+    });
+    expect(tested.json().ok).toBe(true);
+    expect(await lentAvailable(owner)).toBe(true);
   });
 });

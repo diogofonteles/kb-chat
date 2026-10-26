@@ -421,6 +421,13 @@ export class ProviderRegistry implements ProviderCatalog {
       runner: () =>
         this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
+    // The owner logged in again: lend the subscription again at once (ADR 0019).
+    if (
+      result.ok &&
+      request.provider === 'claude-subscription' &&
+      this.isOwner(principal)
+    )
+      this.lentLoggedOutUntil = 0;
     // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
     await this.options.settings.recordTest(principal, {
       provider: request.provider,
