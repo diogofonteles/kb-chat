@@ -23,6 +23,7 @@ const aPerson = (overrides: Partial<Person> = {}): Person => ({
   features: ['search'],
   isOwner: false,
   phone: null,
+  invitation: null,
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-24T10:00:00.000Z',
   lastLoginAt: null,
@@ -79,20 +80,186 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Convidar' }));
     const request = http.expectOne('/api/v1/people');
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({ email: 'new@example.com' });
+    expect(request.request.body).toEqual({
+      email: 'new@example.com',
+      sendEmail: true,
+    });
     request.flush(
       aPerson({
         id: '33333333-3333-4333-8333-333333333333',
         email: 'new@example.com',
         name: '',
+        invitation: { sentAt: '2026-10-26T12:00:00.000Z', failedAt: null },
       }),
     );
     await fixture.whenStable();
 
     expect(screen.getByRole('status').textContent).toContain(
-      'new@example.com já pode entrar',
+      'Convite enviado para new@example.com.',
+    );
+    expect(row(/new@example.com/).textContent).toContain(
+      'Convite enviado em 26/10/2026',
     );
     expect(screen.getByRole('group', { name: 'Acervos' })).toBeTruthy();
+  });
+
+  it('AC-2: "Não enviar e-mail de convite" invites without e-mail and says so', async () => {
+    const { http, fixture } = await renderPanel([owner]);
+    const box = screen.getByRole('checkbox', {
+      name: 'Não enviar e-mail de convite',
+    }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {
+      target: { value: 'quiet@example.com' },
+    });
+    fireEvent.click(box);
+    await fixture.whenStable();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Convidar' }));
+    const request = http.expectOne('/api/v1/people');
+    expect(request.request.body).toEqual({
+      email: 'quiet@example.com',
+      sendEmail: false,
+    });
+    request.flush(aPerson({ email: 'quiet@example.com', name: '' }));
+    await fixture.whenStable();
+
+    expect(screen.getByRole('status').textContent).toContain(
+      'Convite criado sem e-mail. quiet@example.com já pode entrar',
+    );
+    expect(box.checked).toBe(false);
+  });
+
+  it('AC-5: a failed invitation e-mail is an error, and the person stays', async () => {
+    const { http, fixture } = await renderPanel([owner]);
+    fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {
+      target: { value: 'unlucky@example.com' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Convidar' }));
+    http.expectOne('/api/v1/people').flush(
+      aPerson({
+        email: 'unlucky@example.com',
+        name: '',
+        invitation: { sentAt: null, failedAt: '2026-10-26T12:00:00.000Z' },
+      }),
+    );
+    await fixture.whenStable();
+
+    const status = screen.getByRole('status');
+    expect(status.classList).toContain('error');
+    expect(status.textContent).toContain(
+      'Convite criado, mas o e-mail não foi enviado.',
+    );
+    expect(row(/unlucky@example.com/).textContent).toContain(
+      'Falha ao enviar o convite',
+    );
+  });
+
+  it('AC-3: shows "Ativo" after the first sign-in and the invitation before it', async () => {
+    await renderPanel([
+      owner,
+      aPerson({
+        invitation: { sentAt: '2026-10-25T15:30:00.000Z', failedAt: null },
+      }),
+    ]);
+
+    expect(row(/Owner/).textContent).toContain('Ativo');
+    expect(row(/Guest/).textContent).toContain('Convite enviado em 25/10/2026');
+    expect(row(/Guest/).textContent).not.toContain('Ativo');
+  });
+
+  it('AC-4: resends the invitation and announces it', async () => {
+    const { http, fixture } = await renderPanel([
+      owner,
+      aPerson({
+        invitation: { sentAt: '2026-10-25T15:30:00.000Z', failedAt: null },
+      }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reenviar convite' }));
+    const request = http.expectOne(
+      '/api/v1/people/11111111-1111-4111-8111-111111111111/invitation',
+    );
+    expect(request.request.method).toBe('POST');
+    request.flush(
+      aPerson({
+        invitation: { sentAt: '2026-10-26T12:00:00.000Z', failedAt: null },
+      }),
+    );
+    await fixture.whenStable();
+
+    expect(screen.getByRole('status').textContent).toContain(
+      'Convite reenviado para guest@example.com.',
+    );
+    expect(row(/Guest/).textContent).toContain('Convite enviado em 26/10/2026');
+  });
+
+  it('AC-4: says from when a limited invitation can be resent', async () => {
+    const { http, fixture } = await renderPanel();
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar convite' }));
+    http
+      .expectOne(
+        '/api/v1/people/11111111-1111-4111-8111-111111111111/invitation',
+      )
+      .flush(
+        {
+          error: {
+            code: 'RATE_LIMITED',
+            message: 'x',
+            details: { retryAt: '2026-10-26T15:10:00.000Z' },
+          },
+        },
+        { status: 429, statusText: 'Too Many Requests' },
+      );
+    await fixture.whenStable();
+
+    const status = screen.getByRole('status');
+    expect(status.classList).toContain('error');
+    expect(status.textContent).toMatch(
+      /Este convite foi enviado há pouco\. Você pode reenviar a partir de 26\/10 \d{2}:10\./,
+    );
+  });
+
+  it('AC-5: a failed resend shows the error and keeps the invitation', async () => {
+    const { http, fixture } = await renderPanel();
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar convite' }));
+    http
+      .expectOne(
+        '/api/v1/people/11111111-1111-4111-8111-111111111111/invitation',
+      )
+      .flush(
+        aPerson({
+          invitation: { sentAt: null, failedAt: '2026-10-26T12:00:00.000Z' },
+        }),
+      );
+    await fixture.whenStable();
+
+    expect(screen.getByRole('status').textContent).toContain(
+      'Não consegui enviar o e-mail. O convite continua valendo',
+    );
+    expect(row(/Guest/).textContent).toContain('Falha ao enviar o convite');
+  });
+
+  it('AC-7: offers no resend to someone who already signed in', async () => {
+    const { fixture } = await renderPanel([
+      owner,
+      aPerson({ lastLoginAt: '2026-10-26T12:00:00.000Z' }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+
+    expect(
+      screen.queryByRole('button', { name: /enviar convite/i }),
+    ).toBeNull();
   });
 
   it('saves a collection and a feature as soon as they change', async () => {

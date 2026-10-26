@@ -25,6 +25,16 @@
   >
     Convidar
   </button>
+  <label class="check">
+    <input
+      #skipBox
+      type="checkbox"
+      name="skipEmail"
+      [checked]="skipEmail()"
+      (change)="skipEmail.set(skipBox.checked)"
+    />
+    <span i18n="@@people.skipEmail">Não enviar e-mail de convite</span>
+  </label>
 </form>
 @if (inviteError()) {
   <p id="invite-error" class="invite-error" role="alert">
@@ -33,7 +43,8 @@
   </p>
 }
 <p id="invite-hint" class="hint" i18n="@@people.inviteHint">
-  Quem é convidado começa com "Buscar documentos" e nenhum acervo.
+  Quem é convidado recebe um e-mail com o link e começa com "Buscar documentos"
+  e nenhum acervo.
 </p>
 
 <app-access-requests-list (approved)="welcome($event)" />
@@ -86,18 +97,39 @@
             @if (spendOf(person); as spent) {
               <span class="spent">{{ spent }}</span>
             }
+            @let invitation = invitations().get(person.id);
             <span class="last">
-              @if (person.lastLoginAt) {
-                <ng-container i18n="@@people.lastLogin"
-                  >Último acesso
-                  {{
-                    person.lastLoginAt | date: 'dd/MM/yyyy HH:mm'
-                  }}</ng-container
-                >
-              } @else {
-                <ng-container i18n="@@people.neverSignedIn"
-                  >Ainda não entrou</ng-container
-                >
+              @switch (invitation?.kind) {
+                @case ('active') {
+                  <span class="badge active" i18n="@@people.active">Ativo</span>
+                  <ng-container i18n="@@people.lastLogin"
+                    >Último acesso
+                    {{
+                      person.lastLoginAt | date: 'dd/MM/yyyy HH:mm'
+                    }}</ng-container
+                  >
+                }
+                @case ('sent') {
+                  <ng-container i18n="@@people.invitationSentAt"
+                    >Convite enviado em
+                    {{
+                      person.invitation?.sentAt | date: 'dd/MM/yyyy HH:mm'
+                    }}</ng-container
+                  >
+                }
+                @case ('failed') {
+                  <span class="failed"
+                    ><span aria-hidden="true">⚠</span>&ngsp;<ng-container
+                      i18n="@@people.invitationFailed"
+                      >Falha ao enviar o convite</ng-container
+                    ></span
+                  >
+                }
+                @default {
+                  <ng-container i18n="@@people.neverSignedIn"
+                    >Ainda não entrou</ng-container
+                  >
+                }
               }
             </span>
           </span>
@@ -112,6 +144,24 @@
             (changed)="change(person, $event)"
             (revoked)="revoke(person)"
           />
+          @if (
+            !person.isOwner && invitations().get(person.id)?.kind !== 'active'
+          ) {
+            <div class="invitation">
+              <button
+                type="button"
+                class="secondary"
+                [disabled]="busy()"
+                (click)="resend(person)"
+              >
+                @if (invitations().get(person.id)?.kind === 'none') {
+                  <span i18n="@@people.sendInvitation">Enviar convite</span>
+                } @else {
+                  <span i18n="@@people.resendInvitation">Reenviar convite</span>
+                }
+              </button>
+            </div>
+          }
           <ng-container *ngTemplateOutlet="status" />
         }
       </li>
