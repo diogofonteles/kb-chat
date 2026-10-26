@@ -81,12 +81,22 @@ export const personAiUpdateSchema = z.strictObject({
 export type PersonAiUpdate = z.infer<typeof personAiUpdateSchema>;
 
 /** POST /api/v1/people/ai-assignment: one, several or every person at once. */
-export const aiAssignmentRequestSchema = z.strictObject({
-  personIds: z.union([z.literal('all'), z.array(z.uuid()).min(1).max(1000)]),
-  appAi: appAiAssignmentSchema,
-  /** With "all": the house default for people invited later becomes this too. */
-  setDefault: z.boolean().default(false),
-});
+export const aiAssignmentRequestSchema = z
+  .strictObject({
+    personIds: z.union([z.literal('all'), z.array(z.uuid()).min(1).max(1000)]),
+    appAi: appAiAssignmentSchema,
+    /** With "all" and an AI (not "default"): the default for people invited later too. */
+    setDefault: z.boolean().default(false),
+  })
+  .refine(
+    (request) =>
+      !request.setDefault ||
+      (request.personIds === 'all' && request.appAi !== 'default'),
+    {
+      path: ['setDefault'],
+      error: 'The default changes only with "all" and an AI',
+    },
+  );
 export type AiAssignmentRequest = z.input<typeof aiAssignmentRequestSchema>;
 
 export const aiAssignmentResultSchema = z.object({

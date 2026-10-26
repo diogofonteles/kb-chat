@@ -129,7 +129,7 @@ Decisão do dono em 2026-10-26: "Nada deve ser configurado por nós via código;
 | AC-13 | unitário (`ai-access.test.ts`) + integração | — |
 
 ## References
-ADR: `docs/adr/0016-house-ai-plan-and-secrets-at-rest.md` (emenda 0004, 0007, 0008) · Telas: `docs/design/screens.md` (T6, T9, T12 "IA da aplicação") · Runbook: `docs/deploy/runbook.md` (passo 5)
+ADR: `docs/adr/0016-house-ai-plan-and-access-policy.md` (emenda 0004, 0007, 0008), `docs/adr/0017-secrets-sealed-at-rest.md` · Telas: `docs/design/screens.md` (T6, T9, T12 "IA da aplicação") · Runbook: `docs/deploy/runbook.md` (passo 5)
 
 ## Open questions
 Nenhuma. Premissas registradas: pesos 1/2/5; reserva de capacidade 8/16/100 pedidos; cota padrão 5; o dia da cota é o do servidor; `openrouter/free` ligado por padrão; o modelo pago só por pessoa.

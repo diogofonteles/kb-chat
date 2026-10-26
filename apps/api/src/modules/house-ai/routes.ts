@@ -4,6 +4,7 @@ import {
   freeModelListSchema,
   houseAiUpdateSchema,
   houseAiViewSchema,
+  houseDefaultSchema,
   openRouterConnectRequestSchema,
   openRouterConnectResponseSchema,
   type OpenRouterPurpose,
@@ -64,6 +65,22 @@ function registerHouseView(app: FastifyInstance, { house }: HouseAiRouteDeps) {
     },
     async (request) =>
       house.update(request.body, viewerOf(request).person.email),
+  );
+}
+
+function registerHouseDefault(
+  app: FastifyInstance,
+  { house }: HouseAiRouteDeps,
+) {
+  const routes = app.withTypeProvider<ZodTypeProvider>();
+  // The default alone: "Pessoas e permissões" needs no call to OpenRouter (review fix).
+  routes.get(
+    '/api/v1/house-ai/default',
+    {
+      config: { access: MASTER },
+      schema: { response: { 200: houseDefaultSchema } },
+    },
+    async () => ({ defaultAppAi: house.defaultAppAi() }),
   );
 }
 
@@ -174,9 +191,13 @@ async function completeConnection(
     const key = await deps.exchange(code, pending.verifier);
     await target.store(key, viewer);
     return { purpose: pending.purpose };
-  } catch {
-    // The failure's text could carry the code: only the outcome is logged.
-    return { purpose: pending.purpose, error: 'code exchange failed' };
+  } catch (err) {
+    // The failure's text could carry the code: only its kind is logged.
+    const kind = err instanceof Error ? err.name : 'unknown';
+    return {
+      purpose: pending.purpose,
+      error: `code exchange failed (${kind})`,
+    };
   }
 }
 
@@ -199,6 +220,7 @@ export const houseAiRoutes =
   (deps: HouseAiRouteDeps): FastifyPluginAsync =>
   async (app) => {
     registerHouseView(app, deps);
+    registerHouseDefault(app, deps);
     registerHouseKey(app, deps);
     registerConnect(app, deps);
     registerFreeModels(app, deps);

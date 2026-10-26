@@ -68,6 +68,8 @@ export class FakeOpenRouter {
   readonly busy = new Set<string>();
   readonly chats: ChatCall[] = [];
   readonly createdKeys = new Map<string, { key: string; limit: number }>();
+  /** Key management answers 500 (to test what happens when OpenRouter fails). */
+  failManagement = false;
   private readonly validKeys = new Set<string>(['sk-or-v1-house-valid']);
   private readonly codes = new Map<
     string,
@@ -132,6 +134,7 @@ export class FakeOpenRouter {
   }
 
   private manage(route: string, body: unknown): Response {
+    if (this.failManagement) return json({ error: { code: 500 } }, 500);
     const { limit, name } = (body ?? {}) as { limit?: number; name?: string };
     if (route === 'POST /keys') {
       const hash = `hash-${this.createdKeys.size + 1}`;

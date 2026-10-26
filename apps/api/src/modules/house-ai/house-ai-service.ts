@@ -39,6 +39,11 @@ export interface KeyHolder {
 
 const last4 = (key: string): string => key.slice(-4);
 
+/** Where each sealed key lives (bound to its ciphertext, ADR 0017). */
+const CONNECTION = 'house:connection';
+const MANAGEMENT = 'house:management';
+const personContext = (personId: string): string => `house:person:${personId}`;
+
 /**
  * The app's own AI (KBC-022, ADR 0016): the house OpenRouter account, its model chain, the
  * default app AI and quota, and the keys provisioned per person. Kept in memory, written to
@@ -64,13 +69,16 @@ export class HouseAiService {
 
   /** The house key, opened; null when not connected or not readable with this master key. */
   houseKey(): string | null {
-    return this.openKey(this.config.connection?.key);
+    return this.openKey(this.config.connection?.key, CONNECTION);
   }
 
   /** The key a person's house requests use: their provisioned one, else the house's. */
   keyFor(personId: string | null): string | null {
     const own = personId ? this.config.personKeys[personId] : undefined;
-    return this.openKey(own?.key) ?? this.houseKey();
+    const ownKey = personId
+      ? this.openKey(own?.key, personContext(personId))
+      : null;
+    return ownKey ?? this.houseKey();
   }
 
   /** The free chain now: the master's list or the live one, then the router when wanted. */
@@ -125,6 +133,7 @@ export class HouseAiService {
       chain: this.chain(),
       paidModel: rest.paidModel,
       defaultAppAi: rest.defaultAppAi,
+      defaultChange: rest.defaultChange,
       defaultDailyResearches: rest.defaultDailyResearches,
       managementKey: managementKey && { set: true, last4: managementKey.last4 },
       freeUsage: await this.freeUsage(),
@@ -134,6 +143,9 @@ export class HouseAiService {
   /** A master's change; a typed key connects the house account ("Colar uma chave"). */
   async update(patch: HouseAiUpdate, by: string): Promise<HouseAiView> {
     const { key, managementKey, ...rest } = patch;
+    // Keys made on the old account (or with the old management key) would bill it: drop them.
+    if (key !== undefined || managementKey !== undefined)
+      await this.resetPersonKeys();
     await this.change((config) => ({
       ...config,
       ...rest,
@@ -147,6 +159,7 @@ export class HouseAiService {
 
   /** The key from "Conectar OpenRouter" (OAuth PKCE). */
   async connect(key: string, by: string): Promise<void> {
+    await this.resetPersonKeys();
     await this.change((config) => ({
       ...config,
       connection: this.connection(key, 'oauth', by),
@@ -154,7 +167,29 @@ export class HouseAiService {
   }
 
   async disconnect(): Promise<void> {
+    await this.resetPersonKeys();
     await this.change((config) => ({ ...config, connection: null }));
+  }
+
+  /**
+   * Deletes every key provisioned per person (best effort: one OpenRouter refuses is logged)
+   * and forgets them; they are made again on the person's next research (`syncPersonKey`).
+   */
+  private async resetPersonKeys(): Promise<void> {
+    const entries = Object.entries(this.config.personKeys);
+    if (entries.length === 0) return;
+    const management = this.openKey(this.config.managementKey?.key, MANAGEMENT);
+    for (const [personId, { hash }] of entries) {
+      if (!management) break;
+      await this.deps.account
+        .deleteKey(management, hash)
+        .catch(() =>
+          this.deps.warn?.(
+            `could not delete the OpenRouter key of person ${personId}`,
+          ),
+        );
+    }
+    await this.change((config) => ({ ...config, personKeys: {} }));
   }
 
   /** "Testar conexão": the key info answers with the key accepted. */
@@ -180,17 +215,22 @@ export class HouseAiService {
     }
   }
 
-  /** "Também para os próximos": the default app AI of people left on `default`. */
-  async setDefault(appAi: AppAi): Promise<void> {
-    await this.change((config) => ({ ...config, defaultAppAi: appAi }));
+  /** "Também para os próximos": the default app AI of people left on `default`, audited. */
+  async setDefault(appAi: AppAi, by: string): Promise<void> {
+    const at = (this.deps.now?.() ?? new Date()).toISOString();
+    await this.change((config) => ({
+      ...config,
+      defaultAppAi: appAi,
+      defaultChange: { by, at },
+    }));
   }
 
   /**
    * Keeps OpenRouter's own limit in step with a person's paid fallback (ADR 0016): with a
    * management key, a key with a monthly limit while the fallback is on, none when off.
    */
-  async beforePersonAiChange(holder: KeyHolder, next: PersonAi): Promise<void> {
-    const management = this.openKey(this.config.managementKey?.key);
+  async syncPersonKey(holder: KeyHolder, next: PersonAi): Promise<void> {
+    const management = this.openKey(this.config.managementKey?.key, MANAGEMENT);
     if (!management) return;
     const current = this.config.personKeys[holder.id];
     const { enabled, monthlyCapUsd } = next.paidFallback;
@@ -222,7 +262,7 @@ export class HouseAiService {
     });
     const stored = {
       hash: created.hash,
-      key: this.deps.sealer.seal(created.key),
+      key: this.deps.sealer.seal(created.key, personContext(holder.id)),
       limitUsd,
     };
     await this.change((config) => ({
@@ -266,7 +306,7 @@ export class HouseAiService {
   private connection(key: string, via: 'oauth' | 'key', by: string) {
     this.usage = null;
     return {
-      key: this.deps.sealer.seal(key),
+      key: this.deps.sealer.seal(key, CONNECTION),
       last4: last4(key),
       via,
       connectedAt: (this.deps.now?.() ?? new Date()).toISOString(),
@@ -277,13 +317,13 @@ export class HouseAiService {
   private sealedManagementKey(key: string | null) {
     return key === null
       ? null
-      : { key: this.deps.sealer.seal(key), last4: last4(key) };
+      : { key: this.deps.sealer.seal(key, MANAGEMENT), last4: last4(key) };
   }
 
-  private openKey(sealed: string | undefined): string | null {
+  private openKey(sealed: string | undefined, context: string): string | null {
     if (!sealed) return null;
     try {
-      return this.deps.sealer.open(sealed);
+      return this.deps.sealer.open(sealed, context);
     } catch {
       return null;
     }

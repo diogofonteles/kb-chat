@@ -269,6 +269,10 @@ export class OpenRouterAdapter implements AgentLlmPort {
       if (failure === null) return;
       failures.push(failure);
     }
+    // Without a chain (one's own key and model) a busy model is a provider failure, not the
+    // app's free capacity running out.
+    if (windows.length === 0)
+      throw new Error(`OpenRouter failed: ${failures.join('; ')}`);
     throw new LlmCapacityError('OpenRouter', failures.join('; '));
   }
 

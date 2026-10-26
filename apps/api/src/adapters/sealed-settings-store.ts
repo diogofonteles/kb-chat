@@ -18,6 +18,10 @@ function withKeys(value: Json, keys: Json): Json {
   return { ...value, ai: { ...ai, keys } };
 }
 
+/** Where a key lives: bound to its ciphertext, so it opens only there (ADR 0017). */
+const contextOf = (principal: string, provider: string): string =>
+  `settings:${principal}:${provider}`;
+
 export interface SealedSettingsStoreOptions {
   readonly store: SettingsStorePort;
   readonly sealer: SecretSealerPort;
@@ -26,7 +30,7 @@ export interface SealedSettingsStoreOptions {
 }
 
 /**
- * Settings with every provider key sealed on disk (ADR 0016). A file written before this
+ * Settings with every provider key sealed on disk (ADR 0017). A file written before this
  * change has plain keys: they are read once and the file is rewritten sealed at once.
  */
 export class SealedSettingsStore implements SettingsStorePort {
@@ -36,7 +40,7 @@ export class SealedSettingsStore implements SettingsStorePort {
     const raw = await this.options.store.read(principal);
     const keys = keysOf(raw);
     if (!keys || !isObject(raw)) return raw;
-    const { opened, plain } = this.openAll(keys);
+    const { opened, plain } = this.openAll(principal, keys);
     const value = withKeys(raw, opened);
     if (plain) await this.write(principal, value);
     return value;
@@ -49,13 +53,18 @@ export class SealedSettingsStore implements SettingsStorePort {
     const sealed = Object.fromEntries(
       Object.entries(keys).map(([provider, key]) => [
         provider,
-        typeof key === 'string' ? this.options.sealer.seal(key) : key,
+        typeof key === 'string'
+          ? this.options.sealer.seal(key, contextOf(principal, provider))
+          : key,
       ]),
     );
     return this.options.store.write(principal, withKeys(value, sealed));
   }
 
-  private openAll(keys: Json): { opened: Json; plain: boolean } {
+  private openAll(
+    principal: string,
+    keys: Json,
+  ): { opened: Json; plain: boolean } {
     const { sealer, warn } = this.options;
     let plain = false;
     const opened: Json = {};
@@ -67,7 +76,7 @@ export class SealedSettingsStore implements SettingsStorePort {
         continue;
       }
       try {
-        opened[provider] = sealer.open(key);
+        opened[provider] = sealer.open(key, contextOf(principal, provider));
       } catch {
         // Never the value: only that one key of this person could not be opened.
         warn?.(

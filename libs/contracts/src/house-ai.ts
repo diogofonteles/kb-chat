@@ -51,6 +51,8 @@ export const houseAiViewSchema = z.object({
   chain: z.array(z.string()),
   paidModel: modelIdSchema.nullable(),
   defaultAppAi: appAiSchema,
+  /** Who last changed the default and when; null before any change. */
+  defaultChange: z.object({ by: z.string(), at: z.iso.datetime() }).nullable(),
   defaultDailyResearches: dailyResearchesSchema,
   managementKey: maskedKeySchema.nullable(),
   /** null when not connected or OpenRouter could not be read. */
@@ -71,6 +73,10 @@ export const houseAiUpdateSchema = z.strictObject({
   managementKey: keySchema.nullable().optional(),
 });
 export type HouseAiUpdate = z.infer<typeof houseAiUpdateSchema>;
+
+/** GET /api/v1/house-ai/default: the default app AI alone (cheap, for the people screen). */
+export const houseDefaultSchema = z.object({ defaultAppAi: appAiSchema });
+export type HouseDefault = z.infer<typeof houseDefaultSchema>;
 
 /** Whose account an OpenRouter connection is for: the app's (house) or, KBC-023, one's own. */
 export const OPENROUTER_PURPOSES = ['house'] as const;

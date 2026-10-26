@@ -85,7 +85,7 @@ describe('HouseAiService', () => {
 
   it('does not provision without a management key, and refuses when OpenRouter fails', async () => {
     const { fake, service } = await setup();
-    await service.beforePersonAiChange(holder, paid(true));
+    await service.syncPersonKey(holder, paid(true));
     expect(fake.createdKeys.size).toBe(0);
     const failing = await setup(async (input, init) =>
       String(input).endsWith('/keys')
@@ -94,9 +94,32 @@ describe('HouseAiService', () => {
     );
     await failing.service.update({ managementKey: 'sk-or-v1-mgmt-x' }, 'm');
     await expect(
-      failing.service.beforePersonAiChange(holder, paid(true)),
+      failing.service.syncPersonKey(holder, paid(true)),
     ).rejects.toMatchObject({
       code: 'PROVIDER_UNAVAILABLE',
+    });
+  });
+
+  it('drops the keys made on the old account when the house account changes', async () => {
+    const { fake, service } = await setup();
+    await service.update(
+      { key: 'sk-or-v1-house-valid', managementKey: 'mgmt-key-1' },
+      'm',
+    );
+    await service.syncPersonKey(holder, paid(true, 2));
+    expect(fake.createdKeys.size).toBe(1);
+    fake.acceptKey('sk-or-v1-other-house');
+    await service.update({ key: 'sk-or-v1-other-house' }, 'm');
+    expect(fake.createdKeys.size).toBe(0);
+    expect(service.keyFor('p1')).toBe('sk-or-v1-other-house');
+  });
+
+  it('records who changed the default and when', async () => {
+    const { service } = await setup();
+    await service.setDefault('none', 'owner@example.com');
+    expect((await service.view()).defaultChange).toEqual({
+      by: 'owner@example.com',
+      at: '2026-10-26T12:00:00.000Z',
     });
   });
 
@@ -106,7 +129,7 @@ describe('HouseAiService', () => {
       { key: 'sk-or-v1-house-valid', managementKey: 'mgmt-key-1' },
       'm',
     );
-    await service.beforePersonAiChange(holder, paid(true, 2));
+    await service.syncPersonKey(holder, paid(true, 2));
     expect(service.keyFor('p1')).toMatch(/^sk-or-v1-person-/);
     expect(service.keyFor('p2')).toBe('sk-or-v1-house-valid');
     expect(service.keyFor(null)).toBe('sk-or-v1-house-valid');

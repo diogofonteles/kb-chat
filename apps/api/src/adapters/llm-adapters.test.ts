@@ -508,5 +508,16 @@ describe('OpenRouterAdapter fallback chain (KBC-022 FR-7)', () => {
     await expect(collect(rejected, chain)).rejects.toBeInstanceOf(
       LlmKeyRejectedError,
     );
+    const ownBusy = new OpenRouterAdapter({
+      apiKey: 'k',
+      model: 'x',
+      fetch: vi.fn<typeof fetch>(
+        async () => new Response('{}', { status: 429 }),
+      ),
+    });
+    // One's own model (no chain): a provider failure, not the app's capacity.
+    const failure = await collect(ownBusy, []).catch((err: unknown) => err);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(LlmCapacityError);
   });
 });

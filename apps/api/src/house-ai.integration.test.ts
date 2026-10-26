@@ -354,6 +354,7 @@ describe('IA da aplicação: research on the house plan (KBC-022 AC-4 to AC-6)',
     expect(await research(member, 'fast')).toContainEqual({
       type: 'error',
       code: 'HOUSE_QUOTA_EXHAUSTED',
+      limit: 2,
     });
   });
 
@@ -485,5 +486,14 @@ describe('The AI access policy (KBC-022 AC-8, AC-12, AC-13)', () => {
     });
     expect(started.fake.createdKeys.size).toBe(0);
     expect(await statePlain(started.state)).not.toContain('mgmt-0001');
+    // OpenRouter fails: the change is refused and the person keeps the fallback off.
+    started.fake.failManagement = true;
+    const refused = await owner('PATCH', `/api/v1/people/${memberId}`, {
+      ai: { paidFallback: { enabled: true, monthlyCapUsd: 3 } },
+    });
+    expect(refused.statusCode).toBe(503);
+    const people = (await owner('GET', '/api/v1/people')).json().items;
+    const ana = people.find((p: { id: string }) => p.id === memberId);
+    expect(ana.ai.paidFallback.enabled).toBe(false);
   });
 });

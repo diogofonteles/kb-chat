@@ -306,9 +306,8 @@ async function registerPeople(
       topics,
       invitations,
       ai: {
-        beforeChange: (person, next) =>
-          house.service.beforePersonAiChange(person, next),
-        setDefault: (appAi) => house.service.setDefault(appAi),
+        sync: (person, ai) => house.service.syncPersonKey(person, ai),
+        setDefault: (appAi, by) => house.service.setDefault(appAi, by),
       },
     }),
   );

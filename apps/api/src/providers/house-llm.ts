@@ -15,8 +15,13 @@ import { tokensOf } from '../modules/spend/index.js';
 export interface PaidFallbackGate {
   readonly model: string;
   readonly price: LlmPrice;
-  /** Whether a call estimated at this many US$ still fits the person's monthly cap. */
+  /**
+   * Whether a call estimated at this many US$ still fits the person's monthly cap, with the
+   * spend of their calls in flight; when true, the estimate stays reserved until `settle`.
+   */
   allowed(estimateUsd: number): Promise<boolean>;
+  /** The call ended: give back its reservation and count what it really cost. */
+  settle(estimateUsd: number, usd: number): void;
 }
 
 export interface HouseLlmDeps {
@@ -72,24 +77,45 @@ export class HouseLlm implements AgentLlmPort {
     tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
-    const models = await this.chainFor(messages, options.maxTokens);
-    yield* this.deps.adapter.streamAgent(messages, tools, {
+    const { models, reserved } = await this.chainFor(
+      messages,
+      options.maxTokens,
+    );
+    const stream = this.deps.adapter.streamAgent(messages, tools, {
       ...options,
       models,
     });
+    const paid = this.deps.paid;
+    if (!paid || reserved === 0) {
+      yield* stream;
+      return;
+    }
+    // A reserved paid call counts until it ends; then its real cost (0 when a free model
+    // answered). Without a reported usage the whole estimate counts: the cap errs safe.
+    let usd = reserved;
+    try {
+      for await (const chunk of stream) {
+        usd = chunk.type === 'usage' ? (chunk.usage.usd ?? reserved) : usd;
+        yield chunk;
+      }
+    } finally {
+      paid.settle(reserved, usd);
+    }
   }
 
   /** The free chain, then the paid model when its estimated cost fits the cap. */
   private async chainFor(
     messages: readonly AgentMessage[],
     maxTokens: number,
-  ): Promise<string[]> {
+  ): Promise<{ models: string[]; reserved: number }> {
     const free = [...this.deps.chain()];
     const paid = this.deps.paid;
-    if (!paid) return free;
+    if (!paid) return { models: free, reserved: 0 };
     const prompt = messages.map((m) => m.content).join('\n');
     const estimate =
       tokensOf(prompt) * paid.price.input + maxTokens * paid.price.output;
-    return (await paid.allowed(estimate)) ? [...free, paid.model] : free;
+    return (await paid.allowed(estimate))
+      ? { models: [...free, paid.model], reserved: estimate }
+      : { models: free, reserved: 0 };
   }
 }

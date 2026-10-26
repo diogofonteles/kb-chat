@@ -31,7 +31,10 @@ test('AC-1, AC-8, AC-4: a master connects OpenRouter, lends the house plan to on
   await page.goto('/');
   let dialog = await openSettings(page);
   await dialog.getByRole('button', { name: 'IA da aplicação' }).click();
-  await dialog.getByRole('button', { name: 'Conectar OpenRouter' }).click();
+  // "Conectar outra conta" when another spec already connected the shared server's house.
+  await dialog
+    .getByRole('button', { name: /^Conectar (OpenRouter|outra conta)$/ })
+    .click();
   // OpenRouter (faked) approves and sends the master back: the section reopens by itself.
   await page.waitForURL((url) => !url.search.includes('openrouter='));
   dialog = page.getByRole('dialog', { name: 'Configurações' });
@@ -85,10 +88,15 @@ test('AC-5: the quota spent offers the person their own AI', async ({
     topics: ['hermetismo'],
     features: ['search', 'research', 'own-ai-settings'],
   });
-  await owner.put('/api/v1/house-ai', {
-    data: { key: 'sk-or-v1-house-valid' },
-    headers: { 'x-requested-with': 'kb-chat' },
-  });
+  // Connect the house only when no spec did: never swap the key under a running spec.
+  const house = (await (await owner.get('/api/v1/house-ai')).json()) as {
+    connection: unknown;
+  };
+  if (!house.connection)
+    await owner.put('/api/v1/house-ai', {
+      data: { key: 'sk-or-v1-house-valid' },
+      headers: { 'x-requested-with': 'kb-chat' },
+    });
   await owner.patch(`/api/v1/people/${id}`, {
     data: { ai: { appAi: 'house', dailyResearches: 0 } },
     headers: { 'x-requested-with': 'kb-chat' },

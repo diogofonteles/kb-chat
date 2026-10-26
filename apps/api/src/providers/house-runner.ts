@@ -26,6 +26,8 @@ export interface HouseRunnerDeps {
   readonly paidActive: boolean;
   /** Loads what the chain needs (the live free-model list) before the first call. */
   readonly prepare?: () => Promise<void>;
+  /** Runs once the turn is over, whatever its end. */
+  readonly finish?: () => void;
 }
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
@@ -57,6 +59,14 @@ export class HouseResearchRunner implements ResearchRunnerPort {
   }
 
   async *run(input: ResearchInput): AsyncIterable<ResearchEvent> {
+    try {
+      yield* this.turn(input);
+    } finally {
+      this.deps.finish?.();
+    }
+  }
+
+  private async *turn(input: ResearchInput): AsyncIterable<ResearchEvent> {
     await this.deps.prepare?.();
     const refusal = await this.capacityRefusal(input.profile);
     if (refusal) {
@@ -70,10 +80,10 @@ export class HouseResearchRunner implements ResearchRunnerPort {
         dailyLimit: this.deps.dailyLimit,
       });
     } catch (err) {
-      yield {
-        type: 'error',
-        code: err instanceof AppError ? err.code : 'INTERNAL',
-      };
+      const code = err instanceof AppError ? err.code : 'INTERNAL';
+      yield code === 'HOUSE_QUOTA_EXHAUSTED'
+        ? { type: 'error', code, limit: this.deps.dailyLimit }
+        : { type: 'error', code };
       return;
     }
     yield* this.relay(input, reservation);

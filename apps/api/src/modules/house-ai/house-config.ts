@@ -34,6 +34,11 @@ export const houseConfigSchema = z.object({
   includeRouter: z.boolean().default(true),
   paidModel: modelIdSchema.nullable().default(null),
   defaultAppAi: appAiSchema.default('house'),
+  /** Who last changed the default, and when (the audit trail of KBC-022). */
+  defaultChange: z
+    .object({ by: z.string(), at: z.iso.datetime() })
+    .nullable()
+    .default(null),
   defaultDailyResearches: dailyResearchesSchema.default(
     DEFAULT_DAILY_RESEARCHES,
   ),

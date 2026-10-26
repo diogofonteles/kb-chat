@@ -18,16 +18,17 @@ export function parseSecretsKey(base64: string): Buffer {
   return key;
 }
 
-/** AES-256-GCM with a random IV per value (ADR 0016). */
+/** AES-256-GCM with a random IV per value (ADR 0017). */
 export class SecretBox implements SecretSealerPort {
   constructor(private readonly key: Buffer) {
     if (key.length !== KEY_BYTES)
       throw new Error('The secrets key must be 32 bytes');
   }
 
-  seal(plain: string): string {
+  seal(plain: string, context: string): string {
     const iv = randomBytes(IV_BYTES);
     const cipher = createCipheriv(ALGORITHM, this.key, iv);
+    cipher.setAAD(Buffer.from(context, 'utf8'));
     const body = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
     const parts = [iv, cipher.getAuthTag(), body].map((part) =>
       part.toString('base64url'),
@@ -35,7 +36,7 @@ export class SecretBox implements SecretSealerPort {
     return `${SEALED_PREFIX}${parts.join('.')}`;
   }
 
-  open(sealed: string): string {
+  open(sealed: string, context: string): string {
     const [iv, tag, body] = sealed.slice(SEALED_PREFIX.length).split('.');
     if (!this.isSealed(sealed) || !iv || !tag || body === undefined)
       throw new Error('Not a sealed value');
@@ -45,6 +46,7 @@ export class SecretBox implements SecretSealerPort {
       Buffer.from(iv, 'base64url'),
     );
     decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+    decipher.setAAD(Buffer.from(context, 'utf8'));
     return Buffer.concat([
       decipher.update(Buffer.from(body, 'base64url')),
       decipher.final(),
@@ -66,7 +68,7 @@ export interface SecretsKeySource {
 
 /**
  * The master key: the environment's; in development, without it, a 0600 file in the state
- * folder made once (production refuses to start instead, ADR 0016).
+ * folder made once (production refuses to start instead, ADR 0017).
  */
 export async function loadSecretsKey(
   source: SecretsKeySource,

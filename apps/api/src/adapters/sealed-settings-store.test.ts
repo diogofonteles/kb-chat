@@ -41,7 +41,10 @@ describe('SealedSettingsStore (KBC-022 AC-9)', () => {
 
   it('drops a key sealed with another master key, warning without the value', async () => {
     const { inner, store, warnings } = setup();
-    const other = new SecretBox(randomBytes(32)).seal('sk-foreign');
+    const other = new SecretBox(randomBytes(32)).seal(
+      'sk-foreign',
+      'settings:p:openai',
+    );
     await inner.write('p', { ai: { keys: { openai: other } } });
     expect(await store.read('p')).toEqual({ ai: { keys: {} } });
     expect(warnings.join()).toContain('openai');

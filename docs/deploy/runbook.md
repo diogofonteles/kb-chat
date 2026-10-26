@@ -249,7 +249,7 @@ Tudo pela interface (ADR 0016, KBC-022); nada no `.env`.
 | O quê | Como |
 |---|---|
 | Publicar | merge em `main` (o dono decide) |
-| Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico). Um segundo rollback continua voltando (C → B → A), nunca volta para a versão da qual saiu |
+| Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico). Um segundo rollback continua voltando (C → B → A), nunca volta para a versão da qual saiu **Atenção (ADR 0017):** a primeira versão com o KBC-022 cifra as chaves de IA salvas; voltar para uma versão anterior a ela deixa essas chaves ilegíveis (as pessoas e o master conectam de novo, ou restaure o backup do estado de antes do deploy, passo 11) |
 | O que está no ar | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --status` (tag das imagens em execução e saúde do backup: `ok`, `failed`, `stale` ou `never`) |
 | Atualizar o acervo | `deploy/scripts/sync-vault.sh --host ubuntu@<IP>` |
 | Logs | `ssh ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env logs -f --tail 200'` |

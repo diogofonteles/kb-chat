@@ -118,6 +118,11 @@ export const researchEventSchema = z.discriminatedUnion('type', [
     /** House plan: researches left today. */
     remaining: z.number().int().nonnegative().optional(),
   }),
-  z.object({ type: z.literal('error'), code: z.string() }),
+  z.object({
+    type: z.literal('error'),
+    code: z.string(),
+    /** HOUSE_QUOTA_EXHAUSTED: the person's researches a day (KBC-022), for the message. */
+    limit: z.number().int().nonnegative().optional(),
+  }),
 ]);
 export type ResearchEvent = z.infer<typeof researchEventSchema>;

@@ -33,16 +33,21 @@ function recordingAdapter() {
 
 const options = { maxTokens: 1000, signal: new AbortController().signal };
 
-const gate = (allowed: boolean): PaidFallbackGate & { asked: number[] } => {
+const gate = (
+  allowed: boolean,
+): PaidFallbackGate & { asked: number[]; settled: [number, number][] } => {
   const asked: number[] = [];
+  const settled: [number, number][] = [];
   return {
     model: 'paid/model',
     price: { input: 1e-6, output: 2e-6 },
     asked,
+    settled,
     allowed: async (estimate) => {
       asked.push(estimate);
       return allowed;
     },
+    settle: (estimate, usd) => settled.push([estimate, usd]),
   };
 };
 
@@ -64,6 +69,8 @@ describe('HouseLlm (KBC-022 AC-7, BR-5)', () => {
     expect(chains[0]).toEqual(['a:free', 'openrouter/free', 'paid/model']);
     // 7 characters ≈ 2 tokens at 3.5 per token, plus the whole output budget.
     expect(allowed.asked[0]).toBeCloseTo(2 * 1e-6 + 1000 * 2e-6);
+    // No usage reported by this adapter: the whole reservation is counted.
+    expect(allowed.settled).toEqual([[allowed.asked[0], allowed.asked[0]]]);
     const refused = new HouseLlm({
       adapter,
       chain: () => free,

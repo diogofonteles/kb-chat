@@ -15,24 +15,31 @@ const key = () => randomBytes(32);
 describe('SecretBox (ADR 0016)', () => {
   it('seals with AES-256-GCM and opens back, with a fresh IV per value', () => {
     const box = new SecretBox(key());
-    const a = box.seal('sk-or-v1-secret');
-    const b = box.seal('sk-or-v1-secret');
+    const a = box.seal('sk-or-v1-secret', 'ctx');
+    const b = box.seal('sk-or-v1-secret', 'ctx');
     expect(a.startsWith(SEALED_PREFIX)).toBe(true);
     expect(a).not.toContain('secret');
     expect(a).not.toBe(b);
-    expect(box.open(a)).toBe('sk-or-v1-secret');
+    expect(box.open(a, 'ctx')).toBe('sk-or-v1-secret');
     expect(box.isSealed(a)).toBe(true);
     expect(box.isSealed('sk-plain')).toBe(false);
   });
 
   it('refuses a value sealed with another key or tampered with', () => {
-    const sealed = new SecretBox(key()).seal('value-1234');
-    expect(() => new SecretBox(key()).open(sealed)).toThrow();
+    const sealed = new SecretBox(key()).seal('value-1234', 'ctx');
+    expect(() => new SecretBox(key()).open(sealed, 'ctx')).toThrow();
     const box = new SecretBox(key());
-    const good = box.seal('value-1234');
+    const good = box.seal('value-1234', 'ctx');
     const tampered = `${good.slice(0, -2)}${good.endsWith('A') ? 'B' : 'A'}A`;
-    expect(() => box.open(tampered)).toThrow();
-    expect(() => box.open('enc:v1:broken')).toThrow();
+    expect(() => box.open(tampered, 'ctx')).toThrow();
+    expect(() => box.open('enc:v1:broken', 'ctx')).toThrow();
+  });
+
+  it('opens a value only where it was sealed (associated data)', () => {
+    const box = new SecretBox(key());
+    const sealed = box.seal('sk-or-v1-a', 'settings:alice:openrouter');
+    expect(box.open(sealed, 'settings:alice:openrouter')).toBe('sk-or-v1-a');
+    expect(() => box.open(sealed, 'settings:bob:openrouter')).toThrow();
   });
 
   it('needs exactly 32 bytes of key', () => {

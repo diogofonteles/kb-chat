@@ -16,7 +16,7 @@ import { AppError } from '../../app-error.js';
 import { viewerOf, type RouteAccess } from './access.js';
 import type { Invitations } from './invitations.js';
 import type { PeopleService } from './people-service.js';
-import { aiOf, applyAiUpdate } from './person-ai.js';
+import { aiOf } from './person-ai.js';
 import { toPerson, type StoredPerson } from './person.js';
 import type { SessionService } from './session-service.js';
 
@@ -33,8 +33,8 @@ export interface PeopleRouteDeps {
 
 /** The house side of the AI access policy, called by the people routes (KBC-022). */
 export interface PeopleAiHooks {
-  /** Before saving: e.g. provision or drop the person's OpenRouter key; throws to refuse. */
-  beforeChange(person: StoredPerson, next: PersonAi): Promise<void>;
+  /** After a person's AI was saved: e.g. provision or drop their OpenRouter key; throws on failure. */
+  sync(person: StoredPerson, ai: PersonAi): Promise<void>;
   /** "Também para os próximos": the default for people left on `default`. */
   setDefault(appAi: AppAi, by: string): Promise<void>;
 }
@@ -98,8 +98,10 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
       const { params, body } = request;
       assertKnownTopics(deps, body.topics);
       const by = viewerOf(request).person.email;
-      if (body.ai) await prepareAi(deps, { id: params.id, patch: body.ai, by });
-      return view(deps, await deps.people.update(params.id, body, by));
+      const before = await deps.people.find(params.id);
+      const updated = await deps.people.update(params.id, body, by);
+      if (body.ai && before) await syncAi(deps, { before, updated, by });
+      return view(deps, updated);
     },
   );
 }
@@ -121,25 +123,27 @@ function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {
   );
 }
 
-/** Lets the house react before a person's AI limits are saved (provisioned keys). */
-async function prepareAi(
+/**
+ * Lets the house follow a saved AI change (provisioned keys). When that fails, the paid
+ * fallback goes back to what it was, so no person is left half changed (review fix).
+ */
+async function syncAi(
   deps: PeopleRouteDeps,
-  change: {
-    id: string;
-    patch: NonNullable<PersonUpdateBody['ai']>;
-    by: string;
-  },
+  change: { before: StoredPerson; updated: StoredPerson; by: string },
 ): Promise<void> {
-  const person = await deps.people.find(change.id);
-  if (!person || !deps.ai) return;
-  const next = applyAiUpdate(aiOf(person), change.patch, {
-    by: change.by,
-    now: new Date().toISOString(),
-  });
-  await deps.ai.beforeChange(person, next);
+  if (!deps.ai) return;
+  try {
+    await deps.ai.sync(change.updated, aiOf(change.updated));
+  } catch (err) {
+    const paidFallback = aiOf(change.before).paidFallback;
+    await deps.people.update(
+      change.updated.id,
+      { ai: { paidFallback } },
+      change.by,
+    );
+    throw err;
+  }
 }
-
-type PersonUpdateBody = z.infer<typeof personUpdateSchema>;
 
 /** One app AI for several people or everyone, optionally the default too (KBC-022 AC-12). */
 function registerAssignment(app: FastifyInstance, deps: PeopleRouteDeps) {
@@ -155,11 +159,10 @@ function registerAssignment(app: FastifyInstance, deps: PeopleRouteDeps) {
     async (request) => {
       const { personIds, appAi, setDefault } = request.body;
       const by = viewerOf(request).person.email;
-      if (setDefault && appAi === 'default')
-        throw new AppError('VALIDATION_FAILED', 'Choose an AI for the default');
+      const updated = await deps.people.assignAi({ ids: personIds, appAi }, by);
+      // The contract allows setDefault only with "all" and an AI (not "default").
       if (setDefault && appAi !== 'default')
         await deps.ai?.setDefault(appAi, by);
-      const updated = await deps.people.assignAi({ ids: personIds, appAi }, by);
       return { updated };
     },
   );
