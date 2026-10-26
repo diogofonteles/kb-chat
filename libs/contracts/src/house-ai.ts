@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { appAiSchema, dailyResearchesSchema } from './ai-access.js';
+import { dailyResearchesSchema, defaultableAppAiSchema } from './ai-access.js';
 import { maskedKeySchema, modelIdSchema } from './settings.js';
 
 /** OpenRouter's router that picks a free model: the last free option of the chain. */
@@ -52,13 +52,15 @@ export const houseAiViewSchema = z.object({
   /** The chain the house uses now (free models, then the router). */
   chain: z.array(z.string()),
   paidModel: modelIdSchema.nullable(),
-  defaultAppAi: appAiSchema,
+  defaultAppAi: defaultableAppAiSchema,
   /** Who last changed the default and when; null before any change. */
   defaultChange: z.object({ by: z.string(), at: z.iso.datetime() }).nullable(),
   defaultDailyResearches: dailyResearchesSchema,
   managementKey: maskedKeySchema.nullable(),
   /** null when not connected or OpenRouter could not be read. */
   freeUsage: freeUsageSchema.nullable(),
+  /** The owner's Claude subscription can be lent now: Claude Code is on the server (KBC-024). */
+  subscriptionAvailable: z.boolean(),
 });
 export type HouseAiView = z.infer<typeof houseAiViewSchema>;
 
@@ -70,14 +72,18 @@ export const houseAiUpdateSchema = z.strictObject({
   freeModels: z.array(modelIdSchema).max(20).nullable().optional(),
   includeRouter: z.boolean().optional(),
   paidModel: modelIdSchema.nullable().optional(),
-  defaultAppAi: appAiSchema.optional(),
+  defaultAppAi: defaultableAppAiSchema.optional(),
   defaultDailyResearches: dailyResearchesSchema.optional(),
   managementKey: keySchema.nullable().optional(),
 });
 export type HouseAiUpdate = z.infer<typeof houseAiUpdateSchema>;
 
 /** GET /api/v1/house-ai/default: the default app AI alone (cheap, for the people screen). */
-export const houseDefaultSchema = z.object({ defaultAppAi: appAiSchema });
+export const houseDefaultSchema = z.object({
+  defaultAppAi: defaultableAppAiSchema,
+  /** The owner's Claude subscription can be lent now (KBC-024). */
+  subscriptionAvailable: z.boolean(),
+});
 export type HouseDefault = z.infer<typeof houseDefaultSchema>;
 
 /** Whose account an OpenRouter connection is for: the app's (house) or, KBC-023, one's own. */

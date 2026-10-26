@@ -6,6 +6,8 @@ export interface SpendEntry {
   readonly outputTokens: number;
   readonly usd: number;
   readonly interrupted: boolean;
+  /** A lent subscription's turn: US$ 0, kept for the record (KBC-024); absent per token. */
+  readonly billing?: 'subscription';
 }
 
 /** Append-only record of AI spend (ADR 0004, keyed by principal per ADR 0005). */

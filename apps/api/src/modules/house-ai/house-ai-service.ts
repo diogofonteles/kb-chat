@@ -1,7 +1,7 @@
 import {
   OPENROUTER_FREE_ROUTER,
   type AiTestResult,
-  type AppAi,
+  type DefaultableAppAi,
   type FreeUsage,
   type HouseAiUpdate,
   type HouseAiView,
@@ -20,6 +20,10 @@ import {
 } from './house-config.js';
 
 /** The free-request counter is read at most this often (one call per research otherwise). */
+
+/** The house as this service knows it; the routes add whether the subscription can be lent. */
+export type HouseServiceView = Omit<HouseAiView, 'subscriptionAvailable'>;
+
 export const FREE_USAGE_TTL_MS = 60_000;
 
 export interface HouseAiServiceDeps {
@@ -94,7 +98,7 @@ export class HouseAiService {
     return this.config.paidModel;
   }
 
-  defaultAppAi(): AppAi {
+  defaultAppAi(): DefaultableAppAi {
     return this.config.defaultAppAi;
   }
 
@@ -119,7 +123,7 @@ export class HouseAiService {
     await this.deps.catalog.list();
   }
 
-  async view(): Promise<HouseAiView> {
+  async view(): Promise<HouseServiceView> {
     await this.ready();
     const { connection, managementKey, ...rest } = this.config;
     return {
@@ -142,7 +146,7 @@ export class HouseAiService {
   }
 
   /** A master's change; a typed key connects the house account ("Colar uma chave"). */
-  async update(patch: HouseAiUpdate, by: string): Promise<HouseAiView> {
+  async update(patch: HouseAiUpdate, by: string): Promise<HouseServiceView> {
     const { key, managementKey, ...rest } = patch;
     await this.assertPaidModel(rest.paidModel);
     // Keys made on the old account (or with the old management key) would bill it: drop them.
@@ -218,7 +222,7 @@ export class HouseAiService {
   }
 
   /** "Também para os próximos": the default app AI of people left on `default`, audited. */
-  async setDefault(appAi: AppAi, by: string): Promise<void> {
+  async setDefault(appAi: DefaultableAppAi, by: string): Promise<void> {
     const at = (this.deps.now?.() ?? new Date()).toISOString();
     await this.change((config) => ({
       ...config,

@@ -40,7 +40,7 @@ import type {
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { budgetsFromConfig } from '../research-agent-factory.js';
 import { resolveAiSource } from './ai-access.js';
-import type { AppAiPort } from './app-ai-plan.js';
+import type { AppAiPort, LendableSubscription } from './app-ai-plan.js';
 import { findExecutable } from './command-locator.js';
 import { ownFreeLlm } from './own-openrouter.js';
 import { PaidMeters, type TurnMeter } from './paid-meters.js';
@@ -162,6 +162,25 @@ export class ProviderRegistry implements ProviderCatalog {
   private claudeOnPath = false;
 
   constructor(private readonly options: ProviderRegistryOptions) {}
+
+  /**
+   * The owner's Claude subscription as it can be lent to a person (KBC-024, ADR 0019): his CLI
+   * and his models for the profile, never escalating (a fast question counts 1). The owner
+   * check for subscriptions stays for a person's own choice; this path is the app AI's.
+   */
+  lendableSubscription(): LendableSubscription {
+    const owner = this.options.ownerPrincipal ?? 'owner';
+    const choiceFor = (profile: ResearchProfile) =>
+      this.choice(owner, { provider: 'claude-subscription', profile });
+    return {
+      available: () => this.claudeOnPath,
+      llm: () => new DisabledLlm(),
+      runner: (profile) =>
+        new ClaudeCliRunner(
+          this.cliOptions('claude', choiceFor(profile), { principal: owner }),
+        ),
+    };
+  }
 
   /** Looks `claude` up again; the default provider depends on it (BR-4). */
   async refreshCliLookup(): Promise<void> {

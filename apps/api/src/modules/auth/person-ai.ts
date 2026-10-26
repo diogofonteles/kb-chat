@@ -1,5 +1,6 @@
 import {
   DEFAULT_PERSON_AI,
+  isLentSubscription,
   type AppAiAssignment,
   type PersonAi,
   type PersonAiUpdate,
@@ -45,6 +46,9 @@ export function applyAiUpdate(
     enforced: next.enforced,
     by: context.by,
     at: context.now,
+    // The contract required the terms confirmed to lend a subscription (KBC-024 BR-7).
+    ...(isLentSubscription(next.appAi) &&
+      patch.subscriptionTermsAccepted && { termsAccepted: true }),
   };
   return {
     ...next,
@@ -73,15 +77,21 @@ export function assignAi(
   request: {
     readonly ids: 'all' | readonly string[];
     readonly appAi: AppAiAssignment;
+    readonly subscriptionTermsAccepted?: true;
   },
   context: AiChangeContext,
 ): PeopleChange<number> {
   const targets = targetsOf(people, request.ids);
+  const { appAi, subscriptionTermsAccepted } = request;
   const next = people.map((person) =>
     targets.has(person.id)
       ? {
           ...person,
-          ai: applyAiUpdate(aiOf(person), { appAi: request.appAi }, context),
+          ai: applyAiUpdate(
+            aiOf(person),
+            { appAi, subscriptionTermsAccepted },
+            context,
+          ),
         }
       : person,
   );

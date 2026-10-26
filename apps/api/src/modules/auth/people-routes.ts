@@ -1,7 +1,10 @@
 import {
   aiAssignmentRequestSchema,
   aiAssignmentResultSchema,
-  type AppAi,
+  defaultableAppAiSchema,
+  isLentSubscription,
+  type AppAiAssignment,
+  type DefaultableAppAi,
   type PersonAi,
   inviteRequestSchema,
   personIdSchema,
@@ -13,6 +16,7 @@ import type {
   FastifyBaseLogger,
   FastifyInstance,
   FastifyPluginAsync,
+  FastifyRequest,
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -40,10 +44,21 @@ export interface PeopleAiHooks {
   /** After a person's AI was saved: e.g. provision or drop their OpenRouter key; throws on failure. */
   sync(person: StoredPerson, ai: PersonAi): Promise<void>;
   /** "Também para os próximos": the default for people left on `default`. */
-  setDefault(appAi: AppAi, by: string): Promise<void>;
+  setDefault(appAi: DefaultableAppAi, by: string): Promise<void>;
 }
 
 const MASTER: RouteAccess = { master: true };
+
+/** Only the owner lends his subscription; any master may take it back (KBC-024 BR-1). */
+function assertMayLend(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  appAi: AppAiAssignment | undefined,
+) {
+  if (appAi === undefined || !isLentSubscription(appAi)) return;
+  if (!deps.people.isOwner(viewerOf(request).person))
+    throw new AppError('FORBIDDEN', 'Only the owner lends his subscription');
+}
 const params = z.object({ id: personIdSchema });
 
 const view = (deps: PeopleRouteDeps, person: StoredPerson) =>
@@ -101,6 +116,7 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
     async (request) => {
       const { params, body } = request;
       assertKnownTopics(deps, body.topics);
+      assertMayLend(deps, request, body.ai?.appAi);
       const by = viewerOf(request).person.email;
       const before = await deps.people.find(params.id);
       const updated = await deps.people.update(params.id, body, by);
@@ -180,12 +196,18 @@ function registerAssignment(app: FastifyInstance, deps: PeopleRouteDeps) {
       },
     },
     async (request) => {
-      const { personIds, appAi, setDefault } = request.body;
+      const { personIds, appAi, setDefault, subscriptionTermsAccepted } =
+        request.body;
+      assertMayLend(deps, request, appAi);
       const by = viewerOf(request).person.email;
-      const updated = await deps.people.assignAi({ ids: personIds, appAi }, by);
-      // The contract allows setDefault only with "all" and an AI (not "default").
-      if (setDefault && appAi !== 'default')
-        await deps.ai?.setDefault(appAi, by);
+      const updated = await deps.people.assignAi(
+        { ids: personIds, appAi, subscriptionTermsAccepted },
+        by,
+      );
+      // The contract allows setDefault only with "all" and an AI that may be a default.
+      const asDefault = defaultableAppAiSchema.safeParse(appAi);
+      if (setDefault && asDefault.success)
+        await deps.ai?.setDefault(asDefault.data, by);
       return { updated };
     },
   );

@@ -289,7 +289,12 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
   });
   await registerPeople(app, { deps, topics, invitations });
   await app.register(invitationRoutes({ people: auth.people, invitations }));
-  await registerHouse(app, { house: deps.house, settings: deps.ai.settings });
+  await registerHouse(app, {
+    house: deps.house,
+    settings: deps.ai.settings,
+    subscriptionAvailable: () =>
+      deps.ai.registry.lendableSubscription().available(),
+  });
   await registerAccess(app, { deps, access, topics });
 }
 
@@ -320,10 +325,19 @@ async function registerPeople(
 /** "IA da aplicação", the OpenRouter connection and the free models (KBC-022). */
 async function registerHouse(
   app: FastifyInstance,
-  { house, settings }: { house: HouseAi; settings: SettingsService },
+  {
+    house,
+    settings,
+    subscriptionAvailable,
+  }: {
+    house: HouseAi;
+    settings: SettingsService;
+    subscriptionAvailable: () => boolean;
+  },
 ) {
   await app.register(
     houseAiRoutes({
+      subscriptionAvailable,
       house: house.service,
       catalog: house.catalog,
       connect: house.connect,
