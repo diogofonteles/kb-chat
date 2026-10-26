@@ -9,7 +9,11 @@ import {
   personSchema,
   personUpdateSchema,
 } from '@kb-chat/contracts';
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import type {
+  FastifyBaseLogger,
+  FastifyInstance,
+  FastifyPluginAsync,
+} from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
@@ -100,7 +104,8 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
       const by = viewerOf(request).person.email;
       const before = await deps.people.find(params.id);
       const updated = await deps.people.update(params.id, body, by);
-      if (body.ai && before) await syncAi(deps, { before, updated, by });
+      if (body.ai && before)
+        await syncAi(deps, { before, updated, by, log: request.log });
       return view(deps, updated);
     },
   );
@@ -124,30 +129,43 @@ function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {
 }
 
 /**
- * Lets the house follow a saved AI change (provisioned keys). When that fails, the paid
- * fallback goes back to what it was, so no person is left half changed (review fix).
+ * Lets the house follow a saved AI change (provisioned keys). When that fails, the whole
+ * AI part goes back, so no person is left half changed (review fix).
  */
-async function syncAi(
-  deps: PeopleRouteDeps,
-  change: { before: StoredPerson; updated: StoredPerson; by: string },
-): Promise<void> {
+interface AiSyncChange {
+  readonly before: StoredPerson;
+  readonly updated: StoredPerson;
+  readonly by: string;
+  readonly log: FastifyBaseLogger;
+}
+
+async function syncAi(deps: PeopleRouteDeps, change: AiSyncChange) {
   if (!deps.ai) return;
   try {
     await deps.ai.sync(change.updated, aiOf(change.updated));
   } catch (err) {
-    // The whole AI part goes back; a failed compensation never hides the first error.
-    const { appAi, enforced, dailyResearches, paidFallback } = aiOf(
-      change.before,
-    );
-    await deps.people
-      .update(
-        change.updated.id,
-        { ai: { appAi, enforced, dailyResearches, paidFallback } },
-        change.by,
-      )
-      .catch(() => undefined);
+    await undoAi(deps, change);
     throw err;
   }
+}
+
+/** The whole AI part goes back; a failed undo is logged and never hides the first error. */
+async function undoAi(deps: PeopleRouteDeps, change: AiSyncChange) {
+  const { appAi, enforced, dailyResearches, paidFallback } = aiOf(
+    change.before,
+  );
+  const ai = { appAi, enforced, dailyResearches, paidFallback };
+  await deps.people
+    .update(change.updated.id, { ai }, change.by)
+    .catch((undo: unknown) =>
+      change.log.error(
+        {
+          person: change.updated.id,
+          kind: undo instanceof Error ? undo.name : 'unknown',
+        },
+        'could not undo a failed AI change',
+      ),
+    );
 }
 
 /** One app AI for several people or everyone, optionally the default too (KBC-022 AC-12). */

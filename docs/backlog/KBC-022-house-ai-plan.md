@@ -1,7 +1,7 @@
 ---
 id: KBC-022
 title: "Plano da casa: a IA gratuita da aplicação, configurada pelo master na tela"
-status: in-review
+status: done
 slice: release-1
 outcome: qualquer pessoa convidada pesquisa com IA sem configurar nada, dentro de uma cota diária, com custo zero ou visível; a produção não precisa de nenhuma chave de IA no .env
 depends_on: [KBC-007, KBC-010, KBC-017]
