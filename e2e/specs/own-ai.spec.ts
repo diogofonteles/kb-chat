@@ -58,7 +58,7 @@ test('AC-1, AC-2: connects one’s own OpenRouter in one click and answers for f
   const dialog = await openSettings(person);
   await dialog.getByRole('radio', { name: /^OpenRouter/ }).check();
   await expect(
-    dialog.getByRole('region', { name: 'Como configurar' }),
+    dialog.getByRole('region', { name: /Como configurar/ }),
   ).toBeVisible();
   await person.waitForFunction(() => document.getAnimations().length === 0);
   const axe = await new AxeBuilder({ page: person })

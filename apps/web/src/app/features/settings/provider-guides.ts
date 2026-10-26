@@ -18,7 +18,7 @@ export interface ProviderGuide {
 
 const TEST_STEP: GuideStep = {
   text: () =>
-    $localize`:@@guide.test:Clique em “Testar conexão”. Se der certo, clique em “Salvar”.`,
+    $localize`:@@guide.test:Clique em “Testar conexão” e, se der certo, guarde a escolha.`,
 };
 
 /** The guides of "Sua IA" (screens.md T6); providers without one show only their hint. */
@@ -87,7 +87,7 @@ export const PROVIDER_GUIDES: Partial<Record<AiProvider, ProviderGuide>> = {
       },
       {
         text: () =>
-          $localize`:@@guide.gm3:Cole a chave abaixo e escolha o plano: “Gratuito”, se você não ativou o faturamento no Google Cloud.`,
+          $localize`:@@guide.gm3:Cole a chave abaixo e escolha o plano: “Gratuito”, se você não ativou o faturamento no Google Cloud. Com o faturamento ativado, o Google cobra mesmo que você escolha “Gratuito” aqui.`,
       },
       TEST_STEP,
     ],
@@ -144,6 +144,6 @@ export const PROVIDER_GUIDES: Partial<Record<AiProvider, ProviderGuide>> = {
     privacy: () =>
       $localize`:@@guide.oaPrivacy:Pela API, a OpenAI não usa os dados para treinar modelos, por padrão.`,
     note: () =>
-      $localize`:@@guide.oaNote:Assinaturas do ChatGPT (Plus, Pro) não podem ser conectadas a outros apps hoje; use uma chave de API.`,
+      $localize`:@@guide.oaNote:Assinaturas do ChatGPT (Plus, Pro) não podem ser conectadas a este app; use uma chave de API.`,
   },
 };

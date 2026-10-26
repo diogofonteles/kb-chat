@@ -116,9 +116,10 @@ export class AiProviderForm {
   protected readonly testState = signal<TestState>({ kind: 'idle' });
   protected readonly options = computed(() => {
     const items = this.store.providerList()?.items ?? [];
+    // The subscriptions are the owner's own (T6): not even offered to anyone else.
     return PROVIDER_ORDER.flatMap((id) => {
       const info = items.find((item) => item.id === id);
-      return info ? [toOption(info)] : [];
+      return info && info.reason !== 'owner-only' ? [toOption(info)] : [];
     });
   });
   protected readonly loading = computed(() => this.store.providers.isLoading());
@@ -153,6 +154,17 @@ export class AiProviderForm {
     this.models.hasValue() ? this.models.value().paid : [],
   );
   protected readonly connecting = signal(false);
+  /** "Conectar OpenRouter" could not start (said apart from the connection test). */
+  protected readonly connectFailed = signal(false);
+  /** A typed paid model the list does not offer is never used: said on its field. */
+  protected readonly paidError = computed(() => {
+    const typed = this.draft().paidModel.trim();
+    const offered = this.paidOptions();
+    if (!typed || offered.length === 0) return null;
+    return offered.some((model) => model.id === typed)
+      ? null
+      : $localize`:@@ai.paidUnknown:Este modelo não está na lista de modelos pagos com ferramentas do OpenRouter.`;
+  });
   protected readonly keyPlaceholder = computed(() =>
     this.savedKey()
       ? $localize`:@@ai.keyReplace:Trocar a chave`
@@ -238,7 +250,7 @@ export class AiProviderForm {
         next: (url) => this.goTo(url),
         error: () => {
           this.connecting.set(false);
-          this.testState.set({ kind: 'failed' });
+          this.connectFailed.set(true);
         },
       });
   }

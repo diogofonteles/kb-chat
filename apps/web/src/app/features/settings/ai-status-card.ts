@@ -7,9 +7,9 @@ import {
   inject,
 } from '@angular/core';
 import { formatSpend } from '@core/spend/spend-store.js';
-import type { AiProvider } from '@kb-chat/contracts';
+import { aiTestCodeSchema, type AiProvider } from '@kb-chat/contracts';
 import { APP_AI_LABELS } from '@features/house-ai/app-ai-labels.js';
-import { PROVIDER_COPY } from './provider-copy.js';
+import { PROVIDER_COPY, TEST_COPY } from './provider-copy.js';
 import { SettingsStore } from './settings-store.js';
 
 const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
@@ -54,6 +54,9 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
           <p class="who">
             <strong i18n="@@aiStatus.own">Sua IA</strong> ·
             {{ providerLabel() }}
+            @if (planLabel()) {
+              · {{ planLabel() }}
+            }
           </p>
           @if (current.free) {
             <p class="detail" i18n="@@aiStatus.ownFree">Gratuito para você.</p>
@@ -79,8 +82,9 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
               <span i18n="@@aiStatus.testFailed"
                 >Último teste: falhou ({{
                   test.at | date: 'dd/MM HH:mm'
-                }})</span
+                }}).</span
               >
+              {{ testReason() }}
             }
           </p>
         }
@@ -134,6 +138,27 @@ export class AiStatusCard {
     if (status?.spentTodayUsd == null || status.dailyCapUsd === null) return '';
     const usd = (value: number) => formatSpend(value, this.locale);
     return $localize`:@@aiStatus.spentOf:${usd(status.spentTodayUsd)}:spent: de ${usd(status.dailyCapUsd)}:cap:`;
+  });
+  /** One's own plan: OpenRouter's mode or the Google tier (KBC-023 AC-1). */
+  protected readonly planLabel = computed(() => {
+    const provider = this.status()?.provider;
+    const ai = this.store.settings()?.ai;
+    if (!ai) return '';
+    if (provider === 'openrouter')
+      return ai.openrouter.mode === 'free'
+        ? $localize`:@@aiStatus.orFree:Só modelos gratuitos`
+        : $localize`:@@aiStatus.orModels:Modelo à escolha`;
+    if (provider === 'gemini')
+      return ai.gemini.tier === 'free'
+        ? $localize`:@@aiStatus.gmFree:Plano gratuito`
+        : $localize`:@@aiStatus.gmPaid:Plano pago`;
+    return '';
+  });
+  /** Why the last test failed, in the words of "Testar conexão" (T6). */
+  protected readonly testReason = computed(() => {
+    const code = this.status()?.lastTest?.code;
+    const known = code ? aiTestCodeSchema.safeParse(code) : null;
+    return known?.success ? TEST_COPY[known.data]() : '';
   });
   protected readonly providerLabel = computed(() => {
     const provider = this.status()?.provider ?? '';

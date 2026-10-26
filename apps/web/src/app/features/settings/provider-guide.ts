@@ -5,6 +5,7 @@ import {
   input,
 } from '@angular/core';
 import type { AiProvider } from '@kb-chat/contracts';
+import { PROVIDER_COPY } from './provider-copy.js';
 import { PROVIDER_GUIDES } from './provider-guides.js';
 
 /** The step-by-step guide of one AI option (KBC-023 FR-5). Presentational. */
@@ -92,6 +93,7 @@ export class ProviderGuideCard {
     () => PROVIDER_GUIDES[this.provider()] ?? null,
   );
   protected readonly label = computed(
-    () => $localize`:@@guide.label:Como configurar`,
+    () =>
+      $localize`:@@guide.label:Como configurar: ${PROVIDER_COPY[this.provider()].name()}:provider:`,
   );
 }

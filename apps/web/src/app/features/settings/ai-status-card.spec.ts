@@ -4,7 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { render, screen } from '@testing-library/angular';
 import type { AiStatus } from '@kb-chat/contracts';
-import { anAiStatus } from '../../testing/settings-fixtures.js';
+import { aSettingsView, anAiStatus } from '../../testing/settings-fixtures.js';
 import { AiStatusCard } from './ai-status-card.js';
 import { SettingsStore } from './settings-store.js';
 
@@ -14,7 +14,10 @@ async function renderCard(status: AiStatus) {
       provideZonelessChangeDetection(),
       {
         provide: SettingsStore,
-        useValue: { aiStatus: { hasValue: () => true, value: () => status } },
+        useValue: {
+          aiStatus: { hasValue: () => true, value: () => status },
+          settings: () => aSettingsView(),
+        },
       },
     ],
   });
@@ -73,6 +76,27 @@ describe('AiStatusCard (KBC-022, T6)', () => {
       anAiStatus({ source: 'own', provider: 'gemini', free: true }),
     );
     expect(document.body.textContent).toContain('Gratuito para você.');
+  });
+
+  it('names one’s own plan and why the last test failed (KBC-023 AC-1, BR-6)', async () => {
+    await renderCard(
+      anAiStatus({
+        source: 'own',
+        provider: 'openrouter',
+        free: true,
+        lastTest: {
+          provider: 'openrouter',
+          ok: false,
+          code: 'LLM_KEY_REJECTED',
+          at: '2026-10-26T15:30:00.000Z',
+        },
+      }),
+    );
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('OpenRouter');
+    expect(text).toContain('Só modelos gratuitos');
+    expect(text).toContain('Último teste: falhou');
+    expect(text).toContain('A chave não foi aceita pelo provedor.');
   });
 
   it('says when nothing serves the person', async () => {

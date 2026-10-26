@@ -449,7 +449,7 @@ describe('Configurações', () => {
       screen.getByRole('radio', { name: /Claude \(API da Anthropic\)/ }),
     );
     await fixture.whenStable();
-    const guide = screen.getByRole('region', { name: 'Como configurar' });
+    const guide = screen.getByRole('region', { name: /Como configurar/ });
     expect(guide.textContent).toContain('sk-ant-');
     expect(guide.textContent).toContain('Quanto custa');
     expect(guide.textContent).toContain(
@@ -465,7 +465,7 @@ describe('Configurações', () => {
     fireEvent.click(screen.getByRole('radio', { name: /OpenAI \(API\)/ }));
     await fixture.whenStable();
     expect(
-      screen.getByRole('region', { name: 'Como configurar' }).textContent,
+      screen.getByRole('region', { name: /Como configurar/ }).textContent,
     ).toContain('Assinaturas do ChatGPT (Plus, Pro) não podem ser conectadas');
   });
 
@@ -509,11 +509,45 @@ describe('Configurações', () => {
     });
   });
 
+  it('KBC-023 QA: hides the owner’s subscriptions from anyone else', async () => {
+    await openSettings(
+      aSettingsView(),
+      aProviderList({
+        'claude-subscription': { available: false, reason: 'owner-only' },
+        'chatgpt-subscription': { available: false, reason: 'owner-only' },
+      }),
+    );
+    expect(
+      screen.queryByRole('radio', { name: /Assinatura do Claude/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('radio', { name: /Assinatura do ChatGPT/ }),
+    ).toBeNull();
+  });
+
+  it('KBC-023 review: says a paid model outside the list will not be used', async () => {
+    const { http, fixture } = await openSettings();
+    fireEvent.click(screen.getByRole('radio', { name: /^OpenRouter/ }));
+    TestBed.tick();
+    http.expectOne('/api/v1/ai/free-models').flush({
+      items: [],
+      paid: [{ id: 'fake/paid', name: 'Fake Paid', contextLength: 1 }],
+      updatedAt: null,
+      stale: false,
+    });
+    await fixture.whenStable();
+    const paid = screen.getByLabelText('Modelo pago de reserva (opcional)');
+    fireEvent.input(paid, { target: { value: 'fake/typo' } });
+    await fixture.whenStable();
+    expect(paid.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText(/não está na lista de modelos pagos/)).toBeTruthy();
+  });
+
   it('KBC-023 AC-4: guides the free Google key, with the privacy warning, and saves the plan', async () => {
     const { http, fixture } = await openSettings();
     fireEvent.click(screen.getByRole('radio', { name: /Gemini/ }));
     await fixture.whenStable();
-    const guide = screen.getByRole('region', { name: 'Como configurar' });
+    const guide = screen.getByRole('region', { name: /Como configurar/ });
     expect(guide.textContent).toContain('o Google pode usar as perguntas');
     expect(
       screen

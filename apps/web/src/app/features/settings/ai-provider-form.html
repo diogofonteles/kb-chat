@@ -73,6 +73,11 @@
       <p class="hint" i18n="@@ai.connectHint">
         Você vai ao OpenRouter, autoriza e volta para cá com a chave salva.
       </p>
+      @if (connectFailed()) {
+        <p class="field-error" role="alert" i18n="@@ai.connectFailed">
+          ⚠ Não consegui abrir o OpenRouter. Tente de novo.
+        </p>
+      }
     </div>
     <fieldset class="providers plans">
       <legend class="field-label" i18n="@@ai.orModeLegend">
@@ -109,9 +114,16 @@
           autocomplete="off"
           spellcheck="false"
           list="ai-paid-models"
+          [attr.aria-invalid]="paidError() ? true : null"
+          [attr.aria-describedby]="paidError() ? 'ai-paid-error' : null"
           [value]="draft().paidModel"
           (input)="setPaidModel(paidInput.value)"
         />
+        @if (paidError(); as error) {
+          <p id="ai-paid-error" class="field-error" role="alert">
+            ⚠ {{ error }}
+          </p>
+        }
         <datalist id="ai-paid-models">
           @for (model of paidOptions(); track model.id) {
             <option [value]="model.id">{{ model.name }}</option>
