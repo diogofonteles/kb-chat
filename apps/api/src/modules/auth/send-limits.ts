@@ -1,21 +1,17 @@
-interface Window {
-  readonly max: number;
-  readonly ms: number;
-}
+import { SlidingWindows, type RateWindow } from './sliding-windows.js';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 /** KBC-014 BR-5: per email or phone, and per client address (people share one: looser). */
-const IDENTIFIER_WINDOWS: readonly Window[] = [
+const IDENTIFIER_WINDOWS: readonly RateWindow[] = [
   { max: 1, ms: MINUTE },
   { max: 5, ms: HOUR },
 ];
-const ADDRESS_WINDOWS: readonly Window[] = [
+const ADDRESS_WINDOWS: readonly RateWindow[] = [
   { max: 5, ms: MINUTE },
   { max: 20, ms: HOUR },
 ];
-const LONGEST_MS = HOUR;
 
 /** Who asks for a code to be sent. */
 export interface SendAttempt {
@@ -30,42 +26,20 @@ export interface SendAttempt {
  * a restart resets the counters, the code's own lifetime and attempts stay on disk.
  */
 export class SendLimits {
-  private readonly sent = new Map<string, number[]>();
+  private readonly windows: SlidingWindows;
 
-  constructor(private readonly options: { readonly now?: () => number } = {}) {}
+  constructor(options: { readonly now?: () => number } = {}) {
+    this.windows = new SlidingWindows(options);
+  }
 
   /** Counts a send when both keys are under every limit; false, counting nothing, otherwise. */
   take(attempt: SendAttempt): boolean {
-    const now = this.options.now?.() ?? Date.now();
-    const keys: [string, readonly Window[]][] = [
-      [`${attempt.purpose}:${attempt.identifier}`, IDENTIFIER_WINDOWS],
-      [`ip:${attempt.ip}`, ADDRESS_WINDOWS],
-    ];
-    const allowed = keys.every(([key, windows]) =>
-      this.fits(this.recent(key, now), windows, now),
-    );
-    if (allowed)
-      for (const [key] of keys)
-        this.sent.set(key, [...this.recent(key, now), now]);
-    return allowed;
-  }
-
-  private fits(
-    times: readonly number[],
-    windows: readonly Window[],
-    now: number,
-  ) {
-    return windows.every(
-      ({ max, ms }) => times.filter((t) => now - t < ms).length < max,
-    );
-  }
-
-  /** The key's sends in the last hour; older ones are forgotten. */
-  private recent(key: string, now: number): number[] {
-    const times = (this.sent.get(key) ?? []).filter(
-      (t) => now - t < LONGEST_MS,
-    );
-    if (times.length === 0) this.sent.delete(key);
-    return times;
+    return this.windows.take([
+      {
+        key: `${attempt.purpose}:${attempt.identifier}`,
+        windows: IDENTIFIER_WINDOWS,
+      },
+      { key: `ip:${attempt.ip}`, windows: ADDRESS_WINDOWS },
+    ]).allowed;
   }
 }

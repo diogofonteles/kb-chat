@@ -62,6 +62,16 @@ export type Me = z.infer<typeof meSchema>;
 
 export const personIdSchema = z.uuid();
 
+/**
+ * The last invitation e-mail to a person (KBC-026): when one went out and when the last
+ * attempt failed (null after a success). "Ativo" comes from `lastLoginAt`, not from here.
+ */
+export const invitationSchema = z.object({
+  sentAt: z.iso.datetime().nullable(),
+  failedAt: z.iso.datetime().nullable(),
+});
+export type Invitation = z.infer<typeof invitationSchema>;
+
 /** A person as masters see them on "Pessoas e permissões" (FR-3). */
 export const personSchema = z.object({
   id: personIdSchema,
@@ -75,6 +85,8 @@ export const personSchema = z.object({
   isOwner: z.boolean(),
   /** E.164, from an access request (KBC-014); null for invites. */
   phone: z.string().nullable(),
+  /** The invitation e-mail (KBC-026); null when none was sent (opted out, or before KBC-026). */
+  invitation: invitationSchema.nullable().default(null),
   invitedBy: z.string(),
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),
@@ -87,8 +99,13 @@ export type PersonList = z.infer<typeof personListSchema>;
 /** POST /api/v1/people. */
 export const inviteRequestSchema = z.object({
   email: z.email().max(254),
+  /** KBC-026: false is "Não enviar e-mail de convite"; older clients keep sending. */
+  sendEmail: z.boolean().default(true),
 });
-export type InviteRequest = z.infer<typeof inviteRequestSchema>;
+export type InviteRequest = z.input<typeof inviteRequestSchema>;
+
+/** The `details` of a 429 on POST /api/v1/people/:id/invitation (KBC-026 BR-3). */
+export const invitationLimitSchema = z.object({ retryAt: z.iso.datetime() });
 
 /** PATCH /api/v1/people/:id: what a master changes; missing fields stay. */
 export const personUpdateSchema = z

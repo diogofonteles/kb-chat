@@ -10,6 +10,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import { viewerOf, type RouteAccess } from './access.js';
+import type { Invitations } from './invitations.js';
 import type { PeopleService } from './people-service.js';
 import { toPerson, type StoredPerson } from './person.js';
 import type { SessionService } from './session-service.js';
@@ -19,6 +20,8 @@ export interface PeopleRouteDeps {
   readonly sessions: SessionService;
   /** Every collection slug in the vault: a grant must name one. */
   readonly topics: () => readonly string[];
+  /** The invitation e-mail sent on invite (KBC-026). */
+  readonly invitations: Invitations;
 }
 
 const MASTER: RouteAccess = { master: true };
@@ -54,9 +57,13 @@ function registerReads(app: FastifyInstance, deps: PeopleRouteDeps) {
       schema: { body: inviteRequestSchema, response: { 201: personSchema } },
     },
     async (request, reply) => {
-      const by = viewerOf(request).person.email;
-      const invited = await deps.people.invite(request.body.email, by);
-      return reply.code(201).send(view(deps, invited));
+      const inviter = viewerOf(request).person;
+      const { email, sendEmail } = request.body;
+      const invited = await deps.people.invite(email, inviter.email);
+      const result = sendEmail
+        ? await deps.invitations.afterInvite(invited, inviter, request.log)
+        : invited;
+      return reply.code(201).send(view(deps, result));
     },
   );
 }

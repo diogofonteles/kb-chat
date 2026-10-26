@@ -1,6 +1,7 @@
 import {
   DEFAULT_INVITE_FEATURES,
   FEATURES,
+  type Invitation,
   type PersonUpdate,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -148,6 +149,16 @@ export function codeSignIn(
     lastLoginAt: now,
   };
   return { people: replace(people, signedIn), result: signedIn };
+}
+
+/** The outcome of the last invitation e-mail (KBC-026). */
+export function recordInvitation(
+  people: readonly StoredPerson[],
+  id: string,
+  invitation: Invitation,
+): PeopleChange<StoredPerson> {
+  const next: StoredPerson = { ...find(people, id), invitation };
+  return { people: replace(people, next), result: next };
 }
 
 function find(people: readonly StoredPerson[], id: string): StoredPerson {

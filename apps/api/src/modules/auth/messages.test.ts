@@ -4,6 +4,7 @@ import {
   approved,
   codeEmail,
   codeSms,
+  invitation,
   newRequestForMasters,
   requestCooldown,
   requestPending,
@@ -70,5 +71,35 @@ describe('messages (KBC-016: the product is "Nova Alexandria", a feminine noun)'
     expect(codeSms('123456')).toBe(
       'Nova Alexandria: seu código de acesso é 123456. Vale por 10 minutos.',
     );
+  });
+});
+
+describe('invitation (KBC-026 BR-2)', () => {
+  const message = invitation({
+    inviter: 'Ana Master',
+    email: 'novo@exemplo.com',
+    origin,
+  });
+
+  it('says who invited, where to go and both ways in, in plain text', () => {
+    expect(message.subject).toBe('Você foi convidado para a Nova Alexandria');
+    expect(message.text).toMatch(
+      /^Olá! Ana Master convidou você para a Nova Alexandria\./,
+    );
+    expect(message.text).toContain(`acesse ${origin}`);
+    expect(message.text).toContain('"Fazer login com o Google"');
+    expect(message.text).toContain('"Entrar com código"');
+    expect(message.text).toContain('novo@exemplo.com');
+    expect(message.text.endsWith(SIGNATURE)).toBe(true);
+    expect(message.text).not.toMatch(/kb-chat|<[a-z]/i);
+  });
+
+  it('keeps an inviter name with line breaks on one line', () => {
+    const odd = invitation({
+      inviter: '  Ana\n\nMaster  ',
+      email: 'x@exemplo.com',
+      origin,
+    });
+    expect(odd.text).toMatch(/^Olá! Ana Master convidou você/);
   });
 });

@@ -22,6 +22,7 @@ import csrfGuard from './plugins/csrf-guard.js';
 import hostGuard from './plugins/host-guard.js';
 import routeAccess from './plugins/route-access.js';
 import {
+  Invitations,
   Notifier,
   OWNER_PRINCIPAL,
   OneTimeCodes,
@@ -31,6 +32,7 @@ import {
   SessionService,
   authRoutes,
   codeRoutes,
+  invitationRoutes,
   peopleRoutes,
 } from './modules/auth/index.js';
 import {
@@ -266,7 +268,13 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
       }),
     }),
   );
-  await app.register(peopleRoutes({ ...auth, topics }));
+  // KBC-026: inviting sends an e-mail through the same notifier as the codes.
+  const invitations = new Invitations({
+    people: auth.people,
+    notifier: access.notifier,
+  });
+  await app.register(peopleRoutes({ ...auth, topics, invitations }));
+  await app.register(invitationRoutes({ people: auth.people, invitations }));
   await registerAccess(app, { deps, access, topics });
 }
 
