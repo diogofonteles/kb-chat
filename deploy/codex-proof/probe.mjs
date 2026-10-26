@@ -64,9 +64,7 @@ for (const pid of readdirSync('/proc').filter((name) => /^\d+$/.test(name))) {
 // The image creates these folders empty for the API; a mount would fill them.
 const hasContent = (path) => {
   try {
-    return statSync(path).isDirectory()
-      ? readdirSync(path).length > 0
-      : true;
+    return statSync(path).isDirectory() ? readdirSync(path).length > 0 : true;
   } catch {
     return false;
   }
