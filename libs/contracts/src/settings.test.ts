@@ -26,6 +26,10 @@ describe('settings contract', () => {
       researchProfile: 'fast',
       autoDeepen: true,
     });
+    // KBC-023: the own AI plans default when an older API sends none.
+    expect(view.ai.openrouter.mode).toBe('free');
+    expect(view.ai.gemini.tier).toBe('free');
+    expect(view.ai.lastTest).toBeNull();
     expect(
       settingsViewSchema.safeParse({
         ...view,

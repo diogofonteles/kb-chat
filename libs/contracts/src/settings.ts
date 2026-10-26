@@ -165,9 +165,14 @@ export const settingsViewSchema = z.object({
     models: z.partialRecord(modelProviderSchema, profileModelsSchema),
     keys: z.partialRecord(keyProviderSchema, maskedKeySchema),
     dailyCapUsd: z.number().nonnegative(),
-    openrouter: openRouterPlanSchema,
-    gemini: z.object({ tier: geminiTierSchema }),
-    lastTest: lastTestSchema.nullable(),
+    // An API before KBC-023 sends none of these: their defaults.
+    openrouter: openRouterPlanSchema.default(() => ({
+      ...DEFAULT_OPENROUTER_PLAN,
+    })),
+    gemini: z
+      .object({ tier: geminiTierSchema })
+      .default(() => ({ tier: 'free' as const })),
+    lastTest: lastTestSchema.nullable().default(null),
   }),
 });
 export type SettingsView = z.infer<typeof settingsViewSchema>;
