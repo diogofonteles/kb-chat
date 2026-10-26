@@ -43,7 +43,9 @@ for (const width of [1440, 390]) {
   await signIn(page.request, 'owner@kb-chat.test');
   await page.goto(base);
   let dialog = await settingsAt(page, width, 'IA da aplicação');
-  await dialog.getByRole('button', { name: /Conectar (OpenRouter|outra conta)/ }).click();
+  await dialog
+    .getByRole('button', { name: /Conectar (OpenRouter|outra conta)/ })
+    .click();
   await page.waitForURL((url) => !url.search.includes('openrouter='));
   dialog = page.getByRole('dialog', { name: 'Configurações' });
   await dialog.getByText('Conta conectada.').waitFor();
