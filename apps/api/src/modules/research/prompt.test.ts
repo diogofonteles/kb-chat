@@ -4,6 +4,7 @@ import {
   researchSystemPrompt,
   subAgentSystemPrompt,
 } from './prompt.js';
+import { defaultSubscriptionPrompt } from '../../adapters/subscription-prompt.js';
 
 describe('buildResearchMessages', () => {
   it('tells the model to grep with find_text and variants before concluding absence, within 15 steps', () => {
@@ -54,6 +55,8 @@ describe('buildResearchMessages', () => {
         researchSystemPrompt('Hermetismo', profile),
       ),
       subAgentSystemPrompt('Hermetismo'),
+      // The Claude Code and Codex turns (ADR 0007) get the same rules.
+      defaultSubscriptionPrompt('Hermetismo', 'deep'),
     ];
     for (const text of prompts) {
       expect(text).toContain('José Laércio do Egito');

@@ -161,6 +161,14 @@ describe('authorship in the research tools (KBC-020 AC-4, AC-5)', () => {
       }),
     );
     expect(withDocument.output).toMatch(/^Argumentos inválidos .*document/);
+    for (const name of ['search_collection', 'list_sources']) {
+      const refused = await run(
+        tools,
+        call(name, { query: 'vibração', authorship: 'Mestre Laércio' }),
+      );
+      expect(refused.steps).toEqual([]);
+      expect(refused.output).toMatch(/^Argumentos inválidos .*authorship/);
+    }
   });
 
   it('filters search_collection by authorship and labels its hits', async () => {
@@ -210,6 +218,9 @@ describe('authorship in the research tools (KBC-020 AC-4, AC-5)', () => {
     );
     expect(mestre.steps[0]?.text).toBe(
       'Listando as origens e entidades de autoria Mestre Laércio',
+    );
+    expect(mestre.output.split('\n')[0]).toMatch(
+      /^Autoria: Mestre Laércio 3 · /,
     );
     expect(mestre.output).toContain('- Temas-docs (3 documento(s))');
     expect(mestre.output).not.toContain('Livros');

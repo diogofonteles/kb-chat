@@ -102,7 +102,7 @@ export class SourcesTool {
     const entries = args.authorship
       ? all.filter((entry) => entry.authorship === args.authorship)
       : all;
-    const lines: string[] = args.kind === 'all' ? [authorshipLine(all)] : [];
+    const lines: string[] = [authorshipLine(all)];
     if (args.kind !== 'entities')
       lines.push(
         ...section(
