@@ -154,6 +154,18 @@ describe('sub-researchers (KBC-018, ADR 0014)', () => {
   });
 });
 
+describe('sub-researcher spend (KBC-018 QA BUG-1)', () => {
+  it('reserves each call in turn, so sub-researchers starting together pass the cap by one call at most', async () => {
+    const { runner, ledger } = await fixtureRunner(
+      { script: [delegate(3)], usdPerCall: 0.005, callDelayMs: 20 },
+      0.012,
+    );
+    const events = await collectEvents(runner.run(input('ritmo')));
+    expect(events.at(-1)).toEqual({ type: 'error', code: 'DAILY_CAP_REACHED' });
+    expect(ledger.entries[0]?.usd).toBeLessThanOrEqual(0.012 + 0.005 + 1e-9);
+  });
+});
+
 describe('sub-researcher budgets', () => {
   it('stops granting tool steps past the turn total and still reports', async () => {
     const budgets = researchBudgets();

@@ -109,6 +109,8 @@ interface Turn {
   readonly slots: Slots | null;
   /** Estimates of sub-researcher calls in flight, counted by the spend guard. */
   reservedUsd: number;
+  /** Serializes the sub-researchers' check-and-reserve, so none sees a stale reservation. */
+  spendQueue: Promise<unknown>;
   sourcesSent: number;
   /** What each model spent; an escalated turn has two (one ledger entry each). */
   readonly spent: Map<LoopEngine, Spent>;
@@ -230,6 +232,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       subSteps: 0,
       slots: budget.delegation ? new Slots(budget.delegation.parallel) : null,
       reservedUsd: 0,
+      spendQueue: Promise.resolve(),
       sourcesSent: 0,
       spent: new Map(),
       usd: 0,
@@ -363,8 +366,23 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     await spend.guard(turn.usd + turn.reservedUsd + estimate);
   }
 
-  /** A sub-researcher's guard: like guardSpend, and the estimate stays reserved until accounted. */
-  private async reserveSpend(
+  /**
+   * A sub-researcher's guard: like guardSpend, and the estimate stays reserved until
+   * accounted. Checks run one after the other, so parallel calls each see the others'.
+   */
+  private reserveSpend(
+    turn: Turn,
+    prompt: string,
+    outputTokens: number,
+  ): Promise<number> {
+    const reserved = turn.spendQueue.then(() =>
+      this.checkAndReserve(turn, prompt, outputTokens),
+    );
+    turn.spendQueue = reserved.catch(() => undefined);
+    return reserved;
+  }
+
+  private async checkAndReserve(
     turn: Turn,
     prompt: string,
     outputTokens: number,

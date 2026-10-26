@@ -342,6 +342,12 @@ function escalationOf(
   return allowed ? options.escalation : undefined;
 }
 
+/** The turn endpoint's tool calls: sub-agents reach it too, so theirs count (ADR 0014). */
+const stepCap = (budgets: ResearchBudgets, input: TurnInput): number => {
+  const budget = budgets[input.profile];
+  return budget.steps + (budget.delegation?.totalSteps ?? 0);
+};
+
 /**
  * One research turn run by a subscription CLI (KBC-007 FR-4): the tools are served to it
  * over the turn's MCP endpoint, its stdout becomes tokens, and each tool call it makes
@@ -350,12 +356,6 @@ function escalationOf(
  * question escalates: a second CLI run with the deep model, the same tools and numbering,
  * and the rest of the deep step budget (ADR 0009).
  */
-/** The turn endpoint's tool calls: sub-agents reach it too, so theirs count (ADR 0014). */
-const stepCap = (budgets: ResearchBudgets, input: TurnInput): number => {
-  const budget = budgets[input.profile];
-  return budget.steps + (budget.delegation?.totalSteps ?? 0);
-};
-
 export async function* runCliTurn(
   options: CliTurnOptions,
   dialect: CliDialect,
