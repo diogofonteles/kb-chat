@@ -232,9 +232,11 @@ export class ProviderRegistry implements ProviderCatalog {
   }
 
   private subscriptionReady(kind: LentSubscription): boolean {
-    return kind === 'claude-subscription'
-      ? this.claudeOnPath
-      : this.codexReady();
+    if (kind === 'claude-subscription') return this.claudeOnPath;
+    // The sandbox last said the owner's login is not there: nothing to lend (QA N-2).
+    return (
+      this.codexReady() && this.codexStatusCache?.status.loggedIn !== false
+    );
   }
 
   /** Where Codex runs (ADR 0020): its sandbox runner, the owner's Mac (local), or nowhere. */

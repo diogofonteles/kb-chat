@@ -190,4 +190,18 @@ describe('Codex, the ChatGPT subscription, in its sandbox (KBC-027)', () => {
     await owner('GET', '/api/v1/house-ai');
     expect(checks()).toBe(2);
   });
+
+  it('is not lendable while Codex is logged out on the server (QA N-2)', async () => {
+    const { owner, codexHome } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    await writeFile(
+      join(codexHome, 'fake-cli.json'),
+      JSON.stringify({ mode: 'fail' }),
+    );
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 31_000);
+    const house = (await owner('GET', '/api/v1/house-ai')).json();
+    expect(house.codex.loggedIn).toBe(false);
+    expect(house.lendable['chatgpt-subscription']).toBe(false);
+  });
 });

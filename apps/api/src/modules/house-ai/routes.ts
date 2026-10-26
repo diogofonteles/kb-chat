@@ -61,6 +61,7 @@ const lendable = (deps: HouseAiRouteDeps) => ({
 
 /** The house as masters see it: the service's view, what can be lent and Codex's state. */
 async function fullView(deps: HouseAiRouteDeps, view: HouseServiceView) {
+  // Codex's state first: what can be lent depends on its login (KBC-027 QA N-2).
   const codex = (await deps.codex?.()) ?? { configured: false, loggedIn: null };
   return {
     ...view,
@@ -109,7 +110,11 @@ function registerHouseDefault(app: FastifyInstance, deps: HouseAiRouteDeps) {
       config: { access: MASTER },
       schema: { response: { 200: houseDefaultSchema } },
     },
-    async () => ({ defaultAppAi: house.defaultAppAi(), ...lendable(deps) }),
+    async () => {
+      // The people screen offers ChatGPT only with its login there (KBC-027 QA N-2).
+      await deps.codex?.();
+      return { defaultAppAi: house.defaultAppAi(), ...lendable(deps) };
+    },
   );
 }
 
