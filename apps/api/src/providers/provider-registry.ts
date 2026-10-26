@@ -25,9 +25,10 @@ import { GeminiAdapter } from '../adapters/gemini-adapter.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
 import type { AppConfig } from '../config.js';
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
-import type {
-  ProviderCatalog,
-  SettingsService,
+import {
+  publicLastTest,
+  type ProviderCatalog,
+  type SettingsService,
 } from '../modules/settings/index.js';
 import type { LlmPort, LlmPrice } from '../ports/llm.js';
 import type { AgentLlmPort } from '../ports/llm.js';
@@ -126,6 +127,10 @@ interface ChoiceOverride {
   readonly profile?: ResearchProfile;
 }
 
+/** Which key a connection test was about, kept with it; null for the subscriptions. */
+const keyIdOf = (key: string | undefined): string | null =>
+  key ? fingerprint(key) : null;
+
 /** A key's fingerprint for cache ids: the key itself is kept only by the adapter. */
 const fingerprint = (key: string | undefined): string =>
   key ? createHash('sha256').update(key).digest('base64url').slice(0, 16) : '';
@@ -207,10 +212,16 @@ export class ProviderRegistry implements ProviderCatalog {
     };
   }
 
-  /** The last test, only when it was about the AI serving now (KBC-023 review M2). */
+  /**
+   * The last test, only when it was about the AI serving now and the key in use: a test of
+   * another provider or of a typed, unsaved key says nothing about it (KBC-023 review M2, R2-03).
+   */
   private lastTestOf(principal: string, active: ResolvedProvider) {
     const test = this.options.settings.snapshot(principal)?.ai.lastTest ?? null;
-    return test?.provider === active ? test : null;
+    const inUse = keyIdOf(this.key(principal, active));
+    return test?.provider === active && test.keyId === inUse
+      ? publicLastTest(test)
+      : null;
   }
 
   /** The serving AI costs nothing: the app's, or one's own on free models (ADR 0018). */
@@ -379,6 +390,7 @@ export class ProviderRegistry implements ProviderCatalog {
     // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
     await this.options.settings.recordTest(principal, {
       provider: request.provider,
+      keyId: keyIdOf(choice.key),
       ok: result.ok,
       code: result.code,
       at: new Date().toISOString(),

@@ -10,6 +10,7 @@ import {
   modelIdSchema,
   modelProviderSchema,
   preferencesSchema,
+  type LastTest,
   type ModelProvider,
   type ProfileModels,
   type SettingsUpdate,
@@ -46,6 +47,24 @@ function migratedModels(ai: {
   return { ...models, [provider]: { fast: model, deep: model } };
 }
 
+/**
+ * The last "Testar conexão" as kept on disk: which key it was about (a fingerprint, never the
+ * key), so the status shows it only while that key is the one in use (KBC-023 review R2-03).
+ */
+export const storedLastTestSchema = lastTestSchema.extend({
+  keyId: z.string().nullable().default(null),
+});
+export type StoredLastTest = z.infer<typeof storedLastTestSchema>;
+
+/** The last test without the key's fingerprint, for responses. */
+export const publicLastTest = (test: StoredLastTest | null): LastTest | null =>
+  test && {
+    provider: test.provider,
+    ok: test.ok,
+    code: test.code,
+    at: test.at,
+  };
+
 /** settings.json as written on disk (ADR 0007). Keys are kept in full here, and only here. */
 export const storedSettingsSchema = z.object({
   version: z.literal(1).default(1),
@@ -70,7 +89,7 @@ export const storedSettingsSchema = z.object({
         .object({ tier: geminiTierSchema })
         .catch({ tier: 'free' })
         .default({ tier: 'free' }),
-      lastTest: lastTestSchema.nullable().catch(null).default(null),
+      lastTest: storedLastTestSchema.nullable().catch(null).default(null),
     })
     .prefault({})
     .transform(({ model, openrouter, ...ai }) => ({

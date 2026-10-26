@@ -147,7 +147,7 @@ export type GeminiTier = z.infer<typeof geminiTierSchema>;
 
 /** The last "Testar conexão" of the person (KBC-023 BR-6). */
 export const lastTestSchema = z.object({
-  provider: z.string(),
+  provider: aiProviderSchema,
   ok: z.boolean(),
   code: z.string().nullable(),
   at: z.iso.datetime(),

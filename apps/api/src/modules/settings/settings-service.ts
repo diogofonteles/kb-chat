@@ -1,6 +1,5 @@
 import type {
   KeyProvider,
-  LastTest,
   MaskedKey,
   SettingsUpdate,
   SettingsView,
@@ -9,7 +8,9 @@ import type { SettingsStorePort } from '../../ports/settings-store.js';
 import {
   DEFAULT_SETTINGS,
   applySettingsUpdate,
+  publicLastTest,
   storedSettingsSchema,
+  type StoredLastTest,
   type StoredSettings,
 } from './stored-settings.js';
 
@@ -81,7 +82,7 @@ export class SettingsService {
         dailyCapUsd: this.dailyCapUsd(principal),
         openrouter: settings.ai.openrouter,
         gemini: settings.ai.gemini,
-        lastTest: settings.ai.lastTest,
+        lastTest: publicLastTest(settings.ai.lastTest),
       },
     };
   }
@@ -98,7 +99,7 @@ export class SettingsService {
   }
 
   /** Keeps the outcome of "Testar conexão" (KBC-023 BR-6); never the key. */
-  async recordTest(principal: string, test: LastTest): Promise<void> {
+  async recordTest(principal: string, test: StoredLastTest): Promise<void> {
     const run = this.writing.then(async () => {
       await this.load(principal);
       const current = this.snapshot(principal) ?? DEFAULT_SETTINGS;

@@ -168,6 +168,49 @@ describe('Sua IA: Gemini (KBC-023 AC-4, AC-7)', () => {
     ).toBeNull();
   });
 
+  it('shows the last test only when it was about the key in use (review R2-03)', async () => {
+    const started = await start();
+    const { member } = await withPeople(started);
+    await member('PUT', '/api/v1/settings', {
+      ai: { provider: 'gemini', keys: { gemini: 'AIza-ana-key-valid' } },
+    });
+    const lastTest = async () =>
+      (await member('GET', '/api/v1/ai/status')).json().lastTest;
+    // A typed key that is not saved says nothing about the AI serving now.
+    await member('POST', '/api/v1/settings/ai/test', {
+      provider: 'gemini',
+      key: 'AIza-ana-typed-valid',
+    });
+    expect(await lastTest()).toBeNull();
+    // Once that key is saved, its test is the active AI's.
+    await member('PUT', '/api/v1/settings', {
+      ai: { keys: { gemini: 'AIza-ana-typed-valid' } },
+    });
+    expect(await lastTest()).toMatchObject({ provider: 'gemini', ok: true });
+    // A typed key that fails does not mark the saved one as failing.
+    await member('POST', '/api/v1/settings/ai/test', {
+      provider: 'gemini',
+      key: 'AIza-ana-typed-wrong',
+    });
+    expect(await lastTest()).toBeNull();
+    await member('POST', '/api/v1/settings/ai/test', { provider: 'gemini' });
+    expect(await lastTest()).toMatchObject({ ok: true, code: null });
+    // Which key was tested never leaves the server.
+    const settings = (await member('GET', '/api/v1/settings')).json();
+    expect(Object.keys(settings.ai.lastTest)).toEqual([
+      'provider',
+      'ok',
+      'code',
+      'at',
+    ]);
+    expect(Object.keys(await lastTest())).toEqual([
+      'provider',
+      'ok',
+      'code',
+      'at',
+    ]);
+  });
+
   it('prices the paid tier and shows today’s spend against the cap', async () => {
     const started = await start();
     const { member } = await withPeople(started);

@@ -11,6 +11,8 @@ export {
 export {
   DEFAULT_SETTINGS,
   applySettingsUpdate,
+  publicLastTest,
   storedSettingsSchema,
+  type StoredLastTest,
   type StoredSettings,
 } from './stored-settings.js';
