@@ -1,0 +1,206 @@
+.composer {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.field {
+  position: relative;
+}
+
+textarea {
+  width: 100%;
+  min-height: 3rem;
+  max-height: 12rem;
+  resize: none;
+  field-sizing: content;
+  padding: var(--space-2) 2.5rem var(--space-2) var(--space-2);
+  border: none;
+  background: transparent;
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+textarea:focus-visible {
+  outline: none;
+}
+
+.composer:focus-within {
+  border-color: var(--color-accent);
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--target);
+  height: var(--target);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+select {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+/* "Rápido | Profundo | Exaustivo": a radio group drawn as a segmented control (MA-19). */
+.profile {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.profile-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  /* Each option is a full touch target (MA-03). */
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.profile-option.selected {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--color-border);
+}
+
+/* The native radio stays for keyboard and screen readers, drawn by its label. */
+.profile-radio {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.profile-option:has(.profile-radio:focus-visible) {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.help {
+  flex: 1 1 12rem;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.send {
+  min-height: var(--target);
+  min-width: 6rem;
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.send:not(:disabled):hover {
+  background: var(--color-accent-strong);
+}
+
+.limit {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 1023px) {
+  .composer {
+    padding: var(--space-2);
+  }
+
+  textarea {
+    min-height: 2.75rem;
+  }
+
+  /* One compact row on phones: mode selector and send; the help stays for screen readers. */
+  .mode-label,
+  .help {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  /*
+   * One compact row on phones when it fits; with the three research profiles (KBC-017)
+   * the segmented control may take its own row, never pushing the page sideways.
+   */
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .profile {
+    flex: 1 1 auto;
+  }
+
+  .profile-option {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 0 var(--space-2);
+  }
+
+  .send {
+    padding: 0 var(--space-3);
+  }
+
+  /* The exhaustive profile's warning (it may take minutes) stays visible on phones. */
+  .help.always {
+    position: static;
+    order: 1;
+    flex-basis: 100%;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+}

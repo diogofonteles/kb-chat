@@ -1,0 +1,42 @@
+:host {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.authorship-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.0625rem var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* The collection's core: filled, with its mark. */
+[data-authorship='mestre-laercio'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+[data-authorship='outros-autores'] {
+  border-color: var(--color-text-muted);
+}
+
+[data-authorship='sintese'] {
+  border-style: dashed;
+  border-color: var(--color-text-muted);
+}
+
+[data-authorship='nao-classificado'] {
+  border-style: dotted;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}

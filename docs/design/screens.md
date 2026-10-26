@@ -1,4 +1,4 @@
-# Telas e fluxos — kb-chat (esqueleto + release 1)
+# Telas e fluxos — Nova Alexandria (esqueleto + release 1)
 
 Fonte: `docs/product/vision.md`, `docs/product/brief.md`, `docs/product/context.md` (## Design). Facetas reais do tópico `hermetismo` (`kb find --facets`, 2026-10-23).
 
@@ -34,6 +34,8 @@ Desktop (≥ 1024 px)                                   Celular (< 1024 px)
 │          │ [caixa de pergunta fixa]  │          │
 └──────────┴───────────────────────────┴──────────┘
 ```
+
+O ⚙ **Configurações** fica no pé da lateral e do menu do celular (T6).
 
 Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, (3) chips de filtro, (4) botão de IA. A busca é a navegação principal, por isso o campo fica fixo e sempre visível (SL-03).
 
@@ -97,6 +99,10 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 - Padrão sensato (UP-06): **"Fora do tema" fica oculto por padrão**. Aparece no chip como uma opção desmarcada, com a nota "11 ocultos", e uma marcação os mostra (honesto: nada é escondido em silêncio, SL-24).
 - No celular, os chips rolam na horizontal **e** "Filtros (2)" abre uma tela cheia com "Aplicar" fixo e "Cancelar" (SL-21). Nada depende de hover (SL-22).
 
+### Autoria (KBC-020)
+- Antes dos chips, o controle segmentado **"Autoria: Todos (120) · ✦ Mestre Laércio (80) · Outros autores (40)"**: um grupo de rádio (MA-19), com a escolha aplicada na hora na mesma mensagem. O segmento escolhido fica preenchido e com "✓" (estado em texto e forma, não só cor, UP-20). "Todos" é o padrão e inclui as sínteses do acervo e os não classificados. Uma opção com 0 resultados fica desabilitada, salvo se já estiver escolhida. No celular, o controle ocupa uma linha própria acima dos chips, com os três segmentos lado a lado (o de "✦ Mestre Laércio", o rótulo mais longo, um pouco mais largo) e sem rolagem horizontal.
+- **Selo de autoria** na primeira linha de cada cartão, antes do título: **"✦ Mestre Laércio"** em pílula cheia (acento), **"Outros autores"** em pílula contornada, **"Síntese do acervo"** em contorno tracejado e **"Não classificado"** em contorno pontilhado e texto discreto. Leitores de tela ouvem "Autoria: …". Um documento sem autoria (dado antigo) não mostra selo.
+
 ### Estados
 | Estado | Mostra | Ação |
 |---|---|---|
@@ -129,51 +135,157 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 | Sem relações | A seção "Veja também" não aparece (UP-10) |
 | Documento muito longo (> 200 KB) | Renderização progressiva e índice de seções quando houver títulos |
 | Transcrição de áudio ou OCR | Selo "Transcrição automática" ou "Texto extraído de imagem (OCR)", que avisa sobre erros de reconhecimento (UP-02) |
+| Autoria (KBC-020) | O selo de autoria (o mesmo do cartão) abre a área de metadados; quando o vault informa o autor, ele aparece ao lado ("✦ Mestre Laércio · José Laércio do Egito") |
 
 ---
 
-## T4. Responder com IA
+## T4. Pesquisa com IA (KBC-008)
 
-**Objetivo:** obter uma síntese da pergunta a partir do acervo, sabendo quanto custa e de onde veio. **Sucesso:** toda afirmação tem uma citação clicável, e o custo aparece antes e depois.
+*Emenda 2026-10-24: substitui o botão "Responder com IA · ~US$ 0,01" do KBC-004, que nunca disparava sozinho (KBC-008 BR-5).*
+
+**Objetivo:** perguntar como num chat com o Claude e receber uma resposta pesquisada em todo o acervo, que continua o assunto das perguntas anteriores. **Sucesso:** toda afirmação do acervo tem uma citação `[n]` clicável, e o custo (ou "Incluído na sua assinatura") aparece ao final.
 
 ### Fluxo
-1. Abaixo dos cartões: botão secundário **"Responder com IA · ~US$ 0,01"** (custo estimado visível no próprio botão, SL-24). Nunca dispara sozinho.
-2. Clique → estado "Lendo as fontes…" com etapas ("Escolhendo documentos (kb find)…", "Escrevendo resposta…") e "Parar".
-3. A resposta chega em streaming como uma mensagem do sistema. Citações [1], [2] abrem o painel no documento; abaixo, "Fontes" lista os documentos usados e "Custo: US$ 0,008".
-4. A resposta segue os filtros ativos. O cabeçalho da resposta diz quais ("Considerando: Cabala · Central").
+1. O seletor fixo no topo, **"Buscar documentos | Pesquisa com IA"**, escolhe a visão. Com um provedor, a visão inicial é "Pesquisa com IA" (ou a padrão de Configurações); sem provedor, "Pesquisa com IA" fica desabilitada, com a explicação.
+2. Na tela inicial, a saudação "O que você quer pesquisar no acervo?" e a caixa de pergunta ficam centralizadas juntas. Em janelas baixas, a saudação nunca fica sob a barra superior: a área dela rola.
+3. Perguntar já pesquisa com IA. Na caixa de pergunta, um seletor segmentado **"Rápido | Profundo | Exaustivo"** (três rádios, MA-19) escolhe o perfil, com uma linha de ajuda ("Responde em segundos, com uma pesquisa curta e uma resposta direta." / "Pesquisa mais e usa o modelo mais forte; pode levar um minuto." / "Varre o acervo inteiro, página por página, e lista tudo o que achar; pode levar vários minutos."). O Exaustivo (KBC-017, ADR 0013) termina a resposta com uma linha "Cobertura: …" e pode dividir o trabalho entre sub-pesquisadores (KBC-018, ADR 0014): na lista de passos, cada um aparece como "Pesquisador N: …", recuado, e o resumo diz "· N pesquisadores"; o custo aparece como nos outros perfis ("Incluído na sua assinatura" ou "Custo: …"). O padrão vem de Configurações; o navegador lembra a última escolha (KBC-011). No celular, a ajuda fica só para leitores de tela.
+4. Uma linha discreta mostra o passo atual ("Buscando “ritmo”", "Lendo “Os Princípios”") e, ao final, o resumo ("Pesquisou 2 vezes · leu 3 documentos"), que se expande. "Parar" fica visível enquanto o agente trabalha.
+5. A resposta aparece assim que o modelo começa a escrever (ADR 0009). Se um texto já mostrado era o agente pensando alto antes de usar uma ferramenta, ele sai da resposta e fica na lista de passos como **"Pensando: …"**, em itálico e mais discreto, para o leitor entender por que o texto sumiu (UP-01). A resposta chega em streaming abaixo da pergunta.
+   - Quando a pesquisa Rápida não basta, a linha de passos mostra **"Aprofundando a pesquisa…"** e a mesma resposta continua no perfil Profundo; ao final, o resumo diz "… · aprofundou a pesquisa" (ADR 0009). `[n]` abre o painel no documento; abaixo, "Fontes" lista só os documentos citados, como chips numerados. Tabelas largas rolam na horizontal dentro da resposta.
+6. As perguntas seguintes levam as anteriores como contexto e aparecem abaixo, como no Claude.
 
 ### Regras de conteúdo
-- A IA responde **só** a partir das fontes recuperadas. Sem base, diz "O acervo não traz informação suficiente sobre isso" e sugere outra busca. Isso é honestidade, não falha.
-- Rodapé fixo: "Resposta gerada por IA a partir do acervo; confira nas fontes."
+- A IA pesquisa antes de responder e nunca pede ao leitor para refazer a busca. Conhecimento de fora do acervo vem marcado "(fora do acervo)".
+- Rodapé fixo: "Resposta gerada por IA a partir do acervo; confira nas fontes." com "Custo: US$ 0,008" ou "Incluído na sua assinatura".
+- **Autoria (KBC-020):** a IA nunca atribui ao Mestre Laércio o que está em documentos de outros autores e rotula as citações de outros autores com o autor ou o livro. Em "Fontes", cada chip leva o selo de autoria; quando as fontes citadas misturam grupos, elas aparecem em grupos com subtítulo ("Mestre Laércio (3)", "Outros autores (2)", "Síntese do acervo", "Não classificado"), nessa ordem. Respostas salvas antes do KBC-020 mostram as fontes como antes, sem selo.
 
 ### Estados
 | Estado | Mostra | Ação |
 |---|---|---|
-| Sem chave da OpenRouter | O botão aparece desabilitado com explicação: "Configure OPENROUTER_API_KEY no servidor para usar respostas com IA." (SL-20) | — |
-| Saldo insuficiente (HTTP 402) | "Os créditos da OpenRouter acabaram. Adicione em openrouter.ai/settings/credits." (tom sério, DS-19) | Link |
-| Teto diário atingido | "Limite de gasto de hoje atingido (US$ 1,00). Volta amanhã ou ajuste em Configurações." | — |
-| Erro do modelo ou timeout | "Não consegui gerar a resposta agora." + "Tentar de novo" (os resultados grátis continuam na tela) | Tentar de novo |
-| Interrompida | Texto parcial + "(interrompida)" + custo parcial | "Continuar" não existe na R1; "Tentar de novo" |
+| Sem provedor (ou "Nenhum" salvo em Configurações, na hora) | "Pesquisa com IA" desabilitada no seletor, com a explicação; a tela volta para "Buscar documentos" | — |
+| Saldo insuficiente (HTTP 402) | "Os créditos da OpenRouter acabaram…" (tom sério, DS-19) | Adicionar créditos · Tentar de novo |
+| Teto diário atingido | "Limite de gasto com IA de hoje atingido. Ele volta a zero à meia-noite; o valor se ajusta em ⚙ Configurações." | Abrir Configurações (sem "Tentar de novo") |
+| Chave recusada, CLI sem login, provedor fora | A mensagem do caso, com o que fazer (⚙ Configurações ou o login no terminal) | Tentar de novo |
+| Erro do modelo ou timeout | "Não consegui gerar a resposta agora." | Tentar de novo |
+| Interrompida | Texto parcial + "(interrompida)" e o aviso de custo parcial; antes do primeiro texto, "Resposta interrompida antes de começar." sem aviso de custo. Fica no histórico nos dois casos. | Tentar de novo |
 
 ---
 
-## T5. Lateral: sessão, acervo e tema
+## T5. Lateral: conversa, histórico, acervo e tema
 
-- **+ Nova conversa** e o histórico **da sessão**, guardado no navegador e rotulado "neste navegador" (o histórico persistente fica fora da R1).
+- **+ Nova conversa** e o **histórico completo**, guardado pela API local neste computador e rotulado "salvo no servidor": todas as conversas das duas visões, sem limite (KBC-005 BR-1, emenda 2026-10-24). Restaurar uma conversa com IA mostra as respostas salvas sem chamar a IA.
+- Uma conversa que ainda não chegou à API fica guardada no navegador e é reenviada sozinha; enquanto isso, a lateral avisa "Ainda não consegui salvar uma conversa no histórico…".
 - **Acervo ▾**: lista de `kb topic list` com a contagem de documentos. Trocar de acervo inicia uma conversa nova (aviso inline, sem modal).
 - **Tema**: "Automático (claro/escuro)" · "Claro" · "Escuro" · "Esotérico", lembrado no navegador.
 - **Gasto com IA hoje: US$ 0,03 de US$ 1,00** (UP-02).
 
+## T6. Configurações (KBC-007)
+
+**Objetivo:** trocar quem responde (assinatura ou chave própria) e as preferências sem editar arquivos. **Sucesso:** trocar de provedor e ver a próxima resposta usar o novo, sem reiniciar.
+
+- Aberta pelo **⚙ Configurações**, fixo no pé da lateral (desktop) e do menu (celular). Abre como diálogo modal sobre a conversa, que continua igual ao fechar (FR-6). No celular, ocupa a tela inteira.
+- Seções à esquerda (no celular, abas no topo): **IA · Preferências · Sobre**. O foco começa no título; Esc e × fecham.
+- **IA:** cartões de rádio, nesta ordem: Assinatura do Claude, Anthropic API, OpenRouter, Assinatura do ChatGPT, OpenAI API, Nenhum. Cada cartão mostra o custo em texto ("Incluído na sua assinatura" ou "Cobra por uso · chave própria"). Uma assinatura sem a ferramenta instalada aparece desabilitada, com "Não instalado." e o passo a passo de instalação e login (BR-3).
+  - Provedor por uso: o campo da chave é só de escrita. Uma chave salva aparece como "Chave salva ••••abcd" com "Remover" (BR-1). Uma chave do servidor (variável de ambiente) é avisada.
+  - **Modelo rápido** e **Modelo profundo** (KBC-011): um para cada perfil da pesquisa. Nas assinaturas, uma lista fechada ("Padrão: sonnet", `opus`, `haiku`…); nos provedores por uso, texto livre com sugestões. Vazio usa o padrão, mostrado na primeira opção ou no placeholder. Cada provedor guarda os seus.
+  - Limite de gasto por dia (US$), só para os provedores por uso.
+  - "Testar conexão" responde em até 20 s, numa linha de status (NFR-1, AC-5).
+  - "Salvar" grava provedor, chave, modelo e limite juntos.
+- **Preferências:** tela inicial (Pesquisa com IA ou Buscar documentos), pesquisa com IA por padrão (Rápido, Profundo ou Exaustivo), **Aprofundar automaticamente** (caixa de seleção, ligada por padrão, com uma linha de ajuda), acervo padrão, modo de busca e tema. Salvam ao mudar ("Salvo automaticamente.").
+- **Sobre:** onde ficam os dados (~/.kb-chat, só o seu usuário lê); a assinatura nunca passa a senha à Nova Alexandria; "Rever o assistente de início".
+
+| Estado | Mostra |
+|---|---|
+| Carregando | "Carregando…" e "Verificando o que está disponível…" |
+| Servidor fora | "Não consegui carregar as configurações…" + "Tentar de novo" |
+| Erro ao salvar | "Não consegui salvar. Tente de novo." (o rascunho continua na tela) |
+
+## T7. Assistente de primeira abertura (KBC-007)
+
+- Aparece sozinho enquanto não há configuração salva para o usuário (BR-5). Cada passo pode ser pulado:
+  1. Como a IA vai responder? A Assinatura do Claude vem selecionada quando o Claude Code está instalado (BR-4).
+  2. Por onde começar? (tela inicial e modo de busca)
+  3. Qual acervo você estuda?
+  4. Escolha o tema.
+- Rodapé fixo: "Pular" (grava os padrões e não volta, FR-1), "Voltar", "Continuar" e "Concluir".
+- "Passo n de 4" no topo. Reabre em Configurações > Sobre.
+
+## T8. Entrar (KBC-010)
+
+**Objetivo:** entrar com a própria conta Google em um clique. **Sucesso:** do botão ao app sem digitar nada.
+
+- Tela própria, centralizada, antes de qualquer outra (login obrigatório, inclusive no Mac do dono): "Nova Alexandria" (título; nome do produto desde o KBC-016), uma linha de descrição, o botão do Google "Fazer login com o Google" (Google Identity Services) e a nota "Suas conversas e configurações ficam no servidor da Nova Alexandria."
+- Abaixo do botão do Google, separado por "ou": **Entrar com código** (botão secundário) e o link **Pedir acesso sem conta Google** (T10, KBC-014).
+- Sem convite (Google): "Seu acesso ainda não foi liberado." com **Solicitar acesso** (primário) e "Sair" (volta ao botão, sem o login automático do Google). Solicitar abre, no mesmo cartão, o e-mail do Google (só leitura), o campo **Celular (opcional)** e "Enviar solicitação"; depois: "Solicitação enviada. Você recebe um e-mail quando um master aprovar." Se já houver uma solicitação: "Sua solicitação está em análise." ou "Sua solicitação foi recusada. Você pode pedir de novo a partir de dd/mm às hh:mm." (KBC-014 BR-7).
+- Qualquer resposta 401 depois disso (sessão revogada ou vencida) recarrega a página e volta a esta tela; nada da pessoa anterior fica na memória (BR-6).
+
+| Estado | Mostra |
+|---|---|
+| Carregando | "Carregando…" |
+| Sem client id | "O login não está configurado: defina GOOGLE_CLIENT_ID no .env e reinicie a API." |
+| Script do Google indisponível | "Não consegui carregar o botão do Google…" + "Tentar de novo" |
+| Entrando | "Entrando…" |
+| Falha na verificação | a mensagem do erro (ex.: "Não consegui confirmar o login com o Google agora…") |
+| Ticket vencido (mais de 15 min na tela) | "Esta tela ficou aberta tempo demais. Entre com o Google de novo para pedir acesso." |
+
+## T9. Pessoas e permissões (KBC-010, só masters)
+
+- Seção de ⚙ Configurações, aberta também pela lateral ("Pessoas e permissões", acima de ⚙). Some para quem não é master; a seção IA some para quem não tem "Configurações de IA próprias".
+- **Convidar por e-mail** (rótulo acima do campo) + "Convidar"; dica: quem é convidado começa com "Buscar documentos" e nenhum acervo (BR-3).
+- **Solicitações pendentes** (KBC-014), acima da lista, só quando houver alguma: título com a contagem; por solicitação, nome, e-mail, celular (ou "sem celular"), origem ("Google" ou "Cadastro") e data. Ações lado a lado (MA-04): **Aprovar** (primário) e **Recusar** (secundário).
+  - Aprovar: a pessoa entra na lista com "Buscar documentos" e nenhum acervo, o editor dela abre e o status diz "Acesso aprovado. Escolha os acervos de … ." (BR-6).
+  - Recusar pede confirmação na linha (MA-27): "Recusar a solicitação de …? A pessoa só poderá pedir de novo em 24 horas." · "Recusar" · "Cancelar"; o foco segue o botão (WCAG 2.4.3).
+  - Erros na própria linha (MA-23), ex.: "Este e-mail já foi convidado.".
+- A lateral mostra no botão "Pessoas e permissões" um selo com o número de solicitações pendentes (só masters; nome acessível "3 solicitações pendentes"); o selo some com zero.
+- Lista: nome (ou e-mail), e-mail, selos "Master" e "Dono", acervos, último acesso ("Ainda não entrou") e, só para o dono, "Gasto de IA hoje: US$ …" (BR-6). Um convite recusado aparece logo abaixo do campo de e-mail. Abrir uma pessoa mostra:
+  - **Acervos** e **Funcionalidades** (Buscar documentos, Pesquisa com IA, Montar/ampliar acervo, Configurações de IA próprias), caixas de seleção que salvam ao mudar ("Salvo."). Para um master aparecem marcadas e desabilitadas: "Masters veem todos os acervos e usam todas as funcionalidades."
+  - "Tornar master" / "Remover master"; recusas em texto claro: "Deve restar ao menos um master.", "A conta do dono não pode ser rebaixada nem removida."
+  - "Revogar acesso" pede confirmação ("Revogar o acesso de … ? A pessoa sai na hora." · "Revogar" · "Cancelar"); a conta do dono não tem essa ação.
+- A lateral mostra a pessoa (foto ou inicial, nome, e-mail) e "Sair". A visão "Pesquisa com IA" e os acervos não liberados não aparecem; um convidado sem acervo vê "Nenhum acervo foi liberado para você ainda; peça a um master."
+
+## T10. Pedir acesso e entrar com código (KBC-014)
+
+**Objetivo:** quem não tem convite pede acesso; quem foi aprovado entra sem senha. **Sucesso:** pedir acesso em um formulário e um código; entrar em dois passos (identificador, código).
+
+Mesma tela e cartão de T8 (centralizado, uma coluna, MA-17). "← Voltar" no topo do cartão leva ao botão do Google.
+
+**Pedir acesso sem conta Google**
+1. Campos com rótulo acima (MA-16): **E-mail**, **Nome**, **Sobrenome** (lado a lado só a partir de 480 px), **Celular** com a dica "Com DDD. Ex.: (81) 99999-0000. Sem código de país, usamos +55." antes do campo (MA-20). Teclados: `email`, `tel` (MA-12). "Enviar código" (primário).
+2. Resposta sempre igual (KBC-014 BR-3): "Se o e-mail puder ser usado, enviamos um código de 6 dígitos para …". Campo **Código** (`inputmode="numeric"`, `autocomplete="one-time-code"`, 6 dígitos) e "Confirmar"; "Reenviar código" e "Trocar e-mail" como links.
+3. Sucesso: "Solicitação enviada. Um master vai analisar; você recebe um e-mail quando for aprovado."
+
+**Entrar com código**
+1. Quando o SMS está ligado: "Receber o código por" com rádios **E-mail** / **SMS** (MA-19); sem SMS, só o campo **Seu e-mail** (BR-9; com SMS, **Seu e-mail** ou **Seu celular**). "Enviar código".
+2. "Se houver um acesso para …, enviamos um código." Campo **Código** e "Entrar"; "Reenviar código" e "Trocar".
+3. Entrou: o app abre como no Google.
+
+| Estado | Mostra |
+|---|---|
+| Enviando / Confirmando | botão desabilitado e "Enviando…" / "Confirmando…" na linha de status |
+| Campo com erro | ao lado do campo, com ícone e texto (MA-23): "Digite um e-mail válido, como nome@exemplo.com.", "Digite o celular com DDD.", "Digite seu nome.", "O código tem 6 dígitos." |
+| Código errado ou vencido | "Esse código não confere ou já venceu. Confira os 6 dígitos ou peça um novo." (MA-25) |
+| Muitos pedidos | "Muitos pedidos em pouco tempo. Espere um minuto e tente de novo." |
+| Servidor fora | a mensagem de servidor indisponível + o que foi digitado continua (MA-26) |
+
+Acessibilidade: o foco vai para o campo do código quando ele aparece; status em `role="status"`, erros com `aria-invalid` e `aria-describedby`; alvos ≥ 44 px.
+
+## T11. Política de privacidade (KBC-016, pública)
+
+- Rota `/privacidade`, aberta com ou sem sessão (a tela de consentimento do Google aponta para ela). Link discreto "Privacidade" abaixo da nota da tela de entrada.
+- Coluna de leitura (até 42rem, serifa de leitura, três tamanhos de texto): "Nova Alexandria" (marca discreta, link para o início), h1 "Política de privacidade", introdução e as seções h2 "Quais dados guardamos", "Para que usamos", "Quem participa", "Por quanto tempo", "Seus direitos"; "Última atualização" e o link "Voltar à Nova Alexandria".
+- "O responsável pelos dados é o administrador da Nova Alexandria, que aprova os acessos." Contato para pedidos sobre os dados: o e-mail do dono (`KB_CHAT_OWNER_EMAIL`, por `GET /api/v1/auth/config`) como link `mailto:`; sem ele (ou com erro), "fale com o administrador que aprovou o seu acesso"; enquanto carrega, só "…".
+- Título da aba: "Privacidade — Nova Alexandria"; nas outras telas, "Nova Alexandria".
+
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
-Tokens DTCG em `apps/web/src/styles/tokens/` com três conjuntos: `light`, `dark` e `esoteric`. No máximo 3 tamanhos de tipo por tela. O vermelho fica reservado para erros.
+Tokens DTCG em `apps/web/src/styles/tokens.json` (cores; `scripts/tokens.mjs` gera o CSS) com três conjuntos: `light`, `dark` e `esoteric`. No máximo 3 tamanhos de tipo por tela. O vermelho fica reservado para erros.
 
 | Token | Claro | Escuro | Esotérico |
 |---|---|---|---|
 | `color.bg` | creme quente `#F7F5F0` | `#1F1E1C` | noite índigo `#14121F` |
 | `color.surface` | `#FFFFFF` | `#2A2926` | `#1E1B2E` |
 | `color.text` | `#1F1E1C` | `#EDEAE3` | `#E9E2CF` |
-| `color.accent` | terracota `#B5562F` | `#D9774F` | dourado `#C9A54A` |
+| `color.accent` | terracota `#A64D29` | `#E0835D` | dourado `#C9A54A` |
 | `font.reading` | serifada (Source Serif 4) | idem | Cormorant Garamond (títulos) + Source Serif 4 (corpo) |
 | `font.ui` | sans (Inter) | idem | idem |
 

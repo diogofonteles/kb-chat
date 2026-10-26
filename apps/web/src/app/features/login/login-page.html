@@ -1,0 +1,88 @@
+<main class="login" aria-labelledby="login-title">
+  <div class="card">
+    <h1 id="login-title" class="brand" i18n="@@login.brand">Nova Alexandria</h1>
+    <p class="tagline" i18n="@@login.tagline">
+      Busque e pesquise nos seus acervos, com as fontes à vista.
+    </p>
+
+    @if (notInvited()) {
+      <app-google-access-request
+        [details]="notInvitedDetails()"
+        (left)="leave()"
+      />
+    } @else if (mode() === 'code') {
+      <app-code-sign-in [channels]="codeChannels()" (back)="show('start')" />
+    } @else if (mode() === 'signup') {
+      <app-sign-up-form (back)="show('start')" />
+    } @else if (notConfigured()) {
+      <p class="notice" role="alert" i18n="@@login.notConfigured">
+        O login não está configurado: defina GOOGLE_CLIENT_ID no .env e reinicie
+        a API.
+      </p>
+    } @else if (unavailable()) {
+      <div class="notice" role="alert">
+        <p i18n="@@login.unavailable">
+          Não consegui carregar o botão do Google. Verifique a conexão e tente
+          de novo.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="secondary"
+        (click)="retry()"
+        i18n="@@login.retry"
+      >
+        Tentar de novo
+      </button>
+    } @else {
+      @if (loading()) {
+        <p class="muted" role="status" i18n="@@login.loading">Carregando…</p>
+      }
+      <div
+        #button
+        class="google-button"
+        [class.hidden]="loading()"
+        [attr.aria-busy]="signingIn()"
+      ></div>
+      <p class="status" role="status">
+        @if (signingIn()) {
+          <span i18n="@@login.signingIn">Entrando…</span>
+        }
+      </p>
+      @if (failure()) {
+        <p class="error" role="alert">{{ failure() }}</p>
+      }
+    }
+
+    @if (mode() === 'start' && !notInvited()) {
+      <div class="alternatives">
+        <p class="or" i18n="@@login.or">ou</p>
+        <button
+          #codeButton
+          type="button"
+          class="secondary"
+          (click)="show('code')"
+          i18n="@@login.withCode"
+        >
+          Entrar com código
+        </button>
+        <button
+          #signUpButton
+          type="button"
+          class="link"
+          (click)="show('signup')"
+          i18n="@@login.signUp"
+        >
+          Pedir acesso sem conta Google
+        </button>
+      </div>
+    }
+
+    <p class="note" i18n="@@login.note">
+      Suas conversas e configurações ficam no servidor da Nova Alexandria.
+    </p>
+    <a class="privacy-link" routerLink="/privacidade" i18n="@@login.privacy"
+      >Privacidade</a
+    >
+  </div>
+</main>

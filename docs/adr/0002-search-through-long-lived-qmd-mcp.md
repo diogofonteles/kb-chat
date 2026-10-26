@@ -1,6 +1,6 @@
 # 0002 — Search through a long-lived QMD MCP process
 
-- Status: accepted, pending the walking-skeleton latency check (2026-10-24)
+- Status: accepted (2026-10-24, after the MCP spike)
 - Drivers: Q2 semantic and hybrid latency (H/H), Q1, Q5
 
 ## Context
@@ -16,6 +16,21 @@ The API starts one `qmd mcp` child process at boot (through the `QMD_BIN` wrappe
 - **Tudo** → a typed query document `lex: <q>` + `vec: <q>`. It fuses both rankings without the slow LLM query expansion. Full expansion and reranking (`qmd query <q>`) stay behind a feature flag until the latency check shows they fit Q2.
 
 `KbCliSearchAdapter` (`kb search --format json`, through `execFile`) is the fallback when MCP fails to start. In that case, health reports "degraded".
+
+## Spike (QA-18), 2026-10-24
+
+A probe client held one `qmd mcp` process and called its `query` tool. `qmd embed` was still running at the same time, so these numbers are pessimistic.
+
+| Call | Time |
+|---|---|
+| `lex`, `rerank: false` | 0.01–0.03 s (the first call took 3.6 s for warm-up) |
+| `vec`, `rerank: false` | 0.7 s (the first vector call took 4.0 s to load the embedding model) |
+| `lex` + `vec`, `rerank: false`, limit 50 | 1.1 s |
+| Any mode with `rerank: true` (the default) | 9.5–12.8 s |
+
+Every result carries `file` (vault-relative, prefixed by the collection, e.g. `hermetismo/raw/articles/x.md`), `docid`, `score`, `line` and a line-numbered `snippet` that can fall inside the frontmatter.
+
+Consequence: the adapter always sends `rerank: false`, and the API warms the process at boot with one `lex` and one `vec` query. Q2 is met when warm.
 
 ## Options considered
 

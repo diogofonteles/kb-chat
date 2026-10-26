@@ -1,0 +1,184 @@
+<button type="button" class="new" (click)="startNew()">
+  <span aria-hidden="true">+</span>&ngsp;<span i18n="@@sidebar.new"
+    >Nova conversa</span
+  >
+</button>
+
+<nav class="history" aria-labelledby="history-title">
+  <div class="heading">
+    <h2 id="history-title" class="label" i18n="@@sidebar.history">Histórico</h2>
+    <p class="where" i18n="@@sidebar.thisComputer">salvo no servidor</p>
+  </div>
+  @if (!history.available()) {
+    <p class="note" role="status">
+      @if (history.lastError()?.action === 'save') {
+        <ng-container i18n="@@sidebar.historySaveFailed"
+          >Ainda não consegui salvar uma conversa no histórico. Ela fica
+          guardada neste navegador e eu tento de novo sozinho.</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@sidebar.historyUnavailable"
+          >Histórico indisponível no momento.</ng-container
+        >
+      }
+    </p>
+  } @else if (history.lastError()?.action === 'load') {
+    <p class="note" role="status" i18n="@@sidebar.historyLoadFailed">
+      Não consegui abrir essa conversa. Tente de novo.
+    </p>
+  }
+  @if (history.conversations().length === 0) {
+    @if (history.available()) {
+      <p class="note" i18n="@@sidebar.historyEmpty">
+        Suas conversas aparecem aqui.
+      </p>
+    }
+  } @else {
+    <ul>
+      @for (conversation of history.conversations(); track conversation.id) {
+        <li>
+          <button
+            type="button"
+            class="conversation"
+            [attr.aria-current]="
+              conversation.id === currentId() ? 'true' : null
+            "
+            (click)="open(conversation)"
+          >
+            <span class="question" [title]="conversation.title">{{
+              conversation.title
+            }}</span
+            >&ngsp;<span class="meta">
+              <span
+                class="kind"
+                [class.research]="conversation.kind === 'research'"
+                >{{ kindLabels[conversation.kind] }}</span
+              >
+              · {{ titles().get(conversation.topic) ?? conversation.topic }}
+              @if (conversation.count > 1) {
+                <span i18n="@@sidebar.questions"
+                  >·
+                  {conversation.count, plural,
+                    other {{{ conversation.count }} perguntas}
+                  }</span
+                >
+              }
+            </span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</nav>
+
+<div class="settings">
+  <label class="field">
+    <span class="label" i18n="@@sidebar.topic">Acervo</span>
+    <select
+      #topicSelect
+      [disabled]="chat.topicList().length === 0"
+      (change)="changeTopic(topicSelect.value)"
+    >
+      @for (topic of chat.topicList(); track topic.slug) {
+        <option
+          [value]="topic.slug"
+          [selected]="topic.slug === chat.topicSlug()"
+        >
+          {{ topic.title }} ({{ topic.documentCount | number }})
+        </option>
+      }
+    </select>
+  </label>
+
+  <label class="field">
+    <span class="label" i18n="@@sidebar.theme">Tema</span>
+    <select #themeSelect (change)="changeTheme(themeSelect.value)">
+      @for (option of themeOptions; track option.value) {
+        <option [value]="option.value" [selected]="option.value === theme()">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+  </label>
+
+  <p class="spend">
+    <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
+    @if (!spend.configured()) {
+      <span i18n="@@sidebar.spendOff">IA não configurada</span>
+    } @else if (spend.label()) {
+      <span class="amount">{{ spend.label() }}</span>
+    } @else if (spend.today.error()) {
+      <span i18n="@@sidebar.spendError">Gasto indisponível</span>
+    } @else {
+      <span i18n="@@sidebar.spendLoading">Carregando…</span>
+    }
+  </p>
+
+  @if (session.isMaster()) {
+    <button
+      type="button"
+      class="people-button"
+      aria-haspopup="dialog"
+      (click)="openPeople()"
+    >
+      <svg
+        class="icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      >
+        <circle cx="9" cy="8" r="3.5" />
+        <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+        <circle cx="17" cy="9" r="2.5" />
+        <path d="M17 14c2.6 0 4.5 1.8 4.5 4.5" />
+      </svg>
+      <span i18n="@@sidebar.people">Pessoas e permissões</span>
+      @if (requests.count(); as pending) {
+        <span class="count" aria-hidden="true">{{ pending }}</span>
+        <span
+          class="visually-hidden"
+          i18n="@@sidebar.pendingRequests"
+          >{pending, plural,
+            =1 {1 solicitação pendente}
+            other {{{ pending }} solicitações pendentes}
+          }</span
+        >
+      }
+    </button>
+  }
+  <app-settings-button />
+
+  @if (session.me(); as me) {
+    <div class="account">
+      @if (me.picture) {
+        <img
+          class="avatar"
+          [src]="me.picture"
+          alt=""
+          width="32"
+          height="32"
+          referrerpolicy="no-referrer"
+        />
+      } @else {
+        <span class="avatar initial" aria-hidden="true">{{ initial() }}</span>
+      }
+      <span class="person">
+        <span class="name">{{ me.name || me.email }}</span>
+        <span class="email">{{ me.email }}</span>
+      </span>
+      <button
+        type="button"
+        class="sign-out"
+        (click)="signOut()"
+        i18n="@@sidebar.signOut"
+      >
+        Sair
+      </button>
+    </div>
+  }
+</div>

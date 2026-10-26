@@ -1,0 +1,175 @@
+import type {
+  Authorship,
+  ResultFacets,
+  SearchFilters,
+} from '@kb-chat/contracts';
+import {
+  AUTHORSHIP_LABELS,
+  FACET_TITLES,
+  facetValueLabel,
+  type FacetKey,
+} from '@core/i18n/facet-labels.js';
+
+/** Facets in display order; depth goes last because most documents share one level (screens.md). */
+export const FACET_ORDER: readonly FacetKey[] = [
+  'concepts',
+  'genres',
+  'relevances',
+  'depths',
+];
+
+/** Every filter, the authorship control (KBC-020) included: what "remove a filter" offers. */
+const FILTER_KEYS: readonly FacetKey[] = [...FACET_ORDER, 'authorships'];
+
+export type FacetValue = string | number;
+
+export interface FacetOption {
+  readonly value: FacetValue;
+  readonly label: string;
+  readonly count: number;
+  readonly selected: boolean;
+}
+
+export interface FacetGroup {
+  readonly key: FacetKey;
+  readonly title: string;
+  readonly options: readonly FacetOption[];
+  readonly selectedCount: number;
+}
+
+export interface ActiveFilter {
+  readonly key: FacetKey;
+  readonly value: FacetValue;
+  readonly label: string;
+  readonly removeLabel: string;
+}
+
+const selectedValues = (
+  filters: SearchFilters,
+  key: FacetKey,
+): readonly FacetValue[] => filters[key];
+
+/** Options shown for each facet: values with results plus any selected value that dropped to zero. */
+export function toFacetGroups(
+  facets: ResultFacets,
+  filters: SearchFilters,
+): FacetGroup[] {
+  return FACET_ORDER.map((key) => {
+    const selected = selectedValues(filters, key);
+    const counted = (
+      facets[key] as readonly { value: FacetValue; count: number }[]
+    ).map(({ value, count }) => ({
+      value,
+      count,
+      label: facetValueLabel(key, value),
+      selected: selected.includes(value),
+    }));
+    const missing = selected
+      .filter((value) => !counted.some((option) => option.value === value))
+      .map((value) => ({
+        value,
+        count: 0,
+        label: facetValueLabel(key, value),
+        selected: true,
+      }));
+    return {
+      key,
+      title: FACET_TITLES[key],
+      options: [...counted, ...missing],
+      selectedCount: selected.length,
+    };
+  }).filter((group) => group.options.length > 0);
+}
+
+/**
+ * Active filters as removable chips; with an application order ("facet:value" keys,
+ * newest last), the most recently applied comes first (KBC-002 AC-11).
+ */
+export function activeFilters(
+  filters: SearchFilters,
+  order: readonly string[] = [],
+): ActiveFilter[] {
+  const active = FILTER_KEYS.flatMap((key) =>
+    selectedValues(filters, key).map((value) => {
+      const label = `${FACET_TITLES[key]}: ${facetValueLabel(key, value)}`;
+      return {
+        key,
+        value,
+        label,
+        removeLabel: $localize`:@@filters.remove:Remover ${label}:label:`,
+      };
+    }),
+  );
+  const rank = (filter: ActiveFilter): number =>
+    order.indexOf(`${filter.key}:${filter.value}`);
+  return order.length === 0
+    ? active
+    : [...active].sort((a, b) => rank(b) - rank(a));
+}
+
+/** Returns new filters with the value added or removed (filters are never mutated). */
+export function toggleFilter(
+  filters: SearchFilters,
+  key: FacetKey,
+  value: FacetValue,
+): SearchFilters {
+  const current = selectedValues(filters, key);
+  const next = current.includes(value)
+    ? current.filter((v) => v !== value)
+    : [...current, value];
+  return { ...filters, [key]: next } as SearchFilters;
+}
+
+export const countActive = (filters: SearchFilters): number =>
+  FACET_ORDER.reduce((sum, key) => sum + filters[key].length, 0);
+
+/** The groups the authorship control offers (KBC-020): null is "Todos". */
+const AUTHORSHIP_CHOICES = ['mestre-laercio', 'outros-autores'] as const;
+
+export interface AuthorshipOption {
+  readonly value: Authorship | null;
+  readonly label: string;
+  readonly count: number;
+  readonly selected: boolean;
+  /** Mestre Laércio carries its mark (BR-3: not color only). */
+  readonly mestre: boolean;
+}
+
+/** The selected group, or null for "Todos" (any other selection also reads as "Todos"). */
+export function selectedAuthorship(filters: SearchFilters): Authorship | null {
+  const [only, ...rest] = filters.authorships;
+  return only && rest.length === 0 ? only : null;
+}
+
+/** "Todos (10) · Mestre Laércio (6) · Outros autores (3)": Todos counts every group. */
+export function authorshipOptions(
+  facets: ResultFacets,
+  filters: SearchFilters,
+): AuthorshipOption[] {
+  const selected = selectedAuthorship(filters);
+  const countOf = (value: Authorship): number =>
+    facets.authorships.find((option) => option.value === value)?.count ?? 0;
+  const total = facets.authorships.reduce((sum, { count }) => sum + count, 0);
+  return [
+    {
+      value: null,
+      label: $localize`:@@authorship.all:Todos`,
+      count: total,
+      selected: selected === null,
+      mestre: false,
+    },
+    ...AUTHORSHIP_CHOICES.map((value) => ({
+      value,
+      label: AUTHORSHIP_LABELS[value],
+      count: countOf(value),
+      selected: selected === value,
+      mestre: value === 'mestre-laercio',
+    })),
+  ];
+}
+
+/** New filters with one authorship group, or every group for null (filters are never mutated). */
+export const withAuthorship = (
+  filters: SearchFilters,
+  value: Authorship | null,
+): SearchFilters => ({ ...filters, authorships: value ? [value] : [] });

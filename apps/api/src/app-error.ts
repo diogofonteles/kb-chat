@@ -1,0 +1,53 @@
+import type { ApiErrorCode } from '@kb-chat/contracts';
+
+const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
+  TOPIC_NOT_FOUND: 404,
+  INDEX_MISSING: 409,
+  SEARCH_UNAVAILABLE: 503,
+  DOCUMENT_NOT_FOUND: 404,
+  LLM_NOT_CONFIGURED: 409,
+  LLM_INSUFFICIENT_CREDIT: 402,
+  DAILY_CAP_REACHED: 429,
+  VALIDATION_FAILED: 400,
+  NOT_FOUND: 404,
+  RATE_LIMITED: 429,
+  ANSWER_IN_PROGRESS: 409,
+  FORBIDDEN_HOST: 403,
+  UNAUTHENTICATED: 401,
+  FORBIDDEN: 403,
+  NOT_INVITED: 403,
+  CSRF_REJECTED: 403,
+  LAST_MASTER: 409,
+  OWNER_PROTECTED: 409,
+  ALREADY_INVITED: 409,
+  AUTH_UNAVAILABLE: 503,
+  INVALID_CODE: 400,
+  REQUEST_EXPIRED: 400,
+  ALREADY_REQUESTED: 409,
+  REQUEST_COOLDOWN: 429,
+  INTERNAL: 500,
+};
+
+export interface AppErrorOptions {
+  /** Sent to the client for 4xx only. */
+  readonly details?: unknown;
+  /** Logged, never sent. */
+  readonly cause?: unknown;
+}
+
+/** Domain error carrying a stable contract code; the root handler maps it to the envelope. */
+export class AppError extends Error {
+  readonly statusCode: number;
+  readonly details: unknown;
+
+  constructor(
+    readonly code: ApiErrorCode,
+    message: string,
+    options: AppErrorOptions = {},
+  ) {
+    super(message, { cause: options.cause });
+    this.name = 'AppError';
+    this.statusCode = STATUS_BY_CODE[code];
+    this.details = options.details;
+  }
+}

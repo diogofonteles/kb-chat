@@ -1,0 +1,92 @@
+<form class="composer" (submit)="$event.preventDefault(); send()">
+  <label class="visually-hidden" for="question" i18n="@@composer.label"
+    >Sua pergunta</label
+  >
+  <div class="field">
+    <textarea
+      #field
+      id="question"
+      rows="1"
+      [maxLength]="maxLength()"
+      [value]="text()"
+      (input)="updateText($event)"
+      (keydown)="sendOnEnter($event)"
+      [placeholder]="placeholder()"
+      [attr.aria-describedby]="research() ? null : 'mode-help'"
+    ></textarea>
+    @if (text()) {
+      <button
+        type="button"
+        class="clear"
+        (click)="clear()"
+        aria-label="Limpar pergunta"
+        i18n-aria-label="@@composer.clear"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    }
+  </div>
+  <div class="actions">
+    @if (!research()) {
+      <label class="mode">
+        <span class="mode-label" i18n="@@composer.mode">Como buscar</span>
+        <select [value]="mode()" (change)="selectMode($event)">
+          @for (option of modes; track option.value) {
+            <option [value]="option.value" [selected]="option.value === mode()">
+              {{ option.label }}
+            </option>
+          }
+        </select>
+      </label>
+      <span id="mode-help" class="help">{{ modeHelp() }}</span>
+    } @else {
+      <fieldset class="profile" aria-describedby="profile-help">
+        <legend class="visually-hidden" i18n="@@composer.profile">
+          Tipo de pesquisa
+        </legend>
+        @for (option of profiles; track option.value) {
+          <label
+            class="profile-option"
+            [class.selected]="option.value === profile()"
+          >
+            <input
+              type="radio"
+              name="research-profile"
+              class="profile-radio"
+              [value]="option.value"
+              [checked]="option.value === profile()"
+              (change)="selectProfile(option.value)"
+            />
+            <span>{{ option.label }}</span>
+          </label>
+        }
+      </fieldset>
+      <span
+        id="profile-help"
+        class="help"
+        [class.always]="profile() === 'exhaustive'"
+        >{{ profileHelp() }}</span
+      >
+    }
+    @if (nearLimit()) {
+      <span class="limit" aria-live="polite" i18n="@@composer.limit"
+        >{{ text().length }}/{{ maxLength() }}</span
+      >
+    }
+    <button
+      type="submit"
+      class="send"
+      [disabled]="!canSend()"
+      [attr.aria-describedby]="canSend() ? null : 'send-hint'"
+    >
+      @if (research()) {
+        <ng-container i18n="@@composer.ask">Perguntar</ng-container>
+      } @else {
+        <ng-container i18n="@@composer.send">Buscar</ng-container>
+      }
+    </button>
+    @if (!canSend()) {
+      <span id="send-hint" class="visually-hidden">{{ sendHint() }}</span>
+    }
+  </div>
+</form>

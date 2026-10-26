@@ -1,0 +1,47 @@
+@if (groups().length > 0) {
+  <section class="see-also" aria-labelledby="see-also-title">
+    <h3 id="see-also-title" i18n="@@seeAlso.title">Veja também</h3>
+    @for (group of groups(); track group.name) {
+      <div class="group">
+        <h4>{{ group.title }}</h4>
+        <ul>
+          @for (ref of group.items; track ref.id) {
+            <li>
+              <button
+                type="button"
+                class="ref"
+                (click)="opened.emit({ id: ref.id, title: ref.title })"
+              >
+                {{ ref.title }}
+              </button>
+              @if (ref.facets) {
+                <span class="ref-facets">{{ ref.facets }}</span>
+              }
+            </li>
+          }
+        </ul>
+        @if (group.failed) {
+          <p class="failed" role="alert" i18n="@@seeAlso.failed">
+            Não consegui carregar mais referências.
+          </p>
+        }
+        @if (group.items.length < group.total) {
+          <button
+            type="button"
+            class="more"
+            [disabled]="group.loading"
+            (click)="showMore(group)"
+            i18n="@@seeAlso.more"
+          >
+            {group.loading, select,
+              true {Carregando…}
+              other {
+                Ver mais ({{ group.total - group.items.length }} restantes)
+              }
+            }
+          </button>
+        }
+      </div>
+    }
+  </section>
+}

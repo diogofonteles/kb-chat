@@ -1,0 +1,106 @@
+.exchange {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.question {
+  justify-self: end;
+  max-width: 85%;
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm)
+    var(--radius-lg);
+  background: var(--color-surface-muted);
+  white-space: pre-wrap;
+}
+
+.answer {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.status,
+.summary {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.cards {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skeletons {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.skeletons span {
+  height: 5.5rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-muted),
+    var(--color-surface),
+    var(--color-surface-muted)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.error p {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-danger);
+}
+
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.empty p {
+  margin: 0;
+}
+
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.secondary:hover {
+  border-color: var(--color-accent);
+}
+
+.more {
+  justify-self: center;
+  min-width: 12rem;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.more-error {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-danger);
+}

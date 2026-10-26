@@ -1,7 +1,7 @@
 ---
 id: KBC-004
 title: Responder com IA citando as fontes
-status: ready
+status: done
 slice: release-1
 outcome: % de buscas que pedem IA (< 30%); gasto/dia ≤ teto
 depends_on: [KBC-001]
@@ -30,7 +30,7 @@ Quando os resultados não bastam para entender o assunto, quero pedir uma respos
 - BR-1: A IA só roda por clique explícito; nada dispara sozinho.
 - BR-2: Antes da chamada, a API estima o custo com os tokens das passagens + a pergunta + a saída máxima (800 tokens), pelo preço do modelo. O botão mostra a estimativa arredondada para cima em centavos de dólar.
 - BR-3: A API recusa (`DAILY_CAP_REACHED`) quando o gasto do dia + a estimativa > `KB_CHAT_DAILY_CAP_USD` (padrão 1,00). O dia segue o fuso local.
-- BR-4: A resposta usa no máximo 8 passagens dos resultados atuais, com os filtros ativos, cada uma com até 1.500 caracteres. Cada afirmação traz [n], e [n] corresponde à fonte n listada.
+- BR-4: A resposta usa no máximo 8 passagens dos resultados atuais, com os filtros ativos, cada uma com o resumo do documento e até 2.500 caracteres (revisado em 2026-10-24, ADR 0004). Cada afirmação traz [n], e [n] corresponde à fonte n listada.
 - BR-5: Sem base nas passagens, a resposta diz que o acervo não traz informação suficiente e sugere outra busca.
 - BR-6: Cada resposta concluída ou interrompida grava `{ts, principal, model, inputTokens, outputTokens, usd}` no ledger `~/.kb-chat/spend.jsonl`. O custo real vem do `usage` da resposta do OpenRouter.
 - BR-7: A chave da OpenRouter só existe no servidor (env) e nunca aparece em resposta nem em log.
@@ -69,7 +69,7 @@ Quando os resultados não bastam para entender o assunto, quero pedir uma respos
 - **AC-4 (BR-4)**
   - Given 12 resultados
   - When a API monta o prompt
-  - Then só 8 passagens com ≤ 1.500 caracteres são enviadas
+  - Then só 8 passagens, cada uma com resumo e ≤ 2.500 caracteres, são enviadas
 - **AC-5 (BR-3, negativo)**
   - Given um gasto do dia de US$ 0,995 com teto de US$ 1,00 e uma estimativa de US$ 0,01
   - When o usuário pede a resposta

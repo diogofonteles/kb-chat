@@ -1,0 +1,97 @@
+# kb-chat on one VM (ADR 0010): Caddy at the edge, the API on a private network.
+# On the VM it runs from /srv/kb-chat/deploy through deploy/scripts/deploy.sh, which
+# writes release.env (the image tag) next to this file:
+#   docker compose --env-file .env --env-file release.env up -d
+# Locally (smoke of the images, no registry):
+#   KB_CHAT_TAG=local KB_CHAT_DOMAIN=localhost KB_CHAT_DATA=$PWD/.local \
+#     HTTP_PORT=8080 HTTPS_PORT=8443 docker compose -f deploy/compose.yml up -d
+name: kb-chat
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '5'
+
+services:
+  api:
+    image: ${KB_CHAT_REGISTRY:-ghcr.io/diogofonteles}/kb-chat-api:${KB_CHAT_TAG:?set KB_CHAT_TAG (release.env)}
+    restart: unless-stopped
+    init: false # tini is the image's entrypoint
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HOST: 0.0.0.0
+      PORT: '3000'
+      KB_VAULT: /vault
+      KB_CHAT_STATE_DIR: /data/state
+      # Only Caddy reaches the API, over the private network below.
+      TRUST_PROXY: uniquelocal
+      # The public host, plus loopback for the container healthcheck and the MCP calls of
+      # the CLIs the API spawns (ADR 0007).
+      ALLOWED_HOSTS: ${KB_CHAT_DOMAIN:?set KB_CHAT_DOMAIN (.env)},127.0.0.1,localhost
+      # The public origin: the only one the CSRF check accepts (ADR 0008).
+      WEB_ORIGIN: ${WEB_ORIGIN:-https://${KB_CHAT_DOMAIN}}
+      # Sign-in is required (KBC-010): compose refuses to start without them.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?set GOOGLE_CLIENT_ID (.env)}
+      KB_CHAT_OWNER_EMAIL: ${KB_CHAT_OWNER_EMAIL:?set KB_CHAT_OWNER_EMAIL (.env)}
+      # One-time codes and access notices go by email (KBC-014, ADR 0011/0012): the image runs
+      # with NODE_ENV=production, where the API refuses to start without one complete provider:
+      # Gmail SMTP (SMTP_USER + SMTP_PASSWORD, the free path) or Resend (RESEND_API_KEY +
+      # KB_CHAT_EMAIL_FROM). Blank values count as unset; deploy.sh checks the pair first.
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      KB_CHAT_EMAIL_FROM: ${KB_CHAT_EMAIL_FROM:-}
+      # SMS codes stay off until the owner picks a provider (ADR 0011); `log` is refused here.
+      KB_CHAT_SMS: ${KB_CHAT_SMS:-off}
+    volumes:
+      # The vault is read-only for the API (Q7); rsync from the owner's Mac writes it.
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/vault:/vault:ro
+      # QMD index (index.sqlite) and models: qmd needs write access for its WAL files.
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/qmd/cache:/home/app/.cache/qmd
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/qmd/config:/home/app/.config/qmd
+      # Spend ledger, usage, conversations, settings, people and sessions (KBC-010).
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/state:/data/state
+      # Claude Code login of the owner (`claude /login`, once, over SSH).
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/claude:/home/app/.claude
+    networks: [internal]
+    mem_limit: ${API_MEM_LIMIT:-8g}
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  web:
+    image: ${KB_CHAT_REGISTRY:-ghcr.io/diogofonteles}/kb-chat-web:${KB_CHAT_TAG:?set KB_CHAT_TAG (release.env)}
+    restart: unless-stopped
+    environment:
+      KB_CHAT_DOMAIN: ${KB_CHAT_DOMAIN:?set KB_CHAT_DOMAIN (.env)}
+    ports:
+      - ${HTTP_PORT:-80}:80
+      - ${HTTPS_PORT:-443}:443
+      - ${HTTPS_PORT:-443}:443/udp
+    volumes:
+      # Certificates and ACME account: kept across deploys (Let's Encrypt rate limits).
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [internal]
+    mem_limit: 512m
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+
+networks:
+  internal: {}
+
+volumes:
+  caddy-data: {}
+  caddy-config: {}

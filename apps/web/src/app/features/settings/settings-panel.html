@@ -1,0 +1,153 @@
+<header class="head">
+  <h2 id="settings-title" class="title" tabindex="-1" i18n="@@settings.title">
+    Configurações
+  </h2>
+  <button
+    type="button"
+    class="close"
+    aria-label="Fechar configurações"
+    i18n-aria-label="@@settings.close"
+    (click)="closed.emit()"
+  >
+    ×
+  </button>
+</header>
+
+<div class="body">
+  <nav class="nav" aria-label="Seções" i18n-aria-label="@@settings.sections">
+    @for (item of sections(); track item.id) {
+      <button
+        type="button"
+        class="nav-item"
+        [attr.aria-current]="item.id === section() ? 'page' : null"
+        (click)="show(item.id)"
+      >
+        {{ item.label }}
+      </button>
+    }
+  </nav>
+
+  <div class="content">
+    @if (loadFailed()) {
+      <div class="notice" role="alert">
+        <p i18n="@@settings.loadFailed">
+          Não consegui carregar as configurações. Verifique se o servidor está
+          rodando.
+        </p>
+        <button
+          type="button"
+          class="secondary"
+          (click)="retry()"
+          i18n="@@settings.retry"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    } @else if (!settings()) {
+      <p class="muted" i18n="@@settings.loading">Carregando…</p>
+    } @else if (section() === 'ai') {
+      <section class="section" aria-labelledby="settings-ai">
+        <h3 id="settings-ai" class="section-title" i18n="@@settings.aiTitle">
+          IA
+        </h3>
+        <p class="lead" i18n="@@settings.aiLead">
+          Escolha quem responde na Pesquisa com IA. Vale para a próxima
+          resposta, sem reiniciar nada.
+        </p>
+        @if (aiDraft(); as draft) {
+          <app-ai-provider-form
+            [draft]="draft"
+            (draftChange)="editAi($event)"
+          />
+        }
+        <div class="actions">
+          <button
+            type="button"
+            class="primary"
+            [disabled]="aiSave() === 'saving'"
+            (click)="saveAi()"
+            i18n="@@settings.save"
+          >
+            Salvar
+          </button>
+          <p class="save-status" role="status">
+            @if (aiSave() === 'saved') {
+              <span i18n="@@settings.saved">Salvo.</span>
+            } @else if (aiSave() === 'invalid') {
+              <span class="error" i18n="@@settings.fixModel"
+                >Corrija o modelo indicado acima.</span
+              >
+            } @else if (aiSave() === 'failed') {
+              <span class="error" i18n="@@settings.saveFailed"
+                >Não consegui salvar. Tente de novo.</span
+              >
+            }
+          </p>
+        </div>
+      </section>
+    } @else if (section() === 'preferences') {
+      <section class="section" aria-labelledby="settings-prefs">
+        <h3
+          id="settings-prefs"
+          class="section-title"
+          i18n="@@settings.preferencesTitle"
+        >
+          Preferências
+        </h3>
+        @if (preferences(); as current) {
+          <app-preferences-form
+            [preferences]="current"
+            (preferencesChange)="savePreferences($event)"
+          />
+        }
+        <p class="save-status" role="status">
+          @if (preferencesSave() === 'saved') {
+            <span i18n="@@settings.savedAuto">Salvo automaticamente.</span>
+          } @else if (preferencesSave() === 'failed') {
+            <span class="error" i18n="@@settings.saveFailed"
+              >Não consegui salvar. Tente de novo.</span
+            >
+          }
+        </p>
+      </section>
+    } @else if (section() === 'people') {
+      <section class="section" aria-labelledby="settings-people">
+        <h3
+          id="settings-people"
+          class="section-title"
+          i18n="@@settings.peopleTitle"
+        >
+          Pessoas e permissões
+        </h3>
+        <app-people-panel />
+      </section>
+    } @else {
+      <section class="section" aria-labelledby="settings-about">
+        <h3
+          id="settings-about"
+          class="section-title"
+          i18n="@@settings.aboutTitle"
+        >
+          Sobre
+        </h3>
+        <p i18n="@@settings.aboutData">
+          Suas conversas e configurações ficam no servidor da Nova Alexandria.
+          As chaves de API ficam num arquivo que só o servidor lê; a API nunca
+          as devolve ao navegador.
+        </p>
+        <p i18n="@@settings.aboutSubscription">
+          Com uma assinatura, a Nova Alexandria usa o Claude Code ou o Codex já
+          logados no servidor. Ela nunca recebe a sua senha nem a sua conta.
+        </p>
+        <button
+          type="button"
+          class="secondary"
+          (click)="reopenWizard()"
+          i18n="@@settings.reopenWizard"
+        >
+          Rever o assistente de início
+        </button>
+      </section>
+    }
+  </div>
+</div>

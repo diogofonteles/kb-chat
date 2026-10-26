@@ -1,7 +1,7 @@
 ---
 id: KBC-001
 title: Perguntar e abrir um documento (esqueleto andando)
-status: ready
+status: done
 slice: walking-skeleton
 outcome: sessões de pesquisa por semana; % de buscas que abrem documento
 depends_on: []

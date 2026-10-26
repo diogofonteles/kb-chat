@@ -1,0 +1,373 @@
+:host {
+  display: grid;
+  gap: var(--space-2);
+  /* Grid/flex children default to min-width:auto; without this the chip row widens the page. */
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.row > .bar {
+  flex: 1 1 auto;
+}
+
+/* KBC-020: the authorship control, a radio group drawn as segments (screens.md T2). */
+.authorship {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.authorship-title {
+  margin-right: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.segment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.segment:hover {
+  border-color: var(--color-accent);
+}
+
+/* The native radio stays focusable and announced; the segment draws its state. */
+.segment-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.segment:has(.segment-input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.segment-text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.segment.on {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.segment-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.segment.on .segment-count {
+  color: inherit;
+}
+
+.segment.off {
+  border-style: dashed;
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.facets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.facet {
+  position: relative;
+}
+
+.chip,
+.active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.chip:hover,
+.active-chip:hover {
+  border-color: var(--color-accent);
+}
+
+.chip.on {
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.active-chip {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 5;
+  display: grid;
+  gap: var(--space-1);
+  width: max-content;
+  min-width: 16rem;
+  max-width: min(24rem, 80vw);
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+}
+
+.option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--color-surface-muted);
+}
+
+.option input {
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--color-accent);
+}
+
+.option-count {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.link {
+  justify-self: start;
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border: none;
+  background: transparent;
+  color: var(--color-accent-strong);
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hidden-note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.sheet-button {
+  display: none;
+}
+
+.sheet {
+  /* Full-screen modal: undo the user-agent dialog box (margins, max sizes, padding). */
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.sheet[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.sheet::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+
+.sheet-head .hidden-note {
+  margin: var(--space-1) 0 0;
+}
+
+.sheet-head {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.sheet-body {
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-4);
+}
+
+fieldset {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: none;
+}
+
+legend {
+  margin-bottom: var(--space-1);
+  font-weight: 600;
+}
+
+.sheet-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.cancel,
+.apply {
+  min-height: 3rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.apply {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+@media (max-width: 1023px) {
+  /* Phones: the authorship control takes its own row, three equal segments (KBC-020). */
+  .row {
+    display: grid;
+  }
+
+  .authorship {
+    display: grid;
+    /* "✦ Mestre Laércio" is the longest label: its segment gets the most room. */
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.3fr) minmax(0, 1.1fr);
+  }
+
+  .authorship-title {
+    grid-column: 1 / -1;
+  }
+
+  .segment {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .segment-text {
+    display: block;
+  }
+
+  .segment-text .check,
+  .segment-text .mark {
+    margin-right: 0.2em;
+  }
+
+  /* Phones: facet chips scroll in one row and open the sheet (screens.md T2). */
+  .bar {
+    flex-wrap: nowrap;
+  }
+
+  .facets {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .sheet-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  .bar .hidden-note {
+    display: none;
+  }
+}

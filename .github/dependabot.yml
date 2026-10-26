@@ -1,0 +1,13 @@
+# Keeps the SHA-pinned actions of the workflows current (ADR 0010: the deploy workflow's
+# actions handle a token that can push images which run on the VM).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']

@@ -1,0 +1,78 @@
+<header class="head">
+  <p class="eyebrow" i18n="@@wizard.welcome">Boas-vindas à Nova Alexandria</p>
+  <p class="progress" i18n="@@wizard.progress">
+    Passo {{ stepNumber() }} de {{ steps.length }}
+  </p>
+</header>
+
+<div class="content">
+  <h2 id="wizard-title" class="title" tabindex="-1">{{ step().title }}</h2>
+  <p class="lead">{{ step().lead }}</p>
+  @if (step().fields; as fields) {
+    @if (preferences(); as current) {
+      <app-preferences-form
+        [preferences]="current"
+        (preferencesChange)="preferences.set($event)"
+        [fields]="fields"
+      />
+    }
+  } @else if (aiDraft(); as draft) {
+    <app-ai-provider-form
+      [draft]="draft"
+      (draftChange)="aiDraft.set($event)"
+      [compact]="true"
+    />
+  } @else {
+    <p class="lead" i18n="@@settings.loading">Carregando…</p>
+  }
+  @if (failed()) {
+    <p class="error" role="alert" i18n="@@wizard.failed">
+      Não consegui salvar. Verifique se o servidor está rodando e tente de novo.
+    </p>
+  }
+</div>
+
+<footer class="foot">
+  <button
+    type="button"
+    class="ghost"
+    [disabled]="saving()"
+    (click)="skip()"
+    i18n="@@wizard.skip"
+  >
+    Pular
+  </button>
+  <span class="spacer"></span>
+  @if (index() > 0) {
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="saving()"
+      (click)="back()"
+      i18n="@@wizard.back"
+    >
+      Voltar
+    </button>
+  }
+  @if (last()) {
+    <button
+      type="button"
+      class="primary"
+      [disabled]="saving()"
+      (click)="finish()"
+      i18n="@@wizard.finish"
+    >
+      Concluir
+    </button>
+  } @else {
+    <button
+      type="button"
+      class="primary"
+      [disabled]="saving()"
+      (click)="next()"
+      i18n="@@wizard.next"
+    >
+      Continuar
+    </button>
+  }
+</footer>

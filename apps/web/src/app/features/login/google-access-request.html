@@ -1,0 +1,93 @@
+@let request = state();
+<div class="sent" role="status">
+  @if (!request) {
+    <p i18n="@@login.notInvited">
+      Seu acesso ainda não foi liberado; peça a um master.
+    </p>
+  } @else if (step() === 'sent') {
+    <p i18n="@@access.sent">
+      Solicitação enviada. Você recebe um e-mail quando um master aprovar.
+    </p>
+  } @else if (request.status === 'pending') {
+    <p i18n="@@access.pending">Sua solicitação está em análise.</p>
+  } @else if (retryAt(); as retry) {
+    <p i18n="@@access.refused">
+      Sua solicitação foi recusada. Você pode pedir de novo a partir de
+      {{ retry | date: "dd/MM 'às' HH:mm" : BRASILIA }} (horário de Brasília).
+    </p>
+  } @else {
+    <p i18n="@@access.notYet">Seu acesso ainda não foi liberado.</p>
+  }
+</div>
+
+@if (request?.status === 'none' && step() === 'notice') {
+  <button
+    type="button"
+    class="primary"
+    (click)="step.set('form')"
+    i18n="@@access.request"
+  >
+    Solicitar acesso
+  </button>
+}
+
+@if (step() === 'form') {
+  <form (submit)="send($event)" novalidate>
+    <div class="field">
+      <label class="label" for="access-phone">
+        <ng-container i18n="@@login.phone">Celular</ng-container>
+        <span class="optional" i18n="@@access.optional"> (opcional)</span>
+      </label>
+      <p id="access-phone-hint" class="hint" i18n="@@signUp.phoneHint">
+        Com DDD. Ex.: (81) 99999-0000. Sem código de país, usamos +55.
+      </p>
+      <input
+        #phoneInput
+        id="access-phone"
+        type="tel"
+        name="phone"
+        autocomplete="tel"
+        inputmode="tel"
+        [value]="phone()"
+        [attr.aria-invalid]="phoneProblem() ? 'true' : null"
+        [attr.aria-describedby]="
+          phoneProblem()
+            ? 'access-phone-hint access-phone-error'
+            : 'access-phone-hint'
+        "
+        (input)="typePhone(phoneInput.value)"
+      />
+      @if (phoneProblem()) {
+        <p id="access-phone-error" class="field-error" role="alert">
+          <span aria-hidden="true">⚠</span>&ngsp;{{ phoneProblem() }}
+        </p>
+      }
+    </div>
+    <button
+      type="submit"
+      class="primary"
+      [disabled]="busy()"
+      i18n="@@access.send"
+    >
+      Enviar solicitação
+    </button>
+  </form>
+}
+
+<p class="status" role="status">
+  @if (busy()) {
+    <span i18n="@@login.working">Enviando…</span>
+  }
+</p>
+@if (failure()) {
+  <p class="error" role="alert">{{ failure() }}</p>
+}
+
+<button
+  type="button"
+  class="secondary"
+  (click)="left.emit()"
+  i18n="@@login.leave"
+>
+  Sair
+</button>

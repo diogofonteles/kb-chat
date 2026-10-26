@@ -1,4 +1,4 @@
-# Backlog — kb-chat
+# Backlog — Nova Alexandria (`kb-chat`)
 
 Resultado perseguido (`docs/product/brief.md`): o dono pesquisa o acervo pelo navegador **≥ 3 sessões/semana**; **≥ 50%** das buscas abrem um documento; gasto de IA ≤ US$ 1/dia.
 
@@ -16,12 +16,24 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 
 | ID | Título | Fatia | Status | Depende de |
 |---|---|---|---|---|
-| [KBC-001](KBC-001-walking-skeleton-search-and-read.md) | Perguntar e abrir um documento (esqueleto) | walking-skeleton | ready | — |
-| [KBC-002](KBC-002-filter-chips-and-grouped-results.md) | Filtrar resultados por facetas com contagens | release-1 | ready | KBC-001 |
-| [KBC-003](KBC-003-document-panel-highlight-and-see-also.md) | Ler com trecho destacado e "Veja também" | release-1 | ready | KBC-001 |
-| [KBC-004](KBC-004-grounded-ai-answer.md) | Responder com IA citando as fontes | release-1 | ready | KBC-001 |
-| [KBC-005](KBC-005-sidebar-topics-history-themes.md) | Lateral: acervo, histórico, temas e gasto | release-1 | ready | KBC-001, KBC-004 |
-| [KBC-006](KBC-006-start-suggestions-and-usage-log.md) | Sugestões iniciais e log de uso local | release-1 | ready | KBC-002 |
+| [KBC-001](KBC-001-walking-skeleton-search-and-read.md) | Perguntar e abrir um documento (esqueleto) | walking-skeleton | done | — |
+| [KBC-002](KBC-002-filter-chips-and-grouped-results.md) | Filtrar resultados por facetas com contagens | release-1 | done | KBC-001 |
+| [KBC-003](KBC-003-document-panel-highlight-and-see-also.md) | Ler com trecho destacado e "Veja também" | release-1 | done | KBC-001 |
+| [KBC-004](KBC-004-grounded-ai-answer.md) | Responder com IA citando as fontes | release-1 | done | KBC-001 |
+| [KBC-005](KBC-005-sidebar-topics-history-themes.md) | Lateral: acervo, histórico, temas e gasto | release-1 | done | KBC-001, KBC-004 |
+| [KBC-006](KBC-006-start-suggestions-and-usage-log.md) | Sugestões iniciais e log de uso local | release-1 | done | KBC-002 |
+| [KBC-008](KBC-008-conversational-research-agent.md) | IA que pesquisa o acervo e conversa com contexto | release-1 | done | KBC-004, KBC-005 |
+| [KBC-007](KBC-007-onboarding-preferences-ai-provider.md) | Configurações sempre à mão, onboarding e provedor de IA (chave própria ou assinatura Claude/ChatGPT) | release-1 | done | KBC-005, KBC-008 |
+| [KBC-011](KBC-011-faster-research.md) | Pesquisa mais rápida: perfis Rápido/Profundo, modelo por perfil, aprofundamento automático e resposta que aparece assim que começa | release-1 | in-review | KBC-008 |
+| [KBC-010](KBC-010-google-login-and-permissions.md) | Login com conta Google e acesso por permissões (funcionalidades e acervos) | release-1 | done | KBC-007, KBC-008 |
+| [KBC-012](KBC-012-deploy-oracle-cloud.md) | Publicar em produção na Oracle Cloud (Always Free): VM ARM, Compose, Caddy com HTTPS, deploy por merge em `main`, backup criptografado | release-1 | in-review | KBC-010 |
+| [KBC-014](KBC-014-access-requests-and-code-sign-in.md) | Solicitar acesso, cadastro sem Google e entrada com código por e-mail ou SMS | release-1 | in-review | KBC-010 |
+| [KBC-015](KBC-015-gmail-smtp-email-delivery.md) | Enviar os e-mails de código e de aprovação pelo SMTP do Gmail (produção 100% gratuita) | release-1 | done | KBC-014 |
+| [KBC-016](KBC-016-rename-product-nova-alexandria.md) | Dar ao produto o nome "Nova Alexandria" em todo texto que a pessoa vê | release-1 | done | KBC-014, KBC-015 |
+| [KBC-017](KBC-017-exhaustive-research.md) | Pesquisa exaustiva: busca literal sem teto (modos, páginas, filtros por autor e origem), leitura de livros inteiros e o perfil "Exaustivo" com compactação | release-1 | done | KBC-008, KBC-011 |
+| [KBC-018](KBC-018-research-subagents.md) | Pesquisa exaustiva com sub-pesquisadores em paralelo (orquestrador e trabalhadores, contexto próprio, citações na resposta, progresso agrupado) | release-1 | done | KBC-017 |
+| [KBC-020](KBC-020-authorship-mestre-laercio-and-other-authors.md) | Autoria: Mestre Laércio × outros autores (filtro e selos na busca, fontes agrupadas, ferramentas e prompt da IA que nunca misturam os dois) | release-1 | done | KBC-002, KBC-003, KBC-017 |
+| [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
 ## Definição de pronto (global)
 
@@ -34,4 +46,14 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 ## Decisões de escopo
 
 - 2026-10-24: o dono autorizou seguir sem perguntas até a primeira versão publicada; revisa depois. Os padrões do kickoff valem como decisões.
+- 2026-10-24 (revisão do dono): a "Responder com IA" de uma chamada (ADR 0004) não atinge o objetivo. Entra o KBC-008 (agente de pesquisa conversacional, ADR 0006) antes do KBC-007, e a conversa multi-turno sai da release 2 para a release 1. O KBC-007 ganha "Configurações" sempre acessível e a assinatura do Claude rodando o mesmo agente via MCP.
+- 2026-10-24 (pedido do dono, "manter 100% do histórico"): o histórico sai do `localStorage` (50 conversas) e passa a ser guardado sem limite pela API local, com as conversas de busca e de pesquisa com IA. Emendas no KBC-005 (BR-1, AC-3, AC-4) e no KBC-008 (FR-1: rota `POST /api/v1/topics/:topic/research`, sem `mode`).
+- 2026-10-24 (teste do dono, "achei um pouco demorado na resposta"): entra o KBC-011. O Sonnet passa a ser o modelo padrão da assinatura do Claude (configurável), a pesquisa ganha os perfis Rápido e Profundo e a resposta aparece assim que começa (ADR 0009).
+- 2026-10-24: o dono tornou requisito o login com conta Google e o acesso a funcionalidades e acervos por permissão (KBC-010, ADR 0008). Entra antes do KBC-009 e substitui o "usuário único local" da ADR 0005.
+- 2026-10-24 (pedido do dono): a produção vai para uma VM Always Free da OCI (KBC-012, ADR 0010). Só produção fica hospedada; o Mac do dono é o staging. Tudo pronto para rodar; a conta OCI, o domínio e os logins são do dono.
+- 2026-10-25: o dono pediu que ninguém entre sem aprovação, com cadastro sem Google e entrada por código (KBC-014, ADR 0011). O SMS sai desligado até o dono escolher um provedor (nenhum é gratuito no Brasil).
+- 2026-10-25: o dono quer a produção 100% gratuita e não vai comprar domínio. Os e-mails saem pelo SMTP do Gmail com senha de app (KBC-015, ADR 0012) e o site roda num subdomínio do DuckDNS; o Resend fica como alternativa para quando houver domínio.
+- 2026-10-25: o dono deu ao produto o nome **Nova Alexandria** (KBC-016). Muda todo texto que a pessoa vê (site, e-mails, docs para o usuário); repositório, pacotes, variáveis e identificadores internos continuam `kb-chat`.
+- 2026-10-25: o dono quer a pesquisa com IA "sem limitações" e espelhada no Claude (Grep, Read, compactação, sub-agentes). Entra o KBC-017 (ferramentas, filtros, paginação, perfil Exaustivo, ADR 0013) e, em seguida, o KBC-018 (sub-agentes); divisão confirmada pelo dono.
+- 2026-10-26: o dono exige separar com clareza a obra de José Laércio do Egito (Mestre Laércio) dos livros de outros autores. O vault marca cada fonte com `author_group`; entra o KBC-020 (ADR 0015) na busca, nas fontes e na pesquisa com IA.
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.

@@ -1,4 +1,4 @@
-# Contexto do produto — kb-chat
+# Contexto do produto — Nova Alexandria (repositório `kb-chat`)
 
 Registrado no kickoff de 2026-10-23. Fonte: conversa com o dono (Diogo).
 

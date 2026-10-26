@@ -1,7 +1,7 @@
 ---
 id: KBC-006
 title: Sugestões iniciais de assunto e log de uso local
-status: ready
+status: done
 slice: release-1
 outcome: primeira busca sem esforço; medição das métricas do brief
 depends_on: [KBC-002]

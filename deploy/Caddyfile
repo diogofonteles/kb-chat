@@ -1,0 +1,69 @@
+# Edge of kb-chat on the VM (ADR 0010): automatic HTTPS, the SPA, and /api + /health
+# proxied to the API container. /mcp is internal to the API container and never served here.
+#
+# Environment (deploy/.env, passed by compose):
+#   KB_CHAT_DOMAIN  public host name, e.g. kb.example.com ("localhost" = Caddy's local CA)
+{
+	# No admin endpoint: configuration only changes by deploying a new image.
+	admin off
+	servers {
+		# Server-Sent Events of research turns can stay open for minutes.
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+{$KB_CHAT_DOMAIN} {
+	encode zstd gzip
+
+	# Content-Security-Policy generated from the built index.html (deploy/web/csp.mjs).
+	import /etc/caddy/csp.caddy
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Google's sign-in popup must be able to post back to this window (KBC-010).
+		Cross-Origin-Opener-Policy "same-origin-allow-popups"
+		-Server
+	}
+
+	# The MCP endpoint of research turns is for the CLIs inside the API container only
+	# (the API also refuses it from any non-loopback address).
+	handle /mcp* {
+		respond 404
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy api:3000 {
+			# Stream research events as they are produced.
+			flush_interval -1
+		}
+	}
+
+	handle /health {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		root * /srv/www
+		@hashed path_regexp hashed -[A-Z0-9]{8}\.(js|css)$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		# The SPA's pages, including the public privacy policy (KBC-016).
+		@html path / /index.html /privacidade /privacidade/
+		header @html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

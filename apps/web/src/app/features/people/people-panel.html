@@ -1,0 +1,127 @@
+<form class="invite" (submit)="invite($event)">
+  <label class="field">
+    <span class="label" i18n="@@people.inviteLabel">Convidar por e-mail</span>
+    <input
+      #emailInput
+      type="email"
+      name="email"
+      autocomplete="off"
+      inputmode="email"
+      required
+      [attr.aria-describedby]="
+        inviteError() ? 'invite-error invite-hint' : 'invite-hint'
+      "
+      [attr.aria-invalid]="inviteError() ? 'true' : null"
+      [attr.aria-errormessage]="inviteError() ? 'invite-error' : null"
+      [value]="email()"
+      (input)="typeEmail(emailInput.value)"
+    />
+  </label>
+  <button
+    type="submit"
+    class="primary"
+    [disabled]="busy() || !email().trim()"
+    i18n="@@people.invite"
+  >
+    Convidar
+  </button>
+</form>
+@if (inviteError()) {
+  <p id="invite-error" class="invite-error" role="alert">
+    <span class="visually-hidden" i18n="@@people.errorPrefix">Erro:</span>
+    <span aria-hidden="true">⚠</span>&ngsp;{{ inviteError() }}
+  </p>
+}
+<p id="invite-hint" class="hint" i18n="@@people.inviteHint">
+  Quem é convidado começa com "Buscar documentos" e nenhum acervo.
+</p>
+
+<app-access-requests-list (approved)="welcome($event)" />
+
+@if (!openId()) {
+  <ng-container *ngTemplateOutlet="status" />
+}
+
+@if (people.error()) {
+  <div class="alert" role="alert">
+    <p i18n="@@people.loadFailed">Não consegui carregar as pessoas.</p>
+    <button
+      type="button"
+      class="secondary"
+      (click)="people.reload()"
+      i18n="@@people.retry"
+    >
+      Tentar de novo
+    </button>
+  </div>
+} @else if (people.isLoading() && list().length === 0) {
+  <p class="muted" i18n="@@people.loading">Carregando…</p>
+} @else {
+  <ul class="people" aria-label="Pessoas" i18n-aria-label="@@people.listLabel">
+    @for (person of list(); track person.id) {
+      <li class="person">
+        <button
+          #row
+          type="button"
+          class="row"
+          [attr.data-id]="person.id"
+          [attr.aria-expanded]="openId() === person.id"
+          [attr.aria-controls]="'person-' + person.id"
+          (click)="toggle(person)"
+        >
+          <span class="who">
+            <span class="name">{{ person.name || person.email }}</span>
+            @if (person.name) {
+              <span class="email">{{ person.email }}</span>
+            }
+          </span>
+          <span class="meta">
+            @if (person.role === 'master') {
+              <span class="badge" i18n="@@people.master">Master</span>
+            }
+            @if (person.isOwner) {
+              <span class="badge" i18n="@@people.owner">Dono</span>
+            }
+            <span class="topics">{{ topicNames(person) }}</span>
+            @if (spendOf(person); as spent) {
+              <span class="spent">{{ spent }}</span>
+            }
+            <span class="last">
+              @if (person.lastLoginAt) {
+                <ng-container i18n="@@people.lastLogin"
+                  >Último acesso
+                  {{
+                    person.lastLoginAt | date: 'dd/MM/yyyy HH:mm'
+                  }}</ng-container
+                >
+              } @else {
+                <ng-container i18n="@@people.neverSignedIn"
+                  >Ainda não entrou</ng-container
+                >
+              }
+            </span>
+          </span>
+        </button>
+        @if (openId() === person.id) {
+          <app-person-editor
+            [id]="'person-' + person.id"
+            class="editor"
+            [person]="person"
+            [topics]="topics()"
+            [busy]="busy()"
+            (changed)="change(person, $event)"
+            (revoked)="revoke(person)"
+          />
+          <ng-container *ngTemplateOutlet="status" />
+        }
+      </li>
+    }
+  </ul>
+}
+
+<!-- The outcome of the last change, next to the person it changed (MA-23). -->
+<ng-template #status>
+  <p class="notice" [class.error]="notice()?.kind === 'error'" role="status">
+    {{ notice()?.text ?? '' }}
+  </p>
+</ng-template>

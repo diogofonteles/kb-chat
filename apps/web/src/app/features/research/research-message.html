@@ -1,0 +1,160 @@
+<article class="turn" [attr.aria-busy]="streaming()">
+  <p class="question">
+    <span class="visually-hidden" i18n="@@message.you">Você perguntou:</span>
+    {{ turn().question }}
+  </p>
+
+  <div class="reply">
+    @if (stepsLine()) {
+      @if (turn().steps.length > 0) {
+        <details class="steps" [class.working]="streaming()">
+          <summary>
+            <span class="steps-text">{{ stepsLine() }}</span>
+          </summary>
+          <ol>
+            @for (step of stepItems(); track $index) {
+              <li [class.thought]="step.thought">
+                {{ step.text }}
+                @if (step.children.length > 0) {
+                  <ol class="sub-steps">
+                    @for (child of step.children; track $index) {
+                      <li>{{ child.text }}</li>
+                    }
+                  </ol>
+                }
+              </li>
+            }
+          </ol>
+        </details>
+      } @else {
+        <p class="steps" [class.working]="streaming()">
+          <span class="steps-text">{{ stepsLine() }}</span>
+        </p>
+      }
+    }
+
+    @if (turn().text) {
+      <div class="answer" [innerHTML]="html()"></div>
+    }
+
+    @if (turn().phase === 'error') {
+      <p class="error" role="alert">
+        {{ errorText() }}
+        @if (turn().error === 'LLM_INSUFFICIENT_CREDIT') {
+          <a
+            href="https://openrouter.ai/settings/credits"
+            target="_blank"
+            rel="noopener"
+            i18n="@@ai.addCredits"
+            >Adicionar créditos</a
+          >
+        }
+      </p>
+      @if (capReached()) {
+        <button
+          type="button"
+          class="secondary"
+          (click)="openSettings()"
+          i18n="@@ai.openSettings"
+        >
+          Abrir Configurações
+        </button>
+      }
+    }
+
+    @if (turn().phase === 'done') {
+      @if (turn().interrupted) {
+        <p class="note" i18n="@@ai.interrupted">
+          {turn().text ? 1 : 0, select,
+            1 {(interrompida)}
+            other {Resposta interrompida antes de começar.}
+          }
+        </p>
+        @if (partialCost()) {
+          <p class="note" i18n="@@ai.partialCost">
+            O custo do que já foi processado entra no gasto do dia.
+          </p>
+        }
+      }
+      @if (cited().length > 0) {
+        <div class="sources">
+          <h3 class="sources-title" i18n="@@ai.sources">Fontes</h3>
+          @if (sourceGroups(); as groups) {
+            @for (group of groups; track group.authorship) {
+              <h4 class="group-title">
+                {{ group.label }} ({{ group.sources.length }})
+              </h4>
+              <ng-container
+                [ngTemplateOutlet]="chips"
+                [ngTemplateOutletContext]="{
+                  $implicit: group.sources,
+                  label: group.label,
+                }"
+              />
+            }
+          } @else {
+            <ng-container
+              [ngTemplateOutlet]="chips"
+              [ngTemplateOutletContext]="{ $implicit: cited(), label: null }"
+            />
+          }
+          <ng-template #chips let-sources let-label="label">
+            <ol [attr.aria-label]="label">
+              @for (source of sources; track source.n) {
+                <li>
+                  <button
+                    type="button"
+                    class="source"
+                    [attr.data-doc-id]="source.id"
+                    [title]="source.title"
+                    (click)="
+                      opened.emit({ id: source.id, title: source.title })
+                    "
+                  >
+                    <span class="source-n" aria-hidden="true">{{
+                      source.n
+                    }}</span>
+                    <app-authorship-badge [authorship]="source.authorship" />
+                    <span class="source-title">{{ source.title }}</span>
+                  </button>
+                </li>
+              }
+            </ol>
+          </ng-template>
+        </div>
+      }
+      <p class="footer">
+        <span i18n="@@ai.disclaimer"
+          >Resposta gerada por IA a partir do acervo; confira nas fontes.</span
+        >
+        @if (subscription()) {
+          <span i18n="@@ai.subscription">Incluído na sua assinatura</span>
+        } @else if (costLabel()) {
+          <span i18n="@@ai.cost">Custo: {{ costLabel() }}</span>
+        }
+      </p>
+    }
+
+    @if (canRetry()) {
+      <button
+        type="button"
+        class="secondary"
+        (click)="retried.emit()"
+        i18n="@@ai.retry"
+      >
+        Tentar de novo
+      </button>
+    }
+
+    @if (streaming()) {
+      <button
+        type="button"
+        class="secondary stop"
+        (click)="stopped.emit()"
+        i18n="@@ai.stop"
+      >
+        Parar
+      </button>
+    }
+  </div>
+</article>

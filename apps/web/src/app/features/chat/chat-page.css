@@ -1,0 +1,345 @@
+:host {
+  display: block;
+  height: 100dvh;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  /* One screen tall: the thread, the panel and the history scroll inside it, never the page. */
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
+.sidebar {
+  /* The column is tinted, so the current conversation stands out on the surface color. */
+  --sidebar-active: var(--color-surface);
+  min-height: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-width: 0;
+}
+
+.layout.with-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, var(--panel));
+}
+
+.conversation {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+/* First screen: greeting and question box centered together (like a chat home);
+   after the first question the box docks at the bottom. The greeting's row takes its
+   content height first and only the spacers around it shrink, so a short window never
+   clips the greeting: it scrolls in its own row instead. */
+.conversation.empty {
+  grid-template-rows:
+    auto minmax(0, 1fr) minmax(0, max-content) auto
+    minmax(0, 1.25fr);
+}
+
+.conversation.empty > .thread {
+  grid-row: 3;
+  padding-bottom: var(--space-6);
+}
+
+.conversation.empty > .composer-dock {
+  grid-row: 4;
+}
+
+.conversation.empty .welcome {
+  padding-top: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.brand {
+  color: var(--color-accent);
+  font-size: 1.25rem;
+}
+
+.brand::before {
+  content: '✦';
+}
+
+/* The esoteric theme's one ornament: a discreet ☿ in the title bar, never in running text (DS-16). */
+:host-context([data-theme='esoteric']) .brand::before {
+  content: '☿';
+}
+
+.view-switch {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.topic {
+  /* One line, whatever the panel leaves: a long title ends in "…" (M-1). */
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  margin-left: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.thread {
+  /* Containing block for absolutely positioned descendants (the visually hidden live
+     regions): without it they escape the scroller and stretch the page itself. */
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-8);
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
+  overflow-y: auto;
+}
+
+.welcome {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: 12vh;
+  text-align: center;
+}
+
+.greeting {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  line-height: 1.2;
+}
+
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 0.35em;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.suggestions {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.suggestions-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.suggestions ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.suggestion:hover {
+  border-color: var(--color-accent);
+}
+
+.notice {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.composer-dock {
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+/* Phones: the side panel is a modal drawer opened from the top bar. */
+.drawer {
+  width: min(20rem, 85vw);
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.drawer::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.drawer-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.drawer-close {
+  justify-self: end;
+  min-width: var(--target);
+  min-height: var(--target);
+  margin: var(--space-2) var(--space-2) 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.menu {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.topic-notice {
+  justify-self: center;
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 1023px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout.with-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The panel covers the conversation instead of display:none, so the
+     conversation keeps its scroll position when the reader comes back. */
+  .conversation.covered {
+    visibility: hidden;
+  }
+
+  .panel {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-4) var(--space-3);
+  }
+
+  /* Phones: the view switch takes its own full-width row under the title. */
+  .view-switch {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .hint-keyboard {
+    display: none;
+  }
+
+  /* Phones: the start screen fills the space above the docked question box, so a long list
+     of suggestions scrolls instead of pushing the greeting off screen. */
+  .conversation.empty {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .conversation.empty > .thread {
+    grid-row: auto;
+    align-content: safe center;
+    padding-bottom: var(--space-4);
+  }
+
+  .conversation.empty > .composer-dock {
+    grid-row: auto;
+  }
+
+  /* The Menu button takes the brand's place; the title keeps one line. */
+  .brand {
+    display: none;
+  }
+
+  .topic {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .composer-dock {
+    padding: 0 var(--space-3) var(--space-3);
+  }
+}
+
+/* Long chip rows and titles must wrap or scroll inside the column, never widen the page. */
+.thread > * {
+  min-width: 0;
+}

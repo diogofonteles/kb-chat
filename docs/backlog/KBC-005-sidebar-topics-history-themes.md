@@ -1,7 +1,7 @@
 ---
 id: KBC-005
 title: "Lateral: acervo, histórico da sessão, temas e gasto do dia"
-status: ready
+status: done
 slice: release-1
 outcome: sessões por semana (retomar uma pesquisa); conforto de leitura
 depends_on: [KBC-001, KBC-004]
@@ -17,7 +17,7 @@ Quando estudo por um tempo, quero trocar de acervo, voltar a perguntas anteriore
 
 **In:**
 - Lateral (desktop fixa; celular em gaveta ☰) com "+ Nova conversa".
-- Histórico das conversas no navegador ("neste navegador").
+- Histórico das conversas, guardado pela API local ("neste computador"). *Emenda 2026-10-24: antes era o `localStorage` ("neste navegador").*
 - Seletor de Acervo (`GET topics`).
 - Tema: Automático, Claro, Escuro ou Esotérico, com tokens DTCG e teste de contraste.
 - "Gasto com IA hoje" (`GET spend/today`).
@@ -27,7 +27,8 @@ Quando estudo por um tempo, quero trocar de acervo, voltar a perguntas anteriore
 
 ## Business rules
 
-- BR-1: O histórico guarda até 50 conversas no `localStorage` (pergunta, modo, filtros e resultados resumidos, sem corpos de documentos). Acima disso, descarta a mais antiga. Se o storage falhar, o app segue sem histórico.
+- BR-1 *(emenda 2026-10-24, pedido do dono: "manter 100% do histórico")*: O histórico guarda **todas** as conversas, sem limite, na API local deste computador (`/api/v1/conversations`, em `KB_CHAT_STATE_DIR`). Busca guarda pergunta, modo, filtros e total (sem corpos de documentos); pesquisa com IA guarda as respostas e fontes (KBC-008 FR-6). O histórico antigo do `localStorage` é migrado para a API uma única vez. Se a API do histórico falhar, o app segue funcionando e o histórico mostra "Histórico indisponível no momento.".
+  - *Texto original:* até 50 conversas no `localStorage`; acima disso, descarta a mais antiga; se o storage falhar, o app segue sem histórico.
 - BR-2: Trocar de acervo inicia uma conversa nova. O aviso fica inline ("Nova conversa em <Acervo>"), sem modal.
 - BR-3: O tema padrão é "Automático" (claro ou escuro pelo sistema). A escolha é lembrada no navegador.
 - BR-4: Todo par texto/fundo e acento/fundo de cada tema tem contraste ≥ 4,5:1, e os indicadores de foco ≥ 3:1.
@@ -55,14 +56,14 @@ Quando estudo por um tempo, quero trocar de acervo, voltar a perguntas anteriore
   - Given 2 conversas no histórico
   - When o usuário clica na primeira
   - Then a pergunta dela reaparece com resultados
-- **AC-3 (BR-1, limite)**
-  - Given 50 conversas
-  - When a 51ª é criada
-  - Then a mais antiga sai
-- **AC-4 (BR-1, negativo)**
-  - Given um `localStorage` que lança erro
+- **AC-3 (BR-1, sem limite)** *(emenda 2026-10-24; antes: "Given 50 conversas, When a 51ª é criada, Then a mais antiga sai")*
+  - Given 60 conversas salvas na API local
+  - When a lateral aparece
+  - Then as 60 estão no histórico e a mais antiga é alcançável rolando a lista
+- **AC-4 (BR-1, negativo)** *(emenda 2026-10-24; antes: `localStorage` que lança erro e o aviso "indisponível neste navegador")*
+  - Given a API do histórico fora do ar
   - When o app abre
-  - Then a busca funciona e o histórico mostra "indisponível neste navegador"
+  - Then a busca funciona e o histórico mostra "Histórico indisponível no momento."
 - **AC-5 (FR-3, BR-2)**
   - Given 2 tópicos na fixture
   - When o usuário troca de acervo
@@ -88,7 +89,7 @@ Quando estudo por um tempo, quero trocar de acervo, voltar a perguntas anteriore
 
 | AC | Nível | Notas |
 |---|---|---|
-| AC-3, AC-4 | Unit (web: history store) | |
+| AC-3, AC-4 | Unit (web: history store e página) + integração da API (conversations); AC-3 também em E2E | Emenda 2026-10-24 |
 | AC-7 | Unit (web: tokens contrast) | |
 | AC-1, AC-2, AC-5, AC-6, AC-8, AC-9 | E2E Playwright | |
 

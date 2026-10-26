@@ -1,0 +1,161 @@
+@if (shows('view')) {
+  <fieldset class="providers">
+    <legend class="legend" i18n="@@prefs.view">
+      Ao abrir a Nova Alexandria
+    </legend>
+    @for (view of views; track view.value) {
+      <label
+        class="card"
+        [class.selected]="view.value === preferences().defaultView"
+      >
+        <input
+          type="radio"
+          name="pref-view"
+          class="radio"
+          [value]="view.value"
+          [checked]="view.value === preferences().defaultView"
+          (change)="setView(view.value)"
+        />
+        <span class="card-body">
+          <span class="card-title">{{ view.label }}</span>
+          <span class="card-hint">
+            @if (view.value === 'research') {
+              <ng-container i18n="@@prefs.viewResearchHint"
+                >Pergunte e a IA pesquisa o acervo e responde com as
+                fontes.</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@prefs.viewSearchHint"
+                >Busca sem IA: cartões, filtros e o documento ao
+                lado.</ng-container
+              >
+            }
+          </span>
+        </span>
+      </label>
+    }
+  </fieldset>
+}
+
+@if (shows('profile')) {
+  <fieldset class="providers">
+    <legend class="legend" i18n="@@prefs.profile">
+      Pesquisa com IA, por padrão
+    </legend>
+    @for (profile of profiles; track profile.value) {
+      <label
+        class="card"
+        [class.selected]="profile.value === preferences().researchProfile"
+      >
+        <input
+          type="radio"
+          name="pref-profile"
+          class="radio"
+          [value]="profile.value"
+          [checked]="profile.value === preferences().researchProfile"
+          (change)="setProfile(profile.value)"
+        />
+        <span class="card-body">
+          <span class="card-title">{{ profile.label }}</span>
+          <span class="card-hint">{{ profile.help }}</span>
+        </span>
+      </label>
+    }
+  </fieldset>
+}
+
+@if (shows('deepen')) {
+  <div class="field">
+    <label class="check">
+      <input
+        type="checkbox"
+        [checked]="preferences().autoDeepen"
+        (change)="setAutoDeepen(deepenBox.checked)"
+        aria-describedby="pref-deepen-hint"
+        #deepenBox
+      />
+      <span i18n="@@prefs.autoDeepen">Aprofundar automaticamente</span>
+    </label>
+    <p id="pref-deepen-hint" class="hint" i18n="@@prefs.autoDeepenHint">
+      Quando a pesquisa rápida não basta para responder pelo acervo, a IA
+      continua com a pesquisa profunda na mesma resposta. Com uma chave paga por
+      uso, isso usa o modelo profundo, que custa mais.
+    </p>
+  </div>
+}
+
+@if (shows('topic')) {
+  <div class="field">
+    <label class="field-label" for="pref-topic" i18n="@@prefs.topic"
+      >Acervo padrão</label
+    >
+    <select
+      id="pref-topic"
+      class="input"
+      #topicSelect
+      (change)="setTopic(topicSelect.value)"
+    >
+      <option
+        value=""
+        [selected]="!preferences().defaultTopic"
+        i18n="@@prefs.topicAuto"
+      >
+        O maior acervo
+      </option>
+      @for (topic of topics(); track topic.slug) {
+        <option
+          [value]="topic.slug"
+          [selected]="topic.slug === preferences().defaultTopic"
+        >
+          {{ topic.title }} ({{ topic.documentCount | number }})
+        </option>
+      }
+    </select>
+  </div>
+}
+
+@if (shows('mode')) {
+  <div class="field">
+    <label class="field-label" for="pref-mode" i18n="@@prefs.mode"
+      >Como buscar, por padrão</label
+    >
+    <select
+      id="pref-mode"
+      class="input"
+      #modeSelect
+      (change)="setMode(modeSelect.value)"
+    >
+      @for (mode of modes; track mode.value) {
+        <option
+          [value]="mode.value"
+          [selected]="mode.value === preferences().searchMode"
+        >
+          {{ mode.label }} — {{ mode.help }}
+        </option>
+      }
+    </select>
+  </div>
+}
+
+@if (shows('theme')) {
+  <div class="field">
+    <label class="field-label" for="pref-theme" i18n="@@prefs.theme"
+      >Tema</label
+    >
+    <select
+      id="pref-theme"
+      class="input"
+      #themeSelect
+      (change)="setTheme(themeSelect.value)"
+    >
+      @for (theme of themes; track theme.value) {
+        <option
+          [value]="theme.value"
+          [selected]="theme.value === preferences().theme"
+        >
+          {{ theme.label }}
+        </option>
+      }
+    </select>
+  </div>
+}
