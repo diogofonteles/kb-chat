@@ -117,4 +117,50 @@ describe('conversations contract', () => {
     ).toBe('exhaustive');
     expect(savedResearchTurnSchema.parse(turn).profile).toBeUndefined();
   });
+
+  it('keeps the authorship of saved sources and reads older ones without it (KBC-020 AC-8)', () => {
+    const turn = {
+      question: 'q',
+      answer: 'a [1][2]',
+      steps: 2,
+      usd: 0,
+      model: 'stub',
+      interrupted: false,
+      at: '2026-10-26T12:00:00.000Z',
+    };
+    const saved = savedResearchTurnSchema.parse({
+      ...turn,
+      sources: [
+        {
+          n: 1,
+          id: 'raw/a.md',
+          title: 'A',
+          authorship: 'mestre-laercio',
+          author: 'José Laércio do Egito',
+        },
+        { n: 2, id: 'raw/b.md', title: 'B', authorship: 'outros-autores' },
+      ],
+    });
+    expect(saved.sources.map((source) => source.authorship)).toEqual([
+      'mestre-laercio',
+      'outros-autores',
+    ]);
+    expect(saved.sources[0]?.author).toBe('José Laércio do Egito');
+    const old = savedResearchTurnSchema.parse({
+      ...turn,
+      sources: [{ n: 1, id: 'raw/a.md', title: 'A' }],
+    });
+    expect(old.sources[0]?.authorship).toBeUndefined();
+  });
+
+  it('reads a search saved before the authorship filter existed (KBC-020 AC-8)', () => {
+    const oldFilters = { concepts: [], genres: [], depths: [], relevances: [] };
+    const parsed = conversationSchema.parse({
+      ...search,
+      asks: [{ question: 'q', mode: 'all', filters: oldFilters, total: 1 }],
+    });
+    expect(
+      parsed.kind === 'search' && parsed.asks[0]?.filters.authorships,
+    ).toEqual([]);
+  });
 });
