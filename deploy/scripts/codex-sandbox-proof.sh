@@ -55,9 +55,15 @@ post_turn='fetch(process.argv[1] + "/turn", { method: "POST", headers: { "conten
 inside="$(compose exec -T codex node -e "$post_turn" http://127.0.0.1:8790 "$turn")"
 echo "from inside the sandbox: $inside"
 [ "$inside" = "status 403" ] || { echo "SANDBOX LEAK: the runner answered a turn from inside the sandbox" >&2; exit 1; }
-# From the API's address on the codex network, as in production.
-answer="$(docker run --rm --network "${project}_codex" --ip 172.30.0.2 --entrypoint node \
-  "$registry/kb-chat-api:$tag" -e "$post_turn" http://172.30.0.10:8790 "$turn")"
+# From the API's address on the codex network, as in production. The first turn leaves a
+# detached process behind; the runner must have reaped it before the second turn runs.
+from_api() {
+  docker run --rm --network "${project}_codex" --ip 172.30.0.2 --entrypoint node \
+    "$registry/kb-chat-api:$tag" -e "$post_turn" http://172.30.0.10:8790 "$1"
+}
+stray_turn="{\"input\":\"$mark\\nleave-a-stray\",\"token\":\"0123456789abcdef0123456789abcdef\"}"
+from_api "$stray_turn" >/dev/null
+answer="$(from_api "$turn")"
 echo "$answer"
 probe="$(grep '"kbchat.probe"' <<<"$answer")"
 node -e "
@@ -75,7 +81,8 @@ if (!probe.rootReadOnly) leaks.push('writable root');
 if (!probe.noCapabilities) leaks.push('capabilities');
 if (!probe.noNewPrivileges) leaks.push('new privileges allowed');
 if (probe.metadataReachable) leaks.push('metadata service reachable');
+leaks.push(...probe.strays.map((pid) => 'process left by another turn ' + pid));
 if (probe.uid !== 10002) leaks.push('uid ' + probe.uid);
 if (leaks.length > 0) { console.error('SANDBOX LEAK: ' + leaks.join(', ')); process.exit(1); }
-console.log('sandbox proof: ok (uid 10002, no canary file, process or variable, only its own mounts, read-only root, no capabilities, no new privileges, no metadata service; env: ' + probe.envNames.join(' ') + ')');
+console.log('sandbox proof: ok (uid 10002, no canary file, process or variable, only its own mounts, read-only root, no capabilities, no new privileges, no metadata service, no process left by another turn; env: ' + probe.envNames.join(' ') + ')');
 " "$probe"

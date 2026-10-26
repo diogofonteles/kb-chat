@@ -20,6 +20,14 @@ answer="$(printf '%s' "$mark" | docker compose --project-directory "$DEPLOY_DIR"
   -f "$DEPLOY_DIR/compose.yml" --env-file "$DEPLOY_DIR/.env" --env-file "$DEPLOY_DIR/release.env" \
   exec -T codex env -i PATH=/usr/local/bin:/usr/bin:/bin /app/deploy/codex-proof/probe.mjs)"
 echo "$answer"
+# The runner's own environment (pid 1's, readable as the same user) holds no server secret.
+if docker compose --project-directory "$DEPLOY_DIR" -f "$DEPLOY_DIR/compose.yml" \
+  --env-file "$DEPLOY_DIR/.env" --env-file "$DEPLOY_DIR/release.env" \
+  exec -T codex cat /proc/1/environ | tr '\0' '\n' |
+  grep -qE '^(KB_CHAT_SECRETS_KEY|SMTP_PASSWORD|RESEND_API_KEY|GOOGLE_CLIENT_ID)='; then
+  echo "SANDBOX LEAK: a server secret is in the runner's environment" >&2
+  exit 1
+fi
 node_check='
 const probe = JSON.parse(process.argv[1]);
 const leaks = [

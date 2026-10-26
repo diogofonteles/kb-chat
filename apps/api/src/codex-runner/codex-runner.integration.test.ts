@@ -248,4 +248,40 @@ describe('Who may call the runner (review R3)', () => {
     expect((await post()).status).toBe(500);
     await broken.close();
   });
+
+  it('never starts a turn whose caller left while it waited (review 2.2)', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'kbchat-codex-home-'));
+    await writeFile(
+      join(home, 'fake-cli.json'),
+      JSON.stringify({ mode: 'sleep' }),
+    );
+    const queued = await startCodexRunner({
+      bin: join(FAKES_DIR, 'fake-codex.mjs'),
+      codexHome: home,
+      mcpUrl: 'http://127.0.0.1:9/mcp/turn',
+      host: '127.0.0.1',
+      port: 0,
+      env: { PATH: process.env['PATH'] ?? '' },
+    });
+    const post = (signal: AbortSignal) =>
+      fetch(`${queued.url}/turn`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ input: 'x', token: 'x'.repeat(32) }),
+        signal,
+      }).catch(() => null);
+    const first = new AbortController();
+    const second = new AbortController();
+    void post(first.signal);
+    await expect.poll(() => queued.active(), { timeout: 8000 }).toBe(1);
+    void post(second.signal);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    second.abort();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    first.abort();
+    await expect.poll(() => queued.active(), { timeout: 8000 }).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(queued.counts().turns).toBe(1);
+    await queued.close();
+  });
 });

@@ -258,9 +258,9 @@ sudo docker compose --env-file .env --env-file release.env exec codex codex logi
 sudo docker compose --env-file .env --env-file release.env exec codex codex login status
 ```
 
-Depois, na tela: ⚙ → **IA da aplicação** → "Assinatura do ChatGPT (Codex)" deve dizer "Logado no servidor."; marque **Ligar a assinatura do ChatGPT (Codex)**. Para você: ⚙ → Sua IA → "Assinatura do ChatGPT". Para ceder: Pessoas e permissões → pessoa → "ChatGPT do administrador" (os termos da OpenAI também não permitem atender outras pessoas; a confirmação diz isso).
+Antes de ligar, confira o isolamento na própria VM: `sudo /srv/kb-chat/deploy/scripts/codex-vm-check.sh` precisa dizer `sandbox check: ok` (se não disser, deixe o Codex desligado e reporte). Depois, na tela: ⚙ → **IA da aplicação** → "Assinatura do ChatGPT (Codex)" deve dizer "Desligada · Logado no servidor."; marque **Ligar a assinatura do ChatGPT (Codex)**. Faça o login (e o check) com o Codex desligado: antes de cada pesquisa o executor encerra processos soltos no contêiner. Para você: ⚙ → Sua IA → "Assinatura do ChatGPT". Para ceder: Pessoas e permissões → pessoa → "ChatGPT do administrador" (os termos da OpenAI também não permitem atender outras pessoas; a confirmação diz isso).
 
-- Conferir o isolamento na VM (o CI prova o mesmo em todo PR, em arm64): `sudo /srv/kb-chat/deploy/scripts/codex-vm-check.sh` planta um canário no estado e no login do Claude, roda a sonda no contêiner vivo e diz `sandbox check: ok` ou o que vazou.
+- O `codex-vm-check.sh` planta um canário no estado e no login do Claude, roda a sonda no contêiner vivo e confere o ambiente do executor; o CI prova o mesmo em todo PR, em arm64.
 - O login fica em `/srv/kb-chat/codex` (no backup cifrado). Para revogar: `exec codex codex logout`.
 - A sub-rede `172.30.0.0/24` é da rede `codex`; se outra rede Docker da VM já a usar, o `up` falha e diz isso.
 

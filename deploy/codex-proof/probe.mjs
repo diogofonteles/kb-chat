@@ -11,6 +11,10 @@ import { join } from 'node:path';
 let MARK = '';
 for await (const chunk of process.stdin) MARK += chunk;
 MARK = MARK.trim();
+// "leave-a-stray": this turn leaves a detached process behind, which the runner must reap
+// before the next turn (ADR 0020); every probe reports the strays it can see.
+const leaveStray = MARK.includes('\nleave-a-stray');
+MARK = MARK.split('\n')[0];
 if (MARK.length < 24) {
   process.stdout.write(
     `${JSON.stringify({ type: 'kbchat.probe', error: 'no canary' })}\n`,
@@ -132,6 +136,28 @@ const explicit = [
   '/vault',
 ].filter(hasContent);
 
+const strays = readdirSync('/proc')
+  .filter((name) => /^\d+$/.test(name))
+  .filter((pid) => {
+    try {
+      return readFileSync(`/proc/${pid}/cmdline`, 'latin1').includes(
+        'kbchat-stray',
+      );
+    } catch {
+      return false;
+    }
+  });
+if (leaveStray) {
+  const { spawn } = await import('node:child_process');
+  spawn(
+    process.execPath,
+    ['-e', 'setInterval(() => {}, 1000)', 'kbchat-stray'],
+    {
+      detached: true,
+      stdio: 'ignore',
+    },
+  ).unref();
+}
 process.stdout.write(
   `${JSON.stringify({
     type: 'kbchat.probe',
@@ -148,6 +174,7 @@ process.stdout.write(
     noCapabilities,
     noNewPrivileges,
     metadataReachable,
+    strays,
     envNames: Object.keys(process.env).sort(),
   })}\n`,
 );

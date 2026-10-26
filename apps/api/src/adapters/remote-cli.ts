@@ -5,6 +5,15 @@ import type { CliCall, CliProcess } from './cli-process.js';
 /** The last line of a runner's answer: the CLI's exit code (ADR 0020). */
 export const RUNNER_EXIT = 'kbchat.runner.exit';
 
+/** What a Codex turn says when its runner cannot be reached (the container is down). */
+export const RUNNER_UNREACHABLE = 'kbchat runner unreachable';
+
+/** The runner did not run the turn: one `turn.failed` line the Codex parser understands. */
+const unreachableLine = JSON.stringify({
+  type: 'turn.failed',
+  error: { message: RUNNER_UNREACHABLE },
+});
+
 /** The variable that carries the turn token to Codex (sent as `Authorization: Bearer`). */
 export const CODEX_TOKEN_ENV = 'KB_CHAT_MCP_TOKEN';
 
@@ -61,7 +70,10 @@ async function* turnLines(turn: RemoteTurn): AsyncIterable<string> {
       }),
       signal: turn.signal,
     });
-    if (!response.ok || !response.body) return turn.settle(-1);
+    if (!response.ok || !response.body) {
+      yield unreachableLine;
+      return turn.settle(-1);
+    }
     const reader = createInterface({
       input: Readable.fromWeb(response.body),
       crlfDelay: Infinity,
@@ -69,6 +81,7 @@ async function* turnLines(turn: RemoteTurn): AsyncIterable<string> {
     yield* cliLines(reader, turn.settle);
   } catch {
     // The runner is down, or the turn was stopped: like a CLI that could not start.
+    if (!turn.signal.aborted) yield unreachableLine;
     turn.settle(-1);
   }
 }

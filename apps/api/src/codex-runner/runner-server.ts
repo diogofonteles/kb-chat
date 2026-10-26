@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -38,6 +38,8 @@ export interface CodexRunner {
   readonly url: string;
   /** Codex processes running now. */
   active(): number;
+  /** Turns started and `codex login status` checks so far (observability, tests). */
+  counts(): { turns: number; statusChecks: number };
   close(): Promise<void>;
 }
 
@@ -116,6 +118,7 @@ interface TurnContext {
   readonly options: CodexRunnerOptions;
   readonly running: Set<CliProcess>;
   readonly lock: TurnLock;
+  readonly counts: { turns: number; statusChecks: number };
 }
 
 /** Counts the process, frees the lock when it exits, and stops it if the API leaves. */
@@ -157,6 +160,28 @@ async function spawnTurn(
   }
 }
 
+/**
+ * Processes a former turn detached from its group (re-parented to the container's init) are
+ * killed before the next turn starts, so none outlives its turn to read the next token
+ * (ADR 0020). Linux only: elsewhere (tests on macOS) there is no /proc to read.
+ */
+async function reapStrays(): Promise<void> {
+  if (process.platform !== 'linux') return;
+  const pids = (await readdir('/proc')).filter((name) => /^\d+$/.test(name));
+  for (const pid of pids.map(Number)) {
+    if (pid === 1 || pid === process.pid) continue;
+    const stat = await readFile(`/proc/${pid}/stat`, 'utf8').catch(() => '');
+    // Field 4, after the command in parentheses, is the parent pid.
+    const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+    if (parent !== 1) continue;
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Already gone, or another user's: not ours to reap.
+    }
+  }
+}
+
 async function startTurn(
   context: TurnContext,
   turn: Turn,
@@ -171,7 +196,9 @@ async function startTurn(
   }
   let started: { dir: string; cli: CliProcess };
   try {
+    await reapStrays();
     started = await spawnTurn(options, turn);
+    context.counts.turns += 1;
   } catch (err) {
     // Never keep the lock of a turn that did not start: every later turn would wait on it.
     release();
@@ -197,6 +224,7 @@ function registerTurn(app: FastifyInstance, context: TurnContext) {
   });
   app.get('/status', async (request, reply) => {
     if (!allowed(request)) return reply.code(403).send({ error: 'FORBIDDEN' });
+    context.counts.statusChecks += 1;
     return { loggedIn: await loggedIn(context.options) };
   });
 }
@@ -233,7 +261,8 @@ export async function startCodexRunner(
     forceCloseConnections: true,
   });
   const running = new Set<CliProcess>();
-  registerTurn(app, { options, running, lock: new TurnLock() });
+  const counts = { turns: 0, statusChecks: 0 };
+  registerTurn(app, { options, running, lock: new TurnLock(), counts });
   app.get('/health', async () => ({ status: 'ok' }));
   app.addHook('onClose', async () => {
     for (const cli of running) cli.kill();
@@ -244,6 +273,7 @@ export async function startCodexRunner(
   return {
     url: `http://${options.host}:${port}`,
     active: () => running.size,
+    counts: () => ({ ...counts }),
     close: () => app.close(),
   };
 }

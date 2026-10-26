@@ -10,7 +10,11 @@ import type {
 } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { cliFailureCode } from './claude-cli-runner.js';
-import { CODEX_TOKEN_ENV, remoteCli } from './remote-cli.js';
+import {
+  CODEX_TOKEN_ENV,
+  RUNNER_UNREACHABLE,
+  remoteCli,
+} from './remote-cli.js';
 import {
   runCliTurn,
   type CliDialect,
@@ -52,7 +56,14 @@ export function parseCodexLine(text: string): CliLine {
   if (line.type === 'turn.completed') return { result: { ok: true } };
   if (line.type === 'turn.failed')
     return {
-      result: { ok: false, code: cliFailureCode(line.error?.message) },
+      result: {
+        ok: false,
+        // The sandbox runner did not answer: like a CLI that is not there (ADR 0020).
+        code:
+          line.error?.message === RUNNER_UNREACHABLE
+            ? 'CLI_MISSING'
+            : cliFailureCode(line.error?.message),
+      },
     };
   const message =
     line.type === 'item.completed' && line.item?.type === 'agent_message'

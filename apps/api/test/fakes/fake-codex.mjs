@@ -2,6 +2,7 @@
 // Fake `codex exec --json`: calls the kb MCP endpoint given by `-c mcp_servers.kb.url=...`
 // with the bearer token from the variable named by `mcp_servers.kb.bearer_token_env_var`,
 // then prints the JSONL events of one turn. $HOME/fake-cli.json { mode, report } — mode: answer (default) | fail
+// (logged out) | error (a model error)
 // | sleep (starts, then waits to be stopped). report: a file that receives { args, env } (names), CODEX_HOME
 // and the process id. `codex login status` answers "Logged in" (exit 0), or exits 1 with mode fail.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -31,6 +32,10 @@ for await (const chunk of process.stdin) void chunk;
 
 emit({ type: 'thread.started', thread_id: 't1' });
 emit({ type: 'turn.started' });
+if (fake.mode === 'error') {
+  emit({ type: 'turn.failed', error: { message: 'The model is overloaded' } });
+  process.exit(1);
+}
 if (fake.mode === 'fail') {
   emit({ type: 'turn.failed', error: { message: 'Please run codex login' } });
   process.exit(1);

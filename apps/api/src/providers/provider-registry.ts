@@ -149,8 +149,9 @@ const CODEX_STATUS_TTL_MS = 30_000;
 /** A failure that makes a lent subscription unavailable for a while. */
 const pausesLending = (kind: LentSubscription, code: string): boolean =>
   code === 'CLI_LOGIN_REQUIRED' ||
-  // The runner did not answer: Codex's container is down (ADR 0020).
-  (kind === 'chatgpt-subscription' && code === 'PROVIDER_UNAVAILABLE');
+  // The runner did not answer: Codex's container is down (ADR 0020). Any other failed
+  // turn (a model error, a usage limit) pauses nothing.
+  (kind === 'chatgpt-subscription' && code === 'CLI_MISSING');
 
 /** Which key a connection test was about, kept with it; null for the subscriptions. */
 const keyIdOf = (key: string | undefined): string | null =>

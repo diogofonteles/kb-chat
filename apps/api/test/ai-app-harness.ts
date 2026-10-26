@@ -69,13 +69,17 @@ export interface Started {
 
 let current: FastifyInstance | null = null;
 
-/** Closes the app the last `start()` built (call it in `afterEach`). */
 /** Stops the Codex runner the last `start({ codexHome })` started (its container going down). */
 export async function stopCodexRunner(): Promise<void> {
   await runner?.close();
   runner = null;
 }
 
+/** What the Codex runner counted so far (turns, login checks). */
+export const codexRunnerCounts = () =>
+  runner?.counts() ?? { turns: 0, statusChecks: 0 };
+
+/** Closes the app the last `start()` built (call it in `afterEach`). */
 export async function closeApp(): Promise<void> {
   await current?.close();
   current = null;

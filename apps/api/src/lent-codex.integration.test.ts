@@ -1,16 +1,20 @@
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   closeApp,
+  codexRunnerCounts,
   research,
   start,
   stopCodexRunner,
   withPeople,
 } from '../test/ai-app-harness.js';
 
-afterEach(closeApp);
+afterEach(async () => {
+  vi.useRealTimers();
+  await closeApp();
+});
 
 const LEND = {
   appAi: 'chatgpt-subscription',
@@ -153,5 +157,34 @@ describe('Codex, the ChatGPT subscription, in its sandbox (KBC-027)', () => {
     expect((await fromCodex('/mcp/turn', 'POST')).statusCode).toBe(404);
     // Everyone else is unaffected.
     expect((await owner('GET', '/api/v1/topics')).statusCode).toBe(200);
+  });
+
+  it('pauses lending only when the sandbox is down, not on a failed turn (review 2.1)', async () => {
+    const { owner, member, memberId, codexHome } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
+    await writeFile(
+      join(codexHome, 'fake-cli.json'),
+      JSON.stringify({ mode: 'error' }),
+    );
+    expect((await research(member)).at(-1)).toMatchObject({
+      type: 'error',
+      code: 'PROVIDER_UNAVAILABLE',
+    });
+    expect((await member('GET', '/api/v1/ai/status')).json().source).toBe(
+      'app',
+    );
+  });
+
+  it('asks the sandbox about the login at most every 30 s, and again after a failure (review 2.2)', async () => {
+    const { owner } = await withCodex();
+    const checks = () => codexRunnerCounts().statusChecks;
+    await owner('GET', '/api/v1/house-ai');
+    await owner('GET', '/api/v1/house-ai');
+    expect(checks()).toBe(1);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 31_000);
+    await owner('GET', '/api/v1/house-ai');
+    expect(checks()).toBe(2);
   });
 });
