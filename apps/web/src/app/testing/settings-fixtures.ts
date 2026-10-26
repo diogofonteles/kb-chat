@@ -7,6 +7,21 @@ import type {
   SettingsView,
 } from '@kb-chat/contracts';
 
+/** The AI fields KBC-023 added to the settings view, at their defaults. */
+export const AI_EXTRAS = {
+  openrouter: {
+    mode: 'free',
+    freeModels: null,
+    includeRouter: true,
+    paidModel: null,
+  },
+  gemini: { tier: 'free' },
+  lastTest: null,
+} as const satisfies Pick<
+  SettingsView['ai'],
+  'openrouter' | 'gemini' | 'lastTest'
+>;
+
 export const aSettingsView = (
   overrides: Partial<SettingsView> = {},
 ): SettingsView => ({
@@ -18,7 +33,20 @@ export const aSettingsView = (
     researchProfile: 'fast',
     autoDeepen: true,
   },
-  ai: { provider: null, models: {}, keys: {}, dailyCapUsd: 1 },
+  ai: {
+    provider: null,
+    models: {},
+    keys: {},
+    dailyCapUsd: 1,
+    openrouter: {
+      mode: 'free',
+      freeModels: null,
+      includeRouter: true,
+      paidModel: null,
+    },
+    gemini: { tier: 'free' },
+    lastTest: null,
+  },
   ...overrides,
 });
 
@@ -65,6 +93,14 @@ export const aProviderList = (overrides: Overrides = {}): ProviderList => ({
       ...overrides.anthropic,
     }),
     info('openai', { ...KEY_MISSING, ...overrides.openai }),
+    info('gemini', {
+      ...KEY_MISSING,
+      defaultModels: {
+        fast: 'gemini-3.5-flash-lite',
+        deep: 'gemini-3.8-flash',
+      },
+      ...overrides.gemini,
+    }),
     info('claude-subscription', {
       ...CLI_MISSING,
       defaultModels: { fast: 'sonnet', deep: 'opus' },
@@ -87,6 +123,10 @@ export const anAiStatus = (overrides: Partial<AiStatus> = {}): AiStatus => ({
   remainingToday: null,
   dailyResearches: null,
   enforced: false,
+  spentTodayUsd: null,
+  dailyCapUsd: null,
+  free: false,
+  lastTest: null,
   ...overrides,
 });
 

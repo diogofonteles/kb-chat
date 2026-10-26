@@ -46,6 +46,105 @@
 </fieldset>
 
 @if (selected(); as current) {
+  <app-provider-guide [provider]="current.info.id" />
+
+  @if (current.info.id === 'openrouter') {
+    <div class="field">
+      <button
+        type="button"
+        class="primary"
+        [disabled]="connecting()"
+        (click)="connectOpenRouter()"
+      >
+        @if (savedKey()) {
+          <span i18n="@@ai.reconnectOpenRouter">Conectar outra conta</span>
+        } @else {
+          <span i18n="@@ai.connectOpenRouter">Conectar OpenRouter</span>
+        }
+      </button>
+      <p class="hint" i18n="@@ai.connectHint">
+        Você vai ao OpenRouter, autoriza e volta para cá com a chave salva.
+      </p>
+    </div>
+    <fieldset class="providers plans">
+      <legend class="field-label" i18n="@@ai.orModeLegend">
+        Quais modelos usar
+      </legend>
+      <label class="check">
+        <input
+          type="radio"
+          name="or-mode"
+          [checked]="draft().openrouterMode === 'free'"
+          (change)="setOpenRouterMode('free')"
+        />
+        <span i18n="@@ai.orModeFree">Só modelos gratuitos (recomendado)</span>
+      </label>
+      <label class="check">
+        <input
+          type="radio"
+          name="or-mode"
+          [checked]="draft().openrouterMode === 'models'"
+          (change)="setOpenRouterMode('models')"
+        />
+        <span i18n="@@ai.orModeModels">Modelo à escolha (pago por uso)</span>
+      </label>
+    </fieldset>
+    @if (ownFree() && !compact()) {
+      <div class="field">
+        <label class="field-label" for="ai-paid" i18n="@@ai.paidLabel"
+          >Modelo pago de reserva (opcional)</label
+        >
+        <input
+          #paidInput
+          id="ai-paid"
+          class="input"
+          autocomplete="off"
+          spellcheck="false"
+          list="ai-paid-models"
+          [value]="draft().paidModel"
+          (input)="setPaidModel(paidInput.value)"
+        />
+        <datalist id="ai-paid-models">
+          @for (model of paidOptions(); track model.id) {
+            <option [value]="model.id">{{ model.name }}</option>
+          }
+        </datalist>
+        <p class="hint" i18n="@@ai.paidHint">
+          Só responde quando os gratuitos estiverem ocupados, e só dentro do
+          limite de gasto por dia abaixo. Vazio: nunca paga.
+        </p>
+      </div>
+    }
+  }
+
+  @if (current.info.id === 'gemini') {
+    <fieldset class="providers plans">
+      <legend class="field-label" i18n="@@ai.geminiTierLegend">
+        Plano do Google AI Studio
+      </legend>
+      <label class="check">
+        <input
+          type="radio"
+          name="gemini-tier"
+          [checked]="draft().geminiTier === 'free'"
+          (change)="setGeminiTier('free')"
+        />
+        <span i18n="@@ai.geminiFree">Gratuito (sem faturamento ativado)</span>
+      </label>
+      <label class="check">
+        <input
+          type="radio"
+          name="gemini-tier"
+          [checked]="draft().geminiTier === 'paid'"
+          (change)="setGeminiTier('paid')"
+        />
+        <span i18n="@@ai.geminiPaid"
+          >Pago (faturamento ativado no Google Cloud)</span
+        >
+      </label>
+    </fieldset>
+  }
+
   @if (current.info.billing === 'per-token') {
     <div class="field">
       <label class="field-label" for="ai-key" i18n="@@ai.key"
@@ -90,7 +189,7 @@
     </div>
   }
 
-  @if (!compact() && hasModels()) {
+  @if (!compact() && showModels()) {
     @for (field of modelFields(); track field.key) {
       <div class="field">
         <label class="field-label" [for]="field.id">{{ field.label }}</label>

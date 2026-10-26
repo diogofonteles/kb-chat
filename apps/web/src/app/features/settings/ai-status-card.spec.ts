@@ -47,6 +47,34 @@ describe('AiStatusCard (KBC-022, T6)', () => {
     expect(document.body.textContent).toContain('OpenRouter');
   });
 
+  it('KBC-023 AC-7: shows today’s spend against the cap and the last test of one’s own AI', async () => {
+    await renderCard(
+      anAiStatus({
+        source: 'own',
+        provider: 'openai',
+        spentTodayUsd: 0.02,
+        dailyCapUsd: 1,
+        lastTest: {
+          provider: 'openai',
+          ok: true,
+          code: null,
+          at: '2026-10-26T15:30:00.000Z',
+        },
+      }),
+    );
+    const text = document.body.textContent ?? '';
+    expect(text).toContain('Você paga · Gasto hoje: US$');
+    expect(text).toContain('0,02');
+    expect(text).toContain('Último teste: funcionando');
+  });
+
+  it('says one’s own free models cost nothing', async () => {
+    await renderCard(
+      anAiStatus({ source: 'own', provider: 'gemini', free: true }),
+    );
+    expect(document.body.textContent).toContain('Gratuito (modelos gratuitos)');
+  });
+
   it('says when nothing serves the person', async () => {
     await renderCard(anAiStatus());
     expect(document.body.textContent).toContain('só a busca nos documentos');

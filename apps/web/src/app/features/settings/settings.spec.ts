@@ -7,21 +7,25 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { ThemeStore } from '@core/theme/theme-store.js';
+import { GO_TO_URL } from '@core/routing/go-to-url.js';
 import { TOPICS } from '../../testing/fixtures.js';
 import {
   aProviderList,
   aSettingsView,
   flushAiStatus,
+  AI_EXTRAS,
 } from '../../testing/settings-fixtures.js';
 import { aiDraftFrom, aiUpdateFrom, suggestedProvider } from './ai-draft.js';
 import { SettingsButton } from './settings-button.js';
 import { SettingsHost } from './settings-host.js';
 import { SettingsStore } from './settings-store.js';
 
+const goTo = vi.fn();
 const providers = [
   provideZonelessChangeDetection(),
   provideHttpClient(),
   provideHttpClientTesting(),
+  { provide: GO_TO_URL, useValue: goTo },
 ];
 
 async function renderHost(view = aSettingsView(), list = aProviderList()) {
@@ -54,7 +58,13 @@ describe('ai draft', () => {
     expect(
       suggestedProvider(
         aSettingsView({
-          ai: { provider: 'openai', models: {}, keys: {}, dailyCapUsd: 1 },
+          ai: {
+            provider: 'openai',
+            models: {},
+            keys: {},
+            dailyCapUsd: 1,
+            ...AI_EXTRAS,
+          },
         }),
         withClaude,
       ),
@@ -239,6 +249,9 @@ describe('Configurações', () => {
         models: { 'claude-subscription': { deep: 'haiku' } },
         keys: {},
         dailyCapUsd: 1,
+        ...AI_EXTRAS,
+        // OpenRouter with chosen models (KBC-023's free mode hides them).
+        openrouter: { ...AI_EXTRAS.openrouter, mode: 'models' },
       },
     });
     const list = aProviderList({
@@ -297,6 +310,8 @@ describe('Configurações', () => {
         models: {},
         keys: { openrouter: { set: true, last4: 'abcd' } },
         dailyCapUsd: 1,
+        ...AI_EXTRAS,
+        openrouter: { ...AI_EXTRAS.openrouter, mode: 'models' },
       },
     });
     const { http, fixture } = await openSettings(view);
@@ -309,7 +324,14 @@ describe('Configurações', () => {
     expect(put.request.body).toEqual({ ai: { keys: { openrouter: null } } });
     put.flush(
       aSettingsView({
-        ai: { provider: 'openrouter', models: {}, keys: {}, dailyCapUsd: 1 },
+        ai: {
+          provider: 'openrouter',
+          models: {},
+          keys: {},
+          dailyCapUsd: 1,
+          ...AI_EXTRAS,
+          openrouter: { ...AI_EXTRAS.openrouter, mode: 'models' },
+        },
       }),
     );
     TestBed.tick();
@@ -321,7 +343,7 @@ describe('Configurações', () => {
 
   it('tests a typed key and explains a refusal (AC-5)', async () => {
     const { http, fixture } = await openSettings();
-    fireEvent.click(screen.getByRole('radio', { name: /OpenAI API/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /OpenAI \(API\)/ }));
     await fixture.whenStable();
     fireEvent.input(screen.getByLabelText(/Chave da API/), {
       target: { value: 'sk-wrong-1234' },
@@ -351,7 +373,9 @@ describe('Configurações', () => {
 
   it('saves the provider with "Salvar" and preferences as they change', async () => {
     const { http, fixture } = await openSettings();
-    fireEvent.click(screen.getByRole('radio', { name: /Anthropic API/ }));
+    fireEvent.click(
+      screen.getByRole('radio', { name: /Claude \(API da Anthropic\)/ }),
+    );
     await fixture.whenStable();
     fireEvent.input(screen.getByLabelText(/Chave da API/), {
       target: { value: 'sk-ant-key-9999' },
@@ -415,6 +439,96 @@ describe('Configurações', () => {
     fireEvent.click(deepen);
     const off = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
     expect(off.request.body.preferences).toMatchObject({ autoDeepen: false });
+  });
+
+  it('KBC-023 AC-6: guides Claude and OpenAI by API key and says subscriptions cannot be connected', async () => {
+    const { fixture } = await openSettings();
+    fireEvent.click(
+      screen.getByRole('radio', { name: /Claude \(API da Anthropic\)/ }),
+    );
+    await fixture.whenStable();
+    const guide = screen.getByRole('region', { name: 'Como configurar' });
+    expect(guide.textContent).toContain('sk-ant-');
+    expect(guide.textContent).toContain('Quanto custa');
+    expect(guide.textContent).toContain(
+      'Assinaturas do Claude (Pro, Max) não podem ser conectadas',
+    );
+    const link = screen.getByRole('link', {
+      name: /Console da Anthropic.*nova aba/,
+    });
+    expect(link.getAttribute('href')).toBe(
+      'https://console.anthropic.com/settings/keys',
+    );
+    expect(link.getAttribute('target')).toBe('_blank');
+    fireEvent.click(screen.getByRole('radio', { name: /OpenAI \(API\)/ }));
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('region', { name: 'Como configurar' }).textContent,
+    ).toContain('Assinaturas do ChatGPT (Plus, Pro) não podem ser conectadas');
+  });
+
+  it('KBC-023 AC-1/AC-2: connects OpenRouter in one click and saves free models with a paid fallback', async () => {
+    const { http, fixture } = await openSettings();
+    fireEvent.click(screen.getByRole('radio', { name: /^OpenRouter/ }));
+    TestBed.tick();
+    http.expectOne('/api/v1/ai/free-models').flush({
+      items: [],
+      paid: [{ id: 'fake/paid', name: 'Fake Paid', contextLength: 1 }],
+      updatedAt: null,
+      stale: false,
+    });
+    await fixture.whenStable();
+    expect(
+      (
+        screen.getByRole('radio', {
+          name: /Só modelos gratuitos/,
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    expect(screen.queryByLabelText('Modelo rápido')).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Conectar OpenRouter' }),
+    );
+    const start = http.expectOne('/api/v1/openrouter/connect');
+    expect(start.request.body).toEqual({ purpose: 'own' });
+    start.flush({ authorizeUrl: 'https://openrouter.ai/auth?state=s' });
+    expect(goTo).toHaveBeenCalledWith('https://openrouter.ai/auth?state=s');
+    fireEvent.input(
+      screen.getByLabelText('Modelo pago de reserva (opcional)'),
+      {
+        target: { value: 'fake/paid' },
+      },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
+    expect(put.request.body.ai).toMatchObject({
+      provider: 'openrouter',
+      openrouter: { mode: 'free', paidModel: 'fake/paid' },
+    });
+  });
+
+  it('KBC-023 AC-4: guides the free Google key, with the privacy warning, and saves the plan', async () => {
+    const { http, fixture } = await openSettings();
+    fireEvent.click(screen.getByRole('radio', { name: /Gemini/ }));
+    await fixture.whenStable();
+    const guide = screen.getByRole('region', { name: 'Como configurar' });
+    expect(guide.textContent).toContain('o Google pode usar as perguntas');
+    expect(
+      screen
+        .getByRole('link', { name: /Chaves do Google AI Studio/ })
+        .getAttribute('href'),
+    ).toBe('https://aistudio.google.com/apikey');
+    fireEvent.input(screen.getByLabelText(/Chave da API/), {
+      target: { value: 'AIza-my-key-1234' },
+    });
+    fireEvent.click(screen.getByRole('radio', { name: /Pago/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
+    expect(put.request.body.ai).toMatchObject({
+      provider: 'gemini',
+      gemini: { tier: 'paid' },
+      keys: { gemini: 'AIza-my-key-1234' },
+    });
   });
 
   it('tells where the data lives and reopens the wizard', async () => {

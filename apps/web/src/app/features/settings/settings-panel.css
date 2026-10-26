@@ -187,3 +187,8 @@
 .title:focus {
   outline: none;
 }
+
+.notice-line {
+  margin: 0;
+  font-size: var(--text-sm);
+}
