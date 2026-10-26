@@ -103,6 +103,10 @@ export class AiAssignmentBar {
   protected readonly noDefaultNote = computed(() =>
     isLentSubscription(this.appAi()) ? noDefaultNote() : null,
   );
+  /** Nobody to lend to: the selection emptied while the terms were open (QA R2-4). */
+  protected readonly lendEmpty = computed(
+    () => this.confirmingLend() === 'selected' && this.selectedCount() === 0,
+  );
   /** The scope of the lending, before its terms (design D2). */
   protected readonly lendTitle = computed(() => {
     const target = this.confirmingLend();
@@ -123,8 +127,9 @@ export class AiAssignmentBar {
 
   protected choose(value: string): void {
     if (!isAssignment(value)) return;
-    // Another choice ends a pending lending: the terms never apply to it (QA BUG-2).
+    // Another choice ends a pending confirmation: it was about the old one (QA BUG-2, R2-6).
     this.confirmingLend.set(null);
+    this.confirmingAll.set(false);
     this.appAi.set(value);
   }
 
@@ -159,7 +164,8 @@ export class AiAssignmentBar {
   protected lend(): void {
     const target = this.confirmingLend();
     this.confirmingLend.set(null);
-    if (!target || !isLentSubscription(this.appAi())) return;
+    if (!target || !isLentSubscription(this.appAi()) || this.lendEmpty())
+      return;
     this.apply.emit({
       target,
       appAi: this.appAi(),

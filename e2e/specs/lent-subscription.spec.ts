@@ -49,7 +49,7 @@ test('AC-1, AC-2, AC-5: the owner lends his subscription after the terms; the pe
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await fieldset
     .getByLabel('Qual IA atende esta pessoa')
-    .selectOption({ label: 'Assinatura do Claude (administrador)' });
+    .selectOption({ label: 'Claude do administrador' });
   const terms = fieldset.getByRole('group', {
     name: 'Ceder a assinatura do Claude a esta pessoa?',
   });
@@ -123,7 +123,7 @@ test('AC-6: lending to the selected people asks for the terms first, never as th
   });
   await bar
     .getByRole('combobox')
-    .selectOption({ label: 'Assinatura do Claude (administrador)' });
+    .selectOption({ label: 'Claude do administrador' });
   await expect(
     bar.getByRole('checkbox', { name: /próximos convidados/ }),
   ).toBeDisabled();

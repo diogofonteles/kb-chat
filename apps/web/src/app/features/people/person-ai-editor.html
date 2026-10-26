@@ -6,6 +6,9 @@
     <select
       #appAiSelect
       class="select"
+      [attr.aria-describedby]="
+        unavailableNote() ? 'lend-unavailable-person' : null
+      "
       (change)="chooseAppAi(appAiSelect.value)"
     >
       @for (option of options(); track option.id) {
@@ -16,7 +19,7 @@
     </select>
   </label>
   @if (unavailableNote(); as note) {
-    <p class="hint">{{ note }}</p>
+    <p id="lend-unavailable-person" class="hint">{{ note }}</p>
   }
   @if (confirmingLend()) {
     <div
@@ -51,9 +54,16 @@
       </div>
     </div>
   }
+  @if (lentForOthers()) {
+    <p class="hint" i18n="@@lend.ownerOnly">
+      Só o dono muda o uso da assinatura cedida (cota, “sempre” e reserva paga).
+      Você pode trocar a IA desta pessoa.
+    </p>
+  }
   <label class="check">
     <input
       #enforcedBox
+      [disabled]="lentForOthers()"
       type="checkbox"
       [checked]="current.enforced"
       (change)="setEnforced(enforcedBox.checked)"
@@ -66,6 +76,7 @@
     <span i18n="@@personAi.daily">Pesquisas por dia (vazio = padrão)</span>
     <input
       #dailyInput
+      [disabled]="lentForOthers()"
       class="number"
       type="number"
       inputmode="numeric"
@@ -86,6 +97,7 @@
   <label class="check">
     <input
       #paidBox
+      [disabled]="lentForOthers()"
       type="checkbox"
       [checked]="current.paidFallback.enabled"
       (change)="setPaid(paidBox.checked)"
@@ -97,6 +109,7 @@
       <span i18n="@@personAi.cap">Teto por mês (US$)</span>
       <input
         #capInput
+        [disabled]="lentForOthers()"
         class="number"
         type="number"
         inputmode="decimal"

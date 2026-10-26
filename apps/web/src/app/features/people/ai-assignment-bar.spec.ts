@@ -147,4 +147,42 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
     ).toBeNull();
     expect(apply).not.toHaveBeenCalled();
   });
+
+  it('KBC-024 QA R2-4: never lends to an empty selection, and one confirmation at a time', async () => {
+    const apply = vi.fn();
+    const { fixture } = await render(AiAssignmentBar, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        selectedCount: 1,
+        total: 3,
+        defaultAppAi: 'house',
+        lending: { canLend: true, available: true },
+      },
+      on: { apply },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aplicar a todos os usuários' }),
+    );
+    await fixture.whenStable();
+    fireEvent.change(screen.getByLabelText('IA'), {
+      target: { value: 'claude-subscription' },
+    });
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('button', { name: 'Aplicar a todos' }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aplicar às selecionadas (1)' }),
+    );
+    await fixture.whenStable();
+    fixture.componentRef.setInput('selectedCount', 0);
+    await fixture.whenStable();
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Ceder assim mesmo',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
 });

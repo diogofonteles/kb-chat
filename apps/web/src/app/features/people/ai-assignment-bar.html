@@ -4,7 +4,14 @@
   </p>
   <label class="field">
     <span i18n="@@assign.which">IA</span>
-    <select #which class="select" (change)="choose(which.value)">
+    <select
+      #which
+      class="select"
+      [attr.aria-describedby]="
+        unavailableNote() ? 'lend-unavailable-bulk' : null
+      "
+      (change)="choose(which.value)"
+    >
       @for (option of options(); track option.id) {
         <option [value]="option.id" [selected]="option.id === appAi()">
           {{ option.label }}
@@ -13,7 +20,7 @@
     </select>
   </label>
   @if (unavailableNote(); as note) {
-    <p class="note">{{ note }}</p>
+    <p id="lend-unavailable-bulk" class="note">{{ note }}</p>
   }
   <div class="actions">
     <button
@@ -80,7 +87,7 @@
         <button
           type="button"
           class="secondary danger"
-          [disabled]="busy()"
+          [disabled]="busy() || lendEmpty()"
           (click)="lend()"
           i18n="@@lend.confirm"
         >
@@ -104,6 +111,7 @@
       type="checkbox"
       [checked]="alsoDefault() && canSetDefault()"
       [disabled]="!canSetDefault()"
+      [attr.aria-describedby]="noDefaultNote() ? 'lend-no-default' : null"
       (change)="alsoDefault.set(defaultBox.checked)"
     />
     <span i18n="@@assign.alsoDefault"
@@ -111,6 +119,6 @@
     >
   </label>
   @if (noDefaultNote(); as note) {
-    <p class="note">{{ note }}</p>
+    <p id="lend-no-default" class="note">{{ note }}</p>
   }
 </div>

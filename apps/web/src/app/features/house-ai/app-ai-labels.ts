@@ -4,7 +4,7 @@ import type { AppAi, AppAiAssignment } from '@kb-chat/contracts';
 export const APP_AI_LABELS: Record<AppAi, () => string> = {
   house: () => $localize`:@@appAi.house:Plano da casa (OpenRouter)`,
   'claude-subscription': () =>
-    $localize`:@@appAi.claudeSubscription:Assinatura do Claude (administrador)`,
+    $localize`:@@appAi.claudeSubscription:Claude do administrador`,
   none: () => $localize`:@@appAi.none:Nenhuma (IA própria ou só a busca)`,
 };
 

@@ -65,7 +65,7 @@ for (const width of [1440, 390]) {
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await fieldset
     .getByLabel('Qual IA atende esta pessoa')
-    .selectOption({ label: 'Assinatura do Claude (administrador)' });
+    .selectOption({ label: 'Claude do administrador' });
   await fieldset
     .getByRole('button', { name: 'Cancelar' })
     .scrollIntoViewIfNeeded();
@@ -79,7 +79,7 @@ for (const width of [1440, 390]) {
   });
   await bar
     .getByRole('combobox')
-    .selectOption({ label: 'Assinatura do Claude (administrador)' });
+    .selectOption({ label: 'Claude do administrador' });
   await bar
     .getByRole('button', { name: 'Aplicar às selecionadas (1)' })
     .click();

@@ -162,5 +162,6 @@ button:disabled {
 
 /* Side by side on a phone too (design D13). */
 .lend-confirm .actions > button {
-  flex: 1 1 9rem;
+  flex: 1 1 0;
+  min-width: 0;
 }

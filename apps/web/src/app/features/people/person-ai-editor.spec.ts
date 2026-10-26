@@ -184,7 +184,7 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
   it('KBC-024: offers the subscription only to the owner, and says when it is not ready', async () => {
     const { fixture } = await renderEditor();
     expect(
-      screen.queryByRole('option', { name: /Assinatura do Claude/ }),
+      screen.queryByRole('option', { name: /Claude do administrador/ }),
     ).toBeNull();
     fixture.componentRef.setInput('lending', {
       canLend: true,
@@ -192,7 +192,7 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
     });
     await fixture.whenStable();
     expect(
-      screen.getByRole('option', { name: /Assinatura do Claude/ }),
+      screen.getByRole('option', { name: /Claude do administrador/ }),
     ).toBeTruthy();
     // Said only where it matters: the subscription chosen or assigned (review R9).
     expect(
@@ -222,5 +222,65 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
       ],
     });
     expect(screen.getByText(/termos confirmados/)).toBeTruthy();
+  });
+
+  it('KBC-024 QA R2-1: focus returns to the choice once the save is over', async () => {
+    const changed = vi.fn();
+    const { fixture } = await render(PersonAiEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        ai: DEFAULT_PERSON_AI,
+        defaultAppAi: 'house',
+        lending: { canLend: true, available: true },
+      },
+      on: { changed },
+    });
+    const select = screen.getByLabelText('Qual IA atende esta pessoa');
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    fixture.componentRef.setInput('busy', true);
+    await fixture.whenStable();
+    // Saving: the confirmation cannot be sent twice (review R7).
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Ceder assim mesmo',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fixture.componentRef.setInput('busy', false);
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Ceder assim mesmo' }));
+    fixture.componentRef.setInput('busy', true);
+    await fixture.whenStable();
+    fixture.componentRef.setInput('busy', false);
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(select);
+  });
+
+  it('KBC-024 QA R2-3: another master sees how much a lent person uses as the owner’s call', async () => {
+    await renderEditor({ ...DEFAULT_PERSON_AI, appAi: 'claude-subscription' });
+    expect(
+      (
+        screen.getByRole('checkbox', {
+          name: /Usar sempre/,
+        }) as HTMLInputElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByLabelText(
+          'Pesquisas por dia (vazio = padrão)',
+        ) as HTMLInputElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(/Só o dono muda o uso da assinatura cedida/),
+    ).toBeTruthy();
+    // Revoking stays open.
+    expect(
+      (screen.getByLabelText('Qual IA atende esta pessoa') as HTMLSelectElement)
+        .disabled,
+    ).toBe(false);
   });
 });

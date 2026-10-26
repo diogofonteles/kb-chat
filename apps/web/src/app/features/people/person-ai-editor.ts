@@ -5,6 +5,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   input,
@@ -77,6 +78,17 @@ export class PersonAiEditor {
       label: assignmentLabel(change.appAi, null),
     })),
   );
+  /** A lent person's use is the owner's call: other masters may only revoke (KBC-024 F-4). */
+  protected readonly lentForOthers = computed(
+    () => isLentSubscription(this.ai().appAi) && !this.lending().canLend,
+  );
+  /** After lending, focus goes back to the choice once the save is over (QA R2-1). */
+  private refocusChoice = false;
+  private readonly refocusAfterSave = afterRenderEffect(() => {
+    if (this.busy() || !this.refocusChoice) return;
+    this.refocusChoice = false;
+    this.appAiSelect()?.nativeElement.focus();
+  });
   /** Lending waits for the terms to be confirmed (KBC-024 BR-2). */
   protected readonly confirmingLend = signal(false);
   protected readonly terms = lendTerms;
@@ -112,6 +124,7 @@ export class PersonAiEditor {
       appAi: 'claude-subscription',
       subscriptionTermsAccepted: true,
     });
+    this.refocusChoice = true;
     this.focusAfterRender(() => this.appAiSelect());
   }
 
