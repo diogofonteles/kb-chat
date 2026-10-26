@@ -4,6 +4,8 @@ import {
   MODEL_ALLOWLISTS,
   type AiProvider,
   type AiStatus,
+  type GeminiTier,
+  type OpenRouterPlan,
   type AiTestRequest,
   type AiTestResult,
   type ProviderInfo,
@@ -19,6 +21,7 @@ import { DisabledLlm } from '../adapters/disabled-llm.js';
 import type { SubscriptionPrompt } from '../adapters/subscription-prompt.js';
 import { OpenAiAdapter } from '../adapters/openai-adapter.js';
 import { OpenRouterAdapter } from '../adapters/openrouter-adapter.js';
+import { GeminiAdapter } from '../adapters/gemini-adapter.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
 import type { AppConfig } from '../config.js';
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
@@ -26,7 +29,7 @@ import type {
   ProviderCatalog,
   SettingsService,
 } from '../modules/settings/index.js';
-import type { LlmPort } from '../ports/llm.js';
+import type { LlmPort, LlmPrice } from '../ports/llm.js';
 import type { AgentLlmPort } from '../ports/llm.js';
 import type {
   Escalation,
@@ -38,6 +41,7 @@ import { budgetsFromConfig } from '../research-agent-factory.js';
 import { resolveAiSource } from './ai-access.js';
 import type { AppAiPort } from './app-ai-plan.js';
 import { findExecutable } from './command-locator.js';
+import { ownFreeLlm } from './own-openrouter.js';
 import { NO_TOOLS, testConnection } from './connection-test.js';
 import { DisabledResearchRunner, isAgentLlm } from './dynamic-ports.js';
 import {
@@ -72,6 +76,16 @@ export interface ProviderRegistryOptions {
   readonly ownerPrincipal?: string;
   /** The AIs the app lends (KBC-022): absent, nobody gets an app AI. */
   readonly appAi?: AppAiPort;
+  /** The live free-model list (KBC-022), for one's own OpenRouter on free models. */
+  readonly freeModels?: FreeModelSource;
+  /** Today's own spend of a principal (the daily cap of a paid fallback, KBC-023). */
+  readonly spentToday?: (principal: string) => Promise<number>;
+}
+
+/** The live OpenRouter list as the registry needs it. */
+export interface FreeModelSource {
+  autoChain(includeRouter: boolean): string[];
+  priceOf(model: string): LlmPrice | null;
 }
 
 const isSubscription = (provider: ResolvedProvider): boolean =>
@@ -90,6 +104,14 @@ export interface ProviderChoice {
   readonly provider: ResolvedProvider;
   readonly model: string | undefined;
   readonly key: string | undefined;
+  /** The person's plan of that provider (KBC-023): Gemini's tier, OpenRouter's mode. */
+  readonly plan?: OwnPlan;
+}
+
+/** Per-provider plans of one's own AI (ADR 0018). */
+export interface OwnPlan {
+  readonly gemini?: GeminiTier;
+  readonly openrouter?: OpenRouterPlan;
 }
 
 interface ChoiceOverride {
@@ -109,7 +131,14 @@ export const choiceId = (
   principal: string,
   c: ProviderChoice,
 ): string =>
-  [kind, principal, c.provider, c.model ?? '', fingerprint(c.key)].join('|');
+  [
+    kind,
+    principal,
+    c.provider,
+    c.model ?? '',
+    fingerprint(c.key),
+    c.plan ? JSON.stringify(c.plan) : '',
+  ].join('|');
 
 /**
  * The AI provider of each principal (KBC-007, ADR 0007): their Settings first, then the
@@ -154,6 +183,8 @@ export class ProviderRegistry implements ProviderCatalog {
     const quota = active === 'app' && app ? await app.quotaOf(principal) : null;
     const source =
       active === 'app' ? 'app' : active === 'none' ? 'none' : 'own';
+    const free = this.isFree(principal, active);
+    const paying = source === 'own' && !free && this.paysPerToken(active);
     return {
       source,
       appAi: active === 'app' ? (assignment?.appAi ?? null) : null,
@@ -161,7 +192,30 @@ export class ProviderRegistry implements ProviderCatalog {
       remainingToday: quota?.remaining ?? null,
       dailyResearches: quota?.daily ?? null,
       enforced: assignment?.enforced ?? false,
+      spentTodayUsd: paying
+        ? ((await this.options.spentToday?.(principal)) ?? 0)
+        : null,
+      dailyCapUsd: paying ? this.dailyCapUsd(principal) : null,
+      free,
+      lastTest: this.options.settings.snapshot(principal)?.ai.lastTest ?? null,
     };
+  }
+
+  /** The serving AI costs nothing: the app's, or one's own on free models (ADR 0018). */
+  private isFree(principal: string, active: ResolvedProvider): boolean {
+    if (active === 'app') return true;
+    const plan = this.choice(principal, { provider: active }).plan;
+    if (active === 'gemini') return plan?.gemini !== 'paid';
+    const openrouter = plan?.openrouter;
+    return (
+      active === 'openrouter' &&
+      openrouter?.mode === 'free' &&
+      openrouter.paidModel === null
+    );
+  }
+
+  private paysPerToken(active: ResolvedProvider): boolean {
+    return active !== 'stub' && PROVIDERS[active].billing === 'per-token';
   }
 
   private sourceOf(principal: string, chosen: AiProvider | null) {
@@ -216,7 +270,34 @@ export class ProviderRegistry implements ProviderCatalog {
         this.savedModel(principal, provider, profile) ??
         this.defaultModel(provider, profile),
       key: override.key ?? this.key(principal, provider),
+      ...this.planOf(principal, provider),
     };
+  }
+
+  /** The saved plan of Gemini or OpenRouter (KBC-023); none for other providers. */
+  private planOf(
+    principal: string,
+    provider: ResolvedProvider,
+  ): { plan?: OwnPlan } {
+    const ai = this.options.settings.snapshot(principal)?.ai;
+    if (provider === 'gemini')
+      return { plan: { gemini: ai?.gemini.tier ?? 'free' } };
+    if (provider === 'openrouter' && ai)
+      return { plan: { openrouter: ai.openrouter } };
+    return {};
+  }
+
+  /** Own OpenRouter on free models with a paid model: a fresh runner per turn (its meter). */
+  private perTurn(choice: ProviderChoice): boolean {
+    const plan = choice.plan?.openrouter;
+    return plan?.mode === 'free' && plan.paidModel !== null;
+  }
+
+  private isOwnFree(choice: ProviderChoice): boolean {
+    return (
+      choice.provider === 'openrouter' &&
+      choice.plan?.openrouter?.mode === 'free'
+    );
   }
 
   llm(principal: string): LlmPort {
@@ -224,7 +305,7 @@ export class ProviderRegistry implements ProviderCatalog {
     const app = this.options.appAi;
     if (choice.provider === 'app' && app) return app.llm(principal);
     return this.cached(choiceId('llm', principal, choice), () =>
-      this.buildLlm(choice),
+      this.buildLlm(choice, principal),
     ) as LlmPort;
   }
 
@@ -246,6 +327,7 @@ export class ProviderRegistry implements ProviderCatalog {
       profile === 'fast'
         ? (this.choice(principal, { profile: 'deep' }).model ?? null)
         : undefined;
+    if (this.perTurn(choice)) return this.buildRunner(choice, { principal });
     // One cached runner per profile (and deep model), so asking fast then deep keeps both.
     const kind = `runner-${profile}>${deepModel ?? ''}`;
     return this.cached(choiceId(kind, principal, choice), () =>
@@ -275,20 +357,36 @@ export class ProviderRegistry implements ProviderCatalog {
   ): Promise<AiTestResult> {
     await this.options.settings.load(principal);
     const choice = this.choice(principal, request);
-    return testConnection({
+    const result = await testConnection({
       choice,
       signal,
       locate: () => this.locateCli(request.provider),
-      llm: () => this.buildLlm(choice),
+      llm: () => this.buildLlm(choice, principal),
       runner: () =>
         this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
+    // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
+    await this.options.settings.recordTest(principal, {
+      provider: request.provider,
+      ok: result.ok,
+      code: result.code,
+      at: new Date().toISOString(),
+    });
+    return result;
   }
 
-  private buildLlm({ provider, model, key }: ProviderChoice): LlmPort {
+  private buildLlm(choice: ProviderChoice, principal = ''): LlmPort {
+    const { provider, model, key, plan } = choice;
     const fetch = this.options.fetch;
     const options = { apiKey: key, model: model ?? '', fetch };
     if (provider === 'stub') return new StubLlmAdapter();
+    if (this.isOwnFree(choice) && plan?.openrouter)
+      return this.ownFree(choice, principal, plan.openrouter);
+    if (provider === 'gemini')
+      return new GeminiAdapter({
+        ...options,
+        freeTier: plan?.gemini !== 'paid',
+      });
     if (provider === 'openrouter')
       return new OpenRouterAdapter({
         ...options,
@@ -297,6 +395,24 @@ export class ProviderRegistry implements ProviderCatalog {
     if (provider === 'anthropic') return new AnthropicAdapter(options);
     if (provider === 'openai') return new OpenAiAdapter(options);
     return new DisabledLlm();
+  }
+
+  private ownFree(
+    { key }: ProviderChoice,
+    principal: string,
+    plan: OpenRouterPlan,
+  ): LlmPort {
+    const models = this.options.freeModels;
+    return ownFreeLlm({
+      principal,
+      key,
+      plan,
+      autoChain: (router) => models?.autoChain(router) ?? [],
+      priceOf: (id) => models?.priceOf(id) ?? null,
+      spentToday: (who) => this.options.spentToday?.(who) ?? Promise.resolve(0),
+      dailyCapUsd: () => this.dailyCapUsd(principal),
+      fetch: this.options.fetch,
+    });
   }
 
   private buildRunner(
@@ -312,10 +428,14 @@ export class ProviderRegistry implements ProviderCatalog {
       return this.options.config.KB_CHAT_CODEX
         ? new CodexCliRunner(this.cliOptions('codex', choice, build))
         : new DisabledResearchRunner();
-    const llm = this.buildLlm(choice);
+    const llm = this.buildLlm(choice, principal);
     const loop = this.options.perTokenRunner;
     if (!loop || !isAgentLlm(llm)) return new DisabledResearchRunner();
-    const scope = { principal, dailyCapUsd: () => this.dailyCapUsd(principal) };
+    // On free models the daily cap gates only the paid fallback (inside its gate).
+    const cap = this.isOwnFree(choice)
+      ? () => Number.POSITIVE_INFINITY
+      : () => this.dailyCapUsd(principal);
+    const scope = { principal, dailyCapUsd: cap };
     return loop(llm, scope, this.perTokenEscalation(choice, build));
   }
 
@@ -323,8 +443,12 @@ export class ProviderRegistry implements ProviderCatalog {
     choice: ProviderChoice,
     { principal, deepModel }: RunnerBuild,
   ): Escalation<AgentLlmPort> | undefined {
-    if (deepModel === undefined) return undefined;
-    const deep = this.buildLlm({ ...choice, model: deepModel ?? undefined });
+    // Free models answer both profiles: no escalation, as on the house plan.
+    if (deepModel === undefined || this.isOwnFree(choice)) return undefined;
+    const deep = this.buildLlm(
+      { ...choice, model: deepModel ?? undefined },
+      principal,
+    );
     if (!isAgentLlm(deep)) return undefined;
     return { deep, enabled: () => this.autoDeepen(principal) };
   }

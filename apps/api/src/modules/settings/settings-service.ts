@@ -1,5 +1,6 @@
 import type {
   KeyProvider,
+  LastTest,
   MaskedKey,
   SettingsUpdate,
   SettingsView,
@@ -78,6 +79,9 @@ export class SettingsService {
         models: settings.ai.models,
         keys: maskKeys(settings.ai.keys),
         dailyCapUsd: this.dailyCapUsd(principal),
+        openrouter: settings.ai.openrouter,
+        gemini: settings.ai.gemini,
+        lastTest: settings.ai.lastTest,
       },
     };
   }
@@ -91,6 +95,30 @@ export class SettingsService {
     this.writing = run.catch(() => undefined);
     await run;
     return this.view(principal);
+  }
+
+  /** Keeps the outcome of "Testar conexão" (KBC-023 BR-6); never the key. */
+  async recordTest(principal: string, test: LastTest): Promise<void> {
+    const run = this.writing.then(async () => {
+      await this.load(principal);
+      const current = this.snapshot(principal) ?? DEFAULT_SETTINGS;
+      const next = { ...current, ai: { ...current.ai, lastTest: test } };
+      await this.deps.store.write(principal, next);
+      this.cache.set(principal, next);
+    });
+    this.writing = run.catch(() => undefined);
+    await run;
+  }
+
+  /** The key from "Conectar OpenRouter" for oneself (KBC-023): chosen, on free models. */
+  connectOpenRouter(principal: string, key: string): Promise<SettingsView> {
+    return this.update(principal, {
+      ai: {
+        provider: 'openrouter',
+        keys: { openrouter: key },
+        openrouter: { mode: 'free' },
+      },
+    });
   }
 
   private parse(raw: unknown): StoredSettings {

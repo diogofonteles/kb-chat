@@ -1,5 +1,9 @@
 import {
+  DEFAULT_OPENROUTER_PLAN,
   aiProviderSchema,
+  geminiTierSchema,
+  lastTestSchema,
+  openRouterPlanSchema,
   isAllowedModel,
   keyProviderSchema,
   MAX_DAILY_CAP_USD,
@@ -60,10 +64,23 @@ export const storedSettingsSchema = z.object({
         .default({}),
       keys: z.partialRecord(keyProviderSchema, z.string().min(1)).default({}),
       dailyCapUsd: z.number().min(0).max(MAX_DAILY_CAP_USD).optional(),
+      /** One's own OpenRouter plan (KBC-023); absent in older files. */
+      openrouter: openRouterPlanSchema.optional().catch(undefined),
+      gemini: z
+        .object({ tier: geminiTierSchema })
+        .catch({ tier: 'free' })
+        .default({ tier: 'free' }),
+      lastTest: lastTestSchema.nullable().catch(null).default(null),
     })
     .prefault({})
-    .transform(({ model, ...ai }) => ({
+    .transform(({ model, openrouter, ...ai }) => ({
       ...ai,
+      // A key saved before KBC-023 keeps the chosen models it always used.
+      openrouter:
+        openrouter ??
+        (ai.keys.openrouter
+          ? { ...DEFAULT_OPENROUTER_PLAN, mode: 'models' as const }
+          : DEFAULT_OPENROUTER_PLAN),
       models: allowedModels(migratedModels({ ...ai, model })),
     })),
 });
@@ -122,11 +139,12 @@ function applyAi(
   current: StoredSettings['ai'],
   patch: NonNullable<SettingsUpdate['ai']>,
 ): StoredSettings['ai'] {
-  const { models, keys, ...rest } = patch;
+  const { models, keys, openrouter, ...rest } = patch;
   // Each provider keeps its own models, so switching back finds them again (KBC-011).
   return {
     ...current,
     ...rest,
+    openrouter: { ...current.openrouter, ...openrouter },
     models: applyModels(current.models, models ?? {}),
     keys: applyKeys(current.keys, keys ?? {}),
   };

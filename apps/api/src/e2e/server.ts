@@ -126,6 +126,7 @@ const ai = await createAiProviders({
   subAgentPrompt: agent.subAgentPrompt,
   house,
   personOf: (principal) => auth.people.cachedByPrincipal(principal),
+  ledger,
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).
 await ledger.append({

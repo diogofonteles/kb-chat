@@ -199,7 +199,7 @@ describe('GET/PUT /api/v1/settings', () => {
 
   it('refuses unknown fields and invalid values with 400', async () => {
     const { app } = await start();
-    expect((await put(app, { ai: { provider: 'gemini' } })).statusCode).toBe(
+    expect((await put(app, { ai: { provider: 'mistral' } })).statusCode).toBe(
       400,
     );
     expect((await put(app, { extra: true })).statusCode).toBe(400);
