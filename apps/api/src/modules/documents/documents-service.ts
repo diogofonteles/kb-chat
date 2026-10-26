@@ -50,6 +50,8 @@ export class DocumentsService {
       depth: entry.depth,
       relevance: entry.relevance,
       concepts: [...entry.concepts],
+      authorship: entry.authorship,
+      author: entry.author,
       obsidianUrl: this.obsidianUrl(topic, id),
       seeAlso: this.seeAlso(catalog, entry),
       body: splitFrontmatter(text).body.trim(),

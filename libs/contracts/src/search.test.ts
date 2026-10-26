@@ -10,7 +10,13 @@ describe('searchRequestSchema', () => {
       mode: 'all',
       limit: 10,
       offset: 0,
-      filters: { concepts: [], genres: [], depths: [], relevances: [] },
+      filters: {
+        concepts: [],
+        genres: [],
+        depths: [],
+        relevances: [],
+        authorships: [],
+      },
     });
   });
 
@@ -30,6 +36,20 @@ describe('searchRequestSchema', () => {
     ).toBe(false);
     expect(
       searchRequestSchema.safeParse({ q: 'x', filters: { path: 'x' } }).success,
+    ).toBe(false);
+  });
+
+  it('filters by authorship and refuses unknown groups (KBC-020)', () => {
+    const parsed = searchRequestSchema.parse({
+      q: 'x',
+      filters: { authorships: ['mestre-laercio'] },
+    });
+    expect(parsed.filters.authorships).toEqual(['mestre-laercio']);
+    expect(
+      searchRequestSchema.safeParse({
+        q: 'x',
+        filters: { authorships: ['laercio'] },
+      }).success,
     ).toBe(false);
   });
 

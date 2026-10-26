@@ -6,7 +6,10 @@ import {
   input,
   output,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import type { DocumentRef } from '@kb-chat/contracts';
+import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
+import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
   citedSource,
   formatCost,
@@ -15,7 +18,11 @@ import {
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { aiErrorMessage } from './research-errors.js';
 import { describeSteps, groupedSteps } from './research-steps.js';
-import { citedSources, type ResearchTurn } from './research-turn.js';
+import {
+  citedSources,
+  groupByAuthorship,
+  type ResearchTurn,
+} from './research-turn.js';
 
 /**
  * One question and the agent's answer (KBC-008 FR-3): steps line, streamed markdown with [n]
@@ -24,6 +31,7 @@ import { citedSources, type ResearchTurn } from './research-turn.js';
  */
 @Component({
   selector: 'app-research-message',
+  imports: [AuthorshipBadge, NgTemplateOutlet],
   templateUrl: './research-message.html',
   styleUrl: './research-message.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,6 +59,13 @@ export class ResearchMessage {
     renderAnswer(this.turn().text, this.turn().sources),
   );
   protected readonly cited = computed(() => citedSources(this.turn()));
+  /** Mixed authorships are listed apart, the Mestre's first (KBC-020 FR-7). */
+  protected readonly sourceGroups = computed(() =>
+    groupByAuthorship(this.cited())?.map((group) => ({
+      ...group,
+      label: AUTHORSHIP_LABELS[group.authorship],
+    })),
+  );
   /** A subscription turn costs nothing per token and stays out of today's spend (KBC-007 BR-2). */
   protected readonly subscription = computed(
     () => this.turn().billing === 'subscription',

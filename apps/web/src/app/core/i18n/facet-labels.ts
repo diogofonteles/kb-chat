@@ -1,4 +1,5 @@
 import type {
+  Authorship,
   SearchFilters,
   DepthLevel,
   Genre,
@@ -23,6 +24,14 @@ export const RELEVANCE_LABELS: Record<Relevance, string> = {
   collected_on_purpose: $localize`:@@relevance.collected:Material de estudo`,
   general: $localize`:@@relevance.general:Geral`,
   off_topic: $localize`:@@relevance.offTopic:Fora do tema`,
+};
+
+/** KBC-020: whose text a document is (ADR 0015). */
+export const AUTHORSHIP_LABELS: Record<Authorship, string> = {
+  'mestre-laercio': $localize`:@@authorship.mestre:Mestre Laércio`,
+  'outros-autores': $localize`:@@authorship.others:Outros autores`,
+  sintese: $localize`:@@authorship.synthesis:Síntese do acervo`,
+  'nao-classificado': $localize`:@@authorship.unclassified:Não classificado`,
 };
 
 export const DEPTH_LABELS: Record<DepthLevel, string> = {
@@ -81,6 +90,7 @@ export const FACET_TITLES: Record<FacetKey, string> = {
   genres: $localize`:@@facet.genres:Tipo de texto`,
   depths: $localize`:@@facet.depths:Profundidade`,
   relevances: $localize`:@@facet.relevances:Ligação com o tema`,
+  authorships: $localize`:@@facet.authorships:Autoria`,
 };
 
 /** Display label of one facet value; concepts are already human names. */
@@ -90,5 +100,7 @@ export function facetValueLabel(key: FacetKey, value: string | number): string {
     return DEPTH_LABELS[value as DepthLevel] ?? String(value);
   if (key === 'relevances')
     return RELEVANCE_LABELS[value as Relevance] ?? String(value);
+  if (key === 'authorships')
+    return AUTHORSHIP_LABELS[value as Authorship] ?? String(value);
   return String(value);
 }

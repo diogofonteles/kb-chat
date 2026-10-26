@@ -1,4 +1,5 @@
 ---
+author_group: outros-autores
 title: A Pedra Filosofal
 type: source
 genre: article_or_essay

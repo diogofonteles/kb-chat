@@ -1,9 +1,15 @@
 import { z } from 'zod';
+import { authorshipSchema } from './facets.js';
 import { documentRefSchema } from './search.js';
 
-/** A numbered source: [n] in the answer text points to sources[n - 1]. */
+/**
+ * A numbered source: [n] in the answer text points to sources[n - 1]. Its authorship
+ * (KBC-020) is optional: turns saved before it have none and render without a badge.
+ */
 export const answerSourceSchema = documentRefSchema.extend({
   n: z.number().int().positive(),
+  authorship: authorshipSchema.optional(),
+  author: z.string().optional(),
 });
 export type AnswerSource = z.infer<typeof answerSourceSchema>;
 

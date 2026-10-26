@@ -161,6 +161,13 @@ p.steps {
   color: var(--color-accent-strong);
 }
 
+.group-title {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
 .sources-title {
   margin: 0 0 var(--space-1);
   font-size: var(--text-sm);

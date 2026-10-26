@@ -1,4 +1,5 @@
 import {
+  AUTHORSHIPS,
   DEPTH_LEVELS,
   GENRES,
   RELEVANCES,
@@ -70,6 +71,8 @@ const FACET_TESTS: Record<
       (f.relevance !== null && others.includes(f.relevance))
     );
   },
+  authorships: (f, s) =>
+    s.authorships.length === 0 || s.authorships.includes(f.authorship),
 };
 const FACET_KEYS = Object.keys(FACET_TESTS) as FacetKey[];
 
@@ -128,6 +131,10 @@ export function countFacets(
         .map((f) => f.relevance)
         .filter(nonNull),
       RELEVANCES,
+    ),
+    authorships: countBy(
+      pick('authorships').map((f) => f.authorship),
+      AUTHORSHIPS,
     ),
   };
 }

@@ -26,8 +26,13 @@ describe('contract schemas', () => {
       depth: null,
       relevance: null,
       concepts: [],
+      authorship: 'nao-classificado',
+      author: null,
     };
     expect(documentSchema.parse(doc)).toEqual(doc);
+    expect(
+      documentSchema.safeParse({ ...doc, authorship: 'laercio' }).success,
+    ).toBe(false);
     expect(documentSchema.safeParse({ ...doc, origin: 'video' }).success).toBe(
       false,
     );

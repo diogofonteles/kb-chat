@@ -71,13 +71,13 @@ describe('list_sources (KBC-017 AC-6)', () => {
     expect(output).toContain('Entidades (1 de 1):');
     expect(output).toContain('- Temas Herméticos (5 documento(s))');
     const authors = await run({ kind: 'entities' });
-    expect(authors.output.split('\n')[1]).toBe(`- ${AUTHOR} (14 documento(s))`);
+    expect(authors.output.split('\n')[2]).toBe(`- ${AUTHOR} (14 documento(s))`);
     expect(authors.output).not.toContain('Origens');
   });
 
   it('pages each list and keeps every name on one line', async () => {
     const { output } = await run({ kind: 'entities', head_limit: 2 });
-    expect(output.split('\n')[0]).toBe(
+    expect(output.split('\n')[1]).toBe(
       'Entidades (2 de 9): Mostrando 1–2 de 9.',
     );
     expect(output).toContain('Próxima página: offset=2.');
@@ -85,7 +85,7 @@ describe('list_sources (KBC-017 AC-6)', () => {
     expect(next.output).toContain('- Linha 1 Linha 2 5 (1 documento(s))');
     expect(next.output).toContain('Fim da lista.');
     const none = await run({ kind: 'sources', query: 'xyz' });
-    expect(none.output).toBe('Origens: nenhuma.');
+    expect(none.output.split('\n').slice(1)).toEqual(['Origens: nenhuma.']);
   });
 
   it('keeps the output within the page budget with very long names (NFR-3)', async () => {

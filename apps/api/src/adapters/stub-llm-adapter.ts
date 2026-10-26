@@ -86,11 +86,11 @@ const callsInTurn = (messages: AgentHistory): number =>
 const lastToolOutput = (messages: AgentHistory): string =>
   messages.findLast((m) => m.role === 'tool')?.content ?? '';
 
-/** The first "[n] Title" of the latest tool output. */
+/** The first "[n] Title" of the latest tool output (without its " · autoria: …" label). */
 function firstReference(
   messages: AgentHistory,
 ): { n: number; title: string } | null {
-  const match = /^\[(\d+)\] ([^\n—]+)/m.exec(lastToolOutput(messages));
+  const match = /^\[(\d+)\] ([^\n—·]+)/m.exec(lastToolOutput(messages));
   return match?.[1] && match[2]
     ? { n: Number(match[1]), title: match[2].trim() }
     : null;

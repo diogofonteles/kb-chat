@@ -1,4 +1,6 @@
 ---
+author_group: mestre-laercio
+author: José Laércio do Egito
 title: A LEI DO RITMO
 type: source
 genre: article_or_essay

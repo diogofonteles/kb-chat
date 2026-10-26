@@ -1,4 +1,5 @@
 ---
+author_group: outros-autores
 title: A Árvore da Vida
 type: source
 genre: talk_or_interview

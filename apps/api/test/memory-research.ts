@@ -57,6 +57,9 @@ export interface MemoryDoc {
   readonly summary?: string;
   readonly entities?: readonly string[];
   readonly sourcePath?: string;
+  /** The owner-managed `author_group` key (KBC-020); absent = not classified. */
+  readonly authorGroup?: string;
+  readonly author?: string;
 }
 
 /** A raw document's markdown with kb-like frontmatter. */
@@ -66,6 +69,8 @@ export function memoryDoc(doc: MemoryDoc): string {
     `title: ${doc.title}`,
     `summary: ${doc.summary ?? 'Um texto.'}`,
     ...(doc.sourcePath ? [`source_path: ${doc.sourcePath}`] : []),
+    ...(doc.authorGroup ? [`author_group: ${doc.authorGroup}`] : []),
+    ...(doc.author ? [`author: ${doc.author}`] : []),
     ...(doc.entities && doc.entities.length > 0
       ? ['entities:', ...doc.entities.map((name) => `    - ${name}`)]
       : []),

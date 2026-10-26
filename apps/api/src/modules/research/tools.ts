@@ -222,7 +222,10 @@ export class ResearchTools {
       mode: args.mode,
       limit: filtering ? MAX_RESULTS : args.limit,
       offset: filtering ? 0 : args.offset,
-      filters: { concepts: scope.concepts },
+      filters: {
+        concepts: scope.concepts,
+        authorships: scope.filter.authorship ? [scope.filter.authorship] : [],
+      },
     });
     // Only the first MAX_RESULTS candidates can be paged to (the search's own cap).
     if (!filtering)
@@ -380,7 +383,8 @@ export class ResearchTools {
     book: SourceBook,
   ): string {
     const entry = this.entry(topic, ref.id);
-    const n = book.number(ref);
+    // The catalog entry carries the authorship the source keeps (KBC-020).
+    const n = book.number(entry ?? ref);
     return entry ? refLine(n, entry) : `[${n}] ${ref.title}`;
   }
 

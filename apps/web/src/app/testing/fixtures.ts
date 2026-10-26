@@ -14,6 +14,8 @@ export const aHit = (overrides: Partial<SearchHit> = {}): SearchHit => ({
   depth: 2,
   relevance: 'core',
   concepts: ['Hermetismo e Filosofia Hermética', 'Cabala', 'Gnosticismo'],
+  authorship: 'mestre-laercio',
+  author: 'José Laércio do Egito',
   copies: [],
   ...overrides,
 });
@@ -35,6 +37,7 @@ export const aResponse = (
     genres: [{ value: 'article_or_essay', count: 1 }],
     depths: [{ value: 2, count: 1 }],
     relevances: [{ value: 'core', count: 1 }],
+    authorships: [{ value: 'mestre-laercio', count: 1 }],
   },
   mode: 'all',
   tookMs: 640,
@@ -70,6 +73,8 @@ export const aDocument = (overrides: Partial<KbDocument> = {}): KbDocument => ({
   depth: 2,
   relevance: 'core',
   concepts: ['Cabala'],
+  authorship: 'mestre-laercio',
+  author: 'José Laércio do Egito',
   criterion: null,
   origin: null,
   obsidianUrl:

@@ -1,6 +1,8 @@
 import {
+  AUTHORSHIPS,
   MAX_HISTORY_TURNS,
   type AnswerSource,
+  type Authorship,
   type ResearchBilling,
   type ResearchEvent,
   type ResearchProfile,
@@ -234,4 +236,25 @@ export function fromSavedTurn(
     at: saved.at,
     restored: true,
   };
+}
+
+export interface SourceGroup {
+  readonly authorship: Authorship;
+  readonly sources: readonly AnswerSource[];
+}
+
+/**
+ * The cited sources by authorship (KBC-020 FR-7), or null when they need no groups: all of
+ * one group, or some saved before authorship existed (they show as one list, as before).
+ */
+export function groupByAuthorship(
+  sources: readonly AnswerSource[],
+): SourceGroup[] | null {
+  if (sources.some((source) => !source.authorship)) return null;
+  // The contract's order puts the collection's core first.
+  const groups = AUTHORSHIPS.map((authorship) => ({
+    authorship,
+    sources: sources.filter((source) => source.authorship === authorship),
+  })).filter((group) => group.sources.length > 0);
+  return groups.length > 1 ? groups : null;
 }

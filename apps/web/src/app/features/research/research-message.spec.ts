@@ -196,6 +196,57 @@ describe('ResearchMessage', () => {
     expect(screen.queryByRole('button', { name: 'Não citado' })).toBeNull();
   });
 
+  it('groups mixed cited sources by authorship, each with its badge (KBC-020 AC-7)', async () => {
+    await renderMessage(
+      aTurn({
+        text: 'O Mestre ensina [1][3]; o Caibalion diz [2]; a síntese [4].',
+        sources: [
+          {
+            n: 1,
+            id: 'raw/a.md',
+            title: 'Tema 1',
+            authorship: 'mestre-laercio',
+          },
+          {
+            n: 2,
+            id: 'raw/b.md',
+            title: 'O Caibalion',
+            authorship: 'outros-autores',
+          },
+          {
+            n: 3,
+            id: 'raw/c.md',
+            title: 'Tema 2',
+            authorship: 'mestre-laercio',
+          },
+          { n: 4, id: 'wiki/d.md', title: 'Ritmo', authorship: 'sintese' },
+        ],
+      }),
+    );
+    const titles = screen
+      .getAllByRole('heading', { level: 4 })
+      .map((heading) => heading.textContent?.replace(/\s+/g, ' ').trim());
+    expect(titles).toEqual([
+      'Mestre Laércio (2)',
+      'Outros autores (1)',
+      'Síntese do acervo (1)',
+    ]);
+    const mestre = screen.getByRole('list', { name: 'Mestre Laércio' });
+    expect(
+      [...mestre.querySelectorAll('button')].map((b) => b.dataset['docId']),
+    ).toEqual(['raw/a.md', 'raw/c.md']);
+    expect(
+      screen.getByRole('button', { name: /O Caibalion/ }).textContent,
+    ).toMatch(/Outros autores/);
+  });
+
+  it('keeps one list without badges for sources of one group or saved before authorship (KBC-020 AC-8)', async () => {
+    await renderMessage(aTurn());
+    expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([]);
+    expect(screen.queryByText(/Autoria:/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Os Princípios' })).toBeTruthy();
+  });
+
   it('summarizes the steps in one line that expands to the step texts', async () => {
     await renderMessage(aTurn());
     const summary = screen.getByText('Pesquisou 2 vezes · leu 1 documento');

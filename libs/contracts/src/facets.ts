@@ -34,10 +34,28 @@ export const depthLevelSchema = z.union([
 ]);
 export type DepthLevel = z.infer<typeof depthLevelSchema>;
 
+/**
+ * Whose text a document is (KBC-020, ADR 0015), read only from the owner-managed
+ * `author_group` frontmatter key: the work of José Laércio do Egito ("Mestre Laércio"),
+ * books and texts by other authors, a wiki article that synthesizes the collection, or a
+ * document the owner has not marked yet (never guessed).
+ */
+export const AUTHORSHIPS = [
+  'mestre-laercio',
+  'outros-autores',
+  'sintese',
+  'nao-classificado',
+] as const;
+export const authorshipSchema = z.enum(AUTHORSHIPS);
+export type Authorship = z.infer<typeof authorshipSchema>;
+
 export const documentFacetsSchema = z.object({
   genre: genreSchema.nullable(),
   depth: depthLevelSchema.nullable(),
   relevance: relevanceSchema.nullable(),
   concepts: z.array(z.string()),
+  authorship: authorshipSchema,
+  /** The frontmatter `author`, when the owner set one. */
+  author: z.string().nullable(),
 });
 export type DocumentFacets = z.infer<typeof documentFacetsSchema>;

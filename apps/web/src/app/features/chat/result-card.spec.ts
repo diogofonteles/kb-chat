@@ -34,4 +34,23 @@ describe('ResultCard', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(opened).toHaveBeenCalledOnce();
   });
+
+  it('opens with the authorship badge: the Mestre with its mark, other authors outlined (KBC-020 AC-3)', async () => {
+    const view = await render(ResultCard, {
+      providers,
+      inputs: { hit: aHit() },
+    });
+    const mestre = screen.getByText(/Mestre Laércio/);
+    expect(mestre.closest('[data-authorship]')?.textContent).toMatch(
+      /Autoria:\s*✦\s*Mestre Laércio/,
+    );
+    view.fixture.componentRef.setInput(
+      'hit',
+      aHit({ authorship: 'outros-autores', author: null }),
+    );
+    await view.fixture.whenStable();
+    expect(screen.getByText(/Outros autores/)).toBeTruthy();
+    expect(screen.queryByText(/Mestre Laércio/)).toBeNull();
+    expect(screen.queryByText('✦')).toBeNull();
+  });
 });

@@ -36,7 +36,7 @@ import {
   type PreparedCall,
   type ToolContext,
 } from './tool-context.js';
-import { quote } from './tool-output.js';
+import { AUTHORSHIP_LABELS, quote } from './tool-output.js';
 import {
   GREP_PAGE,
   PHRASE_SEPARATOR,
@@ -105,6 +105,7 @@ const pageOf = (
 
 function scopeText(filter: DocFilter): string {
   return [
+    filter.authorship && `autoria ${AUTHORSHIP_LABELS[filter.authorship]}`,
     filter.entity && `entidade ${quote(filter.entity)}`,
     filter.source && `origem ${quote(filter.source)}`,
   ]
@@ -135,6 +136,7 @@ function totalsLine(request: GrepRequest, counted: TextCount): string {
   if (request.phrases.length === 0) {
     const rest = describeFilter({
       ...request.filter,
+      authorship: undefined,
       entity: undefined,
       source: undefined,
     });

@@ -1,0 +1,11 @@
+@if (authorship(); as group) {
+  <span class="authorship-badge" [attr.data-authorship]="group"
+    ><span class="visually-hidden" i18n="@@authorship.prefix"
+      >Autoria:&nbsp;</span
+    >
+    @if (mestre()) {
+      <span class="mark" aria-hidden="true">✦</span>
+    }
+    {{ label() }}</span
+  >
+}

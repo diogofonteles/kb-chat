@@ -31,6 +31,10 @@
   cursor: pointer;
 }
 
+.authorship {
+  justify-self: start;
+}
+
 .title {
   font-family: var(--font-display);
   font-size: 1.125rem;

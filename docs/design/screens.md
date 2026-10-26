@@ -99,6 +99,10 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 - Padrão sensato (UP-06): **"Fora do tema" fica oculto por padrão**. Aparece no chip como uma opção desmarcada, com a nota "11 ocultos", e uma marcação os mostra (honesto: nada é escondido em silêncio, SL-24).
 - No celular, os chips rolam na horizontal **e** "Filtros (2)" abre uma tela cheia com "Aplicar" fixo e "Cancelar" (SL-21). Nada depende de hover (SL-22).
 
+### Autoria (KBC-020)
+- Antes dos chips, o controle segmentado **"Autoria: Todos (120) · ✦ Mestre Laércio (80) · Outros autores (40)"**: um grupo de rádio (MA-19), com a escolha aplicada na hora na mesma mensagem. O segmento escolhido fica preenchido e com "✓" (estado em texto e forma, não só cor, UP-20). "Todos" é o padrão e inclui as sínteses do acervo e os não classificados. Uma opção com 0 resultados fica desabilitada, salvo se já estiver escolhida. No celular, o controle ocupa uma linha própria acima dos chips, com os três segmentos lado a lado (o de "✦ Mestre Laércio", o rótulo mais longo, um pouco mais largo) e sem rolagem horizontal.
+- **Selo de autoria** na primeira linha de cada cartão, antes do título: **"✦ Mestre Laércio"** em pílula cheia (acento), **"Outros autores"** em pílula contornada, **"Síntese do acervo"** em contorno tracejado e **"Não classificado"** em contorno pontilhado e texto discreto. Leitores de tela ouvem "Autoria: …". Um documento sem autoria (dado antigo) não mostra selo.
+
 ### Estados
 | Estado | Mostra | Ação |
 |---|---|---|
@@ -131,6 +135,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 | Sem relações | A seção "Veja também" não aparece (UP-10) |
 | Documento muito longo (> 200 KB) | Renderização progressiva e índice de seções quando houver títulos |
 | Transcrição de áudio ou OCR | Selo "Transcrição automática" ou "Texto extraído de imagem (OCR)", que avisa sobre erros de reconhecimento (UP-02) |
+| Autoria (KBC-020) | O selo de autoria (o mesmo do cartão) abre a área de metadados; quando o vault informa o autor, ele aparece ao lado ("✦ Mestre Laércio · José Laércio do Egito") |
 
 ---
 
@@ -152,6 +157,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 ### Regras de conteúdo
 - A IA pesquisa antes de responder e nunca pede ao leitor para refazer a busca. Conhecimento de fora do acervo vem marcado "(fora do acervo)".
 - Rodapé fixo: "Resposta gerada por IA a partir do acervo; confira nas fontes." com "Custo: US$ 0,008" ou "Incluído na sua assinatura".
+- **Autoria (KBC-020):** a IA nunca atribui ao Mestre Laércio o que está em documentos de outros autores e rotula as citações de outros autores com o autor ou o livro. Em "Fontes", cada chip leva o selo de autoria; quando as fontes citadas misturam grupos, elas aparecem em grupos com subtítulo ("Mestre Laércio (3)", "Outros autores (2)", "Síntese do acervo", "Não classificado"), nessa ordem. Respostas salvas antes do KBC-020 mostram as fontes como antes, sem selo.
 
 ### Estados
 | Estado | Mostra | Ação |

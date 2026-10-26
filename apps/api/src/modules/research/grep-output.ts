@@ -1,7 +1,7 @@
 import type { CatalogEntry } from '../catalog/index.js';
 import { originFolder } from './doc-filter.js';
 import type { DocMatch, Occurrence } from './text-finder.js';
-import { oneLine, quote } from './tool-output.js';
+import { authorshipPart, oneLine, quote } from './tool-output.js';
 
 /**
  * Characters a page may take (NFR-3: every output stays under 60,000, below Claude Code's
@@ -74,7 +74,7 @@ export function fileLine(
   const parts = [titlePart(n, match.entry)];
   if (match.occurrences > 0) parts.push(occurrencesPart(match));
   parts.push(`origem: ${oneLine(originFolder(match.entry), 120)}`);
-  const line = parts.join(' · ');
+  const line = `${parts.join(' · ')}${authorshipPart(match.entry.authorship)}`;
   return passage
     ? `${line} — Trecho: ${oneLine(passage, PASSAGE_CHARS)}`
     : line;
@@ -94,7 +94,7 @@ export function listedLine(
 }
 
 export const countLine = (n: number, match: DocMatch): string =>
-  `${titlePart(n, match.entry)} · ${match.occurrences}`;
+  `${titlePart(n, match.entry)} · ${match.occurrences}${authorshipPart(match.entry.authorship)}`;
 
 /** "[3] Título: ocorrências 21–25 de 25", the head of a document's occurrences on a page. */
 export function groupLine(
@@ -106,7 +106,7 @@ export function groupLine(
     span.from === span.to
       ? `ocorrência ${span.from}`
       : `ocorrências ${span.from}–${span.to}`;
-  return `${titlePart(n, entry)}: ${range} de ${span.of}`;
+  return `${titlePart(n, entry)}: ${range} de ${span.of}${authorshipPart(entry.authorship)}`;
 }
 
 /** One occurrence: its body offset (for read_document) and the text around it. */

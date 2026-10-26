@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  authorshipSchema,
   depthLevelSchema,
   documentFacetsSchema,
   genreSchema,
@@ -24,6 +25,8 @@ export const searchFiltersSchema = z.strictObject({
   genres: z.array(genreSchema).default([]),
   depths: z.array(depthLevelSchema).default([]),
   relevances: z.array(relevanceSchema).default([]),
+  /** KBC-020: none selected = every authorship ("Todos"). */
+  authorships: z.array(authorshipSchema).max(4).default([]),
 });
 export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 export type SearchFiltersInput = z.input<typeof searchFiltersSchema>;
@@ -34,6 +37,7 @@ export const EMPTY_FILTERS: SearchFilters = {
   genres: [],
   depths: [],
   relevances: [],
+  authorships: [],
 };
 
 export const searchRequestSchema = z.strictObject({
@@ -47,6 +51,7 @@ export const searchRequestSchema = z.strictObject({
     genres: [],
     depths: [],
     relevances: [],
+    authorships: [],
   })),
 });
 export type SearchRequest = z.input<typeof searchRequestSchema>;
@@ -76,6 +81,7 @@ export const resultFacetsSchema = z.object({
   genres: facetCountSchema(genreSchema),
   depths: facetCountSchema(depthLevelSchema),
   relevances: facetCountSchema(relevanceSchema),
+  authorships: facetCountSchema(authorshipSchema),
 });
 export type ResultFacets = z.infer<typeof resultFacetsSchema>;
 

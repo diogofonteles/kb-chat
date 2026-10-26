@@ -30,6 +30,8 @@ describe('toCatalogEntry', () => {
       relations: { exampleOf: [], extends: [], related: [] },
       entities: [],
       sourcePath: null,
+      authorship: 'nao-classificado',
+      author: null,
     });
   });
 
@@ -113,6 +115,43 @@ describe('toCatalogEntry entities and source (KBC-017)', () => {
     const entry = toCatalogEntry('wiki/concepts/Cabala.md', { entities: 'x' });
     expect(entry.entities).toEqual([]);
     expect(entry.sourcePath).toBeNull();
+  });
+});
+
+describe('toCatalogEntry authorship (KBC-020 AC-1)', () => {
+  it('reads the owner-managed author_group and author keys', () => {
+    const entry = toCatalogEntry('raw/articles/tema.md', {
+      author_group: 'mestre-laercio',
+      author: ' José Laércio do Egito ',
+    });
+    expect(entry.authorship).toBe('mestre-laercio');
+    expect(entry.author).toBe('José Laércio do Egito');
+    expect(
+      toCatalogEntry('raw/articles/livro.md', {
+        author_group: 'outros-autores',
+      }),
+    ).toMatchObject({ authorship: 'outros-autores', author: null });
+  });
+
+  it('marks a wiki article without the key as a synthesis of the collection', () => {
+    expect(toCatalogEntry('wiki/concepts/Cabala.md', {}).authorship).toBe(
+      'sintese',
+    );
+  });
+
+  it('never guesses: a source without the key or with an unknown value is unclassified', () => {
+    const missing = toCatalogEntry('raw/articles/novo.md', {
+      source_path: '_convert/Temas-docs/TEMA 1.txt',
+      entities: ['José Laércio do Egito'],
+    });
+    expect(missing.authorship).toBe('nao-classificado');
+    expect(
+      toCatalogEntry('raw/articles/x.md', { author_group: 'Mestre Laércio' })
+        .authorship,
+    ).toBe('nao-classificado');
+    expect(
+      toCatalogEntry('wiki/concepts/X.md', { author_group: 42 }).authorship,
+    ).toBe('sintese');
   });
 });
 

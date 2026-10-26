@@ -18,6 +18,11 @@ const FACETS: ResultFacets = {
     { value: 'core', count: 9 },
     { value: 'off_topic', count: 1 },
   ],
+  authorships: [
+    { value: 'mestre-laercio', count: 6 },
+    { value: 'outros-autores', count: 3 },
+    { value: 'sintese', count: 1 },
+  ],
 };
 
 async function renderBar(filters = NO_FILTERS, hiddenOffTopic = 0) {
@@ -195,5 +200,80 @@ describe('FilterBar (mobile sheet)', () => {
     await view.fixture.whenStable();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(view.filtersChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('FilterBar authorship control (KBC-020 AC-2)', () => {
+  const radio = (name: RegExp) => screen.getByRole('radio', { name });
+
+  it('offers Todos, Mestre Laércio and Outros autores with counts, Todos by default', async () => {
+    await renderBar();
+    expect(screen.getByRole('radiogroup', { name: 'Autoria' })).toBeTruthy();
+    expect(radio(/^Todos/).closest('label')?.textContent).toContain('10');
+    expect(radio(/Mestre Laércio/).closest('label')?.textContent).toContain(
+      '6',
+    );
+    expect(radio(/Outros autores/).closest('label')?.textContent).toContain(
+      '3',
+    );
+    expect((radio(/^Todos/) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('filters by one group at once and goes back to every group with Todos', async () => {
+    const view = await renderBar();
+    fireEvent.click(radio(/Mestre Laércio/));
+    expect(view.filtersChange).toHaveBeenLastCalledWith({
+      ...NO_FILTERS,
+      authorships: ['mestre-laercio'],
+    });
+    view.fixture.componentRef.setInput('filters', {
+      ...NO_FILTERS,
+      authorships: ['mestre-laercio'],
+    });
+    await view.fixture.whenStable();
+    expect((radio(/Mestre Laércio/) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(radio(/^Todos/));
+    expect(view.filtersChange).toHaveBeenLastCalledWith(NO_FILTERS);
+  });
+
+  it('disables a group without results unless it is the chosen one', async () => {
+    const filtersChange = vi.fn();
+    const view = await render(FilterBar, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        facets: {
+          ...FACETS,
+          authorships: [{ value: 'mestre-laercio', count: 4 }],
+        },
+        filters: NO_FILTERS,
+      },
+      on: { filtersChange },
+    });
+    await view.fixture.whenStable();
+    expect((radio(/Outros autores/) as HTMLInputElement).disabled).toBe(true);
+    expect(radio(/Outros autores/).closest('label')?.textContent).toContain(
+      '0',
+    );
+  });
+
+  it('keeps the authorship out of the removable chips, which the control already shows', async () => {
+    await renderBar({ ...NO_FILTERS, authorships: ['outros-autores'] });
+    expect(screen.queryByRole('list', { name: 'Filtros ativos' })).toBeNull();
+  });
+
+  it('shows several selected groups as removable chips, since the control reads them as Todos', async () => {
+    const view = await renderBar({
+      ...NO_FILTERS,
+      authorships: ['sintese', 'nao-classificado'],
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Remover Autoria: Síntese do acervo',
+      }),
+    );
+    expect(view.filtersChange).toHaveBeenLastCalledWith({
+      ...NO_FILTERS,
+      authorships: ['nao-classificado'],
+    });
   });
 });

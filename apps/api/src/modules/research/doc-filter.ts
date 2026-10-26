@@ -1,9 +1,12 @@
+import type { Authorship } from '@kb-chat/contracts';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
 import { refNumber, resolveEntry, type ToolContext } from './tool-context.js';
-import { foldName, quote } from './tool-output.js';
+import { AUTHORSHIP_LABELS, foldName, quote } from './tool-output.js';
 
 /** Which documents a find_text or search_collection call looks at (KBC-017, ADR 0013). */
 export interface DocFilter {
+  /** One authorship group (KBC-020). */
+  readonly authorship?: Authorship;
   /** A fragment of one of the document's kb entities (author, person, work). */
   readonly entity?: string;
   /** A fragment of the document's source_path (its origin folder). */
@@ -54,6 +57,7 @@ function hasSubject(entry: CatalogEntry, subjects: readonly string[]): boolean {
 
 /** Whether a document passes the filter. */
 export function acceptsEntry(filter: DocFilter, entry: CatalogEntry): boolean {
+  if (filter.authorship && entry.authorship !== filter.authorship) return false;
   if (filter.entity && !hasFragment(entry.entities, filter.entity))
     return false;
   if (filter.source && !hasFragment([entry.sourcePath ?? ''], filter.source))
@@ -63,7 +67,7 @@ export function acceptsEntry(filter: DocFilter, entry: CatalogEntry): boolean {
 
 /** True when the filter narrows anything. */
 export const isFiltering = (filter: DocFilter): boolean =>
-  Boolean(filter.entity || filter.source) ||
+  Boolean(filter.authorship || filter.entity || filter.source) ||
   (filter.excludeIds?.size ?? 0) > 0 ||
   (filter.excludeTexts?.length ?? 0) > 0 ||
   (filter.subjects?.length ?? 0) > 0;
@@ -73,6 +77,7 @@ export function describeFilter(filter: DocFilter): string {
   const excluded =
     (filter.excludeIds?.size ?? 0) + (filter.excludeTexts?.length ?? 0);
   return [
+    filter.authorship && `autoria: ${AUTHORSHIP_LABELS[filter.authorship]}`,
     filter.entity && `entidade contém ${quote(filter.entity)}`,
     filter.source && `origem contém ${quote(filter.source)}`,
     filter.subjects?.length && `assuntos: ${filter.subjects.join(', ')}`,
@@ -84,6 +89,7 @@ export function describeFilter(filter: DocFilter): string {
 
 /** The filter arguments of a tool call, as the model sends them. */
 export interface FilterArgs {
+  readonly authorship?: Authorship;
   readonly entity?: string;
   readonly source?: string;
   readonly exclude?: readonly (string | number)[];
@@ -108,6 +114,7 @@ export function toFilter(
       excludeTexts.push(ref);
   }
   return {
+    authorship: args.authorship,
     entity: args.entity,
     source: args.source,
     subjects: args.subjects ?? [],

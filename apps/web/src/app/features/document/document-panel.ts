@@ -17,6 +17,7 @@ import {
 import { documentSchema, type DocumentRef } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { documentUrl } from '@core/api/kb-api.js';
+import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { describeFacets } from '@core/i18n/facet-labels.js';
 import {
   sectionIndex,
@@ -56,7 +57,7 @@ type CopyState = 'idle' | 'copied' | 'failed';
 /** Reads one document beside the conversation (desktop) or full screen (mobile) — screens.md T3. */
 @Component({
   selector: 'app-document-panel',
-  imports: [SeeAlsoSection],
+  imports: [SeeAlsoSection, AuthorshipBadge],
   templateUrl: './document-panel.html',
   styleUrl: './document-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
