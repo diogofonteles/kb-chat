@@ -28,6 +28,8 @@ describe('toCatalogEntry', () => {
       criterion: null,
       origin: null,
       relations: { exampleOf: [], extends: [], related: [] },
+      entities: [],
+      sourcePath: null,
     });
   });
 
@@ -82,6 +84,35 @@ describe('relations, criterion and origin', () => {
       toCatalogEntry('a.md', { source_path: '_convert/Temas-docs/x.txt' })
         .origin,
     ).toBeNull();
+  });
+});
+
+describe('toCatalogEntry entities and source (KBC-017)', () => {
+  it('keeps the kb entities (deduplicated, wikilinks unwrapped) and the source path', () => {
+    const entry = toCatalogEntry('raw/a.md', {
+      entities: [
+        'José Laércio do Egito',
+        ' FRC ',
+        '[[Rosacruz]]',
+        'José Laércio do Egito',
+        3,
+      ],
+      source_path: '_convert/Temas-docs/TEMA -0.104 - A DIVULGAÇÃO.txt',
+    });
+    expect(entry.entities).toEqual([
+      'José Laércio do Egito',
+      'FRC',
+      'Rosacruz',
+    ]);
+    expect(entry.sourcePath).toBe(
+      '_convert/Temas-docs/TEMA -0.104 - A DIVULGAÇÃO.txt',
+    );
+  });
+
+  it('has no entities nor source path when the frontmatter lacks them', () => {
+    const entry = toCatalogEntry('wiki/concepts/Cabala.md', { entities: 'x' });
+    expect(entry.entities).toEqual([]);
+    expect(entry.sourcePath).toBeNull();
   });
 });
 

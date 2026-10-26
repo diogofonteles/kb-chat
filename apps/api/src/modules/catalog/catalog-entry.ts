@@ -24,6 +24,10 @@ export interface CatalogEntry extends DocumentFacets {
   readonly criterion: string | null;
   readonly origin: DocumentOrigin;
   readonly relations: RelationNames;
+  /** kb's `entities`: authors, people and works the document names (KBC-017 filters). */
+  readonly entities: readonly string[];
+  /** kb's `source_path`: where the text came from (its origin folder, KBC-017). */
+  readonly sourcePath: string | null;
 }
 
 const WIKILINK = /^\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]$/;
@@ -72,12 +76,23 @@ function toConcepts(value: unknown): string[] {
   return [...new Set(names.filter(Boolean))];
 }
 
+/** A list of names as written, wikilink brackets removed, without blanks or repeats. */
+function toNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const names = value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => /^\[\[([^\]|#]+)/.exec(item.trim())?.[1] ?? item)
+    .map((item) => item.trim());
+  return [...new Set(names.filter(Boolean))];
+}
+
 /** Builds the catalog entry of one document from its parsed frontmatter. */
 export function toCatalogEntry(
   id: string,
   data: Readonly<Record<string, unknown>>,
 ): CatalogEntry {
   const rawTitle = toStringOrNull(data['title']);
+  const sourcePath = toStringOrNull(data['source_path']);
   return {
     id,
     title: rawTitle ? toDisplayTitle(rawTitle) : titleFromId(id),
@@ -87,7 +102,9 @@ export function toCatalogEntry(
     relevance: toRelevance(data['relevance']),
     concepts: toConcepts(data['concepts']),
     criterion: toStringOrNull(data['criterion']),
-    origin: toOrigin(toStringOrNull(data['source_path'])),
+    origin: toOrigin(sourcePath),
+    entities: toNames(data['entities']),
+    sourcePath,
     relations: {
       exampleOf: toConcepts(data['example_of']),
       extends: toConcepts(data['extends']),
