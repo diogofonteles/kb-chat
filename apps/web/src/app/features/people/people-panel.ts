@@ -37,7 +37,7 @@ import {
 } from './ai-assignment-bar.js';
 import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { servingLabel } from '@features/house-ai/app-ai-labels.js';
-import type { Lending } from './lending.js';
+import { NO_LENDING, type Lending } from './lending.js';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -88,9 +88,9 @@ export class PeoplePanel {
   /** Only the owner lends his subscription, and only while it is ready (KBC-024). */
   protected readonly lending = computed<Lending>(() => ({
     canLend: this.session.me()?.isOwner ?? false,
-    available: this.house.hasValue()
-      ? this.house.value().subscriptionAvailable
-      : false,
+    lendable: this.house.hasValue()
+      ? this.house.value().lendable
+      : NO_LENDING.lendable,
   }));
   /** People chosen for a bulk AI assignment. */
   protected readonly selected = signal<ReadonlySet<string>>(new Set());

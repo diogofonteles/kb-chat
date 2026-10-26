@@ -16,6 +16,7 @@ import {
 import { aMe, anOwner } from '../../testing/session-fixtures.js';
 import { SettingsHost } from './settings-host.js';
 import { SettingsStore } from './settings-store.js';
+import { LEND_ALL, LEND_NONE } from '../../testing/lending-fixtures.js';
 
 async function openSettingsAs(me: Me, section: 'people' | null = null) {
   localStorage.clear();
@@ -80,7 +81,7 @@ describe('Configurações per permission (KBC-010)', () => {
     ).toBeTruthy();
     http
       .expectOne('/api/v1/house-ai/default')
-      .flush({ defaultAppAi: 'house', subscriptionAvailable: false });
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/people').flush({ items: [] });
     http.expectOne('/api/v1/topics').flush({ items: [], defaultSlug: null });
     http.expectOne('/api/v1/spend/people').flush({ items: [] });

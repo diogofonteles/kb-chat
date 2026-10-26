@@ -322,7 +322,11 @@ async function registerHouse(
   const { settings } = ai;
   await app.register(
     houseAiRoutes({
-      subscriptionAvailable: () => ai.lentSubscription.available(),
+      lendable: () => ({
+        'claude-subscription': ai.lent['claude-subscription'].available(),
+        'chatgpt-subscription': ai.lent['chatgpt-subscription'].available(),
+      }),
+      codex: () => ai.registry.codexStatus(),
       house: house.service,
       catalog: house.catalog,
       connect: house.connect,

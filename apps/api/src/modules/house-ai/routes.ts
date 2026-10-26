@@ -7,6 +7,7 @@ import {
   houseDefaultSchema,
   openRouterConnectRequestSchema,
   openRouterConnectResponseSchema,
+  type Lendable,
   type OpenRouterPurpose,
 } from '@kb-chat/contracts';
 import type {
@@ -24,7 +25,7 @@ import {
   type Viewer,
 } from '../auth/index.js';
 import type { FreeModelCatalog } from './free-model-catalog.js';
-import type { HouseAiService } from './house-ai-service.js';
+import type { HouseAiService, HouseServiceView } from './house-ai-service.js';
 import type { OpenRouterConnect } from './openrouter-connect.js';
 
 /** Who may connect an account for a purpose, and where its key goes (house; KBC-023 adds own). */
@@ -40,13 +41,33 @@ export interface HouseAiRouteDeps {
   /** Exchanges an OAuth code for a key (OpenRouter's /auth/keys). */
   readonly exchange: (code: string, verifier: string) => Promise<string>;
   readonly targets: Readonly<Record<OpenRouterPurpose, ConnectTarget>>;
-  /** The owner's Claude subscription can be lent now (KBC-024); false when absent. */
-  readonly subscriptionAvailable?: () => boolean;
+  /** The owner's subscriptions that can be lent now (KBC-024, KBC-027); none when absent. */
+  readonly lendable?: () => Lendable;
+  /** Codex's sandbox: configured, and whether the owner's login is there (KBC-027). */
+  readonly codex?: () => Promise<{
+    configured: boolean;
+    loggedIn: boolean | null;
+  }>;
 }
 
+const NOTHING_LENDABLE: Lendable = {
+  'claude-subscription': false,
+  'chatgpt-subscription': false,
+};
+
 const lendable = (deps: HouseAiRouteDeps) => ({
-  subscriptionAvailable: deps.subscriptionAvailable?.() ?? false,
+  lendable: deps.lendable?.() ?? NOTHING_LENDABLE,
 });
+
+/** The house as masters see it: the service's view, what can be lent and Codex's state. */
+async function fullView(deps: HouseAiRouteDeps, view: HouseServiceView) {
+  const codex = (await deps.codex?.()) ?? { configured: false, loggedIn: null };
+  return {
+    ...view,
+    ...lendable(deps),
+    codex: { ...codex, enabled: deps.house.codexEnabled() },
+  };
+}
 
 const MASTER: RouteAccess = { master: true };
 
@@ -59,7 +80,7 @@ function registerHouseView(app: FastifyInstance, deps: HouseAiRouteDeps) {
       config: { access: MASTER },
       schema: { response: { 200: houseAiViewSchema } },
     },
-    async () => ({ ...(await house.view()), ...lendable(deps) }),
+    async () => fullView(deps, await house.view()),
   );
   routes.put(
     '/api/v1/house-ai',
@@ -70,10 +91,11 @@ function registerHouseView(app: FastifyInstance, deps: HouseAiRouteDeps) {
         response: { 200: houseAiViewSchema },
       },
     },
-    async (request) => ({
-      ...(await house.update(request.body, viewerOf(request).person.email)),
-      ...lendable(deps),
-    }),
+    async (request) =>
+      fullView(
+        deps,
+        await house.update(request.body, viewerOf(request).person.email),
+      ),
   );
 }
 

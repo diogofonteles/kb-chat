@@ -166,4 +166,45 @@ describe('HouseAiPanel (KBC-022, T12)', () => {
       'Não consegui salvar',
     );
   });
+
+  it('KBC-027 AC-4: turns Codex on and off, and says why it cannot be used', async () => {
+    const { http, fixture } = await renderPanel(
+      aHouseView({
+        codex: { configured: true, enabled: false, loggedIn: true },
+      }),
+    );
+    const block = screen.getByRole('region', {
+      name: 'Assinatura do ChatGPT (Codex)',
+    });
+    expect(block.textContent).toContain('Logado no servidor.');
+    expect(block.textContent).toContain('contêiner separado');
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Ligar a assinatura do ChatGPT (Codex)',
+      }),
+    );
+    const put = http.expectOne({ method: 'PUT', url: '/api/v1/house-ai' });
+    expect(put.request.body).toEqual({ codexEnabled: true });
+    put.flush(
+      aHouseView({
+        codex: { configured: true, enabled: true, loggedIn: false },
+      }),
+    );
+    await fixture.whenStable();
+    expect(block.textContent).toContain('codex login --device-auth');
+  });
+
+  it('KBC-027: Codex cannot be turned on where it is not configured', async () => {
+    await renderPanel(aHouseView());
+    expect(
+      (
+        screen.getByRole('checkbox', {
+          name: 'Ligar a assinatura do ChatGPT (Codex)',
+        }) as HTMLInputElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(/não está configurado neste servidor/),
+    ).toBeTruthy();
+  });
 });

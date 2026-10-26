@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import {
   MODEL_ALLOWLISTS,
+  isLentSubscription,
   type AiProvider,
+  type LentSubscription,
   type AiStatus,
   type GeminiTier,
   type OpenRouterPlan,
@@ -83,6 +85,8 @@ export interface ProviderRegistryOptions {
   readonly freeModels?: FreeModelSource;
   /** Today's own spend of a principal (the daily cap of a paid fallback, KBC-023). */
   readonly spentToday?: (principal: string) => Promise<number>;
+  /** A master's switch for Codex (KBC-027); absent: on whenever Codex is configured. */
+  readonly codexEnabled?: () => boolean;
 }
 
 /** The live OpenRouter list as the registry needs it. */
@@ -130,6 +134,9 @@ interface ChoiceOverride {
 /** How long a logged-out CLI keeps the lent subscription unavailable (ADR 0019). */
 const LOGGED_OUT_PAUSE_MS = 10 * 60 * 1000;
 
+/** How long Codex's sandbox gets to say whether the owner's login is there. */
+const CODEX_STATUS_TIMEOUT_MS = 5_000;
+
 /** Which key a connection test was about, kept with it; null for the subscriptions. */
 const keyIdOf = (key: string | undefined): string | null =>
   key ? fingerprint(key) : null;
@@ -161,36 +168,88 @@ export class ProviderRegistry implements ProviderCatalog {
   private readonly cache = new Map<string, LlmPort | ResearchRunnerPort>();
   /** One's own paid fallback in flight, every open turn of every person (KBC-023). */
   private readonly meters = new PaidMeters();
-  /** Until when the lent subscription counts as unavailable after a logged-out CLI. */
-  private lentLoggedOutUntil = 0;
+  /** Until when each lent subscription counts as unavailable after a logged-out CLI. */
+  private readonly loggedOutUntil: Record<LentSubscription, number> = {
+    'claude-subscription': 0,
+    'chatgpt-subscription': 0,
+  };
   /** Whether `claude` was on PATH at the last lookup (boot, then every provider list). */
   private claudeOnPath = false;
 
   constructor(private readonly options: ProviderRegistryOptions) {}
 
   /**
-   * The owner's Claude subscription as it can be lent to a person (KBC-024, ADR 0019): his CLI
-   * and his models for the profile, never escalating (a fast question counts 1). The owner
-   * check for subscriptions stays for a person's own choice; this path is the app AI's.
+   * One of the owner's subscriptions as it can be lent to a person (KBC-024, KBC-027; ADR 0019,
+   * ADR 0020): his CLI and his models for the profile, never escalating (a fast question counts
+   * 1); Codex only in its sandbox (or the owner's Mac in local mode). The owner check for
+   * subscriptions stays for a person's own choice; this path is the app AI's.
    */
-  lendableSubscription(): LendableSubscription {
+  lendable(kind: LentSubscription): LendableSubscription {
     const owner = this.options.ownerPrincipal ?? 'owner';
     const choiceFor = (profile: ResearchProfile) =>
-      this.choice(owner, { provider: 'claude-subscription', profile });
+      this.choice(owner, { provider: kind, profile });
     return {
       available: () =>
-        this.claudeOnPath && this.now() >= this.lentLoggedOutUntil,
+        this.subscriptionReady(kind) && this.now() >= this.loggedOutUntil[kind],
       llm: () => new DisabledLlm(),
       runner: (profile) =>
-        new ClaudeCliRunner(
-          this.cliOptions('claude', choiceFor(profile), { principal: owner }),
-        ),
+        kind === 'claude-subscription'
+          ? new ClaudeCliRunner(
+              this.cliOptions('claude', choiceFor(profile), {
+                principal: owner,
+              }),
+            )
+          : new CodexCliRunner(
+              this.codexOptions(choiceFor(profile), { principal: owner }),
+            ),
       failed: (code) => {
         // A logged-out CLI fails every lent turn: people fall back meanwhile (ADR 0019).
         if (code === 'CLI_LOGIN_REQUIRED')
-          this.lentLoggedOutUntil = this.now() + LOGGED_OUT_PAUSE_MS;
+          this.loggedOutUntil[kind] = this.now() + LOGGED_OUT_PAUSE_MS;
       },
     };
+  }
+
+  private subscriptionReady(kind: LentSubscription): boolean {
+    return kind === 'claude-subscription'
+      ? this.claudeOnPath
+      : this.codexReady();
+  }
+
+  /** Where Codex runs (ADR 0020): its sandbox runner, the owner's Mac (local), or nowhere. */
+  private codexMode(): 'sandbox' | 'local' | null {
+    const { config } = this.options;
+    if (config.KB_CHAT_CODEX_RUNNER_URL) return 'sandbox';
+    return config.KB_CHAT_CODEX ? 'local' : null;
+  }
+
+  /** Codex answers only while it is configured and a master turned it on (KBC-027 BR-1). */
+  private codexReady(): boolean {
+    return this.codexMode() !== null && (this.options.codexEnabled?.() ?? true);
+  }
+
+  /** "IA da aplicação" > Codex: configured, and whether the owner's login is there. */
+  async codexStatus(): Promise<{
+    configured: boolean;
+    loggedIn: boolean | null;
+  }> {
+    const url = this.options.config.KB_CHAT_CODEX_RUNNER_URL;
+    const configured = this.codexMode() !== null;
+    if (!url) return { configured, loggedIn: null };
+    try {
+      const response = await fetch(`${url}/status`, {
+        signal: AbortSignal.timeout(CODEX_STATUS_TIMEOUT_MS),
+      });
+      const body: unknown = await response.json();
+      const loggedIn =
+        typeof body === 'object' && body !== null && 'loggedIn' in body
+          ? body.loggedIn === true
+          : null;
+      return { configured, loggedIn };
+    } catch {
+      // The sandbox is not running (COMPOSE_PROFILES without codex) or did not answer.
+      return { configured, loggedIn: null };
+    }
   }
 
   private now(): number {
@@ -424,10 +483,10 @@ export class ProviderRegistry implements ProviderCatalog {
     // The owner logged in again: lend the subscription again at once (ADR 0019).
     if (
       result.ok &&
-      request.provider === 'claude-subscription' &&
+      isLentSubscription(request.provider) &&
       this.isOwner(principal)
     )
-      this.lentLoggedOutUntil = 0;
+      this.loggedOutUntil[request.provider] = 0;
     // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
     await this.options.settings.recordTest(principal, {
       provider: request.provider,
@@ -507,8 +566,8 @@ export class ProviderRegistry implements ProviderCatalog {
     if (choice.provider === 'claude-subscription')
       return new ClaudeCliRunner(this.cliOptions('claude', choice, build));
     if (choice.provider === 'chatgpt-subscription')
-      return this.options.config.KB_CHAT_CODEX
-        ? new CodexCliRunner(this.cliOptions('codex', choice, build))
+      return this.codexReady()
+        ? new CodexCliRunner(this.codexOptions(choice, build))
         : new DisabledResearchRunner();
     const llm = this.buildLlm(choice, principal, build.meter);
     const loop = this.options.perTokenRunner;
@@ -560,6 +619,17 @@ export class ProviderRegistry implements ProviderCatalog {
       tools,
       systemPrompt: this.options.systemPrompt,
       subAgentPrompt: this.options.subAgentPrompt,
+    };
+  }
+
+  /** Codex's options: its sandbox runner when there is one (ADR 0020). */
+  private codexOptions(choice: ProviderChoice, build: RunnerBuild) {
+    const { config } = this.options;
+    const url = config.KB_CHAT_CODEX_RUNNER_URL;
+    const mcpBaseUrl = config.KB_CHAT_CODEX_MCP_BASE_URL;
+    return {
+      ...this.cliOptions('codex', choice, build),
+      ...(url && mcpBaseUrl && { runner: { url, mcpBaseUrl } }),
     };
   }
 
@@ -635,9 +705,12 @@ export class ProviderRegistry implements ProviderCatalog {
   ): ProviderInfo['reason'] {
     if (isSubscription(id) && !this.isOwner(principal)) return 'owner-only';
     if (id === 'app') return this.appReason(principal);
+    if (id === 'chatgpt-subscription') {
+      if (!this.codexReady()) return 'not-enabled';
+      // In the sandbox, Codex is in its own container, not on this PATH (ADR 0020).
+      if (this.codexMode() === 'sandbox') return null;
+    }
     if (PROVIDERS[id].cliBin && !cliFound) return 'cli-missing';
-    if (id === 'chatgpt-subscription' && !this.options.config.KB_CHAT_CODEX)
-      return 'not-enabled';
     if (isKeyProvider(id) && this.keySource(principal, id) === null)
       return 'key-missing';
     return null;

@@ -103,7 +103,9 @@ describe('Researching on the lent subscription (KBC-024 AC-2, AC-3, AC-7)', () =
     const started = await start({ claude: true });
     const { owner, member, memberId } = await withPeople(started);
     expect(
-      (await owner('GET', '/api/v1/house-ai')).json().subscriptionAvailable,
+      (await owner('GET', '/api/v1/house-ai')).json().lendable[
+        'claude-subscription'
+      ],
     ).toBe(true);
     await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
     expect((await member('GET', '/api/v1/ai/status')).json()).toMatchObject({
@@ -156,7 +158,9 @@ describe('Researching on the lent subscription (KBC-024 AC-2, AC-3, AC-7)', () =
     const started = await start();
     const { owner, member, memberId } = await withPeople(started);
     expect(
-      (await owner('GET', '/api/v1/house-ai')).json().subscriptionAvailable,
+      (await owner('GET', '/api/v1/house-ai')).json().lendable[
+        'claude-subscription'
+      ],
     ).toBe(false);
     await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
     expect((await member('GET', '/api/v1/ai/status')).json().source).toBe(
@@ -200,8 +204,9 @@ describe('Researching on the lent subscription (KBC-024 AC-2, AC-3, AC-7)', () =
     const status = (await member('GET', '/api/v1/ai/status')).json();
     expect(status.source).toBe('none');
     expect(
-      (await owner('GET', '/api/v1/house-ai/default')).json()
-        .subscriptionAvailable,
+      (await owner('GET', '/api/v1/house-ai/default')).json().lendable[
+        'claude-subscription'
+      ],
     ).toBe(false);
     // The failed turn gave the research back.
     await owner('PATCH', `/api/v1/people/${memberId}`, {
@@ -253,8 +258,9 @@ describe('What only the owner changes on a lent person (KBC-024 F-4)', () => {
 
 describe('The pause after a logged-out CLI (KBC-024 review R2-1)', () => {
   const lentAvailable = async (owner: ReturnType<typeof caller>) =>
-    (await owner('GET', '/api/v1/house-ai/default')).json()
-      .subscriptionAvailable;
+    (await owner('GET', '/api/v1/house-ai/default')).json().lendable[
+      'claude-subscription'
+    ];
 
   async function loggedOut() {
     const started = await start({ claude: true });

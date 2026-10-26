@@ -183,4 +183,18 @@ describe('SettingsStore.returnFromOpenRouter (KBC-022 AC-1)', () => {
       screen.queryByRole('button', { name: 'Configurar a minha IA' }),
     ).toBeNull();
   });
+
+  it('KBC-027: names the administrator’s ChatGPT subscription when that one is lent', async () => {
+    await renderCard(
+      anAiStatus({
+        source: 'app',
+        appAi: 'chatgpt-subscription',
+        provider: 'app',
+        free: true,
+      }),
+    );
+    expect(document.body.textContent).toContain(
+      'Você está usando temporariamente a IA da aplicação (assinatura do ChatGPT do administrador).',
+    );
+  });
 });

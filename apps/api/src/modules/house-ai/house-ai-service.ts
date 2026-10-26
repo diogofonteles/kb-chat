@@ -19,8 +19,8 @@ import {
   type HouseConfig,
 } from './house-config.js';
 
-/** The house as this service knows it; the routes add whether the subscription can be lent. */
-export type HouseServiceView = Omit<HouseAiView, 'subscriptionAvailable'>;
+/** The house as this service knows it; the routes add what the subscriptions' CLIs say. */
+export type HouseServiceView = Omit<HouseAiView, 'lendable' | 'codex'>;
 
 /** The free-request counter is read at most this often (one call per research otherwise). */
 export const FREE_USAGE_TTL_MS = 60_000;
@@ -146,7 +146,7 @@ export class HouseAiService {
 
   /** A master's change; a typed key connects the house account ("Colar uma chave"). */
   async update(patch: HouseAiUpdate, by: string): Promise<HouseServiceView> {
-    const { key, managementKey, ...rest } = patch;
+    const { key, managementKey, codexEnabled, ...rest } = patch;
     await this.assertPaidModel(rest.paidModel);
     // Keys made on the old account (or with the old management key) would bill it: drop them.
     if (key !== undefined || managementKey !== undefined)
@@ -158,8 +158,20 @@ export class HouseAiService {
       ...(managementKey !== undefined && {
         managementKey: this.sealedManagementKey(managementKey),
       }),
+      ...(codexEnabled !== undefined && {
+        codex: {
+          enabled: codexEnabled,
+          by,
+          at: (this.deps.now?.() ?? new Date()).toISOString(),
+        },
+      }),
     }));
     return this.view();
+  }
+
+  /** A master turned Codex, the ChatGPT subscription, on (KBC-027 BR-1). */
+  codexEnabled(): boolean {
+    return this.config.codex.enabled;
   }
 
   /** The key from "Conectar OpenRouter" (OAuth PKCE). */

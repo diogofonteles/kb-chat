@@ -124,6 +124,18 @@ const house = await createHouseAi({
   fetch: openRouter.fetch,
   authorizeUrl: `http://127.0.0.1:${config.PORT}${E2E_AUTHORIZE_PATH}`,
 });
+/** A lent subscription that answers with the stub model, available while `available` says. */
+const stubSubscription = (available: () => boolean) => ({
+  available,
+  llm: () => new DisabledLlm(),
+  runner: () =>
+    agent.perTokenRunner(new StubLlmAdapter(), {
+      principal: 'lent-subscription',
+      dailyCapUsd: () => Number.POSITIVE_INFINITY,
+      ledger: new MemorySpendLedger(),
+    }),
+  failed: () => undefined,
+});
 const ai = await createAiProviders({
   config,
   principal: OWNER,
@@ -138,18 +150,14 @@ const ai = await createAiProviders({
   house,
   personOf: (principal) => auth.people.cachedByPrincipal(principal),
   ledger,
-  // No Claude Code here: the owner's lent subscription (KBC-024) answers with the stub, in
-  // its own ledger, so the people and Settings screens can be tested end to end.
-  claudeSubscription: {
-    available: () => true,
-    llm: () => new DisabledLlm(),
-    runner: () =>
-      agent.perTokenRunner(new StubLlmAdapter(), {
-        principal: 'lent-subscription',
-        dailyCapUsd: () => Number.POSITIVE_INFINITY,
-        ledger: new MemorySpendLedger(),
-      }),
-    failed: () => undefined,
+  // No CLI here: the owner's lent subscriptions (KBC-024, KBC-027) answer with the stub, in
+  // their own ledger, so the people and Settings screens can be tested end to end. The
+  // ChatGPT one follows the master's switch, as in production.
+  subscriptions: {
+    'claude-subscription': stubSubscription(() => true),
+    'chatgpt-subscription': stubSubscription(() =>
+      house.service.codexEnabled(),
+    ),
   },
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).

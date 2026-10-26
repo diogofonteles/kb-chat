@@ -13,6 +13,7 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { TOPICS } from '../../testing/fixtures.js';
 import { anOwner } from '../../testing/session-fixtures.js';
 import { PeoplePanel } from './people-panel.js';
+import { LEND_ALL, LEND_NONE } from '../../testing/lending-fixtures.js';
 
 const ana: AccessRequest = {
   id: '33333333-3333-4333-8333-333333333333',
@@ -67,7 +68,7 @@ async function renderAsMaster(requests: AccessRequest[]) {
   http.expectOne('/api/v1/topics').flush(TOPICS);
   http
     .expectOne('/api/v1/house-ai/default')
-    .flush({ defaultAppAi: 'house', subscriptionAvailable: false });
+    .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
   http.expectOne('/api/v1/spend/people').flush({ items: [] });
   http.expectOne('/api/v1/access-requests').flush({ items: requests });
   await result.fixture.whenStable();

@@ -187,6 +187,11 @@ export class HouseAiPanel {
     this.save({ paidModel: model || null });
   }
 
+  /** Codex, the ChatGPT subscription, on or off for everyone (KBC-027 AC-4). */
+  protected setCodex(enabled: boolean): void {
+    this.save({ codexEnabled: enabled });
+  }
+
   protected setDefaultAppAi(appAi: DefaultableAppAi): void {
     this.save({ defaultAppAi: appAi });
   }

@@ -21,17 +21,15 @@
   @if (unavailableNote(); as note) {
     <p id="lend-unavailable-person" class="hint">{{ note }}</p>
   }
-  @if (confirmingLend()) {
+  @if (lendCopy(); as copy) {
     <div
       class="lend-confirm"
       role="group"
       aria-labelledby="lend-title-person"
       aria-describedby="lend-terms-person"
     >
-      <p id="lend-title-person" class="lend-title" i18n="@@lend.titlePerson">
-        Ceder a assinatura do Claude a esta pessoa?
-      </p>
-      <p id="lend-terms-person">{{ terms() }}</p>
+      <p id="lend-title-person" class="lend-title">{{ copy.toPerson() }}</p>
+      <p id="lend-terms-person">{{ copy.terms() }}</p>
       <div class="actions">
         <button
           type="button"

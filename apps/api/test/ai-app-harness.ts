@@ -44,6 +44,10 @@ import { createResearchAgent } from '../src/research-agent-factory.js';
 import { createSearchIndex } from '../src/search-index-factory.js';
 import { FakeOpenRouter } from '../src/testing/fake-openrouter.js';
 import { FakeGemini, fakeProvidersFetch } from '../src/testing/fake-gemini.js';
+import {
+  startCodexRunner,
+  type CodexRunner,
+} from '../src/codex-runner/runner-server.js';
 import type { SpendLedgerPort } from '../src/ports/spend-ledger.js';
 
 export const OWNER_EMAIL = 'owner@example.com';
@@ -69,24 +73,32 @@ let current: FastifyInstance | null = null;
 export async function closeApp(): Promise<void> {
   await current?.close();
   current = null;
+  await runner?.close();
+  runner = null;
 }
 
 /** Options of `start()`: `claude` runs the fake Claude CLI, reached over a real port. */
 export interface StartOptions {
   readonly claude?: boolean;
+  /** Codex through its sandbox runner (KBC-027), with the fake Codex and this home. */
+  readonly codexHome?: string;
   /** An existing state folder (a restart over the same files). */
   readonly state?: string;
 }
 
+let runner: CodexRunner | null = null;
+
 async function testConfig(state: string, options: StartOptions) {
+  const port = String(await freePort());
   const cli = options.claude
-    ? {
-        CLAUDE_BIN: join(FAKES_DIR, 'fake-claude.mjs'),
-        PORT: String(await freePort()),
-      }
+    ? { CLAUDE_BIN: join(FAKES_DIR, 'fake-claude.mjs'), PORT: port }
+    : {};
+  const codex = options.codexHome
+    ? await codexSandbox(options.codexHome, port)
     : {};
   return loadConfig({
     ...cli,
+    ...codex,
     KB_VAULT: FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
     KB_CHAT_STATE_DIR: state,
@@ -95,6 +107,22 @@ async function testConfig(state: string, options: StartOptions) {
     WEB_ORIGIN: WEB,
     LOG_LEVEL: 'info',
   });
+}
+
+/** A Codex sandbox runner on loopback, running the fake Codex (ADR 0020). */
+async function codexSandbox(codexHome: string, port: string) {
+  runner = await startCodexRunner({
+    bin: join(FAKES_DIR, 'fake-codex.mjs'),
+    codexHome,
+    host: '127.0.0.1',
+    port: 0,
+    env: { PATH: process.env['PATH'] ?? '' },
+  });
+  return {
+    PORT: port,
+    KB_CHAT_CODEX_RUNNER_URL: runner.url,
+    KB_CHAT_CODEX_MCP_BASE_URL: `http://127.0.0.1:${port}`,
+  };
 }
 
 /** A logger whose lines are kept, so a test can look for secrets in them. */
@@ -197,7 +225,7 @@ export async function start(options: StartOptions = {}): Promise<Started> {
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
   current = await buildApp({ config, ...core, ai, auth, house, logger });
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
-  if (options.claude)
+  if (options.claude || options.codexHome)
     await current.listen({ host: '127.0.0.1', port: config.PORT });
   return { app: current, keys, state, fake, gemini, ledger: core.ledger, logs };
 }

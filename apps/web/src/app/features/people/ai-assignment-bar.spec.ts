@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { AiAssignmentBar } from './ai-assignment-bar.js';
+import { LEND_ALL, LEND_NONE } from '../../testing/lending-fixtures.js';
 
 describe('AiAssignmentBar (KBC-022 AC-12)', () => {
   it('applies to the selection, or to everyone and the future default', async () => {
@@ -71,7 +72,7 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
         selectedCount: 1,
         total: 3,
         defaultAppAi: 'house',
-        lending: { canLend: true, available: true },
+        lending: { canLend: true, lendable: LEND_ALL },
       },
       on: { apply },
     });
@@ -121,7 +122,7 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
         selectedCount: 2,
         total: 3,
         defaultAppAi: 'house',
-        lending: { canLend: true, available: true },
+        lending: { canLend: true, lendable: LEND_ALL },
       },
       on: { apply },
     });
@@ -156,7 +157,7 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
         selectedCount: 1,
         total: 3,
         defaultAppAi: 'house',
-        lending: { canLend: true, available: true },
+        lending: { canLend: true, lendable: LEND_ALL },
       },
       on: { apply },
     });

@@ -49,6 +49,15 @@ export const houseConfigSchema = z.object({
     .default(null),
   /** By person id: the keys provisioned with the management key. */
   personKeys: z.record(z.string(), personKeySchema).default({}),
+  /** Codex, the ChatGPT subscription (KBC-027): off until a master turns it on. */
+  codex: z
+    .object({
+      enabled: z.boolean(),
+      by: z.string().nullable(),
+      at: z.iso.datetime().nullable(),
+    })
+    .catch({ enabled: false, by: null, at: null })
+    .default({ enabled: false, by: null, at: null }),
 });
 export type HouseConfig = z.infer<typeof houseConfigSchema>;
 
