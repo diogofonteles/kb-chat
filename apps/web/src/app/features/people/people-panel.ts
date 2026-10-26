@@ -60,6 +60,8 @@ export class PeoplePanel {
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
+  private readonly resendButtons =
+    viewChildren<ElementRef<HTMLButtonElement>>('resendButton');
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
   /** Each person's AI spend today, shown to the owner only (BR-6). */
@@ -137,6 +139,7 @@ export class PeoplePanel {
     this.run(this.api.resendInvitation(person.id), {
       done: (updated) => {
         this.replace(updated);
+        this.refocusResend();
         if (updated.invitation?.failedAt)
           return {
             kind: 'error',
@@ -147,6 +150,7 @@ export class PeoplePanel {
           : $localize`:@@people.resent:Convite reenviado para ${updated.email}:email:.`;
       },
       failed: (text, err) => {
+        this.refocusResend();
         const retryAt = invitationLimitOf(err);
         this.notice.set({
           kind: 'error',
@@ -174,6 +178,13 @@ export class PeoplePanel {
           ?.nativeElement.focus(),
       { injector: this.injector },
     );
+  }
+
+  /** The button was disabled while sending: keyboard focus goes back to it (WCAG 2.4.3). */
+  private refocusResend(): void {
+    afterNextRender(() => this.resendButtons()[0]?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   protected change(person: Person, patch: PersonUpdate): void {

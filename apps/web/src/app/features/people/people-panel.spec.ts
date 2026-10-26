@@ -114,6 +114,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     });
     fireEvent.click(box);
     await fixture.whenStable();
+    expect(screen.getByText(/Nenhum e-mail será enviado\./)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Convidar' }));
     const request = http.expectOne('/api/v1/people');
@@ -193,6 +194,9 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
 
     expect(screen.getByRole('status').textContent).toContain(
       'Convite reenviado para guest@example.com.',
+    );
+    expect(document.activeElement?.textContent?.trim()).toBe(
+      'Reenviar convite',
     );
     expect(row(/Guest/).textContent).toContain('Convite enviado em 26/10/2026');
   });

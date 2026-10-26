@@ -42,9 +42,18 @@
     <span aria-hidden="true">⚠</span>&ngsp;{{ inviteError() }}
   </p>
 }
-<p id="invite-hint" class="hint" i18n="@@people.inviteHint">
-  Quem é convidado recebe um e-mail com o link e começa com "Buscar documentos"
-  e nenhum acervo.
+<p id="invite-hint" class="hint">
+  @if (skipEmail()) {
+    <ng-container i18n="@@people.inviteHintNoEmail"
+      >Nenhum e-mail será enviado. Quem é convidado começa com "Buscar
+      documentos" e nenhum acervo.</ng-container
+    >
+  } @else {
+    <ng-container i18n="@@people.inviteHint"
+      >Quem é convidado recebe um e-mail com o link e começa com "Buscar
+      documentos" e nenhum acervo.</ng-container
+    >
+  }
 </p>
 
 <app-access-requests-list (approved)="welcome($event)" />
@@ -149,6 +158,7 @@
           ) {
             <div class="invitation">
               <button
+                #resendButton
                 type="button"
                 class="secondary"
                 [disabled]="busy()"
