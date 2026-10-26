@@ -171,6 +171,25 @@ describe('AI in production (KBC-022 AC-10)', () => {
     ).toThrow(/stub/);
   });
 
+  it('refuses Codex in production outside its sandbox runner (KBC-027 AC-6)', () => {
+    expect(() =>
+      assertAiConfigured(loadConfig({ ...production, KB_CHAT_CODEX: 'on' })),
+    ).toThrow(/KB_CHAT_CODEX_RUNNER_URL/);
+    const sandboxed = loadConfig({
+      ...production,
+      KB_CHAT_CODEX: 'on',
+      KB_CHAT_CODEX_RUNNER_URL: 'http://172.30.0.10:8790',
+      KB_CHAT_CODEX_MCP_BASE_URL: 'http://172.30.0.2:3000',
+      KB_CHAT_MCP_PEERS: '172.30.0.10',
+    });
+    expect(() => assertAiConfigured(sandboxed)).not.toThrow();
+    expect(sandboxed.KB_CHAT_MCP_PEERS).toEqual(['172.30.0.10']);
+    // A runner needs the address it reaches the API's MCP endpoint at.
+    expect(() =>
+      loadConfig({ KB_CHAT_CODEX_RUNNER_URL: 'http://172.30.0.10:8790' }),
+    ).toThrow(/KB_CHAT_CODEX_MCP_BASE_URL/);
+  });
+
   it('allows both in development', () => {
     expect(() =>
       assertAiConfigured(

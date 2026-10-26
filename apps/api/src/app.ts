@@ -228,7 +228,7 @@ async function registerRoutes(
   await app.register(usageRoutes({ catalog, log: deps.usage }));
   const conversations = new ConversationsService({ store: deps.conversations });
   await app.register(conversationRoutes(conversations));
-  await registerSettings(app, deps.ai);
+  await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);
 }
 
@@ -372,11 +372,12 @@ async function registerAccess(
 async function registerSettings(
   app: FastifyInstance,
   ai: AiProviders,
+  mcpPeers: readonly string[],
 ): Promise<void> {
   await app.register(
     settingsRoutes({ settings: ai.settings, providers: ai.registry }),
   );
-  await app.register(mcpRoutes(ai.turns));
+  await app.register(mcpRoutes(ai.turns, { peers: mcpPeers }));
 }
 
 /** Settings in memory and providers from the environment only (tests). */

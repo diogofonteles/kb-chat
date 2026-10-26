@@ -3,6 +3,7 @@
 # Runs on the VM as root from kb-chat-backup.timer. What it saves:
 #   state/   conversations, settings (with API keys), spend, usage, people, sessions
 #   claude/  the owner's Claude Code login
+#   codex/   the owner's Codex login (KBC-027, ADR 0020)
 #   deploy/  .env (secrets), release.env, releases.log
 # Not saved: the vault and the QMD index (their source of truth is the owner's Mac).
 # The archive is encrypted with age to a public key; the private key never is on the VM.
@@ -42,7 +43,7 @@ trap 'rm -rf "$work"' EXIT
 
 # Paths relative to ROOT, so a restore lands in the same place; missing ones are skipped.
 paths=()
-for path in state claude deploy/.env deploy/release.env deploy/releases.log; do
+for path in state claude codex deploy/.env deploy/release.env deploy/releases.log; do
   if [ -e "$ROOT/$path" ]; then paths+=("$path"); fi
 done
 [ "${#paths[@]}" -gt 0 ] || die "nothing to back up under $ROOT"

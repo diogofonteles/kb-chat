@@ -81,6 +81,15 @@ export const configSchema = z
       .enum(['on', 'off'])
       .default('off')
       .transform((value) => value === 'on'),
+    /**
+     * The Codex sandbox runner (KBC-027, ADR 0020): Codex turns go there, never to a process
+     * of this container. Required for Codex in production.
+     */
+    KB_CHAT_CODEX_RUNNER_URL: z.url().optional(),
+    /** Where Codex, in its container, reaches this API's MCP endpoint. */
+    KB_CHAT_CODEX_MCP_BASE_URL: z.url().optional(),
+    /** Addresses besides loopback the MCP endpoint answers (the Codex container), by token. */
+    KB_CHAT_MCP_PEERS: csv.default([]),
     KB_CHAT_DAILY_CAP_USD: z.coerce.number().min(0).default(1),
     /** Tool steps of the exhaustive research profile (KBC-017, ADR 0013): a safety net. */
     KB_CHAT_EXHAUSTIVE_STEPS: z.coerce
@@ -154,6 +163,13 @@ export const configSchema = z
           message: `${name} is set without ${other}: set both or neither`,
         });
     }
+    if (config.KB_CHAT_CODEX_RUNNER_URL && !config.KB_CHAT_CODEX_MCP_BASE_URL)
+      context.addIssue({
+        code: 'custom',
+        path: ['KB_CHAT_CODEX_MCP_BASE_URL'],
+        message:
+          'KB_CHAT_CODEX_RUNNER_URL is set without KB_CHAT_CODEX_MCP_BASE_URL: Codex needs the address of the MCP endpoint',
+      });
   });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -198,6 +214,10 @@ export function assertAiConfigured(config: AppConfig): void {
     );
   if (config.KB_CHAT_LLM === 'stub')
     throw new Error('KB_CHAT_LLM=stub is for tests: not in production');
+  if (config.KB_CHAT_CODEX && !config.KB_CHAT_CODEX_RUNNER_URL)
+    throw new Error(
+      'KB_CHAT_CODEX=on runs Codex inside this container: production needs its sandbox, KB_CHAT_CODEX_RUNNER_URL (ADR 0020)',
+    );
 }
 
 /** True when one email provider has everything it needs (ADR 0011, ADR 0012). */

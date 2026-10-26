@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Fake `codex exec --json`: calls the kb MCP endpoint given by `-c mcp_servers.kb.url=...`
 // with the bearer token from the variable named by `mcp_servers.kb.bearer_token_env_var`,
-// then prints the JSONL events of one turn. $HOME/fake-cli.json { mode, report } — mode: answer (default) | fail.
-// report: a file that receives { args, env } (names) and CODEX_HOME.
+// then prints the JSONL events of one turn. $HOME/fake-cli.json { mode, report } — mode: answer (default) | fail
+// | sleep (starts, then waits to be stopped). report: a file that receives { args, env } (names), CODEX_HOME
+// and the process id. `codex login status` answers "Logged in" (exit 0), or exits 1 with mode fail.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -20,6 +21,12 @@ const fake = (() => {
 })();
 const args = process.argv.slice(2);
 const emit = (line) => process.stdout.write(`${JSON.stringify(line)}\n`);
+if (args[0] === 'login' && args[1] === 'status') {
+  process.stdout.write(
+    fake.mode === 'fail' ? 'Not logged in\n' : 'Logged in using ChatGPT\n',
+  );
+  process.exit(fake.mode === 'fail' ? 1 : 0);
+}
 for await (const chunk of process.stdin) void chunk;
 
 emit({ type: 'thread.started', thread_id: 't1' });
@@ -40,8 +47,18 @@ if (fake.report)
       args,
       envNames: Object.keys(process.env),
       codexHome: process.env.CODEX_HOME,
+      pid: process.pid,
+      cwd: process.cwd(),
     }),
   );
+if (fake.mode === 'sleep') {
+  emit({
+    type: 'item.completed',
+    item: { id: 'i0', type: 'agent_message', text: 'Pensando.' },
+  });
+  setInterval(() => undefined, 1000);
+  await new Promise(() => undefined);
+}
 const token = process.env[setting('bearer_token_env_var')];
 const client = new Client({ name: 'fake-codex', version: '0.0.0' });
 await client.connect(

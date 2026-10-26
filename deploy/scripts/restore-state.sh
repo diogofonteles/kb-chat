@@ -20,7 +20,7 @@ trap 'rm -rf "$work"' EXIT
 cat >"$work/state.tar.zst"
 tar --zstd -tf "$work/state.tar.zst" >"$work/list"
 # Only the paths a backup contains; anything else means a wrong or tampered archive.
-if grep -vqE '^(state|claude)(/|$)|^deploy/(\.env|release\.env|releases\.log)$' "$work/list"; then
+if grep -vqE '^(state|claude|codex)(/|$)|^deploy/(\.env|release\.env|releases\.log)$' "$work/list"; then
   echo "restore: unexpected paths in the archive" >&2
   exit 1
 fi
@@ -47,8 +47,8 @@ fi
 # Extract next to the live state first; the swap only starts once that worked.
 mkdir "$work/root"
 tar -C "$work/root" --zstd --no-same-owner -xf "$work/state.tar.zst"
-compose stop api || true
-for dir in state claude; do
+compose stop api codex || true
+for dir in state claude codex; do
   if [ -e "$work/root/$dir" ]; then
     if [ -e "$ROOT/$dir" ]; then mv "$ROOT/$dir" "$ROOT/$dir.before-restore-$stamp"; fi
     mv "$work/root/$dir" "$ROOT/$dir"
@@ -61,6 +61,8 @@ for file in .env release.env releases.log; do
   fi
 done
 chown -R "$APP_UID:$APP_UID" "$ROOT/state" "$ROOT/claude" 2>/dev/null || true
+# The Codex sandbox's own user (ADR 0020).
+chown -R 10002:10002 "$ROOT/codex" 2>/dev/null || true
 if [ -f "$DEPLOY_DIR/.env" ]; then chown root:root "$DEPLOY_DIR/.env" && chmod 0600 "$DEPLOY_DIR/.env"; fi
 compose up -d --wait --wait-timeout 180
 "$DEPLOY_DIR/scripts/smoke.sh"

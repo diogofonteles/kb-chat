@@ -21,7 +21,12 @@ import type {
   ResearchToolsPort,
 } from '../ports/research-tools.js';
 import { EventQueue } from './event-queue.js';
-import { spawnCli, subscriptionEnv, type CliProcess } from './cli-process.js';
+import {
+  spawnCli,
+  subscriptionEnv,
+  type CliCall,
+  type CliProcess,
+} from './cli-process.js';
 
 /** What one stdout line of a CLI means. */
 export interface CliLine {
@@ -78,6 +83,8 @@ export interface CliTurnOptions {
   readonly escalation?: Escalation<string | undefined>;
   /** Step budgets per profile (ADR 0013); default DEFAULT_BUDGETS. */
   readonly budgets?: ResearchBudgets;
+  /** Starts the CLI; default a local process. Codex goes to its sandbox runner (ADR 0020). */
+  readonly spawn?: (call: CliCall) => CliProcess;
 }
 
 /** One research turn as the runner hands it over: the tools and the CLI's model. */
@@ -226,7 +233,7 @@ async function startCli(
   call: { readonly input: CliPassInput; readonly access: TurnAccess },
 ): Promise<CliProcess> {
   const launch = await dialect.launch(call.access, call.input);
-  return spawnCli({
+  return (options.spawn ?? spawnCli)({
     bin: options.bin,
     args: launch.args,
     cwd: options.workDir,

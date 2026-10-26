@@ -10,6 +10,7 @@ import type {
 } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { cliFailureCode } from './claude-cli-runner.js';
+import { CODEX_TOKEN_ENV, remoteCli } from './remote-cli.js';
 import {
   runCliTurn,
   type CliDialect,
@@ -62,27 +63,46 @@ export function parseCodexLine(text: string): CliLine {
   return message ? { text: `${message}\n\n` } : {};
 }
 
+/** Where Codex runs when it is sandboxed (ADR 0020). */
+export interface CodexSandbox {
+  /** The runner in the Codex container. */
+  readonly url: string;
+  /** Where Codex, in its container, reaches this API's MCP endpoint. */
+  readonly mcpBaseUrl: string;
+}
+
 export interface CodexCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   readonly model?: string;
   readonly tools?: ResearchToolsFactory;
   /** The research rules for a topic and profile; default: defaultSubscriptionPrompt. */
   readonly systemPrompt?: SubscriptionPrompt;
+  /** Run every turn in the sandbox container (production); absent: a local process. */
+  readonly runner?: CodexSandbox;
+  readonly fetch?: typeof fetch;
 }
 
-/** The variable that carries the turn token to Codex (sent as `Authorization: Bearer`). */
-export const CODEX_TOKEN_ENV = 'KB_CHAT_MCP_TOKEN';
+export { CODEX_TOKEN_ENV };
 
 /**
- * Best-effort lock-down (ADR 0007): the long-standing built-in tools off, no web search,
- * no AGENTS.md, no history. Codex has no switch that turns off every built-in tool, and
- * its tool set changes between versions, so the provider stays off unless the owner
- * enables it (KB_CHAT_CODEX=on).
+ * Best-effort lock-down (ADR 0007, ADR 0020): the built-in tools Codex 0.164 lets us turn off,
+ * no web search, no AGENTS.md, no history. Codex has no switch that turns off every built-in
+ * tool and its set changes between versions, so the real boundary is the sandbox container.
  */
 const CODEX_LOCKDOWN = [
   'features.shell_tool=false',
   'features.unified_exec=false',
   'features.view_image=false',
   'features.apply_patch_freeform=false',
+  'features.browser_use=false',
+  'features.browser_use_external=false',
+  'features.in_app_browser=false',
+  'features.computer_use=false',
+  'features.apps=false',
+  'features.plugins=false',
+  'features.remote_plugin=false',
+  'features.image_generation=false',
+  'features.multi_agent=false',
+  'features.memories=false',
   'web_search="disabled"',
   'project_doc_max_bytes=0',
   'history.persistence="none"',
@@ -97,6 +117,7 @@ export function codexArgs(mcpUrl: string, model: string | undefined): string[] {
     '--skip-git-repo-check',
     ...['--sandbox', 'read-only'],
     '--ephemeral',
+    '--ignore-user-config',
     ...CODEX_LOCKDOWN.flatMap((setting) => ['-c', setting]),
     ...['-c', `${server}.url=${JSON.stringify(mcpUrl)}`],
     ...['-c', `${server}.bearer_token_env_var="${CODEX_TOKEN_ENV}"`],
@@ -167,11 +188,25 @@ export class CodexCliRunner implements ResearchRunnerPort {
     access: TurnAccess,
     model: string | undefined,
   ): Promise<CliLaunch> {
+    const args = codexArgs(access.bearerUrl, model);
+    // In the sandbox the runner sets CODEX_HOME: only the token travels (ADR 0020).
+    if (this.options.runner)
+      return { args, env: { [CODEX_TOKEN_ENV]: access.token } };
     const home = await privateCodexHome(this.options.workDir, this.options.env);
-    return {
-      args: codexArgs(access.bearerUrl, model),
-      env: { CODEX_HOME: home, [CODEX_TOKEN_ENV]: access.token },
-    };
+    return { args, env: { CODEX_HOME: home, [CODEX_TOKEN_ENV]: access.token } };
+  }
+
+  /** The turn options: the sandbox's MCP address and spawn when Codex runs there. */
+  private turnOptions(): CliTurnOptions {
+    const { runner } = this.options;
+    const base = { ...this.options, model: this.model };
+    return runner
+      ? {
+          ...base,
+          apiBaseUrl: runner.mcpBaseUrl,
+          spawn: remoteCli(runner.url, this.options.fetch),
+        }
+      : base;
   }
 
   async *run(input: ResearchInput): AsyncIterable<ResearchEvent> {
@@ -181,7 +216,7 @@ export class CodexCliRunner implements ResearchRunnerPort {
       return;
     }
     if (input.signal.aborted) return;
-    yield* runCliTurn({ ...this.options, model: this.model }, this.dialect, {
+    yield* runCliTurn(this.turnOptions(), this.dialect, {
       ...input,
       tools,
       model: this.options.model,

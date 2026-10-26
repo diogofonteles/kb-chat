@@ -36,6 +36,14 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 export const isLoopbackRequest = (request: FastifyRequest): boolean =>
   LOOPBACK.has(request.socket.remoteAddress ?? '');
 
+export interface McpRouteOptions {
+  /** Addresses besides loopback allowed to call (the Codex sandbox, ADR 0020); still by token. */
+  readonly peers?: readonly string[];
+}
+
+/** IPv4 peers may arrive mapped (::ffff:a.b.c.d) on a dual-stack socket. */
+const unmapped = (address: string): string => address.replace(/^::ffff:/, '');
+
 function tokenOf(request: FastifyRequest): string | undefined {
   const parsed = params.safeParse(request.params);
   return parsed.success ? parsed.data.token : bearerToken(request);
@@ -47,10 +55,14 @@ function tokenOf(request: FastifyRequest): string | undefined {
  * The token comes in the path or as a bearer header.
  */
 export const mcpRoutes =
-  (turns: McpTurnRegistry): FastifyPluginAsync =>
+  (turns: McpTurnRegistry, options: McpRouteOptions = {}): FastifyPluginAsync =>
   async (app) => {
+    const peers = new Set(options.peers ?? []);
+    const allowed = (request: FastifyRequest) =>
+      isLoopbackRequest(request) ||
+      peers.has(unmapped(request.socket.remoteAddress ?? ''));
     const handler = async (request: FastifyRequest, reply: FastifyReply) => {
-      const token = isLoopbackRequest(request) ? tokenOf(request) : undefined;
+      const token = allowed(request) ? tokenOf(request) : undefined;
       const turn = token === undefined ? undefined : turns.get(token);
       if (!turn) throw new AppError('NOT_FOUND', 'Unknown research turn');
       const server = createKbMcpServer(turn.tools, turn.hooks);

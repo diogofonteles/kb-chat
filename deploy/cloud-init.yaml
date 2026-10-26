@@ -146,9 +146,10 @@ write_files:
 
       log "layout under /srv/kb-chat (app folders owned by uid 10001)"
       mkdir -p /srv/kb-chat/deploy/scripts /srv/kb-chat/vault /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config \
-        /srv/kb-chat/qmd/incoming /srv/kb-chat/state /srv/kb-chat/claude
+        /srv/kb-chat/qmd/incoming /srv/kb-chat/state /srv/kb-chat/claude /srv/kb-chat/codex
       chown -R 10001:10001 /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config /srv/kb-chat/state /srv/kb-chat/claude
-      chmod 0700 /srv/kb-chat/state /srv/kb-chat/claude
+      chown -R 10002:10002 /srv/kb-chat/codex
+      chmod 0700 /srv/kb-chat/state /srv/kb-chat/claude /srv/kb-chat/codex
       chown -R ubuntu:ubuntu /srv/kb-chat/vault /srv/kb-chat/qmd/incoming
       chown root:root /srv/kb-chat/deploy && chmod 0755 /srv/kb-chat/deploy
 
