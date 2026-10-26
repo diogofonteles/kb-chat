@@ -107,4 +107,73 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
     expect(items[0]).toContain('(sempre)');
     expect(items[1]).toContain('Plano da casa');
   });
+
+  it('KBC-024: lends the owner’s subscription only after the terms are confirmed', async () => {
+    const changed = vi.fn();
+    const { fixture } = await render(PersonAiEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        ai: DEFAULT_PERSON_AI,
+        defaultAppAi: 'house',
+        lending: { canLend: true, available: true },
+      },
+      on: { changed },
+    });
+    const select = screen.getByLabelText('Qual IA atende esta pessoa');
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    const confirm = screen.getByRole('alert');
+    expect(confirm.textContent).toContain(
+      'Os termos da Anthropic não permitem',
+    );
+    const lend = screen.getByRole('button', { name: 'Ceder assim mesmo' });
+    expect(document.activeElement).toBe(lend);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    expect((select as HTMLSelectElement).value).toBe('default');
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Ceder assim mesmo' }));
+    expect(changed).toHaveBeenLastCalledWith({
+      appAi: 'claude-subscription',
+      subscriptionTermsAccepted: true,
+    });
+  });
+
+  it('KBC-024: offers the subscription only to the owner, and says when it is not ready', async () => {
+    const { fixture } = await renderEditor();
+    expect(
+      screen.queryByRole('option', { name: /Assinatura do Claude/ }),
+    ).toBeNull();
+    fixture.componentRef.setInput('lending', {
+      canLend: true,
+      available: false,
+    });
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('option', { name: /Assinatura do Claude/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/não está disponível agora no servidor/),
+    ).toBeTruthy();
+  });
+
+  it('KBC-024: says in the history that the terms were confirmed', async () => {
+    await renderEditor({
+      ...DEFAULT_PERSON_AI,
+      appAi: 'claude-subscription',
+      history: [
+        {
+          appAi: 'claude-subscription',
+          enforced: false,
+          by: 'owner@x.com',
+          at: '2026-10-26T12:00:00.000Z',
+          termsAccepted: true,
+        },
+      ],
+    });
+    expect(screen.getByText(/termos confirmados/)).toBeTruthy();
+  });
 });

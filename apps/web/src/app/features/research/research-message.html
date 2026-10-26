@@ -143,7 +143,11 @@
         @if (modelLabel()) {
           <span i18n="@@ai.answeredBy">Respondido por {{ modelLabel() }}</span>
         }
-        @if (subscription()) {
+        @if (lentSubscription()) {
+          <span i18n="@@ai.lentSubscription"
+            >Incluído na assinatura do administrador</span
+          >
+        } @else if (subscription()) {
           <span i18n="@@ai.subscription">Incluído na sua assinatura</span>
         } @else if (free()) {
           <span i18n="@@ai.free">Gratuito</span>

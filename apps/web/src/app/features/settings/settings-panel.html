@@ -61,8 +61,8 @@
             }
           </p>
         }
-        <app-ai-status-card />
-        <p class="lead" i18n="@@settings.aiLead">
+        <app-ai-status-card (configureOwn)="focusOptions()" />
+        <p #aiLead class="lead" tabindex="-1" i18n="@@settings.aiLead">
           Escolha quem responde na Pesquisa com IA. Vale para a próxima
           resposta, sem reiniciar nada.
         </p>

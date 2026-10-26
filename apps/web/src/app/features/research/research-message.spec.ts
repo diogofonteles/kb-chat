@@ -385,6 +385,27 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     expect(footer).not.toContain('Custo');
   });
 
+  it('KBC-024: says the administrator’s subscription answered, and the researches left', async () => {
+    await renderMessage(
+      aTurn({
+        billing: 'subscription',
+        usd: 0,
+        model: 'sonnet',
+        plan: 'app-subscription',
+        remaining: 2,
+      }),
+    );
+    const footer = (
+      document.querySelector('.footer')?.textContent ?? ''
+    ).replace(/\s+/g, ' ');
+    expect(footer).toContain(
+      'IA da aplicação (assinatura do Claude do administrador)',
+    );
+    expect(footer).toContain('Incluído na assinatura do administrador');
+    expect(footer).not.toContain('Incluído na sua assinatura');
+    expect(footer).toContain('Pesquisas restantes hoje: 2');
+  });
+
   it('shows the cost of a paid fallback answer without the quota line for one’s own AI', async () => {
     await renderMessage(
       aTurn({

@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen } from '@testing-library/angular';
 import type { AiStatus } from '@kb-chat/contracts';
 import { aSettingsView, anAiStatus } from '../../testing/settings-fixtures.js';
 import { AiStatusCard } from './ai-status-card.js';
@@ -138,5 +138,25 @@ describe('SettingsStore.returnFromOpenRouter (KBC-022 AC-1)', () => {
     expect(store.panel()).toBe('settings');
     store.returnFromOpenRouter('?openrouter=error');
     expect(store.section()).toBe('ai');
+  });
+
+  it('KBC-024 AC-5: says in front that the administrator’s subscription is lent for now', async () => {
+    const { fixture } = await renderCard(
+      anAiStatus({
+        source: 'app',
+        appAi: 'claude-subscription',
+        provider: 'app',
+        free: true,
+      }),
+    );
+    expect(document.body.textContent).toContain(
+      'Você está usando temporariamente a IA da aplicação (assinatura do Claude do administrador).',
+    );
+    const own = vi.fn();
+    fixture.componentInstance.configureOwn.subscribe(own);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Configurar a minha IA' }),
+    );
+    expect(own).toHaveBeenCalled();
   });
 });

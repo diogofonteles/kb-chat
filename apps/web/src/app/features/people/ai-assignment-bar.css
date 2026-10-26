@@ -75,3 +75,9 @@
   color: var(--color-danger);
   font-weight: 600;
 }
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

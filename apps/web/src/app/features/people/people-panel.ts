@@ -37,6 +37,7 @@ import {
 } from './ai-assignment-bar.js';
 import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { servingLabel } from '@features/house-ai/app-ai-labels.js';
+import type { Lending } from './lending.js';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -79,11 +80,18 @@ export class PeoplePanel {
   protected readonly people = rxResource({ stream: () => this.api.list() });
   /** The house default, to name each person's "Padrão" (KBC-022). */
   private readonly house = rxResource({
-    stream: () => this.houseApi.defaultAppAi(),
+    stream: () => this.houseApi.houseDefault(),
   });
   protected readonly defaultAppAi = computed(() =>
-    this.house.hasValue() ? this.house.value() : null,
+    this.house.hasValue() ? this.house.value().defaultAppAi : null,
   );
+  /** Only the owner lends his subscription, and only while it is ready (KBC-024). */
+  protected readonly lending = computed<Lending>(() => ({
+    canLend: this.session.me()?.isOwner ?? false,
+    available: this.house.hasValue()
+      ? this.house.value().subscriptionAvailable
+      : false,
+  }));
   /** People chosen for a bulk AI assignment. */
   protected readonly selected = signal<ReadonlySet<string>>(new Set());
   protected readonly allSelected = computed(
@@ -159,6 +167,9 @@ export class PeoplePanel {
       personIds,
       appAi: request.appAi,
       setDefault: request.setDefault,
+      ...(request.subscriptionTermsAccepted && {
+        subscriptionTermsAccepted: true,
+      }),
     });
     this.run(call, {
       done: (updated) => {

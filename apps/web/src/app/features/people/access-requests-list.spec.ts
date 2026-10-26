@@ -65,7 +65,9 @@ async function renderAsMaster(requests: AccessRequest[]) {
   const http = TestBed.inject(HttpTestingController);
   http.expectOne('/api/v1/people').flush({ items: [] });
   http.expectOne('/api/v1/topics').flush(TOPICS);
-  http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
+  http
+    .expectOne('/api/v1/house-ai/default')
+    .flush({ defaultAppAi: 'house', subscriptionAvailable: false });
   http.expectOne('/api/v1/spend/people').flush({ items: [] });
   http.expectOne('/api/v1/access-requests').flush({ items: requests });
   await result.fixture.whenStable();

@@ -7,7 +7,7 @@ import {
   output,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import type { DocumentRef } from '@kb-chat/contracts';
+import type { DocumentRef, ResearchPlan } from '@kb-chat/contracts';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
@@ -29,6 +29,16 @@ import {
  * citations, the cited sources, the AI notice with the cost (or the subscription), and "Parar"
  * while it works.
  */
+
+/** Who paid, as the answer's footer says it (ADR 0016, ADR 0019). */
+const PLAN_LABELS: Record<ResearchPlan, () => string> = {
+  house: () =>
+    $localize`:@@ai.planApp:IA da aplicação (cedida pelo administrador)`,
+  'app-subscription': () =>
+    $localize`:@@ai.planLent:IA da aplicação (assinatura do Claude do administrador)`,
+  own: () => $localize`:@@ai.planOwn:Sua IA`,
+};
+
 @Component({
   selector: 'app-research-message',
   imports: [AuthorshipBadge, NgTemplateOutlet],
@@ -77,14 +87,20 @@ export class ResearchMessage {
   /** Who paid: the app's AI or the person's own (ADR 0016); null for older turns. */
   protected readonly planLabel = computed(() => {
     const plan = this.turn().plan;
-    if (plan === 'house')
-      return $localize`:@@ai.planApp:IA da aplicação (cedida pelo administrador)`;
-    return plan === 'own' ? $localize`:@@ai.planOwn:Sua IA` : '';
+    if (!plan) return '';
+    return PLAN_LABELS[plan]();
   });
-  /** House plan: researches left today. */
-  protected readonly remaining = computed(() =>
-    this.turn().plan === 'house' ? this.turn().remaining : null,
+  /** The administrator's subscription, not the reader's (KBC-024). */
+  protected readonly lentSubscription = computed(
+    () => this.turn().plan === 'app-subscription',
   );
+  /** An app AI (house plan or lent subscription): researches left today. */
+  protected readonly remaining = computed(() => {
+    const plan = this.turn().plan;
+    return plan === 'house' || plan === 'app-subscription'
+      ? this.turn().remaining
+      : null;
+  });
   /** A spent quota or no free capacity: offer the reader their own AI. */
   protected readonly offerOwnAi = computed(() => {
     const error = this.turn().error;

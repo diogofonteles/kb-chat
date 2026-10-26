@@ -20,6 +20,7 @@ import {
   type Topic,
 } from '@kb-chat/contracts';
 import { FEATURE_LABELS } from './feature-labels.js';
+import { NO_LENDING, type Lending } from './lending.js';
 import { PersonAiEditor } from './person-ai-editor.js';
 
 const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
@@ -43,6 +44,8 @@ export class PersonEditor {
   readonly busy = input(false);
   /** The house default app AI (KBC-022), named in the person's AI choice. */
   readonly defaultAppAi = input<AppAi | null>(null);
+  /** Whether the owner's subscription is offered (KBC-024). */
+  readonly lending = input<Lending>(NO_LENDING);
   readonly changed = output<PersonUpdate>();
   readonly revoked = output();
 

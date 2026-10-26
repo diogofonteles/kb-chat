@@ -15,6 +15,33 @@
       }
     </select>
   </label>
+  @if (unavailableNote(); as note) {
+    <p class="hint">{{ note }}</p>
+  }
+  @if (confirmingLend()) {
+    <div class="lend-confirm" role="alert">
+      <p>{{ terms() }}</p>
+      <div class="actions">
+        <button
+          #lendButton
+          type="button"
+          class="secondary danger"
+          (click)="lend()"
+          i18n="@@lend.confirm"
+        >
+          Ceder assim mesmo
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          (click)="cancelLend()"
+          i18n="@@lend.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  }
   <label class="check">
     <input
       #enforcedBox
@@ -91,6 +118,11 @@
           @if (change.enforced) {
             <ng-container i18n="@@personAi.historyEnforced"
               >(sempre)</ng-container
+            >
+          }
+          @if (change.termsAccepted) {
+            <ng-container i18n="@@personAi.historyTerms"
+              >(termos confirmados)</ng-container
             >
           }
         </li>

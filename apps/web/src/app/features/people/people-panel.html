@@ -81,6 +81,7 @@
     [selectedCount]="selected().size"
     [total]="list().length"
     [defaultAppAi]="defaultAppAi()"
+    [lending]="lending()"
     [busy]="busy()"
     (apply)="assign($event)"
   />
@@ -177,6 +178,7 @@
             class="editor"
             [person]="person"
             [defaultAppAi]="defaultAppAi()"
+            [lending]="lending()"
             [topics]="topics()"
             [busy]="busy()"
             (changed)="change(person, $event)"

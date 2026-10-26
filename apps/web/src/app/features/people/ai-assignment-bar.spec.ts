@@ -62,4 +62,44 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
       ).disabled,
     ).toBe(true);
   });
+
+  it('KBC-024: confirms the terms before lending the subscription, never as the default', async () => {
+    const apply = vi.fn();
+    const { fixture } = await render(AiAssignmentBar, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        selectedCount: 1,
+        total: 3,
+        defaultAppAi: 'house',
+        lending: { canLend: true, available: true },
+      },
+      on: { apply },
+    });
+    fireEvent.change(screen.getByLabelText('IA'), {
+      target: { value: 'claude-subscription' },
+    });
+    await fixture.whenStable();
+    expect(
+      (
+        screen.getByRole('checkbox', {
+          name: /próximos convidados/,
+        }) as HTMLInputElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aplicar às selecionadas (1)' }),
+    );
+    await fixture.whenStable();
+    expect(apply).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Os termos da Anthropic não permitem',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ceder assim mesmo' }));
+    expect(apply).toHaveBeenLastCalledWith({
+      target: 'selected',
+      appAi: 'claude-subscription',
+      setDefault: false,
+      subscriptionTermsAccepted: true,
+    });
+  });
 });

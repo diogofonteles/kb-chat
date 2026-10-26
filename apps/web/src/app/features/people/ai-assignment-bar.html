@@ -12,6 +12,9 @@
       }
     </select>
   </label>
+  @if (unavailableNote(); as note) {
+    <p class="note">{{ note }}</p>
+  }
   <div class="actions">
     <button
       type="button"
@@ -57,6 +60,31 @@
           class="secondary"
           (click)="cancelAll()"
           i18n="@@assign.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  }
+  @if (confirmingLend()) {
+    <div class="confirm" role="alert">
+      <p>{{ terms() }}</p>
+      <div class="actions">
+        <button
+          #lendButton
+          type="button"
+          class="secondary danger"
+          [disabled]="busy()"
+          (click)="lend()"
+          i18n="@@lend.confirm"
+        >
+          Ceder assim mesmo
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          (click)="cancelLend()"
+          i18n="@@lend.cancel"
         >
           Cancelar
         </button>

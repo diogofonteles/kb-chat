@@ -5,6 +5,7 @@ import {
   LOCALE_ID,
   computed,
   inject,
+  output,
 } from '@angular/core';
 import { formatSpend } from '@core/spend/spend-store.js';
 import { aiTestCodeSchema, type AiProvider } from '@kb-chat/contracts';
@@ -44,6 +45,22 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
               >
             }
           </p>
+          @if (current.appAi === 'claude-subscription') {
+            <div class="lent" role="note">
+              <p i18n="@@aiStatus.lent">
+                Você está usando temporariamente a IA da aplicação (assinatura
+                do Claude do administrador).
+              </p>
+              <button
+                type="button"
+                class="own"
+                (click)="configureOwn.emit()"
+                i18n="@@aiStatus.configureOwn"
+              >
+                Configurar a minha IA
+              </button>
+            </div>
+          }
           @if (current.enforced) {
             <p class="detail" i18n="@@aiStatus.enforced">
               O administrador definiu que a IA da aplicação atende você, mesmo
@@ -122,11 +139,37 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     .detail {
       font-size: var(--text-sm);
     }
+    .lent {
+      display: grid;
+      gap: var(--space-2);
+      justify-items: start;
+      margin-top: var(--space-1);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-accent);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+    }
+    .lent p {
+      margin: 0;
+      font-weight: 600;
+    }
+    .own {
+      min-height: var(--target);
+      padding: 0 var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      font: inherit;
+      cursor: pointer;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AiStatusCard {
   private readonly store = inject(SettingsStore);
+  /** "Configurar a minha IA" on a lent subscription (KBC-024): the panel shows the options. */
+  readonly configureOwn = output();
   private readonly locale = inject(LOCALE_ID);
 
   protected readonly status = computed(() =>

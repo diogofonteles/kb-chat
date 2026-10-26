@@ -78,7 +78,9 @@ describe('Configurações per permission (KBC-010)', () => {
     expect(
       screen.getByRole('heading', { name: 'Pessoas e permissões', level: 3 }),
     ).toBeTruthy();
-    http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
+    http
+      .expectOne('/api/v1/house-ai/default')
+      .flush({ defaultAppAi: 'house', subscriptionAvailable: false });
     http.expectOne('/api/v1/people').flush({ items: [] });
     http.expectOne('/api/v1/topics').flush({ items: [], defaultSlug: null });
     http.expectOne('/api/v1/spend/people').flush({ items: [] });
