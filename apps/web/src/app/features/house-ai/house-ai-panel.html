@@ -21,7 +21,7 @@
     </h4>
     @if (current.connection; as connection) {
       <p class="saved-key">
-        <span>
+        <span class="connected">
           <span i18n="@@house.connectedAs">Conectada</span>
           <code class="masked">••••{{ connection.key.last4 }}</code>
           <span class="hint"
@@ -51,12 +51,16 @@
     <div class="row">
       <button
         type="button"
-        class="primary"
+        [class.primary]="!current.connection"
+        [class.secondary]="current.connection"
         [disabled]="busy()"
         (click)="connect()"
-        i18n="@@house.connect"
       >
-        Conectar OpenRouter
+        @if (current.connection) {
+          <span i18n="@@house.reconnect">Conectar outra conta</span>
+        } @else {
+          <span i18n="@@house.connect">Conectar OpenRouter</span>
+        }
       </button>
       <button
         type="button"

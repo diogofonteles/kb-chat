@@ -141,6 +141,14 @@ input[type='email'] {
   background: var(--color-surface-muted);
 }
 
+.person > .row {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.ai {
+  font-size: var(--text-sm);
+}
+
 .who {
   display: flex;
   flex-wrap: wrap;

@@ -36,6 +36,7 @@ import {
   type AssignmentRequest,
 } from './ai-assignment-bar.js';
 import { HouseAiApi } from '@core/api/house-ai-api.js';
+import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -271,6 +272,14 @@ export class PeoplePanel {
     return names.length > 0
       ? names.join(', ')
       : $localize`:@@people.noCollection:Nenhum acervo`;
+  }
+
+  /** "IA: Plano da casa (sempre)": which app AI the master gave the person (KBC-022). */
+  protected aiLabel(person: Person): string {
+    const label = assignmentLabel(person.ai.appAi, this.defaultAppAi());
+    return person.ai.enforced
+      ? $localize`:@@people.aiEnforced:IA: ${label}:label: (sempre)`
+      : $localize`:@@people.ai:IA: ${label}:label:`;
   }
 
   /** "Gasto de IA hoje: US$ 0,50" for the owner; '' for anyone else. */

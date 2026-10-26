@@ -55,7 +55,7 @@ test('AC-1, AC-8, AC-4: a master connects OpenRouter, lends the house plan to on
   await dialog.getByRole('button', { name: new RegExp(email) }).click();
   await dialog
     .getByLabel('Qual IA atende esta pessoa')
-    .selectOption({ label: 'Plano da casa (OpenRouter da aplicação)' });
+    .selectOption({ label: 'Plano da casa (OpenRouter)' });
   await expect(
     dialog.getByRole('status').filter({ hasText: 'Salvo.' }),
   ).toBeVisible();
