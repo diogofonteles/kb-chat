@@ -66,6 +66,10 @@ awk -v prefix="$VAULT/" '
 ' "$QMD_CONFIG" >"$server_config_dir/index.yml"
 
 RSYNC=(rsync -az --human-readable --itemize-changes --partial)
+# The model cache belongs to the API user (uid 10001, cloud-init), not to the SSH user: the
+# remote rsync runs as that user (setpriv: the uid has no passwd entry), so the files get its owner
+# (macOS rsync has no --chown).
+MODELS_OWNER=(--rsync-path="sudo setpriv --reuid=10001 --regid=10001 --clear-groups rsync")
 VAULT_FILTERS=(--exclude='/_*/' --exclude='/.*' --exclude='/*.sh' --exclude='.DS_Store')
 
 # Count the deletions with a dry run first and refuse before touching the VM: rsync's own
@@ -89,7 +93,7 @@ echo "sync-vault: $VAULT ($topics topics, $deletions deletions) -> $HOST:$REMOTE
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "sync-vault: dry run; would send a snapshot of $INDEX ($(du -h "$INDEX" | cut -f1)) and this QMD config:"
   sed 's/^/  /' "$server_config_dir/index.yml"
-  [ "$WITH_MODELS" -eq 1 ] && "${RSYNC[@]}" "$MODELS/" "$HOST:$REMOTE_ROOT/qmd/cache/models/"
+  [ "$WITH_MODELS" -eq 1 ] && "${RSYNC[@]}" "${MODELS_OWNER[@]}" "$MODELS/" "$HOST:$REMOTE_ROOT/qmd/cache/models/"
   exit 0
 fi
 
@@ -98,7 +102,7 @@ sqlite3 "$INDEX" ".backup '$server_config_dir/index.sqlite'"
 "${RSYNC[@]}" "$server_config_dir/index.sqlite" "$server_config_dir/index.yml" \
   "$HOST:$REMOTE_ROOT/qmd/incoming/"
 if [ "$WITH_MODELS" -eq 1 ]; then
-  "${RSYNC[@]}" "$MODELS/" "$HOST:$REMOTE_ROOT/qmd/cache/models/"
+  "${RSYNC[@]}" "${MODELS_OWNER[@]}" "$MODELS/" "$HOST:$REMOTE_ROOT/qmd/cache/models/"
 fi
 
 # Swaps the index in and restarts the API (a few seconds of "degraded" search).
