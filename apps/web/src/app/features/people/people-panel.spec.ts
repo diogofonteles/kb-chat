@@ -131,6 +131,39 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     expect(box.checked).toBe(false);
   });
 
+  it('says the e-mail was held back when the address got an invitation moments ago', async () => {
+    const { http, fixture } = await renderPanel([owner]);
+    fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {
+      target: { value: 'again@example.com' },
+    });
+    await fixture.whenStable();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Convidar' }));
+    const request = http.expectOne('/api/v1/people');
+    expect(request.request.body).toEqual({
+      email: 'again@example.com',
+      sendEmail: true,
+    });
+    request.flush(aPerson({ email: 'again@example.com', name: '' }));
+    await fixture.whenStable();
+
+    expect(screen.getByRole('status').textContent).toContain(
+      'Convite criado sem e-mail: again@example.com já recebeu um convite há pouco.',
+    );
+  });
+
+  it('puts "Não enviar e-mail de convite" before "Convidar" in the tab order', async () => {
+    await renderPanel([owner]);
+    const box = screen.getByRole('checkbox', {
+      name: 'Não enviar e-mail de convite',
+    });
+    const button = screen.getByRole('button', { name: 'Convidar' });
+
+    expect(
+      box.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('AC-5: a failed invitation e-mail is an error, and the person stays', async () => {
     const { http, fixture } = await renderPanel([owner]);
     fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {
@@ -225,6 +258,8 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
 
     const status = screen.getByRole('status');
     expect(status.classList).toContain('error');
+    expect(status.textContent).toContain('Erro:');
+    expect(document.activeElement?.textContent?.trim()).toBe('Enviar convite');
     expect(status.textContent).toMatch(
       /Este convite foi enviado há pouco\. Você pode reenviar a partir de 26\/10 \d{2}:10\./,
     );

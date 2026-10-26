@@ -17,14 +17,6 @@
       (input)="typeEmail(emailInput.value)"
     />
   </label>
-  <button
-    type="submit"
-    class="primary"
-    [disabled]="busy() || !email().trim()"
-    i18n="@@people.invite"
-  >
-    Convidar
-  </button>
   <label class="check">
     <input
       #skipBox
@@ -35,6 +27,14 @@
     />
     <span i18n="@@people.skipEmail">Não enviar e-mail de convite</span>
   </label>
+  <button
+    type="submit"
+    class="primary"
+    [disabled]="busy() || !email().trim()"
+    i18n="@@people.invite"
+  >
+    Convidar
+  </button>
 </form>
 @if (inviteError()) {
   <p id="invite-error" class="invite-error" role="alert">
@@ -153,9 +153,8 @@
             (changed)="change(person, $event)"
             (revoked)="revoke(person)"
           />
-          @if (
-            !person.isOwner && invitations().get(person.id)?.kind !== 'active'
-          ) {
+          @let invitationKind = invitations().get(person.id)?.kind;
+          @if (!person.isOwner && invitationKind !== 'active') {
             <div class="invitation">
               <button
                 #resendButton
@@ -164,7 +163,7 @@
                 [disabled]="busy()"
                 (click)="resend(person)"
               >
-                @if (invitations().get(person.id)?.kind === 'none') {
+                @if (invitationKind === 'none') {
                   <span i18n="@@people.sendInvitation">Enviar convite</span>
                 } @else {
                   <span i18n="@@people.resendInvitation">Reenviar convite</span>
@@ -182,6 +181,10 @@
 <!-- The outcome of the last change, next to the person it changed (MA-23). -->
 <ng-template #status>
   <p class="notice" [class.error]="notice()?.kind === 'error'" role="status">
+    @if (notice()?.kind === 'error') {
+      <span class="visually-hidden" i18n="@@people.errorPrefix">Erro:</span>
+      <span aria-hidden="true">⚠</span>&ngsp;
+    }
     {{ notice()?.text ?? '' }}
   </p>
 </ng-template>
