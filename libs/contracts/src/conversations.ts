@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { answerSourceSchema, researchBillingSchema } from './research.js';
+import {
+  answerSourceSchema,
+  researchBillingSchema,
+  researchProfileSchema,
+} from './research.js';
 import { searchFiltersSchema, searchModeSchema } from './search.js';
 
 /**
@@ -31,6 +35,8 @@ export const savedResearchTurnSchema = z.object({
   interrupted: z.boolean(),
   /** The fast turn went on with the deep profile (ADR 0009); absent in older turns. */
   escalated: z.boolean().optional(),
+  /** The research profile the turn ran with (KBC-017); absent in older turns. */
+  profile: researchProfileSchema.optional(),
   at: z.iso.datetime(),
 });
 export type SavedResearchTurn = z.infer<typeof savedResearchTurnSchema>;

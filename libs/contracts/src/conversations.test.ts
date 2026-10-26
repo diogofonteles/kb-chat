@@ -99,4 +99,22 @@ describe('conversations contract', () => {
     ).toBe(true);
     expect(savedResearchTurnSchema.parse(turn).escalated).toBeUndefined();
   });
+
+  it('keeps the research profile of a turn, optional for older turns (KBC-017 FR-11)', () => {
+    const turn = {
+      question: 'q',
+      answer: 'a',
+      sources: [],
+      steps: 40,
+      usd: 0,
+      billing: 'subscription',
+      model: 'opus',
+      interrupted: false,
+      at: '2026-10-25T19:00:00.000Z',
+    };
+    expect(
+      savedResearchTurnSchema.parse({ ...turn, profile: 'exhaustive' }).profile,
+    ).toBe('exhaustive');
+    expect(savedResearchTurnSchema.parse(turn).profile).toBeUndefined();
+  });
 });
