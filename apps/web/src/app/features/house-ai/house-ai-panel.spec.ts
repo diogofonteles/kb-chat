@@ -176,8 +176,12 @@ describe('HouseAiPanel (KBC-022, T12)', () => {
     const block = screen.getByRole('region', {
       name: 'Assinatura do ChatGPT (Codex)',
     });
-    expect(block.textContent).toContain('Logado no servidor.');
-    expect(block.textContent).toContain('contêiner separado');
+    // Says plainly whether it is on, and what the sandbox does and does not cover (design 1, 3).
+    expect(block.textContent).toContain('Desligada · Logado no servidor.');
+    expect(block.textContent).toContain(
+      'sem acesso aos segredos nem ao estado do servidor',
+    );
+    expect(block.textContent).toContain('a pergunta vai à OpenAI');
     fireEvent.click(
       screen.getByRole('checkbox', {
         name: 'Ligar a assinatura do ChatGPT (Codex)',
@@ -191,7 +195,17 @@ describe('HouseAiPanel (KBC-022, T12)', () => {
       }),
     );
     await fixture.whenStable();
+    expect(block.textContent).toContain('Ligada · O Codex não está logado');
     expect(block.textContent).toContain('codex login --device-auth');
+  });
+
+  it('KBC-027 QA F-6: says when the Codex container does not answer', async () => {
+    await renderPanel(
+      aHouseView({
+        codex: { configured: true, enabled: true, loggedIn: null },
+      }),
+    );
+    expect(screen.getByText(/O contêiner do Codex não respondeu/)).toBeTruthy();
   });
 
   it('KBC-027: Codex cannot be turned on where it is not configured', async () => {

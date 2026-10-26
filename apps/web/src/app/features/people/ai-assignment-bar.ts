@@ -21,8 +21,8 @@ import {
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import {
   LEND_COPY,
+  LEND_UNAVAILABLE,
   NO_LENDING,
-  lendUnavailable,
   noDefaultNote,
   type Lending,
 } from './lending.js';
@@ -78,9 +78,12 @@ export class AiAssignmentBar {
       this.options().find((option) => option.id === this.appAi())?.label ?? '',
   );
   protected readonly options = computed(() =>
-    APP_AI_ASSIGNMENTS.filter(
-      (id) => !isLentSubscription(id) || this.lending().canLend,
-    ).map((id) => ({
+    APP_AI_ASSIGNMENTS.filter((id) => {
+      if (!isLentSubscription(id)) return true;
+      const { canLend, lendable } = this.lending();
+      // ChatGPT's only while it can be lent (T9).
+      return canLend && (id !== 'chatgpt-subscription' || lendable[id]);
+    }).map((id) => ({
       id,
       label: assignmentLabel(id, this.defaultAppAi()),
     })),
@@ -102,7 +105,7 @@ export class AiAssignmentBar {
   protected readonly unavailableNote = computed(() => {
     const appAi = this.appAi();
     return isLentSubscription(appAi) && !this.lending().lendable[appAi]
-      ? lendUnavailable()
+      ? LEND_UNAVAILABLE[appAi]()
       : null;
   });
   /** Why "também para os próximos" is off with the subscription (design D9). */

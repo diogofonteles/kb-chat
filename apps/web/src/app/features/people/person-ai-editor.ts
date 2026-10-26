@@ -28,8 +28,8 @@ import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 import {
   LEND_COPY,
+  LEND_UNAVAILABLE,
   NO_LENDING,
-  lendUnavailable,
   type Lending,
 } from './lending.js';
 
@@ -63,12 +63,7 @@ export class PersonAiEditor {
 
   /** The subscription is only for the owner to give; others still see it when it is set. */
   protected readonly options = computed(() =>
-    APP_AI_ASSIGNMENTS.filter(
-      (id) =>
-        !isLentSubscription(id) ||
-        this.lending().canLend ||
-        this.ai().appAi === id,
-    ).map((id) => ({
+    APP_AI_ASSIGNMENTS.filter((id) => this.offered(id)).map((id) => ({
       id,
       label: assignmentLabel(id, this.defaultAppAi()),
     })),
@@ -79,6 +74,16 @@ export class PersonAiEditor {
       label: assignmentLabel(change.appAi, null),
     })),
   );
+  /**
+   * The subscription is the owner's to give, and ChatGPT's only while it can be lent (T9);
+   * an option already assigned stays, so the screen never hides what serves the person.
+   */
+  private offered(id: AppAiAssignment): boolean {
+    if (!isLentSubscription(id) || this.ai().appAi === id) return true;
+    const { canLend, lendable } = this.lending();
+    return canLend && (id !== 'chatgpt-subscription' || lendable[id]);
+  }
+
   /** A lent person's use is the owner's call: other masters may only revoke (KBC-024 F-4). */
   protected readonly lentForOthers = computed(
     () => isLentSubscription(this.ai().appAi) && !this.lending().canLend,
@@ -102,7 +107,7 @@ export class PersonAiEditor {
     const assigned = this.ai().appAi;
     const kind =
       this.confirmingLend() ?? (isLentSubscription(assigned) ? assigned : null);
-    return canLend && kind && !lendable[kind] ? lendUnavailable() : null;
+    return canLend && kind && !lendable[kind] ? LEND_UNAVAILABLE[kind]() : null;
   });
   protected readonly maxCap = MAX_MONTHLY_CAP_USD;
   protected readonly maxDaily = MAX_DAILY_RESEARCHES;

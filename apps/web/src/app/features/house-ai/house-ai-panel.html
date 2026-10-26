@@ -337,6 +337,11 @@
       >
     </label>
     <p id="house-codex-status" class="hint">
+      @if (current.codex.enabled) {
+        <strong i18n="@@house.codexOn">Ligada</strong> ·
+      } @else {
+        <strong i18n="@@house.codexOff">Desligada</strong> ·
+      }
       @if (!current.codex.configured) {
         <span i18n="@@house.codexNotConfigured"
           >O Codex não está configurado neste servidor (runbook, passo
@@ -358,8 +363,9 @@
     </p>
     <p id="house-codex-hint" class="hint" i18n="@@house.codexHint">
       Ligada, você usa o ChatGPT em ⚙ Sua IA e pode cedê-lo em Pessoas e
-      permissões. O Codex roda num contêiner separado, sem acesso aos dados da
-      aplicação.
+      permissões. O Codex roda num contêiner separado, sem acesso aos segredos
+      nem ao estado do servidor: ele lê o acervo só pelas ferramentas da
+      pesquisa, e a pergunta vai à OpenAI.
     </p>
   </section>
 

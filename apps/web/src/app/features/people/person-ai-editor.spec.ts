@@ -313,4 +313,36 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
       subscriptionTermsAccepted: true,
     });
   });
+
+  it('KBC-027 design 2: offers the ChatGPT subscription only while it can be lent', async () => {
+    const { fixture } = await render(PersonAiEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        ai: DEFAULT_PERSON_AI,
+        defaultAppAi: 'house',
+        lending: {
+          canLend: true,
+          lendable: {
+            'claude-subscription': true,
+            'chatgpt-subscription': false,
+          },
+        },
+      },
+    });
+    expect(
+      screen.queryByRole('option', { name: 'ChatGPT do administrador' }),
+    ).toBeNull();
+    // Still shown where it is already assigned, with why it does not answer now.
+    fixture.componentRef.setInput('ai', {
+      ...DEFAULT_PERSON_AI,
+      appAi: 'chatgpt-subscription',
+    });
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('option', { name: 'ChatGPT do administrador' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/A assinatura do ChatGPT está desligada/),
+    ).toBeTruthy();
+  });
 });

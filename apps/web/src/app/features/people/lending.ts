@@ -50,8 +50,13 @@ export const LEND_COPY: Record<LentSubscription, LendCopy> = {
   },
 };
 
-export const lendUnavailable = (): string =>
-  $localize`:@@lend.unavailable:A assinatura não está disponível agora no servidor; a pessoa segue com a própria IA ou sem IA até lá.`;
+/** Why a subscription cannot be lent now, and what the person gets meanwhile. */
+export const LEND_UNAVAILABLE: Record<LentSubscription, () => string> = {
+  'claude-subscription': () =>
+    $localize`:@@lend.unavailable:A assinatura do Claude não está disponível agora no servidor; a pessoa segue com a própria IA ou sem IA até lá.`,
+  'chatgpt-subscription': () =>
+    $localize`:@@lendGpt.unavailable:A assinatura do ChatGPT está desligada em IA da aplicação ou sem login no servidor; a pessoa segue com a própria IA ou sem IA até lá.`,
+};
 
 export const noDefaultNote = (): string =>
   $localize`:@@lend.noDefault:A assinatura não pode valer para os próximos convidados.`;
