@@ -15,6 +15,15 @@ describe('answer formatting', () => {
     expect(renderAnswer('sem fonte [9]')).toContain('[9]');
   });
 
+  it('links citations with three or four digits, as long exhaustive answers number many sources (KBC-017)', () => {
+    const html = renderAnswer('Obras [123] e [1234].', [
+      { n: 123, id: 'a.md', title: 'A' },
+      { n: 1234, id: 'b.md', title: 'B' },
+    ]);
+    expect(html).toContain('href="#fonte-123"');
+    expect(html).toContain('href="#fonte-1234"');
+  });
+
   it('wraps a Markdown table in a box that scrolls sideways, and only Markdown tables', () => {
     const html = renderAnswer(
       '| Princípio | Fonte |\n| --- | --- |\n| Ritmo | [1] |\n\n<table>x</table>',

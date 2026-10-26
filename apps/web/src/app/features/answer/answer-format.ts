@@ -35,7 +35,7 @@ export function renderAnswer(
   const html = (answerMarkdown.parse(text) as string)
     .replaceAll('<table>', '<div class="table-scroll"><table>')
     .replaceAll('</table>', '</table></div>');
-  return html.replace(/\[(\d{1,2})\]/g, (match, n: string) => {
+  return html.replace(/\[(\d{1,4})\]/g, (match, n: string) => {
     const source = sources.find((s) => s.n === Number(n));
     if (!source) return match;
     const label = escapeHtml(`Fonte ${n}: ${source.title}`);

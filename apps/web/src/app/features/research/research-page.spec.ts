@@ -220,6 +220,21 @@ describe('ChatPage research view (KBC-008)', () => {
     });
   });
 
+  it('offers the exhaustive profile with its help, and asks with it (KBC-017 AC-9)', async () => {
+    const page = await renderPage();
+    fireEvent.click(screen.getByRole('radio', { name: 'Exaustivo' }));
+    await page.fixture.whenStable();
+    expect(
+      screen.getByText(/Varre o acervo inteiro.*pode levar vários minutos/),
+    ).toBeTruthy();
+    await send(page, 'todas as obras citadas pelo autor', 'Perguntar');
+    expect(page.api.research).toHaveBeenLastCalledWith('hermetismo', {
+      question: 'todas as obras citadas pelo autor',
+      history: [],
+      profile: 'exhaustive',
+    });
+  });
+
   it('moves focus to the question box after "Parar"', async () => {
     const page = await renderPage();
     await send(page, 'o que é o ritmo?', 'Perguntar');
