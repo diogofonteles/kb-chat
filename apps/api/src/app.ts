@@ -317,6 +317,7 @@ const inMemoryAi = (
     tools: agent.toolsFor,
     perTokenRunner: agent.perTokenRunner,
     systemPrompt: agent.systemPrompt,
+    subAgentPrompt: agent.subAgentPrompt,
   });
 
 const inMemoryAuth = (config: AppConfig): AuthDeps => ({

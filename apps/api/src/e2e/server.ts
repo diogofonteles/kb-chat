@@ -86,6 +86,7 @@ const ai = await createAiProviders({
   tools: agent.toolsFor,
   perTokenRunner: agent.perTokenRunner,
   systemPrompt: agent.systemPrompt,
+  subAgentPrompt: agent.subAgentPrompt,
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).
 await ledger.append({

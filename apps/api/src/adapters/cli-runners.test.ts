@@ -282,7 +282,7 @@ describe('ClaudeCliRunner', () => {
       'exhaustive',
     );
     expect(events.at(-1)).toMatchObject({ type: 'done', interrupted: false });
-    expect(open.mock.calls.at(-1)?.[2]).toBe(80);
+    expect(open.mock.calls.at(-1)?.[2]).toBe(80 + 300);
     const seen = JSON.parse(await readFile(report, 'utf8'));
     const prompt = String(seen.args[seen.args.indexOf('--system-prompt') + 1]);
     expect(prompt).toContain('Pesquisa exaustiva');
@@ -300,7 +300,44 @@ describe('ClaudeCliRunner', () => {
       killGraceMs: 200,
     });
     await collect(configured, undefined, 'exhaustive');
-    expect(open.mock.calls.at(-1)?.[2]).toBe(120);
+    expect(open.mock.calls.at(-1)?.[2]).toBe(120 + 300);
+    open.mockRestore();
+  });
+
+  it('lets an exhaustive turn delegate to the "pesquisador" sub-agent, kb tools only (KBC-018 AC-8)', async () => {
+    const report = join(workDir, 'report-agents.json');
+    const open = vi.spyOn(turns, 'open');
+    const events = await collect(
+      claude(await fakeHome({ report, mode: 'delegate' })),
+      undefined,
+      'exhaustive',
+    );
+    const seen = JSON.parse(await readFile(report, 'utf8'));
+    const args: string[] = seen.args;
+    expect(args[args.indexOf('--tools') + 1]).toBe('Agent');
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe('mcp__kb,Agent');
+    const agents = JSON.parse(String(args[args.indexOf('--agents') + 1]));
+    expect(agents.pesquisador.tools).toEqual(['mcp__kb__*']);
+    expect(agents.pesquisador.prompt).toContain('sub-pesquisador');
+    expect(open.mock.calls.at(-1)?.[2]).toBe(80 + 300);
+    expect(events).toContainEqual({
+      type: 'step',
+      step: { kind: 'delegate', text: 'Delegando: Livros 1–60' },
+    });
+    expect(answerText(events)).not.toContain('Relatório interno');
+    expect(answerText(events)).toContain('tudo flui [1].');
+    // The deep profile keeps every built-in tool off and no sub-agents.
+    const deepReport = join(workDir, 'report-deep.json');
+    await collect(
+      claude(await fakeHome({ report: deepReport })),
+      undefined,
+      'deep',
+    );
+    const deepArgs: string[] = JSON.parse(
+      await readFile(deepReport, 'utf8'),
+    ).args;
+    expect(deepArgs[deepArgs.indexOf('--tools') + 1]).toBe('');
+    expect(deepArgs).not.toContain('--agents');
     open.mockRestore();
   });
 
@@ -469,6 +506,23 @@ describe('CLI dialects', () => {
       result: { ok: false, code: 'PROVIDER_UNAVAILABLE' },
     });
     expect(parseClaudeLine('{"type":"assistant","message":{}}')).toEqual({});
+    // Sub-agents (ADR 0014): the main conversation's Agent call is a step; the sub-agent's
+    // own lines (parent_tool_use_id set) never become answer text.
+    expect(
+      parseClaudeLine(
+        '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"Livros 1–60"}}]}}',
+      ),
+    ).toEqual({ delegate: 'Livros 1–60' });
+    expect(
+      parseClaudeLine(
+        '{"type":"assistant","parent_tool_use_id":"toolu_1","message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"x"}}]}}',
+      ),
+    ).toEqual({});
+    expect(
+      parseClaudeLine(
+        '{"type":"stream_event","parent_tool_use_id":"toolu_1","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"interno"}}}',
+      ),
+    ).toEqual({});
     expect(parseClaudeLine('not json')).toEqual({});
   });
 

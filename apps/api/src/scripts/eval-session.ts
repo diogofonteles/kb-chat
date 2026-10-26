@@ -68,6 +68,7 @@ export async function openEvalSession(
     tools: agent.toolsFor,
     perTokenRunner: agent.perTokenRunner,
     systemPrompt: agent.systemPrompt,
+    subAgentPrompt: agent.subAgentPrompt,
     turns,
     apiBaseUrl: mcp.baseUrl,
   });
