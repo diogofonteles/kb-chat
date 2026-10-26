@@ -43,8 +43,9 @@ import {
 import { EventPipe } from './event-pipe.js';
 import { SourceBook } from './source-book.js';
 import {
+  Slots,
   delegateSteps,
-  inPool,
+  runAll,
   numberTasks,
   promptText,
   reportsText,
@@ -104,6 +105,10 @@ interface Turn {
   /** Sub-researchers numbered so far and the tool steps they took (ADR 0014). */
   agents: number;
   subSteps: number;
+  /** At most `parallel` sub-researchers at once, across the turn's delegate calls. */
+  readonly slots: Slots | null;
+  /** Estimates of sub-researcher calls in flight, counted by the spend guard. */
+  reservedUsd: number;
   sourcesSent: number;
   /** What each model spent; an escalated turn has two (one ledger entry each). */
   readonly spent: Map<LoopEngine, Spent>;
@@ -130,6 +135,10 @@ function errorCode(err: unknown): string {
 }
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
+
+/** When a turn with this budget must answer, in ms since the epoch; null: no ceiling. */
+const deadlineOf = (budget: ProfileBudget): number | null =>
+  budget.maxMinutes === null ? null : Date.now() + budget.maxMinutes * 60_000;
 
 /** Grants sub-researcher tool steps from the turn's total (ADR 0014). */
 function reserveSubSteps(
@@ -215,13 +224,12 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       escalated: false,
       maxSteps: budget.steps,
       budget,
-      deadline:
-        budget.maxMinutes === null
-          ? null
-          : Date.now() + budget.maxMinutes * 60_000,
+      deadline: deadlineOf(budget),
       steps: 0,
       agents: 0,
       subSteps: 0,
+      slots: budget.delegation ? new Slots(budget.delegation.parallel) : null,
+      reservedUsd: 0,
       sourcesSent: 0,
       spent: new Map(),
       usd: 0,
@@ -352,7 +360,23 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       prompt,
       llm.maxOutputTokens(outputTokens),
     );
-    await spend.guard(turn.usd + estimate);
+    await spend.guard(turn.usd + turn.reservedUsd + estimate);
+  }
+
+  /** A sub-researcher's guard: like guardSpend, and the estimate stays reserved until accounted. */
+  private async reserveSpend(
+    turn: Turn,
+    prompt: string,
+    outputTokens: number,
+  ): Promise<number> {
+    const { llm, spend } = turn.engine;
+    const estimate = await spend.estimate(
+      prompt,
+      llm.maxOutputTokens(outputTokens),
+    );
+    await spend.guard(turn.usd + turn.reservedUsd + estimate);
+    turn.reservedUsd += estimate;
+    return estimate;
   }
 
   private async *callModel(
@@ -489,13 +513,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn.input.signal.addEventListener('abort', stop, { once: true });
     if (turn.input.signal.aborted) stop();
     const host = this.subHost(turn, { signal: abort.signal, pipe });
-    const parallel = host.budget.parallel;
+    const slots = turn.slots ?? new Slots(host.budget.parallel);
     try {
-      const results = await inPool(tasks, parallel, (task) =>
-        runSubAgent(host, task).catch((err: unknown) => {
-          stop();
-          throw err;
-        }),
+      const results = await runAll(tasks, { slots, onFailure: stop }, (task) =>
+        runSubAgent(host, task),
       );
       return reportsText(
         tasks,
@@ -521,9 +542,16 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       budget,
       compactTokens: turn.budget.compactTokens,
       signal,
+      deadline: turn.deadline,
       guard: (prompt, outputTokens) =>
-        this.guardSpend(turn, { prompt, outputTokens }),
-      account: (call, prompt) => this.account(turn, call, prompt),
+        this.reserveSpend(turn, prompt, outputTokens),
+      account: (call, { prompt, reserved }) => {
+        turn.reservedUsd -= reserved;
+        return this.account(turn, call, prompt);
+      },
+      release: (reserved) => {
+        turn.reservedUsd -= reserved;
+      },
       remainingSteps: () => budget.totalSteps - turn.subSteps,
       reserveSteps: (wanted) => reserveSubSteps(turn, { budget, wanted }),
       emit: (event) => pipe.push(event),

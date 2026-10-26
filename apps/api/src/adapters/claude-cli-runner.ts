@@ -7,7 +7,10 @@ import type {
 } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { KB_MCP_SERVER } from '../mcp/kb-mcp-server.js';
-import { subAgentSystemPrompt } from '../modules/research/index.js';
+import {
+  RESEARCH_TOOL_NAMES,
+  subAgentSystemPrompt,
+} from '../modules/research/index.js';
 import type {
   ResearchInput,
   ResearchRunnerPort,
@@ -104,10 +107,13 @@ const PARSERS: Record<ClaudeLine['type'], (line: ClaudeLine) => CliLine> = {
   // The main conversation starting a sub-agent (Claude Code's Agent tool, ADR 0014).
   assistant: (line) => {
     if (line.type !== 'assistant' || line.parent_tool_use_id) return {};
-    const call = line.message.content?.find(
-      (block) => block.type === 'tool_use' && AGENT_TOOLS.has(block.name ?? ''),
-    );
-    return call ? { delegate: call.input?.description ?? '' } : {};
+    const delegates = (line.message.content ?? [])
+      .filter(
+        (block) =>
+          block.type === 'tool_use' && AGENT_TOOLS.has(block.name ?? ''),
+      )
+      .map((block) => block.input?.description ?? '');
+    return delegates.length > 0 ? { delegates } : {};
   },
   result: (line) => {
     if (line.type !== 'result') return {};
@@ -173,7 +179,10 @@ export function subAgentsJson(prompt: string): string {
       description:
         'Sub-pesquisador do acervo: faz uma tarefa focada de pesquisa (varrer páginas de find_text, documentos grandes) e devolve um relatório curto com as citações [n].',
       prompt,
-      tools: [`mcp__${KB_MCP_SERVER}__*`],
+      // Named one by one: a sub-agent whose tools resolve to nothing does not start.
+      tools: RESEARCH_TOOL_NAMES.map(
+        (name) => `mcp__${KB_MCP_SERVER}__${name}`,
+      ),
     },
   });
 }
@@ -228,6 +237,10 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
     this.dialect = {
       name: 'claude',
       launch: async (access, input) => ({
+        // Only the "pesquisador" sub-agent: Claude Code's built-in ones stay off (ADR 0014).
+        ...(input.profile === 'exhaustive'
+          ? { env: { CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: '1' } }
+          : {}),
         args: claudeArgs(await writeClaudeMcpConfig(access), {
           model: input.model,
           systemPrompt: prompt(input.topic, input.profile, input.canDeepen),

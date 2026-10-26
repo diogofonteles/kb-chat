@@ -150,6 +150,8 @@ export class StubLlmAdapter implements AgentLlmPort {
   /** Sub-researcher calls made, and the most that ran at once (ADR 0014). */
   subCalls = 0;
   maxActive = 0;
+  /** When each agent call started (ms, before any delay): a stop must come before none. */
+  readonly callStarts: number[] = [];
   /** The tool names the orchestrator (not a sub-researcher) saw on its last call. */
   lastTools: string[] = [];
   private active = 0;
@@ -190,6 +192,7 @@ export class StubLlmAdapter implements AgentLlmPort {
     tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
+    this.callStarts.push(performance.now());
     this.active += 1;
     this.maxActive = Math.max(this.maxActive, this.active);
     try {

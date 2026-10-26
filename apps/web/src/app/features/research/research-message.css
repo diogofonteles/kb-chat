@@ -76,6 +76,11 @@ p.steps {
   white-space: nowrap;
 }
 
+/* A finished summary wraps: its last part ("· 3 pesquisadores") must not be cut (KBC-018). */
+.steps:not(.working) .steps-text {
+  white-space: normal;
+}
+
 /* While the agent works: a soft pulse next to the current step. */
 .working .steps-text::before {
   content: '';
@@ -104,9 +109,16 @@ p.steps {
   list-style: none;
 }
 
-/* A sub-researcher's step (KBC-018): indented under the delegation, its number first. */
-.steps li.sub {
+/* A sub-researcher's steps (KBC-018): a nested list under its delegation, quieter. */
+.steps ol.sub-steps {
+  margin: var(--space-1) 0 0;
   padding-left: var(--space-3);
+  border-left-width: 1px;
+  font-weight: 400;
+}
+
+.steps li:has(> ol.sub-steps) {
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 

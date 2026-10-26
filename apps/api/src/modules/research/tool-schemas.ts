@@ -296,6 +296,11 @@ const SCHEMAS: Record<ToolName, z.ZodType> = {
   related_documents: relatedArgsSchema,
 };
 
+/** The research tools' names, for an agent that may use only them (ADR 0014). */
+export const RESEARCH_TOOL_NAMES: readonly ToolName[] = Object.keys(
+  SCHEMAS,
+) as ToolName[];
+
 /** The research tools as the model sees them (ADR 0006); the same for every provider. */
 export const TOOL_DEFINITIONS: readonly ToolDefinition[] = (
   Object.keys(SCHEMAS) as ToolName[]

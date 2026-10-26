@@ -317,7 +317,13 @@ describe('ClaudeCliRunner', () => {
     expect(args[args.indexOf('--tools') + 1]).toBe('Agent');
     expect(args[args.indexOf('--allowedTools') + 1]).toBe('mcp__kb,Agent');
     const agents = JSON.parse(String(args[args.indexOf('--agents') + 1]));
-    expect(agents.pesquisador.tools).toEqual(['mcp__kb__*']);
+    expect(agents.pesquisador.tools).toContain('mcp__kb__find_text');
+    expect(
+      agents.pesquisador.tools.every((tool: string) =>
+        tool.startsWith('mcp__kb__'),
+      ),
+    ).toBe(true);
+    expect(seen.envNames).toContain('CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS');
     expect(agents.pesquisador.prompt).toContain('sub-pesquisador');
     expect(open.mock.calls.at(-1)?.[2]).toBe(80 + 300);
     expect(events).toContainEqual({
@@ -512,7 +518,12 @@ describe('CLI dialects', () => {
       parseClaudeLine(
         '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"Livros 1–60"}}]}}',
       ),
-    ).toEqual({ delegate: 'Livros 1–60' });
+    ).toEqual({ delegates: ['Livros 1–60'] });
+    expect(
+      parseClaudeLine(
+        '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"A"}},{"type":"text"},{"type":"tool_use","name":"Task","input":{"description":"B"}}]}}',
+      ),
+    ).toEqual({ delegates: ['A', 'B'] });
     expect(
       parseClaudeLine(
         '{"type":"assistant","parent_tool_use_id":"toolu_1","message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"x"}}]}}',

@@ -41,7 +41,7 @@ Pedido do dono em 2026-10-25 ("temos que nos espelhar no funcionamento do Claude
 ## Functional requirements
 - FR-1: `delegate { tasks: [{ title, task }] }` (1–5) existe só nos turnos Exaustivos do laço da API; o resultado volta como um texto por tarefa ("Pesquisador N — título") com o relatório do sub-pesquisador. (BR-1)
 - FR-2: cada sub-pesquisador roda com no máximo 25 passos, 4.000 tokens por chamada, compactação e a última chamada sem ferramentas; no máximo 3 rodam juntos. (BR-2)
-- FR-3: `step` ganha `agent` (número do sub-pesquisador) e o tipo `delegate`; o web mostra "Pesquisador N: …" na lista e "· N pesquisadores" no resumo; eventos antigos sem `agent` continuam válidos. (BR-3)
+- FR-3: `step` ganha `agent` (número do sub-pesquisador) e o tipo `delegate`; o web mostra "Pesquisador N — tarefa" com os passos dele numa lista aninhada (o passo atual, durante a pesquisa, "Pesquisador N: …") e "· N pesquisadores" no resumo; eventos antigos sem `agent` continuam válidos. (BR-3)
 - FR-4: as fontes dos sub-pesquisadores entram no evento `sources` do turno. (BR-3)
 - FR-5: o abort do leitor chega a todos os sub-pesquisadores. (BR-5)
 - FR-6: o guarda de gasto de cada chamada de sub-pesquisador conta o que o turno inteiro já gastou; `done.steps` soma os passos de todos. (BR-4)
@@ -68,7 +68,7 @@ Pedido do dono em 2026-10-25 ("temos que nos espelhar no funcionamento do Claude
 - **AC-4 (FR-3)**
   - Given sub-pesquisadores trabalhando
   - When eles chamam ferramentas
-  - Then os eventos `step` trazem `agent: N`; a lista de passos mostra "Pesquisador N: Procurando …" e o resumo "· 3 pesquisadores"
+  - Then os eventos `step` trazem `agent: N`; a lista de passos mostra "Pesquisador N — tarefa" com os passos dele numa lista aninhada abaixo, e o resumo "· 3 pesquisadores" (sem corte em 390 px)
 - **AC-5 (FR-5, BR-5)**
   - Given sub-pesquisadores no meio do trabalho
   - When o leitor clica em "Parar"

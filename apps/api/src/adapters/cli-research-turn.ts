@@ -30,8 +30,8 @@ export interface CliLine {
   /** How the model's message ended, when the CLI says so: with tool calls or as an answer. */
   readonly messageEnd?: 'tool_use' | 'answer';
   readonly model?: string;
-  /** The main conversation started a sub-agent with this description (ADR 0014). */
-  readonly delegate?: string;
+  /** The main conversation started sub-agents with these descriptions (ADR 0014). */
+  readonly delegates?: readonly string[];
   /** The CLI's final verdict: success, or why it failed. */
   readonly result?:
     { readonly ok: true } | { readonly ok: false; readonly code: AiTestCode };
@@ -191,10 +191,10 @@ class CliTurn {
     const { answer } = this.setup;
     if (parsed.model) this.state.model = parsed.model;
     if (parsed.result) this.state.result = parsed.result;
-    if (parsed.delegate !== undefined)
+    for (const delegate of parsed.delegates ?? [])
       this.queue.push({
         type: 'step',
-        step: { kind: 'delegate', text: `Delegando: ${parsed.delegate}` },
+        step: { kind: 'delegate', text: `Delegando: ${delegate}` },
       });
     if (parsed.text) this.push(answer.text(parsed.text));
     if (parsed.messageEnd === 'tool_use') this.push(answer.toolCalled());

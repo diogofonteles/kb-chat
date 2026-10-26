@@ -7,7 +7,7 @@ import {
 } from '../../../test/research-factories.js';
 import type { StubReply } from '../../adapters/stub-llm-adapter.js';
 import { researchBudgets } from './limits.js';
-import { inPool } from './subagents.js';
+import { Slots, runAll } from './subagents.js';
 
 const input = (
   question: string,
@@ -15,18 +15,18 @@ const input = (
   signal = new AbortController().signal,
 ) => ({ topic: 'hermetismo', question, history: [], profile, signal });
 
+const delegateCall = (count: number) => ({
+  name: 'delegate',
+  arguments: {
+    tasks: Array.from({ length: count }, (_, i) => ({
+      title: `Parte ${i + 1}`,
+      task: `Pesquise o ritmo, parte ${i + 1}`,
+    })),
+  },
+});
+
 const delegate = (count: number): StubReply => ({
-  toolCalls: [
-    {
-      name: 'delegate',
-      arguments: {
-        tasks: Array.from({ length: count }, (_, i) => ({
-          title: `Parte ${i + 1}`,
-          task: `Pesquise o ritmo, parte ${i + 1}`,
-        })),
-      },
-    },
-  ],
+  toolCalls: [delegateCall(count)],
 });
 
 const ofType = <T extends ResearchEvent['type']>(
@@ -86,6 +86,20 @@ describe('sub-researchers (KBC-018, ADR 0014)', () => {
     expect(elapsed).toBeLessThan(5 * 50 + 2 * 50);
   });
 
+  it('keeps the bound across several delegate calls of one message', async () => {
+    const twice: StubReply = {
+      toolCalls: [delegateCall(3), delegateCall(3)],
+    };
+    const { runner, llm } = await fixtureRunner({
+      script: [twice],
+      subScript: [],
+      callDelayMs: 20,
+    });
+    await collectEvents(runner.run(input('ritmo')));
+    expect(llm.subCalls).toBe(6);
+    expect(llm.maxActive).toBe(3);
+  });
+
   it('keeps a sub-researcher text away from the reader (AC-7)', async () => {
     const { runner } = await fixtureRunner({
       script: [delegate(2)],
@@ -107,19 +121,21 @@ describe('sub-researchers (KBC-018, ADR 0014)', () => {
     });
     const events: ResearchEvent[] = [];
     let callsAtStop = 0;
+    let stoppedAt = 0;
     for await (const event of runner.run(
       input('ritmo', 'exhaustive', abort.signal),
     )) {
       events.push(event);
       if (event.type === 'step' && event.step.agent && !abort.signal.aborted) {
         callsAtStop = llm.calls;
+        stoppedAt = performance.now();
         abort.abort();
       }
     }
     expect(events.at(-1)).toMatchObject({ type: 'done', interrupted: true });
     // Calls already running may finish; none starts after the stop.
+    expect(llm.callStarts.filter((at) => at > stoppedAt)).toEqual([]);
     expect(llm.calls).toBeLessThanOrEqual(callsAtStop + 3);
-    expect(llm.subCalls).toBeLessThan(3 * 4);
   });
 
   it('ends the turn at the daily cap, counting what the sub-researchers spent (AC-6)', async () => {
@@ -131,7 +147,10 @@ describe('sub-researchers (KBC-018, ADR 0014)', () => {
     expect(events.at(-1)).toEqual({ type: 'error', code: 'DAILY_CAP_REACHED' });
     expect(ledger.entries).toHaveLength(1);
     expect(ledger.entries[0]?.interrupted).toBe(true);
+    // Every call that ran is recorded, and calls in flight count against the cap: at most
+    // one call past it.
     expect(ledger.entries[0]?.usd).toBeGreaterThanOrEqual(0.9);
+    expect(ledger.entries[0]?.usd).toBeLessThanOrEqual(1 + 0.3 + 1e-9);
   });
 });
 
@@ -159,18 +178,34 @@ describe('sub-researcher budgets', () => {
   });
 });
 
-describe('inPool', () => {
-  it('keeps the input order and the concurrency bound', async () => {
+describe('Slots and runAll', () => {
+  it('bounds the work in flight, keeps the order and waits for all before failing', async () => {
+    const slots = new Slots(2);
     let active = 0;
     let most = 0;
-    const out = await inPool([30, 10, 20, 5], 2, async (ms) => {
+    const finished: number[] = [];
+    const work = async (ms: number) => {
       active += 1;
       most = Math.max(most, active);
       await new Promise((resolve) => setTimeout(resolve, ms));
       active -= 1;
+      finished.push(ms);
+      if (ms === 5) throw new Error('cap');
       return ms * 2;
-    });
-    expect(out).toEqual([60, 20, 40, 10]);
+    };
+    const out = await runAll(
+      [30, 10, 20],
+      { slots, onFailure: () => undefined },
+      work,
+    );
+    expect(out).toEqual([60, 20, 40]);
     expect(most).toBe(2);
+    let stopped = 0;
+    await expect(
+      runAll([5, 40], { slots, onFailure: () => (stopped += 1) }, work),
+    ).rejects.toThrow('cap');
+    // The sibling still finished before the failure came back (its cost is accounted).
+    expect(finished).toContain(40);
+    expect(stopped).toBe(1);
   });
 });

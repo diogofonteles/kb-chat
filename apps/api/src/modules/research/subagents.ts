@@ -30,10 +30,20 @@ export interface SubAgentHost {
   /** Estimated prompt tokens past which a sub-researcher compacts; null: never. */
   readonly compactTokens: number | null;
   readonly signal: AbortSignal;
-  /** The daily cap and credit, counting everything the turn spent. */
-  guard(prompt: string, outputTokens: number): Promise<void>;
-  /** Adds a call's cost to the turn. */
-  account(call: SubCall, prompt: string): Promise<void>;
+  /**
+   * The daily cap and credit, counting everything the turn spent and the calls still in
+   * flight; returns the estimate it reserved for this call.
+   */
+  guard(prompt: string, outputTokens: number): Promise<number>;
+  /** Adds a call's cost to the turn and frees its reservation. */
+  account(
+    call: SubCall,
+    cost: { prompt: string; reserved: number },
+  ): Promise<void>;
+  /** Frees a reservation whose call never started (a stop after the guard). */
+  release(reserved: number): void;
+  /** When the turn must answer (its wall-clock ceiling), in ms since the epoch; null: none. */
+  readonly deadline: number | null;
   /** Tool steps left in the turn's sub-researcher budget. */
   remainingSteps(): number;
   /** Reserves tool steps from that budget; returns how many it got. */
@@ -73,7 +83,7 @@ function take(call: SubCall, chunk: AgentChunk): void {
 async function callModel(
   host: SubAgentHost,
   messages: readonly AgentMessage[],
-  final: boolean,
+  { final, reserved }: { final: boolean; reserved: number },
 ): Promise<SubCall> {
   const call: SubCall = { text: '', toolCalls: [], usage: null };
   const prompt = promptText(messages);
@@ -88,7 +98,7 @@ async function callModel(
   } catch (err) {
     if (!host.signal.aborted) throw err;
   } finally {
-    await host.account(call, prompt);
+    await host.account(call, { prompt, reserved });
   }
   return call;
 }
@@ -152,11 +162,11 @@ export async function runSubAgent(
   for (;;) {
     if (host.signal.aborted) return { report: STOPPED_REPORT, steps };
     const room = host.budget.steps - steps;
-    const final = room <= 0 || host.remainingSteps() <= 0;
+    const final = room <= 0 || mustReport(host);
     compact(host, messages);
     if (final) messages.push({ role: 'system', content: SUB_AGENT_FINAL_NOTE });
-    await host.guard(promptText(messages), host.budget.outputTokens);
-    const call = await callModel(host, messages, final);
+    const call = await guardedCall(host, messages, final);
+    if (!call) return { report: STOPPED_REPORT, steps };
     if (final || call.toolCalls.length === 0)
       return { report: call.text.trim() || EMPTY_REPORT, steps };
     const ran = await runTools(host, { agent: task.agent, call, room });
@@ -165,23 +175,77 @@ export async function runSubAgent(
   }
 }
 
-/** Runs `work` over the items, at most `parallel` at once, keeping the input order. */
-export async function inPool<T, R>(
+/** The spend check, then the call; null when the reader stopped meanwhile (BR-5). */
+async function guardedCall(
+  host: SubAgentHost,
+  messages: readonly AgentMessage[],
+  final: boolean,
+): Promise<SubCall | null> {
+  const reserved = await host.guard(
+    promptText(messages),
+    host.budget.outputTokens,
+  );
+  if (host.signal.aborted) {
+    host.release(reserved);
+    return null;
+  }
+  return callModel(host, messages, { final, reserved });
+}
+
+/** The turn's tool-step budget is spent or its wall-clock ceiling passed: report now. */
+const mustReport = (host: SubAgentHost): boolean =>
+  host.remainingSteps() <= 0 ||
+  (host.deadline !== null && Date.now() >= host.deadline);
+
+/**
+ * The turn's sub-researcher slots (ADR 0014): at most `size` run at once, across every
+ * delegate call of the turn; the others wait in order.
+ */
+export class Slots {
+  private free: number;
+  private readonly waiting: (() => void)[] = [];
+
+  constructor(size: number) {
+    this.free = size;
+  }
+
+  async run<T>(work: () => Promise<T>): Promise<T> {
+    if (this.free > 0) this.free -= 1;
+    else await new Promise<void>((resolve) => this.waiting.push(resolve));
+    try {
+      return await work();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.free += 1;
+    }
+  }
+}
+
+/**
+ * Runs every item in the slots and waits for all of them, also after a failure (so each
+ * call in flight is accounted); `onFailure` stops the others; the first error is rethrown.
+ */
+export async function runAll<T, R>(
   items: readonly T[],
-  parallel: number,
+  { slots, onFailure }: { slots: Slots; onFailure: () => void },
   work: (item: T) => Promise<R>,
 ): Promise<R[]> {
-  const results: R[] = new Array<R>(items.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    for (let i = next++; i < items.length; i = next++) {
-      const item = items[i] as T;
-      results[i] = await work(item);
-    }
-  };
-  const workers = Math.max(1, Math.min(parallel, items.length));
-  await Promise.all(Array.from({ length: workers }, worker));
-  return results;
+  const settled = await Promise.allSettled(
+    items.map((item) =>
+      slots
+        .run(() => work(item))
+        .catch((err: unknown) => {
+          onFailure();
+          throw err;
+        }),
+    ),
+  );
+  const failure = settled.find((result) => result.status === 'rejected');
+  if (failure) throw failure.reason;
+  return settled.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : [],
+  );
 }
 
 /** The delegate call's steps: one per task, with the number of its sub-researcher. */

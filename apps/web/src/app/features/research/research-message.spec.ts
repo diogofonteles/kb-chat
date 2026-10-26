@@ -55,17 +55,19 @@ describe('ResearchMessage', () => {
         ],
       }),
     );
-    // Each delegation heads its sub-researcher's own steps, indented below it.
-    const items = [...document.querySelectorAll('details.steps li')].map(
-      (li) => [li.textContent?.trim(), li.classList.contains('sub')],
-    );
-    expect(items).toEqual([
-      ['Procurando o texto “obra”', false],
-      ['Pesquisador 1 — Livros 1–60', false],
-      ['Procurando o texto “livro”', true],
-      ['Pesquisador 2 — Livros 61–120', false],
-      ['Lendo “Miasmas”', true],
+    // Each delegation heads a nested list with its sub-researcher's own steps.
+    const top = [...document.querySelectorAll('details.steps > ol > li')];
+    expect(top.map((li) => li.firstChild?.textContent?.trim())).toEqual([
+      'Procurando o texto “obra”',
+      'Pesquisador 1 — Livros 1–60',
+      'Pesquisador 2 — Livros 61–120',
     ]);
+    const nested = (li: Element | undefined) =>
+      [...(li?.querySelectorAll('ol.sub-steps > li') ?? [])].map((c) =>
+        c.textContent?.trim(),
+      );
+    expect(nested(top[1])).toEqual(['Procurando o texto “livro”']);
+    expect(nested(top[2])).toEqual(['Lendo “Miasmas”']);
     expect(
       screen.getByText('Pesquisou 2 vezes · leu 1 documento · 2 pesquisadores'),
     ).toBeTruthy();

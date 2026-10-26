@@ -13,8 +13,15 @@
           </summary>
           <ol>
             @for (step of stepItems(); track $index) {
-              <li [class.thought]="step.thought" [class.sub]="step.sub">
+              <li [class.thought]="step.thought">
                 {{ step.text }}
+                @if (step.children.length > 0) {
+                  <ol class="sub-steps">
+                    @for (child of step.children; track $index) {
+                      <li>{{ child.text }}</li>
+                    }
+                  </ol>
+                }
               </li>
             }
           </ol>
