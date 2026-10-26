@@ -65,7 +65,7 @@ for (const width of [1440, 390]) {
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await fieldset
     .getByLabel('Qual IA atende esta pessoa')
-    .selectOption({ label: 'Assinatura do Claude do administrador' });
+    .selectOption({ label: 'Assinatura do Claude (administrador)' });
   await fieldset.getByRole('alert').scrollIntoViewIfNeeded();
   await settled(ownerPage);
   await ownerPage.screenshot({ path: `${out}/lend-confirm-${width}.png` });

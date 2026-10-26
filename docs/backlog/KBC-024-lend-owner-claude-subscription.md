@@ -82,7 +82,7 @@ Decisão do dono em 2026-10-26: "o master cede a assinatura Claude do dono a usu
 | AC | Level | Notes |
 |---|---|---|
 | AC-1, AC-4 | integração (`lent-subscription.integration.test.ts`) + unitário web (`person-ai-editor.spec.ts`) + E2E (`lent-subscription.spec.ts`) | — |
-| AC-2, AC-3, AC-7 | integração com a CLI falsa (`test/fakes/fake-claude.mjs`) + unitário (`lent-subscription-runner.test.ts`) | — |
+| AC-2, AC-3, AC-7 | integração com a CLI falsa (`test/fakes/fake-claude.mjs`) + unitário (`subscription-ledger-runner.test.ts`, `app-ai-plan.test.ts`) | — |
 | AC-5 | unitário web (`ai-status-card.spec.ts`) + E2E (runner falso da assinatura no servidor de E2E) | — |
 | AC-6 | unitário web (`ai-assignment-bar.spec.ts`) + E2E | — |
 

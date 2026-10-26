@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import {
+  CSRF,
   expect,
   invite,
   ownerApi,
@@ -48,11 +49,13 @@ test('AC-1, AC-2, AC-5: the owner lends his subscription after the terms; the pe
   const fieldset = dialog.getByRole('group', { name: 'IA da aplicação' });
   await fieldset
     .getByLabel('Qual IA atende esta pessoa')
-    .selectOption({ label: 'Assinatura do Claude do administrador' });
-  const terms = fieldset.getByRole('alert');
+    .selectOption({ label: 'Assinatura do Claude (administrador)' });
+  const terms = fieldset.getByRole('group', {
+    name: 'Ceder a assinatura do Claude a esta pessoa?',
+  });
   await expect(terms).toContainText('Os termos da Anthropic não permitem');
   await expect(
-    fieldset.getByRole('button', { name: 'Ceder assim mesmo' }),
+    fieldset.getByRole('button', { name: 'Cancelar' }),
   ).toBeFocused();
   await page.waitForFunction(() => document.getAnimations().length === 0);
   const axe = await new AxeBuilder({ page }).include('dialog').analyze();
@@ -80,7 +83,7 @@ test('AC-1, AC-2, AC-5: the owner lends his subscription after the terms; the pe
   ).toBeVisible();
   await settings.getByRole('button', { name: 'Configurar a minha IA' }).click();
   await expect(
-    settings.getByText(/Escolha quem responde na Pesquisa com IA/),
+    settings.getByRole('radio', { name: /^OpenRouter/ }),
   ).toBeFocused();
   await person.waitForFunction(() => document.getAnimations().length === 0);
   const personAxe = await new AxeBuilder({ page: person })
@@ -120,16 +123,18 @@ test('AC-6: lending to the selected people asks for the terms first, never as th
   });
   await bar
     .getByRole('combobox')
-    .selectOption({ label: 'Assinatura do Claude do administrador' });
+    .selectOption({ label: 'Assinatura do Claude (administrador)' });
   await expect(
     bar.getByRole('checkbox', { name: /próximos convidados/ }),
   ).toBeDisabled();
   await bar
     .getByRole('button', { name: 'Aplicar às selecionadas (1)' })
     .click();
-  await expect(bar.getByRole('alert')).toContainText(
-    'Os termos da Anthropic não permitem',
-  );
+  await expect(
+    bar.getByRole('group', {
+      name: 'Ceder a assinatura do Claude a 1 pessoa selecionada?',
+    }),
+  ).toContainText('Os termos da Anthropic não permitem');
   await bar.getByRole('button', { name: 'Ceder assim mesmo' }).click();
   await expect(
     dialog
@@ -145,5 +150,37 @@ test('AC-6: lending to the selected people asks for the terms first, never as th
   const ai = person.items.find((item) => item.id === id)?.ai;
   expect(ai?.appAi).toBe('claude-subscription');
   expect(ai?.history.at(-1)?.termsAccepted).toBe(true);
+  await owner.dispose();
+});
+
+test('QA F-3: a person without their own AI settings is told in Preferências', async ({
+  browser,
+  page,
+}) => {
+  const email = uniqueEmail('lent-plain');
+  const owner = await ownerApi();
+  const id = await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['search', 'research'],
+  });
+  const lent = await owner.patch(`/api/v1/people/${id}`, {
+    data: {
+      ai: { appAi: 'claude-subscription', subscriptionTermsAccepted: true },
+    },
+    headers: CSRF,
+  });
+  expect(lent.status()).toBe(200);
+  const person = await pageAs(browser, email, page.viewportSize());
+  await person.goto('/');
+  const settings = await openSettings(person);
+  await expect(
+    settings.getByText(
+      'Você está usando temporariamente a IA da aplicação (assinatura do Claude do administrador).',
+    ),
+  ).toBeVisible();
+  await expect(
+    settings.getByRole('button', { name: 'Configurar a minha IA' }),
+  ).toHaveCount(0);
+  await person.context().close();
   await owner.dispose();
 });
