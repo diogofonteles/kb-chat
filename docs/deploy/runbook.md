@@ -256,7 +256,7 @@ sudo docker compose --env-file .env --env-file release.env exec codex codex logi
 
 Depois, na tela: ⚙ → **IA da aplicação** → "Assinatura do ChatGPT (Codex)" deve dizer "Logado no servidor."; marque **Ligar a assinatura do ChatGPT (Codex)**. Para você: ⚙ → Sua IA → "Assinatura do ChatGPT". Para ceder: Pessoas e permissões → pessoa → "ChatGPT do administrador" (os termos da OpenAI também não permitem atender outras pessoas; a confirmação diz isso).
 
-- Prova do isolamento na própria VM (opcional): `sudo /srv/kb-chat/deploy/scripts/codex-sandbox-proof.sh <sha da release>` não serve aqui (ele monta canários num projeto separado); o CI roda essa prova em todo PR. Na VM, confira que o contêiner não vê o estado: `sudo docker compose ... exec codex ls /data/state /home/app/.claude` deve listar pastas vazias, e `exec codex env` não deve ter `KB_CHAT_SECRETS_KEY`.
+- Conferir o isolamento na VM (o CI prova isso em todo PR, com canários): `sudo docker compose --env-file .env --env-file release.env exec codex ls -A /data/state /home/app/.claude` lista pastas vazias, e `... exec codex env` não tem `KB_CHAT_SECRETS_KEY` nem `SMTP_PASSWORD`.
 - O login fica em `/srv/kb-chat/codex` (no backup cifrado). Para revogar: `exec codex codex logout`.
 - A sub-rede `172.30.0.0/24` é da rede `codex`; se outra rede Docker da VM já a usar, o `up` falha e diz isso.
 
