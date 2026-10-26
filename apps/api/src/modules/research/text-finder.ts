@@ -5,6 +5,7 @@ import {
   type CatalogRegistry,
   type TopicCatalog,
 } from '../catalog/index.js';
+import { flatWithMap } from './flat-map.js';
 import { countOccurrences, flatText, foldText } from './folded-text.js';
 
 /**
@@ -54,11 +55,78 @@ export interface TextQuery {
   readonly limit: number;
 }
 
+/** One matching document: how often each alternative occurs in it (KBC-017). */
+export interface DocMatch {
+  readonly entry: CatalogEntry;
+  readonly occurrences: number;
+  readonly phrases: readonly PhraseCount[];
+}
+
+/** Every matching document of a grep, ranked, with the totals (no cap, ADR 0013). */
+export interface TextCount {
+  readonly matches: readonly DocMatch[];
+  readonly occurrences: number;
+  /** Documents that passed the filter and were searched. */
+  readonly scanned: number;
+}
+
+export interface CountQuery {
+  readonly topic: string;
+  /** Folded-distinct alternatives; none lists every document the filter accepts. */
+  readonly phrases: readonly string[];
+  readonly accept: (entry: CatalogEntry) => boolean;
+}
+
+/** One occurrence inside a document: where it is in the body and the text around it. */
+export interface Occurrence {
+  readonly phrase: string;
+  /** Offset in the NFC body as read_document counts it; null inside the kb summary. */
+  readonly offset: number | null;
+  readonly context: string;
+}
+
+export interface DocOccurrences {
+  /** Characters of the body (read_document's total). */
+  readonly length: number;
+  readonly items: readonly Occurrence[];
+}
+
 interface Counted {
   readonly doc: FoldedDocument;
   readonly occurrences: number;
   readonly phrases: readonly PhraseCount[];
 }
+
+/** Every non-overlapping position of each needle in the folded text, in reading order. */
+function positionsOf(
+  folded: string,
+  needles: readonly Needle[],
+): { readonly at: number; readonly phrase: string }[] {
+  const found: { at: number; phrase: string }[] = [];
+  for (const { phrase, folded: needle } of needles)
+    for (
+      let at = folded.indexOf(needle);
+      at >= 0;
+      at = folded.indexOf(needle, at + needle.length)
+    )
+      found.push({ at, phrase });
+  return found.sort((a, b) => a.at - b.at);
+}
+
+const contextAround = (
+  flat: string,
+  { at, chars }: { at: number; chars: number },
+): string => {
+  const start = Math.max(0, at - Math.floor(chars / 3));
+  const end = Math.min(flat.length, start + chars);
+  return `${start > 0 ? '…' : ''}${flat.slice(start, end)}${end < flat.length ? '…' : ''}`;
+};
+
+const toNeedles = (phrases: readonly string[]): Needle[] =>
+  phrases.map((phrase) => ({ phrase, folded: foldPhrase(phrase) }));
+
+const byTitle = (a: CatalogEntry, b: CatalogEntry): number =>
+  a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
 
 /** The searchable text of a document: its kb summary and its body. */
 const searchableText = (entry: CatalogEntry, text: string): string =>
@@ -121,28 +189,89 @@ export class TextFinder {
 
   /** Documents ranked by occurrences of any of the phrases; null for an unknown topic. */
   async find(query: TextQuery): Promise<TextSearch | null> {
+    const counted = await this.count({ ...query, accept: () => true });
+    if (!counted) return null;
+    const hits = await Promise.all(
+      counted.matches
+        .slice(0, query.limit)
+        .map((match) => this.toHit(query.topic, match)),
+    );
+    return {
+      hits,
+      documents: counted.matches.length,
+      occurrences: counted.occurrences,
+      scanned: counted.scanned,
+    };
+  }
+
+  /**
+   * Every document the filter accepts that holds any of the phrases, ranked by occurrences
+   * (KBC-017): no cap, the caller pages. Without phrases, every accepted document by title.
+   */
+  async count(query: CountQuery): Promise<TextCount | null> {
     const catalog = this.deps.catalog.get(query.topic);
     if (!catalog) return null;
-    const docs = await this.corpus(catalog);
-    const needles = query.phrases.map((phrase) => ({
-      phrase,
-      folded: foldPhrase(phrase),
-    }));
+    if (query.phrases.length === 0) return this.listAccepted(catalog, query);
+    const docs = (await this.corpus(catalog)).filter((doc) =>
+      query.accept(doc.entry),
+    );
+    const needles = toNeedles(query.phrases);
     const counted = docs
       .map((doc) => countIn(doc, needles))
       .filter(({ occurrences }) => occurrences > 0)
       .sort(byRelevance);
-    const hits = await Promise.all(
-      counted
-        .slice(0, query.limit)
-        .map((found) => this.toHit(query.topic, found)),
-    );
     return {
-      hits,
-      documents: counted.length,
+      matches: counted.map(({ doc, occurrences, phrases }) => ({
+        entry: doc.entry,
+        occurrences,
+        phrases,
+      })),
       occurrences: counted.reduce((sum, c) => sum + c.occurrences, 0),
       scanned: docs.length,
     };
+  }
+
+  private listAccepted(catalog: TopicCatalog, query: CountQuery): TextCount {
+    const entries = [...catalog.entries.values()]
+      .filter((entry) => query.accept(entry))
+      .sort(byTitle);
+    return {
+      matches: entries.map((entry) => ({ entry, occurrences: 0, phrases: [] })),
+      occurrences: 0,
+      scanned: entries.length,
+    };
+  }
+
+  /** The passage around the first occurrence of a match's most frequent alternative. */
+  async snippet(topic: string, match: DocMatch): Promise<string> {
+    return (await this.toHit(topic, match)).snippet;
+  }
+
+  /**
+   * Every occurrence of the phrases in one document, in reading order, with its offset in
+   * the body (read_document's) and `chars` characters of context (find_text content mode).
+   */
+  async occurrencesIn(
+    topic: string,
+    entry: CatalogEntry,
+    scan: { readonly phrases: readonly string[]; readonly chars: number },
+  ): Promise<DocOccurrences | null> {
+    const text = await this.deps.vault.readDocument(topic, entry.id);
+    if (text === null) return null;
+    const body = splitFrontmatter(text).body.normalize('NFC');
+    const prefix = `${(entry.summary ?? '').normalize('NFC')}\n\n`;
+    const { flat, map } = flatWithMap(prefix + body);
+    const items = positionsOf(foldText(flat), toNeedles(scan.phrases)).map(
+      ({ at, phrase }) => {
+        const source = map[at] ?? 0;
+        return {
+          phrase,
+          offset: source >= prefix.length ? source - prefix.length : null,
+          context: contextAround(flat, { at, chars: scan.chars }),
+        };
+      },
+    );
+    return { length: body.length, items };
   }
 
   private corpus(catalog: TopicCatalog): Promise<readonly FoldedDocument[]> {
@@ -177,8 +306,8 @@ export class TextFinder {
   }
 
   /** The snippet comes from the file again: only the folded text stays in memory. */
-  private async toHit(topic: string, found: Counted): Promise<TextHit> {
-    const { entry } = found.doc;
+  private async toHit(topic: string, found: DocMatch): Promise<TextHit> {
+    const { entry } = found;
     const text = await this.deps.vault.readDocument(topic, entry.id);
     const best = found.phrases[0]?.phrase ?? '';
     return {

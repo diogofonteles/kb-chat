@@ -26,12 +26,13 @@ async function run(
 }
 
 describe('ResearchTools definitions', () => {
-  it('declares the six tools with JSON Schema parameters', async () => {
+  it('declares the seven tools with JSON Schema parameters', async () => {
     const tools = await fixtureTools();
     expect(tools.definitions.map((t) => t.name)).toEqual([
       'search_collection',
       'find_text',
       'list_subjects',
+      'list_sources',
       'read_document',
       'read_documents',
       'related_documents',
@@ -46,7 +47,7 @@ describe('ResearchTools definitions', () => {
       required: ['query'],
       properties: {
         mode: { enum: ['all', 'exact', 'semantic'], default: 'all' },
-        limit: { maximum: 15 },
+        limit: { maximum: 30 },
       },
     });
     expect(search).not.toHaveProperty('$schema');
@@ -104,7 +105,7 @@ describe('search_collection', () => {
     );
     expect(output).toContain('assuntos: Hermetismo e Filosofia Hermética');
     expect(output).not.toMatch(/\] Ritmo —/);
-    expect(output).toMatch(/: 8 de 13 documento/);
+    expect(output).toMatch(/: 1–8 de 13 documento/);
   });
 
   it('tells the model to re-phrase when nothing is found', async () => {
@@ -169,13 +170,14 @@ describe('find_text', () => {
     });
     const lines = output.split('\n');
     expect(lines[0]).toMatch(
-      /^Texto “SETUPLICIDADE” ou “sétupla” em 22 documentos: 3 documento\(s\), \d+ ocorrência\(s\)\.$/,
+      /^Texto “SETUPLICIDADE” ou “sétupla”: 3 documento\(s\), \d+ ocorrência\(s\), em 22 documentos varridos\. Mostrando 1–3 de 3\.$/,
     );
     expect(lines[1]).toMatch(
-      /^\[1\] A Natureza Sétupla — \d+ ocorrência\(s\): “sétupla” \d+, “SETUPLICIDADE” 1 — Resumo: .* — Trecho: .*setuplicidade/,
+      /^\[1\] A Natureza Sétupla · \d+ ocorrência\(s\) \(“sétupla” \d+, “SETUPLICIDADE” 1\) · origem: .* — Trecho: .*setuplicidade/,
     );
     expect(context.book.size).toBe(3);
-    expect(output).toContain('read_document com document=[n] e around=');
+    expect(output).toContain('output_mode content');
+    expect(output.split('\n').at(-1)).toBe('Fim da lista.');
   });
 
   it('asks for variants before concluding absence, and refuses too-short phrases', async () => {
@@ -199,7 +201,7 @@ describe('find_text', () => {
     const big = await run(
       tools,
       context,
-      call('find_text', { phrase: 'ritmo', limit: 21 }),
+      call('find_text', { phrase: 'ritmo', limit: 201 }),
     );
     expect(big.output).toMatch(/Argumentos inválidos \(limit: /);
   });
