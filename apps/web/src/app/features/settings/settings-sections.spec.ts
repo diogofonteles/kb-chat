@@ -16,7 +16,7 @@ import {
 import { aMe, anOwner } from '../../testing/session-fixtures.js';
 import { SettingsHost } from './settings-host.js';
 import { SettingsStore } from './settings-store.js';
-import { LEND_ALL, LEND_NONE } from '../../testing/lending-fixtures.js';
+import { LEND_NONE } from '../../testing/lending-fixtures.js';
 
 async function openSettingsAs(me: Me, section: 'people' | null = null) {
   localStorage.clear();

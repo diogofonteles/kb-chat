@@ -12,7 +12,7 @@ import { RELOAD_PAGE, SessionStore } from '@core/auth/session-store.js';
 import { anOwner } from '../../testing/session-fixtures.js';
 import { TOPICS } from '../../testing/fixtures.js';
 import { PeoplePanel } from './people-panel.js';
-import { LEND_ALL, LEND_NONE } from '../../testing/lending-fixtures.js';
+import { LEND_NONE } from '../../testing/lending-fixtures.js';
 
 const aPerson = (overrides: Partial<Person> = {}): Person => ({
   id: '11111111-1111-4111-8111-111111111111',

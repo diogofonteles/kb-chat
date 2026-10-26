@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { AiAssignmentBar } from './ai-assignment-bar.js';
-import { LEND_ALL, LEND_NONE } from '../../testing/lending-fixtures.js';
+import { LEND_ALL } from '../../testing/lending-fixtures.js';
 
 describe('AiAssignmentBar (KBC-022 AC-12)', () => {
   it('applies to the selection, or to everyone and the future default', async () => {

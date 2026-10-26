@@ -44,6 +44,14 @@ export interface McpRouteOptions {
 /** IPv4 peers may arrive mapped (::ffff:a.b.c.d) on a dual-stack socket. */
 const unmapped = (address: string): string => address.replace(/^::ffff:/, '');
 
+/** Loopback, or one of the configured peers (by socket address, never a header). */
+const allowedCaller = (peers: readonly string[]) => {
+  const known = new Set(peers);
+  return (request: FastifyRequest): boolean =>
+    isLoopbackRequest(request) ||
+    known.has(unmapped(request.socket.remoteAddress ?? ''));
+};
+
 function tokenOf(request: FastifyRequest): string | undefined {
   const parsed = params.safeParse(request.params);
   return parsed.success ? parsed.data.token : bearerToken(request);
@@ -57,10 +65,7 @@ function tokenOf(request: FastifyRequest): string | undefined {
 export const mcpRoutes =
   (turns: McpTurnRegistry, options: McpRouteOptions = {}): FastifyPluginAsync =>
   async (app) => {
-    const peers = new Set(options.peers ?? []);
-    const allowed = (request: FastifyRequest) =>
-      isLoopbackRequest(request) ||
-      peers.has(unmapped(request.socket.remoteAddress ?? ''));
+    const allowed = allowedCaller(options.peers ?? []);
     const handler = async (request: FastifyRequest, reply: FastifyReply) => {
       const token = allowed(request) ? tokenOf(request) : undefined;
       const turn = token === undefined ? undefined : turns.get(token);

@@ -314,6 +314,15 @@ async function registerPeople(
   );
 }
 
+/** What the owner's subscriptions can do now, for "IA da aplicação" (KBC-024, KBC-027). */
+const subscriptionState = (ai: AiProviders) => ({
+  lendable: () => ({
+    'claude-subscription': ai.lent['claude-subscription'].available(),
+    'chatgpt-subscription': ai.lent['chatgpt-subscription'].available(),
+  }),
+  codex: () => ai.registry.codexStatus(),
+});
+
 /** "IA da aplicação", the OpenRouter connection and the free models (KBC-022). */
 async function registerHouse(
   app: FastifyInstance,
@@ -322,11 +331,7 @@ async function registerHouse(
   const { settings } = ai;
   await app.register(
     houseAiRoutes({
-      lendable: () => ({
-        'claude-subscription': ai.lent['claude-subscription'].available(),
-        'chatgpt-subscription': ai.lent['chatgpt-subscription'].available(),
-      }),
-      codex: () => ai.registry.codexStatus(),
+      ...subscriptionState(ai),
       house: house.service,
       catalog: house.catalog,
       connect: house.connect,

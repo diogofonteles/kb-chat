@@ -121,6 +121,19 @@ function lateSubscription(
   };
 }
 
+/** Both of the owner's subscriptions, bound late to the registry. */
+const lateSubscriptions = (
+  options: AiProvidersOptions,
+  lazy: { registry?: ProviderRegistry },
+): Record<LentSubscription, LendableSubscription> => ({
+  'claude-subscription': lateSubscription(options, lazy, 'claude-subscription'),
+  'chatgpt-subscription': lateSubscription(
+    options,
+    lazy,
+    'chatgpt-subscription',
+  ),
+});
+
 /** The registry over the settings, the turns and the app AIs (ADR 0007, ADR 0016). */
 function buildRegistry(
   options: AiProvidersOptions,
@@ -156,18 +169,7 @@ export async function createAiProviders(
   const settings = await loadSettings(options);
   const turns = options.turns ?? new McpTurnRegistry();
   const lazy: { registry?: ProviderRegistry } = {};
-  const lent: Record<LentSubscription, LendableSubscription> = {
-    'claude-subscription': lateSubscription(
-      options,
-      lazy,
-      'claude-subscription',
-    ),
-    'chatgpt-subscription': lateSubscription(
-      options,
-      lazy,
-      'chatgpt-subscription',
-    ),
-  };
+  const lent = lateSubscriptions(options, lazy);
   const registry = buildRegistry(options, {
     settings,
     turns,
