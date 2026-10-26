@@ -69,7 +69,11 @@ describe('AI access policy contracts (KBC-022)', () => {
       defaultDailyResearches: 5,
       managementKey: null,
       freeUsage: null,
-      subscriptionAvailable: false,
+      lendable: {
+        'claude-subscription': false,
+        'chatgpt-subscription': false,
+      },
+      codex: { configured: false, enabled: false, loggedIn: null },
       key: 'sk-or-leak',
     });
     expect(JSON.stringify(view)).not.toContain('sk-or-leak');

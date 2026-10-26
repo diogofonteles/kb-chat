@@ -14,7 +14,7 @@ export const NO_LENDING: Lending = {
 };
 
 /** What each lending says before it is confirmed (screens.md T9). */
-interface LendCopy {
+export interface LendCopy {
   /** The terms, named every time. */
   readonly terms: () => string;
   readonly toPerson: () => string;
