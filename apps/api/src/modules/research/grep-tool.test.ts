@@ -125,7 +125,9 @@ describe('find_text as a grep (KBC-017, ADR 0013)', () => {
     );
     expect(listed(output)).toHaveLength(25);
     expect(output).not.toContain('Trecho:');
-    expect(listed(output)[24]).toMatch(/^\[25\] Vibração 01 · 1$/);
+    expect(listed(output)[24]).toMatch(
+      /^\[25\] Vibração 01 · 1 · autoria: Não classificado$/,
+    );
   });
 
   it('lists every document of an entity without a phrase (AC-3)', async () => {
@@ -215,9 +217,15 @@ describe('find_text as a grep (KBC-017, ADR 0013)', () => {
     );
     expect(output.split('\n')[0]).toContain('Mostrando 21–50 de 325.');
     // The first document has 25 occurrences: the page starts at its 21st.
-    expect(output).toMatch(/^\[1\] Vibração 25: ocorrências 21–25 de 25$/m);
-    expect(output).toMatch(/^\[2\] Vibração 24: ocorrências 1–24 de 24$/m);
-    expect(output).toMatch(/^\[3\] Vibração 23: ocorrência 1 de 23$/m);
+    expect(output).toMatch(
+      /^\[1\] Vibração 25: ocorrências 21–25 de 25 · autoria: Não classificado$/m,
+    );
+    expect(output).toMatch(
+      /^\[2\] Vibração 24: ocorrências 1–24 de 24 · autoria: Não classificado$/m,
+    );
+    expect(output).toMatch(
+      /^\[3\] Vibração 23: ocorrência 1 de 23 · autoria: Não classificado$/m,
+    );
   });
 
   it('refuses a document grep without a phrase and an empty request', async () => {

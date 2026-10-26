@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildResearchMessages, researchSystemPrompt } from './prompt.js';
+import {
+  buildResearchMessages,
+  researchSystemPrompt,
+  subAgentSystemPrompt,
+} from './prompt.js';
 
 describe('buildResearchMessages', () => {
   it('tells the model to grep with find_text and variants before concluding absence, within 15 steps', () => {
@@ -42,5 +46,25 @@ describe('buildResearchMessages', () => {
     expect(text).toContain('A primeira frase já é conteúdo da resposta');
     expect(text).toContain('"Tenho tudo o que preciso"');
     expect(text).toContain('"---"');
+  });
+
+  it('keeps the Mestre Laércio apart from other authors in every profile and in the sub-researcher (KBC-020 AC-6)', () => {
+    const prompts = [
+      ...(['fast', 'deep', 'exhaustive'] as const).map((profile) =>
+        researchSystemPrompt('Hermetismo', profile),
+      ),
+      subAgentSystemPrompt('Hermetismo'),
+    ];
+    for (const text of prompts) {
+      expect(text).toContain('José Laércio do Egito');
+      expect(text).toMatch(
+        /Atribua ao Mestre Laércio só o que está em documentos com autoria "Mestre Laércio"/,
+      );
+      expect(text).toMatch(
+        /nunca apresente a ideia de outro autor como ensinamento do Mestre/,
+      );
+      expect(text).toContain('authorship: "mestre-laercio"');
+      expect(text).toMatch(/diga de quem é ou de que livro vem/);
+    }
   });
 });

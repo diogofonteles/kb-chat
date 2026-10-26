@@ -1,7 +1,9 @@
 import {
+  authorshipSchema,
   depthLevelSchema,
   genreSchema,
   relevanceSchema,
+  type Authorship,
   type DepthLevel,
   type DocumentFacets,
   type DocumentOrigin,
@@ -60,6 +62,20 @@ function toDepth(value: unknown): DepthLevel | null {
   return parsed.success ? parsed.data : null;
 }
 
+const WIKI_FOLDER = 'wiki/';
+
+/**
+ * KBC-020 (ADR 0015): the owner's `author_group` key decides; without a known value a
+ * wiki article is a synthesis and anything else is unclassified (never guessed).
+ */
+function toAuthorship(id: string, value: unknown): Authorship {
+  const parsed = authorshipSchema
+    .extract(['mestre-laercio', 'outros-autores'])
+    .safeParse(value);
+  if (parsed.success) return parsed.data;
+  return id.startsWith(WIKI_FOLDER) ? 'sintese' : 'nao-classificado';
+}
+
 /** Converted audio and OCR texts carry their pipeline folder in kb's `source_path`. */
 function toOrigin(sourcePath: string | null): DocumentOrigin {
   if (!sourcePath) return null;
@@ -105,6 +121,8 @@ export function toCatalogEntry(
     origin: toOrigin(sourcePath),
     entities: toNames(data['entities']),
     sourcePath,
+    authorship: toAuthorship(id, data['author_group']),
+    author: toStringOrNull(data['author']),
     relations: {
       exampleOf: toConcepts(data['example_of']),
       extends: toConcepts(data['extends']),

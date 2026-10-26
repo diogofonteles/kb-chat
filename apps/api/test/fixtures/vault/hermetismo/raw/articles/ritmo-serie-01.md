@@ -1,4 +1,6 @@
 ---
+author_group: mestre-laercio
+author: José Laércio do Egito
 title: Ritmo, lição 01
 type: source
 genre: article_or_essay

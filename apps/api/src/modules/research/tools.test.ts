@@ -68,7 +68,7 @@ describe('search_collection', () => {
     expect(step).toEqual({ kind: 'search', text: 'Buscando “pitagóricos”' });
     expect(output).toContain('Busca “pitagóricos” (modo exact)');
     expect(output).toMatch(
-      /\[1\] A Lei do Ritmo — Resumo: O texto explora a Lei do Ritmo.* — Trecho: .*pitagóricos.* — Assuntos: Hermetismo e Filosofia Hermética/,
+      /\[1\] A Lei do Ritmo · autoria: Mestre Laércio — Resumo: O texto explora a Lei do Ritmo.* — Trecho: .*pitagóricos.* — Assuntos: Hermetismo e Filosofia Hermética/,
     );
     expect(context.book.find(1)?.id).toBe('raw/articles/a-lei-do-ritmo.md');
   });
@@ -399,7 +399,7 @@ describe('related_documents', () => {
     });
     expect(output).toContain('Ligações de [1] Ritmo:');
     expect(output).toMatch(
-      /Exemplos \(12\):\n\[2\] Ritmo, lição 01 — Lição 01 da série/,
+      /Exemplos \(12\):\n\[2\] Ritmo, lição 01 · autoria: Mestre Laércio — Lição 01 da série/,
     );
     expect(output.match(/^\[\d+\]/gm)).toHaveLength(10);
     expect(context.book.size).toBe(11);

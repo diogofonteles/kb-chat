@@ -1,4 +1,4 @@
-import type { SearchHit } from '@kb-chat/contracts';
+import type { Authorship, SearchHit } from '@kb-chat/contracts';
 import type { CatalogEntry } from '../catalog/index.js';
 import type { BodyWindow } from './body-window.js';
 
@@ -25,12 +25,45 @@ export const foldName = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+/** KBC-020: what every document line says about whose text it is (ADR 0015). */
+export const AUTHORSHIP_LABELS: Readonly<Record<Authorship, string>> = {
+  'mestre-laercio': 'Mestre Laércio',
+  'outros-autores': 'Outros autores',
+  sintese: 'Síntese do acervo',
+  'nao-classificado': 'Não classificado',
+};
+
+/** " · autoria: Mestre Laércio", appended to a document's title on every line. */
+export const authorshipPart = (authorship: Authorship): string =>
+  ` · autoria: ${AUTHORSHIP_LABELS[authorship]}`;
+
+/** What the agent must keep in mind when citing each group (read headers). */
+const AUTHORSHIP_NOTES: Readonly<Record<Authorship, string>> = {
+  'mestre-laercio': '',
+  'outros-autores': 'não é do Mestre Laércio; diga o autor ou o livro ao citar',
+  sintese:
+    'artigo do wiki que resume vários documentos; não é fala do Mestre Laércio',
+  'nao-classificado':
+    'a autoria ainda não foi marcada; não atribua ao Mestre Laércio sem confirmar',
+};
+
+function authorshipLine(entry: CatalogEntry): string {
+  const notes = [
+    entry.author && `autor: ${oneLine(entry.author, 120)}`,
+    AUTHORSHIP_NOTES[entry.authorship],
+  ].filter(Boolean);
+  const detail = notes.length > 0 ? ` (${notes.join('; ')})` : '';
+  return `Autoria: ${AUTHORSHIP_LABELS[entry.authorship]}${detail}`;
+}
+
 export function hitLine(
   n: number,
   hit: SearchHit,
   summary: string | null,
 ): string {
-  const parts = [`[${n}] ${oneLine(hit.title, 160)}`];
+  const parts = [
+    `[${n}] ${oneLine(hit.title, 160)}${authorshipPart(hit.authorship)}`,
+  ];
   if (summary) parts.push(`Resumo: ${oneLine(summary, HIT_TEXT_CHARS)}`);
   if (hit.snippet && hit.snippet !== summary)
     parts.push(`Trecho: ${oneLine(hit.snippet, HIT_TEXT_CHARS)}`);
@@ -41,7 +74,7 @@ export function hitLine(
 
 export function refLine(n: number, entry: CatalogEntry): string {
   const summary = entry.summary ? ` — ${oneLine(entry.summary, 200)}` : '';
-  return `[${n}] ${oneLine(entry.title, 160)}${summary}`;
+  return `[${n}] ${oneLine(entry.title, 160)}${authorshipPart(entry.authorship)}${summary}`;
 }
 
 function facetsLine(entry: CatalogEntry): string {
@@ -58,9 +91,13 @@ export function headerLines(n: number, entry: CatalogEntry): string[] {
   return [
     `[${n}] ${entry.title}`,
     `Id: ${entry.id}`,
+    authorshipLine(entry),
     entry.summary ? `Resumo do kb: ${entry.summary}` : '',
     entry.criterion ? `Critério do kb: ${entry.criterion}` : '',
     entry.concepts.length > 0 ? `Assuntos: ${entry.concepts.join(', ')}` : '',
+    entry.entities.length > 0
+      ? `Entidades do kb: ${oneLine(entry.entities.slice(0, 12).join(', '))}`
+      : '',
     facetsLine(entry),
   ].filter(Boolean);
 }

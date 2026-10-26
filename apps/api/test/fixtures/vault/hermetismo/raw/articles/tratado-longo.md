@@ -1,4 +1,5 @@
 ---
+author_group: outros-autores
 title: Tratado Longo
 type: source
 genre: reference_docs

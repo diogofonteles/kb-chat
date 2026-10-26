@@ -77,6 +77,8 @@ describe('ToolLoopRunner', () => {
       n: 1,
       id: 'raw/articles/a-lei-do-ritmo.md',
       title: 'A Lei do Ritmo',
+      authorship: 'mestre-laercio',
+      author: 'José Laércio do Egito',
     });
     expect(answerText(events)).toBe(
       'Segundo o acervo, “A Lei do Ritmo” trata do assunto [1].',

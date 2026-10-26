@@ -1,4 +1,5 @@
 ---
+author_group: outros-autores
 title: A NATUREZA SÉTUPLA
 type: source
 genre: talk_or_interview

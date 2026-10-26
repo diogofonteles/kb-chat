@@ -1,4 +1,4 @@
-import { SEARCH_MODES } from '@kb-chat/contracts';
+import { AUTHORSHIPS, SEARCH_MODES } from '@kb-chat/contracts';
 import { z } from 'zod';
 import type { ToolDefinition } from '../../ports/llm.js';
 
@@ -35,8 +35,17 @@ const documentRef = z
     'O número [n] de um documento já visto nesta pesquisa (preferível) ou o id (caminho) do documento.',
   );
 
+/** KBC-020 (ADR 0015): one authorship group, as every tool line labels it. */
+const authorshipArg = z
+  .enum(AUTHORSHIPS)
+  .optional()
+  .describe(
+    'Só documentos desta autoria: "mestre-laercio" (obra de José Laércio do Egito, o Mestre Laércio), "outros-autores" (livros e textos de outros autores), "sintese" (artigos do wiki que resumem o acervo) ou "nao-classificado".',
+  );
+
 /** The document filters of find_text and search_collection (KBC-017, ADR 0013). */
 const filterShape = {
+  authorship: authorshipArg,
   entity: z
     .string()
     .trim()
@@ -204,10 +213,12 @@ export const findArgsSchema = z
     ...filterShape,
   })
   .refine(
-    (args) => args.phrase || (!args.document && (args.entity || args.source)),
+    (args) =>
+      args.phrase ||
+      (!args.document && (args.entity || args.source || args.authorship)),
     {
       error:
-        'informe phrase, ou entity/source (sem document) para listar os documentos do filtro; document exige phrase',
+        'informe phrase, ou entity/source/authorship (sem document) para listar os documentos do filtro; document exige phrase',
       path: ['phrase'],
     },
   )
@@ -217,12 +228,13 @@ export const findArgsSchema = z
       !(
         args.entity ||
         args.source ||
+        args.authorship ||
         args.exclude?.length ||
         args.subjects?.length
       ),
     {
       error:
-        'document procura num só documento: não combine com entity, source, exclude ou subjects',
+        'document procura num só documento: não combine com entity, source, authorship, exclude ou subjects',
       path: ['document'],
     },
   );
@@ -250,6 +262,7 @@ export const sourcesArgsSchema = z.object({
     .default(SOURCES_PAGE.default)
     .describe('Quantos itens de cada lista.'),
   offset: z.number().int().min(0).default(0).describe('Quantos itens pular.'),
+  authorship: authorshipArg,
 });
 
 export type ToolName =
@@ -272,13 +285,13 @@ const toParameters = (schema: z.ZodType): Record<string, unknown> => {
 
 const DESCRIPTIONS: Record<ToolName, string> = {
   search_collection:
-    'Busca por sentido e palavras no acervo. Devolve os documentos mais parecidos (no máximo 50 candidatos): [n], título, resumo do kb, trecho e assuntos, com offset para a página seguinte e os filtros entity, source e exclude. Refaça com outras palavras, sinônimos e outro modo quando não achar. Para listar TODOS os documentos de um autor, origem ou texto, use find_text.',
+    'Busca por sentido e palavras no acervo. Devolve os documentos mais parecidos (no máximo 50 candidatos): [n], título, resumo do kb, trecho e assuntos, com a autoria de cada um, offset para a página seguinte e os filtros authorship, entity, source e exclude. Refaça com outras palavras, sinônimos e outro modo quando não achar. Para listar TODOS os documentos de um autor, origem ou texto, use find_text.',
   find_text:
-    'Procura um texto literal em TODOS os documentos do acervo (como o grep; acentos e maiúsculas não importam), sem limite de documentos: sempre informa o total de documentos e ocorrências e pagina com head_limit e offset até "Fim da lista". Filtros: entity (autor, pessoa ou obra), source (pasta de origem), exclude, subjects. Sem phrase, com entity ou source, lista todos os documentos do filtro. Com document, procura no corpo inteiro de um documento (livros enormes) e, em output_mode content, devolve cada ocorrência com a posição para read_document. Use para frases exatas, nomes, listas, números e para varrer o acervo por completo; separe variantes com " | ".',
+    'Procura um texto literal em TODOS os documentos do acervo (como o grep; acentos e maiúsculas não importam), sem limite de documentos: sempre informa o total de documentos e ocorrências e pagina com head_limit e offset até "Fim da lista"; cada linha diz a autoria do documento. Filtros: authorship (mestre-laercio, outros-autores, sintese, nao-classificado), entity (autor, pessoa ou obra), source (pasta de origem), exclude, subjects. Sem phrase, com authorship, entity ou source, lista todos os documentos do filtro. Com document, procura no corpo inteiro de um documento (livros enormes) e, em output_mode content, devolve cada ocorrência com a posição para read_document. Use para frases exatas, nomes, listas, números e para varrer o acervo por completo; separe variantes com " | ".',
   list_subjects:
     'Lista os assuntos (conceitos do kb) do acervo, com quantos documentos cada um tem.',
   list_sources:
-    'Lista as pastas de origem dos documentos (de onde vieram os arquivos) e as entidades do kb (autores, pessoas, obras), com quantos documentos cada uma tem, filtradas por query. Use para descobrir os valores de source e entity de find_text.',
+    'Lista quantos documentos há de cada autoria (Mestre Laércio, Outros autores, Síntese do acervo, Não classificado), as pastas de origem dos documentos (de onde vieram os arquivos) e as entidades do kb (autores, pessoas, obras), com quantos documentos cada uma tem, filtradas por query e, com authorship, só dentro de uma autoria. Use para descobrir os valores de source e entity de find_text.',
   read_document:
     'Lê um documento: resumo do kb, facetas e uma página do texto (padrão 12.000 caracteres, até 30.000 com limit), centrada em `around` ou a partir de `offset`. Sempre diz o tamanho total e o próximo offset, para ler um livro inteiro página por página.',
   read_documents: `Lê de uma vez até ${MAX_BATCH_DOCUMENTS} documentos: de cada um, o resumo do kb e uma janela de até 6.000 caracteres do texto, centrada em \`around\`. Use no lugar de read_document quando for ler mais de um documento.`,

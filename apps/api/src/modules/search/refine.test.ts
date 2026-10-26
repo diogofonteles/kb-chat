@@ -21,6 +21,8 @@ const entry = (
   relations: { exampleOf: [], extends: [], related: [] },
   entities: [],
   sourcePath: null,
+  authorship: 'mestre-laercio',
+  author: null,
   ...overrides,
 });
 const candidate = (e: CatalogEntry, score = 1): Candidate => ({
@@ -112,6 +114,31 @@ describe('refine', () => {
     ]);
     expect(result.facets.concepts).toEqual([{ value: 'Cabala', count: 1 }]);
     expect(result.facets.depths).toEqual([{ value: 1, count: 1 }]);
+  });
+
+  it('filters by authorship and counts every group, off-topic hidden (KBC-020 AC-2)', () => {
+    const book = entry('5.md', { authorship: 'outros-autores' });
+    const wiki = entry('6.md', { authorship: 'sintese' });
+    const loose = entry('7.md', { authorship: 'nao-classificado' });
+    const docs = [...all, ...[book, wiki, loose].map((e) => candidate(e))];
+    const mestre = run(docs, { authorships: ['mestre-laercio'] });
+    expect(mestre.page.map((g) => g.lead.entry.id)).toEqual([
+      '1.md',
+      '2.md',
+      '3.md',
+    ]);
+    expect(mestre.facets.authorships).toEqual([
+      { value: 'mestre-laercio', count: 3 },
+      { value: 'outros-autores', count: 1 },
+      { value: 'sintese', count: 1 },
+      { value: 'nao-classificado', count: 1 },
+    ]);
+    expect(
+      run(docs, { authorships: ['outros-autores'] }).page.map(
+        (g) => g.lead.entry.id,
+      ),
+    ).toEqual(['5.md']);
+    expect(run(docs).total).toBe(6);
   });
 
   it('pages up to the result cap with a next offset', () => {

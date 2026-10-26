@@ -1,4 +1,5 @@
 ---
+author_group: outros-autores
 title: Torta de pêssego
 type: source
 genre: other

@@ -151,6 +151,8 @@ export class SearchService {
       depth: entry.depth,
       relevance: entry.relevance,
       concepts: [...entry.concepts],
+      authorship: entry.authorship,
+      author: entry.author,
       copies: copies.map((copy) => ({ id: copy.id, title: copy.title })),
     };
   }
