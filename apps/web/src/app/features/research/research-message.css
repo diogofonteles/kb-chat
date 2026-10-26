@@ -104,6 +104,12 @@ p.steps {
   list-style: none;
 }
 
+/* A sub-researcher's step (KBC-018): indented under the delegation, its number first. */
+.steps li.sub {
+  padding-left: var(--space-3);
+  overflow-wrap: anywhere;
+}
+
 /* What the agent wrote before a tool call: kept, but quieter than the steps (ADR 0009). */
 .steps li.thought {
   font-style: italic;

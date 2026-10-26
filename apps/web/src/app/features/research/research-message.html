@@ -13,7 +13,9 @@
           </summary>
           <ol>
             @for (step of stepItems(); track $index) {
-              <li [class.thought]="step.thought">{{ step.text }}</li>
+              <li [class.thought]="step.thought" [class.sub]="step.sub">
+                {{ step.text }}
+              </li>
             }
           </ol>
         </details>

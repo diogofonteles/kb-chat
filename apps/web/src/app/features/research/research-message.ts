@@ -14,7 +14,7 @@ import {
 } from '@features/answer/answer-format.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { aiErrorMessage } from './research-errors.js';
-import { describeSteps, stepText } from './research-steps.js';
+import { agentOf, describeSteps, stepText } from './research-steps.js';
 import { citedSources, type ResearchTurn } from './research-turn.js';
 
 /**
@@ -48,6 +48,8 @@ export class ResearchMessage {
     this.turn().steps.map((step) => ({
       text: stepText(step),
       thought: step.kind === 'thought',
+      // A sub-researcher's step sits under the delegation, indented (KBC-018).
+      sub: agentOf(step) !== null,
     })),
   );
   protected readonly html = computed(() =>

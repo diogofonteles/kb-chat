@@ -128,6 +128,33 @@ test('KBC-017 AC-9: "Exaustivo" explains itself, asks with the exhaustive profil
     .toBe('exhaustive');
 });
 
+test('KBC-018 AC-4: an exhaustive turn shows its sub-researchers in the steps and cites what they found', async ({
+  page,
+}) => {
+  await page.getByRole('radio', { name: 'Exaustivo' }).check();
+  const answer = await research(page, 'todas as obras sobre o ritmo');
+  const summary = answer.locator('details.steps summary');
+  await expect(summary).toContainText('2 pesquisadores');
+  await summary.click();
+  await expect(
+    answer.getByText('Pesquisador 1: Primeira parte', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    answer.getByText('Pesquisador 2: Segunda parte', { exact: true }),
+  ).toBeVisible();
+  await expect(answer.locator('li.sub').first()).toBeVisible();
+  // The answer cites a document a sub-researcher read, listed among the sources.
+  await expect(answer.getByRole('heading', { name: 'Fontes' })).toBeVisible();
+  const axe = await new AxeBuilder({ page })
+    .include('app-research-message')
+    .analyze();
+  expect(
+    axe.violations.filter((v) =>
+      ['serious', 'critical'].includes(v.impact ?? ''),
+    ),
+  ).toEqual([]);
+});
+
 test('ADR 0009: text written before a tool call leaves the answer and shows among the steps', async ({
   page,
 }) => {

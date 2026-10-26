@@ -4,11 +4,28 @@ import type { ResearchTurn, TurnStep } from './research-turn.js';
 const countOf = (steps: readonly TurnStep[], kind: ResearchStep['kind']) =>
   steps.filter((step) => step.kind === kind).length;
 
-/** How a steps line reads: a tool step as the server wrote it, a thought prefixed. */
-export const stepText = (step: TurnStep): string =>
-  step.kind === 'thought'
-    ? $localize`:@@research.thought:Pensando: ${step.text}:thought:`
-    : step.text;
+/** The sub-researcher that took a step (KBC-018), or null for the main agent. */
+export const agentOf = (step: TurnStep): number | null =>
+  step.kind !== 'thought' && step.agent ? step.agent : null;
+
+/** How a steps line reads: a tool step as the server wrote it, a thought or a sub-researcher prefixed. */
+export function stepText(step: TurnStep): string {
+  if (step.kind === 'thought')
+    return $localize`:@@research.thought:Pensando: ${step.text}:thought:`;
+  const agent = agentOf(step);
+  return agent === null
+    ? step.text
+    : $localize`:@@research.agentStep:Pesquisador ${agent}:agent:: ${step.text}:step:`;
+}
+
+const agents = (n: number): string =>
+  n === 1
+    ? $localize`:@@research.agentOne:1 pesquisador`
+    : $localize`:@@research.agents:${n}:count: pesquisadores`;
+
+/** Sub-researchers that worked on the turn (ADR 0014). */
+const agentCount = (steps: readonly TurnStep[]): number =>
+  new Set(steps.map(agentOf).filter((agent) => agent !== null)).size;
 
 const searched = (n: number): string =>
   n === 1
@@ -50,6 +67,7 @@ export function describeSteps(turn: ResearchTurn): string {
     ...(deepened
       ? [$localize`:@@research.deepened:aprofundou a pesquisa`]
       : []),
+    ...(agentCount(turn.steps) > 0 ? [agents(agentCount(turn.steps))] : []),
   ];
   const line = parts.join(' · ');
   return line ? line.charAt(0).toUpperCase() + line.slice(1) : '';
