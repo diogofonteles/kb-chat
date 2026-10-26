@@ -262,7 +262,7 @@
     </p>
   }
 
-  @if (!compact() && current.info.billing === 'per-token') {
+  @if (!compact() && current.info.billing === 'per-token' && capApplies()) {
     <div class="field">
       <label class="field-label" for="ai-cap" i18n="@@ai.cap"
         >Limite de gasto por dia (US$)</label

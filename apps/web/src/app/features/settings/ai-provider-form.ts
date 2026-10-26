@@ -145,6 +145,15 @@ export class AiProviderForm {
       this.draft().provider === 'openrouter' &&
       this.draft().openrouterMode === 'free',
   );
+  /**
+   * The daily cap bounds only paid calls: hidden on Gemini's free tier and on free models
+   * without a paid fallback (KBC-023 review R2-06).
+   */
+  protected readonly capApplies = computed(() => {
+    const draft = this.draft();
+    if (draft.provider === 'gemini') return draft.geminiTier === 'paid';
+    return !this.ownFree() || draft.paidModel.trim() !== '';
+  });
   /** Paid models with tools, for the paid fallback field (loaded only when needed). */
   private readonly models = rxResource({
     params: () => this.ownFree() || undefined,

@@ -495,12 +495,16 @@ describe('Configurações', () => {
     expect(start.request.body).toEqual({ purpose: 'own' });
     start.flush({ authorizeUrl: 'https://openrouter.ai/auth?state=s' });
     expect(goTo).toHaveBeenCalledWith('https://openrouter.ai/auth?state=s');
+    // Free models only: a daily spending cap has nothing to bound (review R2-06).
+    expect(screen.queryByLabelText(/Limite de gasto/)).toBeNull();
     fireEvent.input(
       screen.getByLabelText('Modelo pago de reserva (opcional)'),
       {
         target: { value: 'fake/paid' },
       },
     );
+    await fixture.whenStable();
+    expect(screen.getByLabelText(/Limite de gasto/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
     expect(put.request.body.ai).toMatchObject({
@@ -557,7 +561,10 @@ describe('Configurações', () => {
     fireEvent.input(screen.getByLabelText(/Chave da API/), {
       target: { value: 'AIza-my-key-1234' },
     });
+    expect(screen.queryByLabelText(/Limite de gasto/)).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: /Pago/ }));
+    await fixture.whenStable();
+    expect(screen.getByLabelText(/Limite de gasto/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
     const put = http.expectOne({ method: 'PUT', url: '/api/v1/settings' });
     expect(put.request.body.ai).toMatchObject({

@@ -1,8 +1,10 @@
 import {
+  KEY_PROVIDERS,
   isAllowedModel,
   modelIdSchema,
   type AiProvider,
   type GeminiTier,
+  type KeyProvider,
   type OpenRouterPlan,
   type ProviderList,
   type SettingsUpdate,
@@ -72,15 +74,8 @@ export function aiDraftFrom(
 }
 
 /** The key provider of a draft, or null for one without a key. */
-export const keyProviderOf = (
-  provider: AiProvider,
-): 'openrouter' | 'anthropic' | 'openai' | 'gemini' | null =>
-  provider === 'openrouter' ||
-  provider === 'anthropic' ||
-  provider === 'openai' ||
-  provider === 'gemini'
-    ? provider
-    : null;
+export const keyProviderOf = (provider: AiProvider): KeyProvider | null =>
+  KEY_PROVIDERS.find((id) => id === provider) ?? null;
 
 /** The per-provider plans the draft carries (KBC-023). */
 function plansOf(draft: AiDraft): NonNullable<SettingsUpdate['ai']> {
