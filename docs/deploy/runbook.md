@@ -45,10 +45,12 @@ A chave privada do `age` **nunca** vai para a VM. Sem ela os backups não abrem:
 ```bash
 mkdir -p ~/.config/kb-chat
 cp deploy/oci/oci.env.example ~/.config/kb-chat/oci.env   # preencha OCIDs, região, e-mail do alerta
+deploy/oci/check-cli.sh                                    # confere que a OCI CLI instalada tem todos os comandos do script
 deploy/oci/provision.sh --env ~/.config/kb-chat/oci.env            # só lista o que criaria
 deploy/oci/provision.sh --env ~/.config/kb-chat/oci.env --apply    # cria o que falta (idempotente)
 ```
 
+- O orçamento (`BUDGET_USD`) é na moeda de cobrança da conta; o alerta dispara em 1% do gasto real.
 - O script recusa tamanhos acima do Always Free (`OCPUS>2`, `MEMORY_GB>12`, disco>200 GB).
 - **"Out of host capacity"**: é falta temporária de A1 na região. Tente outro `AVAILABILITY_DOMAIN` ou mais tarde, e rode de novo; ele continua de onde parou.
 - Anote o **IP público reservado** e o **namespace** impressos no fim.

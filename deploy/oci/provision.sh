@@ -308,15 +308,25 @@ else say "  exists: alarm $alarm_name"; fi
 
 # --- Cost guard ----------------------------------------------------------------------
 say "cost guard:"
-budget_id="$(find_id budgets budget list --compartment-id "$TENANCY_OCID" --display-name "$NAME_PREFIX-budget")"
+budget_id="$(find_id budgets budget budget list --compartment-id "$TENANCY_OCID" --display-name "$NAME_PREFIX-budget")"
 if [ -z "$budget_id" ]; then
-  budget_id="$(create "budget US\$ $BUDGET_USD/month on the compartment" budgets budget create \
+  # The amount is in the tenancy's billing currency.
+  budget_id="$(create "budget $BUDGET_USD (billing currency)/month on the compartment" budgets budget budget create \
     --compartment-id "$TENANCY_OCID" --display-name "$NAME_PREFIX-budget" --amount "$BUDGET_USD" \
     --reset-period MONTHLY --target-type COMPARTMENT --targets "[\"$COMPARTMENT_OCID\"]")"
-  create "alert at 1% of actual spend -> $BUDGET_ALERT_EMAIL" budgets alert-rule create --budget-id "$budget_id" \
+else say "  exists: budget $NAME_PREFIX-budget"; fi
+# The alert rule is checked on every run, so a run that stopped after the budget still gets it.
+rule_id=""
+# shellcheck disable=SC2016
+if [ "$APPLY" -eq 1 ]; then
+  rule_id="$("${OCI[@]}" budgets budget alert-rule list --budget-id "$budget_id" --all \
+    --query 'data[?type == `ACTUAL`] | [0].id' --raw-output 2>/dev/null | grep '^ocid' || true)"
+fi
+if [ -z "$rule_id" ]; then
+  create "alert at 1% of actual spend -> $BUDGET_ALERT_EMAIL" budgets budget alert-rule create --budget-id "$budget_id" \
     --type ACTUAL --threshold 1 --threshold-type PERCENTAGE --recipients "$BUDGET_ALERT_EMAIL" \
     --message "kb-chat left the Always Free allowance: check the OCI cost report" >/dev/null
-else say "  exists: budget $NAME_PREFIX-budget"; fi
+else say "  exists: budget alert rule (actual spend)"; fi
 
 say ""
 say "public IP: ${reserved:-<after --apply>}  namespace: $namespace"
