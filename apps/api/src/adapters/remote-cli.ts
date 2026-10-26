@@ -53,8 +53,9 @@ async function* turnLines(turn: RemoteTurn): AsyncIterable<string> {
     const response = await turn.fetchImpl(`${turn.runnerUrl}/turn`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      // Only what the runner cannot know; it builds the arguments itself (ADR 0020).
       body: JSON.stringify({
-        args: call.args,
+        ...(call.model !== undefined && { model: call.model }),
         input: call.input,
         token: call.env[CODEX_TOKEN_ENV] ?? '',
       }),
@@ -74,8 +75,9 @@ async function* turnLines(turn: RemoteTurn): AsyncIterable<string> {
 
 /**
  * A CLI run by the Codex sandbox runner instead of a local process (KBC-027, ADR 0020): the
- * arguments, the input and the turn token go over the internal network; nothing else of this
- * process's environment does. Aborting the request makes the runner stop the CLI.
+ * model, the input and the turn token go over the internal network; the runner builds the
+ * locked-down arguments itself, and nothing of this process's environment travels. Aborting
+ * the request makes the runner stop the CLI.
  */
 export const remoteCli =
   (runnerUrl: string, fetchImpl: typeof fetch = fetch) =>

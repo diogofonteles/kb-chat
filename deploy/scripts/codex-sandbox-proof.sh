@@ -48,10 +48,16 @@ compose() {
 }
 compose up -d --wait --wait-timeout 120 codex
 
-turn="{\"args\":[\"exec\",\"--json\",\"-\"],\"input\":\"$mark\",\"token\":\"0123456789abcdef0123456789abcdef\"}"
-answer="$(compose exec -T codex node -e "
-fetch('http://127.0.0.1:8790/turn', { method: 'POST', headers: { 'content-type': 'application/json' }, body: process.argv[1] })
-  .then((r) => r.text()).then((t) => process.stdout.write(t))" "$turn")"
+turn="{\"input\":\"$mark\",\"token\":\"0123456789abcdef0123456789abcdef\"}"
+post_turn='fetch(process.argv[1] + "/turn", { method: "POST", headers: { "content-type": "application/json" }, body: process.argv[2] })
+  .then(async (r) => process.stdout.write(r.status === 200 ? await r.text() : "status " + r.status + "\n"))'
+# From inside the sandbox (a turn calling its own runner): refused (ADR 0020).
+inside="$(compose exec -T codex node -e "$post_turn" http://127.0.0.1:8790 "$turn")"
+echo "from inside the sandbox: $inside"
+[ "$inside" = "status 403" ] || { echo "SANDBOX LEAK: the runner answered a turn from inside the sandbox" >&2; exit 1; }
+# From the API's address on the codex network, as in production.
+answer="$(docker run --rm --network "${project}_codex" --ip 172.30.0.2 --entrypoint node \
+  "$registry/kb-chat-api:$tag" -e "$post_turn" http://172.30.0.10:8790 "$turn")"
 echo "$answer"
 probe="$(grep '"kbchat.probe"' <<<"$answer")"
 node -e "
@@ -64,7 +70,12 @@ const leaks = [
   ...probe.serverPathsVisible.map((p) => 'path ' + p),
 ];
 if (probe.error) leaks.push('probe ' + probe.error);
+leaks.push(...probe.extraMounts.map((m) => 'mount ' + m));
+if (!probe.rootReadOnly) leaks.push('writable root');
+if (!probe.noCapabilities) leaks.push('capabilities');
+if (!probe.noNewPrivileges) leaks.push('new privileges allowed');
+if (probe.metadataReachable) leaks.push('metadata service reachable');
 if (probe.uid !== 10002) leaks.push('uid ' + probe.uid);
 if (leaks.length > 0) { console.error('SANDBOX LEAK: ' + leaks.join(', ')); process.exit(1); }
-console.log('sandbox proof: ok (uid 10002, no canary file, process or variable; env: ' + probe.envNames.join(' ') + ')');
+console.log('sandbox proof: ok (uid 10002, no canary file, process or variable, only its own mounts, read-only root, no capabilities, no new privileges, no metadata service; env: ' + probe.envNames.join(' ') + ')');
 " "$probe"

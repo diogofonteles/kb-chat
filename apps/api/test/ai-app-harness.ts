@@ -70,6 +70,12 @@ export interface Started {
 let current: FastifyInstance | null = null;
 
 /** Closes the app the last `start()` built (call it in `afterEach`). */
+/** Stops the Codex runner the last `start({ codexHome })` started (its container going down). */
+export async function stopCodexRunner(): Promise<void> {
+  await runner?.close();
+  runner = null;
+}
+
 export async function closeApp(): Promise<void> {
   await current?.close();
   current = null;
@@ -99,6 +105,8 @@ async function testConfig(state: string, options: StartOptions) {
   return loadConfig({
     ...cli,
     ...codex,
+    // The Codex sandbox's address in production (ADR 0020): MCP only, by token.
+    KB_CHAT_MCP_PEERS: '172.30.0.10',
     KB_VAULT: FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
     KB_CHAT_STATE_DIR: state,
@@ -114,6 +122,7 @@ async function codexSandbox(codexHome: string, port: string) {
   runner = await startCodexRunner({
     bin: join(FAKES_DIR, 'fake-codex.mjs'),
     codexHome,
+    mcpUrl: `http://127.0.0.1:${port}/mcp/turn`,
     host: '127.0.0.1',
     port: 0,
     env: { PATH: process.env['PATH'] ?? '' },
@@ -121,7 +130,6 @@ async function codexSandbox(codexHome: string, port: string) {
   return {
     PORT: port,
     KB_CHAT_CODEX_RUNNER_URL: runner.url,
-    KB_CHAT_CODEX_MCP_BASE_URL: `http://127.0.0.1:${port}`,
   };
 }
 

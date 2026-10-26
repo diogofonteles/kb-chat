@@ -34,7 +34,6 @@ services:
       # Codex never runs in this container (KBC-027, ADR 0020): its turns go to the `codex`
       # service, which reaches the turn's MCP endpoint here, by token, from its fixed address.
       KB_CHAT_CODEX_RUNNER_URL: http://172.30.0.10:8790
-      KB_CHAT_CODEX_MCP_BASE_URL: http://172.30.0.2:3000
       KB_CHAT_MCP_PEERS: 172.30.0.10
       # The public origin: the only one the CSRF check accepts (ADR 0008).
       WEB_ORIGIN: ${WEB_ORIGIN:-https://${KB_CHAT_DOMAIN}}
@@ -90,6 +89,9 @@ services:
       CODEX_HOME: /codex-home
       CODEX_RUNNER_HOST: 0.0.0.0
       CODEX_RUNNER_PORT: '8790'
+      # The only MCP endpoint Codex is pointed at, and the only caller of the runner.
+      CODEX_MCP_URL: http://172.30.0.2:3000/mcp/turn
+      CODEX_RUNNER_CLIENTS: 172.30.0.2
     volumes:
       # The owner's Codex login (`codex login --device-auth`, once, over SSH; runbook 9c).
       - ${KB_CHAT_DATA:-/srv/kb-chat}/codex:/codex-home

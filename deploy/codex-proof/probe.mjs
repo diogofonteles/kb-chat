@@ -71,14 +71,59 @@ for (const pid of readdirSync('/proc').filter((name) => /^\d+$/.test(name))) {
   }
 }
 
-// The image creates these folders empty for the API; a mount would fill them.
+// The image creates these folders empty for the API; a mount would fill them, and a folder
+// that exists but cannot be read (the API's 0700 state) is a mount just the same.
 const hasContent = (path) => {
+  let info;
   try {
-    return statSync(path).isDirectory() ? readdirSync(path).length > 0 : true;
+    info = statSync(path);
   } catch {
     return false;
   }
+  if (!info.isDirectory()) return true;
+  try {
+    return readdirSync(path).length > 0;
+  } catch {
+    return true;
+  }
 };
+
+// Only these mounts may exist in the container (the probe's own file in the proof only).
+const ALLOWED_MOUNTS = [
+  /^\/$/,
+  /^\/codex-home$/,
+  /^\/tmp$/,
+  /^\/(proc|sys|dev)(\/|$)/,
+  /^\/etc\/(hosts|hostname|resolv\.conf)$/,
+  /^\/probe\/probe\.mjs$/,
+];
+const mounts = readFileSync('/proc/self/mountinfo', 'utf8')
+  .trim()
+  .split('\n')
+  .map((line) => line.split(' '))
+  .map((fields) => ({ point: fields[4], options: fields[5] }));
+const extraMounts = mounts
+  .map((mount) => mount.point)
+  .filter((point) => !ALLOWED_MOUNTS.some((allowed) => allowed.test(point)));
+const rootReadOnly = mounts.some(
+  (mount) => mount.point === '/' && mount.options.split(',').includes('ro'),
+);
+
+// No capability left, and no way to gain one.
+const status = readFileSync('/proc/self/status', 'utf8');
+const field = (name) =>
+  new RegExp(`^${name}:\\s*(\\S+)`, 'm').exec(status)?.[1];
+const noCapabilities =
+  /^0+$/.test(field('CapEff') ?? '') && /^0+$/.test(field('CapPrm') ?? '');
+const noNewPrivileges = field('NoNewPrivs') === '1';
+
+// The cloud's metadata service hands out the VM's credentials: it must not answer here.
+const metadataReachable = await fetch('http://169.254.169.254/', {
+  signal: AbortSignal.timeout(3000),
+}).then(
+  () => true,
+  () => false,
+);
 const explicit = [
   '/data/state',
   '/home/app/.claude',
@@ -98,6 +143,11 @@ process.stdout.write(
       .map(([name]) => name),
     serverVariables: SERVER_VARIABLES.filter((name) => name in process.env),
     serverPathsVisible: explicit,
+    extraMounts,
+    rootReadOnly,
+    noCapabilities,
+    noNewPrivileges,
+    metadataReachable,
     envNames: Object.keys(process.env).sort(),
   })}\n`,
 );

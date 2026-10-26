@@ -138,6 +138,10 @@ describe('MCP turn endpoint', () => {
       (await call('172.30.0.10', `/mcp/turns/${opened.token}`)).statusCode,
     ).toBe(200);
     expect(
+      (await call('::ffff:172.30.0.10', `/mcp/turns/${opened.token}`))
+        .statusCode,
+    ).toBe(200);
+    expect(
       (await call('172.30.0.11', `/mcp/turns/${opened.token}`)).statusCode,
     ).toBe(404);
     expect(

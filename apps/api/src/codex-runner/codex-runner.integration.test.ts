@@ -11,6 +11,7 @@ import {
   startMcpTurnServer,
   type McpTurnServer,
 } from '../mcp/mcp-turn-server.js';
+import { MCP_BEARER_PATH } from '../mcp/mcp-routes.js';
 import { startCodexRunner, type CodexRunner } from './runner-server.js';
 
 const turns = new McpTurnRegistry();
@@ -24,6 +25,7 @@ beforeAll(async () => {
   runner = await startCodexRunner({
     bin: join(FAKES_DIR, 'fake-codex.mjs'),
     codexHome,
+    mcpUrl: `${mcp.baseUrl}${MCP_BEARER_PATH}`,
     host: '127.0.0.1',
     port: 0,
     env: { PATH: process.env['PATH'] ?? '', LANG: 'C.UTF-8' },
@@ -51,7 +53,7 @@ const apiRunner = () =>
       SMTP_PASSWORD: 'KBCHAT-CANARY-smtp',
     },
     tools: () => new FakeResearchTools(),
-    runner: { url: runner.url, mcpBaseUrl: mcp.baseUrl },
+    runner: { url: runner.url },
   });
 
 async function collect(signal = new AbortController().signal) {
@@ -133,12 +135,117 @@ describe('Codex through its sandbox runner (KBC-027 AC-2, ADR 0020)', () => {
     await expect.poll(() => runner.active(), { timeout: 8000 }).toBe(0);
   });
 
-  it('refuses a malformed turn', async () => {
-    const response = await fetch(`${runner.url}/turn`, {
+  it('refuses a malformed turn, and arguments it did not build itself (review F2)', async () => {
+    const post = (body: object) =>
+      fetch(`${runner.url}/turn`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await post({ input: 1 })).status).toBe(400);
+    expect(
+      (
+        await post({
+          args: ['exec', '--dangerously-bypass-approvals-and-sandbox'],
+          input: 'x',
+          token: 'x'.repeat(32),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await post({ model: '--sandbox', input: 'x', token: 'x'.repeat(32) }))
+        .status,
+    ).toBe(400);
+  });
+
+  it('runs one turn at a time, so no turn can see another one’s token (review R3)', async () => {
+    await fake({ mode: 'sleep' });
+    const first = new AbortController();
+    const second = new AbortController();
+    const firstTurn = apiRunner().run({
+      topic: 'hermetismo',
+      question: 'q1',
+      history: [],
+      profile: 'fast',
+      signal: first.signal,
+    });
+    // Read the first turn to its end (in the background), so nothing is left open.
+    let sawToken: () => void = () => undefined;
+    const tokenSeen = new Promise<void>((resolve) => {
+      sawToken = resolve;
+    });
+    const firstDone = (async () => {
+      for await (const event of firstTurn)
+        if (event.type === 'token') sawToken();
+    })();
+    await tokenSeen;
+    const secondTurn = (async () => {
+      const events: ResearchEvent[] = [];
+      for await (const event of apiRunner().run({
+        topic: 'hermetismo',
+        question: 'q2',
+        history: [],
+        profile: 'fast',
+        signal: second.signal,
+      }))
+        events.push(event);
+      return events;
+    })();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(runner.active()).toBe(1);
+    first.abort();
+    await firstDone;
+    await expect.poll(() => runner.active(), { timeout: 8000 }).toBe(1);
+    second.abort();
+    await secondTurn;
+    await expect.poll(() => runner.active(), { timeout: 8000 }).toBe(0);
+  });
+});
+
+describe('Who may call the runner (review R3)', () => {
+  it('answers turns only from the API’s address', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'kbchat-codex-home-'));
+    const guarded = await startCodexRunner({
+      bin: join(FAKES_DIR, 'fake-codex.mjs'),
+      codexHome: home,
+      mcpUrl: 'http://172.30.0.2:3000/mcp/turn',
+      host: '127.0.0.1',
+      port: 0,
+      env: { PATH: process.env['PATH'] ?? '' },
+      allowedClients: ['172.30.0.2'],
+    });
+    const turn = await fetch(`${guarded.url}/turn`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ args: 'exec', input: 1 }),
+      body: JSON.stringify({ input: 'x', token: 'x'.repeat(32) }),
     });
-    expect(response.status).toBe(400);
+    expect(turn.status).toBe(403);
+    expect((await fetch(`${guarded.url}/status`)).status).toBe(403);
+    // The container's own healthcheck still works.
+    expect((await fetch(`${guarded.url}/health`)).status).toBe(200);
+    await guarded.close();
+  });
+
+  it('never keeps the lock of a turn that could not start', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'kbchat-codex-home-'));
+    const broken = await startCodexRunner({
+      bin: join(FAKES_DIR, 'fake-codex.mjs'),
+      codexHome: home,
+      mcpUrl: 'http://127.0.0.1:9/mcp/turn',
+      host: '127.0.0.1',
+      port: 0,
+      env: { PATH: process.env['PATH'] ?? '' },
+      tmpRoot: join(home, 'missing', 'folder'),
+    });
+    const post = () =>
+      fetch(`${broken.url}/turn`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ input: 'x', token: 'x'.repeat(32) }),
+      });
+    expect((await post()).status).toBe(500);
+    // The next turn is not stuck behind the failed one.
+    expect((await post()).status).toBe(500);
+    await broken.close();
   });
 });

@@ -65,7 +65,7 @@ import {
 import { usageRoutes } from './modules/usage/index.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
-import { mcpRoutes } from './mcp/mcp-routes.js';
+import { mcpRoutes, peerOnlyMcp } from './mcp/mcp-routes.js';
 import { randomBytes } from 'node:crypto';
 import { SecretBox } from './adapters/secret-box.js';
 import { createHouseAi, type HouseAi } from './house-ai-factory.js';
@@ -486,6 +486,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
 
+  // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
+  app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));
   await app.register(routeAccess);
   await app.register(hostGuard, { allowedHosts: deps.config.ALLOWED_HOSTS });
   await app.register(cors, { origin: [deps.config.WEB_ORIGIN] });

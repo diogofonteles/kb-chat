@@ -89,6 +89,13 @@ export interface ProviderRegistryOptions {
   readonly codexEnabled?: () => boolean;
 }
 
+/** Codex in "IA da aplicação": configured here, and whether its login is there. */
+export interface CodexStatus {
+  readonly configured: boolean;
+  /** null: no sandbox runner, or it did not answer. */
+  readonly loggedIn: boolean | null;
+}
+
 /** The live OpenRouter list as the registry needs it. */
 export interface FreeModelSource {
   autoChain(includeRouter: boolean): string[];
@@ -136,6 +143,14 @@ const LOGGED_OUT_PAUSE_MS = 10 * 60 * 1000;
 
 /** How long Codex's sandbox gets to say whether the owner's login is there. */
 const CODEX_STATUS_TIMEOUT_MS = 5_000;
+/** Its answer is kept this long: every house view would start a `codex login status`. */
+const CODEX_STATUS_TTL_MS = 30_000;
+
+/** A failure that makes a lent subscription unavailable for a while. */
+const pausesLending = (kind: LentSubscription, code: string): boolean =>
+  code === 'CLI_LOGIN_REQUIRED' ||
+  // The runner did not answer: Codex's container is down (ADR 0020).
+  (kind === 'chatgpt-subscription' && code === 'PROVIDER_UNAVAILABLE');
 
 /** Which key a connection test was about, kept with it; null for the subscriptions. */
 const keyIdOf = (key: string | undefined): string | null =>
@@ -168,6 +183,8 @@ export class ProviderRegistry implements ProviderCatalog {
   private readonly cache = new Map<string, LlmPort | ResearchRunnerPort>();
   /** One's own paid fallback in flight, every open turn of every person (KBC-023). */
   private readonly meters = new PaidMeters();
+  /** The last answer of Codex's sandbox about the login (CODEX_STATUS_TTL_MS). */
+  private codexStatusCache: { status: CodexStatus; at: number } | null = null;
   /** Until when each lent subscription counts as unavailable after a logged-out CLI. */
   private readonly loggedOutUntil: Record<LentSubscription, number> = {
     'claude-subscription': 0,
@@ -203,9 +220,12 @@ export class ProviderRegistry implements ProviderCatalog {
               this.codexOptions(choiceFor(profile), { principal: owner }),
             ),
       failed: (code) => {
-        // A logged-out CLI fails every lent turn: people fall back meanwhile (ADR 0019).
-        if (code === 'CLI_LOGIN_REQUIRED')
-          this.loggedOutUntil[kind] = this.now() + LOGGED_OUT_PAUSE_MS;
+        // A logged-out CLI (or Codex's container down) fails every lent turn: people fall
+        // back meanwhile (ADR 0019, ADR 0020).
+        if (!pausesLending(kind, code)) return;
+        this.loggedOutUntil[kind] = this.now() + LOGGED_OUT_PAUSE_MS;
+        // Ask the sandbox again next time instead of trusting its last answer.
+        if (kind === 'chatgpt-subscription') this.codexStatusCache = null;
       },
     };
   }
@@ -229,10 +249,16 @@ export class ProviderRegistry implements ProviderCatalog {
   }
 
   /** "IA da aplicação" > Codex: configured, and whether the owner's login is there. */
-  async codexStatus(): Promise<{
-    configured: boolean;
-    loggedIn: boolean | null;
-  }> {
+  async codexStatus(): Promise<CodexStatus> {
+    const cached = this.codexStatusCache;
+    if (cached && this.now() - cached.at < CODEX_STATUS_TTL_MS)
+      return cached.status;
+    const status = await this.readCodexStatus();
+    this.codexStatusCache = { status, at: this.now() };
+    return status;
+  }
+
+  private async readCodexStatus(): Promise<CodexStatus> {
     const url = this.options.config.KB_CHAT_CODEX_RUNNER_URL;
     const configured = this.codexMode() !== null;
     if (!url) return { configured, loggedIn: null };
@@ -443,6 +469,9 @@ export class ProviderRegistry implements ProviderCatalog {
         ? (this.choice(principal, { profile: 'deep' }).model ?? null)
         : undefined;
     if (this.perTurn(choice)) return this.turnScoped(choice, principal);
+    // Codex's switch is read on every turn, never through the cache (KBC-027 review R1).
+    if (choice.provider === 'chatgpt-subscription' && !this.codexReady())
+      return new DisabledResearchRunner();
     // One cached runner per profile (and deep model), so asking fast then deep keeps both.
     const kind = `runner-${profile}>${deepModel ?? ''}`;
     return this.cached(choiceId(kind, principal, choice), () =>
@@ -480,13 +509,7 @@ export class ProviderRegistry implements ProviderCatalog {
       runner: () =>
         this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
-    // The owner logged in again: lend the subscription again at once (ADR 0019).
-    if (
-      result.ok &&
-      isLentSubscription(request.provider) &&
-      this.isOwner(principal)
-    )
-      this.loggedOutUntil[request.provider] = 0;
+    this.afterOwnerTest(principal, request.provider, result.ok);
     // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
     await this.options.settings.recordTest(principal, {
       provider: request.provider,
@@ -496,6 +519,18 @@ export class ProviderRegistry implements ProviderCatalog {
       at: new Date().toISOString(),
     });
     return result;
+  }
+
+  /** The owner logged in again: lend the subscription again at once (ADR 0019). */
+  private afterOwnerTest(
+    principal: string,
+    provider: AiTestRequest['provider'],
+    ok: boolean,
+  ): void {
+    if (!ok || !isLentSubscription(provider) || !this.isOwner(principal))
+      return;
+    this.loggedOutUntil[provider] = 0;
+    this.codexStatusCache = null;
   }
 
   private buildLlm(
@@ -626,10 +661,9 @@ export class ProviderRegistry implements ProviderCatalog {
   private codexOptions(choice: ProviderChoice, build: RunnerBuild) {
     const { config } = this.options;
     const url = config.KB_CHAT_CODEX_RUNNER_URL;
-    const mcpBaseUrl = config.KB_CHAT_CODEX_MCP_BASE_URL;
     return {
       ...this.cliOptions('codex', choice, build),
-      ...(url && mcpBaseUrl && { runner: { url, mcpBaseUrl } }),
+      ...(url && { runner: { url } }),
     };
   }
 

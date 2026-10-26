@@ -65,10 +65,8 @@ export function parseCodexLine(text: string): CliLine {
 
 /** Where Codex runs when it is sandboxed (ADR 0020). */
 export interface CodexSandbox {
-  /** The runner in the Codex container. */
+  /** The runner in the Codex container; it knows where the MCP endpoint is. */
   readonly url: string;
-  /** Where Codex, in its container, reaches this API's MCP endpoint. */
-  readonly mcpBaseUrl: string;
 }
 
 export interface CodexCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
@@ -189,9 +187,10 @@ export class CodexCliRunner implements ResearchRunnerPort {
     model: string | undefined,
   ): Promise<CliLaunch> {
     const args = codexArgs(access.bearerUrl, model);
-    // In the sandbox the runner sets CODEX_HOME: only the token travels (ADR 0020).
+    // In the sandbox the runner builds the arguments and sets CODEX_HOME: only the model,
+    // the input and the token travel (ADR 0020).
     if (this.options.runner)
-      return { args, env: { [CODEX_TOKEN_ENV]: access.token } };
+      return { args, env: { [CODEX_TOKEN_ENV]: access.token }, model };
     const home = await privateCodexHome(this.options.workDir, this.options.env);
     return { args, env: { CODEX_HOME: home, [CODEX_TOKEN_ENV]: access.token } };
   }
@@ -201,11 +200,7 @@ export class CodexCliRunner implements ResearchRunnerPort {
     const { runner } = this.options;
     const base = { ...this.options, model: this.model };
     return runner
-      ? {
-          ...base,
-          apiBaseUrl: runner.mcpBaseUrl,
-          spawn: remoteCli(runner.url, this.options.fetch),
-        }
+      ? { ...base, spawn: remoteCli(runner.url, this.options.fetch) }
       : base;
   }
 

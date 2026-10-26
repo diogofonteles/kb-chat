@@ -86,8 +86,6 @@ export const configSchema = z
      * of this container. Required for Codex in production.
      */
     KB_CHAT_CODEX_RUNNER_URL: z.url().optional(),
-    /** Where Codex, in its container, reaches this API's MCP endpoint. */
-    KB_CHAT_CODEX_MCP_BASE_URL: z.url().optional(),
     /** Addresses besides loopback the MCP endpoint answers (the Codex container), by token. */
     KB_CHAT_MCP_PEERS: csv.default([]),
     KB_CHAT_DAILY_CAP_USD: z.coerce.number().min(0).default(1),
@@ -163,13 +161,6 @@ export const configSchema = z
           message: `${name} is set without ${other}: set both or neither`,
         });
     }
-    if (config.KB_CHAT_CODEX_RUNNER_URL && !config.KB_CHAT_CODEX_MCP_BASE_URL)
-      context.addIssue({
-        code: 'custom',
-        path: ['KB_CHAT_CODEX_MCP_BASE_URL'],
-        message:
-          'KB_CHAT_CODEX_RUNNER_URL is set without KB_CHAT_CODEX_MCP_BASE_URL: Codex needs the address of the MCP endpoint',
-      });
   });
 
 export type AppConfig = z.infer<typeof configSchema>;

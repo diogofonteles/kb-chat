@@ -49,11 +49,11 @@ const codexRunner = await startCodexRunner({
     new URL('../../test/fakes/fake-codex.mjs', import.meta.url),
   ),
   codexHome: mkdtempSync(join(tmpdir(), 'kbchat-e2e-codex-')),
+  mcpUrl: `http://127.0.0.1:${process.env['PORT'] ?? '3000'}/mcp/turn`,
   host: '127.0.0.1',
   port: 0,
   env: { PATH: process.env['PATH'] ?? '' },
 });
-const e2ePort = process.env['PORT'] ?? '3000';
 
 // E2E server: the fixture vault and the in-process index, no QMD or models.
 const config = loadConfig({
@@ -70,7 +70,6 @@ const config = loadConfig({
   // Every spec signs in; they run in parallel from one address.
   AUTH_RATE_LIMIT: '10000',
   KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
-  KB_CHAT_CODEX_MCP_BASE_URL: `http://127.0.0.1:${e2ePort}`,
 });
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);

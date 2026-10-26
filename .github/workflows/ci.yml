@@ -55,7 +55,8 @@ jobs:
     # deploy/compose.yml, cannot read the state, the Claude login, the deploy .env or the
     # secrets key (canary copies planted where production keeps them).
     name: Codex sandbox
-    runs-on: ubuntu-latest
+    # The production VM is arm64 (OCI Ampere): prove the image built for that architecture.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -69,5 +70,7 @@ jobs:
           tags: kb-chat-api:proof
           cache-from: type=gha,scope=api-proof
           cache-to: type=gha,mode=max,scope=api-proof
+      - name: Block the metadata service for the sandbox, as cloud-init does on the VM
+        run: sudo deploy/scripts/codex-egress.sh
       - name: Prove the sandbox
         run: deploy/scripts/codex-sandbox-proof.sh proof docker.io/library

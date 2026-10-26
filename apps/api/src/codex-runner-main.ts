@@ -7,6 +7,8 @@ const config = loadRunnerConfig();
 const runner = await startCodexRunner({
   bin: config.CODEX_BIN,
   codexHome: config.CODEX_HOME,
+  mcpUrl: config.CODEX_MCP_URL,
+  allowedClients: config.CODEX_RUNNER_CLIENTS,
   host: config.CODEX_RUNNER_HOST,
   port: config.CODEX_RUNNER_PORT,
   env: { PATH: config.PATH, LANG: config.LANG },

@@ -44,6 +44,19 @@ export interface McpRouteOptions {
 /** IPv4 peers may arrive mapped (::ffff:a.b.c.d) on a dual-stack socket. */
 const unmapped = (address: string): string => address.replace(/^::ffff:/, '');
 
+/**
+ * The Codex sandbox (ADR 0020) may call only the MCP routes: from a peer address every other
+ * route answers 404, so a prompt-injected turn cannot reach sign-in, codes or any API route.
+ */
+export function peerOnlyMcp(peers: readonly string[]) {
+  const known = new Set(peers);
+  return async (request: FastifyRequest): Promise<void> => {
+    if (!known.has(unmapped(request.socket.remoteAddress ?? ''))) return;
+    if (!request.url.startsWith('/mcp/'))
+      throw new AppError('NOT_FOUND', 'Not found');
+  };
+}
+
 /** Loopback, or one of the configured peers (by socket address, never a header). */
 const allowedCaller = (peers: readonly string[]) => {
   const known = new Set(peers);

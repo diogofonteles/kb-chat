@@ -86,6 +86,8 @@ COPY --from=build --chown=app:app /out .
 # The deploy files of this commit; deploy.sh copies them out on the VM (ADR 0010).
 COPY deploy/compose.yml /app/deploy/compose.yml
 COPY deploy/scripts /app/deploy/scripts
+# The sandbox probe (ADR 0020): run on the VM by deploy/scripts/codex-vm-check.sh.
+COPY deploy/codex-proof /app/deploy/codex-proof
 USER app
 EXPOSE 3000
 # The health route answers 200 with "degraded" when qmd is down: the container stays up and

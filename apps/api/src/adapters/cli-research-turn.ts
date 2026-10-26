@@ -58,6 +58,8 @@ export interface CliLaunch {
   readonly args: readonly string[];
   /** Added to the allowlisted environment. */
   readonly env?: Readonly<Record<string, string>>;
+  /** For a remote runner, which builds the arguments itself (ADR 0020). */
+  readonly model?: string;
 }
 
 /** How one official CLI is called and read (Claude Code, Codex). */
@@ -240,6 +242,7 @@ async function startCli(
     env: { ...subscriptionEnv(options.env), ...launch.env },
     input: dialect.input(call.input),
     killGraceMs: options.killGraceMs,
+    ...(launch.model !== undefined && { model: launch.model }),
   });
 }
 

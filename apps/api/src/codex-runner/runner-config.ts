@@ -6,6 +6,18 @@ const runnerConfigSchema = z.object({
   CODEX_BIN: z.string().min(1).default('codex'),
   CODEX_RUNNER_HOST: z.string().min(1).default('0.0.0.0'),
   CODEX_RUNNER_PORT: z.coerce.number().int().min(1).max(65535).default(8790),
+  /** The API's MCP endpoint for turns (ADR 0020): the only one Codex is pointed at. */
+  CODEX_MCP_URL: z.url(),
+  /** Who may send turns, by socket address (the API); empty: loopback only. */
+  CODEX_RUNNER_CLIENTS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
   PATH: z.string().default('/usr/local/bin:/usr/bin:/bin'),
   LANG: z.string().default('C.UTF-8'),
 });

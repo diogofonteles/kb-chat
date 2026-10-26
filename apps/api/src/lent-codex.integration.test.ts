@@ -6,6 +6,7 @@ import {
   closeApp,
   research,
   start,
+  stopCodexRunner,
   withPeople,
 } from '../test/ai-app-harness.js';
 
@@ -106,5 +107,51 @@ describe('Codex, the ChatGPT subscription, in its sandbox (KBC-027)', () => {
         })
       ).statusCode,
     ).toBe(400);
+  });
+
+  it('stops serving the owner too once a master turns it off (review R1)', async () => {
+    const { owner } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    await owner('PUT', '/api/v1/settings', {
+      ai: { provider: 'chatgpt-subscription' },
+    });
+    expect((await research(owner)).at(-1)).toMatchObject({ type: 'done' });
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: false });
+    // Refused before any answer (the route says no AI is configured for him).
+    const after = await research(owner);
+    expect(after.some((event) => event.type === 'done')).toBe(false);
+  });
+
+  it('lets lent people fall back while its container is down (review R2)', async () => {
+    const { owner, member, memberId } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
+    await stopCodexRunner();
+    expect((await research(member)).at(-1)).toMatchObject({ type: 'error' });
+    expect((await member('GET', '/api/v1/ai/status')).json().source).toBe(
+      'none',
+    );
+    const house = (await owner('GET', '/api/v1/house-ai')).json();
+    expect(house.lendable['chatgpt-subscription']).toBe(false);
+    expect(house.codex.loggedIn).toBeNull();
+  });
+
+  it('answers nothing but MCP to the Codex sandbox’s address (review F3)', async () => {
+    const started = await start();
+    const { owner } = await withPeople(started);
+    const fromCodex = (url: string, method: 'GET' | 'POST' = 'GET') =>
+      started.app.inject({
+        method,
+        url,
+        remoteAddress: '172.30.0.10',
+        headers: { host: 'localhost:3000', 'x-requested-with': 'kb-chat' },
+      });
+    expect((await fromCodex('/api/v1/topics')).statusCode).toBe(404);
+    expect((await fromCodex('/health')).statusCode).toBe(404);
+    expect((await fromCodex('/api/v1/auth/code', 'POST')).statusCode).toBe(404);
+    // An unknown turn token is a 404 too, but from the MCP route itself.
+    expect((await fromCodex('/mcp/turn', 'POST')).statusCode).toBe(404);
+    // Everyone else is unaffected.
+    expect((await owner('GET', '/api/v1/topics')).statusCode).toBe(200);
   });
 });
