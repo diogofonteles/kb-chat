@@ -66,11 +66,28 @@ for (const width of [1440, 390]) {
   await fieldset
     .getByLabel('Qual IA atende esta pessoa')
     .selectOption({ label: 'Assinatura do Claude (administrador)' });
-  await fieldset.getByRole('alert').scrollIntoViewIfNeeded();
+  await fieldset
+    .getByRole('button', { name: 'Cancelar' })
+    .scrollIntoViewIfNeeded();
   await settled(ownerPage);
   await ownerPage.screenshot({ path: `${out}/lend-confirm-${width}.png` });
   report.push(`owner ${width}: overflow ${await overflow(ownerPage)}`);
   await fieldset.getByRole('button', { name: 'Ceder assim mesmo' }).click();
+  await dialog.getByLabel(`Selecionar ${email}`).check();
+  const bar = dialog.getByRole('group', {
+    name: 'IA da aplicação para várias pessoas',
+  });
+  await bar
+    .getByRole('combobox')
+    .selectOption({ label: 'Assinatura do Claude (administrador)' });
+  await bar
+    .getByRole('button', { name: 'Aplicar às selecionadas (1)' })
+    .click();
+  await bar.getByRole('button', { name: 'Cancelar' }).scrollIntoViewIfNeeded();
+  await settled(ownerPage);
+  await ownerPage.screenshot({ path: `${out}/lend-bulk-confirm-${width}.png` });
+  await bar.getByRole('button', { name: 'Cancelar' }).click();
+  await dialog.getByLabel(`Selecionar ${email}`).uncheck();
   await dialog.getByText('Histórico da IA').click();
   await dialog.getByText(/termos confirmados/).scrollIntoViewIfNeeded();
   await settled(ownerPage);
@@ -97,6 +114,34 @@ for (const width of [1440, 390]) {
   await settled(person);
   await person.screenshot({ path: `${out}/lent-answer-${width}.png` });
   await person.context().close();
+
+  // Without their own AI settings: the same notice, in Preferências, without the button.
+  const plainEmail = `lv24p-${width}-${Date.now()}@kb-chat.test`;
+  const admin = await pageFor('owner@kb-chat.test', width);
+  const plain = await admin.request.post(`${base}/api/v1/people`, {
+    data: { email: plainEmail },
+    headers: CSRF,
+  });
+  await admin.request.patch(
+    `${base}/api/v1/people/${(await plain.json()).id}`,
+    {
+      data: {
+        topics: ['hermetismo'],
+        features: ['search', 'research'],
+        ai: { appAi: 'claude-subscription', subscriptionTermsAccepted: true },
+      },
+      headers: CSRF,
+    },
+  );
+  await admin.context().close();
+  const plainPage = await pageFor(plainEmail, width);
+  await plainPage.goto(base);
+  dialog = await settings(plainPage, width);
+  await dialog.getByText('Quem atende você agora').waitFor();
+  await settled(plainPage);
+  await plainPage.screenshot({ path: `${out}/lent-preferences-${width}.png` });
+  report.push(`plain ${width}: overflow ${await overflow(plainPage)}`);
+  await plainPage.context().close();
 }
 await browser.close();
 console.log(report.join('\n'));
