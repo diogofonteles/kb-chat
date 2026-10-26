@@ -1,6 +1,7 @@
 # 0007 — AI providers, subscriptions through the official CLIs, and local settings
 
 - Status: accepted (2026-10-24)
+- Amended by: [0016](0016-house-ai-plan-and-access-policy.md) (the house AI plan and the AI access policy; no env or CLI defaults in production); [0017](0017-secrets-sealed-at-rest.md) (keys sealed at rest)
 - Amended by: [0009](0009-faster-research-profiles-and-streaming.md) (a fast and a deep model per provider; Sonnet by default on the Claude subscription), [0014](0014-research-subagents.md) (Claude Code gets its Agent tool and a "pesquisador" sub-agent in the exhaustive profile)
 - Amends: [0004](0004-grounded-answers-single-llm-call.md) (the key is no longer env-only) and [0006](0006-research-agent-over-kb-tools.md) (how Claude Code reaches the tools)
 - Drivers: KBC-007 (preferences and provider without editing files), Q3 cost, the owner's benchmark (Claude at full capability, the default for local use), Q6 evolvability (ADR 0005 seam; logins and permissions in ADR 0008, KBC-010)

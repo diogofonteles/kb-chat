@@ -82,6 +82,12 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.alreadyRequested:Sua solicitação está em análise.`,
   REQUEST_COOLDOWN: () =>
     $localize`:@@error.requestCooldown:Sua solicitação foi recusada há pouco. Tente de novo amanhã.`,
+  HOUSE_QUOTA_EXHAUSTED: () =>
+    $localize`:@@error.houseQuota:Suas pesquisas com IA de hoje acabaram. Volte amanhã ou conecte a sua própria IA.`,
+  AI_CAPACITY_EXHAUSTED: () =>
+    $localize`:@@error.aiCapacity:A IA gratuita da aplicação está sem capacidade agora. Tente mais tarde ou conecte a sua própria IA.`,
+  PROVIDER_UNAVAILABLE: () =>
+    $localize`:@@error.providerUnavailable:O OpenRouter não respondeu agora. Tente de novo em instantes.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

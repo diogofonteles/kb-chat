@@ -11,6 +11,7 @@ import { TOPICS } from '../../testing/fixtures.js';
 import {
   aProviderList,
   aSettingsView,
+  flushAiStatus,
 } from '../../testing/settings-fixtures.js';
 import { aiDraftFrom, aiUpdateFrom, suggestedProvider } from './ai-draft.js';
 import { SettingsButton } from './settings-button.js';
@@ -28,7 +29,9 @@ async function renderHost(view = aSettingsView(), list = aProviderList()) {
   const result = await render(SettingsHost, { providers });
   const http = TestBed.inject(HttpTestingController);
   http.expectOne('/api/v1/settings').flush(view);
+  flushAiStatus(http);
   http.expectOne('/api/v1/ai/providers').flush(list);
+  flushAiStatus(http);
   await result.fixture.whenStable();
   return { ...result, http };
 }
@@ -113,6 +116,7 @@ describe('first-run wizard (AC-1)', () => {
     put.flush(aSettingsView());
     TestBed.tick();
     http.expectOne('/api/v1/ai/providers').flush(aProviderList());
+    flushAiStatus(http);
     await fixture.whenStable();
     expect(dialog()?.open).toBe(false);
   });
@@ -178,6 +182,7 @@ describe('first-run wizard (AC-1)', () => {
     );
     TestBed.tick();
     http.expectOne('/api/v1/ai/providers').flush(list);
+    flushAiStatus(http);
     await fixture.whenStable();
     expect(dialog()?.open).toBe(false);
     expect(TestBed.inject(ThemeStore).theme()).toBe('dark');
@@ -261,6 +266,7 @@ describe('Configurações', () => {
     put.flush(view);
     TestBed.tick();
     http.expectOne('/api/v1/ai/providers').flush(list);
+    flushAiStatus(http);
     await fixture.whenStable();
     // A per-token provider takes any id, with suggestions.
     fireEvent.click(screen.getByRole('radio', { name: /OpenRouter/ }));
@@ -308,6 +314,7 @@ describe('Configurações', () => {
     );
     TestBed.tick();
     http.expectOne('/api/v1/ai/providers').flush(aProviderList());
+    flushAiStatus(http);
     await fixture.whenStable();
     expect(screen.queryByText('••••abcd')).toBeNull();
   });
@@ -365,6 +372,7 @@ describe('Configurações', () => {
     put.flush(aSettingsView());
     TestBed.tick();
     http.expectOne('/api/v1/ai/providers').flush(aProviderList());
+    flushAiStatus(http);
     await fixture.whenStable();
     expect(screen.getByText('Salvo.')).toBeTruthy();
 
@@ -394,6 +402,7 @@ describe('Configurações', () => {
     );
     TestBed.tick();
     http.expectOne('/api/v1/ai/providers').flush(aProviderList());
+    flushAiStatus(http);
     await fixture.whenStable();
     expect(localStorage.getItem('kb-chat.search-mode')).toBe('exact');
     // The saved default view applies to the next page in this browser.

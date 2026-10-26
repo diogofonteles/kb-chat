@@ -3,10 +3,15 @@ import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { OWNER, buildApp } from './app.js';
 import { applyUsageRetention } from './modules/usage/index.js';
 import {
+  assertAiConfigured,
   assertDeliveryConfigured,
   assertSignInConfigured,
+  isHosted,
   loadConfig,
 } from './config.js';
+import { SealedSettingsStore } from './adapters/sealed-settings-store.js';
+import { SecretBox, loadSecretsKey } from './adapters/secret-box.js';
+import { createHouseAi } from './house-ai-factory.js';
 import { JsonDocumentStore } from './adapters/json-document-store.js';
 import { createDelivery } from './delivery-factory.js';
 import { JsonPeopleStore } from './adapters/json-people-store.js';
@@ -29,7 +34,16 @@ import { createSearchIndex } from './search-index-factory.js';
 const config = loadConfig();
 assertSignInConfigured(config);
 assertDeliveryConfigured(config);
+assertAiConfigured(config);
 const logger = createLogger(config.LOG_LEVEL);
+// Every provider key on disk is sealed with this key (ADR 0017).
+const sealer = new SecretBox(
+  await loadSecretsKey({
+    configured: config.KB_CHAT_SECRETS_KEY,
+    stateDir: config.KB_CHAT_STATE_DIR,
+    hosted: isHosted(config),
+  }),
+);
 const vault = new FsVaultAdapter(config.KB_VAULT);
 const index = await createSearchIndex({ config, vault, log: logger });
 const ledger = new JsonlSpendLedger(
@@ -45,24 +59,6 @@ const agent = createResearchAgent({
   ledger,
   budgets: budgetsFromConfig(config),
 });
-// Settings first, then the environment, resolved per request (KBC-007, ADR 0007).
-const ai = await createAiProviders({
-  config,
-  principal: OWNER,
-  store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
-  env: process.env,
-  warn: (message) => logger.warn(message),
-  tools: agent.toolsFor,
-  perTokenRunner: agent.perTokenRunner,
-  systemPrompt: agent.systemPrompt,
-  subAgentPrompt: agent.subAgentPrompt,
-});
-const usage = new JsonlUsageLog(join(config.KB_CHAT_STATE_DIR, 'events.jsonl'));
-await applyUsageRetention(usage, logger);
-const conversations = new FsConversationStore({
-  dir: join(config.KB_CHAT_STATE_DIR, 'conversations'),
-  log: logger,
-});
 // Sign-in with Google and who may use what (KBC-010, ADR 0008).
 const auth = {
   people: new PeopleService({
@@ -74,6 +70,37 @@ const auth = {
   }),
   verifier: createGoogleVerifier(config.GOOGLE_CLIENT_ID),
 };
+// The app's own AI, configured by a master in the UI (KBC-022, ADR 0016).
+const house = await createHouseAi({
+  stateDir: config.KB_CHAT_STATE_DIR,
+  sealer,
+  webOrigin: config.WEB_ORIGIN,
+  warn: (message) => logger.warn(message),
+});
+// Settings first, then the environment, resolved per request (KBC-007, ADR 0007).
+const ai = await createAiProviders({
+  config,
+  principal: OWNER,
+  store: new SealedSettingsStore({
+    store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
+    sealer,
+    warn: (message) => logger.warn(message),
+  }),
+  env: process.env,
+  warn: (message) => logger.warn(message),
+  tools: agent.toolsFor,
+  perTokenRunner: agent.perTokenRunner,
+  systemPrompt: agent.systemPrompt,
+  subAgentPrompt: agent.subAgentPrompt,
+  house,
+  personOf: (principal) => auth.people.cachedByPrincipal(principal),
+});
+const usage = new JsonlUsageLog(join(config.KB_CHAT_STATE_DIR, 'events.jsonl'));
+await applyUsageRetention(usage, logger);
+const conversations = new FsConversationStore({
+  dir: join(config.KB_CHAT_STATE_DIR, 'conversations'),
+  log: logger,
+});
 // Access requests and one-time codes by email or SMS (KBC-014, ADR 0011).
 const access = {
   codes: new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'codes.json')),
@@ -95,6 +122,7 @@ const app = await buildApp({
   ledger,
   usage,
   conversations,
+  house,
 });
 
 const shutdown = async (): Promise<void> => {

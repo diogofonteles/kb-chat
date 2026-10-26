@@ -171,6 +171,11 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 
 ---
 
+### Rodapé da resposta e recusas (KBC-022)
+- Rodapé: "Respondido por <modelo que respondeu> · Gratuito · Pesquisas restantes hoje: N" (plano da casa) ou "· Custo: US$ …".
+- Cota esgotada: "Suas pesquisas com IA de hoje acabaram (N por dia). Volte amanhã ou conecte a sua própria IA." + botão "Conectar a minha IA" (⚙ > IA).
+- Capacidade gratuita esgotada: "A IA gratuita da aplicação está sem capacidade agora. Tente mais tarde ou conecte a sua própria IA." + o mesmo botão.
+
 ## T5. Lateral: conversa, histórico, acervo e tema
 
 - **+ Nova conversa** e o **histórico completo**, guardado pela API local neste computador e rotulado "salvo no servidor": todas as conversas das duas visões, sem limite (KBC-005 BR-1, emenda 2026-10-24). Restaurar uma conversa com IA mostra as respostas salvas sem chamar a IA.
@@ -192,6 +197,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
   - "Testar conexão" responde em até 20 s, numa linha de status (NFR-1, AC-5).
   - "Salvar" grava provedor, chave, modelo e limite juntos.
 - **Preferências:** tela inicial (Pesquisa com IA ou Buscar documentos), pesquisa com IA por padrão (Rápido, Profundo ou Exaustivo), **Aprofundar automaticamente** (caixa de seleção, ligada por padrão, com uma linha de ajuda), acervo padrão, modo de busca e tema. Salvam ao mudar ("Salvo automaticamente.").
+- **Quem atende você** (KBC-022), no topo da seção IA: "IA da aplicação (cedida pelo administrador) · Plano da casa · Gratuito · Pesquisas restantes hoje: 3 de 5" ou "Sua IA · OpenRouter · você paga". O cartão "IA da aplicação" fica no topo da lista de provedores.
 - **Sobre:** onde ficam os dados (~/.kb-chat, só o seu usuário lê); a assinatura nunca passa a senha à Nova Alexandria; "Rever o assistente de início".
 
 | Estado | Mostra |
@@ -243,7 +249,9 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 - Lista: nome (ou e-mail), e-mail, selos "Master" e "Dono", acervos, último acesso ("Ainda não entrou") e, só para o dono, "Gasto de IA hoje: US$ …" (BR-6). Um convite recusado aparece logo abaixo do campo de e-mail. Abrir uma pessoa mostra:
   - **Acervos** e **Funcionalidades** (Buscar documentos, Pesquisa com IA, Montar/ampliar acervo, Configurações de IA próprias), caixas de seleção que salvam ao mudar ("Salvo."). Para um master aparecem marcadas e desabilitadas: "Masters veem todos os acervos e usam todas as funcionalidades."
   - "Tornar master" / "Remover master"; recusas em texto claro: "Deve restar ao menos um master.", "A conta do dono não pode ser rebaixada nem removida."
-  - "Revogar acesso" pede confirmação ("Revogar o acesso de … ? A pessoa sai na hora." · "Revogar" · "Cancelar"); a conta do dono não tem essa ação.
+  - **IA da aplicação** (KBC-022), no editor da pessoa: "Qual IA atende esta pessoa" (seleção: Padrão (Plano da casa) · Plano da casa · Nenhuma), "Usar sempre a IA da aplicação, mesmo se ela tiver a própria", "Pesquisas por dia" (vazio = padrão), "Liberar modelo pago de reserva" + "Teto por mês (US$)". A linha da pessoa mostra "IA: Plano da casa (OpenRouter)" (com "(sempre)" quando marcado); a escolha da própria IA é dela e não aparece ao master (KBC-010 BR-6). "Histórico da IA" (recolhido) lista quem mudou, quando e para quê.
+- **Seleção em lote**: caixa por pessoa e "Selecionar todos"; com seleção, uma barra "N selecionadas · IA da aplicação: [escolha] · Aplicar" e, para todos, "Aplicar a todos os usuários" com "também para os próximos convidados".
+- "Revogar acesso" pede confirmação ("Revogar o acesso de … ? A pessoa sai na hora." · "Revogar" · "Cancelar"); a conta do dono não tem essa ação.
 - A lateral mostra a pessoa (foto ou inicial, nome, e-mail) e "Sair". A visão "Pesquisa com IA" e os acervos não liberados não aparecem; um convidado sem acervo vê "Nenhum acervo foi liberado para você ainda; peça a um master."
 
 ## T10. Pedir acesso e entrar com código (KBC-014)
@@ -278,6 +286,24 @@ Acessibilidade: o foco vai para o campo do código quando ele aparece; status em
 - Coluna de leitura (até 42rem, serifa de leitura, três tamanhos de texto): "Nova Alexandria" (marca discreta, link para o início), h1 "Política de privacidade", introdução e as seções h2 "Quais dados guardamos", "Para que usamos", "Quem participa", "Por quanto tempo", "Seus direitos"; "Última atualização" e o link "Voltar à Nova Alexandria".
 - "O responsável pelos dados é o administrador da Nova Alexandria, que aprova os acessos." Contato para pedidos sobre os dados: o e-mail do dono (`KB_CHAT_OWNER_EMAIL`, por `GET /api/v1/auth/config`) como link `mailto:`; sem ele (ou com erro), "fale com o administrador que aprovou o seu acesso"; enquanto carrega, só "…".
 - Título da aba: "Privacidade — Nova Alexandria"; nas outras telas, "Nova Alexandria".
+
+## T12. IA da aplicação (KBC-022, só masters)
+
+**Objetivo:** dar IA a quem não tem, sem custo, controlando quem usa o quê. **Sucesso:** conectar a conta da casa em um clique e ver cada pesquisa da casa com custo e cota.
+
+- Seção de ⚙ Configurações ("IA da aplicação"), entre "IA" e "Preferências"; some para quem não é master.
+- **Conta OpenRouter da aplicação** (cartão de status): "Conectada ••••abcd · por e-mail em dd/mm" ou "Não conectada". Ações: **Conectar OpenRouter** (primário; vai ao OpenRouter e volta), "Colar uma chave" (abre o campo só de escrita + "Salvar chave"), "Testar conexão" e "Desconectar" (confirmação na linha). Linha "Pedidos gratuitos hoje: 12 de 1000" (ou 50, com a dica: "Com US$ 10 em créditos comprados uma vez, o limite sobe para 1000 por dia.").
+- **Modelos gratuitos**: "Escolher automaticamente (recomendado)" ligado por padrão, com a lista atual (nome, id, contexto) e "Atualizada às hh:mm". Desligado, caixas de seleção na ordem da lista. "Usar openrouter/free como última opção" (ligado). Nota: "Só modelos gratuitos com ferramentas; se um estiver ocupado, o próximo responde."
+- **Modelo pago de reserva** (desligado por padrão): campo de id com sugestões e a nota "Só entra para quem você liberar, até o teto mensal da pessoa."
+- **Para quem**: "IA padrão para quem não tem atribuição" (rádio: Plano da casa · Nenhuma) e "Pesquisas por dia (padrão)" com a ajuda: "Rápido conta 1, Profundo 2, Exaustivo 5."
+- **Chave de gerenciamento (opcional)**: só escrita; "Com ela, cada pessoa com reserva paga ganha uma chave com limite mensal no próprio OpenRouter."
+- Volta do OpenRouter: a seção abre sozinha com "Conta conectada." ou "Não consegui conectar. Tente de novo." (status anunciado).
+
+| Estado | Mostra |
+|---|---|
+| Carregando | "Carregando…" |
+| Lista gratuita indisponível | "Não consegui atualizar a lista agora; usando a última." ou, sem nenhuma, "Sem lista de modelos gratuitos; tente de novo." + "Tentar de novo" |
+| Erro ao salvar | "Não consegui salvar. Tente de novo." |
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 

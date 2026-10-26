@@ -1,6 +1,10 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
+import {
+  OPENROUTER_RETURN_PARAM,
+  openRouterReturnSchema,
+} from '@kb-chat/contracts';
 import type {
   AiTestRequest,
   AiTestResult,
@@ -9,6 +13,7 @@ import type {
   SettingsView,
 } from '@kb-chat/contracts';
 import { SettingsApi } from '@core/api/settings-api.js';
+import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { ThemeStore } from '@core/theme/theme-store.js';
 import { writeModePreference } from '@features/chat/mode-preference.js';
@@ -22,7 +27,11 @@ import { tap, type Observable } from 'rxjs';
 export type SettingsPanel = 'settings' | 'onboarding';
 
 /** The sections of Configurações; `people` is "Pessoas e permissões" (masters, KBC-010). */
-export type SettingsSection = 'ai' | 'preferences' | 'people' | 'about';
+export type SettingsSection =
+  'ai' | 'house' | 'preferences' | 'people' | 'about';
+
+/** How an OpenRouter round trip ended (`?openrouter=` on the way back, KBC-022). */
+export type ConnectOutcome = 'connected' | 'error';
 
 /** This browser's own choices (ThemeStore, mode-preference). */
 const THEME_KEY = 'kb-chat.theme';
@@ -44,6 +53,7 @@ function safeStorage(view: Window | null): Storage | undefined {
 @Injectable({ providedIn: 'root' })
 export class SettingsStore {
   private readonly api = inject(SettingsApi);
+  private readonly houseApi = inject(HouseAiApi);
   private readonly themes = inject(ThemeStore);
   private readonly session = inject(SessionStore);
   private readonly storage = safeStorage(inject(DOCUMENT).defaultView);
@@ -53,6 +63,9 @@ export class SettingsStore {
   private readonly requestedSection = signal<SettingsSection | null>(null);
   /** The section Configurações opens at (the sidebar's "Pessoas e permissões"). */
   readonly section = this.requestedSection.asReadonly();
+  private readonly returned = signal<ConnectOutcome | null>(null);
+  /** The outcome of the last OpenRouter round trip, shown once where it was started. */
+  readonly connectOutcome = this.returned.asReadonly();
   /** Choosing a provider or a key is a feature of its own (KBC-010). */
   readonly ownAi = computed(() => this.session.can('own-ai-settings'));
   /** The profile this browser picked in the research composer (KBC-011). */
@@ -68,6 +81,12 @@ export class SettingsStore {
   readonly providers = rxResource({
     params: () => (this.started() && this.ownAi()) || undefined,
     stream: () => this.api.providers(),
+  });
+
+  /** Which AI serves the person now and who pays (KBC-022). */
+  readonly aiStatus = rxResource({
+    params: () => this.started() || undefined,
+    stream: () => this.houseApi.status(),
   });
 
   readonly settings = computed(() =>
@@ -109,6 +128,21 @@ export class SettingsStore {
     this.requested.set('onboarding');
   }
 
+  /**
+   * Back from OpenRouter (`?openrouter=connected|error&for=house`): Configurações opens where
+   * the connection started, with the outcome (KBC-022).
+   */
+  returnFromOpenRouter(search: string): boolean {
+    const params = new URLSearchParams(search);
+    const outcome = openRouterReturnSchema.safeParse(
+      params.get(OPENROUTER_RETURN_PARAM),
+    );
+    if (!outcome.success) return false;
+    this.returned.set(outcome.data);
+    this.openSettings(params.get('for') === 'house' ? 'house' : 'ai');
+    return true;
+  }
+
   close(): void {
     this.requested.set(null);
     this.onboardingDismissed.set(true);
@@ -125,6 +159,7 @@ export class SettingsStore {
         if (profile && profile !== savedProfile)
           this.chooseResearchProfile(profile);
         this.providers.reload();
+        this.aiStatus.reload();
       }),
     );
   }

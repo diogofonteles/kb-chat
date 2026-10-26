@@ -101,18 +101,28 @@
     </select>
   </label>
 
-  <p class="spend">
-    <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
-    @if (!spend.configured()) {
-      <span i18n="@@sidebar.spendOff">IA não configurada</span>
-    } @else if (spend.label()) {
-      <span class="amount">{{ spend.label() }}</span>
-    } @else if (spend.today.error()) {
-      <span i18n="@@sidebar.spendError">Gasto indisponível</span>
-    } @else {
-      <span i18n="@@sidebar.spendLoading">Carregando…</span>
-    }
-  </p>
+  @if (appServed(); as served) {
+    <p class="spend">
+      <span class="label" i18n="@@sidebar.appAi">IA da aplicação</span>
+      <span i18n="@@sidebar.appAiLeft"
+        >Gratuita · {{ served.remaining }} de {{ served.daily }} pesquisas
+        hoje</span
+      >
+    </p>
+  } @else {
+    <p class="spend">
+      <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
+      @if (!spend.configured()) {
+        <span i18n="@@sidebar.spendOff">IA não configurada</span>
+      } @else if (spend.label()) {
+        <span class="amount">{{ spend.label() }}</span>
+      } @else if (spend.today.error()) {
+        <span i18n="@@sidebar.spendError">Gasto indisponível</span>
+      } @else {
+        <span i18n="@@sidebar.spendLoading">Carregando…</span>
+      }
+    </p>
+  }
 
   @if (session.isMaster()) {
     <button

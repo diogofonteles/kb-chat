@@ -68,16 +68,20 @@ const perTokenRunnerOf =
     ledger: SpendLedgerPort;
     budgets?: ResearchBudgets;
   }): PerTokenRunnerFactory =>
-  (llm, scope, escalation) =>
+  (llm, { ledger: own, ...scope }, escalation) =>
     new ToolLoopRunner({
       llm,
       tools,
       budgets,
-      spend: new SpendService({ llm, ledger, ...scope }),
+      spend: new SpendService({ llm, ledger: own ?? ledger, ...scope }),
       ...(escalation && {
         deep: {
           llm: escalation.deep,
-          spend: new SpendService({ llm: escalation.deep, ledger, ...scope }),
+          spend: new SpendService({
+            llm: escalation.deep,
+            ledger: own ?? ledger,
+            ...scope,
+          }),
         },
         autoDeepen: escalation.enabled,
       }),

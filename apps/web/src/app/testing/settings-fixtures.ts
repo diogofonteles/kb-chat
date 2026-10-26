@@ -1,4 +1,7 @@
+import type { HttpTestingController } from '@angular/common/http/testing';
 import type {
+  AiStatus,
+  HouseAiView,
   ProviderInfo,
   ProviderList,
   SettingsView,
@@ -74,4 +77,40 @@ export const aProviderList = (overrides: Overrides = {}): ProviderList => ({
     }),
     info('none', overrides.none),
   ],
+});
+
+/** GET /api/v1/ai/status (KBC-022): nothing serves the person by default. */
+export const anAiStatus = (overrides: Partial<AiStatus> = {}): AiStatus => ({
+  source: 'none',
+  appAi: null,
+  provider: null,
+  remainingToday: null,
+  dailyResearches: null,
+  enforced: false,
+  ...overrides,
+});
+
+/** Answers every pending "Quem atende você" request (Settings asks again after a save). */
+export const flushAiStatus = (
+  http: HttpTestingController,
+  status: AiStatus = anAiStatus(),
+): void => {
+  for (const request of http.match('/api/v1/ai/status')) request.flush(status);
+};
+
+/** GET /api/v1/house-ai (KBC-022): not connected, the defaults. */
+export const aHouseView = (
+  overrides: Partial<HouseAiView> = {},
+): HouseAiView => ({
+  connection: null,
+  freeModels: null,
+  includeRouter: true,
+  chain: ['openrouter/free'],
+  paidModel: null,
+  defaultAppAi: 'house',
+  defaultChange: null,
+  defaultDailyResearches: 5,
+  managementKey: null,
+  freeUsage: null,
+  ...overrides,
 });

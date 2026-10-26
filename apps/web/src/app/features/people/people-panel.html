@@ -77,9 +77,36 @@
 } @else if (people.isLoading() && list().length === 0) {
   <p class="muted" i18n="@@people.loading">Carregando…</p>
 } @else {
+  <app-ai-assignment-bar
+    [selectedCount]="selected().size"
+    [total]="list().length"
+    [defaultAppAi]="defaultAppAi()"
+    [busy]="busy()"
+    (apply)="assign($event)"
+  />
+  <label class="select-all">
+    <input
+      #allBox
+      type="checkbox"
+      [checked]="allSelected()"
+      (change)="selectAll(allBox.checked)"
+    />
+    <span i18n="@@people.selectAll">Selecionar todos</span>
+  </label>
   <ul class="people" aria-label="Pessoas" i18n-aria-label="@@people.listLabel">
     @for (person of list(); track person.id) {
       <li class="person">
+        <label class="pick">
+          <input
+            #pickBox
+            type="checkbox"
+            [checked]="selected().has(person.id)"
+            (change)="select(person, pickBox.checked)"
+          />
+          <span class="visually-hidden" i18n="@@people.pick"
+            >Selecionar {{ person.email }}</span
+          >
+        </label>
         <button
           #row
           type="button"
@@ -103,6 +130,7 @@
               <span class="badge" i18n="@@people.owner">Dono</span>
             }
             <span class="topics">{{ topicNames(person) }}</span>
+            <span class="ai">{{ aiLabel(person) }}</span>
             @if (spendOf(person); as spent) {
               <span class="spent">{{ spent }}</span>
             }
@@ -148,6 +176,7 @@
             [id]="'person-' + person.id"
             class="editor"
             [person]="person"
+            [defaultAppAi]="defaultAppAi()"
             [topics]="topics()"
             [busy]="busy()"
             (changed)="change(person, $event)"

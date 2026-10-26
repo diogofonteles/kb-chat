@@ -39,12 +39,16 @@ export class JsonlSpendLedger implements SpendLedgerPort {
   }
 
   async spentToday(principal: string, now = new Date()): Promise<number> {
+    return this.spentSince(principal, new Date(startOfLocalDay(now)));
+  }
+
+  async spentSince(principal: string, since: Date): Promise<number> {
     const text = await readFile(this.file, 'utf8').catch(() => '');
-    const since = startOfLocalDay(now);
     return parseSpendLedger(text)
       .filter(
         (entry) =>
-          entry.principal === principal && Date.parse(entry.ts) >= since,
+          entry.principal === principal &&
+          Date.parse(entry.ts) >= since.getTime(),
       )
       .reduce((sum, entry) => sum + entry.usd, 0);
   }

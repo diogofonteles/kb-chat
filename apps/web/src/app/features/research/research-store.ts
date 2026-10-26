@@ -204,6 +204,8 @@ export class ResearchStore {
       this.usage.track({ type: 'ai_answer', usd: event.usd });
     this.patch(id, (turn) => applyEvent(turn, event));
     if (event.type === 'done') this.persist();
+    // "Pesquisas restantes hoje" in Settings follows each answer (KBC-022).
+    if (event.type === 'done') this.settings.aiStatus.reload();
   }
 
   /** Reads today's spend after the server recorded the stopped turn; the rise is its cost. */

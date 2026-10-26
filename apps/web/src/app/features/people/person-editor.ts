@@ -13,12 +13,14 @@ import {
 } from '@angular/core';
 import {
   FEATURES,
+  type AppAi,
   type Feature,
   type Person,
   type PersonUpdate,
   type Topic,
 } from '@kb-chat/contracts';
 import { FEATURE_LABELS } from './feature-labels.js';
+import { PersonAiEditor } from './person-ai-editor.js';
 
 const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
   on ? [...new Set([...values, value])] : values.filter((v) => v !== value);
@@ -29,6 +31,7 @@ const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
  */
 @Component({
   selector: 'app-person-editor',
+  imports: [PersonAiEditor],
   templateUrl: './person-editor.html',
   styleUrl: './person-editor.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -38,6 +41,8 @@ export class PersonEditor {
   readonly person = input.required<Person>();
   readonly topics = input.required<readonly Topic[]>();
   readonly busy = input(false);
+  /** The house default app AI (KBC-022), named in the person's AI choice. */
+  readonly defaultAppAi = input<AppAi | null>(null);
   readonly changed = output<PersonUpdate>();
   readonly revoked = output();
 

@@ -64,8 +64,17 @@ export const researchStepSchema = z.object({
 export type ResearchStep = z.infer<typeof researchStepSchema>;
 
 /** How a research turn was paid: per token (cost shown, daily cap) or by a subscription (KBC-007 BR-2). */
-export const researchBillingSchema = z.enum(['per-token', 'subscription']);
+export const researchBillingSchema = z.enum([
+  'per-token',
+  'subscription',
+  /** US$ 0 with free models (KBC-022). */
+  'free',
+]);
 export type ResearchBilling = z.infer<typeof researchBillingSchema>;
+
+/** Who paid a research turn (KBC-022): an AI the administrator lends, or the person's own. */
+export const researchPlanSchema = z.enum(['house', 'own']);
+export type ResearchPlan = z.infer<typeof researchPlanSchema>;
 
 /** Which model call a piece of answer text came from (KBC-011): one segment per call. */
 const segmentSchema = z.number().int().nonnegative();
@@ -104,7 +113,16 @@ export const researchEventSchema = z.discriminatedUnion('type', [
     steps: z.number().int().nonnegative(),
     /** True when a fast turn escalated to the deep profile; `model` is then the deep one. */
     escalated: z.boolean().optional(),
+    /** Who paid (KBC-022); absent from runners that do not know. */
+    plan: researchPlanSchema.optional(),
+    /** House plan: researches left today. */
+    remaining: z.number().int().nonnegative().optional(),
   }),
-  z.object({ type: z.literal('error'), code: z.string() }),
+  z.object({
+    type: z.literal('error'),
+    code: z.string(),
+    /** HOUSE_QUOTA_EXHAUSTED: the person's researches a day (KBC-022), for the message. */
+    limit: z.number().int().nonnegative().optional(),
+  }),
 ]);
 export type ResearchEvent = z.infer<typeof researchEventSchema>;

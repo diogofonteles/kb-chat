@@ -1,6 +1,7 @@
 # 0004 — Grounded AI answers with one OpenRouter call over retrieved passages
 
 - Status: superseded by [0006](0006-research-agent-over-kb-tools.md) for answers; its spend controls stay (2026-10-24)
+- Amended by: [0016](0016-house-ai-plan-and-access-policy.md) (the house plan keeps its own spend ledger)
 - Drivers: Q3 cost, Q4 grounding
 
 ## Context

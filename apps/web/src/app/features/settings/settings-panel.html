@@ -50,6 +50,7 @@
         <h3 id="settings-ai" class="section-title" i18n="@@settings.aiTitle">
           IA
         </h3>
+        <app-ai-status-card />
         <p class="lead" i18n="@@settings.aiLead">
           Escolha quem responde na Pesquisa com IA. Vale para a próxima
           resposta, sem reiniciar nada.
@@ -84,6 +85,21 @@
             }
           </p>
         </div>
+      </section>
+    } @else if (section() === 'house') {
+      <section class="section" aria-labelledby="settings-house">
+        <h3
+          id="settings-house"
+          class="section-title"
+          i18n="@@settings.houseTitle"
+        >
+          IA da aplicação
+        </h3>
+        <p class="lead" i18n="@@settings.houseLead">
+          A IA que a aplicação empresta a quem não tem a própria: gratuita, com
+          um limite de pesquisas por dia para cada pessoa.
+        </p>
+        <app-house-ai-panel [outcome]="connectOutcome()" />
       </section>
     } @else if (section() === 'preferences') {
       <section class="section" aria-labelledby="settings-prefs">

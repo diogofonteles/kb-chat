@@ -102,13 +102,16 @@ API modules, organised by business capability:
 | `usage` | Local event log for the research plan | `record(event)` |
 | `conversations` | The complete conversation history (search and research), no cap, keyed by principal | `list(principal, filter)`, `get(principal, id)`, `save(principal, conversation)`, `remove(principal, id)` |
 | `auth` | Google sign-in, one-time code sign-in, sessions, people and their permissions (ADR 0008, ADR 0011) | `PeopleService`, `SessionService`, `OneTimeCodes`, `SendLimits`, `RequestTickets`, `Notifier`, `authRoutes`, `codeRoutes`, `peopleRoutes`, `principalOf(request)`, `RouteAccess` |
+| `house-ai` | The app's own AI (KBC-022, ADR 0016): the house OpenRouter account (OAuth PKCE or pasted key, sealed), the live free-model list, the per-person daily quota, key provisioning per person; the AI access policy lives on the person record (`auth`) | `HouseAiService`, `FreeModelCatalog`, `HouseQuota`, `OpenRouterConnect`, `houseAiRoutes` |
 | `access-requests` | Asking for access (form or Google) and the masters' decisions (KBC-014, ADR 0011); depends on `auth` through its barrel | `AccessRequestService`, `SignUpFlow`, `accessRequestRoutes` |
 
 Ports (interfaces in the module) and their adapters (in `adapters/`):
 
 - `SearchIndexPort` → `QmdMcpAdapter`, the primary adapter (a long-lived `qmd mcp` child; ADR 0002), and `KbCliSearchAdapter`, the fallback (`kb search --format json` via `execFile`, no shell).
 - `VaultReaderPort` → `FsVaultAdapter` (read-only, path-confined to the vault root).
-- `LlmPort` → `OpenRouterAdapter`.
+- `LlmPort` → `OpenRouterAdapter` (with a `models` fallback chain in windows of 3, KBC-022), `AnthropicAdapter`, `OpenAiAdapter`; the house plan wraps OpenRouter in `HouseLlm` (`providers/`).
+- `SecretSealerPort` → `SecretBox` (AES-256-GCM, `KB_CHAT_SECRETS_KEY`); `SealedSettingsStore` seals every key of `settings/<principal>.json` (ADR 0016).
+- `OpenRouterAccountPort` → `OpenRouterAccountClient` (models, `GET /key`, OAuth code exchange, management keys); `HouseUsagePort` → `JsonlHouseUsage` (`house-usage.jsonl`); the house's paid spend is a second `JsonlSpendLedger` (`house-spend.jsonl`).
 - `LedgerPort` → `JsonlLedgerAdapter`.
 - `IdentityVerifierPort` → `GoogleIdTokenVerifier` (JWKS cached per Cache-Control; the E2E server uses its own test keys).
 - `PeopleStorePort` → `JsonPeopleStore` (`people.json`, 0600); `SessionStorePort` → `FsSessionStore` (`sessions/<sha256>.json`, 0600).

@@ -88,9 +88,38 @@ input[type='email'] {
 }
 
 .person {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+}
+
+.person > :not(.pick, .row) {
+  grid-column: 1 / -1;
+}
+
+.pick,
+.select-all {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  cursor: pointer;
+}
+
+.pick {
+  justify-content: center;
+  min-width: var(--target);
+  padding-left: var(--space-2);
+}
+
+.pick input,
+.select-all input {
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--color-accent);
 }
 
 .row {
@@ -110,6 +139,14 @@ input[type='email'] {
 
 .row:hover {
   background: var(--color-surface-muted);
+}
+
+.person > .row {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.ai {
+  font-size: var(--text-sm);
 }
 
 .who {

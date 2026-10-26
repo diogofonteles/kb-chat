@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   answerSourceSchema,
   researchBillingSchema,
+  researchPlanSchema,
   researchProfileSchema,
 } from './research.js';
 import { searchFiltersSchema, searchModeSchema } from './search.js';
@@ -37,6 +38,8 @@ export const savedResearchTurnSchema = z.object({
   escalated: z.boolean().optional(),
   /** The research profile the turn ran with (KBC-017); absent in older turns. */
   profile: researchProfileSchema.optional(),
+  /** Who paid (KBC-022); absent in older turns. */
+  plan: researchPlanSchema.optional(),
   at: z.iso.datetime(),
 });
 export type SavedResearchTurn = z.infer<typeof savedResearchTurnSchema>;

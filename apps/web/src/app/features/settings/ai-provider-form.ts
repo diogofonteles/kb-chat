@@ -24,6 +24,7 @@ import {
   BILLING_COPY,
   NOT_ENABLED,
   NOT_INSTALLED,
+  NOT_LENT,
   PROVIDER_COPY,
   PROVIDER_ORDER,
   TEST_COPY,
@@ -51,6 +52,8 @@ function blockedBy(info: ProviderInfo): ProviderOption['blocked'] {
     return { label: NOT_INSTALLED(), steps: copy.install() };
   if (info.reason === 'not-enabled' && copy.enable)
     return { label: NOT_ENABLED(), steps: copy.enable() };
+  if (info.reason === 'app-unavailable' && copy.enable)
+    return { label: NOT_LENT(), steps: copy.enable() };
   return null;
 }
 
@@ -114,6 +117,11 @@ export class AiProviderForm {
   protected readonly selected = computed(() =>
     this.options().find((option) => option.info.id === this.draft().provider),
   );
+  /** Providers with a model to pick and a connection to test (not "app" nor "none"). */
+  protected readonly hasModels = computed(() => {
+    const billing = this.selected()?.info.billing;
+    return billing === 'per-token' || billing === 'subscription';
+  });
   protected readonly savedKey = computed(() => {
     const id = this.draft().provider;
     const keys = this.store.settings()?.ai.keys ?? {};
@@ -196,7 +204,7 @@ export class AiProviderForm {
 
   protected test(): void {
     const { provider, key, fastModel: chosen } = this.draft();
-    if (provider === 'none') return;
+    if (provider === 'none' || provider === 'app') return;
     this.testState.set({ kind: 'running' });
     this.store
       .test({

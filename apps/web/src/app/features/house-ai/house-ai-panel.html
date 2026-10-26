@@ -1,0 +1,376 @@
+<p class="status" role="status" [class.error]="status()?.kind === 'error'">
+  @if (status(); as current) {
+    <span aria-hidden="true">{{ current.kind === 'error' ? '⚠' : '✓' }}</span>
+    {{ current.text }}
+  }
+</p>
+
+@if (house.error()) {
+  <div class="notice" role="alert">
+    <p i18n="@@house.loadFailed">Não consegui carregar a IA da aplicação.</p>
+    <button
+      type="button"
+      class="secondary"
+      (click)="house.reload()"
+      i18n="@@house.retry"
+    >
+      Tentar de novo
+    </button>
+  </div>
+} @else if (view(); as current) {
+  <section class="block" aria-labelledby="house-account">
+    <h4 id="house-account" class="block-title" i18n="@@house.account">
+      Conta OpenRouter da aplicação
+    </h4>
+    @if (current.connection; as connection) {
+      <p class="saved-key">
+        <span class="connected">
+          <span i18n="@@house.connectedAs">Conectada</span>
+          <code class="masked">••••{{ connection.key.last4 }}</code>
+          <span class="hint"
+            ><ng-container i18n="@@house.connectedBy"
+              >por {{ connection.connectedBy }} em
+              {{ connection.connectedAt | date: 'dd/MM/yyyy' }}</ng-container
+            ></span
+          >
+        </span>
+      </p>
+      @if (current.freeUsage; as usage) {
+        <p class="hint" i18n="@@house.freeUsage">
+          Pedidos gratuitos hoje: {{ usage.used }} de {{ usage.limit }}
+        </p>
+      }
+      @if (lowLimit()) {
+        <p class="hint" i18n="@@house.lowLimit">
+          Com US$ 10 em créditos comprados uma vez, o limite sobe para 1000
+          pedidos por dia.
+        </p>
+      }
+    } @else {
+      <p class="hint" i18n="@@house.notConnected">
+        Não conectada. Sem ela, quem não tem IA própria fica só com a busca.
+      </p>
+    }
+    <div class="row">
+      <button
+        type="button"
+        [class.primary]="!current.connection"
+        [class.secondary]="current.connection"
+        [disabled]="busy()"
+        (click)="connect()"
+      >
+        @if (current.connection) {
+          <span i18n="@@house.reconnect">Conectar outra conta</span>
+        } @else {
+          <span i18n="@@house.connect">Conectar OpenRouter</span>
+        }
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        [attr.aria-expanded]="pasting()"
+        aria-controls="house-paste"
+        (click)="pasting.set(!pasting())"
+        i18n="@@house.paste"
+      >
+        Colar uma chave
+      </button>
+      @if (current.connection) {
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="busy()"
+          (click)="test()"
+          i18n="@@house.test"
+        >
+          Testar conexão
+        </button>
+        @if (confirmingDisconnect()) {
+          <span class="confirm" i18n="@@house.confirmDisconnect"
+            >Desconectar a conta? Quem usa a IA da aplicação fica sem IA até
+            você conectar de novo.</span
+          >
+          <button
+            type="button"
+            class="secondary danger"
+            (click)="disconnect()"
+            i18n="@@house.disconnectConfirm"
+          >
+            Desconectar
+          </button>
+          <button
+            type="button"
+            class="link"
+            (click)="confirmingDisconnect.set(false)"
+            i18n="@@house.cancel"
+          >
+            Cancelar
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="link danger"
+            (click)="confirmingDisconnect.set(true)"
+            i18n="@@house.disconnect"
+          >
+            Desconectar
+          </button>
+        }
+      }
+    </div>
+    @if (pasting()) {
+      <div id="house-paste" class="field">
+        <label class="field-label" for="house-key" i18n="@@house.keyLabel"
+          >Chave da API do OpenRouter</label
+        >
+        <input
+          #keyInput
+          id="house-key"
+          class="input"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          [value]="keyDraft()"
+          (input)="keyDraft.set(keyInput.value)"
+        />
+        <p class="hint" i18n="@@house.keyHint">
+          Fica cifrada no servidor e nunca é mostrada de novo.
+        </p>
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="busy() || !keyDraft().trim()"
+          (click)="saveKey()"
+          i18n="@@house.saveKey"
+        >
+          Salvar chave
+        </button>
+      </div>
+    }
+  </section>
+
+  <section class="block" aria-labelledby="house-models">
+    <h4 id="house-models" class="block-title" i18n="@@house.models">
+      Modelos gratuitos
+    </h4>
+    <label class="check">
+      <input
+        #autoBox
+        type="checkbox"
+        [checked]="auto()"
+        [disabled]="busy()"
+        (change)="setAuto(autoBox.checked)"
+      />
+      <span i18n="@@house.auto">Escolher automaticamente (recomendado)</span>
+    </label>
+    @if (listInfo(); as info) {
+      @if (info.items.length === 0) {
+        <p class="hint" role="alert" i18n="@@house.noList">
+          Sem lista de modelos gratuitos; tente de novo.
+        </p>
+        <button
+          type="button"
+          class="secondary"
+          (click)="freeModels.reload()"
+          i18n="@@house.retry"
+        >
+          Tentar de novo
+        </button>
+      } @else {
+        <fieldset class="models" [disabled]="auto() || busy()">
+          <legend class="visually-hidden" i18n="@@house.modelsLegend">
+            Modelos gratuitos usados, nesta ordem
+          </legend>
+          @for (model of modelItems(); track model.id) {
+            <label class="check model">
+              <input
+                #modelBox
+                type="checkbox"
+                [checked]="auto() || model.checked"
+                (change)="toggleModel(model.id, modelBox.checked)"
+              />
+              <span class="model-name">{{ model.name }}</span>
+              <code class="model-id">{{ model.id }}</code>
+            </label>
+          }
+        </fieldset>
+        @if (info.stale) {
+          <p class="hint" i18n="@@house.staleList">
+            Não consegui atualizar a lista agora; usando a última.
+          </p>
+        } @else if (info.updatedAt) {
+          <p class="hint" i18n="@@house.listUpdated">
+            Lista atualizada às {{ info.updatedAt | date: 'HH:mm' }}.
+          </p>
+        }
+      }
+    }
+    <label class="check">
+      <input
+        #routerBox
+        type="checkbox"
+        [checked]="current.includeRouter"
+        [disabled]="busy()"
+        (change)="setRouter(routerBox.checked)"
+      />
+      <span i18n="@@house.router"
+        >Usar {{ router }} como última opção gratuita</span
+      >
+    </label>
+    <p class="hint" i18n="@@house.modelsHint">
+      Só modelos gratuitos que usam ferramentas; se um estiver ocupado, o
+      próximo responde. Ordem atual: {{ chainText() }}
+    </p>
+  </section>
+
+  <section class="block" aria-labelledby="house-paid">
+    <h4 id="house-paid" class="block-title" i18n="@@house.paid">
+      Modelo pago de reserva (opcional)
+    </h4>
+    <label class="field-label" for="house-paid-model" i18n="@@house.paidLabel"
+      >Id do modelo (vazio = desligado)</label
+    >
+    <div class="row">
+      <input
+        #paidInput
+        id="house-paid-model"
+        class="input"
+        autocomplete="off"
+        spellcheck="false"
+        list="house-paid-models"
+        [value]="paidDraft()"
+        (input)="paidDraft.set(paidInput.value)"
+      />
+      <datalist id="house-paid-models">
+        @for (model of paidOptions(); track model.id) {
+          <option [value]="model.id">{{ model.name }}</option>
+        }
+      </datalist>
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="busy()"
+        (click)="savePaid()"
+        i18n="@@house.savePaid"
+      >
+        Salvar
+      </button>
+    </div>
+    <p class="hint" i18n="@@house.paidHint">
+      Só entra para quem você liberar em Pessoas e permissões, até o teto mensal
+      da pessoa. Desligado, a aplicação não gasta nada.
+    </p>
+  </section>
+
+  <section class="block" aria-labelledby="house-who">
+    <h4 id="house-who" class="block-title" i18n="@@house.who">Para quem</h4>
+    <fieldset class="models" [disabled]="busy()">
+      <legend class="field-label" i18n="@@house.defaultLegend">
+        IA padrão para quem não tem atribuição (e para os próximos convidados)
+      </legend>
+      <label class="check">
+        <input
+          type="radio"
+          name="house-default"
+          [checked]="current.defaultAppAi === 'house'"
+          (change)="setDefaultAppAi('house')"
+        />
+        <span i18n="@@house.defaultHouse">Plano da casa</span>
+      </label>
+      <label class="check">
+        <input
+          type="radio"
+          name="house-default"
+          [checked]="current.defaultAppAi === 'none'"
+          (change)="setDefaultAppAi('none')"
+        />
+        <span i18n="@@house.defaultNone"
+          >Nenhuma (só quem você atribuir em Pessoas e permissões)</span
+        >
+      </label>
+    </fieldset>
+    <label class="field-label" for="house-daily" i18n="@@house.dailyLabel"
+      >Pesquisas por dia (padrão)</label
+    >
+    <input
+      #dailyInput
+      id="house-daily"
+      class="input cap"
+      type="number"
+      inputmode="numeric"
+      min="0"
+      [attr.max]="maxDaily"
+      step="1"
+      [attr.aria-invalid]="dailyError() ? true : null"
+      [attr.aria-describedby]="
+        dailyError() ? 'house-daily-error house-daily-hint' : 'house-daily-hint'
+      "
+      [value]="defaultDaily()"
+      (change)="setDefaultDaily(dailyInput.value)"
+    />
+    @if (dailyError(); as error) {
+      <p id="house-daily-error" class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ error }}
+      </p>
+    }
+    <p id="house-daily-hint" class="hint" i18n="@@house.dailyHint">
+      Rápido conta 1, Profundo 2, Exaustivo 5. Cada pessoa pode ter outro
+      número.
+    </p>
+  </section>
+
+  <section class="block" aria-labelledby="house-management">
+    <h4 id="house-management" class="block-title" i18n="@@house.management">
+      Chave de gerenciamento (opcional)
+    </h4>
+    @if (current.managementKey; as management) {
+      <p class="saved-key">
+        <span
+          ><span i18n="@@house.managementSaved">Chave salva</span>
+          <code class="masked">••••{{ management.last4 }}</code></span
+        >
+        <button
+          type="button"
+          class="link danger"
+          (click)="saveManagement(true)"
+          i18n="@@house.remove"
+        >
+          Remover
+        </button>
+      </p>
+    }
+    <label
+      class="field-label"
+      for="house-management-key"
+      i18n="@@house.managementLabel"
+      >Chave de gerenciamento do OpenRouter</label
+    >
+    <div class="row">
+      <input
+        #managementInput
+        id="house-management-key"
+        class="input"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        [value]="managementDraft()"
+        (input)="managementDraft.set(managementInput.value)"
+      />
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="busy() || !managementDraft().trim()"
+        (click)="saveManagement()"
+        i18n="@@house.saveManagement"
+      >
+        Salvar
+      </button>
+    </div>
+    <p class="hint" i18n="@@house.managementHint">
+      Com ela, cada pessoa com reserva paga ganha uma chave com limite mensal no
+      próprio OpenRouter (openrouter.ai/settings/management-keys).
+    </p>
+  </section>
+} @else {
+  <p class="hint" i18n="@@house.loading">Carregando…</p>
+}

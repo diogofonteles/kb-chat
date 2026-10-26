@@ -62,5 +62,7 @@ describe('auth contracts', () => {
       lastLoginAt: null,
     };
     expect(personSchema.parse(person).invitation).toBeNull();
+    // KBC-022: an API without the AI policy reads as the house default.
+    expect(personSchema.parse(person).ai.appAi).toBe('default');
   });
 });

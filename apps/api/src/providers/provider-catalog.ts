@@ -56,6 +56,8 @@ const CLAUDE_MODELS = MODEL_ALLOWLISTS['claude-subscription'] ?? [];
 const CODEX_MODELS = MODEL_ALLOWLISTS['chatgpt-subscription'] ?? [];
 
 export const PROVIDERS: Readonly<Record<AiProvider, ProviderDescriptor>> = {
+  // The AI a master lends (KBC-022): resolved by the app AI plan, not by a key or a model.
+  app: { billing: 'free', defaultModels: fixed(null, null), models: [] },
   openrouter: {
     billing: 'per-token',
     keyEnv: 'OPENROUTER_API_KEY',

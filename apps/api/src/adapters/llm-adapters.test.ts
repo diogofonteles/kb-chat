@@ -7,7 +7,7 @@ import {
   OPENROUTER_DEFAULT_MODEL,
   PROVIDERS,
 } from '../providers/provider-catalog.js';
-import { LlmKeyRejectedError } from '../ports/llm-errors.js';
+import { LlmCapacityError, LlmKeyRejectedError } from '../ports/llm-errors.js';
 import { DisabledLlm } from './disabled-llm.js';
 import { JsonlSpendLedger } from './jsonl-spend-ledger.js';
 import { MemorySpendLedger } from './memory-spend-ledger.js';
@@ -415,5 +415,109 @@ describe('provider composition and the disabled provider', () => {
       for await (const _ of llm.streamAgent()) void _;
     };
     await expect(runAgent()).rejects.toThrow();
+  });
+});
+
+describe('OpenRouterAdapter fallback chain (KBC-022 FR-7)', () => {
+  const answer = (model: string) =>
+    new Response(
+      sseBody([
+        `data: {"model":"${model}","choices":[{"delta":{"content":"ok"}}]}`,
+        `data: {"model":"${model}","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":1,"cost":0}}`,
+        'data: [DONE]',
+        '',
+      ]),
+    );
+  const collect = async (adapter: OpenRouterAdapter, models: string[]) => {
+    const chunks: AgentChunk[] = [];
+    for await (const chunk of adapter.streamAgent([], [], {
+      maxTokens: 5,
+      signal: new AbortController().signal,
+      models,
+    }))
+      chunks.push(chunk);
+    return chunks;
+  };
+  const chain = ['a:free', 'b:free', 'c:free', 'd:free', 'openrouter/free'];
+
+  it('sends the chain as `models` in windows of 3 and reports the model that answered', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return bodies.length === 1
+        ? new Response('{"error":{"code":429}}', { status: 429 })
+        : answer('d:free');
+    });
+    const adapter = new OpenRouterAdapter({
+      apiKey: 'k',
+      model: 'x',
+      fetch: fetchMock,
+    });
+    const chunks = await collect(adapter, chain);
+    expect(bodies.map((b) => b['models'])).toEqual([
+      ['a:free', 'b:free', 'c:free'],
+      ['d:free', 'openrouter/free'],
+    ]);
+    expect(bodies[0]).not.toHaveProperty('model');
+    expect(chunks).toContainEqual({
+      type: 'usage',
+      usage: { inputTokens: 3, outputTokens: 1, usd: 0, model: 'd:free' },
+    });
+  });
+
+  it('moves on when a window fails mid-stream before writing anything', async () => {
+    let calls = 0;
+    const adapter = new OpenRouterAdapter({
+      apiKey: 'k',
+      model: 'x',
+      fetch: vi.fn<typeof fetch>(async () => {
+        calls += 1;
+        return calls === 1
+          ? new Response(sseBody(['data: {"error":{"message":"busy"}}', '']))
+          : answer('b:free');
+      }),
+    });
+    const chunks = await collect(adapter, chain);
+    expect(chunks[0]).toEqual({ type: 'token', text: 'ok' });
+  });
+
+  it('fails with a capacity error when every window is exhausted, and a 403 limit is not a refused key', async () => {
+    const adapter = new OpenRouterAdapter({
+      apiKey: 'k',
+      model: 'x',
+      fetch: vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            '{"error":{"metadata":{"limit_source":"openrouter_key_limit"}}}',
+            {
+              status: 403,
+            },
+          ),
+      ),
+    });
+    await expect(collect(adapter, chain)).rejects.toBeInstanceOf(
+      LlmCapacityError,
+    );
+    const rejected = new OpenRouterAdapter({
+      apiKey: 'k',
+      model: 'x',
+      fetch: vi.fn<typeof fetch>(
+        async () => new Response('{}', { status: 403 }),
+      ),
+    });
+    await expect(collect(rejected, chain)).rejects.toBeInstanceOf(
+      LlmKeyRejectedError,
+    );
+    const ownBusy = new OpenRouterAdapter({
+      apiKey: 'k',
+      model: 'x',
+      fetch: vi.fn<typeof fetch>(
+        async () => new Response('{}', { status: 429 }),
+      ),
+    });
+    // One's own model (no chain): a provider failure, not the app's capacity.
+    const failure = await collect(ownBusy, []).catch((err: unknown) => err);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(LlmCapacityError);
   });
 });

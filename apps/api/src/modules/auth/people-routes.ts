@@ -1,17 +1,26 @@
 import {
+  aiAssignmentRequestSchema,
+  aiAssignmentResultSchema,
+  type AppAi,
+  type PersonAi,
   inviteRequestSchema,
   personIdSchema,
   personListSchema,
   personSchema,
   personUpdateSchema,
 } from '@kb-chat/contracts';
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import type {
+  FastifyBaseLogger,
+  FastifyInstance,
+  FastifyPluginAsync,
+} from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import { viewerOf, type RouteAccess } from './access.js';
 import type { Invitations } from './invitations.js';
 import type { PeopleService } from './people-service.js';
+import { aiOf } from './person-ai.js';
 import { toPerson, type StoredPerson } from './person.js';
 import type { SessionService } from './session-service.js';
 
@@ -22,6 +31,16 @@ export interface PeopleRouteDeps {
   readonly topics: () => readonly string[];
   /** The invitation e-mail sent on invite (KBC-026). */
   readonly invitations: Invitations;
+  /** What the house AI does around a person's AI change (KBC-022); none in tests. */
+  readonly ai?: PeopleAiHooks;
+}
+
+/** The house side of the AI access policy, called by the people routes (KBC-022). */
+export interface PeopleAiHooks {
+  /** After a person's AI was saved: e.g. provision or drop their OpenRouter key; throws on failure. */
+  sync(person: StoredPerson, ai: PersonAi): Promise<void>;
+  /** "Também para os próximos": the default for people left on `default`. */
+  setDefault(appAi: AppAi, by: string): Promise<void>;
 }
 
 const MASTER: RouteAccess = { master: true };
@@ -68,9 +87,8 @@ function registerReads(app: FastifyInstance, deps: PeopleRouteDeps) {
   );
 }
 
-function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {
-  const typed = app.withTypeProvider<ZodTypeProvider>();
-  typed.patch(
+function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
+  app.withTypeProvider<ZodTypeProvider>().patch(
     '/api/v1/people/:id',
     {
       config: { access: MASTER },
@@ -80,12 +98,22 @@ function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {
         response: { 200: personSchema },
       },
     },
-    async ({ params: { id }, body }) => {
+    async (request) => {
+      const { params, body } = request;
       assertKnownTopics(deps, body.topics);
-      return view(deps, await deps.people.update(id, body));
+      const by = viewerOf(request).person.email;
+      const before = await deps.people.find(params.id);
+      const updated = await deps.people.update(params.id, body, by);
+      if (body.ai && before)
+        await syncAi(deps, { before, updated, by, log: request.log });
+      return view(deps, updated);
     },
   );
-  typed.delete(
+}
+
+function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {
+  registerPatch(app, deps);
+  app.withTypeProvider<ZodTypeProvider>().delete(
     '/api/v1/people/:id',
     {
       config: { access: MASTER },
@@ -100,10 +128,74 @@ function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {
   );
 }
 
+/**
+ * Lets the house follow a saved AI change (provisioned keys). When that fails, the whole
+ * AI part goes back, so no person is left half changed (review fix).
+ */
+interface AiSyncChange {
+  readonly before: StoredPerson;
+  readonly updated: StoredPerson;
+  readonly by: string;
+  readonly log: FastifyBaseLogger;
+}
+
+async function syncAi(deps: PeopleRouteDeps, change: AiSyncChange) {
+  if (!deps.ai) return;
+  try {
+    await deps.ai.sync(change.updated, aiOf(change.updated));
+  } catch (err) {
+    await undoAi(deps, change);
+    throw err;
+  }
+}
+
+/** The whole AI part goes back; a failed undo is logged and never hides the first error. */
+async function undoAi(deps: PeopleRouteDeps, change: AiSyncChange) {
+  const { appAi, enforced, dailyResearches, paidFallback } = aiOf(
+    change.before,
+  );
+  const ai = { appAi, enforced, dailyResearches, paidFallback };
+  await deps.people
+    .update(change.updated.id, { ai }, change.by)
+    .catch((undo: unknown) =>
+      change.log.error(
+        {
+          person: change.updated.id,
+          kind: undo instanceof Error ? undo.name : 'unknown',
+        },
+        'could not undo a failed AI change',
+      ),
+    );
+}
+
+/** One app AI for several people or everyone, optionally the default too (KBC-022 AC-12). */
+function registerAssignment(app: FastifyInstance, deps: PeopleRouteDeps) {
+  app.withTypeProvider<ZodTypeProvider>().post(
+    '/api/v1/people/ai-assignment',
+    {
+      config: { access: MASTER },
+      schema: {
+        body: aiAssignmentRequestSchema,
+        response: { 200: aiAssignmentResultSchema },
+      },
+    },
+    async (request) => {
+      const { personIds, appAi, setDefault } = request.body;
+      const by = viewerOf(request).person.email;
+      const updated = await deps.people.assignAi({ ids: personIds, appAi }, by);
+      // The contract allows setDefault only with "all" and an AI (not "default").
+      if (setDefault && appAi !== 'default')
+        await deps.ai?.setDefault(appAi, by);
+      return { updated };
+    },
+  );
+}
+
 /** "Pessoas e permissões" (FR-3): masters only. */
 export const peopleRoutes =
   (deps: PeopleRouteDeps): FastifyPluginAsync =>
   async (app) => {
     registerReads(app, deps);
     registerWrites(app, deps);
+    registerAssignment(app, deps);
   };
