@@ -139,6 +139,7 @@ EOF
 sudo chmod 0600 /srv/kb-chat/deploy/backup.env
 sudo /srv/kb-chat/deploy/scripts/backup-state.sh --dry-run
 sudo systemctl start kb-chat-backup && sudo /srv/kb-chat/deploy/scripts/deploy.sh --status   # backup=ok ...
+systemctl list-timers --no-pager | grep kb-chat   # backup e limpeza de sessões com horário em NEXT
 ```
 
 👤 **DONO:** confirme o e-mail "Oracle Cloud Notifications" que chega depois do `provision.sh --apply`. Sem a confirmação, o alarme "backup ausente há 48 h" não chega.

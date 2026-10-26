@@ -162,11 +162,14 @@ write_files:
       log "OCI CLI (backups with the instance principal, no API key on the VM)"
       PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install oci-cli
 
-      systemctl enable kb-chat-backup.timer kb-chat-sweep-sessions.timer
+      # --now: "enable" alone waits for the next boot, and a fresh VM is not rebooted, so no
+      # backup would run until then (KBC-025).
+      systemctl enable --now kb-chat-backup.timer kb-chat-sweep-sessions.timer
 
       log "verifying"
       mountpoint -q /srv/kb-chat
       systemctl is-active --quiet docker
+      systemctl is-active --quiet kb-chat-backup.timer kb-chat-sweep-sessions.timer
       docker compose version
       /usr/local/bin/oci --version
       touch /var/lib/kb-chat-cloud-init-done
