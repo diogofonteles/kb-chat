@@ -308,12 +308,12 @@ else say "  exists: alarm $alarm_name"; fi
 
 # --- Cost guard ----------------------------------------------------------------------
 say "cost guard:"
-budget_id="$(find_id budgets budget list --compartment-id "$TENANCY_OCID" --display-name "$NAME_PREFIX-budget")"
+budget_id="$(find_id budgets budget budget list --compartment-id "$TENANCY_OCID" --display-name "$NAME_PREFIX-budget")"
 if [ -z "$budget_id" ]; then
-  budget_id="$(create "budget US\$ $BUDGET_USD/month on the compartment" budgets budget create \
+  budget_id="$(create "budget US\$ $BUDGET_USD/month on the compartment" budgets budget budget create \
     --compartment-id "$TENANCY_OCID" --display-name "$NAME_PREFIX-budget" --amount "$BUDGET_USD" \
     --reset-period MONTHLY --target-type COMPARTMENT --targets "[\"$COMPARTMENT_OCID\"]")"
-  create "alert at 1% of actual spend -> $BUDGET_ALERT_EMAIL" budgets alert-rule create --budget-id "$budget_id" \
+  create "alert at 1% of actual spend -> $BUDGET_ALERT_EMAIL" budgets budget alert-rule create --budget-id "$budget_id" \
     --type ACTUAL --threshold 1 --threshold-type PERCENTAGE --recipients "$BUDGET_ALERT_EMAIL" \
     --message "kb-chat left the Always Free allowance: check the OCI cost report" >/dev/null
 else say "  exists: budget $NAME_PREFIX-budget"; fi
