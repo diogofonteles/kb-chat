@@ -30,7 +30,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-014](KBC-014-access-requests-and-code-sign-in.md) | Solicitar acesso, cadastro sem Google e entrada com código por e-mail ou SMS | release-1 | in-review | KBC-010 |
 | [KBC-015](KBC-015-gmail-smtp-email-delivery.md) | Enviar os e-mails de código e de aprovação pelo SMTP do Gmail (produção 100% gratuita) | release-1 | done | KBC-014 |
 | [KBC-016](KBC-016-rename-product-nova-alexandria.md) | Dar ao produto o nome "Nova Alexandria" em todo texto que a pessoa vê | release-1 | done | KBC-014, KBC-015 |
-| [KBC-017](KBC-017-exhaustive-research.md) | Pesquisa exaustiva: busca literal sem teto (modos, páginas, filtros por autor e origem), leitura de livros inteiros e o perfil "Exaustivo" com compactação | release-1 | in-review | KBC-008, KBC-011 |
+| [KBC-017](KBC-017-exhaustive-research.md) | Pesquisa exaustiva: busca literal sem teto (modos, páginas, filtros por autor e origem), leitura de livros inteiros e o perfil "Exaustivo" com compactação | release-1 | done | KBC-008, KBC-011 |
 | KBC-018 | Pesquisa exaustiva com sub-agentes em paralelo (orquestrador e trabalhadores) | release-1 | draft | KBC-017 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 

@@ -1,7 +1,7 @@
 ---
 id: KBC-017
 title: Pesquisa exaustiva — busca literal sem teto, filtros por autor e origem, leitura de livros inteiros e o perfil "Exaustivo"
-status: in-review
+status: done
 slice: release-1
 outcome: uma pergunta exaustiva ("todas as obras citadas por José Laércio do Egito") é respondida varrendo o acervo inteiro, com uma linha de cobertura que diz quanto foi varrido
 depends_on: [KBC-008, KBC-011]
