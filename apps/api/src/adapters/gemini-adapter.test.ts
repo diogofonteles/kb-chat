@@ -279,6 +279,17 @@ describe('GeminiAdapter (KBC-023 AC-4, AC-5)', () => {
     await expect(
       collect(make(sse({ error: { message: 'boom' } })), []),
     ).rejects.toThrow(/boom/);
+    // The free-tier limit can also arrive inside the stream (review R2-05).
+    await expect(
+      collect(
+        make(
+          sse({
+            error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'q' },
+          }),
+        ),
+        [],
+      ),
+    ).rejects.toBeInstanceOf(LlmCapacityError);
     const unset = new GeminiAdapter({
       apiKey: undefined,
       model: 'm',
@@ -287,6 +298,55 @@ describe('GeminiAdapter (KBC-023 AC-4, AC-5)', () => {
     expect(unset.configured()).toBe(false);
     expect(await unset.balance()).toBeNull();
     expect(unset.maxOutputTokens(7)).toBe(7);
+  });
+
+  it('makes unique ids for calls without one and never sends them back (review R2-04, R2-09)', async () => {
+    const noId = {
+      functionCall: { name: 'search_collection', args: { query: 'x' } },
+    };
+    const { fetchMock, bodies } = recorder(
+      sse({ candidates: [{ content: { parts: [noId] } }] }),
+      sse({ candidates: [{ content: { parts: [noId] } }] }),
+      sse({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }),
+    );
+    const adapter = new GeminiAdapter({
+      apiKey: 'k',
+      model: GEMINI_FAST_MODEL,
+      freeTier: true,
+      fetch: fetchMock,
+    });
+    const idsOf = (chunks: AgentChunk[]) =>
+      chunks.flatMap((c) => (c.type === 'tool_call' ? [c.call.id] : []));
+    const question: AgentMessage = { role: 'user', content: 'q' };
+    const first = idsOf(await collect(adapter, [question]));
+    const second = idsOf(await collect(adapter, [question]));
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(first[0]).not.toBe(second[0]);
+    await collect(adapter, [
+      question,
+      // An empty assistant turn (no text, no calls) is not sent: Gemini refuses empty parts.
+      { role: 'assistant', content: '', toolCalls: [] },
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          { id: first[0] ?? '', name: 'search_collection', arguments: '{}' },
+        ],
+      },
+      { role: 'tool', toolCallId: first[0] ?? '', content: 'resultado' },
+    ]);
+    const contents = (bodies[2] as { contents: { parts: object[] }[] })
+      .contents;
+    expect(contents.every((turn) => turn.parts.length > 0)).toBe(true);
+    expect(contents.at(-1)?.parts).toEqual([
+      {
+        functionResponse: {
+          name: 'search_collection',
+          response: { result: 'resultado' },
+        },
+      },
+    ]);
   });
 
   it('streams plain text through stream()', async () => {

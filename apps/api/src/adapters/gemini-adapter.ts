@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { LlmCapacityError, LlmKeyRejectedError } from '../ports/llm-errors.js';
 import type {
@@ -38,6 +39,12 @@ const FREE: LlmPrice = { input: 0, output: 0 };
 export const SKIP_SIGNATURE = 'skip_thought_signature_validator';
 
 type Part = Record<string, unknown>;
+
+/** The prefix of the ids made here for calls Gemini sent without one. */
+const LOCAL_ID = 'gemini_local_';
+/** A call id Gemini knows (its own), as the `id` field; none for an id made here. */
+const geminiId = (id: string): { id?: string } =>
+  id.startsWith(LOCAL_ID) ? {} : { id };
 
 interface GeminiTurn {
   readonly role: 'user' | 'model';
@@ -86,7 +93,13 @@ const chunkSchema = z.looseObject({
       thoughtsTokenCount: z.number().optional(),
     })
     .optional(),
-  error: z.looseObject({ message: z.string().optional() }).optional(),
+  error: z
+    .looseObject({
+      code: z.number().optional(),
+      status: z.string().optional(),
+      message: z.string().optional(),
+    })
+    .optional(),
 });
 
 export interface GeminiOptions {
@@ -197,10 +210,7 @@ export class GeminiAdapter implements AgentLlmPort {
   private *chunks(data: string, state: CallState): Iterable<LlmChunk> {
     const parsed = chunkSchema.safeParse(parseJson(data));
     if (!parsed.success) return;
-    if (parsed.data.error)
-      throw new Error(
-        `Gemini stream error: ${parsed.data.error.message ?? 'unknown'}`,
-      );
+    if (parsed.data.error) throw streamFailureOf(parsed.data.error);
     if (parsed.data.usageMetadata) state.usage = parsed.data.usageMetadata;
     for (const part of parsed.data.candidates?.[0]?.content?.parts ?? []) {
       state.parts.push(part);
@@ -216,8 +226,8 @@ export class GeminiAdapter implements AgentLlmPort {
     index: number,
   ): ToolCall {
     return {
-      // Older models send no id: one is made here and goes back in functionResponse.id.
-      id: call.id ?? `gemini_${Date.now().toString(36)}_${index}`,
+      // Older models send no id: one is made here, unique, and never sent back to Gemini.
+      id: call.id ?? `${LOCAL_ID}${randomUUID()}_${index}`,
       name: call.name,
       arguments: JSON.stringify(call.args ?? {}),
     };
@@ -280,7 +290,9 @@ export class GeminiAdapter implements AgentLlmPort {
   ): GeminiTurn | null {
     if ('toolCalls' in message) {
       for (const call of message.toolCalls) names.set(call.id, call.name);
-      return { role: 'model', parts: this.modelParts(message) };
+      const parts = this.modelParts(message);
+      // Gemini refuses a turn without parts (an empty answer kept in the history).
+      return parts.length > 0 ? { role: 'model', parts } : null;
     }
     if (message.role === 'tool')
       return {
@@ -288,7 +300,7 @@ export class GeminiAdapter implements AgentLlmPort {
         parts: [
           {
             functionResponse: {
-              id: message.toolCallId,
+              ...geminiId(message.toolCallId),
               name: names.get(message.toolCallId) ?? 'tool',
               response: { result: message.content },
             },
@@ -309,7 +321,7 @@ export class GeminiAdapter implements AgentLlmPort {
     const text = message.content ? [{ text: message.content }] : [];
     const calls: Part[] = message.toolCalls.map((call, index) => ({
       functionCall: {
-        id: call.id,
+        ...geminiId(call.id),
         name: call.name,
         args: parseArgs(call.arguments),
       },
@@ -348,6 +360,17 @@ export class GeminiAdapter implements AgentLlmPort {
       if (oldest !== undefined) this.replays.delete(oldest);
     }
   }
+}
+
+/** An error event inside the stream: its rate limit is the provider's capacity, as a 429. */
+function streamFailureOf(error: {
+  code?: number;
+  status?: string;
+  message?: string;
+}): Error {
+  if (error.code === 429 || error.status === 'RESOURCE_EXHAUSTED')
+    return new LlmCapacityError('Gemini', 'free-tier rate limit');
+  return new Error(`Gemini stream error: ${error.message ?? 'unknown'}`);
 }
 
 /** Gemini answers a bad key with 400 API_KEY_INVALID or 401/403; 429 is its free-tier limit. */
