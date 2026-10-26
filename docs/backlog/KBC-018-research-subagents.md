@@ -1,7 +1,7 @@
 ---
 id: KBC-018
 title: Pesquisa exaustiva com sub-pesquisadores em paralelo (orquestrador e trabalhadores)
-status: in-review
+status: done
 slice: release-1
 outcome: uma pergunta exaustiva é dividida pelo orquestrador entre sub-pesquisadores com contexto próprio, que trabalham em paralelo e devolvem resumos citados; a resposta junta tudo, sem estourar o contexto do orquestrador
 depends_on: [KBC-017]
