@@ -7,13 +7,20 @@ set -euo pipefail
 cd "$(dirname "$0")"
 command -v oci >/dev/null || { echo "check-cli: oci CLI not found" >&2; exit 2; }
 
+# Continued lines are joined first, so a command split across lines is read whole.
+joined="$(sed -e ':a' -e '/\\$/N; s/ *\\\n */ /; ta' provision.sh)"
+calls="$(grep -cE 'find_id [a-z]|create "[^"]*"|"\$\{OCI\[@\]\}" [a-z]' <<<"$joined")"
+
 # The words after `find_id`, `create "<label>"` or `"${OCI[@]}"` up to the first flag.
 paths="$(sed -nE \
   -e 's/.*find_id ([a-z][a-z-]*( [a-z][a-z-]*)*) --.*/\1/p' \
-  -e 's/.*create "[^"]*" ([a-z][a-z-]*( [a-z][a-z-]*)*)( \\| --).*/\1/p' \
+  -e 's/.*create "[^"]*" ([a-z][a-z-]*( [a-z][a-z-]*)*) --.*/\1/p' \
   -e 's/.*"\$\{OCI\[@\]\}" ([a-z][a-z-]*( [a-z][a-z-]*)*) --.*/\1/p' \
-  provision.sh | sort -u)"
-[ -n "$paths" ] || { echo "check-cli: no OCI commands found in provision.sh" >&2; exit 1; }
+  <<<"$joined")"
+# Every call site must yield a path; a call the patterns miss would go unchecked.
+found="$(grep -c . <<<"$paths" || true)"
+[ "$found" -eq "$calls" ] || { echo "check-cli: $calls OCI calls but $found command paths read" >&2; exit 1; }
+paths="$(sort -u <<<"$paths")"
 
 failed=0
 while IFS= read -r path; do

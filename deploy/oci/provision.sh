@@ -316,8 +316,8 @@ if [ -z "$budget_id" ]; then
     --reset-period MONTHLY --target-type COMPARTMENT --targets "[\"$COMPARTMENT_OCID\"]")"
 else say "  exists: budget $NAME_PREFIX-budget"; fi
 # The alert rule is checked on every run, so a run that stopped after the budget still gets it.
-# shellcheck disable=SC2016
 rule_id=""
+# shellcheck disable=SC2016
 if [ "$APPLY" -eq 1 ]; then
   rule_id="$("${OCI[@]}" budgets budget alert-rule list --budget-id "$budget_id" --all \
     --query 'data[?type == `ACTUAL`] | [0].id' --raw-output 2>/dev/null | grep '^ocid' || true)"
