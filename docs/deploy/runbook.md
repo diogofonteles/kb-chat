@@ -178,6 +178,7 @@ deploy/scripts/sync-vault.sh --host ubuntu@<IP> --with-models   # 1ª vez: tamb�
 
 - O primeiro envio leva ~325 MB do tópico e ~720 MB do índice.
 - Depois de `kb ingest` + `qmd embed` no Mac, rode de novo sem `--with-models`: só vão as diferenças.
+- `--with-models` grava os modelos como o usuário da API (uid 10001) via `sudo` sem senha do usuário SSH; eles ficam em `/srv/kb-chat/qmd/cache/models`.
 - O script recusa um acervo sem tópicos.
 - Ele conta as remoções num dry-run antes de tudo. Com mais de `--max-delete` (200), recusa sem enviar nada nem apagar nada. Confira o acervo e, se for isso mesmo, rode de novo com `--max-delete <n>`.
 - Se o índice novo falhar no smoke, o anterior volta sozinho.

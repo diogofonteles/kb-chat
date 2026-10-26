@@ -6,7 +6,8 @@
 # Options:
 #   --vault <dir>      vault root with kb.toml (default ~/dev/personal/hermetismo)
 #   --index <file>     QMD index (default ~/.cache/qmd/index.sqlite)
-#   --with-models      also send the QMD models (~2 GB; otherwise the VM downloads them once)
+#   --with-models      also send the QMD models (~2 GB; otherwise the VM downloads them once);
+#                      needs passwordless sudo on the VM (they are written as the API user)
 #   --max-delete <n>   refuse when rsync would delete more than n vault files (default 200)
 #   --dry-run          list the changes, send nothing
 # Safeguards: the source must be a kb vault with at least one topic; deletions on the VM are
@@ -66,10 +67,11 @@ awk -v prefix="$VAULT/" '
 ' "$QMD_CONFIG" >"$server_config_dir/index.yml"
 
 RSYNC=(rsync -az --human-readable --itemize-changes --partial)
-# The model cache belongs to the API user (uid 10001, cloud-init), not to the SSH user: the
-# remote rsync runs as that user (setpriv: the uid has no passwd entry), so the files get its owner
-# (macOS rsync has no --chown).
-MODELS_OWNER=(--rsync-path="sudo setpriv --reuid=10001 --regid=10001 --clear-groups rsync")
+# The model cache belongs to the API user (APP_UID: apps/api/Dockerfile, cloud-init), not to the
+# SSH user: the remote rsync runs as that user (setpriv: the uid has no passwd entry), so the
+# files get its owner (macOS rsync has no --chown). Needs passwordless sudo for the --host user.
+APP_UID=10001
+MODELS_OWNER=(--rsync-path="sudo setpriv --reuid=$APP_UID --regid=$APP_UID --clear-groups rsync")
 VAULT_FILTERS=(--exclude='/_*/' --exclude='/.*' --exclude='/*.sh' --exclude='.DS_Store')
 
 # Count the deletions with a dry run first and refuse before touching the VM: rsync's own
@@ -102,6 +104,9 @@ sqlite3 "$INDEX" ".backup '$server_config_dir/index.sqlite'"
 "${RSYNC[@]}" "$server_config_dir/index.sqlite" "$server_config_dir/index.yml" \
   "$HOST:$REMOTE_ROOT/qmd/incoming/"
 if [ "$WITH_MODELS" -eq 1 ]; then
+  # rsync only creates the last folder, and as APP_UID it cannot create one under a root folder.
+  # shellcheck disable=SC2029 # the path is meant to expand here, on the Mac
+  ssh "$HOST" sudo install -d -o "$APP_UID" -g "$APP_UID" "$REMOTE_ROOT/qmd/cache/models"
   "${RSYNC[@]}" "${MODELS_OWNER[@]}" "$MODELS/" "$HOST:$REMOTE_ROOT/qmd/cache/models/"
 fi
 
