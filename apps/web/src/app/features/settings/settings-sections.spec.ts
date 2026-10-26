@@ -69,7 +69,7 @@ describe('Configurações per permission (KBC-010)', () => {
     TestBed.tick();
 
     expect(sectionNames()).toEqual([
-      'IA',
+      'Sua IA',
       'IA da aplicação',
       'Preferências',
       'Pessoas e permissões',

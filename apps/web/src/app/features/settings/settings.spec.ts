@@ -365,6 +365,8 @@ describe('Configurações', () => {
       model: 'gpt-5.4-mini',
       latencyMs: 300,
     });
+    TestBed.tick();
+    flushAiStatus(http);
     await fixture.whenStable();
     expect(
       screen.getByText('A chave não foi aceita pelo provedor.'),

@@ -42,10 +42,18 @@
         }
       </span>
     </label>
+    @if (option.info.id === draft().provider) {
+      <div class="details">
+        <ng-container
+          [ngTemplateOutlet]="detailsOf"
+          [ngTemplateOutletContext]="{ $implicit: option }"
+        />
+      </div>
+    }
   }
 </fieldset>
 
-@if (selected(); as current) {
+<ng-template #detailsOf let-current>
   <app-provider-guide [provider]="current.info.id" />
 
   @if (current.info.id === 'openrouter') {
@@ -296,4 +304,4 @@
       </p>
     </div>
   }
-}
+</ng-template>

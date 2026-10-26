@@ -56,9 +56,7 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
             {{ providerLabel() }}
           </p>
           @if (current.free) {
-            <p class="detail" i18n="@@aiStatus.ownFree">
-              Gratuito (modelos gratuitos).
-            </p>
+            <p class="detail" i18n="@@aiStatus.ownFree">Gratuito para você.</p>
           } @else if (spentLabel(); as spent) {
             <p class="detail" i18n="@@aiStatus.ownSpent">
               Você paga · Gasto hoje: {{ spent }}

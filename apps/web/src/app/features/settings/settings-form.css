@@ -244,3 +244,16 @@
 .check input {
   flex-shrink: 0;
 }
+
+/* The chosen option's guide and fields, right under its card (KBC-023). */
+.details {
+  display: grid;
+  gap: var(--space-4);
+  margin: var(--space-1) 0 var(--space-3) var(--space-6, 1.5rem);
+}
+
+@media (max-width: 640px) {
+  .details {
+    margin-left: 0;
+  }
+}

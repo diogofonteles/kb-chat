@@ -70,7 +70,7 @@ test('AC-1, AC-2: connects one’s own OpenRouter in one click and answers for f
   const back = person.getByRole('dialog', { name: 'Configurações' });
   await expect(back.getByText('Conta conectada.')).toBeVisible();
   await expect(back.getByText('Sua IA')).toBeVisible();
-  await expect(back.getByText('Gratuito (modelos gratuitos).')).toBeVisible();
+  await expect(back.getByText('Gratuito para você.')).toBeVisible();
   await back.getByRole('button', { name: 'Fechar configurações' }).click();
   const answer = await research(person);
   await expect(answer.getByText('Resposta do plano da casa.')).toBeVisible();

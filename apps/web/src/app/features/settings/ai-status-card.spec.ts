@@ -72,7 +72,7 @@ describe('AiStatusCard (KBC-022, T6)', () => {
     await renderCard(
       anAiStatus({ source: 'own', provider: 'gemini', free: true }),
     );
-    expect(document.body.textContent).toContain('Gratuito (modelos gratuitos)');
+    expect(document.body.textContent).toContain('Gratuito para você.');
   });
 
   it('says when nothing serves the person', async () => {

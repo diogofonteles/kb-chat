@@ -27,7 +27,7 @@ import { SettingsStore, type SettingsSection } from './settings-store.js';
 export type { SettingsSection } from './settings-store.js';
 
 const SECTIONS: readonly { id: SettingsSection; label: () => string }[] = [
-  { id: 'ai', label: () => $localize`:@@settings.ai:IA` },
+  { id: 'ai', label: () => $localize`:@@settings.ai:Sua IA` },
   {
     id: 'house',
     label: () => $localize`:@@settings.house:IA da aplicação`,

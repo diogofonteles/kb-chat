@@ -144,6 +144,8 @@ export class SettingsStore {
   }
 
   close(): void {
+    // The OpenRouter outcome is said once, where it happened.
+    this.returned.set(null);
     this.requested.set(null);
     this.onboardingDismissed.set(true);
   }
@@ -170,8 +172,9 @@ export class SettingsStore {
     writeProfilePreference(this.storage, profile);
   }
 
+  /** The card shows the last test (KBC-023 BR-6): read it again once the test answers. */
   test(request: AiTestRequest): Observable<AiTestResult> {
-    return this.api.test(request);
+    return this.api.test(request).pipe(tap(() => this.aiStatus.reload()));
   }
 
   /**

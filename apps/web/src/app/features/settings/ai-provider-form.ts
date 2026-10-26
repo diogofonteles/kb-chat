@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -98,7 +99,7 @@ const seconds = (ms: number): string =>
  */
 @Component({
   selector: 'app-ai-provider-form',
-  imports: [ProviderGuideCard],
+  imports: [ProviderGuideCard, NgTemplateOutlet],
   templateUrl: './ai-provider-form.html',
   styleUrl: './settings-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
