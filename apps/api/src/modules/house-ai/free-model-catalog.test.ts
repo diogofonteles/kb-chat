@@ -58,6 +58,9 @@ describe('FreeModelCatalog (KBC-022 AC-3)', () => {
       output: 2e-6,
     });
     expect(catalog.priceOf('unknown')).toBeNull();
+    expect(view.paid.map((m) => m.id)).toEqual(['paid/model']);
+    expect(catalog.isPaidWithTools('paid/model')).toBe(true);
+    expect(catalog.isPaidWithTools('big:free')).toBe(false);
   });
 
   it('refreshes once a day and keeps the last list when a refresh fails', async () => {
@@ -95,6 +98,7 @@ describe('FreeModelCatalog (KBC-022 AC-3)', () => {
     });
     expect(await catalog.list()).toEqual({
       items: [],
+      paid: [],
       updatedAt: null,
       stale: true,
     });

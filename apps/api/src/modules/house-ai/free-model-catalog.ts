@@ -14,6 +14,9 @@ export const AUTO_CHAIN_SIZE = 5;
 const isFreeWithTools = (model: OpenRouterModel): boolean =>
   model.id.endsWith(':free') && model.tools;
 
+const isPaidWithTools = (model: OpenRouterModel): boolean =>
+  model.tools && !model.id.endsWith(':free') && model.price.output > 0;
+
 const byContext = (a: OpenRouterModel, b: OpenRouterModel): number =>
   (b.contextLength ?? 0) - (a.contextLength ?? 0) || a.id.localeCompare(b.id);
 
@@ -60,14 +63,31 @@ export class FreeModelCatalog {
     return includeRouter ? [...ids, OPENROUTER_FREE_ROUTER] : ids;
   }
 
+  /** Whether a model can be the paid fallback; null when the list never loaded (unknown). */
+  isPaidWithTools(id: string): boolean | null {
+    if (this.loadedAt === null) return null;
+    return this.models.some(
+      (model) => model.id === id && isPaidWithTools(model),
+    );
+  }
+
   private view(): FreeModelList {
+    const summary = ({ id, name, contextLength }: OpenRouterModel) => ({
+      id,
+      name,
+      contextLength,
+    });
     const items = this.models
       .filter(isFreeWithTools)
       .sort(byContext)
-      .map(({ id, name, contextLength }) => ({ id, name, contextLength }));
+      .map(summary);
+    const paid = this.models
+      .filter(isPaidWithTools)
+      .sort(byContext)
+      .map(summary);
     const updatedAt =
       this.loadedAt === null ? null : new Date(this.loadedAt).toISOString();
-    return { items, updatedAt, stale: this.failedAt !== null };
+    return { items, paid, updatedAt, stale: this.failedAt !== null };
   }
 
   private now(): number {

@@ -143,6 +143,7 @@ export class HouseAiService {
   /** A master's change; a typed key connects the house account ("Colar uma chave"). */
   async update(patch: HouseAiUpdate, by: string): Promise<HouseAiView> {
     const { key, managementKey, ...rest } = patch;
+    await this.assertPaidModel(rest.paidModel);
     // Keys made on the old account (or with the old management key) would bill it: drop them.
     if (key !== undefined || managementKey !== undefined)
       await this.resetPersonKeys();
@@ -312,6 +313,18 @@ export class HouseAiService {
       connectedAt: (this.deps.now?.() ?? new Date()).toISOString(),
       connectedBy: by,
     };
+  }
+
+  /** A paid fallback must be a model OpenRouter lists, paid and with tool calling. */
+  private async assertPaidModel(
+    model: string | null | undefined,
+  ): Promise<void> {
+    if (!model) return;
+    await this.ready();
+    if (this.deps.catalog.isPaidWithTools(model) === false)
+      throw new AppError('VALIDATION_FAILED', 'Unknown paid model', {
+        details: { paidModel: model },
+      });
   }
 
   private sealedManagementKey(key: string | null) {

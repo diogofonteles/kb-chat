@@ -16,6 +16,8 @@ export type FreeModel = z.infer<typeof freeModelSchema>;
 /** GET /api/v1/ai/free-models. `updatedAt` null: the list could never be loaded. */
 export const freeModelListSchema = z.object({
   items: z.array(freeModelSchema),
+  /** Paid models with tool calling: the choices for a paid fallback. */
+  paid: z.array(freeModelSchema),
   updatedAt: z.iso.datetime().nullable(),
   /** The last refresh failed; the items are the previous list. */
   stale: z.boolean(),

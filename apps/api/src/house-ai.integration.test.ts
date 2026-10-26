@@ -464,6 +464,10 @@ describe('The AI access policy (KBC-022 AC-8, AC-12, AC-13)', () => {
     const started = await start();
     const { owner, memberId } = await withPeople(started);
     await connectHouse(started, owner);
+    const unknown = await owner('PUT', '/api/v1/house-ai', {
+      paidModel: 'fake/typo',
+    });
+    expect(unknown.statusCode).toBe(400);
     await owner('PUT', '/api/v1/house-ai', {
       paidModel: 'fake/paid',
       managementKey: 'sk-or-v1-mgmt-0001',
