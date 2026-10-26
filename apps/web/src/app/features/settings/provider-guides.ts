@@ -92,7 +92,7 @@ export const PROVIDER_GUIDES: Partial<Record<AiProvider, ProviderGuide>> = {
       TEST_STEP,
     ],
     cost: () =>
-      $localize`:@@guide.gmCost:No plano gratuito não há custo. No pago, o Google cobra por uso (cerca de US$ 0,30 por milhão de tokens de entrada no Flash-Lite), até o limite de gasto por dia definido aqui.`,
+      $localize`:@@guide.gmCost:No plano gratuito (sem faturamento ativado) não há custo. No pago, o Google cobra por uso (cerca de US$ 0,30 por milhão de tokens de entrada no Flash-Lite), até o limite de gasto por dia definido aqui.`,
     privacy: () =>
       $localize`:@@guide.gmPrivacy:No plano gratuito, o Google pode usar as perguntas e os trechos enviados para melhorar os produtos dele, e pessoas podem revisá-los. Não use o plano gratuito para nada sigiloso.`,
     limits: () =>
