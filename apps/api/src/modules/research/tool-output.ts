@@ -1,7 +1,6 @@
 import type { SearchHit } from '@kb-chat/contracts';
 import type { CatalogEntry } from '../catalog/index.js';
 import type { BodyWindow } from './body-window.js';
-import type { TextHit } from './text-finder.js';
 
 const OPEN = '<<<DOCUMENTO';
 const CLOSE = 'DOCUMENTO>>>';
@@ -19,7 +18,12 @@ export const quote = (text: string): string => `“${oneLine(text, 80)}”`;
 
 /** Accent- and case-insensitive key for matching names. */
 export const foldName = (text: string): string =>
-  text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+  text
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export function hitLine(
   n: number,
@@ -82,22 +86,4 @@ export function windowLines(
 ): string[] {
   const text = window.text.split(OPEN).join('').split(CLOSE).join('');
   return [windowIntro(window, around), OPEN, text, CLOSE, nextHint(n, window)];
-}
-
-const SNIPPET_LINE_CHARS = 600;
-
-/** One find_text hit: [n], title, occurrences per alternative, summary and the passage. */
-export function textHitLine(n: number, hit: TextHit): string {
-  const counts = hit.phrases
-    .map(({ phrase, count }) => `${quote(phrase)} ${count}`)
-    .join(', ');
-  const parts = [
-    `[${n}] ${oneLine(hit.entry.title, 160)}`,
-    `${hit.occurrences} ocorrência(s): ${counts}`,
-  ];
-  if (hit.entry.summary)
-    parts.push(`Resumo: ${oneLine(hit.entry.summary, HIT_TEXT_CHARS)}`);
-  if (hit.snippet)
-    parts.push(`Trecho: ${oneLine(hit.snippet, SNIPPET_LINE_CHARS)}`);
-  return parts.join(' — ');
 }

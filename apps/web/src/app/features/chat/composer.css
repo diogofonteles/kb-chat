@@ -73,11 +73,11 @@ select {
   color: var(--color-text);
 }
 
-/* "Rápido | Profundo": a two-option radio group drawn as a segmented control (MA-19). */
+/* "Rápido | Profundo | Exaustivo": a radio group drawn as a segmented control (MA-19). */
 .profile {
   display: inline-flex;
   margin: 0;
-  padding: 2px;
+  padding: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface-muted);
@@ -87,9 +87,10 @@ select {
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: calc(var(--target) - 6px);
+  /* Each option is a full touch target (MA-03). */
+  min-height: var(--target);
   padding: 0 var(--space-3);
-  border-radius: calc(var(--radius-sm) - 2px);
+  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   cursor: pointer;
@@ -169,7 +170,37 @@ select {
     white-space: nowrap;
   }
 
+  /*
+   * One compact row on phones when it fits; with the three research profiles (KBC-017)
+   * the segmented control may take its own row, never pushing the page sideways.
+   */
   .actions {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+  }
+
+  .profile {
+    flex: 1 1 auto;
+  }
+
+  .profile-option {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 0 var(--space-2);
+  }
+
+  .send {
+    padding: 0 var(--space-3);
+  }
+
+  /* The exhaustive profile's warning (it may take minutes) stays visible on phones. */
+  .help.always {
+    position: static;
+    order: 1;
+    flex-basis: 100%;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
   }
 }

@@ -1,10 +1,13 @@
 import type { SubscriptionPrompt } from './adapters/subscription-prompt.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
+import type { AppConfig } from './config.js';
 import {
   ResearchTools,
   ToolLoopRunner,
+  researchBudgets,
   researchSystemPrompt,
   turnToolsFactory,
+  type ResearchBudgets,
 } from './modules/research/index.js';
 import { SearchService } from './modules/search/index.js';
 import { SpendService } from './modules/spend/index.js';
@@ -19,7 +22,21 @@ export interface ResearchAgentDeps {
   readonly index: SearchIndexPort;
   readonly vault: VaultReaderPort;
   readonly ledger: SpendLedgerPort;
+  /** Per-profile budgets (ADR 0013); default: the module's, without server settings. */
+  readonly budgets?: ResearchBudgets;
 }
+
+/** The research budgets with the server's exhaustive-profile settings (KBC-017). */
+export const budgetsFromConfig = (
+  config: Pick<
+    AppConfig,
+    'KB_CHAT_EXHAUSTIVE_STEPS' | 'KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS'
+  >,
+): ResearchBudgets =>
+  researchBudgets({
+    steps: config.KB_CHAT_EXHAUSTIVE_STEPS,
+    outputTokens: config.KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS,
+  });
 
 /**
  * The research agent's pieces (ADR 0006) for every runner (ADR 0007): one set of tools
@@ -38,7 +55,7 @@ export interface ResearchAgent {
 }
 
 export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
-  const { catalog, index, vault, ledger } = deps;
+  const { catalog, index, vault, ledger, budgets } = deps;
   const search = new SearchService({ catalog, index, vault });
   const tools = new ResearchTools({ search, catalog, vault });
   return {
@@ -49,6 +66,7 @@ export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
       new ToolLoopRunner({
         llm,
         tools,
+        budgets,
         spend: new SpendService({ llm, ledger, ...scope }),
         ...(escalation && {
           deep: {

@@ -19,6 +19,8 @@ const entry = (
   criterion: null,
   origin: null,
   relations: { exampleOf: [], extends: [], related: [] },
+  entities: [],
+  sourcePath: null,
   ...overrides,
 });
 const candidate = (e: CatalogEntry, score = 1): Candidate => ({

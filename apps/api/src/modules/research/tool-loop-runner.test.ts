@@ -1,4 +1,4 @@
-import type { ResearchEvent } from '@kb-chat/contracts';
+import type { ResearchEvent, ResearchProfile } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
   answerText,
@@ -10,10 +10,14 @@ import type { StubReply } from '../../adapters/stub-llm-adapter.js';
 import type { AgentChunk, AgentMessage } from '../../ports/llm.js';
 import { LlmKeyRejectedError } from '../../ports/llm-errors.js';
 import { STUB_THOUGHT } from '../../adapters/stub-llm-adapter.js';
+import { COMPACTED_MARK } from './compaction.js';
 import {
+  EXHAUSTIVE_OUTPUT_TOKENS,
+  EXHAUSTIVE_TOOL_STEPS,
   FAST_TOOL_STEPS,
   MAX_OUTPUT_TOKENS,
   MAX_TOOL_STEPS,
+  researchBudgets,
 } from './limits.js';
 import { AnthropicAdapter } from '../../adapters/anthropic-adapter.js';
 import { MemorySpendLedger } from '../../adapters/memory-spend-ledger.js';
@@ -23,7 +27,7 @@ import { ToolLoopRunner } from './tool-loop-runner.js';
 const input = (
   question: string,
   signal = new AbortController().signal,
-  profile: 'fast' | 'deep' = 'deep',
+  profile: ResearchProfile = 'deep',
 ) => ({
   topic: 'hermetismo',
   question,
@@ -436,5 +440,104 @@ describe('ToolLoopRunner', () => {
       { type: 'error', code: 'DAILY_CAP_REACHED' },
     ]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
+  const exhaustive = (question: string) =>
+    input(question, undefined, 'exhaustive');
+  const pages = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      toolCalls: [
+        {
+          name: 'find_text',
+          arguments: { phrase: 'ritmo', head_limit: 1, offset: i },
+        },
+      ],
+    }));
+
+  it('gives the exhaustive profile 80 steps and 16,000 output tokens, the others keep theirs (AC-11)', async () => {
+    const { runner, llm } = await fixtureRunner({ script: pages(100) });
+    const events = await collectEvents(runner.run(exhaustive('ritmo')));
+    expect(EXHAUSTIVE_TOOL_STEPS).toBe(80);
+    expect(ofType(events, 'done')[0]?.steps).toBe(80);
+    expect(llm.agentCalls).toHaveLength(81);
+    expect(
+      llm.agentCalls.every((c) => c.maxTokens === EXHAUSTIVE_OUTPUT_TOKENS),
+    ).toBe(true);
+    const prompt = llm.lastMessages[0]?.content ?? '';
+    expect(prompt).toContain('Pesquisa exaustiva');
+    expect(prompt).toContain('Cobertura:');
+    const deep = await fixtureRunner({ script: pages(3) });
+    await collectEvents(deep.runner.run(input('ritmo')));
+    expect(
+      deep.llm.agentCalls.every((c) => c.maxTokens === MAX_OUTPUT_TOKENS),
+    ).toBe(true);
+  });
+
+  it('compacts old tool results past the threshold and still answers (AC-10)', async () => {
+    const budgets = researchBudgets();
+    const small = {
+      ...budgets,
+      exhaustive: { ...budgets.exhaustive, steps: 12, compactTokens: 2_000 },
+    };
+    const { runner, llm } = await fixtureRunner(
+      { script: pages(20) },
+      1,
+      small,
+    );
+    const events = await collectEvents(runner.run(exhaustive('ritmo')));
+    expect(ofType(events, 'done')[0]?.steps).toBe(12);
+    const tools = llm.lastMessages.filter((m) => m.role === 'tool');
+    expect(tools).toHaveLength(12);
+    expect(tools[0]?.content.startsWith(COMPACTED_MARK)).toBe(true);
+    // Still above the threshold before the last call: only the 2 newest stay whole.
+    expect(
+      tools.slice(-2).some((m) => m.content.startsWith(COMPACTED_MARK)),
+    ).toBe(false);
+    expect(
+      tools.slice(0, -2).every((m) => m.content.startsWith(COMPACTED_MARK)),
+    ).toBe(true);
+    expect(llm.agentCalls.at(-1)?.toolChoice).toBe('none');
+    expect(answerText(events)).toMatch(/\[\d+\]/);
+  });
+
+  it('answers with what it has once the wall-clock ceiling is spent', async () => {
+    const budgets = researchBudgets();
+    const now = {
+      ...budgets,
+      exhaustive: { ...budgets.exhaustive, maxMinutes: 0 },
+    };
+    const { runner, llm } = await fixtureRunner({ script: pages(5) }, 1, now);
+    const events = await collectEvents(runner.run(exhaustive('ritmo')));
+    expect(ofType(events, 'done')[0]?.steps).toBe(0);
+    expect(llm.agentCalls).toHaveLength(1);
+    expect(llm.agentCalls[0]?.toolChoice).toBe('none');
+  });
+
+  it('prices the forced last call at its whole output budget', async () => {
+    const budgets = researchBudgets();
+    const one = { ...budgets, exhaustive: { ...budgets.exhaustive, steps: 1 } };
+    // US$ 1 per million tokens: 4,000 output tokens fit a US$ 0.01 cap, 16,000 do not.
+    const { runner } = await fixtureRunner(
+      { script: pages(3), usdPerCall: 0 },
+      0.01,
+      one,
+    );
+    const events = await collectEvents(runner.run(exhaustive('ritmo')));
+    expect(ofType(events, 'step')).toHaveLength(1);
+    expect(events.at(-1)).toEqual({ type: 'error', code: 'DAILY_CAP_REACHED' });
+  });
+
+  it('stops cleanly with DAILY_CAP_REACHED and records what it spent (AC-13)', async () => {
+    const { runner, ledger } = await fixtureRunner(
+      { script: pages(10), usdPerCall: 0.4 },
+      1,
+    );
+    const events = await collectEvents(runner.run(exhaustive('ritmo')));
+    expect(events.at(-1)).toEqual({ type: 'error', code: 'DAILY_CAP_REACHED' });
+    expect(ledger.entries).toHaveLength(1);
+    expect(ledger.entries[0]).toMatchObject({ interrupted: true });
+    expect(ledger.entries[0]?.usd).toBeCloseTo(1.2);
   });
 });

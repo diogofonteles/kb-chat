@@ -102,13 +102,10 @@ export class ResearchStore {
     if (this.streaming()) this.stop();
     if (this.state().topic !== topic) this.state.set(emptyConversation(topic));
     const history = toHistory(this.state().turns);
-    const turn = startTurn(this.nextId++, trimmed);
+    const profile = this.profile();
+    const turn = startTurn(this.nextId++, trimmed, profile);
     this.state.update((s) => ({ ...s, turns: [...s.turns, turn] }));
-    this.run(turn.id, topic, {
-      question: trimmed,
-      history,
-      profile: this.profile(),
-    });
+    this.run(turn.id, topic, { question: trimmed, history, profile });
   }
 
   /** "Tentar de novo" on the last turn (failed or stopped): asks the same question in its place. */

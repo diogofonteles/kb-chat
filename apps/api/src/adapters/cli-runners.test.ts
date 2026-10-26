@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ResearchEvent } from '@kb-chat/contracts';
+import type { ResearchEvent, ResearchProfile } from '@kb-chat/contracts';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FakeResearchTools } from '../../test/fake-research-tools.js';
@@ -9,6 +9,7 @@ import { answerText } from '../../test/research-factories.js';
 import { FAKES_DIR } from '../../test/fixture-paths.js';
 import { freePort } from '../../test/free-port.js';
 import { mcpRoutes } from '../mcp/mcp-routes.js';
+import { researchBudgets } from '../modules/research/index.js';
 import { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import {
@@ -56,13 +57,14 @@ async function fakeHome(settings: {
 async function collect(
   runner: ResearchRunnerPort,
   signal = new AbortController().signal,
+  profile: ResearchProfile = 'fast',
 ): Promise<ResearchEvent[]> {
   const events: ResearchEvent[] = [];
   for await (const event of runner.run({
     topic: 'hermetismo',
     question: 'O que é o ritmo?',
     history: [{ question: 'Antes', answer: 'Resposta anterior' }],
-    profile: 'fast',
+    profile,
     signal,
   }))
     events.push(event);
@@ -269,6 +271,37 @@ describe('ClaudeCliRunner', () => {
     expect(prompt).toContain('(fora do acervo)');
     expect(seen.envNames).toContain('PATH');
     expect(seen.envNames).not.toContain('KB_CHAT_UNRELATED_SECRET');
+  });
+
+  it('opens an exhaustive turn with its step budget and prompt (KBC-017 AC-12)', async () => {
+    const report = join(workDir, 'report-exhaustive.json');
+    const open = vi.spyOn(turns, 'open');
+    const events = await collect(
+      claude(await fakeHome({ report })),
+      undefined,
+      'exhaustive',
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'done', interrupted: false });
+    expect(open.mock.calls.at(-1)?.[2]).toBe(80);
+    const seen = JSON.parse(await readFile(report, 'utf8'));
+    const prompt = String(seen.args[seen.args.indexOf('--system-prompt') + 1]);
+    expect(prompt).toContain('Pesquisa exaustiva');
+    expect(prompt).toContain('Cobertura:');
+    expect(JSON.stringify(seen.args)).not.toContain('--effort');
+    const budgets = researchBudgets({ steps: 120 });
+    const configured = new ClaudeCliRunner({
+      bin: join(FAKES_DIR, 'fake-claude.mjs'),
+      apiBaseUrl,
+      turns,
+      workDir,
+      env: process.env,
+      tools: () => new FakeResearchTools(),
+      budgets,
+      killGraceMs: 200,
+    });
+    await collect(configured, undefined, 'exhaustive');
+    expect(open.mock.calls.at(-1)?.[2]).toBe(120);
+    open.mockRestore();
   });
 
   it('kills a CLI that ignores SIGTERM and closes the endpoint on abort', async () => {

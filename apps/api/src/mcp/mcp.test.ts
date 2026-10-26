@@ -66,6 +66,22 @@ describe('kb MCP server', () => {
   });
 });
 
+describe('McpTurnRegistry lifetime (KBC-017)', () => {
+  it('keeps a long exhaustive turn open for 90 minutes, then drops a forgotten one', () => {
+    vi.useFakeTimers();
+    try {
+      const turns = new McpTurnRegistry();
+      const opened = turns.open(new FakeResearchTools(), {}, 80);
+      vi.advanceTimersByTime(60 * 60_000);
+      expect(turns.get(opened.token)).toBeDefined();
+      vi.advanceTimersByTime(31 * 60_000);
+      expect(turns.get(opened.token)).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('MCP turn endpoint', () => {
   it('answers 404 for an unknown or closed turn', async () => {
     const app = Fastify();

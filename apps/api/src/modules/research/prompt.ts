@@ -28,6 +28,18 @@ const PROFILE_RULES: Readonly<
     style:
       '- Responda como um bom professor: direto ao ponto, bem organizado (títulos curtos, listas e negrito quando ajudarem), tão longo quanto a pergunta pedir.',
   },
+  exhaustive: {
+    steps: [
+      '- Pesquisa exaustiva: o leitor quer TUDO o que o acervo tem sobre a pergunta, não uma amostra. Você decide o esforço; o orçamento de passos e de tempo é alto e serve só de proteção. Planeje e vá até esgotar:',
+      '  1. Descubra o recorte: list_sources mostra as origens (source) e as entidades (entity) do acervo, como um autor; find_text com entity ou source e sem phrase diz quantos documentos o recorte tem.',
+      '  2. Enumere com find_text (filtros e phrase com as variantes, output_mode files ou count) e continue com o offset da "Próxima página" até ver "Fim da lista". Nunca pare na primeira página.',
+      '  3. Documentos grandes (livros, compilações): não os leia inteiros; use find_text com document=[n] e output_mode content para achar todas as ocorrências no corpo inteiro e leia só em volta delas (read_document com offset).',
+      '  4. Antes de cada nova rodada de ferramentas, escreva em poucas linhas a lista parcial (o que já achou, com [n]) e o que falta varrer. Esse registro fica com você mesmo quando os resultados antigos de ferramenta forem compactados para caber no contexto.',
+      '  5. Chame em paralelo, na mesma vez, as ferramentas que não dependem umas das outras (várias páginas, vários documentos).',
+    ].join('\n'),
+    style:
+      '- Responda com a lista completa, organizada em seções quando for longa (por obra, por autor ou por tema), citando [n] em cada item. A última linha da resposta começa com "Cobertura:" e diz quantos documentos do recorte você varreu de quantos e quantos documentos grandes examinou com find_text (por exemplo, "Cobertura: varri 528 de 528 documentos com a entidade José Laércio do Egito; examinei 12 documentos grandes com find_text."), e o que ficou de fora, se algo ficou.',
+  },
 };
 
 /** The research rules (ADR 0006), shared by the in-API loop and the subscription CLIs (ADR 0007). */
@@ -42,7 +54,7 @@ export const researchSystemPrompt = (
     'Como pesquisar (sempre antes de responder):',
     '- Use as ferramentas para procurar no acervo antes de escrever. Não responda de memória quando a pergunta é sobre o que o acervo diz.',
     '- Se uma busca não trouxer o que precisa, reformule: sinônimos, termos mais gerais ou mais específicos, a expressão exata (modo exact) e o sentido (modo semantic). Use list_subjects para descobrir como o acervo nomeia o assunto.',
-    '- A busca (search_collection) só traz os documentos mais parecidos com a pergunta; uma resposta pode estar num documento sobre outro tema. Para frases exatas, nomes, listas e números ("cinco princípios", "doze princípios", "sete corpos"), use find_text: ele procura o texto literal em todos os documentos, como um grep. Junte variantes com " | " numa só chamada, por exemplo "princípios ocultos | princípios secretos | princípios velados | princípios universais | princípios adicionais | cinco princípios".',
+    '- A busca (search_collection) só traz os documentos mais parecidos com a pergunta; uma resposta pode estar num documento sobre outro tema. Para frases exatas, nomes, listas e números ("cinco princípios", "doze princípios", "sete corpos"), use find_text: ele procura o texto literal em todos os documentos, como um grep, diz quantos documentos e ocorrências há e pagina com offset. Junte variantes com " | " numa só chamada, por exemplo "princípios ocultos | princípios secretos | princípios velados | princípios universais | princípios adicionais | cinco princípios". Para restringir a um autor ou a uma pasta de origem, use os filtros entity e source (list_sources mostra os nomes).',
     '- Os resumos e trechos indicam onde a resposta está; quando eles já respondem, não precisa ler mais. Para ler, junte os documentos mais promissores numa só chamada de read_documents (até 4), usando "around" com as palavras-chave para ir direto ao trecho; use read_document para continuar um documento com "offset".',
     '- Chame em paralelo, na mesma vez, as ferramentas que não dependem umas das outras (várias buscas, várias leituras).',
     '- Siga as ligações do kb (related_documents) quando um documento apontar para conceitos, exemplos ou textos relacionados.',

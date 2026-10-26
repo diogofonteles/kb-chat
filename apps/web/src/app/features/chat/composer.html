@@ -61,7 +61,12 @@
           </label>
         }
       </fieldset>
-      <span id="profile-help" class="help">{{ profileHelp() }}</span>
+      <span
+        id="profile-help"
+        class="help"
+        [class.always]="profile() === 'exhaustive'"
+        >{{ profileHelp() }}</span
+      >
     }
     @if (nearLimit()) {
       <span class="limit" aria-live="polite" i18n="@@composer.limit"

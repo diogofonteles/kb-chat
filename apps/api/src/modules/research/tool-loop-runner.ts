@@ -27,7 +27,12 @@ import {
   deepenReason,
   beforeMarker,
 } from './escalation.js';
-import { MAX_OUTPUT_TOKENS, PROFILE_STEPS } from './limits.js';
+import { KEEP_TOOL_RESULTS, compactToolResults } from './compaction.js';
+import {
+  DEFAULT_BUDGETS,
+  type ProfileBudget,
+  type ResearchBudgets,
+} from './limits.js';
 import { SourceBook } from './source-book.js';
 import type { ResearchTools } from './tools.js';
 
@@ -36,6 +41,9 @@ const FINAL_NOTES: ReadonlySet<string> = new Set([
   FINAL_ANSWER_NOTE,
   FINAL_DEEPEN_NOTE,
 ]);
+
+/** What a turn still above the threshold keeps whole, after the first compaction. */
+const MIN_KEPT_RESULTS = 2;
 
 const SKIPPED_CALL =
   'Não executada: o limite de passos desta resposta foi atingido.';
@@ -52,6 +60,8 @@ export interface ToolLoopRunnerDeps extends LoopEngine {
   readonly deep?: LoopEngine;
   /** Whether a fast turn may escalate (Settings, "Aprofundar automaticamente"). */
   readonly autoDeepen?: () => boolean;
+  /** Steps, output, ceilings and compaction per profile (ADR 0013); default DEFAULT_BUDGETS. */
+  readonly budgets?: ResearchBudgets;
 }
 
 interface Turn {
@@ -64,6 +74,10 @@ interface Turn {
   engine: LoopEngine;
   /** The step budget: the profile's, then the deep one's after an escalation (KBC-011). */
   maxSteps: number;
+  /** The profile's output, ceilings and compaction (the deep one's after an escalation). */
+  budget: ProfileBudget;
+  /** When the research must stop and answer (exhaustive profile), in ms since the epoch. */
+  readonly deadline: number | null;
   /** The deep profile still to hand over to, while the turn may escalate. */
   deepen: LoopEngine | null;
   escalated: boolean;
@@ -146,7 +160,12 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     yield await this.record(turn, input.signal.aborted);
   }
 
+  private get budgets(): ResearchBudgets {
+    return this.deps.budgets ?? DEFAULT_BUDGETS;
+  }
+
   private startTurn(input: ResearchInput, topicTitle: string): Turn {
+    const budget = this.budgets[input.profile];
     const canDeepen =
       input.profile === 'fast' &&
       this.deps.deep !== undefined &&
@@ -160,7 +179,12 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       engine: this.deps,
       deepen: canDeepen ? (this.deps.deep ?? null) : null,
       escalated: false,
-      maxSteps: PROFILE_STEPS[input.profile],
+      maxSteps: budget.steps,
+      budget,
+      deadline:
+        budget.maxMinutes === null
+          ? null
+          : Date.now() + budget.maxMinutes * 60_000,
       steps: 0,
       sourcesSent: 0,
       spent: new Map(),
@@ -171,13 +195,14 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   private async *loop(turn: Turn): AsyncIterable<ResearchEvent> {
     for (;;) {
       if (turn.input.signal.aborted) return;
-      const final = turn.steps >= turn.maxSteps;
+      const final = this.mustAnswer(turn);
+      this.compact(turn);
       if (final)
         turn.messages.push({
           role: 'system',
           content: turn.deepen ? FINAL_DEEPEN_NOTE : FINAL_ANSWER_NOTE,
         });
-      await this.guard(turn);
+      await this.guard(turn, final);
       const call = yield* this.callModel(turn, final);
       if (yield* this.afterCall(turn, call, final)) return;
     }
@@ -216,7 +241,8 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn.deepen = null;
     turn.escalated = true;
     turn.engine = deep;
-    turn.maxSteps = PROFILE_STEPS.deep;
+    turn.budget = this.budgets.deep;
+    turn.maxSteps = turn.budget.steps;
     this.handOver(turn, call, reason);
     return true;
   }
@@ -245,12 +271,39 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     );
   }
 
-  /** Daily cap and credit before every model call, counting what this turn already spent. */
-  private async guard(turn: Turn): Promise<void> {
+  /** The step budget or the wall-clock ceiling is spent: the next call answers. */
+  private mustAnswer(turn: Turn): boolean {
+    if (turn.steps >= turn.maxSteps) return true;
+    return turn.deadline !== null && Date.now() >= turn.deadline;
+  }
+
+  /**
+   * Auto-compaction (ADR 0013): past the profile's threshold, old tool results become a
+   * short ledger so a long exhaustive turn never overflows the model's context.
+   */
+  private compact(turn: Turn): void {
+    const threshold = turn.budget.compactTokens;
+    if (threshold === null) return;
+    for (const keep of [KEEP_TOOL_RESULTS, MIN_KEPT_RESULTS]) {
+      if (tokensOf(promptText(turn.messages)) <= threshold) return;
+      const { messages } = compactToolResults(turn.messages, {
+        book: turn.book,
+        keep,
+      });
+      turn.messages.splice(0, turn.messages.length, ...messages);
+    }
+  }
+
+  /**
+   * Daily cap and credit before every model call, counting what this turn already spent.
+   * The forced last call is priced at its whole output budget: the long answer comes then.
+   */
+  private async guard(turn: Turn, final: boolean): Promise<void> {
     const { llm, spend } = turn.engine;
+    const { guardOutputTokens, outputTokens } = turn.budget;
     const estimate = await spend.estimate(
       promptText(turn.messages),
-      llm.maxOutputTokens(MAX_OUTPUT_TOKENS),
+      llm.maxOutputTokens(final ? outputTokens : guardOutputTokens),
     );
     await spend.guard(turn.usd + estimate);
   }
@@ -280,7 +333,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       turn.messages,
       this.deps.tools.definitions,
       {
-        maxTokens: MAX_OUTPUT_TOKENS,
+        maxTokens: turn.budget.outputTokens,
         signal: turn.input.signal,
         toolChoice: final ? 'none' : 'auto',
       },

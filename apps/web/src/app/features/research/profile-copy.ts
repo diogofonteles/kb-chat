@@ -18,4 +18,9 @@ export const PROFILE_COPY: Record<ResearchProfile, ProfileCopy> = {
     help: () =>
       $localize`:@@profile.deepHelp:Pesquisa mais e usa o modelo mais forte; pode levar um minuto.`,
   },
+  exhaustive: {
+    label: () => $localize`:@@profile.exhaustive:Exaustivo`,
+    help: () =>
+      $localize`:@@profile.exhaustiveHelp:Varre o acervo inteiro, página por página, e lista tudo o que achar; pode levar vários minutos.`,
+  },
 };

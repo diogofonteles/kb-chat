@@ -1,5 +1,6 @@
-import type { ResearchStep } from '@kb-chat/contracts';
-import { z } from 'zod';
+import type { ResearchStep, SearchHit } from '@kb-chat/contracts';
+import { MAX_RESULTS } from '@kb-chat/contracts';
+import type { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { ToolCall, ToolDefinition } from '../../ports/llm.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
@@ -10,22 +11,36 @@ import {
 } from '../catalog/index.js';
 import type { SearchService } from '../search/index.js';
 import { windowOf, type WindowRequest } from './body-window.js';
+import {
+  acceptsEntry,
+  describeFilter,
+  isFiltering,
+  toFilter,
+  type DocFilter,
+} from './doc-filter.js';
+import { GrepTool } from './grep-tool.js';
 import type { SourceBook } from './source-book.js';
-import { TextFinder, foldPhrase, type TextSearch } from './text-finder.js';
+import { SourcesTool } from './sources-tool.js';
+import { TextFinder } from './text-finder.js';
+import {
+  failed,
+  notFound,
+  parsedArgs,
+  resolveEntry,
+  type PreparedCall,
+  type ToolContext,
+} from './tool-context.js';
 import {
   foldName,
   headerLines,
   hitLine,
   quote,
   refLine,
-  textHitLine,
   windowLines,
 } from './tool-output.js';
 import {
   BATCH_WINDOW_CHARS,
-  PHRASE_SEPARATOR,
   TOOL_DEFINITIONS,
-  findArgsSchema,
   readArgsSchema,
   readManyArgsSchema,
   relatedArgsSchema,
@@ -34,10 +49,10 @@ import {
   type ToolName,
 } from './tool-schemas.js';
 
+export type { PreparedCall, ToolContext } from './tool-context.js';
+
 const MAX_SUBJECTS = 60;
 const MAX_REFS_PER_GROUP = 10;
-const MAX_PHRASES = 8;
-const MIN_PHRASE_CHARS = 3;
 
 export interface ResearchToolsDeps {
   readonly search: SearchService;
@@ -45,22 +60,42 @@ export interface ResearchToolsDeps {
   readonly vault: VaultReaderPort;
 }
 
-export interface ToolContext {
-  readonly topic: string;
-  readonly book: SourceBook;
-}
-
-/** A tool call ready to run: the steps shown to the reader and the text for the model. */
-export interface PreparedCall {
-  /** One per thing done (a batch read shows one step per document); none when refused. */
-  readonly steps: readonly ResearchStep[];
-  run(): Promise<string>;
-}
-
 type Handler = (args: unknown, context: ToolContext) => PreparedCall;
 type ReadManyArgs = z.output<typeof readManyArgsSchema>;
 type SearchArgs = z.output<typeof searchArgsSchema>;
-type FindArgs = z.output<typeof findArgsSchema>;
+
+/** "“ritmo” (modo all; assuntos: X; entidade contém “y”)" for the search's first line. */
+function searchScope(
+  args: SearchArgs,
+  concepts: readonly string[],
+  filter: DocFilter,
+): string {
+  const parts = [
+    `modo ${args.mode}`,
+    concepts.length > 0 && `assuntos: ${concepts.join(', ')}`,
+    describeFilter(filter),
+  ].filter(Boolean);
+  return `${quote(args.query)} (${parts.join('; ')})`;
+}
+
+function noHits(scope: string, offset: number): string {
+  const from = offset > 0 ? ` a partir do ${offset + 1}º` : '';
+  return `Nenhum documento encontrado para ${scope}${from}. Tente sinônimos, termos mais gerais ou mais específicos, outro modo (semantic/exact), list_subjects, ou find_text para varrer o acervo inteiro.`;
+}
+
+/** "11–14 de 14 documento(s) entre 31 candidatos da busca por sentido." and the next page. */
+function searchRange(
+  args: SearchArgs,
+  {
+    shown,
+    total,
+    candidates,
+  }: { shown: number; total: number; candidates: number },
+): string {
+  const next = args.offset + shown;
+  const more = next < total ? ` Próxima página: offset=${next}.` : '';
+  return `${args.offset + 1}–${next} de ${total} documento(s) entre ${candidates} candidatos da busca por sentido.${more}`;
+}
 
 const RELATION_LABELS = {
   exampleOf: 'É exemplo de',
@@ -70,11 +105,6 @@ const RELATION_LABELS = {
   extendedBy: 'Estendido por',
   relatedFrom: 'Citado como relacionado por',
 } as const;
-
-const failed = (text: string): PreparedCall => ({
-  steps: [],
-  run: async () => text,
-});
 
 const readStep = (entry: CatalogEntry): ResearchStep => ({
   kind: 'read',
@@ -90,32 +120,6 @@ function parseArguments(raw: string): unknown {
   }
 }
 
-/** The alternatives of a find_text phrase ("a | b"), without repeats or too-short ones. */
-function phrasesOf(phrase: string): string[] {
-  const byFolded = new Map<string, string>();
-  for (const part of phrase.split(PHRASE_SEPARATOR)) {
-    const folded = foldPhrase(part);
-    if (folded.length >= MIN_PHRASE_CHARS && !byFolded.has(folded))
-      byFolded.set(folded, part.trim());
-  }
-  return [...byFolded.values()].slice(0, MAX_PHRASES);
-}
-
-const phraseList = (phrases: readonly string[]): string =>
-  phrases.map(quote).join(' ou ');
-
-function noTextFound(phrases: readonly string[], scanned: number): string {
-  return `Nenhum dos ${scanned} documentos contém ${phraseList(phrases)}. Antes de concluir que o acervo não trata disso, tente variantes: sinônimos (ocultos, secretos, velados, universais, adicionais), singular e plural, o número por extenso e em algarismos, uma parte menor da frase, e search_collection.`;
-}
-
-function findSummary(phrases: readonly string[], found: TextSearch): string {
-  const shown =
-    found.hits.length < found.documents
-      ? `; mostrando os ${found.hits.length} com mais ocorrências`
-      : '';
-  return `Texto ${phraseList(phrases)} em ${found.scanned} documentos: ${found.documents} documento(s), ${found.occurrences} ocorrência(s)${shown}.`;
-}
-
 function describeFailure(err: unknown): string {
   const code = err instanceof AppError ? err.code : 'INTERNAL';
   return `A ferramenta falhou (${code}). Tente de novo ou use outra ferramenta.`;
@@ -129,17 +133,22 @@ export class ResearchTools {
   readonly definitions: readonly ToolDefinition[] = TOOL_DEFINITIONS;
   private readonly handlers: Record<ToolName, Handler> = {
     search_collection: (args, context) => this.searchCall(args, context),
-    find_text: (args, context) => this.findCall(args, context),
+    find_text: (args, context) => this.grep.prepare(args, context),
     list_subjects: (args, context) => this.subjectsCall(args, context),
+    list_sources: (args, context) => this.sources.prepare(args, context),
     read_document: (args, context) => this.readCall(args, context),
     read_documents: (args, context) => this.readManyCall(args, context),
     related_documents: (args, context) => this.relatedCall(args, context),
   };
 
   private readonly finder: TextFinder;
+  private readonly grep: GrepTool;
+  private readonly sources: SourcesTool;
 
   constructor(private readonly deps: ResearchToolsDeps) {
     this.finder = new TextFinder(deps);
+    this.grep = new GrepTool({ finder: this.finder, catalog: deps.catalog });
+    this.sources = new SourcesTool(deps.catalog);
   }
 
   /** Builds the topic's find_text cache ahead of the first call (it takes seconds on a big vault). */
@@ -162,22 +171,8 @@ export class ResearchTools {
     };
   }
 
-  private parsed<T extends z.ZodType>(
-    schema: T,
-    args: unknown,
-  ): z.output<T> | string {
-    const result = schema.safeParse(args);
-    if (result.success) return result.data;
-    const issues = result.error.issues
-      .map(
-        (issue) => `${issue.path.join('.') || 'argumentos'}: ${issue.message}`,
-      )
-      .join('; ');
-    return `Argumentos inválidos (${issues}). Corrija e chame de novo.`;
-  }
-
   private searchCall(args: unknown, context: ToolContext): PreparedCall {
-    const parsed = this.parsed(searchArgsSchema, args);
+    const parsed = parsedArgs(searchArgsSchema, args);
     if (typeof parsed === 'string') return failed(parsed);
     return {
       steps: [{ kind: 'search', text: `Buscando ${quote(parsed.query)}` }],
@@ -185,68 +180,70 @@ export class ResearchTools {
     };
   }
 
+  /** search_collection's output: the scope, the page range and one line per hit. */
   private async runSearch(
     args: SearchArgs,
-    { topic, book }: ToolContext,
+    context: ToolContext,
   ): Promise<string> {
+    const { topic, book } = context;
     const concepts = this.knownSubjects(topic, args.subjects ?? []);
-    const response = await this.deps.search.search(topic, {
-      q: args.query,
-      mode: args.mode,
-      limit: args.limit,
-      filters: { concepts },
-    });
-    const scope = `${quote(args.query)} (modo ${args.mode}${concepts.length > 0 ? `; assuntos: ${concepts.join(', ')}` : ''})`;
-    if (response.items.length === 0)
-      return `Nenhum documento encontrado para ${scope}. Tente sinônimos, termos mais gerais ou mais específicos, outro modo (semantic/exact) ou list_subjects.`;
-    const lines = response.items.map((hit) =>
-      hitLine(
-        book.number(hit),
-        hit,
-        this.entry(topic, hit.id)?.summary ?? null,
-      ),
+    const filter = toFilter(
+      this.deps.catalog,
+      { ...args, subjects: [] },
+      context,
     );
+    const found = await this.filteredSearch(args, { topic, concepts, filter });
+    const scope = searchScope(args, concepts, filter);
+    if (found.shown.length === 0) return noHits(scope, args.offset);
+    const range = searchRange(args, { ...found, shown: found.shown.length });
     return [
-      `Busca ${scope}: ${response.items.length} de ${response.total} documento(s).`,
-      ...lines,
+      `Busca ${scope}: ${range}`,
+      ...found.shown.map((hit) =>
+        hitLine(
+          book.number(hit),
+          hit,
+          this.entry(topic, hit.id)?.summary ?? null,
+        ),
+      ),
     ].join('\n');
   }
 
-  private findCall(args: unknown, context: ToolContext): PreparedCall {
-    const parsed = this.parsed(findArgsSchema, args);
-    if (typeof parsed === 'string') return failed(parsed);
-    if (phrasesOf(parsed.phrase).length === 0)
-      return failed(
-        `Texto curto demais: use ao menos ${MIN_PHRASE_CHARS} letras por variante.`,
-      );
+  /**
+   * The meaning search, then (KBC-017) the entity/origin/exclusion filters over its
+   * candidates: with a filter, all of them are fetched and filtered here, then paged.
+   */
+  private async filteredSearch(
+    args: SearchArgs,
+    scope: { topic: string; concepts: string[]; filter: DocFilter },
+  ): Promise<{ shown: SearchHit[]; total: number; candidates: number }> {
+    const filtering = isFiltering(scope.filter);
+    const response = await this.deps.search.search(scope.topic, {
+      q: args.query,
+      mode: args.mode,
+      limit: filtering ? MAX_RESULTS : args.limit,
+      offset: filtering ? 0 : args.offset,
+      filters: { concepts: scope.concepts },
+    });
+    // Only the first MAX_RESULTS candidates can be paged to (the search's own cap).
+    if (!filtering)
+      return {
+        shown: response.items,
+        total: Math.min(response.total, MAX_RESULTS),
+        candidates: response.total,
+      };
+    const kept = response.items.filter((hit) =>
+      this.accepts(scope.topic, hit, scope.filter),
+    );
     return {
-      steps: [
-        {
-          kind: 'search',
-          text: `Procurando o texto ${quote(parsed.phrase)} em todo o acervo`,
-        },
-      ],
-      run: () => this.findText(parsed, context),
+      shown: kept.slice(args.offset, args.offset + args.limit),
+      total: kept.length,
+      candidates: response.total,
     };
   }
 
-  private async findText(
-    args: FindArgs,
-    { topic, book }: ToolContext,
-  ): Promise<string> {
-    const phrases = phrasesOf(args.phrase);
-    const found = await this.finder.find({
-      topic,
-      phrases,
-      limit: args.limit,
-    });
-    if (!found) return 'O acervo deste tópico não está disponível.';
-    if (found.hits.length === 0) return noTextFound(phrases, found.scanned);
-    return [
-      findSummary(phrases, found),
-      ...found.hits.map((hit) => textHitLine(book.number(hit.entry), hit)),
-      'Para ver o contexto: read_document com document=[n] e around=<o texto>.',
-    ].join('\n');
+  private accepts(topic: string, hit: SearchHit, filter: DocFilter): boolean {
+    const entry = this.entry(topic, hit.id);
+    return entry !== null && acceptsEntry(filter, entry);
   }
 
   /** Subject names as the catalog spells them (the model may change accents or case). */
@@ -261,7 +258,7 @@ export class ResearchTools {
   }
 
   private subjectsCall(args: unknown, { topic }: ToolContext): PreparedCall {
-    const parsed = this.parsed(subjectsArgsSchema, args);
+    const parsed = parsedArgs(subjectsArgsSchema, args);
     if (typeof parsed === 'string') return failed(parsed);
     const text = parsed.query
       ? `Listando os assuntos sobre ${quote(parsed.query)}`
@@ -288,24 +285,24 @@ export class ResearchTools {
   }
 
   private readCall(args: unknown, context: ToolContext): PreparedCall {
-    const parsed = this.parsed(readArgsSchema, args);
+    const parsed = parsedArgs(readArgsSchema, args);
     if (typeof parsed === 'string') return failed(parsed);
     const entry = this.resolve(parsed.document, context);
-    if (!entry) return failed(this.notFound(parsed.document));
+    if (!entry) return failed(notFound(parsed.document));
     return {
       steps: [readStep(entry)],
-      run: () => this.read(entry, parsed, context),
+      run: () => this.read(entry, { ...parsed, size: parsed.limit }, context),
     };
   }
 
   /** read_documents (KBC-011): several documents in one step, a shorter window each. */
   private readManyCall(args: unknown, context: ToolContext): PreparedCall {
-    const parsed = this.parsed(readManyArgsSchema, args);
+    const parsed = parsedArgs(readManyArgsSchema, args);
     if (typeof parsed === 'string') return failed(parsed);
     const entries = parsed.documents.map((ref) => this.resolve(ref, context));
     const missing = parsed.documents.filter((_, i) => !entries[i]);
     const found = [...new Set(entries.filter((e) => e !== null))];
-    if (found.length === 0) return failed(this.notFound(missing[0] ?? ''));
+    if (found.length === 0) return failed(notFound(missing[0] ?? ''));
     return {
       steps: found.map(readStep),
       run: () => this.readMany(found, { parsed, missing }, context),
@@ -321,10 +318,10 @@ export class ResearchTools {
     const texts = await Promise.all(
       entries.map((entry) => this.read(entry, request, context)),
     );
-    const notFound = missing.map((ref) =>
-      this.notFound(typeof ref === 'number' ? ref : String(ref)),
+    const missed = missing.map((ref) =>
+      notFound(typeof ref === 'number' ? ref : String(ref)),
     );
-    return [...texts, ...notFound].join('\n\n');
+    return [...texts, ...missed].join('\n\n');
   }
 
   private async read(
@@ -344,10 +341,10 @@ export class ResearchTools {
   }
 
   private relatedCall(args: unknown, context: ToolContext): PreparedCall {
-    const parsed = this.parsed(relatedArgsSchema, args);
+    const parsed = parsedArgs(relatedArgsSchema, args);
     if (typeof parsed === 'string') return failed(parsed);
     const entry = this.resolve(parsed.document, context);
-    if (!entry) return failed(this.notFound(parsed.document));
+    if (!entry) return failed(notFound(parsed.document));
     return {
       steps: [
         {
@@ -387,23 +384,14 @@ export class ResearchTools {
     return entry ? refLine(n, entry) : `[${n}] ${ref.title}`;
   }
 
-  /** A [n] already met this turn ("3", "[3]" or 3) or a document id of the topic. */
   private resolve(
     ref: string | number,
-    { topic, book }: ToolContext,
+    context: ToolContext,
   ): CatalogEntry | null {
-    const digits =
-      typeof ref === 'number' ? ref : /^\[?(\d+)\]?$/.exec(ref)?.[1];
-    const id =
-      digits === undefined ? String(ref) : book.find(Number(digits))?.id;
-    return id ? this.entry(topic, id) : null;
+    return resolveEntry(this.deps.catalog, ref, context);
   }
 
   private entry(topic: string, id: string): CatalogEntry | null {
     return this.deps.catalog.get(topic)?.entries.get(id) ?? null;
-  }
-
-  private notFound(ref: string | number): string {
-    return `Documento ${typeof ref === 'number' ? `[${ref}]` : quote(ref)} não encontrado. Use o número [n] de um resultado de busca ou de uma ligação.`;
   }
 }

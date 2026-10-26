@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_HISTORY_TURNS,
+  modelProfileOf,
   researchEventSchema,
   researchRequestSchema,
 } from './research.js';
@@ -14,10 +15,14 @@ describe('research contracts', () => {
     });
   });
 
-  it('takes the fast or the deep profile and nothing else (KBC-011)', () => {
+  it('takes the fast, deep or exhaustive profile and nothing else (KBC-011, KBC-017)', () => {
     expect(
       researchRequestSchema.parse({ question: 'x', profile: 'deep' }).profile,
     ).toBe('deep');
+    expect(
+      researchRequestSchema.parse({ question: 'x', profile: 'exhaustive' })
+        .profile,
+    ).toBe('exhaustive');
     expect(
       researchRequestSchema.safeParse({ question: 'x', profile: 'max' })
         .success,
@@ -86,5 +91,11 @@ describe('research contracts', () => {
     expect(
       researchEventSchema.safeParse({ type: 'retract', segment: -1 }).success,
     ).toBe(false);
+  });
+
+  it('runs the exhaustive profile on the deep model (KBC-017 BR-3)', () => {
+    expect(modelProfileOf('fast')).toBe('fast');
+    expect(modelProfileOf('deep')).toBe('deep');
+    expect(modelProfileOf('exhaustive')).toBe('deep');
   });
 });

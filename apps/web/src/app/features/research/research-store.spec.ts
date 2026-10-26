@@ -13,6 +13,7 @@ import {
   type ResearchConversation,
 } from './research-history.js';
 import { ResearchStore, STOP_SETTLE_MS } from './research-store.js';
+import { citedSources } from './research-turn.js';
 
 const SOURCE = { n: 1, id: 'raw/a.md', title: 'Os Princípios' };
 
@@ -109,6 +110,32 @@ describe('ResearchStore', () => {
     expect(saved?.turns[0]).toMatchObject({ escalated: true, steps: 9 });
     if (saved) store.restore(saved);
     expect(store.turns()[0]).toMatchObject({ escalated: true, restored: true });
+  });
+
+  it('saves the profile of each turn and cites sources numbered past 99 (KBC-017 AC-14)', () => {
+    const { store, streams, save } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('todas as obras citadas por José Laércio do Egito');
+    const stream = streams[0] as Subject<ResearchEvent>;
+    stream.next({
+      type: 'sources',
+      sources: [{ n: 123, id: 'raw/a.md', title: 'Obra A' }],
+    });
+    stream.next({ type: 'token', text: 'A Obra A [123].', segment: 0 });
+    stream.next({
+      type: 'done',
+      usd: 0,
+      billing: 'subscription',
+      model: 'opus',
+      interrupted: false,
+      steps: 42,
+    });
+    const saved = save.mock.lastCall?.[0];
+    expect(saved?.turns[0]).toMatchObject({ profile: 'exhaustive', steps: 42 });
+    const turn = store.turns()[0];
+    expect(turn && citedSources(turn).map((s) => s.n)).toEqual([123]);
+    if (saved) store.restore(saved);
+    expect(store.turns()[0]).toMatchObject({ profile: 'exhaustive' });
   });
 
   it('moves a retracted segment out of the answer into the steps as a thought (ADR 0009)', () => {

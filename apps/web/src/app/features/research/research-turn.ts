@@ -3,6 +3,7 @@ import {
   type AnswerSource,
   type ResearchBilling,
   type ResearchEvent,
+  type ResearchProfile,
   type ResearchStep,
   type ResearchTurn as HistoryTurn,
   type SavedResearchTurn,
@@ -47,16 +48,23 @@ export interface ResearchTurn {
   readonly interrupted: boolean;
   /** The fast turn went on with the deep profile (ADR 0009). */
   readonly escalated: boolean;
+  /** The profile it was asked with (KBC-017); null for turns saved before. */
+  readonly profile: ResearchProfile | null;
   readonly error: ResearchErrorCode | null;
   readonly at: string;
   /** Brought back from the history (FR-6): shown as saved, never announced or re-run. */
   readonly restored: boolean;
 }
 
-export function startTurn(id: number, question: string): ResearchTurn {
+export function startTurn(
+  id: number,
+  question: string,
+  profile: ResearchProfile | null = null,
+): ResearchTurn {
   return {
     id,
     question,
+    profile,
     phase: 'streaming',
     text: '',
     segments: [],
@@ -182,7 +190,7 @@ export function toHistory(turns: readonly ResearchTurn[]): HistoryTurn[] {
 /** Only the sources the answer cites with [n], in their numbering order. */
 export function citedSources(turn: ResearchTurn): AnswerSource[] {
   const cited = new Set(
-    [...turn.text.matchAll(/\[(\d{1,2})\]/g)].map((match) => Number(match[1])),
+    [...turn.text.matchAll(/\[(\d{1,4})\]/g)].map((match) => Number(match[1])),
   );
   return turn.sources.filter((source) => cited.has(source.n));
 }
@@ -198,6 +206,7 @@ export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
     model: turn.model,
     interrupted: turn.interrupted,
     ...(turn.escalated ? { escalated: true } : {}),
+    ...(turn.profile ? { profile: turn.profile } : {}),
     at: turn.at,
   };
 }
@@ -220,6 +229,7 @@ export function fromSavedTurn(
     model: saved.model,
     interrupted: saved.interrupted,
     escalated: saved.escalated === true,
+    profile: saved.profile ?? null,
     error: null,
     at: saved.at,
     restored: true,

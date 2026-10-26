@@ -18,11 +18,21 @@ export type ResearchTurn = z.infer<typeof researchTurnSchema>;
 
 /**
  * How hard the agent researches (KBC-011): `fast` uses the provider's fast model and a
- * short step budget with a focused answer; `deep` uses the deep model and the full budget.
+ * short step budget with a focused answer; `deep` uses the deep model and the full budget;
+ * `exhaustive` (KBC-017, ADR 0013) uses the deep model with a much larger budget, paging
+ * through the whole collection, and ends with a coverage line.
  */
-export const RESEARCH_PROFILES = ['fast', 'deep'] as const;
+export const RESEARCH_PROFILES = ['fast', 'deep', 'exhaustive'] as const;
 export const researchProfileSchema = z.enum(RESEARCH_PROFILES);
 export type ResearchProfile = z.infer<typeof researchProfileSchema>;
+
+/** The profiles that have a model of their own in Settings (KBC-011). */
+export const MODEL_PROFILES = ['fast', 'deep'] as const;
+export type ModelProfile = (typeof MODEL_PROFILES)[number];
+
+/** Whose model a research profile runs on: the exhaustive one uses the deep model (KBC-017 BR-3). */
+export const modelProfileOf = (profile: ResearchProfile): ModelProfile =>
+  profile === 'fast' ? 'fast' : 'deep';
 
 export const researchRequestSchema = z.strictObject({
   question: z.string().trim().min(1).max(2000),
