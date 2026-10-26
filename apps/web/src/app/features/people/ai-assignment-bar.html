@@ -17,6 +17,7 @@
   }
   <div class="actions">
     <button
+      #selectedButton
       type="button"
       class="secondary"
       [disabled]="busy() || selectedCount() === 0"
@@ -67,11 +68,16 @@
     </div>
   }
   @if (confirmingLend()) {
-    <div class="confirm" role="alert">
-      <p>{{ terms() }}</p>
+    <div
+      class="lend-confirm"
+      role="group"
+      aria-labelledby="lend-title-bulk"
+      aria-describedby="lend-terms-bulk"
+    >
+      <p id="lend-title-bulk" class="lend-title">{{ lendTitle() }}</p>
+      <p id="lend-terms-bulk">{{ terms() }}</p>
       <div class="actions">
         <button
-          #lendButton
           type="button"
           class="secondary danger"
           [disabled]="busy()"
@@ -81,6 +87,7 @@
           Ceder assim mesmo
         </button>
         <button
+          #cancelLendButton
           type="button"
           class="secondary"
           (click)="cancelLend()"
@@ -103,4 +110,7 @@
       >Com "todos": também para os próximos convidados</span
     >
   </label>
+  @if (noDefaultNote(); as note) {
+    <p class="note">{{ note }}</p>
+  }
 </div>

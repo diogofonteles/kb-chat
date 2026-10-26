@@ -23,6 +23,7 @@ import {
   NO_LENDING,
   lendTerms,
   lendUnavailable,
+  noDefaultNote,
   type Lending,
 } from './lending.js';
 
@@ -63,8 +64,10 @@ export class AiAssignmentBar {
     viewChild<ElementRef<HTMLButtonElement>>('allButton');
   private readonly cancelButton =
     viewChild<ElementRef<HTMLButtonElement>>('cancelButton');
-  private readonly lendButton =
-    viewChild<ElementRef<HTMLButtonElement>>('lendButton');
+  private readonly selectedButton =
+    viewChild<ElementRef<HTMLButtonElement>>('selectedButton');
+  private readonly cancelLendButton =
+    viewChild<ElementRef<HTMLButtonElement>>('cancelLendButton');
 
   protected readonly appAi = signal<AppAiAssignment>('house');
   protected readonly alsoDefault = signal(false);
@@ -96,6 +99,19 @@ export class AiAssignmentBar {
       ? lendUnavailable()
       : null,
   );
+  /** Why "também para os próximos" is off with the subscription (design D9). */
+  protected readonly noDefaultNote = computed(() =>
+    isLentSubscription(this.appAi()) ? noDefaultNote() : null,
+  );
+  /** The scope of the lending, before its terms (design D2). */
+  protected readonly lendTitle = computed(() => {
+    const target = this.confirmingLend();
+    if (target === 'all')
+      return $localize`:@@lend.titleAll:Ceder a assinatura do Claude a todas as ${this.total()}:count: pessoas?`;
+    return this.selectedCount() === 1
+      ? $localize`:@@lend.titleOne:Ceder a assinatura do Claude a 1 pessoa selecionada?`
+      : $localize`:@@lend.titleSelected:Ceder a assinatura do Claude a ${this.selectedCount()}:count: pessoas selecionadas?`;
+  });
 
   private focusAfterRender(
     target: () => ElementRef<HTMLButtonElement> | undefined,
@@ -106,11 +122,19 @@ export class AiAssignmentBar {
   }
 
   protected choose(value: string): void {
-    if (isAssignment(value)) this.appAi.set(value);
+    if (!isAssignment(value)) return;
+    // Another choice ends a pending lending: the terms never apply to it (QA BUG-2).
+    this.confirmingLend.set(null);
+    this.appAi.set(value);
   }
 
   /** The confirmation replaces the button that had focus: focus follows it (WCAG 2.4.3). */
   protected askAll(): void {
+    // Lending to everyone has its own confirmation, which names how many people.
+    if (isLentSubscription(this.appAi())) {
+      this.applyTo('all');
+      return;
+    }
     this.confirmingAll.set(true);
     this.focusAfterRender(() => this.cancelButton());
   }
@@ -124,7 +148,7 @@ export class AiAssignmentBar {
     if (this.confirmingAll()) this.cancelAll();
     if (isLentSubscription(this.appAi())) {
       this.confirmingLend.set(target);
-      this.focusAfterRender(() => this.lendButton());
+      this.focusAfterRender(() => this.cancelLendButton());
       return;
     }
     const setDefault =
@@ -135,17 +159,24 @@ export class AiAssignmentBar {
   protected lend(): void {
     const target = this.confirmingLend();
     this.confirmingLend.set(null);
-    if (!target) return;
+    if (!target || !isLentSubscription(this.appAi())) return;
     this.apply.emit({
       target,
       appAi: this.appAi(),
       setDefault: false,
       subscriptionTermsAccepted: true,
     });
+    this.focusAfterRender(() => this.openerOf(target));
   }
 
+  /** Back to the button that opened the confirmation (review R8). */
   protected cancelLend(): void {
+    const target = this.confirmingLend();
     this.confirmingLend.set(null);
-    this.focusAfterRender(() => this.allButton());
+    this.focusAfterRender(() => this.openerOf(target ?? 'all'));
+  }
+
+  private openerOf(target: AssignmentRequest['target']) {
+    return target === 'all' ? this.allButton() : this.selectedButton();
   }
 }

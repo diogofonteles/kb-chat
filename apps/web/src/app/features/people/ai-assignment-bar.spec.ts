@@ -91,9 +91,19 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
     );
     await fixture.whenStable();
     expect(apply).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert').textContent).toContain(
+    // The scope comes first, then the terms (design D2); focus on the safe choice (D5).
+    const confirm = screen.getByRole('group', {
+      name: 'Ceder a assinatura do Claude a 1 pessoa selecionada?',
+    });
+    expect(confirm.textContent).toContain(
       'Os termos da Anthropic não permitem',
     );
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancelar');
+    expect(
+      screen.getByText(
+        'A assinatura não pode valer para os próximos convidados.',
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Ceder assim mesmo' }));
     expect(apply).toHaveBeenLastCalledWith({
       target: 'selected',
@@ -101,5 +111,40 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
       setDefault: false,
       subscriptionTermsAccepted: true,
     });
+  });
+
+  it('KBC-024 QA BUG-2: choosing another AI closes the terms', async () => {
+    const apply = vi.fn();
+    const { fixture } = await render(AiAssignmentBar, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        selectedCount: 2,
+        total: 3,
+        defaultAppAi: 'house',
+        lending: { canLend: true, available: true },
+      },
+      on: { apply },
+    });
+    fireEvent.change(screen.getByLabelText('IA'), {
+      target: { value: 'claude-subscription' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aplicar a todos os usuários' }),
+    );
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('group', {
+        name: 'Ceder a assinatura do Claude a todas as 3 pessoas?',
+      }),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('IA'), {
+      target: { value: 'house' },
+    });
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('button', { name: 'Ceder assim mesmo' }),
+    ).toBeNull();
+    expect(apply).not.toHaveBeenCalled();
   });
 });

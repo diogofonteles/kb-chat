@@ -155,3 +155,12 @@ button:disabled {
 .hint {
   color: var(--color-text-muted);
 }
+
+.lend-title {
+  font-weight: 600;
+}
+
+/* Side by side on a phone too (design D13). */
+.lend-confirm .actions > button {
+  flex: 1 1 9rem;
+}

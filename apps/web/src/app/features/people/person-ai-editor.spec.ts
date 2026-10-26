@@ -123,12 +123,16 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
     fireEvent.change(select, { target: { value: 'claude-subscription' } });
     await fixture.whenStable();
     expect(changed).not.toHaveBeenCalled();
-    const confirm = screen.getByRole('alert');
+    const confirm = screen.getByRole('group', {
+      name: 'Ceder a assinatura do Claude a esta pessoa?',
+    });
     expect(confirm.textContent).toContain(
       'Os termos da Anthropic não permitem',
     );
-    const lend = screen.getByRole('button', { name: 'Ceder assim mesmo' });
-    expect(document.activeElement).toBe(lend);
+    // Focus starts on the safe choice (design D5).
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Cancelar' }),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     await fixture.whenStable();
     expect(changed).not.toHaveBeenCalled();
@@ -140,6 +144,41 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
       appAi: 'claude-subscription',
       subscriptionTermsAccepted: true,
     });
+    await fixture.whenStable();
+    // Focus goes back to the choice it came from (design D1).
+    expect(document.activeElement).toBe(select);
+  });
+
+  it('KBC-024 QA BUG-1: choosing another AI or changing another field closes the terms', async () => {
+    const changed = vi.fn();
+    const { fixture } = await render(PersonAiEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        ai: DEFAULT_PERSON_AI,
+        defaultAppAi: 'house',
+        lending: { canLend: true, available: true },
+      },
+      on: { changed },
+    });
+    const select = screen.getByLabelText('Qual IA atende esta pessoa');
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    fireEvent.change(select, { target: { value: 'none' } });
+    await fixture.whenStable();
+    expect(changed).toHaveBeenLastCalledWith({ appAi: 'none' });
+    expect(
+      screen.queryByRole('button', { name: 'Ceder assim mesmo' }),
+    ).toBeNull();
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Usar sempre/ }));
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('button', { name: 'Ceder assim mesmo' }),
+    ).toBeNull();
+    expect(changed).not.toHaveBeenCalledWith(
+      expect.objectContaining({ subscriptionTermsAccepted: true }),
+    );
   });
 
   it('KBC-024: offers the subscription only to the owner, and says when it is not ready', async () => {
@@ -155,6 +194,14 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
     expect(
       screen.getByRole('option', { name: /Assinatura do Claude/ }),
     ).toBeTruthy();
+    // Said only where it matters: the subscription chosen or assigned (review R9).
+    expect(
+      screen.queryByText(/não está disponível agora no servidor/),
+    ).toBeNull();
+    fireEvent.change(screen.getByLabelText('Qual IA atende esta pessoa'), {
+      target: { value: 'claude-subscription' },
+    });
+    await fixture.whenStable();
     expect(
       screen.getByText(/não está disponível agora no servidor/),
     ).toBeTruthy();

@@ -3,11 +3,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   computed,
   inject,
   input,
   model,
   signal,
+  viewChildren,
 } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
@@ -114,6 +116,18 @@ export class AiProviderForm {
   readonly compact = input(false);
 
   protected readonly testState = signal<TestState>({ kind: 'idle' });
+  private readonly radios =
+    viewChildren<ElementRef<HTMLInputElement>>('providerRadio');
+
+  /** "Configurar a minha IA" (KBC-024): to the first option of one's own, scrolled into view. */
+  focusOwnOptions(): void {
+    const own = this.radios()
+      .map((radio) => radio.nativeElement)
+      .find((radio) => radio.value !== 'app' && !radio.disabled);
+    own?.scrollIntoView({ block: 'center' });
+    own?.focus();
+  }
+
   protected readonly options = computed(() => {
     const items = this.store.providerList()?.items ?? [];
     // The subscriptions are the owner's own (T6): not even offered to anyone else.

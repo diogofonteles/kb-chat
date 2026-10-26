@@ -149,14 +149,38 @@ describe('SettingsStore.returnFromOpenRouter (KBC-022 AC-1)', () => {
         free: true,
       }),
     );
-    expect(document.body.textContent).toContain(
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(
       'Você está usando temporariamente a IA da aplicação (assinatura do Claude do administrador).',
     );
+    // One word for who pays, said once (design D7, D12).
+    expect(text).toContain('Incluído na assinatura do administrador');
+    expect(text).not.toContain('Gratuito para você');
+    expect(text).not.toContain('cedida pelo administrador) ·');
     const own = vi.fn();
     fixture.componentInstance.configureOwn.subscribe(own);
     fireEvent.click(
       screen.getByRole('button', { name: 'Configurar a minha IA' }),
     );
     expect(own).toHaveBeenCalled();
+  });
+
+  it('KBC-024 QA F-3: tells a person without their own AI settings too, without the button', async () => {
+    const { fixture } = await renderCard(
+      anAiStatus({
+        source: 'app',
+        appAi: 'claude-subscription',
+        provider: 'app',
+        free: true,
+      }),
+    );
+    fixture.componentRef.setInput('canConfigureOwn', false);
+    await fixture.whenStable();
+    expect(document.body.textContent).toContain(
+      'Você está usando temporariamente a IA da aplicação',
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Configurar a minha IA' }),
+    ).toBeNull();
   });
 });
