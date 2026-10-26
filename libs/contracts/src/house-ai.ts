@@ -81,7 +81,7 @@ export const houseDefaultSchema = z.object({ defaultAppAi: appAiSchema });
 export type HouseDefault = z.infer<typeof houseDefaultSchema>;
 
 /** Whose account an OpenRouter connection is for: the app's (house) or, KBC-023, one's own. */
-export const OPENROUTER_PURPOSES = ['house'] as const;
+export const OPENROUTER_PURPOSES = ['house', 'own'] as const;
 export const openRouterPurposeSchema = z.enum(OPENROUTER_PURPOSES);
 export type OpenRouterPurpose = z.infer<typeof openRouterPurposeSchema>;
 

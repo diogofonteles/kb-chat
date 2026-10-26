@@ -1,7 +1,11 @@
 import {
+  KEY_PROVIDERS,
   isAllowedModel,
   modelIdSchema,
   type AiProvider,
+  type GeminiTier,
+  type KeyProvider,
+  type OpenRouterPlan,
   type ProviderList,
   type SettingsUpdate,
   type SettingsView,
@@ -19,6 +23,11 @@ export interface AiDraft extends DraftModels {
   /** '' = keep the saved key. */
   readonly key: string;
   readonly dailyCapUsd: number;
+  /** One's own OpenRouter: free models (default) or the chosen models (KBC-023). */
+  readonly openrouterMode: OpenRouterPlan['mode'];
+  /** The paid model at the end of the free chain; '' = none. */
+  readonly paidModel: string;
+  readonly geminiTier: GeminiTier;
 }
 
 /**
@@ -58,7 +67,28 @@ export function aiDraftFrom(
     ...savedModels(view, provider),
     key: '',
     dailyCapUsd: view.ai.dailyCapUsd,
+    openrouterMode: view.ai.openrouter.mode,
+    paidModel: view.ai.openrouter.paidModel ?? '',
+    geminiTier: view.ai.gemini.tier,
   };
+}
+
+/** The key provider of a draft, or null for one without a key. */
+export const keyProviderOf = (provider: AiProvider): KeyProvider | null =>
+  KEY_PROVIDERS.find((id) => id === provider) ?? null;
+
+/** The per-provider plans the draft carries (KBC-023). */
+function plansOf(draft: AiDraft): NonNullable<SettingsUpdate['ai']> {
+  if (draft.provider === 'openrouter')
+    return {
+      openrouter: {
+        mode: draft.openrouterMode,
+        paidModel: draft.paidModel.trim() || null,
+      },
+    };
+  return draft.provider === 'gemini'
+    ? { gemini: { tier: draft.geminiTier } }
+    : {};
 }
 
 /** The update for "Salvar": a typed key replaces the saved one of that provider. */
@@ -66,12 +96,7 @@ export function aiUpdateFrom(
   draft: AiDraft,
 ): NonNullable<SettingsUpdate['ai']> {
   const key = draft.key.trim();
-  const keyProvider =
-    draft.provider === 'openrouter' ||
-    draft.provider === 'anthropic' ||
-    draft.provider === 'openai'
-      ? draft.provider
-      : null;
+  const keyProvider = keyProviderOf(draft.provider);
   const models =
     draft.provider === 'none' || draft.provider === 'app'
       ? {}
@@ -87,6 +112,7 @@ export function aiUpdateFrom(
     provider: draft.provider,
     ...models,
     dailyCapUsd: draft.dailyCapUsd,
+    ...plansOf(draft),
     ...(key && keyProvider ? { keys: { [keyProvider]: key } } : {}),
   };
 }

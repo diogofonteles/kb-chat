@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ResearchProfile } from './research.js';
+import { lastTestSchema } from './settings.js';
 
 /**
  * The AI access policy (KBC-022, ADR 0016): which app-owned AI serves each person, chosen by
@@ -118,5 +119,12 @@ export const aiStatusSchema = z.object({
   dailyResearches: z.number().int().nonnegative().nullable(),
   /** The master made the app AI win over the person's own. */
   enforced: z.boolean(),
+  /** Own per-token AI: today's spend and the daily cap (KBC-023); null otherwise. */
+  spentTodayUsd: z.number().nonnegative().nullable(),
+  dailyCapUsd: z.number().nonnegative().nullable(),
+  /** The serving AI costs nothing (house plan, own free models, Gemini free tier). */
+  free: z.boolean(),
+  /** The person's last connection test. */
+  lastTest: lastTestSchema.nullable(),
 });
 export type AiStatus = z.infer<typeof aiStatusSchema>;

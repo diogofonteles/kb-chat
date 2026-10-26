@@ -1,4 +1,5 @@
 import {
+  KEY_PROVIDERS,
   MODEL_ALLOWLISTS,
   type AiProvider,
   type KeyProvider,
@@ -14,6 +15,11 @@ import {
   OPENAI_PRICES,
 } from '../adapters/openai-adapter.js';
 import type { AppConfig } from '../config.js';
+import {
+  GEMINI_DEEP_MODEL,
+  GEMINI_FAST_MODEL,
+  GEMINI_PRICES,
+} from '../adapters/gemini-adapter.js';
 
 /** A provider as chosen in Settings, plus the deterministic stub of tests and E2E. */
 export type ResolvedProvider = AiProvider | 'stub';
@@ -90,11 +96,17 @@ export const PROVIDERS: Readonly<Record<AiProvider, ProviderDescriptor>> = {
     defaultModels: fixed(null, null),
     models: CODEX_MODELS,
   },
+  // Google AI Studio key (KBC-023, ADR 0018): the free tier by default.
+  gemini: {
+    billing: 'per-token',
+    defaultModels: fixed(GEMINI_FAST_MODEL, GEMINI_DEEP_MODEL),
+    models: Object.keys(GEMINI_PRICES),
+  },
   none: { billing: 'none', defaultModels: fixed(null, null), models: [] },
 };
 
 export const isKeyProvider = (provider: AiProvider): provider is KeyProvider =>
-  PROVIDERS[provider].keyEnv !== undefined;
+  KEY_PROVIDERS.some((id) => id === provider);
 
 /**
  * With no provider chosen, the default (KBC-007 BR-4, owner's decision 2026-10-24):

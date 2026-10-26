@@ -29,6 +29,7 @@ import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
 import { SecretBox } from '../adapters/secret-box.js';
 import { createHouseAi } from '../house-ai-factory.js';
 import { FakeOpenRouter } from '../testing/fake-openrouter.js';
+import { FakeGemini, fakeProvidersFetch } from '../testing/fake-gemini.js';
 import {
   E2E_AUTHORIZE_PATH,
   registerOpenRouterConsent,
@@ -79,8 +80,15 @@ const fakeProviderFetch: typeof fetch = async (_url, init) => {
     'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
   );
 };
-// OpenRouter for the house plan (KBC-022): a fake, its consent page served below.
+// OpenRouter (KBC-022, KBC-023) and Gemini (KBC-023): fakes, the consent page served below.
 const openRouter = new FakeOpenRouter();
+openRouter.acceptValidSuffix = true;
+const gemini = new FakeGemini();
+const providersFetch = fakeProvidersFetch({
+  openrouter: (input, init) => openRouter.fetch(input, init),
+  gemini: (input, init) => gemini.fetch(input, init),
+  others: fakeProviderFetch,
+});
 const sealer = new SecretBox(Buffer.alloc(32, 7));
 // The owner's settings already exist, so the first-run wizard stays away from the other specs;
 // the wizard's spec fakes a first run in the browser.
@@ -119,13 +127,14 @@ const ai = await createAiProviders({
   store: settingsStore,
   // No claude or codex on this PATH: subscriptions show as not installed.
   env: { PATH: '/usr/bin:/bin' },
-  fetch: fakeProviderFetch,
+  fetch: providersFetch,
   tools: agent.toolsFor,
   perTokenRunner: agent.perTokenRunner,
   systemPrompt: agent.systemPrompt,
   subAgentPrompt: agent.subAgentPrompt,
   house,
   personOf: (principal) => auth.people.cachedByPrincipal(principal),
+  ledger,
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).
 await ledger.append({

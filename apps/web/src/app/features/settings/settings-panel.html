@@ -48,8 +48,19 @@
     } @else if (section() === 'ai') {
       <section class="section" aria-labelledby="settings-ai">
         <h3 id="settings-ai" class="section-title" i18n="@@settings.aiTitle">
-          IA
+          Sua IA
         </h3>
+        @if (connectOutcome(); as outcome) {
+          <p class="notice-line" role="status">
+            @if (outcome === 'connected') {
+              <span i18n="@@settings.ownConnected">✓ Conta conectada.</span>
+            } @else {
+              <span i18n="@@settings.ownConnectFailed"
+                >⚠ Não consegui conectar. Tente de novo.</span
+              >
+            }
+          </p>
+        }
         <app-ai-status-card />
         <p class="lead" i18n="@@settings.aiLead">
           Escolha quem responde na Pesquisa com IA. Vale para a próxima

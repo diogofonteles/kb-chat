@@ -102,9 +102,15 @@ export class FakeOpenRouter {
     return json({ error: { message: 'not found' } }, 404);
   };
 
+  /** Any key ending in "valid" is accepted too (the E2E convention of KBC-007). */
+  acceptValidSuffix = false;
+
   private isValid(auth: string | null): boolean {
     const key = auth?.replace(/^Bearer /, '') ?? '';
-    return this.validKeys.has(key);
+    return (
+      this.validKeys.has(key) ||
+      (this.acceptValidSuffix && key.endsWith('valid'))
+    );
   }
 
   private keyInfo(auth: string | null): Response {

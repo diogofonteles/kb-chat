@@ -49,7 +49,8 @@ export class SpendService {
 
   /** Refuses before any spend that would cross the daily cap or the account credit. */
   async guard(estimateUsd: number): Promise<void> {
-    if (this.deps.llm.billing === 'subscription') return;
+    // Nothing to pay (a subscription, a free tier): no cap to check (KBC-023 review).
+    if (this.deps.llm.billing !== 'per-token') return;
     const spent = await this.deps.ledger.spentToday(this.deps.principal);
     if (spent + estimateUsd > this.deps.dailyCapUsd())
       throw new AppError('DAILY_CAP_REACHED', 'Daily AI spend cap reached');

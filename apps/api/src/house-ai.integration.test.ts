@@ -1,230 +1,15 @@
-import { randomBytes } from 'node:crypto';
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { Writable } from 'node:stream';
-import type {
-  FastifyInstance,
-  InjectOptions,
-  LightMyRequestResponse,
-} from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  CSRF_HEADER,
-  CSRF_HEADER_VALUE,
-  researchEventSchema,
-  type ResearchEvent,
-} from '@kb-chat/contracts';
-import pino from 'pino';
-import { FIXTURE_VAULT } from '../test/fixture-paths.js';
-import {
-  TEST_CLIENT_ID,
-  createTestKeys,
-  mintIdToken,
-  testVerifier,
-  type TestKeys,
-} from '../test/identity-factories.js';
-import { FsSessionStore } from './adapters/fs-session-store.js';
-import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
-import { JsonPeopleStore } from './adapters/json-people-store.js';
-import { JsonSettingsStore } from './adapters/json-settings-store.js';
-import { JsonlSpendLedger } from './adapters/jsonl-spend-ledger.js';
-import { SealedSettingsStore } from './adapters/sealed-settings-store.js';
-import { SecretBox } from './adapters/secret-box.js';
-import { buildApp } from './app.js';
-import { loadConfig } from './config.js';
-import { createHouseAi } from './house-ai-factory.js';
-import { PeopleService, SessionService } from './modules/auth/index.js';
-import { CatalogRegistry } from './modules/catalog/index.js';
-import { createAiProviders } from './providers/create-ai-providers.js';
-import { createResearchAgent } from './research-agent-factory.js';
-import { createSearchIndex } from './search-index-factory.js';
-import { FakeOpenRouter } from './testing/fake-openrouter.js';
+  OWNER_EMAIL,
+  closeApp,
+  connectHouse,
+  research,
+  start,
+  statePlain,
+  withPeople,
+} from '../test/ai-app-harness.js';
 
-const OWNER_EMAIL = 'owner@example.com';
-const WEB = 'http://localhost:4200';
-const LOCAL = { host: 'localhost:3000', [CSRF_HEADER]: CSRF_HEADER_VALUE };
-
-interface Started {
-  readonly app: FastifyInstance;
-  readonly keys: TestKeys;
-  readonly state: string;
-  readonly fake: FakeOpenRouter;
-  readonly logs: string[];
-}
-
-let current: FastifyInstance | null = null;
-afterEach(async () => {
-  await current?.close();
-  current = null;
-});
-
-/** The app as main builds it, with sealed settings and the house over a fake OpenRouter. */
-async function start(): Promise<Started> {
-  const state = await mkdtemp(join(tmpdir(), 'kbchat-house-'));
-  const config = loadConfig({
-    KB_VAULT: FIXTURE_VAULT,
-    KB_CHAT_SEARCH: 'fixture',
-    KB_CHAT_STATE_DIR: state,
-    GOOGLE_CLIENT_ID: TEST_CLIENT_ID,
-    KB_CHAT_OWNER_EMAIL: OWNER_EMAIL,
-    WEB_ORIGIN: WEB,
-    LOG_LEVEL: 'info',
-  });
-  const logs: string[] = [];
-  const logger = pino(
-    { level: 'info' },
-    new Writable({
-      write(chunk, _encoding, done) {
-        logs.push(String(chunk));
-        done();
-      },
-    }),
-  );
-  const fake = new FakeOpenRouter();
-  const keys = await createTestKeys();
-  const sealer = new SecretBox(randomBytes(32));
-  const vault = new FsVaultAdapter(config.KB_VAULT);
-  const index = await createSearchIndex({ config, vault, log: logger });
-  const catalog = new CatalogRegistry(vault);
-  await catalog.load();
-  const ledger = new JsonlSpendLedger(join(state, 'spend.jsonl'));
-  const agent = createResearchAgent({ catalog, index, vault, ledger });
-  const auth = {
-    people: new PeopleService({
-      store: new JsonPeopleStore(join(state, 'people.json')),
-      ownerEmail: OWNER_EMAIL,
-    }),
-    sessions: new SessionService({
-      store: new FsSessionStore(join(state, 'sessions')),
-    }),
-    verifier: testVerifier(keys),
-  };
-  const house = await createHouseAi({
-    stateDir: state,
-    sealer,
-    webOrigin: WEB,
-    fetch: fake.fetch,
-  });
-  const ai = await createAiProviders({
-    config,
-    principal: 'owner',
-    store: new SealedSettingsStore({
-      store: new JsonSettingsStore(join(state, 'settings')),
-      sealer,
-    }),
-    env: { PATH: '' },
-    fetch: fake.fetch,
-    tools: agent.toolsFor,
-    perTokenRunner: agent.perTokenRunner,
-    systemPrompt: agent.systemPrompt,
-    house,
-    personOf: (principal) => auth.people.cachedByPrincipal(principal),
-  });
-  const app = await buildApp({
-    config,
-    vault,
-    index,
-    catalog,
-    agent,
-    ai,
-    ledger,
-    auth,
-    house,
-    logger,
-  });
-  current = app;
-  return { app, keys, state, fake, logs };
-}
-
-const cookieOf = (setCookie: unknown): string =>
-  String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0] ??
-  '';
-
-async function signIn(
-  { app, keys }: Started,
-  email: string,
-): Promise<Record<string, string>> {
-  const credential = await mintIdToken(keys, { email, sub: `sub-${email}` });
-  const response = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/google',
-    headers: LOCAL,
-    payload: { credential },
-  });
-  expect(response.statusCode).toBe(200);
-  return { ...LOCAL, cookie: cookieOf(response.headers['set-cookie']) };
-}
-
-type Call = (
-  method: InjectOptions['method'],
-  url: string,
-  payload?: object,
-) => Promise<LightMyRequestResponse>;
-
-const caller =
-  (app: FastifyInstance, headers: Record<string, string>): Call =>
-  (method, url, payload) =>
-    app.inject({ method, url, headers, ...(payload && { payload }) });
-
-/** The owner (master) and an invited member with research on the fixture collection. */
-async function withPeople(started: Started) {
-  const owner = caller(started.app, await signIn(started, OWNER_EMAIL));
-  const invited = await owner('POST', '/api/v1/people', {
-    email: 'ana@example.com',
-  });
-  const id: string = invited.json().id;
-  await owner('PATCH', `/api/v1/people/${id}`, {
-    topics: ['hermetismo'],
-    features: ['search', 'research', 'own-ai-settings'],
-  });
-  const member = caller(started.app, await signIn(started, 'ana@example.com'));
-  return { owner, member, memberId: id };
-}
-
-/** Connects the house account through the OAuth PKCE flow against the fake. */
-async function connectHouse(started: Started, owner: Call) {
-  const { authorizeUrl } = (
-    await owner('POST', '/api/v1/openrouter/connect', { purpose: 'house' })
-  ).json();
-  const url = new URL(authorizeUrl);
-  const challenge = url.searchParams.get('code_challenge') ?? '';
-  const state = url.searchParams.get('state') ?? '';
-  const code = started.fake.authorize(challenge, 'sk-or-v1-house-oauth-wxyz');
-  const back = await owner(
-    'GET',
-    `/api/v1/openrouter/callback?code=${code}&state=${state}`,
-  );
-  return { back, state, code };
-}
-
-const events = (body: string): ResearchEvent[] =>
-  body
-    .split('\n\n')
-    .filter((block) => block.startsWith('data: '))
-    .map((block) => researchEventSchema.parse(JSON.parse(block.slice(6))));
-
-const research = async (call: Call, profile = 'fast') =>
-  events(
-    (
-      await call('POST', '/api/v1/topics/hermetismo/research', {
-        question: 'O que é o mentalismo?',
-        profile,
-      })
-    ).body,
-  );
-
-const statePlain = async (state: string): Promise<string> => {
-  const settings = await readdir(join(state, 'settings')).catch(() => []);
-  const files = [
-    ...settings.map((name) => join(state, 'settings', name)),
-    join(state, 'house-ai.json'),
-  ];
-  const texts = await Promise.all(
-    files.map((file) => readFile(file, 'utf8').catch(() => '')),
-  );
-  return texts.join('\n');
-};
+afterEach(closeApp);
 
 describe('IA da aplicação: connection (KBC-022 AC-1, AC-2)', () => {
   it('connects the house account with OAuth PKCE and keeps only a sealed key', async () => {
@@ -337,6 +122,10 @@ describe('IA da aplicação: research on the house plan (KBC-022 AC-4 to AC-6)',
       remainingToday: 4,
       dailyResearches: 5,
       enforced: false,
+      spentTodayUsd: null,
+      dailyCapUsd: null,
+      free: true,
+      lastTest: null,
     });
   });
 

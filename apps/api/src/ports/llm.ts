@@ -30,8 +30,11 @@ export interface LlmStreamOptions {
 /** A chat model behind a paid API (ADR 0004). */
 export interface LlmPort {
   readonly model: string;
-  /** "per-token" spends money and respects the daily cap; "subscription" is covered by a plan (KBC-007). */
-  readonly billing: 'per-token' | 'subscription';
+  /**
+   * "per-token" spends money and respects the daily cap; "subscription" is covered by a plan
+   * (KBC-007); "free" costs nothing (Gemini's free tier, KBC-023).
+   */
+  readonly billing: 'per-token' | 'subscription' | 'free';
   /** False when no API key is configured: answers are refused with LLM_NOT_CONFIGURED. */
   configured(): boolean;
   price(): Promise<LlmPrice>;

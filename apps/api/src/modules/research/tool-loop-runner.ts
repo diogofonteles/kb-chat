@@ -1,4 +1,4 @@
-import type { ResearchEvent } from '@kb-chat/contracts';
+import type { ResearchBilling, ResearchEvent } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import {
   LlmCapacityError,
@@ -144,6 +144,20 @@ function errorCode(err: unknown): string {
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
 
+/** A free model of OpenRouter (`:free`, the free router), as named in its answer. */
+const isFreeModel = (model: string | null): boolean =>
+  model !== null && (model.endsWith(':free') || model === 'openrouter/free');
+
+/** "Gratuito" when a per-token turn cost nothing on a free model (KBC-023 BR-7). */
+function billingOf(turn: Turn): ResearchBilling {
+  const billing = turn.engine.llm.billing;
+  return billing === 'per-token' &&
+    turn.usd === 0 &&
+    isFreeModel(turn.servedModel)
+    ? 'free'
+    : billing;
+}
+
 /** When a turn with this budget must answer, in ms since the epoch; null: no ceiling. */
 const deadlineOf = (budget: ProfileBudget): number | null =>
   budget.maxMinutes === null ? null : Date.now() + budget.maxMinutes * 60_000;
@@ -182,7 +196,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     return this.deps.llm.model;
   }
 
-  get billing(): 'per-token' | 'subscription' {
+  get billing(): ResearchBilling {
     return this.deps.llm.billing;
   }
 
@@ -635,7 +649,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     return {
       type: 'done',
       usd: turn.usd,
-      billing: turn.engine.llm.billing,
+      billing: billingOf(turn),
       model: turn.servedModel ?? turn.engine.llm.model,
       interrupted,
       steps: turn.steps + turn.subSteps,

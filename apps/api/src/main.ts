@@ -94,6 +94,7 @@ const ai = await createAiProviders({
   subAgentPrompt: agent.subAgentPrompt,
   house,
   personOf: (principal) => auth.people.cachedByPrincipal(principal),
+  ledger,
 });
 const usage = new JsonlUsageLog(join(config.KB_CHAT_STATE_DIR, 'events.jsonl'));
 await applyUsageRetention(usage, logger);

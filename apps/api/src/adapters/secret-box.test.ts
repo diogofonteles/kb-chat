@@ -30,7 +30,12 @@ describe('SecretBox (ADR 0017)', () => {
     expect(() => new SecretBox(key()).open(sealed, 'ctx')).toThrow();
     const box = new SecretBox(key());
     const good = box.seal('value-1234', 'ctx');
-    const tampered = `${good.slice(0, -2)}${good.endsWith('A') ? 'B' : 'A'}A`;
+    // Flip one bit of the first ciphertext byte: always a real change, never padding bits.
+    const [iv, tag, body] = good.slice('enc:v1:'.length).split('.');
+    const bytes = Buffer.from(body ?? '', 'base64url');
+    bytes[0] = (bytes[0] ?? 0) ^ 1;
+    const tampered = `enc:v1:${iv}.${tag}.${bytes.toString('base64url')}`;
+    expect(tampered).not.toBe(good);
     expect(() => box.open(tampered, 'ctx')).toThrow();
     expect(() => box.open('enc:v1:broken', 'ctx')).toThrow();
   });
