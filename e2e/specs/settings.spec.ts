@@ -69,8 +69,8 @@ test('AC-2: a saved key shows only its last 4 characters and can be removed', as
 }) => {
   // Desktop and phone run in parallel on one server: each uses its own provider's key.
   const [provider, name, last4] = desktop(page)
-    ? (['openai', /OpenAI API/, 'dsk1'] as const)
-    : (['anthropic', /Anthropic API/, 'mob1'] as const);
+    ? (['openai', /OpenAI \(API\)/, 'dsk1'] as const)
+    : (['anthropic', /Claude \(API da Anthropic\)/, 'mob1'] as const);
   const key = `sk-e2e-secret-${last4}`;
   // Only the key: the provider answering the other specs stays as it is.
   const saved = await page.request.put('/api/v1/settings', {
@@ -92,7 +92,7 @@ test('AC-5: an invalid key gets "A chave não foi aceita pelo provedor"', async 
   page,
 }) => {
   const dialog = await openSettings(page);
-  await dialog.getByRole('radio', { name: /OpenAI API/ }).check();
+  await dialog.getByRole('radio', { name: /OpenAI \(API\)/ }).check();
   await dialog.getByLabel(/Chave da API/).fill('sk-e2e-wrong-key');
   await dialog.getByRole('button', { name: 'Testar conexão' }).click();
   await expect(
@@ -105,6 +105,8 @@ test('KBC-011: each provider shows a fast and a deep model with its defaults', a
 }) => {
   const dialog = await openSettings(page);
   await dialog.getByRole('radio', { name: /OpenRouter/ }).check();
+  // KBC-023: OpenRouter starts on free models; the chosen models are the other plan.
+  await dialog.getByRole('radio', { name: /Modelo à escolha/ }).check();
   await expect(dialog.getByLabel('Modelo rápido')).toHaveAttribute(
     'placeholder',
     'Padrão: deepseek/deepseek-v4-flash',
@@ -113,7 +115,9 @@ test('KBC-011: each provider shows a fast and a deep model with its defaults', a
     'placeholder',
     'Padrão: deepseek/deepseek-v4-pro',
   );
-  await dialog.getByRole('radio', { name: /Anthropic API/ }).check();
+  await dialog
+    .getByRole('radio', { name: /Claude \(API da Anthropic\)/ })
+    .check();
   await expect(dialog.getByLabel('Modelo rápido')).toHaveAttribute(
     'placeholder',
     'Padrão: claude-sonnet-5-5',
