@@ -98,4 +98,24 @@ describe('research contracts', () => {
     expect(modelProfileOf('deep')).toBe('deep');
     expect(modelProfileOf('exhaustive')).toBe('deep');
   });
+
+  it('marks the steps of a sub-researcher and the delegation itself (KBC-018)', () => {
+    const step = researchEventSchema.parse({
+      type: 'step',
+      step: { kind: 'search', text: 'Procurando “livro”', agent: 2 },
+    });
+    expect(step).toMatchObject({ step: { agent: 2 } });
+    expect(
+      researchEventSchema.safeParse({
+        type: 'step',
+        step: { kind: 'delegate', text: 'Delegando: varrer os livros' },
+      }).success,
+    ).toBe(true);
+    expect(
+      researchEventSchema.safeParse({
+        type: 'step',
+        step: { kind: 'search', text: 'x', agent: 0 },
+      }).success,
+    ).toBe(false);
+  });
 });

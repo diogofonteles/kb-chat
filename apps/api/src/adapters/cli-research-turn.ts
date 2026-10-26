@@ -30,6 +30,8 @@ export interface CliLine {
   /** How the model's message ended, when the CLI says so: with tool calls or as an answer. */
   readonly messageEnd?: 'tool_use' | 'answer';
   readonly model?: string;
+  /** The main conversation started sub-agents with these descriptions (ADR 0014). */
+  readonly delegates?: readonly string[];
   /** The CLI's final verdict: success, or why it failed. */
   readonly result?:
     { readonly ok: true } | { readonly ok: false; readonly code: AiTestCode };
@@ -189,6 +191,11 @@ class CliTurn {
     const { answer } = this.setup;
     if (parsed.model) this.state.model = parsed.model;
     if (parsed.result) this.state.result = parsed.result;
+    for (const delegate of parsed.delegates ?? [])
+      this.queue.push({
+        type: 'step',
+        step: { kind: 'delegate', text: `Delegando: ${delegate}` },
+      });
     if (parsed.text) this.push(answer.text(parsed.text));
     if (parsed.messageEnd === 'tool_use') this.push(answer.toolCalled());
     if (parsed.messageEnd === 'answer') this.endAnswer();
@@ -335,6 +342,12 @@ function escalationOf(
   return allowed ? options.escalation : undefined;
 }
 
+/** The turn endpoint's tool calls: sub-agents reach it too, so theirs count (ADR 0014). */
+const stepCap = (budgets: ResearchBudgets, input: TurnInput): number => {
+  const budget = budgets[input.profile];
+  return budget.steps + (budget.delegation?.totalSteps ?? 0);
+};
+
 /**
  * One research turn run by a subscription CLI (KBC-007 FR-4): the tools are served to it
  * over the turn's MCP endpoint, its stdout becomes tokens, and each tool call it makes
@@ -354,7 +367,7 @@ export async function* runCliTurn(
   const first = { ...input, canDeepen: escalation !== undefined };
   const fast = yield* runPass(options, dialect, {
     input: first,
-    maxSteps: budgets[input.profile].steps,
+    maxSteps: stepCap(budgets, input),
     answer,
   });
   const aborted = input.signal.aborted;

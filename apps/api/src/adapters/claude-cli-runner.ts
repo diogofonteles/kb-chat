@@ -7,6 +7,10 @@ import type {
 } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { KB_MCP_SERVER } from '../mcp/kb-mcp-server.js';
+import {
+  RESEARCH_TOOL_NAMES,
+  subAgentSystemPrompt,
+} from '../modules/research/index.js';
 import type {
   ResearchInput,
   ResearchRunnerPort,
@@ -34,6 +38,8 @@ const lineSchema = z.discriminatedUnion('type', [
   }),
   z.looseObject({
     type: z.literal('stream_event'),
+    /** Set on a sub-agent's lines (ADR 0014): they are never answer text. */
+    parent_tool_use_id: z.string().nullable().optional(),
     event: z.looseObject({
       type: z.string(),
       // text_delta in content_block_delta; stop_reason (no type) in message_delta.
@@ -47,6 +53,23 @@ const lineSchema = z.discriminatedUnion('type', [
     }),
   }),
   z.looseObject({
+    type: z.literal('assistant'),
+    parent_tool_use_id: z.string().nullable().optional(),
+    message: z.looseObject({
+      content: z
+        .array(
+          z.looseObject({
+            type: z.string(),
+            name: z.string().optional(),
+            input: z
+              .looseObject({ description: z.string().optional() })
+              .optional(),
+          }),
+        )
+        .optional(),
+    }),
+  }),
+  z.looseObject({
     type: z.literal('result'),
     subtype: z.string(),
     is_error: z.boolean().optional(),
@@ -54,6 +77,11 @@ const lineSchema = z.discriminatedUnion('type', [
   }),
 ]);
 type ClaudeLine = z.infer<typeof lineSchema>;
+
+/** Claude Code's sub-agent tool: "Agent" since 2.1.63, "Task" before. */
+const AGENT_TOOLS: ReadonlySet<string> = new Set(['Agent', 'Task']);
+/** The sub-agent an exhaustive turn may start (ADR 0014). */
+export const SUB_AGENT_NAME = 'pesquisador';
 
 const LOGIN_HINT = /log ?in|authenticat|invalid api key|oauth/i;
 
@@ -66,7 +94,7 @@ const PARSERS: Record<ClaudeLine['type'], (line: ClaudeLine) => CliLine> = {
       ? { model: line.model }
       : {},
   stream_event: (line) => {
-    if (line.type !== 'stream_event') return {};
+    if (line.type !== 'stream_event' || line.parent_tool_use_id) return {};
     const { type, delta } = line.event;
     if (type === 'message_delta' && delta?.stop_reason)
       return {
@@ -75,6 +103,17 @@ const PARSERS: Record<ClaudeLine['type'], (line: ClaudeLine) => CliLine> = {
     return delta?.type === 'text_delta' && delta.text
       ? { text: delta.text }
       : {};
+  },
+  // The main conversation starting a sub-agent (Claude Code's Agent tool, ADR 0014).
+  assistant: (line) => {
+    if (line.type !== 'assistant' || line.parent_tool_use_id) return {};
+    const delegates = (line.message.content ?? [])
+      .filter(
+        (block) =>
+          block.type === 'tool_use' && AGENT_TOOLS.has(block.name ?? ''),
+      )
+      .map((block) => block.input?.description ?? '');
+    return delegates.length > 0 ? { delegates } : {};
   },
   result: (line) => {
     if (line.type !== 'result') return {};
@@ -103,6 +142,8 @@ export interface ClaudeCliRunnerOptions extends Omit<CliTurnOptions, 'model'> {
   readonly tools?: ResearchToolsFactory;
   /** The research rules for a topic and profile; default: defaultSubscriptionPrompt. */
   readonly systemPrompt?: SubscriptionPrompt;
+  /** A sub-researcher's rules for a topic (ADR 0014); default: by the topic's slug. */
+  readonly subAgentPrompt?: (topic: string) => string;
 }
 
 /**
@@ -128,21 +169,46 @@ export const CLAUDE_EFFORT: Readonly<
   Record<ResearchProfile, 'low' | undefined>
 > = { fast: 'low', deep: undefined, exhaustive: undefined };
 
-/** The arguments of a research turn: only the kb MCP tools, no built-ins, no user settings. */
+/**
+ * The `--agents` value of an exhaustive turn (ADR 0014): one sub-agent, the sub-researcher,
+ * with the kb MCP tools only.
+ */
+export function subAgentsJson(prompt: string): string {
+  return JSON.stringify({
+    [SUB_AGENT_NAME]: {
+      description:
+        'Sub-pesquisador do acervo: faz uma tarefa focada de pesquisa (varrer páginas de find_text, documentos grandes) e devolve um relatório curto com as citações [n].',
+      prompt,
+      // Named one by one: a sub-agent whose tools resolve to nothing does not start.
+      tools: RESEARCH_TOOL_NAMES.map(
+        (name) => `mcp__${KB_MCP_SERVER}__${name}`,
+      ),
+    },
+  });
+}
+
+/**
+ * The arguments of a research turn: only the kb MCP tools, no built-ins, no user settings.
+ * An exhaustive turn (`agents` given) also gets the Agent tool and its sub-researcher.
+ */
 export function claudeArgs(
   mcpConfigPath: string,
   options: {
     readonly model?: string;
     readonly systemPrompt: string;
     readonly effort?: string;
+    readonly agents?: string;
   },
 ): string[] {
+  const kb = `mcp__${KB_MCP_SERVER}`;
   return [
     '-p',
     ...['--output-format', 'stream-json', '--verbose'],
     '--include-partial-messages',
-    ...['--tools', ''],
-    ...['--allowedTools', `mcp__${KB_MCP_SERVER}`],
+    ...(options.agents
+      ? ['--tools', 'Agent', '--allowedTools', `${kb},Agent`]
+      : ['--tools', '', '--allowedTools', kb]),
+    ...(options.agents ? ['--agents', options.agents] : []),
     ...['--mcp-config', mcpConfigPath, '--strict-mcp-config'],
     ...['--setting-sources', ''],
     '--no-session-persistence',
@@ -167,13 +233,21 @@ export class ClaudeCliRunner implements ResearchRunnerPort {
   constructor(private readonly options: ClaudeCliRunnerOptions) {
     this.model = options.model ?? 'claude-code';
     const prompt = options.systemPrompt ?? defaultSubscriptionPrompt;
+    const subPrompt = options.subAgentPrompt ?? subAgentSystemPrompt;
     this.dialect = {
       name: 'claude',
       launch: async (access, input) => ({
+        // Only the "pesquisador" sub-agent: Claude Code's built-in ones stay off (ADR 0014).
+        ...(input.profile === 'exhaustive'
+          ? { env: { CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: '1' } }
+          : {}),
         args: claudeArgs(await writeClaudeMcpConfig(access), {
           model: input.model,
           systemPrompt: prompt(input.topic, input.profile, input.canDeepen),
           effort: CLAUDE_EFFORT[input.profile],
+          ...(input.profile === 'exhaustive'
+            ? { agents: subAgentsJson(subPrompt(input.topic)) }
+            : {}),
         }),
       }),
       input: (input) =>

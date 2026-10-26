@@ -43,12 +43,17 @@ export type ResearchRequest = z.input<typeof researchRequestSchema>;
 
 /** What the agent is doing, shown as a discreet line while it works (ADR 0006). */
 export const researchStepSchema = z.object({
-  /** `deepen`: the fast pass was not enough and the deep profile takes over (ADR 0009). */
-  kind: z.enum(['search', 'subjects', 'read', 'related', 'deepen']),
+  /**
+   * `deepen`: the fast pass was not enough and the deep profile takes over (ADR 0009);
+   * `delegate`: the exhaustive orchestrator hands tasks to sub-researchers (ADR 0014).
+   */
+  kind: z.enum(['search', 'subjects', 'read', 'related', 'deepen', 'delegate']),
   /** Short pt-BR description, e.g. "Buscando “cinco princípios ocultos”". */
   text: z.string(),
   /** The document a `read` step read (titles repeat in a collection). */
   document: z.string().optional(),
+  /** The sub-researcher that took the step (ADR 0014); absent for the main agent. */
+  agent: z.number().int().positive().optional(),
 });
 export type ResearchStep = z.infer<typeof researchStepSchema>;
 

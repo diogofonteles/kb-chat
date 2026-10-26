@@ -55,6 +55,7 @@ const ai = await createAiProviders({
   tools: agent.toolsFor,
   perTokenRunner: agent.perTokenRunner,
   systemPrompt: agent.systemPrompt,
+  subAgentPrompt: agent.subAgentPrompt,
 });
 const usage = new JsonlUsageLog(join(config.KB_CHAT_STATE_DIR, 'events.jsonl'));
 await applyUsageRetention(usage, logger);

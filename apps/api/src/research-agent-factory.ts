@@ -6,6 +6,7 @@ import {
   ToolLoopRunner,
   researchBudgets,
   researchSystemPrompt,
+  subAgentSystemPrompt,
   turnToolsFactory,
   type ResearchBudgets,
 } from './modules/research/index.js';
@@ -52,7 +53,35 @@ export interface ResearchAgent {
   readonly perTokenRunner: PerTokenRunnerFactory;
   /** The research rules with the topic's title and the profile, for the subscription CLIs. */
   readonly systemPrompt: SubscriptionPrompt;
+  /** A sub-researcher's rules with the topic's title, for Claude Code's sub-agent (ADR 0014). */
+  readonly subAgentPrompt: (topic: string) => string;
 }
+
+/** The in-API loop over a per-token model, spending on the principal's ledger. */
+const perTokenRunnerOf =
+  ({
+    tools,
+    ledger,
+    budgets,
+  }: {
+    tools: ResearchTools;
+    ledger: SpendLedgerPort;
+    budgets?: ResearchBudgets;
+  }): PerTokenRunnerFactory =>
+  (llm, scope, escalation) =>
+    new ToolLoopRunner({
+      llm,
+      tools,
+      budgets,
+      spend: new SpendService({ llm, ledger, ...scope }),
+      ...(escalation && {
+        deep: {
+          llm: escalation.deep,
+          spend: new SpendService({ llm: escalation.deep, ledger, ...scope }),
+        },
+        autoDeepen: escalation.enabled,
+      }),
+    });
 
 export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
   const { catalog, index, vault, ledger, budgets } = deps;
@@ -62,20 +91,9 @@ export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
     search,
     tools,
     toolsFor: turnToolsFactory(tools),
-    perTokenRunner: (llm, scope, escalation) =>
-      new ToolLoopRunner({
-        llm,
-        tools,
-        budgets,
-        spend: new SpendService({ llm, ledger, ...scope }),
-        ...(escalation && {
-          deep: {
-            llm: escalation.deep,
-            spend: new SpendService({ llm: escalation.deep, ledger, ...scope }),
-          },
-          autoDeepen: escalation.enabled,
-        }),
-      }),
+    perTokenRunner: perTokenRunnerOf({ tools, ledger, budgets }),
+    subAgentPrompt: (topic) =>
+      subAgentSystemPrompt(tools.topicTitle(topic) ?? topic),
     systemPrompt: (topic, profile, canDeepen) =>
       researchSystemPrompt(
         tools.topicTitle(topic) ?? topic,

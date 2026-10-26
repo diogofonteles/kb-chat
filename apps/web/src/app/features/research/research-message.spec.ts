@@ -43,6 +43,52 @@ async function renderMessage(turn: ResearchTurn, last = true) {
 }
 
 describe('ResearchMessage', () => {
+  it('names each sub-researcher in the steps and counts them in the summary (KBC-018 AC-4)', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [
+          { kind: 'search', text: 'Procurando o texto “obra”' },
+          { kind: 'delegate', text: 'Livros 1–60', agent: 1 },
+          { kind: 'delegate', text: 'Livros 61–120', agent: 2 },
+          { kind: 'search', text: 'Procurando o texto “livro”', agent: 1 },
+          { kind: 'read', text: 'Lendo “Miasmas”', agent: 2 },
+        ],
+      }),
+    );
+    // Each delegation heads a nested list with its sub-researcher's own steps.
+    const top = [...document.querySelectorAll('details.steps > ol > li')];
+    expect(top.map((li) => li.firstChild?.textContent?.trim())).toEqual([
+      'Procurando o texto “obra”',
+      'Pesquisador 1 — Livros 1–60',
+      'Pesquisador 2 — Livros 61–120',
+    ]);
+    const nested = (li: Element | undefined) =>
+      [...(li?.querySelectorAll('ol.sub-steps > li') ?? [])].map((c) =>
+        c.textContent?.trim(),
+      );
+    expect(nested(top[1])).toEqual(['Procurando o texto “livro”']);
+    expect(nested(top[2])).toEqual(['Lendo “Miasmas”']);
+    expect(
+      screen.getByText('Pesquisou 2 vezes · leu 1 documento · 2 pesquisadores'),
+    ).toBeTruthy();
+  });
+
+  it('numbers a sub-researcher step whose delegation it never received', async () => {
+    await renderMessage(
+      aTurn({ steps: [{ kind: 'search', text: 'Procurando “x”', agent: 4 }] }),
+    );
+    expect(screen.getByText('Pesquisador 4: Procurando “x”')).toBeTruthy();
+  });
+
+  it('shows a delegation of the Claude Code path as it came, without a number', async () => {
+    await renderMessage(
+      aTurn({
+        steps: [{ kind: 'delegate', text: 'Delegando: Livros 1–60' }],
+      }),
+    );
+    expect(screen.getByText('Delegando: Livros 1–60')).toBeTruthy();
+  });
+
   it('lists what the agent thought aloud among the steps, apart from the answer (ADR 0009)', async () => {
     await renderMessage(
       aTurn({

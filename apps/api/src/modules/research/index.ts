@@ -28,9 +28,11 @@ export {
   type ToolContext,
 } from './tools.js';
 export { SourceBook } from './source-book.js';
+export { RESEARCH_TOOL_NAMES } from './tool-schemas.js';
 export { TurnResearchTools, turnToolsFactory } from './turn-tools.js';
 export {
   buildResearchMessages,
   OUTSIDE_MARK,
   researchSystemPrompt,
+  subAgentSystemPrompt,
 } from './prompt.js';
