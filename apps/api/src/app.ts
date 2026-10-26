@@ -292,8 +292,7 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
   await registerHouse(app, {
     house: deps.house,
     settings: deps.ai.settings,
-    subscriptionAvailable: () =>
-      deps.ai.registry.lendableSubscription().available(),
+    subscriptionAvailable: () => deps.ai.lentSubscription.available(),
   });
   await registerAccess(app, { deps, access, topics });
 }

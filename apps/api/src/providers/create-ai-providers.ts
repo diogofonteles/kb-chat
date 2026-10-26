@@ -58,6 +58,8 @@ export interface AiProviders {
   readonly turns: McpTurnRegistry;
   /** The current provider's model, resolved on every call (FR-5). */
   readonly llm: DynamicLlm;
+  /** The owner's subscription as it is lent to people (KBC-024). */
+  readonly lentSubscription: LendableSubscription;
 }
 
 async function loadSettings(
@@ -135,5 +137,6 @@ export async function createAiProviders(
     registry,
     turns,
     llm: new DynamicLlm(() => registry.llm(options.principal)),
+    lentSubscription: claudeSubscription,
   };
 }
