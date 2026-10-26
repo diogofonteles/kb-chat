@@ -65,6 +65,7 @@ describe('AI access policy contracts (KBC-022)', () => {
       chain: ['a:free'],
       paidModel: null,
       defaultAppAi: 'house',
+      defaultChange: null,
       defaultDailyResearches: 5,
       managementKey: null,
       freeUsage: null,
