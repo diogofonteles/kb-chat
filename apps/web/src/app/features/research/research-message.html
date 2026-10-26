@@ -79,24 +79,48 @@
       @if (cited().length > 0) {
         <div class="sources">
           <h3 class="sources-title" i18n="@@ai.sources">Fontes</h3>
-          <ol>
-            @for (source of cited(); track source.n) {
-              <li>
-                <button
-                  type="button"
-                  class="source"
-                  [attr.data-doc-id]="source.id"
-                  [title]="source.title"
-                  (click)="opened.emit({ id: source.id, title: source.title })"
-                >
-                  <span class="source-n" aria-hidden="true">{{
-                    source.n
-                  }}</span>
-                  <span class="source-title">{{ source.title }}</span>
-                </button>
-              </li>
+          @if (sourceGroups(); as groups) {
+            @for (group of groups; track group.authorship) {
+              <h4 class="group-title">
+                {{ group.label }} ({{ group.sources.length }})
+              </h4>
+              <ng-container
+                [ngTemplateOutlet]="chips"
+                [ngTemplateOutletContext]="{
+                  $implicit: group.sources,
+                  label: group.label,
+                }"
+              />
             }
-          </ol>
+          } @else {
+            <ng-container
+              [ngTemplateOutlet]="chips"
+              [ngTemplateOutletContext]="{ $implicit: cited(), label: null }"
+            />
+          }
+          <ng-template #chips let-sources let-label="label">
+            <ol [attr.aria-label]="label">
+              @for (source of sources; track source.n) {
+                <li>
+                  <button
+                    type="button"
+                    class="source"
+                    [attr.data-doc-id]="source.id"
+                    [title]="source.title"
+                    (click)="
+                      opened.emit({ id: source.id, title: source.title })
+                    "
+                  >
+                    <span class="source-n" aria-hidden="true">{{
+                      source.n
+                    }}</span>
+                    <app-authorship-badge [authorship]="source.authorship" />
+                    <span class="source-title">{{ source.title }}</span>
+                  </button>
+                </li>
+              }
+            </ol>
+          </ng-template>
         </div>
       }
       <p class="footer">

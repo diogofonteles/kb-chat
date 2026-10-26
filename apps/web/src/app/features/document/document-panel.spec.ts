@@ -169,6 +169,18 @@ describe('DocumentPanel reading tools (KBC-003)', () => {
     expect(screen.getByText('Documentos sobre a Cabala.')).toBeTruthy();
   });
 
+  it('shows the authorship badge with the author (KBC-020 AC-3)', async () => {
+    await renderWith({}, aDocument());
+    expect(screen.getByText(/Mestre Laércio/)).toBeTruthy();
+    expect(screen.getByText('José Laércio do Egito')).toBeTruthy();
+  });
+
+  it('labels a synthesis of the collection without an author', async () => {
+    await renderWith({}, aDocument({ authorship: 'sintese', author: null }));
+    expect(screen.getByText(/Síntese do acervo/)).toBeTruthy();
+    expect(screen.queryByText('José Laércio do Egito')).toBeNull();
+  });
+
   it('shows the OCR badge', async () => {
     await renderWith({}, aDocument({ origin: 'ocr' }));
     expect(screen.getByText(/Texto extraído de imagem \(OCR\)/)).toBeTruthy();

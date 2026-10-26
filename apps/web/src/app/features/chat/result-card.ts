@@ -8,12 +8,14 @@ import {
 } from '@angular/core';
 import type { DocumentRef, SearchHit } from '@kb-chat/contracts';
 import { describeFacets } from '@core/i18n/facet-labels.js';
+import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 
 const VISIBLE_CONCEPTS = 2;
 
 /** One search hit: title, snippet, facets in text and its near-identical copies (screens.md T2). */
 @Component({
   selector: 'app-result-card',
+  imports: [AuthorshipBadge],
   templateUrl: './result-card.html',
   styleUrl: './result-card.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

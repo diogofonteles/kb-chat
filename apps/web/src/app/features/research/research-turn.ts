@@ -1,6 +1,7 @@
 import {
   MAX_HISTORY_TURNS,
   type AnswerSource,
+  type Authorship,
   type ResearchBilling,
   type ResearchEvent,
   type ResearchProfile,
@@ -234,4 +235,32 @@ export function fromSavedTurn(
     at: saved.at,
     restored: true,
   };
+}
+
+/** The order of the source groups (KBC-020): the collection's core first. */
+const AUTHORSHIP_ORDER: readonly Authorship[] = [
+  'mestre-laercio',
+  'outros-autores',
+  'sintese',
+  'nao-classificado',
+];
+
+export interface SourceGroup {
+  readonly authorship: Authorship;
+  readonly sources: readonly AnswerSource[];
+}
+
+/**
+ * The cited sources by authorship (KBC-020 FR-7), or null when they need no groups: all of
+ * one group, or some saved before authorship existed (they show as one list, as before).
+ */
+export function groupByAuthorship(
+  sources: readonly AnswerSource[],
+): SourceGroup[] | null {
+  if (sources.some((source) => !source.authorship)) return null;
+  const groups = AUTHORSHIP_ORDER.map((authorship) => ({
+    authorship,
+    sources: sources.filter((source) => source.authorship === authorship),
+  })).filter((group) => group.sources.length > 0);
+  return groups.length > 1 ? groups : null;
 }

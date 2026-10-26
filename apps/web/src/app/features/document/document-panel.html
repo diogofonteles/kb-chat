@@ -71,6 +71,12 @@
 
 <div class="meta">
   @if (loaded(); as doc) {
+    <p class="authorship">
+      <app-authorship-badge [authorship]="doc.authorship" />
+      @if (doc.author) {
+        <span class="author">{{ doc.author }}</span>
+      }
+    </p>
     @if (doc.origin === 'audio') {
       <p class="badge" i18n="@@panel.originAudio">
         Transcrição automática de áudio — pode conter erros de reconhecimento.

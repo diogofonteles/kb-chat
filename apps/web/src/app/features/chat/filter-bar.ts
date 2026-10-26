@@ -13,13 +13,19 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { ResultFacets, SearchFilters } from '@kb-chat/contracts';
+import type {
+  Authorship,
+  ResultFacets,
+  SearchFilters,
+} from '@kb-chat/contracts';
 import type { FacetKey } from '@core/i18n/facet-labels.js';
 import {
   activeFilters,
+  authorshipOptions,
   countActive,
   toFacetGroups,
   toggleFilter,
+  withAuthorship,
   type ActiveFilter,
   type FacetGroup,
   type FacetOption,
@@ -29,6 +35,8 @@ import {
 /** Options listed before "Ver todos" (UP-15: few choices at once). */
 const VISIBLE_OPTIONS = 12;
 const MOBILE_QUERY = '(max-width: 1023px)';
+/** Each bar's authorship radios need a group name of their own (one bar per message). */
+let nextBarId = 0;
 
 /**
  * Facet chips over a result list (screens.md T2). Desktop: one popover per facet,
@@ -70,9 +78,16 @@ export class FilterBar {
   protected readonly draftGroups = computed(() =>
     toFacetGroups(this.facets(), this.draft()),
   );
+  /** The authorship control shows its own choice (KBC-020): no removable chip repeats it. */
   protected readonly active = computed(() =>
-    activeFilters(this.filters(), this.order()),
+    activeFilters(this.filters(), this.order()).filter(
+      (filter) => filter.key !== 'authorships',
+    ),
   );
+  protected readonly authorships = computed(() =>
+    authorshipOptions(this.facets(), this.filters()),
+  );
+  protected readonly barId = `filters-${nextBarId++}`;
   protected readonly activeCount = computed(() => countActive(this.filters()));
 
   protected visibleOptions(group: FacetGroup): readonly FacetOption[] {
@@ -102,6 +117,11 @@ export class FilterBar {
 
   protected toggle(key: FacetKey, value: FacetValue): void {
     this.filtersChange.emit(toggleFilter(this.filters(), key, value));
+  }
+
+  /** KBC-020: one group, or every group ("Todos"), applied at once on every width. */
+  protected chooseAuthorship(value: Authorship | null): void {
+    this.filtersChange.emit(withAuthorship(this.filters(), value));
   }
 
   protected remove(filter: ActiveFilter): void {

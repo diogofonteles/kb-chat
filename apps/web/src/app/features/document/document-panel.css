@@ -72,6 +72,16 @@ h2:focus-visible {
   padding: var(--space-3) var(--space-6) 0;
 }
 
+.authorship {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
 .facets {
   margin: 0;
   font-size: var(--text-sm);

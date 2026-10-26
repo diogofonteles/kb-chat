@@ -1,86 +1,127 @@
-<div
-  class="bar"
-  role="group"
-  aria-label="Filtros"
-  i18n-aria-label="@@filters.label"
->
-  <div class="facets">
-    @for (group of groups(); track group.key) {
-      <div class="facet" #facet (focusout)="closeOnFocusOut($event, facet)">
-        <button
-          #chip
-          type="button"
-          class="chip"
-          [attr.data-facet]="group.key"
-          [class.on]="group.selectedCount > 0"
-          [attr.aria-expanded]="openKey() === group.key"
-          [attr.aria-controls]="
-            openKey() === group.key ? 'facet-' + group.key : null
-          "
-          (click)="openFacet(group.key)"
-          (keydown.escape)="closePopover(chip)"
-        >
-          {{ group.title }}
-          @if (group.selectedCount > 0) {
-            <span>({{ group.selectedCount }})</span>
+<div class="row">
+  <div
+    class="authorship"
+    role="radiogroup"
+    [attr.aria-labelledby]="barId + '-authorship'"
+  >
+    <span
+      class="authorship-title"
+      [id]="barId + '-authorship'"
+      i18n="@@filters.authorship"
+      >Autoria</span
+    >
+    @for (option of authorships(); track option.value) {
+      <label
+        class="segment"
+        [class.on]="option.selected"
+        [class.mestre]="option.mestre"
+        [class.off]="option.count === 0 && !option.selected"
+      >
+        <input
+          type="radio"
+          class="segment-input"
+          [name]="barId + '-authorship-choice'"
+          [checked]="option.selected"
+          [disabled]="option.count === 0 && !option.selected"
+          (change)="chooseAuthorship(option.value)"
+        />
+        <span class="segment-text">
+          @if (option.selected) {
+            <span class="check" aria-hidden="true">✓</span>
           }
-          <span aria-hidden="true">▾</span>
-        </button>
-        @if (openKey() === group.key) {
-          <div
-            class="popover"
-            [id]="'facet-' + group.key"
-            role="group"
-            [attr.aria-label]="group.title"
-            (keydown.escape)="closePopover(chip)"
-          >
-            @for (option of visibleOptions(group); track option.value) {
-              <label class="option">
-                <input
-                  type="checkbox"
-                  [checked]="option.selected"
-                  (change)="toggle(group.key, option.value)"
-                />
-                <span class="option-label">{{ option.label }}</span>
-                <span class="option-count">{{ option.count }}</span>
-              </label>
-            }
-            @if (hiddenOptions(group) > 0) {
-              <button
-                type="button"
-                class="link"
-                (click)="expand(group.key)"
-                i18n="@@filters.showAll"
-              >
-                Ver todos ({{ group.options.length }})
-              </button>
-            }
-          </div>
-        }
-      </div>
+          @if (option.mestre) {
+            <span class="mark" aria-hidden="true">✦</span>
+          }
+          <span class="segment-label">{{ option.label }}</span>
+        </span>
+        <span class="segment-count">{{ option.count }}</span>
+      </label>
     }
   </div>
-  <button
-    #sheetButton
-    type="button"
-    class="chip sheet-button"
-    (click)="openSheet()"
+  <div
+    class="bar"
+    role="group"
+    aria-label="Filtros"
+    i18n-aria-label="@@filters.label"
   >
-    <span i18n="@@filters.open">Filtros</span>
-    @if (activeCount() > 0) {
-      <span>({{ activeCount() }})</span>
-    }
-  </button>
-  @if (hiddenOffTopic() > 0) {
-    <span
-      class="hidden-note"
-      i18n="@@filters.hiddenOffTopic"
-      >{hiddenOffTopic(), plural,
-        =1 {1 oculto (fora do tema)}
-        other {{{ hiddenOffTopic() }} ocultos (fora do tema)}
-      }</span
+    <div class="facets">
+      @for (group of groups(); track group.key) {
+        <div class="facet" #facet (focusout)="closeOnFocusOut($event, facet)">
+          <button
+            #chip
+            type="button"
+            class="chip"
+            [attr.data-facet]="group.key"
+            [class.on]="group.selectedCount > 0"
+            [attr.aria-expanded]="openKey() === group.key"
+            [attr.aria-controls]="
+              openKey() === group.key ? 'facet-' + group.key : null
+            "
+            (click)="openFacet(group.key)"
+            (keydown.escape)="closePopover(chip)"
+          >
+            {{ group.title }}
+            @if (group.selectedCount > 0) {
+              <span>({{ group.selectedCount }})</span>
+            }
+            <span aria-hidden="true">▾</span>
+          </button>
+          @if (openKey() === group.key) {
+            <div
+              class="popover"
+              [id]="'facet-' + group.key"
+              role="group"
+              [attr.aria-label]="group.title"
+              (keydown.escape)="closePopover(chip)"
+            >
+              @for (option of visibleOptions(group); track option.value) {
+                <label class="option">
+                  <input
+                    type="checkbox"
+                    [checked]="option.selected"
+                    (change)="toggle(group.key, option.value)"
+                  />
+                  <span class="option-label">{{ option.label }}</span>
+                  <span class="option-count">{{ option.count }}</span>
+                </label>
+              }
+              @if (hiddenOptions(group) > 0) {
+                <button
+                  type="button"
+                  class="link"
+                  (click)="expand(group.key)"
+                  i18n="@@filters.showAll"
+                >
+                  Ver todos ({{ group.options.length }})
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+    <button
+      #sheetButton
+      type="button"
+      class="chip sheet-button"
+      (click)="openSheet()"
     >
-  }
+      <span i18n="@@filters.open">Filtros</span>
+      @if (activeCount() > 0) {
+        <span>({{ activeCount() }})</span>
+      }
+    </button>
+    @if (hiddenOffTopic() > 0) {
+      <span
+        class="hidden-note"
+        i18n="@@filters.hiddenOffTopic"
+        >{hiddenOffTopic(), plural,
+          =1 {1 oculto (fora do tema)}
+          other {{{ hiddenOffTopic() }} ocultos (fora do tema)}
+        }</span
+      >
+    }
+  </div>
 </div>
 
 @if (active().length > 0) {
