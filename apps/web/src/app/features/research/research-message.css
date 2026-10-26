@@ -145,10 +145,13 @@ p.steps {
 .footer {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   gap: var(--space-1) var(--space-3);
   padding-top: var(--space-2);
   border-top: 1px solid var(--color-border);
+}
+
+.footer > span:first-child {
+  flex-basis: 100%;
 }
 
 .error {

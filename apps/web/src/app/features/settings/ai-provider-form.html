@@ -29,7 +29,7 @@
           <span class="card-title">{{ option.name }}</span>
           <span
             class="badge"
-            [class.included]="option.info.billing === 'subscription'"
+            [class.included]="option.info.billing !== 'per-token'"
             >{{ option.billing }}</span
           >
         </span>
@@ -90,7 +90,11 @@
     </div>
   }
 
-  @if (!compact() && current.info.billing !== 'none') {
+  @if (
+    !compact() &&
+    (current.info.billing === 'per-token' ||
+      current.info.billing === 'subscription')
+  ) {
     @for (field of modelFields(); track field.key) {
       <div class="field">
         <label class="field-label" [for]="field.id">{{ field.label }}</label>
@@ -169,7 +173,17 @@
     </p>
   }
 
-  @if (current.info.billing !== 'none') {
+  @if (current.info.billing === 'free') {
+    <p class="hint" i18n="@@ai.appNote">
+      A aplicação paga; o rodapé de cada resposta mostra o modelo que respondeu
+      e quantas pesquisas restam hoje.
+    </p>
+  }
+
+  @if (
+    current.info.billing === 'per-token' ||
+    current.info.billing === 'subscription'
+  ) {
     <div class="test">
       <button
         type="button"

@@ -31,6 +31,11 @@ import {
   invitationStateOf,
   type InvitationState,
 } from './invitation-status.js';
+import {
+  AiAssignmentBar,
+  type AssignmentRequest,
+} from './ai-assignment-bar.js';
+import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -48,13 +53,20 @@ interface Outcome<T> {
  */
 @Component({
   selector: 'app-people-panel',
-  imports: [PersonEditor, AccessRequestsList, DatePipe, NgTemplateOutlet],
+  imports: [
+    PersonEditor,
+    AccessRequestsList,
+    AiAssignmentBar,
+    DatePipe,
+    NgTemplateOutlet,
+  ],
   templateUrl: './people-panel.html',
   styleUrl: './people-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PeoplePanel {
   private readonly api = inject(PeopleApi);
+  private readonly houseApi = inject(HouseAiApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly session = inject(SessionStore);
   private readonly locale = inject(LOCALE_ID);
@@ -64,6 +76,18 @@ export class PeoplePanel {
     viewChildren<ElementRef<HTMLButtonElement>>('resendButton');
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
+  /** The house default, to name each person's "Padrão" (KBC-022). */
+  private readonly house = rxResource({ stream: () => this.houseApi.view() });
+  protected readonly defaultAppAi = computed(() =>
+    this.house.hasValue() ? this.house.value().defaultAppAi : null,
+  );
+  /** People chosen for a bulk AI assignment. */
+  protected readonly selected = signal<ReadonlySet<string>>(new Set());
+  protected readonly allSelected = computed(
+    () =>
+      this.list().length > 0 &&
+      this.list().every((person) => this.selected().has(person.id)),
+  );
   /** Each person's AI spend today, shown to the owner only (BR-6). */
   private readonly spend = rxResource({
     params: () => this.session.me()?.isOwner || undefined,
@@ -109,6 +133,38 @@ export class PeoplePanel {
   protected toggle(person: Person): void {
     this.openId.update((id) => (id === person.id ? null : person.id));
     this.notice.set(null);
+  }
+
+  protected select(person: Person, on: boolean): void {
+    this.selected.update((current) => {
+      const next = new Set(current);
+      if (on) next.add(person.id);
+      else next.delete(person.id);
+      return next;
+    });
+  }
+
+  protected selectAll(on: boolean): void {
+    this.selected.set(new Set(on ? this.list().map((p) => p.id) : []));
+  }
+
+  /** "Aplicar às selecionadas" or "Aplicar a todos os usuários" (KBC-022 AC-12). */
+  protected assign(request: AssignmentRequest): void {
+    const personIds =
+      request.target === 'all' ? ('all' as const) : [...this.selected()];
+    const call = this.houseApi.assign({
+      personIds,
+      appAi: request.appAi,
+      setDefault: request.setDefault,
+    });
+    this.run(call, {
+      done: (updated) => {
+        this.people.reload();
+        if (request.setDefault) this.house.reload();
+        this.selected.set(new Set());
+        return $localize`:@@people.assigned:IA da aplicação atualizada para ${updated}:count: pessoa(s).`;
+      },
+    });
   }
 
   protected typeEmail(value: string): void {

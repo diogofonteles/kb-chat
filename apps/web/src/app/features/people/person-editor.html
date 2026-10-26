@@ -37,6 +37,13 @@
   }
 </fieldset>
 
+<app-person-ai-editor
+  [ai]="who.ai"
+  [defaultAppAi]="defaultAppAi()"
+  [busy]="busy()"
+  (changed)="changed.emit({ ai: $event })"
+/>
+
 <div class="actions">
   <button
     type="button"

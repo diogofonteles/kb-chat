@@ -17,9 +17,17 @@ export interface ProviderCopy {
 
 export const NOT_INSTALLED = () => $localize`:@@ai.notInstalled:Não instalado.`;
 export const NOT_ENABLED = () => $localize`:@@ai.notEnabled:Desativado.`;
+export const NOT_LENT = () => $localize`:@@ai.notLent:Não liberada.`;
 
 /** pt-BR copy of each provider (KBC-007 scope); the API only knows the ids. */
 export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
+  app: {
+    name: () => $localize`:@@provider.app:IA da aplicação`,
+    description: () =>
+      $localize`:@@provider.appHint:Cedida pelo administrador: você não configura nada e não paga. Tem um limite de pesquisas por dia.`,
+    enable: () =>
+      $localize`:@@provider.appEnable:Nenhuma IA da aplicação foi liberada para você. Peça a um master, ou use a sua própria IA.`,
+  },
   'claude-subscription': {
     name: () => $localize`:@@provider.claude:Assinatura do Claude`,
     description: () =>
@@ -60,6 +68,7 @@ export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
 
 /** Display order: the owner's benchmark first (Claude), "none" last. */
 export const PROVIDER_ORDER: readonly AiProvider[] = [
+  'app',
   'claude-subscription',
   'anthropic',
   'openrouter',
@@ -73,6 +82,7 @@ export const BILLING_COPY: Record<ProviderBilling, () => string> = {
     $localize`:@@billing.subscription:Incluído na sua assinatura`,
   'per-token': () =>
     $localize`:@@billing.perToken:Cobra por uso · chave própria`,
+  free: () => $localize`:@@billing.free:Gratuito · paga a aplicação`,
   none: () => $localize`:@@billing.none:Sem custo`,
 };
 

@@ -41,7 +41,10 @@ export function savedModels(
   view: SettingsView | null,
   provider: AiProvider,
 ): DraftModels {
-  const saved = provider === 'none' ? undefined : view?.ai.models[provider];
+  const saved =
+    provider === 'none' || provider === 'app'
+      ? undefined
+      : view?.ai.models[provider];
   return { fastModel: saved?.fast ?? '', deepModel: saved?.deep ?? '' };
 }
 
@@ -70,7 +73,7 @@ export function aiUpdateFrom(
       ? draft.provider
       : null;
   const models =
-    draft.provider === 'none'
+    draft.provider === 'none' || draft.provider === 'app'
       ? {}
       : {
           models: {
@@ -98,7 +101,7 @@ const MODEL_NOT_OFFERED = () =>
 
 function modelError(provider: AiProvider, typed: string): string | null {
   const model = typed.trim();
-  if (!model || provider === 'none') return null;
+  if (!model || provider === 'none' || provider === 'app') return null;
   if (!modelIdSchema.safeParse(model).success) return MODEL_FORMAT();
   return isAllowedModel(provider, model) ? null : MODEL_NOT_OFFERED();
 }

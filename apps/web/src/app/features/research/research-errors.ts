@@ -19,7 +19,15 @@ const KNOWN_STREAM_CODES: readonly ResearchErrorCode[] = [
   'LLM_INSUFFICIENT_CREDIT',
   'LLM_NOT_CONFIGURED',
   'RATE_LIMITED',
+  'HOUSE_QUOTA_EXHAUSTED',
+  'AI_CAPACITY_EXHAUSTED',
   ...RUNNER_CODES,
+];
+
+/** Refusals of the app's free AI (KBC-022): the reader is offered their own AI. */
+export const OWN_AI_OFFER: readonly ResearchErrorCode[] = [
+  'HOUSE_QUOTA_EXHAUSTED',
+  'AI_CAPACITY_EXHAUSTED',
 ];
 
 export const toResearchErrorCode = (code: string): ResearchErrorCode =>

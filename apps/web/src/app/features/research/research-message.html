@@ -50,6 +50,16 @@
           >
         }
       </p>
+      @if (offerOwnAi()) {
+        <button
+          type="button"
+          class="secondary"
+          (click)="openOwnAi()"
+          i18n="@@ai.connectOwn"
+        >
+          Conectar a minha IA
+        </button>
+      }
       @if (capReached()) {
         <button
           type="button"
@@ -127,10 +137,20 @@
         <span i18n="@@ai.disclaimer"
           >Resposta gerada por IA a partir do acervo; confira nas fontes.</span
         >
+        @if (modelLabel()) {
+          <span i18n="@@ai.answeredBy">Respondido por {{ modelLabel() }}</span>
+        }
         @if (subscription()) {
           <span i18n="@@ai.subscription">Incluído na sua assinatura</span>
+        } @else if (free()) {
+          <span i18n="@@ai.free">Gratuito</span>
         } @else if (costLabel()) {
           <span i18n="@@ai.cost">Custo: {{ costLabel() }}</span>
+        }
+        @if (remaining() !== null) {
+          <span i18n="@@ai.remainingToday"
+            >Pesquisas restantes hoje: {{ remaining() }}</span
+          >
         }
       </p>
     }

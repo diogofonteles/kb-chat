@@ -1,3 +1,4 @@
+import { DOCUMENT, Location } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -46,6 +47,7 @@ export class SettingsHost {
   constructor() {
     // The shell loads settings once: the wizard decides from `exists` (BR-5).
     this.store.start();
+    this.readOpenRouterReturn();
     afterRenderEffect(() => {
       const dialog = this.dialog().nativeElement;
       const open = this.panel() !== null;
@@ -56,6 +58,14 @@ export class SettingsHost {
       }
       if (!open && dialog.open) dialog.close();
     });
+  }
+
+  /** OpenRouter sent the person back here: open where they were, then clean the address. */
+  private readOpenRouterReturn(): void {
+    const search = inject(DOCUMENT).defaultView?.location.search ?? '';
+    if (!this.store.returnFromOpenRouter(search)) return;
+    const location = inject(Location);
+    location.replaceState(location.path().split('?')[0] ?? '/');
   }
 
   protected close(): void {

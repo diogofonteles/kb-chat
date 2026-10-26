@@ -16,7 +16,7 @@ import {
   renderAnswer,
 } from '@features/answer/answer-format.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
-import { aiErrorMessage } from './research-errors.js';
+import { OWN_AI_OFFER, aiErrorMessage } from './research-errors.js';
 import { describeSteps, groupedSteps } from './research-steps.js';
 import {
   citedSources,
@@ -70,6 +70,19 @@ export class ResearchMessage {
   protected readonly subscription = computed(
     () => this.turn().billing === 'subscription',
   );
+  /** US$ 0 with the free models of the app's AI (KBC-022). */
+  protected readonly free = computed(() => this.turn().billing === 'free');
+  /** The model that answered (a fallback chain may hand over to another one). */
+  protected readonly modelLabel = computed(() => this.turn().model);
+  /** House plan: researches left today. */
+  protected readonly remaining = computed(() =>
+    this.turn().plan === 'house' ? this.turn().remaining : null,
+  );
+  /** A spent quota or no free capacity: offer the reader their own AI. */
+  protected readonly offerOwnAi = computed(() => {
+    const error = this.turn().error;
+    return error !== null && OWN_AI_OFFER.includes(error);
+  });
   /** Per-token providers report what the turn cost. */
   protected readonly costLabel = computed(() => {
     const usd = this.turn().usd;
@@ -79,7 +92,11 @@ export class ResearchMessage {
   protected readonly canRetry = computed(() => {
     const turn = this.turn();
     if (!this.last() || turn.restored) return false;
-    if (turn.phase === 'error') return turn.error !== 'DAILY_CAP_REACHED';
+    if (turn.phase === 'error')
+      return (
+        turn.error !== 'DAILY_CAP_REACHED' &&
+        turn.error !== 'HOUSE_QUOTA_EXHAUSTED'
+      );
     return turn.phase === 'done' && turn.interrupted;
   });
   protected readonly capReached = computed(
@@ -88,7 +105,12 @@ export class ResearchMessage {
   /** Only a stop after the answer started has spent something worth a notice. */
   protected readonly partialCost = computed(() => {
     const turn = this.turn();
-    return !turn.restored && !this.subscription() && turn.text.trim() !== '';
+    return (
+      !turn.restored &&
+      !this.subscription() &&
+      !this.free() &&
+      turn.text.trim() !== ''
+    );
   });
   protected readonly errorText = computed(() => {
     const code = this.turn().error;
@@ -97,6 +119,11 @@ export class ResearchMessage {
 
   protected openSettings(): void {
     this.settings.openSettings();
+  }
+
+  /** "Conectar a minha IA": Configurações at the AI section. */
+  protected openOwnAi(): void {
+    this.settings.openSettings('ai');
   }
 
   protected openCitation(event: MouseEvent): void {

@@ -24,6 +24,7 @@ import {
   BILLING_COPY,
   NOT_ENABLED,
   NOT_INSTALLED,
+  NOT_LENT,
   PROVIDER_COPY,
   PROVIDER_ORDER,
   TEST_COPY,
@@ -51,6 +52,8 @@ function blockedBy(info: ProviderInfo): ProviderOption['blocked'] {
     return { label: NOT_INSTALLED(), steps: copy.install() };
   if (info.reason === 'not-enabled' && copy.enable)
     return { label: NOT_ENABLED(), steps: copy.enable() };
+  if (info.reason === 'app-unavailable' && copy.enable)
+    return { label: NOT_LENT(), steps: copy.enable() };
   return null;
 }
 
@@ -196,7 +199,7 @@ export class AiProviderForm {
 
   protected test(): void {
     const { provider, key, fastModel: chosen } = this.draft();
-    if (provider === 'none') return;
+    if (provider === 'none' || provider === 'app') return;
     this.testState.set({ kind: 'running' });
     this.store
       .test({

@@ -365,3 +365,63 @@ describe('ResearchMessage', () => {
     expect(screen.getByText('(interrompida)')).toBeTruthy();
   });
 });
+
+describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
+  it('names the model that answered, says it was free and how many researches are left', async () => {
+    await renderMessage(
+      aTurn({
+        billing: 'free',
+        usd: 0,
+        model: 'fake/large:free',
+        plan: 'house',
+        remaining: 4,
+      }),
+    );
+    const footer = document.querySelector('.footer')?.textContent ?? '';
+    expect(footer).toContain('Respondido por fake/large:free');
+    expect(footer).toContain('Gratuito');
+    expect(footer).toContain('Pesquisas restantes hoje: 4');
+    expect(footer).not.toContain('Custo');
+  });
+
+  it('shows the cost of a paid fallback answer without the quota line for one’s own AI', async () => {
+    await renderMessage(
+      aTurn({
+        billing: 'per-token',
+        usd: 0.0042,
+        plan: 'own',
+        remaining: null,
+      }),
+    );
+    const footer = document.querySelector('.footer')?.textContent ?? '';
+    expect(footer).toContain('Custo');
+    expect(footer).not.toContain('restantes');
+  });
+
+  it('offers one’s own AI when the quota is spent, without "Tentar de novo"', async () => {
+    const { settings } = await renderMessage(
+      aTurn({ phase: 'error', text: '', error: 'HOUSE_QUOTA_EXHAUSTED' }),
+    );
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Suas pesquisas com IA de hoje acabaram',
+    );
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Conectar a minha IA' }),
+    );
+    expect(settings.openSettings).toHaveBeenCalledWith('ai');
+  });
+
+  it('explains a free capacity shortage and still lets the reader try again', async () => {
+    await renderMessage(
+      aTurn({ phase: 'error', text: '', error: 'AI_CAPACITY_EXHAUSTED' }),
+    );
+    expect(screen.getByRole('alert').textContent).toContain(
+      'sem capacidade agora',
+    );
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Conectar a minha IA' }),
+    ).toBeTruthy();
+  });
+});
