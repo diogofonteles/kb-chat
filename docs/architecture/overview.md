@@ -97,7 +97,7 @@ API modules, organised by business capability:
 | `catalog` | In-memory facet catalog per topic (facets, title, summary, concepts, relations, duplicate groups) | `getCatalog(topic)`, `facetCounts(ids)` |
 | `search` | Search modes, over-fetch and post-filter, duplicate grouping, snippet cleanup | `search(query)` |
 | `documents` | Document body without frontmatter, highlight positions, "see also" | `getDocument(topic, id)` |
-| `research` | Research agent (ADR 0006): tools over the index, summaries and relations, the tool loop | `ToolLoopRunner.run(turn)` (stream), `ResearchTools` |
+| `research` | Research agent (ADR 0006): tools over the index, summaries and relations, the tool loop; `find_text` is a paged grep with entity/origin filters, `list_sources`, and the exhaustive profile with compaction (ADR 0013) | `ToolLoopRunner.run(turn)` (stream), `ResearchTools` |
 | `spend` | Spend ledger, daily cap and credit checks (ADR 0004) | `SpendService.guard(usd)`, `record(turn)`, `today()` |
 | `usage` | Local event log for the research plan | `record(event)` |
 | `conversations` | The complete conversation history (search and research), no cap, keyed by principal | `list(principal, filter)`, `get(principal, id)`, `save(principal, conversation)`, `remove(principal, id)` |

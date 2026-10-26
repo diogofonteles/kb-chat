@@ -2,6 +2,7 @@
 
 - Status: accepted (2026-10-24)
 - Amends: [0006](0006-research-agent-over-kb-tools.md) (the narration rule, the step cap, the tools) and [0007](0007-ai-providers-and-local-settings.md) (one model per provider, the Claude subscription's default model)
+- Amended by: [0013](0013-exhaustive-research-grep-tools-and-compaction.md) (a third profile, `exhaustive`)
 - Drivers: KBC-011 (the owner's test: "achei um pouco demorado na resposta"), Q1 latency, Q4 grounding
 
 ## Context

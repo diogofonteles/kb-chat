@@ -2,7 +2,7 @@
 
 - Status: accepted (2026-10-24)
 - Supersedes: [0004](0004-grounded-answers-single-llm-call.md) for answers (its spend controls stay)
-- Amended by: [0009](0009-faster-research-profiles-and-streaming.md) (research profiles, `read_documents`, answers that stream at once with retract)
+- Amended by: [0009](0009-faster-research-profiles-and-streaming.md) (research profiles, `read_documents`, answers that stream at once with retract), [0013](0013-exhaustive-research-grep-tools-and-compaction.md) (`find_text` as a paged grep with filters, `list_sources`, `read_document` `limit`, the exhaustive profile)
 - Drivers: Q4 grounding, the owner's review of release 1 (2026-10-24), Q3 cost
 
 ## Context
