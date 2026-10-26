@@ -55,13 +55,27 @@ describe('ResearchMessage', () => {
         ],
       }),
     );
-    expect(screen.getByText('Pesquisador 1: Livros 1–60')).toBeTruthy();
-    const step = screen.getByText('Pesquisador 2: Lendo “Miasmas”');
-    expect(step.tagName).toBe('LI');
-    expect(step.classList.contains('sub')).toBe(true);
+    // Each delegation heads its sub-researcher's own steps, indented below it.
+    const items = [...document.querySelectorAll('details.steps li')].map(
+      (li) => [li.textContent?.trim(), li.classList.contains('sub')],
+    );
+    expect(items).toEqual([
+      ['Procurando o texto “obra”', false],
+      ['Pesquisador 1 — Livros 1–60', false],
+      ['Procurando o texto “livro”', true],
+      ['Pesquisador 2 — Livros 61–120', false],
+      ['Lendo “Miasmas”', true],
+    ]);
     expect(
       screen.getByText('Pesquisou 2 vezes · leu 1 documento · 2 pesquisadores'),
     ).toBeTruthy();
+  });
+
+  it('numbers a sub-researcher step whose delegation it never received', async () => {
+    await renderMessage(
+      aTurn({ steps: [{ kind: 'search', text: 'Procurando “x”', agent: 4 }] }),
+    );
+    expect(screen.getByText('Pesquisador 4: Procurando “x”')).toBeTruthy();
   });
 
   it('shows a delegation of the Claude Code path as it came, without a number', async () => {

@@ -137,10 +137,10 @@ test('KBC-018 AC-4: an exhaustive turn shows its sub-researchers in the steps an
   await expect(summary).toContainText('2 pesquisadores');
   await summary.click();
   await expect(
-    answer.getByText('Pesquisador 1: Primeira parte', { exact: true }),
+    answer.getByText('Pesquisador 1 — Primeira parte', { exact: true }),
   ).toBeVisible();
   await expect(
-    answer.getByText('Pesquisador 2: Segunda parte', { exact: true }),
+    answer.getByText('Pesquisador 2 — Segunda parte', { exact: true }),
   ).toBeVisible();
   await expect(answer.locator('li.sub').first()).toBeVisible();
   // The answer cites a document a sub-researcher read, listed among the sources.

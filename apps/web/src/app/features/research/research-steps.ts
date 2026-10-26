@@ -80,3 +80,54 @@ const documentsRead = (steps: readonly TurnStep[]): number =>
       s.kind === 'read' ? [('document' in s && s.document) || s.text] : [],
     ),
   ).size;
+
+/** One line of the expanded steps list. */
+export interface StepItem {
+  readonly text: string;
+  readonly thought: boolean;
+  /** A sub-researcher's step, listed under its delegation (KBC-018). */
+  readonly sub: boolean;
+}
+
+const headText = (step: TurnStep, agent: number): string =>
+  $localize`:@@research.agentHead:Pesquisador ${agent}:agent: — ${step.text}:title:`;
+
+/**
+ * The expanded steps, grouped (KBC-018, ADR 0014): each sub-researcher's delegation is a
+ * heading line followed by its own steps, indented, in the order they came; the main
+ * agent's steps keep their place.
+ */
+export function groupedSteps(steps: readonly TurnStep[]): StepItem[] {
+  const byAgent = new Map<number, TurnStep[]>();
+  for (const step of steps) {
+    const agent = agentOf(step);
+    if (agent !== null && step.kind !== 'delegate')
+      byAgent.set(agent, [...(byAgent.get(agent) ?? []), step]);
+  }
+  const headed = new Set<number>();
+  return steps.flatMap((step): StepItem[] => {
+    const agent = agentOf(step);
+    if (agent === null)
+      return [
+        { text: stepText(step), thought: step.kind === 'thought', sub: false },
+      ];
+    if (step.kind !== 'delegate')
+      // Shown under its delegation; one without a heading still shows, numbered.
+      return byAgent.has(agent) && !headed.has(agent) && !hasHead(steps, agent)
+        ? [{ text: stepText(step), thought: false, sub: false }]
+        : [];
+    headed.add(agent);
+    const own = (byAgent.get(agent) ?? []).map((s) => ({
+      text: s.text,
+      thought: false,
+      sub: true,
+    }));
+    return [
+      { text: headText(step, agent), thought: false, sub: false },
+      ...own,
+    ];
+  });
+}
+
+const hasHead = (steps: readonly TurnStep[], agent: number): boolean =>
+  steps.some((s) => s.kind === 'delegate' && agentOf(s) === agent);
