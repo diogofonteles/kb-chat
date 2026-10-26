@@ -36,7 +36,7 @@ assertSignInConfigured(config);
 assertDeliveryConfigured(config);
 assertAiConfigured(config);
 const logger = createLogger(config.LOG_LEVEL);
-// Every provider key on disk is sealed with this key (ADR 0016).
+// Every provider key on disk is sealed with this key (ADR 0017).
 const sealer = new SecretBox(
   await loadSecretsKey({
     configured: config.KB_CHAT_SECRETS_KEY,

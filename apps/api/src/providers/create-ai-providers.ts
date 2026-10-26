@@ -75,6 +75,7 @@ function appAiOf(options: AiProvidersOptions): AppAiPlan | undefined {
     personOf,
     perTokenRunner: options.perTokenRunner,
     fetch: house.fetch ?? options.fetch,
+    warn: options.warn,
   });
 }
 

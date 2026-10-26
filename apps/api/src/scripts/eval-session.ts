@@ -55,7 +55,7 @@ async function composeAgent(config: AppConfig) {
   };
 }
 
-/** The owner's settings, read with the master key the API sealed them with (ADR 0016). */
+/** The owner's settings, read with the master key the API sealed them with (ADR 0017). */
 async function sealedSettings(config: AppConfig): Promise<SealedSettingsStore> {
   const key = await loadSecretsKey({
     configured: config.KB_CHAT_SECRETS_KEY,

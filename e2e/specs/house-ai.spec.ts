@@ -74,6 +74,12 @@ test('AC-1, AC-8, AC-4: a master connects OpenRouter, lends the house plan to on
   ).toBeVisible();
   await expect(answer.getByText('Gratuito', { exact: true })).toBeVisible();
   await expect(answer.getByText('Pesquisas restantes hoje: 4')).toBeVisible();
+  // The side panel shows the researches left, not a spend in US$ the person does not pay.
+  if (!desktop(person))
+    await person.getByRole('button', { name: 'Menu' }).click();
+  await expect(
+    person.getByText(/Gratuita · 4 de 5 pesquisas hoje/),
+  ).toBeVisible();
   await person.context().close();
   await owner.dispose();
 });

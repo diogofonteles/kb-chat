@@ -7,7 +7,7 @@ import {
 } from '@kb-chat/contracts';
 import { z } from 'zod';
 
-/** A key kept sealed (ADR 0016): `value` is `enc:v1:…`, never the key itself. */
+/** A key kept sealed (ADR 0017): `value` is `enc:v1:…`, never the key itself. */
 const sealedSchema = z.string().min(1);
 
 const connectionSchema = z.object({

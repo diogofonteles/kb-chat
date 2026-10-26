@@ -1,10 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
+  inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   APP_AI_ASSIGNMENTS,
@@ -41,6 +46,11 @@ export class AiAssignmentBar {
   readonly defaultAppAi = input<AppAi | null>(null);
   readonly busy = input(false);
   readonly apply = output<AssignmentRequest>();
+  private readonly injector = inject(Injector);
+  private readonly allButton =
+    viewChild<ElementRef<HTMLButtonElement>>('allButton');
+  private readonly cancelButton =
+    viewChild<ElementRef<HTMLButtonElement>>('cancelButton');
 
   protected readonly appAi = signal<AppAiAssignment>('house');
   protected readonly alsoDefault = signal(false);
@@ -59,16 +69,31 @@ export class AiAssignmentBar {
   /** The default can only become an AI, not "default" itself. */
   protected readonly canSetDefault = computed(() => this.appAi() !== 'default');
 
+  private focusAfterRender(
+    target: () => ElementRef<HTMLButtonElement> | undefined,
+  ): void {
+    afterNextRender(() => target()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
+  }
+
   protected choose(value: string): void {
     if (isAssignment(value)) this.appAi.set(value);
   }
 
+  /** The confirmation replaces the button that had focus: focus follows it (WCAG 2.4.3). */
   protected askAll(): void {
     this.confirmingAll.set(true);
+    this.focusAfterRender(() => this.cancelButton());
+  }
+
+  protected cancelAll(): void {
+    this.confirmingAll.set(false);
+    this.focusAfterRender(() => this.allButton());
   }
 
   protected applyTo(target: AssignmentRequest['target']): void {
-    this.confirmingAll.set(false);
+    if (this.confirmingAll()) this.cancelAll();
     const setDefault =
       target === 'all' && this.alsoDefault() && this.canSetDefault();
     this.apply.emit({ target, appAi: this.appAi(), setDefault });

@@ -14,20 +14,28 @@ import {
   type Reservation,
 } from '../modules/house-ai/index.js';
 
-export interface HouseRunnerDeps {
+/** The pieces of one running turn, made only when it starts (no state for a mere check). */
+export interface HouseTurn {
   /** The tool loop over the house model, spending on the house ledger. */
   readonly inner: ResearchRunnerPort;
+  /** The person's paid fallback can answer when the free requests run out. */
+  readonly paidActive: boolean;
+  /** Runs once the turn is over, whatever its end. */
+  readonly finish: () => void;
+}
+
+export interface HouseRunnerDeps {
+  /** The house model as it stands now: its name and whether it can answer. */
+  readonly preview: ResearchRunnerPort;
   readonly quota: HouseQuota;
   readonly principal: string;
   readonly dailyLimit: number;
   /** Today's free requests of the house account; null when unknown (then not checked). */
   readonly capacity: () => Promise<FreeUsage | null>;
-  /** The person's paid fallback can answer when the free requests run out. */
-  readonly paidActive: boolean;
-  /** Loads what the chain needs (the live free-model list) before the first call. */
+  /** Loads what the chain needs (the live list, the person's key) before the turn. */
   readonly prepare?: () => Promise<void>;
-  /** Runs once the turn is over, whatever its end. */
-  readonly finish?: () => void;
+  /** Builds the turn after `prepare`, with the person's current key. */
+  readonly startTurn: () => HouseTurn;
 }
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
@@ -51,24 +59,28 @@ export class HouseResearchRunner implements ResearchRunnerPort {
   constructor(private readonly deps: HouseRunnerDeps) {}
 
   get model(): string {
-    return this.deps.inner.model;
+    return this.deps.preview.model;
   }
 
   configured(): boolean {
-    return this.deps.inner.configured();
+    return this.deps.preview.configured();
   }
 
   async *run(input: ResearchInput): AsyncIterable<ResearchEvent> {
+    await this.deps.prepare?.();
+    const turn = this.deps.startTurn();
     try {
-      yield* this.turn(input);
+      yield* this.turn(input, turn);
     } finally {
-      this.deps.finish?.();
+      turn.finish();
     }
   }
 
-  private async *turn(input: ResearchInput): AsyncIterable<ResearchEvent> {
-    await this.deps.prepare?.();
-    const refusal = await this.capacityRefusal(input.profile);
+  private async *turn(
+    input: ResearchInput,
+    turn: HouseTurn,
+  ): AsyncIterable<ResearchEvent> {
+    const refusal = await this.capacityRefusal(input.profile, turn.paidActive);
     if (refusal) {
       yield { type: 'error', code: refusal };
       return;
@@ -86,15 +98,20 @@ export class HouseResearchRunner implements ResearchRunnerPort {
         : { type: 'error', code };
       return;
     }
-    yield* this.relay(input, reservation);
+    yield* this.relay({ input, reservation, inner: turn.inner });
   }
 
-  private async *relay(
-    input: ResearchInput,
-    reservation: Reservation,
-  ): AsyncIterable<ResearchEvent> {
+  private async *relay({
+    input,
+    reservation,
+    inner,
+  }: {
+    input: ResearchInput;
+    reservation: Reservation;
+    inner: ResearchRunnerPort;
+  }): AsyncIterable<ResearchEvent> {
     let answered = false;
-    for await (const event of this.deps.inner.run(input)) {
+    for await (const event of inner.run(input)) {
       answered ||= ANSWERED.has(event.type);
       if (event.type === 'error' && !answered) await reservation.refund();
       yield event.type === 'done' ? this.labelled(event, reservation) : event;
@@ -113,8 +130,9 @@ export class HouseResearchRunner implements ResearchRunnerPort {
   /** Not enough free requests left today for this profile (and no paid fallback). */
   private async capacityRefusal(
     profile: ResearchProfile,
+    paidActive: boolean,
   ): Promise<'AI_CAPACITY_EXHAUSTED' | null> {
-    if (this.deps.paidActive) return null;
+    if (paidActive) return null;
     const usage = await this.deps.capacity();
     return usage && usage.remaining < CAPACITY_NEEDED[profile]
       ? 'AI_CAPACITY_EXHAUSTED'

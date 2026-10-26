@@ -64,6 +64,9 @@ export interface AppAiPlanDeps {
   readonly perTokenRunner?: PerTokenRunnerFactory;
   readonly fetch?: typeof fetch;
   readonly now?: () => Date;
+  readonly warn?: (message: string) => void;
+  /** The paid spend in flight (a test may read it). */
+  readonly meters?: PaidMeters;
   /** More app AIs beside the house plan (KBC-024, KBC-027). */
   readonly handlers?: Partial<Record<LentAi, AppAiHandler>>;
 }
@@ -74,10 +77,11 @@ const startOfMonth = (now: Date): Date =>
 /** The house plan behind the registry: assignment, model chain, quota and spend (ADR 0016). */
 export class AppAiPlan implements AppAiPort {
   private readonly handlers: Partial<Record<LentAi, AppAiHandler>>;
-  private readonly meters = new PaidMeters();
+  private readonly meters: PaidMeters;
 
   constructor(private readonly deps: AppAiPlanDeps) {
     this.handlers = { ...deps.handlers, house: this.houseHandler() };
+    this.meters = deps.meters ?? new PaidMeters();
   }
 
   assignment(principal: string): AppAiAssignment {
@@ -136,23 +140,29 @@ export class AppAiPlan implements AppAiPort {
   private houseRunner(principal: string): ResearchRunnerPort {
     const loop = this.deps.perTokenRunner;
     if (!loop) return new DisabledResearchRunner();
-    const meter = this.meters.openTurn(principal);
-    // No escalation on the house plan: a fast turn counts 1 and spends a fast budget.
-    const inner = loop(this.houseLlm(principal, meter), {
+    const scope = {
       principal,
       dailyCapUsd: () => Number.POSITIVE_INFINITY,
       ledger: this.deps.houseSpend,
-    });
+    };
     return new HouseResearchRunner({
-      inner,
+      // Name and readiness only: nothing is registered until a turn starts.
+      preview: loop(this.houseLlm(principal), scope),
       quota: this.deps.quota,
       principal,
       dailyLimit: this.dailyLimit(principal),
       capacity: () => this.deps.house.freeUsage(),
-      paidActive: this.paidGate(principal, meter) !== null,
       prepare: () => this.prepareTurn(principal),
-      // The turn's spend is in the house ledger by now: stop counting it in flight.
-      finish: () => this.meters.close(principal, meter),
+      startTurn: () => {
+        const meter = this.meters.openTurn(principal);
+        return {
+          // No escalation on the house plan: a fast turn counts 1 and spends a fast budget.
+          inner: loop(this.houseLlm(principal, meter), scope),
+          paidActive: this.paidGate(principal, meter) !== null,
+          // The turn's spend is in the house ledger by now: stop counting it in flight.
+          finish: () => this.meters.close(principal, meter),
+        };
+      },
     });
   }
 
@@ -166,7 +176,12 @@ export class AppAiPlan implements AppAiPort {
     if (!viewer) return;
     await this.deps.house
       .syncPersonKey(viewer.person, this.aiOf(principal))
-      .catch(() => undefined);
+      .catch((err: unknown) =>
+        // The turn goes on with the house key; the app's meter still guards the cap.
+        this.deps.warn?.(
+          `could not provision the OpenRouter key of person ${viewer.person.id} (${err instanceof Error ? err.name : 'unknown'})`,
+        ),
+      );
   }
 
   async quotaOf(

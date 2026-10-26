@@ -32,6 +32,17 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'a todas as 3 pessoas',
     );
+    // Focus follows the confirmation, and goes back on "Cancelar".
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancelar');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent?.trim()).toBe(
+      'Aplicar a todos os usuários',
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aplicar a todos os usuários' }),
+    );
+    await fixture.whenStable();
     expect(apply).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar a todos' }));
     expect(apply).toHaveBeenLastCalledWith({

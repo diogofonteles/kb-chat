@@ -309,7 +309,9 @@
       (change)="setDefaultDaily(dailyInput.value)"
     />
     @if (dailyError(); as error) {
-      <p id="house-daily-error" class="field-error" role="alert">{{ error }}</p>
+      <p id="house-daily-error" class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ error }}
+      </p>
     }
     <p id="house-daily-hint" class="hint" i18n="@@house.dailyHint">
       Rápido conta 1, Profundo 2, Exaustivo 5. Cada pessoa pode ter outro

@@ -43,7 +43,9 @@
     />
   </label>
   @if (dailyError(); as error) {
-    <p id="person-daily-error" class="field-error" role="alert">{{ error }}</p>
+    <p id="person-daily-error" class="field-error" role="alert">
+      <span aria-hidden="true">⚠</span> {{ error }}
+    </p>
   }
   <label class="check">
     <input
@@ -72,7 +74,9 @@
       />
     </label>
     @if (capError(); as error) {
-      <p id="person-cap-error" class="field-error" role="alert">{{ error }}</p>
+      <p id="person-cap-error" class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ error }}
+      </p>
     }
   }
 </fieldset>

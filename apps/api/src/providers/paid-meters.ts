@@ -28,6 +28,11 @@ export class PaidMeters {
     if (set?.size === 0) this.open.delete(principal);
   }
 
+  /** Open turns of the principal (a turn is open from its start to its record). */
+  openCount(principal: string): number {
+    return this.open.get(principal)?.size ?? 0;
+  }
+
   pending(principal: string): number {
     let total = 0;
     for (const meter of this.open.get(principal) ?? [])

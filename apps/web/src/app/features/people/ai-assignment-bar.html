@@ -24,6 +24,7 @@
     </button>
     @if (!confirmingAll()) {
       <button
+        #allButton
         type="button"
         class="secondary"
         [disabled]="busy()"
@@ -51,9 +52,10 @@
           Aplicar a todos
         </button>
         <button
+          #cancelButton
           type="button"
           class="secondary"
-          (click)="confirmingAll.set(false)"
+          (click)="cancelAll()"
           i18n="@@assign.cancel"
         >
           Cancelar

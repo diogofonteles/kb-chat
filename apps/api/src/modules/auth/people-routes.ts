@@ -135,12 +135,17 @@ async function syncAi(
   try {
     await deps.ai.sync(change.updated, aiOf(change.updated));
   } catch (err) {
-    const paidFallback = aiOf(change.before).paidFallback;
-    await deps.people.update(
-      change.updated.id,
-      { ai: { paidFallback } },
-      change.by,
+    // The whole AI part goes back; a failed compensation never hides the first error.
+    const { appAi, enforced, dailyResearches, paidFallback } = aiOf(
+      change.before,
     );
+    await deps.people
+      .update(
+        change.updated.id,
+        { ai: { appAi, enforced, dailyResearches, paidFallback } },
+        change.by,
+      )
+      .catch(() => undefined);
     throw err;
   }
 }

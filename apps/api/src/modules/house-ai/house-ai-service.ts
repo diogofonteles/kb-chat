@@ -53,6 +53,7 @@ export class HouseAiService {
   private config: HouseConfig = DEFAULT_HOUSE_CONFIG;
   private writing: Promise<unknown> = Promise.resolve();
   private usage: { value: FreeUsage | null; at: number } | null = null;
+  private readonly syncing = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: HouseAiServiceDeps) {}
 
@@ -231,6 +232,19 @@ export class HouseAiService {
    * management key, a key with a monthly limit while the fallback is on, none when off.
    */
   async syncPersonKey(holder: KeyHolder, next: PersonAi): Promise<void> {
+    // One sync per person at a time: two turns starting together make one key, not two.
+    const previous = this.syncing.get(holder.id) ?? Promise.resolve();
+    const run = previous.then(() => this.syncNow(holder, next));
+    const settled = run.catch(() => undefined);
+    this.syncing.set(holder.id, settled);
+    void settled.then(() => {
+      if (this.syncing.get(holder.id) === settled)
+        this.syncing.delete(holder.id);
+    });
+    return run;
+  }
+
+  private async syncNow(holder: KeyHolder, next: PersonAi): Promise<void> {
     const management = this.openKey(this.config.managementKey?.key, MANAGEMENT);
     if (!management) return;
     const current = this.config.personKeys[holder.id];

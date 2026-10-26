@@ -12,7 +12,7 @@ import {
 
 const key = () => randomBytes(32);
 
-describe('SecretBox (ADR 0016)', () => {
+describe('SecretBox (ADR 0017)', () => {
   it('seals with AES-256-GCM and opens back, with a fresh IV per value', () => {
     const box = new SecretBox(key());
     const a = box.seal('sk-or-v1-secret', 'ctx');

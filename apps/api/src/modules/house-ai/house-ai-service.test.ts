@@ -100,6 +100,19 @@ describe('HouseAiService', () => {
     });
   });
 
+  it('makes one key when two turns of a person sync at once', async () => {
+    const { fake, service } = await setup();
+    await service.update(
+      { key: 'sk-or-v1-house-valid', managementKey: 'mgmt-key-1' },
+      'm',
+    );
+    await Promise.all([
+      service.syncPersonKey(holder, paid(true, 2)),
+      service.syncPersonKey(holder, paid(true, 2)),
+    ]);
+    expect(fake.createdKeys.size).toBe(1);
+  });
+
   it('drops the keys made on the old account when the house account changes', async () => {
     const { fake, service } = await setup();
     await service.update(
