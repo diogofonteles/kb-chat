@@ -105,7 +105,7 @@ write_files:
       RequiresMountsFor=/srv/kb-chat
 
   # Everything that needs the network or the volume, in order. The done marker is written
-  # only when Docker, the OCI CLI and the mount are verified; bootstrap-vm.sh checks it.
+  # only when Docker, the OCI CLI, the mount and the two timers are verified; bootstrap-vm.sh checks it.
   - path: /usr/local/sbin/kb-chat-setup
     permissions: '0755'
     content: |
@@ -169,7 +169,9 @@ write_files:
       log "verifying"
       mountpoint -q /srv/kb-chat
       systemctl is-active --quiet docker
-      systemctl is-active --quiet kb-chat-backup.timer kb-chat-sweep-sessions.timer
+      # One unit per call: with several, is-active succeeds when any one of them is active.
+      systemctl is-active --quiet kb-chat-backup.timer
+      systemctl is-active --quiet kb-chat-sweep-sessions.timer
       docker compose version
       /usr/local/bin/oci --version
       touch /var/lib/kb-chat-cloud-init-done

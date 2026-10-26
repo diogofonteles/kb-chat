@@ -55,7 +55,7 @@ deploy/oci/provision.sh --env ~/.config/kb-chat/oci.env --apply    # cria o que 
 - **"Out of host capacity"**: é falta temporária de A1 na região. Tente outro `AVAILABILITY_DOMAIN` ou mais tarde, e rode de novo; ele continua de onde parou.
 - Anote o **IP público reservado** e o **namespace** impressos no fim.
 
-Espere o cloud-init terminar, uns 5–10 min. O script `kb-chat-setup` espera a saída para a internet (o IP reservado), monta o volume e só grava o marcador de pronto quando Docker, compose, OCI CLI e o volume estão confirmados. Sem o marcador, veja `/var/log/cloud-init-output.log`:
+Espere o cloud-init terminar, uns 5–10 min. O script `kb-chat-setup` espera a saída para a internet (o IP reservado), monta o volume e só grava o marcador de pronto quando Docker, compose, OCI CLI, o volume e os timers de backup e de sessões estão confirmados. Sem o marcador, veja `/var/log/cloud-init-output.log`:
 
 ```bash
 ssh ubuntu@<IP> 'cloud-init status --wait; test -f /var/lib/kb-chat-cloud-init-done && echo pronto'
@@ -139,7 +139,7 @@ EOF
 sudo chmod 0600 /srv/kb-chat/deploy/backup.env
 sudo /srv/kb-chat/deploy/scripts/backup-state.sh --dry-run
 sudo systemctl start kb-chat-backup && sudo /srv/kb-chat/deploy/scripts/deploy.sh --status   # backup=ok ...
-systemctl list-timers --no-pager | grep kb-chat   # backup e limpeza de sessões com horário em NEXT
+systemctl list-timers --no-pager 'kb-chat-*'   # duas linhas (backup e sessões), ambas com horário em NEXT
 ```
 
 👤 **DONO:** confirme o e-mail "Oracle Cloud Notifications" que chega depois do `provision.sh --apply`. Sem a confirmação, o alarme "backup ausente há 48 h" não chega.
