@@ -137,3 +137,31 @@ button:disabled {
   font-weight: 600;
   color: var(--color-danger);
 }
+
+/* Lending the owner's subscription: the terms before the choice is saved (KBC-024). */
+.lend-confirm {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+
+.lend-confirm p,
+.hint {
+  margin: 0;
+}
+
+.hint {
+  color: var(--color-text-muted);
+}
+
+.lend-title {
+  font-weight: 600;
+}
+
+/* Side by side on a phone too (design D13). */
+.lend-confirm .actions > button {
+  flex: 1 1 0;
+  min-width: 0;
+}

@@ -8,8 +8,9 @@ import type { SettingsStorePort } from '../ports/settings-store.js';
 import type { SpendLedgerPort } from '../ports/spend-ledger.js';
 import type { HouseAi } from '../house-ai-factory.js';
 import type { Viewer } from '../modules/auth/index.js';
-import { AppAiPlan } from './app-ai-plan.js';
-import { DynamicLlm } from './dynamic-ports.js';
+import { AppAiPlan, type LendableSubscription } from './app-ai-plan.js';
+import { DisabledLlm } from '../adapters/disabled-llm.js';
+import { DisabledResearchRunner, DynamicLlm } from './dynamic-ports.js';
 import { ProviderRegistry } from './provider-registry.js';
 
 export interface AiProvidersOptions {
@@ -43,6 +44,11 @@ export interface AiProvidersOptions {
   readonly personOf?: (principal: string) => Viewer | null;
   /** The own spend ledger: today's spend bounds one's own paid fallback (KBC-023). */
   readonly ledger?: SpendLedgerPort;
+  /**
+   * The owner's subscription as lent to people (KBC-024); default: the registry's, from the
+   * owner's CLI. The E2E server passes one over the stub, as it has no CLI.
+   */
+  readonly claudeSubscription?: LendableSubscription;
 }
 
 /** Settings, the provider registry and the per-request ports built on them (ADR 0007). */
@@ -52,6 +58,8 @@ export interface AiProviders {
   readonly turns: McpTurnRegistry;
   /** The current provider's model, resolved on every call (FR-5). */
   readonly llm: DynamicLlm;
+  /** The owner's subscription as it is lent to people (KBC-024). */
+  readonly lentSubscription: LendableSubscription;
 }
 
 async function loadSettings(
@@ -70,11 +78,15 @@ async function loadSettings(
 const spentTodayOf = (ledger: SpendLedgerPort | undefined) =>
   ledger ? (principal: string) => ledger.spentToday(principal) : undefined;
 
-/** The app-owned AIs (KBC-022) over the house plan, when the caller gave one. */
-function appAiOf(options: AiProvidersOptions): AppAiPlan | undefined {
+/** The app-owned AIs (KBC-022, KBC-024) over the house plan, when the caller gave one. */
+function appAiOf(
+  options: AiProvidersOptions,
+  claudeSubscription: LendableSubscription,
+): AppAiPlan | undefined {
   const { house, personOf } = options;
   if (!house || !personOf) return undefined;
   return new AppAiPlan({
+    claudeSubscription,
     house: house.service,
     catalog: house.catalog,
     quota: house.quota,
@@ -86,16 +98,38 @@ function appAiOf(options: AiProvidersOptions): AppAiPlan | undefined {
   });
 }
 
-export async function createAiProviders(
+/**
+ * The lent subscription for the plan, built before the registry that makes it: the caller's,
+ * else the registry's once it exists (bound late).
+ */
+function lateSubscription(
   options: AiProvidersOptions,
-): Promise<AiProviders> {
+  lazy: { registry?: ProviderRegistry },
+): LendableSubscription {
+  const lent = (): LendableSubscription | undefined =>
+    options.claudeSubscription ?? lazy.registry?.lendableSubscription();
+  return {
+    available: () => lent()?.available() ?? false,
+    llm: () => lent()?.llm() ?? new DisabledLlm(),
+    runner: (profile) =>
+      lent()?.runner(profile) ?? new DisabledResearchRunner(),
+    failed: (code) => lent()?.failed(code),
+  };
+}
+
+/** The registry over the settings, the turns and the app AIs (ADR 0007, ADR 0016). */
+function buildRegistry(
+  options: AiProvidersOptions,
+  wiring: {
+    settings: SettingsService;
+    turns: McpTurnRegistry;
+    appAi?: AppAiPlan;
+  },
+): ProviderRegistry {
   const { config } = options;
-  const settings = await loadSettings(options);
-  const turns = options.turns ?? new McpTurnRegistry();
-  const registry = new ProviderRegistry({
+  return new ProviderRegistry({
     config,
-    settings,
-    turns,
+    ...wiring,
     apiBaseUrl: options.apiBaseUrl ?? `http://127.0.0.1:${config.PORT}`,
     env: options.env,
     fetch: options.fetch,
@@ -104,15 +138,30 @@ export async function createAiProviders(
     systemPrompt: options.systemPrompt,
     subAgentPrompt: options.subAgentPrompt,
     ownerPrincipal: options.ownerPrincipal,
-    appAi: appAiOf(options),
     freeModels: options.house?.catalog,
     spentToday: spentTodayOf(options.ledger),
   });
+}
+
+export async function createAiProviders(
+  options: AiProvidersOptions,
+): Promise<AiProviders> {
+  const settings = await loadSettings(options);
+  const turns = options.turns ?? new McpTurnRegistry();
+  const lazy: { registry?: ProviderRegistry } = {};
+  const lentSubscription = lateSubscription(options, lazy);
+  const registry = buildRegistry(options, {
+    settings,
+    turns,
+    appAi: appAiOf(options, lentSubscription),
+  });
+  lazy.registry = registry;
   await registry.refreshCliLookup();
   return {
     settings,
     registry,
     turns,
     llm: new DynamicLlm(() => registry.llm(options.principal)),
+    lentSubscription,
   };
 }

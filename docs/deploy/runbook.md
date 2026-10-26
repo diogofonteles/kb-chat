@@ -221,11 +221,11 @@ Ele confere: `/health`; a página com CSP e HSTS; `/mcp` 404; `/api/v1/topics` 4
 
 ## 9. 👤 DONO — login do Claude (opcional)
 
-Só o dono usa a própria assinatura (KBC-010 BR-5).
+A assinatura é do dono (KBC-010 BR-5); desde o KBC-024 ele pode cedê-la, por decisão própria, a pessoas escolhidas (ADR 0019).
 
 - Os termos do Claude Code permitem entrar com a **própria** assinatura no binário oficial, mesmo hospedado.
-- Eles **proíbem** atender outras pessoas com ela.
-- Convidados usam as próprias chaves.
+- Eles **proíbem** atender outras pessoas com ela. Ceder a alguém (Pessoas e permissões → "Claude do administrador") é um risco que o dono assume a cada confirmação: pode levar a limites ou ao bloqueio da conta.
+- Os convidados usam o plano da casa ou as próprias chaves, salvo a quem o dono ceder a assinatura.
 
 ```bash
 ssh -t ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env exec api claude'
@@ -233,6 +233,10 @@ ssh -t ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .en
 ```
 
 O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, em ⚙ Configurações → "Assinatura do Claude" → "Testar conexão".
+
+**Assinatura cedida (KBC-024):**
+- Se o login cair, cada pesquisa cedida falha com "faça login" e a assinatura fica indisponível por 10 minutos: quem a recebeu passa para a própria IA (ou fica sem IA) e a tela de pessoas avisa "não está disponível agora". Refaça o login com o comando acima e teste a conexão.
+- Antes de voltar para uma versão anterior ao KBC-024 (rollback), revogue todas as cessões (Pessoas e permissões → outra IA): a versão anterior não lê `claude-subscription` no `people.json`, e as respostas salvas da assinatura cedida ficam ilegíveis até a volta da versão nova.
 
 ## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
 

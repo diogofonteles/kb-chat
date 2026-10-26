@@ -75,3 +75,31 @@
   color: var(--color-danger);
   font-weight: 600;
 }
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Lending the owner's subscription: the same pattern as in the person's editor (design D10). */
+.lend-confirm {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+
+.lend-confirm p {
+  margin: 0;
+}
+
+.lend-title {
+  font-weight: 600;
+}
+
+.lend-confirm .actions > button {
+  flex: 1 1 0;
+  min-width: 0;
+}

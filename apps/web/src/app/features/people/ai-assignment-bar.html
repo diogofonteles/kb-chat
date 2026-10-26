@@ -4,7 +4,14 @@
   </p>
   <label class="field">
     <span i18n="@@assign.which">IA</span>
-    <select #which class="select" (change)="choose(which.value)">
+    <select
+      #which
+      class="select"
+      [attr.aria-describedby]="
+        unavailableNote() ? 'lend-unavailable-bulk' : null
+      "
+      (change)="choose(which.value)"
+    >
       @for (option of options(); track option.id) {
         <option [value]="option.id" [selected]="option.id === appAi()">
           {{ option.label }}
@@ -12,8 +19,12 @@
       }
     </select>
   </label>
+  @if (unavailableNote(); as note) {
+    <p id="lend-unavailable-bulk" class="note">{{ note }}</p>
+  }
   <div class="actions">
     <button
+      #selectedButton
       type="button"
       class="secondary"
       [disabled]="busy() || selectedCount() === 0"
@@ -63,16 +74,51 @@
       </div>
     </div>
   }
+  @if (confirmingLend()) {
+    <div
+      class="lend-confirm"
+      role="group"
+      aria-labelledby="lend-title-bulk"
+      aria-describedby="lend-terms-bulk"
+    >
+      <p id="lend-title-bulk" class="lend-title">{{ lendTitle() }}</p>
+      <p id="lend-terms-bulk">{{ terms() }}</p>
+      <div class="actions">
+        <button
+          type="button"
+          class="secondary danger"
+          [disabled]="busy() || lendEmpty()"
+          (click)="lend()"
+          i18n="@@lend.confirm"
+        >
+          Ceder assim mesmo
+        </button>
+        <button
+          #cancelLendButton
+          type="button"
+          class="secondary"
+          (click)="cancelLend()"
+          i18n="@@lend.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  }
   <label class="check">
     <input
       #defaultBox
       type="checkbox"
       [checked]="alsoDefault() && canSetDefault()"
       [disabled]="!canSetDefault()"
+      [attr.aria-describedby]="noDefaultNote() ? 'lend-no-default' : null"
       (change)="alsoDefault.set(defaultBox.checked)"
     />
     <span i18n="@@assign.alsoDefault"
       >Com "todos": também para os próximos convidados</span
     >
   </label>
+  @if (noDefaultNote(); as note) {
+    <p id="lend-no-default" class="note">{{ note }}</p>
+  }
 </div>

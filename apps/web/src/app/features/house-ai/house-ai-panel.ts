@@ -14,7 +14,7 @@ import {
   DEFAULT_DAILY_RESEARCHES,
   MAX_DAILY_RESEARCHES,
   OPENROUTER_FREE_ROUTER,
-  type AppAi,
+  type DefaultableAppAi,
   type HouseAiUpdate,
   type HouseAiView,
 } from '@kb-chat/contracts';
@@ -187,7 +187,7 @@ export class HouseAiPanel {
     this.save({ paidModel: model || null });
   }
 
-  protected setDefaultAppAi(appAi: AppAi): void {
+  protected setDefaultAppAi(appAi: DefaultableAppAi): void {
     this.save({ defaultAppAi: appAi });
   }
 

@@ -222,6 +222,7 @@ describe('The AI access policy (KBC-022 AC-8, AC-12, AC-13)', () => {
     expect(unknown.statusCode).toBe(404);
     expect((await owner('GET', '/api/v1/house-ai/default')).json()).toEqual({
       defaultAppAi: 'none',
+      subscriptionAvailable: false,
     });
     expect(
       (await owner('GET', '/api/v1/house-ai')).json().defaultChange,

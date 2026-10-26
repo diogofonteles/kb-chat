@@ -123,6 +123,8 @@ export class PeopleService {
     request: {
       readonly ids: 'all' | readonly string[];
       readonly appAi: AppAiAssignment;
+      /** Lending a subscription: its terms were confirmed (KBC-024). */
+      readonly subscriptionTermsAccepted?: true;
     },
     by: string,
   ): Promise<number> {

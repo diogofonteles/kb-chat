@@ -18,7 +18,8 @@ import {
   type ResearchEvent,
 } from '@kb-chat/contracts';
 import pino from 'pino';
-import { FIXTURE_VAULT } from './fixture-paths.js';
+import { FAKES_DIR, FIXTURE_VAULT } from './fixture-paths.js';
+import { freePort } from './free-port.js';
 import {
   TEST_CLIENT_ID,
   createTestKeys,
@@ -70,8 +71,22 @@ export async function closeApp(): Promise<void> {
   current = null;
 }
 
-function testConfig(state: string) {
+/** Options of `start()`: `claude` runs the fake Claude CLI, reached over a real port. */
+export interface StartOptions {
+  readonly claude?: boolean;
+  /** An existing state folder (a restart over the same files). */
+  readonly state?: string;
+}
+
+async function testConfig(state: string, options: StartOptions) {
+  const cli = options.claude
+    ? {
+        CLAUDE_BIN: join(FAKES_DIR, 'fake-claude.mjs'),
+        PORT: String(await freePort()),
+      }
+    : {};
   return loadConfig({
+    ...cli,
     KB_VAULT: FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
     KB_CHAT_STATE_DIR: state,
@@ -128,10 +143,12 @@ interface AiWiring {
   readonly core: Awaited<ReturnType<typeof buildCore>>;
   readonly auth: ReturnType<typeof testAuth>;
   readonly fetch: typeof fetch;
+  /** What the CLIs inherit: no PATH unless the fake CLI must start. */
+  readonly env: NodeJS.ProcessEnv;
 }
 
 /** The house plan and the providers, every key sealed (ADR 0017). */
-async function buildAi({ config, core, auth, fetch }: AiWiring) {
+async function buildAi({ config, core, auth, fetch, env }: AiWiring) {
   const state = config.KB_CHAT_STATE_DIR;
   const sealer = new SecretBox(randomBytes(32));
   const house = await createHouseAi({
@@ -147,7 +164,7 @@ async function buildAi({ config, core, auth, fetch }: AiWiring) {
       store: new JsonSettingsStore(join(state, 'settings')),
       sealer,
     }),
-    env: { PATH: '' },
+    env,
     fetch,
     tools: core.agent.toolsFor,
     perTokenRunner: core.agent.perTokenRunner,
@@ -160,9 +177,13 @@ async function buildAi({ config, core, auth, fetch }: AiWiring) {
 }
 
 /** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
-export async function start(): Promise<Started> {
-  const state = await mkdtemp(join(tmpdir(), 'kbchat-house-'));
-  const config = testConfig(state);
+export async function start(options: StartOptions = {}): Promise<Started> {
+  const state =
+    options.state ?? (await mkdtemp(join(tmpdir(), 'kbchat-house-')));
+  const config = await testConfig(state, options);
+  const env = options.claude
+    ? { PATH: process.env['PATH'] ?? '', HOME: state }
+    : { PATH: '' };
   const { logs, logger } = capturedLogger();
   const fake = new FakeOpenRouter();
   const gemini = new FakeGemini();
@@ -173,8 +194,11 @@ export async function start(): Promise<Started> {
   const keys = await createTestKeys();
   const core = await buildCore(config, logger);
   const auth = testAuth(state, keys);
-  const { house, ai } = await buildAi({ config, core, auth, fetch });
+  const { house, ai } = await buildAi({ config, core, auth, fetch, env });
   current = await buildApp({ config, ...core, ai, auth, house, logger });
+  // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
+  if (options.claude)
+    await current.listen({ host: '127.0.0.1', port: config.PORT });
   return { app: current, keys, state, fake, gemini, ledger: core.ledger, logs };
 }
 

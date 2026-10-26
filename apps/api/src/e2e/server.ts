@@ -29,6 +29,9 @@ import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
 import { SecretBox } from '../adapters/secret-box.js';
 import { createHouseAi } from '../house-ai-factory.js';
 import { FakeOpenRouter } from '../testing/fake-openrouter.js';
+import { DisabledLlm } from '../adapters/disabled-llm.js';
+import { MemorySpendLedger } from '../adapters/memory-spend-ledger.js';
+import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
 import { FakeGemini, fakeProvidersFetch } from '../testing/fake-gemini.js';
 import {
   E2E_AUTHORIZE_PATH,
@@ -135,6 +138,19 @@ const ai = await createAiProviders({
   house,
   personOf: (principal) => auth.people.cachedByPrincipal(principal),
   ledger,
+  // No Claude Code here: the owner's lent subscription (KBC-024) answers with the stub, in
+  // its own ledger, so the people and Settings screens can be tested end to end.
+  claudeSubscription: {
+    available: () => true,
+    llm: () => new DisabledLlm(),
+    runner: () =>
+      agent.perTokenRunner(new StubLlmAdapter(), {
+        principal: 'lent-subscription',
+        dailyCapUsd: () => Number.POSITIVE_INFINITY,
+        ledger: new MemorySpendLedger(),
+      }),
+    failed: () => undefined,
+  },
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).
 await ledger.append({

@@ -22,6 +22,7 @@ import { DisabledResearchRunner } from './dynamic-ports.js';
 import { HouseLlm, type PaidFallbackGate } from './house-llm.js';
 import { HouseResearchRunner } from './house-runner.js';
 import { PaidMeters, type TurnMeter } from './paid-meters.js';
+import { SubscriptionLedgerRunner } from './subscription-ledger-runner.js';
 
 /** Which app AI serves a principal and whether the master enforced it (ADR 0016). */
 export interface AppAiAssignment {
@@ -33,8 +34,23 @@ export interface AppAiAssignment {
 export type LentAi = Exclude<AppAi, 'none'>;
 
 /**
- * One app-owned AI (ADR 0016): the house plan here; KBC-024/027 add the subscriptions as
- * new entries of the same map.
+ * The owner's subscription as it can be lent (KBC-024, ADR 0019): the registry builds it from
+ * the owner's CLI and models.
+ */
+export interface LendableSubscription {
+  /** The CLI is on the server now. */
+  available(): boolean;
+  /** The side panel's model (a subscription has no per-token model). */
+  llm(): LlmPort;
+  /** The owner's CLI for one turn, with his models for the profile and no escalation. */
+  runner(profile: ResearchProfile): ResearchRunnerPort;
+  /** A lent turn failed with this code (a logged-out CLI makes it unavailable for a while). */
+  failed(code: string): void;
+}
+
+/**
+ * One app-owned AI (ADR 0016): the house plan and, from KBC-024, the owner's lent
+ * subscription; KBC-027 adds another entry of the same map.
  */
 export interface AppAiHandler {
   available(): boolean;
@@ -69,6 +85,8 @@ export interface AppAiPlanDeps {
   readonly meters?: PaidMeters;
   /** More app AIs beside the house plan (KBC-024, KBC-027). */
   readonly handlers?: Partial<Record<LentAi, AppAiHandler>>;
+  /** The owner's Claude subscription, lent person by person (KBC-024). */
+  readonly claudeSubscription?: LendableSubscription;
 }
 
 const startOfMonth = (now: Date): Date =>
@@ -80,7 +98,12 @@ export class AppAiPlan implements AppAiPort {
   private readonly meters: PaidMeters;
 
   constructor(private readonly deps: AppAiPlanDeps) {
-    this.handlers = { ...deps.handlers, house: this.houseHandler() };
+    const lent = deps.claudeSubscription;
+    this.handlers = {
+      ...deps.handlers,
+      house: this.houseHandler(),
+      ...(lent && { 'claude-subscription': this.lentHandler(lent) }),
+    };
     this.meters = deps.meters ?? new PaidMeters();
   }
 
@@ -117,6 +140,38 @@ export class AppAiPlan implements AppAiPort {
         this.deps.house.isConnected() && this.deps.house.chain().length > 0,
       llm: (principal) => this.houseLlm(principal),
       runner: (principal) => this.houseRunner(principal),
+    };
+  }
+
+  /**
+   * The owner's subscription for a person he lent it to: their daily quota first, then his
+   * CLI, recorded at US$ 0 in the house ledger (ADR 0019).
+   */
+  private lentHandler(lent: LendableSubscription): AppAiHandler {
+    return {
+      available: () => lent.available(),
+      llm: () => lent.llm(),
+      runner: (principal, profile) =>
+        new HouseResearchRunner({
+          plan: 'app-subscription',
+          preview: lent.runner(profile),
+          quota: this.deps.quota,
+          principal,
+          dailyLimit: this.dailyLimit(principal),
+          // The house account's free requests do not apply to a subscription.
+          capacity: async () => null,
+          startTurn: () => ({
+            inner: new SubscriptionLedgerRunner({
+              inner: lent.runner(profile),
+              ledger: this.deps.houseSpend,
+              principal,
+              now: this.deps.now,
+              failed: (code) => lent.failed(code),
+            }),
+            paidActive: false,
+            finish: () => undefined,
+          }),
+        }),
     };
   }
 

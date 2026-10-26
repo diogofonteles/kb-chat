@@ -40,11 +40,18 @@ export interface HouseAiRouteDeps {
   /** Exchanges an OAuth code for a key (OpenRouter's /auth/keys). */
   readonly exchange: (code: string, verifier: string) => Promise<string>;
   readonly targets: Readonly<Record<OpenRouterPurpose, ConnectTarget>>;
+  /** The owner's Claude subscription can be lent now (KBC-024); false when absent. */
+  readonly subscriptionAvailable?: () => boolean;
 }
+
+const lendable = (deps: HouseAiRouteDeps) => ({
+  subscriptionAvailable: deps.subscriptionAvailable?.() ?? false,
+});
 
 const MASTER: RouteAccess = { master: true };
 
-function registerHouseView(app: FastifyInstance, { house }: HouseAiRouteDeps) {
+function registerHouseView(app: FastifyInstance, deps: HouseAiRouteDeps) {
+  const { house } = deps;
   const routes = app.withTypeProvider<ZodTypeProvider>();
   routes.get(
     '/api/v1/house-ai',
@@ -52,7 +59,7 @@ function registerHouseView(app: FastifyInstance, { house }: HouseAiRouteDeps) {
       config: { access: MASTER },
       schema: { response: { 200: houseAiViewSchema } },
     },
-    async () => house.view(),
+    async () => ({ ...(await house.view()), ...lendable(deps) }),
   );
   routes.put(
     '/api/v1/house-ai',
@@ -63,15 +70,15 @@ function registerHouseView(app: FastifyInstance, { house }: HouseAiRouteDeps) {
         response: { 200: houseAiViewSchema },
       },
     },
-    async (request) =>
-      house.update(request.body, viewerOf(request).person.email),
+    async (request) => ({
+      ...(await house.update(request.body, viewerOf(request).person.email)),
+      ...lendable(deps),
+    }),
   );
 }
 
-function registerHouseDefault(
-  app: FastifyInstance,
-  { house }: HouseAiRouteDeps,
-) {
+function registerHouseDefault(app: FastifyInstance, deps: HouseAiRouteDeps) {
+  const { house } = deps;
   const routes = app.withTypeProvider<ZodTypeProvider>();
   // The default alone: "Pessoas e permissões" needs no call to OpenRouter (review fix).
   routes.get(
@@ -80,7 +87,7 @@ function registerHouseDefault(
       config: { access: MASTER },
       schema: { response: { 200: houseDefaultSchema } },
     },
-    async () => ({ defaultAppAi: house.defaultAppAi() }),
+    async () => ({ defaultAppAi: house.defaultAppAi(), ...lendable(deps) }),
   );
 }
 

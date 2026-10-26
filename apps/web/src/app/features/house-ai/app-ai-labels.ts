@@ -1,8 +1,10 @@
 import type { AppAi, AppAiAssignment } from '@kb-chat/contracts';
 
-/** pt-BR names of the AIs the app lends (KBC-022; KBC-024/027 add the subscriptions). */
+/** pt-BR names of the AIs the app lends (KBC-022, KBC-024; KBC-027 adds another). */
 export const APP_AI_LABELS: Record<AppAi, () => string> = {
   house: () => $localize`:@@appAi.house:Plano da casa (OpenRouter)`,
+  'claude-subscription': () =>
+    $localize`:@@appAi.claudeSubscription:Claude do administrador`,
   none: () => $localize`:@@appAi.none:Nenhuma (IA própria ou só a busca)`,
 };
 

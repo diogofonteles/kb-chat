@@ -40,7 +40,7 @@ import type {
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { budgetsFromConfig } from '../research-agent-factory.js';
 import { resolveAiSource } from './ai-access.js';
-import type { AppAiPort } from './app-ai-plan.js';
+import type { AppAiPort, LendableSubscription } from './app-ai-plan.js';
 import { findExecutable } from './command-locator.js';
 import { ownFreeLlm } from './own-openrouter.js';
 import { PaidMeters, type TurnMeter } from './paid-meters.js';
@@ -127,6 +127,9 @@ interface ChoiceOverride {
   readonly profile?: ResearchProfile;
 }
 
+/** How long a logged-out CLI keeps the lent subscription unavailable (ADR 0019). */
+const LOGGED_OUT_PAUSE_MS = 10 * 60 * 1000;
+
 /** Which key a connection test was about, kept with it; null for the subscriptions. */
 const keyIdOf = (key: string | undefined): string | null =>
   key ? fingerprint(key) : null;
@@ -158,10 +161,41 @@ export class ProviderRegistry implements ProviderCatalog {
   private readonly cache = new Map<string, LlmPort | ResearchRunnerPort>();
   /** One's own paid fallback in flight, every open turn of every person (KBC-023). */
   private readonly meters = new PaidMeters();
+  /** Until when the lent subscription counts as unavailable after a logged-out CLI. */
+  private lentLoggedOutUntil = 0;
   /** Whether `claude` was on PATH at the last lookup (boot, then every provider list). */
   private claudeOnPath = false;
 
   constructor(private readonly options: ProviderRegistryOptions) {}
+
+  /**
+   * The owner's Claude subscription as it can be lent to a person (KBC-024, ADR 0019): his CLI
+   * and his models for the profile, never escalating (a fast question counts 1). The owner
+   * check for subscriptions stays for a person's own choice; this path is the app AI's.
+   */
+  lendableSubscription(): LendableSubscription {
+    const owner = this.options.ownerPrincipal ?? 'owner';
+    const choiceFor = (profile: ResearchProfile) =>
+      this.choice(owner, { provider: 'claude-subscription', profile });
+    return {
+      available: () =>
+        this.claudeOnPath && this.now() >= this.lentLoggedOutUntil,
+      llm: () => new DisabledLlm(),
+      runner: (profile) =>
+        new ClaudeCliRunner(
+          this.cliOptions('claude', choiceFor(profile), { principal: owner }),
+        ),
+      failed: (code) => {
+        // A logged-out CLI fails every lent turn: people fall back meanwhile (ADR 0019).
+        if (code === 'CLI_LOGIN_REQUIRED')
+          this.lentLoggedOutUntil = this.now() + LOGGED_OUT_PAUSE_MS;
+      },
+    };
+  }
+
+  private now(): number {
+    return Date.now();
+  }
 
   /** Looks `claude` up again; the default provider depends on it (BR-4). */
   async refreshCliLookup(): Promise<void> {
@@ -387,6 +421,13 @@ export class ProviderRegistry implements ProviderCatalog {
       runner: () =>
         this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
+    // The owner logged in again: lend the subscription again at once (ADR 0019).
+    if (
+      result.ok &&
+      request.provider === 'claude-subscription' &&
+      this.isOwner(principal)
+    )
+      this.lentLoggedOutUntil = 0;
     // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
     await this.options.settings.recordTest(principal, {
       provider: request.provider,

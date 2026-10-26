@@ -4,12 +4,24 @@ import { lastTestSchema } from './settings.js';
 
 /**
  * The AI access policy (KBC-022, ADR 0016): which app-owned AI serves each person, chosen by
- * a master. `house` is the app's OpenRouter account ("Plano da casa"); `none` leaves the
+ * a master. `house` is the app's OpenRouter account ("Plano da casa"); `claude-subscription`
+ * the owner's subscription, lent person by person (KBC-024, ADR 0019); `none` leaves the
  * person with their own AI or search only.
  */
-export const APP_AIS = ['house', 'none'] as const;
+export const APP_AIS = ['house', 'claude-subscription', 'none'] as const;
 export const appAiSchema = z.enum(APP_AIS);
 export type AppAi = z.infer<typeof appAiSchema>;
+
+/** The subscriptions the owner lends; never a default (ADR 0019). */
+export const LENT_SUBSCRIPTIONS = ['claude-subscription'] as const;
+export type LentSubscription = (typeof LENT_SUBSCRIPTIONS)[number];
+export const isLentSubscription = (appAi: string): appAi is LentSubscription =>
+  LENT_SUBSCRIPTIONS.some((subscription) => subscription === appAi);
+
+/** What the house default may be: an app AI that is not a subscription. */
+export const DEFAULTABLE_APP_AIS = ['house', 'none'] as const;
+export const defaultableAppAiSchema = z.enum(DEFAULTABLE_APP_AIS);
+export type DefaultableAppAi = z.infer<typeof defaultableAppAiSchema>;
 
 /** A person's assignment: an app AI, or `default` (the house default). */
 export const APP_AI_ASSIGNMENTS = ['default', ...APP_AIS] as const;
@@ -48,6 +60,8 @@ export const aiAccessChangeSchema = z.object({
   enforced: z.boolean(),
   by: z.string(),
   at: z.iso.datetime(),
+  /** Lending a subscription: the master confirmed its terms (KBC-024). */
+  termsAccepted: z.boolean().optional(),
 });
 export type AiAccessChange = z.infer<typeof aiAccessChangeSchema>;
 
@@ -72,13 +86,31 @@ export const DEFAULT_PERSON_AI: PersonAi = {
   history: [],
 };
 
+/** Lending a subscription needs the terms confirmed in the same request (ADR 0019). */
+const termsConfirmed = (request: {
+  appAi?: AppAiAssignment;
+  subscriptionTermsAccepted?: boolean;
+}): boolean =>
+  request.appAi === undefined ||
+  !isLentSubscription(request.appAi) ||
+  request.subscriptionTermsAccepted === true;
+
+const TERMS_ERROR = {
+  path: ['subscriptionTermsAccepted'],
+  error: 'Lending a subscription needs its terms confirmed',
+};
+
 /** PATCH /api/v1/people/:id `ai`: what a master changes; missing fields stay. */
-export const personAiUpdateSchema = z.strictObject({
-  appAi: appAiAssignmentSchema.optional(),
-  enforced: z.boolean().optional(),
-  dailyResearches: dailyResearchesSchema.nullable().optional(),
-  paidFallback: paidFallbackSchema.optional(),
-});
+export const personAiUpdateSchema = z
+  .strictObject({
+    appAi: appAiAssignmentSchema.optional(),
+    enforced: z.boolean().optional(),
+    dailyResearches: dailyResearchesSchema.nullable().optional(),
+    paidFallback: paidFallbackSchema.optional(),
+    /** Granting `claude-subscription`: the master confirmed the terms (KBC-024). */
+    subscriptionTermsAccepted: z.literal(true).optional(),
+  })
+  .refine(termsConfirmed, TERMS_ERROR);
 export type PersonAiUpdate = z.infer<typeof personAiUpdateSchema>;
 
 /** POST /api/v1/people/ai-assignment: one, several or every person at once. */
@@ -88,16 +120,21 @@ export const aiAssignmentRequestSchema = z
     appAi: appAiAssignmentSchema,
     /** With "all" and an AI (not "default"): the default for people invited later too. */
     setDefault: z.boolean().default(false),
+    /** Granting `claude-subscription`: the master confirmed the terms (KBC-024). */
+    subscriptionTermsAccepted: z.literal(true).optional(),
   })
   .refine(
     (request) =>
       !request.setDefault ||
-      (request.personIds === 'all' && request.appAi !== 'default'),
+      (request.personIds === 'all' &&
+        defaultableAppAiSchema.safeParse(request.appAi).success),
     {
       path: ['setDefault'],
-      error: 'The default changes only with "all" and an AI',
+      error:
+        'The default changes only with "all" and an AI that is not a subscription',
     },
-  );
+  )
+  .refine(termsConfirmed, TERMS_ERROR);
 export type AiAssignmentRequest = z.input<typeof aiAssignmentRequestSchema>;
 
 export const aiAssignmentResultSchema = z.object({

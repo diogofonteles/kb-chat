@@ -24,7 +24,12 @@ export interface HouseTurn {
   readonly finish: () => void;
 }
 
+/** Which app AI a runner serves: the house plan, or the owner's lent subscription (KBC-024). */
+export type AppPlan = 'house' | 'app-subscription';
+
 export interface HouseRunnerDeps {
+  /** Default `house`: billed free or per token; `app-subscription`: by the subscription. */
+  readonly plan?: AppPlan;
   /** The house model as it stands now: its name and whether it can answer. */
   readonly preview: ResearchRunnerPort;
   readonly quota: HouseQuota;
@@ -49,14 +54,20 @@ const ANSWERED = new Set<ResearchEvent['type']>([
 ]);
 
 /**
- * A research turn on the house plan (KBC-022): the person's daily quota and the account's
- * free capacity are checked first; the answer says it was free (or its cost) and how many
- * researches are left today.
+ * A research turn on an app AI (KBC-022, KBC-024): the person's daily quota and the house
+ * account's free capacity are checked first; the answer says who paid, what it cost and how
+ * many researches are left today.
  */
 export class HouseResearchRunner implements ResearchRunnerPort {
-  readonly billing = 'free' as const;
-
   constructor(private readonly deps: HouseRunnerDeps) {}
+
+  get billing(): 'free' | 'subscription' {
+    return this.plan === 'house' ? 'free' : 'subscription';
+  }
+
+  private get plan(): AppPlan {
+    return this.deps.plan ?? 'house';
+  }
 
   get model(): string {
     return this.deps.preview.model;
@@ -119,10 +130,16 @@ export class HouseResearchRunner implements ResearchRunnerPort {
   }
 
   private labelled(done: Done, reservation: Reservation): Done {
+    const billing =
+      this.plan === 'app-subscription'
+        ? 'subscription'
+        : done.usd === 0
+          ? 'free'
+          : 'per-token';
     return {
       ...done,
-      billing: done.usd === 0 ? 'free' : 'per-token',
-      plan: 'house',
+      billing,
+      plan: this.plan,
       remaining: reservation.remaining,
     };
   }

@@ -160,5 +160,6 @@ export const aHouseView = (
   defaultDailyResearches: 5,
   managementKey: null,
   freeUsage: null,
+  subscriptionAvailable: false,
   ...overrides,
 });
