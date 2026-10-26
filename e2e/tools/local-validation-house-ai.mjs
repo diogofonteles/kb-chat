@@ -80,6 +80,16 @@ for (const width of [1440, 390]) {
     .getByText('IA da aplicação para várias pessoas')
     .scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${out}/bulk-${width}.png` });
+  await dialog
+    .getByRole('button', { name: 'Aplicar a todos os usuários' })
+    .click();
+  await page.screenshot({ path: `${out}/bulk-confirm-${width}.png` });
+  await dialog.getByRole('button', { name: 'Cancelar' }).first().click();
+  const daily = dialog.getByLabel('Pesquisas por dia (vazio = padrão)');
+  await daily.fill('-1');
+  await daily.press('Tab');
+  await daily.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${out}/person-error-${width}.png` });
   report.push(`people ${width}: overflow ${await overflow(page)}`);
 
   const person = await browser.newContext({ viewport: { width, height: 900 } });
