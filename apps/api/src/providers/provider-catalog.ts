@@ -3,7 +3,7 @@ import {
   type AiProvider,
   type KeyProvider,
   type ProviderBilling,
-  type ResearchProfile,
+  type ModelProfile,
 } from '@kb-chat/contracts';
 import {
   ANTHROPIC_DEFAULT_MODEL,
@@ -30,7 +30,7 @@ export interface ProviderDescriptor {
   readonly models: readonly string[];
 }
 
-export type ProfileDefaults = Readonly<Record<ResearchProfile, string | null>>;
+export type ProfileDefaults = Readonly<Record<ModelProfile, string | null>>;
 
 /** Research agent default (ADR 0006): tool calling at about US$ 0.23 per million input tokens. */
 export const OPENROUTER_DEFAULT_MODEL = 'deepseek/deepseek-v4-pro';

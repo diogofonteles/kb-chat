@@ -20,7 +20,10 @@ import { FsConversationStore } from './adapters/fs-conversation-store.js';
 import { JsonSettingsStore } from './adapters/json-settings-store.js';
 import { createAiProviders } from './providers/create-ai-providers.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
-import { createResearchAgent } from './research-agent-factory.js';
+import {
+  budgetsFromConfig,
+  createResearchAgent,
+} from './research-agent-factory.js';
 import { createSearchIndex } from './search-index-factory.js';
 
 const config = loadConfig();
@@ -35,7 +38,13 @@ const ledger = new JsonlSpendLedger(
 const catalog = new CatalogRegistry(vault);
 await catalog.load();
 // One set of research tools for the in-API loop and the subscription CLIs (ADR 0006/0007).
-const agent = createResearchAgent({ catalog, index, vault, ledger });
+const agent = createResearchAgent({
+  catalog,
+  index,
+  vault,
+  ledger,
+  budgets: budgetsFromConfig(config),
+});
 // Settings first, then the environment, resolved per request (KBC-007, ADR 0007).
 const ai = await createAiProviders({
   config,

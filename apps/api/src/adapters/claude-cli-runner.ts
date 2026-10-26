@@ -122,11 +122,11 @@ export async function writeClaudeMcpConfig(
 
 /**
  * Claude Code's effort per research profile (KBC-011): the fast profile thinks less between
- * tool calls; the deep one keeps the CLI's default.
+ * tool calls; the deep and exhaustive ones (KBC-017) keep the CLI's default.
  */
 export const CLAUDE_EFFORT: Readonly<
   Record<ResearchProfile, 'low' | undefined>
-> = { fast: 'low', deep: undefined };
+> = { fast: 'low', deep: undefined, exhaustive: undefined };
 
 /** The arguments of a research turn: only the kb MCP tools, no built-ins, no user settings. */
 export function claudeArgs(

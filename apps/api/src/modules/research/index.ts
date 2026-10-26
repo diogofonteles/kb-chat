@@ -9,10 +9,17 @@ export {
   findingsText,
 } from './escalation.js';
 export {
+  DEFAULT_BUDGETS,
+  EXHAUSTIVE_OUTPUT_TOKENS,
+  EXHAUSTIVE_TOOL_STEPS,
   FAST_TOOL_STEPS,
   MAX_OUTPUT_TOKENS,
   MAX_TOOL_STEPS,
   PROFILE_STEPS,
+  researchBudgets,
+  type ExhaustiveSettings,
+  type ProfileBudget,
+  type ResearchBudgets,
 } from './limits.js';
 export {
   ResearchTools,

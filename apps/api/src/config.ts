@@ -71,6 +71,20 @@ export const configSchema = z
       .default('off')
       .transform((value) => value === 'on'),
     KB_CHAT_DAILY_CAP_USD: z.coerce.number().min(0).default(1),
+    /** Tool steps of the exhaustive research profile (KBC-017, ADR 0013): a safety net. */
+    KB_CHAT_EXHAUSTIVE_STEPS: z.coerce
+      .number()
+      .int()
+      .min(10)
+      .max(300)
+      .default(80),
+    /** Output tokens per model call of the exhaustive profile (long final answers). */
+    KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS: z.coerce
+      .number()
+      .int()
+      .min(2_000)
+      .max(64_000)
+      .default(16_000),
     /** Local state (spend ledger, usage log, settings). */
     KB_CHAT_STATE_DIR: z
       .string()

@@ -9,8 +9,11 @@ import type { KbMcpHooks } from './kb-mcp-server.js';
 
 /** The deep profile's step cap, as in the in-API loop (ADR 0006: 15 tool steps per answer). */
 export const MAX_TURN_STEPS = MAX_TOOL_STEPS;
-/** A turn that was never closed (a crashed CLI) stops answering after this. */
-const TURN_TTL_MS = 15 * 60_000;
+/**
+ * A turn that was never closed (a crashed CLI) stops answering after this; long enough
+ * for an exhaustive turn (KBC-017: 30 minutes of research plus the CLI's own pace).
+ */
+const TURN_TTL_MS = 90 * 60_000;
 
 /** Said to the CLI when the turn's step budget is spent (its profile's, KBC-011). */
 export const stepCapText = (maxSteps: number): string =>

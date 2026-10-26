@@ -11,6 +11,7 @@ import {
   ResearchTools,
   SourceBook,
   ToolLoopRunner,
+  type ResearchBudgets,
   type ToolContext,
 } from '../src/modules/research/index.js';
 import { SearchService } from '../src/modules/search/index.js';
@@ -52,6 +53,7 @@ export interface RunnerFixture {
 export async function fixtureRunner(
   llmOptions: StubLlmOptions = {},
   dailyCapUsd = 1,
+  budgets?: ResearchBudgets,
 ): Promise<RunnerFixture> {
   const llm = new StubLlmAdapter(llmOptions);
   const ledger = new MemorySpendLedger();
@@ -65,6 +67,7 @@ export async function fixtureRunner(
     llm,
     tools: await fixtureTools(),
     spend,
+    budgets,
   });
   return { runner, llm, ledger };
 }

@@ -7,6 +7,8 @@ import {
   type AiTestResult,
   type ProviderInfo,
   type ProviderList,
+  modelProfileOf,
+  type ModelProfile,
   type ResearchProfile,
 } from '@kb-chat/contracts';
 import { AnthropicAdapter } from '../adapters/anthropic-adapter.js';
@@ -31,6 +33,7 @@ import type {
   ResearchRunnerPort,
 } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
+import { researchBudgets } from '../modules/research/index.js';
 import { findExecutable } from './command-locator.js';
 import { NO_TOOLS, testConnection } from './connection-test.js';
 import { DisabledResearchRunner, isAgentLlm } from './dynamic-ports.js';
@@ -139,7 +142,7 @@ export class ProviderRegistry implements ProviderCatalog {
 
   choice(principal: string, override: ChoiceOverride = {}): ProviderChoice {
     const provider = override.provider ?? this.active(principal);
-    const profile = override.profile ?? 'fast';
+    const profile = modelProfileOf(override.profile ?? 'fast');
     return {
       provider,
       model:
@@ -268,6 +271,10 @@ export class ProviderRegistry implements ProviderCatalog {
           };
     return {
       escalation,
+      budgets: researchBudgets({
+        steps: config.KB_CHAT_EXHAUSTIVE_STEPS,
+        outputTokens: config.KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS,
+      }),
       bin: cli === 'claude' ? config.CLAUDE_BIN : config.CODEX_BIN,
       model: choice.model,
       apiBaseUrl: this.options.apiBaseUrl,
@@ -297,7 +304,7 @@ export class ProviderRegistry implements ProviderCatalog {
   private savedModel(
     principal: string,
     provider: ResolvedProvider,
-    profile: ResearchProfile,
+    profile: ModelProfile,
   ): string | undefined {
     if (provider === 'stub' || provider === 'none') return undefined;
     const models = this.options.settings.snapshot(principal)?.ai.models;
@@ -306,7 +313,7 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private defaultModel(
     provider: ResolvedProvider,
-    profile: ResearchProfile,
+    profile: ModelProfile,
   ): string | undefined {
     if (provider === 'stub') return 'stub/model';
     const defaults = PROVIDERS[provider].defaultModels(this.options.config);

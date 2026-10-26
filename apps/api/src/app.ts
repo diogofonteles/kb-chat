@@ -69,6 +69,7 @@ import {
   type AiProviders,
 } from './providers/create-ai-providers.js';
 import {
+  budgetsFromConfig,
   createResearchAgent,
   type ResearchAgent,
 } from './research-agent-factory.js';
@@ -345,6 +346,7 @@ async function completeDeps(deps: AppDeps): Promise<FullDeps> {
       index: deps.index,
       vault: deps.vault,
       ledger,
+      budgets: budgetsFromConfig(deps.config),
     });
   return {
     ...deps,

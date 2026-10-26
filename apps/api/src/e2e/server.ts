@@ -12,7 +12,10 @@ import { FsConversationStore } from '../adapters/fs-conversation-store.js';
 import { JsonSettingsStore } from '../adapters/json-settings-store.js';
 import { createAiProviders } from '../providers/create-ai-providers.js';
 import { CatalogRegistry } from '../modules/catalog/index.js';
-import { createResearchAgent } from '../research-agent-factory.js';
+import {
+  budgetsFromConfig,
+  createResearchAgent,
+} from '../research-agent-factory.js';
 import { createSearchIndex } from '../search-index-factory.js';
 import { MemorySessionStore } from '../adapters/memory-session-store.js';
 import { JsonPeopleStore } from '../adapters/json-people-store.js';
@@ -48,7 +51,13 @@ const ledger = new JsonlSpendLedger(
 );
 const catalog = new CatalogRegistry(vault);
 await catalog.load();
-const agent = createResearchAgent({ catalog, index, vault, ledger });
+const agent = createResearchAgent({
+  catalog,
+  index,
+  vault,
+  ledger,
+  budgets: budgetsFromConfig(config),
+});
 // Providers answer through a fake HTTP layer: a key ending in "valid" is accepted, any other
 // gets 401 (KBC-007 AC-5). Nothing leaves this computer.
 const fakeProviderFetch: typeof fetch = async (_url, init) => {

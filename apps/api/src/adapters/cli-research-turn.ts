@@ -9,9 +9,10 @@ import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import {
   AnswerStream,
   DEEPEN_STEP,
-  PROFILE_STEPS,
+  DEFAULT_BUDGETS,
   deepenReason,
   findingsText,
+  type ResearchBudgets,
 } from '../modules/research/index.js';
 import { MCP_BEARER_PATH, mcpTurnPath } from '../mcp/mcp-routes.js';
 import type { Escalation, ResearchInput } from '../ports/research-runner.js';
@@ -73,6 +74,8 @@ export interface CliTurnOptions {
   readonly killGraceMs?: number;
   /** A fast turn's deep model (undefined: the CLI's own) to escalate to (ADR 0009). */
   readonly escalation?: Escalation<string | undefined>;
+  /** Step budgets per profile (ADR 0013); default DEFAULT_BUDGETS. */
+  readonly budgets?: ResearchBudgets;
 }
 
 /** One research turn as the runner hands it over: the tools and the CLI's model. */
@@ -305,7 +308,10 @@ export function stopOnAbort(signal: AbortSignal, stop: () => void): () => void {
 function deepPass(
   input: TurnInput,
   fast: TurnState,
-  escalation: Escalation<string | undefined>,
+  {
+    escalation,
+    budgets,
+  }: { escalation: Escalation<string | undefined>; budgets: ResearchBudgets },
 ): Omit<OpenPass, 'turn'> {
   const findings = findingsText({ sources: fast.sources });
   return {
@@ -316,7 +322,7 @@ function deepPass(
       canDeepen: false,
       findings,
     },
-    maxSteps: Math.max(1, PROFILE_STEPS.deep - fast.steps),
+    maxSteps: Math.max(1, budgets.deep.steps - fast.steps),
   };
 }
 
@@ -343,11 +349,12 @@ export async function* runCliTurn(
   input: TurnInput,
 ): AsyncIterable<ResearchEvent> {
   const answer = new AnswerStream();
+  const budgets = options.budgets ?? DEFAULT_BUDGETS;
   const escalation = escalationOf(options, input);
   const first = { ...input, canDeepen: escalation !== undefined };
   const fast = yield* runPass(options, dialect, {
     input: first,
-    maxSteps: PROFILE_STEPS[input.profile],
+    maxSteps: budgets[input.profile].steps,
     answer,
   });
   const aborted = input.signal.aborted;
@@ -361,7 +368,7 @@ export async function* runCliTurn(
     yield finalEvent(fast, { aborted: true, escalated: true });
     return;
   }
-  const pass = deepPass(input, fast, escalation);
+  const pass = deepPass(input, fast, { escalation, budgets });
   const deep = yield* runPass(options, dialect, { ...pass, answer });
   const total = { ...deep, steps: fast.steps + deep.steps };
   yield finalEvent(total, { aborted: input.signal.aborted, escalated: true });
