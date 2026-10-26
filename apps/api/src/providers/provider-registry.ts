@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import {
   MODEL_ALLOWLISTS,
   type AiProvider,
+  type AiStatus,
   type AiTestRequest,
   type AiTestResult,
   type ProviderInfo,
@@ -34,6 +35,8 @@ import type {
 } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { budgetsFromConfig } from '../research-agent-factory.js';
+import { resolveAiSource } from './ai-access.js';
+import type { AppAiPort } from './app-ai-plan.js';
 import { findExecutable } from './command-locator.js';
 import { NO_TOOLS, testConnection } from './connection-test.js';
 import { DisabledResearchRunner, isAgentLlm } from './dynamic-ports.js';
@@ -67,6 +70,8 @@ export interface ProviderRegistryOptions {
    * BR-6) and the keys of the server's environment; guests bring their own key.
    */
   readonly ownerPrincipal?: string;
+  /** The AIs the app lends (KBC-022): absent, nobody gets an app AI. */
+  readonly appAi?: AppAiPort;
 }
 
 const isSubscription = (provider: ResolvedProvider): boolean =>
@@ -123,14 +128,73 @@ export class ProviderRegistry implements ProviderCatalog {
     this.claudeOnPath = (await this.locateCli('claude-subscription')) !== null;
   }
 
-  /** The provider answering now for the principal. */
+  /**
+   * The provider answering now for the principal (ADR 0016): an enforced app AI, else their
+   * own choice, else their app AI; the local defaults only on the owner's Mac; else the stub
+   * of tests, else none.
+   */
   active(principal: string): ResolvedProvider {
-    const saved = this.options.settings.snapshot(principal)?.ai.provider;
-    if (this.isOwner(principal))
-      return saved ?? defaultProvider(this.options.config, this.claudeOnPath);
-    if (saved && !isSubscription(saved)) return saved;
-    // A guest has no subscription and no environment key: search only, or the test stub.
+    const saved =
+      this.options.settings.snapshot(principal)?.ai.provider ?? null;
+    const local = this.localDefault(principal, saved);
+    if (local) return local;
+    const source = this.sourceOf(principal, saved);
+    if (source.source === 'app') return 'app';
+    if (source.source === 'own' && this.mayUse(principal, source.provider))
+      return source.provider;
     return this.options.config.KB_CHAT_LLM === 'stub' ? 'stub' : 'none';
+  }
+
+  /** Which AI serves the signed-in person and who pays, for Settings and the composer. */
+  async status(principal: string): Promise<AiStatus> {
+    await this.options.settings.load(principal);
+    const active = this.active(principal);
+    const app = this.options.appAi;
+    const assignment = app?.assignment(principal);
+    const quota = active === 'app' && app ? await app.quotaOf(principal) : null;
+    const source =
+      active === 'app' ? 'app' : active === 'none' ? 'none' : 'own';
+    return {
+      source,
+      appAi: active === 'app' ? (assignment?.appAi ?? null) : null,
+      provider: active === 'none' ? null : active,
+      remainingToday: quota?.remaining ?? null,
+      dailyResearches: quota?.daily ?? null,
+      enforced: assignment?.enforced ?? false,
+    };
+  }
+
+  private sourceOf(principal: string, chosen: AiProvider | null) {
+    const assignment = this.options.appAi?.assignment(principal) ?? {
+      appAi: 'none' as const,
+      enforced: false,
+    };
+    return resolveAiSource({
+      chosen,
+      appAi: assignment.appAi,
+      enforced: assignment.enforced,
+      appAvailable: this.options.appAi?.available(assignment.appAi) ?? false,
+    });
+  }
+
+  /** ADR 0007's defaults (the Claude CLI, then env keys), only with KB_CHAT_AI_DEFAULTS=local. */
+  private localDefault(
+    principal: string,
+    saved: AiProvider | null,
+  ): ResolvedProvider | null {
+    if (!this.localDefaults() || !this.isOwner(principal) || saved !== null)
+      return null;
+    const fallback = defaultProvider(this.options.config, this.claudeOnPath);
+    return fallback === 'none' ? null : fallback;
+  }
+
+  private localDefaults(): boolean {
+    return this.options.config.KB_CHAT_AI_DEFAULTS === 'local';
+  }
+
+  /** Subscriptions are personal: only the owner's (KBC-007 BR-6). */
+  private mayUse(principal: string, provider: AiProvider): boolean {
+    return !isSubscription(provider) || this.isOwner(principal);
   }
 
   private isOwner(principal: string): boolean {
@@ -157,6 +221,8 @@ export class ProviderRegistry implements ProviderCatalog {
 
   llm(principal: string): LlmPort {
     const choice = this.choice(principal);
+    const app = this.options.appAi;
+    if (choice.provider === 'app' && app) return app.llm(principal);
     return this.cached(choiceId('llm', principal, choice), () =>
       this.buildLlm(choice),
     ) as LlmPort;
@@ -171,6 +237,11 @@ export class ProviderRegistry implements ProviderCatalog {
     profile: ResearchProfile = 'fast',
   ): ResearchRunnerPort {
     const choice = this.choice(principal, { profile });
+    const app = this.options.appAi;
+    if (choice.provider === 'app')
+      return app
+        ? app.runner(principal, profile)
+        : new DisabledResearchRunner();
     const deepModel =
       profile === 'fast'
         ? (this.choice(principal, { profile: 'deep' }).model ?? null)
@@ -306,7 +377,8 @@ export class ProviderRegistry implements ProviderCatalog {
     provider: ResolvedProvider,
     profile: ModelProfile,
   ): string | undefined {
-    if (provider === 'stub' || provider === 'none') return undefined;
+    if (provider === 'stub' || provider === 'none' || provider === 'app')
+      return undefined;
     const models = this.options.settings.snapshot(principal)?.ai.models;
     return models?.[provider]?.[profile];
   }
@@ -327,7 +399,8 @@ export class ProviderRegistry implements ProviderCatalog {
     if (provider === 'stub' || !isKeyProvider(provider)) return undefined;
     const env = PROVIDERS[provider].keyEnv;
     const own = this.options.settings.key(principal, provider);
-    if (own || !this.isOwner(principal)) return own;
+    // The env keys are a local default only (ADR 0016): never in production.
+    if (own || !this.isOwner(principal) || !this.localDefaults()) return own;
     return env ? this.options.config[env] : undefined;
   }
 
@@ -355,12 +428,20 @@ export class ProviderRegistry implements ProviderCatalog {
     cliFound: boolean,
   ): ProviderInfo['reason'] {
     if (isSubscription(id) && !this.isOwner(principal)) return 'owner-only';
+    if (id === 'app') return this.appReason(principal);
     if (PROVIDERS[id].cliBin && !cliFound) return 'cli-missing';
     if (id === 'chatgpt-subscription' && !this.options.config.KB_CHAT_CODEX)
       return 'not-enabled';
     if (isKeyProvider(id) && this.keySource(principal, id) === null)
       return 'key-missing';
     return null;
+  }
+
+  /** "IA da aplicação" is offered while an app AI is assigned to the person and can answer. */
+  private appReason(principal: string): ProviderInfo['reason'] {
+    const app = this.options.appAi;
+    const appAi = app?.assignment(principal).appAi ?? 'none';
+    return app?.available(appAi) ? null : 'app-unavailable';
   }
 
   private async info(principal: string, id: AiProvider): Promise<ProviderInfo> {
@@ -378,7 +459,7 @@ export class ProviderRegistry implements ProviderCatalog {
       models: [
         ...new Set(models.filter((m): m is string => typeof m === 'string')),
       ],
-      freeModel: id === 'none' || !MODEL_ALLOWLISTS[id],
+      freeModel: id === 'none' || id === 'app' || !MODEL_ALLOWLISTS[id],
     };
   }
 }

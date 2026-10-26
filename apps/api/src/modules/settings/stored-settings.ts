@@ -36,8 +36,9 @@ function migratedModels(ai: {
   models: Models;
 }): Models {
   const { provider, model, models } = ai;
-  if (!model || !provider || provider === 'none' || models[provider])
+  if (!model || !provider || provider === 'none' || provider === 'app')
     return models;
+  if (models[provider]) return models;
   return { ...models, [provider]: { fast: model, deep: model } };
 }
 

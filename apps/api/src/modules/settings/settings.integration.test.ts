@@ -235,6 +235,7 @@ describe('GET /api/v1/ai/providers', () => {
       {
         OPENROUTER_API_KEY: KEY,
         CLAUDE_BIN: join(FAKES_DIR, 'fake-claude.mjs'),
+        KB_CHAT_AI_DEFAULTS: 'local',
       },
       '',
     );

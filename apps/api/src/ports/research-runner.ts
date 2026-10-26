@@ -1,9 +1,11 @@
 import type {
+  ResearchBilling,
   ResearchEvent,
   ResearchProfile,
   ResearchTurn,
 } from '@kb-chat/contracts';
 import type { AgentLlmPort } from './llm.js';
+import type { SpendLedgerPort } from './spend-ledger.js';
 
 export interface ResearchInput {
   readonly topic: string;
@@ -21,7 +23,7 @@ export interface ResearchInput {
  */
 export interface ResearchRunnerPort {
   readonly model: string;
-  readonly billing: 'per-token' | 'subscription';
+  readonly billing: ResearchBilling;
   configured(): boolean;
   run(input: ResearchInput): AsyncIterable<ResearchEvent>;
 }
@@ -30,6 +32,8 @@ export interface ResearchRunnerPort {
 export interface SpendScope {
   readonly principal: string;
   readonly dailyCapUsd: () => number;
+  /** Where the spend goes; default the main ledger (the house has its own, KBC-022). */
+  readonly ledger?: SpendLedgerPort;
 }
 
 /** The deep profile a fast turn may escalate to (ADR 0009). */

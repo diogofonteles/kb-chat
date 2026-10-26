@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { Invitation, PersonUpdate } from '@kb-chat/contracts';
+import type {
+  AppAiAssignment,
+  Invitation,
+  PersonUpdate,
+} from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { VerifiedIdentity } from '../../ports/identity-verifier.js';
 import type { PeopleStorePort } from '../../ports/people-store.js';
@@ -11,6 +15,7 @@ import {
   type Viewer,
 } from './person.js';
 import * as rules from './people-rules.js';
+import { assignAi } from './person-ai.js';
 import type { PeopleChange } from './people-rules.js';
 
 /** Permission reads are at most this old (BR-4: a change applies within a minute). */
@@ -101,10 +106,40 @@ export class PeopleService {
     );
   }
 
-  update(id: string, patch: PersonUpdate): Promise<StoredPerson> {
+  /** A master's change; `by` (their e-mail) goes to the AI audit trail. */
+  update(
+    id: string,
+    patch: PersonUpdate,
+    by = 'system',
+  ): Promise<StoredPerson> {
+    const context = { by, now: this.now() };
     return this.change((people) =>
-      rules.update(people, { id, patch }, this.ownerEmail),
+      rules.update(people, { id, patch, context }, this.ownerEmail),
     );
+  }
+
+  /** One app AI for several people or for everyone (KBC-022); answers how many changed. */
+  assignAi(
+    request: {
+      readonly ids: 'all' | readonly string[];
+      readonly appAi: AppAiAssignment;
+    },
+    by: string,
+  ): Promise<number> {
+    const context = { by, now: this.now() };
+    return this.change((people) => assignAi(people, request, context));
+  }
+
+  /**
+   * The person a principal belongs to, from memory (refreshed by every request's guard), for
+   * code that cannot wait: the provider registry choosing an AI (KBC-022).
+   */
+  cachedByPrincipal(principal: string): Viewer | null {
+    for (const person of this.loaded?.people ?? []) {
+      const viewer = this.viewerOf(person);
+      if (viewer.principal === principal) return viewer;
+    }
+    return null;
   }
 
   revoke(id: string): Promise<StoredPerson> {

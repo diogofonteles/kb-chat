@@ -24,6 +24,14 @@ import { E2E_CLIENT_ID, createTestIdentity } from './test-identity.js';
 import { MemoryDocumentStore } from '../adapters/memory-document-store.js';
 import { MemoryOutbox } from '../adapters/memory-outbox.js';
 import { registerOutbox } from './outbox-routes.js';
+import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
+import { SecretBox } from '../adapters/secret-box.js';
+import { createHouseAi } from '../house-ai-factory.js';
+import { FakeOpenRouter } from '../testing/fake-openrouter.js';
+import {
+  E2E_AUTHORIZE_PATH,
+  registerOpenRouterConsent,
+} from './openrouter-routes.js';
 
 /** The owner of the E2E run: a master with the `owner` data the specs expect. */
 export const E2E_OWNER_EMAIL = 'owner@kb-chat.test';
@@ -70,12 +78,33 @@ const fakeProviderFetch: typeof fetch = async (_url, init) => {
     'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
   );
 };
+// OpenRouter for the house plan (KBC-022): a fake, its consent page served below.
+const openRouter = new FakeOpenRouter();
+const sealer = new SecretBox(Buffer.alloc(32, 7));
 // The owner's settings already exist, so the first-run wizard stays away from the other specs;
 // the wizard's spec fakes a first run in the browser.
-const settingsStore = new JsonSettingsStore(
-  join(config.KB_CHAT_STATE_DIR, 'settings'),
-);
+const settingsStore = new SealedSettingsStore({
+  store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
+  sealer,
+});
 await settingsStore.write(OWNER, { version: 1 });
+// Sign-in against the test identity (never Google): KBC-010.
+const identity = await createTestIdentity(config.PORT);
+const auth = {
+  people: new PeopleService({
+    store: new JsonPeopleStore(join(config.KB_CHAT_STATE_DIR, 'people.json')),
+    ownerEmail: config.KB_CHAT_OWNER_EMAIL,
+  }),
+  sessions: new SessionService({ store: new MemorySessionStore() }),
+  verifier: identity.verifier,
+};
+const house = await createHouseAi({
+  stateDir: config.KB_CHAT_STATE_DIR,
+  sealer,
+  webOrigin: config.WEB_ORIGIN,
+  fetch: openRouter.fetch,
+  authorizeUrl: `http://127.0.0.1:${config.PORT}${E2E_AUTHORIZE_PATH}`,
+});
 const ai = await createAiProviders({
   config,
   principal: OWNER,
@@ -87,6 +116,8 @@ const ai = await createAiProviders({
   perTokenRunner: agent.perTokenRunner,
   systemPrompt: agent.systemPrompt,
   subAgentPrompt: agent.subAgentPrompt,
+  house,
+  personOf: (principal) => auth.people.cachedByPrincipal(principal),
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).
 await ledger.append({
@@ -103,16 +134,6 @@ const conversations = new FsConversationStore({
   dir: join(config.KB_CHAT_STATE_DIR, 'conversations'),
   log: logger,
 });
-// Sign-in against the test identity (never Google): KBC-010.
-const identity = await createTestIdentity(config.PORT);
-const auth = {
-  people: new PeopleService({
-    store: new JsonPeopleStore(join(config.KB_CHAT_STATE_DIR, 'people.json')),
-    ownerEmail: config.KB_CHAT_OWNER_EMAIL,
-  }),
-  sessions: new SessionService({ store: new MemorySessionStore() }),
-  verifier: identity.verifier,
-};
 // Codes and notices land in memory; the specs read them under /api/e2e/outbox (KBC-014).
 const outbox = new MemoryOutbox();
 const access = {
@@ -133,7 +154,9 @@ const app = await buildApp({
   ledger,
   usage,
   conversations,
+  house,
 });
 identity.register(app);
 registerOutbox(app, outbox);
+registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });

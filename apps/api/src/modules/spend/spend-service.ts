@@ -32,6 +32,8 @@ export interface TurnSpend {
   readonly outputTokens: number;
   readonly usd: number;
   readonly interrupted: boolean;
+  /** The model that answered, when the provider named it (fallback chains, KBC-022). */
+  readonly model?: string;
 }
 
 /** Spend controls of ADR 0004, kept by ADR 0006: the ledger, the daily cap and the credit check. */
@@ -70,8 +72,8 @@ export class SpendService {
     await this.deps.ledger.append({
       ts: new Date().toISOString(),
       principal: this.deps.principal,
-      model: this.deps.llm.model,
       ...spend,
+      model: spend.model ?? this.deps.llm.model,
     });
   }
 

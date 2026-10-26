@@ -44,10 +44,12 @@ export {
 export {
   OWNER_PRINCIPAL,
   hasFeature,
+  isMaster,
   toPerson,
   type StoredPerson,
   type Viewer,
 } from './person.js';
+export { aiOf, applyAiUpdate } from './person-ai.js';
 export { resolveViewer, type ViewerSources } from './resolve-viewer.js';
 export { authRoutes, type AuthRouteDeps } from './routes.js';
 export {

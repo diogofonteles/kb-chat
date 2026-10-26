@@ -6,6 +6,7 @@ import {
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { VerifiedIdentity } from '../../ports/identity-verifier.js';
+import { aiOf, applyAiUpdate, type AiChangeContext } from './person-ai.js';
 import { isMaster, type StoredPerson } from './person.js';
 
 /** The pure rules of "Pessoas e permissões" (BR-2, BR-3); the service persists their result. */
@@ -184,7 +185,11 @@ const unique = <T>(values: readonly T[]): T[] => [...new Set(values)];
 
 export function update(
   people: readonly StoredPerson[],
-  change: { readonly id: string; readonly patch: PersonUpdate },
+  change: {
+    readonly id: string;
+    readonly patch: PersonUpdate;
+    readonly context: AiChangeContext;
+  },
   ownerEmail: string | undefined,
 ): PeopleChange<StoredPerson> {
   const { id, patch } = change;
@@ -195,6 +200,9 @@ export function update(
     role: patch.role ?? target.role,
     topics: patch.topics ? unique(patch.topics) : target.topics,
     features: patch.features ? unique(patch.features) : target.features,
+    ...(patch.ai && {
+      ai: applyAiUpdate(aiOf(target), patch.ai, change.context),
+    }),
   };
   return { people: replace(people, next), result: next };
 }

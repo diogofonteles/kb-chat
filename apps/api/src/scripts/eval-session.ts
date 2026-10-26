@@ -6,6 +6,8 @@ import type {
 } from '@kb-chat/contracts';
 import { FsVaultAdapter } from '../adapters/fs-vault-adapter.js';
 import { JsonSettingsStore } from '../adapters/json-settings-store.js';
+import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
+import { SecretBox, loadSecretsKey } from '../adapters/secret-box.js';
 import { JsonlSpendLedger } from '../adapters/jsonl-spend-ledger.js';
 import { OWNER } from '../app.js';
 import type { AppConfig } from '../config.js';
@@ -53,6 +55,19 @@ async function composeAgent(config: AppConfig) {
   };
 }
 
+/** The owner's settings, read with the master key the API sealed them with (ADR 0016). */
+async function sealedSettings(config: AppConfig): Promise<SealedSettingsStore> {
+  const key = await loadSecretsKey({
+    configured: config.KB_CHAT_SECRETS_KEY,
+    stateDir: config.KB_CHAT_STATE_DIR,
+    hosted: false,
+  });
+  return new SealedSettingsStore({
+    store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
+    sealer: new SecretBox(key),
+  });
+}
+
 export async function openEvalSession(
   options: EvalSessionOptions,
 ): Promise<EvalSession> {
@@ -61,9 +76,10 @@ export async function openEvalSession(
   const turns = new McpTurnRegistry();
   const mcp = await startMcpTurnServer(turns, config.ALLOWED_HOSTS);
   const ai = await createAiProviders({
-    config,
+    // A local tool on the owner's Mac: ADR 0007's defaults apply (ADR 0016).
+    config: { ...config, KB_CHAT_AI_DEFAULTS: 'local' },
     principal: OWNER,
-    store: new JsonSettingsStore(join(config.KB_CHAT_STATE_DIR, 'settings')),
+    store: await sealedSettings(config),
     env: options.env,
     tools: agent.toolsFor,
     perTokenRunner: agent.perTokenRunner,

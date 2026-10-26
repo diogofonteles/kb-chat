@@ -3,8 +3,12 @@ import { researchProfileSchema } from './research.js';
 import { searchModeSchema } from './search.js';
 import { topicSlugSchema } from './topics.js';
 
-/** How the AI answers (KBC-007, ADR 0007); `none` means search only. */
+/**
+ * How the AI answers (KBC-007, ADR 0007); `none` means search only and `app` the AI the
+ * administrator lends ("IA da aplicação", KBC-022, ADR 0016).
+ */
 export const AI_PROVIDERS = [
+  'app',
   'openrouter',
   'anthropic',
   'openai',
@@ -179,9 +183,11 @@ export const settingsUpdateSchema = z.strictObject({
 });
 export type SettingsUpdate = z.infer<typeof settingsUpdateSchema>;
 
+/** `free`: the app's free models (KBC-022): nothing is charged to anyone. */
 export const providerBillingSchema = z.enum([
   'per-token',
   'subscription',
+  'free',
   'none',
 ]);
 export type ProviderBilling = z.infer<typeof providerBillingSchema>;
@@ -194,6 +200,8 @@ export const providerUnavailableReasonSchema = z.enum([
   'not-enabled',
   /** Subscriptions are personal: only the owner's account may use them (KBC-007 BR-6, KBC-010). */
   'owner-only',
+  /** No app AI is assigned to this person, or the house account is not connected (KBC-022). */
+  'app-unavailable',
 ]);
 export type ProviderUnavailableReason = z.infer<
   typeof providerUnavailableReasonSchema

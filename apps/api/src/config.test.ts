@@ -1,6 +1,10 @@
 import { homedir } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { assertDeliveryConfigured, loadConfig } from './config.js';
+import {
+  assertAiConfigured,
+  assertDeliveryConfigured,
+  loadConfig,
+} from './config.js';
 
 describe('loadConfig', () => {
   it('applies defaults and expands the home directory', () => {
@@ -135,5 +139,43 @@ describe('assertDeliveryConfigured (KBC-014 FR-7, KBC-015 AC-6)', () => {
     const config = loadConfig({ KB_CHAT_SMS: 'log' });
     expect(config.NODE_ENV).toBe('development');
     expect(() => assertDeliveryConfigured(config)).not.toThrow();
+  });
+});
+
+describe('AI in production (KBC-022 AC-10)', () => {
+  const key = Buffer.alloc(32, 7).toString('base64');
+  const production = { NODE_ENV: 'production', KB_CHAT_SECRETS_KEY: key };
+
+  it('starts in production with a secrets key and no AI defaults', () => {
+    expect(() => assertAiConfigured(loadConfig(production))).not.toThrow();
+    expect(loadConfig({}).KB_CHAT_AI_DEFAULTS).toBe('off');
+  });
+
+  it('refuses production without KB_CHAT_SECRETS_KEY', () => {
+    expect(() =>
+      assertAiConfigured(loadConfig({ NODE_ENV: 'production' })),
+    ).toThrow(/KB_CHAT_SECRETS_KEY/);
+    expect(() => assertAiConfigured(loadConfig({ HOST: '0.0.0.0' }))).toThrow(
+      /KB_CHAT_SECRETS_KEY/,
+    );
+  });
+
+  it('refuses the local AI defaults and the stub in production', () => {
+    expect(() =>
+      assertAiConfigured(
+        loadConfig({ ...production, KB_CHAT_AI_DEFAULTS: 'local' }),
+      ),
+    ).toThrow(/KB_CHAT_AI_DEFAULTS/);
+    expect(() =>
+      assertAiConfigured(loadConfig({ ...production, KB_CHAT_LLM: 'stub' })),
+    ).toThrow(/stub/);
+  });
+
+  it('allows both in development', () => {
+    expect(() =>
+      assertAiConfigured(
+        loadConfig({ KB_CHAT_AI_DEFAULTS: 'local', KB_CHAT_LLM: 'stub' }),
+      ),
+    ).not.toThrow();
   });
 });

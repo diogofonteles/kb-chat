@@ -56,6 +56,17 @@ export const configSchema = z
       .default('off')
       .transform((value) => value === 'on'),
     KB_CHAT_LLM: z.enum(['openrouter', 'stub']).default('openrouter'),
+    /**
+     * `local` restores ADR 0007's defaults for a person with no provider chosen (the Claude
+     * CLI on PATH, then the env keys): the owner's Mac only. Off by default and refused in
+     * production, which needs no AI key in .env (ADR 0016).
+     */
+    KB_CHAT_AI_DEFAULTS: z.enum(['off', 'local']).default('off'),
+    /**
+     * Master key of the provider keys kept on disk (AES-256-GCM, ADR 0016): 32 random bytes in
+     * base64 (`openssl rand -base64 32`). Required in production.
+     */
+    KB_CHAT_SECRETS_KEY: blankAsUnset(z.string().min(1).optional()),
     /** Per-token provider keys used while Settings do not set one (KBC-007 BR-4). */
     ANTHROPIC_API_KEY: z.string().min(1).optional(),
     OPENAI_API_KEY: z.string().min(1).optional(),
@@ -167,6 +178,28 @@ export function assertSignInConfigured(
 
 const LOOPBACK = new Set(['127.0.0.1', '::1']);
 
+/** Production, or listening beyond loopback even when NODE_ENV was forgotten: fail closed. */
+export const isHosted = (config: AppConfig): boolean =>
+  config.NODE_ENV === 'production' || !LOOPBACK.has(config.HOST);
+
+/**
+ * Production picks no AI from the environment (ADR 0016): no env-key or CLI defaults, no
+ * test stub, and the secrets key must be set (its format is checked when it is loaded).
+ */
+export function assertAiConfigured(config: AppConfig): void {
+  if (!isHosted(config)) return;
+  if (!config.KB_CHAT_SECRETS_KEY)
+    throw new Error(
+      'KB_CHAT_SECRETS_KEY is not set: generate it once with `openssl rand -base64 32` (docs/deploy/runbook.md)',
+    );
+  if (config.KB_CHAT_AI_DEFAULTS === 'local')
+    throw new Error(
+      'KB_CHAT_AI_DEFAULTS=local is for development: production chooses AI in the UI',
+    );
+  if (config.KB_CHAT_LLM === 'stub')
+    throw new Error('KB_CHAT_LLM=stub is for tests: not in production');
+}
+
 /** True when one email provider has everything it needs (ADR 0011, ADR 0012). */
 function hasEmailProvider(config: AppConfig): boolean {
   const smtp = Boolean(config.SMTP_USER && config.SMTP_PASSWORD);
@@ -180,9 +213,7 @@ function hasEmailProvider(config: AppConfig): boolean {
  * too.
  */
 export function assertDeliveryConfigured(config: AppConfig): void {
-  // Listening beyond loopback is a deployment even when NODE_ENV was forgotten: fail closed.
-  const exposed = !LOOPBACK.has(config.HOST);
-  if (config.NODE_ENV !== 'production' && !exposed) return;
+  if (!isHosted(config)) return;
   if (!hasEmailProvider(config))
     throw new Error(
       'Email delivery is not configured for production: set SMTP_USER and SMTP_PASSWORD (Gmail), or RESEND_API_KEY and KB_CHAT_EMAIL_FROM',

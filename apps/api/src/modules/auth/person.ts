@@ -1,5 +1,7 @@
 import {
+  DEFAULT_PERSON_AI,
   FEATURES,
+  personAiSchema,
   featureSchema,
   invitationSchema,
   roleSchema,
@@ -39,6 +41,8 @@ export const storedPersonSchema = z.object({
    * so linking Google later keeps the same history. Absent: the Google `sub`, else the id.
    */
   principal: z.string().min(1).optional(),
+  /** Which app AI serves the person and their limits (KBC-022); absent: the house default. */
+  ai: personAiSchema.optional(),
 });
 export type StoredPerson = z.infer<typeof storedPersonSchema>;
 
@@ -102,4 +106,5 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   invitedBy: person.invitedBy,
   createdAt: person.createdAt,
   lastLoginAt: person.lastLoginAt,
+  ai: person.ai ?? DEFAULT_PERSON_AI,
 });

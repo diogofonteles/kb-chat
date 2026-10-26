@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { personAiSchema, personAiUpdateSchema } from './ai-access.js';
 import { codeChannelSchema } from './access.js';
 import { topicSlugSchema } from './topics.js';
 
@@ -90,6 +91,8 @@ export const personSchema = z.object({
   invitedBy: z.string(),
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),
+  /** Which app AI serves the person and their limits (KBC-022). */
+  ai: personAiSchema,
 });
 export type Person = z.infer<typeof personSchema>;
 
@@ -113,6 +116,7 @@ export const personUpdateSchema = z
     role: roleSchema,
     topics: z.array(topicSlugSchema).max(500),
     features: z.array(featureSchema).max(FEATURES.length),
+    ai: personAiUpdateSchema,
   })
   .partial();
 export type PersonUpdate = z.infer<typeof personUpdateSchema>;

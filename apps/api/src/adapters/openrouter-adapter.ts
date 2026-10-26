@@ -11,13 +11,17 @@ import type {
   ToolCall,
   ToolDefinition,
 } from '../ports/llm.js';
-import { LlmKeyRejectedError } from '../ports/llm-errors.js';
+import { LlmCapacityError, LlmKeyRejectedError } from '../ports/llm-errors.js';
 
 const API = 'https://openrouter.ai/api/v1';
 const BALANCE_TTL_MS = 60_000;
 /** A stalled provider must not hold a request (and its reserved key) forever. */
 const REQUEST_TIMEOUT_MS = 90_000;
 const INFO_TIMEOUT_MS = 10_000;
+/** Models per request in a fallback chain; a longer chain goes in windows (ADR 0016). */
+export const CHAIN_WINDOW = 3;
+/** Statuses after which the next window of the chain is tried. */
+const RETRYABLE = new Set([402, 403, 408, 429, 500, 502, 503, 504]);
 
 const modelsSchema = z.object({
   data: z.array(
@@ -31,6 +35,7 @@ const creditsSchema = z.object({
   data: z.object({ total_credits: z.number(), total_usage: z.number() }),
 });
 const chunkSchema = z.looseObject({
+  model: z.string().optional(),
   error: z.looseObject({ message: z.string().optional() }).optional(),
   choices: z
     .array(
@@ -164,6 +169,22 @@ function* dataPayloads(lines: readonly string[]): Iterable<string> {
     if (line.startsWith('data: ')) yield line.slice(6).trim();
 }
 
+/** A failure of one window of the chain that the next window may avoid. */
+class WindowFailure extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+  }
+}
+
+/** The chain in windows of CHAIN_WINDOW models; one window of the adapter's model without a chain. */
+export function chainWindows(chain: readonly string[] | undefined): string[][] {
+  if (!chain || chain.length === 0) return [];
+  const windows: string[][] = [];
+  for (let i = 0; i < chain.length; i += CHAIN_WINDOW)
+    windows.push(chain.slice(i, i + CHAIN_WINDOW));
+  return windows;
+}
+
 /** OpenRouter chat completions with streaming and the real cost in the final usage chunk (ADR 0004). */
 export class OpenRouterAdapter implements AgentLlmPort {
   readonly model: string;
@@ -229,28 +250,65 @@ export class OpenRouterAdapter implements AgentLlmPort {
       if (chunk.type !== 'tool_call') yield chunk;
   }
 
-  /** Streams text and usage, and each tool call once its arguments are complete. */
+  /**
+   * Streams text and usage, and each tool call once its arguments are complete. With a
+   * fallback chain (`options.models`), each window of up to 3 models is one request; a window
+   * that fails before writing anything (rate limit, credit, downtime) hands over to the next.
+   */
   async *streamAgent(
     messages: readonly AgentMessage[],
     tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
-    const body = await this.post(
-      this.requestBody(messages, tools, options),
-      options.signal,
-    );
+    const windows = chainWindows(options.models);
+    const targets = windows.length > 0 ? windows : [null];
+    const failures: string[] = [];
+    for (const models of targets) {
+      const body = this.requestBody(messages, tools, { ...options, models });
+      const failure = yield* this.tryWindow(body, options);
+      if (failure === null) return;
+      failures.push(failure);
+    }
+    throw new LlmCapacityError('OpenRouter', failures.join('; '));
+  }
+
+  /** One window: null when it answered, the reason when the next window should try. */
+  private async *tryWindow(
+    body: Record<string, unknown>,
+    options: AgentStreamOptions,
+  ): AsyncGenerator<AgentChunk, string | null> {
+    try {
+      yield* this.streamWindow(body, options);
+      return null;
+    } catch (err) {
+      if (!(err instanceof WindowFailure)) throw err;
+      return err.detail;
+    }
+  }
+
+  /** One request; a failure before any output is a WindowFailure (the chain may go on). */
+  private async *streamWindow(
+    body: Record<string, unknown>,
+    options: AgentStreamOptions,
+  ): AsyncIterable<AgentChunk> {
+    const stream = await this.post(body, options.signal);
     const calls = new ToolCallAccumulator();
-    for await (const data of sseData(body)) {
+    const state: StreamState = { model: undefined, wrote: false };
+    for await (const data of sseData(stream)) {
       if (data === '[DONE]') break;
-      yield* toChunks(data, calls);
+      for (const chunk of toChunks(data, calls, state)) {
+        state.wrote = true;
+        yield chunk;
+      }
     }
     for (const call of calls.drain()) yield { type: 'tool_call', call };
   }
 
+  /** The request; `options.models` (one window) replaces the adapter's model. */
   private requestBody(
     messages: readonly AgentMessage[],
     tools: readonly ToolDefinition[],
-    options: AgentStreamOptions,
+    options: Omit<AgentStreamOptions, 'models'> & { models: string[] | null },
   ): Record<string, unknown> {
     const toolFields =
       tools.length === 0
@@ -261,7 +319,7 @@ export class OpenRouterAdapter implements AgentLlmPort {
             parallel_tool_calls: true,
           };
     return {
-      model: this.model,
+      ...(options.models ? { models: options.models } : { model: this.model }),
       messages: messages.map(toWireMessage),
       ...toolFields,
       max_tokens: options.maxTokens,
@@ -284,8 +342,12 @@ export class OpenRouterAdapter implements AgentLlmPort {
         AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       ]),
     });
-    if (response.status === 401 || response.status === 403)
-      throw new LlmKeyRejectedError('OpenRouter', response.status);
+    if (response.status === 401)
+      throw new LlmKeyRejectedError('OpenRouter', 401);
+    if (response.status === 403 && !(await isLimitRefusal(response)))
+      throw new LlmKeyRejectedError('OpenRouter', 403);
+    if (RETRYABLE.has(response.status))
+      throw new WindowFailure(`HTTP ${response.status}`);
     if (!response.ok || !response.body)
       throw new Error(`OpenRouter answered ${response.status}`);
     return response.body;
@@ -299,17 +361,33 @@ export class OpenRouterAdapter implements AgentLlmPort {
   }
 }
 
+interface StreamState {
+  /** The model that answered, from the chunks (fallbacks bill only it). */
+  model: string | undefined;
+  /** Something reached the caller: a later failure can no longer move to another window. */
+  wrote: boolean;
+}
+
+/** A 403 for a spent budget or key limit (carries `limit_source`), not a refused key. */
+async function isLimitRefusal(response: Response): Promise<boolean> {
+  const text = await response.text().catch(() => '');
+  return text.includes('limit_source');
+}
+
 function* toChunks(
   data: string,
   calls: ToolCallAccumulator,
+  state: StreamState,
 ): Iterable<LlmChunk> {
   const parsed = chunkSchema.safeParse(JSON.parse(data));
   if (!parsed.success) return;
+  state.model ??= parsed.data.model;
   // OpenRouter reports mid-stream provider failures as a chunk with `error`.
-  if (parsed.data.error)
-    throw new Error(
-      `OpenRouter stream error: ${parsed.data.error.message ?? 'unknown'}`,
-    );
+  if (parsed.data.error) {
+    const detail = `OpenRouter stream error: ${parsed.data.error.message ?? 'unknown'}`;
+    if (!state.wrote) throw new WindowFailure(detail);
+    throw new Error(detail);
+  }
   const delta = parsed.data.choices?.[0]?.delta;
   for (const part of delta?.tool_calls ?? []) calls.add(part);
   if (delta?.content) yield { type: 'token', text: delta.content };
@@ -321,6 +399,7 @@ function* toChunks(
         inputTokens: usage.prompt_tokens,
         outputTokens: usage.completion_tokens,
         usd: usage.cost ?? null,
+        ...(state.model && { model: state.model }),
       },
     };
   }

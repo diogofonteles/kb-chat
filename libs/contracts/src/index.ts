@@ -12,3 +12,5 @@ export * from './spend.js';
 export * from './auth.js';
 export * from './access.js';
 export * from './phone.js';
+export * from './ai-access.js';
+export * from './house-ai.js';
