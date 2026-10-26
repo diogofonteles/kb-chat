@@ -84,7 +84,17 @@ for (const width of [1440, 390]) {
   await dialog.getByText('Quem atende você agora').waitFor();
   await page.waitForFunction(() => document.getAnimations().length === 0);
   await page.screenshot({ path: `${out}/status-${width}.png` });
-  report.push(`own-ai ${width}: overflow ${await overflow(page)}`);
+  // The daily cap shows only where a paid call can happen (review R2-06).
+  const plan = dialog.getByText('Plano do Google AI Studio');
+  await plan.scrollIntoViewIfNeeded();
+  const capFree = await dialog.getByLabel(/Limite de gasto/).count();
+  await page.screenshot({ path: `${out}/gemini-free-no-cap-${width}.png` });
+  await dialog.getByRole('radio', { name: /Pago/ }).check();
+  await dialog.getByLabel(/Limite de gasto/).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${out}/gemini-paid-cap-${width}.png` });
+  report.push(
+    `own-ai ${width}: overflow ${await overflow(page)}, cap on free ${capFree}`,
+  );
   await context.close();
 }
 await browser.close();
