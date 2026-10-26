@@ -12,6 +12,7 @@ import {
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   DEFAULT_DAILY_RESEARCHES,
+  MAX_DAILY_RESEARCHES,
   OPENROUTER_FREE_ROUTER,
   type AppAi,
   type HouseAiUpdate,
@@ -20,6 +21,7 @@ import {
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { GO_TO_URL } from '@core/routing/go-to-url.js';
+import { parseDaily } from './number-fields.js';
 import { TEST_COPY } from '@features/settings/provider-copy.js';
 import type { Observable } from 'rxjs';
 
@@ -101,6 +103,15 @@ export class HouseAiPanel {
     () => this.view()?.defaultDailyResearches ?? DEFAULT_DAILY_RESEARCHES,
   );
   protected readonly router = OPENROUTER_FREE_ROUTER;
+  protected readonly maxDaily = MAX_DAILY_RESEARCHES;
+  /** Why the typed default was not saved (MA-23). */
+  protected readonly dailyError = signal<string | null>(null);
+  /** The order the house tries the models in, for the hint. */
+  protected readonly chainText = computed(
+    () => this.view()?.chain.join(' → ') ?? '',
+  );
+  /** Paid models with tool calling: the suggestions of the paid fallback field. */
+  protected readonly paidOptions = computed(() => this.listInfo()?.paid ?? []);
 
   /** "Conectar OpenRouter": the server makes the PKCE pair; the browser goes to OpenRouter. */
   protected connect(): void {
@@ -181,9 +192,10 @@ export class HouseAiPanel {
   }
 
   protected setDefaultDaily(value: string): void {
-    const daily = Number(value);
-    if (Number.isInteger(daily) && daily >= 0 && daily <= 500)
-      this.save({ defaultDailyResearches: daily });
+    const parsed = parseDaily(value, false);
+    this.dailyError.set(parsed.ok ? null : parsed.error);
+    if (parsed.ok && parsed.value !== null)
+      this.save({ defaultDailyResearches: parsed.value });
   }
 
   protected saveManagement(remove = false): void {

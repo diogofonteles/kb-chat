@@ -34,12 +34,17 @@
       type="number"
       inputmode="numeric"
       min="0"
-      max="500"
+      [attr.max]="maxDaily"
       step="1"
+      [attr.aria-invalid]="dailyError() ? true : null"
+      [attr.aria-describedby]="dailyError() ? 'person-daily-error' : null"
       [value]="current.dailyResearches ?? ''"
       (change)="setDaily(dailyInput.value)"
     />
   </label>
+  @if (dailyError(); as error) {
+    <p id="person-daily-error" class="field-error" role="alert">{{ error }}</p>
+  }
   <label class="check">
     <input
       #paidBox
@@ -60,10 +65,15 @@
         min="0"
         [attr.max]="maxCap"
         step="0.5"
+        [attr.aria-invalid]="capError() ? true : null"
+        [attr.aria-describedby]="capError() ? 'person-cap-error' : null"
         [value]="current.paidFallback.monthlyCapUsd"
         (change)="setCap(capInput.value)"
       />
     </label>
+    @if (capError(); as error) {
+      <p id="person-cap-error" class="field-error" role="alert">{{ error }}</p>
+    }
   }
 </fieldset>
 @if (history().length > 0) {

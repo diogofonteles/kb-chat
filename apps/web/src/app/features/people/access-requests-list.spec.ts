@@ -8,7 +8,6 @@ import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import type { AccessRequest, Person } from '@kb-chat/contracts';
 import { DEFAULT_PERSON_AI } from '@kb-chat/contracts';
-import { aHouseView } from '../../testing/settings-fixtures.js';
 import { AccessRequestsStore } from '@core/auth/access-requests-store.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { TOPICS } from '../../testing/fixtures.js';
@@ -66,7 +65,7 @@ async function renderAsMaster(requests: AccessRequest[]) {
   const http = TestBed.inject(HttpTestingController);
   http.expectOne('/api/v1/people').flush({ items: [] });
   http.expectOne('/api/v1/topics').flush(TOPICS);
-  http.expectOne('/api/v1/house-ai').flush(aHouseView());
+  http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
   http.expectOne('/api/v1/spend/people').flush({ items: [] });
   http.expectOne('/api/v1/access-requests').flush({ items: requests });
   await result.fixture.whenStable();

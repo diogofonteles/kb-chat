@@ -1,6 +1,10 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
+import {
+  OPENROUTER_RETURN_PARAM,
+  openRouterReturnSchema,
+} from '@kb-chat/contracts';
 import type {
   AiTestRequest,
   AiTestResult,
@@ -130,9 +134,11 @@ export class SettingsStore {
    */
   returnFromOpenRouter(search: string): boolean {
     const params = new URLSearchParams(search);
-    const outcome = params.get('openrouter');
-    if (outcome !== 'connected' && outcome !== 'error') return false;
-    this.returned.set(outcome);
+    const outcome = openRouterReturnSchema.safeParse(
+      params.get(OPENROUTER_RETURN_PARAM),
+    );
+    if (!outcome.success) return false;
+    this.returned.set(outcome.data);
     this.openSettings(params.get('for') === 'house' ? 'house' : 'ai');
     return true;
   }

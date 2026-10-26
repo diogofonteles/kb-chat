@@ -36,7 +36,7 @@ import {
   type AssignmentRequest,
 } from './ai-assignment-bar.js';
 import { HouseAiApi } from '@core/api/house-ai-api.js';
-import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
+import { servingLabel } from '@features/house-ai/app-ai-labels.js';
 import { PersonEditor } from './person-editor.js';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
@@ -78,9 +78,11 @@ export class PeoplePanel {
 
   protected readonly people = rxResource({ stream: () => this.api.list() });
   /** The house default, to name each person's "Padrão" (KBC-022). */
-  private readonly house = rxResource({ stream: () => this.houseApi.view() });
+  private readonly house = rxResource({
+    stream: () => this.houseApi.defaultAppAi(),
+  });
   protected readonly defaultAppAi = computed(() =>
-    this.house.hasValue() ? this.house.value().defaultAppAi : null,
+    this.house.hasValue() ? this.house.value() : null,
   );
   /** People chosen for a bulk AI assignment. */
   protected readonly selected = signal<ReadonlySet<string>>(new Set());
@@ -276,7 +278,7 @@ export class PeoplePanel {
 
   /** "IA: Plano da casa (sempre)": which app AI the master gave the person (KBC-022). */
   protected aiLabel(person: Person): string {
-    const label = assignmentLabel(person.ai.appAi, this.defaultAppAi());
+    const label = servingLabel(person.ai.appAi, this.defaultAppAi());
     return person.ai.enforced
       ? $localize`:@@people.aiEnforced:IA: ${label}:label: (sempre)`
       : $localize`:@@people.ai:IA: ${label}:label:`;

@@ -5,9 +5,11 @@ import {
   computed,
   input,
   output,
+  signal,
 } from '@angular/core';
 import {
   APP_AI_ASSIGNMENTS,
+  MAX_DAILY_RESEARCHES,
   MAX_MONTHLY_CAP_USD,
   type AppAi,
   type AppAiAssignment,
@@ -15,6 +17,7 @@ import {
   type PersonAiUpdate,
 } from '@kb-chat/contracts';
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
+import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 
 const isAssignment = (value: string): value is AppAiAssignment =>
   APP_AI_ASSIGNMENTS.some((option) => option === value);
@@ -50,6 +53,10 @@ export class PersonAiEditor {
     })),
   );
   protected readonly maxCap = MAX_MONTHLY_CAP_USD;
+  protected readonly maxDaily = MAX_DAILY_RESEARCHES;
+  /** Why a typed number was not saved; shown on its field (MA-23). */
+  protected readonly dailyError = signal<string | null>(null);
+  protected readonly capError = signal<string | null>(null);
 
   protected chooseAppAi(value: string): void {
     if (isAssignment(value)) this.changed.emit({ appAi: value });
@@ -61,13 +68,9 @@ export class PersonAiEditor {
 
   /** Blank: the house default; otherwise a whole number of researches a day. */
   protected setDaily(value: string): void {
-    if (value.trim() === '') {
-      this.changed.emit({ dailyResearches: null });
-      return;
-    }
-    const daily = Number(value);
-    if (Number.isInteger(daily) && daily >= 0 && daily <= 500)
-      this.changed.emit({ dailyResearches: daily });
+    const parsed = parseDaily(value, true);
+    this.dailyError.set(parsed.ok ? null : parsed.error);
+    if (parsed.ok) this.changed.emit({ dailyResearches: parsed.value });
   }
 
   protected setPaid(enabled: boolean): void {
@@ -76,9 +79,12 @@ export class PersonAiEditor {
   }
 
   protected setCap(value: string): void {
-    const cap = Number(value);
-    if (!Number.isFinite(cap) || cap < 0 || cap > MAX_MONTHLY_CAP_USD) return;
+    const parsed = parseCap(value);
+    this.capError.set(parsed.ok ? null : parsed.error);
+    if (!parsed.ok) return;
     const { enabled } = this.ai().paidFallback;
-    this.changed.emit({ paidFallback: { enabled, monthlyCapUsd: cap } });
+    this.changed.emit({
+      paidFallback: { enabled, monthlyCapUsd: parsed.value },
+    });
   }
 }

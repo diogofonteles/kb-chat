@@ -58,6 +58,8 @@ export interface ResearchTurn {
   /** The profile it was asked with (KBC-017); null for turns saved before. */
   readonly profile: ResearchProfile | null;
   readonly error: ResearchErrorCode | null;
+  /** HOUSE_QUOTA_EXHAUSTED: the person's researches a day, for the message (KBC-022). */
+  readonly errorLimit: number | null;
   readonly at: string;
   /** Brought back from the history (FR-6): shown as saved, never announced or re-run. */
   readonly restored: boolean;
@@ -86,6 +88,7 @@ export function startTurn(
     plan: null,
     remaining: null,
     error: null,
+    errorLimit: null,
     at: new Date().toISOString(),
     restored: false,
   };
@@ -163,6 +166,7 @@ const HANDLERS: {
     ...turn,
     phase: 'error',
     error: toResearchErrorCode(e.code),
+    errorLimit: e.limit ?? null,
   }),
 };
 
@@ -245,6 +249,7 @@ export function fromSavedTurn(
     remaining: null,
     profile: saved.profile ?? null,
     error: null,
+    errorLimit: null,
     at: saved.at,
     restored: true,
   };

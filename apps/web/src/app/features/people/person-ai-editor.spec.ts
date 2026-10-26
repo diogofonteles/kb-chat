@@ -33,6 +33,48 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
     });
   });
 
+  it('says why an invalid number is not saved, on its field (QA defect 2)', async () => {
+    const { changed, fixture } = await renderEditor({
+      ...DEFAULT_PERSON_AI,
+      paidFallback: { enabled: true, monthlyCapUsd: 2 },
+    });
+    const daily = screen.getByLabelText('Pesquisas por dia (vazio = padrão)');
+    fireEvent.change(daily, { target: { value: '-1' } });
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    expect(daily.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'número inteiro de 0 a 500',
+    );
+    fireEvent.change(screen.getByLabelText('Teto por mês (US$)'), {
+      target: { value: '150' },
+    });
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('de 0 a 100 (US$)');
+  });
+
+  it('says why an invalid number is not saved, on its field (QA defect 2)', async () => {
+    const { changed, fixture } = await renderEditor({
+      ...DEFAULT_PERSON_AI,
+      paidFallback: { enabled: true, monthlyCapUsd: 2 },
+    });
+    const daily = screen.getByLabelText('Pesquisas por dia (vazio = padrão)');
+    fireEvent.change(daily, { target: { value: '-1' } });
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    expect(daily.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'número inteiro de 0 a 500',
+    );
+    fireEvent.change(screen.getByLabelText('Teto por mês (US$)'), {
+      target: { value: '150' },
+    });
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('de 0 a 100 (US$)');
+  });
+
   it('edits the monthly cap and lists the history newest first', async () => {
     const { changed } = await renderEditor({
       ...DEFAULT_PERSON_AI,

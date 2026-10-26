@@ -378,6 +378,7 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       }),
     );
     const footer = document.querySelector('.footer')?.textContent ?? '';
+    expect(footer).toContain('IA da aplicação (cedida pelo administrador)');
     expect(footer).toContain('Respondido por fake/large:free');
     expect(footer).toContain('Gratuito');
     expect(footer).toContain('Pesquisas restantes hoje: 4');
@@ -395,15 +396,21 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     );
     const footer = document.querySelector('.footer')?.textContent ?? '';
     expect(footer).toContain('Custo');
+    expect(footer).toContain('Sua IA');
     expect(footer).not.toContain('restantes');
   });
 
   it('offers one’s own AI when the quota is spent, without "Tentar de novo"', async () => {
     const { settings } = await renderMessage(
-      aTurn({ phase: 'error', text: '', error: 'HOUSE_QUOTA_EXHAUSTED' }),
+      aTurn({
+        phase: 'error',
+        text: '',
+        error: 'HOUSE_QUOTA_EXHAUSTED',
+        errorLimit: 5,
+      }),
     );
     expect(screen.getByRole('alert').textContent).toContain(
-      'Suas pesquisas com IA de hoje acabaram',
+      'Suas pesquisas com IA de hoje acabaram (5 por dia)',
     );
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
     fireEvent.click(

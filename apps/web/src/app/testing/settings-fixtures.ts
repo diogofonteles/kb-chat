@@ -108,6 +108,7 @@ export const aHouseView = (
   chain: ['openrouter/free'],
   paidModel: null,
   defaultAppAi: 'house',
+  defaultChange: null,
   defaultDailyResearches: 5,
   managementKey: null,
   freeUsage: null,

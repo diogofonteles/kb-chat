@@ -1,5 +1,8 @@
 <p class="status" role="status" [class.error]="status()?.kind === 'error'">
-  {{ status()?.text ?? '' }}
+  @if (status(); as current) {
+    <span aria-hidden="true">{{ current.kind === 'error' ? '⚠' : '✓' }}</span>
+    {{ current.text }}
+  }
 </p>
 
 @if (house.error()) {
@@ -216,7 +219,7 @@
     </label>
     <p class="hint" i18n="@@house.modelsHint">
       Só modelos gratuitos que usam ferramentas; se um estiver ocupado, o
-      próximo responde. Ordem atual: {{ current.chain.join(' → ') }}
+      próximo responde. Ordem atual: {{ chainText() }}
     </p>
   </section>
 
@@ -234,9 +237,15 @@
         class="input"
         autocomplete="off"
         spellcheck="false"
+        list="house-paid-models"
         [value]="paidDraft()"
         (input)="paidDraft.set(paidInput.value)"
       />
+      <datalist id="house-paid-models">
+        @for (model of paidOptions(); track model.id) {
+          <option [value]="model.id">{{ model.name }}</option>
+        }
+      </datalist>
       <button
         type="button"
         class="secondary"
@@ -290,12 +299,18 @@
       type="number"
       inputmode="numeric"
       min="0"
-      max="500"
+      [attr.max]="maxDaily"
       step="1"
-      aria-describedby="house-daily-hint"
+      [attr.aria-invalid]="dailyError() ? true : null"
+      [attr.aria-describedby]="
+        dailyError() ? 'house-daily-error house-daily-hint' : 'house-daily-hint'
+      "
       [value]="defaultDaily()"
       (change)="setDefaultDaily(dailyInput.value)"
     />
+    @if (dailyError(); as error) {
+      <p id="house-daily-error" class="field-error" role="alert">{{ error }}</p>
+    }
     <p id="house-daily-hint" class="hint" i18n="@@house.dailyHint">
       Rápido conta 1, Profundo 2, Exaustivo 5. Cada pessoa pode ter outro
       número.

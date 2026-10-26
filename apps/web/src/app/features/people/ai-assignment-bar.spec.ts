@@ -7,7 +7,7 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
     const apply = vi.fn();
     const { fixture } = await render(AiAssignmentBar, {
       providers: [provideZonelessChangeDetection()],
-      inputs: { selectedCount: 2, defaultAppAi: 'house' },
+      inputs: { selectedCount: 2, total: 3, defaultAppAi: 'house' },
       on: { apply },
     });
     fireEvent.click(
@@ -28,6 +28,12 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Aplicar a todos os usuários' }),
     );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'a todas as 3 pessoas',
+    );
+    expect(apply).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar a todos' }));
     expect(apply).toHaveBeenLastCalledWith({
       target: 'all',
       appAi: 'none',

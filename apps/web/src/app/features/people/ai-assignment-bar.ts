@@ -36,12 +36,20 @@ const isAssignment = (value: string): value is AppAiAssignment =>
 })
 export class AiAssignmentBar {
   readonly selectedCount = input(0);
+  /** Everyone on the list, for the "todos" confirmation. */
+  readonly total = input(0);
   readonly defaultAppAi = input<AppAi | null>(null);
   readonly busy = input(false);
   readonly apply = output<AssignmentRequest>();
 
   protected readonly appAi = signal<AppAiAssignment>('house');
   protected readonly alsoDefault = signal(false);
+  /** "Aplicar a todos" asks first: it replaces every individual choice (UP-07). */
+  protected readonly confirmingAll = signal(false);
+  protected readonly chosenLabel = computed(
+    () =>
+      this.options().find((option) => option.id === this.appAi())?.label ?? '',
+  );
   protected readonly options = computed(() =>
     APP_AI_ASSIGNMENTS.map((id) => ({
       id,
@@ -55,7 +63,12 @@ export class AiAssignmentBar {
     if (isAssignment(value)) this.appAi.set(value);
   }
 
+  protected askAll(): void {
+    this.confirmingAll.set(true);
+  }
+
   protected applyTo(target: AssignmentRequest['target']): void {
+    this.confirmingAll.set(false);
     const setDefault =
       target === 'all' && this.alsoDefault() && this.canSetDefault();
     this.apply.emit({ target, appAi: this.appAi(), setDefault });

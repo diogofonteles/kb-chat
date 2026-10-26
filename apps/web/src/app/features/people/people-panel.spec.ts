@@ -11,7 +11,6 @@ import { authInterceptor } from '@core/auth/auth-interceptor.js';
 import { RELOAD_PAGE, SessionStore } from '@core/auth/session-store.js';
 import { anOwner } from '../../testing/session-fixtures.js';
 import { TOPICS } from '../../testing/fixtures.js';
-import { aHouseView } from '../../testing/settings-fixtures.js';
 import { PeoplePanel } from './people-panel.js';
 
 const aPerson = (overrides: Partial<Person> = {}): Person => ({
@@ -53,7 +52,7 @@ async function renderPanel(people: Person[] = [owner, aPerson()]) {
   const http = TestBed.inject(HttpTestingController);
   http.expectOne('/api/v1/people').flush({ items: people });
   http.expectOne('/api/v1/topics').flush(TOPICS);
-  http.expectOne('/api/v1/house-ai').flush(aHouseView());
+  http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
   await result.fixture.whenStable();
   return { ...result, http };
 }
@@ -461,7 +460,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
       .expectOne('/api/v1/people')
       .flush({}, { status: 500, statusText: 'x' });
     http.expectOne('/api/v1/topics').flush(TOPICS);
-    http.expectOne('/api/v1/house-ai').flush(aHouseView());
+    http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
     await result.fixture.whenStable();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
@@ -488,7 +487,7 @@ describe('PeoplePanel for the owner (BR-6)', () => {
     http.expectOne('/api/v1/people').flush({ items: [owner, aPerson()] });
     http.expectOne('/api/v1/topics').flush(TOPICS);
     http.expectOne('/api/v1/access-requests').flush({ items: [] });
-    http.expectOne('/api/v1/house-ai').flush(aHouseView());
+    http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
     http.expectOne('/api/v1/spend/people').flush({
       items: [
         { email: 'owner@example.com', usd: 0 },

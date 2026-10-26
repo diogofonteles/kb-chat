@@ -22,16 +22,45 @@
     >
       Aplicar às selecionadas ({{ selectedCount() }})
     </button>
-    <button
-      type="button"
-      class="secondary"
-      [disabled]="busy()"
-      (click)="applyTo('all')"
-      i18n="@@assign.all"
-    >
-      Aplicar a todos os usuários
-    </button>
+    @if (!confirmingAll()) {
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="busy()"
+        (click)="askAll()"
+        i18n="@@assign.all"
+      >
+        Aplicar a todos os usuários
+      </button>
+    }
   </div>
+  @if (confirmingAll()) {
+    <div class="confirm" role="alert">
+      <p i18n="@@assign.confirm">
+        Aplicar “{{ chosenLabel() }}” a todas as {{ total() }} pessoas? As
+        escolhas individuais serão substituídas.
+      </p>
+      <div class="actions">
+        <button
+          type="button"
+          class="secondary danger"
+          [disabled]="busy()"
+          (click)="applyTo('all')"
+          i18n="@@assign.confirmApply"
+        >
+          Aplicar a todos
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          (click)="confirmingAll.set(false)"
+          i18n="@@assign.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  }
   <label class="check">
     <input
       #defaultBox

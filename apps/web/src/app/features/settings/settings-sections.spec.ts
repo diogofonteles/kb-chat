@@ -10,7 +10,6 @@ import type { Me } from '@kb-chat/contracts';
 import { RELOAD_PAGE, SessionStore } from '@core/auth/session-store.js';
 import { TOPICS } from '../../testing/fixtures.js';
 import {
-  aHouseView,
   aSettingsView,
   flushAiStatus,
 } from '../../testing/settings-fixtures.js';
@@ -79,7 +78,7 @@ describe('Configurações per permission (KBC-010)', () => {
     expect(
       screen.getByRole('heading', { name: 'Pessoas e permissões', level: 3 }),
     ).toBeTruthy();
-    http.expectOne('/api/v1/house-ai').flush(aHouseView());
+    http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
     http.expectOne('/api/v1/people').flush({ items: [] });
     http.expectOne('/api/v1/topics').flush({ items: [], defaultSlug: null });
     http.expectOne('/api/v1/spend/people').flush({ items: [] });

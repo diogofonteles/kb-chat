@@ -117,6 +117,11 @@ export class AiProviderForm {
   protected readonly selected = computed(() =>
     this.options().find((option) => option.info.id === this.draft().provider),
   );
+  /** Providers with a model to pick and a connection to test (not "app" nor "none"). */
+  protected readonly hasModels = computed(() => {
+    const billing = this.selected()?.info.billing;
+    return billing === 'per-token' || billing === 'subscription';
+  });
   protected readonly savedKey = computed(() => {
     const id = this.draft().provider;
     const keys = this.store.settings()?.ai.keys ?? {};

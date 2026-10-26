@@ -64,3 +64,13 @@
   height: 1.125rem;
   accent-color: var(--color-accent);
 }
+
+.confirm p {
+  margin: 0 0 var(--space-2);
+}
+
+.danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  font-weight: 600;
+}

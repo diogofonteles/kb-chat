@@ -16,6 +16,7 @@ const MODELS: FreeModelList = {
     { id: 'fake/large:free', name: 'Fake Large', contextLength: 131072 },
     { id: 'fake/small:free', name: 'Fake Small', contextLength: 32768 },
   ],
+  paid: [{ id: 'fake/paid', name: 'Fake Paid', contextLength: 200000 }],
   updatedAt: '2026-10-26T12:00:00.000Z',
   stale: false,
 };

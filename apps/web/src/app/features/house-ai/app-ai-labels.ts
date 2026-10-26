@@ -6,6 +6,16 @@ export const APP_AI_LABELS: Record<AppAi, () => string> = {
   none: () => $localize`:@@appAi.none:Nenhuma (IA própria ou só a busca)`,
 };
 
+/** What serves a person, short ("Plano da casa (OpenRouter) (padrão)"), for their row. */
+export function servingLabel(
+  assignment: AppAiAssignment,
+  defaultAppAi: AppAi | null,
+): string {
+  if (assignment !== 'default') return APP_AI_LABELS[assignment]();
+  if (!defaultAppAi) return $localize`:@@appAi.defaultShort:Padrão`;
+  return $localize`:@@appAi.byDefault:${APP_AI_LABELS[defaultAppAi]()}:label: (padrão)`;
+}
+
 /** An assignment's label; `default` names what the default is now. */
 export function assignmentLabel(
   assignment: AppAiAssignment,

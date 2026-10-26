@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import type { Person } from '@kb-chat/contracts';
+import { DEFAULT_PERSON_AI, type Person } from '@kb-chat/contracts';
 import { invitationLimitOf, invitationStateOf } from './invitation-status.js';
 
 const person = (overrides: Partial<Person>): Person => ({
@@ -16,6 +16,7 @@ const person = (overrides: Partial<Person>): Person => ({
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-26T12:00:00.000Z',
   lastLoginAt: null,
+  ai: DEFAULT_PERSON_AI,
   ...overrides,
 });
 

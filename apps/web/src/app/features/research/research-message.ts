@@ -74,6 +74,13 @@ export class ResearchMessage {
   protected readonly free = computed(() => this.turn().billing === 'free');
   /** The model that answered (a fallback chain may hand over to another one). */
   protected readonly modelLabel = computed(() => this.turn().model);
+  /** Who paid: the app's AI or the person's own (ADR 0016); null for older turns. */
+  protected readonly planLabel = computed(() => {
+    const plan = this.turn().plan;
+    if (plan === 'house')
+      return $localize`:@@ai.planApp:IA da aplicação (cedida pelo administrador)`;
+    return plan === 'own' ? $localize`:@@ai.planOwn:Sua IA` : '';
+  });
   /** House plan: researches left today. */
   protected readonly remaining = computed(() =>
     this.turn().plan === 'house' ? this.turn().remaining : null,
@@ -113,8 +120,8 @@ export class ResearchMessage {
     );
   });
   protected readonly errorText = computed(() => {
-    const code = this.turn().error;
-    return code ? aiErrorMessage(code) : '';
+    const { error, errorLimit } = this.turn();
+    return error ? aiErrorMessage(error, errorLimit) : '';
   });
 
   protected openSettings(): void {

@@ -90,11 +90,7 @@
     </div>
   }
 
-  @if (
-    !compact() &&
-    (current.info.billing === 'per-token' ||
-      current.info.billing === 'subscription')
-  ) {
+  @if (!compact() && hasModels()) {
     @for (field of modelFields(); track field.key) {
       <div class="field">
         <label class="field-label" [for]="field.id">{{ field.label }}</label>
@@ -180,10 +176,7 @@
     </p>
   }
 
-  @if (
-    current.info.billing === 'per-token' ||
-    current.info.billing === 'subscription'
-  ) {
+  @if (hasModels()) {
     <div class="test">
       <button
         type="button"

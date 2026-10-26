@@ -33,6 +33,7 @@
 }
 
 .check input {
+  flex-shrink: 0;
   width: 1.125rem;
   height: 1.125rem;
   accent-color: var(--color-accent);
@@ -124,8 +125,15 @@ button:disabled {
 }
 
 .history summary {
+  display: list-item;
   min-height: var(--target);
-  display: flex;
-  align-items: center;
+  line-height: var(--target);
   cursor: pointer;
+}
+
+.field-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-danger);
 }

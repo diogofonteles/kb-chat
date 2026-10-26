@@ -6,6 +6,8 @@ import {
   aiTestResultSchema,
   freeModelListSchema,
   houseAiViewSchema,
+  houseDefaultSchema,
+  type AppAi,
   openRouterConnectResponseSchema,
   type AiAssignmentRequest,
   type AiStatus,
@@ -36,6 +38,13 @@ export class HouseAiApi {
     return this.http
       .put(houseAiUrl(), update)
       .pipe(map((body) => houseAiViewSchema.parse(body)));
+  }
+
+  /** The default app AI alone (no call to OpenRouter). */
+  defaultAppAi(): Observable<AppAi> {
+    return this.http
+      .get(`${houseAiUrl()}/default`)
+      .pipe(map((body) => houseDefaultSchema.parse(body).defaultAppAi));
   }
 
   test(): Observable<AiTestResult> {

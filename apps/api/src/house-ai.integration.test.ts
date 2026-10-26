@@ -419,6 +419,26 @@ describe('The AI access policy (KBC-022 AC-8, AC-12, AC-13)', () => {
     expect((await member('GET', '/api/v1/ai/status')).json().source).toBe(
       'none',
     );
+    // QA defect 1/3: a partial list or an unknown id never changes the default.
+    const partial = await owner('POST', '/api/v1/people/ai-assignment', {
+      personIds: [memberId, '00000000-0000-4000-8000-000000000000'],
+      appAi: 'house',
+      setDefault: true,
+    });
+    expect(partial.statusCode).toBe(400);
+    const unknown = await owner('POST', '/api/v1/people/ai-assignment', {
+      personIds: [memberId, '00000000-0000-4000-8000-000000000000'],
+      appAi: 'house',
+    });
+    expect(unknown.statusCode).toBe(404);
+    expect((await owner('GET', '/api/v1/house-ai/default')).json()).toEqual({
+      defaultAppAi: 'none',
+    });
+    expect(
+      (await owner('GET', '/api/v1/house-ai')).json().defaultChange,
+    ).toMatchObject({
+      by: OWNER_EMAIL,
+    });
     const bad = await owner('POST', '/api/v1/people/ai-assignment', {
       personIds: 'all',
       appAi: 'default',
@@ -436,11 +456,17 @@ describe('The AI access policy (KBC-022 AC-8, AC-12, AC-13)', () => {
       ai: {
         provider: 'openrouter',
         keys: { openrouter: 'sk-or-v1-ana-own-5678' },
+        // A model the fake OpenRouter lists (it prices from its own list).
+        models: { openrouter: { fast: 'fake/paid' } },
       },
     });
     expect((await member('GET', '/api/v1/ai/status')).json()).toMatchObject({
       source: 'own',
       provider: 'openrouter',
+    });
+    expect((await research(member)).at(-1)).toMatchObject({
+      type: 'done',
+      plan: 'own',
     });
     await owner('PATCH', `/api/v1/people/${memberId}`, {
       ai: { enforced: true },

@@ -53,7 +53,12 @@ const RUNNER_MESSAGES: Record<RunnerErrorCode, () => string> = {
 const isRunnerCode = (code: ResearchErrorCode): code is RunnerErrorCode =>
   RUNNER_CODES.some((value) => value === code);
 
-export function aiErrorMessage(code: ResearchErrorCode): string {
+export function aiErrorMessage(
+  code: ResearchErrorCode,
+  limit: number | null = null,
+): string {
+  if (code === 'HOUSE_QUOTA_EXHAUSTED' && limit !== null)
+    return $localize`:@@ai.houseQuota:Suas pesquisas com IA de hoje acabaram (${limit}:limit: por dia). Volte amanhã ou conecte a sua própria IA.`;
   if (isRunnerCode(code)) return RUNNER_MESSAGES[code]();
   return AI_MESSAGES[code]?.() ?? errorMessage(code);
 }

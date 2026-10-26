@@ -79,6 +79,7 @@
 } @else {
   <app-ai-assignment-bar
     [selectedCount]="selected().size"
+    [total]="list().length"
     [defaultAppAi]="defaultAppAi()"
     [busy]="busy()"
     (apply)="assign($event)"

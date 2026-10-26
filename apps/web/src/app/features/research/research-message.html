@@ -137,6 +137,9 @@
         <span i18n="@@ai.disclaimer"
           >Resposta gerada por IA a partir do acervo; confira nas fontes.</span
         >
+        @if (planLabel()) {
+          <span>{{ planLabel() }}</span>
+        }
         @if (modelLabel()) {
           <span i18n="@@ai.answeredBy">Respondido por {{ modelLabel() }}</span>
         }
