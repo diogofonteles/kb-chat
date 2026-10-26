@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
 
@@ -72,6 +73,54 @@ test('KBC-011: "Rápido | Profundo" picks the profile of the next question and i
   );
   await page.reload();
   await expect(page.getByRole('radio', { name: 'Profundo' })).toBeChecked();
+});
+
+const QUESTION = 'todas as obras citadas no acervo';
+
+test('KBC-017 AC-9: "Exaustivo" explains itself, asks with the exhaustive profile and is saved with the turn', async ({
+  page,
+}) => {
+  await page.getByRole('radio', { name: 'Exaustivo' }).check();
+  await expect(page.getByRole('radio', { name: 'Exaustivo' })).toBeChecked();
+  // Three profiles never push the page sideways (390 px, KBC-017 NFR-4).
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    ),
+  ).toBeLessThanOrEqual(0);
+  if (desktop(page))
+    await expect(
+      page.getByText(/Varre o acervo inteiro.*pode levar vários minutos/),
+    ).toBeVisible();
+  const asked = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' && request.url().endsWith('/research'),
+  );
+  const answer = await research(page, QUESTION);
+  expect(((await asked).postDataJSON() as { profile: string }).profile).toBe(
+    'exhaustive',
+  );
+  await expect(answer.getByText(/Custo:/)).toBeVisible();
+  const axe = await new AxeBuilder({ page }).include('app-composer').analyze();
+  expect(
+    axe.violations.filter((v) =>
+      ['serious', 'critical'].includes(v.impact ?? ''),
+    ),
+  ).toEqual([]);
+  // The turn is saved with its profile (KBC-017 AC-14).
+  await expect
+    .poll(async () => {
+      const list = await page.request.get('/api/v1/conversations');
+      const { items } = (await list.json()) as {
+        items: { id: string; title: string }[];
+      };
+      const mine = items.find((c) => c.title === QUESTION);
+      if (!mine) return null;
+      const saved = await page.request.get(`/api/v1/conversations/${mine.id}`);
+      const body = (await saved.json()) as { turns: { profile?: string }[] };
+      return body.turns.at(-1)?.profile ?? null;
+    })
+    .toBe('exhaustive');
 });
 
 test('ADR 0009: text written before a tool call leaves the answer and shows among the steps', async ({
