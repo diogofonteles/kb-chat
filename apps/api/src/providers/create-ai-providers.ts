@@ -98,26 +98,37 @@ function appAiOf(
   });
 }
 
-export async function createAiProviders(
+/**
+ * The lent subscription for the plan, built before the registry that makes it: the caller's,
+ * else the registry's once it exists (bound late).
+ */
+function lateSubscription(
   options: AiProvidersOptions,
-): Promise<AiProviders> {
-  const { config } = options;
-  const settings = await loadSettings(options);
-  const turns = options.turns ?? new McpTurnRegistry();
-  // The plan is built before the registry, which builds the lent subscription: bound late.
-  const lazy: { registry?: ProviderRegistry } = {};
+  lazy: { registry?: ProviderRegistry },
+): LendableSubscription {
   const lent = (): LendableSubscription | undefined =>
     options.claudeSubscription ?? lazy.registry?.lendableSubscription();
-  const claudeSubscription: LendableSubscription = {
+  return {
     available: () => lent()?.available() ?? false,
     llm: () => lent()?.llm() ?? new DisabledLlm(),
     runner: (profile) =>
       lent()?.runner(profile) ?? new DisabledResearchRunner(),
   };
-  const registry = new ProviderRegistry({
+}
+
+/** The registry over the settings, the turns and the app AIs (ADR 0007, ADR 0016). */
+function buildRegistry(
+  options: AiProvidersOptions,
+  wiring: {
+    settings: SettingsService;
+    turns: McpTurnRegistry;
+    appAi?: AppAiPlan;
+  },
+): ProviderRegistry {
+  const { config } = options;
+  return new ProviderRegistry({
     config,
-    settings,
-    turns,
+    ...wiring,
     apiBaseUrl: options.apiBaseUrl ?? `http://127.0.0.1:${config.PORT}`,
     env: options.env,
     fetch: options.fetch,
@@ -126,9 +137,22 @@ export async function createAiProviders(
     systemPrompt: options.systemPrompt,
     subAgentPrompt: options.subAgentPrompt,
     ownerPrincipal: options.ownerPrincipal,
-    appAi: appAiOf(options, claudeSubscription),
     freeModels: options.house?.catalog,
     spentToday: spentTodayOf(options.ledger),
+  });
+}
+
+export async function createAiProviders(
+  options: AiProvidersOptions,
+): Promise<AiProviders> {
+  const settings = await loadSettings(options);
+  const turns = options.turns ?? new McpTurnRegistry();
+  const lazy: { registry?: ProviderRegistry } = {};
+  const lentSubscription = lateSubscription(options, lazy);
+  const registry = buildRegistry(options, {
+    settings,
+    turns,
+    appAi: appAiOf(options, lentSubscription),
   });
   lazy.registry = registry;
   await registry.refreshCliLookup();
@@ -137,6 +161,6 @@ export async function createAiProviders(
     registry,
     turns,
     llm: new DynamicLlm(() => registry.llm(options.principal)),
-    lentSubscription: claudeSubscription,
+    lentSubscription,
   };
 }

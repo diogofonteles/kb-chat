@@ -1,6 +1,7 @@
 import {
   DEFAULT_PERSON_AI,
   isLentSubscription,
+  type AiAccessChange,
   type AppAiAssignment,
   type PersonAi,
   type PersonAiUpdate,
@@ -41,7 +42,20 @@ export function applyAiUpdate(
   const assignmentChanged =
     next.appAi !== current.appAi || next.enforced !== current.enforced;
   if (!assignmentChanged) return next;
-  const change = {
+  const change = changeOf(next, patch, context);
+  return {
+    ...next,
+    history: [...current.history, change].slice(-MAX_AI_HISTORY),
+  };
+}
+
+/** One entry of the audit trail: what, who, when and, lending, the terms confirmed. */
+function changeOf(
+  next: PersonAi,
+  patch: PersonAiUpdate,
+  context: AiChangeContext,
+): AiAccessChange {
+  return {
     appAi: next.appAi,
     enforced: next.enforced,
     by: context.by,
@@ -49,10 +63,6 @@ export function applyAiUpdate(
     // The contract required the terms confirmed to lend a subscription (KBC-024 BR-7).
     ...(isLentSubscription(next.appAi) &&
       patch.subscriptionTermsAccepted && { termsAccepted: true }),
-  };
-  return {
-    ...next,
-    history: [...current.history, change].slice(-MAX_AI_HISTORY),
   };
 }
 

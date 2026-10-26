@@ -70,10 +70,7 @@ import { randomBytes } from 'node:crypto';
 import { SecretBox } from './adapters/secret-box.js';
 import { createHouseAi, type HouseAi } from './house-ai-factory.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
-import {
-  settingsRoutes,
-  type SettingsService,
-} from './modules/settings/index.js';
+import { settingsRoutes } from './modules/settings/index.js';
 import {
   createAiProviders,
   type AiProviders,
@@ -289,11 +286,7 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
   });
   await registerPeople(app, { deps, topics, invitations });
   await app.register(invitationRoutes({ people: auth.people, invitations }));
-  await registerHouse(app, {
-    house: deps.house,
-    settings: deps.ai.settings,
-    subscriptionAvailable: () => deps.ai.lentSubscription.available(),
-  });
+  await registerHouse(app, { house: deps.house, ai: deps.ai });
   await registerAccess(app, { deps, access, topics });
 }
 
@@ -324,19 +317,12 @@ async function registerPeople(
 /** "IA da aplicação", the OpenRouter connection and the free models (KBC-022). */
 async function registerHouse(
   app: FastifyInstance,
-  {
-    house,
-    settings,
-    subscriptionAvailable,
-  }: {
-    house: HouseAi;
-    settings: SettingsService;
-    subscriptionAvailable: () => boolean;
-  },
+  { house, ai }: { house: HouseAi; ai: AiProviders },
 ) {
+  const { settings } = ai;
   await app.register(
     houseAiRoutes({
-      subscriptionAvailable,
+      subscriptionAvailable: () => ai.lentSubscription.available(),
       house: house.service,
       catalog: house.catalog,
       connect: house.connect,
