@@ -34,6 +34,8 @@ export const GEMINI_PRICES: Readonly<Record<string, LlmPrice>> = {
 };
 const MOST_EXPENSIVE: LlmPrice = { input: 1.5e-6, output: 7.5e-6 };
 const FREE: LlmPrice = { input: 0, output: 0 };
+/** Google's placeholder for a function call the current model did not write (ADR 0018). */
+export const SKIP_SIGNATURE = 'skip_thought_signature_validator';
 
 type Part = Record<string, unknown>;
 
@@ -106,6 +108,15 @@ const toDeclaration = (tool: ToolDefinition) => ({
   // Full JSON Schema, not the OpenAPI subset of `parameters`.
   parametersJsonSchema: { type: 'object', ...tool.parameters },
 });
+
+/** A malformed SSE line is skipped like an unknown one, never a raw SyntaxError. */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
 function parseArgs(text: string): Record<string, unknown> {
   try {
@@ -184,7 +195,7 @@ export class GeminiAdapter implements AgentLlmPort {
   }
 
   private *chunks(data: string, state: CallState): Iterable<LlmChunk> {
-    const parsed = chunkSchema.safeParse(JSON.parse(data));
+    const parsed = chunkSchema.safeParse(parseJson(data));
     if (!parsed.success) return;
     if (parsed.data.error)
       throw new Error(
@@ -205,6 +216,7 @@ export class GeminiAdapter implements AgentLlmPort {
     index: number,
   ): ToolCall {
     return {
+      // Older models send no id: one is made here and goes back in functionResponse.id.
       id: call.id ?? `gemini_${Date.now().toString(36)}_${index}`,
       name: call.name,
       arguments: JSON.stringify(call.args ?? {}),
@@ -295,12 +307,15 @@ export class GeminiAdapter implements AgentLlmPort {
     const kept = this.replays.get(message.toolCalls[0]?.id ?? '');
     if (kept) return kept;
     const text = message.content ? [{ text: message.content }] : [];
-    const calls = message.toolCalls.map((call) => ({
+    const calls: Part[] = message.toolCalls.map((call, index) => ({
       functionCall: {
         id: call.id,
         name: call.name,
         args: parseArgs(call.arguments),
       },
+      // Not written by this model (an escalation, another model): Gemini 3 wants a signature
+      // on the first call; Google's documented placeholder skips its validation.
+      ...(index === 0 && { thoughtSignature: SKIP_SIGNATURE }),
     }));
     return [...text, ...calls];
   }

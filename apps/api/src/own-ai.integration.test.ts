@@ -149,6 +149,23 @@ describe('Sua IA: Gemini (KBC-023 AC-4, AC-7)', () => {
       'functionDeclarations',
     );
     expect(await statePlain(started.state)).not.toContain('ana-key-valid');
+    // A spend over the cap (an earlier paid AI) never blocks the free tier (review m1).
+    await member('PUT', '/api/v1/settings', { ai: { dailyCapUsd: 0 } });
+    await started.ledger.append({
+      ts: new Date().toISOString(),
+      principal: 'sub-ana@example.com',
+      model: 'paid',
+      inputTokens: 1,
+      outputTokens: 1,
+      usd: 0.5,
+      interrupted: false,
+    });
+    expect((await research(member)).at(-1)).toMatchObject({ type: 'done' });
+    // The last test is shown only for the AI serving now (review M2).
+    await member('PUT', '/api/v1/settings', { ai: { provider: 'none' } });
+    expect(
+      (await member('GET', '/api/v1/ai/status')).json().lastTest,
+    ).toBeNull();
   });
 
   it('prices the paid tier and shows today’s spend against the cap', async () => {

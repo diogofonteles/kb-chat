@@ -231,7 +231,11 @@ describe('GeminiAdapter (KBC-023 AC-4, AC-5)', () => {
           role: 'model',
           parts: [
             { text: 'vou buscar' },
-            { functionCall: { id: 'x', name: 'read', args: { id: 'a' } } },
+            {
+              functionCall: { id: 'x', name: 'read', args: { id: 'a' } },
+              // A turn this adapter did not keep (an escalation): Google's placeholder.
+              thoughtSignature: 'skip_thought_signature_validator',
+            },
           ],
         },
         {

@@ -5,7 +5,7 @@ import {
 import { OpenRouterAdapter } from '../adapters/openrouter-adapter.js';
 import type { LlmPrice } from '../ports/llm.js';
 import { HouseLlm, type PaidFallbackGate } from './house-llm.js';
-import { PaidMeters } from './paid-meters.js';
+import type { PaidMeters, TurnMeter } from './paid-meters.js';
 
 /** What one's own OpenRouter on free models needs from the app (KBC-023, ADR 0018). */
 export interface OwnFreeDeps {
@@ -18,6 +18,9 @@ export interface OwnFreeDeps {
   readonly spentToday: (principal: string) => Promise<number>;
   readonly dailyCapUsd: () => number;
   readonly fetch?: typeof fetch;
+  /** The registry's meters (one set per process) and this turn's meter. */
+  readonly meters: PaidMeters;
+  readonly meter: TurnMeter;
 }
 
 /** The person's free chain: their choice (router last when wanted) or the live list. */
@@ -33,8 +36,7 @@ export function ownChain(
 /**
  * One's own OpenRouter in "Só modelos gratuitos": the free chain with the person's key, and
  * the paid model last only while today's spend, the calls in flight of this runner and the
- * call's estimate fit the daily cap. A runner with a paid model is built per turn, so its
- * meter covers exactly that turn.
+ * call's estimate fit the daily cap, counting every open turn of the person (their meters).
  */
 export function ownFreeLlm(deps: OwnFreeDeps): HouseLlm {
   const adapter = new OpenRouterAdapter({
@@ -53,8 +55,7 @@ function paidGate(deps: OwnFreeDeps): PaidFallbackGate | null {
   const model = deps.plan.paidModel;
   const price = model ? deps.priceOf(model) : null;
   if (!model || !price) return null;
-  const meters = new PaidMeters();
-  const meter = meters.openTurn(deps.principal);
+  const { meters, meter } = deps;
   const fits = async (pendingPlusEstimate: number) =>
     (await deps.spentToday(deps.principal)) + pendingPlusEstimate <=
     deps.dailyCapUsd();

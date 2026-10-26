@@ -42,6 +42,8 @@ import { resolveAiSource } from './ai-access.js';
 import type { AppAiPort } from './app-ai-plan.js';
 import { findExecutable } from './command-locator.js';
 import { ownFreeLlm } from './own-openrouter.js';
+import { PaidMeters, type TurnMeter } from './paid-meters.js';
+import { TurnScopedRunner } from './turn-runner.js';
 import { NO_TOOLS, testConnection } from './connection-test.js';
 import { DisabledResearchRunner, isAgentLlm } from './dynamic-ports.js';
 import {
@@ -97,6 +99,8 @@ interface RunnerBuild {
   readonly tools?: ResearchToolsFactory;
   /** A fast runner's deep model (null: the CLI's own); undefined: no escalation. */
   readonly deepModel?: string | null;
+  /** The running turn's paid meter (one's own paid fallback). */
+  readonly meter?: TurnMeter;
 }
 
 /** A provider resolved for one principal: which one, its model and its key. */
@@ -147,6 +151,8 @@ export const choiceId = (
  */
 export class ProviderRegistry implements ProviderCatalog {
   private readonly cache = new Map<string, LlmPort | ResearchRunnerPort>();
+  /** One's own paid fallback in flight, every open turn of every person (KBC-023). */
+  private readonly meters = new PaidMeters();
   /** Whether `claude` was on PATH at the last lookup (boot, then every provider list). */
   private claudeOnPath = false;
 
@@ -197,8 +203,14 @@ export class ProviderRegistry implements ProviderCatalog {
         : null,
       dailyCapUsd: paying ? this.dailyCapUsd(principal) : null,
       free,
-      lastTest: this.options.settings.snapshot(principal)?.ai.lastTest ?? null,
+      lastTest: this.lastTestOf(principal, active),
     };
+  }
+
+  /** The last test, only when it was about the AI serving now (KBC-023 review M2). */
+  private lastTestOf(principal: string, active: ResolvedProvider) {
+    const test = this.options.settings.snapshot(principal)?.ai.lastTest ?? null;
+    return test?.provider === active ? test : null;
   }
 
   /** The serving AI costs nothing: the app's, or one's own on free models (ADR 0018). */
@@ -207,11 +219,10 @@ export class ProviderRegistry implements ProviderCatalog {
     const plan = this.choice(principal, { provider: active }).plan;
     if (active === 'gemini') return plan?.gemini !== 'paid';
     const openrouter = plan?.openrouter;
-    return (
-      active === 'openrouter' &&
-      openrouter?.mode === 'free' &&
-      openrouter.paidModel === null
-    );
+    // A paid model the list does not price is never used (it stays out of the chain).
+    const paid = openrouter?.paidModel ?? null;
+    const usable = paid !== null && this.options.freeModels?.priceOf(paid);
+    return active === 'openrouter' && openrouter?.mode === 'free' && !usable;
   }
 
   private paysPerToken(active: ResolvedProvider): boolean {
@@ -327,7 +338,7 @@ export class ProviderRegistry implements ProviderCatalog {
       profile === 'fast'
         ? (this.choice(principal, { profile: 'deep' }).model ?? null)
         : undefined;
-    if (this.perTurn(choice)) return this.buildRunner(choice, { principal });
+    if (this.perTurn(choice)) return this.turnScoped(choice, principal);
     // One cached runner per profile (and deep model), so asking fast then deep keeps both.
     const kind = `runner-${profile}>${deepModel ?? ''}`;
     return this.cached(choiceId(kind, principal, choice), () =>
@@ -375,13 +386,17 @@ export class ProviderRegistry implements ProviderCatalog {
     return result;
   }
 
-  private buildLlm(choice: ProviderChoice, principal = ''): LlmPort {
+  private buildLlm(
+    choice: ProviderChoice,
+    principal = '',
+    meter?: TurnMeter,
+  ): LlmPort {
     const { provider, model, key, plan } = choice;
     const fetch = this.options.fetch;
     const options = { apiKey: key, model: model ?? '', fetch };
     if (provider === 'stub') return new StubLlmAdapter();
     if (this.isOwnFree(choice) && plan?.openrouter)
-      return this.ownFree(choice, principal, plan.openrouter);
+      return this.ownFree(choice, principal, { plan: plan.openrouter, meter });
     if (provider === 'gemini')
       return new GeminiAdapter({
         ...options,
@@ -397,10 +412,21 @@ export class ProviderRegistry implements ProviderCatalog {
     return new DisabledLlm();
   }
 
+  /** One's own paid fallback: its meter opens with the turn and closes after its record. */
+  private turnScoped(choice: ProviderChoice, principal: string) {
+    return new TurnScopedRunner(this.buildRunner(choice, { principal }), () => {
+      const meter = this.meters.openTurn(principal);
+      return {
+        runner: this.buildRunner(choice, { principal, meter }),
+        finish: () => this.meters.close(principal, meter),
+      };
+    });
+  }
+
   private ownFree(
     { key }: ProviderChoice,
     principal: string,
-    plan: OpenRouterPlan,
+    { plan, meter }: { plan: OpenRouterPlan; meter?: TurnMeter },
   ): LlmPort {
     const models = this.options.freeModels;
     return ownFreeLlm({
@@ -412,6 +438,9 @@ export class ProviderRegistry implements ProviderCatalog {
       spentToday: (who) => this.options.spentToday?.(who) ?? Promise.resolve(0),
       dailyCapUsd: () => this.dailyCapUsd(principal),
       fetch: this.options.fetch,
+      meters: this.meters,
+      // Outside a turn (the side panel's model) nothing is spent: an unregistered meter.
+      meter: meter ?? { reserved: 0, spent: 0 },
     });
   }
 
@@ -428,7 +457,7 @@ export class ProviderRegistry implements ProviderCatalog {
       return this.options.config.KB_CHAT_CODEX
         ? new CodexCliRunner(this.cliOptions('codex', choice, build))
         : new DisabledResearchRunner();
-    const llm = this.buildLlm(choice, principal);
+    const llm = this.buildLlm(choice, principal, build.meter);
     const loop = this.options.perTokenRunner;
     if (!loop || !isAgentLlm(llm)) return new DisabledResearchRunner();
     // On free models the daily cap gates only the paid fallback (inside its gate).
