@@ -67,9 +67,7 @@ export class Invitations {
   }
 
   private take(person: StoredPerson) {
-    return this.windows.take([
-      { key: person.email, windows: INVITEE_WINDOWS },
-    ]);
+    return this.windows.take([{ key: person.email, windows: INVITEE_WINDOWS }]);
   }
 
   private async deliver(

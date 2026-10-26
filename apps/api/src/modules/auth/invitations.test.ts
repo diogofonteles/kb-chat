@@ -181,7 +181,11 @@ describe('Invitations (KBC-026)', () => {
       invitations.resend(guest.id, master, logger),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     await expect(
-      invitations.resend('33333333-3333-4333-8333-333333333333', master, logger),
+      invitations.resend(
+        '33333333-3333-4333-8333-333333333333',
+        master,
+        logger,
+      ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
