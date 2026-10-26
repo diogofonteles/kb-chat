@@ -58,6 +58,27 @@ export class Sidebar {
   private readonly research = inject(ResearchStore);
   protected readonly history = inject(HistoryStore);
   protected readonly spend = inject(SpendStore);
+  /** One's own AI on free models or a free tier (KBC-023): no spend in US$ to show. */
+  protected readonly ownFree = computed(() => {
+    const status = this.settings.aiStatus.hasValue()
+      ? this.settings.aiStatus.value()
+      : null;
+    return status?.source === 'own' && status.free;
+  });
+  /**
+   * Served by the app's AI (KBC-022): its researches left instead of a spend in US$ the person
+   * does not pay; null otherwise.
+   */
+  protected readonly appServed = computed(() => {
+    const status = this.settings.aiStatus.hasValue()
+      ? this.settings.aiStatus.value()
+      : null;
+    if (status?.source !== 'app' || status.remainingToday === null) return null;
+    return {
+      remaining: status.remainingToday,
+      daily: status.dailyResearches ?? status.remainingToday,
+    };
+  });
   private readonly themes = inject(ThemeStore);
   protected readonly session = inject(SessionStore);
   /** The count badge on "Pessoas e permissões" (masters, KBC-014). */

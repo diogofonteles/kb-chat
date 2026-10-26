@@ -223,3 +223,37 @@
   color: var(--color-danger);
   font-weight: 600;
 }
+
+.plans {
+  gap: var(--space-1);
+}
+
+.primary {
+  justify-self: start;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check input {
+  flex-shrink: 0;
+}
+
+/* The chosen option's guide and fields, right under its card (KBC-023). */
+.details {
+  display: grid;
+  gap: var(--space-4);
+  margin: var(--space-1) 0 var(--space-3) var(--space-6, 1.5rem);
+}
+
+@media (max-width: 640px) {
+  .details {
+    margin-left: 0;
+  }
+}

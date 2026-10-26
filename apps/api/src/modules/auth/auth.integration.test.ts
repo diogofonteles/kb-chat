@@ -594,6 +594,7 @@ describe('AI for guests (BR-5, KBC-007 BR-6)', () => {
     const started = await start({
       KB_CHAT_LLM: 'openrouter',
       OPENROUTER_API_KEY: 'sk-or-env-key',
+      KB_CHAT_AI_DEFAULTS: 'local',
     });
     const ownerHeaders = await signIn(started, OWNER_EMAIL);
     await invite(started, ownerHeaders, {

@@ -1,0 +1,100 @@
+@let current = ai();
+<fieldset class="group" [disabled]="busy()">
+  <legend class="legend" i18n="@@personAi.legend">IA da aplicação</legend>
+  <label class="field">
+    <span i18n="@@personAi.which">Qual IA atende esta pessoa</span>
+    <select
+      #appAiSelect
+      class="select"
+      (change)="chooseAppAi(appAiSelect.value)"
+    >
+      @for (option of options(); track option.id) {
+        <option [value]="option.id" [selected]="option.id === current.appAi">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+  </label>
+  <label class="check">
+    <input
+      #enforcedBox
+      type="checkbox"
+      [checked]="current.enforced"
+      (change)="setEnforced(enforcedBox.checked)"
+    />
+    <span i18n="@@personAi.enforced"
+      >Usar sempre a IA da aplicação, mesmo se a pessoa tiver a própria</span
+    >
+  </label>
+  <label class="field">
+    <span i18n="@@personAi.daily">Pesquisas por dia (vazio = padrão)</span>
+    <input
+      #dailyInput
+      class="number"
+      type="number"
+      inputmode="numeric"
+      min="0"
+      [attr.max]="maxDaily"
+      step="1"
+      [attr.aria-invalid]="dailyError() ? true : null"
+      [attr.aria-describedby]="dailyError() ? 'person-daily-error' : null"
+      [value]="current.dailyResearches ?? ''"
+      (change)="setDaily(dailyInput.value)"
+    />
+  </label>
+  @if (dailyError(); as error) {
+    <p id="person-daily-error" class="field-error" role="alert">
+      <span aria-hidden="true">⚠</span> {{ error }}
+    </p>
+  }
+  <label class="check">
+    <input
+      #paidBox
+      type="checkbox"
+      [checked]="current.paidFallback.enabled"
+      (change)="setPaid(paidBox.checked)"
+    />
+    <span i18n="@@personAi.paid">Liberar o modelo pago de reserva</span>
+  </label>
+  @if (current.paidFallback.enabled) {
+    <label class="field">
+      <span i18n="@@personAi.cap">Teto por mês (US$)</span>
+      <input
+        #capInput
+        class="number"
+        type="number"
+        inputmode="decimal"
+        min="0"
+        [attr.max]="maxCap"
+        step="0.5"
+        [attr.aria-invalid]="capError() ? true : null"
+        [attr.aria-describedby]="capError() ? 'person-cap-error' : null"
+        [value]="current.paidFallback.monthlyCapUsd"
+        (change)="setCap(capInput.value)"
+      />
+    </label>
+    @if (capError(); as error) {
+      <p id="person-cap-error" class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ error }}
+      </p>
+    }
+  }
+</fieldset>
+@if (history().length > 0) {
+  <details class="history">
+    <summary i18n="@@personAi.history">Histórico da IA</summary>
+    <ul>
+      @for (change of history(); track change.at + change.by) {
+        <li>
+          {{ change.at | date: 'dd/MM/yyyy HH:mm' }} · {{ change.by }} ·
+          {{ change.label }}
+          @if (change.enforced) {
+            <ng-container i18n="@@personAi.historyEnforced"
+              >(sempre)</ng-container
+            >
+          }
+        </li>
+      }
+    </ul>
+  </details>
+}

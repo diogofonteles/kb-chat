@@ -22,6 +22,7 @@ import csrfGuard from './plugins/csrf-guard.js';
 import hostGuard from './plugins/host-guard.js';
 import routeAccess from './plugins/route-access.js';
 import {
+  Invitations,
   Notifier,
   OWNER_PRINCIPAL,
   OneTimeCodes,
@@ -31,6 +32,8 @@ import {
   SessionService,
   authRoutes,
   codeRoutes,
+  hasFeature,
+  invitationRoutes,
   peopleRoutes,
 } from './modules/auth/index.js';
 import {
@@ -63,7 +66,14 @@ import { usageRoutes } from './modules/usage/index.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
 import { mcpRoutes } from './mcp/mcp-routes.js';
-import { settingsRoutes } from './modules/settings/index.js';
+import { randomBytes } from 'node:crypto';
+import { SecretBox } from './adapters/secret-box.js';
+import { createHouseAi, type HouseAi } from './house-ai-factory.js';
+import { houseAiRoutes } from './modules/house-ai/index.js';
+import {
+  settingsRoutes,
+  type SettingsService,
+} from './modules/settings/index.js';
 import {
   createAiProviders,
   type AiProviders,
@@ -117,10 +127,16 @@ export interface AppDeps {
   readonly auth?: AuthDeps;
   /** Codes, requests and delivery (KBC-014); in memory, to an outbox, when not given. */
   readonly access?: AccessDeps;
+  /**
+   * The house plan (KBC-022). When not given: in memory, and OpenRouter unreachable (tests
+   * never call it); `ai` must then be built with the same `house` to lend it.
+   */
+  readonly house?: HouseAi;
 }
 
 type FullDeps = AppDeps & {
   auth: AuthDeps;
+  house: HouseAi;
   access: AccessDeps;
   ai: AiProviders;
   agent: ResearchAgent;
@@ -266,8 +282,68 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
       }),
     }),
   );
-  await app.register(peopleRoutes({ ...auth, topics }));
+  // KBC-026: inviting sends an e-mail through the same notifier as the codes.
+  const invitations = new Invitations({
+    people: auth.people,
+    notifier: access.notifier,
+  });
+  await registerPeople(app, { deps, topics, invitations });
+  await app.register(invitationRoutes({ people: auth.people, invitations }));
+  await registerHouse(app, { house: deps.house, settings: deps.ai.settings });
   await registerAccess(app, { deps, access, topics });
+}
+
+/** "Pessoas e permissões", with the house reacting to AI changes (KBC-022). */
+async function registerPeople(
+  app: FastifyInstance,
+  wiring: {
+    deps: FullDeps;
+    topics: () => string[];
+    invitations: Invitations;
+  },
+) {
+  const { deps, topics, invitations } = wiring;
+  const { house, auth } = deps;
+  await app.register(
+    peopleRoutes({
+      ...auth,
+      topics,
+      invitations,
+      ai: {
+        sync: (person, ai) => house.service.syncPersonKey(person, ai),
+        setDefault: (appAi, by) => house.service.setDefault(appAi, by),
+      },
+    }),
+  );
+}
+
+/** "IA da aplicação", the OpenRouter connection and the free models (KBC-022). */
+async function registerHouse(
+  app: FastifyInstance,
+  { house, settings }: { house: HouseAi; settings: SettingsService },
+) {
+  await app.register(
+    houseAiRoutes({
+      house: house.service,
+      catalog: house.catalog,
+      connect: house.connect,
+      exchange: (code, verifier) => house.account.exchangeCode(code, verifier),
+      targets: {
+        house: {
+          allowed: (viewer) => viewer.person.role === 'master',
+          store: (key, viewer) =>
+            house.service.connect(key, viewer.person.email),
+        },
+        // One's own OpenRouter (KBC-023): stored sealed in the person's settings.
+        own: {
+          allowed: (viewer) => hasFeature(viewer.person, 'own-ai-settings'),
+          store: async (key, viewer) => {
+            await settings.connectOpenRouter(viewer.principal, key);
+          },
+        },
+      },
+    }),
+  );
 }
 
 /** One-time code sign-in and access requests (KBC-014, ADR 0011). */
@@ -307,17 +383,37 @@ async function registerSettings(
 /** Settings in memory and providers from the environment only (tests). */
 const inMemoryAi = (
   config: AppConfig,
-  agent: ResearchAgent,
+  wiring: {
+    agent: ResearchAgent;
+    house: HouseAi;
+    auth: AuthDeps;
+    ledger: SpendLedgerPort;
+  },
 ): Promise<AiProviders> =>
   createAiProviders({
     config,
     store: new MemorySettingsStore(),
     principal: OWNER,
     env: {},
-    tools: agent.toolsFor,
-    perTokenRunner: agent.perTokenRunner,
-    systemPrompt: agent.systemPrompt,
-    subAgentPrompt: agent.subAgentPrompt,
+    tools: wiring.agent.toolsFor,
+    perTokenRunner: wiring.agent.perTokenRunner,
+    systemPrompt: wiring.agent.systemPrompt,
+    subAgentPrompt: wiring.agent.subAgentPrompt,
+    house: wiring.house,
+    personOf: (principal) => wiring.auth.people.cachedByPrincipal(principal),
+    ledger: wiring.ledger,
+  });
+
+/** OpenRouter never answers in a test that did not bring its own fake. */
+const offline: typeof fetch = async () => {
+  throw new Error('No network in tests');
+};
+
+const inMemoryHouse = (config: AppConfig): Promise<HouseAi> =>
+  createHouseAi({
+    sealer: new SecretBox(randomBytes(32)),
+    webOrigin: config.WEB_ORIGIN,
+    fetch: offline,
   });
 
 const inMemoryAuth = (config: AppConfig): AuthDeps => ({
@@ -349,11 +445,16 @@ async function completeDeps(deps: AppDeps): Promise<FullDeps> {
       ledger,
       budgets: budgetsFromConfig(deps.config),
     });
+  const auth = deps.auth ?? inMemoryAuth(deps.config);
+  const house = deps.house ?? (await inMemoryHouse(deps.config));
   return {
     ...deps,
-    auth: deps.auth ?? inMemoryAuth(deps.config),
+    auth,
+    house,
     access: deps.access ?? inMemoryAccess(),
-    ai: deps.ai ?? (await inMemoryAi(deps.config, agent)),
+    ai:
+      deps.ai ??
+      (await inMemoryAi(deps.config, { agent, house, auth, ledger })),
     agent,
     catalog,
     ledger,

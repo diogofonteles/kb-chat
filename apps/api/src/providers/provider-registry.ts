@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import {
   MODEL_ALLOWLISTS,
   type AiProvider,
+  type AiStatus,
+  type GeminiTier,
+  type OpenRouterPlan,
   type AiTestRequest,
   type AiTestResult,
   type ProviderInfo,
@@ -18,14 +21,16 @@ import { DisabledLlm } from '../adapters/disabled-llm.js';
 import type { SubscriptionPrompt } from '../adapters/subscription-prompt.js';
 import { OpenAiAdapter } from '../adapters/openai-adapter.js';
 import { OpenRouterAdapter } from '../adapters/openrouter-adapter.js';
+import { GeminiAdapter } from '../adapters/gemini-adapter.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
 import type { AppConfig } from '../config.js';
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
-import type {
-  ProviderCatalog,
-  SettingsService,
+import {
+  publicLastTest,
+  type ProviderCatalog,
+  type SettingsService,
 } from '../modules/settings/index.js';
-import type { LlmPort } from '../ports/llm.js';
+import type { LlmPort, LlmPrice } from '../ports/llm.js';
 import type { AgentLlmPort } from '../ports/llm.js';
 import type {
   Escalation,
@@ -34,7 +39,12 @@ import type {
 } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { budgetsFromConfig } from '../research-agent-factory.js';
+import { resolveAiSource } from './ai-access.js';
+import type { AppAiPort } from './app-ai-plan.js';
 import { findExecutable } from './command-locator.js';
+import { ownFreeLlm } from './own-openrouter.js';
+import { PaidMeters, type TurnMeter } from './paid-meters.js';
+import { TurnScopedRunner } from './turn-runner.js';
 import { NO_TOOLS, testConnection } from './connection-test.js';
 import { DisabledResearchRunner, isAgentLlm } from './dynamic-ports.js';
 import {
@@ -67,6 +77,18 @@ export interface ProviderRegistryOptions {
    * BR-6) and the keys of the server's environment; guests bring their own key.
    */
   readonly ownerPrincipal?: string;
+  /** The AIs the app lends (KBC-022): absent, nobody gets an app AI. */
+  readonly appAi?: AppAiPort;
+  /** The live free-model list (KBC-022), for one's own OpenRouter on free models. */
+  readonly freeModels?: FreeModelSource;
+  /** Today's own spend of a principal (the daily cap of a paid fallback, KBC-023). */
+  readonly spentToday?: (principal: string) => Promise<number>;
+}
+
+/** The live OpenRouter list as the registry needs it. */
+export interface FreeModelSource {
+  autoChain(includeRouter: boolean): string[];
+  priceOf(model: string): LlmPrice | null;
 }
 
 const isSubscription = (provider: ResolvedProvider): boolean =>
@@ -78,6 +100,8 @@ interface RunnerBuild {
   readonly tools?: ResearchToolsFactory;
   /** A fast runner's deep model (null: the CLI's own); undefined: no escalation. */
   readonly deepModel?: string | null;
+  /** The running turn's paid meter (one's own paid fallback). */
+  readonly meter?: TurnMeter;
 }
 
 /** A provider resolved for one principal: which one, its model and its key. */
@@ -85,6 +109,14 @@ export interface ProviderChoice {
   readonly provider: ResolvedProvider;
   readonly model: string | undefined;
   readonly key: string | undefined;
+  /** The person's plan of that provider (KBC-023): Gemini's tier, OpenRouter's mode. */
+  readonly plan?: OwnPlan;
+}
+
+/** Per-provider plans of one's own AI (ADR 0018). */
+export interface OwnPlan {
+  readonly gemini?: GeminiTier;
+  readonly openrouter?: OpenRouterPlan;
 }
 
 interface ChoiceOverride {
@@ -95,6 +127,10 @@ interface ChoiceOverride {
   readonly profile?: ResearchProfile;
 }
 
+/** Which key a connection test was about, kept with it; null for the subscriptions. */
+const keyIdOf = (key: string | undefined): string | null =>
+  key ? fingerprint(key) : null;
+
 /** A key's fingerprint for cache ids: the key itself is kept only by the adapter. */
 const fingerprint = (key: string | undefined): string =>
   key ? createHash('sha256').update(key).digest('base64url').slice(0, 16) : '';
@@ -104,7 +140,14 @@ export const choiceId = (
   principal: string,
   c: ProviderChoice,
 ): string =>
-  [kind, principal, c.provider, c.model ?? '', fingerprint(c.key)].join('|');
+  [
+    kind,
+    principal,
+    c.provider,
+    c.model ?? '',
+    fingerprint(c.key),
+    c.plan ? JSON.stringify(c.plan) : '',
+  ].join('|');
 
 /**
  * The AI provider of each principal (KBC-007, ADR 0007): their Settings first, then the
@@ -113,6 +156,8 @@ export const choiceId = (
  */
 export class ProviderRegistry implements ProviderCatalog {
   private readonly cache = new Map<string, LlmPort | ResearchRunnerPort>();
+  /** One's own paid fallback in flight, every open turn of every person (KBC-023). */
+  private readonly meters = new PaidMeters();
   /** Whether `claude` was on PATH at the last lookup (boot, then every provider list). */
   private claudeOnPath = false;
 
@@ -123,14 +168,109 @@ export class ProviderRegistry implements ProviderCatalog {
     this.claudeOnPath = (await this.locateCli('claude-subscription')) !== null;
   }
 
-  /** The provider answering now for the principal. */
+  /**
+   * The provider answering now for the principal (ADR 0016): an enforced app AI, else their
+   * own choice, else their app AI; the local defaults only on the owner's Mac; else the stub
+   * of tests, else none.
+   */
   active(principal: string): ResolvedProvider {
-    const saved = this.options.settings.snapshot(principal)?.ai.provider;
-    if (this.isOwner(principal))
-      return saved ?? defaultProvider(this.options.config, this.claudeOnPath);
-    if (saved && !isSubscription(saved)) return saved;
-    // A guest has no subscription and no environment key: search only, or the test stub.
+    const saved =
+      this.options.settings.snapshot(principal)?.ai.provider ?? null;
+    const local = this.localDefault(principal, saved);
+    if (local) return local;
+    const source = this.sourceOf(principal, saved);
+    if (source.source === 'app') return 'app';
+    if (source.source === 'own' && this.mayUse(principal, source.provider))
+      return source.provider;
     return this.options.config.KB_CHAT_LLM === 'stub' ? 'stub' : 'none';
+  }
+
+  /** Which AI serves the signed-in person and who pays, for Settings and the composer. */
+  async status(principal: string): Promise<AiStatus> {
+    await this.options.settings.load(principal);
+    const active = this.active(principal);
+    const app = this.options.appAi;
+    const assignment = app?.assignment(principal);
+    const quota = active === 'app' && app ? await app.quotaOf(principal) : null;
+    const source =
+      active === 'app' ? 'app' : active === 'none' ? 'none' : 'own';
+    const free = this.isFree(principal, active);
+    const paying = source === 'own' && !free && this.paysPerToken(active);
+    return {
+      source,
+      appAi: active === 'app' ? (assignment?.appAi ?? null) : null,
+      provider: active === 'none' ? null : active,
+      remainingToday: quota?.remaining ?? null,
+      dailyResearches: quota?.daily ?? null,
+      enforced: assignment?.enforced ?? false,
+      spentTodayUsd: paying
+        ? ((await this.options.spentToday?.(principal)) ?? 0)
+        : null,
+      dailyCapUsd: paying ? this.dailyCapUsd(principal) : null,
+      free,
+      lastTest: this.lastTestOf(principal, active),
+    };
+  }
+
+  /**
+   * The last test, only when it was about the AI serving now and the key in use: a test of
+   * another provider or of a typed, unsaved key says nothing about it (KBC-023 review M2, R2-03).
+   */
+  private lastTestOf(principal: string, active: ResolvedProvider) {
+    const test = this.options.settings.snapshot(principal)?.ai.lastTest ?? null;
+    const inUse = keyIdOf(this.key(principal, active));
+    return test?.provider === active && test.keyId === inUse
+      ? publicLastTest(test)
+      : null;
+  }
+
+  /** The serving AI costs nothing: the app's, or one's own on free models (ADR 0018). */
+  private isFree(principal: string, active: ResolvedProvider): boolean {
+    if (active === 'app') return true;
+    const plan = this.choice(principal, { provider: active }).plan;
+    if (active === 'gemini') return plan?.gemini !== 'paid';
+    const openrouter = plan?.openrouter;
+    // A paid model the list does not price is never used (it stays out of the chain).
+    const paid = openrouter?.paidModel ?? null;
+    const usable = paid !== null && this.options.freeModels?.priceOf(paid);
+    return active === 'openrouter' && openrouter?.mode === 'free' && !usable;
+  }
+
+  private paysPerToken(active: ResolvedProvider): boolean {
+    return active !== 'stub' && PROVIDERS[active].billing === 'per-token';
+  }
+
+  private sourceOf(principal: string, chosen: AiProvider | null) {
+    const assignment = this.options.appAi?.assignment(principal) ?? {
+      appAi: 'none' as const,
+      enforced: false,
+    };
+    return resolveAiSource({
+      chosen,
+      appAi: assignment.appAi,
+      enforced: assignment.enforced,
+      appAvailable: this.options.appAi?.available(assignment.appAi) ?? false,
+    });
+  }
+
+  /** ADR 0007's defaults (the Claude CLI, then env keys), only with KB_CHAT_AI_DEFAULTS=local. */
+  private localDefault(
+    principal: string,
+    saved: AiProvider | null,
+  ): ResolvedProvider | null {
+    if (!this.localDefaults() || !this.isOwner(principal) || saved !== null)
+      return null;
+    const fallback = defaultProvider(this.options.config, this.claudeOnPath);
+    return fallback === 'none' ? null : fallback;
+  }
+
+  private localDefaults(): boolean {
+    return this.options.config.KB_CHAT_AI_DEFAULTS === 'local';
+  }
+
+  /** Subscriptions are personal: only the owner's (KBC-007 BR-6). */
+  private mayUse(principal: string, provider: AiProvider): boolean {
+    return !isSubscription(provider) || this.isOwner(principal);
   }
 
   private isOwner(principal: string): boolean {
@@ -152,13 +292,42 @@ export class ProviderRegistry implements ProviderCatalog {
         this.savedModel(principal, provider, profile) ??
         this.defaultModel(provider, profile),
       key: override.key ?? this.key(principal, provider),
+      ...this.planOf(principal, provider),
     };
+  }
+
+  /** The saved plan of Gemini or OpenRouter (KBC-023); none for other providers. */
+  private planOf(
+    principal: string,
+    provider: ResolvedProvider,
+  ): { plan?: OwnPlan } {
+    const ai = this.options.settings.snapshot(principal)?.ai;
+    if (provider === 'gemini')
+      return { plan: { gemini: ai?.gemini.tier ?? 'free' } };
+    if (provider === 'openrouter' && ai)
+      return { plan: { openrouter: ai.openrouter } };
+    return {};
+  }
+
+  /** Own OpenRouter on free models with a paid model: a fresh runner per turn (its meter). */
+  private perTurn(choice: ProviderChoice): boolean {
+    const plan = choice.plan?.openrouter;
+    return plan?.mode === 'free' && plan.paidModel !== null;
+  }
+
+  private isOwnFree(choice: ProviderChoice): boolean {
+    return (
+      choice.provider === 'openrouter' &&
+      choice.plan?.openrouter?.mode === 'free'
+    );
   }
 
   llm(principal: string): LlmPort {
     const choice = this.choice(principal);
+    const app = this.options.appAi;
+    if (choice.provider === 'app' && app) return app.llm(principal);
     return this.cached(choiceId('llm', principal, choice), () =>
-      this.buildLlm(choice),
+      this.buildLlm(choice, principal),
     ) as LlmPort;
   }
 
@@ -171,10 +340,16 @@ export class ProviderRegistry implements ProviderCatalog {
     profile: ResearchProfile = 'fast',
   ): ResearchRunnerPort {
     const choice = this.choice(principal, { profile });
+    const app = this.options.appAi;
+    if (choice.provider === 'app')
+      return app
+        ? app.runner(principal, profile)
+        : new DisabledResearchRunner();
     const deepModel =
       profile === 'fast'
         ? (this.choice(principal, { profile: 'deep' }).model ?? null)
         : undefined;
+    if (this.perTurn(choice)) return this.turnScoped(choice, principal);
     // One cached runner per profile (and deep model), so asking fast then deep keeps both.
     const kind = `runner-${profile}>${deepModel ?? ''}`;
     return this.cached(choiceId(kind, principal, choice), () =>
@@ -204,20 +379,41 @@ export class ProviderRegistry implements ProviderCatalog {
   ): Promise<AiTestResult> {
     await this.options.settings.load(principal);
     const choice = this.choice(principal, request);
-    return testConnection({
+    const result = await testConnection({
       choice,
       signal,
       locate: () => this.locateCli(request.provider),
-      llm: () => this.buildLlm(choice),
+      llm: () => this.buildLlm(choice, principal),
       runner: () =>
         this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
+    // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
+    await this.options.settings.recordTest(principal, {
+      provider: request.provider,
+      keyId: keyIdOf(choice.key),
+      ok: result.ok,
+      code: result.code,
+      at: new Date().toISOString(),
+    });
+    return result;
   }
 
-  private buildLlm({ provider, model, key }: ProviderChoice): LlmPort {
+  private buildLlm(
+    choice: ProviderChoice,
+    principal = '',
+    meter?: TurnMeter,
+  ): LlmPort {
+    const { provider, model, key, plan } = choice;
     const fetch = this.options.fetch;
     const options = { apiKey: key, model: model ?? '', fetch };
     if (provider === 'stub') return new StubLlmAdapter();
+    if (this.isOwnFree(choice) && plan?.openrouter)
+      return this.ownFree(choice, principal, { plan: plan.openrouter, meter });
+    if (provider === 'gemini')
+      return new GeminiAdapter({
+        ...options,
+        freeTier: plan?.gemini !== 'paid',
+      });
     if (provider === 'openrouter')
       return new OpenRouterAdapter({
         ...options,
@@ -226,6 +422,38 @@ export class ProviderRegistry implements ProviderCatalog {
     if (provider === 'anthropic') return new AnthropicAdapter(options);
     if (provider === 'openai') return new OpenAiAdapter(options);
     return new DisabledLlm();
+  }
+
+  /** One's own paid fallback: its meter opens with the turn and closes after its record. */
+  private turnScoped(choice: ProviderChoice, principal: string) {
+    return new TurnScopedRunner(this.buildRunner(choice, { principal }), () => {
+      const meter = this.meters.openTurn(principal);
+      return {
+        runner: this.buildRunner(choice, { principal, meter }),
+        finish: () => this.meters.close(principal, meter),
+      };
+    });
+  }
+
+  private ownFree(
+    { key }: ProviderChoice,
+    principal: string,
+    { plan, meter }: { plan: OpenRouterPlan; meter?: TurnMeter },
+  ): LlmPort {
+    const models = this.options.freeModels;
+    return ownFreeLlm({
+      principal,
+      key,
+      plan,
+      autoChain: (router) => models?.autoChain(router) ?? [],
+      priceOf: (id) => models?.priceOf(id) ?? null,
+      spentToday: (who) => this.options.spentToday?.(who) ?? Promise.resolve(0),
+      dailyCapUsd: () => this.dailyCapUsd(principal),
+      fetch: this.options.fetch,
+      meters: this.meters,
+      // Outside a turn (the side panel's model) nothing is spent: an unregistered meter.
+      meter: meter ?? { reserved: 0, spent: 0 },
+    });
   }
 
   private buildRunner(
@@ -241,10 +469,14 @@ export class ProviderRegistry implements ProviderCatalog {
       return this.options.config.KB_CHAT_CODEX
         ? new CodexCliRunner(this.cliOptions('codex', choice, build))
         : new DisabledResearchRunner();
-    const llm = this.buildLlm(choice);
+    const llm = this.buildLlm(choice, principal, build.meter);
     const loop = this.options.perTokenRunner;
     if (!loop || !isAgentLlm(llm)) return new DisabledResearchRunner();
-    const scope = { principal, dailyCapUsd: () => this.dailyCapUsd(principal) };
+    // On free models the daily cap gates only the paid fallback (inside its gate).
+    const cap = this.isOwnFree(choice)
+      ? () => Number.POSITIVE_INFINITY
+      : () => this.dailyCapUsd(principal);
+    const scope = { principal, dailyCapUsd: cap };
     return loop(llm, scope, this.perTokenEscalation(choice, build));
   }
 
@@ -252,8 +484,12 @@ export class ProviderRegistry implements ProviderCatalog {
     choice: ProviderChoice,
     { principal, deepModel }: RunnerBuild,
   ): Escalation<AgentLlmPort> | undefined {
-    if (deepModel === undefined) return undefined;
-    const deep = this.buildLlm({ ...choice, model: deepModel ?? undefined });
+    // Free models answer both profiles: no escalation, as on the house plan.
+    if (deepModel === undefined || this.isOwnFree(choice)) return undefined;
+    const deep = this.buildLlm(
+      { ...choice, model: deepModel ?? undefined },
+      principal,
+    );
     if (!isAgentLlm(deep)) return undefined;
     return { deep, enabled: () => this.autoDeepen(principal) };
   }
@@ -306,7 +542,8 @@ export class ProviderRegistry implements ProviderCatalog {
     provider: ResolvedProvider,
     profile: ModelProfile,
   ): string | undefined {
-    if (provider === 'stub' || provider === 'none') return undefined;
+    if (provider === 'stub' || provider === 'none' || provider === 'app')
+      return undefined;
     const models = this.options.settings.snapshot(principal)?.ai.models;
     return models?.[provider]?.[profile];
   }
@@ -327,7 +564,8 @@ export class ProviderRegistry implements ProviderCatalog {
     if (provider === 'stub' || !isKeyProvider(provider)) return undefined;
     const env = PROVIDERS[provider].keyEnv;
     const own = this.options.settings.key(principal, provider);
-    if (own || !this.isOwner(principal)) return own;
+    // The env keys are a local default only (ADR 0016): never in production.
+    if (own || !this.isOwner(principal) || !this.localDefaults()) return own;
     return env ? this.options.config[env] : undefined;
   }
 
@@ -355,12 +593,20 @@ export class ProviderRegistry implements ProviderCatalog {
     cliFound: boolean,
   ): ProviderInfo['reason'] {
     if (isSubscription(id) && !this.isOwner(principal)) return 'owner-only';
+    if (id === 'app') return this.appReason(principal);
     if (PROVIDERS[id].cliBin && !cliFound) return 'cli-missing';
     if (id === 'chatgpt-subscription' && !this.options.config.KB_CHAT_CODEX)
       return 'not-enabled';
     if (isKeyProvider(id) && this.keySource(principal, id) === null)
       return 'key-missing';
     return null;
+  }
+
+  /** "IA da aplicação" is offered while an app AI is assigned to the person and can answer. */
+  private appReason(principal: string): ProviderInfo['reason'] {
+    const app = this.options.appAi;
+    const appAi = app?.assignment(principal).appAi ?? 'none';
+    return app?.available(appAi) ? null : 'app-unavailable';
   }
 
   private async info(principal: string, id: AiProvider): Promise<ProviderInfo> {
@@ -378,7 +624,7 @@ export class ProviderRegistry implements ProviderCatalog {
       models: [
         ...new Set(models.filter((m): m is string => typeof m === 'string')),
       ],
-      freeModel: id === 'none' || !MODEL_ALLOWLISTS[id],
+      freeModel: id === 'none' || id === 'app' || !MODEL_ALLOWLISTS[id],
     };
   }
 }

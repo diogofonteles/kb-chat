@@ -5,6 +5,7 @@ import {
   type Authorship,
   type ResearchBilling,
   type ResearchEvent,
+  type ResearchPlan,
   type ResearchProfile,
   type ResearchStep,
   type ResearchTurn as HistoryTurn,
@@ -50,9 +51,15 @@ export interface ResearchTurn {
   readonly interrupted: boolean;
   /** The fast turn went on with the deep profile (ADR 0009). */
   readonly escalated: boolean;
+  /** Who paid (KBC-022): the app's AI or the reader's own; null when unknown. */
+  readonly plan: ResearchPlan | null;
+  /** House plan: researches left today, from this turn's end; null otherwise. */
+  readonly remaining: number | null;
   /** The profile it was asked with (KBC-017); null for turns saved before. */
   readonly profile: ResearchProfile | null;
   readonly error: ResearchErrorCode | null;
+  /** HOUSE_QUOTA_EXHAUSTED: the person's researches a day, for the message (KBC-022). */
+  readonly errorLimit: number | null;
   readonly at: string;
   /** Brought back from the history (FR-6): shown as saved, never announced or re-run. */
   readonly restored: boolean;
@@ -78,7 +85,10 @@ export function startTurn(
     model: '',
     interrupted: false,
     escalated: false,
+    plan: null,
+    remaining: null,
     error: null,
+    errorLimit: null,
     at: new Date().toISOString(),
     restored: false,
   };
@@ -148,12 +158,15 @@ const HANDLERS: {
     model: e.model,
     interrupted: e.interrupted,
     escalated: e.escalated === true,
+    plan: e.plan ?? null,
+    remaining: e.remaining ?? null,
     stepCount: Math.max(turn.stepCount, e.steps),
   }),
   error: (turn, e) => ({
     ...turn,
     phase: 'error',
     error: toResearchErrorCode(e.code),
+    errorLimit: e.limit ?? null,
   }),
 };
 
@@ -209,6 +222,7 @@ export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
     interrupted: turn.interrupted,
     ...(turn.escalated ? { escalated: true } : {}),
     ...(turn.profile ? { profile: turn.profile } : {}),
+    ...(turn.plan ? { plan: turn.plan } : {}),
     at: turn.at,
   };
 }
@@ -231,8 +245,11 @@ export function fromSavedTurn(
     model: saved.model,
     interrupted: saved.interrupted,
     escalated: saved.escalated === true,
+    plan: saved.plan ?? null,
+    remaining: null,
     profile: saved.profile ?? null,
     error: null,
+    errorLimit: null,
     at: saved.at,
     restored: true,
   };

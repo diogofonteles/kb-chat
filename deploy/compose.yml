@@ -48,6 +48,9 @@ services:
       KB_CHAT_EMAIL_FROM: ${KB_CHAT_EMAIL_FROM:-}
       # SMS codes stay off until the owner picks a provider (ADR 0011); `log` is refused here.
       KB_CHAT_SMS: ${KB_CHAT_SMS:-off}
+      # Seals every AI key kept on disk (ADR 0016); the API refuses to start without it. No AI
+      # key goes here: the master connects the app's AI in the UI ("IA da aplicação").
+      KB_CHAT_SECRETS_KEY: ${KB_CHAT_SECRETS_KEY:?set KB_CHAT_SECRETS_KEY (.env, runbook step 5)}
     volumes:
       # The vault is read-only for the API (Q7); rsync from the owner's Mac writes it.
       - ${KB_CHAT_DATA:-/srv/kb-chat}/vault:/vault:ro

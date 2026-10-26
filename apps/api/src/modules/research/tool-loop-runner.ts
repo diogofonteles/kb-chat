@@ -1,6 +1,9 @@
-import type { ResearchEvent } from '@kb-chat/contracts';
+import type { ResearchBilling, ResearchEvent } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import { LlmKeyRejectedError } from '../../ports/llm-errors.js';
+import {
+  LlmCapacityError,
+  LlmKeyRejectedError,
+} from '../../ports/llm-errors.js';
 import type {
   AgentChunk,
   AgentLlmPort,
@@ -112,6 +115,8 @@ interface Turn {
   /** Serializes the sub-researchers' check-and-reserve, so none sees a stale reservation. */
   spendQueue: Promise<unknown>;
   sourcesSent: number;
+  /** The model that wrote the last call, when the provider names it (KBC-022). */
+  servedModel: string | null;
   /** What each model spent; an escalated turn has two (one ledger entry each). */
   readonly spent: Map<LoopEngine, Spent>;
   usd: number;
@@ -133,10 +138,25 @@ interface CallResult {
 /** A key the provider refused is the reader's to fix in Settings (KBC-007). */
 function errorCode(err: unknown): string {
   if (err instanceof AppError) return err.code;
+  if (err instanceof LlmCapacityError) return 'AI_CAPACITY_EXHAUSTED';
   return err instanceof LlmKeyRejectedError ? 'LLM_KEY_REJECTED' : 'INTERNAL';
 }
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
+
+/** A free model of OpenRouter (`:free`, the free router), as named in its answer. */
+const isFreeModel = (model: string | null): boolean =>
+  model !== null && (model.endsWith(':free') || model === 'openrouter/free');
+
+/** "Gratuito" when a per-token turn cost nothing on a free model (KBC-023 BR-7). */
+function billingOf(turn: Turn): ResearchBilling {
+  const billing = turn.engine.llm.billing;
+  return billing === 'per-token' &&
+    turn.usd === 0 &&
+    isFreeModel(turn.servedModel)
+    ? 'free'
+    : billing;
+}
 
 /** When a turn with this budget must answer, in ms since the epoch; null: no ceiling. */
 const deadlineOf = (budget: ProfileBudget): number | null =>
@@ -176,7 +196,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     return this.deps.llm.model;
   }
 
-  get billing(): 'per-token' | 'subscription' {
+  get billing(): ResearchBilling {
     return this.deps.llm.billing;
   }
 
@@ -234,6 +254,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       reservedUsd: 0,
       spendQueue: Promise.resolve(),
       sourcesSent: 0,
+      servedModel: null,
       spent: new Map(),
       usd: 0,
     };
@@ -611,6 +632,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       usd: spent.usd + usd,
     });
     turn.usd += usd;
+    if (usage.model) turn.servedModel = usage.model;
   }
 
   /** One ledger entry per model of the turn (nothing spent, nothing recorded). */
@@ -622,12 +644,13 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         outputTokens: spent.outputTokens,
         usd: spent.usd,
         interrupted,
+        ...(turn.servedModel && { model: turn.servedModel }),
       });
     return {
       type: 'done',
       usd: turn.usd,
-      billing: turn.engine.llm.billing,
-      model: turn.engine.llm.model,
+      billing: billingOf(turn),
+      model: turn.servedModel ?? turn.engine.llm.model,
       interrupted,
       steps: turn.steps + turn.subSteps,
       ...(turn.escalated ? { escalated: true } : {}),

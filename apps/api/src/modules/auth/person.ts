@@ -1,6 +1,9 @@
 import {
+  DEFAULT_PERSON_AI,
   FEATURES,
+  personAiSchema,
   featureSchema,
+  invitationSchema,
   roleSchema,
   topicSlugSchema,
   type Feature,
@@ -31,11 +34,15 @@ export const storedPersonSchema = z.object({
   lastLoginAt: z.iso.datetime().nullable(),
   /** E.164, from an access request (KBC-014); a sign-in code may go to it by SMS. */
   phone: z.string().nullable().optional(),
+  /** The last invitation e-mail (KBC-026); absent before KBC-026 or when none was sent. */
+  invitation: invitationSchema.optional(),
   /**
    * Whose data, once fixed (ADR 0011): a form approval or the first code sign-in sets it,
    * so linking Google later keeps the same history. Absent: the Google `sub`, else the id.
    */
   principal: z.string().min(1).optional(),
+  /** Which app AI serves the person and their limits (KBC-022); absent: the house default. */
+  ai: personAiSchema.optional(),
 });
 export type StoredPerson = z.infer<typeof storedPersonSchema>;
 
@@ -95,7 +102,9 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   features: person.features,
   isOwner,
   phone: person.phone ?? null,
+  invitation: person.invitation ?? null,
   invitedBy: person.invitedBy,
   createdAt: person.createdAt,
   lastLoginAt: person.lastLoginAt,
+  ai: person.ai ?? DEFAULT_PERSON_AI,
 });

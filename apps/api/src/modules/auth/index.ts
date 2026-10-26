@@ -29,6 +29,11 @@ export {
   type TicketIdentity,
 } from './request-ticket.js';
 export { SendLimits, type SendAttempt } from './send-limits.js';
+export {
+  invitationRoutes,
+  type InvitationRouteDeps,
+} from './invitation-routes.js';
+export { Invitations, type InvitationsDeps } from './invitations.js';
 export { peopleRoutes, type PeopleRouteDeps } from './people-routes.js';
 export type { ApprovedRequest } from './people-rules.js';
 export {
@@ -39,10 +44,12 @@ export {
 export {
   OWNER_PRINCIPAL,
   hasFeature,
+  isMaster,
   toPerson,
   type StoredPerson,
   type Viewer,
 } from './person.js';
+export { aiOf, applyAiUpdate } from './person-ai.js';
 export { resolveViewer, type ViewerSources } from './resolve-viewer.js';
 export { authRoutes, type AuthRouteDeps } from './routes.js';
 export {

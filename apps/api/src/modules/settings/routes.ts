@@ -1,9 +1,11 @@
 import {
+  aiStatusSchema,
   aiTestRequestSchema,
   aiTestResultSchema,
   providerListSchema,
   settingsUpdateSchema,
   settingsViewSchema,
+  type AiStatus,
   type AiTestRequest,
   type AiTestResult,
   type ProviderList,
@@ -30,6 +32,8 @@ import type { SettingsService } from './settings-service.js';
 /** The AI providers as the composition root builds them (ProviderRegistry). */
 export interface ProviderCatalog {
   list(principal: string): Promise<ProviderList>;
+  /** Which AI serves the person now and who pays (KBC-022). */
+  status(principal: string): Promise<AiStatus>;
   /** A minimal question, bounded by NFR-1's 20 s. */
   test(
     principal: string,
@@ -138,10 +142,26 @@ function providerRoutes(app: FastifyInstance, options: SettingsRouteOptions) {
   );
 }
 
+/** Which AI serves the person and who pays (KBC-022), for everyone signed in. */
+function statusRoute(
+  app: FastifyInstance,
+  { providers }: SettingsRouteOptions,
+) {
+  app.withTypeProvider<ZodTypeProvider>().get(
+    '/api/v1/ai/status',
+    {
+      config: { access: SIGNED_IN },
+      schema: { response: { 200: aiStatusSchema } },
+    },
+    async (request) => providers.status(principalOf(request)),
+  );
+}
+
 /** GET/PUT /settings, GET /ai/providers and POST /settings/ai/test (KBC-007 FR-2, FR-3). */
 export const settingsRoutes =
   (options: SettingsRouteOptions): FastifyPluginAsync =>
   async (app) => {
     settingsCrud(app, options);
     providerRoutes(app, options);
+    statusRoute(app, options);
   };

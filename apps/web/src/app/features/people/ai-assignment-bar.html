@@ -1,0 +1,78 @@
+<div class="bar" role="group" aria-labelledby="assign-title">
+  <p id="assign-title" class="title" i18n="@@assign.title">
+    IA da aplicação para várias pessoas
+  </p>
+  <label class="field">
+    <span i18n="@@assign.which">IA</span>
+    <select #which class="select" (change)="choose(which.value)">
+      @for (option of options(); track option.id) {
+        <option [value]="option.id" [selected]="option.id === appAi()">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+  </label>
+  <div class="actions">
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="busy() || selectedCount() === 0"
+      (click)="applyTo('selected')"
+      i18n="@@assign.selected"
+    >
+      Aplicar às selecionadas ({{ selectedCount() }})
+    </button>
+    @if (!confirmingAll()) {
+      <button
+        #allButton
+        type="button"
+        class="secondary"
+        [disabled]="busy()"
+        (click)="askAll()"
+        i18n="@@assign.all"
+      >
+        Aplicar a todos os usuários
+      </button>
+    }
+  </div>
+  @if (confirmingAll()) {
+    <div class="confirm" role="alert">
+      <p i18n="@@assign.confirm">
+        Aplicar “{{ chosenLabel() }}” a todas as {{ total() }} pessoas? As
+        escolhas individuais serão substituídas.
+      </p>
+      <div class="actions">
+        <button
+          type="button"
+          class="secondary danger"
+          [disabled]="busy()"
+          (click)="applyTo('all')"
+          i18n="@@assign.confirmApply"
+        >
+          Aplicar a todos
+        </button>
+        <button
+          #cancelButton
+          type="button"
+          class="secondary"
+          (click)="cancelAll()"
+          i18n="@@assign.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  }
+  <label class="check">
+    <input
+      #defaultBox
+      type="checkbox"
+      [checked]="alsoDefault() && canSetDefault()"
+      [disabled]="!canSetDefault()"
+      (change)="alsoDefault.set(defaultBox.checked)"
+    />
+    <span i18n="@@assign.alsoDefault"
+      >Com "todos": também para os próximos convidados</span
+    >
+  </label>
+</div>

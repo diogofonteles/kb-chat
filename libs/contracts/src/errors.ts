@@ -25,6 +25,12 @@ export const API_ERROR_CODES = [
   'REQUEST_EXPIRED',
   'ALREADY_REQUESTED',
   'REQUEST_COOLDOWN',
+  /** The person's house-plan researches of today are spent (KBC-022). */
+  'HOUSE_QUOTA_EXHAUSTED',
+  /** The free models have no capacity left now (KBC-022). */
+  'AI_CAPACITY_EXHAUSTED',
+  /** An AI provider's account API did not answer (KBC-022: OpenRouter key management). */
+  'PROVIDER_UNAVAILABLE',
   'INTERNAL',
 ] as const;
 

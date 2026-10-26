@@ -246,11 +246,12 @@ env_set() {
   [ -n "${value//[[:space:]]/}" ]
 }
 
-# Sign-in settings plus one complete email provider: Gmail SMTP (SMTP_USER + SMTP_PASSWORD)
-# or Resend (RESEND_API_KEY + KB_CHAT_EMAIL_FROM). Half of the SMTP pair is a typo.
+# Sign-in settings, the secrets key (ADR 0016) plus one complete email provider: Gmail SMTP
+# (SMTP_USER + SMTP_PASSWORD) or Resend (RESEND_API_KEY + KB_CHAT_EMAIL_FROM). Half of the
+# SMTP pair is a typo. AI needs no key here: the master configures it in the UI.
 check_env() {
   local name
-  for name in KB_CHAT_DOMAIN GOOGLE_CLIENT_ID KB_CHAT_OWNER_EMAIL; do
+  for name in KB_CHAT_DOMAIN GOOGLE_CLIENT_ID KB_CHAT_OWNER_EMAIL KB_CHAT_SECRETS_KEY; do
     env_set "$name" || { log "$name is empty in $DEPLOY_DIR/.env"; return 1; }
   done
   if env_set SMTP_USER && ! env_set SMTP_PASSWORD; then

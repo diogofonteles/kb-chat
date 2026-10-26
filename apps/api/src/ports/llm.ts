@@ -8,6 +8,8 @@ export interface LlmUsage {
   readonly outputTokens: number;
   /** Real cost when the provider reports it; null means "compute from the price list". */
   readonly usd: number | null;
+  /** The model that answered, when the provider names it (OpenRouter's fallbacks, KBC-022). */
+  readonly model?: string;
 }
 
 export type LlmChunk =
@@ -28,8 +30,11 @@ export interface LlmStreamOptions {
 /** A chat model behind a paid API (ADR 0004). */
 export interface LlmPort {
   readonly model: string;
-  /** "per-token" spends money and respects the daily cap; "subscription" is covered by a plan (KBC-007). */
-  readonly billing: 'per-token' | 'subscription';
+  /**
+   * "per-token" spends money and respects the daily cap; "subscription" is covered by a plan
+   * (KBC-007); "free" costs nothing (Gemini's free tier, KBC-023).
+   */
+  readonly billing: 'per-token' | 'subscription' | 'free';
   /** False when no API key is configured: answers are refused with LLM_NOT_CONFIGURED. */
   configured(): boolean;
   price(): Promise<LlmPrice>;
@@ -77,6 +82,11 @@ export type AgentChunk =
 export interface AgentStreamOptions extends LlmStreamOptions {
   /** "none" forces a final text answer (used when the step cap is reached). */
   readonly toolChoice?: 'auto' | 'none';
+  /**
+   * Models to fall back on, in order, for a provider that routes (OpenRouter's `models`,
+   * KBC-022); the adapter's own model is used when absent.
+   */
+  readonly models?: readonly string[];
 }
 
 /** A model with native tool calling (OpenRouter, OpenAI, Anthropic; the stub in tests). */

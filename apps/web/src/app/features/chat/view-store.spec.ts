@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import type { DefaultView, SettingsView } from '@kb-chat/contracts';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
-import { aSettingsView } from '../../testing/settings-fixtures.js';
+import { aSettingsView, AI_EXTRAS } from '../../testing/settings-fixtures.js';
 import { ViewStore } from './view-store.js';
 
 const settings = signal<SettingsView | null>(null);
@@ -69,7 +69,13 @@ describe('ViewStore (KBC-008 FR-5)', () => {
     expect(views.current()).toBe('research');
     settings.set(
       aSettingsView({
-        ai: { provider: 'none', models: {}, keys: {}, dailyCapUsd: 1 },
+        ai: {
+          provider: 'none',
+          models: {},
+          keys: {},
+          dailyCapUsd: 1,
+          ...AI_EXTRAS,
+        },
       }),
     );
     TestBed.tick();

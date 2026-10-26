@@ -55,7 +55,7 @@ deploy/oci/provision.sh --env ~/.config/kb-chat/oci.env --apply    # cria o que 
 - **"Out of host capacity"**: é falta temporária de A1 na região. Tente outro `AVAILABILITY_DOMAIN` ou mais tarde, e rode de novo; ele continua de onde parou.
 - Anote o **IP público reservado** e o **namespace** impressos no fim.
 
-Espere o cloud-init terminar, uns 5–10 min. O script `kb-chat-setup` espera a saída para a internet (o IP reservado), monta o volume e só grava o marcador de pronto quando Docker, compose, OCI CLI e o volume estão confirmados. Sem o marcador, veja `/var/log/cloud-init-output.log`:
+Espere o cloud-init terminar, uns 5–10 min. O script `kb-chat-setup` espera a saída para a internet (o IP reservado), monta o volume e só grava o marcador de pronto quando Docker, compose, OCI CLI, o volume e os timers de backup e de sessões estão confirmados. Sem o marcador, veja `/var/log/cloud-init-output.log`:
 
 ```bash
 ssh ubuntu@<IP> 'cloud-init status --wait; test -f /var/lib/kb-chat-cloud-init-done && echo pronto'
@@ -120,7 +120,23 @@ ssh ubuntu@<IP>
 sudo nano /srv/kb-chat/deploy/.env     # root, 0600: preencha a partir de deploy/.env.example
 ```
 
-Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL` e **um** provedor de e-mail completo (passo 4b): `SMTP_USER` + `SMTP_PASSWORD` (Gmail) ou `RESEND_API_KEY` + `KB_CHAT_EMAIL_FROM`. Sem eles, ou com só metade do par SMTP, `deploy.sh` recusa e a API não sobe. Segredos (senha de app, chaves) entram pelo `read -s` do passo 4b, não pelo `nano` com a tela compartilhada.
+Obrigatórios: `KB_CHAT_DOMAIN`, `GOOGLE_CLIENT_ID`, `KB_CHAT_OWNER_EMAIL`, `KB_CHAT_SECRETS_KEY` (abaixo) e **um** provedor de e-mail completo (passo 4b): `SMTP_USER` + `SMTP_PASSWORD` (Gmail) ou `RESEND_API_KEY` + `KB_CHAT_EMAIL_FROM`. Sem eles, ou com só metade do par SMTP, `deploy.sh` recusa e a API não sobe. Segredos (senha de app, chaves) entram pelo `read -s` do passo 4b, não pelo `nano` com a tela compartilhada.
+
+**Chave mestra dos segredos (`KB_CHAT_SECRETS_KEY`, ADR 0016).** Cifra (AES-256-GCM) toda chave de IA guardada em disco: a da IA da aplicação e as de cada pessoa. Gere **uma vez, na VM**, direto no `.env`, sem mostrar o valor:
+
+```bash
+ENV=/srv/kb-chat/deploy/.env
+# Só gera quando ainda não existe: uma chave nova torna ilegíveis as chaves já salvas.
+if sudo grep -q '^KB_CHAT_SECRETS_KEY=.' "$ENV"; then echo 'já existe: mantida'; else
+  sudo sed -i '/^KB_CHAT_SECRETS_KEY=/d' "$ENV"
+  sudo sh -c "printf 'KB_CHAT_SECRETS_KEY=%s\n' \"\$(openssl rand -base64 32)\" >> $ENV"
+fi
+sudo grep -c '^KB_CHAT_SECRETS_KEY=.' "$ENV"   # 1 (conta a linha sem mostrar o valor)
+```
+
+- 👤 **DONO:** guarde uma cópia no seu gerenciador de senhas (`sudo cat` só nessa hora, numa sessão sua). Sem ela, as chaves salvas ficam ilegíveis e cada pessoa precisa conectar de novo; nunca a troque com chaves salvas (o mesmo vale ao restaurar o estado, passo 11).
+- Ela fica só no `.env`, fora do backup do estado: o backup cifrado do estado sozinho não abre as chaves.
+- **Nenhuma chave de IA vai no `.env`.** A IA da aplicação é conectada na tela (passo 9b); as variáveis `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` não são lidas em produção.
 
 - `WEB_ORIGIN` fica `https://$KB_CHAT_DOMAIN` (é a origem que o CSRF aceita).
 - `ALLOWED_HOSTS` e `TRUST_PROXY` vêm do `compose.yml`.
@@ -139,7 +155,10 @@ EOF
 sudo chmod 0600 /srv/kb-chat/deploy/backup.env
 sudo /srv/kb-chat/deploy/scripts/backup-state.sh --dry-run
 sudo systemctl start kb-chat-backup && sudo /srv/kb-chat/deploy/scripts/deploy.sh --status   # backup=ok ...
+systemctl list-timers --all --no-pager 'kb-chat-*'   # duas linhas (backup e sessões), ambas com horário em NEXT
 ```
+
+Um `backup=failed` antes deste passo é esperado: o timer pode disparar antes de o `backup.env` existir. O backup manual acima troca o status para `ok`.
 
 👤 **DONO:** confirme o e-mail "Oracle Cloud Notifications" que chega depois do `provision.sh --apply`. Sem a confirmação, o alarme "backup ausente há 48 h" não chega.
 
@@ -215,12 +234,22 @@ ssh -t ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .en
 
 O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, em ⚙ Configurações → "Assinatura do Claude" → "Testar conexão".
 
+## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
+
+Tudo pela interface (ADR 0016, KBC-022); nada no `.env`.
+
+1. Entre como dono → ⚙ Configurações → **IA da aplicação** → **Conectar OpenRouter**. O OpenRouter pede login e "Authorize"; você volta para a Nova Alexandria com "Conta conectada.". (Alternativa: "Colar uma chave" com uma chave criada em openrouter.ai/settings/keys.) A chave que você usa no Mac fica no Mac: em produção, conecte de novo aqui.
+2. Confira "Pedidos gratuitos hoje: 0 de 50". Com **US$ 10 comprados uma vez** na conta do OpenRouter, o limite dos modelos gratuitos sobe para 1000 por dia (sem gastar os créditos com os modelos `:free`).
+3. "Modelos gratuitos": deixe "Escolher automaticamente". "Modelo pago de reserva": deixe vazio (custo zero).
+4. "Para quem": o padrão "Plano da casa" atende quem não tem IA própria, com 5 pesquisas por dia. Em **Pessoas e permissões**, ajuste por pessoa (IA, "Usar sempre", pesquisas por dia, reserva paga com teto mensal) ou em lote ("Aplicar às selecionadas" / "Aplicar a todos os usuários").
+5. Para você: ⚙ → IA → escolha "Assinatura do Claude" (passo 9) ou outra IA sua.
+
 ## 10. Rotina
 
 | O quê | Como |
 |---|---|
 | Publicar | merge em `main` (o dono decide) |
-| Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico). Um segundo rollback continua voltando (C → B → A), nunca volta para a versão da qual saiu |
+| Voltar uma versão | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/rollback.sh` (ou `rollback.sh <sha>`; `--list` mostra o histórico). Um segundo rollback continua voltando (C → B → A), nunca volta para a versão da qual saiu **Atenção (ADR 0017):** a primeira versão com o KBC-022 cifra as chaves de IA salvas; voltar para uma versão anterior a ela deixa essas chaves ilegíveis (as pessoas e o master conectam de novo, ou restaure o backup do estado de antes do deploy, passo 11) |
 | O que está no ar | `ssh ubuntu@<IP> sudo /srv/kb-chat/deploy/scripts/deploy.sh --status` (tag das imagens em execução e saúde do backup: `ok`, `failed`, `stale` ou `never`) |
 | Atualizar o acervo | `deploy/scripts/sync-vault.sh --host ubuntu@<IP>` |
 | Logs | `ssh ubuntu@<IP> 'cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env logs -f --tail 200'` |

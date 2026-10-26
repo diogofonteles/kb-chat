@@ -83,7 +83,13 @@ async function streamResearch(
   send({ type: 'start', model: runner.model, billing: runner.billing });
   try {
     const input = { topic, ...body, signal };
-    for await (const event of runner.run(input)) send(event);
+    // A turn no app AI paid for is the person's own (KBC-022 transparency).
+    for await (const event of runner.run(input))
+      send(
+        event.type === 'done' && !event.plan
+          ? { ...event, plan: 'own' }
+          : event,
+      );
   } catch (err) {
     request.log.error({ err }, 'research stream failed');
     const code = err instanceof AppError ? err.code : 'INTERNAL';

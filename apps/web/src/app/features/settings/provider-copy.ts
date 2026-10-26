@@ -13,13 +13,25 @@ export interface ProviderCopy {
   readonly install?: () => string;
   /** Why it is off and how to turn it on, for a provider off on this server. */
   readonly enable?: () => string;
+  /** The cost badge when the billing alone would mislead (free tiers, KBC-023). */
+  readonly billing?: () => string;
 }
+
+const FREE_OR_PAID = () => $localize`:@@billing.freeOrPaid:Gratuito ou por uso`;
 
 export const NOT_INSTALLED = () => $localize`:@@ai.notInstalled:Não instalado.`;
 export const NOT_ENABLED = () => $localize`:@@ai.notEnabled:Desativado.`;
+export const NOT_LENT = () => $localize`:@@ai.notLent:Não liberada.`;
 
 /** pt-BR copy of each provider (KBC-007 scope); the API only knows the ids. */
 export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
+  app: {
+    name: () => $localize`:@@provider.app:IA da aplicação`,
+    description: () =>
+      $localize`:@@provider.appHint:Cedida pelo administrador: você não configura nada e não paga. Tem um limite de pesquisas por dia.`,
+    enable: () =>
+      $localize`:@@provider.appEnable:Nenhuma IA da aplicação foi liberada para você. Peça a um master, ou use a sua própria IA.`,
+  },
   'claude-subscription': {
     name: () => $localize`:@@provider.claude:Assinatura do Claude`,
     description: () =>
@@ -37,17 +49,24 @@ export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
       $localize`:@@provider.chatgptEnable:Por segurança, fica desligado: o Codex CLI pode ler outros arquivos deste computador. Para usar mesmo assim, inicie o servidor com KB_CHAT_CODEX=on.`,
   },
   anthropic: {
-    name: () => $localize`:@@provider.anthropic:Anthropic API`,
+    name: () => $localize`:@@provider.anthropic:Claude (API da Anthropic)`,
     description: () =>
       $localize`:@@provider.anthropicHint:Claude pela API, com a sua chave.`,
   },
   openrouter: {
     name: () => $localize`:@@provider.openrouter:OpenRouter`,
     description: () =>
-      $localize`:@@provider.openrouterHint:Muitos modelos com uma só chave.`,
+      $localize`:@@provider.openrouterHint:Conecte a sua conta em um clique; modelos gratuitos ou pagos.`,
+    billing: FREE_OR_PAID,
+  },
+  gemini: {
+    name: () => $localize`:@@provider.gemini:Gemini (Google AI Studio)`,
+    description: () =>
+      $localize`:@@provider.geminiHint:Gratuito com uma chave do Google AI Studio; há também o plano pago.`,
+    billing: FREE_OR_PAID,
   },
   openai: {
-    name: () => $localize`:@@provider.openai:OpenAI API`,
+    name: () => $localize`:@@provider.openai:OpenAI (API)`,
     description: () =>
       $localize`:@@provider.openaiHint:GPT pela API, com a sua chave.`,
   },
@@ -58,13 +77,15 @@ export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
   },
 };
 
-/** Display order: the owner's benchmark first (Claude), "none" last. */
+/** Display order (KBC-023): the app's AI, the free options, the paid keys, the owner's subscriptions, "none" last. */
 export const PROVIDER_ORDER: readonly AiProvider[] = [
-  'claude-subscription',
-  'anthropic',
+  'app',
   'openrouter',
-  'chatgpt-subscription',
+  'gemini',
+  'anthropic',
   'openai',
+  'claude-subscription',
+  'chatgpt-subscription',
   'none',
 ];
 
@@ -73,6 +94,7 @@ export const BILLING_COPY: Record<ProviderBilling, () => string> = {
     $localize`:@@billing.subscription:Incluído na sua assinatura`,
   'per-token': () =>
     $localize`:@@billing.perToken:Cobra por uso · chave própria`,
+  free: () => $localize`:@@billing.free:Gratuito · paga a aplicação`,
   none: () => $localize`:@@billing.none:Sem custo`,
 };
 

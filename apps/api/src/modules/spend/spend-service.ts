@@ -32,6 +32,8 @@ export interface TurnSpend {
   readonly outputTokens: number;
   readonly usd: number;
   readonly interrupted: boolean;
+  /** The model that answered, when the provider named it (fallback chains, KBC-022). */
+  readonly model?: string;
 }
 
 /** Spend controls of ADR 0004, kept by ADR 0006: the ledger, the daily cap and the credit check. */
@@ -47,7 +49,8 @@ export class SpendService {
 
   /** Refuses before any spend that would cross the daily cap or the account credit. */
   async guard(estimateUsd: number): Promise<void> {
-    if (this.deps.llm.billing === 'subscription') return;
+    // Nothing to pay (a subscription, a free tier): no cap to check (KBC-023 review).
+    if (this.deps.llm.billing !== 'per-token') return;
     const spent = await this.deps.ledger.spentToday(this.deps.principal);
     if (spent + estimateUsd > this.deps.dailyCapUsd())
       throw new AppError('DAILY_CAP_REACHED', 'Daily AI spend cap reached');
@@ -70,8 +73,8 @@ export class SpendService {
     await this.deps.ledger.append({
       ts: new Date().toISOString(),
       principal: this.deps.principal,
-      model: this.deps.llm.model,
       ...spend,
+      model: spend.model ?? this.deps.llm.model,
     });
   }
 

@@ -199,7 +199,7 @@ describe('GET/PUT /api/v1/settings', () => {
 
   it('refuses unknown fields and invalid values with 400', async () => {
     const { app } = await start();
-    expect((await put(app, { ai: { provider: 'gemini' } })).statusCode).toBe(
+    expect((await put(app, { ai: { provider: 'mistral' } })).statusCode).toBe(
       400,
     );
     expect((await put(app, { extra: true })).statusCode).toBe(400);
@@ -235,6 +235,7 @@ describe('GET /api/v1/ai/providers', () => {
       {
         OPENROUTER_API_KEY: KEY,
         CLAUDE_BIN: join(FAKES_DIR, 'fake-claude.mjs'),
+        KB_CHAT_AI_DEFAULTS: 'local',
       },
       '',
     );

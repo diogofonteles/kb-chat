@@ -1,10 +1,12 @@
 import {
   DEFAULT_INVITE_FEATURES,
   FEATURES,
+  type Invitation,
   type PersonUpdate,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { VerifiedIdentity } from '../../ports/identity-verifier.js';
+import { aiOf, applyAiUpdate, type AiChangeContext } from './person-ai.js';
 import { isMaster, type StoredPerson } from './person.js';
 
 /** The pure rules of "Pessoas e permissões" (BR-2, BR-3); the service persists their result. */
@@ -150,6 +152,16 @@ export function codeSignIn(
   return { people: replace(people, signedIn), result: signedIn };
 }
 
+/** The outcome of the last invitation e-mail (KBC-026). */
+export function recordInvitation(
+  people: readonly StoredPerson[],
+  id: string,
+  invitation: Invitation,
+): PeopleChange<StoredPerson> {
+  const next: StoredPerson = { ...find(people, id), invitation };
+  return { people: replace(people, next), result: next };
+}
+
 function find(people: readonly StoredPerson[], id: string): StoredPerson {
   const person = people.find((p) => p.id === id);
   if (!person) throw new AppError('NOT_FOUND', 'Unknown person');
@@ -173,7 +185,11 @@ const unique = <T>(values: readonly T[]): T[] => [...new Set(values)];
 
 export function update(
   people: readonly StoredPerson[],
-  change: { readonly id: string; readonly patch: PersonUpdate },
+  change: {
+    readonly id: string;
+    readonly patch: PersonUpdate;
+    readonly context: AiChangeContext;
+  },
   ownerEmail: string | undefined,
 ): PeopleChange<StoredPerson> {
   const { id, patch } = change;
@@ -184,6 +200,9 @@ export function update(
     role: patch.role ?? target.role,
     topics: patch.topics ? unique(patch.topics) : target.topics,
     features: patch.features ? unique(patch.features) : target.features,
+    ...(patch.ai && {
+      ai: applyAiUpdate(aiOf(target), patch.ai, change.context),
+    }),
   };
   return { people: replace(people, next), result: next };
 }

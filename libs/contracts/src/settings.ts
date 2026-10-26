@@ -3,20 +3,31 @@ import { researchProfileSchema } from './research.js';
 import { searchModeSchema } from './search.js';
 import { topicSlugSchema } from './topics.js';
 
-/** How the AI answers (KBC-007, ADR 0007); `none` means search only. */
+/**
+ * How the AI answers (KBC-007, ADR 0007); `none` means search only and `app` the AI the
+ * administrator lends ("IA da aplicação", KBC-022, ADR 0016).
+ */
 export const AI_PROVIDERS = [
+  'app',
   'openrouter',
   'anthropic',
   'openai',
   'claude-subscription',
   'chatgpt-subscription',
+  /** Gemini API with a Google AI Studio key (KBC-023, ADR 0018). */
+  'gemini',
   'none',
 ] as const;
 export const aiProviderSchema = z.enum(AI_PROVIDERS);
 export type AiProvider = z.infer<typeof aiProviderSchema>;
 
 /** Providers paid per token, each with its own API key. */
-export const KEY_PROVIDERS = ['openrouter', 'anthropic', 'openai'] as const;
+export const KEY_PROVIDERS = [
+  'openrouter',
+  'anthropic',
+  'openai',
+  'gemini',
+] as const;
 export const keyProviderSchema = z.enum(KEY_PROVIDERS);
 export type KeyProvider = z.infer<typeof keyProviderSchema>;
 
@@ -27,6 +38,7 @@ export const MODEL_PROVIDERS = [
   'openai',
   'claude-subscription',
   'chatgpt-subscription',
+  'gemini',
 ] as const;
 export const modelProviderSchema = z.enum(MODEL_PROVIDERS);
 export type ModelProvider = z.infer<typeof modelProviderSchema>;
@@ -108,6 +120,40 @@ export const profileModelsSchema = z.object({
 });
 export type ProfileModels = z.infer<typeof profileModelsSchema>;
 
+/**
+ * One's own OpenRouter (KBC-023, ADR 0018): `free` sends the free chain (the live list or
+ * the person's choice, then `openrouter/free`) with an optional paid model last, within the
+ * daily cap; `models` uses the fast and deep models of `ai.models.openrouter`.
+ */
+export const openRouterPlanSchema = z.object({
+  mode: z.enum(['free', 'models']),
+  /** null: the live list, as the house plan picks it. */
+  freeModels: z.array(modelIdSchema).max(20).nullable(),
+  includeRouter: z.boolean(),
+  paidModel: modelIdSchema.nullable(),
+});
+export type OpenRouterPlan = z.infer<typeof openRouterPlanSchema>;
+
+export const DEFAULT_OPENROUTER_PLAN: OpenRouterPlan = {
+  mode: 'free',
+  freeModels: null,
+  includeRouter: true,
+  paidModel: null,
+};
+
+/** Gemini's plan: the Google AI Studio free tier (US$ 0) or the paid one (KBC-023). */
+export const geminiTierSchema = z.enum(['free', 'paid']);
+export type GeminiTier = z.infer<typeof geminiTierSchema>;
+
+/** The last "Testar conexão" of the person (KBC-023 BR-6). */
+export const lastTestSchema = z.object({
+  provider: aiProviderSchema,
+  ok: z.boolean(),
+  code: z.string().nullable(),
+  at: z.iso.datetime(),
+});
+export type LastTest = z.infer<typeof lastTestSchema>;
+
 /** GET /api/v1/settings. `exists: false` until settings.json is first written (BR-5). */
 export const settingsViewSchema = z.object({
   exists: z.boolean(),
@@ -119,6 +165,14 @@ export const settingsViewSchema = z.object({
     models: z.partialRecord(modelProviderSchema, profileModelsSchema),
     keys: z.partialRecord(keyProviderSchema, maskedKeySchema),
     dailyCapUsd: z.number().nonnegative(),
+    // An API before KBC-023 sends none of these: their defaults.
+    openrouter: openRouterPlanSchema.default(() => ({
+      ...DEFAULT_OPENROUTER_PLAN,
+    })),
+    gemini: z
+      .object({ tier: geminiTierSchema })
+      .default(() => ({ tier: 'free' as const })),
+    lastTest: lastTestSchema.nullable().default(null),
   }),
 });
 export type SettingsView = z.infer<typeof settingsViewSchema>;
@@ -174,14 +228,18 @@ export const settingsUpdateSchema = z.strictObject({
         .partialRecord(keyProviderSchema, apiKeySchema.nullable())
         .optional(),
       dailyCapUsd: z.number().min(0).max(MAX_DAILY_CAP_USD).optional(),
+      openrouter: openRouterPlanSchema.partial().strict().optional(),
+      gemini: z.strictObject({ tier: geminiTierSchema }).optional(),
     })
     .optional(),
 });
 export type SettingsUpdate = z.infer<typeof settingsUpdateSchema>;
 
+/** `free`: the app's free models (KBC-022): nothing is charged to anyone. */
 export const providerBillingSchema = z.enum([
   'per-token',
   'subscription',
+  'free',
   'none',
 ]);
 export type ProviderBilling = z.infer<typeof providerBillingSchema>;
@@ -194,6 +252,8 @@ export const providerUnavailableReasonSchema = z.enum([
   'not-enabled',
   /** Subscriptions are personal: only the owner's account may use them (KBC-007 BR-6, KBC-010). */
   'owner-only',
+  /** No app AI is assigned to this person, or the house account is not connected (KBC-022). */
+  'app-unavailable',
 ]);
 export type ProviderUnavailableReason = z.infer<
   typeof providerUnavailableReasonSchema

@@ -5,6 +5,10 @@ import { SettingsService } from '../modules/settings/index.js';
 import type { PerTokenRunnerFactory } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import type { SettingsStorePort } from '../ports/settings-store.js';
+import type { SpendLedgerPort } from '../ports/spend-ledger.js';
+import type { HouseAi } from '../house-ai-factory.js';
+import type { Viewer } from '../modules/auth/index.js';
+import { AppAiPlan } from './app-ai-plan.js';
 import { DynamicLlm } from './dynamic-ports.js';
 import { ProviderRegistry } from './provider-registry.js';
 
@@ -34,6 +38,11 @@ export interface AiProvidersOptions {
   readonly apiBaseUrl?: string;
   /** Only this principal uses subscriptions and environment keys (KBC-010); default `owner`. */
   readonly ownerPrincipal?: string;
+  /** The house plan and who a principal is (KBC-022); without them no app AI is lent. */
+  readonly house?: HouseAi;
+  readonly personOf?: (principal: string) => Viewer | null;
+  /** The own spend ledger: today's spend bounds one's own paid fallback (KBC-023). */
+  readonly ledger?: SpendLedgerPort;
 }
 
 /** Settings, the provider registry and the per-request ports built on them (ADR 0007). */
@@ -57,6 +66,26 @@ async function loadSettings(
   return settings;
 }
 
+/** Today's own spend of a principal, from the ledger when there is one. */
+const spentTodayOf = (ledger: SpendLedgerPort | undefined) =>
+  ledger ? (principal: string) => ledger.spentToday(principal) : undefined;
+
+/** The app-owned AIs (KBC-022) over the house plan, when the caller gave one. */
+function appAiOf(options: AiProvidersOptions): AppAiPlan | undefined {
+  const { house, personOf } = options;
+  if (!house || !personOf) return undefined;
+  return new AppAiPlan({
+    house: house.service,
+    catalog: house.catalog,
+    quota: house.quota,
+    houseSpend: house.spend,
+    personOf,
+    perTokenRunner: options.perTokenRunner,
+    fetch: house.fetch ?? options.fetch,
+    warn: options.warn,
+  });
+}
+
 export async function createAiProviders(
   options: AiProvidersOptions,
 ): Promise<AiProviders> {
@@ -75,6 +104,9 @@ export async function createAiProviders(
     systemPrompt: options.systemPrompt,
     subAgentPrompt: options.subAgentPrompt,
     ownerPrincipal: options.ownerPrincipal,
+    appAi: appAiOf(options),
+    freeModels: options.house?.catalog,
+    spentToday: spentTodayOf(options.ledger),
   });
   await registry.refreshCliLookup();
   return {

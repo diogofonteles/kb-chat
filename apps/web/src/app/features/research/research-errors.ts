@@ -19,7 +19,15 @@ const KNOWN_STREAM_CODES: readonly ResearchErrorCode[] = [
   'LLM_INSUFFICIENT_CREDIT',
   'LLM_NOT_CONFIGURED',
   'RATE_LIMITED',
+  'HOUSE_QUOTA_EXHAUSTED',
+  'AI_CAPACITY_EXHAUSTED',
   ...RUNNER_CODES,
+];
+
+/** Refusals of the app's free AI (KBC-022): the reader is offered their own AI. */
+export const OWN_AI_OFFER: readonly ResearchErrorCode[] = [
+  'HOUSE_QUOTA_EXHAUSTED',
+  'AI_CAPACITY_EXHAUSTED',
 ];
 
 export const toResearchErrorCode = (code: string): ResearchErrorCode =>
@@ -45,7 +53,12 @@ const RUNNER_MESSAGES: Record<RunnerErrorCode, () => string> = {
 const isRunnerCode = (code: ResearchErrorCode): code is RunnerErrorCode =>
   RUNNER_CODES.some((value) => value === code);
 
-export function aiErrorMessage(code: ResearchErrorCode): string {
+export function aiErrorMessage(
+  code: ResearchErrorCode,
+  limit: number | null = null,
+): string {
+  if (code === 'HOUSE_QUOTA_EXHAUSTED' && limit !== null)
+    return $localize`:@@ai.houseQuota:Suas pesquisas com IA de hoje acabaram (${limit}:limit: por dia). Volte amanhã ou conecte a sua própria IA.`;
   if (isRunnerCode(code)) return RUNNER_MESSAGES[code]();
   return AI_MESSAGES[code]?.() ?? errorMessage(code);
 }

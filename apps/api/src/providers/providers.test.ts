@@ -19,7 +19,13 @@ import { choiceId } from './provider-registry.js';
 import { DisabledResearchRunner, DynamicLlm } from './dynamic-ports.js';
 
 const config = (env: Record<string, string> = {}) =>
-  loadConfig({ KB_VAULT: '/nonexistent', LOG_LEVEL: 'silent', ...env });
+  loadConfig({
+    KB_VAULT: '/nonexistent',
+    LOG_LEVEL: 'silent',
+    // ADR 0007's defaults are the local mode since ADR 0016.
+    KB_CHAT_AI_DEFAULTS: 'local',
+    ...env,
+  });
 
 describe('findExecutable', () => {
   it('finds a command on PATH or by path, never a plain file', async () => {
@@ -112,6 +118,22 @@ describe('ProviderRegistry', () => {
     expect(ai.llm.billing).toBe('per-token');
     await ai.settings.update('owner', { ai: { provider: 'none' } });
     expect(ai.llm.configured()).toBe(false);
+  });
+
+  it('ignores the env keys and the Claude CLI without the local defaults (KBC-022 AC-11)', async () => {
+    const ai = await createAiProviders({
+      config: config({
+        OPENROUTER_API_KEY: 'sk-or-env-0000',
+        KB_CHAT_AI_DEFAULTS: 'off',
+      }),
+      store: new MemorySettingsStore(),
+      principal: 'owner',
+      env: {},
+    });
+    expect(ai.registry.active('owner')).toBe('none');
+    expect(
+      ai.registry.choice('owner', { provider: 'openrouter' }).key,
+    ).toBeUndefined();
   });
 
   it('picks the Anthropic models per profile and a saved model only for its provider', async () => {
