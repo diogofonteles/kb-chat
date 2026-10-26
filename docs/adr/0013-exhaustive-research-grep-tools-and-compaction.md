@@ -3,7 +3,7 @@
 - Status: accepted (2026-10-25)
 - Amends: [0006](0006-research-agent-over-kb-tools.md) (the tool contract: `find_text`, `search_collection`, `read_document`, a new `list_sources`) and [0009](0009-faster-research-profiles-and-streaming.md) (a third research profile)
 - Drivers: KBC-017 (the owner: research "sem limitações", "temos que nos espelhar no funcionamento do Claude"), Q4 grounding, Q3 cost
-- Follow-up: KBC-018 (orchestrator and parallel sub-agents)
+- Amended by: [0014](0014-research-subagents.md) (the exhaustive profile delegates to parallel sub-researchers)
 
 ## Context
 
