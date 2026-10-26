@@ -96,7 +96,11 @@ export const personSchema = z.object({
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),
   /** Which app AI serves the person and their limits (KBC-022); an older API sends none. */
-  ai: personAiSchema.default(() => structuredClone(DEFAULT_PERSON_AI)),
+  ai: personAiSchema.default(() => ({
+    ...DEFAULT_PERSON_AI,
+    paidFallback: { ...DEFAULT_PERSON_AI.paidFallback },
+    history: [],
+  })),
 });
 export type Person = z.infer<typeof personSchema>;
 
