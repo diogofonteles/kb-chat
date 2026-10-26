@@ -33,7 +33,7 @@ import type {
   ResearchRunnerPort,
 } from '../ports/research-runner.js';
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
-import { researchBudgets } from '../modules/research/index.js';
+import { budgetsFromConfig } from '../research-agent-factory.js';
 import { findExecutable } from './command-locator.js';
 import { NO_TOOLS, testConnection } from './connection-test.js';
 import { DisabledResearchRunner, isAgentLlm } from './dynamic-ports.js';
@@ -271,10 +271,7 @@ export class ProviderRegistry implements ProviderCatalog {
           };
     return {
       escalation,
-      budgets: researchBudgets({
-        steps: config.KB_CHAT_EXHAUSTIVE_STEPS,
-        outputTokens: config.KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS,
-      }),
+      budgets: budgetsFromConfig(config),
       bin: cli === 'claude' ? config.CLAUDE_BIN : config.CODEX_BIN,
       model: choice.model,
       apiBaseUrl: this.options.apiBaseUrl,

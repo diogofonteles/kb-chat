@@ -73,11 +73,41 @@ export function phrasesOf(phrase: string): string[] {
   return [...byFolded.values()].slice(0, MAX_PHRASES);
 }
 
-const pageSize = (args: FindArgs, mode: GrepMode): number =>
-  Math.min(
+/**
+ * Characters a page may take (NFR-3: every output stays under 60,000, below Claude Code's
+ * MCP output limit): lines past it move to the next page, with an exact offset.
+ */
+export const PAGE_CHARS = 50_000;
+/** What one content line takes besides its context: position, phrase, separators. */
+const CONTENT_LINE_EXTRA = 120;
+/** Room kept for a passage (or summary) line's " — Trecho: …" part. */
+const PASSAGE_ESTIMATE = 320;
+
+/** The page size asked for, bounded by the mode's maximum and, in content, by the budget. */
+function pageSize(args: FindArgs, mode: GrepMode): number {
+  const asked = Math.min(
     args.head_limit ?? args.limit ?? GREP_PAGE[mode].default,
     GREP_PAGE[mode].max,
   );
+  if (mode !== 'content') return asked;
+  // Group heads take some room too: the occurrences get 80% of the page.
+  const fits = Math.floor(
+    (PAGE_CHARS * 0.8) / (args.context_chars + CONTENT_LINE_EXTRA),
+  );
+  return Math.max(1, Math.min(asked, fits));
+}
+
+/** How many of the lines fit in the page's character budget (at least one). */
+function fitting(lines: readonly string[], budget = PAGE_CHARS): number {
+  let used = 0;
+  let count = 0;
+  for (const line of lines) {
+    used += line.length + 1;
+    if (used > budget && count > 0) break;
+    count += 1;
+  }
+  return count;
+}
 
 const pageOf = (
   args: FindArgs,
@@ -186,11 +216,19 @@ export class GrepTool {
     counted: TextCount,
   ): Promise<string> {
     const { args, phrases } = request;
-    const page = pageOf(args, { mode: 'files', total: counted.matches.length });
+    let page = pageOf(args, { mode: 'files', total: counted.matches.length });
     const shown = counted.matches.slice(page.offset, page.offset + page.size);
-    const lines = await Promise.all(
-      shown.map((match, i) => this.fileLineOf(request, match, i)),
+    // Sized before numbering, so no document gets an [n] it was not shown with.
+    const estimates = shown.map(
+      (match, i) =>
+        `${fileLine(0, match, null)}${i < PASSAGES_PER_PAGE ? ' '.repeat(PASSAGE_ESTIMATE) : ''}`,
     );
+    const lines = await Promise.all(
+      shown
+        .slice(0, fitting(estimates))
+        .map((match, i) => this.fileLineOf(request, match, i)),
+    );
+    page = { ...page, size: lines.length };
     const hint =
       phrases.length > 0 && page.offset + page.size >= page.total
         ? [
@@ -223,10 +261,13 @@ export class GrepTool {
 
   private countPage(request: GrepRequest, counted: TextCount): string {
     const { args, context } = request;
-    const page = pageOf(args, { mode: 'count', total: counted.matches.length });
-    const lines = counted.matches
-      .slice(page.offset, page.offset + page.size)
+    const full = pageOf(args, { mode: 'count', total: counted.matches.length });
+    const shown = counted.matches.slice(full.offset, full.offset + full.size);
+    const titles = shown.map((match) => countLine(0, match));
+    const lines = shown
+      .slice(0, fitting(titles))
       .map((match) => countLine(context.book.number(match.entry), match));
+    const page = { ...full, size: lines.length };
     return [
       `${totalsLine(request, counted)} ${pageRange(page)}`,
       ...lines,

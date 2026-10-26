@@ -491,9 +491,14 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
     const tools = llm.lastMessages.filter((m) => m.role === 'tool');
     expect(tools).toHaveLength(12);
     expect(tools[0]?.content.startsWith(COMPACTED_MARK)).toBe(true);
+    // Still above the threshold before the last call: only the 2 newest stay whole.
     expect(
-      tools.slice(-6).some((m) => m.content.startsWith(COMPACTED_MARK)),
+      tools.slice(-2).some((m) => m.content.startsWith(COMPACTED_MARK)),
     ).toBe(false);
+    expect(
+      tools.slice(0, -2).every((m) => m.content.startsWith(COMPACTED_MARK)),
+    ).toBe(true);
+    expect(llm.agentCalls.at(-1)?.toolChoice).toBe('none');
     expect(answerText(events)).toMatch(/\[\d+\]/);
   });
 
@@ -508,6 +513,20 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
     expect(ofType(events, 'done')[0]?.steps).toBe(0);
     expect(llm.agentCalls).toHaveLength(1);
     expect(llm.agentCalls[0]?.toolChoice).toBe('none');
+  });
+
+  it('prices the forced last call at its whole output budget', async () => {
+    const budgets = researchBudgets();
+    const one = { ...budgets, exhaustive: { ...budgets.exhaustive, steps: 1 } };
+    // US$ 1 per million tokens: 4,000 output tokens fit a US$ 0.01 cap, 16,000 do not.
+    const { runner } = await fixtureRunner(
+      { script: pages(3), usdPerCall: 0 },
+      0.01,
+      one,
+    );
+    const events = await collectEvents(runner.run(exhaustive('ritmo')));
+    expect(ofType(events, 'step')).toHaveLength(1);
+    expect(events.at(-1)).toEqual({ type: 'error', code: 'DAILY_CAP_REACHED' });
   });
 
   it('stops cleanly with DAILY_CAP_REACHED and records what it spent (AC-13)', async () => {

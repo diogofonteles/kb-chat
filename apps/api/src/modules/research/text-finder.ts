@@ -32,29 +32,6 @@ export interface PhraseCount {
   readonly count: number;
 }
 
-export interface TextHit {
-  readonly entry: CatalogEntry;
-  readonly occurrences: number;
-  /** The alternatives found in this document, with their counts. */
-  readonly phrases: readonly PhraseCount[];
-  /** The text around the first occurrence of the most frequent alternative. */
-  readonly snippet: string;
-}
-
-export interface TextSearch {
-  readonly hits: readonly TextHit[];
-  /** Documents with at least one occurrence (hits holds the first `limit`). */
-  readonly documents: number;
-  readonly occurrences: number;
-  readonly scanned: number;
-}
-
-export interface TextQuery {
-  readonly topic: string;
-  readonly phrases: readonly string[];
-  readonly limit: number;
-}
-
 /** One matching document: how often each alternative occurs in it (KBC-017). */
 export interface DocMatch {
   readonly entry: CatalogEntry;
@@ -113,11 +90,12 @@ function positionsOf(
   return found.sort((a, b) => a.at - b.at);
 }
 
+/** The text around an occurrence, never reaching back before `floor` (the body's start). */
 const contextAround = (
   flat: string,
-  { at, chars }: { at: number; chars: number },
+  { at, chars, floor }: { at: number; chars: number; floor: number },
 ): string => {
-  const start = Math.max(0, at - Math.floor(chars / 3));
+  const start = Math.max(floor, at - Math.floor(chars / 3));
   const end = Math.min(flat.length, start + chars);
   return `${start > 0 ? '…' : ''}${flat.slice(start, end)}${end < flat.length ? '…' : ''}`;
 };
@@ -187,23 +165,6 @@ export class TextFinder {
     if (catalog) await this.corpus(catalog);
   }
 
-  /** Documents ranked by occurrences of any of the phrases; null for an unknown topic. */
-  async find(query: TextQuery): Promise<TextSearch | null> {
-    const counted = await this.count({ ...query, accept: () => true });
-    if (!counted) return null;
-    const hits = await Promise.all(
-      counted.matches
-        .slice(0, query.limit)
-        .map((match) => this.toHit(query.topic, match)),
-    );
-    return {
-      hits,
-      documents: counted.matches.length,
-      occurrences: counted.occurrences,
-      scanned: counted.scanned,
-    };
-  }
-
   /**
    * Every document the filter accepts that holds any of the phrases, ranked by occurrences
    * (KBC-017): no cap, the caller pages. Without phrases, every accepted document by title.
@@ -242,9 +203,16 @@ export class TextFinder {
     };
   }
 
-  /** The passage around the first occurrence of a match's most frequent alternative. */
+  /**
+   * The passage around the first occurrence of a match's most frequent alternative. It
+   * comes from the file again: only the folded text stays in memory.
+   */
   async snippet(topic: string, match: DocMatch): Promise<string> {
-    return (await this.toHit(topic, match)).snippet;
+    const text = await this.deps.vault.readDocument(topic, match.entry.id);
+    const best = match.phrases[0]?.phrase ?? '';
+    return text === null
+      ? ''
+      : snippetOf(searchableText(match.entry, text), best);
   }
 
   /**
@@ -261,13 +229,16 @@ export class TextFinder {
     const body = splitFrontmatter(text).body.normalize('NFC');
     const prefix = `${(entry.summary ?? '').normalize('NFC')}\n\n`;
     const { flat, map } = flatWithMap(prefix + body);
+    // Where the body starts in the flat text: a body occurrence never shows summary text.
+    const bodyStart = map.findIndex((source) => source >= prefix.length);
     const items = positionsOf(foldText(flat), toNeedles(scan.phrases)).map(
       ({ at, phrase }) => {
-        const source = map[at] ?? 0;
+        const inBody = bodyStart >= 0 && at >= bodyStart;
+        const floor = inBody ? bodyStart : 0;
         return {
           phrase,
-          offset: source >= prefix.length ? source - prefix.length : null,
-          context: contextAround(flat, { at, chars: scan.chars }),
+          offset: inBody ? (map[at] ?? 0) - prefix.length : null,
+          context: contextAround(flat, { at, chars: scan.chars, floor }),
         };
       },
     );
@@ -303,19 +274,5 @@ export class TextFinder {
     const text = await this.deps.vault.readDocument(topic, entry.id);
     if (text === null) return null;
     return { entry, folded: foldText(searchableText(entry, text)) };
-  }
-
-  /** The snippet comes from the file again: only the folded text stays in memory. */
-  private async toHit(topic: string, found: DocMatch): Promise<TextHit> {
-    const { entry } = found;
-    const text = await this.deps.vault.readDocument(topic, entry.id);
-    const best = found.phrases[0]?.phrase ?? '';
-    return {
-      entry,
-      occurrences: found.occurrences,
-      phrases: found.phrases,
-      snippet:
-        text === null ? '' : snippetOf(searchableText(entry, text), best),
-    };
   }
 }

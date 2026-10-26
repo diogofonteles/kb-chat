@@ -111,8 +111,9 @@ describe('find_text as a grep (KBC-017, ADR 0013)', () => {
       call('find_text', { phrase: 'vibração' }),
     );
     const lines = listed(output);
-    expect(lines).toHaveLength(25);
-    expect(lines.filter((line) => line.includes('Trecho:'))).toHaveLength(3);
+    expect(lines).toHaveLength(20);
+    expect(lines.filter((line) => line.includes('Trecho:'))).toHaveLength(10);
+    expect(output).toContain('Próxima página: offset=20.');
   });
 
   it('counts occurrences per document without passages (AC-2)', async () => {
@@ -234,31 +235,96 @@ describe('find_text as a grep (KBC-017, ADR 0013)', () => {
   });
 });
 
-describe('list_sources (KBC-017 AC-6)', () => {
-  it('lists origin folders and entities with counts, filtered by a fragment', async () => {
-    const tools = await memoryTools(new MemoryVault(corpus()));
-    const { steps, output } = await run(
-      tools,
-      context(),
-      call('list_sources', { query: 'temas' }),
-    );
-    expect(steps).toEqual([
-      {
-        kind: 'subjects',
-        text: 'Listando as origens e entidades sobre “temas”',
-      },
+describe('find_text limits and edge cases (KBC-017 NFR-3, QA)', () => {
+  it('keeps every page under 60,000 characters with the largest arguments', async () => {
+    const docs = corpus();
+    const long = 'Título muito longo de uma compilação '.repeat(6);
+    for (let i = 1; i <= 220; i += 1)
+      docs[`raw/articles/longo-${i}.md`] = memoryDoc({
+        title: `${long}${i}`,
+        body: 'vibração som luz cor forma ritmo número tempo '.repeat(40),
+        sourcePath: `_convert/ready/dropbox/${'Pasta muito longa/'.repeat(8)}x.txt`,
+      });
+    const tools = await memoryTools(new MemoryVault(docs));
+    const ctx = context();
+    const outputs = await Promise.all([
+      run(
+        tools,
+        ctx,
+        call('find_text', {
+          phrase: 'vibração | som | luz | cor | forma | ritmo | número | tempo',
+          head_limit: 200,
+        }),
+      ),
+      run(
+        tools,
+        ctx,
+        call('find_text', {
+          phrase: 'vibração | som',
+          output_mode: 'content',
+          head_limit: 100,
+          context_chars: 600,
+        }),
+      ),
+      run(
+        tools,
+        ctx,
+        call('find_text', {
+          document: BIG_ID,
+          phrase: 'miasmas | energia',
+          output_mode: 'content',
+          head_limit: 100,
+          context_chars: 600,
+        }),
+      ),
     ]);
-    expect(output).toContain('Origens (1 de 1):');
-    expect(output).toContain('- Temas-docs (18 documento(s))');
-    expect(output).toContain('Entidades (1 de 1):');
-    expect(output).toContain('- Temas Herméticos (5 documento(s))');
-    const authors = await run(
+    for (const { output } of outputs) {
+      expect(output.length).toBeLessThan(60_000);
+      const next = /Próxima página: offset=(\d+)/.exec(output)?.[1];
+      const range = /Mostrando (\d+)–(\d+) de/.exec(output);
+      // The next page starts right after the last item shown.
+      expect(Number(next)).toBe(Number(range?.[2]));
+    }
+  });
+
+  it('excludes by exact entity or origin, keeping documents that merely mention the name', async () => {
+    const tools = await memoryTools(new MemoryVault(corpus()));
+    const { output } = await run(
       tools,
       context(),
-      call('list_sources', { kind: 'entities' }),
+      call('find_text', { phrase: 'vibração', exclude: ['rosacruz'] }),
     );
-    expect(authors.output.split('\n')[1]).toBe(`- ${AUTHOR} (14 documento(s))`);
-    expect(authors.output).not.toContain('Origens');
+    // "Rosacruz" is an entity of every odd document: an exact name leaves them out.
+    expect(output.split('\n')[0]).toMatch(/: 12 documento\(s\)/);
+    const partial = await run(
+      tools,
+      context(),
+      call('find_text', { phrase: 'vibração', exclude: ['Rosa'] }),
+    );
+    expect(partial.output.split('\n')[0]).toMatch(/: 25 documento\(s\)/);
+    const tiny = await run(
+      tools,
+      context(),
+      call('find_text', { phrase: 'vibração', exclude: ['a'] }),
+    );
+    expect(tiny.output).toMatch(/^Argumentos inválidos \(exclude/);
+  });
+
+  it('matches an entity whatever its spacing, and refuses filters with document', async () => {
+    const tools = await memoryTools(new MemoryVault(corpus()));
+    const spaced = await run(
+      tools,
+      context(),
+      call('find_text', { entity: '  jose   laercio ' }),
+    );
+    expect(spaced.output.split('\n')[0]).toMatch(/: 14 documento\(s\)/);
+    const mixed = await run(
+      tools,
+      context(),
+      call('find_text', { document: BIG_ID, phrase: 'livro', entity: 'x y' }),
+    );
+    expect(mixed.steps).toEqual([]);
+    expect(mixed.output).toMatch(/^Argumentos inválidos \(document: /);
   });
 });
 
@@ -276,6 +342,33 @@ describe('read_document paging (KBC-017 AC-7)', () => {
     );
     expect(output).toMatch(/caracteres 100000 a 120000 de \d{6}:/);
     expect(output).toContain('offset=120000');
+  });
+});
+
+describe('search_collection reachable pages (KBC-017 QA)', () => {
+  it('never offers a page past the 50 reachable candidates', async () => {
+    const docs = corpus();
+    for (let i = 1; i <= 40; i += 1)
+      docs[`raw/articles/extra-${i}.md`] = memoryDoc({
+        title: `Extra ${i}`,
+        body: 'a vibração',
+      });
+    const hits = Object.keys(docs).map((id, i) => ({
+      id,
+      score: 1 - i / 1000,
+      snippet: 'a vibração',
+    }));
+    const tools = await memoryTools(
+      new MemoryVault(docs),
+      new FixedIndex(hits),
+    );
+    const { output } = await run(
+      tools,
+      context(),
+      call('search_collection', { query: 'vibração', offset: 40, limit: 30 }),
+    );
+    expect(output.split('\n')[0]).toMatch(/: 41–50 de 50 documento\(s\)/);
+    expect(output).not.toContain('Próxima página');
   });
 });
 

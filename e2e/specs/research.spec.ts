@@ -88,10 +88,15 @@ test('KBC-017 AC-9: "Exaustivo" explains itself, asks with the exhaustive profil
       () => document.documentElement.scrollWidth - window.innerWidth,
     ),
   ).toBeLessThanOrEqual(0);
-  if (desktop(page))
-    await expect(
-      page.getByText(/Varre o acervo inteiro.*pode levar vários minutos/),
-    ).toBeVisible();
+  // The warning shows at every width: it may take minutes (KBC-017 AC-9).
+  await expect(
+    page.getByText(/Varre o acervo inteiro.*pode levar vários minutos/),
+  ).toBeVisible();
+  const option = await page
+    .locator('.profile-option')
+    .last()
+    .evaluate((el) => el.getBoundingClientRect().height);
+  expect(option).toBeGreaterThanOrEqual(44);
   const asked = page.waitForRequest(
     (request) =>
       request.method() === 'POST' && request.url().endsWith('/research'),

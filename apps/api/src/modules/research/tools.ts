@@ -224,10 +224,11 @@ export class ResearchTools {
       offset: filtering ? 0 : args.offset,
       filters: { concepts: scope.concepts },
     });
+    // Only the first MAX_RESULTS candidates can be paged to (the search's own cap).
     if (!filtering)
       return {
         shown: response.items,
-        total: response.total,
+        total: Math.min(response.total, MAX_RESULTS),
         candidates: response.total,
       };
     const kept = response.items.filter((hit) =>

@@ -56,6 +56,14 @@ describe('compactToolResults (KBC-017 AC-10)', () => {
     ).toBeGreaterThan(2_000);
     // A second pass does not compact the same results again.
     expect(compactToolResults(out, { book }).compacted).toBe(0);
+    // A later pass keeps one ledger only, on its newest compacted result.
+    const later = compactToolResults(out, { book, keep: 2 }).messages.filter(
+      (m) => m.role === 'tool',
+    );
+    expect(later.filter((m) => m.content.includes('Registro:'))).toHaveLength(
+      1,
+    );
+    expect(later[4]?.content).toContain('Registro:');
   });
 
   it('keeps the first line and says how to get the text back', () => {

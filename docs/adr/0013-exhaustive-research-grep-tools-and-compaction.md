@@ -25,16 +25,16 @@ Claude Code answers this kind of question with Grep (`output_mode` `files_with_m
 | Argument | Meaning |
 |---|---|
 | `phrase` | literal text, accent- and case-insensitive, variants joined with ` \| `; optional when `entity` or `source` is given (then the tool lists every document of the filter) |
-| `output_mode` | `files` (default: one compact line per document, a passage only on the first 3 lines of a page), `count` (occurrences per document, no passage), `content` (every occurrence with its context and its position) |
-| `head_limit`, `offset` | the page. Defaults: 50 lines in `files`, 200 in `count`, 30 occurrences in `content`; at most 200 lines or 100 occurrences per page. `limit` is still accepted as `head_limit` |
+| `output_mode` | `files` (default: one compact line per document, a passage only on the first 10 lines of a page), `count` (occurrences per document, no passage), `content` (every occurrence with its context and its position) |
+| `head_limit`, `offset` | the page. Defaults: 20 lines in `files` (the deep profile's old 10–20 hits with passages, so fast and deep turns read the same amount, ADR 0009 latency), 200 in `count`, 30 occurrences in `content`; at most 200 lines or 100 occurrences per page. `limit` is still accepted as `head_limit` |
 | `entity` | a fragment of one of the document's kb `entities` (author, person, work), folded |
 | `source` | a fragment of the document's `source_path` (origin folder), folded |
-| `exclude` | documents to leave out: `[n]`/n, an id, or a text found in the origin or the entities |
+| `exclude` | documents to leave out: `[n]`/n, an id, a fragment of the origin, or the exact name of an entity (a document that merely lists a name among its entities stays unless the name is given whole); at least 2 characters |
 | `subjects` | as in `search_collection` |
-| `document` | grep one document's whole body (the "scan_document" of the request) |
+| `document` | grep one document's whole body (the "scan_document" of the request); refused together with the filters |
 | `context_chars` | characters around each occurrence in `content` (default 160, at most 600) |
 
-There is **no cap on matching documents**: every output starts with the totals (documents, occurrences, documents scanned, the filters, the page range) and ends with `Próxima página: offset=N` or `Fim da lista.` A page stays well under 60,000 characters, below Claude Code's MCP output limit.
+There is **no cap on matching documents**: every output starts with the totals (documents, occurrences, documents scanned, the filters, the page range) and ends with `Próxima página: offset=N` or `Fim da lista.` A page has a budget of 50,000 characters, below Claude Code's MCP output limit: in `content` the page size shrinks with `context_chars` so the occurrences take at most 40,000; in `files` and `count` the lines past the budget move to the next page, sized before they are numbered, and the footer's offset is exact. At most 3 alternatives' counts show per line. Body occurrences never show kb-summary text in their context.
 
 In `content` mode a position is an offset in the document body as `read_document` counts it (NFC body, frontmatter out), so the agent can read around any occurrence. The folded text keeps one character per character of a flattened text; a position map from the flat text back to the body is built per scanned document (O(n), about 15 ms for 490,000 characters). Occurrences in the kb summary come first, marked `(resumo)`, without a position.
 
@@ -50,16 +50,16 @@ In `content` mode a position is an offset in the document body as `read_document
 |---|---|---|---|
 | Tool steps | 6 | 15 | 80 (`KB_CHAT_EXHAUSTIVE_STEPS`, 10–300) |
 | Output tokens per call | 2,000 | 2,000 | 16,000 (`KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS`, 2,000–64,000) |
-| Output priced by the spend guard | the call's budget | the call's budget | 4,000 per call (the long output comes once) |
+| Output priced by the spend guard | the call's budget | the call's budget | 4,000 per research call; the forced last call at its whole budget (the long output comes then) |
 | Wall-clock ceiling | — | — | 30 minutes, then the "answer now" note |
 | Context compaction (in-API loop) | — | — | past ~60,000 estimated tokens |
 | Claude Code effort | `low` | CLI default | CLI default |
 
 The ceilings are safety nets, not the plan: the exhaustive prompt tells the model to decide the effort, enumerate with filters and pages until the lists end, grep big documents with `find_text` + `document` instead of reading them whole, keep a running list in its notes between tool calls, and end the answer with a **coverage line** ("Cobertura: varri X de Y documentos que …; examinei Z documentos grandes com find_text").
 
-**Compaction** (in-API loop, exhaustive profile): before a model call whose prompt is estimated past the threshold, every tool result older than the last 6 becomes a short ledger entry: the tool's first line (its totals) and the `[n]` it listed, marked as compacted. The first compacted result also carries a ledger of every document numbered so far. The model's own notes stay. Deterministic, no extra model call, so it costs nothing and is tested with fakes. The subscription CLIs compact their own context (Claude Code's auto-compact).
+**Compaction** (in-API loop, exhaustive profile): before every model call (the forced last one included) whose prompt is estimated past the threshold, every tool result older than the last 6 becomes a short ledger entry: the tool's first line (its totals) and the `[n]` it listed, marked as compacted; if the prompt is still past it, only the last 2 stay whole. The newest compacted result carries the one ledger of every document numbered so far (older ledgers are dropped). The model's own notes stay. Deterministic, no extra model call, so it costs nothing and is tested with fakes. The subscription CLIs compact their own context (Claude Code's auto-compact).
 
-**Subscriptions.** The CLIs reach the same tools over the turn's MCP endpoint, which now accepts the profile's step budget (80) and lives 90 minutes (was 15). The exhaustive prompt goes to the CLI as for the other profiles.
+**Subscriptions.** The CLIs reach the same tools over the turn's MCP endpoint, which now accepts the profile's step budget (80) and lives 90 minutes (was 15). The exhaustive prompt goes to the CLI as for the other profiles. The 30-minute ceiling is the in-API loop's: a CLI runs its own loop, so a subscription turn is bounded by the 80 steps, the reader's "Parar" and the endpoint's 90 minutes (deliberate; nothing is spent per token there).
 
 **Spend.** A per-token exhaustive turn is still checked against the daily cap before every model call; when the cap is reached mid-turn it ends with `DAILY_CAP_REACHED` (the existing message) and what it spent is recorded.
 

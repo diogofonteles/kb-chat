@@ -33,8 +33,13 @@ const hasFragment = (values: readonly string[], fragment: string): boolean => {
   return values.some((value) => foldName(value).includes(needle));
 };
 
-const matchesText = (entry: CatalogEntry, fragment: string): boolean =>
-  hasFragment([entry.sourcePath ?? '', ...entry.entities], fragment);
+/**
+ * An exclusion text leaves out a document whose origin contains it or that names it as
+ * one of its entities exactly: a document that merely mentions a name among many stays.
+ */
+const matchesText = (entry: CatalogEntry, text: string): boolean =>
+  hasFragment([entry.sourcePath ?? ''], text) ||
+  entry.entities.some((name) => foldName(name) === foldName(text));
 
 function isExcluded(entry: CatalogEntry, filter: DocFilter): boolean {
   if (filter.excludeIds?.has(entry.id)) return true;

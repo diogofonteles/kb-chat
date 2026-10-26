@@ -27,7 +27,7 @@ import {
   deepenReason,
   beforeMarker,
 } from './escalation.js';
-import { compactToolResults } from './compaction.js';
+import { KEEP_TOOL_RESULTS, compactToolResults } from './compaction.js';
 import {
   DEFAULT_BUDGETS,
   type ProfileBudget,
@@ -41,6 +41,9 @@ const FINAL_NOTES: ReadonlySet<string> = new Set([
   FINAL_ANSWER_NOTE,
   FINAL_DEEPEN_NOTE,
 ]);
+
+/** What a turn still above the threshold keeps whole, after the first compaction. */
+const MIN_KEPT_RESULTS = 2;
 
 const SKIPPED_CALL =
   'Não executada: o limite de passos desta resposta foi atingido.';
@@ -193,13 +196,13 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     for (;;) {
       if (turn.input.signal.aborted) return;
       const final = this.mustAnswer(turn);
-      if (!final) this.compact(turn);
+      this.compact(turn);
       if (final)
         turn.messages.push({
           role: 'system',
           content: turn.deepen ? FINAL_DEEPEN_NOTE : FINAL_ANSWER_NOTE,
         });
-      await this.guard(turn);
+      await this.guard(turn, final);
       const call = yield* this.callModel(turn, final);
       if (yield* this.afterCall(turn, call, final)) return;
     }
@@ -281,17 +284,26 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   private compact(turn: Turn): void {
     const threshold = turn.budget.compactTokens;
     if (threshold === null) return;
-    if (tokensOf(promptText(turn.messages)) <= threshold) return;
-    const { messages } = compactToolResults(turn.messages, { book: turn.book });
-    turn.messages.splice(0, turn.messages.length, ...messages);
+    for (const keep of [KEEP_TOOL_RESULTS, MIN_KEPT_RESULTS]) {
+      if (tokensOf(promptText(turn.messages)) <= threshold) return;
+      const { messages } = compactToolResults(turn.messages, {
+        book: turn.book,
+        keep,
+      });
+      turn.messages.splice(0, turn.messages.length, ...messages);
+    }
   }
 
-  /** Daily cap and credit before every model call, counting what this turn already spent. */
-  private async guard(turn: Turn): Promise<void> {
+  /**
+   * Daily cap and credit before every model call, counting what this turn already spent.
+   * The forced last call is priced at its whole output budget: the long answer comes then.
+   */
+  private async guard(turn: Turn, final: boolean): Promise<void> {
     const { llm, spend } = turn.engine;
+    const { guardOutputTokens, outputTokens } = turn.budget;
     const estimate = await spend.estimate(
       promptText(turn.messages),
-      llm.maxOutputTokens(turn.budget.guardOutputTokens),
+      llm.maxOutputTokens(final ? outputTokens : guardOutputTokens),
     );
     await spend.guard(turn.usd + estimate);
   }

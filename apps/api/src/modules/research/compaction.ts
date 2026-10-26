@@ -33,7 +33,25 @@ export function compactedText(content: string): string {
 }
 
 const ledgerOf = (book: SourceBook): string =>
-  `Registro: ${book.size} documento(s) numerados até aqui${book.size > 0 ? ` ([1] a [${book.size}])` : ''}; os números continuam valendo. Resultados antigos de ferramenta foram resumidos; suas anotações da lista parcial continuam acima.`;
+  `${book.size} documento(s) numerados até aqui${book.size > 0 ? ` ([1] a [${book.size}])` : ''}; os números continuam valendo. Resultados antigos de ferramenta foram resumidos; suas anotações da lista parcial continuam acima.`;
+
+const LEDGER_START = '\nRegistro: ';
+
+/** The tool results older than the last `keep` that are not compacted yet, in order. */
+function toCompact(messages: readonly AgentMessage[], keep: number): number[] {
+  const toolIndexes = messages.flatMap((m, i) =>
+    m.role === 'tool' ? [i] : [],
+  );
+  return toolIndexes
+    .slice(0, Math.max(0, toolIndexes.length - keep))
+    .filter((i) => !isCompacted(messages[i]?.content ?? ''));
+}
+
+/** A compacted result without the ledger an earlier pass appended (only the newest stays). */
+const withoutLedger = (content: string): string => {
+  const at = content.indexOf(LEDGER_START);
+  return at < 0 ? content : content.slice(0, at);
+};
 
 /**
  * Auto-compaction of a long research turn (KBC-017, ADR 0013): every tool result older
@@ -45,22 +63,21 @@ export function compactToolResults(
   messages: readonly AgentMessage[],
   { book, keep = KEEP_TOOL_RESULTS }: { book: SourceBook; keep?: number },
 ): { messages: AgentMessage[]; compacted: number } {
-  const toolIndexes = messages.flatMap((m, i) =>
-    m.role === 'tool' ? [i] : [],
-  );
-  const old = new Set(
-    toolIndexes.slice(0, Math.max(0, toolIndexes.length - keep)),
-  );
-  let compacted = 0;
+  const fresh = toCompact(messages, keep);
+  if (fresh.length === 0) return { messages: [...messages], compacted: 0 };
+  const first = fresh[0];
   const result = messages.map((message, i) => {
-    if (message.role !== 'tool' || !old.has(i) || isCompacted(message.content))
-      return message;
-    const text = compactedText(message.content);
-    compacted += 1;
-    return {
-      ...message,
-      content: compacted === 1 ? `${text}\n${ledgerOf(book)}` : text,
-    };
+    if (message.role !== 'tool') return message;
+    if (i === first)
+      return {
+        ...message,
+        content: `${compactedText(message.content)}${LEDGER_START}${ledgerOf(book)}`,
+      };
+    if (fresh.includes(i))
+      return { ...message, content: compactedText(message.content) };
+    return isCompacted(message.content)
+      ? { ...message, content: withoutLedger(message.content) }
+      : message;
   });
-  return { messages: result, compacted };
+  return { messages: result, compacted: fresh.length };
 }

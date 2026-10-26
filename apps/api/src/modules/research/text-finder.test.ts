@@ -1,8 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
-import { CatalogRegistry } from '../catalog/index.js';
+import { CatalogRegistry, splitFrontmatter } from '../catalog/index.js';
 import { flatText, foldText } from './folded-text.js';
 import { TextFinder } from './text-finder.js';
+
+interface FindQuery {
+  readonly topic: string;
+  readonly phrases: readonly string[];
+  readonly limit: number;
+}
+
+/** The ranked documents with their passages, as find_text's files mode shows them. */
+async function find(finder: TextFinder, query: FindQuery) {
+  const counted = await finder.count({ ...query, accept: () => true });
+  if (!counted) return null;
+  const hits = await Promise.all(
+    counted.matches.slice(0, query.limit).map(async (match) => ({
+      ...match,
+      snippet: await finder.snippet(query.topic, match),
+    })),
+  );
+  return {
+    hits,
+    documents: counted.matches.length,
+    occurrences: counted.occurrences,
+    scanned: counted.scanned,
+  };
+}
 
 /** An in-memory vault with one topic whose documents can be swapped between loads. */
 class MemoryVault implements VaultReaderPort {
@@ -58,7 +82,7 @@ describe('foldText', () => {
 describe('TextFinder', () => {
   it('finds a phrase across line breaks and bold marks, in a document about another theme', async () => {
     const { finder } = await finderOver(new MemoryVault({ ...DOCS }));
-    const found = await finder.find({
+    const found = await find(finder, {
       topic: 'hermetismo',
       phrases: ['cinco principios universais'],
       limit: 10,
@@ -81,7 +105,7 @@ describe('TextFinder', () => {
         ),
       }),
     );
-    const found = await finder.find({
+    const found = await find(finder, {
       topic: 'hermetismo',
       phrases: ['cinco principios ocultos'],
       limit: 10,
@@ -93,7 +117,7 @@ describe('TextFinder', () => {
 
   it('ranks documents by occurrences of any alternative and counts each one', async () => {
     const { finder } = await finderOver(new MemoryVault({ ...DOCS }));
-    const found = await finder.find({
+    const found = await find(finder, {
       topic: 'hermetismo',
       phrases: [
         'princípios ocultos',
@@ -117,7 +141,7 @@ describe('TextFinder', () => {
 
   it('returns no hits for an absent phrase and null for an unknown topic', async () => {
     const { finder } = await finderOver(new MemoryVault({ ...DOCS }));
-    const none = await finder.find({
+    const none = await find(finder, {
       topic: 'hermetismo',
       phrases: ['doze princípios'],
       limit: 5,
@@ -129,7 +153,7 @@ describe('TextFinder', () => {
       scanned: 3,
     });
     expect(
-      await finder.find({ topic: 'nope', phrases: ['x'], limit: 5 }),
+      await find(finder, { topic: 'nope', phrases: ['x'], limit: 5 }),
     ).toBeNull();
   });
 
@@ -139,14 +163,44 @@ describe('TextFinder', () => {
     const query = { topic: 'hermetismo', phrases: ['tortinha'], limit: 5 };
     await finder.warm('hermetismo');
     const afterWarm = vault.reads;
-    await finder.find(query);
+    await find(finder, query);
     expect(vault.reads).toBe(afterWarm);
     vault.docs = {
       ...DOCS,
       'raw/articles/nova.md': doc('Nova', 'Uma tortinha.'),
     };
     await catalog.load();
-    const found = await finder.find(query);
+    const found = await find(finder, query);
     expect(found?.hits.map((h) => h.entry.title)).toEqual(['Nova']);
+  });
+
+  it('shows body occurrences with body text only, and summary ones as such (KBC-017)', async () => {
+    const { catalog, finder } = await finderOver(
+      new MemoryVault({
+        'raw/articles/obra.md': doc(
+          'Obra',
+          'Livro citado logo no início.',
+          'O resumo também cita um livro.',
+        ),
+      }),
+    );
+    const entry = catalog
+      .get('hermetismo')
+      ?.entries.get('raw/articles/obra.md');
+    if (!entry) throw new Error('fixture missing');
+    const found = await finder.occurrencesIn('hermetismo', entry, {
+      phrases: ['livro'],
+      chars: 120,
+    });
+    const body = splitFrontmatter(
+      doc('Obra', 'Livro citado logo no início.', 'x'),
+    ).body;
+    // The offset is read_document's: the body as split from the frontmatter.
+    expect(found?.items.map((i) => i.offset)).toEqual([
+      null,
+      body.indexOf('Livro'),
+    ]);
+    expect(found?.items[1]?.context).toMatch(/^…Livro citado/);
+    expect(found?.items[0]?.context).toContain('resumo');
   });
 });

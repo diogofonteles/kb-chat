@@ -8,7 +8,7 @@ import {
   type PreparedCall,
   type ToolContext,
 } from './tool-context.js';
-import { foldName, quote } from './tool-output.js';
+import { foldName, oneLine, quote } from './tool-output.js';
 import { sourcesArgsSchema } from './tool-schemas.js';
 
 type SourcesArgs = z.output<typeof sourcesArgsSchema>;
@@ -55,7 +55,9 @@ function section(
     `${label} (${size} de ${matching.length}): ${pageRange(page)}`,
     ...matching
       .slice(page.offset, page.offset + size)
-      .map(({ name, count }) => `- ${name} (${count} documento(s))`),
+      .map(
+        ({ name, count }) => `- ${oneLine(name, 160)} (${count} documento(s))`,
+      ),
     pageFooter(page),
   ];
 }

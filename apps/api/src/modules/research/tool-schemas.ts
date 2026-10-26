@@ -8,7 +8,7 @@ export const MAX_SEARCH_LIMIT = 30;
 export const MAX_SEARCH_OFFSET = 49;
 /** find_text page sizes per output mode (KBC-017, ADR 0013): lines, or occurrences. */
 export const GREP_PAGE = {
-  files: { default: 50, max: 200 },
+  files: { default: 20, max: 200 },
   count: { default: 200, max: 200 },
   content: { default: 30, max: 100 },
 } as const;
@@ -56,11 +56,16 @@ const filterShape = {
       'Só documentos cuja origem (pasta do arquivo original) contém este texto, como "Temas-docs". Veja list_sources.',
     ),
   exclude: z
-    .array(documentRef.or(z.string().trim().min(2).max(300)))
+    .array(
+      z.union([
+        z.number().int().positive(),
+        z.string().trim().min(2).max(1024),
+      ]),
+    )
     .max(100)
     .optional()
     .describe(
-      'Deixa de fora: números [n] ou ids de documentos, ou um texto que apareça na origem ou nas entidades (ex.: "Blavatsky").',
+      'Deixa de fora: números [n] ou ids de documentos, um trecho da origem (ex.: "Livros") ou o nome exato de uma entidade.',
     ),
   subjects: z
     .array(z.string().min(1).max(200))
@@ -204,6 +209,21 @@ export const findArgsSchema = z
       error:
         'informe phrase, ou entity/source (sem document) para listar os documentos do filtro; document exige phrase',
       path: ['phrase'],
+    },
+  )
+  .refine(
+    (args) =>
+      !args.document ||
+      !(
+        args.entity ||
+        args.source ||
+        args.exclude?.length ||
+        args.subjects?.length
+      ),
+    {
+      error:
+        'document procura num só documento: não combine com entity, source, exclude ou subjects',
+      path: ['document'],
     },
   );
 

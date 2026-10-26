@@ -4,7 +4,7 @@ import type { DocMatch, Occurrence } from './text-finder.js';
 import { oneLine, quote } from './tool-output.js';
 
 /** Lines of a files page that also show a passage (the rest stay one compact line). */
-export const PASSAGES_PER_PAGE = 3;
+export const PASSAGES_PER_PAGE = 10;
 const PASSAGE_CHARS = 300;
 const TITLE_CHARS = 140;
 
@@ -34,9 +34,13 @@ export function pageFooter({ offset, size, total }: Page): string {
 }
 
 const occurrencesPart = (match: DocMatch): string => {
+  // The three most frequent alternatives: a line stays short with eight of them.
   const counts =
     match.phrases.length > 1
-      ? ` (${match.phrases.map(({ phrase, count }) => `${quote(phrase)} ${count}`).join(', ')})`
+      ? ` (${match.phrases
+          .slice(0, 3)
+          .map(({ phrase, count }) => `${quote(phrase)} ${count}`)
+          .join(', ')}${match.phrases.length > 3 ? ', …' : ''})`
       : '';
   return `${match.occurrences} ocorrência(s)${counts}`;
 };
