@@ -184,5 +184,7 @@ describe('AiAssignmentBar (KBC-022 AC-12)', () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Ceder assim mesmo' }));
+    expect(apply).not.toHaveBeenCalled();
   });
 });

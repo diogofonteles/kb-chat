@@ -163,9 +163,9 @@ export class AiAssignmentBar {
 
   protected lend(): void {
     const target = this.confirmingLend();
-    this.confirmingLend.set(null);
     if (!target || !isLentSubscription(this.appAi()) || this.lendEmpty())
       return;
+    this.confirmingLend.set(null);
     this.apply.emit({
       target,
       appAi: this.appAi(),

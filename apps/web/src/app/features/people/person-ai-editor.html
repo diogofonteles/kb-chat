@@ -55,7 +55,7 @@
     </div>
   }
   @if (lentForOthers()) {
-    <p class="hint" i18n="@@lend.ownerOnly">
+    <p id="lend-owner-only" class="hint" i18n="@@lend.ownerOnly">
       Só o dono muda o uso da assinatura cedida (cota, “sempre” e reserva paga).
       Você pode trocar a IA desta pessoa.
     </p>
@@ -64,6 +64,7 @@
     <input
       #enforcedBox
       [disabled]="lentForOthers()"
+      [attr.aria-describedby]="lentForOthers() ? 'lend-owner-only' : null"
       type="checkbox"
       [checked]="current.enforced"
       (change)="setEnforced(enforcedBox.checked)"
@@ -84,7 +85,13 @@
       [attr.max]="maxDaily"
       step="1"
       [attr.aria-invalid]="dailyError() ? true : null"
-      [attr.aria-describedby]="dailyError() ? 'person-daily-error' : null"
+      [attr.aria-describedby]="
+        dailyError()
+          ? 'person-daily-error'
+          : lentForOthers()
+            ? 'lend-owner-only'
+            : null
+      "
       [value]="current.dailyResearches ?? ''"
       (change)="setDaily(dailyInput.value)"
     />
@@ -98,6 +105,7 @@
     <input
       #paidBox
       [disabled]="lentForOthers()"
+      [attr.aria-describedby]="lentForOthers() ? 'lend-owner-only' : null"
       type="checkbox"
       [checked]="current.paidFallback.enabled"
       (change)="setPaid(paidBox.checked)"
@@ -117,7 +125,13 @@
         [attr.max]="maxCap"
         step="0.5"
         [attr.aria-invalid]="capError() ? true : null"
-        [attr.aria-describedby]="capError() ? 'person-cap-error' : null"
+        [attr.aria-describedby]="
+          capError()
+            ? 'person-cap-error'
+            : lentForOthers()
+              ? 'lend-owner-only'
+              : null
+        "
         [value]="current.paidFallback.monthlyCapUsd"
         (change)="setCap(capInput.value)"
       />

@@ -274,9 +274,12 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
         ) as HTMLInputElement
       ).disabled,
     ).toBe(true);
+    const hint = screen.getByText(/Só o dono muda o uso da assinatura cedida/);
     expect(
-      screen.getByText(/Só o dono muda o uso da assinatura cedida/),
-    ).toBeTruthy();
+      screen
+        .getByRole('checkbox', { name: /Usar sempre/ })
+        .getAttribute('aria-describedby'),
+    ).toBe(hint.id);
     // Revoking stays open.
     expect(
       (screen.getByLabelText('Qual IA atende esta pessoa') as HTMLSelectElement)

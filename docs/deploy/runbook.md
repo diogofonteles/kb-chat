@@ -224,7 +224,7 @@ Ele confere: `/health`; a página com CSP e HSTS; `/mcp` 404; `/api/v1/topics` 4
 A assinatura é do dono (KBC-010 BR-5); desde o KBC-024 ele pode cedê-la, por decisão própria, a pessoas escolhidas (ADR 0019).
 
 - Os termos do Claude Code permitem entrar com a **própria** assinatura no binário oficial, mesmo hospedado.
-- Eles **proíbem** atender outras pessoas com ela. Ceder a alguém (Pessoas e permissões → "Assinatura do Claude (administrador)") é um risco que o dono assume a cada confirmação: pode levar a limites ou ao bloqueio da conta.
+- Eles **proíbem** atender outras pessoas com ela. Ceder a alguém (Pessoas e permissões → "Claude do administrador") é um risco que o dono assume a cada confirmação: pode levar a limites ou ao bloqueio da conta.
 - Os convidados usam o plano da casa ou as próprias chaves, salvo a quem o dono ceder a assinatura.
 
 ```bash
