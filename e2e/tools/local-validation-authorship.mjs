@@ -68,10 +68,9 @@ for (const [name, viewport] of [
 ]) {
   const page = await browser.newPage({ viewport });
   await signIn(page);
-  await page.addInitScript(() =>
-    localStorage.setItem('kb-chat.view', 'search'),
-  );
   await page.goto(`${base}/`);
+  await page.evaluate(() => localStorage.setItem('kb-chat.view', 'search'));
+  await page.reload();
   await page
     .getByLabel('Como buscar')
     .selectOption({ label: 'Por significado' });

@@ -316,7 +316,8 @@ legend {
 
   .authorship {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* "✦ Mestre Laércio" is the longest label: its segment gets the most room. */
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.3fr) minmax(0, 1.1fr);
   }
 
   .authorship-title {
@@ -329,8 +330,18 @@ legend {
     gap: 0;
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
     text-align: center;
     line-height: 1.2;
+  }
+
+  .segment-text {
+    display: block;
+  }
+
+  .segment-text .check,
+  .segment-text .mark {
+    margin-right: 0.2em;
   }
 
   /* Phones: facet chips scroll in one row and open the sheet (screens.md T2). */
