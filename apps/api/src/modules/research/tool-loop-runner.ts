@@ -563,10 +563,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       deadline: turn.deadline,
       guard: (prompt, outputTokens) =>
         this.reserveSpend(turn, prompt, outputTokens),
-      account: (call, { prompt, reserved }) => {
-        turn.reservedUsd -= reserved;
-        return this.account(turn, call, prompt);
-      },
+      account: (call, cost) => this.accountReserved(turn, call, cost),
       release: (reserved) => {
         turn.reservedUsd -= reserved;
       },
@@ -574,6 +571,19 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       reserveSteps: (wanted) => reserveSubSteps(turn, { budget, wanted }),
       emit: (event) => pipe.push(event),
     };
+  }
+
+  /** A sub-researcher's cost: its reservation is freed only once the real cost is in (BR-4). */
+  private async accountReserved(
+    turn: Turn,
+    call: CallResult,
+    { prompt, reserved }: { prompt: string; reserved: number },
+  ): Promise<void> {
+    try {
+      await this.account(turn, call, prompt);
+    } finally {
+      turn.reservedUsd -= reserved;
+    }
   }
 
   /** Real usage when reported; otherwise counted from the prompt and the output. */

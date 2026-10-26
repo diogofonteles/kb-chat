@@ -302,10 +302,9 @@ export const RESEARCH_TOOL_NAMES: readonly ToolName[] = Object.keys(
 ) as ToolName[];
 
 /** The research tools as the model sees them (ADR 0006); the same for every provider. */
-export const TOOL_DEFINITIONS: readonly ToolDefinition[] = (
-  Object.keys(SCHEMAS) as ToolName[]
-).map((name) => ({
-  name,
-  description: DESCRIPTIONS[name],
-  parameters: toParameters(SCHEMAS[name]),
-}));
+export const TOOL_DEFINITIONS: readonly ToolDefinition[] =
+  RESEARCH_TOOL_NAMES.map((name) => ({
+    name,
+    description: DESCRIPTIONS[name],
+    parameters: toParameters(SCHEMAS[name]),
+  }));
