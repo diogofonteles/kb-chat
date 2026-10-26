@@ -260,4 +260,20 @@ describe('FilterBar authorship control (KBC-020 AC-2)', () => {
     await renderBar({ ...NO_FILTERS, authorships: ['outros-autores'] });
     expect(screen.queryByRole('list', { name: 'Filtros ativos' })).toBeNull();
   });
+
+  it('shows several selected groups as removable chips, since the control reads them as Todos', async () => {
+    const view = await renderBar({
+      ...NO_FILTERS,
+      authorships: ['sintese', 'nao-classificado'],
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Remover Autoria: Síntese do acervo',
+      }),
+    );
+    expect(view.filtersChange).toHaveBeenLastCalledWith({
+      ...NO_FILTERS,
+      authorships: ['nao-classificado'],
+    });
+  });
 });

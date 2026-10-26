@@ -23,6 +23,7 @@ import {
   activeFilters,
   authorshipOptions,
   countActive,
+  selectedAuthorship,
   toFacetGroups,
   toggleFilter,
   withAuthorship,
@@ -78,12 +79,16 @@ export class FilterBar {
   protected readonly draftGroups = computed(() =>
     toFacetGroups(this.facets(), this.draft()),
   );
-  /** The authorship control shows its own choice (KBC-020): no removable chip repeats it. */
-  protected readonly active = computed(() =>
-    activeFilters(this.filters(), this.order()).filter(
-      (filter) => filter.key !== 'authorships',
-    ),
-  );
+  /**
+   * The authorship control shows a single choice (KBC-020): no removable chip repeats it.
+   * Several groups (API or an edited saved search) read as "Todos" there, so they stay chips.
+   */
+  protected readonly active = computed(() => {
+    const single = selectedAuthorship(this.filters()) !== null;
+    return activeFilters(this.filters(), this.order()).filter(
+      (filter) => !(single && filter.key === 'authorships'),
+    );
+  });
   protected readonly authorships = computed(() =>
     authorshipOptions(this.facets(), this.filters()),
   );

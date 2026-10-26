@@ -1,4 +1,5 @@
 import {
+  AUTHORSHIPS,
   MAX_HISTORY_TURNS,
   type AnswerSource,
   type Authorship,
@@ -237,14 +238,6 @@ export function fromSavedTurn(
   };
 }
 
-/** The order of the source groups (KBC-020): the collection's core first. */
-const AUTHORSHIP_ORDER: readonly Authorship[] = [
-  'mestre-laercio',
-  'outros-autores',
-  'sintese',
-  'nao-classificado',
-];
-
 export interface SourceGroup {
   readonly authorship: Authorship;
   readonly sources: readonly AnswerSource[];
@@ -258,7 +251,8 @@ export function groupByAuthorship(
   sources: readonly AnswerSource[],
 ): SourceGroup[] | null {
   if (sources.some((source) => !source.authorship)) return null;
-  const groups = AUTHORSHIP_ORDER.map((authorship) => ({
+  // The contract's order puts the collection's core first.
+  const groups = AUTHORSHIPS.map((authorship) => ({
     authorship,
     sources: sources.filter((source) => source.authorship === authorship),
   })).filter((group) => group.sources.length > 0);
