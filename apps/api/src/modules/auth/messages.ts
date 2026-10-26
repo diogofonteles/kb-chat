@@ -76,6 +76,36 @@ export const approved = (firstName: string, origin: string): Text => ({
   text: `Olá${firstName ? `, ${firstName}` : ''}! Seu acesso à Nova Alexandria foi aprovado. Entre em ${origin} com o Google ou com um código enviado para este e-mail.${SIGNATURE}`,
 });
 
+/** Who invited, where and how a person who was invited gets in (KBC-026 BR-2). */
+export interface InvitationSummary {
+  /** The master's name, else their e-mail. */
+  readonly inviter: string;
+  /** The invited address. */
+  readonly email: string;
+  readonly origin: string;
+}
+
+export const invitation = ({
+  inviter,
+  email,
+  origin,
+}: InvitationSummary): Text => ({
+  subject: 'Você foi convidado para a Nova Alexandria',
+  text: [
+    `Olá! ${oneLine(inviter)} convidou você para a Nova Alexandria.`,
+    '',
+    `Para entrar, acesse ${origin} e escolha um dos caminhos:`,
+    '',
+    `- Se ${email} é uma conta Google (como um endereço do Gmail), clique em "Fazer login com o Google".`,
+    `- Se não é, clique em "Entrar com código" e informe ${email}. Enviamos para ele um código de 6 dígitos, que vale por 10 minutos.`,
+    '',
+    `Se você não esperava este convite, ignore esta mensagem.${SIGNATURE}`,
+  ].join('\n'),
+});
+
+/** A name from a Google profile stays on its line, whatever it carries. */
+const oneLine = (value: string): string => value.replace(/\s+/g, ' ').trim();
+
 function formatDateTime(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',

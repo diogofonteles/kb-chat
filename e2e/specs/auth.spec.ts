@@ -215,7 +215,7 @@ test('a master grants collections and features on "Pessoas e permissões"', asyn
   await dialog.getByLabel('Convidar por e-mail').fill(email);
   await dialog.getByRole('button', { name: 'Convidar' }).click();
   await expect(dialog.getByRole('status').first()).toContainText(
-    `${email} já pode entrar`,
+    `Convite enviado para ${email}.`,
   );
   await dialog.getByRole('checkbox', { name: 'Hermetismo' }).check();
   await expect(dialog.getByText('Salvo.')).toBeVisible();

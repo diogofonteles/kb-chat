@@ -42,6 +42,7 @@ const approvedAna: Person = {
   features: ['search'],
   isOwner: false,
   phone: '+5581999990000',
+  invitation: null,
   invitedBy: 'owner@example.com',
   createdAt: '2026-10-25T10:05:00.000Z',
   lastLoginAt: null,

@@ -67,9 +67,17 @@ export class PeopleApi {
       .pipe(map((body) => personListSchema.parse(body).items));
   }
 
-  invite(email: string): Observable<Person> {
+  /** KBC-026: `sendEmail` false is "Não enviar e-mail de convite". */
+  invite(email: string, sendEmail: boolean): Observable<Person> {
     return this.http
-      .post(peopleUrl(), { email })
+      .post(peopleUrl(), { email, sendEmail })
+      .pipe(map((body) => personSchema.parse(body)));
+  }
+
+  /** "Reenviar convite" (KBC-026): 429 with `retryAt` when limited. */
+  resendInvitation(id: string): Observable<Person> {
+    return this.http
+      .post(`${personUrl(id)}/invitation`, null)
       .pipe(map((body) => personSchema.parse(body)));
   }
 

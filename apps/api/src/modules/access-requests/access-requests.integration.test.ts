@@ -235,6 +235,8 @@ describe('no account enumeration (BR-3, NFR-3)', () => {
     await post(started.app, '/api/v1/access-requests/google', { ticket });
     const known = await postAs(owner)(started.app, '/api/v1/people', {
       email: 'known@example.com',
+      // The invitation e-mail (KBC-026) is not what these counts are about.
+      sendEmail: false,
     });
     expect(known.statusCode).toBe(201);
     const emails = [
@@ -431,6 +433,8 @@ describe('approval gate and decisions (BR-1, BR-6, BR-7)', () => {
     const invited = (
       await postAs(owner)(started.app, '/api/v1/people', {
         email: 'bia@example.com',
+        // The invitation e-mail (KBC-026) is not what these counts are about.
+        sendEmail: false,
       })
     ).json();
     await post(started.app, '/api/v1/auth/code', {

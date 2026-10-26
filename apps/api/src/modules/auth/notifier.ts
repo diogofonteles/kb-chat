@@ -69,6 +69,14 @@ export class Notifier {
     return this.email(email, messages.approved(firstName, this.deps.webOrigin));
   }
 
+  /** The invitation e-mail (KBC-026); throws when the provider refuses, for the caller to record. */
+  invitation(email: string, inviter: string): Promise<void> {
+    return this.email(
+      email,
+      messages.invitation({ inviter, email, origin: this.deps.webOrigin }),
+    );
+  }
+
   private email(to: string, { subject, text }: messages.Text): Promise<void> {
     return this.deps.email.send({ to, subject, text });
   }

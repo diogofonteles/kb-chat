@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PersonUpdate } from '@kb-chat/contracts';
+import type { Invitation, PersonUpdate } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { VerifiedIdentity } from '../../ports/identity-verifier.js';
 import type { PeopleStorePort } from '../../ports/people-store.js';
@@ -109,6 +109,13 @@ export class PeopleService {
 
   revoke(id: string): Promise<StoredPerson> {
     return this.change((people) => rules.revoke(people, id, this.ownerEmail));
+  }
+
+  /** Keeps the outcome of the last invitation e-mail (KBC-026). */
+  recordInvitation(id: string, invitation: Invitation): Promise<StoredPerson> {
+    return this.change((people) =>
+      rules.recordInvitation(people, id, invitation),
+    );
   }
 
   private now(): string {
