@@ -33,8 +33,8 @@ export const houseConfigSchema = z.object({
   freeModels: z.array(modelIdSchema).nullable().default(null),
   includeRouter: z.boolean().default(true),
   paidModel: modelIdSchema.nullable().default(null),
-  // A subscription is never a default (ADR 0019): a hand-edited one reads as the house.
-  defaultAppAi: defaultableAppAiSchema.default('house').catch('house'),
+  // A subscription is never a default (ADR 0019): a hand-edited one reads as no AI.
+  defaultAppAi: defaultableAppAiSchema.default('house').catch('none'),
   /** Who last changed the default, and when (the audit trail of KBC-022). */
   defaultChange: z
     .object({ by: z.string(), at: z.iso.datetime() })

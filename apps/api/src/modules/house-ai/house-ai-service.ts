@@ -19,11 +19,10 @@ import {
   type HouseConfig,
 } from './house-config.js';
 
-/** The free-request counter is read at most this often (one call per research otherwise). */
-
 /** The house as this service knows it; the routes add whether the subscription can be lent. */
 export type HouseServiceView = Omit<HouseAiView, 'subscriptionAvailable'>;
 
+/** The free-request counter is read at most this often (one call per research otherwise). */
 export const FREE_USAGE_TTL_MS = 60_000;
 
 export interface HouseAiServiceDeps {

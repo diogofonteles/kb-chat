@@ -160,4 +160,90 @@ describe('Researching on the lent subscription (KBC-024 AC-2, AC-3, AC-7)', () =
       'none',
     );
   });
+
+  it('runs the owner’s fast model with no escalation (review R3)', async () => {
+    const started = await start({ claude: true });
+    const { owner, member, memberId } = await withPeople(started);
+    const report = join(started.state, 'cli-report.json');
+    await writeFile(
+      join(started.state, 'fake-cli.json'),
+      JSON.stringify({ report, mode: 'deepen' }),
+    );
+    await owner('PUT', '/api/v1/settings', {
+      ai: {
+        models: { 'claude-subscription': { fast: 'haiku', deep: 'opus' } },
+      },
+    });
+    await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
+    const done = (await research(member)).at(-1);
+    expect(done).toMatchObject({ type: 'done', plan: 'app-subscription' });
+    expect(done?.type === 'done' && done.escalated).toBeFalsy();
+    const { args } = JSON.parse(await readFile(report, 'utf8'));
+    expect(args).toContain('--model=haiku');
+  });
+
+  it('refunds a turn the logged-out CLI could not answer, then serves nobody through it (A2)', async () => {
+    const started = await start({ claude: true });
+    const { owner, member, memberId } = await withPeople(started);
+    await writeFile(
+      join(started.state, 'fake-cli.json'),
+      JSON.stringify({ mode: 'login' }),
+    );
+    await owner('PATCH', `/api/v1/people/${memberId}`, { ai: LEND });
+    expect((await research(member)).at(-1)).toMatchObject({
+      type: 'error',
+      code: 'CLI_LOGIN_REQUIRED',
+    });
+    const status = (await member('GET', '/api/v1/ai/status')).json();
+    expect(status.source).toBe('none');
+    expect(
+      (await owner('GET', '/api/v1/house-ai/default')).json()
+        .subscriptionAvailable,
+    ).toBe(false);
+    // The failed turn gave the research back.
+    await owner('PATCH', `/api/v1/people/${memberId}`, {
+      ai: { appAi: 'house' },
+    });
+    started.fake.acceptKey('sk-or-v1-house-valid');
+    await owner('PUT', '/api/v1/house-ai', { key: 'sk-or-v1-house-valid' });
+    expect(
+      (await member('GET', '/api/v1/ai/status')).json().remainingToday,
+    ).toBe(5);
+  });
+});
+
+describe('What only the owner changes on a lent person (KBC-024 F-4)', () => {
+  it('refuses another master raising the quota or enforcing it, but lets them revoke', async () => {
+    const started = await start();
+    const { owner, memberId } = await withPeople(started);
+    const url = `/api/v1/people/${memberId}`;
+    await owner('PATCH', url, { ai: LEND });
+    const bea = await anotherMaster(started, owner);
+    expect(
+      (await bea('PATCH', url, { ai: { dailyResearches: 50 } })).statusCode,
+    ).toBe(403);
+    expect(
+      (await bea('PATCH', url, { ai: { enforced: true } })).statusCode,
+    ).toBe(403);
+    expect(
+      (await owner('PATCH', url, { ai: { dailyResearches: 2 } })).statusCode,
+    ).toBe(200);
+    expect(
+      (await bea('PATCH', url, { ai: { appAi: 'none' } })).statusCode,
+    ).toBe(200);
+  });
+
+  it('reads a hand-edited subscription default as no AI (F-6)', async () => {
+    const started = await start();
+    await writeFile(
+      join(started.state, 'house-ai.json'),
+      JSON.stringify({ version: 1, defaultAppAi: 'claude-subscription' }),
+    );
+    await closeApp();
+    const again = await start({ state: started.state });
+    const { owner } = await withPeople(again);
+    expect(
+      (await owner('GET', '/api/v1/house-ai/default')).json().defaultAppAi,
+    ).toBe('none');
+  });
 });

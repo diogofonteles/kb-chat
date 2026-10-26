@@ -12,6 +12,8 @@ export interface SubscriptionLedgerDeps {
   readonly ledger: SpendLedgerPort;
   readonly principal: string;
   readonly now?: () => Date;
+  /** Told the code of a turn that ended in an error (the CLI logged out, KBC-024). */
+  readonly failed?: (code: string) => void;
 }
 
 /**
@@ -33,6 +35,7 @@ export class SubscriptionLedgerRunner implements ResearchRunnerPort {
 
   async *run(input: ResearchInput): AsyncIterable<ResearchEvent> {
     for await (const event of this.deps.inner.run(input)) {
+      if (event.type === 'error') this.deps.failed?.(event.code);
       if (event.type === 'done')
         await this.deps.ledger.append({
           ts: (this.deps.now?.() ?? new Date()).toISOString(),

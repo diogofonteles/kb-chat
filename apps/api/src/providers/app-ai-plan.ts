@@ -44,6 +44,8 @@ export interface LendableSubscription {
   llm(): LlmPort;
   /** The owner's CLI for one turn, with his models for the profile and no escalation. */
   runner(profile: ResearchProfile): ResearchRunnerPort;
+  /** A lent turn failed with this code (a logged-out CLI makes it unavailable for a while). */
+  failed(code: string): void;
 }
 
 /**
@@ -164,6 +166,7 @@ export class AppAiPlan implements AppAiPort {
               ledger: this.deps.houseSpend,
               principal,
               now: this.deps.now,
+              failed: (code) => lent.failed(code),
             }),
             paidActive: false,
             finish: () => undefined,

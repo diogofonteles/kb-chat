@@ -127,6 +127,9 @@ interface ChoiceOverride {
   readonly profile?: ResearchProfile;
 }
 
+/** How long a logged-out CLI keeps the lent subscription unavailable (ADR 0019). */
+const LOGGED_OUT_PAUSE_MS = 10 * 60 * 1000;
+
 /** Which key a connection test was about, kept with it; null for the subscriptions. */
 const keyIdOf = (key: string | undefined): string | null =>
   key ? fingerprint(key) : null;
@@ -158,6 +161,8 @@ export class ProviderRegistry implements ProviderCatalog {
   private readonly cache = new Map<string, LlmPort | ResearchRunnerPort>();
   /** One's own paid fallback in flight, every open turn of every person (KBC-023). */
   private readonly meters = new PaidMeters();
+  /** Until when the lent subscription counts as unavailable after a logged-out CLI. */
+  private lentLoggedOutUntil = 0;
   /** Whether `claude` was on PATH at the last lookup (boot, then every provider list). */
   private claudeOnPath = false;
 
@@ -173,13 +178,23 @@ export class ProviderRegistry implements ProviderCatalog {
     const choiceFor = (profile: ResearchProfile) =>
       this.choice(owner, { provider: 'claude-subscription', profile });
     return {
-      available: () => this.claudeOnPath,
+      available: () =>
+        this.claudeOnPath && this.now() >= this.lentLoggedOutUntil,
       llm: () => new DisabledLlm(),
       runner: (profile) =>
         new ClaudeCliRunner(
           this.cliOptions('claude', choiceFor(profile), { principal: owner }),
         ),
+      failed: (code) => {
+        // A logged-out CLI fails every lent turn: people fall back meanwhile (ADR 0019).
+        if (code === 'CLI_LOGIN_REQUIRED')
+          this.lentLoggedOutUntil = this.now() + LOGGED_OUT_PAUSE_MS;
+      },
     };
+  }
+
+  private now(): number {
+    return Date.now();
   }
 
   /** Looks `claude` up again; the default provider depends on it (BR-4). */

@@ -113,6 +113,7 @@ function lateSubscription(
     llm: () => lent()?.llm() ?? new DisabledLlm(),
     runner: (profile) =>
       lent()?.runner(profile) ?? new DisabledResearchRunner(),
+    failed: (code) => lent()?.failed(code),
   };
 }
 

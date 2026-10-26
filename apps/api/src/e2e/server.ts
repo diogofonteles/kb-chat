@@ -149,6 +149,7 @@ const ai = await createAiProviders({
         dailyCapUsd: () => Number.POSITIVE_INFINITY,
         ledger: new MemorySpendLedger(),
       }),
+    failed: () => undefined,
   },
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).

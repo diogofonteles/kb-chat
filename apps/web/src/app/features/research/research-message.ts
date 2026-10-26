@@ -24,12 +24,6 @@ import {
   type ResearchTurn,
 } from './research-turn.js';
 
-/**
- * One question and the agent's answer (KBC-008 FR-3): steps line, streamed markdown with [n]
- * citations, the cited sources, the AI notice with the cost (or the subscription), and "Parar"
- * while it works.
- */
-
 /** Who paid, as the answer's footer says it (ADR 0016, ADR 0019). */
 const PLAN_LABELS: Record<ResearchPlan, () => string> = {
   house: () =>
@@ -39,6 +33,11 @@ const PLAN_LABELS: Record<ResearchPlan, () => string> = {
   own: () => $localize`:@@ai.planOwn:Sua IA`,
 };
 
+/**
+ * One question and the agent's answer (KBC-008 FR-3): steps line, streamed markdown with [n]
+ * citations, the cited sources, the AI notice with the cost (or the subscription), and "Parar"
+ * while it works.
+ */
 @Component({
   selector: 'app-research-message',
   imports: [AuthorshipBadge, NgTemplateOutlet],

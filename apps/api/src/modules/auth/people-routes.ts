@@ -5,6 +5,7 @@ import {
   isLentSubscription,
   type AppAiAssignment,
   type DefaultableAppAi,
+  type PersonAiUpdate,
   type PersonAi,
   inviteRequestSchema,
   personIdSchema,
@@ -49,6 +50,9 @@ export interface PeopleAiHooks {
 
 const MASTER: RouteAccess = { master: true };
 
+const ownerOnly = () =>
+  new AppError('FORBIDDEN', 'Only the owner lends his subscription');
+
 /** Only the owner lends his subscription; any master may take it back (KBC-024 BR-1). */
 function assertMayLend(
   deps: PeopleRouteDeps,
@@ -56,8 +60,23 @@ function assertMayLend(
   appAi: AppAiAssignment | undefined,
 ) {
   if (appAi === undefined || !isLentSubscription(appAi)) return;
-  if (!deps.people.isOwner(viewerOf(request).person))
-    throw new AppError('FORBIDDEN', 'Only the owner lends his subscription');
+  if (!deps.people.isOwner(viewerOf(request).person)) throw ownerOnly();
+}
+
+/**
+ * On a person lent the subscription, how much they use it (quota, "sempre", paid fallback) is
+ * the owner's call too; revoking stays open to any master (KBC-024 F-4).
+ */
+function assertMayChangeLent(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  change: { before: StoredPerson | null; ai: PersonAiUpdate | undefined },
+) {
+  const { before, ai } = change;
+  if (!before || !ai || !isLentSubscription(aiOf(before).appAi)) return;
+  const revokes = ai.appAi !== undefined && !isLentSubscription(ai.appAi);
+  if (revokes || deps.people.isOwner(viewerOf(request).person)) return;
+  throw ownerOnly();
 }
 const params = z.object({ id: personIdSchema });
 
@@ -119,6 +138,7 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
       assertMayLend(deps, request, body.ai?.appAi);
       const by = viewerOf(request).person.email;
       const before = await deps.people.find(params.id);
+      assertMayChangeLent(deps, request, { before, ai: body.ai });
       const updated = await deps.people.update(params.id, body, by);
       if (body.ai && before)
         await syncAi(deps, { before, updated, by, log: request.log });

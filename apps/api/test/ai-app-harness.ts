@@ -74,6 +74,8 @@ export async function closeApp(): Promise<void> {
 /** Options of `start()`: `claude` runs the fake Claude CLI, reached over a real port. */
 export interface StartOptions {
   readonly claude?: boolean;
+  /** An existing state folder (a restart over the same files). */
+  readonly state?: string;
 }
 
 async function testConfig(state: string, options: StartOptions) {
@@ -176,7 +178,8 @@ async function buildAi({ config, core, auth, fetch, env }: AiWiring) {
 
 /** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
 export async function start(options: StartOptions = {}): Promise<Started> {
-  const state = await mkdtemp(join(tmpdir(), 'kbchat-house-'));
+  const state =
+    options.state ?? (await mkdtemp(join(tmpdir(), 'kbchat-house-')));
   const config = await testConfig(state, options);
   const env = options.claude
     ? { PATH: process.env['PATH'] ?? '', HOME: state }
