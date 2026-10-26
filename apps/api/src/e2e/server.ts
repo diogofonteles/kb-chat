@@ -29,7 +29,7 @@ import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
 import { SecretBox } from '../adapters/secret-box.js';
 import { createHouseAi } from '../house-ai-factory.js';
 import { FakeOpenRouter } from '../testing/fake-openrouter.js';
-import { FakeGemini } from '../testing/fake-gemini.js';
+import { FakeGemini, fakeProvidersFetch } from '../testing/fake-gemini.js';
 import {
   E2E_AUTHORIZE_PATH,
   registerOpenRouterConsent,
@@ -84,13 +84,11 @@ const fakeProviderFetch: typeof fetch = async (_url, init) => {
 const openRouter = new FakeOpenRouter();
 openRouter.acceptValidSuffix = true;
 const gemini = new FakeGemini();
-const providersFetch: typeof fetch = async (input, init) => {
-  const host = new URL(String(input)).hostname;
-  if (host === 'openrouter.ai') return openRouter.fetch(input, init);
-  if (host === 'generativelanguage.googleapis.com')
-    return gemini.fetch(input, init);
-  return fakeProviderFetch(input, init);
-};
+const providersFetch = fakeProvidersFetch({
+  openrouter: (input, init) => openRouter.fetch(input, init),
+  gemini: (input, init) => gemini.fetch(input, init),
+  others: fakeProviderFetch,
+});
 const sealer = new SecretBox(Buffer.alloc(32, 7));
 // The owner's settings already exist, so the first-run wizard stays away from the other specs;
 // the wizard's spec fakes a first run in the browser.

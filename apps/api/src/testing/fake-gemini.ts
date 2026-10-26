@@ -36,13 +36,21 @@ export class FakeGemini {
   };
 }
 
-/** One fetch for every fake provider, by host (OpenRouter, Gemini). */
+/**
+ * One fetch for every fake provider, by host: Gemini, OpenRouter, and the other providers
+ * (`others`; OpenRouter's fake when absent).
+ */
 export function fakeProvidersFetch(routes: {
   readonly openrouter: typeof fetch;
   readonly gemini: typeof fetch;
+  readonly others?: typeof fetch;
 }): typeof fetch {
-  return async (input, init) =>
-    new URL(String(input)).hostname === 'generativelanguage.googleapis.com'
-      ? routes.gemini(input, init)
-      : routes.openrouter(input, init);
+  return async (input, init) => {
+    const host = new URL(String(input)).hostname;
+    if (host === 'generativelanguage.googleapis.com')
+      return routes.gemini(input, init);
+    if (host === 'openrouter.ai' || !routes.others)
+      return routes.openrouter(input, init);
+    return routes.others(input, init);
+  };
 }
