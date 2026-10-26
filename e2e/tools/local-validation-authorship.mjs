@@ -68,23 +68,38 @@ for (const [name, viewport] of [
 ]) {
   const page = await browser.newPage({ viewport });
   await signIn(page);
-  await page.addInitScript(() => localStorage.setItem('kb-chat.view', 'search'));
+  await page.addInitScript(() =>
+    localStorage.setItem('kb-chat.view', 'search'),
+  );
   await page.goto(`${base}/`);
-  await page.getByLabel('Como buscar').selectOption({ label: 'Por significado' });
+  await page
+    .getByLabel('Como buscar')
+    .selectOption({ label: 'Por significado' });
   await page.getByLabel('Sua pergunta').fill('natureza');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await page.locator('app-result-card').first().waitFor();
   await page.screenshot({ path: `${out}/${name}-1-todos.png` });
   const control = page.getByRole('radiogroup', { name: 'Autoria' });
-  const options = await control.getByRole('radio').evaluateAll((radios) =>
-    radios.map((radio) => radio.closest('label')?.innerText.replace(/\s+/g, ' ').trim()),
+  const options = await control
+    .getByRole('radio')
+    .evaluateAll((radios) =>
+      radios.map((radio) =>
+        radio.closest('label')?.innerText.replace(/\s+/g, ' ').trim(),
+      ),
+    );
+  console.log(
+    `${name}: options ${JSON.stringify(options)}, overflow ${await overflow(page)}px`,
   );
-  console.log(`${name}: options ${JSON.stringify(options)}, overflow ${await overflow(page)}px`);
 
   await control.getByRole('radio', { name: /Mestre Laércio/ }).check();
   await page.getByText(/1 documento · Por significado/).waitFor();
   await page.screenshot({ path: `${out}/${name}-2-mestre.png` });
-  await page.locator('app-result-card').first().getByRole('button').first().click();
+  await page
+    .locator('app-result-card')
+    .first()
+    .getByRole('button')
+    .first()
+    .click();
   await page.getByRole('dialog').getByText('José Laércio do Egito').waitFor();
   await page.screenshot({ path: `${out}/${name}-3-panel.png` });
   console.log(`${name}: panel overflow ${await overflow(page)}px`);
@@ -98,14 +113,21 @@ for (const [name, viewport] of [
     }),
   );
   await page.goto(`${base}/`);
-  await page.getByLabel('Sua pergunta').fill('o que o Mestre ensina sobre o ritmo?');
+  await page
+    .getByLabel('Sua pergunta')
+    .fill('o que o Mestre ensina sobre o ritmo?');
   await page.getByRole('button', { name: 'Perguntar' }).click();
   await page.getByText(/Resposta gerada por IA/).waitFor();
-  await page.screenshot({ path: `${out}/${name}-4-sources.png`, fullPage: true });
+  await page.screenshot({
+    path: `${out}/${name}-4-sources.png`,
+    fullPage: true,
+  });
   const headings = await page
     .locator('app-research-message h4')
     .allInnerTexts();
-  console.log(`${name}: source groups ${JSON.stringify(headings)}, overflow ${await overflow(page)}px`);
+  console.log(
+    `${name}: source groups ${JSON.stringify(headings)}, overflow ${await overflow(page)}px`,
+  );
 
   // The real stub turn: tools over the fixture vault, sources carry the authorship.
   await page.unroute('**/api/v1/topics/*/research');
@@ -113,9 +135,17 @@ for (const [name, viewport] of [
   await page.getByLabel('Sua pergunta').fill('natureza sétupla');
   await page.getByRole('button', { name: 'Perguntar' }).click();
   await page.getByText(/Resposta gerada por IA/).waitFor();
-  const chip = await page.locator('app-research-message .source').first().innerText();
-  console.log(`${name}: stub turn source chip "${chip.replace(/\s+/g, ' ').trim()}"`);
-  await page.screenshot({ path: `${out}/${name}-5-stub-turn.png`, fullPage: true });
+  const chip = await page
+    .locator('app-research-message .source')
+    .first()
+    .innerText();
+  console.log(
+    `${name}: stub turn source chip "${chip.replace(/\s+/g, ' ').trim()}"`,
+  );
+  await page.screenshot({
+    path: `${out}/${name}-5-stub-turn.png`,
+    fullPage: true,
+  });
   await page.close();
 }
 await browser.close();
