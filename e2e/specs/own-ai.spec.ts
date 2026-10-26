@@ -69,7 +69,9 @@ test('AC-1, AC-2: connects one’s own OpenRouter in one click and answers for f
   await person.waitForURL((url) => !url.search.includes('openrouter='));
   const back = person.getByRole('dialog', { name: 'Configurações' });
   await expect(back.getByText('Conta conectada.')).toBeVisible();
-  await expect(back.getByText('Sua IA')).toBeVisible();
+  await expect(
+    back.getByRole('group', { name: 'Quem atende você agora' }),
+  ).toContainText('Sua IA · OpenRouter');
   await expect(back.getByText('Gratuito para você.')).toBeVisible();
   await back.getByRole('button', { name: 'Fechar configurações' }).click();
   const answer = await research(person);
@@ -103,6 +105,12 @@ test('AC-4, AC-7: guides the free Google key, tests it and shows the last test',
   const answer = await research(person);
   await expect(answer.getByText('Resposta do Gemini.')).toBeVisible();
   await expect(answer.getByText('Gratuito', { exact: true })).toBeVisible();
+  // The side panel says the person's own free AI costs nothing (no US$ spend).
+  if (!desktop(person))
+    await person.getByRole('button', { name: 'Menu' }).click();
+  await expect(person.getByText('Gratuita', { exact: true })).toBeVisible();
+  if (!desktop(person))
+    await person.getByRole('button', { name: 'Fechar menu' }).click();
   const again = await openSettings(person);
   await expect(again.getByText(/Último teste: funcionando/)).toBeVisible();
   await person.context().close();

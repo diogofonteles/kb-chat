@@ -109,6 +109,11 @@
         hoje</span
       >
     </p>
+  } @else if (ownFree()) {
+    <p class="spend">
+      <span class="label" i18n="@@sidebar.ownAi">Sua IA</span>
+      <span i18n="@@sidebar.ownAiFree">Gratuita</span>
+    </p>
   } @else {
     <p class="spend">
       <span class="label" i18n="@@sidebar.spend">Gasto com IA hoje</span>
