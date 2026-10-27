@@ -649,6 +649,11 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       expect(
         screen.getByText(/a IA analisou 412 de 1\.363 documentos/),
       ).toBeTruthy();
+      // One explanation of the stop, not two; no AI notice without an answer.
+      expect(
+        screen.queryByText('Resposta interrompida antes de começar.'),
+      ).toBeNull();
+      expect(screen.queryByText(/Resposta gerada por IA/)).toBeNull();
       expect(button('Continuar varredura')).toBeTruthy();
     });
   });

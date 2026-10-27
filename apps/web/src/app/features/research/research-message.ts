@@ -195,6 +195,10 @@ export class ResearchMessage {
     if (coverage || !sweep || phase !== 'done') return '';
     return missingText(sweep.needed - sweep.documentsDone, 'stopped');
   });
+  /** The sweep's box already says it stopped and what was left: no second note (UP-10). */
+  protected readonly sweepExplainsStop = computed(
+    () => this.coverage() !== null || this.stoppedAt() !== '',
+  );
   protected readonly canContinue = computed(
     () => this.last() && canContinueSweep(this.turn()),
   );

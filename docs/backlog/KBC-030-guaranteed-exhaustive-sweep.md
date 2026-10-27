@@ -77,7 +77,7 @@ ADR: `docs/adr/0021-app-driven-exhaustive-sweep.md` (emenda 0013, substitui 0014
 
 ## Follow-ups (from the reviews of 2026-10-27)
 - Reserva de gasto por pessoa entre turnos (ou um Exaustivo por pessoa de cada vez) — ADR 0021, riscos aceitos.
-- Com o KBC-029: retomar do cursor guardado no servidor pelo id do turno, e o turno gravado no servidor montar o cursor com os `found` do progresso (obrigação na ADR 0021).
+- Gravar o cursor também durante a varredura (hoje o turno é gravado no início e no fim; uma queda dura da API perde o progresso).
 - Operação: uma linha de log por varredura (lotes, pedidos, motivo, duração) e o motivo no log de uso.
 - Nota: o limite de pesquisas por minuto por cliente virou configurável (`RESEARCH_RATE_LIMIT`, padrão 20, o valor de antes); o servidor de E2E usa 10000.
 

@@ -1,6 +1,6 @@
 import {
   AUTHORSHIPS,
-  MAX_CARRIED_FINDINGS,
+  mergeFindings,
   MAX_HISTORY_TURNS,
   type AnswerSource,
   type Authorship,
@@ -86,10 +86,10 @@ function progressCursor(
   progress: SweepProgress,
 ): SweepCursor | null {
   if (!progress.cursor) return turn.cursor;
-  const findings = [
-    ...(turn.cursor?.findings ?? []),
-    ...(progress.found ?? []),
-  ].slice(0, MAX_CARRIED_FINDINGS);
+  const findings = mergeFindings(
+    turn.cursor?.findings ?? [],
+    progress.found ?? [],
+  );
   return { ...progress.cursor, findings };
 }
 

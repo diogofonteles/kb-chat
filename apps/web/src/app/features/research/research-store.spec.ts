@@ -791,4 +791,24 @@ describe('ResearchStore', () => {
       usd: 0.3,
     });
   });
+
+  it('keeps each finding once when a running sweep is followed again from its start', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const batch = {
+      type: 'sweep' as const,
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: [{ id: 'raw/a.md', text: 'A' }],
+      },
+    };
+    streams[0]?.next(batch);
+    // The same batch again, as a replay from the turn's first event brings it.
+    streams[0]?.next(batch);
+    expect(store.turns()[0]?.cursor?.findings).toEqual([
+      { id: 'raw/a.md', text: 'A' },
+    ]);
+  });
 });

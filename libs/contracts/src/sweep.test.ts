@@ -6,6 +6,7 @@ import {
 } from './research.js';
 import { savedResearchTurnSchema } from './conversations.js';
 import {
+  mergeFindings,
   sweepCoverageSchema,
   sweepCursorSchema,
   sweepPlanSchema,
@@ -160,5 +161,16 @@ describe('sweep contracts (KBC-030)', () => {
     expect(
       sweepCoverageSchema.safeParse({ ...coverage, scanned: 11 }).success,
     ).toBe(false);
+  });
+
+  it('merges findings without repeats and within the cap', () => {
+    const a = { id: 'd1', text: 'A' };
+    const b = { id: 'd2', text: 'B' };
+    expect(mergeFindings([a], [b, a])).toEqual([a, b]);
+    const many = Array.from({ length: 700 }, (_, i) => ({
+      id: `d${i}`,
+      text: 'x',
+    }));
+    expect(mergeFindings(many)).toHaveLength(600);
   });
 });

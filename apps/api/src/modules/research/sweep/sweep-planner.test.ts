@@ -128,4 +128,22 @@ describe('SweepPlanner (KBC-030)', () => {
       await (await planner()).layout('nope', { plan: plan(), batchChars: 1 }),
     ).toBeNull();
   });
+
+  it('plans the Mestre’s documents by default when the question names him and the topic has them', async () => {
+    const plan = (await planner()).defaultPlan(
+      'hermetismo',
+      'O que o Mestre Laércio diz?',
+    );
+    expect(plan.target).toEqual({ authorship: 'mestre-laercio' });
+    expect(plan.extract).toBe('O que o Mestre Laércio diz?');
+  });
+
+  it('falls back to the whole topic when it has no document of the Mestre (architecture review)', async () => {
+    const tools = await memoryTools(
+      new MemoryVault({ 'raw/x.md': memoryDoc({ title: 'X', body: 'texto' }) }),
+    );
+    expect(
+      tools.sweeps.defaultPlan('hermetismo', 'o que o Mestre diz?').target,
+    ).toEqual({});
+  });
 });

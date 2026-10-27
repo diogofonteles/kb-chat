@@ -47,6 +47,8 @@ export class SweepPacer {
     const at = Math.max(now, this.next);
     this.next = at + this.gapMs;
     if (at > now) await clock.sleep(at - now, signal);
+    // A stopped sweep gives its start back, so other sweeps do not wait for it.
+    if (signal.aborted && this.next === at + this.gapMs) this.next = at;
   }
 }
 

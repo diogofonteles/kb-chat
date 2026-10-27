@@ -232,7 +232,8 @@ export class ResearchStore {
       last?.phase === 'error' || (last?.phase === 'done' && last.interrupted);
     if (!last || !retriable) return;
     this.state.update((s) => ({ ...s, turns: s.turns.slice(0, -1) }));
-    this.ask(last.question, last.turnId);
+    // A continuation asked again is the question itself (its label is only shown).
+    this.ask(originalSweepQuestion(last.question), last.turnId);
   }
 
   /**

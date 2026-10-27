@@ -16,6 +16,7 @@ import {
 } from '../../../ports/llm-errors.js';
 import type { ResearchTools } from '../tools.js';
 import { SourceBook } from '../source-book.js';
+import { SweepPacer } from './sweep-pacing.js';
 import {
   SweepCoordinator,
   type BatchEngine,
@@ -132,6 +133,8 @@ async function sweep(
     sweeps: options.sweeps ?? tools.sweeps,
     emit: (progress) => events.push(progress),
     clock: options.clock ?? new FakeClock(),
+    // Each test paces on its own: the process's pacer is shared.
+    pacer: new SweepPacer(),
   });
   const outcome = await coordinator.run({
     topic: 'hermetismo',
@@ -406,5 +409,35 @@ describe('SweepCoordinator (KBC-030)', () => {
       missing: 1,
       reason: 'requests',
     });
+  });
+
+  it('fails the turn when a condensing call meets a refused key (code review round 2)', async () => {
+    const engine = new FakeEngine({
+      parallel: 1,
+      reply: (user) => `- [D1] ${'achado longo '.repeat(20)}${user.length}`,
+      fail: (call) => (call > DOCS ? new LlmKeyRejectedError('x', 401) : null),
+    });
+    await expect(sweep(engine, { findingsChars: 400 })).rejects.toBeInstanceOf(
+      LlmKeyRejectedError,
+    );
+  });
+
+  it('paces condensing calls on a free model like batches', async () => {
+    const clock = new FakeClock();
+    const engine = new FakeEngine({
+      free: true,
+      parallel: 1,
+      clock,
+      reply: (user) =>
+        user.startsWith('Achados')
+          ? '- [1] Livro único'
+          : `- [D1] ${'achado longo '.repeat(20)}${user.length}`,
+    });
+    await sweep(engine, { clock, findingsChars: 400 });
+    const starts = engine.starts;
+    for (let i = 1; i < starts.length; i += 1)
+      expect((starts[i] ?? 0) - (starts[i - 1] ?? 0)).toBeGreaterThanOrEqual(
+        3_200,
+      );
   });
 });

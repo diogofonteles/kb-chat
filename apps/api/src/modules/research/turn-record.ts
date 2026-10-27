@@ -1,6 +1,6 @@
 import {
-  MAX_CARRIED_FINDINGS,
   continuationQuestion,
+  mergeFindings,
   type ResearchEvent,
   type ResearchProfile,
   type SavedResearchTurn,
@@ -123,10 +123,7 @@ function progressCursor(
   progress: SweepProgress,
 ): SweepCursor | undefined {
   if (!progress.cursor) return before;
-  const findings = [
-    ...(before?.findings ?? []),
-    ...(progress.found ?? []),
-  ].slice(0, MAX_CARRIED_FINDINGS);
+  const findings = mergeFindings(before?.findings ?? [], progress.found ?? []);
   return { ...progress.cursor, findings };
 }
 

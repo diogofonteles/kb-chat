@@ -128,7 +128,7 @@
     }
 
     @if (turn().phase === 'done') {
-      @if (turn().interrupted) {
+      @if (turn().interrupted && !sweepExplainsStop()) {
         <p class="note" i18n="@@ai.interrupted">
           {turn().text ? 1 : 0, select,
             1 {(interrompida)}

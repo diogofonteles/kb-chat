@@ -174,3 +174,17 @@ export const continuationQuestion = (question: string): string =>
     0,
     2000,
   );
+
+/**
+ * Findings merged in order without repeats (same document and text), at most the cap: the
+ * page and the server build a cursor the same way, also when a turn is followed again and
+ * its batches come a second time.
+ */
+export function mergeFindings(
+  ...lists: readonly (readonly SweepFinding[])[]
+): SweepFinding[] {
+  const byKey = new Map<string, SweepFinding>();
+  for (const finding of lists.flat())
+    byKey.set(`${finding.id}\u0000${finding.text}`, finding);
+  return [...byKey.values()].slice(0, MAX_CARRIED_FINDINGS);
+}

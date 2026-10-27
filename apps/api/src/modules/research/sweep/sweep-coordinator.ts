@@ -27,8 +27,8 @@ import {
 import {
   FREE_PACER,
   SWEEP_PACE,
-  SweepPacer,
   realClock,
+  type SweepPacer,
   type SweepClock,
 } from './sweep-pacing.js';
 import {
@@ -76,8 +76,10 @@ export interface SweepDeps {
   readonly engine: BatchEngine;
   readonly sweeps: Pick<SweepPlanner, 'batchText'>;
   readonly emit: (progress: SweepProgress) => void;
-  /** Tests inject a clock; with one, the pacer is private to the sweep. */
+  /** Default: the real clock. */
   readonly clock?: SweepClock;
+  /** Paces free-model requests; default the process's (FREE_PACER). */
+  readonly pacer?: SweepPacer;
 }
 
 export interface SweepRequest {
@@ -150,7 +152,7 @@ class SweepRun {
     private readonly request: SweepRequest,
   ) {
     this.clock = deps.clock ?? realClock;
-    this.pacer = deps.clock ? new SweepPacer() : FREE_PACER;
+    this.pacer = deps.pacer ?? FREE_PACER;
     this.findings = new FindingSet(request.book);
     this.findings.addFound(carriedItems(request));
     this.done = request.layout.batches.map(() => false);
@@ -293,7 +295,8 @@ class SweepRun {
   }
 
   private async condensed(part: readonly string[]) {
-    const output = this.takeRequest()
+    // Paced like a batch: a condensing call is a request to the same account.
+    const output = (await this.mayStart())
       ? await this.call(
           condenseSystemPrompt(this.request.topicTitle),
           `Achados:\n${part.join('\n')}`,
