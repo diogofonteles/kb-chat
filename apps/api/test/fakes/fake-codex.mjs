@@ -72,17 +72,20 @@ await client.connect(
   }),
 );
 const { tools } = await client.listTools();
-emit({
-  type: 'item.started',
-  item: {
-    id: 'i1',
-    type: 'mcp_tool_call',
-    server: 'kb',
-    tool: tools[0].name,
-    status: 'in_progress',
-  },
-});
-await client.callTool({ name: tools[0].name, arguments: { query: 'ritmo' } });
+// A connection test ("Testar conexão") has no tools: it only proves the login and MCP.
+if (tools.length > 0) {
+  emit({
+    type: 'item.started',
+    item: {
+      id: 'i1',
+      type: 'mcp_tool_call',
+      server: 'kb',
+      tool: tools[0].name,
+      status: 'in_progress',
+    },
+  });
+  await client.callTool({ name: tools[0].name, arguments: { query: 'ritmo' } });
+}
 await client.close();
 emit({
   type: 'item.completed',
