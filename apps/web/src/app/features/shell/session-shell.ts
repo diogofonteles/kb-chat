@@ -15,25 +15,32 @@ import {
   RouterOutlet,
 } from '@angular/router';
 import { SessionStore } from '@core/auth/session-store.js';
-import { isPublicUrl } from '@core/routing/public-pages.js';
+import { publicPageOf } from '@core/routing/public-pages.js';
 import { filter, map } from 'rxjs';
 import { LoginPage } from '@features/login/login-page.js';
 import { PrivacyPage } from '@features/privacy/privacy-page.js';
 import { SettingsHost } from '@features/settings/settings-host.js';
+import { TutorialPage } from '@features/tutorial/tutorial-page.js';
 
 /**
  * Who is signed in decides between the login screen and the app (KBC-010 BR-1). A public
- * page (the privacy policy, KBC-016) shows either way, rendered here rather than in the
+ * page (the privacy policy, KBC-016; the tutorial, KBC-032) shows either way, rendered here rather than in the
  * router outlet: the outlet only exists with a session, so a protected page is never built
- * without one. Settings and the policy load in their own chunks.
+ * without one. Settings and the public pages load in their own chunks.
  */
 @Component({
   selector: 'app-session-shell',
-  imports: [RouterOutlet, SettingsHost, LoginPage, PrivacyPage],
+  imports: [RouterOutlet, SettingsHost, LoginPage, PrivacyPage, TutorialPage],
   template: `
-    @if (publicPage()) {
+    @if (publicPage() === 'privacy') {
       @defer (on immediate) {
         <app-privacy-page />
+      } @placeholder {
+        <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
+      }
+    } @else if (publicPage() === 'tutorial') {
+      @defer (on immediate) {
+        <app-tutorial-page />
       } @placeholder {
         <p class="boot" role="status" i18n="@@app.loading">Carregando…</p>
       }
@@ -73,7 +80,7 @@ export class SessionShell {
           event instanceof NavigationError,
       ),
       map((event) =>
-        isPublicUrl(
+        publicPageOf(
           event instanceof NavigationStart
             ? event.url
             : event instanceof NavigationEnd
@@ -83,7 +90,7 @@ export class SessionShell {
       ),
     ),
     // The first navigation may end before this shell exists: read the address bar.
-    { initialValue: isPublicUrl(inject(Location).path()) },
+    { initialValue: publicPageOf(inject(Location).path()) },
   );
   protected readonly signedIn = computed(
     () => this.session.state().kind === 'signed-in',

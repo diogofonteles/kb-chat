@@ -7,7 +7,8 @@
 #   SMOKE_RESOLVE=kb.example.com:443:127.0.0.1 smoke.sh       # from the VM itself
 # Checks: /health answers with a status; the SPA shell loads with the security headers;
 # /mcp is not served publicly; without a session the API refuses (401) once sign-in is on;
-# the public privacy policy (/privacidade, KBC-016) is served without a session.
+# the public privacy policy (/privacidade, KBC-016) and tutorial (/tutorial, KBC-032) are
+# served without a session.
 #   SMOKE_URL=...    base URL when no argument is given
 #   SMOKE_AUTH=off   skips the 401 check (a build without KBC-010)
 #   SMOKE_STRICT=1   also fails when /health reports "degraded" (qmd down, kb fallback)
@@ -85,13 +86,15 @@ status_of() {
   "${CURL[@]}" -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || echo 000
 }
 
-check_privacy() {
-  local headers body
+# A public page of the SPA (KBC-016 /privacidade, KBC-032 /tutorial): served without a
+# session, never cached (a deploy changes it), with the CSP.
+check_public_page() {
+  local path="$1" headers body
   headers="$(mktemp)"
-  body="$("${CURL[@]}" -f -D "$headers" "$BASE/privacidade" 2>/dev/null)" || { fail "/privacidade did not answer 200"; rm -f "$headers"; return; }
-  if grep -q '<app-root' <<<"$body"; then pass "/privacidade serves the SPA shell without a session"; else fail "/privacidade is not the SPA shell"; fi
-  if grep -qi '^cache-control:.*no-cache' "$headers"; then pass "/privacidade is not cached"; else fail "/privacidade without Cache-Control: no-cache"; fi
-  if grep -qi '^content-security-policy:' "$headers"; then pass "/privacidade has a Content-Security-Policy"; else fail "/privacidade without Content-Security-Policy"; fi
+  body="$("${CURL[@]}" -f -D "$headers" "$BASE$path" 2>/dev/null)" || { fail "$path did not answer 200"; rm -f "$headers"; return; }
+  if grep -q '<app-root' <<<"$body"; then pass "$path serves the SPA shell without a session"; else fail "$path is not the SPA shell"; fi
+  if grep -qi '^cache-control:.*no-cache' "$headers"; then pass "$path is not cached"; else fail "$path without Cache-Control: no-cache"; fi
+  if grep -qi '^content-security-policy:' "$headers"; then pass "$path has a Content-Security-Policy"; else fail "$path without Content-Security-Policy"; fi
   rm -f "$headers"
 }
 
@@ -111,7 +114,8 @@ check_auth() {
 
 check_health
 check_shell
-check_privacy
+check_public_page /privacidade
+check_public_page /tutorial
 check_mcp_hidden
 check_auth
 

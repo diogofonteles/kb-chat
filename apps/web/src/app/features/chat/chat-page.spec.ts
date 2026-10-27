@@ -97,6 +97,16 @@ describe('ChatPage', () => {
     ).toBeTruthy();
   });
 
+  it('offers the tutorial in a new tab, so the conversation stays (KBC-032 AC-4)', async () => {
+    await renderPage();
+    const help = screen.getByRole('link', {
+      name: 'Como usar a Nova Alexandria (abre em nova aba)',
+    });
+    expect(help.getAttribute('href')).toBe('/tutorial');
+    expect(help.getAttribute('target')).toBe('_blank');
+    expect(help.getAttribute('rel')).toContain('noopener');
+  });
+
   it('asks, shows a searching state and then the result cards', async () => {
     const view = await renderPage();
     await ask('lei do ritmo', view);

@@ -318,6 +318,13 @@ Acessibilidade: o foco vai para o campo do código quando ele aparece; status em
 | Lista gratuita indisponível | "Não consegui atualizar a lista agora; usando a última." ou, sem nenhuma, "Sem lista de modelos gratuitos; tente de novo." + "Tentar de novo" |
 | Erro ao salvar | "Não consegui salvar. Tente de novo." |
 
+## T13. Tutorial "Como usar" (KBC-032, público)
+
+- Rota `/tutorial`, aberta com ou sem sessão; título da aba "Como usar — Nova Alexandria". Links: "Como usar" ao lado de "Privacidade" na tela de entrada; ícone "?" com "Como usar" no topo do app (no celular, só o ícone; nome acessível "Como usar a Nova Alexandria (abre em nova aba)", abre em nova aba para não perder a conversa); "Como usar a Nova Alexandria" no pé da política.
+- Coluna de leitura de até 48rem, com os tamanhos de tipo da política (h1; h2 em `--text-lg`; texto e h3 em `--text-md`; legendas em `--text-sm`): marca discreta, h1 "Como usar a Nova Alexandria", introdução, sumário "Nesta página" (cartão; duas colunas a partir de 720 px) e as seções h2 com âncoras estáveis: `o-que-e`, `entrar`, `busca`, `pesquisa-com-ia`, `historico`, `sua-ia`, `preferencias`, `administradores` (rótulo "Só para administradores", texto em destaque, sem forma de botão), `perguntas-frequentes`. Abrir `/tutorial#<âncora>` rola até a seção e leva o foco ao título.
+- Cada seção: texto curto, passos numerados (círculos com o número) e figuras: captura real do app com destaques por letra (contorno laranja e letra A, B, C… num quadrado escuro no canto) que a legenda explica; as letras não se confundem com os passos numerados do texto (círculos); legenda + "Ver a imagem ampliada" (nova aba). Capturas altas (celular, lateral) ficam com até 20rem, centralizadas. Tabela dos três tipos de pesquisa (rola na horizontal no celular). "Voltar ao sumário" ao fim das seções; no pé, "Voltar à Nova Alexandria" e "Privacidade".
+- Imagens: WebP com hash no nome, `width`/`height` declarados, só a primeira do computador e a primeira do celular sem carregamento preguiçoso; total < 3 MB.
+
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
 Tokens DTCG em `apps/web/src/styles/tokens.json` (cores; `scripts/tokens.mjs` gera o CSS) com três conjuntos: `light`, `dark` e `esoteric`. No máximo 3 tamanhos de tipo por tela. O vermelho fica reservado para erros.

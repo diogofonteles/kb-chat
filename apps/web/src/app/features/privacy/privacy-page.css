@@ -92,3 +92,10 @@ a:focus-visible {
   min-height: var(--target);
   font-family: var(--font-ui);
 }
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-6);
+  margin: 0;
+}
