@@ -251,6 +251,34 @@ describe('the ChatGPT card in the sandbox says why it is off (KBC-031)', () => {
     });
   });
 
+  it('is not lendable while its container does not answer (BR-4, review R1)', async () => {
+    const { owner } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    await stopCodexRunner();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 31_000);
+    const house = (await owner('GET', '/api/v1/house-ai/default')).json();
+    expect(house.lendable['chatgpt-subscription']).toBe(false);
+  });
+
+  it('asks the sandbox again soon after it said no, so a new login shows quickly (review R1)', async () => {
+    const { owner, codexHome } = await withCodex();
+    await writeFile(
+      join(codexHome, 'fake-cli.json'),
+      JSON.stringify({ mode: 'fail' }),
+    );
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    expect((await chatgptCard(owner)).reason).toBe('login-required');
+    // The owner logs in on the server; a few seconds later the card is free.
+    await writeFile(join(codexHome, 'fake-cli.json'), JSON.stringify({}));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 6_000);
+    expect(await chatgptCard(owner)).toMatchObject({
+      available: true,
+      reason: null,
+    });
+  });
+
   it('says the sandbox did not answer (AC-3)', async () => {
     const { owner } = await withCodex();
     await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });

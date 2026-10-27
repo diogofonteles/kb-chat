@@ -145,6 +145,11 @@ const LOGGED_OUT_PAUSE_MS = 10 * 60 * 1000;
 const CODEX_STATUS_TIMEOUT_MS = 5_000;
 /** Its answer is kept this long: every house view would start a `codex login status`. */
 const CODEX_STATUS_TTL_MS = 30_000;
+/**
+ * A "no" (logged out, or no answer) is kept only this long: once the owner logs in or the
+ * container is back, his card frees itself soon (KBC-031 review R1).
+ */
+const CODEX_STATUS_RETRY_MS = 5_000;
 
 /** A failure that makes a lent subscription unavailable for a while. */
 const pausesLending = (kind: LentSubscription, code: string): boolean =>
@@ -233,14 +238,26 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private subscriptionReady(kind: LentSubscription): boolean {
     if (kind === 'claude-subscription') return this.claudeOnPath;
-    // The sandbox said, less than 30 s ago, that the owner's login is not there: nothing to
-    // lend (QA N-2); an older answer is not trusted (review R3).
+    // The sandbox said lately that the login is not there, or did not answer (KBC-031 BR-4):
+    // nothing to lend (QA N-2); an older answer is not trusted (review R3). Locally there is no
+    // sandbox to ask, so only a "logged out" counts there.
+    const status = this.freshCodexStatus();
+    const notReady =
+      this.codexMode() === 'sandbox'
+        ? status !== null && status.loggedIn !== true
+        : status?.loggedIn === false;
+    return this.codexReady() && !notReady;
+  }
+
+  /** The sandbox's last answer while it still holds: 30 s for "yes", 5 s for anything else. */
+  private freshCodexStatus(): CodexStatus | null {
     const cached = this.codexStatusCache;
-    const loggedOut =
-      cached !== null &&
-      this.now() - cached.at < CODEX_STATUS_TTL_MS &&
-      cached.status.loggedIn === false;
-    return this.codexReady() && !loggedOut;
+    if (!cached) return null;
+    const ttl =
+      cached.status.loggedIn === true
+        ? CODEX_STATUS_TTL_MS
+        : CODEX_STATUS_RETRY_MS;
+    return this.now() - cached.at < ttl ? cached.status : null;
   }
 
   /** Where Codex runs (ADR 0020): its sandbox runner, the owner's Mac (local), or nowhere. */
@@ -257,9 +274,8 @@ export class ProviderRegistry implements ProviderCatalog {
 
   /** "IA da aplicação" > Codex: configured, and whether the owner's login is there. */
   async codexStatus(): Promise<CodexStatus> {
-    const cached = this.codexStatusCache;
-    if (cached && this.now() - cached.at < CODEX_STATUS_TTL_MS)
-      return cached.status;
+    const fresh = this.freshCodexStatus();
+    if (fresh) return fresh;
     const status = await this.readCodexStatus();
     this.codexStatusCache = { status, at: this.now() };
     return status;
