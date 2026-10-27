@@ -129,11 +129,8 @@ describe('Invite profiles (KBC-028)', () => {
     const bare = await master('POST', '/api/v1/people', {
       email: 'simples@example.com',
     });
-    expect(bare.json()).toMatchObject({
-      topics: [],
-      features: ['search'],
-      initialPreferences: null,
-    });
+    expect(bare.json()).toMatchObject({ topics: [], features: ['search'] });
+    expect(bare.json()).not.toHaveProperty('initialPreferences');
   });
 
   it('applies a profile to someone already there, never over their saved preferences (AC-4)', async () => {

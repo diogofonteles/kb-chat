@@ -97,7 +97,7 @@ export const personSchema = z.object({
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),
   /** Preferences set in the invitation (KBC-028), until the person saves their own. */
-  initialPreferences: initialPreferencesSchema.nullable().default(null),
+  initialPreferences: initialPreferencesSchema.optional(),
   /** Which app AI serves the person and their limits (KBC-022); an older API sends none. */
   ai: personAiSchema.default(() => ({
     ...DEFAULT_PERSON_AI,

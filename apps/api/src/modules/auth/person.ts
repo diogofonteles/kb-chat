@@ -110,5 +110,7 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   createdAt: person.createdAt,
   lastLoginAt: person.lastLoginAt,
   ai: person.ai ?? DEFAULT_PERSON_AI,
-  initialPreferences: person.initialPreferences ?? null,
+  ...(person.initialPreferences && {
+    initialPreferences: person.initialPreferences,
+  }),
 });
