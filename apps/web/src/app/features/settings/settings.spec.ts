@@ -290,6 +290,8 @@ describe('Configurações', () => {
       // Production never asks to install the CLI nor for the local switch (BR-5).
       expect(screen.queryByText(/Instale o Codex CLI/)).toBeNull();
       expect(screen.queryByText(/KB_CHAT_CODEX=on/)).toBeNull();
+      // The card never claims a login it does not have (design R1-1).
+      expect(screen.queryByText(/Codex CLI já logado/)).toBeNull();
     },
   );
 

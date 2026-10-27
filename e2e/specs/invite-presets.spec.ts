@@ -237,18 +237,24 @@ test('KBC-031 AC-5: the owner lends his subscription in the invitation, after th
     .getByLabel('Qual IA atende a pessoa')
     .selectOption({ label: 'Claude do administrador' });
   const confirm = preset.getByRole('group', {
-    name: 'Ceder a assinatura do Claude a esta pessoa?',
+    name: 'Ceder a assinatura do Claude a quem você está convidando?',
   });
   await expect(confirm).toContainText('Os termos da Anthropic não permitem');
   await expect(confirm.getByRole('button', { name: 'Cancelar' })).toBeFocused();
   await dialog.getByLabel('Convidar por e-mail').fill(email);
   // The invitation waits for the terms.
-  await expect(dialog.getByRole('button', { name: 'Convidar' })).toBeDisabled();
+  const send = dialog.getByRole('button', { name: 'Convidar' });
+  await expect(send).toBeDisabled();
+  await expect(send).toHaveAccessibleDescription(
+    'Confirme ou cancele a cessão da assinatura em “IA da aplicação” para convidar.',
+  );
   await expectAccessible(page);
   await shoot(page, 'invite-lend-confirm', inviteForm(dialog));
   await confirm.getByRole('button', { name: 'Ceder assim mesmo' }).click();
   await expect(
-    preset.getByText('Termos da assinatura confirmados para este convite.'),
+    preset
+      .getByRole('status')
+      .filter({ hasText: 'Termos da assinatura do Claude confirmados' }),
   ).toBeVisible();
   await shoot(page, 'invite-lend-confirmed', inviteForm(dialog));
   await dialog.getByRole('button', { name: 'Convidar' }).click();

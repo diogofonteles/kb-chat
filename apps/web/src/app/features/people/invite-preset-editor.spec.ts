@@ -12,12 +12,13 @@ async function renderEditor(
 ) {
   const changed = vi.fn();
   const invalidChange = vi.fn();
+  const lendPending = vi.fn();
   const view = await render(InvitePresetEditor, {
     providers: [provideZonelessChangeDetection()],
     inputs: { preset, topics: TOPICS.items, defaultAppAi: 'house', lending },
-    on: { changed, invalidChange },
+    on: { changed, invalidChange, lendPending },
   });
-  return { ...view, changed, invalidChange };
+  return { ...view, changed, invalidChange, lendPending };
 }
 
 const OWNER_LENDS_CLAUDE: Lending = {
@@ -39,7 +40,7 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
   });
 
   it('asks for the terms before the preset lends it, and the invitation waits (AC-5)', async () => {
-    const { changed, invalidChange, fixture } = await renderEditor(
+    const { changed, invalidChange, lendPending, fixture } = await renderEditor(
       plainPreset(),
       OWNER_LENDS_CLAUDE,
     );
@@ -50,8 +51,10 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
     await fixture.whenStable();
     expect(changed).not.toHaveBeenCalled();
     expect(invalidChange).toHaveBeenLastCalledWith(true);
+    expect(lendPending).toHaveBeenLastCalledWith(true);
+    // The person does not exist yet: the title names who is being invited (design R1-4).
     const confirm = screen.getByRole('group', {
-      name: 'Ceder a assinatura do Claude a esta pessoa?',
+      name: 'Ceder a assinatura do Claude a quem você está convidando?',
     });
     expect(confirm.textContent).toContain(
       'Os termos da Anthropic não permitem',
@@ -67,6 +70,55 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
       subscriptionTermsAccepted: true,
     });
     expect(invalidChange).toHaveBeenLastCalledWith(false);
+    expect(lendPending).toHaveBeenLastCalledWith(false);
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(select);
+  });
+
+  it('announces which terms were confirmed and how to undo it (design R1-3)', async () => {
+    const preset = plainPreset();
+    await renderEditor(
+      {
+        ...preset,
+        ai: {
+          ...preset.ai,
+          appAi: 'claude-subscription',
+          subscriptionTermsAccepted: true,
+        },
+      },
+      OWNER_LENDS_CLAUDE,
+    );
+    expect(screen.getByRole('status').textContent).toContain(
+      'Termos da assinatura do Claude confirmados para este convite. Para desfazer, escolha outra IA.',
+    );
+  });
+
+  it('keeps the pending choice shown while another field changes (review R1)', async () => {
+    const { fixture, changed } = await renderEditor(
+      plainPreset(),
+      OWNER_LENDS_CLAUDE,
+    );
+    const select = screen.getByLabelText(
+      'Qual IA atende a pessoa',
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+    fixture.componentRef.setInput('preset', last(changed));
+    await fixture.whenStable();
+    expect(select.value).toBe('claude-subscription');
+    expect(
+      screen.getByRole('group', { name: /Ceder a assinatura do Claude/ }),
+    ).toBeTruthy();
+  });
+
+  it('tells the owner why a subscription is not offered now (design R1-5)', async () => {
+    await renderEditor(plainPreset(), OWNER_LENDS_CLAUDE);
+    expect(
+      screen.getByText(
+        /A assinatura do ChatGPT não aparece agora: está desligada em IA da aplicação, sem login no servidor ou com o contêiner do Codex sem responder\./,
+      ),
+    ).toBeTruthy();
   });
 
   it('goes back to the earlier choice when the lending is cancelled', async () => {
@@ -83,6 +135,7 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
     await fixture.whenStable();
     expect(changed).not.toHaveBeenCalled();
     expect(select.value).toBe('default');
+    expect(document.activeElement).toBe(select);
     expect(
       screen.queryByRole('group', { name: /Ceder a assinatura/ }),
     ).toBeNull();

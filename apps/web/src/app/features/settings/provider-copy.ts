@@ -68,7 +68,7 @@ export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
   'chatgpt-subscription': {
     name: () => $localize`:@@provider.chatgpt:Assinatura do ChatGPT`,
     description: () =>
-      $localize`:@@provider.chatgptHint:Usa o Codex CLI já logado no servidor da Nova Alexandria.`,
+      $localize`:@@provider.chatgptHint:Usa a sua assinatura do ChatGPT pelo Codex, rodando no servidor da Nova Alexandria.`,
     steps: {
       // The owner's Mac (ADR 0007): Codex runs there only when he asks for it.
       'cli-missing': () =>
@@ -79,7 +79,7 @@ export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
       'house-off': () =>
         $localize`:@@provider.chatgptHouseOff:Ligue em ⚙ Configurações → IA da aplicação → “Ligar a assinatura do ChatGPT (Codex)”.`,
       'login-required': () =>
-        $localize`:@@provider.chatgptLogin:O Codex não está logado no servidor: o dono entra por SSH com codex login --device-auth (runbook, passo 9c) e volta aqui.`,
+        $localize`:@@provider.chatgptLogin:Entre no servidor por SSH, rode codex login --device-auth (runbook, passo 9c) e reabra esta tela.`,
       'sandbox-unavailable': () =>
         $localize`:@@provider.chatgptSandbox:O contêiner do Codex não está configurado ou não respondeu: confira se ele está ligado (runbook, passo 9c).`,
     },

@@ -18,6 +18,10 @@ export interface LendCopy {
   /** The terms, named every time. */
   readonly terms: () => string;
   readonly toPerson: () => string;
+  /** In an invitation the person does not exist yet (KBC-031). */
+  readonly toInvitee: () => string;
+  /** Said after the terms were confirmed for one invitation, with how to undo it. */
+  readonly confirmedForInvite: () => string;
   readonly toOne: () => string;
   readonly toSelected: (count: number) => string;
   readonly toAll: (count: number) => string;
@@ -29,6 +33,10 @@ export const LEND_COPY: Record<LentSubscription, LendCopy> = {
       $localize`:@@lend.terms:Os termos da Anthropic não permitem usar a assinatura do Claude para atender outras pessoas. Ceder é decisão sua e pode levar a limites ou ao bloqueio da sua conta. Quem recebe passa a usar os limites da sua assinatura do Claude, com o próprio limite de pesquisas por dia.`,
     toPerson: () =>
       $localize`:@@lend.titlePerson:Ceder a assinatura do Claude a esta pessoa?`,
+    toInvitee: () =>
+      $localize`:@@lend.titleInvitee:Ceder a assinatura do Claude a quem você está convidando?`,
+    confirmedForInvite: () =>
+      $localize`:@@lend.confirmedInvite:Termos da assinatura do Claude confirmados para este convite. Para desfazer, escolha outra IA.`,
     toOne: () =>
       $localize`:@@lend.titleOne:Ceder a assinatura do Claude a 1 pessoa selecionada?`,
     toSelected: (count) =>
@@ -41,6 +49,10 @@ export const LEND_COPY: Record<LentSubscription, LendCopy> = {
       $localize`:@@lendGpt.terms:Os termos da OpenAI não permitem usar a assinatura do ChatGPT para atender outras pessoas. Ceder é decisão sua e pode levar a limites ou ao bloqueio da sua conta. Quem recebe passa a usar os limites da sua assinatura do ChatGPT, com o próprio limite de pesquisas por dia.`,
     toPerson: () =>
       $localize`:@@lendGpt.titlePerson:Ceder a assinatura do ChatGPT a esta pessoa?`,
+    toInvitee: () =>
+      $localize`:@@lendGpt.titleInvitee:Ceder a assinatura do ChatGPT a quem você está convidando?`,
+    confirmedForInvite: () =>
+      $localize`:@@lendGpt.confirmedInvite:Termos da assinatura do ChatGPT confirmados para este convite. Para desfazer, escolha outra IA.`,
     toOne: () =>
       $localize`:@@lendGpt.titleOne:Ceder a assinatura do ChatGPT a 1 pessoa selecionada?`,
     toSelected: (count) =>
@@ -55,7 +67,15 @@ export const LEND_UNAVAILABLE: Record<LentSubscription, () => string> = {
   'claude-subscription': () =>
     $localize`:@@lend.unavailable:A assinatura do Claude não está disponível agora no servidor; a pessoa segue com a própria IA ou sem IA até lá.`,
   'chatgpt-subscription': () =>
-    $localize`:@@lendGpt.unavailable:A assinatura do ChatGPT está desligada em IA da aplicação ou sem login no servidor; a pessoa segue com a própria IA ou sem IA até lá.`,
+    $localize`:@@lendGpt.unavailable:A assinatura do ChatGPT está desligada em IA da aplicação, sem login no servidor ou com o contêiner do Codex sem responder; a pessoa segue com a própria IA ou sem IA até lá.`,
+};
+
+/** Why the owner does not see a subscription among the choices of an invitation (KBC-031). */
+export const LEND_NOT_OFFERED: Record<LentSubscription, () => string> = {
+  'claude-subscription': () =>
+    $localize`:@@lend.notOffered:A assinatura do Claude não aparece agora: ela não está disponível no servidor.`,
+  'chatgpt-subscription': () =>
+    $localize`:@@lendGpt.notOffered:A assinatura do ChatGPT não aparece agora: está desligada em IA da aplicação, sem login no servidor ou com o contêiner do Codex sem responder.`,
 };
 
 export const noDefaultNote = (): string =>

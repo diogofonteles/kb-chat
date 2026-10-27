@@ -57,7 +57,7 @@
       (change)="chooseAppAi(appAiSelect.value)"
     >
       @for (option of appAis(); track option.id) {
-        <option [value]="option.id" [selected]="option.id === current.ai.appAi">
+        <option [value]="option.id" [selected]="option.id === shownAppAi()">
           {{ option.label }}
         </option>
       }
@@ -73,6 +73,9 @@
       Assinaturas são cedidas pessoa a pessoa, no editor da pessoa.
     </p>
   }
+  @for (note of notOffered(); track note.kind) {
+    <p class="hint">{{ note.text }}</p>
+  }
   @if (lendCopy(); as copy) {
     <div
       class="lend-confirm"
@@ -81,7 +84,7 @@
       [attr.aria-describedby]="uid + '-lend-terms'"
     >
       <p [id]="uid + '-lend-title'" class="lend-title">
-        {{ copy.toPerson() }}
+        {{ copy.toInvitee() }}
       </p>
       <p [id]="uid + '-lend-terms'">{{ copy.terms() }}</p>
       <div class="actions">
@@ -104,11 +107,12 @@
         </button>
       </div>
     </div>
-  } @else if (termsConfirmed()) {
-    <p class="hint" i18n="@@preset.termsConfirmed">
-      Termos da assinatura confirmados para este convite.
-    </p>
   }
+  <p class="hint" role="status">
+    @if (!lendCopy() && confirmedCopy(); as confirmed) {
+      {{ confirmed }}
+    }
+  </p>
   @if (noAppAi()) {
     <p [id]="uid + '-none-hint'" class="hint" i18n="@@preset.noneHint">
       Sem IA da aplicação, a cota e a reserva paga não se aplicam.

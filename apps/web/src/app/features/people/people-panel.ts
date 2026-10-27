@@ -160,6 +160,11 @@ export class PeoplePanel {
   protected readonly configuring = signal(false);
   /** A number typed in the preset is not kept yet: the invitation waits (design D4). */
   protected readonly presetInvalid = signal(false);
+  /** A subscription in the preset waits for its terms: said next to "Convidar" (design R1-2). */
+  protected readonly lendPending = signal(false);
+  protected readonly waitsForLend = computed(
+    () => this.configuring() && this.lendPending(),
+  );
   protected readonly draftPreset = linkedSignal<InvitationPreset>(
     () => this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
   );
@@ -227,11 +232,13 @@ export class PeoplePanel {
   protected toggleConfigure(): void {
     this.configuring.update((open) => !open);
     this.presetInvalid.set(false);
+    this.lendPending.set(false);
   }
 
   protected chooseSetup(value: string): void {
     this.pickedSetup.set(value);
     this.presetInvalid.set(false);
+    this.lendPending.set(false);
   }
 
   protected invite(event: Event): void {
@@ -272,6 +279,7 @@ export class PeoplePanel {
     this.pickedSetup.set(null);
     this.configuring.set(false);
     this.presetInvalid.set(false);
+    this.lendPending.set(false);
   }
 
   /** "Aplicar perfil" (KBC-028 FR-4): role, collections, features and AI change. */

@@ -32,7 +32,12 @@ import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { FEATURE_LABELS } from './feature-labels.js';
-import { LEND_COPY, NO_LENDING, type Lending } from './lending.js';
+import {
+  LEND_COPY,
+  LEND_NOT_OFFERED,
+  NO_LENDING,
+  type Lending,
+} from './lending.js';
 
 type InitialPreferences = InvitationPreset['preferences'];
 
@@ -74,6 +79,8 @@ export class InvitePresetEditor {
   readonly changed = output<InvitationPreset>();
   /** True while a typed number is not kept: the invitation or profile waits (design D4). */
   readonly invalidChange = output<boolean>();
+  /** True while a subscription waits for its terms: the invitation says why it waits. */
+  readonly lendPending = output<boolean>();
 
   private readonly injector = inject(Injector);
   private readonly appAiSelect =
@@ -110,12 +117,25 @@ export class InvitePresetEditor {
     return kind ? LEND_COPY[kind] : null;
   });
   protected readonly canLend = computed(() => this.lending().canLend);
-  /** The terms of the subscription this preset lends were confirmed here. */
-  protected readonly termsConfirmed = computed(
-    () =>
-      isLentSubscription(this.preset().ai.appAi) &&
-      this.preset().ai.subscriptionTermsAccepted === true,
+  /** The choice the field shows: the subscription waiting for its terms, else the preset's. */
+  protected readonly shownAppAi = computed(
+    () => this.confirmingLend() ?? this.preset().ai.appAi,
   );
+  /** Why the owner does not see a subscription now (KBC-031, design R1-5). */
+  protected readonly notOffered = computed(() => {
+    const { canLend, lendable } = this.lending();
+    if (!canLend) return [];
+    return (['claude-subscription', 'chatgpt-subscription'] as const)
+      .filter((kind) => !this.offered(kind))
+      .map((kind) => ({ kind, text: LEND_NOT_OFFERED[kind]() }));
+  });
+  /** Which subscription's terms were confirmed for this invitation, said in a live region. */
+  protected readonly confirmedCopy = computed(() => {
+    const { appAi, subscriptionTermsAccepted } = this.preset().ai;
+    return isLentSubscription(appAi) && subscriptionTermsAccepted === true
+      ? LEND_COPY[appAi].confirmedForInvite()
+      : null;
+  });
   /** The default collection is one of those granted (BR-4); a master sees them all. */
   protected readonly defaultTopics = computed(() =>
     this.collections().filter((topic) => topic.checked),
@@ -207,8 +227,6 @@ export class InvitePresetEditor {
   protected cancelLend(): void {
     this.confirmingLend.set(null);
     this.reportValidity();
-    const select = this.appAiSelect()?.nativeElement;
-    if (select) select.value = this.preset().ai.appAi;
     this.focusAfterRender(() => this.appAiSelect());
   }
 
@@ -268,18 +286,22 @@ export class InvitePresetEditor {
 
   /** A bad number or a lending not yet confirmed holds the invitation (design D4). */
   private reportValidity(): void {
+    const pending = this.confirmingLend() !== null;
     this.invalidChange.emit(
-      this.dailyError() !== null ||
-        this.capError() !== null ||
-        this.confirmingLend() !== null,
+      this.dailyError() !== null || this.capError() !== null || pending,
     );
+    this.lendPending.emit(pending);
   }
 
+  /** The terms flag goes up only while it is set: another AI never carries it. */
   private emitAi(patch: Partial<InvitationPreset['ai']>): void {
-    const ai = { ...this.preset().ai, ...patch };
-    if (ai.subscriptionTermsAccepted === undefined)
-      delete ai.subscriptionTermsAccepted;
-    this.emit({ ai });
+    const { subscriptionTermsAccepted, ...ai } = {
+      ...this.preset().ai,
+      ...patch,
+    };
+    this.emit({
+      ai: subscriptionTermsAccepted ? { ...ai, subscriptionTermsAccepted } : ai,
+    });
   }
 
   /** "Sem preferência" drops the key: the person's Settings keep their own default. */
