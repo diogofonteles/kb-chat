@@ -487,11 +487,13 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     const progress = {
       status: 'running' as const,
       documents: 2555,
-      documentsDone: 640,
+      needed: 1363,
+      documentsDone: 412,
       batches: 80,
       batchesDone: 12,
       requests: 82,
       free: true,
+      minutes: 5,
     };
     const coverage = {
       target: { authorship: 'mestre-laercio' as const },
@@ -499,7 +501,8 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       documents: 2555,
       scanned: 2555,
       withHits: 412,
-      read: 96,
+      read: 412,
+      needed: 412,
       missing: 0,
       batches: 80,
     };
@@ -514,8 +517,9 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       },
       findings: [],
     };
+    const button = (name: string) => screen.queryByRole('button', { name });
 
-    it('shows the estimate, the free-model note and the progress while it sweeps', async () => {
+    it('shows the estimate with its time, the free-model note and the progress while it sweeps', async () => {
       await renderMessage(
         aTurn({ phase: 'streaming', text: '', sweep: progress, steps: [] }),
       );
@@ -523,57 +527,92 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
         screen.getByRole('heading', { name: 'Varredura do conjunto inteiro' }),
       ).toBeTruthy();
       expect(
-        screen.getByText('2.555 documentos em ~80 lotes (~82 pedidos à IA).'),
+        screen.getByText(
+          '2.555 documentos em ~80 lotes (~82 pedidos à IA). Leva pelo menos ~5 min.',
+        ),
       ).toBeTruthy();
       expect(
-        screen.getByText(/Modelos gratuitos são menos rigorosos/),
+        screen.getByText(
+          'Modelos gratuitos são menos rigorosos e mais lentos.',
+        ),
       ).toBeTruthy();
       expect(screen.getByRole('status').textContent).toContain(
-        'Lote 12 de 80 · 640 de 2.555 documentos',
+        'Lote 12 de 80 · a IA analisou 412 de 1.363 documentos',
       );
-      expect(screen.getByRole('progressbar')).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Parar' })).toBeTruthy();
+      // A fixed name: the numbers are announced once, by the status (MA-29).
+      expect(
+        screen.getByRole('progressbar', { name: 'Progresso da varredura' }),
+      ).toBeTruthy();
+      expect(button('Parar')).toBeTruthy();
     });
 
-    it('renders the coverage the app measured and the summary, with no continue when complete', async () => {
+    it('states the most a paid model may cost before it sweeps', async () => {
+      await renderMessage(
+        aTurn({
+          phase: 'streaming',
+          text: '',
+          sweep: { ...progress, free: false, minutes: undefined, usd: 0.42 },
+          steps: [],
+        }),
+      );
+      expect(screen.getByText(/Custo de no máximo US\$ 0,42/)).toBeTruthy();
+    });
+
+    it('renders the coverage with one word per count, and the summary, with no continue when complete', async () => {
       await renderMessage(aTurn({ coverage }));
       expect(
         screen.getByText(
-          'Cobertura (medida pelo aplicativo): 2.555 documentos no conjunto · 2.555 varridos por dentro · 412 com ocorrências · 96 lidos.',
+          'Cobertura (medida pelo aplicativo): 2.555 documentos no conjunto · 2.555 conferidos pelas expressões · 412 com ocorrências · 412 analisados pela IA.',
         ),
       ).toBeTruthy();
       expect(
         screen.getByText(/autoria Mestre Laércio; expressões: livro, obra/),
       ).toBeTruthy();
       expect(
-        screen.getByText(/varreu 2\.555 de 2\.555 documentos/),
+        screen.getByText(/a IA analisou 412 de 412 documentos/),
       ).toBeTruthy();
-      expect(
-        screen.queryByRole('button', { name: 'Continuar varredura' }),
-      ).toBeNull();
+      expect(button('Continuar varredura')).toBeNull();
     });
 
-    it('says what was left and why, and offers to continue the sweep', async () => {
+    it('says the counts add up earlier turns on a continuation', async () => {
+      await renderMessage(
+        aTurn({ coverage: { ...coverage, continued: true } }),
+      );
+      expect(
+        screen.getByText(
+          /412 analisados pela IA \(somando as varreduras anteriores\)\./,
+        ),
+      ).toBeTruthy();
+    });
+
+    it('says what was left and why, and offers to continue instead of starting over', async () => {
       await renderMessage(
         aTurn({
-          coverage: {
-            ...coverage,
-            read: 30,
-            missing: 1900,
-            reason: 'requests',
-          },
+          interrupted: true,
+          coverage: { ...coverage, read: 30, missing: 382, reason: 'requests' },
           cursor,
         }),
       );
       expect(screen.getByText('Varredura incompleta.')).toBeTruthy();
       expect(
         screen.getByText(
-          /Faltaram 1\.900 documentos: o limite de pedidos desta pesquisa acabou\./,
+          /Faltaram 382 documentos para a IA analisar: o limite de pedidos desta pesquisa acabou\./,
         ),
       ).toBeTruthy();
+      expect(button('Continuar varredura')).toBeTruthy();
+      expect(button('Tentar de novo')).toBeNull();
+    });
+
+    it('says the answer was not written when the cap stopped it after the sweep', async () => {
+      await renderMessage(
+        aTurn({ text: '', coverage: { ...coverage, reason: 'spend' }, cursor }),
+      );
       expect(
-        screen.getByRole('button', { name: 'Continuar varredura' }),
+        screen.getByText(
+          /A varredura terminou, mas a resposta não foi escrita: o teto de gasto do dia chegou\./,
+        ),
       ).toBeTruthy();
+      expect(button('Continuar varredura')).toBeTruthy();
     });
 
     it('emits continued, also on a turn brought back from the history, but only on the last one', async () => {
@@ -594,22 +633,23 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
 
     it('offers no continue on an earlier turn', async () => {
       await renderMessage(aTurn({ cursor }), false);
-      expect(
-        screen.queryByRole('button', { name: 'Continuar varredura' }),
-      ).toBeNull();
+      expect(button('Continuar varredura')).toBeNull();
     });
 
-    it('tells where a sweep stopped on this page before its coverage came', async () => {
+    it('tells what was left when the reader stopped on this page, and what the AI analyzed', async () => {
       await renderMessage(
         aTurn({ interrupted: true, sweep: progress, cursor, text: '' }),
       );
       expect(screen.getByText('Varredura incompleta.')).toBeTruthy();
       expect(
-        screen.getByText(/Faltaram 1\.915 documentos: você parou a pesquisa\./),
+        screen.getByText(
+          /Faltaram 951 documentos para a IA analisar: você parou a pesquisa\./,
+        ),
       ).toBeTruthy();
       expect(
-        screen.getByRole('button', { name: 'Continuar varredura' }),
+        screen.getByText(/a IA analisou 412 de 1\.363 documentos/),
       ).toBeTruthy();
+      expect(button('Continuar varredura')).toBeTruthy();
     });
   });
 });

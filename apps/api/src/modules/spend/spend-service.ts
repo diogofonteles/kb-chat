@@ -6,8 +6,11 @@ import type { SpendLedgerPort } from '../../ports/spend-ledger.js';
 /** Rough size of a token in Portuguese text, used when the provider reports no usage. */
 const CHARS_PER_TOKEN = 3.5;
 
-export const tokensOf = (text: string): number =>
-  Math.ceil(text.length / CHARS_PER_TOKEN);
+export const tokensOf = (text: string): number => tokensForChars(text.length);
+
+/** The tokens of a text this long, counted as tokensOf does. */
+export const tokensForChars = (chars: number): number =>
+  Math.ceil(chars / CHARS_PER_TOKEN);
 
 export interface SpendServiceDeps {
   readonly llm: LlmPort;

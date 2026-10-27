@@ -56,5 +56,6 @@ export {
 export {
   SUBSCRIPTION_CONTEXT_TOKENS,
   runSweepTurn,
+  sweepTurnHost,
   type SweepTurnResult,
 } from './sweep/sweep-turn.js';

@@ -1,5 +1,4 @@
 import type { AnswerSource, ResearchStep } from '@kb-chat/contracts';
-import type { SweepKit } from '../modules/research/index.js';
 import type { ToolDefinition } from './llm.js';
 
 /** What one tool call produced: the text the model reads, the step shown and the sources so far. */
@@ -16,8 +15,6 @@ export interface ResearchToolResult {
  * numbering. The in-API loop and the MCP server (ADR 0007) call the same implementation.
  */
 export interface ResearchToolsPort {
-  /** The exhaustive sweep's planner and the turn's numbering (KBC-030); absent: no sweep. */
-  readonly sweepKit?: SweepKit;
   definitions(): readonly ToolDefinition[];
   /** Runs a tool; `args` is the parsed JSON the model wrote. Unknown tools reject. */
   call(name: string, args: unknown): Promise<ResearchToolResult>;

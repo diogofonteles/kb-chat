@@ -108,16 +108,24 @@ export const sweepCoverageSchema = z
     scanned: count,
     withHits: count.nullable(),
     read: count,
-    /** Documents of the set not covered yet (a continuation covers them). */
+    /**
+     * Documents the AI has to analyze: those with occurrences of the phrases, or with
+     * phrases absent every document with text (KBC-030 design review).
+     */
+    needed: count,
+    /** Of those, not analyzed yet (a continuation analyzes them). */
     missing: count,
     batches: count,
     reason: sweepStopReasonSchema.optional(),
+    /** The counts include earlier turns of the same sweep ("Continuar varredura"). */
+    continued: z.boolean().optional(),
   })
   .refine(
     (c) =>
       c.scanned <= c.documents &&
-      c.read <= c.documents &&
-      c.missing <= c.documents &&
+      c.read <= c.needed &&
+      c.needed <= c.documents &&
+      c.missing <= c.needed &&
       (c.withHits ?? 0) <= c.documents,
     { error: 'coverage counts more than the set' },
   );
@@ -127,7 +135,9 @@ export type SweepCoverage = z.infer<typeof sweepCoverageSchema>;
 export const sweepProgressSchema = z.strictObject({
   status: z.enum(['planned', 'running']),
   documents: count,
-  /** Documents fully swept, previous continuations included. */
+  /** Documents the AI has to analyze (see the coverage's `needed`). */
+  needed: count,
+  /** Of those, analyzed so far, previous continuations included. */
   documentsDone: count,
   batches: count,
   batchesDone: count,
@@ -135,6 +145,10 @@ export const sweepProgressSchema = z.strictObject({
   requests: count,
   /** Free models: slower and less rigorous; the estimate says so. */
   free: z.boolean(),
+  /** At least this many minutes (free models are paced), when known. */
+  minutes: count.optional(),
+  /** At most this much in US$ on a per-token model, when known. */
+  usd: z.number().nonnegative().optional(),
   /** Where to continue from if the turn stops now (its findings come apart, in `found`). */
   cursor: sweepCursorSchema.optional(),
   /** The findings of the batch that just finished: the page keeps them for a stop. */

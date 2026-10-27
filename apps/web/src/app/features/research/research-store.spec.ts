@@ -41,6 +41,7 @@ const CURSOR: SweepCursor = {
 const PROGRESS: SweepProgress = {
   status: 'running',
   documents: 10,
+  needed: 10,
   documentsDone: 3,
   batches: 4,
   batchesDone: 1,
@@ -55,6 +56,7 @@ const COVERAGE: SweepCoverage = {
   scanned: 3,
   withHits: null,
   read: 3,
+  needed: 10,
   missing: 7,
   batches: 1,
   reason: 'requests',
@@ -660,8 +662,12 @@ describe('ResearchStore', () => {
     expect(saved?.coverage).toEqual(COVERAGE);
     expect(saved?.sweep).toEqual(CURSOR);
     store.continueSweep();
+    // Shown as a continuation, asked as the question itself.
+    expect(store.turns()[1]?.question).toBe(
+      'Continuar varredura: quais livros o Mestre cita?',
+    );
     expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
-      question: 'Continuar varredura: quais livros o Mestre cita?',
+      question: 'quais livros o Mestre cita?',
       history: [
         {
           question: 'quais livros o Mestre cita?',
@@ -718,5 +724,47 @@ describe('ResearchStore', () => {
     expect(store.turns()[0]?.cursor).toBeNull();
     store.continueSweep();
     expect(api.research).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the carried findings when a continuation is stopped too (code review 1)', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const earlier = { ...CURSOR, findings: [{ id: 'raw/a.md', text: 'A' }] };
+    streams[0]?.next({ type: 'token', text: 'Parcial [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: COVERAGE,
+      sweep: earlier,
+    });
+    store.continueSweep();
+    streams[1]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: [{ id: 'raw/b.md', text: 'B' }],
+      },
+    });
+    store.stop();
+    expect(store.turns()[1]?.cursor?.findings).toEqual([
+      { id: 'raw/a.md', text: 'A' },
+      { id: 'raw/b.md', text: 'B' },
+    ]);
+  });
+
+  it('continues a sweep whose answer failed, from the cursor it kept (code review 10)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    streams[0]?.next({ type: 'error', code: 'PROVIDER_UNAVAILABLE' });
+    store.continueSweep();
+    expect(api.research).toHaveBeenCalledTimes(2);
   });
 });

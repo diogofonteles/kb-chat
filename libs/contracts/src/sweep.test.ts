@@ -32,6 +32,7 @@ const coverage = {
   scanned: 10,
   withHits: 3,
   read: 3,
+  needed: 3,
   missing: 0,
   batches: 2,
 };
@@ -96,6 +97,8 @@ describe('sweep contracts (KBC-030)', () => {
         sweep: {
           status: 'planned',
           documents: 10,
+          needed: 10,
+          minutes: 1,
           documentsDone: 0,
           batches: 4,
           batchesDone: 0,
@@ -108,6 +111,7 @@ describe('sweep contracts (KBC-030)', () => {
         sweep: {
           status: 'running',
           documents: 10,
+          needed: 10,
           documentsDone: 4,
           batches: 4,
           batchesDone: 1,
@@ -123,7 +127,7 @@ describe('sweep contracts (KBC-030)', () => {
         model: 'm',
         interrupted: false,
         steps: 2,
-        coverage: { ...coverage, missing: 6, reason: 'requests' },
+        coverage: { ...coverage, needed: 9, missing: 6, reason: 'requests' },
         sweep: cursor,
       },
     ];

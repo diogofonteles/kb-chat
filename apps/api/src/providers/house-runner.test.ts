@@ -70,6 +70,16 @@ describe('HouseResearchRunner and the exhaustive sweep (KBC-030)', () => {
     expect(inner.seen?.requestBudget).toBe(120);
   });
 
+  it('never lends one sweep more than a quarter of the house’s day, shared by everyone', async () => {
+    const inner = new RecordingRunner();
+    await drain(
+      house(inner, { used: 0, limit: 1000, remaining: 1000 }).run(
+        input('exhaustive'),
+      ),
+    );
+    expect(inner.seen?.requestBudget).toBe(250);
+  });
+
   it('sets no budget when the capacity is unknown', async () => {
     const inner = new RecordingRunner();
     await drain(house(inner, null).run(input('exhaustive')));

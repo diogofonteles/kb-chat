@@ -4,7 +4,14 @@ const WORD = 'cobertura';
 
 /** The start of a line without its markdown dress (bold, heading, quote, bullet). */
 const bare = (line: string): string =>
-  foldName(line.replace(/^[\s*_#>`\-–—•]+/u, ''));
+  foldName(line.replace(/^(?:[\s*_#>`|\-–—•]|\d+[.)])+/u, ''));
+
+/** Only list numbers, bullets and markdown so far: the line may still be a coverage line. */
+const ONLY_PREFIX = /^[\s*_#>`|\-–—•\d.)]*$/u;
+
+/** A line that is only a coverage heading ("## Cobertura", "**Cobertura:**"). */
+const isHeading = (start: string): boolean =>
+  /^cobertura[\s:*_#]*$/u.test(start);
 
 /**
  * Takes the model's own coverage lines out of a streamed answer (KBC-030, ADR 0021): the
@@ -16,6 +23,8 @@ export class CoverageLineFilter {
   private held = '';
   /** The current line proved not to be one: the rest of it passes. */
   private passing = false;
+  /** Under a coverage heading: its lines are dropped up to the next blank line. */
+  private section = false;
 
   push(delta: string): string {
     let out = '';
@@ -27,7 +36,22 @@ export class CoverageLineFilter {
   end(): string {
     const line = this.held;
     this.held = '';
-    return bare(line).startsWith(WORD) ? '' : line;
+    return this.section || bare(line).startsWith(WORD) ? '' : line;
+  }
+
+  /** A whole line: dropped when it claims coverage or belongs to a coverage section. */
+  private endLine(): string {
+    const line = this.held;
+    this.held = '';
+    const start = bare(line);
+    // The section ends at a blank line, which goes with it.
+    if (this.section) {
+      this.section = start !== '';
+      return '';
+    }
+    if (!start.startsWith(WORD)) return `${line}\n`;
+    this.section = isHeading(start);
+    return '';
   }
 
   private take(char: string): string {
@@ -35,14 +59,15 @@ export class CoverageLineFilter {
       if (char === '\n') this.passing = false;
       return char;
     }
-    if (char === '\n') {
-      const line = this.held;
-      this.held = '';
-      return bare(line).startsWith(WORD) ? '' : `${line}\n`;
-    }
+    if (char === '\n') return this.endLine();
     this.held += char;
+    if (this.section) return '';
     const start = bare(this.held);
-    if (start.startsWith(WORD) || WORD.startsWith(start)) return '';
+    const undecided =
+      ONLY_PREFIX.test(this.held) ||
+      start.startsWith(WORD) ||
+      WORD.startsWith(start);
+    if (undecided) return '';
     this.passing = true;
     const line = this.held;
     this.held = '';

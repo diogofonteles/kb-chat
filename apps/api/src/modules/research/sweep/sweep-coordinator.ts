@@ -19,6 +19,19 @@ import {
   type FoundItem,
 } from './findings.js';
 import {
+  coverageOf,
+  cursorOf,
+  measureSweep,
+  type SweepMeasure,
+} from './sweep-measure.js';
+import {
+  FREE_PACER,
+  SWEEP_PACE,
+  SweepPacer,
+  realClock,
+  type SweepClock,
+} from './sweep-pacing.js';
+import {
   batchSystemPrompt,
   batchUserPrompt,
   condenseSystemPrompt,
@@ -26,18 +39,10 @@ import {
 import type { SweepBatch, SweepLayout, SweepPlanner } from './sweep-planner.js';
 import { Slots } from './slots.js';
 
-/**
- * The OpenRouter free tier allows 20 requests a minute: one start every 3.2 s stays under
- * it (KBC-030). On a refused request (429, every model of the chain busy) the sweep waits
- * and tries again, then stops with a cursor.
- */
-export const SWEEP_PACE = {
-  freeGapMs: 3_200,
-  backoffMs: [15_000, 30_000, 60_000],
-} as const;
+export { SWEEP_PACE, type SweepClock } from './sweep-pacing.js';
 
 /** Errors that end the sweep (not the turn) and what the coverage says about them. */
-const STOPPING_CODES: Readonly<Record<string, SweepStopReason>> = {
+export const STOPPING_CODES: Readonly<Record<string, SweepStopReason>> = {
   DAILY_CAP_REACHED: 'spend',
   LLM_INSUFFICIENT_CREDIT: 'spend',
   HOUSE_QUOTA_EXHAUSTED: 'requests',
@@ -63,31 +68,15 @@ export interface BatchEngine {
     readonly user: string;
     readonly signal: AbortSignal;
   }): Promise<string>;
+  /** At most what `calls` calls over `chars` characters cost, in US$; absent: unknown. */
+  estimateUsd?(chars: number, calls: number): Promise<number>;
 }
-
-export interface SweepClock {
-  now(): number;
-  sleep(ms: number, signal: AbortSignal): Promise<void>;
-}
-
-const realClock: SweepClock = {
-  now: () => Date.now(),
-  sleep: (ms, signal) =>
-    new Promise((resolve) => {
-      const timer = setTimeout(done, ms);
-      function done() {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', done);
-        resolve();
-      }
-      signal.addEventListener('abort', done, { once: true });
-    }),
-};
 
 export interface SweepDeps {
   readonly engine: BatchEngine;
   readonly sweeps: Pick<SweepPlanner, 'batchText'>;
   readonly emit: (progress: SweepProgress) => void;
+  /** Tests inject a clock; with one, the pacer is private to the sweep. */
   readonly clock?: SweepClock;
 }
 
@@ -117,13 +106,15 @@ export interface SweepOutcome {
   readonly coverage: SweepCoverage;
   /** Where to continue; null when the whole set was covered. */
   readonly cursor: SweepCursor | null;
+  /** The cursor even when nothing is left (an answer that could not be written). */
+  readonly resume: SweepCursor;
   /** Model requests the sweep made. */
   readonly requests: number;
   /** Findings that did not fit even after condensing. */
   readonly cut: number;
 }
 
-/** Thrown inside a batch to end the whole turn (a refused key). */
+/** Thrown inside a batch to end the whole turn (a refused key, a vault error). */
 class TurnFailure extends Error {
   constructor(override readonly cause: unknown) {
     super('sweep failed');
@@ -137,69 +128,89 @@ class TurnFailure extends Error {
  * come from what really finished, never from what the model says.
  */
 export class SweepCoordinator {
+  constructor(private readonly deps: SweepDeps) {}
+
+  run(request: SweepRequest): Promise<SweepOutcome> {
+    return new SweepRun(this.deps, request).run();
+  }
+}
+
+/** The state of one sweep: one instance per run. */
+class SweepRun {
   private readonly clock: SweepClock;
-  private request!: SweepRequest;
-  private findings!: FindingSet;
-  private done: boolean[] = [];
+  private readonly pacer: SweepPacer;
+  private findings: FindingSet;
+  private readonly done: boolean[];
   private requests = 0;
-  private nextStart = 0;
   private stopped: SweepStopReason | null = null;
   private failure: TurnFailure | null = null;
 
-  constructor(private readonly deps: SweepDeps) {
+  constructor(
+    private readonly deps: SweepDeps,
+    private readonly request: SweepRequest,
+  ) {
     this.clock = deps.clock ?? realClock;
-  }
-
-  async run(request: SweepRequest): Promise<SweepOutcome> {
-    this.request = request;
+    this.pacer = deps.clock ? new SweepPacer() : FREE_PACER;
     this.findings = new FindingSet(request.book);
     this.findings.addFound(carriedItems(request));
-    const { batches } = request.layout;
-    this.done = batches.map(() => false);
-    this.deps.emit(this.progress('planned'));
+    this.done = request.layout.batches.map(() => false);
+  }
+
+  async run(): Promise<SweepOutcome> {
+    this.deps.emit(await this.planned());
     const slots = new Slots(this.deps.engine.parallel);
-    await Promise.all(batches.map((b) => slots.run(() => this.batch(b))));
-    if (this.failure) throw this.failure.cause;
+    const { batches } = this.request.layout;
+    await Promise.all(batches.map((b) => slots.run(() => this.guarded(b))));
+    this.rethrow();
     const cut = await this.condense();
-    return {
-      ...this.measure(),
-      findings: this.findings,
-      requests: this.requests,
-      cut,
-    };
+    // A failure in a condensing call (a refused key) fails the turn too.
+    this.rethrow();
+    return this.outcome(cut);
+  }
+
+  private rethrow(): void {
+    if (this.failure) throw this.failure.cause;
+  }
+
+  /** A batch whose failure (a vault error) stops the others instead of leaving them running. */
+  private async guarded(batch: SweepBatch): Promise<void> {
+    try {
+      await this.batch(batch);
+    } catch (err) {
+      this.failure ??= new TurnFailure(err);
+    }
   }
 
   private async batch(batch: SweepBatch): Promise<void> {
     if (!(await this.mayStart())) return;
+    const { request } = this;
     const { text, labels } = await this.deps.sweeps.batchText(
-      this.request.topic,
+      request.topic,
       batch,
     );
+    const extract = request.layout.plan.extract;
     const output = await this.call(
-      batchSystemPrompt(this.request.topicTitle),
-      batchUserPrompt({
-        ...this.request,
-        extract: this.request.layout.plan.extract,
-        text,
-      }),
+      batchSystemPrompt(request.topicTitle),
+      batchUserPrompt({ ...request, extract, text }),
     );
-    if (output === null) return;
+    // A call cut short by "Parar" may return part of its text: it never counts.
+    if (output === null || request.signal.aborted) return;
     const found = parseFindings(output, labels);
     this.findings.addFound(found);
     this.done[batch.index] = true;
-    this.deps.emit(this.progress('running', found));
+    this.deps.emit(this.progress(found));
   }
 
   /** Checks the ceilings, then waits for the free pace; false when the sweep must stop. */
   private async mayStart(): Promise<boolean> {
     if (!this.canGoOn()) return false;
-    if (this.deps.engine.free) {
-      const now = this.clock.now();
-      const at = Math.max(now, this.nextStart);
-      this.nextStart = at + SWEEP_PACE.freeGapMs;
-      if (at > now) await this.clock.sleep(at - now, this.request.signal);
-    }
+    await this.pace();
     return this.takeRequest();
+  }
+
+  private async pace(): Promise<void> {
+    if (this.deps.engine.free)
+      await this.pacer.wait(this.clock, this.request.signal);
   }
 
   /** Counts a request before it starts, so batches in parallel never pass the budget. */
@@ -240,34 +251,29 @@ export class SweepCoordinator {
   ): Promise<{ ok: true; text: string } | { ok: false; err: unknown }> {
     const { signal } = this.request;
     try {
-      return {
-        ok: true,
-        text: await this.deps.engine.extract({ system, user, signal }),
-      };
+      const text = await this.deps.engine.extract({ system, user, signal });
+      return { ok: true, text };
     } catch (err) {
       return { ok: false, err };
     }
   }
 
-  /** Waits after a refusal and counts the next try; false when the sweep must stop. */
+  /** Waits after a refusal, keeps the free pace and counts the next try; false: stop. */
   private async retryAfter(err: unknown, attempt: number): Promise<boolean> {
     const wait = this.afterFailure(err, attempt);
     if (wait === null) return false;
     await this.clock.sleep(wait, this.request.signal);
+    if (!this.canGoOn()) return false;
+    await this.pace();
     return this.takeRequest();
   }
 
   /** How long to wait before trying again, or null after stopping (or failing) the sweep. */
   private afterFailure(err: unknown, attempt: number): number | null {
+    const stopping = err instanceof AppError ? STOPPING_CODES[err.code] : null;
     if (this.request.signal.aborted) this.stop('stopped');
-    else if (err instanceof AppError && STOPPING_CODES[err.code])
-      this.stop(STOPPING_CODES[err.code] ?? 'capacity');
-    else if (
-      err instanceof AppError ||
-      err instanceof LlmKeyRejectedError ||
-      err instanceof SweepFatalError
-    )
-      this.failure ??= new TurnFailure(err);
+    else if (stopping) this.stop(stopping);
+    else if (isFatal(err)) this.failure ??= new TurnFailure(err);
     else if (attempt < SWEEP_PACE.backoffMs.length)
       return SWEEP_PACE.backoffMs[attempt] ?? null;
     else this.stop('capacity');
@@ -278,24 +284,24 @@ export class SweepCoordinator {
   private async condense(): Promise<number> {
     const cap = this.request.findingsChars;
     for (let round = 0; round < 2 && this.size() > cap; round += 1) {
-      const parts = chunks(this.findings.lines(), cap);
       const merged = new FindingSet(this.request.book);
-      for (const part of parts) {
-        const output = this.takeRequest()
-          ? await this.call(
-              condenseSystemPrompt(this.request.topicTitle),
-              `Achados:\n${part.join('\n')}`,
-            )
-          : null;
-        merged.addNumbered(
-          output === null
-            ? linesAsItems(part)
-            : parseNumbered(output, this.request.book),
-        );
-      }
+      for (const part of chunks(this.findings.lines(), cap))
+        merged.addNumbered(await this.condensed(part));
       this.findings = merged;
     }
     return this.trim(cap);
+  }
+
+  private async condensed(part: readonly string[]) {
+    const output = this.takeRequest()
+      ? await this.call(
+          condenseSystemPrompt(this.request.topicTitle),
+          `Achados:\n${part.join('\n')}`,
+        )
+      : null;
+    return output === null
+      ? linesAsItems(part)
+      : parseNumbered(output, this.request.book);
   }
 
   private size(): number {
@@ -313,90 +319,85 @@ export class SweepCoordinator {
     return lines.length - kept.length;
   }
 
-  /** The documents fully swept, in id order, from the cursor on. */
-  private prefix(): number {
-    const { docs, skipped, batches } = this.request.layout;
-    const batchOf = new Map<string, number[]>();
-    for (const batch of batches)
-      for (const unit of batch.units)
-        batchOf.set(unit.entry.id, [
-          ...(batchOf.get(unit.entry.id) ?? []),
-          batch.index,
-        ]);
-    let count = skipped;
-    while (count < docs.length) {
-      const id = docs[count]?.entry.id ?? '';
-      if (!(batchOf.get(id) ?? []).every((i) => this.done[i])) break;
-      count += 1;
-    }
-    return count;
+  private measure(): SweepMeasure {
+    return measureSweep(this.request.layout, {
+      done: this.done,
+      previousBatches: this.request.previous?.batches ?? 0,
+    });
   }
 
-  private totals(): { totals: SweepTotals; swept: number; after?: string } {
-    const { layout, previous } = this.request;
-    const swept = this.prefix();
-    const read = layout.docs
-      .slice(0, swept)
-      .filter((d) => d.units.length > 0).length;
-    const totals: SweepTotals = {
-      documents: layout.docs.length,
-      scanned: layout.withHits === null ? swept : layout.scanned,
-      withHits: layout.withHits,
-      read,
-      batches: (previous?.batches ?? 0) + this.done.filter(Boolean).length,
+  private outcome(cut: number): SweepOutcome {
+    const { layout } = this.request;
+    const ending = {
+      measure: this.measure(),
+      stopped: this.stopped,
+      findings: this.findings.carried(MAX_CARRIED_FINDINGS),
+      continued: this.request.previous !== undefined,
     };
-    return { totals, swept, after: layout.docs[swept - 1]?.entry.id };
-  }
-
-  private measure(): Pick<SweepOutcome, 'coverage' | 'cursor'> {
-    const { totals, swept, after } = this.totals();
-    const missing = totals.documents - swept;
-    const { plan } = this.request.layout;
-    const reason = missing > 0 ? (this.stopped ?? 'stopped') : undefined;
-    const coverage: SweepCoverage = {
-      ...totals,
-      target: plan.target,
-      phrases: plan.phrases,
-      missing,
-      ...(reason ? { reason } : {}),
+    const resume = cursorOf(layout, ending);
+    return {
+      findings: this.findings,
+      coverage: coverageOf(layout, ending),
+      cursor: ending.measure.missing > 0 ? resume : null,
+      resume,
+      requests: this.requests,
+      cut,
     };
-    const findings = this.findings.carried(MAX_CARRIED_FINDINGS);
-    const cursor =
-      missing > 0
-        ? { plan, ...(after ? { after } : {}), totals, findings }
-        : null;
-    return { coverage, cursor };
   }
 
-  private progress(
+  /** Before the first batch: what the sweep will take (time on free models, US$ on paid). */
+  private async planned(): Promise<SweepProgress> {
+    const { batches } = this.request.layout;
+    const base = this.progressBase('planned');
+    const { engine } = this.deps;
+    const chars = batches.reduce((sum, b) => sum + b.chars, 0);
+    const usd = engine.free
+      ? undefined
+      : await engine.estimateUsd?.(chars, batches.length);
+    const minutes = engine.free
+      ? Math.ceil((base.requests * SWEEP_PACE.freeGapMs) / 60_000)
+      : undefined;
+    return {
+      ...base,
+      ...(minutes !== undefined && { minutes }),
+      ...(usd !== undefined && { usd }),
+    };
+  }
+
+  private progress(found: readonly FoundItem[]): SweepProgress {
+    const measure = this.measure();
+    return {
+      ...this.progressBase('running', measure),
+      cursor: cursorOf(this.request.layout, { measure, findings: [] }),
+      found: found
+        .slice(0, MAX_FOUND_PER_PROGRESS)
+        .map(({ entry, text }) => carriedOf(entry, text)),
+    };
+  }
+
+  private progressBase(
     status: SweepProgress['status'],
-    found: readonly FoundItem[] = [],
+    measure = this.measure(),
   ): SweepProgress {
-    const { totals, swept, after } = this.totals();
     const { layout, requestsBefore } = this.request;
     const batches = layout.batches.length;
     return {
       status,
-      documents: totals.documents,
-      documentsDone: swept,
+      documents: measure.totals.documents,
+      needed: measure.needed,
+      documentsDone: measure.totals.read,
       batches,
       batchesDone: this.done.filter(Boolean).length,
       requests: requestsBefore + batches + 1,
       free: this.deps.engine.free,
-      ...(status === 'running' && {
-        cursor: {
-          plan: layout.plan,
-          ...(after ? { after } : {}),
-          totals,
-          findings: [],
-        },
-        found: found
-          .slice(0, MAX_FOUND_PER_PROGRESS)
-          .map(({ entry, text }) => carriedOf(entry, text)),
-      }),
     };
   }
 }
+
+const isFatal = (err: unknown): boolean =>
+  err instanceof AppError ||
+  err instanceof LlmKeyRejectedError ||
+  err instanceof SweepFatalError;
 
 /** Lines in consecutive groups of at most `cap` characters (a longer line alone). */
 function chunks(lines: readonly string[], cap: number): string[][] {

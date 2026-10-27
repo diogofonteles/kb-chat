@@ -306,3 +306,17 @@ p.steps {
 .coverage-missing {
   color: var(--color-text);
 }
+
+/* "Continuar varredura": the main action of an unfinished sweep, under its coverage (UP-13). */
+.primary {
+  justify-self: start;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

@@ -48,11 +48,16 @@ import {
   type ResearchTurn,
 } from './research-turn.js';
 
-/** The continuation's question: the original one, said to be a continuation (saved as such). */
-function continuationOf(question: string): string {
-  const prefix = $localize`:@@sweep.continuedQuestion:Continuar varredura: `;
-  return `${prefix}${question.replace(prefix, '')}`.slice(0, 2000);
-}
+const continuedPrefix = (): string =>
+  $localize`:@@sweep.continuedQuestion:Continuar varredura: `;
+
+/** A continuation's question without its label: what the reader first asked. */
+const originalQuestion = (question: string): string =>
+  question.replace(continuedPrefix(), '');
+
+/** The continuation's question as shown and saved. */
+const continuationOf = (original: string): string =>
+  `${continuedPrefix()}${original}`.slice(0, 2000);
 
 /** The server records a stopped answer's cost a moment after the request is aborted. */
 export const STOP_SETTLE_MS = 1000;
@@ -195,13 +200,18 @@ export class ResearchStore {
     const last = turns.at(-1);
     if (!topic || topic !== current || !last?.cursor) return;
     if (!canContinueSweep(last) || this.streaming()) return;
-    const question = continuationOf(last.question);
+    const original = originalQuestion(last.question);
     const history = toHistory(turns);
-    const turn = startTurn(this.nextId++, question, 'exhaustive');
+    // Shown as a continuation; it starts with the findings so far, so a stop keeps them.
+    const turn = {
+      ...startTurn(this.nextId++, continuationOf(original), 'exhaustive'),
+      cursor: last.cursor,
+    };
     this.state.update((s) => ({ ...s, turns: [...s.turns, turn] }));
+    // The model gets the question itself, without the continuation's label.
     const sweep = last.cursor;
     this.run(turn.id, topic, {
-      question,
+      question: original,
       history,
       profile: 'exhaustive',
       sweep,

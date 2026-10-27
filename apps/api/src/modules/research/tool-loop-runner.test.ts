@@ -516,7 +516,7 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, KBC-030; ADR 0013, ADR 00
     expect(llm.agentCalls[0]?.toolChoice).toBe('none');
   });
 
-  it('prices the answer call at its whole output budget', async () => {
+  it('prices the answer call at its whole output budget, and keeps the sweep when the cap blocks it', async () => {
     const budgets = researchBudgets();
     const one = { ...budgets, exhaustive: { ...budgets.exhaustive, steps: 1 } };
     // US$ 1 per million tokens: 4,000 output tokens fit a US$ 0.01 cap, 16,000 do not.
@@ -527,7 +527,12 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, KBC-030; ADR 0013, ADR 00
     );
     const events = await collectEvents(runner.run(exhaustive('ritmo')));
     expect(ofType(events, 'step')).toHaveLength(1);
-    expect(events.at(-1)).toEqual({ type: 'error', code: 'DAILY_CAP_REACHED' });
+    // The answer did not fit the cap: the coverage and a cursor with the findings stay,
+    // so "Continuar varredura" only has to write it (code review of KBC-030).
+    const done = ofType(events, 'done')[0];
+    expect(done?.coverage?.reason).toBe('spend');
+    expect(done?.sweep).toBeDefined();
+    expect(answerText(events)).toBe('');
   });
 
   it('stops cleanly with DAILY_CAP_REACHED and records what it spent (AC-13)', async () => {

@@ -7,6 +7,7 @@ import {
 } from '../../catalog/index.js';
 import { acceptsEntry, type DocFilter } from '../doc-filter.js';
 import type { TextFinder } from '../text-finder.js';
+import { defaultPlan } from './plan-tool.js';
 import { AUTHORSHIP_LABELS, oneLine } from '../tool-output.js';
 
 /**
@@ -186,6 +187,19 @@ export class SweepPlanner {
     return [...catalog.entries.values()]
       .filter((entry) => acceptsEntry(filter, entry))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+
+  /**
+   * The default plan for a topic (ADR 0021): the Mestre's documents when the question names
+   * him and the topic has any, otherwise the whole topic (architecture review of KBC-030).
+   */
+  defaultPlan(topic: string, question: string): SweepPlan {
+    const plan = defaultPlan(question);
+    const wanted = plan.target.authorship;
+    if (!wanted) return plan;
+    const entries = this.deps.catalog.get(topic)?.entries.values() ?? [];
+    const has = [...entries].some((entry) => entry.authorship === wanted);
+    return has ? plan : { ...plan, target: {} };
   }
 
   /** The labelled, fenced text of one batch, read from the vault now. */

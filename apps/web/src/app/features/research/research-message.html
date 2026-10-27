@@ -49,7 +49,7 @@
         <progress
           [value]="sweep.done"
           [max]="sweep.total"
-          [attr.aria-label]="sweep.progress"
+          [attr.aria-label]="sweep.label"
         ></progress>
         <p class="sweep-progress" role="status">{{ sweep.progress }}</p>
       </section>
@@ -79,6 +79,17 @@
           {{ stoppedAt() }}
         </p>
       </div>
+    }
+
+    @if (canContinue()) {
+      <button
+        type="button"
+        class="primary continue"
+        (click)="continued.emit()"
+        i18n="@@sweep.continue"
+      >
+        Continuar varredura
+      </button>
     }
 
     @if (turn().phase === 'error') {
@@ -207,17 +218,6 @@
           >
         }
       </p>
-    }
-
-    @if (canContinue()) {
-      <button
-        type="button"
-        class="secondary continue"
-        (click)="continued.emit()"
-        i18n="@@sweep.continue"
-      >
-        Continuar varredura
-      </button>
     }
 
     @if (canRetry()) {

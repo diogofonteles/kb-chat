@@ -8,8 +8,9 @@ import {
   PlanningTools,
   SUBSCRIPTION_CONTEXT_TOKENS,
   SweepFatalError,
-  defaultPlan,
+  TurnResearchTools,
   runSweepTurn,
+  sweepTurnHost,
   type BatchEngine,
   type SweepKit,
   type SweepTurnResult,
@@ -72,7 +73,7 @@ async function quiet(
 async function* planWithCli(
   options: CliTurnOptions,
   dialect: CliDialect,
-  { input, state }: { input: TurnInput; state: SweepState },
+  { input, state, kit }: { input: TurnInput; state: SweepState; kit: SweepKit },
 ): AsyncGenerator<ResearchEvent, SweepPlan> {
   const planned = new AbortController();
   const unwatch = stopOnAbort(input.signal, () => planned.abort());
@@ -91,7 +92,7 @@ async function* planWithCli(
     if (tools.plan) return tools.plan;
     if (!input.signal.aborted && ended.result && !ended.result.ok)
       throw cliFailure(ended.result.code);
-    return defaultPlan(input.question);
+    return kit.sweeps.defaultPlan(input.topic, input.question);
   } finally {
     unwatch();
   }
@@ -181,15 +182,18 @@ export async function* runCliSweepTurn(
   dialect: CliDialect,
   input: TurnInput,
 ): AsyncIterable<ResearchEvent> {
-  const kit = input.tools.sweepKit;
+  // The sweep needs the turn's own tools (their numbering); a stand-in has none.
+  const kit =
+    input.tools instanceof TurnResearchTools ? input.tools.sweepKit : null;
   if (!kit) {
     yield { type: 'error', code: 'INTERNAL' };
     return;
   }
   const call: CliCallContext = { options, dialect, input };
+  const startedAt = Date.now();
   const state: SweepState = { model: input.model ?? options.model, steps: 0 };
   try {
-    const sweep = yield* planAndSweep(call, { kit, state });
+    const sweep = yield* planAndSweep(call, { kit, state, startedAt });
     yield doneEvent(state, { aborted: input.signal.aborted, sweep });
   } catch (err) {
     yield input.signal.aborted
@@ -210,32 +214,35 @@ const errorCode = (err: unknown): string =>
 /** The plan (the cursor's, or one the CLI makes), then the sweep and its answer. */
 async function* planAndSweep(
   call: CliCallContext,
-  { kit, state }: { kit: SweepKit; state: SweepState },
+  {
+    kit,
+    state,
+    startedAt,
+  }: { kit: SweepKit; state: SweepState; startedAt: number },
 ): AsyncGenerator<ResearchEvent, SweepTurnResult | null> {
   const { options, dialect, input } = call;
   const plan =
     input.sweep?.plan ??
-    (yield* planWithCli(options, dialect, { input, state }));
+    (yield* planWithCli(options, dialect, { input, state, kit }));
   if (input.signal.aborted) return null;
-  return yield* runSweepTurn(sweepHost(call, kit), plan);
+  return yield* runSweepTurn(sweepHost(call, { kit, startedAt }), plan);
 }
 
-function sweepHost(call: CliCallContext, kit: SweepKit) {
+function sweepHost(
+  call: CliCallContext,
+  { kit, startedAt }: { kit: SweepKit; startedAt: number },
+) {
   const { options, dialect, input } = call;
-  const budget = (options.budgets ?? DEFAULT_BUDGETS).exhaustive;
   const answer = new AnswerStream();
-  const maxRequests = budget.sweep?.maxRequests ?? 0;
-  const minutes = budget.maxMinutes;
-  return {
-    ...kit,
-    ...input,
-    ...(input.sweep && { cursor: input.sweep }),
+  return sweepTurnHost({
+    kit,
+    input,
     engine: cliEngine(options, dialect, input),
     contextTokens: SUBSCRIPTION_CONTEXT_TOKENS,
-    deadline: minutes === null ? null : Date.now() + minutes * 60_000,
-    maxRequests: Math.min(maxRequests, input.requestBudget ?? Infinity),
+    budget: (options.budgets ?? DEFAULT_BUDGETS).exhaustive,
+    startedAt,
     requestsBefore: input.sweep ? 0 : 1,
     answer: (messages: AgentMessage[]) =>
       answerWithCli(call, { messages, answer }),
-  };
+  });
 }

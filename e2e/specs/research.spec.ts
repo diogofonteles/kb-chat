@@ -154,12 +154,12 @@ test('KBC-030: an exhaustive turn shows the estimate and the progress, sweeps th
   await expect(sweep).toHaveCount(0);
   await expect(
     answer.getByText(
-      /Cobertura \(medida pelo aplicativo\): \d+ documentos no conjunto · \d+ varridos por dentro · \d+ lidos\./,
+      /Cobertura \(medida pelo aplicativo\): \d+ documentos no conjunto · \d+ lidos por inteiro pela IA\./,
     ),
   ).toBeVisible();
   await expect(answer.getByText(/Conjunto:.*o acervo inteiro/)).toBeVisible();
   await expect(answer.locator('.steps-text')).toContainText(
-    /varreu (\d+) de \1 documentos/i,
+    /a IA analisou (\d+) de \1 documentos/i,
   );
   await expect(
     answer.getByRole('button', { name: 'Continuar varredura' }),
@@ -218,6 +218,7 @@ test('KBC-030: a sweep that stopped early says what was left and "Continuar varr
             scanned: 10,
             withHits: null,
             read: 10,
+            needed: 22,
             missing: 12,
             batches: 1,
             reason: 'requests',
@@ -240,7 +241,7 @@ test('KBC-030: a sweep that stopped early says what was left and "Continuar varr
   await expect(first.getByText('Varredura incompleta.')).toBeVisible();
   await expect(
     first.getByText(
-      /Faltaram 12 documentos: o limite de pedidos desta pesquisa acabou\./,
+      /Faltaram 12 documentos para a IA analisar: o limite de pedidos desta pesquisa acabou\./,
     ),
   ).toBeVisible();
   const asked = page.waitForRequest(
@@ -256,12 +257,14 @@ test('KBC-030: a sweep that stopped early says what was left and "Continuar varr
   };
   expect(body.profile).toBe('exhaustive');
   expect(body.sweep.after).toBe(cursor.after);
-  expect(body.question).toBe(`Continuar varredura: ${title}`);
+  // Shown as a continuation, asked as the original question.
+  expect(body.question).toBe(title);
+  await expect(page.getByText(`Continuar varredura: ${title}`)).toBeVisible();
   expect(body.history).toHaveLength(1);
   const next = page.locator('app-research-message').last();
   await expect(next.getByText(/Segundo o acervo/)).toBeVisible();
   await expect(next.locator('.steps-text')).toContainText(
-    /varreu 22 de 22 documentos/i,
+    /a IA analisou 22 de 22 documentos/i,
   );
   await expect(next.getByText('Varredura incompleta.')).toHaveCount(0);
 });

@@ -20,7 +20,7 @@ import type {
   ResearchInput,
   ResearchRunnerPort,
 } from '../../ports/research-runner.js';
-import { tokensOf, type SpendService } from '../spend/index.js';
+import { tokensForChars, tokensOf, type SpendService } from '../spend/index.js';
 import {
   EMPTY_ANSWER,
   FINAL_ANSWER_NOTE,
@@ -50,15 +50,16 @@ import {
   PLAN_STEPS,
   PLAN_SWEEP_DEFINITION,
   PLAN_SWEEP_TOOL,
-  defaultPlan,
 } from './sweep/plan-tool.js';
 import type { BatchEngine, SweepClock } from './sweep/sweep-coordinator.js';
 import {
   batchCharsFor,
   runSweepTurn,
+  sweepTurnHost,
   type SweepTurnHost,
   type SweepTurnResult,
 } from './sweep/sweep-turn.js';
+import { sweepAnswerMessages } from './sweep/sweep-prompts.js';
 import { failed, parsedArgs, type PreparedCall } from './tool-context.js';
 import type { ResearchTools } from './tools.js';
 
@@ -104,6 +105,8 @@ interface Turn {
   maxSteps: number;
   /** The profile's output, ceilings and compaction (the deep one's after an escalation). */
   budget: ProfileBudget;
+  /** When the turn started, in ms since the epoch (the sweep's ceiling counts from it). */
+  readonly startedAt: number;
   /** When the research must stop and answer (exhaustive profile), in ms since the epoch. */
   readonly deadline: number | null;
   /** The deep profile still to hand over to, while the turn may escalate. */
@@ -272,6 +275,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         ? Math.min(PLAN_STEPS, budget.steps)
         : budget.steps,
       budget,
+      startedAt: Date.now(),
       deadline: deadlineOf(budget),
       ...freshCounters(),
     };
@@ -314,7 +318,8 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   private async *planSweep(
     turn: Turn,
   ): AsyncGenerator<ResearchEvent, SweepPlan> {
-    const fallback = () => defaultPlan(turn.input.question);
+    const fallback = () =>
+      this.deps.tools.sweeps.defaultPlan(turn.input.topic, turn.input.question);
     for (;;) {
       if (turn.input.signal.aborted || this.mustAnswer(turn)) return fallback();
       this.compact(turn);
@@ -331,28 +336,23 @@ export class ToolLoopRunner implements ResearchRunnerPort {
 
   /** What the sweep borrows from the turn: tools, numbering, model, spend and ceilings. */
   private async sweepHost(turn: Turn): Promise<SweepTurnHost> {
-    const { input } = turn;
-    const budget = turn.budget.sweep ?? SWEEP;
-    return {
-      sweeps: this.deps.tools.sweeps,
-      topic: input.topic,
-      topicTitle: turn.topicTitle,
-      question: input.question,
-      history: input.history,
-      book: turn.book,
-      signal: input.signal,
-      ...(input.sweep && { cursor: input.sweep }),
-      engine: await this.batchEngine(turn, budget),
-      contextTokens: turn.engine.llm.contextTokens,
-      deadline: turn.deadline,
-      maxRequests: Math.min(
-        budget.maxRequests,
-        input.requestBudget ?? Infinity,
-      ),
+    const { input, budget } = turn;
+    const { llm } = turn.engine;
+    return sweepTurnHost({
+      kit: {
+        sweeps: this.deps.tools.sweeps,
+        book: turn.book,
+        topicTitle: turn.topicTitle,
+      },
+      input,
+      engine: await this.batchEngine(turn, budget.sweep ?? SWEEP),
+      ...(llm.contextTokens && { contextTokens: llm.contextTokens }),
+      budget,
+      startedAt: turn.startedAt,
       requestsBefore: turn.calls,
       ...(this.deps.clock && { clock: this.deps.clock }),
       answer: (messages) => this.sweepAnswer(turn, messages),
-    };
+    });
   }
 
   /** The turn's model as the sweep calls it: no tools, a batch's output, the spend guarded. */
@@ -360,13 +360,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     turn: Turn,
     budget: SweepBudget,
   ): Promise<BatchEngine> {
-    const { llm, spend } = turn.engine;
+    const { llm } = turn.engine;
     const price = await llm.price();
-    // The answer comes after the batches: its estimate stays out of their reach.
-    turn.finalReserveUsd = await spend.estimate(
-      ' '.repeat(batchCharsFor(llm.contextTokens)),
-      llm.maxOutputTokens(turn.budget.outputTokens),
-    );
+    turn.finalReserveUsd = await this.answerReserve(turn);
+    const output = llm.maxOutputTokens(budget.outputTokens);
     return {
       free: llm.billing === 'free' || (price.input === 0 && price.output === 0),
       parallel: budget.parallel,
@@ -375,7 +372,33 @@ export class ToolLoopRunner implements ResearchRunnerPort {
           ...request,
           outputTokens: budget.outputTokens,
         }),
+      // Every batch at its whole output budget, and the answer: an upper bound.
+      estimateUsd: async (chars, calls) =>
+        tokensForChars(chars) * price.input +
+        calls * output * price.output +
+        turn.finalReserveUsd,
     };
+  }
+
+  /**
+   * What the answer call may cost: its rules, the conversation so far and findings as long
+   * as one batch, at its whole output budget. The batches never spend it (code review).
+   */
+  private answerReserve(turn: Turn): Promise<number> {
+    const { llm, spend } = turn.engine;
+    const { input, topicTitle } = turn;
+    const rules = promptText(
+      sweepAnswerMessages(topicTitle, {
+        ...input,
+        findings: [],
+        partial: true,
+        cut: 0,
+      }),
+    );
+    return spend.estimate(
+      rules + ' '.repeat(batchCharsFor(llm.contextTokens)),
+      llm.maxOutputTokens(turn.budget.outputTokens),
+    );
   }
 
   private async extractBatch(

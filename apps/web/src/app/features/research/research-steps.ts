@@ -72,10 +72,19 @@ export function describeSteps(turn: ResearchTurn): string {
       ? [$localize`:@@research.deepened:aprofundou a pesquisa`]
       : []),
     ...(agentCount(turn.steps) > 0 ? [agents(agentCount(turn.steps))] : []),
-    ...(turn.coverage ? [sweptText(turn.coverage)] : []),
+    ...sweepPart(turn),
   ];
   const line = parts.join(' · ');
   return line ? line.charAt(0).toUpperCase() + line.slice(1) : '';
+}
+
+/** What the sweep's AI analyzed: from the coverage, or from the last progress of a stop. */
+function sweepPart(turn: ResearchTurn): string[] {
+  if (turn.coverage) return [sweptText(turn.coverage)];
+  const progress = turn.sweep;
+  return progress
+    ? [sweptText({ read: progress.documentsDone, needed: progress.needed })]
+    : [];
 }
 
 /** Distinct documents read, by id: a document read again counts once, two with one title twice. */

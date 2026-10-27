@@ -5,6 +5,7 @@ import type {
   SweepTarget,
 } from '@kb-chat/contracts';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
+import { formatCost } from '@features/answer/answer-format.js';
 
 /** pt-BR is the only locale of v1 (i18n skill): "2.555". */
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -48,44 +49,69 @@ export function targetText(
     : set;
 }
 
-/** Before the first batch: what the sweep will take (honest about free models, UP-02). */
+/** Before the first batch: what the sweep will take, in time or money (UP-02, SL-24). */
 export function estimateText(progress: SweepProgress): string {
-  return $localize`:@@sweep.estimate:${n(progress.documents)}:documents: documentos em ~${n(progress.batches)}:batches: lotes (~${n(progress.requests)}:requests: pedidos à IA).`;
+  const volume = $localize`:@@sweep.estimate:${n(progress.documents)}:documents: documentos em ~${n(progress.batches)}:batches: lotes (~${n(progress.requests)}:requests: pedidos à IA).`;
+  const time =
+    progress.minutes === undefined
+      ? ''
+      : $localize`:@@sweep.estimateTime: Leva pelo menos ~${n(Math.max(1, progress.minutes))}:minutes: min.`;
+  const cost =
+    progress.usd === undefined
+      ? ''
+      : $localize`:@@sweep.estimateCost: Custo de no máximo ${formatCost(progress.usd)}:usd:, dentro do seu teto diário.`;
+  return `${volume}${time}${cost}`;
 }
 
 export const FREE_MODELS_NOTE = (): string =>
-  $localize`:@@sweep.freeNote:Modelos gratuitos são menos rigorosos e mais lentos; a varredura pode levar vários minutos.`;
+  $localize`:@@sweep.freeNote:Modelos gratuitos são menos rigorosos e mais lentos.`;
 
-/** "Lote 12 de 80 · 640 de 2.555 documentos" (UP-14). */
+/** The progress bar's fixed name; its numbers are in the status text (MA-29). */
+export const PROGRESS_LABEL = (): string =>
+  $localize`:@@sweep.progressLabel:Progresso da varredura`;
+
+/** "Lote 12 de 80 · a IA analisou 412 de 1.363 documentos" (UP-14). */
 export function progressText(progress: SweepProgress): string {
-  return $localize`:@@sweep.progress:Lote ${n(progress.batchesDone)}:done: de ${n(progress.batches)}:batches: · ${n(progress.documentsDone)}:docs: de ${n(progress.documents)}:documents: documentos`;
+  return $localize`:@@sweep.progress:Lote ${n(progress.batchesDone)}:done: de ${n(progress.batches)}:batches: · ${analyzedText(progress.documentsDone, progress.needed)}:analyzed:`;
 }
 
 /**
- * The coverage line the app measured (KBC-030): never the model's. Documents with
- * occurrences only when the sweep looked for expressions.
+ * One word per count, the same everywhere (design review of KBC-030): "conferidos pelas
+ * expressões" (searched for the phrases), "com ocorrências", "analisados pela IA".
  */
+const analyzedText = (read: number, needed: number): string =>
+  $localize`:@@sweep.analyzed:a IA analisou ${n(read)}:read: de ${n(needed)}:needed: documentos`;
+
+/** The coverage line the app measured (KBC-030): never the model's. */
 export function coverageText(coverage: SweepCoverage): string {
-  const parts = [
-    $localize`:@@sweep.covSet:${n(coverage.documents)}:count: documentos no conjunto`,
-    $localize`:@@sweep.covScanned:${n(coverage.scanned)}:count: varridos por dentro`,
-    ...(coverage.withHits === null
-      ? []
+  const parts =
+    coverage.withHits === null
+      ? [
+          $localize`:@@sweep.covSet:${n(coverage.documents)}:count: documentos no conjunto`,
+          $localize`:@@sweep.covReadWhole:${n(coverage.read)}:count: lidos por inteiro pela IA`,
+        ]
       : [
+          $localize`:@@sweep.covSet:${n(coverage.documents)}:count: documentos no conjunto`,
+          $localize`:@@sweep.covScanned:${n(coverage.scanned)}:count: conferidos pelas expressões`,
           $localize`:@@sweep.covHits:${n(coverage.withHits)}:count: com ocorrências`,
-        ]),
-    $localize`:@@sweep.covRead:${n(coverage.read)}:count: lidos`,
-  ];
-  return $localize`:@@sweep.coverage:Cobertura (medida pelo aplicativo): ${parts.join(' · ')}:parts:.`;
+          $localize`:@@sweep.covAnalyzed:${n(coverage.read)}:count: analisados pela IA`,
+        ];
+  const total = coverage.continued
+    ? $localize`:@@sweep.covContinued: (somando as varreduras anteriores)`
+    : '';
+  return $localize`:@@sweep.coverage:Cobertura (medida pelo aplicativo): ${parts.join(' · ')}:parts:${total}:total:.`;
 }
 
-/** "Faltaram 1.900 documentos: o limite de pedidos desta pesquisa acabou." */
+/** "Faltaram 951 documentos para a IA analisar: o limite de pedidos desta pesquisa acabou." */
 export function missingText(missing: number, reason: SweepStopReason): string {
-  return $localize`:@@sweep.missing:Faltaram ${n(missing)}:count: documentos: ${stopReasonText(reason)}:reason:.`;
+  return $localize`:@@sweep.missing:Faltaram ${n(missing)}:count: documentos para a IA analisar: ${stopReasonText(reason)}:reason:.`;
 }
 
-/** The steps summary's part: "varreu 2.555 de 2.555 documentos". */
-export function sweptText(coverage: SweepCoverage): string {
-  const swept = coverage.documents - coverage.missing;
-  return $localize`:@@sweep.swept:varreu ${n(swept)}:swept: de ${n(coverage.documents)}:documents: documentos`;
+/** Every document analyzed, but the answer could not be written. */
+export function unansweredText(reason: SweepStopReason): string {
+  return $localize`:@@sweep.unanswered:A varredura terminou, mas a resposta não foi escrita: ${stopReasonText(reason)}:reason:.`;
 }
+
+/** The steps summary's part: "a IA analisou 412 de 1.363 documentos". */
+export const sweptText = ({ read, needed }: { read: number; needed: number }) =>
+  analyzedText(read, needed);

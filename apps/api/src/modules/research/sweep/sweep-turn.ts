@@ -5,15 +5,20 @@ import type {
   SweepCursor,
   SweepPlan,
 } from '@kb-chat/contracts';
+import { AppError } from '../../../app-error.js';
 import type { AgentMessage } from '../../../ports/llm.js';
+import type { ResearchInput } from '../../../ports/research-runner.js';
+import type { ProfileBudget } from '../limits.js';
 import { EventPipe } from '../event-pipe.js';
 import type { SourceBook } from '../source-book.js';
 import {
+  STOPPING_CODES,
   SweepCoordinator,
   type BatchEngine,
   type SweepClock,
   type SweepOutcome,
 } from './sweep-coordinator.js';
+import type { SweepKit } from './sweep-kit.js';
 import type { SweepLayout, SweepPlanner } from './sweep-planner.js';
 import { sweepAnswerMessages } from './sweep-prompts.js';
 
@@ -59,6 +64,47 @@ export interface SweepTurnHost {
   answer(messages: AgentMessage[]): AsyncIterable<ResearchEvent>;
 }
 
+/** What a runner brings to its exhaustive turn; the rest comes from the input and budget. */
+export interface SweepParts {
+  readonly kit: SweepKit;
+  readonly input: ResearchInput;
+  readonly engine: BatchEngine;
+  readonly contextTokens?: number;
+  /** The exhaustive profile's budget (time ceiling, request cap). */
+  readonly budget: ProfileBudget;
+  /** When the turn started (ms since the epoch): the time ceiling counts from it. */
+  readonly startedAt: number;
+  readonly requestsBefore: number;
+  readonly clock?: SweepClock;
+  answer(messages: AgentMessage[]): AsyncIterable<ResearchEvent>;
+}
+
+/**
+ * The sweep's host, the same for the in-API loop and the CLIs (architecture review of
+ * KBC-030): the deadline from the turn's start, the request cap from the budget and from
+ * the house's free requests.
+ */
+export function sweepTurnHost(parts: SweepParts): SweepTurnHost {
+  const { kit, input, budget } = parts;
+  const minutes = budget.maxMinutes;
+  const cap = budget.sweep?.maxRequests ?? 0;
+  return {
+    ...kit,
+    topic: input.topic,
+    question: input.question,
+    history: input.history,
+    signal: input.signal,
+    ...(input.sweep && { cursor: input.sweep }),
+    engine: parts.engine,
+    ...(parts.contextTokens && { contextTokens: parts.contextTokens }),
+    deadline: minutes === null ? null : parts.startedAt + minutes * 60_000,
+    maxRequests: Math.min(cap, input.requestBudget ?? Infinity),
+    requestsBefore: parts.requestsBefore,
+    ...(parts.clock && { clock: parts.clock }),
+    answer: (messages) => parts.answer(messages),
+  };
+}
+
 /** What the turn's `done` event carries about the sweep. */
 export interface SweepTurnResult {
   readonly coverage: SweepCoverage;
@@ -89,16 +135,43 @@ export async function* runSweepTurn(
   const { coverage, cursor } = outcome;
   const result = { coverage, cursor, batches: layout.batches.length };
   if (host.signal.aborted) return result;
-  yield* host.answer(
-    sweepAnswerMessages(host.topicTitle, {
-      question: host.question,
-      history: host.history,
-      findings: outcome.findings.lines(),
-      partial: outcome.cursor !== null,
-      cut: outcome.cut,
-    }),
-  );
+  try {
+    yield* host.answer(answerMessages(host, outcome));
+  } catch (err) {
+    return unanswered(host, { err, outcome, result });
+  }
   return result;
+}
+
+const answerMessages = (host: SweepTurnHost, outcome: SweepOutcome) =>
+  sweepAnswerMessages(host.topicTitle, {
+    question: host.question,
+    history: host.history,
+    findings: outcome.findings.lines(),
+    partial: outcome.cursor !== null,
+    cut: outcome.cut,
+  });
+
+/**
+ * The answer could not be written for a reason the reader can act on (the day's cap): the
+ * sweep's coverage still comes, with a cursor that keeps every finding, so "Continuar
+ * varredura" only has to write the answer (code review of KBC-030). Anything else fails.
+ */
+function unanswered(
+  host: SweepTurnHost,
+  {
+    err,
+    outcome,
+    result,
+  }: { err: unknown; outcome: SweepOutcome; result: SweepTurnResult },
+): SweepTurnResult {
+  const reason = err instanceof AppError ? STOPPING_CODES[err.code] : undefined;
+  if (!reason || host.signal.aborted) throw err;
+  return {
+    ...result,
+    coverage: { ...result.coverage, reason },
+    cursor: outcome.resume,
+  };
 }
 
 /** Runs every batch, streaming the estimate and the progress as `sweep` events. */

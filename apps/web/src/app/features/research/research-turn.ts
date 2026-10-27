@@ -93,6 +93,15 @@ function progressCursor(
   return { ...progress.cursor, findings };
 }
 
+/**
+ * A turn ended well with text, when stopped, or when a sweep kept its cursor without an
+ * answer (the day's cap blocked it): the coverage box says so (KBC-030).
+ */
+const endedWell = (
+  turn: ResearchTurn,
+  e: Extract<ResearchEvent, { type: 'done' }>,
+): boolean => turn.text.trim() !== '' || e.interrupted || e.sweep !== undefined;
+
 /** A turn without an exhaustive sweep (KBC-030). */
 const NO_SWEEP = { sweep: null, coverage: null, cursor: null } as const;
 
@@ -190,8 +199,8 @@ const HANDLERS: {
   // A finished answer without text is a provider failure, not an empty success.
   done: (turn, e) => ({
     ...turn,
-    phase: turn.text.trim() || e.interrupted ? 'done' : 'error',
-    error: turn.text.trim() || e.interrupted ? null : 'INTERNAL',
+    phase: endedWell(turn, e) ? 'done' : 'error',
+    error: endedWell(turn, e) ? null : 'INTERNAL',
     usd: e.usd,
     billing: e.billing,
     model: e.model,
@@ -339,7 +348,7 @@ export const replayFrom = (turn: ResearchTurn): ResearchTurn => ({
 
 /** The last turn of an unfinished sweep, once it ended: "Continuar varredura" (KBC-030). */
 export const canContinueSweep = (turn: ResearchTurn): boolean =>
-  turn.cursor !== null && turn.phase === 'done';
+  turn.cursor !== null && turn.phase !== 'streaming';
 
 export interface SourceGroup {
   readonly authorship: Authorship;

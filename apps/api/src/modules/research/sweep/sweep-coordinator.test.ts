@@ -20,6 +20,7 @@ import {
   SweepCoordinator,
   type BatchEngine,
   type SweepClock,
+  type SweepDeps,
   type SweepRequest,
 } from './sweep-coordinator.js';
 
@@ -49,6 +50,7 @@ const PLAN: SweepPlan = sweepPlanSchema.parse({
 /** A model that cites the first document of each batch; scripted failures by call. */
 class FakeEngine implements BatchEngine {
   readonly calls: string[] = [];
+  readonly starts: number[] = [];
   active = 0;
   maxActive = 0;
 
@@ -58,6 +60,9 @@ class FakeEngine implements BatchEngine {
       readonly parallel?: number;
       readonly fail?: (call: number) => Error | null;
       readonly reply?: (user: string) => string;
+      /** Records when each call started, on this clock. */
+      readonly clock?: SweepClock;
+      readonly estimateUsd?: (chars: number, calls: number) => Promise<number>;
     } = {},
   ) {}
 
@@ -69,8 +74,13 @@ class FakeEngine implements BatchEngine {
     return this.options.parallel ?? 3;
   }
 
+  get estimateUsd() {
+    return this.options.estimateUsd;
+  }
+
   async extract({ user }: { system: string; user: string }): Promise<string> {
     this.calls.push(user);
+    this.starts.push(this.options.clock?.now() ?? 0);
     const failure = this.options.fail?.(this.calls.length);
     if (failure) throw failure;
     this.active += 1;
@@ -102,11 +112,16 @@ let tools: ResearchTools;
 
 async function sweep(
   engine: BatchEngine,
-  options: Partial<SweepRequest> & { after?: string; clock?: SweepClock } = {},
+  options: Partial<SweepRequest> & {
+    after?: string;
+    clock?: SweepClock;
+    plan?: SweepPlan;
+    sweeps?: SweepDeps['sweeps'];
+  } = {},
 ) {
   tools ??= await memoryTools(new MemoryVault(corpus()));
   const layout = await tools.sweeps.layout('hermetismo', {
-    plan: PLAN,
+    plan: options.plan ?? PLAN,
     batchChars: 1_000,
     after: options.after,
   });
@@ -114,7 +129,7 @@ async function sweep(
   const events: SweepProgress[] = [];
   const coordinator = new SweepCoordinator({
     engine,
-    sweeps: tools.sweeps,
+    sweeps: options.sweeps ?? tools.sweeps,
     emit: (progress) => events.push(progress),
     clock: options.clock ?? new FakeClock(),
   });
@@ -308,5 +323,88 @@ describe('SweepCoordinator (KBC-030)', () => {
       carried: [{ id: 'raw/forjado.md', text: 'inventado' }],
     });
     expect(outcome.findings.lines().join()).not.toContain('inventado');
+  });
+
+  it('never counts a batch whose call returned after the reader stopped (code review 2)', async () => {
+    const abort = new AbortController();
+    const engine = new FakeEngine({
+      parallel: 1,
+      reply: (user) => {
+        abort.abort();
+        return `- [D1] meio texto ${user.length}`;
+      },
+    });
+    const { outcome } = await sweep(engine, { signal: abort.signal });
+    expect(outcome.coverage.read).toBe(0);
+    expect(outcome.coverage.reason).toBe('stopped');
+    expect(outcome.findings.size).toBe(0);
+  });
+
+  it('keeps the free pace on retries after refusals (code review 3)', async () => {
+    const clock = new FakeClock();
+    const engine = new FakeEngine({
+      free: true,
+      parallel: 1,
+      clock,
+      fail: (call) => (call === 1 ? new LlmCapacityError('x', '429') : null),
+    });
+    await sweep(engine, { clock });
+    const starts = [...engine.starts].sort((a, b) => a - b);
+    for (let i = 1; i < starts.length; i += 1)
+      expect((starts[i] ?? 0) - (starts[i - 1] ?? 0)).toBeGreaterThanOrEqual(
+        3_200,
+      );
+  });
+
+  it('stops every other batch when the vault fails to read one (code review 4)', async () => {
+    const engine = new FakeEngine({ parallel: 1 });
+    tools ??= await memoryTools(new MemoryVault(corpus()));
+    let reads = 0;
+    const failing: SweepDeps['sweeps'] = {
+      batchText: async (topic, batch) => {
+        reads += 1;
+        if (reads === 2) throw new Error('disk gone');
+        return tools.sweeps.batchText(topic, batch);
+      },
+    };
+    await expect(sweep(engine, { sweeps: failing })).rejects.toThrow(
+      'disk gone',
+    );
+    expect(engine.calls).toHaveLength(1);
+  });
+
+  it('estimates the time on a free model and the cost on a paid one', async () => {
+    const free = await sweep(new FakeEngine({ free: true }));
+    expect(free.events[0]?.minutes).toBe(
+      Math.ceil(((2 + DOCS + 1) * 3_200) / 60_000),
+    );
+    expect(free.events[0]?.usd).toBeUndefined();
+    const paid = await sweep(
+      new FakeEngine({
+        estimateUsd: async (chars, calls) => chars * 1e-6 + calls,
+      }),
+    );
+    expect(paid.events[0]?.usd).toBeGreaterThan(DOCS);
+    expect(paid.events[0]?.minutes).toBeUndefined();
+  });
+
+  it('counts as missing only documents the AI still has to analyze (design review)', async () => {
+    const plan = sweepPlanSchema.parse({
+      ...PLAN,
+      phrases: ['Tema 2', 'Tema 5'],
+    });
+    const { outcome } = await sweep(new FakeEngine({ parallel: 1 }), {
+      plan,
+      maxRequests: 1,
+    });
+    expect(outcome.coverage).toMatchObject({
+      documents: DOCS,
+      scanned: DOCS,
+      withHits: 2,
+      needed: 2,
+      read: 1,
+      missing: 1,
+      reason: 'requests',
+    });
   });
 });

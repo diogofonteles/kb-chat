@@ -7,7 +7,11 @@ import {
   output,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import type { DocumentRef, ResearchPlan } from '@kb-chat/contracts';
+import type {
+  DocumentRef,
+  ResearchPlan,
+  SweepCoverage,
+} from '@kb-chat/contracts';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
@@ -20,11 +24,13 @@ import { OWN_AI_OFFER, aiErrorMessage } from './research-errors.js';
 import { describeSteps, groupedSteps } from './research-steps.js';
 import {
   FREE_MODELS_NOTE,
+  PROGRESS_LABEL,
   coverageText,
   estimateText,
   missingText,
   progressText,
   targetText,
+  unansweredText,
 } from './research-sweep.js';
 import {
   canContinueSweep,
@@ -32,6 +38,13 @@ import {
   groupByAuthorship,
   type ResearchTurn,
 } from './research-turn.js';
+
+/** What a sweep left: documents not analyzed, or an answer that could not be written. */
+function leftText(coverage: SweepCoverage): string {
+  const reason = coverage.reason ?? 'stopped';
+  if (coverage.missing > 0) return missingText(coverage.missing, reason);
+  return coverage.reason ? unansweredText(coverage.reason) : '';
+}
 
 /** Who paid, as the answer's footer says it (ADR 0016, ADR 0019). */
 const PLAN_LABELS: Record<ResearchPlan, () => string> = {
@@ -124,8 +137,9 @@ export class ResearchMessage {
   /** Asking again fits a failure or a stop, never a spent daily cap (that needs Settings). */
   protected readonly canRetry = computed(() => {
     const turn = this.turn();
-    // A failed or stopped turn from the history can be asked again too (KBC-029).
-    if (!this.last()) return false;
+    // A failed or stopped turn from the history can be asked again too (KBC-029); a sweep
+    // that can go on offers that, not starting over (design review, UP-15).
+    if (!this.last() || this.canContinue()) return false;
     if (turn.phase === 'error')
       return (
         turn.error !== 'DAILY_CAP_REACHED' &&
@@ -160,6 +174,7 @@ export class ResearchMessage {
       estimate: estimateText(progress),
       free: progress.free ? FREE_MODELS_NOTE() : '',
       progress: progressText(progress),
+      label: PROGRESS_LABEL(),
       done: progress.batchesDone,
       total: Math.max(1, progress.batches),
     };
@@ -171,17 +186,14 @@ export class ResearchMessage {
     return {
       line: coverageText(coverage),
       target: targetText(coverage.target, coverage.phrases),
-      missing:
-        coverage.missing > 0
-          ? missingText(coverage.missing, coverage.reason ?? 'stopped')
-          : '',
+      missing: leftText(coverage),
     };
   });
   /** A sweep stopped on this page before its coverage came: what was left (QA F-3). */
   protected readonly stoppedAt = computed(() => {
     const { coverage, sweep, phase } = this.turn();
     if (coverage || !sweep || phase !== 'done') return '';
-    return missingText(sweep.documents - sweep.documentsDone, 'stopped');
+    return missingText(sweep.needed - sweep.documentsDone, 'stopped');
   });
   protected readonly canContinue = computed(
     () => this.last() && canContinueSweep(this.turn()),

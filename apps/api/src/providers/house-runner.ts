@@ -41,6 +41,16 @@ export interface HouseRunnerDeps {
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
 
+/**
+ * The share of the house's free requests of the day one exhaustive sweep may use (KBC-030
+ * architecture review): the account is shared by everyone the house serves, so one sweep
+ * never empties it; and never more than what is left.
+ */
+export const HOUSE_SWEEP_SHARE = 0.25;
+
+const sweepShare = (usage: FreeUsage): number =>
+  Math.min(usage.remaining, Math.ceil(usage.limit * HOUSE_SWEEP_SHARE));
+
 /** Events that show a model already answered: the turn's units are not given back. */
 const ANSWERED = new Set<ResearchEvent['type']>([
   'token',
@@ -105,9 +115,8 @@ export class HouseResearchRunner implements ResearchRunnerPort {
         : { type: 'error', code };
       return;
     }
-    // An exhaustive sweep makes no more requests than the house has left today (KBC-030).
     const budgeted = usage
-      ? { ...input, requestBudget: usage.remaining }
+      ? { ...input, requestBudget: sweepShare(usage) }
       : input;
     yield* this.relay({ input: budgeted, reservation, inner: turn.inner });
   }

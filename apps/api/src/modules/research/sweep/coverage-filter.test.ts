@@ -19,6 +19,7 @@ describe('CoverageLineFilter (KBC-030)', () => {
       '**Cobertura:** varri 2.555 documentos de autoria Mestre Laércio.',
       '> cobertura: 100%',
       '## Cobertura',
+      '',
       'Fim [2].',
     ].join('\n');
     expect(filtered(text)).toBe(
@@ -42,5 +43,19 @@ describe('CoverageLineFilter (KBC-030)', () => {
     expect(filter.push('Lista')).toBe('Lista');
     expect(filter.push('\n**Co')).toBe('\n');
     expect(filter.push('mo diz [1]')).toBe('**Como diz [1]');
+  });
+
+  it('drops numbered and table coverage lines, and a coverage heading with its section (code review 8)', () => {
+    const text = [
+      'Livros [1].',
+      '1. Cobertura: 2.555 documentos',
+      '| Cobertura | 2.555 |',
+      '## Cobertura',
+      'Varri 2.555 documentos de 2.555.',
+      'Todos lidos.',
+      '',
+      'Fim [2].',
+    ].join('\n');
+    expect(filtered(text)).toBe('Livros [1].\nFim [2].');
   });
 });
