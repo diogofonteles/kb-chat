@@ -143,6 +143,11 @@ export class PeopleService {
     );
   }
 
+  /** Puts a person back as they were, after a change the house could not follow. */
+  restore(before: StoredPerson): Promise<StoredPerson> {
+    return this.change((people) => rules.restore(people, before));
+  }
+
   /** A master's change; `by` (their e-mail) goes to the AI audit trail. */
   update(
     id: string,

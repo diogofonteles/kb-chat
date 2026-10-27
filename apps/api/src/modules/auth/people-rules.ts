@@ -238,13 +238,23 @@ export function applyPreset(
     },
     ownerEmail,
   );
+  if (!change.withPreferences) return updated;
+  // The profile's preferences replace the earlier ones, none included (KBC-028 review).
   const hasPreferences = Object.keys(preset.preferences).length > 0;
-  if (!change.withPreferences || !hasPreferences) return updated;
   const next: StoredPerson = {
     ...updated.result,
-    initialPreferences: preset.preferences,
+    initialPreferences: hasPreferences ? preset.preferences : undefined,
   };
   return { people: replace(updated.people, next), result: next };
+}
+
+/** The person as they were (same id); they must still be there. */
+export function restore(
+  people: readonly StoredPerson[],
+  before: StoredPerson,
+): PeopleChange<StoredPerson> {
+  find(people, before.id);
+  return { people: replace(people, before), result: before };
 }
 
 export function revoke(

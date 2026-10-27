@@ -143,8 +143,15 @@ async function invite(
   const chosen = deps.presets?.presetFor({ preset, profileId });
   if (chosen) assertKnownTopics(deps, chosen.topics);
   const invited = await deps.people.invite(email, inviter.email, chosen);
-  // The house follows the AI it was given (provisioned keys), as after the editor.
-  if (chosen) await deps.ai?.sync(invited, aiOf(invited));
+  // The house follows the AI it was given (provisioned keys), as after the editor; if it
+  // cannot, the invitation is undone so that inviting again works.
+  if (chosen)
+    await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
+      await deps.people
+        .revoke(invited.id)
+        .catch(() => request.log.error('could not undo a failed invitation'));
+      throw err;
+    });
   return sendEmail
     ? deps.invitations.afterInvite(invited, inviter, request.log)
     : invited;
@@ -188,22 +195,45 @@ function registerApplyProfile(app: FastifyInstance, deps: PeopleRouteDeps) {
         response: { 200: personSchema },
       },
     },
-    async (request) => {
-      const { presets } = deps;
-      if (!presets) throw new AppError('NOT_FOUND', 'Unknown invite profile');
-      const preset = presets.presetFor({ profileId: request.body.profileId });
-      const before = await deps.people.find(request.params.id);
-      if (!preset || !before) throw new AppError('NOT_FOUND', 'Not found');
-      const by = viewerOf(request).person.email;
-      assertMayChangeLent(deps, request, { before, ai: preset.ai });
-      const updated = await deps.people.applyPreset(before.id, preset, {
-        by,
-        withPreferences: !(await presets.hasSavedSettings(before)),
-      });
-      await syncAi(deps, { before, updated, by, log: request.log });
-      return view(deps, updated);
+    async (request) =>
+      view(
+        deps,
+        await applyProfile(deps, request, {
+          id: request.params.id,
+          profileId: request.body.profileId,
+        }),
+      ),
+  );
+}
+
+async function applyProfile(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  target: { readonly id: string; readonly profileId: string },
+): Promise<StoredPerson> {
+  const { profileId } = target;
+  const { presets } = deps;
+  if (!presets) throw new AppError('NOT_FOUND', 'Unknown invite profile');
+  const preset = presets.presetFor({ profileId });
+  const before = await deps.people.find(target.id);
+  if (!preset || !before) throw new AppError('NOT_FOUND', 'Not found');
+  assertKnownTopics(deps, preset.topics);
+  const by = viewerOf(request).person.email;
+  assertMayChangeLent(deps, request, { before, ai: preset.ai });
+  const updated = await deps.people.applyPreset(before.id, preset, {
+    by,
+    withPreferences: !(await presets.hasSavedSettings(before)),
+  });
+  // The whole profile goes back when the house cannot follow its AI.
+  await syncAi(deps, { before, updated, by, log: request.log }).catch(
+    async (err: unknown) => {
+      await deps.people
+        .restore(before)
+        .catch(() => request.log.error('could not undo a profile'));
+      throw err;
     },
   );
+  return updated;
 }
 
 function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {

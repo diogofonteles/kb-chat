@@ -78,6 +78,14 @@ function assertMayUpdate(
     throw new AppError('FORBIDDEN', "Subscriptions are the owner's own");
 }
 
+/** The invitation's preferences, without a default collection the person no longer sees. */
+function visibleInitial(request: FastifyRequest) {
+  const initial = viewerOf(request).person.initialPreferences;
+  if (!initial?.defaultTopic || canSee(request, initial.defaultTopic))
+    return initial;
+  return { ...initial, defaultTopic: undefined };
+}
+
 /** The body was read, so only the response tells that the client went away. */
 function abortOnDisconnect(reply: FastifyReply): AbortSignal {
   const abort = new AbortController();
@@ -97,10 +105,7 @@ function settingsRead(app: FastifyInstance, options: SettingsRouteOptions) {
       schema: { response: { 200: settingsViewSchema } },
     },
     async (request) =>
-      settings.view(
-        principalOf(request),
-        viewerOf(request).person.initialPreferences,
-      ),
+      settings.view(principalOf(request), visibleInitial(request)),
   );
 }
 
@@ -121,7 +126,7 @@ function settingsUpdate(app: FastifyInstance, options: SettingsRouteOptions) {
       return settings.update(
         principalOf(request),
         request.body,
-        viewerOf(request).person.initialPreferences,
+        visibleInitial(request),
       );
     },
   );

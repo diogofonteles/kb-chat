@@ -39,6 +39,8 @@ const withDefault = (
 export class InviteProfilesService {
   private document: ProfilesDocument = { version: 1, profiles: [] };
   private writing: Promise<unknown> = Promise.resolve();
+  /** An unreadable file is never overwritten: someone fixes it first (it holds the profiles). */
+  private invalid = false;
 
   constructor(private readonly deps: InviteProfilesDeps) {}
 
@@ -46,8 +48,11 @@ export class InviteProfilesService {
     const parsed = documentSchema.safeParse(
       (await this.deps.store.read()) ?? {},
     );
-    if (!parsed.success)
-      this.deps.warn?.('invite-profiles.json is invalid; ignored');
+    this.invalid = !parsed.success;
+    if (this.invalid)
+      this.deps.warn?.(
+        'invite-profiles.json is invalid; profiles are off and the file is kept as it is',
+      );
     this.document = parsed.success ? parsed.data : { version: 1, profiles: [] };
   }
 
@@ -114,6 +119,10 @@ export class InviteProfilesService {
   private change(
     apply: (profiles: readonly InviteProfile[]) => InviteProfile[],
   ): Promise<void> {
+    if (this.invalid)
+      return Promise.reject(
+        new AppError('INTERNAL', 'invite-profiles.json is invalid'),
+      );
     const run = this.writing.then(async () => {
       const next: ProfilesDocument = {
         version: 1,
