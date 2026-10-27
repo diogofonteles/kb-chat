@@ -95,7 +95,7 @@ const TITLE_MAX = 2000;
 /** Which conversation is on screen and since when (kept across saves of the same one). */
 interface ConversationMeta {
   readonly id: string;
-  /** Set when its first question gets an outcome; a restored one keeps its own. */
+  /** Set when its first question is saved; a restored one keeps its own. */
   readonly createdAt: string | null;
 }
 
@@ -104,14 +104,16 @@ const freshConversation = (): ConversationMeta => ({
   createdAt: null,
 });
 
-/** The history entry for the messages on screen; null until a question has an outcome. */
+/**
+ * The history entry for the messages on screen, from the first question on (KBC-029: it is in
+ * the history as soon as it is sent; its result count comes when the search answers).
+ */
 function toConversation(
   meta: ConversationMeta,
   messages: readonly ChatMessage[],
 ): SearchConversation | null {
   const first = messages[0];
-  if (!first || messages.every((message) => message.status === 'loading'))
-    return null;
+  if (!first) return null;
   const now = new Date().toISOString();
   return {
     kind: 'search',
@@ -175,6 +177,11 @@ export class ChatStore {
       tap((messages) => this.remember(messages)),
     ),
     { initialValue: [] as readonly ChatMessage[] },
+  );
+
+  /** A search of the conversation on screen is running ("pesquisando…" in the history, KBC-029). */
+  readonly searching = computed(() =>
+    this.messages().some((message) => message.status === 'loading'),
   );
 
   /** Id of the conversation on screen in the history (KBC-005 BR-1). */

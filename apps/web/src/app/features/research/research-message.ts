@@ -114,7 +114,8 @@ export class ResearchMessage {
   /** Asking again fits a failure or a stop, never a spent daily cap (that needs Settings). */
   protected readonly canRetry = computed(() => {
     const turn = this.turn();
-    if (!this.last() || turn.restored) return false;
+    // A failed or stopped turn from the history can be asked again too (KBC-029).
+    if (!this.last()) return false;
     if (turn.phase === 'error')
       return (
         turn.error !== 'DAILY_CAP_REACHED' &&

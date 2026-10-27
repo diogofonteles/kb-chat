@@ -11,7 +11,11 @@ import {
   type SearchConversation,
 } from '@kb-chat/contracts';
 import { aSearchConversation } from '../../testing/fake-conversations.js';
-import { HistoryStore, RETRY_FIRST_MS } from './history-store.js';
+import {
+  HistoryStore,
+  POLL_PENDING_MS,
+  RETRY_FIRST_MS,
+} from './history-store.js';
 import { LEGACY_HISTORY_KEY } from './legacy-history.js';
 import { PENDING_SAVES_KEY } from './pending-saves.js';
 
@@ -272,5 +276,70 @@ describe('HistoryStore migration of the old browser history', () => {
     const { http } = createStore();
     http.expectOne(LIST).flush({ items: [] });
     expect(localStorage.getItem(LEGACY_HISTORY_KEY)).toBeNull();
+  });
+
+  describe('KBC-029: conversations whose research is running', () => {
+    afterEach(() => vi.useRealTimers());
+
+    const research = (status?: 'pending'): Conversation => ({
+      kind: 'research',
+      id: '2b0f4a52-8a8b-4b0e-9a55-0d1b5c2b3c4d',
+      topic: 'hermetismo',
+      title: 'lei do ritmo',
+      createdAt: '2026-10-27T09:00:00.000Z',
+      updatedAt: '2026-10-27T09:00:00.000Z',
+      turns: [
+        {
+          id: '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4',
+          question: 'lei do ritmo',
+          answer: status ? '' : 'Tudo flui [1].',
+          sources: [],
+          steps: 1,
+          usd: 0,
+          billing: 'per-token',
+          model: 'm',
+          interrupted: false,
+          ...(status ? { status } : {}),
+          at: '2026-10-27T09:00:00.000Z',
+        },
+      ],
+    });
+
+    it('checks a pending one every few seconds until it ends, in place', async () => {
+      vi.useFakeTimers();
+      const running = research('pending');
+      const other = aSearchConversation();
+      const { store, http } = createStore();
+      http
+        .expectOne(LIST)
+        .flush({ items: [running, other].map(summarizeConversation) });
+      await vi.advanceTimersByTimeAsync(0);
+      TestBed.tick();
+      expect(store.conversations()[0]?.status).toBe('pending');
+      vi.advanceTimersByTime(POLL_PENDING_MS);
+      http.expectOne(one(running.id)).flush(running);
+      expect(store.conversations()[0]?.status).toBe('pending');
+      vi.advanceTimersByTime(POLL_PENDING_MS);
+      http.expectOne(one(running.id)).flush(research());
+      TestBed.tick();
+      expect(store.conversations().map((c) => [c.id, c.status])).toEqual([
+        [running.id, undefined],
+        [other.id, undefined],
+      ]);
+      vi.advanceTimersByTime(POLL_PENDING_MS * 3);
+      http.expectNone(one(running.id));
+    });
+
+    it('does not check when nothing is pending', async () => {
+      vi.useFakeTimers();
+      const { http } = createStore();
+      http
+        .expectOne(LIST)
+        .flush({ items: [summarizeConversation(research())] });
+      await vi.advanceTimersByTimeAsync(0);
+      TestBed.tick();
+      vi.advanceTimersByTime(POLL_PENDING_MS * 2);
+      http.expectNone(() => true);
+    });
   });
 });

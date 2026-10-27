@@ -17,7 +17,12 @@ import { registerErrorHandler } from './error-handler.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
 import { DocumentsService, documentRoutes } from './modules/documents/index.js';
-import { researchRoutes } from './modules/research/index.js';
+import {
+  LiveTurns,
+  TURN_CEILING_MS,
+  researchRoutes,
+  type ResearchRouteOptions,
+} from './modules/research/index.js';
 import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
 import { searchRoutes } from './modules/search/index.js';
@@ -87,6 +92,9 @@ import {
   type ResearchAgent,
 } from './research-agent-factory.js';
 
+/** On shutdown, how long the running research turns get to record how they ended. */
+const TURN_SAVE_GRACE_MS = 5_000;
+
 /** The owner's principal: the alias of the data written before logins (ADR 0008). */
 export const OWNER = OWNER_PRINCIPAL;
 
@@ -149,6 +157,23 @@ type FullDeps = AppDeps & {
   conversations: ConversationStorePort;
 };
 
+/** The runner of a person's turn: a fixed model in tests, else the provider in Settings. */
+function researchRunnerOf(deps: FullDeps) {
+  const { ai, agent, llm } = deps;
+  return (
+    principal: string,
+    profile: ResearchProfile = 'fast',
+  ): ResearchRunnerPort =>
+    llm
+      ? agent.perTokenRunner(llm, spendScopeOf(deps, principal))
+      : ai.registry.researchRunner(principal, profile);
+}
+
+const spendScopeOf = (deps: FullDeps, principal: string) => ({
+  principal,
+  dailyCapUsd: () => deps.ai.registry.dailyCapUsd(principal),
+});
+
 /**
  * The research agent (ADR 0006) with the runner of the current provider, asked per turn
  * (ADR 0007), and the spend controls it shares with the side panel: per-token turns check
@@ -157,31 +182,29 @@ type FullDeps = AppDeps & {
 async function registerResearch(
   app: FastifyInstance,
   deps: FullDeps,
+  recording: Pick<ResearchRouteOptions, 'turns' | 'journal'>,
 ): Promise<void> {
-  const { ai, agent, ledger, catalog, llm } = deps;
-  const scopeOf = (principal: string) => ({
-    principal,
-    dailyCapUsd: () => ai.registry.dailyCapUsd(principal),
-  });
-  const runner = (
-    principal: string,
-    profile: ResearchProfile = 'fast',
-  ): ResearchRunnerPort =>
-    llm
-      ? agent.perTokenRunner(llm, scopeOf(principal))
-      : ai.registry.researchRunner(principal, profile);
+  const { ai, ledger, catalog, llm } = deps;
+  const runner = researchRunnerOf(deps);
   const spendFor = (principal: string) =>
     new SpendService({
       llm: llm ?? ai.registry.llm(principal),
       ledger,
-      ...scopeOf(principal),
+      ...spendScopeOf(deps, principal),
       configured: () => runner(principal).configured(),
     });
   await app.register(
     spendRoutes({ serviceFor: spendFor, ledger, people: () => spenders(deps) }),
   );
   const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
-  await app.register(researchRoutes({ runner, hasTopic }));
+  await app.register(
+    researchRoutes({
+      runner,
+      hasTopic,
+      ratePerMinute: deps.config.RESEARCH_RATE_LIMIT,
+      ...recording,
+    }),
+  );
 }
 
 /** Everyone who has signed in, with the principal their spend is kept under. */
@@ -224,7 +247,15 @@ async function registerRoutes(
 ): Promise<void> {
   const { config, vault, catalog } = deps;
   await registerSearch(app, deps);
-  await registerResearch(app, deps);
+  // Recorded research turns run apart from their request (KBC-029) and land in the history.
+  const turns = new LiveTurns();
+  const conversations = new ConversationsService({
+    store: deps.conversations,
+    isLive: (principal, turnId) => turns.isLive(principal, turnId),
+    ceilingMs: TURN_CEILING_MS,
+  });
+  app.addHook('onClose', () => turns.close(TURN_SAVE_GRACE_MS));
+  await registerResearch(app, deps, { turns, journal: conversations });
   const documents = new DocumentsService({
     catalog,
     vault,
@@ -232,7 +263,6 @@ async function registerRoutes(
   });
   await app.register(documentRoutes(documents));
   await app.register(usageRoutes({ catalog, log: deps.usage }));
-  const conversations = new ConversationsService({ store: deps.conversations });
   await app.register(conversationRoutes(conversations));
   await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);

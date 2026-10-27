@@ -34,6 +34,8 @@ export interface AnswerSegment {
 /** One question and the agent's answer, as shown in the "Pesquisa com IA" thread. */
 export interface ResearchTurn {
   readonly id: number;
+  /** The turn's id in the history (KBC-029); "Tentar de novo" keeps it. */
+  readonly turnId: string;
   readonly question: string;
   readonly phase: 'streaming' | 'done' | 'error';
   /** The answer: the segments shown and not retracted, joined. */
@@ -68,10 +70,12 @@ export interface ResearchTurn {
 export function startTurn(
   id: number,
   question: string,
-  profile: ResearchProfile | null = null,
+  options: { profile?: ResearchProfile | null; turnId?: string } = {},
 ): ResearchTurn {
+  const { profile = null, turnId = crypto.randomUUID() } = options;
   return {
     id,
+    turnId,
     question,
     profile,
     phase: 'streaming',
@@ -185,10 +189,6 @@ export function applyEvent(
 export const isFinished = (turn: ResearchTurn): boolean =>
   turn.phase === 'done' && turn.text.trim().length > 0;
 
-/** A turn that goes to the history: every finished one, also one stopped before any text. */
-export const isSaved = (turn: ResearchTurn): boolean =>
-  turn.phase === 'done' && (turn.interrupted || turn.text.trim().length > 0);
-
 const MAX_ANSWER_CHARS = 20_000;
 
 /** The previous questions and answers (text only, BR-4), the most recent ones within the cap. */
@@ -210,8 +210,17 @@ export function citedSources(turn: ResearchTurn): AnswerSource[] {
   return turn.sources.filter((source) => cited.has(source.n));
 }
 
+/** How the history keeps a turn's phase (KBC-029): pending, failed with its code, or ended. */
+function savedStatusOf(turn: ResearchTurn): Partial<SavedResearchTurn> {
+  if (turn.phase === 'streaming') return { status: 'pending' };
+  if (turn.phase === 'error')
+    return { status: 'failed', error: turn.error ?? 'INTERNAL' };
+  return {};
+}
+
 export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
   return {
+    id: turn.turnId,
     question: turn.question,
     answer: turn.text,
     sources: [...turn.sources],
@@ -223,18 +232,30 @@ export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
     ...(turn.escalated ? { escalated: true } : {}),
     ...(turn.profile ? { profile: turn.profile } : {}),
     ...(turn.plan ? { plan: turn.plan } : {}),
+    ...savedStatusOf(turn),
     at: turn.at,
   };
 }
 
+const PHASES: Record<
+  NonNullable<SavedResearchTurn['status']> | 'ended',
+  ResearchTurn['phase']
+> = { pending: 'streaming', failed: 'error', ended: 'done' };
+
+/**
+ * A turn from the history. A pending one (KBC-029) comes back streaming, to be followed
+ * again; a failed one with its error, so "Tentar de novo" can ask it again.
+ */
 export function fromSavedTurn(
   id: number,
   saved: SavedResearchTurn,
 ): ResearchTurn {
+  const phase = PHASES[saved.status ?? 'ended'];
   return {
     id,
+    turnId: saved.id ?? crypto.randomUUID(),
     question: saved.question,
-    phase: 'done',
+    phase,
     text: saved.answer,
     segments: [{ segment: 0, text: saved.answer }],
     sources: saved.sources,
@@ -248,12 +269,24 @@ export function fromSavedTurn(
     plan: saved.plan ?? null,
     remaining: null,
     profile: saved.profile ?? null,
-    error: null,
+    error: phase === 'error' ? toResearchErrorCode(saved.error ?? '') : null,
     errorLimit: null,
     at: saved.at,
-    restored: true,
+    // A pending turn is still to be followed: its answer is announced when it arrives.
+    restored: phase !== 'streaming',
   };
 }
+
+/** A followed turn replays from its start (KBC-029): what was shown so far is cleared. */
+export const replayFrom = (turn: ResearchTurn): ResearchTurn => ({
+  ...turn,
+  phase: 'streaming',
+  text: '',
+  segments: [],
+  sources: [],
+  steps: [],
+  stepCount: 0,
+});
 
 export interface SourceGroup {
   readonly authorship: Authorship;

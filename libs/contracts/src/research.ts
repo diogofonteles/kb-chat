@@ -40,12 +40,27 @@ export type ModelProfile = (typeof MODEL_PROFILES)[number];
 export const modelProfileOf = (profile: ResearchProfile): ModelProfile =>
   profile === 'fast' ? 'fast' : 'deep';
 
-export const researchRequestSchema = z.strictObject({
-  question: z.string().trim().min(1).max(2000),
-  history: z.array(researchTurnSchema).max(MAX_HISTORY_TURNS).default([]),
-  profile: researchProfileSchema.default('fast'),
-});
+/**
+ * `conversationId` and `turnId` (KBC-029, both or neither): the server records the turn in
+ * that conversation as it runs, and the turn goes on when the page goes away.
+ */
+export const researchRequestSchema = z
+  .strictObject({
+    question: z.string().trim().min(1).max(2000),
+    history: z.array(researchTurnSchema).max(MAX_HISTORY_TURNS).default([]),
+    profile: researchProfileSchema.default('fast'),
+    conversationId: z.uuid().optional(),
+    turnId: z.uuid().optional(),
+  })
+  .refine(
+    (request) =>
+      (request.conversationId === undefined) === (request.turnId === undefined),
+    { error: 'conversationId and turnId go together' },
+  );
 export type ResearchRequest = z.input<typeof researchRequestSchema>;
+
+/** The wall-clock ceiling of a recorded research turn (KBC-029): past it, it is stopped. */
+export const RESEARCH_TURN_MAX_MINUTES = 60;
 
 /** What the agent is doing, shown as a discreet line while it works (ADR 0006). */
 export const researchStepSchema = z.object({

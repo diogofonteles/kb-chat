@@ -168,6 +168,8 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 | Chave recusada, CLI sem login, provedor fora | A mensagem do caso, com o que fazer (⚙ Configurações ou o login no terminal) | Tentar de novo |
 | Erro do modelo ou timeout | "Não consegui gerar a resposta agora." | Tentar de novo |
 | Interrompida | Texto parcial + "(interrompida)" e o aviso de custo parcial; antes do primeiro texto, "Resposta interrompida antes de começar." sem aviso de custo. Fica no histórico nos dois casos. | Tentar de novo |
+| Recarregada no meio (KBC-029) | A conversa volta sozinha (mesma aba), com a pergunta e "Parar"; a resposta continua chegando, do começo, e termina como de costume. Fechar a aba ou abrir outra conversa não para a pesquisa: ela termina e entra no histórico. Só "Parar" para. | Parar |
+| Aberta do histórico depois de falhar ou parar (KBC-029) | O turno como ficou ("Não consegui gerar a resposta agora.", "(interrompida)") | Tentar de novo (pergunta de novo no lugar) |
 
 ---
 
@@ -180,6 +182,7 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 
 - **+ Nova conversa** e o **histórico completo**, guardado pela API local neste computador e rotulado "salvo no servidor": todas as conversas das duas visões, sem limite (KBC-005 BR-1, emenda 2026-10-24). Restaurar uma conversa com IA mostra as respostas salvas sem chamar a IA.
 - Uma conversa que ainda não chegou à API fica guardada no navegador e é reenviada sozinha; enquanto isso, a lateral avisa "Ainda não consegui salvar uma conversa no histórico…".
+- **Desde o envio (KBC-029):** a conversa entra no topo do histórico, selecionada, no instante em que a pergunta é enviada (busca e pesquisa com IA; título = a primeira pergunta). A linha de meta diz como ela está, sempre em texto (nunca só cor): "· pesquisando…" com um pequeno spinner (parado com `prefers-reduced-motion`), "· interrompida" ou "· falhou" (cor de perigo). Uma pesquisa que roda no servidor e não está na tela é conferida a cada 5 s até terminar; um turno que o servidor não roda mais aparece como "interrompida", nunca com spinner para sempre.
 - **Acervo ▾**: lista de `kb topic list` com a contagem de documentos. Trocar de acervo inicia uma conversa nova (aviso inline, sem modal).
 - **Tema**: "Automático (claro/escuro)" · "Claro" · "Escuro" · "Esotérico", lembrado no navegador.
 - **Gasto com IA hoje: US$ 0,03 de US$ 1,00** (UP-02).

@@ -118,4 +118,20 @@ describe('research contracts', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('KBC-029: takes the conversation and turn ids together, or neither', () => {
+    const conversationId = '6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e';
+    const turnId = '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4';
+    expect(
+      researchRequestSchema.parse({ question: 'x', conversationId, turnId }),
+    ).toMatchObject({ conversationId, turnId });
+    expect(
+      researchRequestSchema.safeParse({ question: 'x', conversationId })
+        .success,
+    ).toBe(false);
+    expect(
+      researchRequestSchema.safeParse({ question: 'x', turnId: 'nope' })
+        .success,
+    ).toBe(false);
+  });
 });

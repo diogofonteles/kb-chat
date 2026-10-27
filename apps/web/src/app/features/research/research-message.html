@@ -134,9 +134,12 @@
         </div>
       }
       <p class="footer">
-        <span i18n="@@ai.disclaimer"
-          >Resposta gerada por IA a partir do acervo; confira nas fontes.</span
-        >
+        @if (turn().text) {
+          <span i18n="@@ai.disclaimer"
+            >Resposta gerada por IA a partir do acervo; confira nas
+            fontes.</span
+          >
+        }
         @if (planLabel()) {
           <span>{{ planLabel() }}</span>
         }

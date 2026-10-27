@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   AgentChunk,
   AgentLlmPort,
@@ -35,6 +36,8 @@ export interface StubLlmOptions {
   readonly script?: readonly StubReply[];
   /** Cost reported per agent call; default: US$ 1 per million tokens. */
   readonly usdPerCall?: number;
+  /** How its turns are paid; default per token (a subscription in tests of that path). */
+  readonly billing?: AgentLlmPort['billing'];
   /** The model name it reports; default "stub/model". */
   readonly model?: string;
   /** What the forced last call (toolChoice "none") writes; default: an answer citing [n]. */
@@ -69,6 +72,28 @@ function delegateReply(question: string): StubReply {
 }
 
 const DEFAULT_ANSWER = 'Segundo o acervo, a natureza é sétupla [1].';
+
+/**
+ * E2E hooks of the stub (KBC-029), in the question: "[lento]" makes each agent call wait
+ * STUB_SLOW_CALL_MS (a turn long enough to reload or stop), "[falha]" makes the call fail.
+ */
+export const STUB_SLOW_MARKER = '[lento]';
+export const STUB_FAIL_MARKER = '[falha]';
+export const STUB_SLOW_CALL_MS = 1500;
+
+async function honorMarkers(question: string, signal: AbortSignal) {
+  if (question.includes(STUB_SLOW_MARKER))
+    await pause(STUB_SLOW_CALL_MS, signal);
+  if (question.includes(STUB_FAIL_MARKER))
+    throw new Error('stub model failure');
+}
+
+const questionOf = (messages: AgentHistory): string =>
+  messages[lastUserIndex(messages)]?.content ?? '';
+
+/** Waits, or less when the turn is stopped meanwhile. */
+const pause = (ms: number, signal: AbortSignal): Promise<void> =>
+  sleep(ms, undefined, { signal }).catch(() => undefined);
 /** A query no document contains, so the default script has to search again (AC-1). */
 export const STUB_NONSENSE_QUERY = 'xqzw kplvm';
 
@@ -142,7 +167,7 @@ function finalText(messages: AgentHistory): string {
  */
 export class StubLlmAdapter implements AgentLlmPort {
   readonly model: string;
-  readonly billing = 'per-token' as const;
+  readonly billing: AgentLlmPort['billing'];
   /** Messages of the last call, calls made and tokens handed out, for assertions. */
   lastMessages: readonly AgentMessage[] = [];
   /** Options of every agent call, for assertions (toolChoice, maxTokens). */
@@ -160,6 +185,7 @@ export class StubLlmAdapter implements AgentLlmPort {
 
   constructor(private readonly options: StubLlmOptions = {}) {
     this.model = options.model ?? 'stub/model';
+    this.billing = options.billing ?? 'per-token';
   }
 
   configured(): boolean {
@@ -211,6 +237,7 @@ export class StubLlmAdapter implements AgentLlmPort {
       await new Promise((resolve) =>
         setTimeout(resolve, this.options.callDelayMs),
       );
+    await honorMarkers(questionOf(messages), options.signal);
     const reply = this.replyTo(messages, tools, options);
     if ('text' in reply) {
       yield* this.words(reply.text, messages, options);

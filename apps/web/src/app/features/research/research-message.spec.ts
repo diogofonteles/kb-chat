@@ -348,8 +348,17 @@ describe('ResearchMessage', () => {
       screen.getByText('Resposta interrompida antes de começar.'),
     ).toBeTruthy();
     expect(screen.queryByText(/O custo do que já foi processado/)).toBeNull();
+    // No answer, so no "Resposta gerada por IA…" notice (KBC-029 review).
+    expect(screen.queryByText(/Resposta gerada por IA/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     expect(view.retried).toHaveBeenCalledOnce();
+  });
+
+  it('offers "Tentar de novo" on a failed turn brought back from the history (KBC-029)', async () => {
+    await renderMessage(
+      aTurn({ phase: 'error', text: '', error: 'INTERNAL', restored: true }),
+    );
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
   });
 
   it('uses the AI wording for the rate limit and marks a stopped answer', async () => {

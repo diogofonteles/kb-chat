@@ -7,7 +7,11 @@ import {
   linkedSignal,
   signal,
 } from '@angular/core';
-import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  rxResource,
+  takeUntilDestroyed,
+  toObservable,
+} from '@angular/core/rxjs-interop';
 import {
   summarizeConversation,
   type Conversation,
@@ -15,14 +19,18 @@ import {
 } from '@kb-chat/contracts';
 import { ConversationsApi } from '@core/api/conversations-api.js';
 import {
+  EMPTY,
   Subject,
   catchError,
   concat,
   concatMap,
+  exhaustMap,
+  forkJoin,
   map,
   of,
   switchMap,
   tap,
+  timer,
   toArray,
   type Observable,
 } from 'rxjs';
@@ -36,6 +44,8 @@ import { PendingSaves } from './pending-saves.js';
 /** First retry of a failed save; each new failure doubles it, up to the maximum. */
 export const RETRY_FIRST_MS = 2_000;
 const RETRY_MAX_MS = 60_000;
+/** How often the history checks a conversation whose research is running (KBC-029). */
+export const POLL_PENDING_MS = 5_000;
 
 interface SaveResult {
   readonly conversation: Conversation;
@@ -141,6 +151,51 @@ export class HistoryStore {
       )
       .subscribe((result) => this.settle(result));
     inject(DestroyRef).onDestroy(() => clearTimeout(this.retryTimer));
+    this.watchRunning();
+  }
+
+  /**
+   * A research that runs on the server (KBC-029, also one left by another page) shows as
+   * "pesquisando…" until it ends: its conversation is read again every few seconds and its
+   * entry updated in place once it answered, failed or was interrupted.
+   */
+  private watchRunning(): void {
+    const running = computed(() =>
+      this.summaries()
+        .filter((summary) => summary.status === 'pending')
+        .map((summary) => summary.id)
+        .join(' '),
+    );
+    toObservable(running)
+      .pipe(
+        switchMap((ids) =>
+          ids
+            ? timer(POLL_PENDING_MS, POLL_PENDING_MS).pipe(
+                exhaustMap(() =>
+                  forkJoin(ids.split(' ').map((id) => this.peek(id))),
+                ),
+              )
+            : EMPTY,
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((read) => this.settleRunning(read));
+  }
+
+  private peek(id: string): Observable<Conversation | null> {
+    return this.api.get(id).pipe(catchError(() => of(null)));
+  }
+
+  private settleRunning(read: readonly (Conversation | null)[]): void {
+    const ended = read
+      .filter((c): c is Conversation => c !== null)
+      .map(summarizeConversation)
+      .filter((summary) => summary.status !== 'pending');
+    if (ended.length === 0) return;
+    const byId = new Map(ended.map((summary) => [summary.id, summary]));
+    this.summaries.update((list) =>
+      list.map((summary) => byId.get(summary.id) ?? summary),
+    );
   }
 
   /** Shows the conversation at the top right away and saves it on the server. */
