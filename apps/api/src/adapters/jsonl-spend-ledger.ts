@@ -14,6 +14,8 @@ const spendEntrySchema = z.object({
   outputTokens: z.number(),
   usd: z.number().nonnegative(),
   interrupted: z.boolean(),
+  /** A lent subscription's turn (KBC-024). */
+  billing: z.literal('subscription').optional(),
 });
 
 /** Parses spend.jsonl, skipping lines that are not valid entries. */

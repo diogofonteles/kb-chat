@@ -182,7 +182,14 @@ export class SettingsStore {
    * mode picked in the side panel or the question box stays (KBC-005 BR-3).
    */
   private applyUnchosen(view: SettingsView): void {
-    if (!view.exists) return;
+    if (!view.exists) {
+      // Before the first save, the invitation's theme (KBC-028) shows while this browser
+      // keeps the automatic one.
+      const { theme } = view.preferences;
+      if (theme !== 'auto' && this.themes.theme() === 'auto')
+        this.themes.set(theme);
+      return;
+    }
     if (this.readStored(THEME_KEY) === null)
       this.themes.set(view.preferences.theme);
     if (this.readStored(MODE_KEY) === null)

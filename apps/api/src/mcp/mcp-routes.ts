@@ -36,6 +36,35 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 export const isLoopbackRequest = (request: FastifyRequest): boolean =>
   LOOPBACK.has(request.socket.remoteAddress ?? '');
 
+export interface McpRouteOptions {
+  /** Addresses besides loopback allowed to call (the Codex sandbox, ADR 0020); still by token. */
+  readonly peers?: readonly string[];
+}
+
+/** IPv4 peers may arrive mapped (::ffff:a.b.c.d) on a dual-stack socket. */
+const unmapped = (address: string): string => address.replace(/^::ffff:/, '');
+
+/**
+ * The Codex sandbox (ADR 0020) may call only the MCP routes: from a peer address every other
+ * route answers 404, so a prompt-injected turn cannot reach sign-in, codes or any API route.
+ */
+export function peerOnlyMcp(peers: readonly string[]) {
+  const known = new Set(peers);
+  return async (request: FastifyRequest): Promise<void> => {
+    if (!known.has(unmapped(request.socket.remoteAddress ?? ''))) return;
+    if (!request.url.startsWith('/mcp/'))
+      throw new AppError('NOT_FOUND', 'Not found');
+  };
+}
+
+/** Loopback, or one of the configured peers (by socket address, never a header). */
+const allowedCaller = (peers: readonly string[]) => {
+  const known = new Set(peers);
+  return (request: FastifyRequest): boolean =>
+    isLoopbackRequest(request) ||
+    known.has(unmapped(request.socket.remoteAddress ?? ''));
+};
+
 function tokenOf(request: FastifyRequest): string | undefined {
   const parsed = params.safeParse(request.params);
   return parsed.success ? parsed.data.token : bearerToken(request);
@@ -47,10 +76,11 @@ function tokenOf(request: FastifyRequest): string | undefined {
  * The token comes in the path or as a bearer header.
  */
 export const mcpRoutes =
-  (turns: McpTurnRegistry): FastifyPluginAsync =>
+  (turns: McpTurnRegistry, options: McpRouteOptions = {}): FastifyPluginAsync =>
   async (app) => {
+    const allowed = allowedCaller(options.peers ?? []);
     const handler = async (request: FastifyRequest, reply: FastifyReply) => {
-      const token = isLoopbackRequest(request) ? tokenOf(request) : undefined;
+      const token = allowed(request) ? tokenOf(request) : undefined;
       const turn = token === undefined ? undefined : turns.get(token);
       if (!turn) throw new AppError('NOT_FOUND', 'Unknown research turn');
       const server = createKbMcpServer(turn.tools, turn.hooks);

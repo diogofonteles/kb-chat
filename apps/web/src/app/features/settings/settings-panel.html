@@ -61,7 +61,7 @@
             }
           </p>
         }
-        <app-ai-status-card />
+        <app-ai-status-card (configureOwn)="focusOptions()" />
         <p class="lead" i18n="@@settings.aiLead">
           Escolha quem responde na Pesquisa com IA. Vale para a próxima
           resposta, sem reiniciar nada.
@@ -121,6 +121,9 @@
         >
           Preferências
         </h3>
+        @if (!ownAi()) {
+          <app-ai-status-card [canConfigureOwn]="false" />
+        }
         @if (preferences(); as current) {
           <app-preferences-form
             [preferences]="current"

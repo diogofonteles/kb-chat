@@ -9,7 +9,7 @@ import {
 } from '../providers/provider-catalog.js';
 import { LlmCapacityError, LlmKeyRejectedError } from '../ports/llm-errors.js';
 import { DisabledLlm } from './disabled-llm.js';
-import { JsonlSpendLedger } from './jsonl-spend-ledger.js';
+import { JsonlSpendLedger, parseSpendLedger } from './jsonl-spend-ledger.js';
 import { MemorySpendLedger } from './memory-spend-ledger.js';
 import {
   OpenRouterAdapter,
@@ -370,6 +370,22 @@ describe('spend ledgers', () => {
     expect(
       await new JsonlSpendLedger(join(file, 'missing')).spentToday('owner'),
     ).toBe(0);
+  });
+
+  it('keeps the mark of a lent subscription’s turn when read back (KBC-024)', () => {
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      principal: 'guest',
+      model: 'sonnet',
+      inputTokens: 0,
+      outputTokens: 0,
+      usd: 0,
+      interrupted: false,
+      billing: 'subscription',
+    });
+    expect(parseSpendLedger(line)).toEqual([
+      expect.objectContaining({ billing: 'subscription' }),
+    ]);
   });
 
   it('keeps the same rules in memory', async () => {

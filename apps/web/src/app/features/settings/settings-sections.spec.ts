@@ -16,6 +16,7 @@ import {
 import { aMe, anOwner } from '../../testing/session-fixtures.js';
 import { SettingsHost } from './settings-host.js';
 import { SettingsStore } from './settings-store.js';
+import { LEND_NONE } from '../../testing/lending-fixtures.js';
 
 async function openSettingsAs(me: Me, section: 'people' | null = null) {
   localStorage.clear();
@@ -78,11 +79,14 @@ describe('Configurações per permission (KBC-010)', () => {
     expect(
       screen.getByRole('heading', { name: 'Pessoas e permissões', level: 3 }),
     ).toBeTruthy();
-    http.expectOne('/api/v1/house-ai/default').flush({ defaultAppAi: 'house' });
+    http
+      .expectOne('/api/v1/house-ai/default')
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/people').flush({ items: [] });
     http.expectOne('/api/v1/topics').flush({ items: [], defaultSlug: null });
     http.expectOne('/api/v1/spend/people').flush({ items: [] });
     http.expectOne('/api/v1/access-requests').flush({ items: [] });
+    http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
     await fixture.whenStable();
   });
 });

@@ -7,6 +7,7 @@ import {
   personSchema,
   spendByPersonSchema,
   type AuthConfig,
+  type InvitePresetInput,
   type Me,
   type Person,
   type PersonUpdate,
@@ -56,6 +57,11 @@ export class AuthApi {
   }
 }
 
+/** How an invitation sets the person up (KBC-028): a preset of its own or a profile. */
+export type InviteSetup =
+  | { readonly preset?: InvitePresetInput; readonly profileId?: never }
+  | { readonly profileId?: string; readonly preset?: never };
+
 /** "Pessoas e permissões" (FR-3): masters only. */
 @Injectable({ providedIn: 'root' })
 export class PeopleApi {
@@ -67,10 +73,24 @@ export class PeopleApi {
       .pipe(map((body) => personListSchema.parse(body).items));
   }
 
-  /** KBC-026: `sendEmail` false is "Não enviar e-mail de convite". */
-  invite(email: string, sendEmail: boolean): Observable<Person> {
+  /**
+   * KBC-026: `sendEmail` false is "Não enviar e-mail de convite". KBC-028: a preset or a
+   * profile sets the person up; neither means the default profile, if there is one.
+   */
+  invite(
+    email: string,
+    sendEmail: boolean,
+    setup: InviteSetup = {},
+  ): Observable<Person> {
     return this.http
-      .post(peopleUrl(), { email, sendEmail })
+      .post(peopleUrl(), { email, sendEmail, ...setup })
+      .pipe(map((body) => personSchema.parse(body)));
+  }
+
+  /** "Aplicar perfil" (KBC-028 FR-4) to someone already invited. */
+  applyProfile(id: string, profileId: string): Observable<Person> {
+    return this.http
+      .post(`${personUrl(id)}/profile`, { profileId })
       .pipe(map((body) => personSchema.parse(body)));
   }
 

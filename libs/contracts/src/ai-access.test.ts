@@ -69,10 +69,50 @@ describe('AI access policy contracts (KBC-022)', () => {
       defaultDailyResearches: 5,
       managementKey: null,
       freeUsage: null,
+      lendable: {
+        'claude-subscription': false,
+        'chatgpt-subscription': false,
+      },
+      codex: { configured: false, enabled: false, loggedIn: null },
       key: 'sk-or-leak',
     });
     expect(JSON.stringify(view)).not.toContain('sk-or-leak');
     expect(houseAiUpdateSchema.safeParse({ key: 'short' }).success).toBe(false);
+  });
+
+  it('lends a subscription only with its terms confirmed and never as the default (KBC-024)', () => {
+    expect(
+      personAiUpdateSchema.safeParse({ appAi: 'claude-subscription' }).success,
+    ).toBe(false);
+    expect(
+      personAiUpdateSchema.safeParse({
+        appAi: 'claude-subscription',
+        subscriptionTermsAccepted: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      aiAssignmentRequestSchema.safeParse({
+        personIds: 'all',
+        appAi: 'claude-subscription',
+        subscriptionTermsAccepted: true,
+        setDefault: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      houseAiUpdateSchema.safeParse({ defaultAppAi: 'claude-subscription' })
+        .success,
+    ).toBe(false);
+    expect(
+      researchEventSchema.parse({
+        type: 'done',
+        usd: 0,
+        billing: 'subscription',
+        model: 'sonnet',
+        interrupted: false,
+        steps: 1,
+        plan: 'app-subscription',
+      }),
+    ).toMatchObject({ plan: 'app-subscription' });
   });
 
   it('marks free answers, who paid and the researches left, in events and saved turns', () => {

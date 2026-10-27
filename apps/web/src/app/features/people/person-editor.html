@@ -40,9 +40,75 @@
 <app-person-ai-editor
   [ai]="who.ai"
   [defaultAppAi]="defaultAppAi()"
+  [lending]="lending()"
   [busy]="busy()"
   (changed)="changed.emit({ ai: $event })"
 />
+
+@if (profiles().length > 0 && !who.isOwner) {
+  <fieldset class="group" [disabled]="busy()">
+    <legend class="legend" i18n="@@people.applyProfileLegend">
+      Aplicar perfil
+    </legend>
+    <div class="actions apply-row">
+      <label class="field">
+        <span i18n="@@people.profile">Perfil</span>
+        <select
+          #profileSelect
+          class="select"
+          name="applyProfile"
+          (change)="chooseProfile(profileSelect.value)"
+        >
+          @for (profile of profiles(); track profile.id) {
+            <option
+              [value]="profile.id"
+              [selected]="profile.id === chosenProfile()?.id"
+            >
+              {{ profile.name }}
+            </option>
+          }
+        </select>
+      </label>
+      @if (!confirmingApply()) {
+        <button
+          #applyButton
+          type="button"
+          class="secondary"
+          (click)="askApply()"
+          i18n="@@people.applyProfile"
+        >
+          Aplicar perfil
+        </button>
+      }
+    </div>
+    @if (confirmingApply()) {
+      <div class="actions">
+        <p class="confirm" i18n="@@people.confirmApply">
+          Aplicar o perfil "{{ chosenProfile()?.name }}" a {{ who.email }}?
+          Papel, acervos, funcionalidades e IA mudam; as preferências que a
+          pessoa já salvou continuam.
+        </p>
+        <button
+          #applyConfirmButton
+          type="button"
+          class="secondary"
+          (click)="confirmApply()"
+          i18n="@@people.applyConfirm"
+        >
+          Aplicar
+        </button>
+        <button
+          type="button"
+          class="link"
+          (click)="cancelApply()"
+          i18n="@@people.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    }
+  </fieldset>
+}
 
 <div class="actions">
   <button

@@ -75,6 +75,11 @@ Rel(api, vault, "Reads markdown and frontmatter from", "fs, read-only")
 Rel(api, qmd, "Sends query and get calls to", "MCP stdio")
 Rel(api, ledger, "Appends spend and events to")
 Rel(api, openrouter, "Streams completions from", "HTTPS, key in env")
+Container(codex, "Codex sandbox (KBC-027, ADR 0020)", "API image as uid 10002, runner + Codex CLI", "Own container: only CODEX_HOME mounted, no .env, state or Claude login; one turn at a time")
+System_Ext(openai, "OpenAI (ChatGPT plan)")
+Rel(api, codex, "Sends a Codex turn (model, input, token) to the runner", "HTTP, network codex 172.30.0.0/24, only from 172.30.0.2")
+Rel(codex, api, "Calls the turn's kb tools", "MCP over HTTP, by token, MCP routes only")
+Rel(codex, openai, "Runs the model", "HTTPS")
 ```
 
 Legend: Container = runnable unit or data store in this repository; ContainerDb = data store; System_Ext = outside this repository.
@@ -102,7 +107,7 @@ API modules, organised by business capability:
 | `usage` | Local event log for the research plan | `record(event)` |
 | `conversations` | The complete conversation history (search and research), no cap, keyed by principal | `list(principal, filter)`, `get(principal, id)`, `save(principal, conversation)`, `remove(principal, id)` |
 | `auth` | Google sign-in, one-time code sign-in, sessions, people and their permissions (ADR 0008, ADR 0011) | `PeopleService`, `SessionService`, `OneTimeCodes`, `SendLimits`, `RequestTickets`, `Notifier`, `authRoutes`, `codeRoutes`, `peopleRoutes`, `principalOf(request)`, `RouteAccess` |
-| `house-ai` | The app's own AI (KBC-022, ADR 0016): the house OpenRouter account (OAuth PKCE or pasted key, sealed), the live free-model list, the per-person daily quota, key provisioning per person; the AI access policy lives on the person record (`auth`) | `HouseAiService`, `FreeModelCatalog`, `HouseQuota`, `OpenRouterConnect`, `houseAiRoutes` |
+| `house-ai` | The app's own AI (KBC-022, ADR 0016): the house OpenRouter account (OAuth PKCE or pasted key, sealed), the live free-model list, the per-person daily quota, key provisioning per person, and the turns of the owner's lent subscription (KBC-024, ADR 0019: `HouseResearchRunner` with `plan: app-subscription` over `SubscriptionLedgerRunner`); the AI access policy lives on the person record (`auth`) | `HouseAiService`, `FreeModelCatalog`, `HouseQuota`, `OpenRouterConnect`, `houseAiRoutes` |
 | `access-requests` | Asking for access (form or Google) and the masters' decisions (KBC-014, ADR 0011); depends on `auth` through its barrel | `AccessRequestService`, `SignUpFlow`, `accessRequestRoutes` |
 
 Ports (interfaces in the module) and their adapters (in `adapters/`):
@@ -197,7 +202,9 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
    - RS256 signature against Google's JWKS, `aud`, `iss`, `exp`/`iat` (60 s skew, 1 h max age) and `email_verified`; the issuer and keys URL are constants. Each credential opens one session (a replay is refused while it is valid); the keys download times out after 5 s.
    - `SameSite=Lax` plus the `X-Requested-With: kb-chat` header and the `Origin` check on every state change, sign-in included.
    - `HttpOnly` cookie (`Secure` when hosted); only the token's SHA-256 is stored, in 0600 files; sliding 30-day expiry.
-   - One guard driven by `config.access` on every route (404 for unseen collections, 403 for features and roles), conversations and settings keyed by principal (saving over another person's id answers 404), subscriptions and environment keys for the owner only; the owner sees spend per person, not content.
+   - One guard driven by `config.access` on every route (404 for unseen collections, 403 for features and roles), conversations and settings keyed by principal (saving over another person's id answers 404), subscriptions and environment keys for the owner only, except the Claude subscription the owner lends person by person (KBC-024, ADR 0019); the owner sees spend per person, not content.
+   - Codex (ADR 0020): never in the API container; each turn runs in the `codex` service (the API image as uid 10002, only `/srv/kb-chat/codex` mounted, no `.env`, state, Claude login or secrets key, read-only root, no capabilities), one at a time, through a runner that builds the locked-down arguments itself and answers only the API's address. From the Codex address the API answers only the MCP routes (every other route is 404, so sign-in, codes and the proxy's forwarded-for trust are out of reach), and those by the turn's token; the cloud's metadata service is dropped for the `codex` subnet. CI proves on every PR, on arm64, that a turn there finds no canary of the state, the Claude login, the deploy `.env` or the secrets key, no extra mount, no capability and no metadata service. Accepted: Codex can read its own login and reaches the internet.
+   - Lent subscription (ADR 0019): only the owner grants it (403 to other masters, the terms confirmed in the request); a guest's question then runs on the owner's Claude Code with no built-in tools (`--tools ''`, only the kb MCP tools of a per-turn token, `--strict-mcp-config`, `--setting-sources ''`), on a topic the research route already checked for that guest, so an injected prompt reaches only that collection's kb tools; the guest spends the owner's usage limits, bounded by the guest's daily quota.
    - Revocation deletes the sessions at once; `LAST_MASTER` and `OWNER_PROTECTED` keep a master in place.
    - `config.rateLimit` on sign-in; the log carries the person id, never the token or the email.
 4. **Did we do a good job?** Tests: token verification with a local key and a fake JWKS (no network), the guard matrix per route kind, the route-coverage check (NFR-2), revocation, the last master, CSRF and the owner migration (`auth.integration.test.ts`, `route-access.test.ts`); E2E AC-1 to AC-7 at 1440 and 390.

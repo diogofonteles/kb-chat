@@ -160,5 +160,7 @@ export const aHouseView = (
   defaultDailyResearches: 5,
   managementKey: null,
   freeUsage: null,
+  lendable: { 'claude-subscription': false, 'chatgpt-subscription': false },
+  codex: { configured: false, enabled: false, loggedIn: null },
   ...overrides,
 });

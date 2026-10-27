@@ -1,4 +1,9 @@
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+import { JsonDocumentStore } from './adapters/json-document-store.js';
+import {
+  InviteProfilesService,
+  inviteProfilesRoutes,
+} from './modules/invite-profiles/index.js';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -35,6 +40,7 @@ import {
   hasFeature,
   invitationRoutes,
   peopleRoutes,
+  type StoredPerson,
 } from './modules/auth/index.js';
 import {
   AccessRequestService,
@@ -65,15 +71,12 @@ import {
 import { usageRoutes } from './modules/usage/index.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
-import { mcpRoutes } from './mcp/mcp-routes.js';
+import { mcpRoutes, peerOnlyMcp } from './mcp/mcp-routes.js';
 import { randomBytes } from 'node:crypto';
 import { SecretBox } from './adapters/secret-box.js';
 import { createHouseAi, type HouseAi } from './house-ai-factory.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
-import {
-  settingsRoutes,
-  type SettingsService,
-} from './modules/settings/index.js';
+import { settingsRoutes } from './modules/settings/index.js';
 import {
   createAiProviders,
   type AiProviders,
@@ -231,7 +234,7 @@ async function registerRoutes(
   await app.register(usageRoutes({ catalog, log: deps.usage }));
   const conversations = new ConversationsService({ store: deps.conversations });
   await app.register(conversationRoutes(conversations));
-  await registerSettings(app, deps.ai);
+  await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);
 }
 
@@ -289,7 +292,7 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
   });
   await registerPeople(app, { deps, topics, invitations });
   await app.register(invitationRoutes({ people: auth.people, invitations }));
-  await registerHouse(app, { house: deps.house, settings: deps.ai.settings });
+  await registerHouse(app, { house: deps.house, ai: deps.ai });
   await registerAccess(app, { deps, access, topics });
 }
 
@@ -304,6 +307,9 @@ async function registerPeople(
 ) {
   const { deps, topics, invitations } = wiring;
   const { house, auth } = deps;
+  const profiles = await loadInviteProfiles(deps, (message) =>
+    app.log.warn(message),
+  );
   await app.register(
     peopleRoutes({
       ...auth,
@@ -313,17 +319,53 @@ async function registerPeople(
         sync: (person, ai) => house.service.syncPersonKey(person, ai),
         setDefault: (appAi, by) => house.service.setDefault(appAi, by),
       },
+      presets: presetsOf(deps, profiles),
     }),
   );
+  await app.register(inviteProfilesRoutes(profiles, topics));
 }
+
+/** What an invitation and "Aplicar perfil" need from the profiles and Settings (KBC-028). */
+const presetsOf = (deps: FullDeps, profiles: InviteProfilesService) => ({
+  presetFor: (request: Parameters<InviteProfilesService['presetFor']>[0]) =>
+    profiles.presetFor(request),
+  hasSavedSettings: (person: StoredPerson) =>
+    deps.ai.settings.exists(deps.auth.people.viewerOf(person).principal),
+});
+
+/** "Perfis de convite" (KBC-028): invite-profiles.json in the state folder. */
+async function loadInviteProfiles(
+  deps: FullDeps,
+  warn: (message: string) => void,
+) {
+  const profiles = new InviteProfilesService({
+    warn,
+    store: new JsonDocumentStore(
+      join(deps.config.KB_CHAT_STATE_DIR, 'invite-profiles.json'),
+    ),
+  });
+  await profiles.load();
+  return profiles;
+}
+
+/** What the owner's subscriptions can do now, for "IA da aplicação" (KBC-024, KBC-027). */
+const subscriptionState = (ai: AiProviders) => ({
+  lendable: () => ({
+    'claude-subscription': ai.lent['claude-subscription'].available(),
+    'chatgpt-subscription': ai.lent['chatgpt-subscription'].available(),
+  }),
+  codex: () => ai.registry.codexStatus(),
+});
 
 /** "IA da aplicação", the OpenRouter connection and the free models (KBC-022). */
 async function registerHouse(
   app: FastifyInstance,
-  { house, settings }: { house: HouseAi; settings: SettingsService },
+  { house, ai }: { house: HouseAi; ai: AiProviders },
 ) {
+  const { settings } = ai;
   await app.register(
     houseAiRoutes({
+      ...subscriptionState(ai),
       house: house.service,
       catalog: house.catalog,
       connect: house.connect,
@@ -373,11 +415,12 @@ async function registerAccess(
 async function registerSettings(
   app: FastifyInstance,
   ai: AiProviders,
+  mcpPeers: readonly string[],
 ): Promise<void> {
   await app.register(
     settingsRoutes({ settings: ai.settings, providers: ai.registry }),
   );
-  await app.register(mcpRoutes(ai.turns));
+  await app.register(mcpRoutes(ai.turns, { peers: mcpPeers }));
 }
 
 /** Settings in memory and providers from the environment only (tests). */
@@ -477,6 +520,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
 
+  // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
+  app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));
   await app.register(routeAccess);
   await app.register(hostGuard, { allowedHosts: deps.config.ALLOWED_HOSTS });
   await app.register(cors, { origin: [deps.config.WEB_ORIGIN] });

@@ -319,6 +319,56 @@
     </p>
   </section>
 
+  <section class="block" aria-labelledby="house-codex">
+    <h4 id="house-codex" class="block-title" i18n="@@house.codex">
+      Assinatura do ChatGPT (Codex)
+    </h4>
+    <label class="check">
+      <input
+        #codexBox
+        type="checkbox"
+        [checked]="current.codex.enabled"
+        [disabled]="busy() || !current.codex.configured"
+        aria-describedby="house-codex-status house-codex-hint"
+        (change)="setCodex(codexBox.checked)"
+      />
+      <span i18n="@@house.codexToggle"
+        >Ligar a assinatura do ChatGPT (Codex)</span
+      >
+    </label>
+    <p id="house-codex-status" class="hint">
+      @if (current.codex.enabled) {
+        <strong i18n="@@house.codexOn">Ligada</strong> ·
+      } @else {
+        <strong i18n="@@house.codexOff">Desligada</strong> ·
+      }
+      @if (!current.codex.configured) {
+        <span i18n="@@house.codexNotConfigured"
+          >O Codex não está configurado neste servidor (runbook, passo
+          9c).</span
+        >
+      } @else if (current.codex.loggedIn === true) {
+        <span i18n="@@house.codexLoggedIn">Logado no servidor.</span>
+      } @else if (current.codex.loggedIn === false) {
+        <span i18n="@@house.codexLoggedOut"
+          >O Codex não está logado no servidor: o dono entra por SSH com
+          <code>codex login --device-auth</code> (runbook, passo 9c).</span
+        >
+      } @else {
+        <span i18n="@@house.codexDown"
+          >O contêiner do Codex não respondeu: confira se ele está ligado
+          (runbook, passo 9c).</span
+        >
+      }
+    </p>
+    <p id="house-codex-hint" class="hint" i18n="@@house.codexHint">
+      Ligada, você usa o ChatGPT em ⚙ Sua IA e pode cedê-lo em Pessoas e
+      permissões. O Codex roda num contêiner separado, sem acesso aos segredos
+      nem ao estado do servidor: ele lê o acervo só pelas ferramentas da
+      pesquisa, e a pergunta vai à OpenAI.
+    </p>
+  </section>
+
   <section class="block" aria-labelledby="house-management">
     <h4 id="house-management" class="block-title" i18n="@@house.management">
       Chave de gerenciamento (opcional)

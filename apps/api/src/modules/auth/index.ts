@@ -34,7 +34,11 @@ export {
   type InvitationRouteDeps,
 } from './invitation-routes.js';
 export { Invitations, type InvitationsDeps } from './invitations.js';
-export { peopleRoutes, type PeopleRouteDeps } from './people-routes.js';
+export {
+  peopleRoutes,
+  type PeopleRouteDeps,
+  type PresetSource,
+} from './people-routes.js';
 export type { ApprovedRequest } from './people-rules.js';
 export {
   PEOPLE_CACHE_MS,

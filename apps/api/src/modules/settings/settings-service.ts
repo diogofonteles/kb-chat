@@ -1,4 +1,5 @@
 import type {
+  InitialPreferences,
   KeyProvider,
   MaskedKey,
   SettingsUpdate,
@@ -68,13 +69,28 @@ export class SettingsService {
     );
   }
 
-  async view(principal: string): Promise<SettingsView> {
+  /** The principal saved their Settings at least once. */
+  async exists(principal: string): Promise<boolean> {
+    await this.load(principal);
+    return this.snapshot(principal) !== null;
+  }
+
+  /**
+   * GET /settings. Before the first save, the preferences a master set in the invitation
+   * fill the defaults (KBC-028 FR-5); a saved file always wins (BR-6).
+   */
+  async view(
+    principal: string,
+    initial?: InitialPreferences,
+  ): Promise<SettingsView> {
     await this.load(principal);
     const saved = this.snapshot(principal);
     const settings = saved ?? DEFAULT_SETTINGS;
     return {
       exists: saved !== null,
-      preferences: settings.preferences,
+      preferences: saved
+        ? settings.preferences
+        : { ...settings.preferences, ...initial },
       ai: {
         provider: settings.ai.provider,
         models: settings.ai.models,
@@ -91,8 +107,11 @@ export class SettingsService {
   async update(
     principal: string,
     patch: SettingsUpdate,
+    initial?: InitialPreferences,
   ): Promise<SettingsView> {
-    const run = this.writing.then(() => this.persist(principal, patch));
+    const run = this.writing.then(() =>
+      this.persist(principal, patch, initial),
+    );
     this.writing = run.catch(() => undefined);
     await run;
     return this.view(principal);
@@ -133,9 +152,14 @@ export class SettingsService {
   private async persist(
     principal: string,
     patch: SettingsUpdate,
+    initial?: InitialPreferences,
   ): Promise<void> {
     await this.load(principal);
-    const current = this.snapshot(principal) ?? DEFAULT_SETTINGS;
+    // The first save keeps the invitation's preferences: they become the person's (KBC-028).
+    const current = this.snapshot(principal) ?? {
+      ...DEFAULT_SETTINGS,
+      preferences: { ...DEFAULT_SETTINGS.preferences, ...initial },
+    };
     const next = applySettingsUpdate(current, patch);
     await this.deps.store.write(principal, next);
     this.cache.set(principal, next);

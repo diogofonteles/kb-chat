@@ -1,3 +1,4 @@
+import type { InvitePreset } from '@kb-chat/contracts';
 import { randomUUID } from 'node:crypto';
 import type {
   AppAiAssignment,
@@ -100,10 +101,51 @@ export class PeopleService {
     return this.change((people) => rules.codeSignIn(people, id, this.now()));
   }
 
-  invite(email: string, invitedBy: string): Promise<StoredPerson> {
+  /** An invitation; with a preset, the person is set up at once (KBC-028). */
+  invite(
+    email: string,
+    invitedBy: string,
+    preset?: InvitePreset,
+  ): Promise<StoredPerson> {
+    return this.change((people) => {
+      const invited = rules.invite(
+        people,
+        { email, invitedBy },
+        this.context(),
+      );
+      if (!preset) return invited;
+      return rules.applyPreset(
+        invited.people,
+        {
+          id: invited.result.id,
+          preset,
+          context: { by: invitedBy, now: this.now() },
+          withPreferences: true,
+        },
+        this.ownerEmail,
+      );
+    });
+  }
+
+  /** A profile applied to someone already there (KBC-028 FR-4). */
+  applyPreset(
+    id: string,
+    preset: InvitePreset,
+    options: { readonly by: string; readonly withPreferences: boolean },
+  ): Promise<StoredPerson> {
+    const context = { by: options.by, now: this.now() };
     return this.change((people) =>
-      rules.invite(people, { email, invitedBy }, this.context()),
+      rules.applyPreset(
+        people,
+        { id, preset, context, withPreferences: options.withPreferences },
+        this.ownerEmail,
+      ),
     );
+  }
+
+  /** Puts a person back as they were, after a change the house could not follow. */
+  restore(before: StoredPerson): Promise<StoredPerson> {
+    return this.change((people) => rules.restore(people, before));
   }
 
   /** A master's change; `by` (their e-mail) goes to the AI audit trail. */
@@ -123,6 +165,8 @@ export class PeopleService {
     request: {
       readonly ids: 'all' | readonly string[];
       readonly appAi: AppAiAssignment;
+      /** Lending a subscription: its terms were confirmed (KBC-024). */
+      readonly subscriptionTermsAccepted?: true;
     },
     by: string,
   ): Promise<number> {

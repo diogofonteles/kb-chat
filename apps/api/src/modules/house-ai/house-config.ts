@@ -1,6 +1,6 @@
 import {
   DEFAULT_DAILY_RESEARCHES,
-  appAiSchema,
+  defaultableAppAiSchema,
   connectionViaSchema,
   dailyResearchesSchema,
   modelIdSchema,
@@ -33,7 +33,8 @@ export const houseConfigSchema = z.object({
   freeModels: z.array(modelIdSchema).nullable().default(null),
   includeRouter: z.boolean().default(true),
   paidModel: modelIdSchema.nullable().default(null),
-  defaultAppAi: appAiSchema.default('house'),
+  // A subscription is never a default (ADR 0019): a hand-edited one reads as no AI.
+  defaultAppAi: defaultableAppAiSchema.default('house').catch('none'),
   /** Who last changed the default, and when (the audit trail of KBC-022). */
   defaultChange: z
     .object({ by: z.string(), at: z.iso.datetime() })
@@ -48,6 +49,15 @@ export const houseConfigSchema = z.object({
     .default(null),
   /** By person id: the keys provisioned with the management key. */
   personKeys: z.record(z.string(), personKeySchema).default({}),
+  /** Codex, the ChatGPT subscription (KBC-027): off until a master turns it on. */
+  codex: z
+    .object({
+      enabled: z.boolean(),
+      by: z.string().nullable(),
+      at: z.iso.datetime().nullable(),
+    })
+    .catch({ enabled: false, by: null, at: null })
+    .default({ enabled: false, by: null, at: null }),
 });
 export type HouseConfig = z.infer<typeof houseConfigSchema>;
 

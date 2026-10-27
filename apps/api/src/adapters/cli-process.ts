@@ -13,6 +13,8 @@ export interface CliCall {
   readonly input: string;
   /** SIGTERM → SIGKILL delay; default KILL_GRACE_MS. */
   readonly killGraceMs?: number;
+  /** The model a remote runner builds its own arguments with (ADR 0020). */
+  readonly model?: string;
 }
 
 export interface CliProcess {

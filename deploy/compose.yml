@@ -29,8 +29,12 @@ services:
       # Only Caddy reaches the API, over the private network below.
       TRUST_PROXY: uniquelocal
       # The public host, plus loopback for the container healthcheck and the MCP calls of
-      # the CLIs the API spawns (ADR 0007).
-      ALLOWED_HOSTS: ${KB_CHAT_DOMAIN:?set KB_CHAT_DOMAIN (.env)},127.0.0.1,localhost
+      # the CLIs the API spawns (ADR 0007), plus its address on the Codex network (ADR 0020).
+      ALLOWED_HOSTS: ${KB_CHAT_DOMAIN:?set KB_CHAT_DOMAIN (.env)},127.0.0.1,localhost,172.30.0.2
+      # Codex never runs in this container (KBC-027, ADR 0020): its turns go to the `codex`
+      # service, which reaches the turn's MCP endpoint here, by token, from its fixed address.
+      KB_CHAT_CODEX_RUNNER_URL: http://172.30.0.10:8790
+      KB_CHAT_MCP_PEERS: 172.30.0.10
       # The public origin: the only one the CSRF check accepts (ADR 0008).
       WEB_ORIGIN: ${WEB_ORIGIN:-https://${KB_CHAT_DOMAIN}}
       # Sign-in is required (KBC-010): compose refuses to start without them.
@@ -61,8 +65,58 @@ services:
       - ${KB_CHAT_DATA:-/srv/kb-chat}/state:/data/state
       # Claude Code login of the owner (`claude /login`, once, over SSH).
       - ${KB_CHAT_DATA:-/srv/kb-chat}/claude:/home/app/.claude
-    networks: [internal]
+    networks:
+      internal: {}
+      codex:
+        ipv4_address: 172.30.0.2
     mem_limit: ${API_MEM_LIMIT:-8g}
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  # The Codex sandbox (KBC-027, ADR 0020): the API image as another user, with only the
+  # owner's Codex login mounted: no .env, no state, no Claude login, no secrets key, a
+  # read-only root, no capabilities. Opt in with COMPOSE_PROFILES=codex in .env.
+  codex:
+    image: ${KB_CHAT_REGISTRY:-ghcr.io/diogofonteles}/kb-chat-api:${KB_CHAT_TAG:?set KB_CHAT_TAG (release.env)}
+    profiles: [codex]
+    restart: unless-stopped
+    init: false # tini is the image's entrypoint
+    user: '10002:10002'
+    command: ['node', 'dist/codex-runner-main.js']
+    environment:
+      CODEX_HOME: /codex-home
+      CODEX_RUNNER_HOST: 0.0.0.0
+      CODEX_RUNNER_PORT: '8790'
+      # The only MCP endpoint Codex is pointed at, and the only caller of the runner.
+      CODEX_MCP_URL: http://172.30.0.2:3000/mcp/turn
+      CODEX_RUNNER_CLIENTS: 172.30.0.2
+      # Before each turn, kill whatever a former turn left in this container (ADR 0020).
+      CODEX_RUNNER_REAP: 'on'
+    volumes:
+      # The owner's Codex login (`codex login --device-auth`, once, over SSH; runbook 9c).
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/codex:/codex-home
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8790/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    networks:
+      codex:
+        ipv4_address: 172.30.0.10
+    mem_limit: ${CODEX_MEM_LIMIT:-2g}
+    pids_limit: 256
     logging: *logging
     security_opt:
       - no-new-privileges:true
@@ -94,6 +148,11 @@ services:
 
 networks:
   internal: {}
+  # Only the API and the Codex sandbox (ADR 0020); Codex reaches the internet through it.
+  codex:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   caddy-data: {}

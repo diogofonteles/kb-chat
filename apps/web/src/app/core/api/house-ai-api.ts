@@ -7,13 +7,13 @@ import {
   freeModelListSchema,
   houseAiViewSchema,
   houseDefaultSchema,
-  type AppAi,
   openRouterConnectResponseSchema,
   type AiAssignmentRequest,
   type AiStatus,
   type AiTestResult,
   type FreeModelList,
   type HouseAiUpdate,
+  type HouseDefault,
   type HouseAiView,
   type OpenRouterPurpose,
 } from '@kb-chat/contracts';
@@ -40,11 +40,11 @@ export class HouseAiApi {
       .pipe(map((body) => houseAiViewSchema.parse(body)));
   }
 
-  /** The default app AI alone (no call to OpenRouter). */
-  defaultAppAi(): Observable<AppAi> {
+  /** The default app AI and whether the subscription can be lent (no call to OpenRouter). */
+  houseDefault(): Observable<HouseDefault> {
     return this.http
       .get(`${houseAiUrl()}/default`)
-      .pipe(map((body) => houseDefaultSchema.parse(body).defaultAppAi));
+      .pipe(map((body) => houseDefaultSchema.parse(body)));
   }
 
   test(): Observable<AiTestResult> {

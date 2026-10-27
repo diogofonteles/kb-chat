@@ -18,7 +18,8 @@ import {
   type ResearchEvent,
 } from '@kb-chat/contracts';
 import pino from 'pino';
-import { FIXTURE_VAULT } from './fixture-paths.js';
+import { FAKES_DIR, FIXTURE_VAULT } from './fixture-paths.js';
+import { freePort } from './free-port.js';
 import {
   TEST_CLIENT_ID,
   createTestKeys,
@@ -43,6 +44,10 @@ import { createResearchAgent } from '../src/research-agent-factory.js';
 import { createSearchIndex } from '../src/search-index-factory.js';
 import { FakeOpenRouter } from '../src/testing/fake-openrouter.js';
 import { FakeGemini, fakeProvidersFetch } from '../src/testing/fake-gemini.js';
+import {
+  startCodexRunner,
+  type CodexRunner,
+} from '../src/codex-runner/runner-server.js';
 import type { SpendLedgerPort } from '../src/ports/spend-ledger.js';
 
 export const OWNER_EMAIL = 'owner@example.com';
@@ -64,14 +69,48 @@ export interface Started {
 
 let current: FastifyInstance | null = null;
 
+/** Stops the Codex runner the last `start({ codexHome })` started (its container going down). */
+export async function stopCodexRunner(): Promise<void> {
+  await runner?.close();
+  runner = null;
+}
+
+/** What the Codex runner counted so far (turns, login checks). */
+export const codexRunnerCounts = () =>
+  runner?.counts() ?? { turns: 0, statusChecks: 0 };
+
 /** Closes the app the last `start()` built (call it in `afterEach`). */
 export async function closeApp(): Promise<void> {
   await current?.close();
   current = null;
+  await runner?.close();
+  runner = null;
 }
 
-function testConfig(state: string) {
+/** Options of `start()`: `claude` runs the fake Claude CLI, reached over a real port. */
+export interface StartOptions {
+  readonly claude?: boolean;
+  /** Codex through its sandbox runner (KBC-027), with the fake Codex and this home. */
+  readonly codexHome?: string;
+  /** An existing state folder (a restart over the same files). */
+  readonly state?: string;
+}
+
+let runner: CodexRunner | null = null;
+
+async function testConfig(state: string, options: StartOptions) {
+  const port = String(await freePort());
+  const cli = options.claude
+    ? { CLAUDE_BIN: join(FAKES_DIR, 'fake-claude.mjs'), PORT: port }
+    : {};
+  const codex = options.codexHome
+    ? await codexSandbox(options.codexHome, port)
+    : {};
   return loadConfig({
+    ...cli,
+    ...codex,
+    // The Codex sandbox's address in production (ADR 0020): MCP only, by token.
+    KB_CHAT_MCP_PEERS: '172.30.0.10',
     KB_VAULT: FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
     KB_CHAT_STATE_DIR: state,
@@ -80,6 +119,22 @@ function testConfig(state: string) {
     WEB_ORIGIN: WEB,
     LOG_LEVEL: 'info',
   });
+}
+
+/** A Codex sandbox runner on loopback, running the fake Codex (ADR 0020). */
+async function codexSandbox(codexHome: string, port: string) {
+  runner = await startCodexRunner({
+    bin: join(FAKES_DIR, 'fake-codex.mjs'),
+    codexHome,
+    mcpUrl: `http://127.0.0.1:${port}/mcp/turn`,
+    host: '127.0.0.1',
+    port: 0,
+    env: { PATH: process.env['PATH'] ?? '' },
+  });
+  return {
+    PORT: port,
+    KB_CHAT_CODEX_RUNNER_URL: runner.url,
+  };
 }
 
 /** A logger whose lines are kept, so a test can look for secrets in them. */
@@ -128,10 +183,12 @@ interface AiWiring {
   readonly core: Awaited<ReturnType<typeof buildCore>>;
   readonly auth: ReturnType<typeof testAuth>;
   readonly fetch: typeof fetch;
+  /** What the CLIs inherit: no PATH unless the fake CLI must start. */
+  readonly env: NodeJS.ProcessEnv;
 }
 
 /** The house plan and the providers, every key sealed (ADR 0017). */
-async function buildAi({ config, core, auth, fetch }: AiWiring) {
+async function buildAi({ config, core, auth, fetch, env }: AiWiring) {
   const state = config.KB_CHAT_STATE_DIR;
   const sealer = new SecretBox(randomBytes(32));
   const house = await createHouseAi({
@@ -147,7 +204,7 @@ async function buildAi({ config, core, auth, fetch }: AiWiring) {
       store: new JsonSettingsStore(join(state, 'settings')),
       sealer,
     }),
-    env: { PATH: '' },
+    env,
     fetch,
     tools: core.agent.toolsFor,
     perTokenRunner: core.agent.perTokenRunner,
@@ -160,9 +217,13 @@ async function buildAi({ config, core, auth, fetch }: AiWiring) {
 }
 
 /** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
-export async function start(): Promise<Started> {
-  const state = await mkdtemp(join(tmpdir(), 'kbchat-house-'));
-  const config = testConfig(state);
+export async function start(options: StartOptions = {}): Promise<Started> {
+  const state =
+    options.state ?? (await mkdtemp(join(tmpdir(), 'kbchat-house-')));
+  const config = await testConfig(state, options);
+  const env = options.claude
+    ? { PATH: process.env['PATH'] ?? '', HOME: state }
+    : { PATH: '' };
   const { logs, logger } = capturedLogger();
   const fake = new FakeOpenRouter();
   const gemini = new FakeGemini();
@@ -173,8 +234,11 @@ export async function start(): Promise<Started> {
   const keys = await createTestKeys();
   const core = await buildCore(config, logger);
   const auth = testAuth(state, keys);
-  const { house, ai } = await buildAi({ config, core, auth, fetch });
+  const { house, ai } = await buildAi({ config, core, auth, fetch, env });
   current = await buildApp({ config, ...core, ai, auth, house, logger });
+  // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
+  if (options.claude || options.codexHome)
+    await current.listen({ host: '127.0.0.1', port: config.PORT });
   return { app: current, keys, state, fake, gemini, ledger: core.ledger, logs };
 }
 

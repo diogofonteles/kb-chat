@@ -5,6 +5,8 @@ import {
   LOCALE_ID,
   computed,
   inject,
+  input,
+  output,
 } from '@angular/core';
 import { formatSpend } from '@core/spend/spend-store.js';
 import { aiTestCodeSchema, type AiProvider } from '@kb-chat/contracts';
@@ -28,14 +30,26 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
           Quem atende você agora
         </p>
         @if (current.source === 'app') {
-          <p class="who">
-            <strong i18n="@@aiStatus.app"
-              >IA da aplicação (cedida pelo administrador)</strong
-            >
-            · {{ appLabel() }}
-          </p>
+          @if (lent()) {
+            <p class="who">
+              <strong i18n="@@aiStatus.appShort">IA da aplicação</strong>
+            </p>
+          } @else {
+            <p class="who">
+              <strong i18n="@@aiStatus.app"
+                >IA da aplicação (cedida pelo administrador)</strong
+              >
+              · {{ appLabel() }}
+            </p>
+          }
           <p class="detail">
-            <span i18n="@@aiStatus.free">Gratuito para você</span>
+            @if (lent()) {
+              <span i18n="@@aiStatus.lentIncluded"
+                >Incluído na assinatura do administrador</span
+              >
+            } @else {
+              <span i18n="@@aiStatus.free">Gratuito para você</span>
+            }
             @if (current.remainingToday !== null) {
               ·
               <span i18n="@@aiStatus.remaining"
@@ -44,6 +58,31 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
               >
             }
           </p>
+          @if (lent()) {
+            <div class="lent" role="note">
+              @if (lentChatgpt()) {
+                <p i18n="@@aiStatus.lentGpt">
+                  Você está usando temporariamente a IA da aplicação (assinatura
+                  do ChatGPT do administrador).
+                </p>
+              } @else {
+                <p i18n="@@aiStatus.lent">
+                  Você está usando temporariamente a IA da aplicação (assinatura
+                  do Claude do administrador).
+                </p>
+              }
+              @if (canConfigureOwn()) {
+                <button
+                  type="button"
+                  class="own"
+                  (click)="configureOwn.emit()"
+                  i18n="@@aiStatus.configureOwn"
+                >
+                  Configurar a minha IA
+                </button>
+              }
+            </div>
+          }
           @if (current.enforced) {
             <p class="detail" i18n="@@aiStatus.enforced">
               O administrador definiu que a IA da aplicação atende você, mesmo
@@ -122,15 +161,52 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     .detail {
       font-size: var(--text-sm);
     }
+    .lent {
+      display: grid;
+      gap: var(--space-2);
+      justify-items: start;
+      margin-top: var(--space-1);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-accent);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+    }
+    .lent p {
+      margin: 0;
+      font-weight: 600;
+    }
+    .own {
+      min-height: var(--target);
+      padding: 0 var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      font: inherit;
+      cursor: pointer;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AiStatusCard {
   private readonly store = inject(SettingsStore);
+  /** The person may choose their own AI (the button shows only then, KBC-024 BR-6). */
+  readonly canConfigureOwn = input(true);
+  /** "Configurar a minha IA" on a lent subscription (KBC-024): the panel shows the options. */
+  readonly configureOwn = output();
   private readonly locale = inject(LOCALE_ID);
 
   protected readonly status = computed(() =>
     this.store.aiStatus.hasValue() ? this.store.aiStatus.value() : null,
+  );
+  /** The owner's subscription lent to this person (KBC-024). */
+  protected readonly lent = computed(() => {
+    const appAi = this.status()?.appAi;
+    return appAi === 'claude-subscription' || appAi === 'chatgpt-subscription';
+  });
+  /** Which of the administrator's subscriptions, in the notice. */
+  protected readonly lentChatgpt = computed(
+    () => this.status()?.appAi === 'chatgpt-subscription',
   );
   protected readonly appLabel = computed(() => {
     const appAi = this.status()?.appAi;

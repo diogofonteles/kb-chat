@@ -7,6 +7,7 @@ import {
   linkedSignal,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { Preferences } from '@kb-chat/contracts';
@@ -64,6 +65,7 @@ export class SettingsPanel {
   private readonly session = inject(SessionStore);
   private readonly destroyRef = inject(DestroyRef);
   readonly closed = output();
+  private readonly aiForm = viewChild(AiProviderForm);
 
   /** Only what the person may change (KBC-010): AI with own-ai-settings, people for masters. */
   protected readonly sections = computed(() =>
@@ -95,6 +97,14 @@ export class SettingsPanel {
   );
   protected readonly aiSave = signal<SaveState>('idle');
   protected readonly preferencesSave = signal<SaveState>('idle');
+
+  /** "Configurar a minha IA" (KBC-024): to the options, where one's own AI is chosen. */
+  protected focusOptions(): void {
+    this.aiForm()?.focusOwnOptions();
+  }
+
+  /** Without the AI section, "Quem atende você" shows in Preferências (KBC-024 BR-6). */
+  protected readonly ownAi = this.store.ownAi;
 
   protected show(section: SettingsSection): void {
     this.section.set(section);

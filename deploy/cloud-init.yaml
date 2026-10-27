@@ -104,6 +104,21 @@ write_files:
       [Unit]
       RequiresMountsFor=/srv/kb-chat
 
+  # The Codex sandbox never reaches the metadata service (ADR 0020), after every Docker start.
+  - path: /etc/systemd/system/docker.service.d/20-kb-chat-codex-egress.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      ExecStartPost=/usr/local/sbin/kb-chat-codex-egress
+  - path: /usr/local/sbin/kb-chat-codex-egress
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      # Same as deploy/scripts/codex-egress.sh (ADR 0020).
+      set -euo pipefail
+      rule=(-s 172.30.0.0/24 -d 169.254.0.0/16 -j DROP)
+      iptables -C DOCKER-USER "${rule[@]}" 2>/dev/null || iptables -I DOCKER-USER "${rule[@]}"
+
   # Everything that needs the network or the volume, in order. The done marker is written
   # only when Docker, the OCI CLI, the mount and the two timers are verified; bootstrap-vm.sh checks it.
   - path: /usr/local/sbin/kb-chat-setup
@@ -146,9 +161,10 @@ write_files:
 
       log "layout under /srv/kb-chat (app folders owned by uid 10001)"
       mkdir -p /srv/kb-chat/deploy/scripts /srv/kb-chat/vault /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config \
-        /srv/kb-chat/qmd/incoming /srv/kb-chat/state /srv/kb-chat/claude
+        /srv/kb-chat/qmd/incoming /srv/kb-chat/state /srv/kb-chat/claude /srv/kb-chat/codex
       chown -R 10001:10001 /srv/kb-chat/qmd/cache /srv/kb-chat/qmd/config /srv/kb-chat/state /srv/kb-chat/claude
-      chmod 0700 /srv/kb-chat/state /srv/kb-chat/claude
+      chown -R 10002:10002 /srv/kb-chat/codex
+      chmod 0700 /srv/kb-chat/state /srv/kb-chat/claude /srv/kb-chat/codex
       chown -R ubuntu:ubuntu /srv/kb-chat/vault /srv/kb-chat/qmd/incoming
       chown root:root /srv/kb-chat/deploy && chmod 0755 /srv/kb-chat/deploy
 

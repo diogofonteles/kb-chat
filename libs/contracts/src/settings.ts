@@ -95,6 +95,18 @@ export const preferencesSchema = z.object({
 });
 export type Preferences = z.infer<typeof preferencesSchema>;
 
+/**
+ * The preferences a master sets in an invitation (KBC-028): they fill the person's Settings
+ * (and the first-run wizard) until the person saves their own.
+ */
+export const initialPreferencesSchema = z.strictObject({
+  defaultTopic: topicSlugSchema.optional(),
+  defaultView: defaultViewSchema.optional(),
+  researchProfile: researchProfileSchema.optional(),
+  theme: themeSchema.optional(),
+});
+export type InitialPreferences = z.infer<typeof initialPreferencesSchema>;
+
 /** A saved key as the API shows it: never the key, only its last 4 characters (BR-1). */
 export const maskedKeySchema = z.object({
   set: z.literal(true),

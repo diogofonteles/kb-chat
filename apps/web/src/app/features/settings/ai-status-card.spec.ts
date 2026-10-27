@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen } from '@testing-library/angular';
 import type { AiStatus } from '@kb-chat/contracts';
 import { aSettingsView, anAiStatus } from '../../testing/settings-fixtures.js';
 import { AiStatusCard } from './ai-status-card.js';
@@ -138,5 +138,63 @@ describe('SettingsStore.returnFromOpenRouter (KBC-022 AC-1)', () => {
     expect(store.panel()).toBe('settings');
     store.returnFromOpenRouter('?openrouter=error');
     expect(store.section()).toBe('ai');
+  });
+
+  it('KBC-024 AC-5: says in front that the administrator’s subscription is lent for now', async () => {
+    const { fixture } = await renderCard(
+      anAiStatus({
+        source: 'app',
+        appAi: 'claude-subscription',
+        provider: 'app',
+        free: true,
+      }),
+    );
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(
+      'Você está usando temporariamente a IA da aplicação (assinatura do Claude do administrador).',
+    );
+    // One word for who pays, said once (design D7, D12).
+    expect(text).toContain('Incluído na assinatura do administrador');
+    expect(text).not.toContain('Gratuito para você');
+    expect(text).not.toContain('cedida pelo administrador) ·');
+    const own = vi.fn();
+    fixture.componentInstance.configureOwn.subscribe(own);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Configurar a minha IA' }),
+    );
+    expect(own).toHaveBeenCalled();
+  });
+
+  it('KBC-024 QA F-3: tells a person without their own AI settings too, without the button', async () => {
+    const { fixture } = await renderCard(
+      anAiStatus({
+        source: 'app',
+        appAi: 'claude-subscription',
+        provider: 'app',
+        free: true,
+      }),
+    );
+    fixture.componentRef.setInput('canConfigureOwn', false);
+    await fixture.whenStable();
+    expect(document.body.textContent).toContain(
+      'Você está usando temporariamente a IA da aplicação',
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Configurar a minha IA' }),
+    ).toBeNull();
+  });
+
+  it('KBC-027: names the administrator’s ChatGPT subscription when that one is lent', async () => {
+    await renderCard(
+      anAiStatus({
+        source: 'app',
+        appAi: 'chatgpt-subscription',
+        provider: 'app',
+        free: true,
+      }),
+    );
+    expect(document.body.textContent).toContain(
+      'Você está usando temporariamente a IA da aplicação (assinatura do ChatGPT do administrador).',
+    );
   });
 });

@@ -49,3 +49,28 @@ jobs:
           name: playwright-report
           path: e2e/playwright-report
           retention-days: 7
+
+  codex-sandbox:
+    # KBC-027 AC-1, ADR 0020: a Codex turn, run by the real runner in the `codex` service of
+    # deploy/compose.yml, cannot read the state, the Claude login, the deploy .env or the
+    # secrets key (canary copies planted where production keeps them).
+    name: Codex sandbox
+    # The production VM is arm64 (OCI Ampere): prove the image built for that architecture.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the API image (it carries the runner and Codex)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          load: true
+          tags: kb-chat-api:proof
+          cache-from: type=gha,scope=api-proof
+          cache-to: type=gha,mode=max,scope=api-proof
+      - name: Block the metadata service for the sandbox, as cloud-init does on the VM
+        run: sudo deploy/scripts/codex-egress.sh
+      - name: Prove the sandbox
+        run: deploy/scripts/codex-sandbox-proof.sh proof docker.io/library

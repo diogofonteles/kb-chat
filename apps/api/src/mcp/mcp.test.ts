@@ -120,6 +120,37 @@ describe('MCP turn endpoint', () => {
     await app.close();
   });
 
+  it('accepts the Codex sandbox address, with the token only (KBC-027 AC-3)', async () => {
+    const app = Fastify();
+    registerErrorHandler(app);
+    const turns = new McpTurnRegistry();
+    const opened = turns.open(new FakeResearchTools(), {}, 5);
+    await app.register(mcpRoutes(turns, { peers: ['172.30.0.10'] }));
+    const call = (remoteAddress: string, url: string) =>
+      app.inject({
+        method: 'POST',
+        url,
+        remoteAddress,
+        headers: { accept: 'application/json, text/event-stream' },
+        payload: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+      });
+    expect(
+      (await call('172.30.0.10', `/mcp/turns/${opened.token}`)).statusCode,
+    ).toBe(200);
+    expect(
+      (await call('::ffff:172.30.0.10', `/mcp/turns/${opened.token}`))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await call('172.30.0.11', `/mcp/turns/${opened.token}`)).statusCode,
+    ).toBe(404);
+    expect(
+      (await call('172.30.0.10', `/mcp/turns/${'x'.repeat(32)}`)).statusCode,
+    ).toBe(404);
+    opened.close();
+    await app.close();
+  });
+
   it('never logs the turn token, even at info level (ADR 0007)', async () => {
     const lines: string[] = [];
     const sink = new Writable({

@@ -1,0 +1,6 @@
+/* The preset sits inside the invitation or a profile: a quiet frame groups it (T9). */
+:host {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}

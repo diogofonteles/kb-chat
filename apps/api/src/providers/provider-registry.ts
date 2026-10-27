@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import {
   MODEL_ALLOWLISTS,
+  isLentSubscription,
   type AiProvider,
+  type LentSubscription,
   type AiStatus,
   type GeminiTier,
   type OpenRouterPlan,
@@ -40,7 +42,7 @@ import type {
 import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { budgetsFromConfig } from '../research-agent-factory.js';
 import { resolveAiSource } from './ai-access.js';
-import type { AppAiPort } from './app-ai-plan.js';
+import type { AppAiPort, LendableSubscription } from './app-ai-plan.js';
 import { findExecutable } from './command-locator.js';
 import { ownFreeLlm } from './own-openrouter.js';
 import { PaidMeters, type TurnMeter } from './paid-meters.js';
@@ -83,6 +85,15 @@ export interface ProviderRegistryOptions {
   readonly freeModels?: FreeModelSource;
   /** Today's own spend of a principal (the daily cap of a paid fallback, KBC-023). */
   readonly spentToday?: (principal: string) => Promise<number>;
+  /** A master's switch for Codex (KBC-027); absent: on whenever Codex is configured. */
+  readonly codexEnabled?: () => boolean;
+}
+
+/** Codex in "IA da aplicação": configured here, and whether its login is there. */
+export interface CodexStatus {
+  readonly configured: boolean;
+  /** null: no sandbox runner, or it did not answer. */
+  readonly loggedIn: boolean | null;
 }
 
 /** The live OpenRouter list as the registry needs it. */
@@ -127,6 +138,21 @@ interface ChoiceOverride {
   readonly profile?: ResearchProfile;
 }
 
+/** How long a logged-out CLI keeps the lent subscription unavailable (ADR 0019). */
+const LOGGED_OUT_PAUSE_MS = 10 * 60 * 1000;
+
+/** How long Codex's sandbox gets to say whether the owner's login is there. */
+const CODEX_STATUS_TIMEOUT_MS = 5_000;
+/** Its answer is kept this long: every house view would start a `codex login status`. */
+const CODEX_STATUS_TTL_MS = 30_000;
+
+/** A failure that makes a lent subscription unavailable for a while. */
+const pausesLending = (kind: LentSubscription, code: string): boolean =>
+  code === 'CLI_LOGIN_REQUIRED' ||
+  // The runner did not answer: Codex's container is down (ADR 0020). Any other failed
+  // turn (a model error, a usage limit) pauses nothing.
+  (kind === 'chatgpt-subscription' && code === 'CLI_MISSING');
+
 /** Which key a connection test was about, kept with it; null for the subscriptions. */
 const keyIdOf = (key: string | undefined): string | null =>
   key ? fingerprint(key) : null;
@@ -158,10 +184,110 @@ export class ProviderRegistry implements ProviderCatalog {
   private readonly cache = new Map<string, LlmPort | ResearchRunnerPort>();
   /** One's own paid fallback in flight, every open turn of every person (KBC-023). */
   private readonly meters = new PaidMeters();
+  /** The last answer of Codex's sandbox about the login (CODEX_STATUS_TTL_MS). */
+  private codexStatusCache: { status: CodexStatus; at: number } | null = null;
+  /** Until when each lent subscription counts as unavailable after a logged-out CLI. */
+  private readonly loggedOutUntil: Record<LentSubscription, number> = {
+    'claude-subscription': 0,
+    'chatgpt-subscription': 0,
+  };
   /** Whether `claude` was on PATH at the last lookup (boot, then every provider list). */
   private claudeOnPath = false;
 
   constructor(private readonly options: ProviderRegistryOptions) {}
+
+  /**
+   * One of the owner's subscriptions as it can be lent to a person (KBC-024, KBC-027; ADR 0019,
+   * ADR 0020): his CLI and his models for the profile, never escalating (a fast question counts
+   * 1); Codex only in its sandbox (or the owner's Mac in local mode). The owner check for
+   * subscriptions stays for a person's own choice; this path is the app AI's.
+   */
+  lendable(kind: LentSubscription): LendableSubscription {
+    const owner = this.options.ownerPrincipal ?? 'owner';
+    const choiceFor = (profile: ResearchProfile) =>
+      this.choice(owner, { provider: kind, profile });
+    return {
+      available: () =>
+        this.subscriptionReady(kind) && this.now() >= this.loggedOutUntil[kind],
+      llm: () => new DisabledLlm(),
+      runner: (profile) =>
+        kind === 'claude-subscription'
+          ? new ClaudeCliRunner(
+              this.cliOptions('claude', choiceFor(profile), {
+                principal: owner,
+              }),
+            )
+          : new CodexCliRunner(
+              this.codexOptions(choiceFor(profile), { principal: owner }),
+            ),
+      failed: (code) => {
+        // A logged-out CLI (or Codex's container down) fails every lent turn: people fall
+        // back meanwhile (ADR 0019, ADR 0020).
+        if (!pausesLending(kind, code)) return;
+        this.loggedOutUntil[kind] = this.now() + LOGGED_OUT_PAUSE_MS;
+        // Ask the sandbox again next time instead of trusting its last answer.
+        if (kind === 'chatgpt-subscription') this.codexStatusCache = null;
+      },
+    };
+  }
+
+  private subscriptionReady(kind: LentSubscription): boolean {
+    if (kind === 'claude-subscription') return this.claudeOnPath;
+    // The sandbox said, less than 30 s ago, that the owner's login is not there: nothing to
+    // lend (QA N-2); an older answer is not trusted (review R3).
+    const cached = this.codexStatusCache;
+    const loggedOut =
+      cached !== null &&
+      this.now() - cached.at < CODEX_STATUS_TTL_MS &&
+      cached.status.loggedIn === false;
+    return this.codexReady() && !loggedOut;
+  }
+
+  /** Where Codex runs (ADR 0020): its sandbox runner, the owner's Mac (local), or nowhere. */
+  private codexMode(): 'sandbox' | 'local' | null {
+    const { config } = this.options;
+    if (config.KB_CHAT_CODEX_RUNNER_URL) return 'sandbox';
+    return config.KB_CHAT_CODEX ? 'local' : null;
+  }
+
+  /** Codex answers only while it is configured and a master turned it on (KBC-027 BR-1). */
+  private codexReady(): boolean {
+    return this.codexMode() !== null && (this.options.codexEnabled?.() ?? true);
+  }
+
+  /** "IA da aplicação" > Codex: configured, and whether the owner's login is there. */
+  async codexStatus(): Promise<CodexStatus> {
+    const cached = this.codexStatusCache;
+    if (cached && this.now() - cached.at < CODEX_STATUS_TTL_MS)
+      return cached.status;
+    const status = await this.readCodexStatus();
+    this.codexStatusCache = { status, at: this.now() };
+    return status;
+  }
+
+  private async readCodexStatus(): Promise<CodexStatus> {
+    const url = this.options.config.KB_CHAT_CODEX_RUNNER_URL;
+    const configured = this.codexMode() !== null;
+    if (!url) return { configured, loggedIn: null };
+    try {
+      const response = await fetch(`${url}/status`, {
+        signal: AbortSignal.timeout(CODEX_STATUS_TIMEOUT_MS),
+      });
+      const body: unknown = await response.json();
+      const loggedIn =
+        typeof body === 'object' && body !== null && 'loggedIn' in body
+          ? body.loggedIn === true
+          : null;
+      return { configured, loggedIn };
+    } catch {
+      // The sandbox is not running (COMPOSE_PROFILES without codex) or did not answer.
+      return { configured, loggedIn: null };
+    }
+  }
+
+  private now(): number {
+    return Date.now();
+  }
 
   /** Looks `claude` up again; the default provider depends on it (BR-4). */
   async refreshCliLookup(): Promise<void> {
@@ -350,6 +476,9 @@ export class ProviderRegistry implements ProviderCatalog {
         ? (this.choice(principal, { profile: 'deep' }).model ?? null)
         : undefined;
     if (this.perTurn(choice)) return this.turnScoped(choice, principal);
+    // Codex's switch is read on every turn, never through the cache (KBC-027 review R1).
+    if (choice.provider === 'chatgpt-subscription' && !this.codexReady())
+      return new DisabledResearchRunner();
     // One cached runner per profile (and deep model), so asking fast then deep keeps both.
     const kind = `runner-${profile}>${deepModel ?? ''}`;
     return this.cached(choiceId(kind, principal, choice), () =>
@@ -387,6 +516,7 @@ export class ProviderRegistry implements ProviderCatalog {
       runner: () =>
         this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
     });
+    this.afterOwnerTest(principal, request.provider, result.ok);
     // The status card shows the last test (KBC-023 BR-6); the key is never part of it.
     await this.options.settings.recordTest(principal, {
       provider: request.provider,
@@ -396,6 +526,18 @@ export class ProviderRegistry implements ProviderCatalog {
       at: new Date().toISOString(),
     });
     return result;
+  }
+
+  /** The owner logged in again: lend the subscription again at once (ADR 0019). */
+  private afterOwnerTest(
+    principal: string,
+    provider: AiTestRequest['provider'],
+    ok: boolean,
+  ): void {
+    if (!ok || !isLentSubscription(provider) || !this.isOwner(principal))
+      return;
+    this.loggedOutUntil[provider] = 0;
+    this.codexStatusCache = null;
   }
 
   private buildLlm(
@@ -466,8 +608,8 @@ export class ProviderRegistry implements ProviderCatalog {
     if (choice.provider === 'claude-subscription')
       return new ClaudeCliRunner(this.cliOptions('claude', choice, build));
     if (choice.provider === 'chatgpt-subscription')
-      return this.options.config.KB_CHAT_CODEX
-        ? new CodexCliRunner(this.cliOptions('codex', choice, build))
+      return this.codexReady()
+        ? new CodexCliRunner(this.codexOptions(choice, build))
         : new DisabledResearchRunner();
     const llm = this.buildLlm(choice, principal, build.meter);
     const loop = this.options.perTokenRunner;
@@ -519,6 +661,16 @@ export class ProviderRegistry implements ProviderCatalog {
       tools,
       systemPrompt: this.options.systemPrompt,
       subAgentPrompt: this.options.subAgentPrompt,
+    };
+  }
+
+  /** Codex's options: its sandbox runner when there is one (ADR 0020). */
+  private codexOptions(choice: ProviderChoice, build: RunnerBuild) {
+    const { config } = this.options;
+    const url = config.KB_CHAT_CODEX_RUNNER_URL;
+    return {
+      ...this.cliOptions('codex', choice, build),
+      ...(url && { runner: { url } }),
     };
   }
 
@@ -594,9 +746,12 @@ export class ProviderRegistry implements ProviderCatalog {
   ): ProviderInfo['reason'] {
     if (isSubscription(id) && !this.isOwner(principal)) return 'owner-only';
     if (id === 'app') return this.appReason(principal);
+    if (id === 'chatgpt-subscription') {
+      if (!this.codexReady()) return 'not-enabled';
+      // In the sandbox, Codex is in its own container, not on this PATH (ADR 0020).
+      if (this.codexMode() === 'sandbox') return null;
+    }
     if (PROVIDERS[id].cliBin && !cliFound) return 'cli-missing';
-    if (id === 'chatgpt-subscription' && !this.options.config.KB_CHAT_CODEX)
-      return 'not-enabled';
     if (isKeyProvider(id) && this.keySource(principal, id) === null)
       return 'key-missing';
     return null;

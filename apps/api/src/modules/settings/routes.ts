@@ -78,6 +78,14 @@ function assertMayUpdate(
     throw new AppError('FORBIDDEN', "Subscriptions are the owner's own");
 }
 
+/** The invitation's preferences, without a default collection the person no longer sees. */
+function visibleInitial(request: FastifyRequest) {
+  const initial = viewerOf(request).person.initialPreferences;
+  if (!initial?.defaultTopic || canSee(request, initial.defaultTopic))
+    return initial;
+  return { ...initial, defaultTopic: undefined };
+}
+
 /** The body was read, so only the response tells that the client went away. */
 function abortOnDisconnect(reply: FastifyReply): AbortSignal {
   const abort = new AbortController();
@@ -87,7 +95,7 @@ function abortOnDisconnect(reply: FastifyReply): AbortSignal {
   return abort.signal;
 }
 
-function settingsCrud(app: FastifyInstance, options: SettingsRouteOptions) {
+function settingsRead(app: FastifyInstance, options: SettingsRouteOptions) {
   const { settings } = options;
   const routes = app.withTypeProvider<ZodTypeProvider>();
   routes.get(
@@ -96,8 +104,14 @@ function settingsCrud(app: FastifyInstance, options: SettingsRouteOptions) {
       config: { access: SIGNED_IN },
       schema: { response: { 200: settingsViewSchema } },
     },
-    async (request) => settings.view(principalOf(request)),
+    async (request) =>
+      settings.view(principalOf(request), visibleInitial(request)),
   );
+}
+
+function settingsUpdate(app: FastifyInstance, options: SettingsRouteOptions) {
+  const { settings } = options;
+  const routes = app.withTypeProvider<ZodTypeProvider>();
   routes.put(
     '/api/v1/settings',
     {
@@ -109,7 +123,11 @@ function settingsCrud(app: FastifyInstance, options: SettingsRouteOptions) {
     },
     async (request) => {
       assertMayUpdate(request, request.body);
-      return settings.update(principalOf(request), request.body);
+      return settings.update(
+        principalOf(request),
+        request.body,
+        visibleInitial(request),
+      );
     },
   );
 }
@@ -161,7 +179,8 @@ function statusRoute(
 export const settingsRoutes =
   (options: SettingsRouteOptions): FastifyPluginAsync =>
   async (app) => {
-    settingsCrud(app, options);
+    settingsRead(app, options);
+    settingsUpdate(app, options);
     providerRoutes(app, options);
     statusRoute(app, options);
   };
