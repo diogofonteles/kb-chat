@@ -217,7 +217,9 @@ Smoke à mão, de qualquer lugar:
 deploy/scripts/smoke.sh https://kb.<seu-domínio>
 ```
 
-Ele confere: `/health`; a página com CSP e HSTS; `/mcp` 404; `/api/v1/topics` 401 sem sessão.
+Ele confere: `/health`; a página com CSP e HSTS; as páginas públicas `/privacidade` e `/tutorial` sem sessão e sem cache; `/mcp` 404; `/api/v1/topics` 401 sem sessão.
+
+As imagens do tutorial (`/assets/tutorial/*.webp`, nome com hash) saem com cache de um ano. Para trocá-las depois de uma mudança de tela, rode `pnpm tutorial:screenshots` no repositório (README, "Tutorial screenshots") e publique pelo fluxo normal.
 
 ## 9. 👤 DONO — login do Claude (opcional)
 
