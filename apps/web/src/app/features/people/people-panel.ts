@@ -17,6 +17,7 @@ import {
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
+  type InvitationPreset,
   type Person,
   type PersonUpdate,
 } from '@kb-chat/contracts';
@@ -159,7 +160,7 @@ export class PeoplePanel {
   protected readonly configuring = signal(false);
   /** A number typed in the preset is not kept yet: the invitation waits (design D4). */
   protected readonly presetInvalid = signal(false);
-  protected readonly draftPreset = linkedSignal(
+  protected readonly draftPreset = linkedSignal<InvitationPreset>(
     () => this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
   );
   /** What the invitation starts the person with, for the hint; '' is the plain invite. */

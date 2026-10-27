@@ -1,22 +1,126 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import type { InvitePreset } from '@kb-chat/contracts';
+import type { InvitationPreset } from '@kb-chat/contracts';
 import { TOPICS } from '../../testing/fixtures.js';
 import { InvitePresetEditor } from './invite-preset-editor.js';
+import { NO_LENDING, type Lending } from './lending.js';
 import { plainPreset } from './preset-defaults.js';
 
-async function renderEditor(preset: InvitePreset = plainPreset()) {
+async function renderEditor(
+  preset: InvitationPreset = plainPreset(),
+  lending: Lending = NO_LENDING,
+) {
   const changed = vi.fn();
+  const invalidChange = vi.fn();
   const view = await render(InvitePresetEditor, {
     providers: [provideZonelessChangeDetection()],
-    inputs: { preset, topics: TOPICS.items, defaultAppAi: 'house' },
-    on: { changed },
+    inputs: { preset, topics: TOPICS.items, defaultAppAi: 'house', lending },
+    on: { changed, invalidChange },
   });
-  return { ...view, changed };
+  return { ...view, changed, invalidChange };
 }
 
-const last = (changed: ReturnType<typeof vi.fn>): InvitePreset =>
-  changed.mock.lastCall?.[0] as InvitePreset;
+const OWNER_LENDS_CLAUDE: Lending = {
+  canLend: true,
+  lendable: { 'claude-subscription': true, 'chatgpt-subscription': false },
+};
+
+const optionsOf = (select: HTMLElement) =>
+  within(select)
+    .getAllByRole('option')
+    .map((option) => (option as HTMLOptionElement).value);
+
+describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', () => {
+  it('offers only what the owner can lend now (AC-7)', async () => {
+    await renderEditor(plainPreset(), OWNER_LENDS_CLAUDE);
+    expect(optionsOf(screen.getByLabelText('Qual IA atende a pessoa'))).toEqual(
+      ['default', 'house', 'claude-subscription', 'none'],
+    );
+  });
+
+  it('asks for the terms before the preset lends it, and the invitation waits (AC-5)', async () => {
+    const { changed, invalidChange, fixture } = await renderEditor(
+      plainPreset(),
+      OWNER_LENDS_CLAUDE,
+    );
+    const select = screen.getByLabelText(
+      'Qual IA atende a pessoa',
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    expect(invalidChange).toHaveBeenLastCalledWith(true);
+    const confirm = screen.getByRole('group', {
+      name: 'Ceder a assinatura do Claude a esta pessoa?',
+    });
+    expect(confirm.textContent).toContain(
+      'Os termos da Anthropic não permitem',
+    );
+    expect(document.activeElement).toBe(
+      within(confirm).getByRole('button', { name: 'Cancelar' }),
+    );
+    fireEvent.click(
+      within(confirm).getByRole('button', { name: 'Ceder assim mesmo' }),
+    );
+    expect(last(changed).ai).toMatchObject({
+      appAi: 'claude-subscription',
+      subscriptionTermsAccepted: true,
+    });
+    expect(invalidChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('goes back to the earlier choice when the lending is cancelled', async () => {
+    const { changed, fixture } = await renderEditor(
+      plainPreset(),
+      OWNER_LENDS_CLAUDE,
+    );
+    const select = screen.getByLabelText(
+      'Qual IA atende a pessoa',
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'claude-subscription' } });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(changed).not.toHaveBeenCalled();
+    expect(select.value).toBe('default');
+    expect(
+      screen.queryByRole('group', { name: /Ceder a assinatura/ }),
+    ).toBeNull();
+  });
+
+  it('drops the confirmed terms when another AI is chosen', async () => {
+    const preset = plainPreset();
+    const { changed } = await renderEditor(
+      {
+        ...preset,
+        ai: {
+          ...preset.ai,
+          appAi: 'claude-subscription',
+          subscriptionTermsAccepted: true,
+        },
+      },
+      OWNER_LENDS_CLAUDE,
+    );
+    fireEvent.change(screen.getByLabelText('Qual IA atende a pessoa'), {
+      target: { value: 'house' },
+    });
+    expect(last(changed).ai.appAi).toBe('house');
+    expect(last(changed).ai).not.toHaveProperty('subscriptionTermsAccepted');
+  });
+
+  it('offers no subscription to a master who is not the owner (AC-7)', async () => {
+    await renderEditor(plainPreset(), {
+      canLend: false,
+      lendable: { 'claude-subscription': true, 'chatgpt-subscription': true },
+    });
+    expect(optionsOf(screen.getByLabelText('Qual IA atende a pessoa'))).toEqual(
+      ['default', 'house', 'none'],
+    );
+  });
+});
+
+const last = (changed: ReturnType<typeof vi.fn>): InvitationPreset =>
+  changed.mock.lastCall?.[0] as InvitationPreset;
 
 describe('InvitePresetEditor (KBC-028 AC-2)', () => {
   it('starts as the plain invitation and sends the whole preset up', async () => {

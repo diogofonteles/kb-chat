@@ -63,9 +63,52 @@
       }
     </select>
   </label>
-  <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHint">
-    Assinaturas são cedidas pessoa a pessoa, no editor da pessoa.
-  </p>
+  @if (canLend()) {
+    <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHintOwner">
+      As suas assinaturas aparecem aqui enquanto podem ser cedidas, sempre com a
+      confirmação dos termos. Perfis de convite não guardam assinaturas.
+    </p>
+  } @else {
+    <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHint">
+      Assinaturas são cedidas pessoa a pessoa, no editor da pessoa.
+    </p>
+  }
+  @if (lendCopy(); as copy) {
+    <div
+      class="lend-confirm"
+      role="group"
+      [attr.aria-labelledby]="uid + '-lend-title'"
+      [attr.aria-describedby]="uid + '-lend-terms'"
+    >
+      <p [id]="uid + '-lend-title'" class="lend-title">
+        {{ copy.toPerson() }}
+      </p>
+      <p [id]="uid + '-lend-terms'">{{ copy.terms() }}</p>
+      <div class="actions">
+        <button
+          type="button"
+          class="secondary danger"
+          (click)="lend()"
+          i18n="@@lend.confirm"
+        >
+          Ceder assim mesmo
+        </button>
+        <button
+          #cancelLendButton
+          type="button"
+          class="secondary"
+          (click)="cancelLend()"
+          i18n="@@lend.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  } @else if (termsConfirmed()) {
+    <p class="hint" i18n="@@preset.termsConfirmed">
+      Termos da assinatura confirmados para este convite.
+    </p>
+  }
   @if (noAppAi()) {
     <p [id]="uid + '-none-hint'" class="hint" i18n="@@preset.noneHint">
       Sem IA da aplicação, a cota e a reserva paga não se aplicam.
