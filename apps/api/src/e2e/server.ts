@@ -29,6 +29,7 @@ import { SealedSettingsStore } from '../adapters/sealed-settings-store.js';
 import { SecretBox } from '../adapters/secret-box.js';
 import { createHouseAi } from '../house-ai-factory.js';
 import { FakeOpenRouter } from '../testing/fake-openrouter.js';
+import { startCodexRunner } from '../codex-runner/runner-server.js';
 import { DisabledLlm } from '../adapters/disabled-llm.js';
 import { MemorySpendLedger } from '../adapters/memory-spend-ledger.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
@@ -40,6 +41,19 @@ import {
 
 /** The owner of the E2E run: a master with the `owner` data the specs expect. */
 export const E2E_OWNER_EMAIL = 'owner@kb-chat.test';
+
+// Codex's sandbox runner (KBC-027, ADR 0020), here in-process with the fake Codex: Codex
+// turns take the production path (runner, then the turn's MCP endpoint by token).
+const codexRunner = await startCodexRunner({
+  bin: fileURLToPath(
+    new URL('../../test/fakes/fake-codex.mjs', import.meta.url),
+  ),
+  codexHome: mkdtempSync(join(tmpdir(), 'kbchat-e2e-codex-')),
+  mcpUrl: `http://127.0.0.1:${process.env['PORT'] ?? '3000'}/mcp/turn`,
+  host: '127.0.0.1',
+  port: 0,
+  env: { PATH: process.env['PATH'] ?? '' },
+});
 
 // E2E server: the fixture vault and the in-process index, no QMD or models.
 const config = loadConfig({
@@ -55,6 +69,7 @@ const config = loadConfig({
   KB_CHAT_OWNER_EMAIL: E2E_OWNER_EMAIL,
   // Every spec signs in; they run in parallel from one address.
   AUTH_RATE_LIMIT: '10000',
+  KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
 });
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
@@ -124,6 +139,18 @@ const house = await createHouseAi({
   fetch: openRouter.fetch,
   authorizeUrl: `http://127.0.0.1:${config.PORT}${E2E_AUTHORIZE_PATH}`,
 });
+/** A lent subscription that answers with the stub model, available while `available` says. */
+const stubSubscription = (available: () => boolean) => ({
+  available,
+  llm: () => new DisabledLlm(),
+  runner: () =>
+    agent.perTokenRunner(new StubLlmAdapter(), {
+      principal: 'lent-subscription',
+      dailyCapUsd: () => Number.POSITIVE_INFINITY,
+      ledger: new MemorySpendLedger(),
+    }),
+  failed: () => undefined,
+});
 const ai = await createAiProviders({
   config,
   principal: OWNER,
@@ -138,18 +165,10 @@ const ai = await createAiProviders({
   house,
   personOf: (principal) => auth.people.cachedByPrincipal(principal),
   ledger,
-  // No Claude Code here: the owner's lent subscription (KBC-024) answers with the stub, in
-  // its own ledger, so the people and Settings screens can be tested end to end.
-  claudeSubscription: {
-    available: () => true,
-    llm: () => new DisabledLlm(),
-    runner: () =>
-      agent.perTokenRunner(new StubLlmAdapter(), {
-        principal: 'lent-subscription',
-        dailyCapUsd: () => Number.POSITIVE_INFINITY,
-        ledger: new MemorySpendLedger(),
-      }),
-    failed: () => undefined,
+  // No Claude Code here: the owner's lent Claude subscription (KBC-024) answers with the stub,
+  // in its own ledger; the ChatGPT one goes to the runner above, as in production.
+  subscriptions: {
+    'claude-subscription': stubSubscription(() => true),
   },
 });
 // Today's spend starts at US$ 0.03 so the side panel has a known value (KBC-005 AC-8).

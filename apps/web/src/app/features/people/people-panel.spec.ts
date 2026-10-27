@@ -12,6 +12,7 @@ import { RELOAD_PAGE, SessionStore } from '@core/auth/session-store.js';
 import { anOwner } from '../../testing/session-fixtures.js';
 import { TOPICS } from '../../testing/fixtures.js';
 import { PeoplePanel } from './people-panel.js';
+import { LEND_NONE } from '../../testing/lending-fixtures.js';
 
 const aPerson = (overrides: Partial<Person> = {}): Person => ({
   id: '11111111-1111-4111-8111-111111111111',
@@ -54,7 +55,7 @@ async function renderPanel(people: Person[] = [owner, aPerson()]) {
   http.expectOne('/api/v1/topics').flush(TOPICS);
   http
     .expectOne('/api/v1/house-ai/default')
-    .flush({ defaultAppAi: 'house', subscriptionAvailable: false });
+    .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
   await result.fixture.whenStable();
   return { ...result, http };
 }
@@ -464,7 +465,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     http.expectOne('/api/v1/topics').flush(TOPICS);
     http
       .expectOne('/api/v1/house-ai/default')
-      .flush({ defaultAppAi: 'house', subscriptionAvailable: false });
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     await result.fixture.whenStable();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
@@ -493,7 +494,7 @@ describe('PeoplePanel for the owner (BR-6)', () => {
     http.expectOne('/api/v1/access-requests').flush({ items: [] });
     http
       .expectOne('/api/v1/house-ai/default')
-      .flush({ defaultAppAi: 'house', subscriptionAvailable: false });
+      .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
     http.expectOne('/api/v1/spend/people').flush({
       items: [
         { email: 'owner@example.com', usd: 0 },

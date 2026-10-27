@@ -1,6 +1,8 @@
 import {
   DEFAULT_PERSON_AI,
+  LENT_SUBSCRIPTIONS,
   type AppAi,
+  type LentSubscription,
   type PersonAi,
   type ResearchProfile,
 } from '@kb-chat/contracts';
@@ -20,7 +22,7 @@ import type {
 import type { SpendLedgerPort } from '../ports/spend-ledger.js';
 import { DisabledResearchRunner } from './dynamic-ports.js';
 import { HouseLlm, type PaidFallbackGate } from './house-llm.js';
-import { HouseResearchRunner } from './house-runner.js';
+import { HouseResearchRunner, type AppPlan } from './house-runner.js';
 import { PaidMeters, type TurnMeter } from './paid-meters.js';
 import { SubscriptionLedgerRunner } from './subscription-ledger-runner.js';
 
@@ -85,9 +87,17 @@ export interface AppAiPlanDeps {
   readonly meters?: PaidMeters;
   /** More app AIs beside the house plan (KBC-024, KBC-027). */
   readonly handlers?: Partial<Record<LentAi, AppAiHandler>>;
-  /** The owner's Claude subscription, lent person by person (KBC-024). */
-  readonly claudeSubscription?: LendableSubscription;
+  /** The owner's subscriptions, lent person by person (KBC-024, KBC-027). */
+  readonly subscriptions?: Partial<
+    Record<LentSubscription, LendableSubscription>
+  >;
 }
+
+/** How a lent subscription's answers say who paid (ADR 0019, ADR 0020). */
+const LENT_PLAN: Record<LentSubscription, AppPlan> = {
+  'claude-subscription': 'app-subscription',
+  'chatgpt-subscription': 'app-chatgpt-subscription',
+};
 
 const startOfMonth = (now: Date): Date =>
   new Date(now.getFullYear(), now.getMonth(), 1);
@@ -98,12 +108,12 @@ export class AppAiPlan implements AppAiPort {
   private readonly meters: PaidMeters;
 
   constructor(private readonly deps: AppAiPlanDeps) {
-    const lent = deps.claudeSubscription;
-    this.handlers = {
-      ...deps.handlers,
-      house: this.houseHandler(),
-      ...(lent && { 'claude-subscription': this.lentHandler(lent) }),
-    };
+    const lent: Partial<Record<LentAi, AppAiHandler>> = {};
+    for (const kind of LENT_SUBSCRIPTIONS) {
+      const subscription = deps.subscriptions?.[kind];
+      if (subscription) lent[kind] = this.lentHandler(kind, subscription);
+    }
+    this.handlers = { ...deps.handlers, house: this.houseHandler(), ...lent };
     this.meters = deps.meters ?? new PaidMeters();
   }
 
@@ -147,13 +157,16 @@ export class AppAiPlan implements AppAiPort {
    * The owner's subscription for a person he lent it to: their daily quota first, then his
    * CLI, recorded at US$ 0 in the house ledger (ADR 0019).
    */
-  private lentHandler(lent: LendableSubscription): AppAiHandler {
+  private lentHandler(
+    kind: LentSubscription,
+    lent: LendableSubscription,
+  ): AppAiHandler {
     return {
       available: () => lent.available(),
       llm: () => lent.llm(),
       runner: (principal, profile) =>
         new HouseResearchRunner({
-          plan: 'app-subscription',
+          plan: LENT_PLAN[kind],
           preview: lent.runner(profile),
           quota: this.deps.quota,
           principal,

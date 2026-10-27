@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { dailyResearchesSchema, defaultableAppAiSchema } from './ai-access.js';
+import {
+  dailyResearchesSchema,
+  defaultableAppAiSchema,
+  lendableSchema,
+} from './ai-access.js';
 import { maskedKeySchema, modelIdSchema } from './settings.js';
 
 /** OpenRouter's router that picks a free model: the last free option of the chain. */
@@ -59,8 +63,17 @@ export const houseAiViewSchema = z.object({
   managementKey: maskedKeySchema.nullable(),
   /** null when not connected or OpenRouter could not be read. */
   freeUsage: freeUsageSchema.nullable(),
-  /** The owner's Claude subscription can be lent now: Claude Code is on the server (KBC-024). */
-  subscriptionAvailable: z.boolean(),
+  /** The owner's subscriptions that can be lent now (KBC-024, KBC-027). */
+  lendable: lendableSchema,
+  /**
+   * Codex, the ChatGPT subscription (KBC-027, ADR 0020): its sandbox is configured, a master
+   * turned it on, and the owner's login is there (null: the runner did not answer).
+   */
+  codex: z.object({
+    configured: z.boolean(),
+    enabled: z.boolean(),
+    loggedIn: z.boolean().nullable(),
+  }),
 });
 export type HouseAiView = z.infer<typeof houseAiViewSchema>;
 
@@ -75,14 +88,16 @@ export const houseAiUpdateSchema = z.strictObject({
   defaultAppAi: defaultableAppAiSchema.optional(),
   defaultDailyResearches: dailyResearchesSchema.optional(),
   managementKey: keySchema.nullable().optional(),
+  /** Turns Codex, the ChatGPT subscription, on or off for everyone (KBC-027). */
+  codexEnabled: z.boolean().optional(),
 });
 export type HouseAiUpdate = z.infer<typeof houseAiUpdateSchema>;
 
 /** GET /api/v1/house-ai/default: the default app AI alone (cheap, for the people screen). */
 export const houseDefaultSchema = z.object({
   defaultAppAi: defaultableAppAiSchema,
-  /** The owner's Claude subscription can be lent now (KBC-024). */
-  subscriptionAvailable: z.boolean(),
+  /** The owner's subscriptions that can be lent now (KBC-024, KBC-027). */
+  lendable: lendableSchema,
 });
 export type HouseDefault = z.infer<typeof houseDefaultSchema>;
 

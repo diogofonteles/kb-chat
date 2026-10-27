@@ -20,9 +20,9 @@ import {
 } from '@kb-chat/contracts';
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import {
+  LEND_COPY,
+  LEND_UNAVAILABLE,
   NO_LENDING,
-  lendTerms,
-  lendUnavailable,
   noDefaultNote,
   type Lending,
 } from './lending.js';
@@ -78,9 +78,12 @@ export class AiAssignmentBar {
       this.options().find((option) => option.id === this.appAi())?.label ?? '',
   );
   protected readonly options = computed(() =>
-    APP_AI_ASSIGNMENTS.filter(
-      (id) => !isLentSubscription(id) || this.lending().canLend,
-    ).map((id) => ({
+    APP_AI_ASSIGNMENTS.filter((id) => {
+      if (!isLentSubscription(id)) return true;
+      const { canLend, lendable } = this.lending();
+      // ChatGPT's only while it can be lent (T9).
+      return canLend && (id !== 'chatgpt-subscription' || lendable[id]);
+    }).map((id) => ({
       id,
       label: assignmentLabel(id, this.defaultAppAi()),
     })),
@@ -93,12 +96,18 @@ export class AiAssignmentBar {
   protected readonly confirmingLend = signal<
     AssignmentRequest['target'] | null
   >(null);
-  protected readonly terms = lendTerms;
-  protected readonly unavailableNote = computed(() =>
-    isLentSubscription(this.appAi()) && !this.lending().available
-      ? lendUnavailable()
-      : null,
-  );
+  /** The chosen subscription's copy, while one is chosen. */
+  private readonly lendCopyOf = computed(() => {
+    const appAi = this.appAi();
+    return isLentSubscription(appAi) ? LEND_COPY[appAi] : null;
+  });
+  protected readonly terms = computed(() => this.lendCopyOf()?.terms() ?? '');
+  protected readonly unavailableNote = computed(() => {
+    const appAi = this.appAi();
+    return isLentSubscription(appAi) && !this.lending().lendable[appAi]
+      ? LEND_UNAVAILABLE[appAi]()
+      : null;
+  });
   /** Why "também para os próximos" is off with the subscription (design D9). */
   protected readonly noDefaultNote = computed(() =>
     isLentSubscription(this.appAi()) ? noDefaultNote() : null,
@@ -109,12 +118,12 @@ export class AiAssignmentBar {
   );
   /** The scope of the lending, before its terms (design D2). */
   protected readonly lendTitle = computed(() => {
-    const target = this.confirmingLend();
-    if (target === 'all')
-      return $localize`:@@lend.titleAll:Ceder a assinatura do Claude a todas as ${this.total()}:count: pessoas?`;
+    const copy = this.lendCopyOf();
+    if (!copy) return '';
+    if (this.confirmingLend() === 'all') return copy.toAll(this.total());
     return this.selectedCount() === 1
-      ? $localize`:@@lend.titleOne:Ceder a assinatura do Claude a 1 pessoa selecionada?`
-      : $localize`:@@lend.titleSelected:Ceder a assinatura do Claude a ${this.selectedCount()}:count: pessoas selecionadas?`;
+      ? copy.toOne()
+      : copy.toSelected(this.selectedCount());
   });
 
   private focusAfterRender(

@@ -75,6 +75,11 @@ Rel(api, vault, "Reads markdown and frontmatter from", "fs, read-only")
 Rel(api, qmd, "Sends query and get calls to", "MCP stdio")
 Rel(api, ledger, "Appends spend and events to")
 Rel(api, openrouter, "Streams completions from", "HTTPS, key in env")
+Container(codex, "Codex sandbox (KBC-027, ADR 0020)", "API image as uid 10002, runner + Codex CLI", "Own container: only CODEX_HOME mounted, no .env, state or Claude login; one turn at a time")
+System_Ext(openai, "OpenAI (ChatGPT plan)")
+Rel(api, codex, "Sends a Codex turn (model, input, token) to the runner", "HTTP, network codex 172.30.0.0/24, only from 172.30.0.2")
+Rel(codex, api, "Calls the turn's kb tools", "MCP over HTTP, by token, MCP routes only")
+Rel(codex, openai, "Runs the model", "HTTPS")
 ```
 
 Legend: Container = runnable unit or data store in this repository; ContainerDb = data store; System_Ext = outside this repository.
@@ -198,6 +203,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
    - `SameSite=Lax` plus the `X-Requested-With: kb-chat` header and the `Origin` check on every state change, sign-in included.
    - `HttpOnly` cookie (`Secure` when hosted); only the token's SHA-256 is stored, in 0600 files; sliding 30-day expiry.
    - One guard driven by `config.access` on every route (404 for unseen collections, 403 for features and roles), conversations and settings keyed by principal (saving over another person's id answers 404), subscriptions and environment keys for the owner only, except the Claude subscription the owner lends person by person (KBC-024, ADR 0019); the owner sees spend per person, not content.
+   - Codex (ADR 0020): never in the API container; each turn runs in the `codex` service (the API image as uid 10002, only `/srv/kb-chat/codex` mounted, no `.env`, state, Claude login or secrets key, read-only root, no capabilities), one at a time, through a runner that builds the locked-down arguments itself and answers only the API's address. From the Codex address the API answers only the MCP routes (every other route is 404, so sign-in, codes and the proxy's forwarded-for trust are out of reach), and those by the turn's token; the cloud's metadata service is dropped for the `codex` subnet. CI proves on every PR, on arm64, that a turn there finds no canary of the state, the Claude login, the deploy `.env` or the secrets key, no extra mount, no capability and no metadata service. Accepted: Codex can read its own login and reaches the internet.
    - Lent subscription (ADR 0019): only the owner grants it (403 to other masters, the terms confirmed in the request); a guest's question then runs on the owner's Claude Code with no built-in tools (`--tools ''`, only the kb MCP tools of a per-turn token, `--strict-mcp-config`, `--setting-sources ''`), on a topic the research route already checked for that guest, so an injected prompt reaches only that collection's kb tools; the guest spends the owner's usage limits, bounded by the guest's daily quota.
    - Revocation deletes the sessions at once; `LAST_MASTER` and `OWNER_PROTECTED` keep a master in place.
    - `config.rateLimit` on sign-in; the log carries the person id, never the token or the email.

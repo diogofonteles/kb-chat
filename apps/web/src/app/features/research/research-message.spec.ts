@@ -286,6 +286,7 @@ describe('ResearchMessage', () => {
   it.each([
     ['CLI_LOGIN_REQUIRED', /não está logado/],
     ['PROVIDER_UNAVAILABLE', /não respondeu agora/],
+    ['CLI_MISSING', /não está disponível agora no servidor/],
     ['LLM_KEY_REJECTED', /chave de API não foi aceita/],
     ['LLM_NOT_CONFIGURED', /Escolha um em ⚙ Configurações/],
   ] as const)('explains the runner failure %s', async (error, text) => {
@@ -404,6 +405,26 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     expect(footer).toContain('Incluído na assinatura do administrador');
     expect(footer).not.toContain('Incluído na sua assinatura');
     expect(footer).toContain('Pesquisas restantes hoje: 2');
+  });
+
+  it('KBC-027: says the administrator’s ChatGPT subscription answered', async () => {
+    await renderMessage(
+      aTurn({
+        billing: 'subscription',
+        usd: 0,
+        model: 'gpt-5.5',
+        plan: 'app-chatgpt-subscription',
+        remaining: 3,
+      }),
+    );
+    const footer = (
+      document.querySelector('.footer')?.textContent ?? ''
+    ).replace(/\s+/g, ' ');
+    expect(footer).toContain(
+      'IA da aplicação (assinatura do ChatGPT do administrador)',
+    );
+    expect(footer).toContain('Incluído na assinatura do administrador');
+    expect(footer).toContain('Pesquisas restantes hoje: 3');
   });
 
   it('shows the cost of a paid fallback answer without the quota line for one’s own AI', async () => {

@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { DEFAULT_PERSON_AI, type PersonAi } from '@kb-chat/contracts';
 import { PersonAiEditor } from './person-ai-editor.js';
+import { LEND_ALL, LEND_NONE } from '../../testing/lending-fixtures.js';
 
 async function renderEditor(ai: PersonAi = DEFAULT_PERSON_AI) {
   const changed = vi.fn();
@@ -115,7 +116,7 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
       inputs: {
         ai: DEFAULT_PERSON_AI,
         defaultAppAi: 'house',
-        lending: { canLend: true, available: true },
+        lending: { canLend: true, lendable: LEND_ALL },
       },
       on: { changed },
     });
@@ -156,7 +157,7 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
       inputs: {
         ai: DEFAULT_PERSON_AI,
         defaultAppAi: 'house',
-        lending: { canLend: true, available: true },
+        lending: { canLend: true, lendable: LEND_ALL },
       },
       on: { changed },
     });
@@ -188,7 +189,7 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
     ).toBeNull();
     fixture.componentRef.setInput('lending', {
       canLend: true,
-      available: false,
+      lendable: LEND_NONE,
     });
     await fixture.whenStable();
     expect(
@@ -231,7 +232,7 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
       inputs: {
         ai: DEFAULT_PERSON_AI,
         defaultAppAi: 'house',
-        lending: { canLend: true, available: true },
+        lending: { canLend: true, lendable: LEND_ALL },
       },
       on: { changed },
     });
@@ -285,5 +286,63 @@ describe('PersonAiEditor (KBC-022 FR-5)', () => {
       (screen.getByLabelText('Qual IA atende esta pessoa') as HTMLSelectElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it('KBC-027 AC-5: lends the ChatGPT subscription after the OpenAI terms', async () => {
+    const changed = vi.fn();
+    const { fixture } = await render(PersonAiEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        ai: DEFAULT_PERSON_AI,
+        defaultAppAi: 'house',
+        lending: { canLend: true, lendable: LEND_ALL },
+      },
+      on: { changed },
+    });
+    fireEvent.change(screen.getByLabelText('Qual IA atende esta pessoa'), {
+      target: { value: 'chatgpt-subscription' },
+    });
+    await fixture.whenStable();
+    const confirm = screen.getByRole('group', {
+      name: 'Ceder a assinatura do ChatGPT a esta pessoa?',
+    });
+    expect(confirm.textContent).toContain('Os termos da OpenAI não permitem');
+    fireEvent.click(screen.getByRole('button', { name: 'Ceder assim mesmo' }));
+    expect(changed).toHaveBeenLastCalledWith({
+      appAi: 'chatgpt-subscription',
+      subscriptionTermsAccepted: true,
+    });
+  });
+
+  it('KBC-027 design 2: offers the ChatGPT subscription only while it can be lent', async () => {
+    const { fixture } = await render(PersonAiEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        ai: DEFAULT_PERSON_AI,
+        defaultAppAi: 'house',
+        lending: {
+          canLend: true,
+          lendable: {
+            'claude-subscription': true,
+            'chatgpt-subscription': false,
+          },
+        },
+      },
+    });
+    expect(
+      screen.queryByRole('option', { name: 'ChatGPT do administrador' }),
+    ).toBeNull();
+    // Still shown where it is already assigned, with why it does not answer now.
+    fixture.componentRef.setInput('ai', {
+      ...DEFAULT_PERSON_AI,
+      appAi: 'chatgpt-subscription',
+    });
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('option', { name: 'ChatGPT do administrador' }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/A assinatura do ChatGPT está desligada/),
+    ).toBeTruthy();
   });
 });

@@ -65,7 +65,7 @@ import {
 import { usageRoutes } from './modules/usage/index.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
-import { mcpRoutes } from './mcp/mcp-routes.js';
+import { mcpRoutes, peerOnlyMcp } from './mcp/mcp-routes.js';
 import { randomBytes } from 'node:crypto';
 import { SecretBox } from './adapters/secret-box.js';
 import { createHouseAi, type HouseAi } from './house-ai-factory.js';
@@ -228,7 +228,7 @@ async function registerRoutes(
   await app.register(usageRoutes({ catalog, log: deps.usage }));
   const conversations = new ConversationsService({ store: deps.conversations });
   await app.register(conversationRoutes(conversations));
-  await registerSettings(app, deps.ai);
+  await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);
 }
 
@@ -314,6 +314,15 @@ async function registerPeople(
   );
 }
 
+/** What the owner's subscriptions can do now, for "IA da aplicação" (KBC-024, KBC-027). */
+const subscriptionState = (ai: AiProviders) => ({
+  lendable: () => ({
+    'claude-subscription': ai.lent['claude-subscription'].available(),
+    'chatgpt-subscription': ai.lent['chatgpt-subscription'].available(),
+  }),
+  codex: () => ai.registry.codexStatus(),
+});
+
 /** "IA da aplicação", the OpenRouter connection and the free models (KBC-022). */
 async function registerHouse(
   app: FastifyInstance,
@@ -322,7 +331,7 @@ async function registerHouse(
   const { settings } = ai;
   await app.register(
     houseAiRoutes({
-      subscriptionAvailable: () => ai.lentSubscription.available(),
+      ...subscriptionState(ai),
       house: house.service,
       catalog: house.catalog,
       connect: house.connect,
@@ -372,11 +381,12 @@ async function registerAccess(
 async function registerSettings(
   app: FastifyInstance,
   ai: AiProviders,
+  mcpPeers: readonly string[],
 ): Promise<void> {
   await app.register(
     settingsRoutes({ settings: ai.settings, providers: ai.registry }),
   );
-  await app.register(mcpRoutes(ai.turns));
+  await app.register(mcpRoutes(ai.turns, { peers: mcpPeers }));
 }
 
 /** Settings in memory and providers from the environment only (tests). */
@@ -476,6 +486,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
 
+  // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
+  app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));
   await app.register(routeAccess);
   await app.register(hostGuard, { allowedHosts: deps.config.ALLOWED_HOSTS });
   await app.register(cors, { origin: [deps.config.WEB_ORIGIN] });

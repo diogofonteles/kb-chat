@@ -166,4 +166,59 @@ describe('HouseAiPanel (KBC-022, T12)', () => {
       'Não consegui salvar',
     );
   });
+
+  it('KBC-027 AC-4: turns Codex on and off, and says why it cannot be used', async () => {
+    const { http, fixture } = await renderPanel(
+      aHouseView({
+        codex: { configured: true, enabled: false, loggedIn: true },
+      }),
+    );
+    const block = screen.getByRole('region', {
+      name: 'Assinatura do ChatGPT (Codex)',
+    });
+    // Says plainly whether it is on, and what the sandbox does and does not cover (design 1, 3).
+    expect(block.textContent).toContain('Desligada · Logado no servidor.');
+    expect(block.textContent).toContain(
+      'sem acesso aos segredos nem ao estado do servidor',
+    );
+    expect(block.textContent).toContain('a pergunta vai à OpenAI');
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Ligar a assinatura do ChatGPT (Codex)',
+      }),
+    );
+    const put = http.expectOne({ method: 'PUT', url: '/api/v1/house-ai' });
+    expect(put.request.body).toEqual({ codexEnabled: true });
+    put.flush(
+      aHouseView({
+        codex: { configured: true, enabled: true, loggedIn: false },
+      }),
+    );
+    await fixture.whenStable();
+    expect(block.textContent).toContain('Ligada · O Codex não está logado');
+    expect(block.textContent).toContain('codex login --device-auth');
+  });
+
+  it('KBC-027 QA F-6: says when the Codex container does not answer', async () => {
+    await renderPanel(
+      aHouseView({
+        codex: { configured: true, enabled: true, loggedIn: null },
+      }),
+    );
+    expect(screen.getByText(/O contêiner do Codex não respondeu/)).toBeTruthy();
+  });
+
+  it('KBC-027: Codex cannot be turned on where it is not configured', async () => {
+    await renderPanel(aHouseView());
+    expect(
+      (
+        screen.getByRole('checkbox', {
+          name: 'Ligar a assinatura do ChatGPT (Codex)',
+        }) as HTMLInputElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(/não está configurado neste servidor/),
+    ).toBeTruthy();
+  });
 });

@@ -238,6 +238,32 @@ O login fica em `/srv/kb-chat/claude` (no volume e no backup cifrado). Depois, e
 - Se o login cair, cada pesquisa cedida falha com "faça login" e a assinatura fica indisponível por 10 minutos: quem a recebeu passa para a própria IA (ou fica sem IA) e a tela de pessoas avisa "não está disponível agora". Refaça o login com o comando acima e teste a conexão.
 - Antes de voltar para uma versão anterior ao KBC-024 (rollback), revogue todas as cessões (Pessoas e permissões → outra IA): a versão anterior não lê `claude-subscription` no `people.json`, e as respostas salvas da assinatura cedida ficam ilegíveis até a volta da versão nova.
 
+## 9c. 👤 DONO — assinatura do ChatGPT (Codex), no contêiner isolado (opcional)
+
+O Codex nunca roda no contêiner da API: roda no serviço `codex` (mesma imagem, outro usuário, só a pasta `/srv/kb-chat/codex` montada, sem `.env`, sem estado, sem o login do Claude, sem a chave de cifra; ADR 0020, KBC-027). Uma vez, na VM:
+
+```bash
+ssh -t ubuntu@<IP>
+sudo install -d -o 10002 -g 10002 -m 0700 /srv/kb-chat/codex
+# o contêiner do Codex nunca alcança o serviço de metadados da OCI (ADR 0020), também depois de reiniciar o Docker:
+sudo install -m 0755 /srv/kb-chat/deploy/scripts/codex-egress.sh /usr/local/sbin/kb-chat-codex-egress
+printf '[Service]\nExecStartPost=/usr/local/sbin/kb-chat-codex-egress\n' | sudo tee /etc/systemd/system/docker.service.d/20-kb-chat-codex-egress.conf
+sudo systemctl daemon-reload && sudo /usr/local/sbin/kb-chat-codex-egress
+# liga o serviço do Codex nos próximos deploys:
+echo 'COMPOSE_PROFILES=codex' | sudo tee -a /srv/kb-chat/deploy/.env
+cd /srv/kb-chat/deploy
+sudo docker compose --env-file .env --env-file release.env up -d --wait codex
+# login do dono por código (abra a URL no navegador do Mac e digite o código):
+sudo docker compose --env-file .env --env-file release.env exec codex codex login --device-auth
+sudo docker compose --env-file .env --env-file release.env exec codex codex login status
+```
+
+Antes de ligar, confira o isolamento na própria VM: `sudo /srv/kb-chat/deploy/scripts/codex-vm-check.sh` precisa dizer `sandbox check: ok` (se não disser, deixe o Codex desligado e reporte). Depois, na tela: ⚙ → **IA da aplicação** → "Assinatura do ChatGPT (Codex)" deve dizer "Desligada · Logado no servidor."; marque **Ligar a assinatura do ChatGPT (Codex)**. Faça o login (e o check) com o Codex desligado: antes de cada pesquisa o executor encerra processos soltos no contêiner. Para você: ⚙ → Sua IA → "Assinatura do ChatGPT". Para ceder: Pessoas e permissões → pessoa → "ChatGPT do administrador" (os termos da OpenAI também não permitem atender outras pessoas; a confirmação diz isso).
+
+- O `codex-vm-check.sh` planta um canário no estado e no login do Claude, roda a sonda no contêiner vivo e confere o ambiente do executor; o CI prova o mesmo em todo PR, em arm64.
+- O login fica em `/srv/kb-chat/codex` (no backup cifrado). Para revogar: `exec codex codex logout`.
+- A sub-rede `172.30.0.0/24` é da rede `codex`; se outra rede Docker da VM já a usar, o `up` falha e diz isso.
+
 ## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
 
 Tudo pela interface (ADR 0016, KBC-022); nada no `.env`.

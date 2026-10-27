@@ -60,10 +60,17 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
           </p>
           @if (lent()) {
             <div class="lent" role="note">
-              <p i18n="@@aiStatus.lent">
-                Você está usando temporariamente a IA da aplicação (assinatura
-                do Claude do administrador).
-              </p>
+              @if (lentChatgpt()) {
+                <p i18n="@@aiStatus.lentGpt">
+                  Você está usando temporariamente a IA da aplicação (assinatura
+                  do ChatGPT do administrador).
+                </p>
+              } @else {
+                <p i18n="@@aiStatus.lent">
+                  Você está usando temporariamente a IA da aplicação (assinatura
+                  do Claude do administrador).
+                </p>
+              }
               @if (canConfigureOwn()) {
                 <button
                   type="button"
@@ -193,8 +200,13 @@ export class AiStatusCard {
     this.store.aiStatus.hasValue() ? this.store.aiStatus.value() : null,
   );
   /** The owner's subscription lent to this person (KBC-024). */
-  protected readonly lent = computed(
-    () => this.status()?.appAi === 'claude-subscription',
+  protected readonly lent = computed(() => {
+    const appAi = this.status()?.appAi;
+    return appAi === 'claude-subscription' || appAi === 'chatgpt-subscription';
+  });
+  /** Which of the administrator's subscriptions, in the notice. */
+  protected readonly lentChatgpt = computed(
+    () => this.status()?.appAi === 'chatgpt-subscription',
   );
   protected readonly appLabel = computed(() => {
     const appAi = this.status()?.appAi;

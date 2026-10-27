@@ -7,6 +7,7 @@
 #   qmd    search index over MCP (primary search)
 #   kb     fallback search when qmd is down (`kb search`)
 #   claude Claude Code, only for the owner's subscription (KBC-007, KBC-010 BR-5)
+#   codex  Codex, run only by the `codex` service, the sandbox container (KBC-027, ADR 0020)
 # Everything, the workspace and these global CLIs, is installed with pnpm (project rule);
 # versions are pinned.
 
@@ -32,6 +33,7 @@ FROM ${NODE_IMAGE} AS clis
 ARG QMD_VERSION=2.8.3
 ARG KB_VERSION=0.0.12
 ARG CLAUDE_CODE_VERSION=2.1.310
+ARG CODEX_VERSION=0.164.0
 # false leaves Claude Code out (an image for hosts that never use the subscription).
 ARG INSTALL_CLAUDE=true
 # qmd's tree-sitter grammars compile with node-gyp when no prebuild matches.
@@ -50,6 +52,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate \
   && if [ "$INSTALL_CLAUDE" = "true" ]; then \
        pnpm add -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
      fi \
+  && pnpm add -g "@openai/codex@${CODEX_VERSION}" \
   && rm -rf /tmp/pnpm-store
 
 # --- Runtime: non-root, tini as PID 1 (the CLIs run in their own process groups) ---
@@ -60,8 +63,11 @@ RUN apt-get update \
 COPY --from=clis /opt/clis /opt/clis
 
 # Fixed uid/gid so the host folders under /srv/kb-chat can be owned by it (cloud-init).
+# `codex` (10002) runs only in the sandbox container, with /srv/kb-chat/codex (ADR 0020).
 RUN groupadd --gid 10001 app \
   && useradd --uid 10001 --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app \
+  && groupadd --gid 10002 codex \
+  && useradd --uid 10002 --gid codex --no-create-home --home-dir /codex-home --shell /usr/sbin/nologin codex \
   && mkdir -p /vault /data/state /home/app/.cache/qmd /home/app/.config/qmd /home/app/.claude \
   && chown -R app:app /data /home/app
 
@@ -80,6 +86,8 @@ COPY --from=build --chown=app:app /out .
 # The deploy files of this commit; deploy.sh copies them out on the VM (ADR 0010).
 COPY deploy/compose.yml /app/deploy/compose.yml
 COPY deploy/scripts /app/deploy/scripts
+# The sandbox probe (ADR 0020): run on the VM by deploy/scripts/codex-vm-check.sh.
+COPY deploy/codex-proof /app/deploy/codex-proof
 USER app
 EXPOSE 3000
 # The health route answers 200 with "degraded" when qmd is down: the container stays up and

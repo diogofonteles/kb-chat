@@ -6,6 +6,7 @@ import { errorMessage, type UiErrorCode } from '@core/api/api-error.js';
  */
 const RUNNER_CODES = [
   'CLI_LOGIN_REQUIRED',
+  'CLI_MISSING',
   'PROVIDER_UNAVAILABLE',
   'LLM_KEY_REJECTED',
 ] as const;
@@ -44,6 +45,8 @@ const AI_MESSAGES: Partial<Record<UiErrorCode, () => string>> = {
 const RUNNER_MESSAGES: Record<RunnerErrorCode, () => string> = {
   CLI_LOGIN_REQUIRED: () =>
     $localize`:@@ai.cliLogin:O Claude Code (ou o Codex) deste computador não está logado. Faça o login no terminal (claude e depois /login, ou codex login) e tente de novo.`,
+  CLI_MISSING: () =>
+    $localize`:@@ai.cliMissing:A assinatura não está disponível agora no servidor. Tente de novo mais tarde ou troque de IA em ⚙ Configurações.`,
   PROVIDER_UNAVAILABLE: () =>
     $localize`:@@ai.providerUnavailable:O provedor de IA não respondeu agora. Tente de novo em instantes ou troque de provedor em ⚙ Configurações.`,
   LLM_KEY_REJECTED: () =>

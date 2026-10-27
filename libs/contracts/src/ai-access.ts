@@ -5,15 +5,23 @@ import { lastTestSchema } from './settings.js';
 /**
  * The AI access policy (KBC-022, ADR 0016): which app-owned AI serves each person, chosen by
  * a master. `house` is the app's OpenRouter account ("Plano da casa"); `claude-subscription`
- * the owner's subscription, lent person by person (KBC-024, ADR 0019); `none` leaves the
- * person with their own AI or search only.
+ * and `chatgpt-subscription` the owner's subscriptions, lent person by person (KBC-024,
+ * KBC-027; ADR 0019, ADR 0020); `none` leaves the person with their own AI or search only.
  */
-export const APP_AIS = ['house', 'claude-subscription', 'none'] as const;
+export const APP_AIS = [
+  'house',
+  'claude-subscription',
+  'chatgpt-subscription',
+  'none',
+] as const;
 export const appAiSchema = z.enum(APP_AIS);
 export type AppAi = z.infer<typeof appAiSchema>;
 
-/** The subscriptions the owner lends; never a default (ADR 0019). */
-export const LENT_SUBSCRIPTIONS = ['claude-subscription'] as const;
+/** The subscriptions the owner lends; never a default (ADR 0019, ADR 0020). */
+export const LENT_SUBSCRIPTIONS = [
+  'claude-subscription',
+  'chatgpt-subscription',
+] as const;
 export type LentSubscription = (typeof LENT_SUBSCRIPTIONS)[number];
 export const isLentSubscription = (appAi: string): appAi is LentSubscription =>
   LENT_SUBSCRIPTIONS.some((subscription) => subscription === appAi);
@@ -165,3 +173,10 @@ export const aiStatusSchema = z.object({
   lastTest: lastTestSchema.nullable(),
 });
 export type AiStatus = z.infer<typeof aiStatusSchema>;
+
+/** Which of the owner's subscriptions can be lent now (the CLI is ready on the server). */
+export const lendableSchema = z.object({
+  'claude-subscription': z.boolean(),
+  'chatgpt-subscription': z.boolean(),
+});
+export type Lendable = z.infer<typeof lendableSchema>;

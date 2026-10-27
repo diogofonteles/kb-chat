@@ -74,9 +74,14 @@ export type ResearchBilling = z.infer<typeof researchBillingSchema>;
 
 /**
  * Who paid a research turn (KBC-022): an AI the administrator lends (the house plan, or the
- * owner's subscription, KBC-024), or the person's own.
+ * owner's Claude subscription, KBC-024, or his ChatGPT one, KBC-027), or the person's own.
  */
-export const researchPlanSchema = z.enum(['house', 'app-subscription', 'own']);
+export const researchPlanSchema = z.enum([
+  'house',
+  'app-subscription',
+  'app-chatgpt-subscription',
+  'own',
+]);
 export type ResearchPlan = z.infer<typeof researchPlanSchema>;
 
 /** Which model call a piece of answer text came from (KBC-011): one segment per call. */

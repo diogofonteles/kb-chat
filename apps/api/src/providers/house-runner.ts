@@ -25,7 +25,7 @@ export interface HouseTurn {
 }
 
 /** Which app AI a runner serves: the house plan, or the owner's lent subscription (KBC-024). */
-export type AppPlan = 'house' | 'app-subscription';
+export type AppPlan = 'house' | 'app-subscription' | 'app-chatgpt-subscription';
 
 export interface HouseRunnerDeps {
   /** Default `house`: billed free or per token; `app-subscription`: by the subscription. */
@@ -131,7 +131,7 @@ export class HouseResearchRunner implements ResearchRunnerPort {
 
   private labelled(done: Done, reservation: Reservation): Done {
     const billing =
-      this.plan === 'app-subscription'
+      this.plan !== 'house'
         ? 'subscription'
         : done.usd === 0
           ? 'free'

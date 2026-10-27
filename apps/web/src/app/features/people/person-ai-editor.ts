@@ -20,15 +20,16 @@ import {
   MAX_MONTHLY_CAP_USD,
   type AppAi,
   type AppAiAssignment,
+  type LentSubscription,
   type PersonAi,
   type PersonAiUpdate,
 } from '@kb-chat/contracts';
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 import {
+  LEND_COPY,
+  LEND_UNAVAILABLE,
   NO_LENDING,
-  lendTerms,
-  lendUnavailable,
   type Lending,
 } from './lending.js';
 
@@ -62,12 +63,7 @@ export class PersonAiEditor {
 
   /** The subscription is only for the owner to give; others still see it when it is set. */
   protected readonly options = computed(() =>
-    APP_AI_ASSIGNMENTS.filter(
-      (id) =>
-        !isLentSubscription(id) ||
-        this.lending().canLend ||
-        this.ai().appAi === id,
-    ).map((id) => ({
+    APP_AI_ASSIGNMENTS.filter((id) => this.offered(id)).map((id) => ({
       id,
       label: assignmentLabel(id, this.defaultAppAi()),
     })),
@@ -78,6 +74,16 @@ export class PersonAiEditor {
       label: assignmentLabel(change.appAi, null),
     })),
   );
+  /**
+   * The subscription is the owner's to give, and ChatGPT's only while it can be lent (T9);
+   * an option already assigned stays, so the screen never hides what serves the person.
+   */
+  private offered(id: AppAiAssignment): boolean {
+    if (!isLentSubscription(id) || this.ai().appAi === id) return true;
+    const { canLend, lendable } = this.lending();
+    return canLend && (id !== 'chatgpt-subscription' || lendable[id]);
+  }
+
   /** A lent person's use is the owner's call: other masters may only revoke (KBC-024 F-4). */
   protected readonly lentForOthers = computed(
     () => isLentSubscription(this.ai().appAi) && !this.lending().canLend,
@@ -89,14 +95,19 @@ export class PersonAiEditor {
     this.refocusChoice = false;
     this.appAiSelect()?.nativeElement.focus();
   });
-  /** Lending waits for the terms to be confirmed (KBC-024 BR-2). */
-  protected readonly confirmingLend = signal(false);
-  protected readonly terms = lendTerms;
+  /** Lending waits for the terms of that subscription to be confirmed (KBC-024 BR-2). */
+  protected readonly confirmingLend = signal<LentSubscription | null>(null);
+  protected readonly lendCopy = computed(() => {
+    const kind = this.confirmingLend();
+    return kind ? LEND_COPY[kind] : null;
+  });
   /** Said where it matters: the subscription chosen or assigned while it is not ready. */
   protected readonly unavailableNote = computed(() => {
-    const { canLend, available } = this.lending();
-    const shown = this.confirmingLend() || isLentSubscription(this.ai().appAi);
-    return canLend && !available && shown ? lendUnavailable() : null;
+    const { canLend, lendable } = this.lending();
+    const assigned = this.ai().appAi;
+    const kind =
+      this.confirmingLend() ?? (isLentSubscription(assigned) ? assigned : null);
+    return canLend && kind && !lendable[kind] ? LEND_UNAVAILABLE[kind]() : null;
   });
   protected readonly maxCap = MAX_MONTHLY_CAP_USD;
   protected readonly maxDaily = MAX_DAILY_RESEARCHES;
@@ -108,22 +119,20 @@ export class PersonAiEditor {
     if (!isAssignment(value)) return;
     if (!isLentSubscription(value)) {
       // Another choice ends a pending lending: the terms never apply to it (QA BUG-1).
-      this.confirmingLend.set(false);
+      this.confirmingLend.set(null);
       this.changed.emit({ appAi: value });
       return;
     }
     // The confirmation opens with focus on the safe choice (WCAG 2.4.3, design D5).
-    this.confirmingLend.set(true);
+    this.confirmingLend.set(value);
     this.focusAfterRender(() => this.cancelLendButton());
   }
 
   protected lend(): void {
-    if (!this.confirmingLend()) return;
-    this.confirmingLend.set(false);
-    this.changed.emit({
-      appAi: 'claude-subscription',
-      subscriptionTermsAccepted: true,
-    });
+    const kind = this.confirmingLend();
+    if (!kind) return;
+    this.confirmingLend.set(null);
+    this.changed.emit({ appAi: kind, subscriptionTermsAccepted: true });
     this.refocusChoice = true;
     this.focusAfterRender(() => this.appAiSelect());
   }
@@ -137,7 +146,7 @@ export class PersonAiEditor {
   /** Closes a pending lending and shows the saved choice again. */
   private dropLend(): void {
     if (!this.confirmingLend()) return;
-    this.confirmingLend.set(false);
+    this.confirmingLend.set(null);
     const select = this.appAiSelect()?.nativeElement;
     if (select) select.value = this.ai().appAi;
   }

@@ -1,7 +1,7 @@
 ---
 id: KBC-024
 title: "Assinatura do Claude do dono cedida, por decisão do dono, a pessoas específicas"
-status: in-review
+status: done
 slice: release-1
 outcome: o dono cede a sua assinatura do Claude a uma, várias ou todas as pessoas, sabendo o que os termos dizem, e cada pessoa sabe que está usando a IA da aplicação temporariamente e como configurar a própria
 depends_on: [KBC-007, KBC-022, KBC-023]

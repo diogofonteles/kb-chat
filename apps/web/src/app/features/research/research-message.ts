@@ -30,6 +30,8 @@ const PLAN_LABELS: Record<ResearchPlan, () => string> = {
     $localize`:@@ai.planApp:IA da aplicação (cedida pelo administrador)`,
   'app-subscription': () =>
     $localize`:@@ai.planLent:IA da aplicação (assinatura do Claude do administrador)`,
+  'app-chatgpt-subscription': () =>
+    $localize`:@@ai.planLentGpt:IA da aplicação (assinatura do ChatGPT do administrador)`,
   own: () => $localize`:@@ai.planOwn:Sua IA`,
 };
 
@@ -90,15 +92,14 @@ export class ResearchMessage {
     return PLAN_LABELS[plan]();
   });
   /** The administrator's subscription, not the reader's (KBC-024). */
-  protected readonly lentSubscription = computed(
-    () => this.turn().plan === 'app-subscription',
-  );
+  protected readonly lentSubscription = computed(() => {
+    const plan = this.turn().plan;
+    return plan === 'app-subscription' || plan === 'app-chatgpt-subscription';
+  });
   /** An app AI (house plan or lent subscription): researches left today. */
   protected readonly remaining = computed(() => {
     const plan = this.turn().plan;
-    return plan === 'house' || plan === 'app-subscription'
-      ? this.turn().remaining
-      : null;
+    return plan && plan !== 'own' ? this.turn().remaining : null;
   });
   /** A spent quota or no free capacity: offer the reader their own AI. */
   protected readonly offerOwnAi = computed(() => {
