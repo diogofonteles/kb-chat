@@ -1,4 +1,9 @@
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+import { JsonDocumentStore } from './adapters/json-document-store.js';
+import {
+  InviteProfilesService,
+  inviteProfilesRoutes,
+} from './modules/invite-profiles/index.js';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -301,6 +306,7 @@ async function registerPeople(
 ) {
   const { deps, topics, invitations } = wiring;
   const { house, auth } = deps;
+  const profiles = await loadInviteProfiles(deps);
   await app.register(
     peopleRoutes({
       ...auth,
@@ -310,8 +316,25 @@ async function registerPeople(
         sync: (person, ai) => house.service.syncPersonKey(person, ai),
         setDefault: (appAi, by) => house.service.setDefault(appAi, by),
       },
+      presets: {
+        presetFor: (request) => profiles.presetFor(request),
+        hasSavedSettings: (person) =>
+          deps.ai.settings.exists(auth.people.viewerOf(person).principal),
+      },
     }),
   );
+  await app.register(inviteProfilesRoutes(profiles));
+}
+
+/** "Perfis de convite" (KBC-028): invite-profiles.json in the state folder. */
+async function loadInviteProfiles(deps: FullDeps) {
+  const profiles = new InviteProfilesService({
+    store: new JsonDocumentStore(
+      join(deps.config.KB_CHAT_STATE_DIR, 'invite-profiles.json'),
+    ),
+  });
+  await profiles.load();
+  return profiles;
 }
 
 /** What the owner's subscriptions can do now, for "IA da aplicação" (KBC-024, KBC-027). */

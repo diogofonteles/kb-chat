@@ -87,7 +87,7 @@ function abortOnDisconnect(reply: FastifyReply): AbortSignal {
   return abort.signal;
 }
 
-function settingsCrud(app: FastifyInstance, options: SettingsRouteOptions) {
+function settingsRead(app: FastifyInstance, options: SettingsRouteOptions) {
   const { settings } = options;
   const routes = app.withTypeProvider<ZodTypeProvider>();
   routes.get(
@@ -96,8 +96,17 @@ function settingsCrud(app: FastifyInstance, options: SettingsRouteOptions) {
       config: { access: SIGNED_IN },
       schema: { response: { 200: settingsViewSchema } },
     },
-    async (request) => settings.view(principalOf(request)),
+    async (request) =>
+      settings.view(
+        principalOf(request),
+        viewerOf(request).person.initialPreferences,
+      ),
   );
+}
+
+function settingsUpdate(app: FastifyInstance, options: SettingsRouteOptions) {
+  const { settings } = options;
+  const routes = app.withTypeProvider<ZodTypeProvider>();
   routes.put(
     '/api/v1/settings',
     {
@@ -109,7 +118,11 @@ function settingsCrud(app: FastifyInstance, options: SettingsRouteOptions) {
     },
     async (request) => {
       assertMayUpdate(request, request.body);
-      return settings.update(principalOf(request), request.body);
+      return settings.update(
+        principalOf(request),
+        request.body,
+        viewerOf(request).person.initialPreferences,
+      );
     },
   );
 }
@@ -161,7 +174,8 @@ function statusRoute(
 export const settingsRoutes =
   (options: SettingsRouteOptions): FastifyPluginAsync =>
   async (app) => {
-    settingsCrud(app, options);
+    settingsRead(app, options);
+    settingsUpdate(app, options);
     providerRoutes(app, options);
     statusRoute(app, options);
   };

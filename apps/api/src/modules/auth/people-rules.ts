@@ -1,3 +1,4 @@
+import type { InvitePreset } from '@kb-chat/contracts';
 import {
   DEFAULT_INVITE_FEATURES,
   FEATURES,
@@ -205,6 +206,45 @@ export function update(
     }),
   };
   return { people: replace(people, next), result: next };
+}
+
+/** What applying a preset changes (KBC-028): access and AI, and maybe the first preferences. */
+export interface PresetChange {
+  readonly id: string;
+  readonly preset: InvitePreset;
+  readonly context: AiChangeContext;
+  /** False for someone who saved their own preferences: theirs stay (BR-6). */
+  readonly withPreferences: boolean;
+}
+
+/** Sets a preset on a person, as the editor would (the AI change goes to the audit trail). */
+export function applyPreset(
+  people: readonly StoredPerson[],
+  change: PresetChange,
+  ownerEmail: string | undefined,
+): PeopleChange<StoredPerson> {
+  const { preset } = change;
+  const updated = update(
+    people,
+    {
+      id: change.id,
+      patch: {
+        role: preset.role,
+        topics: preset.topics,
+        features: preset.features,
+        ai: preset.ai,
+      },
+      context: change.context,
+    },
+    ownerEmail,
+  );
+  const hasPreferences = Object.keys(preset.preferences).length > 0;
+  if (!change.withPreferences || !hasPreferences) return updated;
+  const next: StoredPerson = {
+    ...updated.result,
+    initialPreferences: preset.preferences,
+  };
+  return { people: replace(updated.people, next), result: next };
 }
 
 export function revoke(
