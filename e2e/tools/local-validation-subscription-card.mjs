@@ -95,11 +95,27 @@ async function validateInvite() {
     const select = preset.getByLabel('Qual IA atende a pessoa');
     await select.selectOption({ label: 'Claude do administrador' });
     const confirm = preset.getByRole('group', {
-      name: 'Ceder a assinatura do Claude a esta pessoa?',
+      name: 'Ceder a assinatura do Claude a quem você está convidando?',
     });
     await confirm.scrollIntoViewIfNeeded();
     await settled(page);
     await page.screenshot({ path: `${out}/invite-lend-confirm-${width}.png` });
+    // "Convidar" waits, and says why, while the terms are open (design R1-2).
+    await dialog
+      .getByLabel('Convidar por e-mail')
+      .fill('validacao@kb-chat.test');
+    const send = dialog.getByRole('button', { name: 'Convidar' });
+    await send.scrollIntoViewIfNeeded();
+    await settled(page);
+    await page.screenshot({ path: `${out}/invite-lend-waits-${width}.png` });
+    report.push({
+      name: 'invite-waits',
+      width,
+      disabled: await send.isDisabled(),
+      describedBy: await send.getAttribute('aria-describedby'),
+      overflow: await overflow(page),
+    });
+    await confirm.scrollIntoViewIfNeeded();
     report.push({
       name: 'invite-confirm',
       width,
@@ -109,7 +125,7 @@ async function validateInvite() {
       overflow: await overflow(page),
     });
     await confirm.getByRole('button', { name: 'Ceder assim mesmo' }).click();
-    const note = preset.getByText('Termos da assinatura confirmados');
+    const note = preset.getByText('Termos da assinatura do Claude confirmados');
     await note.scrollIntoViewIfNeeded();
     await settled(page);
     await page.screenshot({
