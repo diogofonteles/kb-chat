@@ -6,7 +6,6 @@ import {
   ToolLoopRunner,
   researchBudgets,
   researchSystemPrompt,
-  subAgentSystemPrompt,
   turnToolsFactory,
   type ResearchBudgets,
 } from './modules/research/index.js';
@@ -31,12 +30,15 @@ export interface ResearchAgentDeps {
 export const budgetsFromConfig = (
   config: Pick<
     AppConfig,
-    'KB_CHAT_EXHAUSTIVE_STEPS' | 'KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS'
+    | 'KB_CHAT_EXHAUSTIVE_STEPS'
+    | 'KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS'
+    | 'KB_CHAT_SWEEP_MAX_REQUESTS'
   >,
 ): ResearchBudgets =>
   researchBudgets({
     steps: config.KB_CHAT_EXHAUSTIVE_STEPS,
     outputTokens: config.KB_CHAT_EXHAUSTIVE_OUTPUT_TOKENS,
+    sweepRequests: config.KB_CHAT_SWEEP_MAX_REQUESTS,
   });
 
 /**
@@ -53,8 +55,6 @@ export interface ResearchAgent {
   readonly perTokenRunner: PerTokenRunnerFactory;
   /** The research rules with the topic's title and the profile, for the subscription CLIs. */
   readonly systemPrompt: SubscriptionPrompt;
-  /** A sub-researcher's rules with the topic's title, for Claude Code's sub-agent (ADR 0014). */
-  readonly subAgentPrompt: (topic: string) => string;
 }
 
 /** The in-API loop over a per-token model, spending on the principal's ledger. */
@@ -96,8 +96,6 @@ export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
     tools,
     toolsFor: turnToolsFactory(tools),
     perTokenRunner: perTokenRunnerOf({ tools, ledger, budgets }),
-    subAgentPrompt: (topic) =>
-      subAgentSystemPrompt(tools.topicTitle(topic) ?? topic),
     systemPrompt: (topic, profile, canDeepen) =>
       researchSystemPrompt(
         tools.topicTitle(topic) ?? topic,

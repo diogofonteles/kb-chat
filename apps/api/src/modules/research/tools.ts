@@ -21,6 +21,7 @@ import {
 import { GrepTool } from './grep-tool.js';
 import type { SourceBook } from './source-book.js';
 import { SourcesTool } from './sources-tool.js';
+import { SweepPlanner } from './sweep/sweep-planner.js';
 import { TextFinder } from './text-finder.js';
 import {
   failed,
@@ -141,12 +142,15 @@ export class ResearchTools {
     related_documents: (args, context) => this.relatedCall(args, context),
   };
 
+  /** The exhaustive sweep's set and batches, over the same find_text cache (KBC-030). */
+  readonly sweeps: SweepPlanner;
   private readonly finder: TextFinder;
   private readonly grep: GrepTool;
   private readonly sources: SourcesTool;
 
   constructor(private readonly deps: ResearchToolsDeps) {
     this.finder = new TextFinder(deps);
+    this.sweeps = new SweepPlanner({ ...deps, finder: this.finder });
     this.grep = new GrepTool({ finder: this.finder, catalog: deps.catalog });
     this.sources = new SourcesTool(deps.catalog);
   }

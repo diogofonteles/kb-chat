@@ -7,7 +7,11 @@ import {
   output,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import type { DocumentRef, ResearchPlan } from '@kb-chat/contracts';
+import type {
+  DocumentRef,
+  ResearchPlan,
+  SweepCoverage,
+} from '@kb-chat/contracts';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
@@ -19,10 +23,28 @@ import { SettingsStore } from '@features/settings/settings-store.js';
 import { OWN_AI_OFFER, aiErrorMessage } from './research-errors.js';
 import { describeSteps, groupedSteps } from './research-steps.js';
 import {
+  FREE_MODELS_NOTE,
+  PROGRESS_LABEL,
+  coverageText,
+  estimateText,
+  missingText,
+  progressText,
+  targetText,
+  unansweredText,
+} from './research-sweep.js';
+import {
+  canContinueSweep,
   citedSources,
   groupByAuthorship,
   type ResearchTurn,
 } from './research-turn.js';
+
+/** What a sweep left: documents not analyzed, or an answer that could not be written. */
+function leftText(coverage: SweepCoverage): string {
+  const reason = coverage.reason ?? 'stopped';
+  if (coverage.missing > 0) return missingText(coverage.missing, reason);
+  return coverage.reason ? unansweredText(coverage.reason) : '';
+}
 
 /** Who paid, as the answer's footer says it (ADR 0016, ADR 0019). */
 const PLAN_LABELS: Record<ResearchPlan, () => string> = {
@@ -56,6 +78,7 @@ export class ResearchMessage {
   readonly opened = output<DocumentRef>();
   readonly stopped = output();
   readonly retried = output();
+  readonly continued = output();
   private readonly settings = inject(SettingsStore);
 
   protected readonly streaming = computed(
@@ -114,8 +137,9 @@ export class ResearchMessage {
   /** Asking again fits a failure or a stop, never a spent daily cap (that needs Settings). */
   protected readonly canRetry = computed(() => {
     const turn = this.turn();
-    // A failed or stopped turn from the history can be asked again too (KBC-029).
-    if (!this.last()) return false;
+    // A failed or stopped turn from the history can be asked again too (KBC-029); a sweep
+    // that can go on offers that, not starting over (design review, UP-15).
+    if (!this.last() || this.canContinue()) return false;
     if (turn.phase === 'error')
       return (
         turn.error !== 'DAILY_CAP_REACHED' &&
@@ -140,6 +164,46 @@ export class ResearchMessage {
     const { error, errorLimit } = this.turn();
     return error ? aiErrorMessage(error, errorLimit) : '';
   });
+
+  /** The sweep's estimate and progress while it runs, before the answer (KBC-030). */
+  protected readonly sweep = computed(() => {
+    const turn = this.turn();
+    const progress = turn.sweep;
+    if (!progress || turn.phase !== 'streaming' || turn.text) return null;
+    return {
+      estimate: estimateText(progress),
+      free: progress.free ? FREE_MODELS_NOTE() : '',
+      progress: progressText(progress),
+      label: PROGRESS_LABEL(),
+      done: progress.batchesDone,
+      total: Math.max(1, progress.batches),
+    };
+  });
+  /** The coverage the app measured, and what was left, after the turn (KBC-030). */
+  protected readonly coverage = computed(() => {
+    const coverage = this.turn().coverage;
+    if (!coverage || this.turn().phase === 'streaming') return null;
+    return {
+      line: coverageText(coverage),
+      target: targetText(coverage.target, coverage.phrases),
+      missing: leftText(coverage),
+    };
+  });
+  /** A sweep stopped on this page before its coverage came: what was left (QA F-3). */
+  protected readonly stoppedAt = computed(() => {
+    const { coverage, sweep, phase } = this.turn();
+    if (coverage || !sweep || phase !== 'done') return '';
+    return missingText(sweep.needed - sweep.documentsDone, 'stopped');
+  });
+  /** The sweep's box already says it stopped and what was left: no second note (UP-10). */
+  protected readonly sweepExplainsStop = computed(() => {
+    // Only a sweep stopped before any answer: an answer cut short still says "(interrompida)".
+    if (this.turn().text.trim()) return false;
+    return Boolean(this.coverage()?.missing) || this.stoppedAt() !== '';
+  });
+  protected readonly canContinue = computed(
+    () => this.last() && canContinueSweep(this.turn()),
+  );
 
   protected openSettings(): void {
     this.settings.openSettings();

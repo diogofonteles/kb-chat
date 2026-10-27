@@ -31,8 +31,6 @@ export interface AiProvidersOptions {
   readonly perTokenRunner?: PerTokenRunnerFactory;
   /** The research rules for a topic and profile, for the subscription CLIs (the module's prompt). */
   readonly systemPrompt?: SubscriptionPrompt;
-  /** A sub-researcher's rules for a topic (ADR 0014). */
-  readonly subAgentPrompt?: (topic: string) => string;
   readonly warn?: (message: string) => void;
   /** The turns' MCP registry when the caller serves it itself (agent-eval); default: a new one. */
   readonly turns?: McpTurnRegistry;
@@ -153,7 +151,6 @@ function buildRegistry(
     tools: options.tools,
     perTokenRunner: options.perTokenRunner,
     systemPrompt: options.systemPrompt,
-    subAgentPrompt: options.subAgentPrompt,
     ownerPrincipal: options.ownerPrincipal,
     freeModels: options.house?.catalog,
     codexEnabled: options.house

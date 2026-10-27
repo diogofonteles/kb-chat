@@ -5,6 +5,7 @@ import type {
   ResearchToolsPort,
 } from '../../ports/research-tools.js';
 import { SourceBook } from './source-book.js';
+import type { SweepKit } from './sweep/sweep-kit.js';
 import type { ResearchTools } from './tools.js';
 
 /**
@@ -20,6 +21,15 @@ export class TurnResearchTools implements ResearchToolsPort {
     private readonly tools: ResearchTools,
     private readonly topic: string,
   ) {}
+
+  /** The sweep's planner and this turn's numbering, for an exhaustive CLI turn (KBC-030). */
+  get sweepKit(): SweepKit {
+    return {
+      sweeps: this.tools.sweeps,
+      book: this.book,
+      topicTitle: this.tools.topicTitle(this.topic) ?? this.topic,
+    };
+  }
 
   definitions(): readonly ToolDefinition[] {
     return this.tools.definitions;

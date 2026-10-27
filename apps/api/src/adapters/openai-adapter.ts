@@ -132,6 +132,8 @@ class ToolCallBuffer {
 /** OpenAI Chat Completions with streaming and tool calling (KBC-007). */
 export class OpenAiAdapter implements AgentLlmPort {
   readonly model: string;
+  /** The context window of the GPT models: sizes the exhaustive sweep's batches (KBC-030). */
+  readonly contextTokens = 128_000;
   readonly billing = 'per-token' as const;
   private readonly fetch: typeof fetch;
 

@@ -99,6 +99,8 @@ const isAuthError = (err: unknown): boolean =>
  */
 export class AnthropicAdapter implements AgentLlmPort {
   readonly model: string;
+  /** The context window of Claude models: sizes the exhaustive sweep's batches (KBC-030). */
+  readonly contextTokens = 200_000;
   readonly billing = 'per-token' as const;
   private readonly client: Anthropic;
   private readonly replays = new Map<string, BetaContentBlockParam[]>();

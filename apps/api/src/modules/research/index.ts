@@ -21,6 +21,7 @@ export {
   MAX_OUTPUT_TOKENS,
   MAX_TOOL_STEPS,
   PROFILE_STEPS,
+  SWEEP_MAX_REQUESTS,
   researchBudgets,
   type ExhaustiveSettings,
   type ProfileBudget,
@@ -39,5 +40,22 @@ export {
   buildResearchMessages,
   OUTSIDE_MARK,
   researchSystemPrompt,
-  subAgentSystemPrompt,
 } from './prompt.js';
+export { CoverageLineFilter } from './sweep/coverage-filter.js';
+export { PLAN_STEPS, PLAN_SWEEP_TOOL, defaultPlan } from './sweep/plan-tool.js';
+export { NO_TOOLS, PlanningTools } from './sweep/planning-tools.js';
+export {
+  SweepFatalError,
+  type BatchEngine,
+} from './sweep/sweep-coordinator.js';
+export type { SweepKit } from './sweep/sweep-kit.js';
+export {
+  BATCH_PROMPT_START,
+  CONDENSE_PROMPT_START,
+} from './sweep/sweep-prompts.js';
+export {
+  SUBSCRIPTION_CONTEXT_TOKENS,
+  runSweepTurn,
+  sweepTurnHost,
+  type SweepTurnResult,
+} from './sweep/sweep-turn.js';

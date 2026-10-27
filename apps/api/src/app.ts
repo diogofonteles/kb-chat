@@ -471,7 +471,6 @@ const inMemoryAi = (
     tools: wiring.agent.toolsFor,
     perTokenRunner: wiring.agent.perTokenRunner,
     systemPrompt: wiring.agent.systemPrompt,
-    subAgentPrompt: wiring.agent.subAgentPrompt,
     house: wiring.house,
     personOf: (principal) => wiring.auth.people.cachedByPrincipal(principal),
     ledger: wiring.ledger,

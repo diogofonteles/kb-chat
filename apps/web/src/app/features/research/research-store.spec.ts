@@ -1,7 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ResearchEvent, SavedResearchTurn } from '@kb-chat/contracts';
+import type {
+  ResearchEvent,
+  SavedResearchTurn,
+  SweepCoverage,
+  SweepCursor,
+  SweepProgress,
+} from '@kb-chat/contracts';
 import { ResearchApi } from '@core/api/research-api.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
@@ -21,6 +27,40 @@ import {
 import { citedSources } from './research-turn.js';
 
 const SOURCE = { n: 1, id: 'raw/a.md', title: 'Os Princípios' };
+
+const CURSOR: SweepCursor = {
+  plan: {
+    target: { authorship: 'mestre-laercio' },
+    phrases: [],
+    extract: 'livros',
+  },
+  after: 'raw/c.md',
+  totals: { documents: 10, scanned: 3, withHits: null, read: 3, batches: 1 },
+  findings: [],
+};
+const PROGRESS: SweepProgress = {
+  status: 'running',
+  documents: 10,
+  needed: 10,
+  documentsDone: 3,
+  batches: 4,
+  batchesDone: 1,
+  requests: 6,
+  free: true,
+  cursor: CURSOR,
+};
+const COVERAGE: SweepCoverage = {
+  target: { authorship: 'mestre-laercio' },
+  phrases: [],
+  documents: 10,
+  scanned: 3,
+  withHits: null,
+  read: 3,
+  needed: 10,
+  missing: 7,
+  batches: 1,
+  reason: 'requests',
+};
 
 function setup(options: { stored?: ResearchConversation } = {}) {
   localStorage.clear();
@@ -596,5 +636,237 @@ describe('ResearchStore', () => {
       expect(store.conversationId()).toBe(CONVERSATION);
       expect(api.follow).toHaveBeenCalledWith(TURN);
     });
+  });
+
+  it('sweeps on: "Continuar varredura" asks only for the rest, from the saved cursor (KBC-030)', () => {
+    const { store, api, streams, save } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('quais livros o Mestre cita?');
+    const stream = streams[0];
+    if (!stream) throw new Error('no stream');
+    stream.next({ type: 'sweep', sweep: { ...PROGRESS, status: 'planned' } });
+    stream.next({ type: 'sweep', sweep: PROGRESS });
+    stream.next({ type: 'token', text: 'Lista parcial [1].', segment: 0 });
+    stream.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 2,
+      coverage: COVERAGE,
+      sweep: CURSOR,
+    });
+    stream.complete();
+    const saved = save.mock.calls.at(-1)?.[0].turns[0];
+    expect(saved?.coverage).toEqual(COVERAGE);
+    expect(saved?.sweep).toEqual(CURSOR);
+    store.continueSweep();
+    // Shown as a continuation, asked as the question itself.
+    expect(store.turns()[1]?.question).toBe(
+      'Continuar varredura: quais livros o Mestre cita?',
+    );
+    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
+      question: 'quais livros o Mestre cita?',
+      history: [
+        {
+          question: 'quais livros o Mestre cita?',
+          answer: 'Lista parcial [1].',
+        },
+      ],
+      profile: 'exhaustive',
+      sweep: CURSOR,
+      // Recorded in the same conversation, as its own turn (KBC-029).
+      conversationId: store.conversationId(),
+      turnId: store.turns()[1]?.turnId,
+    });
+    // In the history at once, as a continuation.
+    const pending = save.mock.calls.at(-1)?.[0].turns.at(-1);
+    expect(pending?.question).toBe(
+      'Continuar varredura: quais livros o Mestre cita?',
+    );
+  });
+
+  it('keeps the last progress cursor and every batch’s findings when the reader stops (QA F-1)', () => {
+    const { store, streams, save } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const found = (text: string) => [{ id: 'raw/a.md', text }];
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: found('A'),
+      },
+    });
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: found('B'),
+      },
+    });
+    store.stop();
+    const expected = { ...CURSOR, findings: [...found('A'), ...found('B')] };
+    expect(store.turns()[0]?.cursor).toEqual(expected);
+    expect(save.mock.calls.at(-1)?.[0].turns[0]?.sweep).toEqual(expected);
+  });
+
+  it('continues nothing when the sweep covered its whole set', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    streams[0]?.next({ type: 'token', text: 'Tudo [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: { ...COVERAGE, missing: 0, read: 10, reason: undefined },
+    });
+    expect(store.turns()[0]?.cursor).toBeNull();
+    store.continueSweep();
+    expect(api.research).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the carried findings when a continuation is stopped too (code review 1)', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const earlier = { ...CURSOR, findings: [{ id: 'raw/a.md', text: 'A' }] };
+    streams[0]?.next({ type: 'token', text: 'Parcial [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: COVERAGE,
+      sweep: earlier,
+    });
+    store.continueSweep();
+    streams[1]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: [{ id: 'raw/b.md', text: 'B' }],
+      },
+    });
+    store.stop();
+    expect(store.turns()[1]?.cursor?.findings).toEqual([
+      { id: 'raw/a.md', text: 'A' },
+      { id: 'raw/b.md', text: 'B' },
+    ]);
+  });
+
+  it('continues a sweep whose answer failed, from the cursor it kept (code review 10)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    streams[0]?.next({ type: 'error', code: 'PROVIDER_UNAVAILABLE' });
+    store.continueSweep();
+    expect(api.research).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the estimate shown while the sweep goes on', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: { ...PROGRESS, status: 'planned', minutes: 4, usd: 0.3 },
+    });
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    expect(store.turns()[0]?.sweep).toMatchObject({
+      status: 'running',
+      minutes: 4,
+      usd: 0.3,
+    });
+  });
+
+  it('keeps each finding once when a running sweep is followed again from its start', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const batch = {
+      type: 'sweep' as const,
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: [{ id: 'raw/a.md', text: 'A' }],
+      },
+    };
+    streams[0]?.next(batch);
+    // The same batch again, as a replay from the turn's first event brings it.
+    streams[0]?.next(batch);
+    expect(store.turns()[0]?.cursor?.findings).toEqual([
+      { id: 'raw/a.md', text: 'A' },
+    ]);
+  });
+
+  it('retries a stopped continuation from the cursor it started from (review round 3)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'token', text: 'Parcial [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: COVERAGE,
+      sweep: CURSOR,
+    });
+    store.continueSweep();
+    // The continuation's answer is cut short after the whole set was analyzed.
+    streams[1]?.next({ type: 'token', text: 'Lista [1]', segment: 0 });
+    streams[1]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: true,
+      steps: 1,
+      coverage: { ...COVERAGE, missing: 0, read: 10, reason: undefined },
+    });
+    const stopped = store.turns()[1]?.turnId;
+    store.chooseProfile('fast');
+    store.retry();
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'livros',
+        profile: 'exhaustive',
+        sweep: CURSOR,
+        // In its place: the server replaces the stopped turn (KBC-029).
+        turnId: stopped,
+      }),
+    );
+    expect(store.turns()).toHaveLength(2);
+    expect(store.turns()[1]?.turnId).toBe(stopped);
+  });
+
+  it('asks a continuation again as its question when there is no cursor to resume from (review round 4)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('deep');
+    store.ask('Continuar varredura: livros');
+    streams[0]?.next({ type: 'error', code: 'PROVIDER_UNAVAILABLE' });
+    const failed = store.turns()[0]?.turnId;
+    store.retry();
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({ question: 'livros', turnId: failed }),
+    );
+    expect(store.turns()).toHaveLength(1);
   });
 });

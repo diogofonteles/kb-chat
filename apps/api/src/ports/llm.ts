@@ -91,6 +91,8 @@ export interface AgentStreamOptions extends LlmStreamOptions {
 
 /** A model with native tool calling (OpenRouter, OpenAI, Anthropic; the stub in tests). */
 export interface AgentLlmPort extends LlmPort {
+  /** The model's context window in tokens, when known: sizes the sweep's batches (KBC-030). */
+  readonly contextTokens?: number;
   /**
    * The output tokens a call asking for `requested` may really spend: some adapters raise
    * it (Anthropic's thinking floor), and the spend guard prices this, not the request.

@@ -6,6 +6,7 @@ import {
   researchProfileSchema,
 } from './research.js';
 import { searchFiltersSchema, searchModeSchema } from './search.js';
+import { sweepCoverageSchema, sweepCursorSchema } from './sweep.js';
 
 /**
  * Conversations kept by the local API, all of them, without a cap (owner, 2026-10-24:
@@ -42,6 +43,10 @@ export const savedResearchTurnSchema = z.object({
   profile: researchProfileSchema.optional(),
   /** Who paid (KBC-022); absent in older turns. */
   plan: researchPlanSchema.optional(),
+  /** Exhaustive sweep (KBC-030): the coverage the app measured; absent in older turns. */
+  coverage: sweepCoverageSchema.optional(),
+  /** An unfinished sweep's cursor, for "Continuar varredura". */
+  sweep: sweepCursorSchema.optional(),
   at: z.iso.datetime(),
   /** KBC-029: the turn's id (kept by "Tentar de novo"); absent in older turns. */
   id: z.uuid().optional(),

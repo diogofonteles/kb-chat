@@ -130,6 +130,8 @@ const inputOf = ({ topic, body }: ResearchCall, signal: AbortSignal) => ({
   question: body.question,
   history: body.history,
   profile: body.profile,
+  // "Continuar varredura" (KBC-030): the sweep resumes from the page's cursor.
+  ...(body.sweep && { sweep: body.sweep }),
   signal,
 });
 

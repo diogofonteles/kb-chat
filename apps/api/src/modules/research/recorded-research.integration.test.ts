@@ -345,3 +345,56 @@ describe('recorded research turns (KBC-029)', { timeout: 20_000 }, () => {
     expect(statuses).toEqual([200, 200, 429]);
   });
 });
+
+describe('recorded exhaustive sweeps (KBC-030)', { timeout: 20_000 }, () => {
+  it('records the coverage, then continues from a cursor and answers with what it carried', async () => {
+    const { ana } = await start();
+    const { conversationId, turnId } = ids();
+    const question = 'todas as obras sobre o ritmo';
+    const first = await ask(ana, {
+      question,
+      profile: 'exhaustive',
+      conversationId,
+      turnId,
+    });
+    await first.text();
+    const swept = await settled(ana, conversationId);
+    expect(swept.coverage).toMatchObject({ missing: 0 });
+    expect(swept.coverage?.read).toBe(swept.coverage?.needed);
+    expect(swept.sweep).toBeUndefined();
+    const cursor = {
+      plan: { target: {}, phrases: [], extract: question },
+      after: 'raw/articles/ritmo-serie-06.md',
+      totals: {
+        documents: 22,
+        scanned: 10,
+        withHits: null,
+        read: 10,
+        batches: 1,
+      },
+      findings: [
+        {
+          id: 'raw/articles/a-lei-do-ritmo.md',
+          text: '“A Lei do Ritmo” trata do assunto — “achado de antes”',
+        },
+      ],
+    };
+    const next = await ask(ana, {
+      question,
+      profile: 'exhaustive',
+      conversationId,
+      turnId: randomUUID(),
+      sweep: cursor,
+      history: [{ question, answer: swept.answer }],
+    });
+    const events = eventsOf(await next.text());
+    // No planning: the cursor's plan; only what came after it was swept.
+    expect(
+      events.some((e) => e.type === 'step' && e.step.kind === 'sweep'),
+    ).toBe(false);
+    const continued = await settled(ana, conversationId);
+    expect(continued.question).toBe(`Continuar varredura: ${question}`);
+    expect(continued.coverage).toMatchObject({ continued: true, missing: 0 });
+    expect(continued.answer).toMatch(/A Lei do Ritmo/);
+  });
+});

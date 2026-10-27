@@ -91,7 +91,6 @@ const ai = await createAiProviders({
   tools: agent.toolsFor,
   perTokenRunner: agent.perTokenRunner,
   systemPrompt: agent.systemPrompt,
-  subAgentPrompt: agent.subAgentPrompt,
   house,
   personOf: (principal) => auth.people.cachedByPrincipal(principal),
   ledger,

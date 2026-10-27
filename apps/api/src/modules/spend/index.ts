@@ -5,6 +5,7 @@ export {
 } from './routes.js';
 export {
   SpendService,
+  tokensForChars,
   tokensOf,
   type CallUsage,
   type SpendServiceDeps,

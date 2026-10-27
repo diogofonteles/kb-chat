@@ -33,8 +33,63 @@
       }
     }
 
+    @if (sweep(); as sweep) {
+      <section class="sweep" aria-labelledby="sweep-title-{{ turn().id }}">
+        <h3
+          class="sweep-title"
+          id="sweep-title-{{ turn().id }}"
+          i18n="@@sweep.title"
+        >
+          Varredura do conjunto inteiro
+        </h3>
+        <p class="sweep-estimate">{{ sweep.estimate }}</p>
+        @if (sweep.free) {
+          <p class="sweep-note">{{ sweep.free }}</p>
+        }
+        <progress
+          [value]="sweep.done"
+          [max]="sweep.total"
+          [attr.aria-label]="sweep.label"
+        ></progress>
+        <p class="sweep-progress" role="status">{{ sweep.progress }}</p>
+      </section>
+    }
+
     @if (turn().text) {
       <div class="answer" [innerHTML]="html()"></div>
+    }
+
+    @if (coverage(); as coverage) {
+      <div class="coverage" [class.incomplete]="coverage.missing">
+        <p>{{ coverage.line }}</p>
+        <p class="coverage-target">
+          <span i18n="@@sweep.target">Conjunto:</span> {{ coverage.target }}
+        </p>
+        @if (coverage.missing) {
+          <p class="coverage-missing">
+            <strong i18n="@@sweep.incomplete">Varredura incompleta.</strong>
+            {{ coverage.missing }}
+          </p>
+        }
+      </div>
+    } @else if (stoppedAt()) {
+      <div class="coverage incomplete">
+        <p class="coverage-missing">
+          <strong i18n="@@sweep.incomplete">Varredura incompleta.</strong>
+          {{ stoppedAt() }}
+        </p>
+      </div>
+    }
+
+    @if (canContinue()) {
+      <button
+        type="button"
+        class="primary continue"
+        (click)="continued.emit()"
+        i18n="@@sweep.continue"
+      >
+        Continuar varredura
+      </button>
     }
 
     @if (turn().phase === 'error') {
@@ -73,18 +128,18 @@
     }
 
     @if (turn().phase === 'done') {
-      @if (turn().interrupted) {
+      @if (turn().interrupted && !sweepExplainsStop()) {
         <p class="note" i18n="@@ai.interrupted">
           {turn().text ? 1 : 0, select,
             1 {(interrompida)}
             other {Resposta interrompida antes de começar.}
           }
         </p>
-        @if (partialCost()) {
-          <p class="note" i18n="@@ai.partialCost">
-            O custo do que já foi processado entra no gasto do dia.
-          </p>
-        }
+      }
+      @if (turn().interrupted && partialCost()) {
+        <p class="note" i18n="@@ai.partialCost">
+          O custo do que já foi processado entra no gasto do dia.
+        </p>
       }
       @if (cited().length > 0) {
         <div class="sources">

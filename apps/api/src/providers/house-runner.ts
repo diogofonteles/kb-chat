@@ -1,8 +1,4 @@
-import type {
-  FreeUsage,
-  ResearchEvent,
-  ResearchProfile,
-} from '@kb-chat/contracts';
+import type { FreeUsage, ResearchEvent } from '@kb-chat/contracts';
 import type {
   ResearchInput,
   ResearchRunnerPort,
@@ -44,6 +40,16 @@ export interface HouseRunnerDeps {
 }
 
 type Done = Extract<ResearchEvent, { type: 'done' }>;
+
+/**
+ * The share of the house's free requests of the day one exhaustive sweep may use (KBC-030
+ * architecture review): the account is shared by everyone the house serves, so one sweep
+ * never empties it; and never more than what is left.
+ */
+export const HOUSE_SWEEP_SHARE = 0.25;
+
+const sweepShare = (usage: FreeUsage): number =>
+  Math.min(usage.remaining, Math.ceil(usage.limit * HOUSE_SWEEP_SHARE));
 
 /** Events that show a model already answered: the turn's units are not given back. */
 const ANSWERED = new Set<ResearchEvent['type']>([
@@ -91,9 +97,9 @@ export class HouseResearchRunner implements ResearchRunnerPort {
     input: ResearchInput,
     turn: HouseTurn,
   ): AsyncIterable<ResearchEvent> {
-    const refusal = await this.capacityRefusal(input.profile, turn.paidActive);
-    if (refusal) {
-      yield { type: 'error', code: refusal };
+    const usage = turn.paidActive ? null : await this.deps.capacity();
+    if (usage && usage.remaining < CAPACITY_NEEDED[input.profile]) {
+      yield { type: 'error', code: 'AI_CAPACITY_EXHAUSTED' };
       return;
     }
     let reservation: Reservation;
@@ -109,7 +115,10 @@ export class HouseResearchRunner implements ResearchRunnerPort {
         : { type: 'error', code };
       return;
     }
-    yield* this.relay({ input, reservation, inner: turn.inner });
+    const budgeted = usage
+      ? { ...input, requestBudget: sweepShare(usage) }
+      : input;
+    yield* this.relay({ input: budgeted, reservation, inner: turn.inner });
   }
 
   private async *relay({
@@ -142,17 +151,5 @@ export class HouseResearchRunner implements ResearchRunnerPort {
       plan: this.plan,
       remaining: reservation.remaining,
     };
-  }
-
-  /** Not enough free requests left today for this profile (and no paid fallback). */
-  private async capacityRefusal(
-    profile: ResearchProfile,
-    paidActive: boolean,
-  ): Promise<'AI_CAPACITY_EXHAUSTED' | null> {
-    if (paidActive) return null;
-    const usage = await this.deps.capacity();
-    return usage && usage.remaining < CAPACITY_NEEDED[profile]
-      ? 'AI_CAPACITY_EXHAUSTED'
-      : null;
   }
 }
