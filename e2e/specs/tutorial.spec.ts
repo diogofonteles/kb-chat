@@ -144,3 +144,40 @@ test('AC-4: the help in the app header opens the tutorial in a new tab and keeps
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
   await tutorial.close();
 });
+
+test('AC-4: with the document panel open on a narrow desktop, the help stays visible and clickable', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'desktop',
+    'the side panel is desktop only',
+  );
+  for (const width of [1280, 1024]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/');
+    await page.getByRole('radio', { name: 'Buscar documentos' }).check();
+    await page.getByLabel('Sua pergunta').fill('ritmo');
+    await page.getByRole('button', { name: 'Buscar' }).click();
+    await page.locator('[data-doc-id]').first().click();
+    await expect(page.locator('app-document-panel')).toBeVisible();
+    const help = page.getByRole('link', {
+      name: 'Como usar a Nova Alexandria (abre em nova aba)',
+    });
+    await expect(help).toBeInViewport({ ratio: 1 });
+    // Nothing covers it: the element at its center is the link itself.
+    const box = await help.boundingBox();
+    const onTop = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest('a')?.className,
+      {
+        x: (box?.x ?? 0) + (box?.width ?? 0) / 2,
+        y: (box?.y ?? 0) + (box?.height ?? 0) / 2,
+      },
+    );
+    expect(onTop, `width ${width}`).toContain('help');
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+  }
+});

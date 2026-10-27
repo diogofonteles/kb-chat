@@ -652,6 +652,7 @@ test('administrators', async ({ browser }) => {
   dialog = page.getByRole('dialog', { name: 'Configurações' });
   const request = dialog.getByRole('listitem').filter({ hasText: BRUNO.email });
   await expect(request).toBeVisible();
+  await request.evaluate((item) => item.scrollIntoView({ block: 'nearest' }));
   await shooter.shoot(page, 'access-requests', {
     clip: dialog,
     marks: [
@@ -698,9 +699,7 @@ test('administrators', async ({ browser }) => {
     .getByLabel('Qual IA atende a pessoa')
     .selectOption({ label: 'Claude do administrador' });
   const confirm = dialog.getByRole('button', { name: 'Ceder assim mesmo' });
-  await confirm.evaluate((button) =>
-    button.scrollIntoView({ block: 'center' }),
-  );
+  await confirm.scrollIntoViewIfNeeded();
   await shooter.shoot(page, 'lend-subscription', {
     clip: dialog,
     marks: [

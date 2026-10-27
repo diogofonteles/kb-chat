@@ -43,7 +43,7 @@ Pedido do dono em 2026-10-27: "Faça uma página de tutorial de como usar todas 
 - FR-6: Caddy serve `/tutorial` com `Cache-Control: no-cache` e CSP; `/assets/tutorial/*` com cache longo; o smoke confere a rota.
 
 ## Non-functional requirements
-- NFR-1: peso total das imagens da página < 3 MB; imagens abaixo da dobra com `loading="lazy"`; `width`/`height` declarados (sem salto de layout).
+- NFR-1: peso total das imagens da página < 3 MB; imagens abaixo da dobra com `loading="lazy"` (a primeira do computador e a primeira do celular, não); `width`/`height` declarados (sem salto de layout).
 - NFR-2: WCAG 2.2 AA: axe sem violações sérias em 1440 px e 390 px; sem rolagem horizontal em 390 px; alvos ≥ 44 px.
 - NFR-3: textos em pt-BR externalizados com `i18n`.
 
@@ -67,7 +67,7 @@ Pedido do dono em 2026-10-27: "Faça uma página de tutorial de como usar todas 
 - **AC-5 (NFR-1)**
   - Given o manifesto de imagens
   - When se soma o tamanho
-  - Then o total fica abaixo de 3 MB, e só a primeira figura carrega sem `loading="lazy"`
+  - Then o total fica abaixo de 3 MB, e só as primeiras figuras do computador e do celular carregam sem `loading="lazy"`
 - **AC-6 (FR-6)**
   - Given a produção
   - When o smoke roda

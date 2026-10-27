@@ -39,6 +39,17 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
+  /* The top bar adapts to this column, not to the window (the document panel narrows it). */
+  container-type: inline-size;
+}
+
+/* A column too narrow for one line (the panel open below ~1366 px): the switch and the help
+   wrap below the title instead of passing under the panel. */
+@container (max-width: 33rem) {
+  .topbar {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
 }
 
 /* First screen: greeting and question box centered together (like a chat home);

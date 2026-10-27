@@ -77,7 +77,7 @@ describe('TutorialPage (KBC-032)', () => {
     expect(admins?.textContent).toContain('Só para administradores');
   });
 
-  it('keeps the pictures under 3 MB and loads all but the first lazily (AC-5)', async () => {
+  it('keeps the pictures under 3 MB and loads lazily all but the first ones (AC-5)', async () => {
     const { container } = await renderTutorial();
 
     const total = Object.values(TUTORIAL_IMAGES).reduce(
@@ -86,8 +86,11 @@ describe('TutorialPage (KBC-032)', () => {
     );
     expect(total).toBeGreaterThan(0);
     expect(total).toBeLessThan(MAX_IMAGE_BYTES);
-    const [first, ...rest] = images(container);
-    expect(first?.getAttribute('loading')).not.toBe('lazy');
+    // The first picture on a desktop (home) and on a phone (login) come at once.
+    const [home, login, ...rest] = images(container);
+    expect(home?.getAttribute('loading')).not.toBe('lazy');
+    expect(login?.getAttribute('src')).toBe(TUTORIAL_IMAGES.login.src);
+    expect(login?.getAttribute('loading')).not.toBe('lazy');
     expect(rest.length).toBeGreaterThan(0);
     for (const image of rest)
       expect(image.getAttribute('loading')).toBe('lazy');

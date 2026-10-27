@@ -9,10 +9,10 @@ export interface TutorialImage {
 
 export const TUTORIAL_IMAGES = {
   'access-requests': {
-    src: '/assets/tutorial/access-requests-3CBA9EE1.webp',
+    src: '/assets/tutorial/access-requests-36ADDA70.webp',
     width: 1344,
     height: 1056,
-    bytes: 37868,
+    bytes: 38818,
   },
   'document-panel': {
     src: '/assets/tutorial/document-panel-ED57DFD4.webp',
@@ -51,16 +51,16 @@ export const TUTORIAL_IMAGES = {
     bytes: 47568,
   },
   'invite-preset': {
-    src: '/assets/tutorial/invite-preset-7669EAE1.webp',
+    src: '/assets/tutorial/invite-preset-8E4AB987.webp',
     width: 1344,
     height: 1056,
-    bytes: 42960,
+    bytes: 42912,
   },
   'lend-subscription': {
-    src: '/assets/tutorial/lend-subscription-654B508D.webp',
+    src: '/assets/tutorial/lend-subscription-740E73F7.webp',
     width: 1344,
     height: 1056,
-    bytes: 73264,
+    bytes: 73796,
   },
   login: {
     src: '/assets/tutorial/login-E2293F0F.webp',
@@ -81,10 +81,10 @@ export const TUTORIAL_IMAGES = {
     bytes: 74228,
   },
   people: {
-    src: '/assets/tutorial/people-FDE2B67A.webp',
+    src: '/assets/tutorial/people-E9CEC6AC.webp',
     width: 1344,
     height: 1056,
-    bytes: 47542,
+    bytes: 47492,
   },
   preferences: {
     src: '/assets/tutorial/preferences-60C70CEE.webp',
@@ -117,10 +117,10 @@ export const TUTORIAL_IMAGES = {
     bytes: 31536,
   },
   'research-phone': {
-    src: '/assets/tutorial/research-phone-B8F0FC70.webp',
+    src: '/assets/tutorial/research-phone-825008E4.webp',
     width: 780,
     height: 1688,
-    bytes: 43544,
+    bytes: 43714,
   },
   'research-profiles': {
     src: '/assets/tutorial/research-profiles-BAE07D51.webp',
