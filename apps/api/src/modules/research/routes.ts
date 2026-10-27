@@ -205,8 +205,9 @@ export async function runRecorded(
 
 /**
  * Registers the turn, then records it as pending. Registered first: from then on an older
- * attempt of this turn id no longer records its end. A refusal (another person's conversation,
- * another collection) comes before anything runs.
+ * attempt of this turn id no longer records its end, and the person's turn still running in
+ * this conversation is stopped (one at a time), even if the history then refuses this one
+ * (another person's conversation, another collection), which is the page's own mistake.
  */
 async function claimTurn(
   { journal, turns }: Pick<ResearchRouteOptions, 'journal' | 'turns'>,

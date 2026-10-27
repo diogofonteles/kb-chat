@@ -1,4 +1,5 @@
 import {
+  RESEARCH_TURN_MAX_MINUTES,
   summarizeConversation,
   type Conversation,
   type ConversationKind,
@@ -51,8 +52,6 @@ const byNewest = (a: ConversationSummary, b: ConversationSummary) =>
  * The complete conversation history kept on this computer (no cap), per principal: each
  * person only lists, reads and removes their own (KBC-010 BR-6).
  */
-const DEFAULT_CEILING_MS = 60 * 60_000;
-
 export class ConversationsService {
   private readonly locks = new Map<string, Promise<unknown>>();
   private readonly bootAt: number;
@@ -175,7 +174,7 @@ export class ConversationsService {
       isLive: (turnId) => isLive(principal, turnId),
       bootAt: this.bootAt,
       now: this.now(),
-      ceilingMs: this.deps.ceilingMs ?? DEFAULT_CEILING_MS,
+      ceilingMs: this.deps.ceilingMs ?? RESEARCH_TURN_MAX_MINUTES * 60_000,
     };
   }
 
