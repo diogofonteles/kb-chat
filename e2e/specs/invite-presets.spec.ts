@@ -32,7 +32,9 @@ async function shoot(page: Page, name: string, part?: Locator): Promise<void> {
   const sideways = await page.evaluate(() =>
     [
       document.documentElement,
-      ...document.querySelectorAll<HTMLElement>('dialog, dialog *:not(nav)'),
+      ...Array.from(
+        document.querySelectorAll<HTMLElement>('dialog, dialog *:not(nav)'),
+      ),
     ]
       .filter((el) => {
         const overflow = getComputedStyle(el).overflowX;
