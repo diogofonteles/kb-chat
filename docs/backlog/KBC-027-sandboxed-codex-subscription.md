@@ -1,7 +1,7 @@
 ---
 id: KBC-027
 title: "Assinatura do ChatGPT (Codex) como IA da aplicação, com sandbox obrigatório"
-status: in-review
+status: done
 slice: release-1
 outcome: o dono usa e cede a sua assinatura do ChatGPT como a do Claude, e um turno do Codex nunca lê o estado, o login do Claude, o .env nem a chave de cifra
 depends_on: [KBC-007, KBC-022, KBC-024]

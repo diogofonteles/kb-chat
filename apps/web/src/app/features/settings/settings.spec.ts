@@ -113,6 +113,20 @@ describe('SettingsStore', () => {
 });
 
 describe('first-run wizard (AC-1)', () => {
+  it('KBC-028: shows the preferences of the invitation before the first save, theme included', async () => {
+    const base = aSettingsView({ exists: false });
+    await renderHost({
+      ...base,
+      preferences: {
+        ...base.preferences,
+        theme: 'dark',
+        defaultView: 'search',
+      },
+    });
+    expect(TestBed.inject(ThemeStore).theme()).toBe('dark');
+    expect(dialog()?.open).toBe(true);
+  });
+
   it('opens by itself while no settings exist, and "Pular" saves the defaults', async () => {
     const { http, fixture } = await renderHost(
       aSettingsView({ exists: false }),

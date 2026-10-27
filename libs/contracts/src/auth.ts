@@ -5,6 +5,7 @@ import {
   personAiUpdateSchema,
 } from './ai-access.js';
 import { codeChannelSchema } from './access.js';
+import { initialPreferencesSchema } from './settings.js';
 import { topicSlugSchema } from './topics.js';
 
 /**
@@ -95,6 +96,8 @@ export const personSchema = z.object({
   invitedBy: z.string(),
   createdAt: z.iso.datetime(),
   lastLoginAt: z.iso.datetime().nullable(),
+  /** Preferences set in the invitation (KBC-028), until the person saves their own. */
+  initialPreferences: initialPreferencesSchema.optional(),
   /** Which app AI serves the person and their limits (KBC-022); an older API sends none. */
   ai: personAiSchema.default(() => ({
     ...DEFAULT_PERSON_AI,

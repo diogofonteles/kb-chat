@@ -1,4 +1,9 @@
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+import { JsonDocumentStore } from './adapters/json-document-store.js';
+import {
+  InviteProfilesService,
+  inviteProfilesRoutes,
+} from './modules/invite-profiles/index.js';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -35,6 +40,7 @@ import {
   hasFeature,
   invitationRoutes,
   peopleRoutes,
+  type StoredPerson,
 } from './modules/auth/index.js';
 import {
   AccessRequestService,
@@ -301,6 +307,9 @@ async function registerPeople(
 ) {
   const { deps, topics, invitations } = wiring;
   const { house, auth } = deps;
+  const profiles = await loadInviteProfiles(deps, (message) =>
+    app.log.warn(message),
+  );
   await app.register(
     peopleRoutes({
       ...auth,
@@ -310,8 +319,33 @@ async function registerPeople(
         sync: (person, ai) => house.service.syncPersonKey(person, ai),
         setDefault: (appAi, by) => house.service.setDefault(appAi, by),
       },
+      presets: presetsOf(deps, profiles),
     }),
   );
+  await app.register(inviteProfilesRoutes(profiles, topics));
+}
+
+/** What an invitation and "Aplicar perfil" need from the profiles and Settings (KBC-028). */
+const presetsOf = (deps: FullDeps, profiles: InviteProfilesService) => ({
+  presetFor: (request: Parameters<InviteProfilesService['presetFor']>[0]) =>
+    profiles.presetFor(request),
+  hasSavedSettings: (person: StoredPerson) =>
+    deps.ai.settings.exists(deps.auth.people.viewerOf(person).principal),
+});
+
+/** "Perfis de convite" (KBC-028): invite-profiles.json in the state folder. */
+async function loadInviteProfiles(
+  deps: FullDeps,
+  warn: (message: string) => void,
+) {
+  const profiles = new InviteProfilesService({
+    warn,
+    store: new JsonDocumentStore(
+      join(deps.config.KB_CHAT_STATE_DIR, 'invite-profiles.json'),
+    ),
+  });
+  await profiles.load();
+  return profiles;
 }
 
 /** What the owner's subscriptions can do now, for "IA da aplicação" (KBC-024, KBC-027). */

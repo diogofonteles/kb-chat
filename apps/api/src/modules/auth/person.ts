@@ -3,6 +3,7 @@ import {
   FEATURES,
   personAiSchema,
   featureSchema,
+  initialPreferencesSchema,
   invitationSchema,
   roleSchema,
   topicSlugSchema,
@@ -43,6 +44,8 @@ export const storedPersonSchema = z.object({
   principal: z.string().min(1).optional(),
   /** Which app AI serves the person and their limits (KBC-022); absent: the house default. */
   ai: personAiSchema.optional(),
+  /** Set in the invitation (KBC-028): the person's Settings until they save their own. */
+  initialPreferences: initialPreferencesSchema.optional(),
 });
 export type StoredPerson = z.infer<typeof storedPersonSchema>;
 
@@ -107,4 +110,7 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   createdAt: person.createdAt,
   lastLoginAt: person.lastLoginAt,
   ai: person.ai ?? DEFAULT_PERSON_AI,
+  ...(person.initialPreferences && {
+    initialPreferences: person.initialPreferences,
+  }),
 });

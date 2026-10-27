@@ -4,6 +4,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   input,
@@ -15,6 +16,7 @@ import {
   FEATURES,
   type AppAi,
   type Feature,
+  type InviteProfile,
   type Person,
   type PersonUpdate,
   type Topic,
@@ -46,15 +48,40 @@ export class PersonEditor {
   readonly defaultAppAi = input<AppAi | null>(null);
   /** Whether the owner's subscription is offered (KBC-024). */
   readonly lending = input<Lending>(NO_LENDING);
+  /** The invitation profiles a master can apply here (KBC-028 FR-4). */
+  readonly profiles = input<readonly InviteProfile[]>([]);
   readonly changed = output<PersonUpdate>();
   readonly revoked = output();
+  /** "Aplicar perfil", once confirmed: the profile's id. */
+  readonly profileApplied = output<string>();
 
   private readonly confirmButton =
     viewChild<ElementRef<HTMLButtonElement>>('confirmButton');
   private readonly revokeButton =
     viewChild<ElementRef<HTMLButtonElement>>('revokeButton');
+  private readonly applyConfirmButton =
+    viewChild<ElementRef<HTMLButtonElement>>('applyConfirmButton');
+  private readonly applyButton =
+    viewChild<ElementRef<HTMLButtonElement>>('applyButton');
 
   protected readonly confirming = signal(false);
+  /** The profile picked in "Aplicar perfil"; the first one until another is chosen. */
+  protected readonly chosenProfileId = signal<string | null>(null);
+  protected readonly chosenProfile = computed(
+    () =>
+      this.profiles().find((p) => p.id === this.chosenProfileId()) ??
+      this.profiles()[0] ??
+      null,
+  );
+  /** Applying waits for a confirmation on the line (screens.md T9). */
+  protected readonly confirmingApply = signal(false);
+  /** After applying, focus returns to "Aplicar perfil" once the save is over (WCAG 2.4.3). */
+  private refocusApply = false;
+  private readonly refocusAfterApply = afterRenderEffect(() => {
+    if (this.busy() || !this.refocusApply) return;
+    this.refocusApply = false;
+    this.applyButton()?.nativeElement.focus();
+  });
   protected readonly isMaster = computed(() => this.person().role === 'master');
   protected readonly features = computed(() =>
     FEATURES.map((id) => ({
@@ -82,6 +109,29 @@ export class PersonEditor {
 
   protected toggleMaster(): void {
     this.changed.emit({ role: this.isMaster() ? 'member' : 'master' });
+  }
+
+  protected chooseProfile(id: string): void {
+    this.chosenProfileId.set(id);
+    this.confirmingApply.set(false);
+  }
+
+  protected askApply(): void {
+    this.confirmingApply.set(true);
+    this.focusAfterRender(() => this.applyConfirmButton());
+  }
+
+  protected cancelApply(): void {
+    this.confirmingApply.set(false);
+    this.focusAfterRender(() => this.applyButton());
+  }
+
+  protected confirmApply(): void {
+    const profile = this.chosenProfile();
+    this.confirmingApply.set(false);
+    if (!profile) return;
+    this.refocusApply = true;
+    this.profileApplied.emit(profile.id);
   }
 
   /** The asked-for button replaces the one that had focus: focus follows it (WCAG 2.4.3). */

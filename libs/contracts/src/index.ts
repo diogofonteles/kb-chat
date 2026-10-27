@@ -14,3 +14,4 @@ export * from './access.js';
 export * from './phone.js';
 export * from './ai-access.js';
 export * from './house-ai.js';
+export * from './invite-profiles.js';

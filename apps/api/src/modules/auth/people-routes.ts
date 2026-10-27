@@ -1,4 +1,7 @@
 import {
+  applyProfileRequestSchema,
+  presetInviteRequestSchema,
+  type InvitePreset,
   aiAssignmentRequestSchema,
   aiAssignmentResultSchema,
   defaultableAppAiSchema,
@@ -7,7 +10,6 @@ import {
   type DefaultableAppAi,
   type PersonAiUpdate,
   type PersonAi,
-  inviteRequestSchema,
   personIdSchema,
   personListSchema,
   personSchema,
@@ -38,6 +40,18 @@ export interface PeopleRouteDeps {
   readonly invitations: Invitations;
   /** What the house AI does around a person's AI change (KBC-022); none in tests. */
   readonly ai?: PeopleAiHooks;
+  /** Invitation presets (KBC-028); absent, invitations are plain. */
+  readonly presets?: PresetSource;
+}
+
+/** Where the people routes find a preset (KBC-028), and whether a person saved Settings. */
+export interface PresetSource {
+  presetFor(request: {
+    readonly preset?: InvitePreset;
+    readonly profileId?: string;
+  }): InvitePreset | undefined;
+  /** The person saved their own preferences: a profile's ones never replace them (BR-6). */
+  hasSavedSettings(person: StoredPerson): Promise<boolean>;
 }
 
 /** The house side of the AI access policy, called by the people routes (KBC-022). */
@@ -107,18 +121,40 @@ function registerReads(app: FastifyInstance, deps: PeopleRouteDeps) {
     '/api/v1/people',
     {
       config: { access: MASTER },
-      schema: { body: inviteRequestSchema, response: { 201: personSchema } },
+      schema: {
+        body: presetInviteRequestSchema,
+        response: { 201: personSchema },
+      },
     },
-    async (request, reply) => {
-      const inviter = viewerOf(request).person;
-      const { email, sendEmail } = request.body;
-      const invited = await deps.people.invite(email, inviter.email);
-      const result = sendEmail
-        ? await deps.invitations.afterInvite(invited, inviter, request.log)
-        : invited;
-      return reply.code(201).send(view(deps, result));
-    },
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send(view(deps, await invite(deps, request, request.body))),
   );
+}
+
+async function invite(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  body: z.infer<typeof presetInviteRequestSchema>,
+): Promise<StoredPerson> {
+  const inviter = viewerOf(request).person;
+  const { email, sendEmail, preset, profileId } = body;
+  const chosen = deps.presets?.presetFor({ preset, profileId });
+  if (chosen) assertKnownTopics(deps, chosen.topics);
+  const invited = await deps.people.invite(email, inviter.email, chosen);
+  // The house follows the AI it was given (provisioned keys), as after the editor; if it
+  // cannot, the invitation is undone so that inviting again works.
+  if (chosen)
+    await deps.ai?.sync(invited, aiOf(invited)).catch(async (err: unknown) => {
+      await deps.people
+        .revoke(invited.id)
+        .catch(() => request.log.error('could not undo a failed invitation'));
+      throw err;
+    });
+  return sendEmail
+    ? deps.invitations.afterInvite(invited, inviter, request.log)
+    : invited;
 }
 
 function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
@@ -147,8 +183,62 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
   );
 }
 
+/** "Aplicar perfil" (KBC-028 FR-4): a profile on someone already invited. */
+function registerApplyProfile(app: FastifyInstance, deps: PeopleRouteDeps) {
+  app.withTypeProvider<ZodTypeProvider>().post(
+    '/api/v1/people/:id/profile',
+    {
+      config: { access: MASTER },
+      schema: {
+        params,
+        body: applyProfileRequestSchema,
+        response: { 200: personSchema },
+      },
+    },
+    async (request) =>
+      view(
+        deps,
+        await applyProfile(deps, request, {
+          id: request.params.id,
+          profileId: request.body.profileId,
+        }),
+      ),
+  );
+}
+
+async function applyProfile(
+  deps: PeopleRouteDeps,
+  request: FastifyRequest,
+  target: { readonly id: string; readonly profileId: string },
+): Promise<StoredPerson> {
+  const { profileId } = target;
+  const { presets } = deps;
+  if (!presets) throw new AppError('NOT_FOUND', 'Unknown invite profile');
+  const preset = presets.presetFor({ profileId });
+  const before = await deps.people.find(target.id);
+  if (!preset || !before) throw new AppError('NOT_FOUND', 'Not found');
+  assertKnownTopics(deps, preset.topics);
+  const by = viewerOf(request).person.email;
+  assertMayChangeLent(deps, request, { before, ai: preset.ai });
+  const updated = await deps.people.applyPreset(before.id, preset, {
+    by,
+    withPreferences: !(await presets.hasSavedSettings(before)),
+  });
+  // The whole profile goes back when the house cannot follow its AI.
+  await syncAi(deps, { before, updated, by, log: request.log }).catch(
+    async (err: unknown) => {
+      await deps.people
+        .restore(before)
+        .catch(() => request.log.error('could not undo a profile'));
+      throw err;
+    },
+  );
+  return updated;
+}
+
 function registerWrites(app: FastifyInstance, deps: PeopleRouteDeps) {
   registerPatch(app, deps);
+  registerApplyProfile(app, deps);
   app.withTypeProvider<ZodTypeProvider>().delete(
     '/api/v1/people/:id',
     {
