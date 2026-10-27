@@ -54,6 +54,10 @@ export class LiveTurn {
   }
 }
 
+/** Turns are kept per person: another person's id never reaches them (BR-4). */
+const slotOf = (principal: string, turnId: string): string =>
+  JSON.stringify([principal, turnId]);
+
 /** One turn at a time per conversation (or turn id), and only ever the person's own. */
 const isSameSlot = (a: LiveTurnKey, b: LiveTurnKey): boolean =>
   a.principal === b.principal &&
@@ -84,7 +88,7 @@ export class LiveTurns {
     for (const other of this.turns.values())
       if (isSameSlot(other.key, key)) other.abort.abort();
     const turn = new LiveTurn(key);
-    this.turns.set(key.turnId, turn);
+    this.turns.set(slotOf(key.principal, key.turnId), turn);
     const timer = setTimeout(() => turn.abort.abort(), this.ceilingMs);
     timer.unref();
     this.timers.set(turn, timer);
@@ -95,15 +99,14 @@ export class LiveTurns {
   end(turn: LiveTurn): void {
     clearTimeout(this.timers.get(turn));
     this.timers.delete(turn);
-    if (this.turns.get(turn.key.turnId) === turn)
-      this.turns.delete(turn.key.turnId);
+    const slot = slotOf(turn.key.principal, turn.key.turnId);
+    if (this.turns.get(slot) === turn) this.turns.delete(slot);
     turn.finish();
   }
 
   /** The person's running turn with that id; another person's is never found. */
   find(principal: string, turnId: string): LiveTurn | null {
-    const turn = this.turns.get(turnId);
-    return turn?.key.principal === principal ? turn : null;
+    return this.turns.get(slotOf(principal, turnId)) ?? null;
   }
 
   isLive(principal: string, turnId: string): boolean {

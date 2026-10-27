@@ -103,6 +103,16 @@ describe('LiveTurns', () => {
     expect(mine.abort.signal.aborted).toBe(false);
   });
 
+  it('keeps two people’s turns with the same id apart (QA BUG-1)', () => {
+    const turns = new LiveTurns();
+    const mine = turns.start(key('t1'));
+    const theirs = turns.start(key('t1', 'c2', 'bia'));
+    expect(turns.find('ana', 't1')).toBe(mine);
+    expect(turns.find('bia', 't1')).toBe(theirs);
+    turns.end(theirs);
+    expect(turns.isLive('ana', 't1')).toBe(true);
+  });
+
   it('closing stops every turn and waits for their runs to settle', async () => {
     const turns = new LiveTurns();
     const turn = turns.start(key('t1'));

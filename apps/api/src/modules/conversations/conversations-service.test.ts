@@ -146,6 +146,18 @@ describe('ConversationsService.finishTurn (KBC-029)', () => {
     expect(saved?.updatedAt).toBe(iso(BOOT + 60_000));
   });
 
+  it('ignores the outcome of an earlier attempt of a turn that was asked again (QA BUG-2)', async () => {
+    const { service, store } = setup();
+    const retried = pending({ at: iso(BOOT + 9000) });
+    await store.put('ana', conversation([retried]));
+    await service.finishTurn(
+      'ana',
+      CONVERSATION,
+      turn({ interrupted: true, at: iso(BOOT + 1000) }),
+    );
+    expect(turnsOf(await store.get('ana', CONVERSATION))).toEqual([retried]);
+  });
+
   it('does not bring back a conversation the person removed meanwhile', async () => {
     const { service } = setup();
     await service.finishTurn('ana', CONVERSATION, turn());

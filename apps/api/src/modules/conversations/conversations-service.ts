@@ -38,6 +38,12 @@ export interface TurnPlace {
   readonly turn: SavedResearchTurn;
 }
 
+/** The stored turn with this id started later: a newer attempt (both stamped by the server). */
+const isSuperseded = (
+  stored: ResearchConversation,
+  turn: SavedResearchTurn,
+): boolean => stored.turns.some((t) => t.id === turn.id && t.at > turn.at);
+
 const CEILING_MS = RESEARCH_TURN_MAX_MINUTES * 60_000;
 
 const matches = (summary: ConversationSummary, filter: ConversationFilter) =>
@@ -120,7 +126,10 @@ export class ConversationsService {
     });
   }
 
-  /** Records how a turn ended; a conversation removed meanwhile stays removed. */
+  /**
+   * Records how a turn ended; a conversation removed meanwhile stays removed, and the end of
+   * an attempt that "Tentar de novo" already replaced is dropped.
+   */
   finishTurn(
     principal: string,
     conversationId: string,
@@ -128,7 +137,7 @@ export class ConversationsService {
   ): Promise<void> {
     return this.serial(conversationId, async () => {
       const stored = await this.deps.store.get(principal, conversationId);
-      if (stored?.kind !== 'research') return;
+      if (stored?.kind !== 'research' || isSuperseded(stored, turn)) return;
       const turns = withTurn(stored, turn);
       await this.put(principal, { ...stored, updatedAt: this.stamp(), turns });
     });
