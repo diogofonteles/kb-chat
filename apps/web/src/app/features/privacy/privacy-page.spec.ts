@@ -108,4 +108,14 @@ describe('PrivacyPage (KBC-016)', () => {
       screen.getByText(/fale com o administrador que aprovou o seu acesso/),
     ).toBeTruthy();
   });
+
+  it('links to the tutorial (KBC-032 AC-4)', async () => {
+    await renderPolicy(null);
+
+    expect(
+      screen
+        .getByRole('link', { name: 'Como usar a Nova Alexandria' })
+        .getAttribute('href'),
+    ).toBe('/tutorial');
+  });
 });

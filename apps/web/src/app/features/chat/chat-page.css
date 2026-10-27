@@ -33,7 +33,11 @@
 
 .conversation {
   display: grid;
+  /* One column that may shrink: with the document panel open on a narrow desktop, the
+     results and the question box wrap instead of spilling under the panel. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -62,8 +66,10 @@
 
 .topbar {
   display: flex;
+  /* A narrow column (the document panel open) wraps the switch and the help. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   padding: var(--space-3) var(--space-6);
   border-bottom: 1px solid var(--color-border);
 }
@@ -85,6 +91,38 @@
 .view-switch {
   flex-shrink: 0;
   margin-left: auto;
+}
+
+/* Help (KBC-032): right-aligned, after the view switch when there is one. */
+.help {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: var(--target);
+  min-height: var(--target);
+  margin-left: auto;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.view-switch ~ .help {
+  margin-left: 0;
+}
+
+.help:hover {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+}
+
+.help:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .topic {
@@ -299,7 +337,17 @@
   /* Phones: the view switch takes its own full-width row under the title. */
   .view-switch {
     flex-basis: 100%;
+    order: 1;
     margin-left: 0;
+  }
+
+  /* Phones: the help stays on the title row, as an icon. */
+  .view-switch ~ .help {
+    margin-left: auto;
+  }
+
+  .help-text {
+    display: none;
   }
 
   .hint-keyboard {
@@ -328,6 +376,8 @@
   }
 
   .topic {
+    /* Shrinks (with "…") instead of wrapping, so the help stays on the title row. */
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

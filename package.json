@@ -14,6 +14,7 @@
     "build": "nx run-many -t build",
     "lint": "nx run-many -t lint",
     "e2e": "pnpm --filter @kb-chat/e2e e2e",
+    "tutorial:screenshots": "pnpm --filter @kb-chat/e2e exec playwright test -c tutorial.config.ts && prettier --write apps/web/src/app/features/tutorial/tutorial-images.generated.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
