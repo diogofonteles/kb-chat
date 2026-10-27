@@ -28,7 +28,7 @@ Decisão do dono em 2026-10-26: pré-configurar a pessoa no convite ("Configurar
 
 ## Business rules
 - BR-1: só masters convidam, gerenciam perfis e aplicam perfis (como hoje).
-- BR-2: o preset nunca cede uma assinatura do dono (só Padrão, Plano da casa ou Nenhuma).
+- BR-2: o preset nunca cede uma assinatura do dono (só Padrão, Plano da casa ou Nenhuma). **Emenda de 2026-10-27 (KBC-031):** o preset enviado num convite ("Configurar agora") pode ceder a assinatura do Claude ou do ChatGPT, só pelo dono e com a confirmação dos termos; os perfis de convite continuam sem assinaturas (ADR 0019, emenda).
 - BR-3: um único perfil padrão; apagar o padrão deixa a casa sem padrão.
 - BR-4: o acervo padrão das preferências precisa estar entre os acervos do preset (ou o papel ser master).
 - BR-5: aplicar um perfil a uma pessoa existente registra a mudança de IA no histórico dela (quem e quando), como o editor.

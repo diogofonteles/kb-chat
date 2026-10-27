@@ -23,6 +23,7 @@ import {
   type CliTurnOptions,
   type TurnAccess,
 } from './cli-research-turn.js';
+import { runCliSweepTurn } from './cli-sweep-turn.js';
 import {
   defaultSubscriptionPrompt,
   subscriptionTurnInput,
@@ -180,7 +181,9 @@ export class CodexCliRunner implements ResearchRunnerPort {
       launch: (access, input) => this.launch(access, input.model),
       // Codex has no system-prompt flag: the instructions lead the input.
       input: (input) =>
-        `${prompt(input.topic, input.profile, input.canDeepen)}\n\n${subscriptionTurnInput(input.question, input.history, input.findings)}`,
+        input.override
+          ? `${input.override.system}\n\n${input.override.input}`
+          : `${prompt(input.topic, input.profile, input.canDeepen)}\n\n${subscriptionTurnInput(input.question, input.history, input.findings)}`,
       parse: parseCodexLine,
     };
   }
@@ -218,7 +221,8 @@ export class CodexCliRunner implements ResearchRunnerPort {
       return;
     }
     if (input.signal.aborted) return;
-    yield* runCliTurn(this.turnOptions(), this.dialect, {
+    const run = input.profile === 'exhaustive' ? runCliSweepTurn : runCliTurn;
+    yield* run(this.turnOptions(), this.dialect, {
       ...input,
       tools,
       model: this.options.model,

@@ -97,10 +97,22 @@ describe('ChatPage', () => {
     ).toBeTruthy();
   });
 
+  it('offers the tutorial in a new tab, so the conversation stays (KBC-032 AC-4)', async () => {
+    await renderPage();
+    const help = screen.getByRole('link', {
+      name: 'Como usar a Nova Alexandria (abre em nova aba)',
+    });
+    expect(help.getAttribute('href')).toBe('/tutorial');
+    expect(help.getAttribute('target')).toBe('_blank');
+    expect(help.getAttribute('rel')).toContain('noopener');
+  });
+
   it('asks, shows a searching state and then the result cards', async () => {
     const view = await renderPage();
     await ask('lei do ritmo', view);
-    expect(screen.getByText('lei do ritmo')).toBeTruthy();
+    // The history shows it too, from the moment it is sent (KBC-029).
+    const thread = screen.getByRole('region', { name: 'Conversa' });
+    expect(within(thread).getByText('lei do ritmo')).toBeTruthy();
     expect(screen.getByText(/Buscando em Hermetismo/)).toBeTruthy();
     const request = view.http.expectOne(SEARCH_URL);
     expect(request.request.body).toEqual({
@@ -459,6 +471,52 @@ describe('ChatPage side panel (KBC-005)', () => {
     expect(
       history.querySelector('[aria-current="true"]')?.textContent,
     ).toContain('lei do ritmo');
+  });
+
+  it('KBC-029: shows the question in the history as soon as it is sent, selected and "pesquisando…"', async () => {
+    const view = await renderPage();
+    await ask('lei do ritmo', view);
+    const history = screen.getByRole('navigation', { name: /Histórico/ });
+    const current = within(history).getByRole('button', {
+      name: /lei do ritmo.*pesquisando…/,
+    });
+    expect(current.getAttribute('aria-current')).toBe('true');
+    view.http.expectOne(SEARCH_URL).flush(aResponse());
+    await view.fixture.whenStable();
+    expect(within(history).queryByText(/pesquisando…/)).toBeNull();
+  });
+
+  it('KBC-029: says in the history which research was interrupted or failed', async () => {
+    const turn = {
+      answer: '',
+      sources: [],
+      steps: 0,
+      usd: 0,
+      billing: 'per-token' as const,
+      model: '',
+      at: '2026-10-27T09:00:00.000Z',
+    };
+    const stored = (title: string, extra: object) => ({
+      kind: 'research' as const,
+      id: crypto.randomUUID(),
+      topic: 'hermetismo',
+      title,
+      createdAt: '2026-10-27T09:00:00.000Z',
+      updatedAt: '2026-10-27T09:00:00.000Z',
+      turns: [{ ...turn, question: title, interrupted: false, ...extra }],
+    });
+    const stopped = stored('polaridade', { interrupted: true });
+    const failed = stored('vibração', { status: 'failed', error: 'INTERNAL' });
+    conversations.saved.set(stopped.id, stopped);
+    conversations.saved.set(failed.id, failed);
+    await renderPage();
+    const history = screen.getByRole('navigation', { name: /Histórico/ });
+    expect(
+      within(history).getByRole('button', { name: /polaridade.*interrompida/ }),
+    ).toBeTruthy();
+    expect(
+      within(history).getByRole('button', { name: /vibração.*falhou/ }),
+    ).toBeTruthy();
   });
 
   it('switches the collection into a new conversation with an inline notice (AC-5)', async () => {

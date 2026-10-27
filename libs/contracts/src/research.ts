@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { authorshipSchema } from './facets.js';
 import { documentRefSchema } from './search.js';
+import {
+  sweepCoverageSchema,
+  sweepCursorSchema,
+  sweepProgressSchema,
+} from './sweep.js';
 
 /**
  * A numbered source: [n] in the answer text points to sources[n - 1]. Its authorship
@@ -40,20 +45,57 @@ export type ModelProfile = (typeof MODEL_PROFILES)[number];
 export const modelProfileOf = (profile: ResearchProfile): ModelProfile =>
   profile === 'fast' ? 'fast' : 'deep';
 
-export const researchRequestSchema = z.strictObject({
-  question: z.string().trim().min(1).max(2000),
-  history: z.array(researchTurnSchema).max(MAX_HISTORY_TURNS).default([]),
-  profile: researchProfileSchema.default('fast'),
-});
+/**
+ * `conversationId` and `turnId` (KBC-029, both or neither): the server records the turn in
+ * that conversation as it runs, and the turn goes on when the page goes away. `sweep`
+ * (KBC-030): "Continuar varredura" of an exhaustive turn, from its cursor.
+ */
+export const researchRequestSchema = z
+  .strictObject({
+    question: z.string().trim().min(1).max(2000),
+    history: z.array(researchTurnSchema).max(MAX_HISTORY_TURNS).default([]),
+    profile: researchProfileSchema.default('fast'),
+    conversationId: z.uuid().optional(),
+    turnId: z.uuid().optional(),
+    sweep: sweepCursorSchema.optional(),
+  })
+  .superRefine((request, ctx) => {
+    if (
+      (request.conversationId === undefined) !==
+      (request.turnId === undefined)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'conversationId and turnId go together',
+      });
+    if (request.sweep && request.profile !== 'exhaustive')
+      ctx.addIssue({
+        code: 'custom',
+        message: 'a sweep cursor goes with the exhaustive profile',
+      });
+  });
 export type ResearchRequest = z.input<typeof researchRequestSchema>;
+
+/** The wall-clock ceiling of a recorded research turn (KBC-029): past it, it is stopped. */
+export const RESEARCH_TURN_MAX_MINUTES = 60;
 
 /** What the agent is doing, shown as a discreet line while it works (ADR 0006). */
 export const researchStepSchema = z.object({
   /**
    * `deepen`: the fast pass was not enough and the deep profile takes over (ADR 0009);
-   * `delegate`: the exhaustive orchestrator hands tasks to sub-researchers (ADR 0014).
+   * `delegate`: the exhaustive orchestrator handed tasks to sub-researchers (ADR 0014,
+   * superseded by ADR 0021; kept so older streams stay valid); `sweep`: the exhaustive
+   * orchestrator planned the app's sweep (KBC-030).
    */
-  kind: z.enum(['search', 'subjects', 'read', 'related', 'deepen', 'delegate']),
+  kind: z.enum([
+    'search',
+    'subjects',
+    'read',
+    'related',
+    'deepen',
+    'delegate',
+    'sweep',
+  ]),
   /** Short pt-BR description, e.g. "Buscando “cinco princípios ocultos”". */
   text: z.string(),
   /** The document a `read` step read (titles repeat in a collection). */
@@ -112,6 +154,8 @@ export const researchEventSchema = z.discriminatedUnion('type', [
     segment: segmentSchema,
   }),
   z.object({ type: z.literal('retract'), segment: segmentSchema }),
+  /** The exhaustive sweep's estimate and progress (KBC-030). */
+  z.object({ type: z.literal('sweep'), sweep: sweepProgressSchema }),
   z.object({
     type: z.literal('done'),
     usd: z.number().nonnegative(),
@@ -125,6 +169,10 @@ export const researchEventSchema = z.discriminatedUnion('type', [
     plan: researchPlanSchema.optional(),
     /** House plan: researches left today. */
     remaining: z.number().int().nonnegative().optional(),
+    /** Exhaustive sweep (KBC-030): the coverage the app measured. */
+    coverage: sweepCoverageSchema.optional(),
+    /** Exhaustive sweep that did not finish: where "Continuar varredura" resumes. */
+    sweep: sweepCursorSchema.optional(),
   }),
   z.object({
     type: z.literal('error'),

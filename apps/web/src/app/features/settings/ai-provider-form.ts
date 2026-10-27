@@ -26,9 +26,8 @@ import {
 } from './ai-draft.js';
 import {
   BILLING_COPY,
-  NOT_ENABLED,
-  NOT_INSTALLED,
-  NOT_LENT,
+  BLOCKED_LABEL,
+  type BlockingReason,
   PROVIDER_COPY,
   PROVIDER_ORDER,
   TEST_COPY,
@@ -53,15 +52,15 @@ type TestState =
   | { readonly kind: 'done'; readonly result: AiTestResult }
   | { readonly kind: 'failed' };
 
+const isBlocking = (reason: ProviderInfo['reason']): reason is BlockingReason =>
+  reason !== null && reason !== 'key-missing' && reason !== 'owner-only';
+
 function blockedBy(info: ProviderInfo): ProviderOption['blocked'] {
-  const copy = PROVIDER_COPY[info.id];
-  if (info.reason === 'cli-missing' && copy.install)
-    return { label: NOT_INSTALLED(), steps: copy.install() };
-  if (info.reason === 'not-enabled' && copy.enable)
-    return { label: NOT_ENABLED(), steps: copy.enable() };
-  if (info.reason === 'app-unavailable' && copy.enable)
-    return { label: NOT_LENT(), steps: copy.enable() };
-  return null;
+  const { reason } = info;
+  if (!isBlocking(reason)) return null;
+  // A reason without its own steps still blocks the card (KBC-031): the label says why.
+  const steps = PROVIDER_COPY[info.id].steps?.[reason]?.() ?? '';
+  return { label: BLOCKED_LABEL[reason](), steps };
 }
 
 const toOption = (info: ProviderInfo): ProviderOption => {

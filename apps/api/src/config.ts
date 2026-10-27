@@ -44,6 +44,8 @@ export const configSchema = z
     KB_TOPIC: z.string().min(1).optional(),
     /** Searches per minute per client (local single user: generous, ND-22). */
     SEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(120),
+    /** Research turns per minute per client: each may cost money (ND-22). */
+    RESEARCH_RATE_LIMIT: z.coerce.number().int().min(1).default(20),
     /** Obsidian vault name for "Abrir no Obsidian"; default: the vault folder's name. */
     OBSIDIAN_VAULT: z.string().min(1).optional(),
     /** Paid provider key for the research agent; without it AI is disabled (LLM_NOT_CONFIGURED). */
@@ -103,6 +105,16 @@ export const configSchema = z
       .min(2_000)
       .max(64_000)
       .default(16_000),
+    /**
+     * Model requests one exhaustive turn may make (KBC-030): planning, the sweep's batches
+     * and the answer; past it the sweep stops and "Continuar varredura" resumes.
+     */
+    KB_CHAT_SWEEP_MAX_REQUESTS: z.coerce
+      .number()
+      .int()
+      .min(10)
+      .max(2_000)
+      .default(250),
     /** Local state (spend ledger, usage log, settings). */
     KB_CHAT_STATE_DIR: z
       .string()

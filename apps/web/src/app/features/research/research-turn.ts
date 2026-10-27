@@ -1,5 +1,6 @@
 import {
   AUTHORSHIPS,
+  mergeFindings,
   MAX_HISTORY_TURNS,
   type AnswerSource,
   type Authorship,
@@ -10,6 +11,9 @@ import {
   type ResearchStep,
   type ResearchTurn as HistoryTurn,
   type SavedResearchTurn,
+  type SweepCoverage,
+  type SweepCursor,
+  type SweepProgress,
 } from '@kb-chat/contracts';
 import {
   toResearchErrorCode,
@@ -34,6 +38,8 @@ export interface AnswerSegment {
 /** One question and the agent's answer, as shown in the "Pesquisa com IA" thread. */
 export interface ResearchTurn {
   readonly id: number;
+  /** The turn's id in the history (KBC-029); "Tentar de novo" keeps it. */
+  readonly turnId: string;
   readonly question: string;
   readonly phase: 'streaming' | 'done' | 'error';
   /** The answer: the segments shown and not retracted, joined. */
@@ -63,15 +69,78 @@ export interface ResearchTurn {
   readonly at: string;
   /** Brought back from the history (FR-6): shown as saved, never announced or re-run. */
   readonly restored: boolean;
+  /** The exhaustive sweep's estimate, then its progress, while it runs (KBC-030). */
+  readonly sweep: SweepProgress | null;
+  /** What the sweep covered, measured by the app. */
+  readonly coverage: SweepCoverage | null;
+  /** Where "Continuar varredura" resumes; null when the sweep covered its whole set. */
+  readonly cursor: SweepCursor | null;
 }
+
+/**
+ * The cursor of a sweep still running: the server's latest, with every finding the page
+ * received so far, so a stop keeps them for "Continuar varredura" (KBC-030 QA F-1).
+ */
+function progressCursor(
+  turn: ResearchTurn,
+  progress: SweepProgress,
+): SweepCursor | null {
+  if (!progress.cursor) return turn.cursor;
+  const findings = mergeFindings(
+    turn.cursor?.findings ?? [],
+    progress.found ?? [],
+  );
+  return { ...progress.cursor, findings };
+}
+
+/**
+ * A turn ended well with text, when stopped, or when a sweep kept its cursor without an
+ * answer (the day's cap blocked it): the coverage box says so (KBC-030).
+ */
+const endedWell = (
+  turn: ResearchTurn,
+  e: Extract<ResearchEvent, { type: 'done' }>,
+): boolean => turn.text.trim() !== '' || e.interrupted || e.sweep !== undefined;
+
+/** The estimate (time, cost) comes once, before the first batch: progress keeps it shown. */
+function withEstimate(
+  before: SweepProgress | null,
+  progress: SweepProgress,
+): SweepProgress {
+  const minutes = progress.minutes ?? before?.minutes;
+  const usd = progress.usd ?? before?.usd;
+  return {
+    ...progress,
+    ...(minutes !== undefined && { minutes }),
+    ...(usd !== undefined && { usd }),
+  };
+}
+
+/** A turn without an exhaustive sweep (KBC-030). */
+const NO_SWEEP = { sweep: null, coverage: null, cursor: null } as const;
+
+/** What a turn not answered yet reports. */
+const NOT_ANSWERED = {
+  usd: null,
+  billing: 'per-token',
+  model: '',
+  interrupted: false,
+  escalated: false,
+  plan: null,
+  remaining: null,
+  error: null,
+  errorLimit: null,
+} as const;
 
 export function startTurn(
   id: number,
   question: string,
-  profile: ResearchProfile | null = null,
+  options: { profile?: ResearchProfile | null; turnId?: string } = {},
 ): ResearchTurn {
+  const { profile = null, turnId = crypto.randomUUID() } = options;
   return {
     id,
+    turnId,
     question,
     profile,
     phase: 'streaming',
@@ -80,17 +149,10 @@ export function startTurn(
     sources: [],
     steps: [],
     stepCount: 0,
-    usd: null,
-    billing: 'per-token',
-    model: '',
-    interrupted: false,
-    escalated: false,
-    plan: null,
-    remaining: null,
-    error: null,
-    errorLimit: null,
+    ...NOT_ANSWERED,
     at: new Date().toISOString(),
     restored: false,
+    ...NO_SWEEP,
   };
 }
 
@@ -148,11 +210,16 @@ const HANDLERS: {
   sources: (turn, e) => ({ ...turn, sources: e.sources }),
   token: appendToken,
   retract: (turn, e) => retractSegment(turn, e.segment),
+  sweep: (turn, e) => ({
+    ...turn,
+    sweep: withEstimate(turn.sweep, e.sweep),
+    cursor: progressCursor(turn, e.sweep),
+  }),
   // A finished answer without text is a provider failure, not an empty success.
   done: (turn, e) => ({
     ...turn,
-    phase: turn.text.trim() || e.interrupted ? 'done' : 'error',
-    error: turn.text.trim() || e.interrupted ? null : 'INTERNAL',
+    phase: endedWell(turn, e) ? 'done' : 'error',
+    error: endedWell(turn, e) ? null : 'INTERNAL',
     usd: e.usd,
     billing: e.billing,
     model: e.model,
@@ -161,6 +228,10 @@ const HANDLERS: {
     plan: e.plan ?? null,
     remaining: e.remaining ?? null,
     stepCount: Math.max(turn.stepCount, e.steps),
+    coverage: e.coverage ?? null,
+    // A sweep that finished leaves no cursor; a stopped one keeps where it got to.
+    cursor:
+      e.sweep ?? (e.coverage && e.coverage.missing === 0 ? null : turn.cursor),
   }),
   error: (turn, e) => ({
     ...turn,
@@ -185,10 +256,6 @@ export function applyEvent(
 export const isFinished = (turn: ResearchTurn): boolean =>
   turn.phase === 'done' && turn.text.trim().length > 0;
 
-/** A turn that goes to the history: every finished one, also one stopped before any text. */
-export const isSaved = (turn: ResearchTurn): boolean =>
-  turn.phase === 'done' && (turn.interrupted || turn.text.trim().length > 0);
-
 const MAX_ANSWER_CHARS = 20_000;
 
 /** The previous questions and answers (text only, BR-4), the most recent ones within the cap. */
@@ -210,8 +277,17 @@ export function citedSources(turn: ResearchTurn): AnswerSource[] {
   return turn.sources.filter((source) => cited.has(source.n));
 }
 
+/** How the history keeps a turn's phase (KBC-029): pending, failed with its code, or ended. */
+function savedStatusOf(turn: ResearchTurn): Partial<SavedResearchTurn> {
+  if (turn.phase === 'streaming') return { status: 'pending' };
+  if (turn.phase === 'error')
+    return { status: 'failed', error: turn.error ?? 'INTERNAL' };
+  return {};
+}
+
 export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
   return {
+    id: turn.turnId,
     question: turn.question,
     answer: turn.text,
     sources: [...turn.sources],
@@ -223,18 +299,32 @@ export function toSavedTurn(turn: ResearchTurn): SavedResearchTurn {
     ...(turn.escalated ? { escalated: true } : {}),
     ...(turn.profile ? { profile: turn.profile } : {}),
     ...(turn.plan ? { plan: turn.plan } : {}),
+    ...savedStatusOf(turn),
+    ...(turn.coverage ? { coverage: turn.coverage } : {}),
+    ...(turn.cursor ? { sweep: turn.cursor } : {}),
     at: turn.at,
   };
 }
 
+const PHASES: Record<
+  NonNullable<SavedResearchTurn['status']> | 'ended',
+  ResearchTurn['phase']
+> = { pending: 'streaming', failed: 'error', ended: 'done' };
+
+/**
+ * A turn from the history. A pending one (KBC-029) comes back streaming, to be followed
+ * again; a failed one with its error, so "Tentar de novo" can ask it again.
+ */
 export function fromSavedTurn(
   id: number,
   saved: SavedResearchTurn,
 ): ResearchTurn {
+  const phase = PHASES[saved.status ?? 'ended'];
   return {
     id,
+    turnId: saved.id ?? crypto.randomUUID(),
     question: saved.question,
-    phase: 'done',
+    phase,
     text: saved.answer,
     segments: [{ segment: 0, text: saved.answer }],
     sources: saved.sources,
@@ -248,12 +338,41 @@ export function fromSavedTurn(
     plan: saved.plan ?? null,
     remaining: null,
     profile: saved.profile ?? null,
-    error: null,
+    error: phase === 'error' ? toResearchErrorCode(saved.error ?? '') : null,
     errorLimit: null,
     at: saved.at,
-    restored: true,
+    // A pending turn is still to be followed: its answer is announced when it arrives.
+    restored: phase !== 'streaming',
+    ...savedSweep(saved),
   };
 }
+
+/** A saved turn's sweep: its coverage and cursor; no live progress (KBC-030). */
+const savedSweep = (saved: SavedResearchTurn) => ({
+  sweep: null,
+  coverage: saved.coverage ?? null,
+  cursor: saved.sweep ?? null,
+});
+
+/**
+ * A followed turn replays from its start (KBC-029): what was shown so far is cleared; the
+ * sweep's cursor stays (a continuation's carried findings), the replay adds what it found.
+ */
+export const replayFrom = (turn: ResearchTurn): ResearchTurn => ({
+  ...turn,
+  phase: 'streaming',
+  text: '',
+  segments: [],
+  sources: [],
+  steps: [],
+  stepCount: 0,
+  sweep: null,
+  coverage: null,
+});
+
+/** The last turn of an unfinished sweep, once it ended: "Continuar varredura" (KBC-030). */
+export const canContinueSweep = (turn: ResearchTurn): boolean =>
+  turn.cursor !== null && turn.phase !== 'streaming';
 
 export interface SourceGroup {
   readonly authorship: Authorship;

@@ -35,7 +35,7 @@
     }
   } @else {
     <ul>
-      @for (conversation of history.conversations(); track conversation.id) {
+      @for (conversation of entries(); track conversation.id) {
         <li>
           <button
             type="button"
@@ -61,6 +61,18 @@
                   {conversation.count, plural,
                     other {{{ conversation.count }} perguntas}
                   }</span
+                >
+              }
+              @if (conversation.status; as status) {
+                <span
+                  class="status"
+                  [class.pending]="status === 'pending'"
+                  [class.failed]="status === 'failed'"
+                >
+                  @if (status === 'pending') {
+                    <span class="spinner" aria-hidden="true"></span>
+                  }
+                  {{ statusLabels[status] }}</span
                 >
               }
             </span>

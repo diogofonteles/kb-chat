@@ -6,6 +6,7 @@ import {
   researchProfileSchema,
 } from './research.js';
 import { searchFiltersSchema, searchModeSchema } from './search.js';
+import { sweepCoverageSchema, sweepCursorSchema } from './sweep.js';
 
 /**
  * Conversations kept by the local API, all of them, without a cap (owner, 2026-10-24:
@@ -22,6 +23,8 @@ export const savedSearchAskSchema = z.object({
   total: z.number().int().nonnegative().nullable(),
 });
 export type SavedSearchAsk = z.infer<typeof savedSearchAskSchema>;
+
+export const savedTurnStatusSchema = z.enum(['pending', 'failed']);
 
 /** One turn of a "Pesquisa com IA" conversation: restored as saved, never re-run (it costs). */
 export const savedResearchTurnSchema = z.object({
@@ -40,7 +43,20 @@ export const savedResearchTurnSchema = z.object({
   profile: researchProfileSchema.optional(),
   /** Who paid (KBC-022); absent in older turns. */
   plan: researchPlanSchema.optional(),
+  /** Exhaustive sweep (KBC-030): the coverage the app measured; absent in older turns. */
+  coverage: sweepCoverageSchema.optional(),
+  /** An unfinished sweep's cursor, for "Continuar varredura". */
+  sweep: sweepCursorSchema.optional(),
   at: z.iso.datetime(),
+  /** KBC-029: the turn's id (kept by "Tentar de novo"); absent in older turns. */
+  id: z.uuid().optional(),
+  /**
+   * KBC-029: `pending` while the agent works, `failed` when it could not answer; absent once
+   * it finished (`interrupted` tells a stopped one).
+   */
+  status: savedTurnStatusSchema.optional(),
+  /** The error code of a failed turn. */
+  error: z.string().min(1).max(64).optional(),
 });
 export type SavedResearchTurn = z.infer<typeof savedResearchTurnSchema>;
 
@@ -68,6 +84,22 @@ export const conversationSchema = z.discriminatedUnion('kind', [
 export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationKind = Conversation['kind'];
 
+/** What the history shows next to a conversation (KBC-029): working, stopped or failed. */
+export const conversationStatusSchema = z.enum([
+  'pending',
+  'interrupted',
+  'failed',
+]);
+export type ConversationStatus = z.infer<typeof conversationStatusSchema>;
+
+/** The status of a research turn as the history shows it; undefined for an answered one. */
+export function turnStatusOf(
+  turn: SavedResearchTurn,
+): ConversationStatus | undefined {
+  if (turn.status) return turn.status;
+  return turn.interrupted ? 'interrupted' : undefined;
+}
+
 export const conversationSummarySchema = z.object({
   id: conversationIdSchema,
   kind: z.enum(['search', 'research']),
@@ -76,6 +108,8 @@ export const conversationSummarySchema = z.object({
   updatedAt: z.iso.datetime(),
   /** Questions in the conversation. */
   count: z.number().int().positive(),
+  /** KBC-029: how the latest research turn stands; absent when it answered. */
+  status: conversationStatusSchema.optional(),
 });
 export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
 
@@ -93,9 +127,18 @@ export function summarizeConversation(
   conversation: Conversation,
 ): ConversationSummary {
   const { id, kind, topic, title, updatedAt } = conversation;
-  const count =
-    conversation.kind === 'search'
-      ? conversation.asks.length
-      : conversation.turns.length;
-  return { id, kind, topic, title, updatedAt, count };
+  if (conversation.kind === 'search')
+    return {
+      id,
+      kind,
+      topic,
+      title,
+      updatedAt,
+      count: conversation.asks.length,
+    };
+  const { turns } = conversation;
+  const last = turns.at(-1);
+  const status = last ? turnStatusOf(last) : undefined;
+  const summary = { id, kind, topic, title, updatedAt, count: turns.length };
+  return status ? { ...summary, status } : summary;
 }

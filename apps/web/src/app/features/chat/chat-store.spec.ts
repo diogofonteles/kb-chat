@@ -128,20 +128,37 @@ describe('ChatStore conversations (KBC-005)', () => {
     store.newConversation();
     answer(0);
     expect(store.messages()).toEqual([]);
-    expect(history.conversations()).toEqual([]);
+    // The question was in the history from the moment it was sent (KBC-029), once.
+    expect(history.conversations().map((c) => c.title)).toEqual(['ritmo']);
   });
 
   it('writes the history only when the conversation summary changes', async () => {
     const { store, history, answer } = await setup();
     const save = vi.spyOn(history, 'save');
     store.ask('ritmo');
+    // Once when sent (KBC-029), once with the result count.
     answer(0, aResponse(undefined, { nextOffset: 1 }));
-    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(2);
     const [message] = store.messages();
     if (!message) throw new Error('no message');
     store.loadMore(message);
     answer(1);
-    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it('KBC-029: saves the conversation as the question is sent, and says it is searching', async () => {
+    const { store, history, savedOnServer } = await setup();
+    expect(store.searching()).toBe(false);
+    store.ask('ritmo');
+    expect(store.searching()).toBe(true);
+    expect(history.conversations()[0]).toMatchObject({
+      id: store.conversationId(),
+      title: 'ritmo',
+    });
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(savedOnServer(store.conversationId())?.asks).toEqual([
+      expect.objectContaining({ question: 'ritmo', total: null }),
+    ]);
   });
 
   it('switches collection into a new conversation and ignores the current one', async () => {

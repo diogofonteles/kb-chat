@@ -7,7 +7,7 @@ import {
   personSchema,
   spendByPersonSchema,
   type AuthConfig,
-  type InvitePresetInput,
+  type InvitationPresetInput,
   type Me,
   type Person,
   type PersonUpdate,
@@ -59,7 +59,7 @@ export class AuthApi {
 
 /** How an invitation sets the person up (KBC-028): a preset of its own or a profile. */
 export type InviteSetup =
-  | { readonly preset?: InvitePresetInput; readonly profileId?: never }
+  | { readonly preset?: InvitationPresetInput; readonly profileId?: never }
   | { readonly profileId?: string; readonly preset?: never };
 
 /** "Pessoas e permissões" (FR-3): masters only. */

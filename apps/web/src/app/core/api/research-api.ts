@@ -42,37 +42,55 @@ export class ResearchApi {
       .pipe(map((body) => spendTodaySchema.parse(body)));
   }
 
-  /** Emits each agent event as it arrives; unsubscribing aborts the request (and the agent). */
+  /**
+   * Emits each agent event as it arrives. Unsubscribing aborts the request; a turn sent with
+   * its conversation and turn ids (KBC-029) runs on until it ends or `stopTurn`.
+   */
   research(topic: string, request: ResearchRequest): Observable<ResearchEvent> {
-    return this.stream(
-      `${topicPath(topic)}/research`,
-      request,
-      researchEventSchema,
-    );
+    const events = this.http.post(`${topicPath(topic)}/research`, request, {
+      observe: 'events',
+      reportProgress: true,
+      responseType: 'text',
+    });
+    return parseEvents(events, researchEventSchema);
   }
 
-  private stream<T>(
-    url: string,
-    body: object,
-    schema: ZodType<T>,
-  ): Observable<T> {
-    let seen = 0;
-    return this.http
-      .post(url, body, {
-        observe: 'events',
-        reportProgress: true,
-        responseType: 'text',
-      })
-      .pipe(
-        concatMap((event: HttpEvent<string>) => {
-          const text = textOf(event);
-          if (text === null) return from([]);
-          const fresh = newEvents(schema, text, seen);
-          seen += fresh.length;
-          return from(fresh);
-        }),
-      );
+  /** A running turn's events from its start, then live (after a reload, KBC-029). */
+  follow(turnId: string): Observable<ResearchEvent> {
+    const events = this.http.get(turnPath(turnId, 'events'), {
+      observe: 'events',
+      reportProgress: true,
+      responseType: 'text',
+    });
+    return parseEvents(events, researchEventSchema);
   }
+
+  /** "Parar" (KBC-029): the server stops the turn and records it as interrupted. */
+  stopTurn(turnId: string): Observable<void> {
+    return this.http
+      .post(turnPath(turnId, 'stop'), {})
+      .pipe(map(() => undefined));
+  }
+}
+
+const turnPath = (turnId: string, action: 'events' | 'stop'): string =>
+  `/api/v1/research/turns/${encodeURIComponent(turnId)}/${action}`;
+
+/** The SSE events of a streamed response, as they arrive. */
+function parseEvents<T>(
+  events: Observable<HttpEvent<string>>,
+  schema: ZodType<T>,
+): Observable<T> {
+  let seen = 0;
+  return events.pipe(
+    concatMap((event: HttpEvent<string>) => {
+      const text = textOf(event);
+      if (text === null) return from([]);
+      const fresh = newEvents(schema, text, seen);
+      seen += fresh.length;
+      return from(fresh);
+    }),
+  );
 }
 
 function textOf(event: HttpEvent<string>): string | null {

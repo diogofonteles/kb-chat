@@ -29,7 +29,9 @@ class ProtectedProbe {
 }
 const probeRoutes: Routes = [
   { path: '', component: ProtectedProbe },
-  ...routes.filter((route) => route.path === 'privacidade'),
+  ...routes.filter(
+    (route) => route.path === 'privacidade' || route.path === 'tutorial',
+  ),
 ];
 
 function signOut(http: HttpTestingController): void {
@@ -138,6 +140,28 @@ describe('SessionShell (KBC-010 BR-1)', () => {
     expect(
       screen.queryByRole('heading', { level: 1, name: 'Nova Alexandria' }),
     ).toBeNull();
+    expect(probeBuilt).toBe(0);
+  });
+
+  it('shows the tutorial at /tutorial without a session (KBC-032 AC-1)', async () => {
+    const { http, fixture } = await renderApp(probeRoutes);
+    signOut(http);
+    await fixture.whenStable();
+
+    expect(await TestBed.inject(Router).navigateByUrl('/tutorial#entrar')).toBe(
+      true,
+    );
+    TestBed.tick();
+    for (const block of await fixture.getDeferBlocks())
+      await block.render(DeferBlockState.Complete);
+    await fixture.whenStable();
+
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'Como usar a Nova Alexandria',
+      }),
+    ).toBeTruthy();
     expect(probeBuilt).toBe(0);
   });
 

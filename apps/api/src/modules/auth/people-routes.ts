@@ -1,7 +1,7 @@
 import {
   applyProfileRequestSchema,
   presetInviteRequestSchema,
-  type InvitePreset,
+  type InvitationPreset,
   aiAssignmentRequestSchema,
   aiAssignmentResultSchema,
   defaultableAppAiSchema,
@@ -47,9 +47,9 @@ export interface PeopleRouteDeps {
 /** Where the people routes find a preset (KBC-028), and whether a person saved Settings. */
 export interface PresetSource {
   presetFor(request: {
-    readonly preset?: InvitePreset;
+    readonly preset?: InvitationPreset;
     readonly profileId?: string;
-  }): InvitePreset | undefined;
+  }): InvitationPreset | undefined;
   /** The person saved their own preferences: a profile's ones never replace them (BR-6). */
   hasSavedSettings(person: StoredPerson): Promise<boolean>;
 }
@@ -142,6 +142,8 @@ async function invite(
   const { email, sendEmail, preset, profileId } = body;
   const chosen = deps.presets?.presetFor({ preset, profileId });
   if (chosen) assertKnownTopics(deps, chosen.topics);
+  // Lending in the invitation is the owner's alone, as in the editor (KBC-031 BR-1).
+  assertMayLend(deps, request, chosen?.ai.appAi);
   const invited = await deps.people.invite(email, inviter.email, chosen);
   // The house follows the AI it was given (provisioned keys), as after the editor; if it
   // cannot, the invitation is undone so that inviting again works.

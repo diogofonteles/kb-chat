@@ -1,0 +1,995 @@
+<main class="tutorial" aria-labelledby="tutorial-title">
+  <article class="guide">
+    <a class="brand" routerLink="/" i18n="@@tutorial.brand">Nova Alexandria</a>
+    <h1 id="tutorial-title" i18n="@@tutorial.title">
+      Como usar a Nova Alexandria
+    </h1>
+    <p class="lead" i18n="@@tutorial.intro">
+      Um passo a passo curto, com imagens das telas, de tudo o que dá para fazer
+      na Nova Alexandria: entrar, buscar nos documentos, pesquisar com ajuda da
+      inteligência artificial (IA) e ajustar o app do seu jeito. Leia na ordem
+      ou pule direto para o que precisa. Nas imagens, as letras (A, B, C…)
+      marcam o que a legenda logo abaixo explica.
+    </p>
+
+    <nav class="toc" aria-labelledby="sumario">
+      <h2 id="sumario" tabindex="-1" i18n="@@tutorial.tocTitle">
+        Nesta página
+      </h2>
+      <ol>
+        @for (section of sections; track section.id) {
+          <li>
+            <a
+              routerLink="/tutorial"
+              [fragment]="section.id"
+              (click)="showSection(section.id)"
+              >{{ section.title }}</a
+            >
+          </li>
+        }
+      </ol>
+    </nav>
+
+    <!-- 1. O que é -->
+    <section aria-labelledby="o-que-e">
+      <h2 id="o-que-e" tabindex="-1" i18n="@@tutorial.about.title">
+        O que é a Nova Alexandria
+      </h2>
+      <p i18n="@@tutorial.about.p1">
+        A Nova Alexandria é uma biblioteca de pesquisa. Como a antiga Biblioteca
+        de Alexandria, ela quer guardar conhecimento de muitas áreas; o coração
+        do acervo é o hermetismo. Você faz perguntas em linguagem natural, como
+        numa conversa, e ela mostra os textos que respondem, com o trecho
+        encontrado em destaque.
+      </p>
+      <p i18n="@@tutorial.about.p2">
+        Há dois jeitos de perguntar, escolhidos no topo da tela:
+      </p>
+      <ul>
+        <li i18n="@@tutorial.about.search">
+          <strong>Buscar documentos:</strong> lista os textos que falam do
+          assunto, para você ler. Não usa IA e não tem limite.
+        </li>
+        <li i18n="@@tutorial.about.research">
+          <strong>✦ Pesquisa com IA:</strong> a IA procura no acervo, lê os
+          textos e escreve uma resposta com as fontes numeradas, para você
+          conferir.
+        </li>
+      </ul>
+      <p i18n="@@tutorial.about.authorship">
+        O acervo separa sempre a obra do <strong>Mestre Laércio</strong> (José
+        Laércio do Egito), marcada com ✦, dos livros de
+        <strong>outros autores</strong>. Você pode filtrar por autoria, e a IA
+        nunca atribui ao Mestre o que vem de outro autor.
+      </p>
+      <app-tutorial-figure
+        name="home"
+        priority
+        alt="Tela inicial da Nova Alexandria no computador: à esquerda, a lateral com o histórico; no topo, a escolha entre Buscar documentos e Pesquisa com IA; no centro, a pergunta “O que você quer pesquisar no acervo?” e a caixa de pergunta."
+        i18n-alt="@@tutorial.about.homeAlt"
+      >
+        <ng-container i18n="@@tutorial.about.homeCaption"
+          >A tela inicial: (A) a escolha entre buscar e pesquisar com IA, (B) a
+          caixa de pergunta e (C) a lateral, com o histórico e as
+          configurações.</ng-container
+        >
+      </app-tutorial-figure>
+    </section>
+
+    <!-- 2. Entrar -->
+    <section aria-labelledby="entrar">
+      <h2 id="entrar" tabindex="-1" i18n="@@tutorial.signIn.title">Entrar</h2>
+      <p i18n="@@tutorial.signIn.intro">
+        A Nova Alexandria é de acesso restrito: só entra quem um administrador
+        aprova ou convida. Há três caminhos na tela de entrada.
+      </p>
+
+      <h3 i18n="@@tutorial.signIn.googleTitle">Com a conta Google</h3>
+      <ol class="steps">
+        <li i18n="@@tutorial.signIn.google1">
+          Toque em <strong>Fazer login com o Google</strong> e escolha a sua
+          conta.
+        </li>
+        <li i18n="@@tutorial.signIn.google2">
+          Se você já foi convidado ou aprovado, o app abre na hora.
+        </li>
+        <li i18n="@@tutorial.signIn.google3">
+          Se ainda não tem acesso, aparece “Seu acesso ainda não foi liberado.”:
+          toque em <strong>Solicitar acesso</strong>, informe o celular se
+          quiser (é opcional) e envie. Você recebe um e-mail quando um
+          administrador aprovar.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="login"
+        phone
+        priority
+        alt="Tela de entrada no celular: título Nova Alexandria, botão Fazer login com o Google e, abaixo de “ou”, o botão Entrar com código e o link Pedir acesso sem conta Google."
+        i18n-alt="@@tutorial.signIn.loginAlt"
+      >
+        <ng-container i18n="@@tutorial.signIn.loginCaption"
+          >A tela de entrada: (A) Google, (B) código por e-mail e (C) pedir
+          acesso sem conta Google.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.signIn.codeTitle">Com um código por e-mail</h3>
+      <ol class="steps">
+        <li i18n="@@tutorial.signIn.code1">
+          Toque em <strong>Entrar com código</strong>, digite o seu e-mail e
+          toque em <strong>Enviar código</strong>.
+        </li>
+        <li i18n="@@tutorial.signIn.code2">
+          Abra o e-mail “Seu código de acesso à Nova Alexandria” e digite os 6
+          números. O código vale por 10 minutos e serve uma vez só.
+        </li>
+        <li i18n="@@tutorial.signIn.code3">
+          Toque em <strong>Entrar</strong>. Não chegou? Confira o spam ou use
+          <strong>Reenviar código</strong>.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="sign-in-code"
+        phone
+        alt="Entrar com código no celular: o e-mail informado, o aviso de que o código foi enviado, o campo Código com 6 dígitos e o botão Entrar."
+        i18n-alt="@@tutorial.signIn.codeAlt"
+      >
+        <ng-container i18n="@@tutorial.signIn.codeCaption"
+          >Depois de pedir o código, digite os 6 números e toque em
+          Entrar.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.signIn.requestTitle">
+        Pedir acesso sem conta Google
+      </h3>
+      <ol class="steps">
+        <li i18n="@@tutorial.signIn.request1">
+          Toque em <strong>Pedir acesso sem conta Google</strong>.
+        </li>
+        <li i18n="@@tutorial.signIn.request2">
+          Preencha e-mail, nome, sobrenome e celular (com DDD) e toque em
+          <strong>Enviar código</strong>.
+        </li>
+        <li i18n="@@tutorial.signIn.request3">
+          Digite o código de 6 números que chegou por e-mail e toque em
+          <strong>Confirmar</strong>. Pronto: o pedido vai para os
+          administradores.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="request-access"
+        phone
+        alt="Formulário Pedir acesso no celular, com os campos E-mail, Nome, Sobrenome e Celular e o botão Enviar código."
+        i18n-alt="@@tutorial.signIn.requestAlt"
+      >
+        <ng-container i18n="@@tutorial.signIn.requestCaption"
+          >O pedido de acesso sem conta Google.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.signIn.waitTitle">O que esperar depois</h3>
+      <ul>
+        <li i18n="@@tutorial.signIn.approved">
+          <strong>Aprovado:</strong> você recebe o e-mail “Seu acesso à Nova
+          Alexandria foi aprovado” e já pode entrar com o Google ou com um
+          código.
+        </li>
+        <li i18n="@@tutorial.signIn.invited">
+          <strong>Convidado:</strong> se um administrador convidou você, chega
+          um e-mail de convite. Entre com o mesmo e-mail que recebeu o convite.
+        </li>
+        <li i18n="@@tutorial.signIn.refused">
+          <strong>Recusado:</strong> você pode pedir de novo depois de 24 horas.
+        </li>
+        <li i18n="@@tutorial.signIn.whatYouSee">
+          Cada pessoa vê só os acervos e as funções que o administrador liberou.
+          Se algo não aparece para você, peça a ele.
+        </li>
+      </ul>
+      <p class="back-to-top">
+        <a
+          routerLink="/tutorial"
+          fragment="sumario"
+          (click)="showSection('sumario')"
+          i18n="@@tutorial.backToTop"
+          >Voltar ao sumário</a
+        >
+      </p>
+    </section>
+
+    <!-- 3. Busca sem IA -->
+    <section aria-labelledby="busca">
+      <h2 id="busca" tabindex="-1" i18n="@@tutorial.search.title">
+        Buscar documentos (sem IA)
+      </h2>
+      <p i18n="@@tutorial.search.intro">
+        A busca mostra os textos do acervo que falam do que você perguntou. Ela
+        é rápida, não usa IA e não tem limite.
+      </p>
+      <ol class="steps">
+        <li i18n="@@tutorial.search.step1">
+          No topo, escolha <strong>Buscar documentos</strong>.
+        </li>
+        <li i18n="@@tutorial.search.step2">
+          Escreva a pergunta na caixa de baixo e aperte Enter (ou toque em
+          <strong>Buscar</strong>). Para começar sem ideia, toque num dos
+          assuntos sugeridos. Dica: no computador, a tecla / leva direto à
+          caixa.
+        </li>
+        <li i18n="@@tutorial.search.step3">
+          Em <strong>Como buscar</strong>, escolha o modo:
+          <strong>Tudo</strong> (o padrão), <strong>Palavras exatas</strong>
+          (acha o termo como você escreveu) ou
+          <strong>Por significado</strong> (acha ideias parecidas, mesmo com
+          outras palavras).
+        </li>
+        <li i18n="@@tutorial.search.step4">
+          Em <strong>Autoria</strong>, escolha <strong>Todos</strong>,
+          <strong>✦ Mestre Laércio</strong> ou <strong>Outros autores</strong>.
+          Cada cartão também traz o selo da autoria.
+        </li>
+        <li i18n="@@tutorial.search.step5">
+          Para afinar, use os botões de filtro: <strong>Assuntos</strong>,
+          <strong>Tipo de texto</strong>, <strong>Profundidade</strong> e
+          <strong>Ligação com o tema</strong>. Cada opção mostra quantos
+          documentos tem; um filtro ativo aparece preenchido, com × para tirar.
+          Os textos “Fora do tema” ficam escondidos, mas dá para mostrá-los.
+        </li>
+        <li i18n="@@tutorial.search.step6">
+          Toque num cartão para abrir o documento. Cópias quase iguais ficam
+          juntas num cartão só (“+2 cópias”), e
+          <strong>Mostrar mais</strong> traz mais resultados.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="search-results"
+        alt="Resultados de uma busca no computador: a linha Autoria com Todos, Mestre Laércio e Outros autores; os botões de filtro Assuntos, Tipo de texto, Profundidade e Ligação com o tema; e cartões de documentos com selo de autoria, título, trecho com as palavras em destaque e o tipo do texto."
+        i18n-alt="@@tutorial.search.resultsAlt"
+      >
+        <ng-container i18n="@@tutorial.search.resultsCaption"
+          >Resultados: (A) Como buscar, (B) Autoria, (C) filtros e (D) os
+          cartões dos documentos.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.search.panelTitle">Ler um documento</h3>
+      <ol class="steps">
+        <li i18n="@@tutorial.search.panel1">
+          O documento abre ao lado (no celular, em tela cheia), já no trecho
+          encontrado, destacado. As setas ▲▼ pulam entre as ocorrências (“1 de
+          4”).
+        </li>
+        <li i18n="@@tutorial.search.panel2">
+          O <strong>Resumo</strong> no topo diz do que o texto trata. Os
+          assuntos do documento são botões: um toque filtra a busca por aquele
+          assunto.
+        </li>
+        <li i18n="@@tutorial.search.panel3">
+          No fim, <strong>Veja também</strong> leva a textos ligados (“É exemplo
+          de”, “Aprofunda”, “Relacionados”). Eles abrem no mesmo lugar, e
+          <strong>← Voltar</strong> retorna ao anterior.
+        </li>
+        <li i18n="@@tutorial.search.panel4">Feche com × ou com a tecla Esc.</li>
+      </ol>
+      <app-tutorial-figure
+        name="document-panel"
+        alt="Painel do documento aberto à direita dos resultados: título, selo de autoria, trecho encontrado em destaque e a navegação entre ocorrências."
+        i18n-alt="@@tutorial.search.panelAlt"
+      >
+        <ng-container i18n="@@tutorial.search.panelCaption"
+          >O painel do documento: (A) o trecho encontrado em destaque e (B) a
+          navegação entre as ocorrências.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.search.phoneTitle">No celular</h3>
+      <p i18n="@@tutorial.search.phone">
+        Os filtros ficam em <strong>Filtros</strong>, que abre uma tela própria:
+        marque o que quiser e toque em <strong>Aplicar</strong>. A lateral (o
+        histórico e as configurações) fica no botão <strong>☰ Menu</strong>.
+      </p>
+      <app-tutorial-figure
+        name="filters-phone"
+        phone
+        alt="Tela Filtros no celular, com as listas de opções marcáveis e os botões Aplicar e Cancelar no rodapé."
+        i18n-alt="@@tutorial.search.filtersAlt"
+      >
+        <ng-container i18n="@@tutorial.search.filtersCaption"
+          >Os filtros no celular, com Aplicar no rodapé.</ng-container
+        >
+      </app-tutorial-figure>
+      <p class="back-to-top">
+        <a
+          routerLink="/tutorial"
+          fragment="sumario"
+          (click)="showSection('sumario')"
+          i18n="@@tutorial.backToTop"
+          >Voltar ao sumário</a
+        >
+      </p>
+    </section>
+
+    <!-- 4. Pesquisa com IA -->
+    <section aria-labelledby="pesquisa-com-ia">
+      <h2 id="pesquisa-com-ia" tabindex="-1" i18n="@@tutorial.research.title">
+        Pesquisa com IA
+      </h2>
+      <p i18n="@@tutorial.research.intro">
+        Na Pesquisa com IA, você pergunta como numa conversa. A IA busca no
+        acervo, lê os textos e escreve a resposta com números entre colchetes,
+        como [1], que apontam para as fontes. As perguntas seguintes continuam o
+        mesmo assunto.
+      </p>
+      <ol class="steps">
+        <li i18n="@@tutorial.research.step1">
+          No topo, escolha <strong>✦ Pesquisa com IA</strong>. Se a opção
+          estiver apagada, nenhuma IA foi liberada para você ainda (veja
+          <a
+            routerLink="/tutorial"
+            fragment="sua-ia"
+            (click)="showSection('sua-ia')"
+            >Sua IA</a
+          >).
+        </li>
+        <li i18n="@@tutorial.research.step2">
+          Escolha o tipo de pesquisa, logo abaixo da caixa:
+          <strong>Rápido</strong>, <strong>Profundo</strong> ou
+          <strong>Exaustivo</strong> (veja a tabela).
+        </li>
+        <li i18n="@@tutorial.research.step3">
+          Escreva a pergunta e toque em <strong>Perguntar</strong>. Uma linha
+          mostra o que a IA está fazendo (“Buscando…”, “Lendo…”), e a resposta
+          aparece enquanto é escrita. <strong>Parar</strong> interrompe a
+          qualquer momento.
+        </li>
+        <li i18n="@@tutorial.research.step4">
+          Toque num número, como [1], para abrir o documento no trecho usado.
+          Abaixo da resposta, <strong>Fontes</strong> lista os documentos
+          citados, separados por autoria (Mestre Laércio, outros autores) quando
+          a resposta usa os dois.
+        </li>
+        <li i18n="@@tutorial.research.step5">
+          O rodapé diz qual modelo de IA respondeu e quanto custou: “Gratuito” e
+          quantas pesquisas restam hoje, “Incluído na assinatura” ou o custo em
+          US$, conforme a IA que atende você.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="research-profiles"
+        alt="Caixa de pergunta da Pesquisa com IA com a escolha entre Rápido, Profundo e Exaustivo e a explicação do tipo escolhido."
+        i18n-alt="@@tutorial.research.profilesAlt"
+      >
+        <ng-container i18n="@@tutorial.research.profilesCaption"
+          >(A) O tipo de pesquisa e (B) o botão Perguntar.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <div
+        class="table-wrap"
+        role="region"
+        aria-labelledby="profiles-caption"
+        tabindex="0"
+      >
+        <table>
+          <caption
+            id="profiles-caption"
+            i18n="@@tutorial.research.tableCaption"
+          >
+            Os três tipos de pesquisa
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col" i18n="@@tutorial.research.colProfile">Tipo</th>
+              <th scope="col" i18n="@@tutorial.research.colWhat">O que faz</th>
+              <th scope="col" i18n="@@tutorial.research.colTime">Tempo</th>
+              <th scope="col" i18n="@@tutorial.research.colQuota">
+                Conta na cota do dia
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" i18n="@@tutorial.research.fast">Rápido</th>
+              <td i18n="@@tutorial.research.fastWhat">
+                Pesquisa curta e resposta direta.
+              </td>
+              <td i18n="@@tutorial.research.fastTime">Segundos</td>
+              <td i18n="@@tutorial.research.fastQuota">1 pesquisa</td>
+            </tr>
+            <tr>
+              <th scope="row" i18n="@@tutorial.research.deep">Profundo</th>
+              <td i18n="@@tutorial.research.deepWhat">
+                Pesquisa mais e usa um modelo mais forte.
+              </td>
+              <td i18n="@@tutorial.research.deepTime">Cerca de 1 minuto</td>
+              <td i18n="@@tutorial.research.deepQuota">2 pesquisas</td>
+            </tr>
+            <tr>
+              <th scope="row" i18n="@@tutorial.research.exhaustive">
+                Exaustivo
+              </th>
+              <td i18n="@@tutorial.research.exhaustiveWhat">
+                Varre o acervo inteiro (ou a parte pedida), documento por
+                documento, e lista tudo o que achar.
+              </td>
+              <td i18n="@@tutorial.research.exhaustiveTime">Vários minutos</td>
+              <td i18n="@@tutorial.research.exhaustiveQuota">5 pesquisas</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note" i18n="@@tutorial.research.cost">
+        O custo depende de quem atende você: com a IA da aplicação ou um modelo
+        gratuito, você não paga nada; com a sua própria chave paga, o Profundo e
+        o Exaustivo custam mais que o Rápido, e o rodapé mostra o valor de cada
+        resposta.
+      </p>
+
+      <app-tutorial-figure
+        name="research-answer"
+        alt="Uma resposta da Pesquisa com IA: o resumo dos passos (quantas buscas e leituras), o texto com a citação [1], as fontes numeradas com o selo de autoria e o rodapé com o modelo que respondeu."
+        i18n-alt="@@tutorial.research.answerAlt"
+      >
+        <ng-container i18n="@@tutorial.research.answerCaption"
+          >Uma resposta: (A) o que a IA fez, (B) a resposta com a citação, (C)
+          as fontes e (D) quem respondeu e quanto custou. Nas imagens, quem
+          responde é um modelo de teste, por isso a resposta é
+          curta.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.research.exhaustiveTitle">
+        Quando usar o Exaustivo
+      </h3>
+      <p i18n="@@tutorial.research.exhaustiveIntro">
+        Use o Exaustivo para listas completas, como “todos os textos do Mestre
+        que falam de ritmo”. Nele, a IA só planeja o que procurar; quem varre é
+        a própria aplicação, documento por documento, em lotes, e só então a IA
+        escreve a resposta. Assim nada fica de fora porque a IA “cansou”.
+      </p>
+      <ol class="steps">
+        <li i18n="@@tutorial.research.sweep1">
+          Antes de começar, o quadro
+          <strong>Varredura do conjunto inteiro</strong> diz quantos documentos
+          serão lidos, em quantos lotes, quanto tempo leva e, com uma IA paga, o
+          custo máximo.
+        </li>
+        <li i18n="@@tutorial.research.sweep2">
+          Durante a varredura, a barra mostra o progresso (“Lote 12 de 80”). Com
+          modelos gratuitos ela é mais lenta. <strong>Parar</strong>
+          interrompe tudo.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="research-sweep"
+        alt="Uma pesquisa Exaustiva em andamento: o quadro Varredura do conjunto inteiro com a estimativa de documentos, lotes e custo, e a barra de progresso com Lote 0 de 5."
+        i18n-alt="@@tutorial.research.sweepAlt"
+      >
+        <ng-container i18n="@@tutorial.research.sweepCaption"
+          >(A) A estimativa e (B) o progresso da varredura.</ng-container
+        >
+      </app-tutorial-figure>
+      <p i18n="@@tutorial.research.coverage">
+        No fim, abaixo da resposta, a linha
+        <strong>Cobertura (medida pelo aplicativo)</strong> diz quantos
+        documentos havia no conjunto e quantos a IA analisou. Esses números vêm
+        da aplicação, nunca da IA.
+      </p>
+      <app-tutorial-figure
+        name="research-exhaustive"
+        alt="Resposta de uma pesquisa Exaustiva com a linha Cobertura (medida pelo aplicativo): 22 documentos no conjunto, 22 lidos por inteiro pela IA."
+        i18n-alt="@@tutorial.research.exhaustiveAlt"
+      >
+        <ng-container i18n="@@tutorial.research.exhaustiveCaption"
+          >A cobertura medida pela aplicação (A).</ng-container
+        >
+      </app-tutorial-figure>
+      <p i18n="@@tutorial.research.continue">
+        Se um limite parar a varredura antes do fim (tempo, número de pedidos,
+        gasto do dia) ou se você tocar em Parar, aparece “Varredura incompleta”,
+        com quantos documentos faltaram e por quê. Toque em
+        <strong>Continuar varredura</strong> para seguir de onde parou, sem
+        repetir o que já foi lido; o botão também aparece quando você reabre a
+        conversa pelo histórico.
+      </p>
+      <app-tutorial-figure
+        name="research-continue"
+        alt="Uma varredura incompleta: o aviso Varredura incompleta, faltaram 12 documentos para a IA analisar, e o botão Continuar varredura."
+        i18n-alt="@@tutorial.research.continueAlt"
+      >
+        <ng-container i18n="@@tutorial.research.continueCaption"
+          >(A) O que faltou e (B) Continuar varredura.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.research.limitsTitle">Limites e avisos</h3>
+      <ul>
+        <li i18n="@@tutorial.research.quota">
+          Com a IA da aplicação há um número de pesquisas por dia. Quando
+          acabam, aparece “Suas pesquisas com IA de hoje acabaram”: volte no dia
+          seguinte ou toque em <strong>Conectar a minha IA</strong>.
+        </li>
+        <li i18n="@@tutorial.research.deepen">
+          Se a pesquisa rápida não bastar, a IA pode aprofundar sozinha
+          (“Aprofundando a pesquisa…”), na mesma resposta. Isso se desliga em
+          Preferências.
+        </li>
+        <li i18n="@@tutorial.research.check">
+          A IA pode errar. Confira sempre nas fontes; o que ela disser de fora
+          do acervo vem marcado “(fora do acervo)”.
+        </li>
+      </ul>
+      <app-tutorial-figure
+        name="research-phone"
+        phone
+        alt="Pesquisa com IA no celular: a pergunta, a resposta com a citação e as fontes logo abaixo."
+        i18n-alt="@@tutorial.research.phoneAlt"
+      >
+        <ng-container i18n="@@tutorial.research.phoneCaption"
+          >A Pesquisa com IA no celular.</ng-container
+        >
+      </app-tutorial-figure>
+      <p class="back-to-top">
+        <a
+          routerLink="/tutorial"
+          fragment="sumario"
+          (click)="showSection('sumario')"
+          i18n="@@tutorial.backToTop"
+          >Voltar ao sumário</a
+        >
+      </p>
+    </section>
+
+    <!-- 5. Histórico -->
+    <section aria-labelledby="historico">
+      <h2 id="historico" tabindex="-1" i18n="@@tutorial.history.title">
+        Histórico de conversas
+      </h2>
+      <p i18n="@@tutorial.history.intro">
+        Tudo o que você pergunta fica guardado no servidor, sem limite, para
+        retomar quando quiser, em qualquer aparelho.
+      </p>
+      <ol class="steps">
+        <li i18n="@@tutorial.history.step1">
+          A conversa entra no topo do <strong>Histórico</strong> (na lateral; no
+          celular, em ☰ Menu) no instante em que você envia a pergunta. Uma
+          pesquisa com IA em andamento aparece com “pesquisando…”.
+        </li>
+        <li i18n="@@tutorial.history.step2">
+          Se uma pesquisa falhou, ela fica com “falhou”; se você tocou em
+          <strong>Parar</strong>, com “interrompida”. Nada se perde.
+        </li>
+        <li i18n="@@tutorial.history.step3">
+          Pode recarregar a página, fechar a aba ou abrir outra conversa: a
+          pesquisa continua no servidor até o fim e a resposta aparece quando
+          você voltar. Só Parar interrompe.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="history"
+        alt="A lateral com o Histórico: uma pesquisa com “pesquisando…”, outra com “falhou” e outra com “interrompida”, cada uma com a pergunta, o tipo IA e o acervo."
+        i18n-alt="@@tutorial.history.alt"
+      >
+        <ng-container i18n="@@tutorial.history.caption"
+          >(A) Pesquisando, (B) falhou e (C) interrompida.</ng-container
+        >
+      </app-tutorial-figure>
+      <p i18n="@@tutorial.history.open">
+        Toque numa conversa para abri-la: as respostas voltam como estavam, sem
+        gastar uma nova pesquisa. Numa pesquisa que falhou ou foi interrompida,
+        use <strong>Tentar de novo</strong> para perguntar de novo no mesmo
+        lugar. <strong>+ Nova conversa</strong> começa outra do zero.
+      </p>
+      <app-tutorial-figure
+        name="history-retry"
+        alt="Uma pesquisa que falhou, aberta pelo histórico: o aviso Não consegui gerar a resposta agora e o botão Tentar de novo."
+        i18n-alt="@@tutorial.history.retryAlt"
+      >
+        <ng-container i18n="@@tutorial.history.retryCaption"
+          >(A) O aviso e (B) Tentar de novo.</ng-container
+        >
+      </app-tutorial-figure>
+      <p class="back-to-top">
+        <a
+          routerLink="/tutorial"
+          fragment="sumario"
+          (click)="showSection('sumario')"
+          i18n="@@tutorial.backToTop"
+          >Voltar ao sumário</a
+        >
+      </p>
+    </section>
+
+    <!-- 6. Sua IA -->
+    <section aria-labelledby="sua-ia">
+      <h2 id="sua-ia" tabindex="-1" i18n="@@tutorial.ownAi.title">Sua IA</h2>
+      <p i18n="@@tutorial.ownAi.intro">
+        Quem responde na Pesquisa com IA pode ser a
+        <strong>IA da aplicação</strong>, emprestada pelo administrador
+        (gratuita para você, com um limite por dia), ou uma
+        <strong>IA sua</strong>. Para ver e trocar, abra
+        <strong>⚙ Configurações</strong> (no pé da lateral; no celular, em ☰
+        Menu) e a seção <strong>Sua IA</strong>. Ela só aparece se o
+        administrador liberou “Configurações de IA próprias” para você.
+      </p>
+      <ol class="steps">
+        <li i18n="@@tutorial.ownAi.step1">
+          No topo, o cartão <strong>Quem atende você agora</strong> mostra a IA
+          ativa, quem paga e quantas pesquisas restam hoje.
+        </li>
+        <li i18n="@@tutorial.ownAi.step2">
+          Escolha uma opção. Cada uma abre um guia com passos numerados e o que
+          ela custa, o que acontece com os seus dados e os limites.
+        </li>
+        <li i18n="@@tutorial.ownAi.step3">
+          Use <strong>Testar conexão</strong>; se der certo, toque em
+          <strong>Salvar</strong>. A próxima resposta já usa a IA nova.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="own-ai"
+        alt="Configurações, seção Sua IA: o cartão Quem atende você agora e a lista de opções, começando pela IA da aplicação e pelo OpenRouter."
+        i18n-alt="@@tutorial.ownAi.alt"
+      >
+        <ng-container i18n="@@tutorial.ownAi.caption"
+          >(A) Quem atende você agora e (B) as opções de IA.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.ownAi.optionsTitle">As opções</h3>
+      <ul>
+        <li i18n="@@tutorial.ownAi.app">
+          <strong>IA da aplicação:</strong> não precisa configurar nada e você
+          não paga. Há um limite de pesquisas por dia (Rápido conta 1, Profundo
+          2, Exaustivo 5).
+        </li>
+        <li i18n="@@tutorial.ownAi.openrouter">
+          <strong>OpenRouter (grátis):</strong> toque em
+          <strong>Conectar OpenRouter</strong>, entre ou crie a conta (com
+          Google ou e-mail), autorize e volte com a chave já salva. Deixe
+          <strong>Só modelos gratuitos (recomendado)</strong> para não pagar
+          nada. Sem créditos comprados, são 50 pedidos gratuitos por dia (uma
+          pesquisa usa de 7 a 16).
+        </li>
+        <li i18n="@@tutorial.ownAi.gemini">
+          <strong>Gemini (Google AI Studio):</strong> no Google AI Studio, use
+          “Create API key”, copie a chave (começa com AIza), cole e escolha o
+          plano <strong>Gratuito</strong>. Atenção: no plano gratuito o Google
+          pode usar o que você envia para melhorar os produtos dele; não use
+          para nada sigiloso.
+        </li>
+        <li i18n="@@tutorial.ownAi.keys">
+          <strong>Claude (API da Anthropic) e OpenAI (API):</strong> crie uma
+          chave de API no site do provedor, adicione créditos e cole a chave.
+          Cobram por uso; um limite de gasto por dia, em US$, protege você.
+          Assinaturas comuns (Claude Pro, ChatGPT Plus) não podem ser conectadas
+          por outros apps.
+        </li>
+      </ul>
+      <app-tutorial-figure
+        name="own-ai-openrouter"
+        alt="O guia do OpenRouter aberto em Sua IA: passos numerados, o botão Conectar OpenRouter e a escolha Só modelos gratuitos."
+        i18n-alt="@@tutorial.ownAi.openrouterAlt"
+      >
+        <ng-container i18n="@@tutorial.ownAi.openrouterCaption"
+          >O guia do OpenRouter: (A) Conectar OpenRouter e (B) só modelos
+          gratuitos.</ng-container
+        >
+      </app-tutorial-figure>
+      <p class="note" i18n="@@tutorial.ownAi.privacy">
+        <strong>Privacidade e custos:</strong> a chave fica só no servidor da
+        Nova Alexandria, guardada de forma cifrada, e não é mostrada de novo
+        depois de salva. A sua pergunta e os trechos do acervo vão para o
+        provedor de IA escolhido. O gasto do dia aparece na lateral. Se uma
+        opção aparece desativada, o cartão dela diz o motivo e o que fazer.
+      </p>
+      <p class="back-to-top">
+        <a
+          routerLink="/tutorial"
+          fragment="sumario"
+          (click)="showSection('sumario')"
+          i18n="@@tutorial.backToTop"
+          >Voltar ao sumário</a
+        >
+      </p>
+    </section>
+
+    <!-- 7. Preferências -->
+    <section aria-labelledby="preferencias">
+      <h2 id="preferencias" tabindex="-1" i18n="@@tutorial.prefs.title">
+        Preferências
+      </h2>
+      <p i18n="@@tutorial.prefs.intro">
+        Em <strong>⚙ Configurações › Preferências</strong> você ajusta o app ao
+        seu jeito. Tudo salva sozinho (“Salvo automaticamente.”).
+      </p>
+      <ul>
+        <li i18n="@@tutorial.prefs.open">
+          <strong>Ao abrir a Nova Alexandria:</strong> começar na Pesquisa com
+          IA ou em Buscar documentos.
+        </li>
+        <li i18n="@@tutorial.prefs.profile">
+          <strong>Pesquisa com IA, por padrão:</strong> Rápido, Profundo ou
+          Exaustivo.
+        </li>
+        <li i18n="@@tutorial.prefs.deepen">
+          <strong>Aprofundar automaticamente:</strong> quando a pesquisa rápida
+          não basta, a IA continua com a profunda na mesma resposta.
+        </li>
+        <li i18n="@@tutorial.prefs.topic">
+          <strong>Acervo, modo de busca e tema:</strong> o acervo que abre
+          primeiro, o “Como buscar” padrão e as cores: Automático
+          (claro/escuro), Claro, Escuro ou Esotérico.
+        </li>
+      </ul>
+      <app-tutorial-figure
+        name="preferences"
+        alt="Configurações, seção Preferências: Ao abrir a Nova Alexandria, Pesquisa com IA por padrão, Aprofundar automaticamente, Acervo, Como buscar e Tema."
+        i18n-alt="@@tutorial.prefs.alt"
+      >
+        <ng-container i18n="@@tutorial.prefs.caption"
+          >As preferências salvam sozinhas.</ng-container
+        >
+      </app-tutorial-figure>
+      <p i18n="@@tutorial.prefs.sidebar">
+        O acervo e o tema também mudam direto na lateral. Em
+        <strong>Sobre</strong>, “Rever o assistente de início” mostra de novo as
+        perguntas da primeira vez.
+      </p>
+      <p class="back-to-top">
+        <a
+          routerLink="/tutorial"
+          fragment="sumario"
+          (click)="showSection('sumario')"
+          i18n="@@tutorial.backToTop"
+          >Voltar ao sumário</a
+        >
+      </p>
+    </section>
+
+    <!-- 8. Administradores -->
+    <section class="admins" aria-labelledby="administradores">
+      <h2 id="administradores" tabindex="-1" i18n="@@tutorial.admins.title">
+        Para administradores
+      </h2>
+      <p class="audience" i18n="@@tutorial.admins.badge">
+        Só para administradores
+      </p>
+      <p i18n="@@tutorial.admins.intro">
+        Estas telas só aparecem para quem é administrador (master). Se você não
+        é, pode pular esta parte.
+      </p>
+
+      <h3 i18n="@@tutorial.admins.houseTitle">IA da aplicação</h3>
+      <p i18n="@@tutorial.admins.houseIntro">
+        Em <strong>⚙ Configurações › IA da aplicação</strong> você dá IA a quem
+        não tem, sem custo:
+      </p>
+      <ol class="steps">
+        <li i18n="@@tutorial.admins.house1">
+          Toque em <strong>Conectar OpenRouter</strong> para ligar a conta da
+          casa (ou cole uma chave). A linha “Pedidos gratuitos hoje” mostra o
+          uso.
+        </li>
+        <li i18n="@@tutorial.admins.house2">
+          Em <strong>Modelos gratuitos</strong>, deixe “Escolher automaticamente
+          (recomendado)”: se um modelo estiver ocupado, o próximo responde.
+        </li>
+        <li i18n="@@tutorial.admins.house3">
+          O <strong>modelo pago de reserva</strong> é opcional e só vale para
+          quem você liberar, até um teto por mês.
+        </li>
+        <li i18n="@@tutorial.admins.house4">
+          Em <strong>Para quem</strong>, escolha a IA padrão de quem não tem uma
+          atribuída (Plano da casa ou Nenhuma) e as pesquisas por dia (Rápido
+          conta 1, Profundo 2, Exaustivo 5).
+        </li>
+        <li i18n="@@tutorial.admins.house5">
+          Para usar ou ceder a assinatura do ChatGPT, marque “Ligar a assinatura
+          do ChatGPT (Codex)”. Enquanto ela estiver desligada ou sem login no
+          servidor, o cartão dela em Sua IA aparece desativado, com o motivo e o
+          que fazer.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="house-ai"
+        alt="Configurações, seção IA da aplicação: a conta OpenRouter conectada, os pedidos gratuitos de hoje e a lista de modelos gratuitos."
+        i18n-alt="@@tutorial.admins.houseAlt"
+      >
+        <ng-container i18n="@@tutorial.admins.houseCaption"
+          >(A) A conta da casa e (B) os modelos gratuitos.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.admins.peopleTitle">Pessoas e permissões</h3>
+      <p i18n="@@tutorial.admins.peopleIntro">
+        Abra <strong>Pessoas e permissões</strong> (na lateral, acima de ⚙
+        Configurações). O número ao lado do botão conta as solicitações de
+        acesso que esperam resposta.
+      </p>
+      <ol class="steps">
+        <li i18n="@@tutorial.admins.people1">
+          <strong>Solicitações pendentes:</strong> veja nome, e-mail, celular e
+          origem, e toque em <strong>Aprovar</strong> ou
+          <strong>Recusar</strong> (a recusa pede confirmação; a pessoa só pode
+          pedir de novo em 24 horas). A pessoa recebe um e-mail com a resposta.
+        </li>
+        <li i18n="@@tutorial.admins.people2">
+          Toque numa pessoa para escolher os <strong>Acervos</strong> e as
+          <strong>Funcionalidades</strong> dela (Buscar documentos, Pesquisa com
+          IA, Configurações de IA próprias…), qual IA da aplicação a atende e
+          quantas pesquisas por dia. Tudo salva ao mudar.
+        </li>
+        <li i18n="@@tutorial.admins.people3">
+          Outras ações da pessoa: <strong>Tornar master</strong>,
+          <strong>Aplicar perfil</strong>, <strong>Reenviar convite</strong> e
+          <strong>Revogar acesso</strong> (com confirmação).
+        </li>
+        <li i18n="@@tutorial.admins.people4">
+          Para mudar várias de uma vez, marque as caixas das pessoas e use a
+          barra “IA da aplicação” que aparece.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="access-requests"
+        alt="Pessoas e permissões com uma solicitação pendente: nome, e-mail, origem e data, e os botões Aprovar e Recusar."
+        i18n-alt="@@tutorial.admins.requestsAlt"
+      >
+        <ng-container i18n="@@tutorial.admins.requestsCaption"
+          >Uma solicitação de acesso: (A) Aprovar ou (B) Recusar.</ng-container
+        >
+      </app-tutorial-figure>
+      <app-tutorial-figure
+        name="people"
+        alt="A lista de pessoas com o status de cada uma (Ativo, Convite enviado em…) e uma pessoa aberta, com os acervos, as funcionalidades e a IA da aplicação."
+        i18n-alt="@@tutorial.admins.peopleAlt"
+      >
+        <ng-container i18n="@@tutorial.admins.peopleCaption"
+          >Uma pessoa aberta: (A) acervos, (B) funcionalidades e (C) a IA que a
+          atende.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.admins.inviteTitle">Convidar alguém</h3>
+      <ol class="steps">
+        <li i18n="@@tutorial.admins.invite1">
+          Em <strong>Convidar por e-mail</strong>, digite o e-mail da pessoa.
+          Por padrão sai um e-mail de convite; marque “Não enviar e-mail de
+          convite” se preferir avisar você mesmo.
+        </li>
+        <li i18n="@@tutorial.admins.invite2">
+          Em <strong>Perfil</strong>, escolha um perfil de convite (por exemplo,
+          “Aluno”) para que a pessoa já entre com tudo pronto. Para ajustar só
+          este convite, toque em <strong>Configurar agora</strong>: papel,
+          acervos, funcionalidades, IA da aplicação e preferências iniciais.
+        </li>
+        <li i18n="@@tutorial.admins.invite3">
+          Toque em <strong>Convidar</strong>. Na lista, o status mostra “Convite
+          enviado em …” até a pessoa entrar, e depois “Ativo”. Se o e-mail não
+          chegou, use <strong>Reenviar convite</strong>.
+        </li>
+        <li i18n="@@tutorial.admins.invite4">
+          Os perfis ficam em <strong>Perfis de convite</strong>: crie com
+          <strong>Novo perfil</strong>, edite e escolha qual é o padrão.
+        </li>
+      </ol>
+      <app-tutorial-figure
+        name="invite-preset"
+        alt="O convite com Configurar agora aberto: o e-mail, o perfil escolhido e o editor com papel, acervos, funcionalidades, IA da aplicação e preferências iniciais."
+        i18n-alt="@@tutorial.admins.inviteAlt"
+      >
+        <ng-container i18n="@@tutorial.admins.inviteCaption"
+          >(A) O e-mail, (B) o perfil e (C) Configurar agora.</ng-container
+        >
+      </app-tutorial-figure>
+
+      <h3 i18n="@@tutorial.admins.lendTitle">Ceder uma assinatura</h3>
+      <p i18n="@@tutorial.admins.lendIntro">
+        O dono da Nova Alexandria pode ceder a própria assinatura do Claude ou
+        do ChatGPT a pessoas escolhidas: no editor da pessoa (“Qual IA atende
+        esta pessoa”) ou já no convite, em <strong>Configurar agora</strong> ›
+        IA da aplicação. Cada assinatura só aparece enquanto pode mesmo ser
+        cedida (com login no servidor; a do ChatGPT, também ligada em IA da
+        aplicação). Ao escolher uma, aparece um aviso:
+      </p>
+      <p class="warning" i18n="@@tutorial.admins.lendWarning">
+        <strong>⚠ Atenção:</strong> os termos da Anthropic e da OpenAI não
+        permitem usar essas assinaturas para atender outras pessoas. Ceder é
+        decisão sua e pode levar a limites ou ao bloqueio da sua conta.
+      </p>
+      <p i18n="@@tutorial.admins.lendConfirm">
+        Só depois de <strong>Ceder assim mesmo</strong> a pessoa passa a usar a
+        assinatura, com o próprio limite de pesquisas por dia; no convite,
+        “Convidar” espera essa confirmação. A cessão nunca vale como padrão, os
+        perfis de convite não guardam assinaturas e tudo fica registrado no
+        histórico da IA da pessoa.
+      </p>
+      <app-tutorial-figure
+        name="lend-subscription"
+        alt="No convite, a confirmação Ceder a assinatura do Claude a quem você está convidando?, com o aviso sobre os termos e os botões Ceder assim mesmo e Cancelar."
+        i18n-alt="@@tutorial.admins.lendAlt"
+      >
+        <ng-container i18n="@@tutorial.admins.lendCaption"
+          >A confirmação com o aviso (A) e Ceder assim mesmo (B).</ng-container
+        >
+      </app-tutorial-figure>
+      <p class="back-to-top">
+        <a
+          routerLink="/tutorial"
+          fragment="sumario"
+          (click)="showSection('sumario')"
+          i18n="@@tutorial.backToTop"
+          >Voltar ao sumário</a
+        >
+      </p>
+    </section>
+
+    <!-- 9. Perguntas frequentes -->
+    <section aria-labelledby="perguntas-frequentes">
+      <h2 id="perguntas-frequentes" tabindex="-1" i18n="@@tutorial.faq.title">
+        Perguntas frequentes
+      </h2>
+      <dl class="faq">
+        <dt i18n="@@tutorial.faq.payQ">Preciso pagar alguma coisa?</dt>
+        <dd i18n="@@tutorial.faq.payA">
+          Não para buscar documentos. Na Pesquisa com IA, a IA da aplicação é
+          gratuita para você, com um limite por dia; só paga quem conecta a
+          própria chave paga.
+        </dd>
+        <dt i18n="@@tutorial.faq.disabledQ">
+          Por que a Pesquisa com IA está apagada?
+        </dt>
+        <dd i18n="@@tutorial.faq.disabledA">
+          Nenhuma IA atende você ainda. Peça ao administrador ou, se puder,
+          conecte a sua em ⚙ Configurações › Sua IA.
+        </dd>
+        <dt i18n="@@tutorial.faq.quotaQ">
+          Minhas pesquisas de hoje acabaram. E agora?
+        </dt>
+        <dd i18n="@@tutorial.faq.quotaA">
+          O limite volta no dia seguinte. A busca de documentos continua
+          funcionando, e você pode conectar a sua própria IA.
+        </dd>
+        <dt i18n="@@tutorial.faq.trustQ">Posso confiar nas respostas da IA?</dt>
+        <dd i18n="@@tutorial.faq.trustA">
+          Use como ponto de partida: toda afirmação do acervo tem um número que
+          abre a fonte. Confira sempre no texto original.
+        </dd>
+        <dt i18n="@@tutorial.faq.codeQ">O código não chegou.</dt>
+        <dd i18n="@@tutorial.faq.codeA">
+          Confira a caixa de spam e se o e-mail está certo. O código vale 10
+          minutos; use “Reenviar código” para pedir outro.
+        </dd>
+        <dt i18n="@@tutorial.faq.phoneQ">Funciona no celular?</dt>
+        <dd i18n="@@tutorial.faq.phoneA">
+          Sim, pelo navegador. O histórico e as configurações ficam no botão ☰
+          Menu.
+        </dd>
+        <dt i18n="@@tutorial.faq.missingQ">
+          Não vejo um acervo ou uma função.
+        </dt>
+        <dd i18n="@@tutorial.faq.missingA">
+          Cada pessoa vê o que o administrador liberou. Peça a ele.
+        </dd>
+        <dt i18n="@@tutorial.faq.dataQ">O que acontece com os meus dados?</dt>
+        <dd>
+          <ng-container i18n="@@tutorial.faq.dataA"
+            >As suas conversas ficam guardadas no servidor da Nova Alexandria
+            para você retomar. O que é guardado, por quanto tempo e como pedir
+            para apagar está na</ng-container
+          >&ngsp;<a routerLink="/privacidade" i18n="@@tutorial.faq.privacyLink"
+            >Política de privacidade</a
+          >.
+        </dd>
+      </dl>
+    </section>
+
+    <footer class="end">
+      <a class="back" routerLink="/" i18n="@@tutorial.back"
+        >Voltar à Nova Alexandria</a
+      >
+      <a routerLink="/privacidade" i18n="@@tutorial.privacy">Privacidade</a>
+    </footer>
+  </article>
+</main>

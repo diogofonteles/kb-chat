@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures.js';
+import { CSRF, expect, test } from './fixtures.js';
 
 /**
  * "Pesquisa com IA" (KBC-008) against the stub agent (KB_CHAT_LLM=stub): it searches, finds
@@ -128,27 +129,41 @@ test('KBC-017 AC-9: "Exaustivo" explains itself, asks with the exhaustive profil
     .toBe('exhaustive');
 });
 
-test('KBC-018 AC-4: an exhaustive turn shows its sub-researchers in the steps and cites what they found', async ({
+test('KBC-030: an exhaustive turn shows the estimate and the progress, sweeps the whole set and shows the coverage the app measured', async ({
   page,
 }) => {
   await page.getByRole('radio', { name: 'Exaustivo' }).check();
-  const answer = await research(page, 'todas as obras sobre o ritmo');
-  const summary = answer.locator('details.steps summary');
-  await expect(summary).toContainText('2 pesquisadores');
-  await summary.click();
+  await page
+    .getByLabel('Sua pergunta')
+    .fill('todas as obras sobre o ritmo [varredura lenta]');
+  await page.getByRole('button', { name: 'Perguntar' }).click();
+  const answer = page.locator('app-research-message').last();
+  const sweep = answer.getByRole('region', {
+    name: 'Varredura do conjunto inteiro',
+  });
+  await expect(sweep.getByText(/documentos em ~\d+ lotes/)).toBeVisible();
+  await expect(sweep.getByRole('status')).toContainText(/Lote \d+ de \d+/);
+  await expect(sweep.getByRole('progressbar')).toBeVisible();
+  // Nothing pushes the page sideways while it sweeps (390 px).
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    ),
+  ).toBeLessThanOrEqual(0);
+  await expect(answer.getByText(/Segundo o acervo/)).toBeVisible();
+  await expect(sweep).toHaveCount(0);
   await expect(
-    answer.locator('details.steps > ol > li', {
-      hasText: 'Pesquisador 1 — Primeira parte',
-    }),
+    answer.getByText(
+      /Cobertura \(medida pelo aplicativo\): \d+ documentos no conjunto · \d+ lidos por inteiro pela IA\./,
+    ),
   ).toBeVisible();
+  await expect(answer.getByText(/Conjunto:.*o acervo inteiro/)).toBeVisible();
+  await expect(answer.locator('.steps-text')).toContainText(
+    /a IA analisou (\d+) de \1 documentos/i,
+  );
   await expect(
-    answer.locator('details.steps > ol > li', {
-      hasText: 'Pesquisador 2 — Segunda parte',
-    }),
-  ).toBeVisible();
-  await expect(answer.locator('ol.sub-steps li').first()).toBeVisible();
-  // The answer cites a document a sub-researcher read, listed among the sources.
-  await expect(answer.getByRole('heading', { name: 'Fontes' })).toBeVisible();
+    answer.getByRole('button', { name: 'Continuar varredura' }),
+  ).toHaveCount(0);
   const axe = await new AxeBuilder({ page })
     .include('app-research-message')
     .analyze();
@@ -157,6 +172,101 @@ test('KBC-018 AC-4: an exhaustive turn shows its sub-researchers in the steps an
       ['serious', 'critical'].includes(v.impact ?? ''),
     ),
   ).toEqual([]);
+});
+
+test('KBC-030: a sweep that stopped early says what was left and "Continuar varredura" resumes from its cursor', async ({
+  page,
+}) => {
+  const id = randomUUID();
+  const title = `obras ${id.slice(0, 8)}`;
+  const at = new Date().toISOString();
+  const cursor = {
+    plan: { target: {}, phrases: [], extract: 'obras citadas' },
+    after: 'raw/articles/ritmo-serie-06.md',
+    totals: {
+      documents: 22,
+      scanned: 10,
+      withHits: null,
+      read: 10,
+      batches: 1,
+    },
+  };
+  const seeded = await page.request.put(`/api/v1/conversations/${id}`, {
+    headers: CSRF,
+    data: {
+      kind: 'research',
+      id,
+      topic: 'hermetismo',
+      title,
+      createdAt: at,
+      updatedAt: at,
+      turns: [
+        {
+          question: title,
+          answer: 'Lista parcial: “A Lei do Ritmo” trata do assunto.',
+          sources: [],
+          steps: 1,
+          usd: 0,
+          billing: 'per-token',
+          model: 'stub/model',
+          interrupted: false,
+          profile: 'exhaustive',
+          coverage: {
+            target: {},
+            phrases: [],
+            documents: 22,
+            scanned: 10,
+            withHits: null,
+            read: 10,
+            needed: 22,
+            missing: 12,
+            batches: 1,
+            reason: 'requests',
+          },
+          sweep: cursor,
+          at,
+        },
+      ],
+    },
+  });
+  expect(seeded.status()).toBe(200);
+  await page.reload();
+  await (
+    await sidebar(page)
+  )
+    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('button', { name: title })
+    .click();
+  const first = page.locator('app-research-message').first();
+  await expect(first.getByText('Varredura incompleta.')).toBeVisible();
+  await expect(
+    first.getByText(
+      /Faltaram 12 documentos para a IA analisar: o limite de pedidos desta pesquisa acabou\./,
+    ),
+  ).toBeVisible();
+  const asked = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' && request.url().endsWith('/research'),
+  );
+  await first.getByRole('button', { name: 'Continuar varredura' }).click();
+  const body = (await asked).postDataJSON() as {
+    question: string;
+    profile: string;
+    sweep: typeof cursor;
+    history: unknown[];
+  };
+  expect(body.profile).toBe('exhaustive');
+  expect(body.sweep.after).toBe(cursor.after);
+  // Shown as a continuation, asked as the original question.
+  expect(body.question).toBe(title);
+  await expect(page.getByText(`Continuar varredura: ${title}`)).toBeVisible();
+  expect(body.history).toHaveLength(1);
+  const next = page.locator('app-research-message').last();
+  await expect(next.getByText(/Segundo o acervo/)).toBeVisible();
+  await expect(next.locator('.steps-text')).toContainText(
+    /a IA analisou 22 de 22 documentos/i,
+  );
+  await expect(next.getByText('Varredura incompleta.')).toHaveCount(0);
 });
 
 test('ADR 0009: text written before a tool call leaves the answer and shows among the steps', async ({

@@ -13,7 +13,7 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 ## Architecture (reference)
 
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — drivers, C4, modules, contracts, threat model
-- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam (superseded) · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract) · 0010 production on OCI Always Free (Compose, Caddy) · 0011 access requests and one-time codes (Resend, SMS off) · 0012 Gmail SMTP as the free email provider · 0013 exhaustive research (grep-like tools, paging, filters, exhaustive profile, compaction) · 0014 research sub-agents (orchestrator, parallel workers) · 0015 authorship in the catalog, search contract and research tools (Mestre Laércio × other authors) · 0016 the house AI plan, the AI access policy, no AI defaults in production · 0017 AI keys sealed at rest (`KB_CHAT_SECRETS_KEY`) · 0018 one's own AI (Gemini, OpenRouter on free models by OAuth, guided setup) · 0019 the owner lends his Claude subscription to chosen people · 0020 Codex runs in a sandbox container, through a runner
+- ADRs: [`docs/adr/`](docs/adr/) — 0001 Nx/Angular/Fastify · 0002 QMD MCP search · 0003 frontmatter catalog · 0004 grounded AI answers · 0005 local-first auth seam (superseded) · 0006 research agent · 0007 AI providers and local settings · 0008 Google login and permissions · 0009 faster research (profiles, auto-escalation, streaming with retract) · 0010 production on OCI Always Free (Compose, Caddy) · 0011 access requests and one-time codes (Resend, SMS off) · 0012 Gmail SMTP as the free email provider · 0013 exhaustive research (grep-like tools, paging, filters, exhaustive profile, compaction) · 0014 research sub-agents (orchestrator, parallel workers) · 0015 authorship in the catalog, search contract and research tools (Mestre Laércio × other authors) · 0016 the house AI plan, the AI access policy, no AI defaults in production · 0017 AI keys sealed at rest (`KB_CHAT_SECRETS_KEY`) · 0018 one's own AI (Gemini, OpenRouter on free models by OAuth, guided setup) · 0019 the owner lends his Claude subscription to chosen people · 0020 Codex runs in a sandbox container, through a runner · 0021 the exhaustive profile's app-driven sweep and coverage measured by the app
 - Screens: [`docs/design/screens.md`](docs/design/screens.md) (T10: request access, code sign-in) · Backlog: [`docs/backlog/README.md`](docs/backlog/README.md)
 
 ## Stack
@@ -51,6 +51,7 @@ SMOKE_INSECURE=1 deploy/scripts/smoke.sh https://localhost:8443
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm format:check   # gates (coverage floor 80%)
+pnpm tutorial:screenshots                   # regenerates the /tutorial pictures (KBC-032, README)
 pnpm e2e                                    # Playwright, ports 3117/4317 (KBC_E2E_API_PORT/KBC_E2E_WEB_PORT to move them), desktop 1440 + mobile 390
 pnpm --filter @kb-chat/api latency          # p95 per search mode against a running API (Q1/Q2)
 ```

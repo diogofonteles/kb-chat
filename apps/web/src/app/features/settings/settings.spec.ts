@@ -256,6 +256,45 @@ describe('Configurações', () => {
     expect(screen.getByText(/KB_CHAT_CODEX=on/)).toBeTruthy();
   });
 
+  it.each([
+    {
+      reason: 'house-off',
+      label: 'Desativado.',
+      steps: /IA da aplicação → “Ligar a assinatura do ChatGPT \(Codex\)”/,
+    },
+    {
+      reason: 'login-required',
+      label: 'Sem login no servidor.',
+      steps: /codex login --device-auth/,
+    },
+    {
+      reason: 'sandbox-unavailable',
+      label: 'Indisponível no servidor.',
+      steps: /contêiner do Codex/,
+    },
+  ] as const)(
+    'says why the ChatGPT subscription is blocked in the sandbox: $reason (KBC-031)',
+    async ({ reason, label, steps }) => {
+      await openSettings(
+        aSettingsView(),
+        aProviderList({
+          'chatgpt-subscription': { available: false, reason },
+        }),
+      );
+      const codex = screen.getByRole('radio', {
+        name: /Assinatura do ChatGPT/,
+      }) as HTMLInputElement;
+      expect(codex.disabled).toBe(true);
+      expect(screen.getByText(label)).toBeTruthy();
+      expect(screen.getByText(steps)).toBeTruthy();
+      // Production never asks to install the CLI nor for the local switch (BR-5).
+      expect(screen.queryByText(/Instale o Codex CLI/)).toBeNull();
+      expect(screen.queryByText(/KB_CHAT_CODEX=on/)).toBeNull();
+      // The card never claims a login it does not have (design R1-1).
+      expect(screen.queryByText(/Codex CLI já logado/)).toBeNull();
+    },
+  );
+
   it('offers a fast and a deep model per provider: a list for the Claude subscription (KBC-011)', async () => {
     const view = aSettingsView({
       ai: {

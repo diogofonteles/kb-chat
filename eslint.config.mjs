@@ -84,6 +84,7 @@ export default defineConfig(
           capture: ['moduleName'],
         },
         { type: 'adapter', pattern: ['apps/api/src/adapters/*'] },
+        { type: 'port', pattern: ['apps/api/src/ports/*.ts'], mode: 'file' },
       ],
       'import/resolver': {
         typescript: {
@@ -114,6 +115,12 @@ export default defineConfig(
               disallow: { from: { element: { type: 'module' } } },
               message:
                 'Modules depend on ports; only the composition root imports adapters.',
+            },
+            {
+              to: { element: { type: 'module' } },
+              disallow: { from: { element: { type: 'port' } } },
+              message:
+                'Ports are the inner contract: they never import a module (KBC-030 review).',
             },
           ],
         },

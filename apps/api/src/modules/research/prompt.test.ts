@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
 import {
-  buildResearchMessages,
-  researchSystemPrompt,
-  subAgentSystemPrompt,
-} from './prompt.js';
+  batchSystemPrompt,
+  sweepAnswerSystemPrompt,
+} from './sweep/sweep-prompts.js';
+import { describe, expect, it } from 'vitest';
+import { buildResearchMessages, researchSystemPrompt } from './prompt.js';
 import { defaultSubscriptionPrompt } from '../../adapters/subscription-prompt.js';
 
 describe('buildResearchMessages', () => {
@@ -49,12 +49,13 @@ describe('buildResearchMessages', () => {
     expect(text).toContain('"---"');
   });
 
-  it('keeps the Mestre Laércio apart from other authors in every profile and in the sub-researcher (KBC-020 AC-6)', () => {
+  it('keeps the Mestre Laércio apart from other authors in every profile, the sweep batches and its answer (KBC-020 AC-6, KBC-030)', () => {
     const prompts = [
       ...(['fast', 'deep', 'exhaustive'] as const).map((profile) =>
         researchSystemPrompt('Hermetismo', profile),
       ),
-      subAgentSystemPrompt('Hermetismo'),
+      batchSystemPrompt('Hermetismo'),
+      sweepAnswerSystemPrompt('Hermetismo'),
       // The Claude Code and Codex turns (ADR 0007) get the same rules.
       defaultSubscriptionPrompt('Hermetismo', 'deep'),
     ];
@@ -69,5 +70,15 @@ describe('buildResearchMessages', () => {
       expect(text).toContain('authorship: "mestre-laercio"');
       expect(text).toMatch(/diga de quem é ou de que livro vem/);
     }
+  });
+
+  it('asks the exhaustive orchestrator to plan, never to write coverage numbers (KBC-030)', () => {
+    const text = researchSystemPrompt('Hermetismo', 'exhaustive');
+    expect(text).toContain('plan_sweep');
+    expect(text).toContain('Nunca escreva linha nem números de cobertura');
+    expect(text).not.toContain('delegate');
+    expect(sweepAnswerSystemPrompt('Hermetismo')).toContain(
+      'Nunca escreva linha nem números de cobertura',
+    );
   });
 });

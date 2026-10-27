@@ -1,7 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ResearchEvent } from '@kb-chat/contracts';
+import type {
+  ResearchEvent,
+  SavedResearchTurn,
+  SweepCoverage,
+  SweepCursor,
+  SweepProgress,
+} from '@kb-chat/contracts';
 import { ResearchApi } from '@core/api/research-api.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
@@ -9,17 +15,57 @@ import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { Subject, of, throwError } from 'rxjs';
 import {
+  LOAD_CONVERSATION,
   SAVE_RESEARCH,
   type ResearchConversation,
 } from './research-history.js';
-import { ResearchStore, STOP_SETTLE_MS } from './research-store.js';
+import {
+  OPEN_RESEARCH_KEY,
+  ResearchStore,
+  STOP_SETTLE_MS,
+} from './research-store.js';
 import { citedSources } from './research-turn.js';
 
 const SOURCE = { n: 1, id: 'raw/a.md', title: 'Os Princípios' };
 
-function setup() {
+const CURSOR: SweepCursor = {
+  plan: {
+    target: { authorship: 'mestre-laercio' },
+    phrases: [],
+    extract: 'livros',
+  },
+  after: 'raw/c.md',
+  totals: { documents: 10, scanned: 3, withHits: null, read: 3, batches: 1 },
+  findings: [],
+};
+const PROGRESS: SweepProgress = {
+  status: 'running',
+  documents: 10,
+  needed: 10,
+  documentsDone: 3,
+  batches: 4,
+  batchesDone: 1,
+  requests: 6,
+  free: true,
+  cursor: CURSOR,
+};
+const COVERAGE: SweepCoverage = {
+  target: { authorship: 'mestre-laercio' },
+  phrases: [],
+  documents: 10,
+  scanned: 3,
+  withHits: null,
+  read: 3,
+  needed: 10,
+  missing: 7,
+  batches: 1,
+  reason: 'requests',
+};
+
+function setup(options: { stored?: ResearchConversation } = {}) {
   localStorage.clear();
   const streams: Subject<ResearchEvent>[] = [];
+  const follows: Subject<ResearchEvent>[] = [];
   const spendNow = { usd: 0.1 };
   const api = {
     research: vi.fn(() => {
@@ -27,6 +73,12 @@ function setup() {
       streams.push(stream);
       return stream;
     }),
+    follow: vi.fn(() => {
+      const stream = new Subject<ResearchEvent>();
+      follows.push(stream);
+      return stream;
+    }),
+    stopTurn: vi.fn(() => of(undefined)),
     spendToday: vi.fn(() =>
       of({ usd: spendNow.usd, capUsd: 1, configured: true }),
     ),
@@ -43,6 +95,11 @@ function setup() {
   };
   const usage = { track: vi.fn() };
   const save = vi.fn<(conversation: ResearchConversation) => void>();
+  const load = vi.fn((id: string) =>
+    options.stored?.id === id
+      ? of(options.stored)
+      : throwError(() => new HttpErrorResponse({ status: 404 })),
+  );
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -53,10 +110,22 @@ function setup() {
       { provide: SpendStore, useValue: spend },
       { provide: UsageLog, useValue: usage },
       { provide: SAVE_RESEARCH, useValue: save },
+      { provide: LOAD_CONVERSATION, useValue: load },
     ],
   });
   const store = TestBed.inject(ResearchStore);
-  return { store, api, streams, chat, spend, usage, save, spendNow };
+  return {
+    store,
+    api,
+    streams,
+    follows,
+    chat,
+    spend,
+    usage,
+    save,
+    load,
+    spendNow,
+  };
 }
 
 function answer(stream: Subject<ResearchEvent>, text: string, usd = 0.002) {
@@ -80,11 +149,14 @@ describe('ResearchStore', () => {
     expect(store.profile()).toBe('fast');
     store.chooseProfile('deep');
     store.ask('quais são os 5 princípios ocultos');
-    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
-      question: 'quais são os 5 princípios ocultos',
-      history: [],
-      profile: 'deep',
-    });
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'quais são os 5 princípios ocultos',
+        history: [],
+        profile: 'deep',
+      }),
+    );
     expect(localStorage.getItem('kb-chat.research-profile')).toBe('deep');
   });
 
@@ -164,20 +236,26 @@ describe('ResearchStore', () => {
   it('sends the previous question and answer as history on a follow-up (AC-2)', () => {
     const { store, api, streams } = setup();
     store.ask('quais são os princípios?');
-    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
-      question: 'quais são os princípios?',
-      history: [],
-      profile: 'fast',
-    });
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'quais são os princípios?',
+        history: [],
+        profile: 'fast',
+      }),
+    );
     answer(streams[0] as Subject<ResearchEvent>, 'São sete [1].');
     store.ask('  e o terceiro?  ');
-    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
-      question: 'e o terceiro?',
-      history: [
-        { question: 'quais são os princípios?', answer: 'São sete [1].' },
-      ],
-      profile: 'fast',
-    });
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'e o terceiro?',
+        history: [
+          { question: 'quais são os princípios?', answer: 'São sete [1].' },
+        ],
+        profile: 'fast',
+      }),
+    );
     expect(store.turns().map((turn) => turn.question)).toEqual([
       'quais são os princípios?',
       'e o terceiro?',
@@ -214,7 +292,7 @@ describe('ResearchStore', () => {
   });
 
   it('stops the turn in flight on "Parar", keeping the partial text', () => {
-    const { store, streams, usage, spend, save } = setup();
+    const { store, api, streams, usage, spend, save } = setup();
     store.ask('quais são?');
     const stream = streams[0] as Subject<ResearchEvent>;
     stream.next({ type: 'token', text: 'Começo', segment: 0 });
@@ -228,7 +306,11 @@ describe('ResearchStore', () => {
     });
     expect(usage.track).toHaveBeenCalledWith({ type: 'ai_cancel' });
     expect(spend.refresh).toHaveBeenCalledExactlyOnceWith(STOP_SETTLE_MS);
-    expect(save).toHaveBeenCalledOnce();
+    // Saved when asked, then when stopped; the server is told to stop the turn (KBC-029).
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(api.stopTurn).toHaveBeenCalledExactlyOnceWith(
+      store.turns()[0]?.turnId,
+    );
   });
 
   it('keeps one turn in flight: a new question stops the previous one', () => {
@@ -341,20 +423,12 @@ describe('ResearchStore', () => {
     expect(store.turns()).toEqual([]);
     expect(store.conversationId()).not.toBe(first);
     store.ask('outra');
-    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
-      question: 'outra',
-      history: [],
-      profile: 'fast',
-    });
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({ question: 'outra', history: [] }),
+    );
     chat.topicSlug.set('outro');
     expect(store.turns()).toEqual([]);
-  });
-
-  it('does not save a conversation with no turn ended yet', () => {
-    const { store, save } = setup();
-    store.persist();
-    store.ask('quais são?');
-    expect(save).not.toHaveBeenCalled();
   });
 
   it('saves a turn stopped before any text, with the model and the cost spent (100% of the history)', () => {
@@ -391,5 +465,408 @@ describe('ResearchStore', () => {
     expect(api.research).toHaveBeenCalledTimes(2);
     expect(store.turns()).toHaveLength(1);
     expect(store.streaming()).toBe(true);
+  });
+
+  describe('KBC-029: the question is in the history from the moment it is sent', () => {
+    const CONVERSATION = '2b0f4a52-8a8b-4b0e-9a55-0d1b5c2b3c4d';
+    const TURN = '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4';
+
+    const savedTurn = (overrides: Partial<SavedResearchTurn> = {}) => ({
+      id: TURN,
+      question: 'e a polaridade?',
+      answer: '',
+      sources: [],
+      steps: 0,
+      usd: 0,
+      billing: 'per-token' as const,
+      model: '',
+      interrupted: false,
+      status: 'pending' as const,
+      at: '2026-10-27T10:00:00.000Z',
+      ...overrides,
+    });
+
+    const conversation = (
+      turns: SavedResearchTurn[],
+    ): ResearchConversation => ({
+      kind: 'research',
+      id: CONVERSATION,
+      topic: 'hermetismo',
+      title: 'lei do ritmo',
+      createdAt: '2026-10-27T09:00:00.000Z',
+      updatedAt: '2026-10-27T10:00:00.000Z',
+      turns,
+    });
+
+    afterEach(() => sessionStorage.clear());
+
+    it('saves the conversation with the pending question and sends its ids', () => {
+      const { store, api, save } = setup();
+      store.ask('quais são?');
+      const turnId = store.turns()[0]?.turnId;
+      expect(api.research).toHaveBeenLastCalledWith(
+        'hermetismo',
+        expect.objectContaining({
+          conversationId: store.conversationId(),
+          turnId,
+        }),
+      );
+      expect(save.mock.lastCall?.[0]).toMatchObject({
+        id: store.conversationId(),
+        title: 'quais são?',
+        turns: [{ id: turnId, question: 'quais são?', status: 'pending' }],
+      });
+      expect(sessionStorage.getItem(OPEN_RESEARCH_KEY)).toBe(
+        store.conversationId(),
+      );
+    });
+
+    it('saves a turn that failed, with its code', () => {
+      const { store, streams, save } = setup();
+      store.ask('quais são?');
+      streams[0]?.next({ type: 'start', model: 'm', billing: 'per-token' });
+      streams[0]?.next({ type: 'error', code: 'PROVIDER_UNAVAILABLE' });
+      expect(save.mock.lastCall?.[0].turns[0]).toMatchObject({
+        status: 'failed',
+        error: 'PROVIDER_UNAVAILABLE',
+      });
+    });
+
+    it('saves a question refused before the server took it as failed', () => {
+      const { store, api, save } = setup();
+      api.research.mockReturnValueOnce(
+        throwError(() => new HttpErrorResponse({ status: 429 })) as never,
+      );
+      store.ask('quais são?');
+      expect(store.turns()[0]?.phase).toBe('error');
+      expect(save.mock.lastCall?.[0].turns[0]).toMatchObject({
+        status: 'failed',
+      });
+    });
+
+    it('follows the turn again when the stream drops after it started', () => {
+      const { store, api, streams, follows, save } = setup();
+      store.ask('quais são?');
+      const turnId = store.turns()[0]?.turnId;
+      streams[0]?.next({ type: 'start', model: 'm', billing: 'per-token' });
+      streams[0]?.next({ type: 'token', text: 'Come', segment: 0 });
+      streams[0]?.error(new HttpErrorResponse({ status: 0 }));
+      expect(api.follow).toHaveBeenCalledExactlyOnceWith(turnId);
+      expect(store.turns()[0]).toMatchObject({ phase: 'streaming', text: '' });
+      answer(follows[0] as Subject<ResearchEvent>, 'São sete [1].');
+      expect(store.turns()[0]).toMatchObject({
+        phase: 'done',
+        text: 'São sete [1].',
+      });
+      expect(save.mock.lastCall?.[0].turns[0]).not.toHaveProperty('status');
+    });
+
+    it('restores a conversation whose turn still runs and follows it to the answer', () => {
+      const { store, api, follows } = setup();
+      store.restore(conversation([savedTurn()]));
+      expect(api.follow).toHaveBeenCalledExactlyOnceWith(TURN);
+      expect(store.streaming()).toBe(true);
+      const follow = follows[0] as Subject<ResearchEvent>;
+      follow.next({ type: 'start', model: 'm', billing: 'per-token' });
+      answer(follow, 'Tudo é duplo [1].');
+      expect(store.turns()[0]).toMatchObject({
+        phase: 'done',
+        text: 'Tudo é duplo [1].',
+        restored: false,
+      });
+    });
+
+    it('shows what the history kept when the turn no longer runs, never a spinner', () => {
+      const ended: SavedResearchTurn = {
+        ...savedTurn({ answer: 'Tudo é duplo.' }),
+      };
+      delete ended.status;
+      const { store, follows, load } = setup({
+        stored: conversation([ended]),
+      });
+      store.restore(conversation([savedTurn()]));
+      follows[0]?.error(new HttpErrorResponse({ status: 404 }));
+      expect(load).toHaveBeenCalledWith(CONVERSATION);
+      expect(store.turns()[0]).toMatchObject({
+        phase: 'done',
+        text: 'Tudo é duplo.',
+      });
+    });
+
+    it('marks a turn interrupted when it neither runs nor ended in the history', () => {
+      const { store, follows } = setup();
+      store.restore(conversation([savedTurn()]));
+      follows[0]?.error(new HttpErrorResponse({ status: 404 }));
+      expect(store.turns()[0]).toMatchObject({
+        phase: 'done',
+        interrupted: true,
+      });
+      expect(store.streaming()).toBe(false);
+    });
+
+    it('restores a failed turn with its error and asks it again with the same id', () => {
+      const { store, api } = setup();
+      store.restore(
+        conversation([savedTurn({ status: 'failed', error: 'RATE_LIMITED' })]),
+      );
+      expect(store.turns()[0]).toMatchObject({
+        phase: 'error',
+        error: 'RATE_LIMITED',
+      });
+      store.retry();
+      expect(api.research).toHaveBeenLastCalledWith(
+        'hermetismo',
+        expect.objectContaining({ turnId: TURN, conversationId: CONVERSATION }),
+      );
+    });
+
+    it('"+ Nova conversa" leaves the running turn to the server instead of stopping it', () => {
+      const { store, api, streams } = setup();
+      store.ask('quais são?');
+      store.newConversation();
+      expect(streams[0]?.observed).toBe(false);
+      expect(api.stopTurn).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem(OPEN_RESEARCH_KEY)).toBeNull();
+    });
+
+    it('brings back, after a reload, the research conversation that was on screen', () => {
+      sessionStorage.setItem(OPEN_RESEARCH_KEY, CONVERSATION);
+      const { store, api } = setup({ stored: conversation([savedTurn()]) });
+      TestBed.tick();
+      expect(store.conversationId()).toBe(CONVERSATION);
+      expect(api.follow).toHaveBeenCalledWith(TURN);
+    });
+  });
+
+  it('sweeps on: "Continuar varredura" asks only for the rest, from the saved cursor (KBC-030)', () => {
+    const { store, api, streams, save } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('quais livros o Mestre cita?');
+    const stream = streams[0];
+    if (!stream) throw new Error('no stream');
+    stream.next({ type: 'sweep', sweep: { ...PROGRESS, status: 'planned' } });
+    stream.next({ type: 'sweep', sweep: PROGRESS });
+    stream.next({ type: 'token', text: 'Lista parcial [1].', segment: 0 });
+    stream.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 2,
+      coverage: COVERAGE,
+      sweep: CURSOR,
+    });
+    stream.complete();
+    const saved = save.mock.calls.at(-1)?.[0].turns[0];
+    expect(saved?.coverage).toEqual(COVERAGE);
+    expect(saved?.sweep).toEqual(CURSOR);
+    store.continueSweep();
+    // Shown as a continuation, asked as the question itself.
+    expect(store.turns()[1]?.question).toBe(
+      'Continuar varredura: quais livros o Mestre cita?',
+    );
+    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
+      question: 'quais livros o Mestre cita?',
+      history: [
+        {
+          question: 'quais livros o Mestre cita?',
+          answer: 'Lista parcial [1].',
+        },
+      ],
+      profile: 'exhaustive',
+      sweep: CURSOR,
+      // Recorded in the same conversation, as its own turn (KBC-029).
+      conversationId: store.conversationId(),
+      turnId: store.turns()[1]?.turnId,
+    });
+    // In the history at once, as a continuation.
+    const pending = save.mock.calls.at(-1)?.[0].turns.at(-1);
+    expect(pending?.question).toBe(
+      'Continuar varredura: quais livros o Mestre cita?',
+    );
+  });
+
+  it('keeps the last progress cursor and every batch’s findings when the reader stops (QA F-1)', () => {
+    const { store, streams, save } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const found = (text: string) => [{ id: 'raw/a.md', text }];
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: found('A'),
+      },
+    });
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: found('B'),
+      },
+    });
+    store.stop();
+    const expected = { ...CURSOR, findings: [...found('A'), ...found('B')] };
+    expect(store.turns()[0]?.cursor).toEqual(expected);
+    expect(save.mock.calls.at(-1)?.[0].turns[0]?.sweep).toEqual(expected);
+  });
+
+  it('continues nothing when the sweep covered its whole set', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    streams[0]?.next({ type: 'token', text: 'Tudo [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: { ...COVERAGE, missing: 0, read: 10, reason: undefined },
+    });
+    expect(store.turns()[0]?.cursor).toBeNull();
+    store.continueSweep();
+    expect(api.research).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the carried findings when a continuation is stopped too (code review 1)', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const earlier = { ...CURSOR, findings: [{ id: 'raw/a.md', text: 'A' }] };
+    streams[0]?.next({ type: 'token', text: 'Parcial [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: COVERAGE,
+      sweep: earlier,
+    });
+    store.continueSweep();
+    streams[1]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: [{ id: 'raw/b.md', text: 'B' }],
+      },
+    });
+    store.stop();
+    expect(store.turns()[1]?.cursor?.findings).toEqual([
+      { id: 'raw/a.md', text: 'A' },
+      { id: 'raw/b.md', text: 'B' },
+    ]);
+  });
+
+  it('continues a sweep whose answer failed, from the cursor it kept (code review 10)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    streams[0]?.next({ type: 'error', code: 'PROVIDER_UNAVAILABLE' });
+    store.continueSweep();
+    expect(api.research).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the estimate shown while the sweep goes on', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: { ...PROGRESS, status: 'planned', minutes: 4, usd: 0.3 },
+    });
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    expect(store.turns()[0]?.sweep).toMatchObject({
+      status: 'running',
+      minutes: 4,
+      usd: 0.3,
+    });
+  });
+
+  it('keeps each finding once when a running sweep is followed again from its start', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    const batch = {
+      type: 'sweep' as const,
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: [{ id: 'raw/a.md', text: 'A' }],
+      },
+    };
+    streams[0]?.next(batch);
+    // The same batch again, as a replay from the turn's first event brings it.
+    streams[0]?.next(batch);
+    expect(store.turns()[0]?.cursor?.findings).toEqual([
+      { id: 'raw/a.md', text: 'A' },
+    ]);
+  });
+
+  it('retries a stopped continuation from the cursor it started from (review round 3)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'token', text: 'Parcial [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: COVERAGE,
+      sweep: CURSOR,
+    });
+    store.continueSweep();
+    // The continuation's answer is cut short after the whole set was analyzed.
+    streams[1]?.next({ type: 'token', text: 'Lista [1]', segment: 0 });
+    streams[1]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: true,
+      steps: 1,
+      coverage: { ...COVERAGE, missing: 0, read: 10, reason: undefined },
+    });
+    const stopped = store.turns()[1]?.turnId;
+    store.chooseProfile('fast');
+    store.retry();
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'livros',
+        profile: 'exhaustive',
+        sweep: CURSOR,
+        // In its place: the server replaces the stopped turn (KBC-029).
+        turnId: stopped,
+      }),
+    );
+    expect(store.turns()).toHaveLength(2);
+    expect(store.turns()[1]?.turnId).toBe(stopped);
+  });
+
+  it('asks a continuation again as its question when there is no cursor to resume from (review round 4)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('deep');
+    store.ask('Continuar varredura: livros');
+    streams[0]?.next({ type: 'error', code: 'PROVIDER_UNAVAILABLE' });
+    const failed = store.turns()[0]?.turnId;
+    store.retry();
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({ question: 'livros', turnId: failed }),
+    );
+    expect(store.turns()).toHaveLength(1);
   });
 });

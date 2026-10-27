@@ -192,4 +192,19 @@ describe('LoginPage (KBC-010, T8)', () => {
       screen.getByRole('link', { name: 'Privacidade' }).getAttribute('href'),
     ).toBe('/privacidade');
   });
+
+  it('links to the public tutorial (KBC-032 AC-4)', async () => {
+    const google = fakeGoogle();
+    const { http, fixture } = await renderLogin(of(google.accounts));
+    http.expectOne('/api/v1/auth/config').flush({
+      googleClientId: 'client-123',
+      codeChannels: ['email'],
+      privacyContactEmail: null,
+    });
+    await fixture.whenStable();
+
+    expect(
+      screen.getByRole('link', { name: 'Como usar' }).getAttribute('href'),
+    ).toBe('/tutorial');
+  });
 });

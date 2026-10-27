@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  invitationPresetSchema,
   invitePresetSchema,
   presetInviteRequestSchema,
 } from './invite-profiles.js';
@@ -48,6 +49,23 @@ describe('invite presets (KBC-028)', () => {
         email: 'a@b.com',
         preset: {},
         profileId: '6c9c2a1e-6b1e-4f8e-9d55-0f3a1d9b2c11',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('lends a subscription in one invitation only with the terms (KBC-031 BR-2, BR-3)', () => {
+    for (const appAi of ['claude-subscription', 'chatgpt-subscription']) {
+      expect(invitationPresetSchema.safeParse({ ai: { appAi } }).success).toBe(
+        false,
+      );
+      const lent = invitationPresetSchema.parse({
+        ai: { appAi, subscriptionTermsAccepted: true },
+      });
+      expect(lent.ai).toMatchObject({ appAi, subscriptionTermsAccepted: true });
+    }
+    expect(
+      invitationPresetSchema.safeParse({
+        preferences: { defaultTopic: 'hermetismo' },
       }).success,
     ).toBe(false);
   });

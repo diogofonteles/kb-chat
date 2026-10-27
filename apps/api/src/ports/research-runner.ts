@@ -3,6 +3,7 @@ import type {
   ResearchEvent,
   ResearchProfile,
   ResearchTurn,
+  SweepCursor,
 } from '@kb-chat/contracts';
 import type { AgentLlmPort } from './llm.js';
 import type { SpendLedgerPort } from './spend-ledger.js';
@@ -14,6 +15,10 @@ export interface ResearchInput {
   /** Step budget and prompt of the turn (KBC-011); the model was chosen with the runner. */
   readonly profile: ResearchProfile;
   readonly signal: AbortSignal;
+  /** "Continuar varredura" (KBC-030): the exhaustive sweep resumes from this cursor. */
+  readonly sweep?: SweepCursor;
+  /** Model requests the turn may make (the house's free requests left, KBC-030). */
+  readonly requestBudget?: number;
 }
 
 /**

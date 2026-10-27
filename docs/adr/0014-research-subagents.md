@@ -1,6 +1,7 @@
 # 0014 — Research sub-agents: an orchestrator that delegates to parallel workers
 
-- Status: accepted (2026-10-25)
+- Status: superseded for the exhaustive profile by [0021](0021-app-driven-exhaustive-sweep.md) (2026-10-27): the app sweeps in batches; `delegate` and the "pesquisador" agent are removed
+- Accepted: 2026-10-25
 - Amends: [0013](0013-exhaustive-research-grep-tools-and-compaction.md) (the exhaustive profile gains delegation), [0007](0007-ai-providers-and-local-settings.md) (Claude Code gets its Agent tool in the exhaustive profile)
 - Drivers: KBC-018 (the owner: "temos que nos espelhar no funcionamento do Claude"; exhaustive questions answered completely), Q4 grounding, Q3 cost
 

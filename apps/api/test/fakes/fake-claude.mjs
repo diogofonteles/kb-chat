@@ -4,12 +4,15 @@
 // $HOME/fake-cli.json { mode, report } — mode: answer (default) | aloud (thinks aloud before the
 // tool call) | deepen (asks to go deeper unless started with --model=opus) | deepen-mid
 // (the same after a sentence, the marker split across deltas) | absent (gives
-// up on the collection unless --model=opus) | delegate (starts a sub-agent) | sleep | stubborn (ignores SIGTERM) | login. report: a file that
-// receives { args, stdin, env } with the names of the credential variables it saw.
+// up on the collection unless --model=opus) | plan (calls plan_sweep,
+// KBC-030) | sleep | stubborn (ignores SIGTERM) | login. report: a file that receives
+// { args, stdin, env } with the names of the credential variables it saw; log: a file that
+// gets one line per run. A sweep's batch or answer prompt gets its reply (fake-sweep.mjs).
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SWEEP_PLAN, logRun, sweepReply } from './fake-sweep.mjs';
 
 // The CLI gets only allowlisted variables, so the test settings come from $HOME.
 const fake = (() => {
@@ -58,6 +61,24 @@ if (fake.report) {
 
 emit({ type: 'system', subtype: 'init', model: 'claude-fake-1', tools: [] });
 
+// A sweep's batch or answer (KBC-030): no tools, the rules in --system-prompt.
+const systemPrompt = String(args[args.indexOf('--system-prompt') + 1] ?? '');
+logRun(fake, {
+  args,
+  stdin: stdin.slice(0, 2000),
+  system: systemPrompt.slice(0, 80),
+});
+const sweep = sweepReply(`${systemPrompt}\n${stdin}`);
+if (sweep !== null) {
+  delta(sweep);
+  emit({
+    type: 'stream_event',
+    event: { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+  });
+  emit({ type: 'result', subtype: 'success', is_error: false });
+  process.exit(0);
+}
+
 if (mode === 'login') {
   emit({
     type: 'result',
@@ -99,6 +120,9 @@ if (mode === 'sleep' || mode === 'stubborn') {
       name: tools[0].name,
       arguments: { query: 'ritmo' },
     });
+  // An exhaustive turn that plans (KBC-030): the runner ends the pass once the plan is in.
+  if (mode === 'plan' && tools.some((tool) => tool.name === 'plan_sweep'))
+    await client.callTool({ name: 'plan_sweep', arguments: SWEEP_PLAN });
   await client.close();
   emit({
     type: 'stream_event',
@@ -112,45 +136,6 @@ if (mode === 'sleep' || mode === 'stubborn') {
       },
     },
   });
-  if (mode === 'delegate') {
-    // The main conversation starts a sub-agent (Agent tool); the sub-agent's own messages
-    // carry parent_tool_use_id and never become answer text (ADR 0014).
-    emit({
-      type: 'assistant',
-      parent_tool_use_id: null,
-      message: {
-        content: [
-          {
-            type: 'tool_use',
-            id: 'toolu_agent_1',
-            name: 'Agent',
-            input: {
-              description: 'Livros 1–60',
-              prompt: 'Liste as obras citadas',
-              subagent_type: 'pesquisador',
-            },
-          },
-        ],
-      },
-    });
-    emit({
-      type: 'stream_event',
-      parent_tool_use_id: 'toolu_agent_1',
-      event: {
-        type: 'content_block_delta',
-        index: 0,
-        delta: {
-          type: 'text_delta',
-          text: 'Relatório interno do sub-agente. ',
-        },
-      },
-    });
-    emit({
-      type: 'stream_event',
-      parent_tool_use_id: 'toolu_agent_1',
-      event: { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
-    });
-  }
   const deep = args.includes('--model=opus');
   if (mode === 'deepen' && !deep) delta('<<APROFUNDAR>> faltou a lista');
   else if (mode === 'deepen-mid' && !deep) {

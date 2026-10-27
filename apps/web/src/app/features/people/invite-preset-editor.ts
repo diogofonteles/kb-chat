@@ -1,10 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
+  inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   APP_AI_ASSIGNMENTS,
@@ -16,8 +21,10 @@ import {
   THEMES,
   isLentSubscription,
   type AppAi,
+  type AppAiAssignment,
   type Feature,
-  type InvitePreset,
+  type InvitationPreset,
+  type LentSubscription,
   type Topic,
 } from '@kb-chat/contracts';
 import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
@@ -25,14 +32,14 @@ import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
 import { FEATURE_LABELS } from './feature-labels.js';
+import {
+  LEND_COPY,
+  LEND_NOT_OFFERED,
+  NO_LENDING,
+  type Lending,
+} from './lending.js';
 
-type PresetAppAi = InvitePreset['ai']['appAi'];
-type InitialPreferences = InvitePreset['preferences'];
-
-/** A preset never lends a subscription (KBC-028 BR-2): only these are offered. */
-const PRESET_APP_AIS = APP_AI_ASSIGNMENTS.filter(
-  (id): id is PresetAppAi => !isLentSubscription(id),
-);
+type InitialPreferences = InvitationPreset['preferences'];
 
 const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
   on ? [...new Set([...values, value])] : values.filter((v) => v !== value);
@@ -59,14 +66,27 @@ let nextId = 0;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class InvitePresetEditor {
-  readonly preset = input.required<InvitePreset>();
+  readonly preset = input.required<InvitationPreset>();
   readonly topics = input.required<readonly Topic[]>();
   /** The house default app AI (KBC-022), named in the "Padrão" option. */
   readonly defaultAppAi = input<AppAi | null>(null);
   readonly busy = input(false);
-  readonly changed = output<InvitePreset>();
+  /**
+   * The owner's subscriptions this invitation may lend (KBC-031); a profile never gets any,
+   * so its editor keeps the default (none).
+   */
+  readonly lending = input<Lending>(NO_LENDING);
+  readonly changed = output<InvitationPreset>();
   /** True while a typed number is not kept: the invitation or profile waits (design D4). */
   readonly invalidChange = output<boolean>();
+  /** True while a subscription waits for its terms: the invitation says why it waits. */
+  readonly lendPending = output<boolean>();
+
+  private readonly injector = inject(Injector);
+  private readonly appAiSelect =
+    viewChild<ElementRef<HTMLSelectElement>>('appAiSelect');
+  private readonly cancelLendButton =
+    viewChild<ElementRef<HTMLButtonElement>>('cancelLendButton');
 
   protected readonly uid = `preset-${nextId++}`;
   protected readonly isMaster = computed(() => this.preset().role === 'master');
@@ -83,12 +103,48 @@ export class InvitePresetEditor {
       checked: this.isMaster() || this.preset().features.includes(id),
     })),
   );
+  /** The owner's subscriptions join while each can be lent now (KBC-031 BR-4). */
   protected readonly appAis = computed(() =>
-    PRESET_APP_AIS.map((id) => ({
+    APP_AI_ASSIGNMENTS.filter((id) => this.offered(id)).map((id) => ({
       id,
       label: assignmentLabel(id, this.defaultAppAi()),
     })),
   );
+  /** Lending waits for the terms of that subscription (KBC-024 BR-2, KBC-031 BR-2). */
+  protected readonly confirmingLend = signal<LentSubscription | null>(null);
+  protected readonly lendCopy = computed(() => {
+    const kind = this.confirmingLend();
+    return kind ? LEND_COPY[kind] : null;
+  });
+  protected readonly canLend = computed(() => this.lending().canLend);
+  /** The choice the field shows: the subscription waiting for its terms, else the preset's. */
+  protected readonly shownAppAi = computed(
+    () => this.confirmingLend() ?? this.preset().ai.appAi,
+  );
+  /** Why the owner does not see a subscription now (KBC-031, design R1-5). */
+  protected readonly notOffered = computed(() => {
+    if (!this.lending().canLend) return [];
+    return (['claude-subscription', 'chatgpt-subscription'] as const)
+      .filter((kind) => !this.offered(kind))
+      .map((kind) => ({
+        kind,
+        id: `${this.uid}-not-offered-${kind}`,
+        text: LEND_NOT_OFFERED[kind](),
+      }));
+  });
+  /** The field is described by its hint and by why a subscription is missing (NG-30). */
+  protected readonly appAiDescribedBy = computed(() =>
+    [`${this.uid}-ai-hint`, ...this.notOffered().map((note) => note.id)].join(
+      ' ',
+    ),
+  );
+  /** Which subscription's terms were confirmed for this invitation, said in a live region. */
+  protected readonly confirmedCopy = computed(() => {
+    const { appAi, subscriptionTermsAccepted } = this.preset().ai;
+    return isLentSubscription(appAi) && subscriptionTermsAccepted === true
+      ? LEND_COPY[appAi].confirmedForInvite()
+      : null;
+  });
   /** The default collection is one of those granted (BR-4); a master sees them all. */
   protected readonly defaultTopics = computed(() =>
     this.collections().filter((topic) => topic.checked),
@@ -140,16 +196,55 @@ export class InvitePresetEditor {
     this.emit({ features: toggled(this.preset().features, feature, on) });
   }
 
+  private offered(id: AppAiAssignment): boolean {
+    if (!isLentSubscription(id) || this.preset().ai.appAi === id) return true;
+    const { canLend, lendable } = this.lending();
+    return canLend && lendable[id];
+  }
+
   protected chooseAppAi(value: string): void {
-    const appAi = pick(PRESET_APP_AIS, value);
-    if (!appAi) return;
+    const appAi = pick(APP_AI_ASSIGNMENTS, value);
+    if (!appAi || !this.offered(appAi)) return;
+    if (isLentSubscription(appAi)) {
+      // The confirmation opens with focus on the safe choice (WCAG 2.4.3, design D5).
+      this.confirmingLend.set(appAi);
+      this.reportValidity();
+      this.focusAfterRender(() => this.cancelLendButton());
+      return;
+    }
+    this.confirmingLend.set(null);
     // Without an app AI the limits are off: a pending bad number no longer holds anything.
     if (appAi === 'none') {
       this.dailyError.set(null);
       this.capError.set(null);
-      this.reportValidity();
     }
-    this.emitAi({ appAi });
+    this.reportValidity();
+    // Another choice never carries the terms confirmed for a subscription.
+    this.emitAi({ appAi, subscriptionTermsAccepted: undefined });
+  }
+
+  protected lend(): void {
+    const kind = this.confirmingLend();
+    if (!kind) return;
+    this.confirmingLend.set(null);
+    this.reportValidity();
+    this.emitAi({ appAi: kind, subscriptionTermsAccepted: true });
+    this.focusAfterRender(() => this.appAiSelect());
+  }
+
+  /** Back to the preset's choice, with focus on the field. */
+  protected cancelLend(): void {
+    this.confirmingLend.set(null);
+    this.reportValidity();
+    this.focusAfterRender(() => this.appAiSelect());
+  }
+
+  private focusAfterRender(
+    target: () => ElementRef<HTMLElement> | undefined,
+  ): void {
+    afterNextRender(() => target()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   protected setEnforced(enforced: boolean): void {
@@ -198,19 +293,29 @@ export class InvitePresetEditor {
     this.emit({}, { theme: pick(THEMES, value) });
   }
 
+  /** A bad number or a lending not yet confirmed holds the invitation (design D4). */
   private reportValidity(): void {
+    const pending = this.confirmingLend() !== null;
     this.invalidChange.emit(
-      this.dailyError() !== null || this.capError() !== null,
+      this.dailyError() !== null || this.capError() !== null || pending,
     );
+    this.lendPending.emit(pending);
   }
 
-  private emitAi(patch: Partial<InvitePreset['ai']>): void {
-    this.emit({ ai: { ...this.preset().ai, ...patch } });
+  /** The terms flag goes up only while it is set: another AI never carries it. */
+  private emitAi(patch: Partial<InvitationPreset['ai']>): void {
+    const { subscriptionTermsAccepted, ...ai } = {
+      ...this.preset().ai,
+      ...patch,
+    };
+    this.emit({
+      ai: subscriptionTermsAccepted ? { ...ai, subscriptionTermsAccepted } : ai,
+    });
   }
 
   /** "Sem preferência" drops the key: the person's Settings keep their own default. */
   private emit(
-    patch: Partial<InvitePreset>,
+    patch: Partial<InvitationPreset>,
     preferences: Partial<InitialPreferences> = {},
   ): void {
     const merged = { ...this.preset().preferences, ...preferences };

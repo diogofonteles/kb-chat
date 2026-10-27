@@ -163,4 +163,27 @@ describe('conversations contract', () => {
       parsed.kind === 'search' && parsed.asks[0]?.filters.authorships,
     ).toEqual([]);
   });
+
+  it('KBC-029: keeps a pending and a failed turn, and says so in the summary', () => {
+    const [turn] = research.kind === 'research' ? research.turns : [];
+    const pending = { ...turn, id: base.id, status: 'pending', answer: '' };
+    const failed = {
+      ...turn,
+      id: base.id,
+      status: 'failed',
+      error: 'INTERNAL',
+    };
+    const withTurn = (t: unknown) =>
+      conversationSchema.parse({ ...research, turns: [t] });
+    expect(summarizeConversation(withTurn(pending)).status).toBe('pending');
+    expect(summarizeConversation(withTurn(failed)).status).toBe('failed');
+    expect(
+      summarizeConversation(withTurn({ ...turn, interrupted: true })).status,
+    ).toBe('interrupted');
+    expect(summarizeConversation(research)).not.toHaveProperty('status');
+    expect(summarizeConversation(search)).not.toHaveProperty('status');
+    expect(
+      savedResearchTurnSchema.safeParse({ ...turn, status: 'running' }).success,
+    ).toBe(false);
+  });
 });

@@ -1,3 +1,9 @@
+import { setTimeout as sleep } from 'node:timers/promises';
+import {
+  BATCH_PROMPT_START,
+  CONDENSE_PROMPT_START,
+  PLAN_SWEEP_TOOL,
+} from '../modules/research/index.js';
 import type {
   AgentChunk,
   AgentLlmPort,
@@ -35,40 +41,83 @@ export interface StubLlmOptions {
   readonly script?: readonly StubReply[];
   /** Cost reported per agent call; default: US$ 1 per million tokens. */
   readonly usdPerCall?: number;
+  /** How its turns are paid; default per token (a subscription in tests of that path). */
+  readonly billing?: AgentLlmPort['billing'];
   /** The model name it reports; default "stub/model". */
   readonly model?: string;
   /** What the forced last call (toolChoice "none") writes; default: an answer citing [n]. */
   readonly finalText?: string;
-  /** A sub-researcher's replies by call position in its own conversation (ADR 0014). */
-  readonly subScript?: readonly StubReply[];
+  /** Its price per token; default US$ 1 per million (a zero price is a free model). */
+  readonly price?: LlmPrice;
+  /** What a sweep batch call writes (KBC-030); default: one finding on its first document. */
+  readonly batchReply?: (user: string) => string;
   /** Milliseconds each agent call waits before replying (parallelism tests). */
   readonly callDelayMs?: number;
 }
 
-/** How a sub-researcher's system prompt starts (prompt.ts, subAgentSystemPrompt). */
-const SUB_AGENT_PROMPT = 'Você é um sub-pesquisador';
+/** A sweep's batch or condensing call (KBC-030): no tools, findings as lines. */
+const isBatch = (messages: AgentHistory): boolean => {
+  const system = messages[0]?.content ?? '';
+  return (
+    system.startsWith(BATCH_PROMPT_START) ||
+    system.startsWith(CONDENSE_PROMPT_START)
+  );
+};
 
-const isSubAgent = (messages: AgentHistory): boolean =>
-  messages[0]?.content.startsWith(SUB_AGENT_PROMPT) ?? false;
+/**
+ * A question with this marker makes each sweep batch take a moment (E2E only), so the
+ * estimate and the progress can be seen (KBC-030).
+ */
+export const STUB_SLOW_SWEEP = '[varredura lenta]';
+const SLOW_BATCH_MS = 700;
 
-/** The default orchestrator's first move when it may delegate: two tasks on the question. */
-function delegateReply(question: string): StubReply {
+const batchDelay = (messages: AgentHistory): number =>
+  isBatch(messages) && (messages[1]?.content ?? '').includes(STUB_SLOW_SWEEP)
+    ? SLOW_BATCH_MS
+    : 0;
+
+/** The default exhaustive orchestrator (KBC-030): it plans the whole topic at once. */
+function planReply(question: string): StubReply {
   return {
     toolCalls: [
       {
-        name: 'delegate',
-        arguments: {
-          tasks: [
-            { title: 'Primeira parte', task: question },
-            { title: 'Segunda parte', task: question },
-          ],
-        },
+        name: PLAN_SWEEP_TOOL,
+        arguments: { target: {}, extract: question.slice(0, 1000) || 'tudo' },
       },
     ],
   };
 }
 
+/** One finding on the batch's first document; condensing keeps the lines as they are. */
+function defaultBatchReply(user: string): string {
+  if (user.startsWith('Achados')) return user.split('\n').slice(1).join('\n');
+  const title = /^\[D1\] ([^·\n]+)/m.exec(user)?.[1]?.trim();
+  return title ? `- [D1] “${title}” trata do assunto — “trecho”` : 'NENHUM';
+}
+
 const DEFAULT_ANSWER = 'Segundo o acervo, a natureza é sétupla [1].';
+
+/**
+ * E2E hooks of the stub (KBC-029), in the question: "[lento]" makes each agent call wait
+ * STUB_SLOW_CALL_MS (a turn long enough to reload or stop), "[falha]" makes the call fail.
+ */
+export const STUB_SLOW_MARKER = '[lento]';
+export const STUB_FAIL_MARKER = '[falha]';
+export const STUB_SLOW_CALL_MS = 1500;
+
+async function honorMarkers(question: string, signal: AbortSignal) {
+  if (question.includes(STUB_SLOW_MARKER))
+    await pause(STUB_SLOW_CALL_MS, signal);
+  if (question.includes(STUB_FAIL_MARKER))
+    throw new Error('stub model failure');
+}
+
+const questionOf = (messages: AgentHistory): string =>
+  messages[lastUserIndex(messages)]?.content ?? '';
+
+/** Waits, or less when the turn is stopped meanwhile. */
+const pause = (ms: number, signal: AbortSignal): Promise<void> =>
+  sleep(ms, undefined, { signal }).catch(() => undefined);
 /** A query no document contains, so the default script has to search again (AC-1). */
 export const STUB_NONSENSE_QUERY = 'xqzw kplvm';
 
@@ -123,13 +172,13 @@ const search = (query: string, mode: string): StubReply => ({
   toolCalls: [{ name: 'search_collection', arguments: { query, mode } }],
 });
 
-/** "“Título” trata do assunto [n]" as a sub-researcher's report says it. */
-const REPORTED = /“([^”]+)” trata do assunto \[(\d+)\]/;
+/** "- [n] “Título” trata do assunto" as the sweep's merged findings list it (KBC-030). */
+const FOUND = /^- \[(\d+)\] “([^”]+)” trata do assunto/m;
 
 function finalText(messages: AgentHistory): string {
-  const reported = REPORTED.exec(lastToolOutput(messages));
-  if (reported)
-    return `Segundo o acervo, “${reported[1]}” trata do assunto [${reported[2]}].`;
+  const found = FOUND.exec(messages[lastUserIndex(messages)]?.content ?? '');
+  if (found)
+    return `Segundo o acervo, “${found[2]}” trata do assunto [${found[1]}].`;
   const read = firstReference(messages);
   return read
     ? `Segundo o acervo, “${read.title}” trata do assunto [${read.n}].`
@@ -142,24 +191,29 @@ function finalText(messages: AgentHistory): string {
  */
 export class StubLlmAdapter implements AgentLlmPort {
   readonly model: string;
-  readonly billing = 'per-token' as const;
+  readonly billing: AgentLlmPort['billing'];
   /** Messages of the last call, calls made and tokens handed out, for assertions. */
   lastMessages: readonly AgentMessage[] = [];
   /** Options of every agent call, for assertions (toolChoice, maxTokens). */
   readonly agentCalls: AgentStreamOptions[] = [];
-  /** Sub-researcher calls made, and the most that ran at once (ADR 0014). */
-  subCalls = 0;
+  /** Sweep batch calls made, and the most calls that ran at once (KBC-030). */
+  batchCalls = 0;
   maxActive = 0;
   /** When each agent call started (ms, before any delay): a stop must come before none. */
   readonly callStarts: number[] = [];
-  /** The tool names the orchestrator (not a sub-researcher) saw on its last call. */
+  /** The tool names the orchestrator (not a sweep batch) saw on its last call. */
   lastTools: string[] = [];
+  /** The tool names of every orchestrator call, in order. */
+  readonly toolsSeen: string[][] = [];
+  /** The messages of every orchestrator call, in order. */
+  readonly messagesSeen: (readonly AgentMessage[])[] = [];
   private active = 0;
   calls = 0;
   yielded = 0;
 
   constructor(private readonly options: StubLlmOptions = {}) {
     this.model = options.model ?? 'stub/model';
+    this.billing = options.billing ?? 'per-token';
   }
 
   configured(): boolean {
@@ -171,7 +225,7 @@ export class StubLlmAdapter implements AgentLlmPort {
   }
 
   async price(): Promise<LlmPrice> {
-    return { input: 1e-6, output: 1e-6 };
+    return this.options.price ?? { input: 1e-6, output: 1e-6 };
   }
 
   async balance(): Promise<number | null> {
@@ -207,10 +261,9 @@ export class StubLlmAdapter implements AgentLlmPort {
     tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
-    if (this.options.callDelayMs)
-      await new Promise((resolve) =>
-        setTimeout(resolve, this.options.callDelayMs),
-      );
+    const delay = this.options.callDelayMs ?? batchDelay(messages);
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    await honorMarkers(questionOf(messages), options.signal);
     const reply = this.replyTo(messages, tools, options);
     if ('text' in reply) {
       yield* this.words(reply.text, messages, options);
@@ -232,46 +285,35 @@ export class StubLlmAdapter implements AgentLlmPort {
     };
   }
 
-  /** Records the call and picks the reply: a sub-researcher's, or the orchestrator's. */
+  /** Records the call and picks the reply: a sweep batch's, or the orchestrator's. */
   private replyTo(
     messages: readonly AgentMessage[],
     tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): StubReply {
-    const sub = isSubAgent(messages);
-    if (sub) this.subCalls += 1;
-    else {
-      this.lastMessages = [...messages];
-      this.lastTools = tools.map((tool) => tool.name);
-    }
     this.calls += 1;
     this.agentCalls.push(options);
-    const canDelegate = tools.some((tool) => tool.name === 'delegate');
-    return sub
-      ? this.subReply(messages, options)
-      : this.reply(messages, { ...options, canDelegate });
-  }
-
-  private subReply(
-    messages: AgentHistory,
-    options: AgentStreamOptions,
-  ): StubReply {
-    if (options.toolChoice === 'none') return { text: finalText(messages) };
-    const scripted = this.options.subScript;
-    if (!scripted) return defaultReply(messages);
-    return scripted[callsInTurn(messages)] ?? { text: finalText(messages) };
+    if (isBatch(messages)) {
+      this.batchCalls += 1;
+      const user = messages[1]?.content ?? '';
+      return { text: (this.options.batchReply ?? defaultBatchReply)(user) };
+    }
+    this.lastMessages = [...messages];
+    this.lastTools = tools.map((tool) => tool.name);
+    this.toolsSeen.push(this.lastTools);
+    this.messagesSeen.push(this.lastMessages);
+    const canPlan = tools.some((tool) => tool.name === PLAN_SWEEP_TOOL);
+    return this.reply(messages, { ...options, canPlan });
   }
 
   private reply(
     messages: AgentHistory,
-    options: AgentStreamOptions & { readonly canDelegate: boolean },
+    options: AgentStreamOptions & { readonly canPlan: boolean },
   ): StubReply {
     if (options.toolChoice === 'none')
       return { text: this.options.finalText ?? finalText(messages) };
-    if (!this.options.script && options.canDelegate)
-      return callsInTurn(messages) === 0
-        ? delegateReply(messages[lastUserIndex(messages)]?.content ?? '')
-        : { text: finalText(messages) };
+    if (!this.options.script && options.canPlan)
+      return planReply(messages[lastUserIndex(messages)]?.content ?? '');
     if (!this.options.script) return defaultReply(messages);
     return (
       this.options.script[callsInTurn(messages)] ?? {

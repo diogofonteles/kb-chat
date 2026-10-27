@@ -193,11 +193,14 @@ describe('ChatPage research view (KBC-008)', () => {
     const page = await renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Cabala' }));
     await page.fixture.whenStable();
-    expect(page.api.research).toHaveBeenCalledWith('hermetismo', {
-      question: 'O que o acervo diz sobre Cabala?',
-      history: [],
-      profile: 'fast',
-    });
+    expect(page.api.research).toHaveBeenCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'O que o acervo diz sobre Cabala?',
+        history: [],
+        profile: 'fast',
+      }),
+    );
   });
 
   it('asks with the profile of the "Rápido | Profundo" toggle (KBC-011)', async () => {
@@ -213,11 +216,14 @@ describe('ChatPage research view (KBC-008)', () => {
       screen.getByText(/Pesquisa mais e usa o modelo mais forte/),
     ).toBeTruthy();
     await send(page, 'quais são os 5 princípios ocultos', 'Perguntar');
-    expect(page.api.research).toHaveBeenLastCalledWith('hermetismo', {
-      question: 'quais são os 5 princípios ocultos',
-      history: [],
-      profile: 'deep',
-    });
+    expect(page.api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'quais são os 5 princípios ocultos',
+        history: [],
+        profile: 'deep',
+      }),
+    );
   });
 
   it('offers the exhaustive profile with its help, and asks with it (KBC-017 AC-9)', async () => {
@@ -228,11 +234,14 @@ describe('ChatPage research view (KBC-008)', () => {
       screen.getByText(/Varre o acervo inteiro.*pode levar vários minutos/),
     ).toBeTruthy();
     await send(page, 'todas as obras citadas pelo autor', 'Perguntar');
-    expect(page.api.research).toHaveBeenLastCalledWith('hermetismo', {
-      question: 'todas as obras citadas pelo autor',
-      history: [],
-      profile: 'exhaustive',
-    });
+    expect(page.api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'todas as obras citadas pelo autor',
+        history: [],
+        profile: 'exhaustive',
+      }),
+    );
   });
 
   it('moves focus to the question box after "Parar"', async () => {
