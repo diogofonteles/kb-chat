@@ -139,9 +139,10 @@ async function drawMarks(
       const box = document.createElement('div');
       box.style.cssText = `position:absolute;left:${item.x - 5}px;top:${item.y - 5}px;width:${item.width + 10}px;height:${item.height + 10}px;box-sizing:border-box;border:3px solid #c2410c;border-radius:12px;box-shadow:0 0 0 2px #fff`;
       const badge = document.createElement('div');
-      badge.textContent = String(item.n);
+      // Letters, not numbers: the numbered steps in the text are another thing.
+      badge.textContent = 'ABCDEFGHI'.charAt(item.n - 1);
       badge.style.cssText =
-        'position:absolute;right:-15px;top:-15px;width:28px;height:28px;border-radius:50%;background:#c2410c;color:#fff;font:700 15px/28px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff';
+        'position:absolute;right:-15px;top:-15px;width:28px;height:28px;border-radius:7px;background:#1f1e1c;color:#fff;font:700 15px/28px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff';
       box.append(badge);
       layer.append(box);
     }
@@ -179,6 +180,8 @@ export class Shooter {
       readonly clip?: Locator;
       /** False for a passing state (a sweep's progress) that would end while settling. */
       readonly settle?: boolean;
+      /** Page space kept around `clip`, so a mark at its edge never covers the content. */
+      readonly margin?: number;
     } = {},
   ): Promise<void> {
     if (options.settle !== false) await settled(page);
@@ -186,7 +189,9 @@ export class Shooter {
     await page.evaluate(() =>
       (document.activeElement as HTMLElement | null)?.blur(),
     );
-    const clip = options.clip ? await this.clipOf(page, options.clip) : null;
+    const clip = options.clip
+      ? await this.clipOf(page, options.clip, options.margin ?? 0)
+      : null;
     await drawMarks(page, options.marks ?? [], clip);
     const png = await page.screenshot({
       animations: 'disabled',
@@ -221,19 +226,29 @@ export class Shooter {
     writeFileSync(MANIFEST, this.manifest());
   }
 
-  private async clipOf(page: Page, target: Locator): Promise<Box> {
+  private async clipOf(
+    page: Page,
+    target: Locator,
+    margin: number,
+  ): Promise<Box> {
     const box = await target.boundingBox({ timeout: 10_000 });
     if (!box) throw new Error('the clip region is not on the screen');
     const viewport = page.viewportSize();
     if (!viewport) throw new Error('no viewport');
-    // Inside the viewport, in whole pixels.
-    const x = Math.max(0, Math.floor(box.x));
-    const y = Math.max(0, Math.floor(box.y));
+    // With the margin, inside the viewport, in whole pixels.
+    const x = Math.max(0, Math.floor(box.x - margin));
+    const y = Math.max(0, Math.floor(box.y - margin));
     return {
       x,
       y,
-      width: Math.min(viewport.width - x, Math.ceil(box.width)),
-      height: Math.min(viewport.height - y, Math.ceil(box.height)),
+      width: Math.min(
+        viewport.width - x,
+        Math.ceil(box.x + box.width + margin) - x,
+      ),
+      height: Math.min(
+        viewport.height - y,
+        Math.ceil(box.y + box.height + margin) - y,
+      ),
     };
   }
 
@@ -285,4 +300,20 @@ export class Shooter {
       '',
     ].join('\n');
   }
+}
+
+/**
+ * Scrolls the nearest scrolling box (a dialog's content) so that `target` starts at its top,
+ * without moving the dialog itself as `scrollIntoView` may.
+ */
+export async function scrollToTop(target: Locator): Promise<void> {
+  await target.evaluate((element) => {
+    let box = element.parentElement;
+    while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY))
+      box = box.parentElement;
+    if (!box) return;
+    const offset =
+      element.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTop += offset - 16;
+  });
 }

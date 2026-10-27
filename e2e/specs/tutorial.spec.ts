@@ -51,7 +51,7 @@ test.describe('signed out', () => {
       await expect(
         page.getByRole('heading', { level: 2, name: section }),
       ).toBeAttached();
-    const images = page.locator('main img');
+    const images = page.getByRole('img');
     expect(await images.count()).toBeGreaterThanOrEqual(15);
     for (const image of await images.all()) {
       await image.scrollIntoViewIfNeeded();
@@ -158,7 +158,10 @@ test('AC-4: with the document panel open on a narrow desktop, the help stays vis
     await page.getByRole('radio', { name: 'Buscar documentos' }).check();
     await page.getByLabel('Sua pergunta').fill('ritmo');
     await page.getByRole('button', { name: 'Buscar' }).click();
-    await page.locator('[data-doc-id]').first().click();
+    await page
+      .getByRole('button', { name: /A Lei do Ritmo/ })
+      .first()
+      .click();
     await expect(page.locator('app-document-panel')).toBeVisible();
     const help = page.getByRole('link', {
       name: 'Como usar a Nova Alexandria (abre em nova aba)',

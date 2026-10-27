@@ -9,7 +9,14 @@ import {
   type BrowserContext,
   type Page,
 } from '@playwright/test';
-import { CSRF, OUT_DIR, Shooter, fakeGoogle, signIn } from './capture-kit.js';
+import {
+  CSRF,
+  OUT_DIR,
+  Shooter,
+  fakeGoogle,
+  scrollToTop,
+  signIn,
+} from './capture-kit.js';
 
 /**
  * The tutorial's screenshots (KBC-032), against the E2E server: the fixture vault, fake AI
@@ -458,6 +465,7 @@ test('research with AI', async ({ browser }) => {
   await ana.getByRole('radio', { name: 'Exaustivo' }).check({ force: true });
   await shooter.shoot(ana, 'research-profiles', {
     clip: ana.locator('.composer-dock'),
+    margin: 12,
     marks: [
       { n: 1, target: ana.getByRole('group', { name: 'Tipo de pesquisa' }) },
       { n: 2, target: ana.getByRole('button', { name: 'Perguntar' }) },
@@ -699,7 +707,11 @@ test('administrators', async ({ browser }) => {
     .getByLabel('Qual IA atende a pessoa')
     .selectOption({ label: 'Claude do administrador' });
   const confirm = dialog.getByRole('button', { name: 'Ceder assim mesmo' });
-  await confirm.scrollIntoViewIfNeeded();
+  await scrollToTop(
+    dialog.getByText(
+      /Ceder a assinatura do Claude a quem você está convidando/,
+    ),
+  );
   await shooter.shoot(page, 'lend-subscription', {
     clip: dialog,
     marks: [

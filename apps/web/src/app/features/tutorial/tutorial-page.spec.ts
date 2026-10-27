@@ -21,13 +21,12 @@ async function renderTutorial(url = '/tutorial') {
   return result;
 }
 
-const images = (container: Element): HTMLImageElement[] => [
-  ...container.querySelectorAll('img'),
-];
+const images = (): HTMLImageElement[] =>
+  screen.getAllByRole<HTMLImageElement>('img');
 
 describe('TutorialPage (KBC-032)', () => {
   it('has a title and one section per table-of-contents entry, with its anchor (AC-1, AC-3)', async () => {
-    const { container } = await renderTutorial();
+    await renderTutorial();
 
     expect(
       screen.getByRole('heading', {
@@ -44,16 +43,18 @@ describe('TutorialPage (KBC-032)', () => {
       expect(links[index]?.getAttribute('href')).toBe(
         `/tutorial#${section.id}`,
       );
-      const heading = container.querySelector(`#${section.id}`);
-      expect(heading?.tagName, section.id).toBe('H2');
-      expect(heading?.textContent?.trim()).toBe(section.title);
+      expect(
+        screen
+          .getByRole('heading', { level: 2, name: section.title })
+          .getAttribute('id'),
+      ).toBe(section.id);
     }
   });
 
   it('shows every captured picture once, each with a meaningful text alternative (AC-3)', async () => {
-    const { container } = await renderTutorial();
+    await renderTutorial();
 
-    const shown = images(container);
+    const shown = images();
     const sources = shown.map((image) => image.getAttribute('src'));
     expect([...sources].sort()).toEqual(
       Object.values(TUTORIAL_IMAGES)
@@ -71,14 +72,19 @@ describe('TutorialPage (KBC-032)', () => {
   });
 
   it('marks the administrators section as only for them', async () => {
-    const { container } = await renderTutorial();
+    await renderTutorial();
 
-    const admins = container.querySelector('section:has(#administradores)');
-    expect(admins?.textContent).toContain('Só para administradores');
+    const heading = screen.getByRole('heading', {
+      level: 2,
+      name: 'Para administradores',
+    });
+    const label = screen.getByText('Só para administradores');
+    // Right under the section title.
+    expect(heading.nextElementSibling).toBe(label);
   });
 
   it('keeps the pictures under 3 MB and loads lazily all but the first ones (AC-5)', async () => {
-    const { container } = await renderTutorial();
+    await renderTutorial();
 
     const total = Object.values(TUTORIAL_IMAGES).reduce(
       (sum, image) => sum + image.bytes,
@@ -87,7 +93,7 @@ describe('TutorialPage (KBC-032)', () => {
     expect(total).toBeGreaterThan(0);
     expect(total).toBeLessThan(MAX_IMAGE_BYTES);
     // The first picture on a desktop (home) and on a phone (login) come at once.
-    const [home, login, ...rest] = images(container);
+    const [home, login, ...rest] = images();
     expect(home?.getAttribute('loading')).not.toBe('lazy');
     expect(login?.getAttribute('src')).toBe(TUTORIAL_IMAGES.login.src);
     expect(login?.getAttribute('loading')).not.toBe('lazy');
