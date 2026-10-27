@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   inviteProfileSchema,
-  type InvitePreset,
+  type InvitationPreset,
   type InviteProfile,
   type InviteProfileCreate,
   type InviteProfileUpdate,
@@ -68,9 +68,9 @@ export class InviteProfilesService {
 
   /** The preset an invitation uses: the one sent, the profile named, the default, or none. */
   presetFor(request: {
-    readonly preset?: InvitePreset;
+    readonly preset?: InvitationPreset;
     readonly profileId?: string;
-  }): InvitePreset | undefined {
+  }): InvitationPreset | undefined {
     if (request.preset) return request.preset;
     if (request.profileId) return this.find(request.profileId).preset;
     return this.document.profiles.find((p) => p.isDefault)?.preset;

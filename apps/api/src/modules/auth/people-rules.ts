@@ -1,4 +1,4 @@
-import type { InvitePreset } from '@kb-chat/contracts';
+import type { InvitationPreset } from '@kb-chat/contracts';
 import {
   DEFAULT_INVITE_FEATURES,
   FEATURES,
@@ -211,7 +211,7 @@ export function update(
 /** What applying a preset changes (KBC-028): access and AI, and maybe the first preferences. */
 export interface PresetChange {
   readonly id: string;
-  readonly preset: InvitePreset;
+  readonly preset: InvitationPreset;
   readonly context: AiChangeContext;
   /** False for someone who saved their own preferences: theirs stay (BR-6). */
   readonly withPreferences: boolean;
