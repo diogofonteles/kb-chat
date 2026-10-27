@@ -191,7 +191,14 @@ async function registerResearch(
     spendRoutes({ serviceFor: spendFor, ledger, people: () => spenders(deps) }),
   );
   const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
-  await app.register(researchRoutes({ runner, hasTopic, ...recording }));
+  await app.register(
+    researchRoutes({
+      runner,
+      hasTopic,
+      ratePerMinute: deps.config.RESEARCH_RATE_LIMIT,
+      ...recording,
+    }),
+  );
 }
 
 /** Everyone who has signed in, with the principal their spend is kept under. */

@@ -36,6 +36,8 @@ export interface ResearchRouteOptions {
   readonly turns: LiveTurns;
   /** Where a recorded turn is written as it starts and ends (the conversation history). */
   readonly journal: TurnJournal;
+  /** Research turns per minute per client (RESEARCH_RATE_LIMIT). */
+  readonly ratePerMinute: number;
 }
 
 /** The history as the research routes write to it (KBC-029); the conversations module. */
@@ -55,8 +57,6 @@ export interface TurnJournal {
   ): Promise<void>;
 }
 
-/** Each answer may cost money: a low per-client rate (ND-22). */
-const RATE_PER_MINUTE = 20;
 /** Following or stopping a turn costs nothing, but each holds a stream or a turn. */
 const TURN_RATE_PER_MINUTE = 60;
 
@@ -86,16 +86,17 @@ const RESEARCH_ACCESS: RouteAccess = {
   feature: 'research',
 };
 
-const researchOptions = {
+/** Each answer may cost money: a low per-client rate (ND-22, RESEARCH_RATE_LIMIT). */
+const researchOptions = (ratePerMinute: number) => ({
   config: {
     access: RESEARCH_ACCESS,
-    rateLimit: { max: RATE_PER_MINUTE, timeWindow: '1 minute' },
+    rateLimit: { max: ratePerMinute, timeWindow: '1 minute' },
   },
   schema: {
     params: z.object({ topic: topicSlugSchema }),
     body: researchRequestSchema,
   },
-};
+});
 
 interface ResearchCall {
   readonly topic: string;
@@ -276,7 +277,7 @@ export const researchRoutes =
       .withTypeProvider<ZodTypeProvider>()
       .post(
         '/api/v1/topics/:topic/research',
-        researchOptions,
+        researchOptions(options.ratePerMinute),
         (request, reply) =>
           handleResearch(
             options,
