@@ -158,6 +158,23 @@ type FullDeps = AppDeps & {
   conversations: ConversationStorePort;
 };
 
+/** The runner of a person's turn: a fixed model in tests, else the provider in Settings. */
+function researchRunnerOf(deps: FullDeps) {
+  const { ai, agent, llm } = deps;
+  return (
+    principal: string,
+    profile: ResearchProfile = 'fast',
+  ): ResearchRunnerPort =>
+    llm
+      ? agent.perTokenRunner(llm, spendScopeOf(deps, principal))
+      : ai.registry.researchRunner(principal, profile);
+}
+
+const spendScopeOf = (deps: FullDeps, principal: string) => ({
+  principal,
+  dailyCapUsd: () => deps.ai.registry.dailyCapUsd(principal),
+});
+
 /**
  * The research agent (ADR 0006) with the runner of the current provider, asked per turn
  * (ADR 0007), and the spend controls it shares with the side panel: per-token turns check
@@ -168,23 +185,13 @@ async function registerResearch(
   deps: FullDeps,
   recording: Pick<ResearchRouteOptions, 'turns' | 'journal'>,
 ): Promise<void> {
-  const { ai, agent, ledger, catalog, llm } = deps;
-  const scopeOf = (principal: string) => ({
-    principal,
-    dailyCapUsd: () => ai.registry.dailyCapUsd(principal),
-  });
-  const runner = (
-    principal: string,
-    profile: ResearchProfile = 'fast',
-  ): ResearchRunnerPort =>
-    llm
-      ? agent.perTokenRunner(llm, scopeOf(principal))
-      : ai.registry.researchRunner(principal, profile);
+  const { ai, ledger, catalog, llm } = deps;
+  const runner = researchRunnerOf(deps);
   const spendFor = (principal: string) =>
     new SpendService({
       llm: llm ?? ai.registry.llm(principal),
       ledger,
-      ...scopeOf(principal),
+      ...spendScopeOf(deps, principal),
       configured: () => runner(principal).configured(),
     });
   await app.register(
