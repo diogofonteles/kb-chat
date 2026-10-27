@@ -58,6 +58,13 @@ async function shoot(page: Page, name: string, part?: Locator): Promise<void> {
   expect(sideways, `${name}: no horizontal scroll`).toEqual([]);
 }
 
+/**
+ * A profile name no parallel worker repeats: desktop and mobile can start in the same
+ * millisecond on the shared E2E server (KBC-033 QA).
+ */
+const profileName = () =>
+  `Aluno ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
 const profiles = (dialog: Locator) =>
   dialog.getByRole('region', { name: /Perfis de convite/ });
 
@@ -103,7 +110,7 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
   page,
   browser,
 }) => {
-  const name = `Aluno ${Date.now().toString(36)}`;
+  const name = profileName();
   const email = uniqueEmail('aluno');
   const dialog = await openPeople(page);
   await createAluno(dialog, name);
@@ -149,7 +156,7 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
 test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on someone there', async ({
   page,
 }) => {
-  const name = `Aluno ${Date.now().toString(36)}b`;
+  const name = profileName();
   const adjusted = uniqueEmail('ajustado');
   const existing = uniqueEmail('existente');
   const dialog = await openPeople(page);
