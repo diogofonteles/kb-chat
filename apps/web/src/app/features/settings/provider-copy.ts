@@ -3,16 +3,27 @@ import type {
   AiTestCode,
   DefaultView,
   ProviderBilling,
+  ProviderUnavailableReason,
   Theme,
 } from '@kb-chat/contracts';
+
+/**
+ * Reasons that block a card (BR-3): a missing key is typed in the card itself, and another
+ * person's subscription is never shown (T6).
+ */
+export type BlockingReason = Exclude<
+  ProviderUnavailableReason,
+  'key-missing' | 'owner-only'
+>;
 
 export interface ProviderCopy {
   readonly name: () => string;
   readonly description: () => string;
-  /** How to install and log in, for a subscription whose CLI is missing (BR-3). */
-  readonly install?: () => string;
-  /** Why it is off and how to turn it on, for a provider off on this server. */
-  readonly enable?: () => string;
+  /**
+   * What to do, per reason the card is blocked for: install and log in (`cli-missing`), turn
+   * it on (`not-enabled`, `house-off`), log in on the server, ask a master (KBC-031).
+   */
+  readonly steps?: Partial<Record<BlockingReason, () => string>>;
   /** The cost badge when the billing alone would mislead (free tiers, KBC-023). */
   readonly billing?: () => string;
 }
@@ -23,30 +34,55 @@ export const NOT_INSTALLED = () => $localize`:@@ai.notInstalled:Não instalado.`
 export const NOT_ENABLED = () => $localize`:@@ai.notEnabled:Desativado.`;
 export const NOT_LENT = () => $localize`:@@ai.notLent:Não liberada.`;
 
+/** The short label of a blocked card, before its steps (BR-3, KBC-031). */
+export const BLOCKED_LABEL: Record<BlockingReason, () => string> = {
+  'cli-missing': NOT_INSTALLED,
+  'not-enabled': NOT_ENABLED,
+  'house-off': NOT_ENABLED,
+  'login-required': () => $localize`:@@ai.loginRequired:Sem login no servidor.`,
+  'sandbox-unavailable': () =>
+    $localize`:@@ai.sandboxUnavailable:Indisponível no servidor.`,
+  'app-unavailable': NOT_LENT,
+};
+
 /** pt-BR copy of each provider (KBC-007 scope); the API only knows the ids. */
 export const PROVIDER_COPY: Record<AiProvider, ProviderCopy> = {
   app: {
     name: () => $localize`:@@provider.app:IA da aplicação`,
     description: () =>
       $localize`:@@provider.appHint:Cedida pelo administrador: você não configura nada e não paga. Tem um limite de pesquisas por dia.`,
-    enable: () =>
-      $localize`:@@provider.appEnable:Nenhuma IA da aplicação foi liberada para você. Peça a um master, ou use a sua própria IA.`,
+    steps: {
+      'app-unavailable': () =>
+        $localize`:@@provider.appEnable:Nenhuma IA da aplicação foi liberada para você. Peça a um master, ou use a sua própria IA.`,
+    },
   },
   'claude-subscription': {
     name: () => $localize`:@@provider.claude:Assinatura do Claude`,
     description: () =>
       $localize`:@@provider.claudeHint:Usa o Claude Code já logado no servidor da Nova Alexandria, com todo o acervo como ferramenta.`,
-    install: () =>
-      $localize`:@@provider.claudeInstall:Instale o Claude Code (claude.ai/code), abra o Terminal, rode claude e faça /login com a sua conta do Claude.`,
+    steps: {
+      'cli-missing': () =>
+        $localize`:@@provider.claudeInstall:Instale o Claude Code (claude.ai/code), abra o Terminal, rode claude e faça /login com a sua conta do Claude.`,
+    },
   },
   'chatgpt-subscription': {
     name: () => $localize`:@@provider.chatgpt:Assinatura do ChatGPT`,
     description: () =>
-      $localize`:@@provider.chatgptHint:Usa o Codex CLI já logado no servidor da Nova Alexandria.`,
-    install: () =>
-      $localize`:@@provider.chatgptInstall:Instale o Codex CLI (developers.openai.com/codex), rode codex login no Terminal e escolha “Sign in with ChatGPT”.`,
-    enable: () =>
-      $localize`:@@provider.chatgptEnable:Por segurança, fica desligado: o Codex CLI pode ler outros arquivos deste computador. Para usar mesmo assim, inicie o servidor com KB_CHAT_CODEX=on.`,
+      $localize`:@@provider.chatgptHint:Usa a sua assinatura do ChatGPT pelo Codex, rodando no servidor da Nova Alexandria.`,
+    steps: {
+      // The owner's Mac (ADR 0007): Codex runs there only when he asks for it.
+      'cli-missing': () =>
+        $localize`:@@provider.chatgptInstall:Instale o Codex CLI (developers.openai.com/codex), rode codex login no Terminal e escolha “Sign in with ChatGPT”.`,
+      'not-enabled': () =>
+        $localize`:@@provider.chatgptEnable:Por segurança, fica desligado: o Codex CLI pode ler outros arquivos deste computador. Para usar mesmo assim, inicie o servidor com KB_CHAT_CODEX=on.`,
+      // The server (ADR 0020): Codex runs in its own container, turned on by a master.
+      'house-off': () =>
+        $localize`:@@provider.chatgptHouseOff:Ligue em ⚙ Configurações → IA da aplicação → “Ligar a assinatura do ChatGPT (Codex)”.`,
+      'login-required': () =>
+        $localize`:@@provider.chatgptLogin:Entre no servidor por SSH, rode codex login --device-auth (runbook, passo 9c) e reabra esta tela.`,
+      'sandbox-unavailable': () =>
+        $localize`:@@provider.chatgptSandbox:O contêiner do Codex não está configurado ou não respondeu: confira se ele está ligado (runbook, passo 9c).`,
+    },
   },
   anthropic: {
     name: () => $localize`:@@provider.anthropic:Claude (API da Anthropic)`,

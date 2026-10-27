@@ -260,8 +260,14 @@ export type ProviderBilling = z.infer<typeof providerBillingSchema>;
 export const providerUnavailableReasonSchema = z.enum([
   'key-missing',
   'cli-missing',
-  /** Off on this server until the owner enables it (Codex, ADR 0007). */
+  /** Off on this server until the owner enables it (Codex on his Mac, ADR 0007). */
   'not-enabled',
+  /** Off in "IA da aplicação" until a master turns it on (Codex, KBC-027, KBC-031). */
+  'house-off',
+  /** The server's CLI is not logged in (Codex's sandbox says so, KBC-031). */
+  'login-required',
+  /** Codex's sandbox is not configured on this server or did not answer (ADR 0020, KBC-031). */
+  'sandbox-unavailable',
   /** Subscriptions are personal: only the owner's account may use them (KBC-007 BR-6, KBC-010). */
   'owner-only',
   /** No app AI is assigned to this person, or the house account is not connected (KBC-022). */

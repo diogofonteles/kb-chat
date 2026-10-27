@@ -36,32 +36,69 @@ export const presetAiSchema = z.strictObject({
 });
 
 /**
- * Everything an invitation can set up at once (KBC-028): role, collections, features, the
- * app AI and its limits, and the person's initial preferences.
+ * The app AI of the preset sent with one invitation (KBC-031): it may also lend one of the
+ * owner's subscriptions, with the terms confirmed in the same request (ADR 0019).
  */
-export const invitePresetSchema = z
-  .strictObject({
-    role: roleSchema.default('member'),
-    topics: z.array(topicSlugSchema).max(500).default([]),
-    features: z
-      .array(featureSchema)
-      .max(FEATURES.length)
-      .default([...DEFAULT_INVITE_FEATURES]),
-    ai: presetAiSchema.prefault({}),
-    preferences: initialPreferencesSchema.prefault({}),
+export const invitationAiSchema = presetAiSchema
+  .extend({
+    appAi: appAiAssignmentSchema.default('default'),
+    subscriptionTermsAccepted: z.literal(true).optional(),
   })
   .refine(
-    (preset) =>
-      preset.preferences.defaultTopic === undefined ||
-      preset.role === 'master' ||
-      preset.topics.includes(preset.preferences.defaultTopic),
+    (ai) =>
+      !isLentSubscription(ai.appAi) || ai.subscriptionTermsAccepted === true,
     {
-      path: ['preferences', 'defaultTopic'],
-      error: 'The default collection must be one of the collections granted',
+      path: ['subscriptionTermsAccepted'],
+      error: 'Lending a subscription needs its terms confirmed',
     },
   );
+
+const presetFieldsSchema = z.strictObject({
+  role: roleSchema.default('member'),
+  topics: z.array(topicSlugSchema).max(500).default([]),
+  features: z
+    .array(featureSchema)
+    .max(FEATURES.length)
+    .default([...DEFAULT_INVITE_FEATURES]),
+  ai: presetAiSchema.prefault({}),
+  preferences: initialPreferencesSchema.prefault({}),
+});
+
+/** The default collection is one of those granted, unless the person is a master (BR-4). */
+const grantsDefaultTopic = (preset: {
+  readonly role: string;
+  readonly topics: readonly string[];
+  readonly preferences: { readonly defaultTopic?: string };
+}): boolean =>
+  preset.preferences.defaultTopic === undefined ||
+  preset.role === 'master' ||
+  preset.topics.includes(preset.preferences.defaultTopic);
+
+const DEFAULT_TOPIC_ERROR = {
+  path: ['preferences', 'defaultTopic'],
+  error: 'The default collection must be one of the collections granted',
+};
+
+/**
+ * Everything an invitation can set up at once (KBC-028): role, collections, features, the
+ * app AI and its limits, and the person's initial preferences. This is what a profile keeps.
+ */
+export const invitePresetSchema = presetFieldsSchema.refine(
+  grantsDefaultTopic,
+  DEFAULT_TOPIC_ERROR,
+);
 export type InvitePreset = z.infer<typeof invitePresetSchema>;
 export type InvitePresetInput = z.input<typeof invitePresetSchema>;
+
+/**
+ * The preset sent with one invitation ("Configurar agora", KBC-031): a profile's fields, and
+ * its AI may lend a subscription after the terms (never kept in a profile, BR-3).
+ */
+export const invitationPresetSchema = presetFieldsSchema
+  .extend({ ai: invitationAiSchema.prefault({}) })
+  .refine(grantsDefaultTopic, DEFAULT_TOPIC_ERROR);
+export type InvitationPreset = z.infer<typeof invitationPresetSchema>;
+export type InvitationPresetInput = z.input<typeof invitationPresetSchema>;
 
 export const inviteProfileNameSchema = z.string().trim().min(1).max(60);
 
@@ -101,7 +138,7 @@ export type InviteProfileUpdate = z.input<typeof inviteProfileUpdateSchema>;
  */
 export const presetInviteRequestSchema = inviteRequestSchema
   .extend({
-    preset: invitePresetSchema.optional(),
+    preset: invitationPresetSchema.optional(),
     profileId: z.uuid().optional(),
   })
   .refine((request) => !(request.preset && request.profileId), {

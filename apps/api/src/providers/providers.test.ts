@@ -217,6 +217,23 @@ describe('ProviderRegistry', () => {
     );
   });
 
+  it('says the sandbox is missing in production, never the local switch (KBC-031 AC-4, BR-5)', async () => {
+    const reasonOf = async (env: Record<string, string>) => {
+      const ai = await createAiProviders({
+        config: config({ KB_CHAT_LLM: 'stub', ...env }),
+        store: new MemorySettingsStore(),
+        principal: 'owner',
+        env: { PATH: '' },
+      });
+      const items = (await ai.registry.list('owner')).items;
+      return items.find((item) => item.id === 'chatgpt-subscription')?.reason;
+    };
+    expect(await reasonOf({})).toBe('not-enabled');
+    expect(await reasonOf({ HOST: '0.0.0.0' })).toBe('sandbox-unavailable');
+    // On the owner's Mac with Codex on and no binary: still "install it" (today's behavior).
+    expect(await reasonOf({ KB_CHAT_CODEX: 'on' })).toBe('cli-missing');
+  });
+
   it('runs the per-token tool loop it is given (bound to KBC-008 after the merge)', async () => {
     const loop = new DisabledResearchRunner();
     const ai = await createAiProviders({

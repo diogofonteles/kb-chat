@@ -1,4 +1,4 @@
-import type { InvitePreset } from '@kb-chat/contracts';
+import type { InvitationPreset } from '@kb-chat/contracts';
 import { randomUUID } from 'node:crypto';
 import type {
   AppAiAssignment,
@@ -105,7 +105,7 @@ export class PeopleService {
   invite(
     email: string,
     invitedBy: string,
-    preset?: InvitePreset,
+    preset?: InvitationPreset,
   ): Promise<StoredPerson> {
     return this.change((people) => {
       const invited = rules.invite(
@@ -130,7 +130,7 @@ export class PeopleService {
   /** A profile applied to someone already there (KBC-028 FR-4). */
   applyPreset(
     id: string,
-    preset: InvitePreset,
+    preset: InvitationPreset,
     options: { readonly by: string; readonly withPreferences: boolean },
   ): Promise<StoredPerson> {
     const context = { by: options.by, now: this.now() };

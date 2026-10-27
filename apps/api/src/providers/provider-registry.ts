@@ -25,7 +25,7 @@ import { OpenAiAdapter } from '../adapters/openai-adapter.js';
 import { OpenRouterAdapter } from '../adapters/openrouter-adapter.js';
 import { GeminiAdapter } from '../adapters/gemini-adapter.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
-import type { AppConfig } from '../config.js';
+import { isHosted, type AppConfig } from '../config.js';
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import {
   publicLastTest,
@@ -145,6 +145,11 @@ const LOGGED_OUT_PAUSE_MS = 10 * 60 * 1000;
 const CODEX_STATUS_TIMEOUT_MS = 5_000;
 /** Its answer is kept this long: every house view would start a `codex login status`. */
 const CODEX_STATUS_TTL_MS = 30_000;
+/**
+ * A "no" (logged out, or no answer) is kept only this long: once the owner logs in or the
+ * container is back, his card frees itself soon (KBC-031 review R1).
+ */
+const CODEX_STATUS_RETRY_MS = 5_000;
 
 /** A failure that makes a lent subscription unavailable for a while. */
 const pausesLending = (kind: LentSubscription, code: string): boolean =>
@@ -186,6 +191,8 @@ export class ProviderRegistry implements ProviderCatalog {
   private readonly meters = new PaidMeters();
   /** The last answer of Codex's sandbox about the login (CODEX_STATUS_TTL_MS). */
   private codexStatusCache: { status: CodexStatus; at: number } | null = null;
+  /** The question to the sandbox in flight, if any. */
+  private codexStatusRead: Promise<CodexStatus> | null = null;
   /** Until when each lent subscription counts as unavailable after a logged-out CLI. */
   private readonly loggedOutUntil: Record<LentSubscription, number> = {
     'claude-subscription': 0,
@@ -233,14 +240,26 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private subscriptionReady(kind: LentSubscription): boolean {
     if (kind === 'claude-subscription') return this.claudeOnPath;
-    // The sandbox said, less than 30 s ago, that the owner's login is not there: nothing to
-    // lend (QA N-2); an older answer is not trusted (review R3).
+    // The sandbox said lately that the login is not there, or did not answer (KBC-031 BR-4):
+    // nothing to lend (QA N-2); an older answer is not trusted (review R3). Locally there is no
+    // sandbox to ask, so only a "logged out" counts there.
+    const status = this.freshCodexStatus();
+    const notReady =
+      this.codexMode() === 'sandbox'
+        ? status !== null && status.loggedIn !== true
+        : status?.loggedIn === false;
+    return this.codexReady() && !notReady;
+  }
+
+  /** The sandbox's last answer while it still holds: 30 s for "yes", 5 s for anything else. */
+  private freshCodexStatus(): CodexStatus | null {
     const cached = this.codexStatusCache;
-    const loggedOut =
-      cached !== null &&
-      this.now() - cached.at < CODEX_STATUS_TTL_MS &&
-      cached.status.loggedIn === false;
-    return this.codexReady() && !loggedOut;
+    if (!cached) return null;
+    const ttl =
+      cached.status.loggedIn === true
+        ? CODEX_STATUS_TTL_MS
+        : CODEX_STATUS_RETRY_MS;
+    return this.now() - cached.at < ttl ? cached.status : null;
   }
 
   /** Where Codex runs (ADR 0020): its sandbox runner, the owner's Mac (local), or nowhere. */
@@ -257,12 +276,15 @@ export class ProviderRegistry implements ProviderCatalog {
 
   /** "IA da aplicação" > Codex: configured, and whether the owner's login is there. */
   async codexStatus(): Promise<CodexStatus> {
-    const cached = this.codexStatusCache;
-    if (cached && this.now() - cached.at < CODEX_STATUS_TTL_MS)
-      return cached.status;
-    const status = await this.readCodexStatus();
-    this.codexStatusCache = { status, at: this.now() };
-    return status;
+    const fresh = this.freshCodexStatus();
+    if (fresh) return fresh;
+    // Requests at the same time share one question to the sandbox (KBC-031 review R2).
+    this.codexStatusRead ??= this.readCodexStatus().then((status) => {
+      this.codexStatusCache = { status, at: this.now() };
+      this.codexStatusRead = null;
+      return status;
+    });
+    return this.codexStatusRead;
   }
 
   private async readCodexStatus(): Promise<CodexStatus> {
@@ -511,7 +533,7 @@ export class ProviderRegistry implements ProviderCatalog {
     const result = await testConnection({
       choice,
       signal,
-      locate: () => this.locateCli(request.provider),
+      locate: () => this.locateForTest(request.provider),
       llm: () => this.buildLlm(choice, principal),
       runner: () =>
         this.buildRunner(choice, { principal, tools: () => NO_TOOLS }),
@@ -739,22 +761,51 @@ export class ProviderRegistry implements ProviderCatalog {
     );
   }
 
-  private unavailableReason(
+  /**
+   * Where "Testar conexão" finds the CLI: Codex's sandbox runner is in its own container,
+   * never on this PATH (ADR 0020, KBC-031).
+   */
+  private locateForTest(provider: AiProvider): Promise<string | null> {
+    const url = this.options.config.KB_CHAT_CODEX_RUNNER_URL;
+    if (provider === 'chatgpt-subscription' && url)
+      return Promise.resolve(this.codexReady() ? url : null);
+    return this.locateCli(provider);
+  }
+
+  private async unavailableReason(
     principal: string,
     id: AiProvider,
     cliFound: boolean,
-  ): ProviderInfo['reason'] {
+  ): Promise<ProviderInfo['reason']> {
     if (isSubscription(id) && !this.isOwner(principal)) return 'owner-only';
     if (id === 'app') return this.appReason(principal);
     if (id === 'chatgpt-subscription') {
-      if (!this.codexReady()) return 'not-enabled';
-      // In the sandbox, Codex is in its own container, not on this PATH (ADR 0020).
-      if (this.codexMode() === 'sandbox') return null;
+      const codex = await this.codexReason();
+      if (codex !== 'on-path') return codex;
     }
     if (PROVIDERS[id].cliBin && !cliFound) return 'cli-missing';
     if (isKeyProvider(id) && this.keySource(principal, id) === null)
       return 'key-missing';
     return null;
+  }
+
+  /**
+   * Why Codex cannot answer the owner now (KBC-031), in the order a person fixes it: there is
+   * no Codex here, a master has not turned it on, the sandbox has no login or did not answer.
+   * `on-path`: local mode, where only the CLI on PATH is left to check.
+   */
+  private async codexReason(): Promise<ProviderInfo['reason'] | 'on-path'> {
+    const mode = this.codexMode();
+    // Production never offers the local switch: there Codex runs only in its sandbox.
+    if (mode === null)
+      return isHosted(this.options.config)
+        ? 'sandbox-unavailable'
+        : 'not-enabled';
+    if (!this.codexReady()) return 'house-off';
+    if (mode === 'local') return 'on-path';
+    const { loggedIn } = await this.codexStatus();
+    if (loggedIn === null) return 'sandbox-unavailable';
+    return loggedIn ? null : 'login-required';
   }
 
   /** "IA da aplicação" is offered while an app AI is assigned to the person and can answer. */
@@ -766,7 +817,7 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private async info(principal: string, id: AiProvider): Promise<ProviderInfo> {
     const cliFound = (await this.locateCli(id)) !== null;
-    const reason = this.unavailableReason(principal, id, cliFound);
+    const reason = await this.unavailableReason(principal, id, cliFound);
     const defaults = PROVIDERS[id].defaultModels(this.options.config);
     const models = [defaults.fast, defaults.deep, ...PROVIDERS[id].models];
     return {

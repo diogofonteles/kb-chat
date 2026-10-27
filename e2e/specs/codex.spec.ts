@@ -111,3 +111,24 @@ test('AC-5: the owner lends the ChatGPT subscription to one person', async ({
   });
   await owner.dispose();
 });
+
+test('KBC-031 AC-2: once on, the owner picks the ChatGPT card and tests it through the runner', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  await owner.put('/api/v1/house-ai', {
+    data: { codexEnabled: true },
+    headers: CSRF,
+  });
+  await owner.dispose();
+  await page.goto('/');
+  const dialog = await openSettings(page);
+  const card = dialog.getByRole('radio', { name: /Assinatura do ChatGPT/ });
+  await expect(card).toBeEnabled();
+  await expect(dialog.getByText(/Instale o Codex CLI/)).toHaveCount(0);
+  await expect(dialog.getByText(/KB_CHAT_CODEX=on/)).toHaveCount(0);
+  // Picked, not saved: the owner's settings are shared by every spec.
+  await card.check();
+  await dialog.getByRole('button', { name: 'Testar conexão' }).click();
+  await expect(dialog.getByText(/Conexão funcionando/)).toBeVisible();
+});

@@ -40,6 +40,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-027](KBC-027-sandboxed-codex-subscription.md) | Assinatura do ChatGPT (Codex) como IA da aplicação, com sandbox obrigatório (contêiner separado e executor, liga/desliga do master, cessão como a do Claude, prova em CI) | release-1 | done | KBC-007, KBC-022, KBC-024 |
 | [KBC-028](KBC-028-preconfigured-invitation.md) | Convite pré-configurado: IA, permissões e preferências no convite, perfis de convite ("Aluno", "Pesquisador") com um padrão, "Aplicar perfil" a pessoas existentes | release-1 | in-review | KBC-010, KBC-022, KBC-026 |
 | [KBC-029](KBC-029-history-on-submit.md) | A conversa aparece no histórico assim que a pergunta é enviada (turno pendente gravado pelo servidor, pesquisa que segue após recarregar, "pesquisando…", "interrompida", "falhou") | release-1 | in-review | KBC-005, KBC-008, KBC-011 |
+| [KBC-031](KBC-031-subscription-reasons-and-lending-at-invite.md) | Assinatura do ChatGPT escolhível em produção (motivos corretos do cartão, "Testar conexão" pelo executor) e cessão de assinaturas no convite com a confirmação dos termos | release-1 | in-review | KBC-024, KBC-027, KBC-028 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
 ## Definição de pronto (global)

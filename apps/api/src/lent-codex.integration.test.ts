@@ -50,7 +50,7 @@ describe('Codex, the ChatGPT subscription, in its sandbox (KBC-027)', () => {
       providers.items.find(
         (item: { id: string }) => item.id === 'chatgpt-subscription',
       ),
-    ).toMatchObject({ available: false, reason: 'not-enabled' });
+    ).toMatchObject({ available: false, reason: 'house-off' });
     const on = await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
     expect(on.json().codex).toEqual({
       configured: true,
@@ -203,5 +203,91 @@ describe('Codex, the ChatGPT subscription, in its sandbox (KBC-027)', () => {
     const house = (await owner('GET', '/api/v1/house-ai')).json();
     expect(house.codex.loggedIn).toBe(false);
     expect(house.lendable['chatgpt-subscription']).toBe(false);
+  });
+});
+
+/** The owner's ChatGPT card in "Sua IA", as `GET /api/v1/ai/providers` describes it. */
+async function chatgptCard(
+  owner: Awaited<ReturnType<typeof withCodex>>['owner'],
+) {
+  const providers = (await owner('GET', '/api/v1/ai/providers')).json();
+  return providers.items.find(
+    (item: { id: string }) => item.id === 'chatgpt-subscription',
+  );
+}
+
+describe('the ChatGPT card in the sandbox says why it is off (KBC-031)', () => {
+  it('asks a master to turn it on, never to install the CLI or set KB_CHAT_CODEX (AC-1)', async () => {
+    const { owner } = await withCodex();
+    expect(await chatgptCard(owner)).toMatchObject({
+      available: false,
+      reason: 'house-off',
+    });
+  });
+
+  it('tests the connection through the runner once it is on (AC-2)', async () => {
+    const { owner } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    expect(await chatgptCard(owner)).toMatchObject({
+      available: true,
+      reason: null,
+    });
+    const test = await owner('POST', '/api/v1/settings/ai/test', {
+      provider: 'chatgpt-subscription',
+    });
+    expect(test.json()).toMatchObject({ ok: true, code: null });
+  });
+
+  it('says the login is missing on the server (AC-3)', async () => {
+    const { owner, codexHome } = await withCodex();
+    await writeFile(
+      join(codexHome, 'fake-cli.json'),
+      JSON.stringify({ mode: 'fail' }),
+    );
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    expect(await chatgptCard(owner)).toMatchObject({
+      available: false,
+      reason: 'login-required',
+    });
+  });
+
+  it('is not lendable while its container does not answer (BR-4, review R1)', async () => {
+    const { owner } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    await stopCodexRunner();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 31_000);
+    const house = (await owner('GET', '/api/v1/house-ai/default')).json();
+    expect(house.lendable['chatgpt-subscription']).toBe(false);
+  });
+
+  it('asks the sandbox again soon after it said no, so a new login shows quickly (review R1)', async () => {
+    const { owner, codexHome } = await withCodex();
+    await writeFile(
+      join(codexHome, 'fake-cli.json'),
+      JSON.stringify({ mode: 'fail' }),
+    );
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    expect((await chatgptCard(owner)).reason).toBe('login-required');
+    // The owner logs in on the server; a few seconds later the card is free.
+    await writeFile(join(codexHome, 'fake-cli.json'), JSON.stringify({}));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 6_000);
+    expect(await chatgptCard(owner)).toMatchObject({
+      available: true,
+      reason: null,
+    });
+  });
+
+  it('says the sandbox did not answer (AC-3)', async () => {
+    const { owner } = await withCodex();
+    await owner('PUT', '/api/v1/house-ai', { codexEnabled: true });
+    await stopCodexRunner();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 31_000);
+    expect(await chatgptCard(owner)).toMatchObject({
+      available: false,
+      reason: 'sandbox-unavailable',
+    });
   });
 });

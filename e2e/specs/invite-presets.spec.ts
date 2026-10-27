@@ -1,6 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
-import { expect, pageAs, test, uniqueEmail } from './fixtures.js';
+import {
+  CSRF,
+  OWNER_EMAIL,
+  expect,
+  ownerApi,
+  pageAs,
+  test,
+  uniqueEmail,
+} from './fixtures.js';
 
 /**
  * KBC-028: an invitation profile sets the person up at once (collections, features, the app
@@ -215,4 +223,62 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await expect(personRow(dialog, existing)).toContainText('IA: Plano da casa');
 
   await removeProfile(dialog, name);
+});
+
+test('KBC-031 AC-5: the owner lends his subscription in the invitation, after the terms', async ({
+  page,
+}) => {
+  const email = uniqueEmail('cedida');
+  // No spec makes a profile the default: "Configurar agora" opens the plain preset.
+  const dialog = await openPeople(page);
+  await dialog.getByRole('button', { name: 'Configurar agora' }).click();
+  const preset = dialog.locator('#invite-preset');
+  await preset
+    .getByLabel('Qual IA atende a pessoa')
+    .selectOption({ label: 'Claude do administrador' });
+  const confirm = preset.getByRole('group', {
+    name: 'Ceder a assinatura do Claude a quem você está convidando?',
+  });
+  await expect(confirm).toContainText('Os termos da Anthropic não permitem');
+  await expect(confirm.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await dialog.getByLabel('Convidar por e-mail').fill(email);
+  // The invitation waits for the terms.
+  const send = dialog.getByRole('button', { name: 'Convidar' });
+  await expect(send).toBeDisabled();
+  await expect(send).toHaveAccessibleDescription(
+    'Confirme ou cancele a cessão da assinatura em “IA da aplicação” para convidar.',
+  );
+  await expectAccessible(page);
+  await shoot(page, 'invite-lend-confirm', inviteForm(dialog));
+  await confirm.getByRole('button', { name: 'Ceder assim mesmo' }).click();
+  await expect(
+    preset
+      .getByRole('status')
+      .filter({ hasText: 'Termos da assinatura do Claude confirmados' }),
+  ).toBeVisible();
+  await shoot(page, 'invite-lend-confirmed', inviteForm(dialog));
+  await dialog.getByRole('button', { name: 'Convidar' }).click();
+  await expect(
+    dialog
+      .getByRole('status')
+      .filter({ hasText: 'Perfil: configuração própria.' }),
+  ).toBeVisible();
+  await expect(personRow(dialog, email)).toContainText(
+    'IA: Claude do administrador',
+  );
+  const owner = await ownerApi();
+  const people = await (await owner.get('/api/v1/people')).json();
+  const invited = people.items.find(
+    (person: { email: string }) => person.email === email,
+  );
+  expect(invited.ai.history.at(-1)).toMatchObject({
+    appAi: 'claude-subscription',
+    by: OWNER_EMAIL,
+    termsAccepted: true,
+  });
+  await owner.patch(`/api/v1/people/${invited.id}`, {
+    data: { ai: { appAi: 'none' } },
+    headers: CSRF,
+  });
+  await owner.dispose();
 });

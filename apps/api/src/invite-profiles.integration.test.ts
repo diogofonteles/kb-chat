@@ -198,6 +198,59 @@ describe('Invite profiles (KBC-028)', () => {
     ).toBe(403);
   });
 
+  it('lends a subscription in the invitation only from the owner, with the terms, recorded (KBC-031 AC-5, AC-6)', async () => {
+    const started = await start();
+    const { owner: master, memberId } = await withPeople(started);
+    const lending = (terms: boolean) => ({
+      topics: ['hermetismo'],
+      features: ['search', 'research'],
+      ai: {
+        appAi: 'claude-subscription',
+        ...(terms && { subscriptionTermsAccepted: true }),
+      },
+    });
+    const withoutTerms = await master('POST', '/api/v1/people', {
+      email: 'sem-termos@example.com',
+      preset: lending(false),
+    });
+    expect(withoutTerms.statusCode).toBe(400);
+    const lent = await master('POST', '/api/v1/people', {
+      email: 'cedida@example.com',
+      preset: lending(true),
+    });
+    expect(lent.statusCode).toBe(201);
+    expect(lent.json().ai.appAi).toBe('claude-subscription');
+    expect(lent.json().ai.history.at(-1)).toMatchObject({
+      appAi: 'claude-subscription',
+      by: 'owner@example.com',
+      termsAccepted: true,
+    });
+    // Another master may invite, but never lends the owner's subscription (BR-1).
+    await master('PATCH', `/api/v1/people/${memberId}`, { role: 'master' });
+    const other = caller(started.app, await signIn(started, 'ana@example.com'));
+    const refused = await other('POST', '/api/v1/people', {
+      email: 'outra@example.com',
+      preset: lending(true),
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(
+      (await master('GET', '/api/v1/people'))
+        .json()
+        .items.some(
+          (person: { email: string }) => person.email === 'outra@example.com',
+        ),
+    ).toBe(false);
+    // A reusable profile still never holds one (BR-3).
+    expect(
+      (
+        await master('POST', '/api/v1/invite-profiles', {
+          name: 'Cedido',
+          preset: lending(true),
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
+
   it('answers 404 for an unknown profile or person, 401/403 to anyone but a master', async () => {
     const started = await start();
     const { owner: master, member, memberId } = await withPeople(started);

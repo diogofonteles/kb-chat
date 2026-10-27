@@ -1,6 +1,6 @@
 # 0019 — The owner lends his Claude subscription to chosen people
 
-- Status: accepted (2026-10-26)
+- Status: accepted (2026-10-26); amended 2026-10-27 by KBC-031 (lending in an invitation)
 - Amends: [0007](0007-ai-providers-and-local-settings.md) (subscriptions were the owner's only), [0016](0016-house-ai-plan-and-access-policy.md) (a second app AI, `claude-subscription`, and the `app-subscription` plan)
 - Drivers: KBC-024; the owner's decision of 2026-10-26 ("o master cede a assinatura Claude do dono a usuários específicos")
 
@@ -17,6 +17,11 @@ ADR 0016 named a second app-owned AI, the owner's Claude subscription on the VM,
 - **Unavailable means not served.** When the CLI is missing, `available('claude-subscription')` is false and the person falls back as ADR 0016 says (their own AI, else none). The people screen says the subscription is not ready on the server (`GET /api/v1/house-ai` → `subscriptionAvailable`).
 - **Told to the person.** The status gives `appAi: 'claude-subscription'`; Settings shows a highlighted notice ("Você está usando temporariamente a IA da aplicação (assinatura do Claude do administrador)") with a button to their own AI, and each answer says "Incluído na assinatura do administrador".
 - **E2E.** The E2E server injects a lent subscription backed by the stub runner, so the screens are tested without a CLI; integration tests run the real `ClaudeCliRunner` against the fake CLI.
+
+## Amendment (2026-10-27, KBC-031): lending in an invitation
+
+- The preset sent with one invitation ("Configurar agora", KBC-028) may lend `claude-subscription` or `chatgpt-subscription`: `POST /api/v1/people { preset: { ai: { appAi, subscriptionTermsAccepted: true } } }`. The same rules as the person editor apply: only the owner (403 for any other master, and nobody is invited), the terms confirmed in the same request (400 otherwise), the grant recorded in the person's `ai.history` with `by`, `at` and `termsAccepted`. The web offers each subscription only while it can be lent now (`lendable`) and shows the same confirmation before the invitation can be sent.
+- Invite profiles never keep a lending (`invitePresetSchema` still refuses it): a profile is reused by any master and later, while the terms are confirmed person by person, now. Applying a profile to someone already invited keeps the subscription out; the owner lends it in the same editor's AI field.
 
 ## Options considered
 

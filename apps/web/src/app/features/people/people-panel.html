@@ -93,9 +93,11 @@
         [preset]="draftPreset()"
         [topics]="topics()"
         [defaultAppAi]="defaultAppAi()"
+        [lending]="lending()"
         [busy]="busy()"
         (changed)="draftPreset.set($event)"
         (invalidChange)="presetInvalid.set($event)"
+        (lendPending)="lendPending.set($event)"
       />
     }
   }
@@ -103,10 +105,17 @@
     type="submit"
     class="primary"
     [disabled]="busy() || !email().trim() || (configuring() && presetInvalid())"
+    [attr.aria-describedby]="waitsForLend() ? 'invite-lend-wait' : null"
     i18n="@@people.invite"
   >
     Convidar
   </button>
+  @if (waitsForLend()) {
+    <p id="invite-lend-wait" class="hint" i18n="@@people.inviteLendWait">
+      Confirme ou cancele a cessão da assinatura em “IA da aplicação” para
+      convidar.
+    </p>
+  }
 </form>
 @if (inviteError()) {
   <p id="invite-error" class="invite-error" role="alert">
