@@ -8,6 +8,11 @@ const runnerConfigSchema = z.object({
   CODEX_RUNNER_PORT: z.coerce.number().int().min(1).max(65535).default(8790),
   /** The API's MCP endpoint for turns (ADR 0020): the only one Codex is pointed at. */
   CODEX_MCP_URL: z.url(),
+  /** Kill what a former turn left before each turn: only in the container (compose sets it). */
+  CODEX_RUNNER_REAP: z
+    .enum(['on', 'off'])
+    .default('off')
+    .transform((value) => value === 'on'),
   /** Who may send turns, by socket address (the API); empty: loopback only. */
   CODEX_RUNNER_CLIENTS: z
     .string()

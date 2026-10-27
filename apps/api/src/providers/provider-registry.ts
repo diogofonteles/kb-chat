@@ -233,10 +233,14 @@ export class ProviderRegistry implements ProviderCatalog {
 
   private subscriptionReady(kind: LentSubscription): boolean {
     if (kind === 'claude-subscription') return this.claudeOnPath;
-    // The sandbox last said the owner's login is not there: nothing to lend (QA N-2).
-    return (
-      this.codexReady() && this.codexStatusCache?.status.loggedIn !== false
-    );
+    // The sandbox said, less than 30 s ago, that the owner's login is not there: nothing to
+    // lend (QA N-2); an older answer is not trusted (review R3).
+    const cached = this.codexStatusCache;
+    const loggedOut =
+      cached !== null &&
+      this.now() - cached.at < CODEX_STATUS_TTL_MS &&
+      cached.status.loggedIn === false;
+    return this.codexReady() && !loggedOut;
   }
 
   /** Where Codex runs (ADR 0020): its sandbox runner, the owner's Mac (local), or nowhere. */

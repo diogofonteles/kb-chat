@@ -179,7 +179,7 @@ describe('Codex, the ChatGPT subscription, in its sandbox (KBC-027)', () => {
     );
   });
 
-  it('asks the sandbox about the login at most every 30 s, and again after a failure (review 2.2)', async () => {
+  it('asks the sandbox about the login at most every 30 s (review 2.2)', async () => {
     const { owner } = await withCodex();
     const checks = () => codexRunnerCounts().statusChecks;
     await owner('GET', '/api/v1/house-ai');

@@ -15,6 +15,10 @@ describe('loadRunnerConfig (ADR 0020)', () => {
       loadRunnerConfig({ ...base, CODEX_RUNNER_CLIENTS: '172.30.0.2' })
         .CODEX_RUNNER_CLIENTS,
     ).toEqual(['172.30.0.2']);
+    expect(loadRunnerConfig(base).CODEX_RUNNER_REAP).toBe(false);
+    expect(
+      loadRunnerConfig({ ...base, CODEX_RUNNER_REAP: 'on' }).CODEX_RUNNER_REAP,
+    ).toBe(true);
     expect(loadRunnerConfig(base)).toMatchObject({
       CODEX_BIN: 'codex',
       CODEX_RUNNER_HOST: '0.0.0.0',

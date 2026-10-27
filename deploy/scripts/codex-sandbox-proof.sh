@@ -63,6 +63,16 @@ from_api() {
 }
 stray_turn="{\"input\":\"$mark\\nleave-a-stray\",\"token\":\"0123456789abcdef0123456789abcdef\"}"
 from_api "$stray_turn" >/dev/null
+# Positive control: the stray and its child are alive now (a `docker exec` has parent 0, so
+# the reaper leaves this check alone); the next turn must not see them.
+sleep 2
+count_strays='const fs = require("fs"); const me = String(process.pid); let n = 0;
+for (const p of fs.readdirSync("/proc")) { if (!/^[0-9]+$/.test(p) || p === me) continue;
+  try { if (fs.readFileSync("/proc/" + p + "/cmdline", "latin1").includes("kbchat" + "-stray")) n++; } catch {} }
+console.log(n);'
+alive="$(compose exec -T codex node -e "$count_strays")"
+echo "strays alive before the next turn: $alive"
+[ "$alive" -ge 2 ] || { echo "PROOF BROKEN: the stray family did not start, so the reaping is not proven" >&2; exit 1; }
 answer="$(from_api "$turn")"
 echo "$answer"
 probe="$(grep '"kbchat.probe"' <<<"$answer")"

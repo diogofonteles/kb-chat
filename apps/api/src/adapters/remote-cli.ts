@@ -6,16 +6,16 @@ import type { CliCall, CliProcess } from './cli-process.js';
 export const RUNNER_EXIT = 'kbchat.runner.exit';
 
 /**
- * What a Codex turn says when its runner did not run it: unreachable (the container is down)
- * or refusing (misconfigured callers, a start that failed). Either way the sandbox is unusable.
+ * The runner did not run the turn: unreachable (the container is down) or refusing it as not
+ * allowed (misconfigured callers) or failing to start it. A line of the runner's own, which
+ * the CLI's output is never mapped to (ADR 0020); the Codex parser reads it as CLI_MISSING.
  */
-export const RUNNER_UNREACHABLE = 'kbchat runner unreachable';
+export const RUNNER_UNAVAILABLE = 'kbchat.runner.unavailable';
+const unavailableLine = JSON.stringify({ type: RUNNER_UNAVAILABLE });
 
-/** The runner did not run the turn: one `turn.failed` line the Codex parser understands. */
-const unreachableLine = JSON.stringify({
-  type: 'turn.failed',
-  error: { message: RUNNER_UNREACHABLE },
-});
+/** A refusal that means the sandbox cannot be used (not a malformed request of ours). */
+const refusalLines = (status: number): string[] =>
+  status === 403 || status >= 500 ? [unavailableLine] : [];
 
 /** The variable that carries the turn token to Codex (sent as `Authorization: Bearer`). */
 export const CODEX_TOKEN_ENV = 'KB_CHAT_MCP_TOKEN';
@@ -74,7 +74,7 @@ async function* turnLines(turn: RemoteTurn): AsyncIterable<string> {
       signal: turn.signal,
     });
     if (!response.ok || !response.body) {
-      yield unreachableLine;
+      yield* refusalLines(response.status);
       return turn.settle(-1);
     }
     const reader = createInterface({
@@ -84,7 +84,7 @@ async function* turnLines(turn: RemoteTurn): AsyncIterable<string> {
     yield* cliLines(reader, turn.settle);
   } catch {
     // The runner is down, or the turn was stopped: like a CLI that could not start.
-    if (!turn.signal.aborted) yield unreachableLine;
+    if (!turn.signal.aborted) yield unavailableLine;
     turn.settle(-1);
   }
 }

@@ -92,6 +92,8 @@ services:
       # The only MCP endpoint Codex is pointed at, and the only caller of the runner.
       CODEX_MCP_URL: http://172.30.0.2:3000/mcp/turn
       CODEX_RUNNER_CLIENTS: 172.30.0.2
+      # Before each turn, kill whatever a former turn left in this container (ADR 0020).
+      CODEX_RUNNER_REAP: 'on'
     volumes:
       # The owner's Codex login (`codex login --device-auth`, once, over SSH; runbook 9c).
       - ${KB_CHAT_DATA:-/srv/kb-chat}/codex:/codex-home

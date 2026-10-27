@@ -12,7 +12,7 @@ import type { ResearchToolsFactory } from '../ports/research-tools.js';
 import { cliFailureCode } from './claude-cli-runner.js';
 import {
   CODEX_TOKEN_ENV,
-  RUNNER_UNREACHABLE,
+  RUNNER_UNAVAILABLE,
   remoteCli,
 } from './remote-cli.js';
 import {
@@ -54,16 +54,12 @@ export function parseCodexLine(text: string): CliLine {
   if (!parsed.success) return {};
   const line = parsed.data;
   if (line.type === 'turn.completed') return { result: { ok: true } };
+  // The sandbox runner did not run the turn: like a CLI that is not there (ADR 0020).
+  if (line.type === RUNNER_UNAVAILABLE)
+    return { result: { ok: false, code: 'CLI_MISSING' } };
   if (line.type === 'turn.failed')
     return {
-      result: {
-        ok: false,
-        // The sandbox runner did not answer: like a CLI that is not there (ADR 0020).
-        code:
-          line.error?.message === RUNNER_UNREACHABLE
-            ? 'CLI_MISSING'
-            : cliFailureCode(line.error?.message),
-      },
+      result: { ok: false, code: cliFailureCode(line.error?.message) },
     };
   const message =
     line.type === 'item.completed' && line.item?.type === 'agent_message'

@@ -20,12 +20,16 @@ answer="$(printf '%s' "$mark" | docker compose --project-directory "$DEPLOY_DIR"
   -f "$DEPLOY_DIR/compose.yml" --env-file "$DEPLOY_DIR/.env" --env-file "$DEPLOY_DIR/release.env" \
   exec -T codex env -i PATH=/usr/local/bin:/usr/bin:/bin /app/deploy/codex-proof/probe.mjs)"
 echo "$answer"
-# The runner's own environment (pid 1's, readable as the same user) holds no server secret.
-if docker compose --project-directory "$DEPLOY_DIR" -f "$DEPLOY_DIR/compose.yml" \
+# The runner's own environment (pid 1's, readable as the same user): only what compose and
+# the image set for it, never a server secret. A failed read fails the check.
+runner_env="$(docker compose --project-directory "$DEPLOY_DIR" -f "$DEPLOY_DIR/compose.yml" \
   --env-file "$DEPLOY_DIR/.env" --env-file "$DEPLOY_DIR/release.env" \
-  exec -T codex cat /proc/1/environ | tr '\0' '\n' |
-  grep -qE '^(KB_CHAT_SECRETS_KEY|SMTP_PASSWORD|RESEND_API_KEY|GOOGLE_CLIENT_ID)='; then
-  echo "SANDBOX LEAK: a server secret is in the runner's environment" >&2
+  exec -T codex cat /proc/1/environ | tr '\0' '\n' | cut -d= -f1 | sort -u)"
+[ -n "$runner_env" ] || { echo "SANDBOX CHECK FAILED: could not read the runner's environment" >&2; exit 1; }
+allowed='^(PATH|HOSTNAME|HOME|NODE_ENV|NODE_VERSION|YARN_VERSION|HOST|PORT|KB_VAULT|KB_CHAT_STATE_DIR|CLAUDE_CONFIG_DIR|DISABLE_AUTOUPDATER|CODEX_HOME|CODEX_RUNNER_HOST|CODEX_RUNNER_PORT|CODEX_MCP_URL|CODEX_RUNNER_CLIENTS|CODEX_RUNNER_REAP)$'
+unexpected="$(grep -vE "$allowed" <<<"$runner_env" || true)"
+if [ -n "$unexpected" ]; then
+  echo "SANDBOX LEAK: unexpected variables in the runner's environment: $(tr '\n' ' ' <<<"$unexpected")" >&2
   exit 1
 fi
 node_check='

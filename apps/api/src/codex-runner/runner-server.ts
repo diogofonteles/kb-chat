@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { spawnCli, type CliProcess } from '../adapters/cli-process.js';
 import { codexArgs } from '../adapters/codex-cli-runner.js';
 import { CODEX_TOKEN_ENV, RUNNER_EXIT } from '../adapters/remote-cli.js';
+import { reapStrays } from './strays.js';
 
 /** How long `codex login status` may take before it counts as logged out. */
 const STATUS_TIMEOUT_MS = 10_000;
@@ -162,57 +163,6 @@ async function spawnTurn(
   } catch (err) {
     await rm(dir, { recursive: true, force: true });
     throw err;
-  }
-}
-
-/** pid → parent pid of every process this user can see (Linux /proc). */
-async function processTree(): Promise<Map<number, number>> {
-  const tree = new Map<number, number>();
-  for (const name of await readdir('/proc')) {
-    if (!/^\d+$/.test(name)) continue;
-    const stat = await readFile(`/proc/${name}/stat`, 'utf8').catch(() => '');
-    // Field 4, after the command in parentheses, is the parent pid.
-    const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-    if (Number.isInteger(parent)) tree.set(Number(name), parent);
-  }
-  return tree;
-}
-
-/** Whether the pid comes from a former turn: its ancestry reaches init without the runner. */
-function isStray(tree: Map<number, number>, pid: number): boolean {
-  let current = pid;
-  for (let hops = 0; hops < 64; hops += 1) {
-    if (current === process.pid) return false;
-    const parent = tree.get(current);
-    // `docker exec` and the healthcheck come from outside (parent 0): not a turn's.
-    if (parent === undefined || parent === 0) return false;
-    if (parent === 1) return current !== process.pid;
-    current = parent;
-  }
-  return false;
-}
-
-/**
- * Kills every process a former turn left behind, with its whole family (ADR 0020): the lock
- * is held, so no turn runs now, and anything descending from init but not from the runner
- * would otherwise outlive its turn and read the next one's token. Repeats while it kills.
- */
-async function reapStrays(): Promise<void> {
-  for (let pass = 0; pass < 3; pass += 1) {
-    const tree = await processTree();
-    const strays = [...tree.keys()].filter(
-      (pid) => pid !== 1 && pid !== process.pid && isStray(tree, pid),
-    );
-    if (strays.length === 0) return;
-    strays.forEach(killQuietly);
-  }
-}
-
-function killQuietly(pid: number): void {
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch {
-    // Already gone.
   }
 }
 
