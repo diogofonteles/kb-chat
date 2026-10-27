@@ -130,3 +130,22 @@ describe('LiveTurns', () => {
     expect(saved).toBe(true);
   });
 });
+
+describe('LiveTurn events (review MINOR-5)', () => {
+  it('keeps the tokens of one segment in a row as one, for a small replay', () => {
+    const turns = new LiveTurns();
+    const turn = turns.start(key('t1'));
+    const live = recorder();
+    turn.follow(live);
+    turn.publish(token('Tu'));
+    turn.publish(token('do'));
+    turn.publish({ type: 'retract', segment: 0 });
+    turn.publish({ type: 'token', text: 'Flui', segment: 1 });
+    expect(live.seen).toHaveLength(4);
+    expect(turn.events).toEqual([
+      token('Tudo'),
+      { type: 'retract', segment: 0 },
+      { type: 'token', text: 'Flui', segment: 1 },
+    ]);
+  });
+});

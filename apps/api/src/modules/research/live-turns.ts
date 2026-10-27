@@ -25,20 +25,40 @@ export interface LiveTurnKey {
  */
 export class LiveTurn {
   readonly abort = new AbortController();
-  readonly events: ResearchEvent[] = [];
+  private readonly kept: ResearchEvent[] = [];
+
+  /** What happened so far, for a replay and for the history. */
+  get events(): readonly ResearchEvent[] {
+    return this.kept;
+  }
   private readonly followers = new Set<TurnFollower>();
   private ended = false;
 
   constructor(readonly key: LiveTurnKey) {}
 
   publish(event: ResearchEvent): void {
-    this.events.push(event);
+    this.keep(event);
     for (const follower of this.followers) follower.event(event);
+  }
+
+  /** Kept for a replay: tokens of one segment in a row as one (a long answer stays small). */
+  private keep(event: ResearchEvent): void {
+    const last = this.kept.at(-1);
+    if (
+      event.type === 'token' &&
+      last?.type === 'token' &&
+      last.segment === event.segment
+    )
+      this.kept[this.kept.length - 1] = {
+        ...last,
+        text: last.text + event.text,
+      };
+    else this.kept.push(event);
   }
 
   /** Replays what happened so far, then live; returns the way to stop following. */
   follow(follower: TurnFollower): () => void {
-    for (const event of this.events) follower.event(event);
+    for (const event of this.kept) follower.event(event);
     if (this.ended) {
       follower.end();
       return () => undefined;

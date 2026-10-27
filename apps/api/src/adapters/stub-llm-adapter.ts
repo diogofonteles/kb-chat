@@ -36,6 +36,8 @@ export interface StubLlmOptions {
   readonly script?: readonly StubReply[];
   /** Cost reported per agent call; default: US$ 1 per million tokens. */
   readonly usdPerCall?: number;
+  /** How its turns are paid; default per token (a subscription in tests of that path). */
+  readonly billing?: AgentLlmPort['billing'];
   /** The model name it reports; default "stub/model". */
   readonly model?: string;
   /** What the forced last call (toolChoice "none") writes; default: an answer citing [n]. */
@@ -165,7 +167,7 @@ function finalText(messages: AgentHistory): string {
  */
 export class StubLlmAdapter implements AgentLlmPort {
   readonly model: string;
-  readonly billing = 'per-token' as const;
+  readonly billing: AgentLlmPort['billing'];
   /** Messages of the last call, calls made and tokens handed out, for assertions. */
   lastMessages: readonly AgentMessage[] = [];
   /** Options of every agent call, for assertions (toolChoice, maxTokens). */
@@ -183,6 +185,7 @@ export class StubLlmAdapter implements AgentLlmPort {
 
   constructor(private readonly options: StubLlmOptions = {}) {
     this.model = options.model ?? 'stub/model';
+    this.billing = options.billing ?? 'per-token';
   }
 
   configured(): boolean {

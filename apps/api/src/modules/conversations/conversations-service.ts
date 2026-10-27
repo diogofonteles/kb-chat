@@ -1,5 +1,4 @@
 import {
-  RESEARCH_TURN_MAX_MINUTES,
   summarizeConversation,
   type Conversation,
   type ConversationKind,
@@ -28,6 +27,8 @@ export interface ConversationsServiceDeps {
   /** When this process started (ms); default: when the service was built. */
   readonly bootAt?: number;
   readonly now?: () => number;
+  /** A pending turn older than this reads as interrupted; default 60 min (the turn ceiling). */
+  readonly ceilingMs?: number;
 }
 
 /** Where the server records a research turn (KBC-029). */
@@ -37,14 +38,6 @@ export interface TurnPlace {
   readonly topic: string;
   readonly turn: SavedResearchTurn;
 }
-
-/** The stored turn with this id started later: a newer attempt (both stamped by the server). */
-const isSuperseded = (
-  stored: ResearchConversation,
-  turn: SavedResearchTurn,
-): boolean => stored.turns.some((t) => t.id === turn.id && t.at > turn.at);
-
-const CEILING_MS = RESEARCH_TURN_MAX_MINUTES * 60_000;
 
 const matches = (summary: ConversationSummary, filter: ConversationFilter) =>
   (filter.kind === undefined || summary.kind === filter.kind) &&
@@ -58,6 +51,8 @@ const byNewest = (a: ConversationSummary, b: ConversationSummary) =>
  * The complete conversation history kept on this computer (no cap), per principal: each
  * person only lists, reads and removes their own (KBC-010 BR-6).
  */
+const DEFAULT_CEILING_MS = 60 * 60_000;
+
 export class ConversationsService {
   private readonly locks = new Map<string, Promise<unknown>>();
   private readonly bootAt: number;
@@ -126,10 +121,7 @@ export class ConversationsService {
     });
   }
 
-  /**
-   * Records how a turn ended; a conversation removed meanwhile stays removed, and the end of
-   * an attempt that "Tentar de novo" already replaced is dropped.
-   */
+  /** Records how a turn ended; a conversation removed meanwhile stays removed. */
   finishTurn(
     principal: string,
     conversationId: string,
@@ -137,7 +129,7 @@ export class ConversationsService {
   ): Promise<void> {
     return this.serial(conversationId, async () => {
       const stored = await this.deps.store.get(principal, conversationId);
-      if (stored?.kind !== 'research' || isSuperseded(stored, turn)) return;
+      if (stored?.kind !== 'research') return;
       const turns = withTurn(stored, turn);
       await this.put(principal, { ...stored, updatedAt: this.stamp(), turns });
     });
@@ -183,7 +175,7 @@ export class ConversationsService {
       isLive: (turnId) => isLive(principal, turnId),
       bootAt: this.bootAt,
       now: this.now(),
-      ceilingMs: CEILING_MS,
+      ceilingMs: this.deps.ceilingMs ?? DEFAULT_CEILING_MS,
     };
   }
 

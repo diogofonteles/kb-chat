@@ -17,6 +17,7 @@ import {
   STUB_FAIL_MARKER,
   STUB_SLOW_MARKER,
   StubLlmAdapter,
+  type StubLlmOptions,
 } from '../../adapters/stub-llm-adapter.js';
 import { OWNER, buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
@@ -39,8 +40,12 @@ interface Client {
   readonly headers: Record<string, string>;
 }
 
-async function start() {
+async function start(
+  env: Record<string, string> = {},
+  llm: StubLlmOptions = {},
+) {
   const config = loadConfig({
+    ...env,
     KB_VAULT: FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
     LOG_LEVEL: 'silent',
@@ -56,7 +61,7 @@ async function start() {
     vault,
     index,
     auth,
-    llm: new StubLlmAdapter(),
+    llm: new StubLlmAdapter(llm),
     conversations: store,
     logger: log,
   });
@@ -294,5 +299,49 @@ describe('recorded research turns (KBC-029)', { timeout: 20_000 }, () => {
     expect(items.find((item) => item.id === conversationId)?.status).toBe(
       'interrupted',
     );
+  });
+
+  it('"Tentar de novo" right after "Parar" ends with the new answer', async () => {
+    const { ana } = await start();
+    const { conversationId, turnId } = ids();
+    const first = await ask(ana, {
+      question: `ritmo ${STUB_SLOW_MARKER}`,
+      conversationId,
+      turnId,
+    });
+    await first.body?.getReader().read();
+    await call(ana, `/api/v1/research/turns/${turnId}/stop`, {
+      method: 'POST',
+      body: '{}',
+    });
+    const again = await ask(ana, { question: 'ritmo', conversationId, turnId });
+    expect(eventsOf(await again.text()).at(-1)?.type).toBe('done');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const turn = await settled(ana, conversationId);
+    expect(turn).toMatchObject({ id: turnId, interrupted: false });
+    expect(turn.answer).toMatch(/Segundo o acervo/);
+  });
+
+  it('records a subscription turn through the same path, with its billing (AC-5)', async () => {
+    const { ana } = await start({}, { billing: 'subscription' });
+    const { conversationId, turnId } = ids();
+    await (
+      await ask(ana, { question: 'ritmo', conversationId, turnId })
+    ).text();
+    expect(await settled(ana, conversationId)).toMatchObject({
+      billing: 'subscription',
+      usd: 0,
+    });
+  });
+
+  it('refuses research past RESEARCH_RATE_LIMIT per minute (FR-7)', async () => {
+    const { ana } = await start({ RESEARCH_RATE_LIMIT: '2' });
+    const statuses: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const response = await ask(ana, { question: 'ritmo' });
+      await response.text();
+      statuses.push(response.status);
+    }
+    expect(statuses).toEqual([200, 200, 429]);
   });
 });

@@ -146,16 +146,26 @@ describe('ConversationsService.finishTurn (KBC-029)', () => {
     expect(saved?.updatedAt).toBe(iso(BOOT + 60_000));
   });
 
-  it('ignores the outcome of an earlier attempt of a turn that was asked again (QA BUG-2)', async () => {
-    const { service, store } = setup();
-    const retried = pending({ at: iso(BOOT + 9000) });
-    await store.put('ana', conversation([retried]));
+  it('records the answer even when a later page snapshot of the pending turn landed first (review MAJOR-1)', async () => {
+    const { service } = setup({ live: [T1] });
+    await service.beginTurn('ana', {
+      conversationId: CONVERSATION,
+      topic: 'hermetismo',
+      turn: pending({ at: iso(BOOT + 1000) }),
+    });
+    // The page's clock runs ahead: its snapshot of the same pending turn says later.
+    await service.save(
+      'ana',
+      conversation([pending({ at: iso(BOOT + 1300) })]),
+    );
     await service.finishTurn(
       'ana',
       CONVERSATION,
-      turn({ interrupted: true, at: iso(BOOT + 1000) }),
+      turn({ at: iso(BOOT + 1000) }),
     );
-    expect(turnsOf(await store.get('ana', CONVERSATION))).toEqual([retried]);
+    expect(turnsOf(await service.get('ana', CONVERSATION))).toEqual([
+      turn({ at: iso(BOOT + 1000) }),
+    ]);
   });
 
   it('does not bring back a conversation the person removed meanwhile', async () => {
@@ -241,6 +251,17 @@ describe('ConversationsService.save merges research turns by id (KBC-029)', () =
       conversation([turn({ interrupted: true, usd: 0.003 })]),
     );
     expect(turnsOf(await store.get('ana', CONVERSATION))[0]?.usd).toBe(0.003);
+  });
+
+  it('does not repeat a turn an older page sends without its id, or under another id (review MINOR-2)', async () => {
+    const { service, store } = setup();
+    await store.put('ana', conversation([turn()]));
+    const legacy = turn();
+    delete legacy.id;
+    await service.save('ana', conversation([legacy]));
+    expect(turnsOf(await store.get('ana', CONVERSATION))).toHaveLength(1);
+    await service.save('ana', conversation([turn({ id: T2 })]));
+    expect(turnsOf(await store.get('ana', CONVERSATION))).toHaveLength(1);
   });
 
   it('keeps older turns without ids as the snapshot sends them', async () => {

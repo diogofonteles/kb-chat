@@ -1,3 +1,4 @@
+import { finished } from 'node:stream/promises';
 import {
   researchRequestSchema,
   topicSlugSchema,
@@ -98,7 +99,7 @@ const researchOptions = (ratePerMinute: number) => ({
   },
 });
 
-interface ResearchCall {
+export interface ResearchCall {
   readonly topic: string;
   readonly body: ResearchRequestBody;
 }
@@ -142,21 +143,29 @@ const failure = (err: unknown): ResearchEvent => ({
 });
 
 /** Streams a running turn's events to this request until the turn ends or the page leaves. */
-async function followTurn(reply: FastifyReply, turn: LiveTurn): Promise<void> {
+export async function followTurn(
+  reply: FastifyReply,
+  turn: LiveTurn,
+): Promise<void> {
+  // The page may leave while the turn is being saved: the turn goes on, nobody to stream to.
+  if (reply.raw.destroyed) {
+    reply.hijack();
+    return;
+  }
   const send = openStream(reply);
-  const closed = new Promise<void>((resolve) => reply.raw.on('close', resolve));
+  const closed = finished(reply.raw).catch(() => undefined);
   const unfollow = turn.follow({ event: send, end: () => reply.raw.end() });
   await closed;
   unfollow();
 }
 
-interface RecordedCall extends ResearchCall {
+export interface RecordedCall extends ResearchCall {
   readonly principal: string;
   readonly conversationId: string;
   readonly turnId: string;
 }
 
-interface Recording {
+export interface Recording {
   readonly runner: ResearchRunnerPort;
   readonly call: RecordedCall;
   readonly turn: LiveTurn;
@@ -168,7 +177,7 @@ interface Recording {
  * Runs a recorded turn to its end apart from any connection (KBC-029): only "Parar" or the
  * ceiling stop it. Its outcome is written to the history; it never throws.
  */
-async function runRecorded(
+export async function runRecorded(
   { runner, call, turn, pending, log }: Recording,
   { journal, turns }: Pick<ResearchRouteOptions, 'journal' | 'turns'>,
 ): Promise<void> {
@@ -180,13 +189,42 @@ async function runRecorded(
     log.error({ err }, 'recorded research turn failed');
     turn.publish(failure(err));
   }
-  const outcome = recordTurn(pending, turn.events);
-  await journal
-    .finishTurn(call.principal, call.conversationId, outcome)
-    .catch((err: unknown) =>
-      log.error({ err }, 'cannot record a research turn'),
-    );
+  // A retry that took this turn id over records its own outcome (no clocks involved).
+  if (turns.find(call.principal, call.turnId) === turn)
+    await journal
+      .finishTurn(
+        call.principal,
+        call.conversationId,
+        recordTurn(pending, turn.events),
+      )
+      .catch((err: unknown) =>
+        log.error({ err }, 'cannot record a research turn'),
+      );
   turns.end(turn);
+}
+
+/**
+ * Registers the turn, then records it as pending. Registered first: from then on an older
+ * attempt of this turn id no longer records its end. A refusal (another person's conversation,
+ * another collection) comes before anything runs.
+ */
+async function claimTurn(
+  { journal, turns }: Pick<ResearchRouteOptions, 'journal' | 'turns'>,
+  { principal, conversationId, turnId, topic }: RecordedCall,
+  pending: SavedResearchTurn,
+): Promise<LiveTurn> {
+  const turn = turns.start({ principal, conversationId, turnId });
+  try {
+    await journal.beginTurn(principal, {
+      conversationId,
+      topic,
+      turn: pending,
+    });
+    return turn;
+  } catch (err) {
+    turns.end(turn);
+    throw err;
+  }
 }
 
 /** Records the turn as pending, starts it and follows it on this request. */
@@ -199,19 +237,14 @@ async function startRecorded(
     options: ResearchRouteOptions;
   },
 ): Promise<void> {
-  const { journal, turns } = ctx.options;
-  const { principal, conversationId, turnId, topic, body } = call;
   const pending = pendingTurn({
-    id: turnId,
-    question: body.question,
-    profile: body.profile,
+    ...call.body,
+    id: call.turnId,
     at: new Date().toISOString(),
   });
-  // Refused (another person's conversation, another collection) before anything runs.
-  await journal.beginTurn(principal, { conversationId, topic, turn: pending });
-  const turn = turns.start({ principal, conversationId, turnId });
+  const turn = await claimTurn(ctx.options, call, pending);
   const recording = { runner, call, turn, pending, log: ctx.log };
-  turns.track(runRecorded(recording, ctx.options));
+  ctx.options.turns.track(runRecorded(recording, ctx.options));
   await followTurn(ctx.reply, turn);
 }
 

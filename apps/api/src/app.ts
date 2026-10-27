@@ -19,10 +19,10 @@ import { CatalogRegistry } from './modules/catalog/index.js';
 import { DocumentsService, documentRoutes } from './modules/documents/index.js';
 import {
   LiveTurns,
+  TURN_CEILING_MS,
   researchRoutes,
   type ResearchRouteOptions,
 } from './modules/research/index.js';
-
 import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
 import { searchRoutes } from './modules/search/index.js';
@@ -92,11 +92,10 @@ import {
   type ResearchAgent,
 } from './research-agent-factory.js';
 
-/** The owner's principal: the alias of the data written before logins (ADR 0008). */
-
 /** On shutdown, how long the running research turns get to record how they ended. */
 const TURN_SAVE_GRACE_MS = 5_000;
 
+/** The owner's principal: the alias of the data written before logins (ADR 0008). */
 export const OWNER = OWNER_PRINCIPAL;
 
 /** Where one-time codes and access requests are kept and how messages go (ADR 0011). */
@@ -253,6 +252,7 @@ async function registerRoutes(
   const conversations = new ConversationsService({
     store: deps.conversations,
     isLive: (principal, turnId) => turns.isLive(principal, turnId),
+    ceilingMs: TURN_CEILING_MS,
   });
   app.addHook('onClose', () => turns.close(TURN_SAVE_GRACE_MS));
   await registerResearch(app, deps, { turns, journal: conversations });

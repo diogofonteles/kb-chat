@@ -59,7 +59,8 @@ function pick(
 /**
  * A page's snapshot merged over what is stored (KBC-029): turns match by id; a pending
  * snapshot never overwrites a turn that already ended; turns the server recorded that the
- * snapshot lacks stay, in time order. Turns without an id (older ones) come from the snapshot.
+ * snapshot lacks stay, in time order (unless the snapshot has the same turn under no id or
+ * another one). Turns without an id (older ones) come from the snapshot.
  */
 export function mergeResearchTurns(
   incoming: ResearchConversation,
@@ -70,10 +71,17 @@ export function mergeResearchTurns(
     stored.turns.flatMap((turn) => (turn.id ? [[turn.id, turn] as const] : [])),
   );
   const sent = new Set(incoming.turns.map((turn) => turn.id));
+  // An older page sends a turn without its id, or under another one: same question, same start.
+  const sameTurn = new Set(
+    incoming.turns.map((turn) => `${turn.at} ${turn.question}`),
+  );
   const merged = incoming.turns.map((turn) =>
     turn.id ? pick(turn, byId.get(turn.id)) : turn,
   );
-  const kept = [...byId.values()].filter((turn) => !sent.has(turn.id));
+  const kept = [...byId.values()].filter(
+    (turn) =>
+      !sent.has(turn.id) && !sameTurn.has(`${turn.at} ${turn.question}`),
+  );
   if (kept.length === 0) return { ...incoming, turns: merged };
   const turns = [...merged, ...kept].sort((a, b) => a.at.localeCompare(b.at));
   return { ...incoming, turns };
