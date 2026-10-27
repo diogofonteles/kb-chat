@@ -676,7 +676,15 @@ describe('ResearchStore', () => {
       ],
       profile: 'exhaustive',
       sweep: CURSOR,
+      // Recorded in the same conversation, as its own turn (KBC-029).
+      conversationId: store.conversationId(),
+      turnId: store.turns()[1]?.turnId,
     });
+    // In the history at once, as a continuation.
+    const pending = save.mock.calls.at(-1)?.[0].turns.at(-1);
+    expect(pending?.question).toBe(
+      'Continuar varredura: quais livros o Mestre cita?',
+    );
   });
 
   it('keeps the last progress cursor and every batch’s findings when the reader stops (QA F-1)', () => {

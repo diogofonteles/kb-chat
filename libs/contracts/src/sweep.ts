@@ -155,3 +155,22 @@ export const sweepProgressSchema = z.strictObject({
   found: z.array(sweepFindingSchema).max(MAX_FOUND_PER_PROGRESS).optional(),
 });
 export type SweepProgress = z.infer<typeof sweepProgressSchema>;
+
+/**
+ * How a continuation's question is stored and shown (data, like every question): the label,
+ * then what the reader first asked. The model always gets the question without it.
+ */
+export const SWEEP_CONTINUATION_LABEL = 'Continuar varredura: ';
+
+/** A question without the continuation's label. */
+export const originalSweepQuestion = (question: string): string =>
+  question.startsWith(SWEEP_CONTINUATION_LABEL)
+    ? question.slice(SWEEP_CONTINUATION_LABEL.length)
+    : question;
+
+/** The question of a continuation, as the history keeps it. */
+export const continuationQuestion = (question: string): string =>
+  `${SWEEP_CONTINUATION_LABEL}${originalSweepQuestion(question)}`.slice(
+    0,
+    2000,
+  );

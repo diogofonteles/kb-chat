@@ -1,7 +1,11 @@
-import type {
-  ResearchEvent,
-  ResearchProfile,
-  SavedResearchTurn,
+import {
+  MAX_CARRIED_FINDINGS,
+  continuationQuestion,
+  type ResearchEvent,
+  type ResearchProfile,
+  type SavedResearchTurn,
+  type SweepCursor,
+  type SweepProgress,
 } from '@kb-chat/contracts';
 
 /** What the server knows of a turn when it starts (KBC-029). */
@@ -10,13 +14,18 @@ export interface TurnStart {
   readonly question: string;
   readonly profile: ResearchProfile;
   readonly at: string;
+  /** "Continuar varredura" (KBC-030): where the sweep starts again. */
+  readonly sweep?: SweepCursor;
 }
 
 /** The turn as the history keeps it while the agent works. */
 export function pendingTurn(start: TurnStart): SavedResearchTurn {
   return {
     id: start.id,
-    question: start.question,
+    // A continuation is kept as one, with the cursor it starts from (KBC-030).
+    question: start.sweep
+      ? continuationQuestion(start.question)
+      : start.question,
     answer: '',
     sources: [],
     steps: 0,
@@ -26,6 +35,7 @@ export function pendingTurn(start: TurnStart): SavedResearchTurn {
     interrupted: false,
     profile: start.profile,
     status: 'pending',
+    ...(start.sweep && { sweep: start.sweep }),
     at: start.at,
   };
 }
@@ -69,8 +79,11 @@ function finished(
   turn: SavedResearchTurn,
   e: Extract<ResearchEvent, { type: 'done' }>,
 ): SavedResearchTurn {
+  // The cursor comes from sweepEnd: none once the whole set was analyzed.
+  const base = withoutStatus(turn);
+  delete base.sweep;
   const ended: SavedResearchTurn = {
-    ...withoutStatus(turn),
+    ...base,
     usd: e.usd,
     billing: e.billing,
     model: e.model,
@@ -78,10 +91,43 @@ function finished(
     steps: Math.max(turn.steps, e.steps),
     ...(e.escalated ? { escalated: true } : {}),
     ...(e.plan ? { plan: e.plan } : {}),
+    ...sweepEnd(turn, e),
   };
-  return turn.answer.trim() || e.interrupted
+  // A sweep whose answer the day's cap blocked keeps its cursor: it ended, not failed.
+  return turn.answer.trim() || e.interrupted || e.sweep
     ? ended
     : failed(ended, 'INTERNAL');
+}
+
+/**
+ * The sweep's coverage and cursor at the end (KBC-030): `done`'s; a stopped sweep without
+ * one keeps what its progress built; a finished sweep keeps no cursor.
+ */
+function sweepEnd(
+  turn: SavedResearchTurn,
+  e: Extract<ResearchEvent, { type: 'done' }>,
+): Pick<SavedResearchTurn, 'coverage' | 'sweep'> {
+  const sweep = e.sweep ?? (e.coverage?.missing === 0 ? undefined : turn.sweep);
+  return {
+    ...(e.coverage && { coverage: e.coverage }),
+    ...(sweep && { sweep }),
+  };
+}
+
+/**
+ * A progress event's cursor with every finding so far (ADR 0021): progress cursors carry
+ * none, each event brings its batch's (`found`), as the page builds it.
+ */
+function progressCursor(
+  before: SweepCursor | undefined,
+  progress: SweepProgress,
+): SweepCursor | undefined {
+  if (!progress.cursor) return before;
+  const findings = [
+    ...(before?.findings ?? []),
+    ...(progress.found ?? []),
+  ].slice(0, MAX_CARRIED_FINDINGS);
+  return { ...progress.cursor, findings };
 }
 
 const withTurn = (
@@ -110,6 +156,10 @@ const STEPS: {
       p,
       p.segments.filter((s) => s.segment !== e.segment),
     ),
+  sweep: (p, e) => {
+    const sweep = progressCursor(p.turn.sweep, e.sweep);
+    return sweep ? withTurn(p, { sweep }) : p;
+  },
   done: (p, e) => ({ ...p, turn: finished(p.turn, e), ended: true }),
   error: (p, e) => ({ ...p, turn: failed(p.turn, e.code), ended: true }),
 };

@@ -110,3 +110,83 @@ describe('recordTurn', () => {
     });
   });
 });
+
+describe('recorded sweep turns (KBC-030, ADR 0021)', () => {
+  const cursor = (findings: { id: string; text: string }[] = []) => ({
+    plan: { target: {}, phrases: [], extract: 'livros' },
+    after: 'raw/b.md',
+    totals: { documents: 4, scanned: 2, withHits: null, read: 2, batches: 1 },
+    findings,
+  });
+  const progress = (found: { id: string; text: string }[]): ResearchEvent => ({
+    type: 'sweep',
+    sweep: {
+      status: 'running',
+      documents: 4,
+      needed: 4,
+      documentsDone: 2,
+      batches: 4,
+      batchesDone: 1,
+      requests: 6,
+      free: true,
+      cursor: cursor(),
+      found,
+    },
+  });
+  const coverage = {
+    target: {},
+    phrases: [],
+    documents: 4,
+    scanned: 4,
+    withHits: null,
+    read: 4,
+    needed: 4,
+    missing: 0,
+    batches: 4,
+  };
+
+  it('keeps a continuation as one, with the cursor it starts from', () => {
+    const turn = pendingTurn({
+      id: '0b9d7c1e-3f2a-4c5b-8d6e-7f8091a2b3c4',
+      question: 'livros citados',
+      profile: 'exhaustive',
+      at: AT,
+      sweep: cursor([{ id: 'raw/a.md', text: 'A' }]),
+    });
+    expect(turn.question).toBe('Continuar varredura: livros citados');
+    expect(turn.sweep?.findings).toEqual([{ id: 'raw/a.md', text: 'A' }]);
+  });
+
+  it('adds every batch’s findings to the cursor, so a turn cut short keeps them', () => {
+    const turn = recordTurn(
+      { ...pending(), sweep: cursor([{ id: 'raw/a.md', text: 'A' }]) },
+      [
+        progress([{ id: 'raw/b.md', text: 'B' }]),
+        { type: 'token', text: 'Parcial.', segment: 0 },
+      ],
+    );
+    expect(turn.interrupted).toBe(true);
+    expect(turn.sweep?.findings).toEqual([
+      { id: 'raw/a.md', text: 'A' },
+      { id: 'raw/b.md', text: 'B' },
+    ]);
+  });
+
+  it('keeps the coverage of done, and no cursor once the whole set was analyzed', () => {
+    const turn = recordTurn(pending(), [
+      progress([{ id: 'raw/b.md', text: 'B' }]),
+      { type: 'token', text: 'Tudo [1].', segment: 0 },
+      done({ coverage }),
+    ]);
+    expect(turn.coverage).toEqual(coverage);
+    expect(turn.sweep).toBeUndefined();
+  });
+
+  it('records a sweep whose answer the cap blocked as ended, with its cursor', () => {
+    const turn = recordTurn(pending(), [
+      done({ coverage: { ...coverage, reason: 'spend' }, sweep: cursor() }),
+    ]);
+    expect(turn.status).toBeUndefined();
+    expect(turn.sweep).toEqual(cursor());
+  });
+});

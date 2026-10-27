@@ -8,11 +8,14 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import type {
-  Conversation,
-  ResearchEvent,
-  ResearchProfile,
-  ResearchRequest,
+import {
+  continuationQuestion,
+  originalSweepQuestion,
+  type Conversation,
+  type ResearchEvent,
+  type ResearchProfile,
+  type ResearchRequest,
+  type SweepCursor,
 } from '@kb-chat/contracts';
 import { ResearchApi } from '@core/api/research-api.js';
 import { toUiErrorCode } from '@core/api/api-error.js';
@@ -47,17 +50,6 @@ import {
   toSavedTurn,
   type ResearchTurn,
 } from './research-turn.js';
-
-const continuedPrefix = (): string =>
-  $localize`:@@sweep.continuedQuestion:Continuar varredura: `;
-
-/** A continuation's question without its label: what the reader first asked. */
-const originalQuestion = (question: string): string =>
-  question.replace(continuedPrefix(), '');
-
-/** The continuation's question as shown and saved. */
-const continuationOf = (original: string): string =>
-  `${continuedPrefix()}${original}`.slice(0, 2000);
 
 /** The server records a stopped answer's cost a moment after the request is aborted. */
 export const STOP_SETTLE_MS = 1000;
@@ -192,7 +184,9 @@ export class ResearchStore {
 
   /**
    * "Continuar varredura" (KBC-030): a new exhaustive turn that sweeps only what the last
-   * one did not reach, from its cursor; the previous answer goes along as history.
+   * one did not reach, from its cursor; the previous answer goes along as history. Recorded
+   * and followed like any question (KBC-029); it starts with the findings so far, so a
+   * stop keeps them.
    */
   continueSweep(): void {
     const topic = this.chat.topicSlug();
@@ -200,22 +194,35 @@ export class ResearchStore {
     const last = turns.at(-1);
     if (!topic || topic !== current || !last?.cursor) return;
     if (!canContinueSweep(last) || this.streaming()) return;
-    const original = originalQuestion(last.question);
-    const history = toHistory(turns);
-    // Shown as a continuation; it starts with the findings so far, so a stop keeps them.
+    const original = originalSweepQuestion(last.question);
+    const shown = continuationQuestion(original);
     const turn = {
-      ...startTurn(this.nextId++, continuationOf(original), 'exhaustive'),
+      ...startTurn(this.nextId++, shown, { profile: 'exhaustive' }),
       cursor: last.cursor,
     };
     this.state.update((s) => ({ ...s, turns: [...s.turns, turn] }));
+    this.persist();
+    this.remember(this.state().id);
     // The model gets the question itself, without the continuation's label.
-    const sweep = last.cursor;
-    this.run(turn.id, topic, {
-      question: original,
-      history,
-      profile: 'exhaustive',
-      sweep,
+    const request = this.continuation(original, { turns, cursor: last.cursor });
+    const events = this.api.research(topic, {
+      ...request,
+      turnId: turn.turnId,
     });
+    this.run({ id: turn.id, events, asked: true });
+  }
+
+  private continuation(
+    question: string,
+    { turns, cursor }: { turns: readonly ResearchTurn[]; cursor: SweepCursor },
+  ): ResearchRequest {
+    return {
+      question,
+      history: toHistory(turns),
+      profile: 'exhaustive',
+      conversationId: this.state().id,
+      sweep: cursor,
+    };
   }
 
   /** "Tentar de novo" on the last turn (failed or stopped): asks the same question in its place. */

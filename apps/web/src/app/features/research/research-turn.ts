@@ -119,6 +119,19 @@ function withEstimate(
 /** A turn without an exhaustive sweep (KBC-030). */
 const NO_SWEEP = { sweep: null, coverage: null, cursor: null } as const;
 
+/** What a turn not answered yet reports. */
+const NOT_ANSWERED = {
+  usd: null,
+  billing: 'per-token',
+  model: '',
+  interrupted: false,
+  escalated: false,
+  plan: null,
+  remaining: null,
+  error: null,
+  errorLimit: null,
+} as const;
+
 export function startTurn(
   id: number,
   question: string,
@@ -136,15 +149,7 @@ export function startTurn(
     sources: [],
     steps: [],
     stepCount: 0,
-    usd: null,
-    billing: 'per-token',
-    model: '',
-    interrupted: false,
-    escalated: false,
-    plan: null,
-    remaining: null,
-    error: null,
-    errorLimit: null,
+    ...NOT_ANSWERED,
     at: new Date().toISOString(),
     restored: false,
     ...NO_SWEEP,
@@ -338,11 +343,16 @@ export function fromSavedTurn(
     at: saved.at,
     // A pending turn is still to be followed: its answer is announced when it arrives.
     restored: phase !== 'streaming',
-    sweep: null,
-    coverage: saved.coverage ?? null,
-    cursor: saved.sweep ?? null,
+    ...savedSweep(saved),
   };
 }
+
+/** A saved turn's sweep: its coverage and cursor; no live progress (KBC-030). */
+const savedSweep = (saved: SavedResearchTurn) => ({
+  sweep: null,
+  coverage: saved.coverage ?? null,
+  cursor: saved.sweep ?? null,
+});
 
 /**
  * A followed turn replays from its start (KBC-029): what was shown so far is cleared; the
