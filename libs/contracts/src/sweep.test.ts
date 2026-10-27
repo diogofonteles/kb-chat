@@ -1,0 +1,146 @@
+import { describe, expect, it } from 'vitest';
+import {
+  researchEventSchema,
+  researchRequestSchema,
+  type ResearchEvent,
+} from './research.js';
+import { savedResearchTurnSchema } from './conversations.js';
+import {
+  sweepCoverageSchema,
+  sweepCursorSchema,
+  sweepPlanSchema,
+  type SweepCursor,
+} from './sweep.js';
+
+const plan = {
+  target: { authorship: 'mestre-laercio' },
+  phrases: ['livro', 'obra'],
+  extract: 'livros citados de forma positiva, com trecho e documento',
+} as const;
+
+const cursor: SweepCursor = {
+  plan: sweepPlanSchema.parse(plan),
+  after: 'raw/temas/b.md',
+  totals: { documents: 10, scanned: 4, withHits: 2, read: 2, batches: 1 },
+};
+
+const coverage = {
+  target: plan.target,
+  phrases: ['livro'],
+  documents: 10,
+  scanned: 10,
+  withHits: 3,
+  read: 3,
+  missing: 0,
+  batches: 2,
+};
+
+describe('sweep contracts (KBC-030)', () => {
+  it('defaults a plan without phrases to a full read and refuses an empty extraction', () => {
+    expect(
+      sweepPlanSchema.parse({ target: {}, extract: 'livros citados' }).phrases,
+    ).toEqual([]);
+    expect(
+      sweepPlanSchema.safeParse({ target: {}, extract: ' ' }).success,
+    ).toBe(false);
+    expect(
+      sweepPlanSchema.safeParse({
+        target: { authorship: 'nobody' },
+        extract: 'x y z',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('takes a sweep cursor on an exhaustive request (Continuar varredura)', () => {
+    const request = researchRequestSchema.parse({
+      question: 'livros',
+      profile: 'exhaustive',
+      sweep: cursor,
+    });
+    expect(request.sweep?.after).toBe('raw/temas/b.md');
+  });
+
+  it('refuses a cursor on a fast or deep request', () => {
+    expect(
+      researchRequestSchema.safeParse({
+        question: 'livros',
+        profile: 'deep',
+        sweep: cursor,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('refuses cursor totals that do not add up', () => {
+    const bad = { ...cursor, totals: { ...cursor.totals, read: 11 } };
+    expect(sweepCursorSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('streams sweep progress and a done event with coverage and cursor', () => {
+    const events: ResearchEvent[] = [
+      {
+        type: 'sweep',
+        sweep: {
+          status: 'planned',
+          documents: 10,
+          documentsDone: 0,
+          batches: 4,
+          batchesDone: 0,
+          requests: 6,
+          free: true,
+        },
+      },
+      {
+        type: 'sweep',
+        sweep: {
+          status: 'running',
+          documents: 10,
+          documentsDone: 4,
+          batches: 4,
+          batchesDone: 1,
+          requests: 6,
+          free: true,
+          cursor,
+        },
+      },
+      {
+        type: 'done',
+        usd: 0,
+        billing: 'free',
+        model: 'm',
+        interrupted: false,
+        steps: 2,
+        coverage: { ...coverage, missing: 6, reason: 'requests' },
+        sweep: cursor,
+      },
+    ];
+    for (const event of events)
+      expect(researchEventSchema.parse(event)).toEqual(event);
+  });
+
+  it('keeps coverage and the cursor with a saved turn; older turns stay valid', () => {
+    const turn = {
+      question: 'q',
+      answer: 'a',
+      sources: [],
+      steps: 1,
+      usd: 0,
+      model: 'm',
+      interrupted: false,
+      at: '2026-10-27T10:00:00.000Z',
+    };
+    expect(savedResearchTurnSchema.parse(turn).coverage).toBeUndefined();
+    const saved = savedResearchTurnSchema.parse({
+      ...turn,
+      coverage,
+      sweep: cursor,
+    });
+    expect(saved.coverage?.documents).toBe(10);
+    expect(saved.sweep?.after).toBe('raw/temas/b.md');
+  });
+
+  it('refuses a coverage that counts more than the set', () => {
+    expect(
+      sweepCoverageSchema.safeParse({ ...coverage, scanned: 11 }).success,
+    ).toBe(false);
+  });
+});
