@@ -519,7 +519,7 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
         aTurn({ phase: 'streaming', text: '', sweep: progress, steps: [] }),
       );
       expect(
-        screen.getByRole('heading', { name: 'Varredura completa' }),
+        screen.getByRole('heading', { name: 'Varredura do conjunto inteiro' }),
       ).toBeTruthy();
       expect(
         screen.getByText('2.555 documentos em ~80 lotes (~82 pedidos à IA).'),

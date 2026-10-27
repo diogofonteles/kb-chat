@@ -138,7 +138,9 @@ test('KBC-030: an exhaustive turn shows the estimate and the progress, sweeps th
     .fill('todas as obras sobre o ritmo [varredura lenta]');
   await page.getByRole('button', { name: 'Perguntar' }).click();
   const answer = page.locator('app-research-message').last();
-  const sweep = answer.getByRole('region', { name: 'Varredura completa' });
+  const sweep = answer.getByRole('region', {
+    name: 'Varredura do conjunto inteiro',
+  });
   await expect(sweep.getByText(/documentos em ~\d+ lotes/)).toBeVisible();
   await expect(sweep.getByRole('status')).toContainText(/Lote \d+ de \d+/);
   await expect(sweep.getByRole('progressbar')).toBeVisible();
