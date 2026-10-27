@@ -1,3 +1,4 @@
+import type { SweepFinding } from '@kb-chat/contracts';
 import type { CatalogEntry } from '../../catalog/index.js';
 import type { SourceBook } from '../source-book.js';
 import { foldName } from '../tool-output.js';
@@ -59,6 +60,15 @@ export function parseNumbered(
   });
 }
 
+/** Characters of a finding a cursor carries (the contract's cap). */
+const CARRIED_CHARS = 300;
+
+/** A finding as a cursor carries it: by document id, so another turn can number it. */
+export const carriedOf = (entry: CatalogEntry, text: string): SweepFinding => ({
+  id: entry.id,
+  text: text.slice(0, CARRIED_CHARS),
+});
+
 const keyOf = ({ n, text }: NumberedItem): string =>
   `${n}|${foldName(text)
     .replace(/[^\p{L}\p{N} ]/gu, '')
@@ -94,6 +104,14 @@ export class FindingSet {
       const key = keyOf(item);
       if (!this.items.has(key)) this.items.set(key, item);
     }
+  }
+
+  /** The findings by document id, at most `max` (for the cursor). */
+  carried(max: number): SweepFinding[] {
+    return [...this.items.values()].slice(0, max).flatMap(({ n, text }) => {
+      const id = this.book.find(n)?.id;
+      return id ? [{ id, text: text.slice(0, CARRIED_CHARS) }] : [];
+    });
   }
 
   lines(): string[] {

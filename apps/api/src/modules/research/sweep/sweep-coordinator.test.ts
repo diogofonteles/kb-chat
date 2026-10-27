@@ -274,4 +274,39 @@ describe('SweepCoordinator (KBC-030)', () => {
     expect(engine.calls.some((c) => c.startsWith('Achados'))).toBe(true);
     expect(outcome.findings.lines().join('\n').length).toBeLessThanOrEqual(400);
   });
+
+  it('carries its findings in the cursor and each batch’s new ones in the progress (QA F-1)', async () => {
+    const { outcome, events } = await sweep(new FakeEngine({ parallel: 1 }), {
+      maxRequests: 2,
+    });
+    expect(outcome.cursor?.findings).toEqual([
+      { id: 'raw/t1.md', text: 'Livro citado em Tema 1 — “leiam o livro”' },
+      { id: 'raw/t2.md', text: 'Livro citado em Tema 2 — “leiam o livro”' },
+    ]);
+    const running = events.filter((e) => e.status === 'running');
+    expect(running.map((e) => e.found?.length)).toEqual([1, 1]);
+    expect(running[0]?.cursor?.findings).toEqual([]);
+  });
+
+  it('answers a continuation with what the earlier turns found too (QA F-1)', async () => {
+    const first = await sweep(new FakeEngine({ parallel: 1 }), {
+      maxRequests: 2,
+    });
+    const rest = await sweep(new FakeEngine(), {
+      after: first.outcome.cursor?.after,
+      previous: first.outcome.cursor?.totals,
+      carried: first.outcome.cursor?.findings,
+    });
+    const lines = rest.outcome.findings.lines().join('\n');
+    expect(lines).toContain('Tema 1');
+    expect(lines).toContain('Tema 6');
+    expect(rest.outcome.findings.size).toBe(DOCS);
+  });
+
+  it('drops carried findings of documents outside the set', async () => {
+    const { outcome } = await sweep(new FakeEngine(), {
+      carried: [{ id: 'raw/forjado.md', text: 'inventado' }],
+    });
+    expect(outcome.findings.lines().join()).not.toContain('inventado');
+  });
 });

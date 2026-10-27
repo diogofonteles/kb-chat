@@ -1,5 +1,6 @@
 import {
   AUTHORSHIPS,
+  MAX_CARRIED_FINDINGS,
   MAX_HISTORY_TURNS,
   type AnswerSource,
   type Authorship,
@@ -74,6 +75,22 @@ export interface ResearchTurn {
   readonly coverage: SweepCoverage | null;
   /** Where "Continuar varredura" resumes; null when the sweep covered its whole set. */
   readonly cursor: SweepCursor | null;
+}
+
+/**
+ * The cursor of a sweep still running: the server's latest, with every finding the page
+ * received so far, so a stop keeps them for "Continuar varredura" (KBC-030 QA F-1).
+ */
+function progressCursor(
+  turn: ResearchTurn,
+  progress: SweepProgress,
+): SweepCursor | null {
+  if (!progress.cursor) return turn.cursor;
+  const findings = [
+    ...(turn.cursor?.findings ?? []),
+    ...(progress.found ?? []),
+  ].slice(0, MAX_CARRIED_FINDINGS);
+  return { ...progress.cursor, findings };
 }
 
 /** A turn without an exhaustive sweep (KBC-030). */
@@ -168,7 +185,7 @@ const HANDLERS: {
   sweep: (turn, e) => ({
     ...turn,
     sweep: e.sweep,
-    cursor: e.sweep.cursor ?? turn.cursor,
+    cursor: progressCursor(turn, e.sweep),
   }),
   // A finished answer without text is a provider failure, not an empty success.
   done: (turn, e) => ({

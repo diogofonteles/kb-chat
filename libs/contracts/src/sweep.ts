@@ -56,6 +56,21 @@ export const sweepTotalsSchema = z
 export type SweepTotals = z.infer<typeof sweepTotalsSchema>;
 
 /**
+ * One finding carried from a sweep turn to its continuation: the document's id and the
+ * text, so "Continuar varredura" answers with what earlier turns found too (KBC-030 QA F-1).
+ */
+export const sweepFindingSchema = z.strictObject({
+  id: z.string().min(1).max(300),
+  text: z.string().min(1).max(300),
+});
+export type SweepFinding = z.infer<typeof sweepFindingSchema>;
+
+/** Findings a cursor carries at most (keeps a continuation's request well under 1 MB). */
+export const MAX_CARRIED_FINDINGS = 600;
+/** New findings one progress event carries at most. */
+export const MAX_FOUND_PER_PROGRESS = 200;
+
+/**
  * Where an unfinished sweep stopped: its plan and the last document id fully swept, in id
  * order (absent: none). "Continuar varredura" sends it back (`sweep` in the request).
  */
@@ -63,6 +78,8 @@ export const sweepCursorSchema = z.strictObject({
   plan: sweepPlanSchema,
   after: z.string().min(1).max(1000).optional(),
   totals: sweepTotalsSchema,
+  /** What the sweep found so far, merged into the continuation's answer. */
+  findings: z.array(sweepFindingSchema).max(MAX_CARRIED_FINDINGS).default([]),
 });
 export type SweepCursor = z.infer<typeof sweepCursorSchema>;
 
@@ -118,7 +135,9 @@ export const sweepProgressSchema = z.strictObject({
   requests: count,
   /** Free models: slower and less rigorous; the estimate says so. */
   free: z.boolean(),
-  /** Where to continue from if the turn stops now. */
+  /** Where to continue from if the turn stops now (its findings come apart, in `found`). */
   cursor: sweepCursorSchema.optional(),
+  /** The findings of the batch that just finished: the page keeps them for a stop. */
+  found: z.array(sweepFindingSchema).max(MAX_FOUND_PER_PROGRESS).optional(),
 });
 export type SweepProgress = z.infer<typeof sweepProgressSchema>;

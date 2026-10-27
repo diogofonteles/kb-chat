@@ -1,14 +1,23 @@
-import type {
-  SweepCoverage,
-  SweepCursor,
-  SweepProgress,
-  SweepStopReason,
-  SweepTotals,
+import {
+  MAX_CARRIED_FINDINGS,
+  MAX_FOUND_PER_PROGRESS,
+  type SweepCoverage,
+  type SweepCursor,
+  type SweepFinding,
+  type SweepProgress,
+  type SweepStopReason,
+  type SweepTotals,
 } from '@kb-chat/contracts';
 import { AppError } from '../../../app-error.js';
 import { LlmKeyRejectedError } from '../../../ports/llm-errors.js';
 import type { SourceBook } from '../source-book.js';
-import { FindingSet, parseFindings, parseNumbered } from './findings.js';
+import {
+  FindingSet,
+  carriedOf,
+  parseFindings,
+  parseNumbered,
+  type FoundItem,
+} from './findings.js';
 import {
   batchSystemPrompt,
   batchUserPrompt,
@@ -89,6 +98,8 @@ export interface SweepRequest {
   readonly layout: SweepLayout;
   /** The totals of the turns this one continues. */
   readonly previous?: SweepTotals;
+  /** What those turns found: merged into this turn's findings (QA F-1). */
+  readonly carried?: readonly SweepFinding[];
   readonly book: SourceBook;
   readonly signal: AbortSignal;
   /** No batch starts after this time (ms since the epoch); null: none. */
@@ -142,6 +153,7 @@ export class SweepCoordinator {
   async run(request: SweepRequest): Promise<SweepOutcome> {
     this.request = request;
     this.findings = new FindingSet(request.book);
+    this.findings.addFound(carriedItems(request));
     const { batches } = request.layout;
     this.done = batches.map(() => false);
     this.deps.emit(this.progress('planned'));
@@ -172,9 +184,10 @@ export class SweepCoordinator {
       }),
     );
     if (output === null) return;
-    this.findings.addFound(parseFindings(output, labels));
+    const found = parseFindings(output, labels);
+    this.findings.addFound(found);
     this.done[batch.index] = true;
-    this.deps.emit(this.progress('running'));
+    this.deps.emit(this.progress('running', found));
   }
 
   /** Checks the ceilings, then waits for the free pace; false when the sweep must stop. */
@@ -347,12 +360,18 @@ export class SweepCoordinator {
       missing,
       ...(reason ? { reason } : {}),
     };
+    const findings = this.findings.carried(MAX_CARRIED_FINDINGS);
     const cursor =
-      missing > 0 ? { plan, ...(after ? { after } : {}), totals } : null;
+      missing > 0
+        ? { plan, ...(after ? { after } : {}), totals, findings }
+        : null;
     return { coverage, cursor };
   }
 
-  private progress(status: SweepProgress['status']): SweepProgress {
+  private progress(
+    status: SweepProgress['status'],
+    found: readonly FoundItem[] = [],
+  ): SweepProgress {
     const { totals, swept, after } = this.totals();
     const { layout, requestsBefore } = this.request;
     const batches = layout.batches.length;
@@ -364,9 +383,17 @@ export class SweepCoordinator {
       batchesDone: this.done.filter(Boolean).length,
       requests: requestsBefore + batches + 1,
       free: this.deps.engine.free,
-      ...(status === 'running'
-        ? { cursor: { plan: layout.plan, ...(after ? { after } : {}), totals } }
-        : {}),
+      ...(status === 'running' && {
+        cursor: {
+          plan: layout.plan,
+          ...(after ? { after } : {}),
+          totals,
+          findings: [],
+        },
+        found: found
+          .slice(0, MAX_FOUND_PER_PROGRESS)
+          .map(({ entry, text }) => carriedOf(entry, text)),
+      }),
     };
   }
 }
@@ -396,3 +423,12 @@ const linesAsItems = (lines: readonly string[]) =>
       ? [{ n: Number(match[1]), text: match[2] }]
       : [];
   });
+
+/** The carried findings of documents in this set; any other id is dropped (never trusted). */
+function carriedItems({ layout, carried = [] }: SweepRequest): FoundItem[] {
+  const byId = new Map(layout.docs.map((doc) => [doc.entry.id, doc.entry]));
+  return carried.flatMap(({ id, text }) => {
+    const entry = byId.get(id);
+    return entry ? [{ entry, text }] : [];
+  });
+}

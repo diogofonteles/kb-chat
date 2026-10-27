@@ -177,11 +177,11 @@ export class ResearchMessage {
           : '',
     };
   });
-  /** A sweep stopped on this page before its coverage came: where it got to. */
+  /** A sweep stopped on this page before its coverage came: what was left (QA F-3). */
   protected readonly stoppedAt = computed(() => {
-    const turn = this.turn();
-    if (turn.coverage || !turn.sweep || turn.phase !== 'done') return '';
-    return progressText(turn.sweep);
+    const { coverage, sweep, phase } = this.turn();
+    if (coverage || !sweep || phase !== 'done') return '';
+    return missingText(sweep.documents - sweep.documentsDone, 'stopped');
   });
   protected readonly canContinue = computed(
     () => this.last() && canContinueSweep(this.turn()),

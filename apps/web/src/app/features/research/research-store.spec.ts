@@ -36,6 +36,7 @@ const CURSOR: SweepCursor = {
   },
   after: 'raw/c.md',
   totals: { documents: 10, scanned: 3, withHits: null, read: 3, batches: 1 },
+  findings: [],
 };
 const PROGRESS: SweepProgress = {
   status: 'running',
@@ -672,15 +673,31 @@ describe('ResearchStore', () => {
     });
   });
 
-  it('keeps the last progress cursor when the reader stops the sweep, and offers to continue', () => {
+  it('keeps the last progress cursor and every batch’s findings when the reader stops (QA F-1)', () => {
     const { store, streams, save } = setup();
     store.chooseProfile('exhaustive');
     store.ask('livros');
-    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    const found = (text: string) => [{ id: 'raw/a.md', text }];
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: found('A'),
+      },
+    });
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: {
+        ...PROGRESS,
+        cursor: { ...CURSOR, findings: [] },
+        found: found('B'),
+      },
+    });
     store.stop();
-    const turn = store.turns()[0];
-    expect(turn?.cursor).toEqual(CURSOR);
-    expect(save.mock.calls.at(-1)?.[0].turns[0]?.sweep).toEqual(CURSOR);
+    const expected = { ...CURSOR, findings: [...found('A'), ...found('B')] };
+    expect(store.turns()[0]?.cursor).toEqual(expected);
+    expect(save.mock.calls.at(-1)?.[0].turns[0]?.sweep).toEqual(expected);
   });
 
   it('continues nothing when the sweep covered its whole set', () => {

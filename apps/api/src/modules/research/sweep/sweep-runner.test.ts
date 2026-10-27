@@ -261,4 +261,32 @@ describe('exhaustive sweep in the in-API loop (KBC-030)', () => {
     expect(ofType(events, 'sweep')).toHaveLength(0);
     expect(done(events).coverage).toBeUndefined();
   });
+
+  it('keeps the findings made before Parar and answers the continuation with them (QA F-1)', async () => {
+    const abort = new AbortController();
+    let calls = 0;
+    const stopped = await sweepRunner({
+      llm: {
+        ...LAZY,
+        batchReply: (user) => {
+          calls += 1;
+          // The reader stops while the second batch runs.
+          if (calls === 2) abort.abort();
+          const title = /^\[D1\] ([^·\n]+)/m.exec(user)?.[1]?.trim() ?? '?';
+          return `- [D1] Achado antes de parar em ${title}`;
+        },
+      },
+    });
+    const events = await collectEvents(
+      stopped.runner.run(exhaustive({ question: WHOLE, signal: abort.signal })),
+    );
+    const cursor = done(events).sweep;
+    expect(cursor?.findings[0]?.text).toMatch(/Achado antes de parar/);
+    const rest = await sweepRunner({ llm: { batchReply: () => 'NENHUM' } });
+    await collectEvents(
+      rest.runner.run(exhaustive({ question: WHOLE, sweep: cursor })),
+    );
+    const answerCall = rest.llm.messagesSeen.at(-1) ?? [];
+    expect(answerCall.at(-1)?.content).toMatch(/Achado antes de parar/);
+  });
 });

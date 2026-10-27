@@ -512,6 +512,7 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
         read: 640,
         batches: 12,
       },
+      findings: [],
     };
 
     it('shows the estimate, the free-model note and the progress while it sweeps', async () => {
@@ -602,8 +603,13 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       await renderMessage(
         aTurn({ interrupted: true, sweep: progress, cursor, text: '' }),
       );
-      expect(screen.getByText('Varredura interrompida em:')).toBeTruthy();
-      expect(screen.getByText(/Lote 12 de 80/)).toBeTruthy();
+      expect(screen.getByText('Varredura incompleta.')).toBeTruthy();
+      expect(
+        screen.getByText(/Faltaram 1\.915 documentos: você parou a pesquisa\./),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Continuar varredura' }),
+      ).toBeTruthy();
     });
   });
 });

@@ -22,6 +22,7 @@ const cursor: SweepCursor = {
   plan: sweepPlanSchema.parse(plan),
   after: 'raw/temas/b.md',
   totals: { documents: 10, scanned: 4, withHits: 2, read: 2, batches: 1 },
+  findings: [{ id: 'raw/temas/a.md', text: 'O Caibalion — “leiam”' }],
 };
 
 const coverage = {
@@ -67,6 +68,19 @@ describe('sweep contracts (KBC-030)', () => {
         profile: 'deep',
         sweep: cursor,
       }).success,
+    ).toBe(false);
+  });
+
+  it('carries the findings so far, and refuses more than the cap', () => {
+    expect(
+      sweepCursorSchema.parse({ ...cursor, findings: undefined }).findings,
+    ).toEqual([]);
+    const many = Array.from({ length: 601 }, (_, i) => ({
+      id: `d${i}`,
+      text: 'x',
+    }));
+    expect(
+      sweepCursorSchema.safeParse({ ...cursor, findings: many }).success,
     ).toBe(false);
   });
 

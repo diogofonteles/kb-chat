@@ -118,6 +118,7 @@ async function* sweepAll(
       ...host,
       layout,
       previous: host.cursor?.totals,
+      carried: host.cursor?.findings,
       maxRequests: Math.max(0, host.maxRequests - host.requestsBefore - 1),
       findingsChars: batchChars,
     })
