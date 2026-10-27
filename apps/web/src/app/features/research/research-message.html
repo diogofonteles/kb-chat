@@ -135,11 +135,11 @@
             other {Resposta interrompida antes de começar.}
           }
         </p>
-        @if (partialCost()) {
-          <p class="note" i18n="@@ai.partialCost">
-            O custo do que já foi processado entra no gasto do dia.
-          </p>
-        }
+      }
+      @if (turn().interrupted && partialCost()) {
+        <p class="note" i18n="@@ai.partialCost">
+          O custo do que já foi processado entra no gasto do dia.
+        </p>
       }
       @if (cited().length > 0) {
         <div class="sources">

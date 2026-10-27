@@ -52,6 +52,7 @@ import {
   PLAN_SWEEP_TOOL,
 } from './sweep/plan-tool.js';
 import type { BatchEngine, SweepClock } from './sweep/sweep-coordinator.js';
+import type { SweepPacer } from './sweep/sweep-pacing.js';
 import {
   batchCharsFor,
   runSweepTurn,
@@ -91,6 +92,8 @@ export interface ToolLoopRunnerDeps extends LoopEngine {
   readonly budgets?: ResearchBudgets;
   /** The sweep's clock (tests); default the real one. */
   readonly clock?: SweepClock;
+  /** The free-model pacer (tests); default the process's. */
+  readonly pacer?: SweepPacer;
 }
 
 interface Turn {
@@ -351,6 +354,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       startedAt: turn.startedAt,
       requestsBefore: turn.calls,
       ...(this.deps.clock && { clock: this.deps.clock }),
+      ...(this.deps.pacer && { pacer: this.deps.pacer }),
       answer: (messages) => this.sweepAnswer(turn, messages),
     });
   }

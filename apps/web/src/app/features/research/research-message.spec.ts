@@ -631,6 +631,16 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       expect(continued).toHaveBeenCalledTimes(1);
     });
 
+    it('still marks an answer cut short after a complete sweep, with its partial cost (review round 3)', async () => {
+      await renderMessage(aTurn({ interrupted: true, coverage }));
+      expect(screen.getByText('(interrompida)')).toBeTruthy();
+      expect(
+        screen.getByText(
+          'O custo do que já foi processado entra no gasto do dia.',
+        ),
+      ).toBeTruthy();
+    });
+
     it('offers no continue on an earlier turn', async () => {
       await renderMessage(aTurn({ cursor }), false);
       expect(button('Continuar varredura')).toBeNull();

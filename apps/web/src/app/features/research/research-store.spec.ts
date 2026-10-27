@@ -811,4 +811,44 @@ describe('ResearchStore', () => {
       { id: 'raw/a.md', text: 'A' },
     ]);
   });
+
+  it('retries a stopped continuation from the cursor it started from (review round 3)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'token', text: 'Parcial [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: COVERAGE,
+      sweep: CURSOR,
+    });
+    store.continueSweep();
+    // The continuation's answer is cut short after the whole set was analyzed.
+    streams[1]?.next({ type: 'token', text: 'Lista [1]', segment: 0 });
+    streams[1]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: true,
+      steps: 1,
+      coverage: { ...COVERAGE, missing: 0, read: 10, reason: undefined },
+    });
+    store.chooseProfile('fast');
+    store.retry();
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({
+        question: 'livros',
+        profile: 'exhaustive',
+        sweep: CURSOR,
+      }),
+    );
+    expect(store.turns()).toHaveLength(2);
+  });
 });

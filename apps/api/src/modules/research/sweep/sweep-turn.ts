@@ -19,6 +19,7 @@ import {
   type SweepOutcome,
 } from './sweep-coordinator.js';
 import type { SweepKit } from './sweep-kit.js';
+import type { SweepPacer } from './sweep-pacing.js';
 import type { SweepLayout, SweepPlanner } from './sweep-planner.js';
 import { sweepAnswerMessages } from './sweep-prompts.js';
 
@@ -60,6 +61,7 @@ export interface SweepTurnHost {
   /** Requests the turn made while planning. */
   readonly requestsBefore: number;
   readonly clock?: SweepClock;
+  readonly pacer?: SweepPacer;
   /** Streams the final answer of these messages (the runner's model, no tools). */
   answer(messages: AgentMessage[]): AsyncIterable<ResearchEvent>;
 }
@@ -76,6 +78,7 @@ export interface SweepParts {
   readonly startedAt: number;
   readonly requestsBefore: number;
   readonly clock?: SweepClock;
+  readonly pacer?: SweepPacer;
   answer(messages: AgentMessage[]): AsyncIterable<ResearchEvent>;
 }
 
@@ -101,6 +104,7 @@ export function sweepTurnHost(parts: SweepParts): SweepTurnHost {
     maxRequests: Math.min(cap, input.requestBudget ?? Infinity),
     requestsBefore: parts.requestsBefore,
     ...(parts.clock && { clock: parts.clock }),
+    ...(parts.pacer && { pacer: parts.pacer }),
     answer: (messages) => parts.answer(messages),
   };
 }
@@ -184,6 +188,7 @@ async function* sweepAll(
     engine: host.engine,
     sweeps: host.sweeps,
     clock: host.clock,
+    pacer: host.pacer,
     emit: (sweep) => pipe.push({ type: 'sweep', sweep }),
   });
   const running = coordinator

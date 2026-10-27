@@ -196,9 +196,11 @@ export class ResearchMessage {
     return missingText(sweep.needed - sweep.documentsDone, 'stopped');
   });
   /** The sweep's box already says it stopped and what was left: no second note (UP-10). */
-  protected readonly sweepExplainsStop = computed(
-    () => this.coverage() !== null || this.stoppedAt() !== '',
-  );
+  protected readonly sweepExplainsStop = computed(() => {
+    // Only a sweep stopped before any answer: an answer cut short still says "(interrompida)".
+    if (this.turn().text.trim()) return false;
+    return Boolean(this.coverage()?.missing) || this.stoppedAt() !== '';
+  });
   protected readonly canContinue = computed(
     () => this.last() && canContinueSweep(this.turn()),
   );
