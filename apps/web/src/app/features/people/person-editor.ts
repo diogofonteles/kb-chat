@@ -129,8 +129,9 @@ export class PersonEditor {
   protected confirmApply(): void {
     const profile = this.chosenProfile();
     this.confirmingApply.set(false);
+    if (!profile) return;
     this.refocusApply = true;
-    if (profile) this.profileApplied.emit(profile.id);
+    this.profileApplied.emit(profile.id);
   }
 
   /** The asked-for button replaces the one that had focus: focus follows it (WCAG 2.4.3). */

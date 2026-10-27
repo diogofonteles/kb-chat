@@ -649,6 +649,10 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
       'Perfil "Aluno" aplicado a guest@example.com.',
     );
     expect(row(/Guest/).textContent).toContain('Hermetismo');
+    // Focus is back on "Aplicar perfil" once the save is over (WCAG 2.4.3).
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Aplicar perfil' }),
+    );
   });
 
   it('can cancel applying a profile, and the owner is offered none', async () => {
@@ -691,5 +695,30 @@ describe('PeoplePanel invitation profiles (KBC-028)', () => {
     expect(
       screen.queryByLabelText('Pesquisas por dia (vazio = padrão)'),
     ).toBeNull();
+  });
+
+  it('another profile starts the preset over, a pending bad number included (review N-2)', async () => {
+    const { fixture } = await renderPanel([owner], [aluno, pesquisador]);
+    fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {
+      target: { value: 'new@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Configurar agora' }));
+    await fixture.whenStable();
+    fireEvent.change(
+      screen.getByLabelText('Pesquisas por dia (vazio = padrão)'),
+      { target: { value: '-3' } },
+    );
+    await fixture.whenStable();
+    const send = screen.getByRole('button', {
+      name: 'Convidar',
+    }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    const select = document.querySelector(
+      'select[name="profile"]',
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: pesquisador.id } });
+    await fixture.whenStable();
+    expect(send.disabled).toBe(false);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

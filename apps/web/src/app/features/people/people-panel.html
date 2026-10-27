@@ -85,16 +85,19 @@
     </p>
   }
   @if (configuring()) {
-    <app-invite-preset-editor
-      id="invite-preset"
-      class="preset"
-      [preset]="draftPreset()"
-      [topics]="topics()"
-      [defaultAppAi]="defaultAppAi()"
-      [busy]="busy()"
-      (changed)="draftPreset.set($event)"
-      (invalidChange)="presetInvalid.set($event)"
-    />
+    <!-- Another profile starts the editor over, its field errors included. -->
+    @for (choice of [setupChoice()]; track choice) {
+      <app-invite-preset-editor
+        id="invite-preset"
+        class="preset"
+        [preset]="draftPreset()"
+        [topics]="topics()"
+        [defaultAppAi]="defaultAppAi()"
+        [busy]="busy()"
+        (changed)="draftPreset.set($event)"
+        (invalidChange)="presetInvalid.set($event)"
+      />
+    }
   }
   <button
     type="submit"

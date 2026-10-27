@@ -230,6 +230,7 @@ export class PeoplePanel {
 
   protected chooseSetup(value: string): void {
     this.pickedSetup.set(value);
+    this.presetInvalid.set(false);
   }
 
   protected invite(event: Event): void {

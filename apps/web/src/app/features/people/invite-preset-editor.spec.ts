@@ -167,4 +167,24 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
       screen.getByText(/a cota e a reserva paga não se aplicam/),
     ).toBeTruthy();
   });
+
+  it('"Nenhuma" clears a pending bad number, so nothing stays held (review N-1)', async () => {
+    const invalidChange = vi.fn();
+    const { fixture } = await render(InvitePresetEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { preset: plainPreset(), topics: TOPICS.items },
+      on: { invalidChange },
+    });
+    fireEvent.change(
+      screen.getByLabelText('Pesquisas por dia (vazio = padrão)'),
+      { target: { value: '-5' } },
+    );
+    expect(invalidChange).toHaveBeenLastCalledWith(true);
+    fireEvent.change(screen.getByLabelText('Qual IA atende a pessoa'), {
+      target: { value: 'none' },
+    });
+    await fixture.whenStable();
+    expect(invalidChange).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });

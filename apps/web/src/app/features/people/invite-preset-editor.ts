@@ -142,7 +142,14 @@ export class InvitePresetEditor {
 
   protected chooseAppAi(value: string): void {
     const appAi = pick(PRESET_APP_AIS, value);
-    if (appAi) this.emitAi({ appAi });
+    if (!appAi) return;
+    // Without an app AI the limits are off: a pending bad number no longer holds anything.
+    if (appAi === 'none') {
+      this.dailyError.set(null);
+      this.capError.set(null);
+      this.reportValidity();
+    }
+    this.emitAi({ appAi });
   }
 
   protected setEnforced(enforced: boolean): void {
