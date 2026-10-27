@@ -17,7 +17,12 @@ import { registerErrorHandler } from './error-handler.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
 import { DocumentsService, documentRoutes } from './modules/documents/index.js';
-import { researchRoutes } from './modules/research/index.js';
+import {
+  LiveTurns,
+  researchRoutes,
+  type ResearchRouteOptions,
+} from './modules/research/index.js';
+
 import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
 import { searchRoutes } from './modules/search/index.js';
@@ -88,6 +93,10 @@ import {
 } from './research-agent-factory.js';
 
 /** The owner's principal: the alias of the data written before logins (ADR 0008). */
+
+/** On shutdown, how long the running research turns get to record how they ended. */
+const TURN_SAVE_GRACE_MS = 5_000;
+
 export const OWNER = OWNER_PRINCIPAL;
 
 /** Where one-time codes and access requests are kept and how messages go (ADR 0011). */
@@ -157,6 +166,7 @@ type FullDeps = AppDeps & {
 async function registerResearch(
   app: FastifyInstance,
   deps: FullDeps,
+  recording: Pick<ResearchRouteOptions, 'turns' | 'journal'>,
 ): Promise<void> {
   const { ai, agent, ledger, catalog, llm } = deps;
   const scopeOf = (principal: string) => ({
@@ -181,7 +191,7 @@ async function registerResearch(
     spendRoutes({ serviceFor: spendFor, ledger, people: () => spenders(deps) }),
   );
   const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
-  await app.register(researchRoutes({ runner, hasTopic }));
+  await app.register(researchRoutes({ runner, hasTopic, ...recording }));
 }
 
 /** Everyone who has signed in, with the principal their spend is kept under. */
@@ -224,7 +234,14 @@ async function registerRoutes(
 ): Promise<void> {
   const { config, vault, catalog } = deps;
   await registerSearch(app, deps);
-  await registerResearch(app, deps);
+  // Recorded research turns run apart from their request (KBC-029) and land in the history.
+  const turns = new LiveTurns();
+  const conversations = new ConversationsService({
+    store: deps.conversations,
+    isLive: (principal, turnId) => turns.isLive(principal, turnId),
+  });
+  app.addHook('onClose', () => turns.close(TURN_SAVE_GRACE_MS));
+  await registerResearch(app, deps, { turns, journal: conversations });
   const documents = new DocumentsService({
     catalog,
     vault,
@@ -232,7 +249,6 @@ async function registerRoutes(
   });
   await app.register(documentRoutes(documents));
   await app.register(usageRoutes({ catalog, log: deps.usage }));
-  const conversations = new ConversationsService({ store: deps.conversations });
   await app.register(conversationRoutes(conversations));
   await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);

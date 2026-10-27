@@ -1,4 +1,9 @@
-export { researchRoutes, type ResearchRouteOptions } from './routes.js';
+export {
+  researchRoutes,
+  type ResearchRouteOptions,
+  type TurnJournal,
+} from './routes.js';
+export { LiveTurns, TURN_CEILING_MS } from './live-turns.js';
 export { ToolLoopRunner, type ToolLoopRunnerDeps } from './tool-loop-runner.js';
 export { preambleLength } from './answer-preamble.js';
 export { AnswerStream, PREAMBLE_WINDOW_CHARS } from './answer-stream.js';
