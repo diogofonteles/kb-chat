@@ -1,9 +1,11 @@
 import { readFile, readdir } from 'node:fs/promises';
 
-/** One process as /proc/<pid>/stat tells it: its parent and its start time (clock ticks). */
+/** One process as /proc/<pid>/stat tells it: state, parent and start time (clock ticks). */
 export interface ProcessEntry {
   readonly parent: number;
   readonly start: string;
+  /** `Z`: a zombie (already dead, waiting for init to collect it): it can read nothing. */
+  readonly state?: string;
 }
 
 /**
@@ -17,7 +19,7 @@ export function parseStat(stat: string): ProcessEntry | null {
   const parent = Number(fields[1]);
   const start = fields[19];
   if (!Number.isInteger(parent) || start === undefined) return null;
-  return { parent, start };
+  return { parent, start, state: fields[0] };
 }
 
 /** The deepest process chain the container may have (its pids_limit is 256). */
@@ -81,6 +83,15 @@ async function killIfSame(
 
 /** How many times the reaper scans and kills before it gives up (and refuses the turn). */
 const PASSES = 5;
+/** Time for init to collect what was killed before the next scan. */
+const SETTLE_MS = 100;
+
+/** The strays still alive (a zombie is dead already: init collects it). */
+function liveStrays(tree: ReadonlyMap<number, ProcessEntry>, runner: number) {
+  return [...tree].filter(
+    ([pid, entry]) => entry.state !== 'Z' && isStray(tree, pid, runner),
+  );
+}
 
 /**
  * Kills every process a former turn left behind, with its whole family, and fails closed: if
@@ -92,12 +103,11 @@ export async function reapStrays(
   proc = '/proc',
 ): Promise<void> {
   for (let pass = 0; pass < PASSES; pass += 1) {
-    const tree = await processTree(proc);
-    const strays = [...tree].filter(([pid]) => isStray(tree, pid, runner));
+    const strays = liveStrays(await processTree(proc), runner);
     if (strays.length === 0) return;
     for (const [pid, { start }] of strays) await killIfSame(proc, pid, start);
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
   }
-  const tree = await processTree(proc);
-  if ([...tree.keys()].some((pid) => isStray(tree, pid, runner)))
+  if (liveStrays(await processTree(proc), runner).length > 0)
     throw new Error('A former turn left processes that would not stop');
 }

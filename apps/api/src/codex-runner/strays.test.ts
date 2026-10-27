@@ -8,9 +8,13 @@ import { isStray, parseStat, reapStrays, type ProcessEntry } from './strays.js';
 const stat = (
   pid: number,
   comm: string,
-  { parent, start = '100' }: { parent: number; start?: string },
+  {
+    parent,
+    start = '100',
+    state = 'S',
+  }: { parent: number; start?: string; state?: string },
 ) =>
-  `${pid} (${comm}) S ${parent} ${Array.from({ length: 17 }, () => '0').join(' ')} ${start} 0`;
+  `${pid} (${comm}) ${state} ${parent} ${Array.from({ length: 17 }, () => '0').join(' ')} ${start} 0`;
 
 const tree = (
   entries: Record<number, [parent: number, start?: string]>,
@@ -27,10 +31,12 @@ describe('parseStat (ADR 0020)', () => {
     expect(parseStat(stat(42, 'node', { parent: 7, start: '555' }))).toEqual({
       parent: 7,
       start: '555',
+      state: 'S',
     });
     expect(parseStat(stat(42, 'a) b (c', { parent: 9, start: '7' }))).toEqual({
       parent: 9,
       start: '7',
+      state: 'S',
     });
     expect(parseStat('')).toBeNull();
     expect(parseStat('42 node S x')).toBeNull();
@@ -71,13 +77,14 @@ describe('isStray (ADR 0020)', () => {
 
 describe('reapStrays (review R1)', () => {
   /** A fake /proc whose pids no process can have (above any system's pid limit). */
-  async function fakeProc(entries: Record<number, number>) {
+  async function fakeProc(entries: Record<number, number | [number, string]>) {
     const proc = await mkdtemp(join(tmpdir(), 'kbchat-proc-'));
-    for (const [pid, parent] of Object.entries(entries)) {
+    for (const [pid, value] of Object.entries(entries)) {
+      const [parent, state] = Array.isArray(value) ? value : [value, 'S'];
       await mkdir(join(proc, pid));
       await writeFile(
         join(proc, pid, 'stat'),
-        stat(Number(pid), 'node', { parent }),
+        stat(Number(pid), 'node', { parent, state }),
       );
     }
     return proc;
@@ -93,5 +100,10 @@ describe('reapStrays (review R1)', () => {
     // forking would.
     const proc = await fakeProc({ 1: 0, 4999990: 1, 4999991: 1 });
     await expect(reapStrays(4999990, proc)).rejects.toThrow(/would not stop/);
+  });
+
+  it('does not count a killed process waiting for init (a zombie) as a survivor', async () => {
+    const proc = await fakeProc({ 1: 0, 4999990: 1, 4999991: [1, 'Z'] });
+    await expect(reapStrays(4999990, proc)).resolves.toBeUndefined();
   });
 });
