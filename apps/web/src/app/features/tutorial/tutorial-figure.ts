@@ -20,7 +20,7 @@ import {
   selector: 'app-tutorial-figure',
   imports: [NgOptimizedImage],
   template: `
-    <figure [class.phone]="phone()">
+    <figure [class.phone]="phone()" [class.portrait]="portrait()">
       <img
         [ngSrc]="image().src"
         [width]="image().width"
@@ -55,9 +55,13 @@ import {
       background: var(--color-surface);
     }
 
-    .phone img {
+    /* A tall picture (a phone, the sidebar) keeps a readable size instead of the column's. */
+    .portrait img {
       width: min(100%, 20rem);
       margin: 0 auto;
+    }
+
+    .phone img {
       border-radius: var(--radius-lg);
     }
 
@@ -69,7 +73,7 @@ import {
       color: var(--color-text-muted);
     }
 
-    .phone figcaption {
+    .portrait figcaption {
       text-align: center;
     }
 
@@ -96,8 +100,11 @@ export class TutorialFigure {
   readonly alt = input.required<string>();
   /** The first figure: loads at once instead of lazily (largest paint). */
   readonly priority = input(false, { transform: booleanAttribute });
-  /** A phone screenshot: shown narrower and centered. */
+  /** A phone screenshot: rounder corners, like the phone (tall pictures are narrower). */
   readonly phone = input(false, { transform: booleanAttribute });
 
   protected readonly image = computed(() => TUTORIAL_IMAGES[this.name()]);
+  protected readonly portrait = computed(
+    () => this.image().height > this.image().width,
+  );
 }
