@@ -19,6 +19,15 @@ import { SettingsStore } from '@features/settings/settings-store.js';
 import { OWN_AI_OFFER, aiErrorMessage } from './research-errors.js';
 import { describeSteps, groupedSteps } from './research-steps.js';
 import {
+  FREE_MODELS_NOTE,
+  coverageText,
+  estimateText,
+  missingText,
+  progressText,
+  targetText,
+} from './research-sweep.js';
+import {
+  canContinueSweep,
   citedSources,
   groupByAuthorship,
   type ResearchTurn,
@@ -56,6 +65,7 @@ export class ResearchMessage {
   readonly opened = output<DocumentRef>();
   readonly stopped = output();
   readonly retried = output();
+  readonly continued = output();
   private readonly settings = inject(SettingsStore);
 
   protected readonly streaming = computed(
@@ -140,6 +150,42 @@ export class ResearchMessage {
     const { error, errorLimit } = this.turn();
     return error ? aiErrorMessage(error, errorLimit) : '';
   });
+
+  /** The sweep's estimate and progress while it runs, before the answer (KBC-030). */
+  protected readonly sweep = computed(() => {
+    const turn = this.turn();
+    const progress = turn.sweep;
+    if (!progress || turn.phase !== 'streaming' || turn.text) return null;
+    return {
+      estimate: estimateText(progress),
+      free: progress.free ? FREE_MODELS_NOTE() : '',
+      progress: progressText(progress),
+      done: progress.batchesDone,
+      total: Math.max(1, progress.batches),
+    };
+  });
+  /** The coverage the app measured, and what was left, after the turn (KBC-030). */
+  protected readonly coverage = computed(() => {
+    const coverage = this.turn().coverage;
+    if (!coverage || this.turn().phase === 'streaming') return null;
+    return {
+      line: coverageText(coverage),
+      target: targetText(coverage.target, coverage.phrases),
+      missing:
+        coverage.missing > 0
+          ? missingText(coverage.missing, coverage.reason ?? 'stopped')
+          : '',
+    };
+  });
+  /** A sweep stopped on this page before its coverage came: where it got to. */
+  protected readonly stoppedAt = computed(() => {
+    const turn = this.turn();
+    if (turn.coverage || !turn.sweep || turn.phase !== 'done') return '';
+    return progressText(turn.sweep);
+  });
+  protected readonly canContinue = computed(
+    () => this.last() && canContinueSweep(this.turn()),
+  );
 
   protected openSettings(): void {
     this.settings.openSettings();

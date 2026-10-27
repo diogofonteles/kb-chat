@@ -251,3 +251,58 @@ p.steps {
   border-radius: 2px;
   background: currentColor;
 }
+
+/* The exhaustive sweep (KBC-030): estimate and progress while it runs. */
+.sweep {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sweep p,
+.sweep-title {
+  margin: 0;
+}
+
+.sweep-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.sweep-note {
+  color: var(--color-text-muted);
+}
+
+.sweep progress {
+  width: 100%;
+  height: 0.5rem;
+  accent-color: var(--color-accent);
+}
+
+/* The coverage the app measured: quiet when complete, marked when something is left. */
+.coverage {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-border);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.coverage p {
+  margin: 0;
+}
+
+.coverage.incomplete {
+  border-left-color: var(--color-accent);
+}
+
+.coverage-missing {
+  color: var(--color-text);
+}

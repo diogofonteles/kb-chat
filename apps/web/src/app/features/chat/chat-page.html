@@ -175,6 +175,7 @@
             (opened)="openSource($event)"
             (stopped)="stopResearch()"
             (retried)="research.retry()"
+            (continued)="research.continueSweep()"
           />
         } @else {
           @for (message of messages(); track message.id) {

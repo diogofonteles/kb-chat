@@ -1,7 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ResearchEvent, SavedResearchTurn } from '@kb-chat/contracts';
+import type {
+  ResearchEvent,
+  SavedResearchTurn,
+  SweepCoverage,
+  SweepCursor,
+  SweepProgress,
+} from '@kb-chat/contracts';
 import { ResearchApi } from '@core/api/research-api.js';
 import { SpendStore } from '@core/spend/spend-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
@@ -21,6 +27,37 @@ import {
 import { citedSources } from './research-turn.js';
 
 const SOURCE = { n: 1, id: 'raw/a.md', title: 'Os Princípios' };
+
+const CURSOR: SweepCursor = {
+  plan: {
+    target: { authorship: 'mestre-laercio' },
+    phrases: [],
+    extract: 'livros',
+  },
+  after: 'raw/c.md',
+  totals: { documents: 10, scanned: 3, withHits: null, read: 3, batches: 1 },
+};
+const PROGRESS: SweepProgress = {
+  status: 'running',
+  documents: 10,
+  documentsDone: 3,
+  batches: 4,
+  batchesDone: 1,
+  requests: 6,
+  free: true,
+  cursor: CURSOR,
+};
+const COVERAGE: SweepCoverage = {
+  target: { authorship: 'mestre-laercio' },
+  phrases: [],
+  documents: 10,
+  scanned: 3,
+  withHits: null,
+  read: 3,
+  missing: 7,
+  batches: 1,
+  reason: 'requests',
+};
 
 function setup(options: { stored?: ResearchConversation } = {}) {
   localStorage.clear();
@@ -596,5 +633,73 @@ describe('ResearchStore', () => {
       expect(store.conversationId()).toBe(CONVERSATION);
       expect(api.follow).toHaveBeenCalledWith(TURN);
     });
+  });
+
+  it('sweeps on: "Continuar varredura" asks only for the rest, from the saved cursor (KBC-030)', () => {
+    const { store, api, streams, save } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('quais livros o Mestre cita?');
+    const stream = streams[0];
+    if (!stream) throw new Error('no stream');
+    stream.next({ type: 'sweep', sweep: { ...PROGRESS, status: 'planned' } });
+    stream.next({ type: 'sweep', sweep: PROGRESS });
+    stream.next({ type: 'token', text: 'Lista parcial [1].', segment: 0 });
+    stream.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 2,
+      coverage: COVERAGE,
+      sweep: CURSOR,
+    });
+    stream.complete();
+    const saved = save.mock.calls.at(-1)?.[0].turns[0];
+    expect(saved?.coverage).toEqual(COVERAGE);
+    expect(saved?.sweep).toEqual(CURSOR);
+    store.continueSweep();
+    expect(api.research).toHaveBeenLastCalledWith('hermetismo', {
+      question: 'Continuar varredura: quais livros o Mestre cita?',
+      history: [
+        {
+          question: 'quais livros o Mestre cita?',
+          answer: 'Lista parcial [1].',
+        },
+      ],
+      profile: 'exhaustive',
+      sweep: CURSOR,
+    });
+  });
+
+  it('keeps the last progress cursor when the reader stops the sweep, and offers to continue', () => {
+    const { store, streams, save } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    store.stop();
+    const turn = store.turns()[0];
+    expect(turn?.cursor).toEqual(CURSOR);
+    expect(save.mock.calls.at(-1)?.[0].turns[0]?.sweep).toEqual(CURSOR);
+  });
+
+  it('continues nothing when the sweep covered its whole set', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    streams[0]?.next({ type: 'token', text: 'Tudo [1].', segment: 0 });
+    streams[0]?.next({
+      type: 'done',
+      usd: 0,
+      billing: 'free',
+      model: 'm',
+      interrupted: false,
+      steps: 1,
+      coverage: { ...COVERAGE, missing: 0, read: 10, reason: undefined },
+    });
+    expect(store.turns()[0]?.cursor).toBeNull();
+    store.continueSweep();
+    expect(api.research).toHaveBeenCalledTimes(1);
   });
 });

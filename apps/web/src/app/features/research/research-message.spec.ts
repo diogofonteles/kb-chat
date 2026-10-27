@@ -482,4 +482,128 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
       screen.getByRole('button', { name: 'Conectar a minha IA' }),
     ).toBeTruthy();
   });
+
+  describe('exhaustive sweep (KBC-030)', () => {
+    const progress = {
+      status: 'running' as const,
+      documents: 2555,
+      documentsDone: 640,
+      batches: 80,
+      batchesDone: 12,
+      requests: 82,
+      free: true,
+    };
+    const coverage = {
+      target: { authorship: 'mestre-laercio' as const },
+      phrases: ['livro', 'obra'],
+      documents: 2555,
+      scanned: 2555,
+      withHits: 412,
+      read: 96,
+      missing: 0,
+      batches: 80,
+    };
+    const cursor = {
+      plan: { target: {}, phrases: [], extract: 'livros' },
+      totals: {
+        documents: 2555,
+        scanned: 640,
+        withHits: null,
+        read: 640,
+        batches: 12,
+      },
+    };
+
+    it('shows the estimate, the free-model note and the progress while it sweeps', async () => {
+      await renderMessage(
+        aTurn({ phase: 'streaming', text: '', sweep: progress, steps: [] }),
+      );
+      expect(
+        screen.getByRole('heading', { name: 'Varredura completa' }),
+      ).toBeTruthy();
+      expect(
+        screen.getByText('2.555 documentos em ~80 lotes (~82 pedidos à IA).'),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/Modelos gratuitos são menos rigorosos/),
+      ).toBeTruthy();
+      expect(screen.getByRole('status').textContent).toContain(
+        'Lote 12 de 80 · 640 de 2.555 documentos',
+      );
+      expect(screen.getByRole('progressbar')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Parar' })).toBeTruthy();
+    });
+
+    it('renders the coverage the app measured and the summary, with no continue when complete', async () => {
+      await renderMessage(aTurn({ coverage }));
+      expect(
+        screen.getByText(
+          'Cobertura (medida pelo aplicativo): 2.555 documentos no conjunto · 2.555 varridos por dentro · 412 com ocorrências · 96 lidos.',
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/autoria Mestre Laércio; expressões: livro, obra/),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/varreu 2\.555 de 2\.555 documentos/),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole('button', { name: 'Continuar varredura' }),
+      ).toBeNull();
+    });
+
+    it('says what was left and why, and offers to continue the sweep', async () => {
+      await renderMessage(
+        aTurn({
+          coverage: {
+            ...coverage,
+            read: 30,
+            missing: 1900,
+            reason: 'requests',
+          },
+          cursor,
+        }),
+      );
+      expect(screen.getByText('Varredura incompleta.')).toBeTruthy();
+      expect(
+        screen.getByText(
+          /Faltaram 1\.900 documentos: o limite de pedidos desta pesquisa acabou\./,
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Continuar varredura' }),
+      ).toBeTruthy();
+    });
+
+    it('emits continued, also on a turn brought back from the history, but only on the last one', async () => {
+      const continued = vi.fn();
+      await render(ResearchMessage, {
+        providers: [
+          provideZonelessChangeDetection(),
+          { provide: SettingsStore, useValue: { openSettings: vi.fn() } },
+        ],
+        inputs: { turn: aTurn({ restored: true, cursor }), last: true },
+        on: { continued },
+      });
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Continuar varredura' }),
+      );
+      expect(continued).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers no continue on an earlier turn', async () => {
+      await renderMessage(aTurn({ cursor }), false);
+      expect(
+        screen.queryByRole('button', { name: 'Continuar varredura' }),
+      ).toBeNull();
+    });
+
+    it('tells where a sweep stopped on this page before its coverage came', async () => {
+      await renderMessage(
+        aTurn({ interrupted: true, sweep: progress, cursor, text: '' }),
+      );
+      expect(screen.getByText('Varredura interrompida em:')).toBeTruthy();
+      expect(screen.getByText(/Lote 12 de 80/)).toBeTruthy();
+    });
+  });
 });

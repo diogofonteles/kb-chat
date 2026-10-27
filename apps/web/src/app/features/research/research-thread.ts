@@ -21,6 +21,7 @@ import type { ResearchTurn } from './research-turn.js';
         (opened)="opened.emit($event)"
         (stopped)="stopped.emit()"
         (retried)="retried.emit()"
+        (continued)="continued.emit()"
       />
     }
     <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
@@ -40,6 +41,8 @@ export class ResearchThread {
   readonly opened = output<DocumentRef>();
   readonly stopped = output();
   readonly retried = output();
+  /** "Continuar varredura" on the last turn (KBC-030). */
+  readonly continued = output();
 
   /**
    * Short live-region text: the streamed tokens are not announced, and errors already are

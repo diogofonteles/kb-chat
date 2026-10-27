@@ -62,6 +62,18 @@ const isBatch = (messages: AgentHistory): boolean => {
   );
 };
 
+/**
+ * A question with this marker makes each sweep batch take a moment (E2E only), so the
+ * estimate and the progress can be seen (KBC-030).
+ */
+export const STUB_SLOW_SWEEP = '[varredura lenta]';
+const SLOW_BATCH_MS = 700;
+
+const batchDelay = (messages: AgentHistory): number =>
+  isBatch(messages) && (messages[1]?.content ?? '').includes(STUB_SLOW_SWEEP)
+    ? SLOW_BATCH_MS
+    : 0;
+
 /** The default exhaustive orchestrator (KBC-030): it plans the whole topic at once. */
 function planReply(question: string): StubReply {
   return {
@@ -247,10 +259,8 @@ export class StubLlmAdapter implements AgentLlmPort {
     tools: readonly ToolDefinition[],
     options: AgentStreamOptions,
   ): AsyncIterable<AgentChunk> {
-    if (this.options.callDelayMs)
-      await new Promise((resolve) =>
-        setTimeout(resolve, this.options.callDelayMs),
-      );
+    const delay = this.options.callDelayMs ?? batchDelay(messages);
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
     await honorMarkers(questionOf(messages), options.signal);
     const reply = this.replyTo(messages, tools, options);
     if ('text' in reply) {
