@@ -10,6 +10,7 @@ import {
   afterNextRender,
   computed,
   inject,
+  linkedSignal,
   signal,
   viewChildren,
 } from '@angular/core';
@@ -21,7 +22,7 @@ import {
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { topicsUrl } from '@core/api/kb-api.js';
-import { PeopleApi } from '@core/auth/auth-api.js';
+import { PeopleApi, type InviteSetup } from '@core/auth/auth-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatSpend } from '@core/spend/spend-store.js';
 import type { Observable } from 'rxjs';
@@ -39,6 +40,13 @@ import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { servingLabel } from '@features/house-ai/app-ai-labels.js';
 import { NO_LENDING, type Lending } from './lending.js';
 import { PersonEditor } from './person-editor.js';
+import { InvitePresetEditor } from './invite-preset-editor.js';
+import { InviteProfilesPanel } from './invite-profiles-panel.js';
+import { InviteProfilesStore } from './invite-profiles-store.js';
+import { plainPreset } from './preset-defaults.js';
+
+/** "Nenhum" in the invitation's "Perfil": today's plain invitation. */
+const NO_PROFILE = 'none';
 
 type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
 
@@ -59,9 +67,12 @@ interface Outcome<T> {
     PersonEditor,
     AccessRequestsList,
     AiAssignmentBar,
+    InvitePresetEditor,
+    InviteProfilesPanel,
     DatePipe,
     NgTemplateOutlet,
   ],
+  providers: [InviteProfilesStore],
   templateUrl: './people-panel.html',
   styleUrl: './people-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -135,6 +146,29 @@ export class PeoplePanel {
         this.list().map((person) => [person.id, invitationStateOf(person)]),
       ),
   );
+  /** The invitation profiles (KBC-028), shared with the profiles section. */
+  protected readonly profiles = inject(InviteProfilesStore);
+  /** The "Perfil" picked; until then, the default profile (or "Nenhum"). */
+  private readonly pickedSetup = signal<string | null>(null);
+  protected readonly setupChoice = computed(
+    () =>
+      this.pickedSetup() ?? this.profiles.defaultProfile()?.id ?? NO_PROFILE,
+  );
+  protected readonly noProfile = NO_PROFILE;
+  /** "Configurar agora": the preset opens from the chosen profile (KBC-028 AC-2). */
+  protected readonly configuring = signal(false);
+  protected readonly draftPreset = linkedSignal(
+    () => this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
+  );
+  /** What the invitation starts the person with, for the hint; '' is the plain invite. */
+  protected readonly setupLabel = computed(() => {
+    if (this.configuring())
+      return $localize`:@@people.setupConfigured:o que você configurou abaixo`;
+    const profile = this.profiles.find(this.setupChoice());
+    return profile
+      ? $localize`:@@people.setupProfile:o perfil "${profile.name}:name:"`
+      : '';
+  });
   /** Why the last invite failed, shown under the e-mail field (MA-23). */
   protected readonly inviteError = signal('');
   protected readonly openId = signal<string | null>(null);
@@ -186,20 +220,57 @@ export class PeoplePanel {
     this.inviteError.set('');
   }
 
+  protected chooseSetup(value: string): void {
+    this.pickedSetup.set(value);
+  }
+
   protected invite(event: Event): void {
     event.preventDefault();
     const email = this.email().trim();
     if (!email) return;
     const sendEmail = !this.skipEmail();
-    this.run(this.api.invite(email, sendEmail), {
+    const used = this.setupName();
+    this.run(this.api.invite(email, sendEmail, this.inviteSetup()), {
       done: (invited) => {
         this.people.update((all) => [...(all ?? []), invited]);
-        this.email.set('');
-        this.skipEmail.set(false);
+        this.resetInvite();
         this.openId.set(invited.id);
-        return inviteNotice(invited, sendEmail);
+        return withSetup(inviteNotice(invited, sendEmail), used);
       },
       failed: (text) => this.inviteError.set(text),
+    });
+  }
+
+  /** The preset opened here, else the profile; "Nenhum" over a default is the plain preset. */
+  private inviteSetup(): InviteSetup {
+    if (this.configuring()) return { preset: this.draftPreset() };
+    const choice = this.setupChoice();
+    if (choice !== NO_PROFILE) return { profileId: choice };
+    return this.profiles.defaultProfile() ? { preset: plainPreset() } : {};
+  }
+
+  /** The profile named in the outcome; null for the plain invitation. */
+  private setupName(): string | null {
+    if (this.configuring())
+      return $localize`:@@people.setupOwn:configuração própria`;
+    return this.profiles.find(this.setupChoice())?.name ?? null;
+  }
+
+  private resetInvite(): void {
+    this.email.set('');
+    this.skipEmail.set(false);
+    this.pickedSetup.set(null);
+    this.configuring.set(false);
+  }
+
+  /** "Aplicar perfil" (KBC-028 FR-4): role, collections, features and AI change. */
+  protected applyProfile(person: Person, profileId: string): void {
+    const name = this.profiles.find(profileId)?.name ?? '';
+    this.run(this.api.applyProfile(person.id, profileId), {
+      done: (updated) => {
+        this.replace(updated);
+        return $localize`:@@people.profileApplied:Perfil "${name}:name:" aplicado a ${updated.email}:email:.`;
+      },
     });
   }
 
@@ -330,6 +401,16 @@ export class PeoplePanel {
       },
     });
   }
+}
+
+/** The outcome also says which profile set the person up (screens.md T9). */
+function withSetup(
+  notice: NonNullable<Notice>,
+  used: string | null,
+): NonNullable<Notice> {
+  if (!used) return notice;
+  const suffix = $localize`:@@people.inviteProfileUsed:Perfil: ${used}:name:.`;
+  return { ...notice, text: `${notice.text} ${suffix}` };
 }
 
 /** What the invite did with the e-mail (KBC-026 FR-4); a failure is an error, the invite stands. */

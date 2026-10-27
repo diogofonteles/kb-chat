@@ -27,6 +27,61 @@
     />
     <span i18n="@@people.skipEmail">Não enviar e-mail de convite</span>
   </label>
+  <div class="setup">
+    @if (profiles.list().length > 0) {
+      <label class="field setup-field">
+        <span class="label" i18n="@@people.inviteProfile">Perfil</span>
+        <select
+          #setupSelect
+          class="select"
+          name="profile"
+          (change)="chooseSetup(setupSelect.value)"
+        >
+          @for (profile of profiles.list(); track profile.id) {
+            <option
+              [value]="profile.id"
+              [selected]="profile.id === setupChoice()"
+            >
+              {{ profile.name }}
+              @if (profile.isDefault) {
+                <ng-container i18n="@@people.profileIsDefault"
+                  >(padrão)</ng-container
+                >
+              }
+            </option>
+          }
+          <option
+            [value]="noProfile"
+            [selected]="setupChoice() === noProfile"
+            i18n="@@people.noProfile"
+          >
+            Nenhum
+          </option>
+        </select>
+      </label>
+    }
+    <button
+      type="button"
+      class="secondary"
+      aria-controls="invite-preset"
+      [attr.aria-expanded]="configuring()"
+      (click)="configuring.set(!configuring())"
+      i18n="@@people.configureNow"
+    >
+      Configurar agora
+    </button>
+  </div>
+  @if (configuring()) {
+    <app-invite-preset-editor
+      id="invite-preset"
+      class="preset"
+      [preset]="draftPreset()"
+      [topics]="topics()"
+      [defaultAppAi]="defaultAppAi()"
+      [busy]="busy()"
+      (changed)="draftPreset.set($event)"
+    />
+  }
   <button
     type="submit"
     class="primary"
@@ -43,7 +98,19 @@
   </p>
 }
 <p id="invite-hint" class="hint">
-  @if (skipEmail()) {
+  @if (setupLabel(); as setup) {
+    @if (skipEmail()) {
+      <ng-container i18n="@@people.inviteHintSetupNoEmail"
+        >Nenhum e-mail será enviado. Quem é convidado começa com
+        {{ setup }}.</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@people.inviteHintSetup"
+        >Quem é convidado recebe um e-mail com o link e começa com
+        {{ setup }}.</ng-container
+      >
+    }
+  } @else if (skipEmail()) {
     <ng-container i18n="@@people.inviteHintNoEmail"
       >Nenhum e-mail será enviado. Quem é convidado começa com "Buscar
       documentos" e nenhum acervo.</ng-container
@@ -55,6 +122,11 @@
     >
   }
 </p>
+
+<app-invite-profiles-panel
+  [topics]="topics()"
+  [defaultAppAi]="defaultAppAi()"
+/>
 
 <app-access-requests-list (approved)="welcome($event)" />
 
@@ -181,7 +253,9 @@
             [lending]="lending()"
             [topics]="topics()"
             [busy]="busy()"
+            [profiles]="profiles.list()"
             (changed)="change(person, $event)"
+            (profileApplied)="applyProfile(person, $event)"
             (revoked)="revoke(person)"
           />
           @let invitationKind = invitations().get(person.id)?.kind;

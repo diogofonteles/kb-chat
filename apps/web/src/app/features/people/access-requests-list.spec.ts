@@ -71,6 +71,7 @@ async function renderAsMaster(requests: AccessRequest[]) {
     .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
   http.expectOne('/api/v1/spend/people').flush({ items: [] });
   http.expectOne('/api/v1/access-requests').flush({ items: requests });
+  http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
   await result.fixture.whenStable();
   return { ...result, http };
 }

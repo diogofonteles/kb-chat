@@ -1,0 +1,226 @@
+<section class="profiles" aria-labelledby="profiles-toggle">
+  <button
+    id="profiles-toggle"
+    type="button"
+    class="toggle"
+    aria-controls="profiles-body"
+    [attr.aria-expanded]="expanded()"
+    (click)="expanded.set(!expanded())"
+  >
+    <span aria-hidden="true" class="chevron">{{ expanded() ? '▾' : '▸' }}</span>
+    <span i18n="@@profiles.title">Perfis de convite</span>&ngsp;
+    <span class="count">({{ store.list().length }})</span>
+  </button>
+  @if (expanded()) {
+    <div id="profiles-body" class="body">
+      <p class="hint" i18n="@@profiles.hint">
+        Um perfil prepara o convite de uma vez: acervos, funcionalidades, IA e
+        preferências. O padrão vale quando você não escolhe outro.
+      </p>
+
+      @if (store.failed()) {
+        <div class="alert" role="alert">
+          <p i18n="@@profiles.loadFailed">Não consegui carregar os perfis.</p>
+          <button
+            type="button"
+            class="secondary"
+            (click)="store.reload()"
+            i18n="@@people.retry"
+          >
+            Tentar de novo
+          </button>
+        </div>
+      }
+
+      @if (store.list().length > 0) {
+        <ul
+          class="list"
+          aria-label="Perfis de convite"
+          i18n-aria-label="@@profiles.listLabel"
+        >
+          @for (profile of store.list(); track profile.id) {
+            <li class="profile">
+              <span class="name">
+                {{ profile.name }}
+                @if (profile.isDefault) {
+                  <span class="badge" i18n="@@profiles.default">Padrão</span>
+                }
+              </span>
+              @if (confirmingDelete() === profile.id) {
+                <p class="confirm" i18n="@@profiles.confirmDelete">
+                  Apagar o perfil "{{ profile.name }}"? As pessoas já convidadas
+                  continuam como estão.
+                </p>
+                <div class="actions">
+                  <button
+                    type="button"
+                    class="danger"
+                    [disabled]="busy()"
+                    (click)="remove(profile)"
+                    i18n="@@profiles.deleteConfirm"
+                  >
+                    Apagar
+                  </button>
+                  <button
+                    type="button"
+                    class="link"
+                    (click)="cancelDelete()"
+                    i18n="@@people.cancel"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              } @else {
+                <div class="actions">
+                  <button
+                    type="button"
+                    class="secondary"
+                    [disabled]="busy()"
+                    (click)="edit(profile)"
+                    i18n="@@profiles.edit"
+                  >
+                    Editar&ngsp;<span class="visually-hidden">{{
+                      profile.name
+                    }}</span>
+                  </button>
+                  @if (!profile.isDefault) {
+                    <button
+                      type="button"
+                      class="secondary"
+                      [disabled]="busy()"
+                      (click)="makeDefault(profile)"
+                      i18n="@@profiles.makeDefault"
+                    >
+                      Tornar padrão&ngsp;<span class="visually-hidden">{{
+                        profile.name
+                      }}</span>
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="link danger-text"
+                    [disabled]="busy()"
+                    (click)="askDelete(profile)"
+                    i18n="@@profiles.delete"
+                  >
+                    Apagar&ngsp;<span class="visually-hidden">{{
+                      profile.name
+                    }}</span>
+                  </button>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty" i18n="@@profiles.empty">
+          Nenhum perfil ainda. Crie "Aluno" ou "Pesquisador" para convidar com
+          um clique.
+        </p>
+      }
+
+      @if (draft(); as current) {
+        <form
+          class="draft"
+          novalidate
+          aria-labelledby="profile-draft-title"
+          (submit)="save($event)"
+        >
+          <p id="profile-draft-title" class="draft-title">
+            @if (current.id) {
+              <ng-container i18n="@@profiles.editTitle"
+                >Editar perfil</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@profiles.newTitle"
+                >Novo perfil</ng-container
+              >
+            }
+          </p>
+          <label class="field">
+            <span i18n="@@profiles.name">Nome do perfil</span>
+            <input
+              #nameInput
+              class="text"
+              type="text"
+              name="name"
+              maxlength="60"
+              autocomplete="off"
+              required
+              [attr.aria-invalid]="nameError() ? 'true' : null"
+              [attr.aria-describedby]="
+                nameError() ? 'profile-name-error' : null
+              "
+              [value]="current.name"
+              (input)="rename(nameInput.value)"
+            />
+          </label>
+          @if (nameError()) {
+            <p id="profile-name-error" class="field-error" role="alert">
+              <span aria-hidden="true">⚠</span> {{ nameError() }}
+            </p>
+          }
+          <label class="check">
+            <input
+              #defaultBox
+              type="checkbox"
+              [checked]="current.isDefault"
+              (change)="markDefault(defaultBox.checked)"
+            />
+            <span i18n="@@profiles.isDefault"
+              >Usar como padrão nos próximos convites</span
+            >
+          </label>
+          <app-invite-preset-editor
+            [preset]="current.preset"
+            [topics]="topics()"
+            [defaultAppAi]="defaultAppAi()"
+            [busy]="busy()"
+            (changed)="changePreset($event)"
+          />
+          <div class="actions">
+            <button
+              type="submit"
+              class="primary"
+              [disabled]="busy()"
+              i18n="@@profiles.save"
+            >
+              Salvar perfil
+            </button>
+            <button
+              type="button"
+              class="link"
+              (click)="cancel()"
+              i18n="@@people.cancel"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      } @else {
+        <button
+          #newButton
+          type="button"
+          class="secondary"
+          [disabled]="busy()"
+          (click)="startNew()"
+          i18n="@@profiles.new"
+        >
+          Novo perfil
+        </button>
+      }
+
+      <p
+        class="notice"
+        [class.error]="notice()?.kind === 'error'"
+        aria-live="polite"
+      >
+        @if (notice()?.kind === 'error') {
+          <span class="visually-hidden" i18n="@@people.errorPrefix">Erro:</span>
+          <span aria-hidden="true">⚠</span>&ngsp;
+        }
+        {{ notice()?.text ?? '' }}
+      </p>
+    </div>
+  }
+</section>

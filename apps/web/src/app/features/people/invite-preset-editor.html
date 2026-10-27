@@ -1,0 +1,210 @@
+@let current = preset();
+<fieldset class="group" [disabled]="busy()">
+  <legend class="legend" i18n="@@preset.role">Papel</legend>
+  <label class="check">
+    <input
+      #masterBox
+      type="checkbox"
+      [checked]="isMaster()"
+      (change)="setMaster(masterBox.checked)"
+    />
+    <span i18n="@@preset.master"
+      >Master (vê todos os acervos e usa todas as funcionalidades)</span
+    >
+  </label>
+</fieldset>
+
+<fieldset class="group" [disabled]="busy() || isMaster()">
+  <legend class="legend" i18n="@@preset.collections">Acervos</legend>
+  @for (topic of collections(); track topic.slug) {
+    <label class="check">
+      <input
+        #box
+        type="checkbox"
+        [checked]="topic.checked"
+        (change)="toggleTopic(topic.slug, box.checked)"
+      />
+      <span>{{ topic.title }}</span>
+    </label>
+  } @empty {
+    <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
+  }
+</fieldset>
+
+<fieldset class="group" [disabled]="busy() || isMaster()">
+  <legend class="legend" i18n="@@preset.features">Funcionalidades</legend>
+  @for (feature of features(); track feature.id) {
+    <label class="check">
+      <input
+        #box
+        type="checkbox"
+        [checked]="feature.checked"
+        (change)="toggleFeature(feature.id, box.checked)"
+      />
+      <span>{{ feature.label }}</span>
+    </label>
+  }
+</fieldset>
+
+<fieldset class="group" [disabled]="busy()">
+  <legend class="legend" i18n="@@preset.ai">IA da aplicação</legend>
+  <label class="field">
+    <span i18n="@@preset.appAi">Qual IA atende a pessoa</span>
+    <select
+      #appAiSelect
+      class="select"
+      [attr.aria-describedby]="uid + '-ai-hint'"
+      (change)="chooseAppAi(appAiSelect.value)"
+    >
+      @for (option of appAis(); track option.id) {
+        <option [value]="option.id" [selected]="option.id === current.ai.appAi">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+  </label>
+  <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHint">
+    Assinaturas são cedidas pessoa a pessoa, no editor da pessoa.
+  </p>
+  <label class="check">
+    <input
+      #enforcedBox
+      type="checkbox"
+      [checked]="current.ai.enforced"
+      (change)="setEnforced(enforcedBox.checked)"
+    />
+    <span i18n="@@preset.enforced"
+      >Usar sempre a IA da aplicação, mesmo se a pessoa tiver a própria</span
+    >
+  </label>
+  <label class="field">
+    <span i18n="@@preset.daily">Pesquisas por dia (vazio = padrão)</span>
+    <input
+      #dailyInput
+      class="number"
+      type="number"
+      inputmode="numeric"
+      min="0"
+      [attr.max]="maxDaily"
+      step="1"
+      [attr.aria-invalid]="dailyError() ? true : null"
+      [attr.aria-describedby]="dailyError() ? uid + '-daily-error' : null"
+      [value]="current.ai.dailyResearches ?? ''"
+      (change)="setDaily(dailyInput.value)"
+    />
+  </label>
+  @if (dailyError(); as error) {
+    <p [id]="uid + '-daily-error'" class="field-error" role="alert">
+      <span aria-hidden="true">⚠</span> {{ error }}
+    </p>
+  }
+  <label class="check">
+    <input
+      #paidBox
+      type="checkbox"
+      [checked]="current.ai.paidFallback.enabled"
+      (change)="setPaid(paidBox.checked)"
+    />
+    <span i18n="@@preset.paid">Liberar o modelo pago de reserva</span>
+  </label>
+  @if (current.ai.paidFallback.enabled) {
+    <label class="field">
+      <span i18n="@@preset.cap">Teto por mês (US$)</span>
+      <input
+        #capInput
+        class="number"
+        type="number"
+        inputmode="decimal"
+        min="0"
+        [attr.max]="maxCap"
+        step="0.5"
+        [attr.aria-invalid]="capError() ? true : null"
+        [attr.aria-describedby]="capError() ? uid + '-cap-error' : null"
+        [value]="current.ai.paidFallback.monthlyCapUsd"
+        (change)="setCap(capInput.value)"
+      />
+    </label>
+    @if (capError(); as error) {
+      <p [id]="uid + '-cap-error'" class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ error }}
+      </p>
+    }
+  }
+</fieldset>
+
+<fieldset class="group" [disabled]="busy()">
+  <legend class="legend" i18n="@@preset.preferences">
+    Preferências iniciais
+  </legend>
+  <p class="hint" i18n="@@preset.preferencesHint">
+    Valem até a pessoa salvar as dela em Configurações.
+  </p>
+  <label class="field">
+    <span i18n="@@preset.defaultTopic">Acervo padrão</span>
+    <select
+      #topicSelect
+      class="select"
+      (change)="setDefaultTopic(topicSelect.value)"
+    >
+      <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+      @for (topic of defaultTopics(); track topic.slug) {
+        <option
+          [value]="topic.slug"
+          [selected]="topic.slug === current.preferences.defaultTopic"
+        >
+          {{ topic.title }}
+        </option>
+      }
+    </select>
+  </label>
+  <label class="field">
+    <span i18n="@@preset.defaultView">Visão inicial</span>
+    <select
+      #viewSelect
+      class="select"
+      (change)="setDefaultView(viewSelect.value)"
+    >
+      <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+      @for (view of views; track view.id) {
+        <option
+          [value]="view.id"
+          [selected]="view.id === current.preferences.defaultView"
+        >
+          {{ view.label }}
+        </option>
+      }
+    </select>
+  </label>
+  <label class="field">
+    <span i18n="@@preset.researchProfile">Perfil de pesquisa</span>
+    <select
+      #profileSelect
+      class="select"
+      (change)="setResearchProfile(profileSelect.value)"
+    >
+      <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+      @for (profile of profiles; track profile.id) {
+        <option
+          [value]="profile.id"
+          [selected]="profile.id === current.preferences.researchProfile"
+        >
+          {{ profile.label }}
+        </option>
+      }
+    </select>
+  </label>
+  <label class="field">
+    <span i18n="@@preset.theme">Tema</span>
+    <select #themeSelect class="select" (change)="setTheme(themeSelect.value)">
+      <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+      @for (theme of themes; track theme.id) {
+        <option
+          [value]="theme.id"
+          [selected]="theme.id === current.preferences.theme"
+        >
+          {{ theme.label }}
+        </option>
+      }
+    </select>
+  </label>
+</fieldset>

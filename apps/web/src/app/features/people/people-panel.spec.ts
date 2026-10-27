@@ -6,7 +6,11 @@ import {
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import { DEFAULT_PERSON_AI, type Person } from '@kb-chat/contracts';
+import {
+  DEFAULT_PERSON_AI,
+  type InviteProfile,
+  type Person,
+} from '@kb-chat/contracts';
 import { authInterceptor } from '@core/auth/auth-interceptor.js';
 import { RELOAD_PAGE, SessionStore } from '@core/auth/session-store.js';
 import { anOwner } from '../../testing/session-fixtures.js';
@@ -41,7 +45,10 @@ const owner = aPerson({
   lastLoginAt: '2026-10-24T12:30:00.000Z',
 });
 
-async function renderPanel(people: Person[] = [owner, aPerson()]) {
+async function renderPanel(
+  people: Person[] = [owner, aPerson()],
+  profiles: InviteProfile[] = [],
+) {
   const result = await render(PeoplePanel, {
     providers: [
       provideZonelessChangeDetection(),
@@ -56,6 +63,7 @@ async function renderPanel(people: Person[] = [owner, aPerson()]) {
   http
     .expectOne('/api/v1/house-ai/default')
     .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
+  http.expectOne('/api/v1/invite-profiles').flush({ items: profiles });
   await result.fixture.whenStable();
   return { ...result, http };
 }
@@ -466,6 +474,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     http
       .expectOne('/api/v1/house-ai/default')
       .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
+    http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
     await result.fixture.whenStable();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
@@ -495,6 +504,7 @@ describe('PeoplePanel for the owner (BR-6)', () => {
     http
       .expectOne('/api/v1/house-ai/default')
       .flush({ defaultAppAi: 'house', lendable: LEND_NONE });
+    http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
     http.expectOne('/api/v1/spend/people').flush({
       items: [
         { email: 'owner@example.com', usd: 0 },
@@ -505,5 +515,155 @@ describe('PeoplePanel for the owner (BR-6)', () => {
 
     expect(row(/Guest/).textContent).toContain('Gasto de IA hoje: US$');
     expect(row(/Guest/).textContent).toContain('0,50');
+  });
+});
+
+describe('PeoplePanel invitation profiles (KBC-028)', () => {
+  const aluno: InviteProfile = {
+    id: '44444444-4444-4444-8444-444444444444',
+    name: 'Aluno',
+    isDefault: true,
+    preset: {
+      role: 'member',
+      topics: ['hermetismo'],
+      features: ['search', 'research'],
+      ai: {
+        appAi: 'house',
+        enforced: false,
+        dailyResearches: 3,
+        paidFallback: { enabled: false, monthlyCapUsd: 1 },
+      },
+      preferences: { defaultTopic: 'hermetismo', theme: 'dark' },
+    },
+  };
+  const pesquisador: InviteProfile = {
+    ...aluno,
+    id: '55555555-5555-4555-8555-555555555555',
+    name: 'Pesquisador',
+    isDefault: false,
+  };
+  const invited = aPerson({
+    id: '33333333-3333-4333-8333-333333333333',
+    email: 'new@example.com',
+    name: '',
+    invitation: { sentAt: '2026-10-26T12:00:00.000Z', failedAt: null },
+  });
+
+  async function typeAndInvite(fixture: { whenStable(): Promise<unknown> }) {
+    fireEvent.input(screen.getByLabelText('Convidar por e-mail'), {
+      target: { value: 'new@example.com' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Convidar' }));
+  }
+
+  it('invites with the default profile unless another is chosen, and says which', async () => {
+    const { http, fixture } = await renderPanel([owner], [aluno, pesquisador]);
+    const select = screen.getByLabelText('Perfil') as HTMLSelectElement;
+    expect(select.value).toBe(aluno.id);
+    expect(select.textContent).toContain('Aluno (padrão)');
+    expect(screen.getByText(/começa com o perfil "Aluno"/)).toBeTruthy();
+
+    await typeAndInvite(fixture);
+    const request = http.expectOne('/api/v1/people');
+    expect(request.request.body).toEqual({
+      email: 'new@example.com',
+      sendEmail: true,
+      profileId: aluno.id,
+    });
+    request.flush(invited);
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Convite enviado para new@example.com. Perfil: Aluno.',
+    );
+  });
+
+  it('"Nenhum" over a default profile is the plain invitation', async () => {
+    const { http, fixture } = await renderPanel([owner], [aluno]);
+    fireEvent.change(screen.getByLabelText('Perfil'), {
+      target: { value: 'none' },
+    });
+    await typeAndInvite(fixture);
+    const request = http.expectOne('/api/v1/people');
+    expect(request.request.body.profileId).toBeUndefined();
+    expect(request.request.body.preset).toMatchObject({
+      role: 'member',
+      topics: [],
+      features: ['search'],
+    });
+    request.flush(invited);
+  });
+
+  it('AC-2: "Configurar agora" adjusts the preset of the invitation, not the profile', async () => {
+    const { http, fixture } = await renderPanel([owner], [aluno]);
+    const configure = screen.getByRole('button', { name: 'Configurar agora' });
+    expect(configure.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(configure);
+    await fixture.whenStable();
+    expect(configure.getAttribute('aria-expanded')).toBe('true');
+    const daily = screen.getByLabelText(
+      'Pesquisas por dia (vazio = padrão)',
+    ) as HTMLInputElement;
+    expect(daily.value).toBe('3');
+    fireEvent.change(daily, { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Tema'), {
+      target: { value: 'light' },
+    });
+    await fixture.whenStable();
+
+    await typeAndInvite(fixture);
+    const request = http.expectOne('/api/v1/people');
+    expect(request.request.body.profileId).toBeUndefined();
+    expect(request.request.body.preset).toMatchObject({
+      topics: ['hermetismo'],
+      ai: { appAi: 'house', dailyResearches: 5 },
+      preferences: { defaultTopic: 'hermetismo', theme: 'light' },
+    });
+    request.flush(invited);
+    await fixture.whenStable();
+    http.expectNone({ method: 'PUT' });
+    expect(screen.getByRole('status').textContent).toContain(
+      'Perfil: configuração própria.',
+    );
+    // The invitation starts over closed, from the default profile.
+    expect(configure.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('AC-4: applies a profile to an existing person after a confirmation', async () => {
+    const guest = aPerson();
+    const { http, fixture } = await renderPanel([owner, guest], [aluno]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil' }));
+    await fixture.whenStable();
+    expect(
+      screen.getByText(/Aplicar o perfil "Aluno" a guest@example.com/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    const request = http.expectOne(`/api/v1/people/${guest.id}/profile`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ profileId: aluno.id });
+    request.flush({ ...guest, topics: ['hermetismo'] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Perfil "Aluno" aplicado a guest@example.com.',
+    );
+    expect(row(/Guest/).textContent).toContain('Hermetismo');
+  });
+
+  it('can cancel applying a profile, and the owner is offered none', async () => {
+    const guest = aPerson();
+    const { http, fixture } = await renderPanel([owner, guest], [aluno]);
+    fireEvent.click(row(/Owner/));
+    await fixture.whenStable();
+    expect(screen.queryByRole('button', { name: 'Aplicar perfil' })).toBeNull();
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(screen.getByRole('button', { name: 'Aplicar perfil' })).toBeTruthy();
+    http.expectNone(`/api/v1/people/${guest.id}/profile`);
   });
 });
