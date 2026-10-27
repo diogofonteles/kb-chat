@@ -113,6 +113,8 @@ async function drawMarks(
 ): Promise<void> {
   const boxes: (Box & { n: number })[] = [];
   for (const mark of marks) {
+    if (mark.n < 1 || mark.n > 9)
+      throw new Error(`mark ${mark.n}: use 1 to 9 (A to I)`);
     const box = await mark.target.boundingBox({ timeout: 10_000 });
     if (!box) throw new Error(`mark ${mark.n} is not on the screen`);
     // Kept inside the picture, so the number in the corner is never cut.
