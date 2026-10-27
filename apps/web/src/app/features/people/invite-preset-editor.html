@@ -66,70 +66,84 @@
   <p [id]="uid + '-ai-hint'" class="hint" i18n="@@preset.aiHint">
     Assinaturas são cedidas pessoa a pessoa, no editor da pessoa.
   </p>
-  <label class="check">
-    <input
-      #enforcedBox
-      type="checkbox"
-      [checked]="current.ai.enforced"
-      (change)="setEnforced(enforcedBox.checked)"
-    />
-    <span i18n="@@preset.enforced"
-      >Usar sempre a IA da aplicação, mesmo se a pessoa tiver a própria</span
-    >
-  </label>
-  <label class="field">
-    <span i18n="@@preset.daily">Pesquisas por dia (vazio = padrão)</span>
-    <input
-      #dailyInput
-      class="number"
-      type="number"
-      inputmode="numeric"
-      min="0"
-      [attr.max]="maxDaily"
-      step="1"
-      [attr.aria-invalid]="dailyError() ? true : null"
-      [attr.aria-describedby]="dailyError() ? uid + '-daily-error' : null"
-      [value]="current.ai.dailyResearches ?? ''"
-      (change)="setDaily(dailyInput.value)"
-    />
-  </label>
-  @if (dailyError(); as error) {
-    <p [id]="uid + '-daily-error'" class="field-error" role="alert">
-      <span aria-hidden="true">⚠</span> {{ error }}
+  @if (noAppAi()) {
+    <p [id]="uid + '-none-hint'" class="hint" i18n="@@preset.noneHint">
+      Sem IA da aplicação, a cota e a reserva paga não se aplicam.
     </p>
   }
-  <label class="check">
-    <input
-      #paidBox
-      type="checkbox"
-      [checked]="current.ai.paidFallback.enabled"
-      (change)="setPaid(paidBox.checked)"
-    />
-    <span i18n="@@preset.paid">Liberar o modelo pago de reserva</span>
-  </label>
-  @if (current.ai.paidFallback.enabled) {
-    <label class="field">
-      <span i18n="@@preset.cap">Teto por mês (US$)</span>
+  <fieldset
+    class="group limits"
+    [disabled]="noAppAi()"
+    [attr.aria-describedby]="noAppAi() ? uid + '-none-hint' : null"
+  >
+    <legend class="visually-hidden" i18n="@@preset.limits">
+      Limites da IA da aplicação
+    </legend>
+    <label class="check">
       <input
-        #capInput
+        #enforcedBox
+        type="checkbox"
+        [checked]="current.ai.enforced"
+        (change)="setEnforced(enforcedBox.checked)"
+      />
+      <span i18n="@@preset.enforced"
+        >Usar sempre a IA da aplicação, mesmo se a pessoa tiver a própria</span
+      >
+    </label>
+    <label class="field">
+      <span i18n="@@preset.daily">Pesquisas por dia (vazio = padrão)</span>
+      <input
+        #dailyInput
         class="number"
         type="number"
-        inputmode="decimal"
+        inputmode="numeric"
         min="0"
-        [attr.max]="maxCap"
-        step="0.5"
-        [attr.aria-invalid]="capError() ? true : null"
-        [attr.aria-describedby]="capError() ? uid + '-cap-error' : null"
-        [value]="current.ai.paidFallback.monthlyCapUsd"
-        (change)="setCap(capInput.value)"
+        [attr.max]="maxDaily"
+        step="1"
+        [attr.aria-invalid]="dailyError() ? true : null"
+        [attr.aria-describedby]="dailyError() ? uid + '-daily-error' : null"
+        [value]="current.ai.dailyResearches ?? ''"
+        (change)="setDaily(dailyInput.value)"
       />
     </label>
-    @if (capError(); as error) {
-      <p [id]="uid + '-cap-error'" class="field-error" role="alert">
+    @if (dailyError(); as error) {
+      <p [id]="uid + '-daily-error'" class="field-error" role="alert">
         <span aria-hidden="true">⚠</span> {{ error }}
       </p>
     }
-  }
+    <label class="check">
+      <input
+        #paidBox
+        type="checkbox"
+        [checked]="current.ai.paidFallback.enabled"
+        (change)="setPaid(paidBox.checked)"
+      />
+      <span i18n="@@preset.paid">Liberar o modelo pago de reserva</span>
+    </label>
+    @if (current.ai.paidFallback.enabled) {
+      <label class="field">
+        <span i18n="@@preset.cap">Teto por mês (US$)</span>
+        <input
+          #capInput
+          class="number"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          [attr.max]="maxCap"
+          step="0.5"
+          [attr.aria-invalid]="capError() ? true : null"
+          [attr.aria-describedby]="capError() ? uid + '-cap-error' : null"
+          [value]="current.ai.paidFallback.monthlyCapUsd"
+          (change)="setCap(capInput.value)"
+        />
+      </label>
+      @if (capError(); as error) {
+        <p [id]="uid + '-cap-error'" class="field-error" role="alert">
+          <span aria-hidden="true">⚠</span> {{ error }}
+        </p>
+      }
+    }
+  </fieldset>
 </fieldset>
 
 <fieldset class="group" [disabled]="busy()">

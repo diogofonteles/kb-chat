@@ -141,4 +141,30 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
     expect(last(changed).role).toBe('member');
     expect(last(changed).preferences).toEqual({});
   });
+
+  it('says when a typed number is not kept, and when it is again (design D4)', async () => {
+    const invalidChange = vi.fn();
+    await render(InvitePresetEditor, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { preset: plainPreset(), topics: TOPICS.items },
+      on: { invalidChange },
+    });
+    const daily = screen.getByLabelText('Pesquisas por dia (vazio = padrão)');
+    fireEvent.change(daily, { target: { value: '-3' } });
+    expect(invalidChange).toHaveBeenLastCalledWith(true);
+    fireEvent.change(daily, { target: { value: '4' } });
+    expect(invalidChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('turns the AI limits off with "Nenhuma" and says why', async () => {
+    const preset = plainPreset();
+    await renderEditor({ ...preset, ai: { ...preset.ai, appAi: 'none' } });
+    const limits = screen.getByRole('group', {
+      name: 'Limites da IA da aplicação',
+    }) as HTMLFieldSetElement;
+    expect(limits.disabled).toBe(true);
+    expect(
+      screen.getByText(/a cota e a reserva paga não se aplicam/),
+    ).toBeTruthy();
+  });
 });

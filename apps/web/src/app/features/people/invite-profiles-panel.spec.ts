@@ -214,4 +214,54 @@ describe('InviteProfilesPanel (KBC-028 FR-2)', () => {
     await fixture.whenStable();
     expect(host.querySelector('.notice.error')).toBeTruthy();
   });
+
+  it('keeps keyboard focus on the line when deleting or making a default (WCAG 2.4.3)', async () => {
+    const { http, fixture } = await renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Apagar Aluno' }));
+    await fixture.whenStable();
+    expect(screen.getByText(/Ele é o padrão/)).toBeTruthy();
+    expect(document.activeElement?.textContent?.trim()).toBe('Apagar');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Apagar Aluno' }),
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Tornar padrão Pesquisador' }),
+    );
+    http
+      .expectOne(`${URL}/${pesquisador.id}`)
+      .flush({ ...pesquisador, isDefault: true });
+    TestBed.tick();
+    http.expectOne(URL).flush({
+      items: [
+        { ...aluno, isDefault: false },
+        { ...pesquisador, isDefault: true },
+      ],
+    });
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Editar Pesquisador' }),
+    );
+  });
+
+  it('waits for a valid number before saving, and names the profile it edits', async () => {
+    const { fixture } = await renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Aluno' }));
+    await fixture.whenStable();
+    expect(screen.getByText('Editar o perfil "Aluno"')).toBeTruthy();
+    fireEvent.change(
+      screen.getByLabelText('Pesquisas por dia (vazio = padrão)'),
+      { target: { value: '1.5' } },
+    );
+    await fixture.whenStable();
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Salvar perfil',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
 });

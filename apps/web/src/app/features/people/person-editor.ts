@@ -4,6 +4,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   input,
@@ -74,6 +75,13 @@ export class PersonEditor {
   );
   /** Applying waits for a confirmation on the line (screens.md T9). */
   protected readonly confirmingApply = signal(false);
+  /** After applying, focus returns to "Aplicar perfil" once the save is over (WCAG 2.4.3). */
+  private refocusApply = false;
+  private readonly refocusAfterApply = afterRenderEffect(() => {
+    if (this.busy() || !this.refocusApply) return;
+    this.refocusApply = false;
+    this.applyButton()?.nativeElement.focus();
+  });
   protected readonly isMaster = computed(() => this.person().role === 'master');
   protected readonly features = computed(() =>
     FEATURES.map((id) => ({
@@ -121,8 +129,8 @@ export class PersonEditor {
   protected confirmApply(): void {
     const profile = this.chosenProfile();
     this.confirmingApply.set(false);
+    this.refocusApply = true;
     if (profile) this.profileApplied.emit(profile.id);
-    this.focusAfterRender(() => this.applyButton());
   }
 
   /** The asked-for button replaces the one that had focus: focus follows it (WCAG 2.4.3). */

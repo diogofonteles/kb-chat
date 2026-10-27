@@ -47,14 +47,23 @@
                 }
               </span>
               @if (confirmingDelete() === profile.id) {
-                <p class="confirm" i18n="@@profiles.confirmDelete">
-                  Apagar o perfil "{{ profile.name }}"? As pessoas já convidadas
-                  continuam como estão.
+                <p class="confirm">
+                  <ng-container i18n="@@profiles.confirmDelete"
+                    >Apagar o perfil "{{ profile.name }}"? As pessoas já
+                    convidadas continuam como estão.</ng-container
+                  >
+                  @if (profile.isDefault) {
+                    <ng-container i18n="@@profiles.confirmDeleteDefault"
+                      >Ele é o padrão: os próximos convites voltam a ser o
+                      convite simples.</ng-container
+                    >
+                  }
                 </p>
                 <div class="actions">
                   <button
                     type="button"
                     class="danger"
+                    data-focus="delete-confirm"
                     [disabled]="busy()"
                     (click)="remove(profile)"
                     i18n="@@profiles.deleteConfirm"
@@ -75,6 +84,7 @@
                   <button
                     type="button"
                     class="secondary"
+                    [attr.data-edit]="profile.id"
                     [disabled]="busy()"
                     (click)="edit(profile)"
                     i18n="@@profiles.edit"
@@ -99,6 +109,7 @@
                   <button
                     type="button"
                     class="link danger-text"
+                    [attr.data-delete]="profile.id"
                     [disabled]="busy()"
                     (click)="askDelete(profile)"
                     i18n="@@profiles.delete"
@@ -129,7 +140,7 @@
           <p id="profile-draft-title" class="draft-title">
             @if (current.id) {
               <ng-container i18n="@@profiles.editTitle"
-                >Editar perfil</ng-container
+                >Editar o perfil "{{ editingName() }}"</ng-container
               >
             } @else {
               <ng-container i18n="@@profiles.newTitle"
@@ -177,12 +188,13 @@
             [defaultAppAi]="defaultAppAi()"
             [busy]="busy()"
             (changed)="changePreset($event)"
+            (invalidChange)="presetInvalid.set($event)"
           />
           <div class="actions">
             <button
               type="submit"
               class="primary"
-              [disabled]="busy()"
+              [disabled]="busy() || presetInvalid()"
               i18n="@@profiles.save"
             >
               Salvar perfil

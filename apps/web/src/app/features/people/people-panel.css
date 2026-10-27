@@ -264,3 +264,7 @@ input[aria-invalid='true'] {
 .preset {
   flex-basis: 100%;
 }
+
+.setup-hint {
+  flex-basis: 100%;
+}

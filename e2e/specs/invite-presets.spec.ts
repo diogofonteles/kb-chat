@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import type { Locator, Page } from '@playwright/test';
 import { expect, pageAs, test, uniqueEmail } from './fixtures.js';
 
@@ -67,8 +68,15 @@ async function createAluno(dialog: Locator, name: string): Promise<void> {
   await section.getByLabel('Visão inicial').selectOption('research');
   await section.getByLabel('Perfil de pesquisa').selectOption('fast');
   await section.getByLabel('Tema').selectOption('dark');
+  await expectAccessible(section.page());
   await section.getByRole('button', { name: 'Salvar perfil' }).click();
   await expect(section.getByText(`Perfil "${name}" salvo.`)).toBeVisible();
+}
+
+/** WCAG 2.2 AA in the dialog as it stands (NFR-1). */
+async function expectAccessible(page: Page): Promise<void> {
+  const axe = await new AxeBuilder({ page }).include('dialog').analyze();
+  expect(axe.violations).toEqual([]);
 }
 
 async function removeProfile(dialog: Locator, name: string): Promise<void> {
@@ -150,9 +158,10 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await inviteForm(dialog)
     .locator('select[name="profile"]')
     .selectOption({ label: name });
-  const configure = dialog.getByRole('button', { name: 'Configurar agora' });
-  await configure.click();
-  await expect(configure).toHaveAttribute('aria-expanded', 'true');
+  await dialog.getByRole('button', { name: 'Configurar agora' }).click();
+  await expect(
+    dialog.getByRole('button', { name: 'Descartar configuração' }),
+  ).toHaveAttribute('aria-expanded', 'true');
   const preset = dialog.locator('#invite-preset');
   await expect(
     preset.getByLabel('Pesquisas por dia (vazio = padrão)'),
@@ -160,6 +169,7 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await preset.getByLabel('Pesquisas por dia (vazio = padrão)').fill('7');
   await preset.getByLabel('Pesquisas por dia (vazio = padrão)').blur();
   await preset.getByLabel('Tema').selectOption('light');
+  await expectAccessible(page);
   await shoot(page, 'invite-configure-now', inviteForm(dialog));
   await dialog.getByLabel('Convidar por e-mail').fill(adjusted);
   await dialog.getByRole('button', { name: 'Convidar' }).click();
@@ -189,6 +199,7 @@ test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on
   await expect(
     dialog.getByText(`Aplicar o perfil "${name}" a ${existing}?`),
   ).toBeVisible();
+  await expectAccessible(page);
   await shoot(
     page,
     'apply-profile-confirm',

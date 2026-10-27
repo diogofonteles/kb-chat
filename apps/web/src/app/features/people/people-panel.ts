@@ -84,6 +84,8 @@ export class PeoplePanel {
   private readonly session = inject(SessionStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
+  /** The invitation profiles (KBC-028), shared with the profiles section. */
+  protected readonly profiles = inject(InviteProfilesStore);
   private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
   private readonly resendButtons =
     viewChildren<ElementRef<HTMLButtonElement>>('resendButton');
@@ -146,8 +148,6 @@ export class PeoplePanel {
         this.list().map((person) => [person.id, invitationStateOf(person)]),
       ),
   );
-  /** The invitation profiles (KBC-028), shared with the profiles section. */
-  protected readonly profiles = inject(InviteProfilesStore);
   /** The "Perfil" picked; until then, the default profile (or "Nenhum"). */
   private readonly pickedSetup = signal<string | null>(null);
   protected readonly setupChoice = computed(
@@ -157,6 +157,8 @@ export class PeoplePanel {
   protected readonly noProfile = NO_PROFILE;
   /** "Configurar agora": the preset opens from the chosen profile (KBC-028 AC-2). */
   protected readonly configuring = signal(false);
+  /** A number typed in the preset is not kept yet: the invitation waits (design D4). */
+  protected readonly presetInvalid = signal(false);
   protected readonly draftPreset = linkedSignal(
     () => this.profiles.find(this.setupChoice())?.preset ?? plainPreset(),
   );
@@ -220,6 +222,12 @@ export class PeoplePanel {
     this.inviteError.set('');
   }
 
+  /** Closing "Configurar agora" discards what was adjusted: the profile applies again. */
+  protected toggleConfigure(): void {
+    this.configuring.update((open) => !open);
+    this.presetInvalid.set(false);
+  }
+
   protected chooseSetup(value: string): void {
     this.pickedSetup.set(value);
   }
@@ -261,6 +269,7 @@ export class PeoplePanel {
     this.skipEmail.set(false);
     this.pickedSetup.set(null);
     this.configuring.set(false);
+    this.presetInvalid.set(false);
   }
 
   /** "Aplicar perfil" (KBC-028 FR-4): role, collections, features and AI change. */

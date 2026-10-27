@@ -65,6 +65,8 @@ export class InvitePresetEditor {
   readonly defaultAppAi = input<AppAi | null>(null);
   readonly busy = input(false);
   readonly changed = output<InvitePreset>();
+  /** True while a typed number is not kept: the invitation or profile waits (design D4). */
+  readonly invalidChange = output<boolean>();
 
   protected readonly uid = `preset-${nextId++}`;
   protected readonly isMaster = computed(() => this.preset().role === 'master');
@@ -108,6 +110,10 @@ export class InvitePresetEditor {
   /** Why a typed number was not kept; shown on its field (MA-23). */
   protected readonly dailyError = signal<string | null>(null);
   protected readonly capError = signal<string | null>(null);
+  /** With "Nenhuma", the limits of the app AI have nothing to apply to. */
+  protected readonly noAppAi = computed(
+    () => this.preset().ai.appAi === 'none',
+  );
 
   protected setMaster(on: boolean): void {
     const { topics, preferences } = this.preset();
@@ -147,10 +153,15 @@ export class InvitePresetEditor {
   protected setDaily(value: string): void {
     const parsed = parseDaily(value, true);
     this.dailyError.set(parsed.ok ? null : parsed.error);
+    this.reportValidity();
     if (parsed.ok) this.emitAi({ dailyResearches: parsed.value });
   }
 
   protected setPaid(enabled: boolean): void {
+    if (!enabled && this.capError()) {
+      this.capError.set(null);
+      this.reportValidity();
+    }
     const { monthlyCapUsd } = this.preset().ai.paidFallback;
     this.emitAi({ paidFallback: { enabled, monthlyCapUsd } });
   }
@@ -158,6 +169,7 @@ export class InvitePresetEditor {
   protected setCap(value: string): void {
     const parsed = parseCap(value);
     this.capError.set(parsed.ok ? null : parsed.error);
+    this.reportValidity();
     if (!parsed.ok) return;
     const { enabled } = this.preset().ai.paidFallback;
     this.emitAi({ paidFallback: { enabled, monthlyCapUsd: parsed.value } });
@@ -177,6 +189,12 @@ export class InvitePresetEditor {
 
   protected setTheme(value: string): void {
     this.emit({}, { theme: pick(THEMES, value) });
+  }
+
+  private reportValidity(): void {
+    this.invalidChange.emit(
+      this.dailyError() !== null || this.capError() !== null,
+    );
   }
 
   private emitAi(patch: Partial<InvitePreset['ai']>): void {

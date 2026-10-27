@@ -35,6 +35,7 @@
           #setupSelect
           class="select"
           name="profile"
+          [attr.aria-describedby]="configuring() ? 'invite-setup-hint' : null"
           (change)="chooseSetup(setupSelect.value)"
         >
           @for (profile of profiles.list(); track profile.id) {
@@ -65,12 +66,24 @@
       class="secondary"
       aria-controls="invite-preset"
       [attr.aria-expanded]="configuring()"
-      (click)="configuring.set(!configuring())"
-      i18n="@@people.configureNow"
+      (click)="toggleConfigure()"
     >
-      Configurar agora
+      @if (configuring()) {
+        <span i18n="@@people.discardConfiguration">Descartar configuração</span>
+      } @else {
+        <span i18n="@@people.configureNow">Configurar agora</span>
+      }
     </button>
   </div>
+  @if (configuring() && profiles.list().length > 0) {
+    <p
+      id="invite-setup-hint"
+      class="hint setup-hint"
+      i18n="@@people.setupSwitchHint"
+    >
+      Trocar o perfil recomeça a configuração a partir dele.
+    </p>
+  }
   @if (configuring()) {
     <app-invite-preset-editor
       id="invite-preset"
@@ -80,12 +93,13 @@
       [defaultAppAi]="defaultAppAi()"
       [busy]="busy()"
       (changed)="draftPreset.set($event)"
+      (invalidChange)="presetInvalid.set($event)"
     />
   }
   <button
     type="submit"
     class="primary"
-    [disabled]="busy() || !email().trim()"
+    [disabled]="busy() || !email().trim() || (configuring() && presetInvalid())"
     i18n="@@people.invite"
   >
     Convidar

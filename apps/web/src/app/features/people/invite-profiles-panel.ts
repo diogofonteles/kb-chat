@@ -5,6 +5,7 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  computed,
   inject,
   input,
   signal,
@@ -46,6 +47,7 @@ type Notice = { readonly kind: 'ok' | 'error'; readonly text: string } | null;
 })
 export class InviteProfilesPanel {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   protected readonly store = inject(InviteProfilesStore);
   readonly topics = input.required<readonly Topic[]>();
@@ -59,8 +61,15 @@ export class InviteProfilesPanel {
   /** The section starts folded under the invitation (screens.md T9). */
   protected readonly expanded = signal(false);
   protected readonly draft = signal<Draft | null>(null);
+  /** The saved name of the profile being edited, for the form's title. */
+  protected readonly editingName = computed(() => {
+    const id = this.draft()?.id;
+    return id ? (this.store.find(id)?.name ?? '') : '';
+  });
   protected readonly confirmingDelete = signal<string | null>(null);
   protected readonly nameError = signal('');
+  /** A number typed in the preset is not kept yet: saving waits (design D4). */
+  protected readonly presetInvalid = signal(false);
   protected readonly busy = signal(false);
   protected readonly notice = signal<Notice>(null);
 
@@ -113,20 +122,29 @@ export class InviteProfilesPanel {
     });
   }
 
+  /** "Tornar padrão" goes away on that line: focus moves to its "Editar" (WCAG 2.4.3). */
   protected makeDefault(profile: InviteProfile): void {
-    this.run(
-      this.store.update(profile.id, { isDefault: true }),
-      () =>
-        $localize`:@@profiles.defaultSet:"${profile.name}:name:" agora é o perfil padrão.`,
-    );
+    this.run(this.store.update(profile.id, { isDefault: true }), () => {
+      this.focusAfterRender(() => this.byData(`[data-edit="${profile.id}"]`));
+      return $localize`:@@profiles.defaultSet:"${profile.name}:name:" agora é o perfil padrão.`;
+    });
   }
 
+  /** The confirmation replaces the button that had focus: focus follows it (WCAG 2.4.3). */
   protected askDelete(profile: InviteProfile): void {
     this.confirmingDelete.set(profile.id);
+    this.focusAfterRender(() => this.byData('[data-focus="delete-confirm"]'));
   }
 
   protected cancelDelete(): void {
+    const id = this.confirmingDelete();
     this.confirmingDelete.set(null);
+    this.focusAfterRender(() => this.byData(`[data-delete="${id}"]`));
+  }
+
+  private byData(selector: string): ElementRef<HTMLElement> | undefined {
+    const found = this.host.nativeElement.querySelector<HTMLElement>(selector);
+    return found ? new ElementRef(found) : undefined;
   }
 
   protected remove(profile: InviteProfile): void {
@@ -140,6 +158,7 @@ export class InviteProfilesPanel {
   private open(draft: Draft): void {
     this.notice.set(null);
     this.nameError.set('');
+    this.presetInvalid.set(false);
     this.confirmingDelete.set(null);
     this.draft.set(draft);
     this.focusAfterRender(() => this.nameInput());

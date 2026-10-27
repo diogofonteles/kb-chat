@@ -156,6 +156,19 @@ describe('Invite profiles (KBC-028)', () => {
     expect(applied.json().ai.history.at(-1).by).toBe('owner@example.com');
     const settings = (await member('GET', '/api/v1/settings')).json();
     expect(settings.preferences.theme).toBe('light');
+    // The role changes too.
+    const coordinator = (
+      await master('POST', '/api/v1/invite-profiles', {
+        name: 'Coordenação',
+        preset: { role: 'master' },
+      })
+    ).json();
+    const promoted = await master(
+      'POST',
+      `/api/v1/people/${memberId}/profile`,
+      { profileId: coordinator.id },
+    );
+    expect(promoted.json().role).toBe('master');
   });
 
   it('refuses a lent subscription, a default collection not granted, and anyone but a master (AC-5)', async () => {

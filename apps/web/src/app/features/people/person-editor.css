@@ -165,3 +165,8 @@ button:disabled {
   flex: 1 1 0;
   min-width: 0;
 }
+
+/* "Aplicar perfil": the button lines up with the select, not its label (design D9). */
+.apply-row {
+  align-items: end;
+}
