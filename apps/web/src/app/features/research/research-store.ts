@@ -198,7 +198,8 @@ export class ResearchStore {
     if (!current) return;
     this.usage.track({ type: 'ai_cancel' });
     this.detach();
-    // A stop that does not arrive leaves the turn to end by itself; it is still saved.
+    // One POST that completes by itself (NG-21); a stop that does not arrive leaves the
+    // turn to end by itself, and it is still saved.
     this.api.stopTurn(current.turnId).subscribe({ error: () => undefined });
     this.patch(current.id, (turn) => ({
       ...turn,
@@ -322,18 +323,20 @@ export class ResearchStore {
   /** The turn is not running any more: shows what the history kept of it. */
   private adoptSaved(turn: ResearchTurn): void {
     const conversationId = this.state().id;
-    this.load(conversationId).subscribe({
-      next: (saved) => {
-        if (this.state().id !== conversationId) return;
-        const kept =
-          saved.kind === 'research'
-            ? saved.turns.find((t) => t.id === turn.turnId)
-            : undefined;
-        const shown = kept ? fromSavedTurn(turn.id, kept) : turn;
-        this.patch(turn.id, () => cutShort(shown));
-      },
-      error: () => this.patch(turn.id, cutShort),
-    });
+    this.load(conversationId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (saved) => {
+          if (this.state().id !== conversationId) return;
+          const kept =
+            saved.kind === 'research'
+              ? saved.turns.find((t) => t.id === turn.turnId)
+              : undefined;
+          const shown = kept ? fromSavedTurn(turn.id, kept) : turn;
+          this.patch(turn.id, () => cutShort(shown));
+        },
+        error: () => this.patch(turn.id, cutShort),
+      });
   }
 
   private load(id: string): Observable<Conversation> {

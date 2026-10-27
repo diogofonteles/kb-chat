@@ -105,8 +105,10 @@
   color: var(--color-accent-strong);
 }
 
-/* KBC-029: how a conversation stands, always in words; the spinner only adds motion. */
+/* KBC-029: how a conversation stands, always in words, on a line of its own; the spinner only
+   adds motion. */
 .status {
+  display: block;
   font-weight: 600;
   white-space: nowrap;
 }
