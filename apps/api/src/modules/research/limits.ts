@@ -15,23 +15,23 @@ const EXHAUSTIVE_MINUTES = 30;
 /** Estimated prompt tokens past which the exhaustive loop compacts old tool results. */
 const EXHAUSTIVE_COMPACT_TOKENS = 60_000;
 
-/** How an exhaustive orchestrator may delegate to sub-researchers (KBC-018, ADR 0014). */
-export interface DelegationBudget {
-  /** Sub-researchers running at once. */
+/** How an exhaustive turn sweeps its planned set (KBC-030, ADR 0021). */
+export interface SweepBudget {
+  /** Batches at once on a per-token model. */
   readonly parallel: number;
-  /** Tool steps of one sub-researcher. */
-  readonly steps: number;
-  /** Output tokens per sub-researcher call. */
+  /** Output tokens of one batch call. */
   readonly outputTokens: number;
-  /** Tool steps of all the turn's sub-researchers together. */
-  readonly totalSteps: number;
+  /** Model requests one turn may make: planning, batches and the answer. */
+  readonly maxRequests: number;
 }
 
-export const DELEGATION: DelegationBudget = {
+/** The default of KB_CHAT_SWEEP_MAX_REQUESTS. */
+export const SWEEP_MAX_REQUESTS = 250;
+
+export const SWEEP: SweepBudget = {
   parallel: 3,
-  steps: 25,
   outputTokens: 4_000,
-  totalSteps: 300,
+  maxRequests: SWEEP_MAX_REQUESTS,
 };
 
 /** How far one research profile may go (KBC-011, KBC-017). */
@@ -46,8 +46,8 @@ export interface ProfileBudget {
   readonly maxMinutes: number | null;
   /** Estimated prompt tokens past which old tool results are compacted; null: never. */
   readonly compactTokens: number | null;
-  /** Sub-researchers the profile may delegate to (ADR 0014); null: none. */
-  readonly delegation: DelegationBudget | null;
+  /** The app-driven sweep (ADR 0021); null: the profile does not sweep. */
+  readonly sweep: SweepBudget | null;
 }
 
 export type ResearchBudgets = Readonly<Record<ResearchProfile, ProfileBudget>>;
@@ -56,6 +56,8 @@ export type ResearchBudgets = Readonly<Record<ResearchProfile, ProfileBudget>>;
 export interface ExhaustiveSettings {
   readonly steps?: number;
   readonly outputTokens?: number;
+  /** KB_CHAT_SWEEP_MAX_REQUESTS (KBC-030). */
+  readonly sweepRequests?: number;
 }
 
 const shortBudget = (steps: number): ProfileBudget => ({
@@ -64,7 +66,7 @@ const shortBudget = (steps: number): ProfileBudget => ({
   guardOutputTokens: MAX_OUTPUT_TOKENS,
   maxMinutes: null,
   compactTokens: null,
-  delegation: null,
+  sweep: null,
 });
 
 /** The budgets of every profile; the exhaustive one takes the server's settings. */
@@ -81,7 +83,10 @@ export function researchBudgets(
       guardOutputTokens: Math.min(outputTokens, EXHAUSTIVE_GUARD_OUTPUT_TOKENS),
       maxMinutes: EXHAUSTIVE_MINUTES,
       compactTokens: EXHAUSTIVE_COMPACT_TOKENS,
-      delegation: DELEGATION,
+      sweep: {
+        ...SWEEP,
+        maxRequests: exhaustive.sweepRequests ?? SWEEP_MAX_REQUESTS,
+      },
     },
   };
 }

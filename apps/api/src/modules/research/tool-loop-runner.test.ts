@@ -13,7 +13,6 @@ import { STUB_THOUGHT } from '../../adapters/stub-llm-adapter.js';
 import { COMPACTED_MARK } from './compaction.js';
 import {
   EXHAUSTIVE_OUTPUT_TOKENS,
-  EXHAUSTIVE_TOOL_STEPS,
   FAST_TOOL_STEPS,
   MAX_OUTPUT_TOKENS,
   MAX_TOOL_STEPS,
@@ -23,6 +22,7 @@ import { AnthropicAdapter } from '../../adapters/anthropic-adapter.js';
 import { MemorySpendLedger } from '../../adapters/memory-spend-ledger.js';
 import { SpendService } from '../spend/index.js';
 import { ToolLoopRunner } from './tool-loop-runner.js';
+import { PLAN_STEPS } from './sweep/plan-tool.js';
 
 const input = (
   question: string,
@@ -445,7 +445,7 @@ describe('ToolLoopRunner', () => {
   });
 });
 
-describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
+describe('ToolLoopRunner, exhaustive profile (KBC-017, KBC-030; ADR 0013, ADR 0021)', () => {
   const exhaustive = (question: string) =>
     input(question, undefined, 'exhaustive');
   const pages = (n: number) =>
@@ -458,18 +458,20 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
       ],
     }));
 
-  it('gives the exhaustive profile 80 steps and 16,000 output tokens, the others keep theirs (AC-11)', async () => {
+  it('plans with at most the planning steps and the 16,000-token output; deep keeps its own (KBC-030)', async () => {
     const { runner, llm } = await fixtureRunner({ script: pages(100) });
     const events = await collectEvents(runner.run(exhaustive('ritmo')));
-    expect(EXHAUSTIVE_TOOL_STEPS).toBe(80);
-    expect(ofType(events, 'done')[0]?.steps).toBe(80);
-    expect(llm.agentCalls).toHaveLength(81);
+    expect(ofType(events, 'done')[0]?.steps).toBe(PLAN_STEPS);
+    expect(llm.toolsSeen).toHaveLength(PLAN_STEPS + 1);
     expect(
-      llm.agentCalls.every((c) => c.maxTokens === EXHAUSTIVE_OUTPUT_TOKENS),
+      llm.agentCalls.every(
+        (c) =>
+          c.maxTokens === EXHAUSTIVE_OUTPUT_TOKENS || c.maxTokens === 4_000,
+      ),
     ).toBe(true);
-    const prompt = llm.lastMessages[0]?.content ?? '';
+    const prompt = llm.messagesSeen[0]?.[0]?.content ?? '';
     expect(prompt).toContain('Pesquisa exaustiva');
-    expect(prompt).toContain('Cobertura:');
+    expect(prompt).toContain('plan_sweep');
     const deep = await fixtureRunner({ script: pages(3) });
     await collectEvents(deep.runner.run(input('ritmo')));
     expect(
@@ -477,11 +479,11 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
     ).toBe(true);
   });
 
-  it('compacts old tool results past the threshold and still answers (AC-10)', async () => {
+  it('compacts old tool results past the threshold while planning (AC-10)', async () => {
     const budgets = researchBudgets();
     const small = {
       ...budgets,
-      exhaustive: { ...budgets.exhaustive, steps: 12, compactTokens: 2_000 },
+      exhaustive: { ...budgets.exhaustive, compactTokens: 2_000 },
     };
     const { runner, llm } = await fixtureRunner(
       { script: pages(20) },
@@ -489,19 +491,16 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
       small,
     );
     const events = await collectEvents(runner.run(exhaustive('ritmo')));
-    expect(ofType(events, 'done')[0]?.steps).toBe(12);
-    const tools = llm.lastMessages.filter((m) => m.role === 'tool');
-    expect(tools).toHaveLength(12);
+    expect(ofType(events, 'done')[0]?.steps).toBe(PLAN_STEPS);
+    const lastPlanning = llm.messagesSeen[PLAN_STEPS - 1] ?? [];
+    const tools = lastPlanning.filter((m) => m.role === 'tool');
+    expect(tools).toHaveLength(PLAN_STEPS - 1);
     expect(tools[0]?.content.startsWith(COMPACTED_MARK)).toBe(true);
-    // Still above the threshold before the last call: only the 2 newest stay whole.
     expect(
       tools.slice(-2).some((m) => m.content.startsWith(COMPACTED_MARK)),
     ).toBe(false);
-    expect(
-      tools.slice(0, -2).every((m) => m.content.startsWith(COMPACTED_MARK)),
-    ).toBe(true);
     expect(llm.agentCalls.at(-1)?.toolChoice).toBe('none');
-    expect(answerText(events)).toMatch(/\[\d+\]/);
+    expect(answerText(events)).not.toBe('');
   });
 
   it('answers with what it has once the wall-clock ceiling is spent', async () => {
@@ -517,7 +516,7 @@ describe('ToolLoopRunner, exhaustive profile (KBC-017, ADR 0013)', () => {
     expect(llm.agentCalls[0]?.toolChoice).toBe('none');
   });
 
-  it('prices the forced last call at its whole output budget', async () => {
+  it('prices the answer call at its whole output budget', async () => {
     const budgets = researchBudgets();
     const one = { ...budgets, exhaustive: { ...budgets.exhaustive, steps: 1 } };
     // US$ 1 per million tokens: 4,000 output tokens fit a US$ 0.01 cap, 16,000 do not.

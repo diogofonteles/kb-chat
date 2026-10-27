@@ -1,4 +1,9 @@
-import type { ResearchBilling, ResearchEvent } from '@kb-chat/contracts';
+import {
+  sweepPlanSchema,
+  type ResearchBilling,
+  type ResearchEvent,
+  type SweepPlan,
+} from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import {
   LlmCapacityError,
@@ -33,29 +38,27 @@ import {
 import { KEEP_TOOL_RESULTS, compactToolResults } from './compaction.js';
 import {
   DEFAULT_BUDGETS,
-  DELEGATION,
-  type DelegationBudget,
+  SWEEP,
   type ProfileBudget,
   type ResearchBudgets,
+  type SweepBudget,
 } from './limits.js';
-import {
-  DELEGATE_DEFINITION,
-  DELEGATE_TOOL,
-  delegateArgsSchema,
-} from './delegate.js';
-import { EventPipe } from './event-pipe.js';
+import { promptText } from './prompt-text.js';
 import { SourceBook } from './source-book.js';
+import { CoverageLineFilter } from './sweep/coverage-filter.js';
 import {
-  Slots,
-  delegateSteps,
-  runAll,
-  numberTasks,
-  promptText,
-  reportsText,
-  runSubAgent,
-  type SubAgentHost,
-  type SubTask,
-} from './subagents.js';
+  PLAN_STEPS,
+  PLAN_SWEEP_DEFINITION,
+  PLAN_SWEEP_TOOL,
+  defaultPlan,
+} from './sweep/plan-tool.js';
+import type { BatchEngine, SweepClock } from './sweep/sweep-coordinator.js';
+import {
+  batchCharsFor,
+  runSweepTurn,
+  type SweepTurnHost,
+  type SweepTurnResult,
+} from './sweep/sweep-turn.js';
 import { failed, parsedArgs, type PreparedCall } from './tool-context.js';
 import type { ResearchTools } from './tools.js';
 
@@ -85,6 +88,8 @@ export interface ToolLoopRunnerDeps extends LoopEngine {
   readonly autoDeepen?: () => boolean;
   /** Steps, output, ceilings and compaction per profile (ADR 0013); default DEFAULT_BUDGETS. */
   readonly budgets?: ResearchBudgets;
+  /** The sweep's clock (tests); default the real one. */
+  readonly clock?: SweepClock;
 }
 
 interface Turn {
@@ -105,14 +110,19 @@ interface Turn {
   deepen: LoopEngine | null;
   escalated: boolean;
   steps: number;
-  /** Sub-researchers numbered so far and the tool steps they took (ADR 0014). */
-  agents: number;
-  subSteps: number;
-  /** At most `parallel` sub-researchers at once, across the turn's delegate calls. */
-  readonly slots: Slots | null;
-  /** Estimates of sub-researcher calls in flight, counted by the spend guard. */
+  /** Model calls of the turn (the exhaustive sweep counts its requests, ADR 0021). */
+  calls: number;
+  /** The exhaustive plan, once the orchestrator called plan_sweep (KBC-030). */
+  plan: SweepPlan | null;
+  /** The exhaustive answer leaves out any coverage line the model writes. */
+  filter: CoverageLineFilter | null;
+  /** What the sweep covered, for `done`. */
+  sweep: SweepTurnResult | null;
+  /** Estimates of sweep batches in flight, counted by the spend guard. */
   reservedUsd: number;
-  /** Serializes the sub-researchers' check-and-reserve, so none sees a stale reservation. */
+  /** Kept free for the answer while the batches run: the sweep never spends it. */
+  finalReserveUsd: number;
+  /** Serializes the batches' check-and-reserve, so none sees a stale reservation. */
   spendQueue: Promise<unknown>;
   sourcesSent: number;
   /** The model that wrote the last call, when the provider names it (KBC-022). */
@@ -158,22 +168,35 @@ function billingOf(turn: Turn): ResearchBilling {
     : billing;
 }
 
+/** What a turn has done and spent when it starts: nothing. */
+const freshCounters = () => ({
+  steps: 0,
+  calls: 0,
+  plan: null,
+  filter: null,
+  sweep: null,
+  reservedUsd: 0,
+  finalReserveUsd: 0,
+  spendQueue: Promise.resolve(),
+  sourcesSent: 0,
+  servedModel: null,
+  spent: new Map<LoopEngine, Spent>(),
+  usd: 0,
+});
+
+/** A call's text and usage, without tools (a sweep batch). */
+async function collectCall(
+  chunks: AsyncIterable<AgentChunk>,
+  call: CallResult,
+): Promise<void> {
+  for await (const chunk of chunks)
+    if (chunk.type === 'usage') call.usage = chunk.usage;
+    else if (chunk.type === 'token') call.text += chunk.text;
+}
+
 /** When a turn with this budget must answer, in ms since the epoch; null: no ceiling. */
 const deadlineOf = (budget: ProfileBudget): number | null =>
   budget.maxMinutes === null ? null : Date.now() + budget.maxMinutes * 60_000;
-
-/** Grants sub-researcher tool steps from the turn's total (ADR 0014). */
-function reserveSubSteps(
-  turn: Turn,
-  { budget, wanted }: { budget: DelegationBudget; wanted: number },
-): number {
-  const granted = Math.max(
-    0,
-    Math.min(wanted, budget.totalSteps - turn.subSteps),
-  );
-  turn.subSteps += granted;
-  return granted;
-}
 
 function parseJson(raw: string): unknown {
   try {
@@ -244,23 +267,21 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       engine: this.deps,
       deepen: canDeepen ? (this.deps.deep ?? null) : null,
       escalated: false,
-      maxSteps: budget.steps,
+      // An exhaustive turn only plans with tools; the app sweeps (ADR 0021).
+      maxSteps: budget.sweep
+        ? Math.min(PLAN_STEPS, budget.steps)
+        : budget.steps,
       budget,
       deadline: deadlineOf(budget),
-      steps: 0,
-      agents: 0,
-      subSteps: 0,
-      slots: budget.delegation ? new Slots(budget.delegation.parallel) : null,
-      reservedUsd: 0,
-      spendQueue: Promise.resolve(),
-      sourcesSent: 0,
-      servedModel: null,
-      spent: new Map(),
-      usd: 0,
+      ...freshCounters(),
     };
   }
 
   private async *loop(turn: Turn): AsyncIterable<ResearchEvent> {
+    if (turn.budget.sweep) {
+      yield* this.exhaustive(turn);
+      return;
+    }
     for (;;) {
       if (turn.input.signal.aborted) return;
       const final = this.mustAnswer(turn);
@@ -274,6 +295,132 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       const call = yield* this.callModel(turn, final);
       if (yield* this.afterCall(turn, call, final)) return;
     }
+  }
+
+  /**
+   * The exhaustive turn (KBC-030, ADR 0021): the orchestrator plans (or the default plan
+   * applies), then the app sweeps the whole set and only then asks for the answer.
+   */
+  private async *exhaustive(turn: Turn): AsyncIterable<ResearchEvent> {
+    const plan = turn.input.sweep?.plan ?? (yield* this.planSweep(turn));
+    if (turn.input.signal.aborted) return;
+    turn.sweep = yield* runSweepTurn(await this.sweepHost(turn), plan);
+  }
+
+  /**
+   * Planning: the research tools and plan_sweep, a few steps. An answer written before the
+   * sweep (a lazy model) is taken back and the default plan applies, as when the steps run out.
+   */
+  private async *planSweep(
+    turn: Turn,
+  ): AsyncGenerator<ResearchEvent, SweepPlan> {
+    const fallback = () => defaultPlan(turn.input.question);
+    for (;;) {
+      if (turn.input.signal.aborted || this.mustAnswer(turn)) return fallback();
+      this.compact(turn);
+      await this.guard(turn, false);
+      const call = yield* this.callModel(turn, false);
+      if (call.toolCalls.length === 0) {
+        yield* turn.answer.toolCalled();
+        return fallback();
+      }
+      yield* this.runTools(turn, call);
+      if (turn.plan) return turn.plan;
+    }
+  }
+
+  /** What the sweep borrows from the turn: tools, numbering, model, spend and ceilings. */
+  private async sweepHost(turn: Turn): Promise<SweepTurnHost> {
+    const { input } = turn;
+    const budget = turn.budget.sweep ?? SWEEP;
+    return {
+      sweeps: this.deps.tools.sweeps,
+      topic: input.topic,
+      topicTitle: turn.topicTitle,
+      question: input.question,
+      history: input.history,
+      book: turn.book,
+      signal: input.signal,
+      ...(input.sweep && { cursor: input.sweep }),
+      engine: await this.batchEngine(turn, budget),
+      contextTokens: turn.engine.llm.contextTokens,
+      deadline: turn.deadline,
+      maxRequests: Math.min(
+        budget.maxRequests,
+        input.requestBudget ?? Infinity,
+      ),
+      requestsBefore: turn.calls,
+      ...(this.deps.clock && { clock: this.deps.clock }),
+      answer: (messages) => this.sweepAnswer(turn, messages),
+    };
+  }
+
+  /** The turn's model as the sweep calls it: no tools, a batch's output, the spend guarded. */
+  private async batchEngine(
+    turn: Turn,
+    budget: SweepBudget,
+  ): Promise<BatchEngine> {
+    const { llm, spend } = turn.engine;
+    const price = await llm.price();
+    // The answer comes after the batches: its estimate stays out of their reach.
+    turn.finalReserveUsd = await spend.estimate(
+      ' '.repeat(batchCharsFor(llm.contextTokens)),
+      llm.maxOutputTokens(turn.budget.outputTokens),
+    );
+    return {
+      free: llm.billing === 'free' || (price.input === 0 && price.output === 0),
+      parallel: budget.parallel,
+      extract: (request) =>
+        this.extractBatch(turn, {
+          ...request,
+          outputTokens: budget.outputTokens,
+        }),
+    };
+  }
+
+  private async extractBatch(
+    turn: Turn,
+    request: {
+      system: string;
+      user: string;
+      signal: AbortSignal;
+      outputTokens: number;
+    },
+  ): Promise<string> {
+    const messages: AgentMessage[] = [
+      { role: 'system', content: request.system },
+      { role: 'user', content: request.user },
+    ];
+    const prompt = promptText(messages);
+    const { outputTokens: maxTokens, signal } = request;
+    const reserved = await this.reserveSpend(turn, prompt, maxTokens);
+    const call: CallResult = { text: '', toolCalls: [], usage: null };
+    turn.calls += 1;
+    try {
+      const options = { maxTokens, signal, toolChoice: 'none' as const };
+      await collectCall(
+        turn.engine.llm.streamAgent(messages, [], options),
+        call,
+      );
+    } finally {
+      await this.accountReserved(turn, call, { prompt, reserved });
+    }
+    return call.text;
+  }
+
+  /** The exhaustive answer from the merged findings, without the model's coverage line. */
+  private async *sweepAnswer(
+    turn: Turn,
+    messages: AgentMessage[],
+  ): AsyncIterable<ResearchEvent> {
+    turn.messages.splice(0, turn.messages.length, ...messages);
+    const filter = new CoverageLineFilter();
+    turn.filter = filter;
+    await this.guard(turn, true);
+    yield* this.callModel(turn, true);
+    yield* turn.answer.text(filter.end());
+    yield* turn.answer.ended();
+    yield* this.ensureAnswer(turn);
   }
 
   /** Runs the tools a call asked for, or ends (or escalates) on an answer; true when done. */
@@ -413,7 +560,9 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       prompt,
       llm.maxOutputTokens(outputTokens),
     );
-    await spend.guard(turn.usd + turn.reservedUsd + estimate);
+    await spend.guard(
+      turn.usd + turn.reservedUsd + turn.finalReserveUsd + estimate,
+    );
     turn.reservedUsd += estimate;
     return estimate;
   }
@@ -424,6 +573,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
   ): AsyncGenerator<ResearchEvent, CallResult> {
     const call: CallResult = { text: '', toolCalls: [], usage: null };
     const prompt = promptText(turn.messages);
+    turn.calls += 1;
     try {
       yield* this.consume(turn, call, final);
     } catch (err) {
@@ -439,15 +589,13 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     call: CallResult,
     final: boolean,
   ): AsyncIterable<ResearchEvent> {
-    const chunks = turn.engine.llm.streamAgent(
-      turn.messages,
-      this.definitions(turn),
-      {
-        maxTokens: turn.budget.outputTokens,
-        signal: turn.input.signal,
-        toolChoice: final ? 'none' : 'auto',
-      },
-    );
+    // The sweep's answer comes from the findings only: no tools (ADR 0021).
+    const tools = turn.filter ? [] : this.definitions(turn);
+    const chunks = turn.engine.llm.streamAgent(turn.messages, tools, {
+      maxTokens: turn.budget.outputTokens,
+      signal: turn.input.signal,
+      toolChoice: final ? 'none' : 'auto',
+    });
     for await (const chunk of chunks)
       yield* this.take(turn, call, { chunk, final });
   }
@@ -468,8 +616,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       yield* turn.answer.toolCalled();
     } else {
       call.text += chunk.text;
+      // The exhaustive answer never shows the model's own coverage line (ADR 0021).
+      const shown = turn.filter ? turn.filter.push(chunk.text) : chunk.text;
       // Text after a tool call in the same call is the model's, not the reader's.
-      if (call.toolCalls.length === 0) yield* turn.answer.text(chunk.text);
+      if (call.toolCalls.length === 0) yield* turn.answer.text(shown);
     }
   }
 
@@ -483,18 +633,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     call: CallResult,
   ): AsyncIterable<ResearchEvent> {
     const runnable = call.toolCalls.slice(0, turn.maxSteps - turn.steps);
-    // Sub-researchers stream their steps while the calls run (ADR 0014).
-    const pipe = new EventPipe<ResearchEvent>();
-    const prepared = runnable.map((c) => this.prepare(turn, c, pipe));
+    const prepared = runnable.map((c) => this.prepare(turn, c));
     for (const { steps } of prepared)
       for (const step of steps) yield { type: 'step', step };
-    const running = Promise.all(prepared.map((p) => p.run())).finally(() =>
-      pipe.end(),
-    );
-    // Handled below, after the pipe drains; this only keeps Node from calling it unhandled.
-    running.catch(() => undefined);
-    yield* pipe;
-    const outputs = await running;
+    const outputs = await Promise.all(prepared.map((p) => p.run()));
     turn.steps += runnable.length;
     turn.messages.push(
       { role: 'assistant', content: call.text, toolCalls: call.toolCalls },
@@ -509,92 +651,31 @@ export class ToolLoopRunner implements ResearchRunnerPort {
     yield { type: 'sources', sources: turn.book.list() };
   }
 
-  /** The tools of this turn: the exhaustive orchestrator may also delegate (ADR 0014). */
+  /** The tools of this turn: the exhaustive orchestrator also plans the sweep (ADR 0021). */
   private definitions(turn: Turn) {
-    return turn.budget.delegation
-      ? [...this.deps.tools.definitions, DELEGATE_DEFINITION]
+    return turn.budget.sweep
+      ? [...this.deps.tools.definitions, PLAN_SWEEP_DEFINITION]
       : this.deps.tools.definitions;
   }
 
-  private prepare(
-    turn: Turn,
-    call: ToolCall,
-    pipe: EventPipe<ResearchEvent>,
-  ): PreparedCall {
-    if (call.name !== DELEGATE_TOOL || !turn.budget.delegation)
+  private prepare(turn: Turn, call: ToolCall): PreparedCall {
+    if (call.name !== PLAN_SWEEP_TOOL || !turn.budget.sweep)
       return this.deps.tools.prepare(call, {
         topic: turn.input.topic,
         book: turn.book,
       });
-    const args = parsedArgs(delegateArgsSchema, parseJson(call.arguments));
-    if (typeof args === 'string') return failed(args);
-    const tasks = numberTasks(args, turn.agents + 1);
-    turn.agents += tasks.length;
+    const plan = parsedArgs(sweepPlanSchema, parseJson(call.arguments));
+    if (typeof plan === 'string') return failed(plan);
     return {
-      steps: delegateSteps(tasks),
-      run: () => this.delegate(turn, { tasks, pipe }),
-    };
-  }
-
-  /**
-   * Runs the tasks on sub-researchers, a few at a time, and returns their reports. A
-   * failure (the daily cap) stops the others; the reader's stop reaches them all.
-   */
-  private async delegate(
-    turn: Turn,
-    {
-      tasks,
-      pipe,
-    }: { tasks: readonly SubTask[]; pipe: EventPipe<ResearchEvent> },
-  ): Promise<string> {
-    const abort = new AbortController();
-    const stop = () => abort.abort();
-    turn.input.signal.addEventListener('abort', stop, { once: true });
-    if (turn.input.signal.aborted) stop();
-    const host = this.subHost(turn, { signal: abort.signal, pipe });
-    const slots = turn.slots ?? new Slots(host.budget.parallel);
-    try {
-      const results = await runAll(tasks, { slots, onFailure: stop }, (task) =>
-        runSubAgent(host, task),
-      );
-      return reportsText(
-        tasks,
-        results.map((r) => r.report),
-      );
-    } finally {
-      turn.input.signal.removeEventListener('abort', stop);
-    }
-  }
-
-  /** What a sub-researcher borrows from the turn: its model, tools, numbering and spend. */
-  private subHost(
-    turn: Turn,
-    { signal, pipe }: { signal: AbortSignal; pipe: EventPipe<ResearchEvent> },
-  ): SubAgentHost {
-    const budget = turn.budget.delegation ?? DELEGATION;
-    const { llm } = turn.engine;
-    return {
-      llm,
-      tools: this.deps.tools,
-      context: { topic: turn.input.topic, book: turn.book },
-      topicTitle: turn.topicTitle,
-      budget,
-      compactTokens: turn.budget.compactTokens,
-      signal,
-      deadline: turn.deadline,
-      guard: (prompt, outputTokens) =>
-        this.reserveSpend(turn, prompt, outputTokens),
-      account: (call, cost) => this.accountReserved(turn, call, cost),
-      release: (reserved) => {
-        turn.reservedUsd -= reserved;
+      steps: [{ kind: 'sweep', text: 'Planejando a varredura completa' }],
+      run: async () => {
+        turn.plan = plan;
+        return 'Plano registrado: o aplicativo varre o conjunto inteiro agora.';
       },
-      remainingSteps: () => budget.totalSteps - turn.subSteps,
-      reserveSteps: (wanted) => reserveSubSteps(turn, { budget, wanted }),
-      emit: (event) => pipe.push(event),
     };
   }
 
-  /** A sub-researcher's cost: its reservation is freed only once the real cost is in (BR-4). */
+  /** A sweep batch's cost: its reservation is freed only once the real cost is in. */
   private async accountReserved(
     turn: Turn,
     call: CallResult,
@@ -652,8 +733,10 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       billing: billingOf(turn),
       model: turn.servedModel ?? turn.engine.llm.model,
       interrupted,
-      steps: turn.steps + turn.subSteps,
+      steps: turn.steps,
       ...(turn.escalated ? { escalated: true } : {}),
+      ...(turn.sweep && { coverage: turn.sweep.coverage }),
+      ...(turn.sweep?.cursor && { sweep: turn.sweep.cursor }),
     };
   }
 }

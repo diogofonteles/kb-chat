@@ -9,9 +9,11 @@ import { answerText } from '../../test/research-factories.js';
 import { FAKES_DIR } from '../../test/fixture-paths.js';
 import { freePort } from '../../test/free-port.js';
 import { mcpRoutes } from '../mcp/mcp-routes.js';
-import { researchBudgets } from '../modules/research/index.js';
+import { PLAN_STEPS, turnToolsFactory } from '../modules/research/index.js';
+import { fixtureTools } from '../../test/research-factories.js';
 import { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
+import type { ResearchToolsPort } from '../ports/research-tools.js';
 import {
   CLAUDE_EFFORT,
   ClaudeCliRunner,
@@ -44,10 +46,36 @@ afterAll(async () => {
   await server.close();
 });
 
+/** The real research tools over the fixture vault, for exhaustive turns (KBC-030). */
+async function sweepTools() {
+  return turnToolsFactory(await fixtureTools())('hermetismo');
+}
+
+interface LoggedRun {
+  readonly args: string[];
+  readonly stdin: string;
+  readonly system?: string;
+}
+
+/** The runs a fake CLI logged, one JSON line each. */
+async function logged(path: string): Promise<LoggedRun[]> {
+  const text = await readFile(path, 'utf8');
+  return text
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as LoggedRun);
+}
+
+const sweepOf = (events: readonly ResearchEvent[], status: string) =>
+  events.flatMap((e) =>
+    e.type === 'sweep' && e.sweep.status === status ? [e.sweep] : [],
+  )[0];
+
 /** A HOME whose fake-cli.json sets the fake CLI's mode and report file. */
 async function fakeHome(settings: {
   readonly mode?: string;
   readonly report?: string;
+  readonly log?: string;
 }): Promise<NodeJS.ProcessEnv> {
   const home = await mkdtemp(join(tmpdir(), 'kbchat-home-'));
   await writeFile(join(home, 'fake-cli.json'), JSON.stringify(settings));
@@ -73,7 +101,7 @@ async function collect(
 
 function claude(
   env: NodeJS.ProcessEnv = {},
-  tools = new FakeResearchTools(),
+  tools: ResearchToolsPort = new FakeResearchTools(),
   dir = workDir,
 ) {
   return new ClaudeCliRunner({
@@ -273,78 +301,71 @@ describe('ClaudeCliRunner', () => {
     expect(seen.envNames).not.toContain('KB_CHAT_UNRELATED_SECRET');
   });
 
-  it('opens an exhaustive turn with its step budget and prompt (KBC-017 AC-12)', async () => {
-    const report = join(workDir, 'report-exhaustive.json');
+  it('runs an exhaustive turn as a plan, one CLI run per batch and an answer, with the coverage the app measured (KBC-030)', async () => {
+    const log = join(workDir, 'sweep-claude.jsonl');
     const open = vi.spyOn(turns, 'open');
     const events = await collect(
-      claude(await fakeHome({ report })),
+      claude(await fakeHome({ mode: 'plan', log }), await sweepTools()),
       undefined,
       'exhaustive',
     );
-    expect(events.at(-1)).toMatchObject({ type: 'done', interrupted: false });
-    expect(open.mock.calls.at(-1)?.[2]).toBe(80 + 300);
-    const seen = JSON.parse(await readFile(report, 'utf8'));
-    const prompt = String(seen.args[seen.args.indexOf('--system-prompt') + 1]);
-    expect(prompt).toContain('Pesquisa exaustiva');
-    expect(prompt).toContain('Cobertura:');
-    expect(JSON.stringify(seen.args)).not.toContain('--effort');
-    const budgets = researchBudgets({ steps: 120 });
-    const configured = new ClaudeCliRunner({
-      bin: join(FAKES_DIR, 'fake-claude.mjs'),
-      apiBaseUrl,
-      turns,
-      workDir,
-      env: process.env,
-      tools: () => new FakeResearchTools(),
-      budgets,
-      killGraceMs: 200,
+    const runs = await logged(log);
+    const planned = sweepOf(events, 'planned');
+    // Planning first, over MCP with plan_sweep; then one run per batch; then the answer.
+    const systemOf = (run?: LoggedRun) =>
+      run?.args[run.args.indexOf('--system-prompt') + 1] ?? '';
+    expect(systemOf(runs[0])).toContain('Pesquisa exaustiva');
+    expect(open.mock.calls[0]?.[2]).toBe(PLAN_STEPS + 1);
+    const batches = runs.filter((r) => r.system?.startsWith('Você lê um lote'));
+    expect(batches).toHaveLength(planned?.batches ?? -1);
+    expect(systemOf(runs.at(-1))).toContain('O aplicativo já varreu');
+    for (const run of runs) {
+      expect(run.args[run.args.indexOf('--tools') + 1]).toBe('');
+      expect(run.args).not.toContain('--agents');
+    }
+    const done = events.at(-1);
+    expect(done).toMatchObject({
+      type: 'done',
+      billing: 'subscription',
+      coverage: {
+        target: { authorship: 'mestre-laercio' },
+        phrases: ['ritmo'],
+        missing: 0,
+      },
     });
-    await collect(configured, undefined, 'exhaustive');
-    expect(open.mock.calls.at(-1)?.[2]).toBe(120 + 300);
+    expect(answerText(events)).toMatch(/trata do ritmo \[\d+\]/);
+    expect(answerText(events)).not.toMatch(/cobertura|9\.999/i);
+    expect(
+      events.some((e) => e.type === 'step' && e.step.kind === 'sweep'),
+    ).toBe(true);
+    expect(turns.size).toBe(0);
     open.mockRestore();
   });
 
-  it('lets an exhaustive turn delegate to the "pesquisador" sub-agent, kb tools only (KBC-018 AC-8)', async () => {
-    const report = join(workDir, 'report-agents.json');
-    const open = vi.spyOn(turns, 'open');
+  it('sweeps with the default plan when the CLI answers instead of planning (lazy)', async () => {
     const events = await collect(
-      claude(await fakeHome({ report, mode: 'delegate' })),
+      claude(await fakeHome({}), await sweepTools()),
       undefined,
       'exhaustive',
     );
-    const seen = JSON.parse(await readFile(report, 'utf8'));
-    const args: string[] = seen.args;
-    expect(args[args.indexOf('--tools') + 1]).toBe('Agent');
-    expect(args[args.indexOf('--allowedTools') + 1]).toBe('mcp__kb,Agent');
-    const agents = JSON.parse(String(args[args.indexOf('--agents') + 1]));
-    expect(agents.pesquisador.tools).toContain('mcp__kb__find_text');
-    expect(
-      agents.pesquisador.tools.every((tool: string) =>
-        tool.startsWith('mcp__kb__'),
-      ),
-    ).toBe(true);
-    expect(seen.envNames).toContain('CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS');
-    expect(agents.pesquisador.prompt).toContain('sub-pesquisador');
-    expect(open.mock.calls.at(-1)?.[2]).toBe(80 + 300);
-    expect(events).toContainEqual({
-      type: 'step',
-      step: { kind: 'delegate', text: 'Delegando: Livros 1–60' },
-    });
-    expect(answerText(events)).not.toContain('Relatório interno');
-    expect(answerText(events)).toContain('tudo flui [1].');
-    // The deep profile keeps every built-in tool off and no sub-agents.
-    const deepReport = join(workDir, 'report-deep.json');
-    await collect(
-      claude(await fakeHome({ report: deepReport })),
+    const done = events.at(-1);
+    expect(done?.type).toBe('done');
+    if (done?.type !== 'done') return;
+    expect(done.coverage?.target).toEqual({});
+    expect(done.coverage?.read).toBe(done.coverage?.documents);
+    expect(answerText(events)).not.toContain('tudo flui');
+  });
+
+  it('ends an exhaustive turn whose CLI is logged out with CLI_LOGIN_REQUIRED', async () => {
+    const events = await collect(
+      claude(await fakeHome({ mode: 'login' }), await sweepTools()),
       undefined,
-      'deep',
+      'exhaustive',
     );
-    const deepArgs: string[] = JSON.parse(
-      await readFile(deepReport, 'utf8'),
-    ).args;
-    expect(deepArgs[deepArgs.indexOf('--tools') + 1]).toBe('');
-    expect(deepArgs).not.toContain('--agents');
-    open.mockRestore();
+    expect(events.at(-1)).toEqual({
+      type: 'error',
+      code: 'CLI_LOGIN_REQUIRED',
+    });
   });
 
   it('kills a CLI that ignores SIGTERM and closes the endpoint on abort', async () => {
@@ -460,6 +481,39 @@ describe('CodexCliRunner', () => {
     );
   });
 
+  it('runs an exhaustive Codex turn through the same sweep, one run at a time, every run locked down (KBC-030)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kbchat-codex-sweep-'));
+    const log = join(dir, 'runs.jsonl');
+    const tools = await sweepTools();
+    const runner = new CodexCliRunner({
+      bin: join(FAKES_DIR, 'fake-codex.mjs'),
+      apiBaseUrl,
+      turns,
+      workDir: dir,
+      env: { ...process.env, ...(await fakeHome({ mode: 'plan', log })) },
+      tools: () => tools,
+    });
+    const events = await collect(runner, undefined, 'exhaustive');
+    const runs = await logged(log);
+    const planned = sweepOf(events, 'planned');
+    const batches = runs.filter((r) => r.stdin.startsWith('Você lê um lote'));
+    expect(batches).toHaveLength(planned?.batches ?? -1);
+    for (const run of runs)
+      expect(run.args).toEqual(
+        expect.arrayContaining([
+          '-c',
+          'features.shell_tool=false',
+          '--sandbox',
+          'read-only',
+        ]),
+      );
+    expect(events.at(-1)).toMatchObject({
+      type: 'done',
+      coverage: { phrases: ['ritmo'], missing: 0 },
+    });
+    expect(answerText(events)).not.toMatch(/cobertura/i);
+  });
+
   it('streams a Codex turn with its MCP step and free cost', async () => {
     const events = await collect(codex());
     expect(events.map((e) => e.type)).toEqual([
@@ -512,23 +566,7 @@ describe('CLI dialects', () => {
       result: { ok: false, code: 'PROVIDER_UNAVAILABLE' },
     });
     expect(parseClaudeLine('{"type":"assistant","message":{}}')).toEqual({});
-    // Sub-agents (ADR 0014): the main conversation's Agent call is a step; the sub-agent's
-    // own lines (parent_tool_use_id set) never become answer text.
-    expect(
-      parseClaudeLine(
-        '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"Livros 1–60"}}]}}',
-      ),
-    ).toEqual({ delegates: ['Livros 1–60'] });
-    expect(
-      parseClaudeLine(
-        '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"A"}},{"type":"text"},{"type":"tool_use","name":"Task","input":{"description":"B"}}]}}',
-      ),
-    ).toEqual({ delegates: ['A', 'B'] });
-    expect(
-      parseClaudeLine(
-        '{"type":"assistant","parent_tool_use_id":"toolu_1","message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"x"}}]}}',
-      ),
-    ).toEqual({});
+    // A line with parent_tool_use_id is never answer text.
     expect(
       parseClaudeLine(
         '{"type":"stream_event","parent_tool_use_id":"toolu_1","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"interno"}}}',

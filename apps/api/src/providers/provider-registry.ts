@@ -72,8 +72,6 @@ export interface ProviderRegistryOptions {
   readonly perTokenRunner?: PerTokenRunnerFactory;
   /** The research rules for a topic and profile, for the subscription CLIs; default: the module's, by slug. */
   readonly systemPrompt?: SubscriptionPrompt;
-  /** A sub-researcher's rules for a topic, for Claude Code's sub-agent (ADR 0014). */
-  readonly subAgentPrompt?: (topic: string) => string;
   /**
    * The owner's principal (KBC-010): only it may use the subscriptions (personal, KBC-007
    * BR-6) and the keys of the server's environment; guests bring their own key.
@@ -682,7 +680,6 @@ export class ProviderRegistry implements ProviderCatalog {
       env: this.options.env,
       tools,
       systemPrompt: this.options.systemPrompt,
-      subAgentPrompt: this.options.subAgentPrompt,
     };
   }
 

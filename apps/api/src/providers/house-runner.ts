@@ -1,8 +1,4 @@
-import type {
-  FreeUsage,
-  ResearchEvent,
-  ResearchProfile,
-} from '@kb-chat/contracts';
+import type { FreeUsage, ResearchEvent } from '@kb-chat/contracts';
 import type {
   ResearchInput,
   ResearchRunnerPort,
@@ -91,9 +87,9 @@ export class HouseResearchRunner implements ResearchRunnerPort {
     input: ResearchInput,
     turn: HouseTurn,
   ): AsyncIterable<ResearchEvent> {
-    const refusal = await this.capacityRefusal(input.profile, turn.paidActive);
-    if (refusal) {
-      yield { type: 'error', code: refusal };
+    const usage = turn.paidActive ? null : await this.deps.capacity();
+    if (usage && usage.remaining < CAPACITY_NEEDED[input.profile]) {
+      yield { type: 'error', code: 'AI_CAPACITY_EXHAUSTED' };
       return;
     }
     let reservation: Reservation;
@@ -109,7 +105,11 @@ export class HouseResearchRunner implements ResearchRunnerPort {
         : { type: 'error', code };
       return;
     }
-    yield* this.relay({ input, reservation, inner: turn.inner });
+    // An exhaustive sweep makes no more requests than the house has left today (KBC-030).
+    const budgeted = usage
+      ? { ...input, requestBudget: usage.remaining }
+      : input;
+    yield* this.relay({ input: budgeted, reservation, inner: turn.inner });
   }
 
   private async *relay({
@@ -142,17 +142,5 @@ export class HouseResearchRunner implements ResearchRunnerPort {
       plan: this.plan,
       remaining: reservation.remaining,
     };
-  }
-
-  /** Not enough free requests left today for this profile (and no paid fallback). */
-  private async capacityRefusal(
-    profile: ResearchProfile,
-    paidActive: boolean,
-  ): Promise<'AI_CAPACITY_EXHAUSTED' | null> {
-    if (paidActive) return null;
-    const usage = await this.deps.capacity();
-    return usage && usage.remaining < CAPACITY_NEEDED[profile]
-      ? 'AI_CAPACITY_EXHAUSTED'
-      : null;
   }
 }

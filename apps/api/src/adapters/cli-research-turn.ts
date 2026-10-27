@@ -8,6 +8,7 @@ import type {
 import type { McpTurnRegistry } from '../mcp/mcp-turns.js';
 import {
   AnswerStream,
+  CoverageLineFilter,
   DEEPEN_STEP,
   DEFAULT_BUDGETS,
   deepenReason,
@@ -35,8 +36,6 @@ export interface CliLine {
   /** How the model's message ended, when the CLI says so: with tool calls or as an answer. */
   readonly messageEnd?: 'tool_use' | 'answer';
   readonly model?: string;
-  /** The main conversation started sub-agents with these descriptions (ADR 0014). */
-  readonly delegates?: readonly string[];
   /** The CLI's final verdict: success, or why it failed. */
   readonly result?:
     { readonly ok: true } | { readonly ok: false; readonly code: AiTestCode };
@@ -102,7 +101,15 @@ export type CliPassInput = TurnInput & {
   readonly canDeepen: boolean;
   /** What the fast pass found, told to the deep pass. */
   readonly findings?: string;
+  /**
+   * A call of the exhaustive sweep (KBC-030): these rules and this input instead of the
+   * research prompt and the question (a batch, or the answer from the findings).
+   */
+  readonly override?: { readonly system: string; readonly input: string };
 };
+
+/** What a pass ended with: the model, its steps and sources, the CLI's verdict. */
+export type CliPassState = TurnState;
 
 interface TurnState {
   model: string;
@@ -144,6 +151,17 @@ interface CliTurnSetup {
   readonly canDeepen: boolean;
   /** What the reader asked: what a give-up answer would deny. */
   readonly question: string;
+  /** How the pass's text is used (KBC-030); default: the reader's answer. */
+  readonly output?: PassOutput;
+}
+
+/**
+ * Where a pass's text goes (KBC-030): `collect` takes it whole and none reaches the reader
+ * (a sweep's planning or batch); `filter` takes the model's coverage lines out of the answer.
+ */
+export interface PassOutput {
+  readonly collect?: (text: string) => void;
+  readonly filter?: CoverageLineFilter;
 }
 
 /** The live state of one CLI pass: its events, the CLI's verdict and the steps taken. */
@@ -178,13 +196,15 @@ class CliTurn {
   }
 
   finish(): void {
-    this.endAnswer();
+    if (!this.setup.output?.collect) this.endAnswer();
     this.queue.end();
   }
 
   /** The message ended without tools: the answer, or the fast pass asking to go deeper. */
   private endAnswer(): void {
     const { answer, canDeepen } = this.setup;
+    const rest = this.setup.output?.filter?.end();
+    if (rest) this.push(answer.text(rest));
     const { question } = this.setup;
     const reason = canDeepen ? deepenReason(answer.current, question) : null;
     if (reason !== null && this.state.deepen === null) {
@@ -200,12 +220,13 @@ class CliTurn {
     const { answer } = this.setup;
     if (parsed.model) this.state.model = parsed.model;
     if (parsed.result) this.state.result = parsed.result;
-    for (const delegate of parsed.delegates ?? [])
-      this.queue.push({
-        type: 'step',
-        step: { kind: 'delegate', text: `Delegando: ${delegate}` },
-      });
-    if (parsed.text) this.push(answer.text(parsed.text));
+    const { collect, filter } = this.setup.output ?? {};
+    if (collect) {
+      if (parsed.text) collect(parsed.text);
+      return;
+    }
+    if (parsed.text)
+      this.push(answer.text(filter ? filter.push(parsed.text) : parsed.text));
     if (parsed.messageEnd === 'tool_use') this.push(answer.toolCalled());
     if (parsed.messageEnd === 'answer') this.endAnswer();
   }
@@ -282,12 +303,18 @@ interface OpenPass {
   readonly maxSteps: number;
 }
 
+/** One pass as a caller asks for it: the input, the steps it may take, where its text goes. */
+export type PassRequest = Omit<OpenPass, 'turn'> & {
+  readonly answer: AnswerStream;
+  readonly output?: PassOutput;
+};
+
 /** One CLI run: its endpoint and process live only while its events are read. */
-async function* runPass(
+export async function* runPass(
   options: CliTurnOptions,
   dialect: CliDialect,
-  pass: Omit<OpenPass, 'turn'> & { readonly answer: AnswerStream },
-): AsyncGenerator<ResearchEvent, TurnState> {
+  pass: PassRequest,
+): AsyncGenerator<ResearchEvent, CliPassState> {
   const { input } = pass;
   const { canDeepen, question } = input;
   const model = input.model ?? options.model;
@@ -352,11 +379,9 @@ function escalationOf(
   return allowed ? options.escalation : undefined;
 }
 
-/** The turn endpoint's tool calls: sub-agents reach it too, so theirs count (ADR 0014). */
-const stepCap = (budgets: ResearchBudgets, input: TurnInput): number => {
-  const budget = budgets[input.profile];
-  return budget.steps + (budget.delegation?.totalSteps ?? 0);
-};
+/** The turn endpoint's tool calls: the profile's steps. */
+const stepCap = (budgets: ResearchBudgets, input: TurnInput): number =>
+  budgets[input.profile].steps;
 
 /**
  * One research turn run by a subscription CLI (KBC-007 FR-4): the tools are served to it

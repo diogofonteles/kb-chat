@@ -156,6 +156,8 @@ interface CallState {
  */
 export class GeminiAdapter implements AgentLlmPort {
   readonly model: string;
+  /** The context window of Gemini Flash: sizes the exhaustive sweep's batches (KBC-030). */
+  readonly contextTokens = 1_000_000;
   readonly billing: 'per-token' | 'free';
   private readonly fetch: typeof fetch;
   private readonly replays = new Map<string, Part[]>();
