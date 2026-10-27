@@ -43,6 +43,7 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-031](KBC-031-subscription-reasons-and-lending-at-invite.md) | Assinatura do ChatGPT escolhível em produção (motivos corretos do cartão, "Testar conexão" pelo executor) e cessão de assinaturas no convite com a confirmação dos termos | release-1 | in-review | KBC-024, KBC-027, KBC-028 |
 | [KBC-030](KBC-030-guaranteed-exhaustive-sweep.md) | Exaustivo garantido: o aplicativo planeja (ou usa o plano padrão), varre o conjunto inteiro em lotes em todos os provedores, mede a cobertura, mostra estimativa e progresso, e "Continuar varredura" retoma de onde parou | release-1 | in-review | KBC-017, KBC-018, KBC-020, KBC-022 |
 | [KBC-032](KBC-032-public-tutorial.md) | Tutorial público com imagens: como usar cada funcionalidade, aberto sem login | release-1 | in-review | KBC-016, KBC-029, KBC-030, KBC-031 |
+| [KBC-033](KBC-033-default-collection-hint.md) | Acervo padrão no editor de convite e de perfil: dica quando nenhum acervo está marcado, pré-seleção do único marcado e aviso quando o padrão é limpo | release-1 | in-review | KBC-028 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
 ## Definição de pronto (global)
@@ -71,4 +72,5 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 - 2026-10-27 (pedido do dono): "quando eu escreva uma pergunta e ela inicie a busca, aquela conversa já apareça no histórico". Entra o KBC-029: a pergunta é gravada no envio, o turno da pesquisa com IA roda no servidor até o fim mesmo se a página recarregar ou fechar (só "Parar" para) e o histórico mostra "pesquisando…", "interrompida" ou "falhou".
 - 2026-10-27: em produção, um modelo gratuito no Exaustivo leu 38 de 2.555 documentos e escreveu uma cobertura falsa. O dono decidiu que, no Exaustivo, o aplicativo garante a varredura para todo provedor e mede a cobertura (KBC-030, ADR 0021); os sub-pesquisadores do KBC-018 saem do Exaustivo.
 - 2026-10-27: o dono pediu uma página de tutorial com imagens, aberta sem login (KBC-032), com todas as funcionalidades; as capturas são geradas por script contra o servidor E2E.
+- 2026-10-27 (relato do dono em produção): o "Acervo padrão" do convite parecia quebrado com nenhum acervo marcado. Entra o KBC-033: dica sob o campo, pré-seleção do único acervo marcado e aviso quando o padrão é limpo.
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.
