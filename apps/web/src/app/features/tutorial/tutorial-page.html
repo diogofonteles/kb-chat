@@ -442,29 +442,62 @@
       </h3>
       <p i18n="@@tutorial.research.exhaustiveIntro">
         Use o Exaustivo para listas completas, como “todos os textos do Mestre
-        que falam de ritmo”. A própria aplicação garante a varredura: ela divide
-        o acervo em partes, faz a IA ler cada parte e só então pede a resposta.
-        No fim, a linha <strong>Cobertura</strong>, escrita pela aplicação (não
-        pela IA), diz quantos documentos foram examinados.
+        que falam de ritmo”. Nele, a IA só planeja o que procurar; quem varre é
+        a própria aplicação, documento por documento, em lotes, e só então a IA
+        escreve a resposta. Assim nada fica de fora porque a IA “cansou”.
       </p>
-      <ul>
-        <li i18n="@@tutorial.research.exhaustiveProgress">
-          Enquanto trabalha, ela mostra o progresso (por exemplo, “lote 12 de
-          80”). Com modelos gratuitos, a varredura é mais lenta.
+      <ol class="steps">
+        <li i18n="@@tutorial.research.sweep1">
+          Antes de começar, o quadro
+          <strong>Varredura do conjunto inteiro</strong> diz quantos documentos
+          serão lidos, em quantos lotes, quanto tempo leva e, com uma IA paga, o
+          custo máximo.
         </li>
-        <li i18n="@@tutorial.research.exhaustiveContinue">
-          Se o limite de tempo ou de gasto chegar antes do fim, a cobertura diz
-          o que faltou e aparece <strong>Continuar varredura</strong>, que
-          retoma de onde parou.
+        <li i18n="@@tutorial.research.sweep2">
+          Durante a varredura, a barra mostra o progresso (“Lote 12 de 80”). Com
+          modelos gratuitos ela é mais lenta. <strong>Parar</strong>
+          interrompe tudo.
         </li>
-      </ul>
+      </ol>
+      <app-tutorial-figure
+        name="research-sweep"
+        alt="Uma pesquisa Exaustiva em andamento: o quadro Varredura do conjunto inteiro com a estimativa de documentos, lotes e custo, e a barra de progresso com Lote 0 de 5."
+        i18n-alt="@@tutorial.research.sweepAlt"
+      >
+        <ng-container i18n="@@tutorial.research.sweepCaption"
+          >(1) A estimativa e (2) o progresso da varredura.</ng-container
+        >
+      </app-tutorial-figure>
+      <p i18n="@@tutorial.research.coverage">
+        No fim, abaixo da resposta, a linha
+        <strong>Cobertura (medida pelo aplicativo)</strong> diz quantos
+        documentos havia no conjunto e quantos a IA analisou. Esses números vêm
+        da aplicação, nunca da IA.
+      </p>
       <app-tutorial-figure
         name="research-exhaustive"
-        alt="Resposta de uma pesquisa Exaustiva com a linha Cobertura, que informa quantos documentos foram examinados."
+        alt="Resposta de uma pesquisa Exaustiva com a linha Cobertura (medida pelo aplicativo): 22 documentos no conjunto, 22 lidos por inteiro pela IA."
         i18n-alt="@@tutorial.research.exhaustiveAlt"
       >
         <ng-container i18n="@@tutorial.research.exhaustiveCaption"
-          >Uma pesquisa Exaustiva e a linha de cobertura (1).</ng-container
+          >A cobertura medida pela aplicação (1).</ng-container
+        >
+      </app-tutorial-figure>
+      <p i18n="@@tutorial.research.continue">
+        Se um limite parar a varredura antes do fim (tempo, número de pedidos,
+        gasto do dia) ou se você tocar em Parar, aparece “Varredura incompleta”,
+        com quantos documentos faltaram e por quê. Toque em
+        <strong>Continuar varredura</strong> para seguir de onde parou, sem
+        repetir o que já foi lido; o botão também aparece quando você reabre a
+        conversa pelo histórico.
+      </p>
+      <app-tutorial-figure
+        name="research-continue"
+        alt="Uma varredura incompleta: o aviso Varredura incompleta, faltaram 12 documentos para a IA analisar, e o botão Continuar varredura."
+        i18n-alt="@@tutorial.research.continueAlt"
+      >
+        <ng-container i18n="@@tutorial.research.continueCaption"
+          >(1) O que faltou e (2) Continuar varredura.</ng-container
         >
       </app-tutorial-figure>
 
@@ -517,30 +550,42 @@
       </p>
       <ol class="steps">
         <li i18n="@@tutorial.history.step1">
-          A conversa entra no <strong>Histórico</strong> (na lateral; no
-          celular, em ☰ Menu) assim que você envia a pergunta, com a indicação
-          de que ainda está pesquisando.
+          A conversa entra no topo do <strong>Histórico</strong> (na lateral; no
+          celular, em ☰ Menu) no instante em que você envia a pergunta. Uma
+          pesquisa com IA em andamento aparece com “pesquisando…”.
         </li>
         <li i18n="@@tutorial.history.step2">
-          Toque numa conversa para abri-la. As respostas da IA voltam como
-          estavam, sem gastar uma nova pesquisa.
+          Se uma pesquisa falhou, ela fica com “falhou”; se você tocou em
+          <strong>Parar</strong>, com “interrompida”. Nada se perde.
         </li>
         <li i18n="@@tutorial.history.step3">
-          Se uma pesquisa foi interrompida (você tocou em Parar, fechou a aba ou
-          a conexão caiu) ou falhou, ela continua no histórico com esse aviso.
-          Abra e use <strong>Tentar de novo</strong>.
-        </li>
-        <li i18n="@@tutorial.history.step4">
-          <strong>+ Nova conversa</strong> começa outra do zero.
+          Pode recarregar a página, fechar a aba ou abrir outra conversa: a
+          pesquisa continua no servidor até o fim e a resposta aparece quando
+          você voltar. Só Parar interrompe.
         </li>
       </ol>
       <app-tutorial-figure
         name="history"
-        alt="A lateral com o botão Nova conversa e a lista do Histórico, cada conversa com a pergunta, o tipo, o acervo e o estado."
+        alt="A lateral com o Histórico: uma pesquisa com “pesquisando…”, outra com “falhou” e outra com “interrompida”, cada uma com a pergunta, o tipo IA e o acervo."
         i18n-alt="@@tutorial.history.alt"
       >
         <ng-container i18n="@@tutorial.history.caption"
-          >(1) Nova conversa e (2) o histórico, salvo no servidor.</ng-container
+          >(1) Pesquisando, (2) falhou e (3) interrompida.</ng-container
+        >
+      </app-tutorial-figure>
+      <p i18n="@@tutorial.history.open">
+        Toque numa conversa para abri-la: as respostas voltam como estavam, sem
+        gastar uma nova pesquisa. Numa pesquisa que falhou ou foi interrompida,
+        use <strong>Tentar de novo</strong> para perguntar de novo no mesmo
+        lugar. <strong>+ Nova conversa</strong> começa outra do zero.
+      </p>
+      <app-tutorial-figure
+        name="history-retry"
+        alt="Uma pesquisa que falhou, aberta pelo histórico: o aviso Não consegui gerar a resposta agora e o botão Tentar de novo."
+        i18n-alt="@@tutorial.history.retryAlt"
+      >
+        <ng-container i18n="@@tutorial.history.retryCaption"
+          >(1) O aviso e (2) Tentar de novo.</ng-container
         >
       </app-tutorial-figure>
       <p class="back-to-top">
@@ -634,7 +679,8 @@
         <strong>Privacidade e custos:</strong> a chave fica só no servidor da
         Nova Alexandria, guardada de forma cifrada, e não é mostrada de novo
         depois de salva. A sua pergunta e os trechos do acervo vão para o
-        provedor de IA escolhido. O gasto do dia aparece na lateral.
+        provedor de IA escolhido. O gasto do dia aparece na lateral. Se uma
+        opção aparece desativada, o cartão dela diz o motivo e o que fazer.
       </p>
       <p class="back-to-top">
         <a
@@ -737,6 +783,12 @@
           atribuída (Plano da casa ou Nenhuma) e as pesquisas por dia (Rápido
           conta 1, Profundo 2, Exaustivo 5).
         </li>
+        <li i18n="@@tutorial.admins.house5">
+          Para usar ou ceder a assinatura do ChatGPT, marque “Ligar a assinatura
+          do ChatGPT (Codex)”. Enquanto ela estiver desligada ou sem login no
+          servidor, o cartão dela em Sua IA aparece desativado, com o motivo e o
+          que fazer.
+        </li>
       </ol>
       <app-tutorial-figure
         name="house-ai"
@@ -833,8 +885,11 @@
       <h3 i18n="@@tutorial.admins.lendTitle">Ceder uma assinatura</h3>
       <p i18n="@@tutorial.admins.lendIntro">
         O dono da Nova Alexandria pode ceder a própria assinatura do Claude ou
-        do ChatGPT a pessoas escolhidas, no editor da pessoa (“Qual IA atende
-        esta pessoa”) ou no próprio convite. Antes, aparece um aviso:
+        do ChatGPT a pessoas escolhidas: no editor da pessoa (“Qual IA atende
+        esta pessoa”) ou já no convite, em <strong>Configurar agora</strong> ›
+        IA da aplicação. Cada assinatura só aparece enquanto pode mesmo ser
+        cedida (com login no servidor; a do ChatGPT, também ligada em IA da
+        aplicação). Ao escolher uma, aparece um aviso:
       </p>
       <p class="warning" i18n="@@tutorial.admins.lendWarning">
         <strong>⚠ Atenção:</strong> os termos da Anthropic e da OpenAI não
@@ -843,12 +898,14 @@
       </p>
       <p i18n="@@tutorial.admins.lendConfirm">
         Só depois de <strong>Ceder assim mesmo</strong> a pessoa passa a usar a
-        assinatura, com o próprio limite de pesquisas por dia. A cessão nunca
-        vale como padrão e fica registrada no histórico da pessoa.
+        assinatura, com o próprio limite de pesquisas por dia; no convite,
+        “Convidar” espera essa confirmação. A cessão nunca vale como padrão, os
+        perfis de convite não guardam assinaturas e tudo fica registrado no
+        histórico da IA da pessoa.
       </p>
       <app-tutorial-figure
         name="lend-subscription"
-        alt="A confirmação para ceder a assinatura a uma pessoa, com o aviso sobre os termos e os botões Ceder assim mesmo e Cancelar."
+        alt="No convite, a confirmação Ceder a assinatura do Claude a quem você está convidando?, com o aviso sobre os termos e os botões Ceder assim mesmo e Cancelar."
         i18n-alt="@@tutorial.admins.lendAlt"
       >
         <ng-container i18n="@@tutorial.admins.lendCaption"

@@ -9,10 +9,10 @@ export interface TutorialImage {
 
 export const TUTORIAL_IMAGES = {
   'access-requests': {
-    src: '/assets/tutorial/access-requests-48177F5C.webp',
+    src: '/assets/tutorial/access-requests-3CBA9EE1.webp',
     width: 1344,
     height: 1056,
-    bytes: 37906,
+    bytes: 37868,
   },
   'document-panel': {
     src: '/assets/tutorial/document-panel-ED57DFD4.webp',
@@ -27,10 +27,16 @@ export const TUTORIAL_IMAGES = {
     bytes: 29402,
   },
   history: {
-    src: '/assets/tutorial/history-4B95B50B.webp',
+    src: '/assets/tutorial/history-55F04325.webp',
     width: 384,
-    height: 1200,
-    bytes: 28866,
+    height: 1500,
+    bytes: 43264,
+  },
+  'history-retry': {
+    src: '/assets/tutorial/history-retry-22698CB5.webp',
+    width: 1080,
+    height: 1160,
+    bytes: 12732,
   },
   home: {
     src: '/assets/tutorial/home-D953CD4B.webp',
@@ -39,22 +45,22 @@ export const TUTORIAL_IMAGES = {
     bytes: 64600,
   },
   'house-ai': {
-    src: '/assets/tutorial/house-ai-B0C2CD06.webp',
+    src: '/assets/tutorial/house-ai-10669355.webp',
     width: 1344,
     height: 1056,
-    bytes: 47610,
+    bytes: 47568,
   },
   'invite-preset': {
-    src: '/assets/tutorial/invite-preset-0A8F3B8E.webp',
+    src: '/assets/tutorial/invite-preset-7669EAE1.webp',
     width: 1344,
     height: 1056,
-    bytes: 42978,
+    bytes: 42960,
   },
   'lend-subscription': {
-    src: '/assets/tutorial/lend-subscription-1DDF58D4.webp',
+    src: '/assets/tutorial/lend-subscription-654B508D.webp',
     width: 1344,
     height: 1056,
-    bytes: 58230,
+    bytes: 73264,
   },
   login: {
     src: '/assets/tutorial/login-E2293F0F.webp',
@@ -75,10 +81,10 @@ export const TUTORIAL_IMAGES = {
     bytes: 74228,
   },
   people: {
-    src: '/assets/tutorial/people-BAEB591D.webp',
+    src: '/assets/tutorial/people-FDE2B67A.webp',
     width: 1344,
     height: 1056,
-    bytes: 47492,
+    bytes: 47542,
   },
   preferences: {
     src: '/assets/tutorial/preferences-60C70CEE.webp',
@@ -98,11 +104,17 @@ export const TUTORIAL_IMAGES = {
     height: 860,
     bytes: 25738,
   },
-  'research-exhaustive': {
-    src: '/assets/tutorial/research-exhaustive-6692F89D.webp',
+  'research-continue': {
+    src: '/assets/tutorial/research-continue-0F1E40A8.webp',
     width: 1080,
     height: 834,
-    bytes: 23496,
+    bytes: 38052,
+  },
+  'research-exhaustive': {
+    src: '/assets/tutorial/research-exhaustive-D45107B0.webp',
+    width: 1080,
+    height: 834,
+    bytes: 31536,
   },
   'research-phone': {
     src: '/assets/tutorial/research-phone-B8F0FC70.webp',
@@ -115,6 +127,12 @@ export const TUTORIAL_IMAGES = {
     width: 1080,
     height: 251,
     bytes: 16254,
+  },
+  'research-sweep': {
+    src: '/assets/tutorial/research-sweep-345443D5.webp',
+    width: 1080,
+    height: 834,
+    bytes: 22518,
   },
   'search-results': {
     src: '/assets/tutorial/search-results-819C1DBF.webp',

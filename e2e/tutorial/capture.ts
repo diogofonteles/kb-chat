@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import {
   expect,
@@ -198,6 +199,126 @@ async function openSettings(page: Page, section?: string) {
   return dialog;
 }
 
+/** Test hooks of the E2E stub model (stub-llm-adapter.ts), added on the way out only. */
+const SLOW = '[lento]';
+const SLOW_SWEEP = '[varredura lenta]';
+
+/**
+ * Runs `act` with `marker` appended to the research question the page sends: the stub slows
+ * down or fails, while the screen keeps the question as typed.
+ */
+async function withStubMarker(
+  page: Page,
+  marker: string,
+  act: () => Promise<void>,
+): Promise<void> {
+  const pattern = '**/api/v1/topics/*/research';
+  await page.route(pattern, async (route) => {
+    const body = route.request().postDataJSON() as { question: string };
+    await route.continue({
+      postData: JSON.stringify({
+        ...body,
+        question: `${body.question} ${marker}`,
+      }),
+    });
+  });
+  await act();
+  await page.unroute(pattern);
+}
+
+/** A one-turn research conversation, saved as the app saves a finished one. */
+async function seedResearch(
+  api: APIRequestContext,
+  question: string,
+  turn: Record<string, unknown>,
+): Promise<void> {
+  const id = randomUUID();
+  const at = new Date().toISOString();
+  await expectOk(
+    api.put(`/api/v1/conversations/${id}`, {
+      headers: CSRF,
+      data: {
+        kind: 'research',
+        id,
+        topic: 'hermetismo',
+        title: question,
+        createdAt: at,
+        updatedAt: at,
+        turns: [
+          {
+            question,
+            answer: '',
+            sources: [],
+            steps: 0,
+            usd: 0,
+            billing: 'per-token',
+            model: 'stub/model',
+            interrupted: false,
+            profile: 'fast',
+            at,
+            id: randomUUID(),
+            ...turn,
+          },
+        ],
+      },
+    }),
+  );
+}
+
+/**
+ * A sweep a limit stopped (KBC-030), saved as the app saves it: the stub sweeps the fixture
+ * vault too fast to stop one for real.
+ */
+async function seedUnfinishedSweep(page: Page): Promise<string> {
+  const id = randomUUID();
+  const title = 'Quais obras o Mestre cita como referência?';
+  const at = new Date().toISOString();
+  const totals = { documents: 22, scanned: 10, withHits: null, read: 10 };
+  await expectOk(
+    page.request.put(`/api/v1/conversations/${id}`, {
+      headers: CSRF,
+      data: {
+        kind: 'research',
+        id,
+        topic: 'hermetismo',
+        title,
+        createdAt: at,
+        updatedAt: at,
+        turns: [
+          {
+            question: title,
+            answer:
+              'Lista parcial: “A Lei do Ritmo” e “Ritmo, lição 01” citam obras de referência.',
+            sources: [],
+            steps: 3,
+            usd: 0,
+            billing: 'per-token',
+            model: 'stub/model',
+            interrupted: false,
+            profile: 'exhaustive',
+            coverage: {
+              target: {},
+              phrases: [],
+              ...totals,
+              needed: 22,
+              missing: 12,
+              batches: 1,
+              reason: 'requests',
+            },
+            sweep: {
+              plan: { target: {}, phrases: [], extract: 'obras citadas' },
+              after: 'raw/articles/ritmo-serie-06.md',
+              totals: { ...totals, batches: 1 },
+            },
+            at,
+          },
+        ],
+      },
+    }),
+  );
+  return title;
+}
+
 test.beforeAll(async ({ browser }) => {
   mkdirSync(OUT_DIR, { recursive: true });
   shooter = await Shooter.create(browser);
@@ -362,15 +483,50 @@ test('research with AI', async ({ browser }) => {
 
   await page.getByRole('button', { name: 'Nova conversa' }).click();
   await page.getByRole('radio', { name: 'Exaustivo' }).check({ force: true });
-  await ask(page, 'Liste todos os textos que falam da lei do ritmo.');
+  await withStubMarker(page, SLOW_SWEEP, () =>
+    ask(page, 'Liste todos os textos que falam da lei do ritmo.'),
+  );
   const exhaustive = page.locator('app-research-message').last();
+  const sweep = exhaustive.getByRole('region', {
+    name: 'Varredura do conjunto inteiro',
+  });
+  await expect(sweep.getByRole('status')).toContainText(/Lote \d+ de/);
+  await shooter.shoot(page, 'research-sweep', {
+    settle: false,
+    clip: page.locator('section.thread'),
+    marks: [
+      { n: 1, target: sweep },
+      { n: 2, target: sweep.getByRole('status') },
+    ],
+  });
   await expect(exhaustive.getByText(/Respondido por/)).toBeVisible({
     timeout: 90_000,
   });
-  const coverage = exhaustive.getByText(/Cobertura/).first();
   await shooter.shoot(page, 'research-exhaustive', {
     clip: page.locator('section.thread'),
-    marks: (await coverage.isVisible()) ? [{ n: 1, target: coverage }] : [],
+    marks: [
+      {
+        n: 1,
+        target: exhaustive.getByText(/Cobertura \(medida pelo aplicativo\)/),
+      },
+    ],
+  });
+
+  const unfinished = await seedUnfinishedSweep(page);
+  await page.reload();
+  await page
+    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('button', { name: unfinished })
+    .click();
+  const cut = page.locator('app-research-message').first();
+  const resume = cut.getByRole('button', { name: 'Continuar varredura' });
+  await expect(resume).toBeVisible();
+  await shooter.shoot(page, 'research-continue', {
+    clip: page.locator('section.thread'),
+    marks: [
+      { n: 1, target: cut.getByText(/Faltaram \d+ documentos/) },
+      { n: 2, target: resume },
+    ],
   });
   await page.context().close();
 
@@ -389,22 +545,51 @@ test('research with AI', async ({ browser }) => {
 });
 
 test('history', async ({ browser }) => {
-  const page = await desktopPage(browser, ANA);
-  await openAsAna(page);
-  await chooseView(page, 'Buscar documentos');
-  for (const question of ['natureza sétupla', 'árvore da vida']) {
-    await page.getByRole('button', { name: 'Nova conversa' }).click();
-    await ask(page, question);
-    await expect(page.locator('app-result-card').first()).toBeVisible();
-  }
+  // Taller, so the whole history list shows without scrolling.
+  const page = await desktopPage(browser, OWNER, 1000);
+  // A failed and a stopped research, saved as the app saves them (KBC-029).
+  await seedResearch(page.request, 'O que é a natureza sétupla?', {
+    interrupted: true,
+  });
+  const failed = 'Quais livros o Mestre recomenda?';
+  await seedResearch(page.request, failed, {
+    status: 'failed',
+    error: 'INTERNAL',
+  });
+  await page.goto('/');
   const side = page.getByRole('complementary', { name: 'Lateral' });
-  await shooter.shoot(page, 'history', {
-    clip: side,
+  const list = side.getByRole('navigation', { name: 'Histórico' });
+  await list.getByRole('button', { name: new RegExp(failed) }).click();
+  const retry = page.getByRole('button', { name: 'Tentar de novo' });
+  await expect(retry).toBeVisible();
+  await shooter.shoot(page, 'history-retry', {
+    clip: page.locator('section.thread'),
     marks: [
-      { n: 1, target: side.getByRole('button', { name: 'Nova conversa' }) },
-      { n: 2, target: side.getByRole('navigation') },
+      { n: 1, target: page.getByRole('alert') },
+      { n: 2, target: retry },
     ],
   });
+
+  await page.getByRole('button', { name: 'Nova conversa' }).click();
+  await chooseView(page, 'Pesquisa com IA');
+  await withStubMarker(page, SLOW, () =>
+    ask(page, 'Como o ritmo aparece na música?'),
+  );
+  const running = list.getByRole('button', { name: /pesquisando…/ });
+  await expect(running).toBeVisible();
+  await expect(list.getByText('interrompida', { exact: true })).toBeVisible();
+  await expect(list.getByText('falhou', { exact: true })).toBeVisible();
+  await shooter.shoot(page, 'history', {
+    clip: side,
+    // The spinner of the running research never stops animating.
+    settle: false,
+    marks: [
+      { n: 1, target: running },
+      { n: 2, target: list.getByRole('button', { name: /falhou/ }) },
+      { n: 3, target: list.getByRole('button', { name: /interrompida/ }) },
+    ],
+  });
+  await page.getByRole('button', { name: 'Parar' }).click();
   await page.context().close();
 });
 
@@ -491,19 +676,6 @@ test('administrators', async ({ browser }) => {
     ],
   });
 
-  await dialog
-    .getByLabel('Qual IA atende esta pessoa')
-    .selectOption({ label: 'Claude do administrador' });
-  const confirm = dialog.getByRole('button', { name: 'Ceder assim mesmo' });
-  await confirm.scrollIntoViewIfNeeded();
-  await shooter.shoot(page, 'lend-subscription', {
-    clip: dialog,
-    marks: [
-      { n: 1, target: dialog.getByText(/Os termos da Anthropic/) },
-      { n: 2, target: confirm },
-    ],
-  });
-  await dialog.getByRole('button', { name: 'Cancelar' }).first().click();
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: /Pessoas e permissões/ }).click();
@@ -517,6 +689,23 @@ test('administrators', async ({ browser }) => {
       { n: 1, target: email },
       { n: 2, target: dialog.locator('select[name="profile"]') },
       { n: 3, target: configure },
+    ],
+  });
+
+  // The owner lends a subscription right in the invitation (KBC-031), terms first.
+  await configure.click();
+  await dialog
+    .getByLabel('Qual IA atende a pessoa')
+    .selectOption({ label: 'Claude do administrador' });
+  const confirm = dialog.getByRole('button', { name: 'Ceder assim mesmo' });
+  await confirm.evaluate((button) =>
+    button.scrollIntoView({ block: 'center' }),
+  );
+  await shooter.shoot(page, 'lend-subscription', {
+    clip: dialog,
+    marks: [
+      { n: 1, target: dialog.getByText(/Os termos da Anthropic/) },
+      { n: 2, target: confirm },
     ],
   });
   await page.context().close();

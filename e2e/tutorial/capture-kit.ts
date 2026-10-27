@@ -174,9 +174,14 @@ export class Shooter {
   async shoot(
     page: Page,
     name: string,
-    options: { readonly marks?: readonly Mark[]; readonly clip?: Locator } = {},
+    options: {
+      readonly marks?: readonly Mark[];
+      readonly clip?: Locator;
+      /** False for a passing state (a sweep's progress) that would end while settling. */
+      readonly settle?: boolean;
+    } = {},
   ): Promise<void> {
-    await settled(page);
+    if (options.settle !== false) await settled(page);
     // No focus ring in the pictures (the composer takes the focus on load).
     await page.evaluate(() =>
       (document.activeElement as HTMLElement | null)?.blur(),
