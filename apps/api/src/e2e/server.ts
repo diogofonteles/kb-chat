@@ -69,6 +69,8 @@ const config = loadConfig({
   KB_CHAT_OWNER_EMAIL: E2E_OWNER_EMAIL,
   // Every spec signs in; they run in parallel from one address.
   AUTH_RATE_LIMIT: '10000',
+  // Every spec researches from the same address, at both widths.
+  RESEARCH_RATE_LIMIT: '10000',
   KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
 });
 const logger = createLogger(config.LOG_LEVEL);
