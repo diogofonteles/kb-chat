@@ -61,6 +61,8 @@ export class InviteProfilesPanel {
   /** The section starts folded under the invitation (screens.md T9). */
   protected readonly expanded = signal(false);
   protected readonly draft = signal<Draft | null>(null);
+  /** Each opened draft gets a new editor: nothing of the last profile stays (KBC-033). */
+  protected readonly opened = signal(0);
   /** The saved name of the profile being edited, for the form's title. */
   protected readonly editingName = computed(() => {
     const id = this.draft()?.id;
@@ -161,6 +163,7 @@ export class InviteProfilesPanel {
     this.presetInvalid.set(false);
     this.confirmingDelete.set(null);
     this.draft.set(draft);
+    this.opened.update((count) => count + 1);
     this.focusAfterRender(() => this.nameInput());
   }
 

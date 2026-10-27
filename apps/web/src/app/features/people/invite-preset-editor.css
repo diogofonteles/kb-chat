@@ -4,3 +4,13 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
+
+/* The default collection keeps its hint and notice close, apart from the next field (KBC-033). */
+.field-with-notes {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field-with-notes:has(.hint:not(.visually-hidden)) {
+  margin-block-end: var(--space-2);
+}

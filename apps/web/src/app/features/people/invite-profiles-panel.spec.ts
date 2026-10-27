@@ -157,6 +157,32 @@ describe('InviteProfilesPanel (KBC-028 FR-2)', () => {
     expect(notice()).toContain('Perfil "Pesquisa" salvo.');
   });
 
+  it('starts the preset editor over for each profile, its notices included (KBC-033)', async () => {
+    const { fixture } = await renderPanel();
+    const cleared = /O acervo padrão foi limpo/;
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Aluno' }));
+    await fixture.whenStable();
+    fireEvent.change(screen.getByLabelText('Acervo padrão'), {
+      target: { value: 'hermetismo' },
+    });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+    await fixture.whenStable();
+    expect(screen.getByText(cleared)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar Pesquisador' }));
+    await fixture.whenStable();
+    expect(screen.queryByText(cleared)).toBeNull();
+    // The next profile never inherits the last one's choice: its only collection is preselected.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
+    await fixture.whenStable();
+    expect(
+      (screen.getByLabelText('Acervo padrão') as HTMLSelectElement).value,
+    ).toBe('alquimia');
+  });
+
   it('AC-3: marks another profile as the default', async () => {
     const { http, fixture } = await renderPanel();
     fireEvent.click(

@@ -204,24 +204,51 @@
   <p class="hint" i18n="@@preset.preferencesHint">
     Valem até a pessoa salvar as dela em Configurações.
   </p>
-  <label class="field">
-    <span i18n="@@preset.defaultTopic">Acervo padrão</span>
-    <select
-      #topicSelect
-      class="select"
-      (change)="setDefaultTopic(topicSelect.value)"
-    >
-      <option value="" i18n="@@preset.noPreference">Sem preferência</option>
-      @for (topic of defaultTopics(); track topic.slug) {
+  <!-- The hint and the notice stay with their field, apart from the next one. -->
+  <div class="field-with-notes">
+    <label class="field">
+      <span i18n="@@preset.defaultTopic">Acervo padrão</span>
+      <select
+        #topicSelect
+        class="select"
+        [attr.aria-describedby]="defaultTopicDescribedBy()"
+        (change)="setDefaultTopic(topicSelect.value)"
+      >
         <option
-          [value]="topic.slug"
-          [selected]="topic.slug === current.preferences.defaultTopic"
+          value=""
+          [selected]="!current.preferences.defaultTopic"
+          i18n="@@preset.noPreference"
         >
-          {{ topic.title }}
+          Sem preferência
         </option>
+        @for (topic of defaultTopics(); track topic.slug) {
+          <option
+            [value]="topic.slug"
+            [selected]="topic.slug === current.preferences.defaultTopic"
+          >
+            {{ topic.title }}
+          </option>
+        }
+      </select>
+    </label>
+    @if (needsCollection()) {
+      <p
+        [id]="uid + '-default-topic-hint'"
+        class="hint"
+        i18n="@@preset.defaultTopicHint"
+      >
+        Marque ao menos um acervo em “Acervos” acima para escolher o padrão.
+      </p>
+    }
+    <p class="hint" role="status" [class.visually-hidden]="!defaultCleared()">
+      @if (defaultCleared()) {
+        <ng-container i18n="@@preset.defaultTopicCleared"
+          >O acervo padrão foi limpo porque ele não está mais entre os acervos
+          marcados.</ng-container
+        >
       }
-    </select>
-  </label>
+    </p>
+  </div>
   <label class="field">
     <span i18n="@@preset.defaultView">Visão inicial</span>
     <select
