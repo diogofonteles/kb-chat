@@ -182,14 +182,17 @@
               >Usar como padrão nos próximos convites</span
             >
           </label>
-          <app-invite-preset-editor
-            [preset]="current.preset"
-            [topics]="topics()"
-            [defaultAppAi]="defaultAppAi()"
-            [busy]="busy()"
-            (changed)="changePreset($event)"
-            (invalidChange)="presetInvalid.set($event)"
-          />
+          <!-- Another profile starts the editor over, its notices included. -->
+          @for (round of [opened()]; track round) {
+            <app-invite-preset-editor
+              [preset]="current.preset"
+              [topics]="topics()"
+              [defaultAppAi]="defaultAppAi()"
+              [busy]="busy()"
+              (changed)="changePreset($event)"
+              (invalidChange)="presetInvalid.set($event)"
+            />
+          }
           <div class="actions">
             <button
               type="submit"

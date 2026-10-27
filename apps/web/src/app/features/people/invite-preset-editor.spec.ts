@@ -88,8 +88,12 @@ describe('InvitePresetEditor lends a subscription in the invitation (KBC-031)', 
       },
       OWNER_LENDS_CLAUDE,
     );
-    expect(screen.getByRole('status').textContent).toContain(
-      'Termos da assinatura do Claude confirmados para este convite. Para desfazer, escolha outra IA.',
+    expect(
+      screen.getAllByRole('status').map((status) => status.textContent),
+    ).toContainEqual(
+      expect.stringContaining(
+        'Termos da assinatura do Claude confirmados para este convite. Para desfazer, escolha outra IA.',
+      ),
     );
   });
 
@@ -343,5 +347,116 @@ describe('InvitePresetEditor (KBC-028 AC-2)', () => {
     await fixture.whenStable();
     expect(invalidChange).toHaveBeenLastCalledWith(false);
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+/** The editor inside a parent that keeps each change, as the invitation and the profile do. */
+async function renderKept(preset: InvitationPreset) {
+  const changed = vi.fn();
+  const view = await render(InvitePresetEditor, {
+    providers: [provideZonelessChangeDetection()],
+    inputs: { preset, topics: TOPICS.items },
+    on: {
+      changed: (next: InvitationPreset) => {
+        changed(next);
+        view.fixture.componentRef.setInput('preset', next);
+      },
+    },
+  });
+  const settle = () => view.fixture.whenStable();
+  const defaultTopic = () =>
+    screen.getByLabelText('Acervo padrão') as HTMLSelectElement;
+  return { ...view, changed, settle, defaultTopic };
+}
+
+const HINT =
+  'Marque ao menos um acervo em “Acervos” acima para escolher o padrão.';
+const CLEARED =
+  'O acervo padrão foi limpo porque ele não está mais entre os acervos marcados.';
+
+describe('InvitePresetEditor explains the default collection (KBC-033)', () => {
+  it('says why only "Sem preferência" is offered while no collection is checked (AC-1)', async () => {
+    const { settle, defaultTopic } = await renderKept(plainPreset());
+    expect(optionsOf(defaultTopic())).toEqual(['']);
+    const hint = screen.getByText(HINT);
+    expect(defaultTopic().getAttribute('aria-describedby')).toBe(hint.id);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
+    await settle();
+    expect(screen.queryByText(HINT)).toBeNull();
+    expect(defaultTopic().hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('gives no hint to a master, who sees every collection (AC-1)', async () => {
+    await renderKept({ ...plainPreset(), role: 'master' });
+    expect(screen.queryByText(HINT)).toBeNull();
+  });
+
+  it('preselects the only checked collection, still changeable to "Sem preferência" (AC-2)', async () => {
+    const { changed, settle, defaultTopic } = await renderKept(plainPreset());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
+    await settle();
+    expect(last(changed).preferences).toEqual({ defaultTopic: 'alquimia' });
+    expect(defaultTopic().value).toBe('alquimia');
+    fireEvent.change(defaultTopic(), { target: { value: '' } });
+    await settle();
+    expect(last(changed).preferences).toEqual({});
+    expect(defaultTopic().value).toBe('');
+  });
+
+  it('never picks again once "Sem preferência" was chosen (AC-2, BR-2)', async () => {
+    const { changed, settle, defaultTopic } = await renderKept({
+      ...plainPreset(),
+      topics: ['hermetismo', 'alquimia'],
+    });
+    fireEvent.change(defaultTopic(), { target: { value: '' } });
+    await settle();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
+    await settle();
+    expect(last(changed).topics).toEqual(['hermetismo']);
+    expect(last(changed).preferences).toEqual({});
+  });
+
+  it('never replaces a default already chosen (AC-2, BR-2)', async () => {
+    const { changed, settle } = await renderKept({
+      ...plainPreset(),
+      topics: ['hermetismo', 'alquimia'],
+      preferences: { defaultTopic: 'hermetismo' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
+    await settle();
+    expect(last(changed).preferences).toEqual({ defaultTopic: 'hermetismo' });
+  });
+
+  it('clears the default when its collection is unchecked, and says so politely (AC-3)', async () => {
+    const { changed, settle, defaultTopic } = await renderKept({
+      ...plainPreset(),
+      topics: ['hermetismo', 'alquimia'],
+    });
+    fireEvent.change(defaultTopic(), { target: { value: 'alquimia' } });
+    await settle();
+    expect(screen.queryByText(CLEARED)).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
+    await settle();
+    expect(last(changed).preferences).toEqual({});
+    expect(defaultTopic().value).toBe('');
+    const notice = screen.getByText(CLEARED);
+    expect(notice.closest('[role="status"]')).not.toBeNull();
+    // Choosing a default again puts the notice away.
+    fireEvent.change(defaultTopic(), { target: { value: 'hermetismo' } });
+    await settle();
+    expect(screen.queryByText(CLEARED)).toBeNull();
+  });
+
+  it('says so too when stepping down from master drops the default (AC-3)', async () => {
+    await renderKept({
+      ...plainPreset(),
+      role: 'master',
+      topics: [],
+      preferences: { defaultTopic: 'alquimia' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /^Master/ }));
+    expect(await screen.findByText(CLEARED)).toBeTruthy();
+    expect(screen.getByText(HINT)).toBeTruthy();
   });
 });

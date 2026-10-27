@@ -149,6 +149,17 @@ export class InvitePresetEditor {
   protected readonly defaultTopics = computed(() =>
     this.collections().filter((topic) => topic.checked),
   );
+  /** With no collection checked, the field says why it offers only "Sem preferência" (KBC-033). */
+  protected readonly needsCollection = computed(
+    () => this.topics().length > 0 && this.defaultTopics().length === 0,
+  );
+  protected readonly defaultTopicDescribedBy = computed(() =>
+    this.needsCollection() ? `${this.uid}-default-topic-hint` : null,
+  );
+  /** True once the master picks in "Acervo padrão": the editor never picks for them again. */
+  private readonly defaultChosen = signal(false);
+  /** The default collection was dropped with its collection: said in a polite live region. */
+  protected readonly defaultCleared = signal(false);
   protected readonly views = DEFAULT_VIEWS.map((id) => ({
     id,
     label: VIEW_COPY[id](),
@@ -172,24 +183,39 @@ export class InvitePresetEditor {
   );
 
   protected setMaster(on: boolean): void {
-    const { topics, preferences } = this.preset();
     // Back to member, the default collection must be one of theirs (BR-4).
-    const keeps =
-      on ||
-      preferences.defaultTopic === undefined ||
-      topics.includes(preferences.defaultTopic);
     this.emit(
       { role: on ? 'master' : 'member' },
-      keeps ? {} : { defaultTopic: undefined },
+      on ? {} : this.defaultFor(this.preset().topics),
     );
   }
 
   protected toggleTopic(slug: string, on: boolean): void {
     const topics = toggled(this.preset().topics, slug, on);
+    this.emit({ topics }, this.defaultFor(topics));
+  }
+
+  /**
+   * The default collection once the granted ones change (KBC-033): a collection taken away is
+   * no longer the default (BR-4), and says so; the only one granted becomes the default while
+   * the master has not picked one.
+   */
+  private defaultFor(topics: readonly string[]): Partial<InitialPreferences> {
     const { defaultTopic } = this.preset().preferences;
-    // A collection taken away is no longer the default one (BR-4).
-    const keeps = defaultTopic === undefined || topics.includes(defaultTopic);
-    this.emit({ topics }, keeps ? {} : { defaultTopic: undefined });
+    if (defaultTopic !== undefined && !topics.includes(defaultTopic)) {
+      this.defaultCleared.set(true);
+      return { defaultTopic: undefined };
+    }
+    const [only] = topics;
+    if (
+      defaultTopic === undefined &&
+      !this.defaultChosen() &&
+      topics.length === 1
+    ) {
+      this.defaultCleared.set(false);
+      return { defaultTopic: only };
+    }
+    return {};
   }
 
   protected toggleFeature(feature: Feature, on: boolean): void {
@@ -278,6 +304,8 @@ export class InvitePresetEditor {
   }
 
   protected setDefaultTopic(value: string): void {
+    this.defaultChosen.set(true);
+    this.defaultCleared.set(false);
     this.emit({}, { defaultTopic: value || undefined });
   }
 

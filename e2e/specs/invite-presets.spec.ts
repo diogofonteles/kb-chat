@@ -58,6 +58,13 @@ async function shoot(page: Page, name: string, part?: Locator): Promise<void> {
   expect(sideways, `${name}: no horizontal scroll`).toEqual([]);
 }
 
+/**
+ * A profile name no parallel worker repeats: desktop and mobile can start in the same
+ * millisecond on the shared E2E server (KBC-033 QA).
+ */
+const profileName = () =>
+  `Aluno ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
 const profiles = (dialog: Locator) =>
   dialog.getByRole('region', { name: /Perfis de convite/ });
 
@@ -103,7 +110,7 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
   page,
   browser,
 }) => {
-  const name = `Aluno ${Date.now().toString(36)}`;
+  const name = profileName();
   const email = uniqueEmail('aluno');
   const dialog = await openPeople(page);
   await createAluno(dialog, name);
@@ -149,7 +156,7 @@ test('AC-1: inviting with a profile sets up access, AI and the first Settings', 
 test('AC-2, AC-4: "Configurar agora" adjusts one invitation; "Aplicar perfil" on someone there', async ({
   page,
 }) => {
-  const name = `Aluno ${Date.now().toString(36)}b`;
+  const name = profileName();
   const adjusted = uniqueEmail('ajustado');
   const existing = uniqueEmail('existente');
   const dialog = await openPeople(page);
@@ -281,4 +288,52 @@ test('KBC-031 AC-5: the owner lends his subscription in the invitation, after th
     headers: CSRF,
   });
   await owner.dispose();
+});
+
+test('KBC-033: "Acervo padrão" says why it is empty, takes the only collection and says when it is cleared', async ({
+  page,
+}) => {
+  // No spec makes a profile the default: "Configurar agora" opens the plain preset.
+  const dialog = await openPeople(page);
+  await dialog.getByRole('button', { name: 'Configurar agora' }).click();
+  const preset = dialog.locator('#invite-preset');
+  const defaultTopic = preset.getByLabel('Acervo padrão');
+  // The dialog scrolls: the screenshots show the preferences, where the field is.
+  const preferences = preset.getByRole('group', {
+    name: 'Preferências iniciais',
+  });
+  const shootPreferences = async (name: string) => {
+    await preferences.scrollIntoViewIfNeeded();
+    await shoot(page, name, preferences);
+  };
+
+  // AC-1: no collection checked, the field says why it offers only "Sem preferência".
+  await expect(defaultTopic.locator('option')).toHaveText(['Sem preferência']);
+  await expect(defaultTopic).toHaveAccessibleDescription(
+    'Marque ao menos um acervo em “Acervos” acima para escolher o padrão.',
+  );
+  await expectAccessible(page);
+  await shootPreferences('default-topic-hint');
+
+  // AC-2: the only collection checked becomes the default, still changeable.
+  await preset.getByRole('checkbox', { name: 'Hermetismo' }).check();
+  await expect(defaultTopic).toHaveValue('hermetismo');
+  await expect(
+    preset.getByText('Marque ao menos um acervo em “Acervos” acima'),
+  ).toBeHidden();
+  await shootPreferences('default-topic-preselected');
+
+  // AC-3: unchecking the chosen default clears it, and a polite notice says why.
+  await preset.getByRole('checkbox', { name: 'Alquimia' }).check();
+  await defaultTopic.selectOption('alquimia');
+  await preset.getByRole('checkbox', { name: 'Alquimia' }).uncheck();
+  await expect(defaultTopic).toHaveValue('');
+  await expect(
+    preset.getByRole('status').filter({
+      hasText:
+        'O acervo padrão foi limpo porque ele não está mais entre os acervos marcados.',
+    }),
+  ).toBeVisible();
+  await expectAccessible(page);
+  await shootPreferences('default-topic-cleared');
 });
