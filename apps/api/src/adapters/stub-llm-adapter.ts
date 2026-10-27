@@ -47,6 +47,8 @@ export interface StubLlmOptions {
   readonly model?: string;
   /** What the forced last call (toolChoice "none") writes; default: an answer citing [n]. */
   readonly finalText?: string;
+  /** Its price per token; default US$ 1 per million (a zero price is a free model). */
+  readonly price?: LlmPrice;
   /** What a sweep batch call writes (KBC-030); default: one finding on its first document. */
   readonly batchReply?: (user: string) => string;
   /** Milliseconds each agent call waits before replying (parallelism tests). */
@@ -223,7 +225,7 @@ export class StubLlmAdapter implements AgentLlmPort {
   }
 
   async price(): Promise<LlmPrice> {
-    return { input: 1e-6, output: 1e-6 };
+    return this.options.price ?? { input: 1e-6, output: 1e-6 };
   }
 
   async balance(): Promise<number | null> {

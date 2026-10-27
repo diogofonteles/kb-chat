@@ -839,6 +839,7 @@ describe('ResearchStore', () => {
       steps: 1,
       coverage: { ...COVERAGE, missing: 0, read: 10, reason: undefined },
     });
+    const stopped = store.turns()[1]?.turnId;
     store.chooseProfile('fast');
     store.retry();
     expect(api.research).toHaveBeenLastCalledWith(
@@ -847,8 +848,25 @@ describe('ResearchStore', () => {
         question: 'livros',
         profile: 'exhaustive',
         sweep: CURSOR,
+        // In its place: the server replaces the stopped turn (KBC-029).
+        turnId: stopped,
       }),
     );
     expect(store.turns()).toHaveLength(2);
+    expect(store.turns()[1]?.turnId).toBe(stopped);
+  });
+
+  it('asks a continuation again as its question when there is no cursor to resume from (review round 4)', () => {
+    const { store, api, streams } = setup();
+    store.chooseProfile('deep');
+    store.ask('Continuar varredura: livros');
+    streams[0]?.next({ type: 'error', code: 'PROVIDER_UNAVAILABLE' });
+    const failed = store.turns()[0]?.turnId;
+    store.retry();
+    expect(api.research).toHaveBeenLastCalledWith(
+      'hermetismo',
+      expect.objectContaining({ question: 'livros', turnId: failed }),
+    );
+    expect(store.turns()).toHaveLength(1);
   });
 });

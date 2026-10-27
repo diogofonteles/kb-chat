@@ -18,6 +18,7 @@ import { SpendService } from '../../spend/index.js';
 import { researchBudgets, type ResearchBudgets } from '../limits.js';
 import { ToolLoopRunner } from '../tool-loop-runner.js';
 import { PLAN_STEPS, PLAN_SWEEP_TOOL } from './plan-tool.js';
+import { SweepPacer, type SweepClock } from './sweep-pacing.js';
 
 /** The fixture vault's documents marked as the Mestre's (author_group: mestre-laercio). */
 const MESTRE_DOCS = 14;
@@ -37,12 +38,14 @@ interface Setup {
   readonly llm?: StubLlmOptions;
   readonly cap?: number;
   readonly budgets?: ResearchBudgets;
+  readonly pacer?: SweepPacer;
 }
 
 async function sweepRunner({
   llm: options = {},
   cap = 5,
   budgets,
+  pacer,
 }: Setup = {}) {
   const llm = new StubLlmAdapter(options);
   const ledger = new MemorySpendLedger();
@@ -53,7 +56,7 @@ async function sweepRunner({
     principal: 'owner',
   });
   const tools = await fixtureTools();
-  const runner = new ToolLoopRunner({ llm, tools, spend, budgets });
+  const runner = new ToolLoopRunner({ llm, tools, spend, budgets, pacer });
   return { runner, llm, ledger };
 }
 
@@ -288,5 +291,21 @@ describe('exhaustive sweep in the in-API loop (KBC-030)', () => {
     );
     const answerCall = rest.llm.messagesSeen.at(-1) ?? [];
     expect(answerCall.at(-1)?.content).toMatch(/Achado antes de parar/);
+  });
+
+  it('paces a free model’s batches with the pacer it is given (review round 4)', async () => {
+    let waits = 0;
+    const pacer = new (class extends SweepPacer {
+      override async wait(_clock: SweepClock, _signal: AbortSignal) {
+        waits += 1;
+      }
+    })();
+    const { runner, llm } = await sweepRunner({
+      llm: { ...LAZY, price: { input: 0, output: 0 } },
+      pacer,
+    });
+    await collectEvents(runner.run(exhaustive({ question: WHOLE })));
+    expect(waits).toBe(llm.batchCalls);
+    expect(waits).toBeGreaterThan(0);
   });
 });

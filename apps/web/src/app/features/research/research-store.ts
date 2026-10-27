@@ -189,18 +189,28 @@ export class ResearchStore {
    * stop keeps them.
    */
   continueSweep(): void {
+    this.continueAfter(this.state().turns);
+  }
+
+  /**
+   * Starts a continuation after `turns`, whose last one holds the cursor; `turnId` keeps a
+   * retried turn's id, so the server replaces it (KBC-029). False when it cannot start.
+   */
+  private continueAfter(
+    turns: readonly ResearchTurn[],
+    turnId?: string,
+  ): boolean {
     const topic = this.chat.topicSlug();
-    const { turns, topic: current } = this.state();
     const last = turns.at(-1);
-    if (!topic || topic !== current || !last?.cursor) return;
-    if (!canContinueSweep(last) || this.streaming()) return;
+    const ready = topic && topic === this.state().topic && last?.cursor;
+    if (!ready || !canContinueSweep(last) || this.streaming()) return false;
     const original = originalSweepQuestion(last.question);
     const shown = continuationQuestion(original);
     const turn = {
-      ...startTurn(this.nextId++, shown, { profile: 'exhaustive' }),
+      ...startTurn(this.nextId++, shown, { profile: 'exhaustive', turnId }),
       cursor: last.cursor,
     };
-    this.state.update((s) => ({ ...s, turns: [...s.turns, turn] }));
+    this.state.update((s) => ({ ...s, turns: [...turns, turn] }));
     this.persist();
     this.remember(this.state().id);
     // The model gets the question itself, without the continuation's label.
@@ -210,6 +220,7 @@ export class ResearchStore {
       turnId: turn.turnId,
     });
     this.run({ id: turn.id, events, asked: true });
+    return true;
   }
 
   private continuation(
@@ -227,19 +238,18 @@ export class ResearchStore {
 
   /** "Tentar de novo" on the last turn (failed or stopped): asks the same question in its place. */
   retry(): void {
-    const last = this.state().turns.at(-1);
+    const turns = this.state().turns;
+    const last = turns.at(-1);
     const retriable =
       last?.phase === 'error' || (last?.phase === 'done' && last.interrupted);
     if (!last || !retriable) return;
+    // A continuation asked again resumes from the cursor it started from, in its place.
+    const continued = last.question !== originalSweepQuestion(last.question);
+    if (continued && this.continueAfter(turns.slice(0, -1), last.turnId))
+      return;
     this.state.update((s) => ({ ...s, turns: s.turns.slice(0, -1) }));
-    // A continuation asked again resumes from the cursor it started from (review round 3).
-    const before = this.state().turns.at(-1);
-    if (
-      last.question !== originalSweepQuestion(last.question) &&
-      before?.cursor
-    )
-      return this.continueSweep();
-    this.ask(last.question, last.turnId);
+    // The question itself: a continuation's label is only shown (ADR 0021).
+    this.ask(originalSweepQuestion(last.question), last.turnId);
   }
 
   /**
