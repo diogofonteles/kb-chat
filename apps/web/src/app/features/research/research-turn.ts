@@ -102,6 +102,20 @@ const endedWell = (
   e: Extract<ResearchEvent, { type: 'done' }>,
 ): boolean => turn.text.trim() !== '' || e.interrupted || e.sweep !== undefined;
 
+/** The estimate (time, cost) comes once, before the first batch: progress keeps it shown. */
+function withEstimate(
+  before: SweepProgress | null,
+  progress: SweepProgress,
+): SweepProgress {
+  const minutes = progress.minutes ?? before?.minutes;
+  const usd = progress.usd ?? before?.usd;
+  return {
+    ...progress,
+    ...(minutes !== undefined && { minutes }),
+    ...(usd !== undefined && { usd }),
+  };
+}
+
 /** A turn without an exhaustive sweep (KBC-030). */
 const NO_SWEEP = { sweep: null, coverage: null, cursor: null } as const;
 
@@ -193,7 +207,7 @@ const HANDLERS: {
   retract: (turn, e) => retractSegment(turn, e.segment),
   sweep: (turn, e) => ({
     ...turn,
-    sweep: e.sweep,
+    sweep: withEstimate(turn.sweep, e.sweep),
     cursor: progressCursor(turn, e.sweep),
   }),
   // A finished answer without text is a provider failure, not an empty success.

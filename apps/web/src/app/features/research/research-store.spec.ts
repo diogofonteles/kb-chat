@@ -767,4 +767,20 @@ describe('ResearchStore', () => {
     store.continueSweep();
     expect(api.research).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps the estimate shown while the sweep goes on', () => {
+    const { store, streams } = setup();
+    store.chooseProfile('exhaustive');
+    store.ask('livros');
+    streams[0]?.next({
+      type: 'sweep',
+      sweep: { ...PROGRESS, status: 'planned', minutes: 4, usd: 0.3 },
+    });
+    streams[0]?.next({ type: 'sweep', sweep: PROGRESS });
+    expect(store.turns()[0]?.sweep).toMatchObject({
+      status: 'running',
+      minutes: 4,
+      usd: 0.3,
+    });
+  });
 });
