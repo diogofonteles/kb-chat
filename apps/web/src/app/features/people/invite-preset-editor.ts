@@ -153,6 +153,9 @@ export class InvitePresetEditor {
   protected readonly needsCollection = computed(
     () => this.topics().length > 0 && this.defaultTopics().length === 0,
   );
+  protected readonly defaultTopicDescribedBy = computed(() =>
+    this.needsCollection() ? `${this.uid}-default-topic-hint` : null,
+  );
   /** True once the master picks in "Acervo padrão": the editor never picks for them again. */
   private readonly defaultChosen = signal(false);
   /** The default collection was dropped with its collection: said in a polite live region. */

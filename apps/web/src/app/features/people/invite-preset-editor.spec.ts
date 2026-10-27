@@ -402,8 +402,15 @@ describe('InvitePresetEditor explains the default collection (KBC-033)', () => {
     await settle();
     expect(last(changed).preferences).toEqual({});
     expect(defaultTopic().value).toBe('');
-    // "Sem preferência" was chosen: the editor never picks for the master again (BR-2).
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermetismo' }));
+  });
+
+  it('never picks again once "Sem preferência" was chosen (AC-2, BR-2)', async () => {
+    const { changed, settle, defaultTopic } = await renderKept({
+      ...plainPreset(),
+      topics: ['hermetismo', 'alquimia'],
+    });
+    fireEvent.change(defaultTopic(), { target: { value: '' } });
+    await settle();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Alquimia' }));
     await settle();
     expect(last(changed).topics).toEqual(['hermetismo']);
