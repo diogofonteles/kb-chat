@@ -18,7 +18,7 @@ Evidência (produção, 2026-10-27): no Exaustivo, com `nvidia/nemotron-3-ultra-
 **In:**
 - Planejamento: o orquestrador ganha `plan_sweep` (conjunto por autoria, entidade, origem ou assuntos, ou o acervo inteiro; expressões; o que extrair) e até 12 passos; sem plano (respondeu cedo ou acabaram os passos), vale o plano padrão (autoria do Mestre quando a pergunta cita Laércio/o Mestre, senão o acervo inteiro; leitura inteira; a pergunta como extração).
 - Varredura pelo aplicativo: conjunto resolvido em ordem de id; com expressões, varredura por padrão de todos e leitura só das janelas em volta das ocorrências; sem expressões, leitura inteira em janelas; lotes do tamanho do contexto do modelo; cada lote é uma chamada sem ferramentas que devolve achados `- [Dk] … — “trecho”`; achados juntados, sem repetição, com o [n] compartilhado; resposta final pedida só no fim.
-- Tetos que param a varredura com cursor: tempo (30 min), pedidos por turno (`KB_CHAT_SWEEP_MAX_REQUESTS`, padrão 250) e os pedidos gratuitos que restam à casa, gasto do dia (a resposta final fica reservada), provedor recusando (espera 15/30/60 s), "Parar".
+- Tetos que param a varredura com cursor: tempo (30 min), pedidos por turno (`KB_CHAT_SWEEP_MAX_REQUESTS`, padrão 250) e os pedidos gratuitos que restam à casa (no máximo um quarto do limite diário da casa por varredura), gasto do dia (a resposta final fica reservada), provedor recusando (espera 15/30/60 s), "Parar".
 - Ritmo de modelo gratuito: um pedido a cada 3,2 s (20/min da OpenRouter); a cadeia de modelos da pessoa continua valendo em cada pedido.
 - Cobertura medida pelo aplicativo no `done` e no turno salvo; o prompt proíbe números de cobertura e o aplicativo retira qualquer linha "Cobertura" do modelo.
 - "Continuar varredura": o cursor (plano, último documento feito, totais) vai com o turno e com cada progresso; o botão no último turno (também reaberto do histórico) varre só o que faltou.
@@ -74,6 +74,12 @@ Evidência (produção, 2026-10-27): no Exaustivo, com `nvidia/nemotron-3-ultra-
 
 ## References
 ADR: `docs/adr/0021-app-driven-exhaustive-sweep.md` (emenda 0013, substitui 0014 no Exaustivo) · Telas: `docs/design/screens.md` (T1, Exaustivo)
+
+## Follow-ups (from the reviews of 2026-10-27)
+- Reserva de gasto por pessoa entre turnos (ou um Exaustivo por pessoa de cada vez) — ADR 0021, riscos aceitos.
+- Com o KBC-029: retomar do cursor guardado no servidor pelo id do turno, e o turno gravado no servidor montar o cursor com os `found` do progresso (obrigação na ADR 0021).
+- Operação: uma linha de log por varredura (lotes, pedidos, motivo, duração) e o motivo no log de uso.
+- Nota: o limite de pesquisas por minuto por cliente virou configurável (`RESEARCH_RATE_LIMIT`, padrão 20, o valor de antes); o servidor de E2E usa 10000.
 
 ## Open questions
 Nenhuma. Premissas registradas: 12 passos de planejamento, 250 pedidos por turno, 3 lotes em paralelo (Codex 1), lote = metade do contexto, janelas de ±1.500 caracteres.
