@@ -18,7 +18,7 @@ import { SpendService } from '../../spend/index.js';
 import { researchBudgets, type ResearchBudgets } from '../limits.js';
 import { ToolLoopRunner } from '../tool-loop-runner.js';
 import { PLAN_STEPS, PLAN_SWEEP_TOOL } from './plan-tool.js';
-import { SweepPacer, type SweepClock } from './sweep-pacing.js';
+import { SweepPacer } from './sweep-pacing.js';
 
 /** The fixture vault's documents marked as the Mestre's (author_group: mestre-laercio). */
 const MESTRE_DOCS = 14;
@@ -296,7 +296,7 @@ describe('exhaustive sweep in the in-API loop (KBC-030)', () => {
   it('paces a free model’s batches with the pacer it is given (review round 4)', async () => {
     let waits = 0;
     const pacer = new (class extends SweepPacer {
-      override async wait(_clock: SweepClock, _signal: AbortSignal) {
+      override async wait() {
         waits += 1;
       }
     })();
