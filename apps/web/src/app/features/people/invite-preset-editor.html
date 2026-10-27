@@ -209,9 +209,18 @@
     <select
       #topicSelect
       class="select"
+      [attr.aria-describedby]="
+        needsCollection() ? uid + '-default-topic-hint' : null
+      "
       (change)="setDefaultTopic(topicSelect.value)"
     >
-      <option value="" i18n="@@preset.noPreference">Sem preferência</option>
+      <option
+        value=""
+        [selected]="!current.preferences.defaultTopic"
+        i18n="@@preset.noPreference"
+      >
+        Sem preferência
+      </option>
       @for (topic of defaultTopics(); track topic.slug) {
         <option
           [value]="topic.slug"
@@ -222,6 +231,23 @@
       }
     </select>
   </label>
+  @if (needsCollection()) {
+    <p
+      [id]="uid + '-default-topic-hint'"
+      class="hint"
+      i18n="@@preset.defaultTopicHint"
+    >
+      Marque ao menos um acervo em “Acervos” acima para escolher o padrão.
+    </p>
+  }
+  <p class="hint" role="status" [class.visually-hidden]="!defaultCleared()">
+    @if (defaultCleared()) {
+      <ng-container i18n="@@preset.defaultTopicCleared"
+        >O acervo padrão foi limpo porque ele não está mais entre os acervos
+        marcados.</ng-container
+      >
+    }
+  </p>
   <label class="field">
     <span i18n="@@preset.defaultView">Visão inicial</span>
     <select
