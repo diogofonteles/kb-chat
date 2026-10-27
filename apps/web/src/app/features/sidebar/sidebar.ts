@@ -10,6 +10,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
   Conversation,
   ConversationKind,
+  ConversationStatus,
   ConversationSummary,
 } from '@kb-chat/contracts';
 import { HistoryStore } from '@core/history/history-store.js';
@@ -33,6 +34,13 @@ const THEME_LABELS: Record<Theme, () => string> = {
   light: () => $localize`:@@theme.light:Claro`,
   dark: () => $localize`:@@theme.dark:Escuro`,
   esoteric: () => $localize`:@@theme.esoteric:Esotérico`,
+};
+
+/** How a conversation stands, in words (KBC-029): never color alone. */
+const STATUS_LABELS: Record<ConversationStatus, () => string> = {
+  pending: () => $localize`:@@sidebar.statusPending:pesquisando…`,
+  interrupted: () => $localize`:@@sidebar.statusInterrupted:interrompida`,
+  failed: () => $localize`:@@sidebar.statusFailed:falhou`,
 };
 
 const KIND_LABELS: Record<ConversationKind, () => string> = {
@@ -111,6 +119,27 @@ export class Sidebar {
   protected readonly titles = computed(
     () => new Map(this.chat.topicList().map((t) => [t.slug, t.title])),
   );
+  /**
+   * The history with how each conversation stands (KBC-029): the one on screen from what this
+   * page sees (a search or research still running), the others as the server keeps them.
+   */
+  protected readonly entries = computed(() => {
+    const searching = this.chat.searching() ? this.chat.conversationId() : null;
+    const researching = this.research.streaming()
+      ? this.research.conversationId()
+      : null;
+    return this.history.conversations().map((conversation) => {
+      const running =
+        conversation.id === searching || conversation.id === researching;
+      const status = running ? 'pending' : conversation.status;
+      return { ...conversation, status };
+    });
+  });
+  protected readonly statusLabels: Record<ConversationStatus, string> = {
+    pending: STATUS_LABELS.pending(),
+    interrupted: STATUS_LABELS.interrupted(),
+    failed: STATUS_LABELS.failed(),
+  };
   protected readonly kindLabels: Record<ConversationKind, string> = {
     search: KIND_LABELS.search(),
     research: KIND_LABELS.research(),
