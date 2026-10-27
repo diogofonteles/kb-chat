@@ -123,12 +123,21 @@ export class InvitePresetEditor {
   );
   /** Why the owner does not see a subscription now (KBC-031, design R1-5). */
   protected readonly notOffered = computed(() => {
-    const { canLend, lendable } = this.lending();
-    if (!canLend) return [];
+    if (!this.lending().canLend) return [];
     return (['claude-subscription', 'chatgpt-subscription'] as const)
       .filter((kind) => !this.offered(kind))
-      .map((kind) => ({ kind, text: LEND_NOT_OFFERED[kind]() }));
+      .map((kind) => ({
+        kind,
+        id: `${this.uid}-not-offered-${kind}`,
+        text: LEND_NOT_OFFERED[kind](),
+      }));
   });
+  /** The field is described by its hint and by why a subscription is missing (NG-30). */
+  protected readonly appAiDescribedBy = computed(() =>
+    [`${this.uid}-ai-hint`, ...this.notOffered().map((note) => note.id)].join(
+      ' ',
+    ),
+  );
   /** Which subscription's terms were confirmed for this invitation, said in a live region. */
   protected readonly confirmedCopy = computed(() => {
     const { appAi, subscriptionTermsAccepted } = this.preset().ai;

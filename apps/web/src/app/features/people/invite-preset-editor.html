@@ -53,7 +53,7 @@
     <select
       #appAiSelect
       class="select"
-      [attr.aria-describedby]="uid + '-ai-hint'"
+      [attr.aria-describedby]="appAiDescribedBy()"
       (change)="chooseAppAi(appAiSelect.value)"
     >
       @for (option of appAis(); track option.id) {
@@ -74,7 +74,7 @@
     </p>
   }
   @for (note of notOffered(); track note.kind) {
-    <p class="hint">{{ note.text }}</p>
+    <p [id]="note.id" class="hint">{{ note.text }}</p>
   }
   @if (lendCopy(); as copy) {
     <div
@@ -108,7 +108,11 @@
       </div>
     </div>
   }
-  <p class="hint" role="status">
+  <p
+    class="hint"
+    role="status"
+    [class.visually-hidden]="!lendCopy() && !confirmedCopy()"
+  >
     @if (!lendCopy() && confirmedCopy(); as confirmed) {
       {{ confirmed }}
     }

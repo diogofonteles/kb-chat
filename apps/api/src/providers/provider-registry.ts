@@ -191,6 +191,8 @@ export class ProviderRegistry implements ProviderCatalog {
   private readonly meters = new PaidMeters();
   /** The last answer of Codex's sandbox about the login (CODEX_STATUS_TTL_MS). */
   private codexStatusCache: { status: CodexStatus; at: number } | null = null;
+  /** The question to the sandbox in flight, if any. */
+  private codexStatusRead: Promise<CodexStatus> | null = null;
   /** Until when each lent subscription counts as unavailable after a logged-out CLI. */
   private readonly loggedOutUntil: Record<LentSubscription, number> = {
     'claude-subscription': 0,
@@ -276,9 +278,13 @@ export class ProviderRegistry implements ProviderCatalog {
   async codexStatus(): Promise<CodexStatus> {
     const fresh = this.freshCodexStatus();
     if (fresh) return fresh;
-    const status = await this.readCodexStatus();
-    this.codexStatusCache = { status, at: this.now() };
-    return status;
+    // Requests at the same time share one question to the sandbox (KBC-031 review R2).
+    this.codexStatusRead ??= this.readCodexStatus().then((status) => {
+      this.codexStatusCache = { status, at: this.now() };
+      this.codexStatusRead = null;
+      return status;
+    });
+    return this.codexStatusRead;
   }
 
   private async readCodexStatus(): Promise<CodexStatus> {
