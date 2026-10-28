@@ -277,13 +277,17 @@ async function registerRoutes(
   await app.register(conversationRoutes(conversations));
   await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);
-  if (deps.media) await registerMedia(app, deps.media);
+  if (deps.media) await registerMedia(app, { media: deps.media, catalog });
 }
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
-async function registerMedia(app: FastifyInstance, media: MediaDeps) {
-  const { store, files, workerToken } = media;
-  await app.register(mediaRoutes(new MediaService({ store, files })));
+async function registerMedia(
+  app: FastifyInstance,
+  wiring: { media: MediaDeps; catalog: CatalogRegistry },
+) {
+  const { store, files, workerToken } = wiring.media;
+  const hasTopic = (topic: string) => wiring.catalog.get(topic) !== undefined;
+  await app.register(mediaRoutes(new MediaService({ store, files, hasTopic })));
   await app.register(
     workerRoutes({
       service: new WorkerService({ store, files }),

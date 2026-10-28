@@ -86,7 +86,7 @@ function registerJobRoutes(
     '/api/v1/media-worker/jobs/:id/fail',
     route(failJobRequestSchema),
     async (request, reply) => {
-      service.fail(request.params.id, request.body);
+      await service.fail(request.params.id, request.body);
       return reply.code(204).send();
     },
   );

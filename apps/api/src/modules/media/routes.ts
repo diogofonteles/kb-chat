@@ -69,7 +69,11 @@ const OPTIONS = {
     schema: { params: topicParams, response: { 200: mediaListSchema } },
   },
   create: {
-    config: { access: { ...UPLOAD, topicParam: 'topic' } },
+    config: {
+      access: { ...UPLOAD, topicParam: 'topic' },
+      // Until the quotas of KBC-035, creating items is bounded per client.
+      rateLimit: { max: 30, timeWindow: '1 minute' },
+    },
     schema: {
       params: topicParams,
       body: createMediaRequestSchema,

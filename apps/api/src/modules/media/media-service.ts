@@ -23,6 +23,8 @@ export interface MediaActor {
 export interface MediaServiceDeps {
   readonly store: MediaStorePort;
   readonly files: MediaFilesPort;
+  /** The collection exists in the vault (a master "sees" any slug, even a wrong one). */
+  readonly hasTopic: (topic: string) => boolean;
   readonly now?: () => Date;
 }
 
@@ -71,6 +73,7 @@ export class MediaService {
     topic: string,
     request: CreateMediaRequest,
   ): MediaItem {
+    this.assertTopic(topic);
     if (!hasAcceptedAudioExtension(request.fileName))
       throw new AppError('VALIDATION_FAILED', 'Not an accepted audio file', {
         details: { field: 'fileName' },
@@ -108,18 +111,43 @@ export class MediaService {
     this.receiving.add(mediaId);
     try {
       await this.save(media, body);
+    } catch (err) {
+      // Removed while its bytes were arriving: the file is gone, so is the item.
+      if (!this.deps.store.getMedia(mediaId)) {
+        await this.deps.files.discardUpload(mediaId);
+        throw notFound();
+      }
+      throw err;
     } finally {
       this.receiving.delete(mediaId);
     }
-    const queued = this.deps.store.markUploaded({
-      mediaId,
-      jobId: randomUUID(),
-      now: this.now(),
-    });
+    const queued = await this.queue(mediaId);
     return toMediaItem(queued, actor.isMaster);
   }
 
+  /** The file arrived: queue the conversion, unless the item was removed meanwhile. */
+  private async queue(mediaId: string): Promise<MediaRecord> {
+    try {
+      return this.deps.store.markUploaded({
+        mediaId,
+        jobId: randomUUID(),
+        now: this.now(),
+      });
+    } catch (err) {
+      await this.deps.files.discardUpload(mediaId);
+      if (!this.deps.store.getMedia(mediaId)) throw notFound();
+      throw new AppError(
+        'MEDIA_CONFLICT',
+        'This media is not waiting for its file',
+        {
+          cause: err,
+        },
+      );
+    }
+  }
+
   list(actor: MediaActor, topic: string): MediaItem[] {
+    this.assertTopic(topic);
     return this.deps.store
       .listMedia(topic)
       .map((record) => toMediaItem(record, actor.isMaster));
@@ -177,6 +205,11 @@ export class MediaService {
       this.deps.store.retryMedia({ mediaId, now: this.now() }),
       actor.isMaster,
     );
+  }
+
+  private assertTopic(topic: string): void {
+    if (!this.deps.hasTopic(topic))
+      throw new AppError('TOPIC_NOT_FOUND', 'Unknown topic');
   }
 
   private visible(actor: MediaActor, mediaId: string): MediaRecord {

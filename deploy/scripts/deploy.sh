@@ -273,8 +273,11 @@ check_env() {
 ensure_media_dir() {
   local dir="${DEPLOY_DIR%/deploy}/media"
   [ -d "$dir" ] && return 0
-  mkdir -p "$dir" && chmod 0700 "$dir"
-  if [ "$(id -u)" -eq 0 ]; then chown 10001:10001 "$dir"; fi
+  if [ "$(id -u)" -ne 0 ]; then
+    log "$dir is missing and only root can create it for the app (uid 10001): run deploy.sh with sudo"
+    return 1
+  fi
+  mkdir -p "$dir" && chmod 0700 "$dir" && chown 10001:10001 "$dir"
   log "created $dir for the media library"
 }
 
@@ -317,7 +320,7 @@ main() {
   fi
 
   take_lock
-  ensure_media_dir
+  ensure_media_dir || exit 1
   trap on_exit EXIT
   trap 'exit 130' INT TERM
 

@@ -115,7 +115,12 @@ export class MediaWorker {
     job: WorkerJob,
     run: { target: string; signal: AbortSignal },
   ): Promise<void> {
-    const output = await probe(this.deps.bins, run.target, run.signal);
+    // An unreadable result is the conversion's fault, never the uploaded file's.
+    const output = await probe(this.deps.bins, run.target, run.signal).catch(
+      (err: unknown) => {
+        throw new Error(`the converted file cannot be read: ${String(err)}`);
+      },
+    );
     const { size } = await stat(run.target);
     const done = await this.deps.api.complete(job, {
       durationMs: output.durationMs,
@@ -130,6 +135,8 @@ export class MediaWorker {
     state: { progress: { percent: number }; abort: AbortController },
   ): NodeJS.Timeout {
     return setInterval(() => {
+      // A long conversion is the worker working: the healthcheck must see it alive.
+      void this.touchAlive();
       this.deps.api.heartbeat(job, state.progress.percent).then(
         (held) => {
           if (held) return;

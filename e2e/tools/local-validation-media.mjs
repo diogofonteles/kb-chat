@@ -106,13 +106,11 @@ for (const width of [1440, 390]) {
     await shot('01-list');
     await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
     const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
-    await dialog
-      .locator('input[type="file"]')
-      .setInputFiles({
-        name: 'apostila.pdf',
-        mimeType: 'application/pdf',
-        buffer: Buffer.from('%PDF'),
-      });
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: 'apostila.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF'),
+    });
     await dialog.getByRole('button', { name: 'Enviar' }).click();
     await shot('02-upload-errors');
     await dialog.getByRole('button', { name: 'Cancelar' }).click();

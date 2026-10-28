@@ -16,6 +16,11 @@ export interface WorkerServiceDeps {
   readonly now?: () => Date;
 }
 
+const leaseOf = (done: CompleteTranscodeRequest) => ({
+  worker: done.worker,
+  leaseId: done.leaseId,
+});
+
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
 
@@ -58,7 +63,7 @@ export class WorkerService {
 
   /**
    * The lease's work file is on disk with the announced size: it becomes the rendition and
-   * the upload goes (BR-4). The lease is checked (by a beat) before the file is moved.
+   * the upload goes (BR-4).
    */
   async completeTranscode(
     jobId: string,
@@ -67,28 +72,37 @@ export class WorkerService {
     const mediaId = this.deps.store.mediaOfJob(jobId);
     if (!mediaId) throw leaseLost();
     await this.assertWorkFile(mediaId, done);
-    this.heartbeat(jobId, {
-      worker: done.worker,
-      leaseId: done.leaseId,
-      progress: 100,
-    });
-    const { files, store } = this.deps;
-    const path = files.audioPath(mediaId);
-    await files.promote(files.workPath(mediaId, done.leaseId), path);
-    const rendition = {
-      mediaId,
-      rendition: 'audio',
-      path,
-      bytes: done.bytes,
-    } as const;
-    const finished = store.completeTranscode({
+    // The lease must still be ours before the file moves (a beat checks it).
+    this.heartbeat(jobId, { ...leaseOf(done), progress: 100 });
+    const path = await this.promote(mediaId, done.leaseId);
+    const finished = this.deps.store.completeTranscode({
       ...done,
       jobId,
       now: this.now(),
-      rendition: { ...rendition, mime: AUDIO_MIME },
+      rendition: {
+        mediaId,
+        rendition: 'audio',
+        path,
+        bytes: done.bytes,
+        mime: AUDIO_MIME,
+      },
     });
-    if (!finished) throw leaseLost();
-    await files.discardUpload(mediaId);
+    // The rendition is in place; if the lease is gone because the item was removed
+    // meanwhile, the file must not stay behind (the removal already ran).
+    if (!finished) {
+      if (!this.deps.store.getMedia(mediaId))
+        await this.deps.files.remove([path]);
+      throw leaseLost();
+    }
+    await this.deps.files.discardUpload(mediaId);
+  }
+
+  /** The lease's work file becomes the rendition (an atomic rename). */
+  private async promote(mediaId: string, leaseId: string): Promise<string> {
+    const { files } = this.deps;
+    const path = files.audioPath(mediaId);
+    await files.promote(files.workPath(mediaId, leaseId), path);
+    return path;
   }
 
   private async assertWorkFile(
@@ -108,7 +122,12 @@ export class WorkerService {
       );
   }
 
-  fail(jobId: string, failure: FailJobRequest): void {
+  /**
+   * A bad file is given up at once and its original goes (BR-4: nothing could ever use
+   * it). A crash keeps the original: the job is retried, or a master may "Tentar de novo".
+   */
+  async fail(jobId: string, failure: FailJobRequest): Promise<void> {
+    const mediaId = this.deps.store.mediaOfJob(jobId);
     const recorded = this.deps.store.failJob({
       jobId,
       ...failure,
@@ -116,5 +135,7 @@ export class WorkerService {
       maxAttempts: MAX_JOB_ATTEMPTS,
     });
     if (!recorded) throw leaseLost();
+    if (failure.failure === 'invalid-audio' && mediaId)
+      await this.deps.files.discardUpload(mediaId);
   }
 }

@@ -1,4 +1,5 @@
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import type { MediaItem, WorkerJob } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -221,6 +222,65 @@ describe('Media library: upload (KBC-034)', () => {
       headers: uploader.headers,
     });
     expect(sent.statusCode).toBe(404);
+  });
+});
+
+describe('Media library: collections and races', () => {
+  it('refuses a collection that does not exist, even to a master', async () => {
+    const media = await startMedia();
+    const created = await media.owner(
+      'POST',
+      '/api/v1/topics/nao-existe/media',
+      aRequest(),
+    );
+    expect(created.statusCode).toBe(404);
+    expect(created.json().error.code).toBe('TOPIC_NOT_FOUND');
+    expect(
+      (await media.owner('GET', '/api/v1/topics/nao-existe/media')).statusCode,
+    ).toBe(404);
+  });
+
+  it('answers 404 and keeps no bytes when the item is removed while its file arrives', async () => {
+    const media = await startMedia();
+    const created = (
+      await media.owner('POST', '/api/v1/topics/hermetismo/media', aRequest())
+    ).json();
+    const body = new PassThrough();
+    const sending = media.started.app.inject({
+      method: 'PUT',
+      url: `/api/v1/media/${created.id}/file`,
+      headers: {
+        ...media.ownerHeaders,
+        'content-type': 'application/octet-stream',
+      },
+      payload: body,
+    });
+    body.write(AUDIO.subarray(0, 10));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      (await media.owner('DELETE', `/api/v1/media/${created.id}`)).statusCode,
+    ).toBe(204);
+    body.end(AUDIO.subarray(10));
+    const sent = await sending;
+    expect(sent.statusCode).toBe(404);
+    expect(readdirSync(join(media.mediaDir, 'uploads'))).toEqual([]);
+  });
+
+  it('limits how many items one client creates per minute', async () => {
+    const media = await startMedia();
+    const answers: number[] = [];
+    for (let i = 0; i < 31; i++)
+      answers.push(
+        (
+          await media.owner(
+            'POST',
+            '/api/v1/topics/hermetismo/media',
+            aRequest(),
+          )
+        ).statusCode,
+      );
+    expect(answers.slice(0, 30).every((code) => code === 201)).toBe(true);
+    expect(answers[30]).toBe(429);
   });
 });
 
@@ -461,6 +521,8 @@ describe('Media library: worker protocol (FR-3, FR-4)', () => {
     });
     const retry = await media.owner('POST', `/api/v1/media/${item.id}/retry`);
     expect(retry.statusCode).toBe(409);
+    // BR-4: nothing could ever use a bad file, so its original is gone.
+    expect(existsSync(join(media.mediaDir, job.sourcePath))).toBe(false);
   });
 
   it('gives up after the fourth crash and lets a master retry (AC-5, FR-7)', async () => {
