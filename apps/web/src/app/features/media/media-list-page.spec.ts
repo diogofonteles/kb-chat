@@ -16,6 +16,7 @@ import {
   sessionAs,
 } from '../../testing/media-fixtures.js';
 import { MediaListPage } from './media-list-page.js';
+import { ChatStore } from '@features/chat/chat-store.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 
 const LIST_URL = '/api/v1/topics/hermetismo/media';
@@ -366,6 +367,12 @@ describe('MediaListPage (T14)', () => {
     expect(
       (document.activeElement as HTMLElement | null)?.dataset['mediaId'],
     ).toBeUndefined();
+    // Switching collection leaves no stale notice behind.
+    TestBed.inject(ChatStore).topicSlug.set('alquimia');
+    TestBed.tick();
+    http.expectOne('/api/v1/topics/alquimia/media').flush({ items: [created] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent?.trim()).toBe('');
   });
 
   it('closes the upload panel without uploading', async () => {

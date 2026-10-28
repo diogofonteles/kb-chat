@@ -10,6 +10,7 @@ import {
   afterRenderEffect,
   computed,
   inject,
+  linkedSignal,
   signal,
   viewChild,
   viewChildren,
@@ -98,8 +99,11 @@ export class MediaListPage {
   protected readonly removing = signal<MediaItem | null>(null);
   protected readonly actionError = signal('');
   protected readonly announcement = signal('');
-  /** Where the last upload went, when it was another collection. */
-  protected readonly sentElsewhere = signal('');
+  /** Where the last upload went, when it was another collection; cleared on a switch. */
+  protected readonly sentElsewhere = linkedSignal({
+    source: this.chat.topicSlug,
+    computation: () => '',
+  });
 
   constructor() {
     this.pollWhileInFlight();
