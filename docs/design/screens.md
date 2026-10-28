@@ -361,7 +361,7 @@ Acessibilidade: o foco vai para o campo do código quando ele aparece; status em
 | Sem acesso ao acervo / `KB_CHAT_MEDIA=off` | O item **Mídia** não aparece; a rota direta mostra a tela de não encontrado | — |
 | Conteúdo extremo | 500 itens: a lista é virtualizada; títulos de 200 caracteres quebram em 2 linhas | — |
 
-## T15. Player (KBC-034, KBC-041, KBC-038, KBC-039)
+## T15. Player (KBC-034, KBC-041 a KBC-046, KBC-038, KBC-039; vídeo no KBC-035)
 
 **Objetivo:** ouvir uma palestra longa, lendo junto quando quiser, e voltar a um trecho sem procurar o minuto. **Contexto:** sentado, estudando no computador (fones, às vezes com anotações); no celular, ouvindo com a tela bloqueada ou trocando de app. **Sucesso:** voltar 15 s, mudar a velocidade e pular para uma frase sem errar o controle; retomar no dia seguinte, em outro aparelho, do ponto onde parou; nenhum controle depende só do mouse ou de gesto.
 
@@ -382,7 +382,7 @@ Desktop (≥ 1024 px)                                           Celular (< 1024 
 │          │ Copiar link deste minuto          │           │   │ Transcrição (abaixo) │
 └──────────┴───────────────────────────────────┴──────────┘    └──────────────────────┘
 ```
-- O player é um componente próprio sobre um único `<audio>` sem o atributo `controls`: os controles nativos variam entre navegadores e não seguem os temas (DS-12).
+- O player é um componente próprio sobre um único elemento de mídia sem o atributo `controls`: os controles nativos variam entre navegadores e não seguem os temas (DS-12). Ele serve áudio agora e vídeo depois (ADR 0025): acima dos controles há uma área de mídia, vazia no áudio (só a legenda) e com o vídeo no KBC-035, com a proporção reservada desde a primeira pintura, tela cheia (F) e picture-in-picture. Nada nos controles, na transcrição ou nos marcadores muda entre áudio e vídeo.
 - **Mini-player persistente (KBC-041):** ao sair de `/midia/{id}` com o áudio tocando, ele continua. Uma barra de 64 px aparece no pé da área principal (no celular, acima da caixa de pergunta) com o título (link de volta ao player), ⟲15, ▶/❚❚, a barra de progresso fina e ✕ ("Fechar o player", que pausa e salva a posição). Assim dá para ouvir enquanto busca. A área principal ganha `scroll-padding-bottom` e margem inferior da altura do mini-player, para ele nunca esconder o elemento focado (WCAG 2.4.11).
 
 ### Controles (UP-13, MA-06, SL-20)
@@ -395,12 +395,14 @@ Desktop (≥ 1024 px)                                           Celular (< 1024 
 | Velocidade | Botão com o valor ("1,5×") que abre um menu com 0,75× · 1× · 1,25× · 1,5× · 1,75× · 2×, o atual marcado com ✓ e em texto. Os atalhos sobem e descem um degrau, sem dar a volta. Vale para todas as mídias e é guardada na conta (KBC-041); é reaplicada a cada mídia (`defaultPlaybackRate` e `playbackRate`), com o tom da voz preservado | "Velocidade: 1,5 vezes" |
 | CC (KBC-038) | Liga/desliga a legenda, `aria-pressed`; a escolha é lembrada | "Legendas" |
 | Volume | Botão de mudo + controle deslizante horizontal. Aparece só quando o navegador deixa mudar o volume, o que o player testa ao abrir (no iPhone e no iPad o volume da página é só leitura, mesmo com trackpad); senão, vale o volume do aparelho | "Silenciar" / "Volume, 80%" |
-| ⋯ | "Copiar link deste minuto" (KBC-038) e "Atalhos de teclado" | "Mais opções" |
+| 🔖 Marcar (KBC-042) | Cria um marcador 2 s antes do ponto atual, sem pausar, e abre a nota em linha | "Marcar este trecho" |
+| ☾ Timer (KBC-046) | Aparece só com o timer ligado, mostrando "Para em 14:59"; abre "Mais 5 minutos" e "Desligar timer" | "Timer para dormir: para em 14 minutos e 59 segundos" |
+| ⋯ | "Copiar link deste minuto" (KBC-038), **Pulos** (voltar 5/10/15/30 s, avançar 10/15/30/45/60 s, KBC-043), **Encurtar silêncios** com o tempo economizado (KBC-044), **Destacar palavra a palavra** (KBC-045), **Timer para dormir** (5–60 min ou "No fim desta mídia", KBC-046) e "Atalhos de teclado" | "Mais opções" |
 
 Os tempos usam `m:ss` abaixo de 1 h e `h:mm:ss` a partir de 1 h, em algarismos tabulares, para não tremer ao contar.
 
 ### Atalhos de teclado (UP-09: todos também têm botão)
-Ativos só na página do player, quando o foco está no player, na transcrição, no mini-player ou no corpo da página, e **nunca** com o foco em `input`, `textarea`, `select`, `[contenteditable]`, item de menu ou diálogo: Espaço ou K tocar/pausar · J voltar 15 s · L avançar 30 s · ←/→ 5 s · Shift+, e Shift+. diminuir/aumentar a velocidade · M silenciar · C legendas · 0–9 ir para 0%–90% · ? lista dos atalhos. O diálogo "Atalhos de teclado" (com "Fechar" e Esc) tem a opção **Usar atalhos de uma tecla**, ligada por padrão e lembrada, que os desliga (WCAG 2.1.4). Os botões declaram `aria-keyshortcuts`. Um controle focado que usa uma tecla (as setas na barra de progresso e na transcrição) a consome, e o atalho global não age em dobro.
+Ativos só na página do player, quando o foco está no player, na transcrição, no mini-player ou no corpo da página, e **nunca** com o foco em `input`, `textarea`, `select`, `[contenteditable]`, item de menu ou diálogo: Espaço ou K tocar/pausar · J voltar 15 s · L avançar 30 s · ←/→ 5 s · Shift+, e Shift+. diminuir/aumentar a velocidade · M silenciar · C legendas · B marcar este trecho · 0–9 ir para 0%–90% · ? lista dos atalhos. J e L seguem os pulos escolhidos (KBC-043). O diálogo "Atalhos de teclado" (com "Fechar" e Esc) tem a opção **Usar atalhos de uma tecla**, ligada por padrão e lembrada, que os desliga (WCAG 2.1.4). Os botões declaram `aria-keyshortcuts`. Um controle focado que usa uma tecla (as setas na barra de progresso e na transcrição) a consome, e o atalho global não age em dobro.
 
 ### Sistema operacional (Media Session API)
 Título, autoria ("Mestre Laércio — Nova Alexandria") e o ícone do app na tela de bloqueio e na central de controle; tocar, pausar, voltar 15 s, avançar 30 s e arrastar a posição funcionam por lá e pelos botões de fone. A posição e a velocidade são informadas ao sistema (`setPositionState`), para a barra da tela de bloqueio ficar certa.
@@ -431,6 +433,8 @@ Título, autoria ("Mestre Laércio — Nova Alexandria") e o ícone do app na te
 - O segmento ativo tem `aria-current="true"`, fundo de destaque **e** uma barra lateral (UP-20). O acompanhamento o mantém visível sem rolagem brusca (com `prefers-reduced-motion`, sem animação). **Qualquer rolagem feita pela pessoa** (roda, toque, teclado, barra de rolagem) suspende o acompanhamento, que só volta quando ela clica **Voltar ao trecho atual** (aparece enquanto o trecho ativo está fora da vista), toca num segmento ou pula pelo player. A transcrição nunca rola contra quem está lendo.
 - **Buscar na transcrição** (campo com rótulo no topo da coluna): destaca as ocorrências, mostra "3 de 12", ↑/↓ ou Enter/Shift+Enter andam entre elas, e **Tocar daqui** toca a ocorrência atual. Com a busca aberta, o acompanhamento fica suspenso.
 - Selecionar texto oferece **Copiar com o link do minuto** (o trecho entre aspas, o título e o link `?t=`).
+- **Palavra a palavra (KBC-045):** dentro do segmento ativo, a palavra falada ganha sublinhado grosso e peso maior (nunca só cor); clicar numa palavra toca dali. As palavras não são paradas de Tab.
+- **Aba Marcadores (KBC-042):** ao lado de "Transcrição", lista os marcadores da pessoa nesta mídia, por tempo, com a nota (ou o texto falado naquele ponto); clicar toca dali; editar a nota em linha; apagar com **Desfazer** por 8 s. As marcas também aparecem na barra de progresso. A tela Mídia ganha **Meus marcadores**, com os de todas as mídias.
 - Baixa confiança: "Transcrição automática de baixa confiança: pode haver trechos errados." acima do texto, em tom de aviso (não vermelho, UP-19), sempre visível.
 - Legenda sobre a área do player (fundo escuro translúcido, texto claro, contraste ≥ 4,5:1 em todos os temas), no máximo 2 linhas.
 
@@ -444,7 +448,7 @@ Título, autoria ("Mestre Laércio — Nova Alexandria") e o ícone do app na te
 
 ### Fora do escopo e perguntas em aberto
 - **Fora:** baixar o áudio; listas de reprodução e fila de próximos; faixas e capítulos no slider e na transcrição (fase B); compilados (fase C); vídeo (KBC-035 usa o mesmo player com a área de vídeo); editar a transcrição.
-- **Candidatos depois da fase A** (benchmark, seção "Deveria" e "Poderia"): marcadores com nota ("Marcar este trecho"), intervalos de pulo configuráveis, encurtar silêncios, destaque palavra a palavra e timer para dormir. Precisam de decisão do dono.
+- Marcadores com nota, pulos configuráveis, encurtar silêncios, palavra a palavra e timer para dormir entraram por decisão do dono em 2026-10-28 (KBC-042 a KBC-046).
 - **Precisa de teste com usuários** (UP-25): os rótulos ⟲15/30⟳ e o "Continuar de" são entendidos? O mini-player atrapalha a leitura dos resultados no celular? Entra no teste da fase 2 com 1 a 2 colegas (`docs/product/context.md`, ## Research).
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)

@@ -25,7 +25,7 @@ Como pessoa com `media-upload`, quero enviar vários áudios ou vídeos grandes 
 - FR-1: Quando a pessoa escolhe arquivos, a tela deve calcular o SHA-256 de cada um no navegador e perguntar à API se já existe; se existir, mostrar "Já está no acervo" com o link, sem enviar. (BR-2)
 - FR-2: O envio deve usar tus com partes de 8 MB e retomar do último byte confirmado após queda de rede ou recarga da página. (BR-3)
 - FR-3: Antes de aceitar, a API deve recusar com `MEDIA_QUOTA_EXCEEDED` o envio que passaria a cota pela estimativa (áudio 30 MB/h; vídeo 400 MB/h). (BR-1)
-- FR-4: Para vídeo, o worker deve gerar a cópia 720p e a cópia de áudio; o player passa a ser de vídeo.
+- FR-4: Para vídeo, o worker deve gerar a cópia 720p e a cópia de áudio; o player ganha só a visão de vídeo da ADR 0025 (área com proporção reservada, pôster, tela cheia com F, picture-in-picture onde houver e a legenda sobre a imagem), sem mudar o `MediaEngine` nem os recursos (velocidade, retomar, marcadores, silêncios, timer, transcrição).
 - FR-5: Um job agendado deve apagar partes de envios parados há mais de 24 h. (BR-3)
 
 ## Non-functional requirements

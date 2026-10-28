@@ -30,7 +30,7 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 - FR-4: Quando a reserva de um trabalho vence sem sinal de vida, a API deve devolvê-lo à fila; na 4ª vez, marcá-lo como "Falhou". (BR-5)
 - FR-5: `GET /api/v1/topics/{topic}/media` deve listar as mídias do acervo (título, autoria, duração, status) e `GET /api/v1/media/{id}/stream` deve entregar o áudio com Range (206, `Accept-Ranges: bytes`, `Content-Range`, `ETag`, `If-Range`, 416 fora do arquivo, `Content-Type: audio/mp4`), sem ler o arquivo inteiro. (BR-2)
 - FR-6: A tela "Mídia" deve mostrar a lista do acervo selecionado, o status de cada item, o player do item aberto e, para quem tem `media-upload`, o botão "Enviar áudio", como em `docs/design/screens.md` T14 e T15.
-- FR-6a: O player deve ser um componente próprio sobre um `<audio>` sem `controls`, com tocar/pausar, voltar 15 s, avançar 30 s e barra de progresso (`role="slider"`, setas 5 s, PageUp/PageDown 60 s, Home/End), sem passar de 0 nem do fim, e com os estados "carregando", "esperando dados" (após 300 ms seguidos, nunca durante um pulo pedido), "erro com Tentar de novo no mesmo segundo" e "terminou". O estado vem dos eventos do elemento (`playing`, `pause`, `waiting`, `ended`, `error`), nunca da chamada `play()`, cuja promessa recusada é tratada; uma carga antiga que termina depois de uma nova é descartada; limpar a fonte é `removeAttribute('src')` + `load()`. Um clique na trilha pula sem arrastar; o `aria-valuetext` fala o tempo e diz a duração só ao focar.
+- FR-6a: O player deve ser um componente próprio sobre um elemento de mídia sem `controls`, em camadas que não sabem se a mídia é áudio ou vídeo (ADR 0025: um `MediaEngine` único no app, recursos por cima, visões por cima dos recursos), com tocar/pausar, voltar 15 s, avançar 30 s e barra de progresso (`role="slider"`, setas 5 s, PageUp/PageDown 60 s, Home/End), sem passar de 0 nem do fim, e com os estados "carregando", "esperando dados" (após 300 ms seguidos, nunca durante um pulo pedido), "erro com Tentar de novo no mesmo segundo" e "terminou". O estado vem dos eventos do elemento (`playing`, `pause`, `waiting`, `ended`, `error`), nunca da chamada `play()`, cuja promessa recusada é tratada; uma carga antiga que termina depois de uma nova é descartada; limpar a fonte é `removeAttribute('src')` + `load()`. Um clique na trilha pula sem arrastar; o `aria-valuetext` fala o tempo e diz a duração só ao focar.
 - FR-7: Masters devem ver os trabalhos em "Falhou" com o motivo e poder "Tentar de novo".
 - FR-8: Quando um master confirma "Remover" numa mídia, o sistema deve apagar o registro, o arquivo convertido e os trabalhos pendentes dela; uma reprodução em andamento por outra pessoa passa a receber 404.
 
@@ -52,6 +52,7 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 - **AC-10** (FR-6a): Given uma mídia pronta de 10 s tocando, When a pessoa usa "Avançar 30 segundos", Then a posição vai para o fim, o estado é "terminou" e aparece "Ouvir de novo"; When usa "Voltar 15 segundos" em 0:05, Then vai para 0:00.
 - **AC-11** (FR-6a): Given o player com foco na barra de progresso, When a pessoa aperta → três vezes e End, Then a posição avança 15 s e depois vai ao fim, e o `aria-valuetext` diz o tempo em palavras.
 - **AC-12** (FR-6a): Given o áudio tocando, When a rede cai e volta, Then o player mostra "Não consegui carregar o áudio. Verifique a conexão." e "Tentar de novo" retoma do mesmo segundo (±1 s).
+- **AC-14** (FR-6a, ADR 0025): Given a suíte de contrato do `MediaEngine`, When roda contra um `<audio>` e contra um `<video>`, Then os dois passam igual (tocar, pausar, pular, espera, erro, fim, carga antiga descartada).
 - **AC-13** (FR-8): Given uma mídia pronta, When um master confirma "Remover", Then ela some da lista, o arquivo convertido não existe mais e o stream responde 404; When cancela, Then nada muda. Quem não é master não vê "Remover" e o `DELETE` responde 403.
 
 ## Test strategy
@@ -67,9 +68,10 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 | AC-10, AC-11 | unitário (máquina de estados do player com elemento de mídia falso) + componente + E2E | O E2E confere que o áudio toca de verdade (`currentTime` avança) |
 | AC-12 | unitário + E2E | Rede cortada pelo Playwright (`route.abort`) no meio da reprodução |
 | AC-13 | integração + E2E | Confere o arquivo no disco |
+| AC-14 | unitário (suíte de contrato) + E2E | Elemento de mídia falso no unitário; `<audio>` e `<video>` reais no E2E |
 
 ## References
-ADR: [0022](../adr/0022-media-library-store-queue-and-streaming.md) · Plano da fase 2 v3 (itens A1, A3) · Piloto: [`docs/research/2026-10-28-transcription-pilot.md`](../research/2026-10-28-transcription-pilot.md) · Telas: `docs/design/screens.md` T14 (Mídia) e T15 (Player) · Barra de qualidade da fase 2: `docs/backlog/README.md`
+ADR: [0022](../adr/0022-media-library-store-queue-and-streaming.md) · Plano da fase 2 v3 (itens A1, A3) · Piloto: [`docs/research/2026-10-28-transcription-pilot.md`](../research/2026-10-28-transcription-pilot.md) · Telas: `docs/design/screens.md` T14 (Mídia) e T15 (Player) · Player: [ADR 0025](../adr/0025-own-media-player-for-audio-and-video.md) · Barra de qualidade da fase 2: `docs/backlog/README.md`
 
 ## Open questions
 Nenhuma.
