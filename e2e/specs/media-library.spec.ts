@@ -158,6 +158,10 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
   await expect(
     page.getByRole('listitem').filter({ hasText: media.title }),
   ).toHaveCount(0);
+  // Focus goes to the list's heading, so a keyboard user is not lost (AC-13).
+  await expect(
+    page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
+  ).toBeFocused();
   expect((await owner.get(`/api/v1/media/${media.id}/stream`)).status()).toBe(
     404,
   );

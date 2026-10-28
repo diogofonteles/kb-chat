@@ -93,6 +93,8 @@ test('AC-11: the slider speaks the time and moves 5 s per arrow, End to the end'
     'aria-valuetext',
     /^15 segundos de 2 minutos$/,
   );
+  await slider.press('End');
+  await expect(slider).toHaveAttribute('aria-valuenow', '120');
   await slider.press('Home');
   await expect(slider).toHaveAttribute('aria-valuenow', '0');
 });
@@ -172,35 +174,40 @@ test('AC-12: when the network drops mid-playback, the player says so and resumes
   await page.getByRole('button', { name: 'Tentar de novo' }).click();
   await expect(page.getByRole('alert')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
+  // It goes back to the second where it stopped (±1 s), not to the start.
   await expect
-    .poll(async () => (await audioState(page)).currentTime)
-    .toBeGreaterThan(stoppedAt);
-  expect((await audioState(page)).currentTime).toBeLessThan(stoppedAt + 3);
+    .poll(async () => (await audioState(page)).currentTime, { intervals: [50] })
+    .toBeGreaterThanOrEqual(stoppedAt - 1);
+  expect((await audioState(page)).currentTime).toBeLessThan(stoppedAt + 1.5);
 });
 
-test('AC-14: the same stream plays, seeks and ends in a real <video> element too', async ({
+test('AC-14: the same engine drives a real <video> element', async ({
   page,
 }) => {
-  await openPlayer(page, short);
-  const result = await page.evaluate(async (src) => {
-    const video = document.createElement('video');
-    video.muted = true;
-    video.src = src;
-    document.body.append(video);
-    await video.play();
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const playedTo = video.currentTime;
-    video.currentTime = 5;
-    await new Promise((resolve) =>
-      video.addEventListener('ended', resolve, { once: true }),
-    );
-    const outcome = { playedTo, ended: video.ended, duration: video.duration };
-    video.remove();
-    return outcome;
-  }, `/api/v1/media/${short.id}/stream`);
-  expect(result.playedTo).toBeGreaterThan(0.2);
-  expect(result.ended).toBe(true);
-  expect(result.duration).toBeGreaterThan(5.5);
+  // Development builds only: ?mediaElement=video gives the engine a <video> (ADR 0025).
+  await page.goto(`/midia/${short.id}?mediaElement=video`);
+  await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();
+  expect((await audioState(page)).tag).toBe('VIDEO');
+  await play(page);
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(0.3);
+  await page.getByRole('button', { name: 'Pausar' }).click();
+  const slider = page.getByRole('slider', { name: 'Posição' });
+  await slider.focus();
+  await slider.press('ArrowRight');
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(4.9);
+  await page.getByRole('button', { name: 'Avançar 30 segundos' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Ouvir de novo' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Ouvir de novo' }).click();
+  await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeLessThan(3);
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {

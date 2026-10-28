@@ -83,11 +83,12 @@ export async function uploadReady(
   return { id, title: input.title };
 }
 
-/** What the page's media element is doing (the engine's hidden <audio>). */
+/** What the page's media element is doing (the engine's hidden <audio> or <video>). */
 export async function audioState(page: Page) {
-  return page.locator('audio[data-media-engine]').evaluate((element) => {
-    const audio = element as HTMLAudioElement;
+  return page.locator('[data-media-engine]').evaluate((element) => {
+    const audio = element as HTMLMediaElement;
     return {
+      tag: audio.tagName,
       currentTime: audio.currentTime,
       paused: audio.paused,
       ended: audio.ended,
