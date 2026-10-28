@@ -142,7 +142,11 @@ test('AC-4: revoking a guest sends their next call back to the login screen', as
   // The next call answers 401; the app's own next call sends it back to sign in (any
   // background call may get there first, so the page is reloaded to make it certain).
   expect((await guest.request.get('/api/v1/topics')).status()).toBe(401);
-  await guest.reload();
+  // When the app's own redirect wins the race, it aborts the reload: that redirect is the
+  // outcome under test, so only that abort is tolerated.
+  await guest.reload().catch((err: unknown) => {
+    if (!String(err).includes('net::ERR_ABORTED')) throw err;
+  });
 
   await expect(
     guest.getByRole('button', { name: 'Fazer login com o Google' }),
