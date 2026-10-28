@@ -13,8 +13,8 @@ depends_on: [KBC-010, KBC-012]
 Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para começar o acervo de mídia sem depender do terminal.
 
 ## Scope
-**In:** banco SQLite do módulo `media` com migrações; fila confiável (reserva com prazo, sinal de vida, recuperação, limite de tentativas, lista de falhas); contêiner `media-worker` com 1 CPU e 2 GB; envio simples (um arquivo por vez, até 500 MB); conversão para AAC 64k mono `.m4a` com faststart; lista "Mídia" por acervo; player nativo; entrega com Range; liga/desliga `KB_CHAT_MEDIA`; nova permissão `media-upload`; backup do banco.
-**Out:** transcrição (KBC-036), legendas e transcrição clicável (KBC-038), busca (KBC-039), envio retomável, cotas, vídeo e arquivo repetido (KBC-035).
+**In:** banco SQLite do módulo `media` com migrações; fila confiável (reserva com prazo, sinal de vida, recuperação, limite de tentativas, lista de falhas); contêiner `media-worker` com 1 CPU e 2 GB; envio simples (um arquivo por vez, até 500 MB); conversão para AAC 64k mono `.m4a` com faststart; lista "Mídia" por acervo (T14), com remoção por masters; o player próprio do app com os controles básicos (T15: tocar/pausar, voltar 15 s, avançar 30 s, barra de progresso com o trecho carregado, tempos, estados de carregamento e erro); entrega com Range; liga/desliga `KB_CHAT_MEDIA`; nova permissão `media-upload`; backup do banco.
+**Out:** velocidade, volume, atalhos de teclado, controles do sistema, retomar e mini-player (KBC-041); transcrição (KBC-036), legendas e transcrição clicável (KBC-038), busca (KBC-039), envio retomável, cotas, vídeo e arquivo repetido (KBC-035).
 
 ## Business rules
 - BR-1: só envia mídia quem tem a permissão `media-upload` (masters têm todas). Convites e perfis não a concedem por padrão.
@@ -29,8 +29,10 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 - FR-3: O `media-worker` deve reservar um trabalho por vez, mandar sinal de vida a cada 15 s, converter com ffmpeg (caminho absoluto, tempo limite), medir a duração com ffprobe e concluir; a mídia passa a "Pronta" e o arquivo enviado é apagado. (BR-4)
 - FR-4: Quando a reserva de um trabalho vence sem sinal de vida, a API deve devolvê-lo à fila; na 4ª vez, marcá-lo como "Falhou". (BR-5)
 - FR-5: `GET /api/v1/topics/{topic}/media` deve listar as mídias do acervo (título, autoria, duração, status) e `GET /api/v1/media/{id}/stream` deve entregar o áudio com Range (206), sem ler o arquivo inteiro. (BR-2)
-- FR-6: A tela "Mídia" deve mostrar a lista do acervo selecionado, o status de cada item, o player do item aberto e, para quem tem `media-upload`, o botão "Enviar áudio".
+- FR-6: A tela "Mídia" deve mostrar a lista do acervo selecionado, o status de cada item, o player do item aberto e, para quem tem `media-upload`, o botão "Enviar áudio", como em `docs/design/screens.md` T14 e T15.
+- FR-6a: O player deve ser um componente próprio sobre um `<audio>` sem `controls`, com tocar/pausar, voltar 15 s, avançar 30 s e barra de progresso (`role="slider"`, setas 5 s, PageUp/PageDown 60 s, Home/End), sem passar de 0 nem do fim, e com os estados "carregando", "esperando dados" (após 300 ms), "erro com Tentar de novo no mesmo segundo" e "terminou".
 - FR-7: Masters devem ver os trabalhos em "Falhou" com o motivo e poder "Tentar de novo".
+- FR-8: Quando um master confirma "Remover" numa mídia, o sistema deve apagar o registro, o arquivo convertido e os trabalhos pendentes dela; uma reprodução em andamento por outra pessoa passa a receber 404.
 
 ## Non-functional requirements
 - NFR-1: com uma conversão rodando, a busca do site segue respondendo HTTP 200 com p95 ≤ 1,5 s (medido como no piloto: 30 checagens durante a conversão de 1 h de áudio).
@@ -46,7 +48,11 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 - **AC-6** (BR-5): Given um arquivo .mp3 corrompido, When é enviado, Then a mídia fica "Falhou: o arquivo não é um áudio válido" sem novas tentativas.
 - **AC-7** (FR-1): Given `KB_CHAT_MEDIA=on` e `/data/media` somente leitura, When a API sobe, Then ela para com uma mensagem clara no log.
 - **AC-8** (limite): Given um arquivo de 501 MB ou um .pdf, When é enviado, Then a API recusa com `VALIDATION_FAILED` e a tela diz "Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus)."
-- **AC-9**: fluxo de envio e reprodução em 1440 px e 390 px, sem violações sérias do axe.
+- **AC-9**: fluxo de envio e reprodução em 1440 px e 390 px, nos três temas, sem violações sérias ou críticas do axe.
+- **AC-10** (FR-6a): Given uma mídia pronta de 10 s tocando, When a pessoa usa "Avançar 30 segundos", Then a posição vai para o fim, o estado é "terminou" e aparece "Ouvir de novo"; When usa "Voltar 15 segundos" em 0:05, Then vai para 0:00.
+- **AC-11** (FR-6a): Given o player com foco na barra de progresso, When a pessoa aperta → três vezes e End, Then a posição avança 15 s e depois vai ao fim, e o `aria-valuetext` diz o tempo em palavras.
+- **AC-12** (FR-6a): Given o áudio tocando, When a rede cai e volta, Then o player mostra "Não consegui carregar o áudio. Verifique a conexão." e "Tentar de novo" retoma do mesmo segundo (±1 s).
+- **AC-13** (FR-8): Given uma mídia pronta, When um master confirma "Remover", Then ela some da lista, o arquivo convertido não existe mais e o stream responde 404; When cancela, Then nada muda. Quem não é master não vê "Remover" e o `DELETE` responde 403.
 
 ## Test strategy
 | AC | Nível | Notas |
@@ -57,10 +63,13 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 | AC-5, AC-6 | unitário (fila) + integração | Relógio falso para o vencimento |
 | AC-7 | integração | Diretório sem permissão |
 | AC-8 | integração + componente | |
-| AC-9 | E2E | 1440 e 390 px, axe |
+| AC-9 | E2E | 1440 e 390 px, três temas, axe |
+| AC-10, AC-11 | unitário (máquina de estados do player com elemento de mídia falso) + componente + E2E | O E2E confere que o áudio toca de verdade (`currentTime` avança) |
+| AC-12 | unitário + E2E | Rede cortada pelo Playwright (`route.abort`) no meio da reprodução |
+| AC-13 | integração + E2E | Confere o arquivo no disco |
 
 ## References
-ADR: [0022](../adr/0022-media-library-store-queue-and-streaming.md) · Plano da fase 2 v3 (itens A1, A3) · Piloto: [`docs/research/2026-10-28-transcription-pilot.md`](../research/2026-10-28-transcription-pilot.md) · Tela: `docs/design/screens.md` (seção "Mídia", a escrever na spec)
+ADR: [0022](../adr/0022-media-library-store-queue-and-streaming.md) · Plano da fase 2 v3 (itens A1, A3) · Piloto: [`docs/research/2026-10-28-transcription-pilot.md`](../research/2026-10-28-transcription-pilot.md) · Telas: `docs/design/screens.md` T14 (Mídia) e T15 (Player) · Barra de qualidade da fase 2: `docs/backlog/README.md`
 
 ## Open questions
 Nenhuma.

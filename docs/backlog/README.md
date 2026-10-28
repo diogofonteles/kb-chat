@@ -52,15 +52,16 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 
 | Atividade → | Enviar | Converter e guardar | Transcrever | Ouvir e ler | Achar |
 |---|---|---|---|---|---|
-| **Esqueleto (KBC-034)** | Um áudio por vez, até 500 MB | Fila confiável, AAC no worker com CPU limitada | — (stub: sem texto) | Player nativo com Range | Lista "Mídia" do acervo |
-| **Fase A** | Retomável, vídeo, cota, repetidos (KBC-035) | — | Mac do dono (KBC-036), termos editáveis (KBC-040), Groq de reserva (KBC-037) | Legendas e transcrição clicável (KBC-038) | "Na fala" na busca, no minuto exato (KBC-039) |
+| **Esqueleto (KBC-034)** | Um áudio por vez, até 500 MB | Fila confiável, AAC no worker com CPU limitada | — (stub: sem texto) | Player próprio com os controles básicos e Range | Lista "Mídia" do acervo |
+| **Fase A** | Retomável, vídeo, cota, repetidos (KBC-035) | — | Mac do dono (KBC-036), termos editáveis (KBC-040), Groq de reserva (KBC-037) | Player completo: velocidade, teclado, tela de bloqueio, retomar, mini-player (KBC-041); legendas e transcrição clicável (KBC-038) | "Na fala" na busca, no minuto exato (KBC-039) |
 | **Fases B a E** | Importação em lote | Faixas e capítulos | Classificação | Compilados | Sinônimos, pesquisa com IA, coleções, compartilhamento, busca na web |
 
 | ID | Título | Fatia | Status | Depende de |
 |---|---|---|---|---|
 | [KBC-034](KBC-034-media-walking-skeleton-upload-and-play.md) | Mídia (esqueleto): enviar um áudio, converter numa fila confiável e ouvir no navegador | phase-2-a | ready | KBC-010, KBC-012 |
+| [KBC-041](KBC-041-full-player-controls-resume-and-mini-player.md) | Player completo: velocidade, volume, atalhos de teclado, controles do sistema, retomar de onde parou e mini-player | phase-2-a | ready | KBC-034 |
 | [KBC-036](KBC-036-transcription-on-the-mac-worker.md) | Transcrição no Mac do dono: transcritor pareado, VAD e termos, JSON bruto, filtro de repetições, baixa confiança | phase-2-a | ready | KBC-034 |
-| [KBC-038](KBC-038-player-subtitles-clickable-transcript.md) | Player com legendas e transcrição clicável | phase-2-a | ready | KBC-036 |
+| [KBC-038](KBC-038-player-subtitles-clickable-transcript.md) | Player com legendas e transcrição clicável | phase-2-a | ready | KBC-036, KBC-041 |
 | [KBC-039](KBC-039-media-in-search-exact-minute.md) | Mídia na busca, no minuto exato | phase-2-a | ready | KBC-036, KBC-038 |
 | [KBC-040](KBC-040-editable-term-list-and-retranscribe.md) | Lista de termos editável e "Transcrever de novo" | phase-2-a | ready | KBC-036 |
 | [KBC-035](KBC-035-resumable-upload-quotas-video-duplicates.md) | Envio retomável, vídeo 720p, cota por pessoa e arquivos repetidos | phase-2-a | ready | KBC-034 |
@@ -73,6 +74,19 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 - Telas validadas em 1440 px e 390 px contra `docs/design/screens.md`; WCAG 2.2 AA (axe sem violações sérias).
 - Textos de UI em pt-BR externalizados; nenhum termo interno do kb na tela.
 - A API nunca escreve no vault; nenhum segredo em log ou resposta.
+
+### Barra de qualidade da fase 2 (vale para KBC-034 a KBC-041, além da definição global)
+
+Pedido do dono (2026-10-28): código, infraestrutura e UI/UX de qualidade máxima; o player moderno, completo e sem bugs; testes criteriosos.
+
+- **Cobertura:** ≥ 90% de linhas e de ramos no código novo de mídia (módulo `media` da API, `features/media` do web, worker), com limite por pasta na configuração do Vitest, para não esconder buraco na média do projeto.
+- **Mutação:** Stryker nos núcleos de lógica pura (fila, leitura de Range, gerador de WebVTT, filtro de repetições, máquina de estados do player, mapa de atalhos), com nota ≥ 80%. Roda no item (não no CI) e o resultado entra no `qa.md`.
+- **Propriedades:** fast-check onde a entrada é um espaço grande: cabeçalho Range, limites dos cues do WebVTT, filtro de repetições, formatação de tempo.
+- **E2E de mídia de verdade:** áudios reais gerados por ffmpeg no setup do teste; as asserções conferem a reprodução (o `currentTime` anda, o pulo chega ao segundo certo), não só o DOM. Os specs de mídia rodam no **Google Chrome** (o Chromium do Playwright não decodifica AAC nem H.264) em 1440 px e 390 px e no **WebKit** (motor do Safari). Se o WebKit do Linux não tocar AAC no CI, ele roda no Mac antes da PR e o resultado entra no `qa.md`.
+- **Estabilidade:** nenhuma espera fixa (`waitForTimeout`), só por condição; os specs de mídia passam 3 vezes seguidas (`--repeat-each=3`) antes da PR; nenhum teste desligado ou asserção afrouxada.
+- **UI:** cada estado das telas T14 e T15 capturado nos três temas e nas duas larguras e conferido contra `docs/design/screens.md` na validação local; o review de toda PR com tela inclui o do `product-designer`; axe sem violações sérias ou críticas nos três temas.
+- **Infraestrutura:** contêiner novo com limite de CPU e memória, healthcheck, usuário sem root, sistema de arquivos só leitura onde der e logs sem segredo; migração e rollback testados no Mac (staging) antes da produção.
+- **Aparelhos reais (antes da produção):** o dono confere no iPhone (Safari) e num Android (Chrome) a tela de bloqueio, os botões do fone, a reprodução em segundo plano e o retomar. A mídia só liga em produção (`KB_CHAT_MEDIA=on`) depois do KBC-041.
 
 ## Decisões de escopo
 
@@ -95,4 +109,5 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 - 2026-10-27 (relato do dono em produção): o "Acervo padrão" do convite parecia quebrado com nenhum acervo marcado. Entra o KBC-033: dica sob o campo, pré-seleção do único acervo marcado e aviso quando o padrão é limpo.
 - 2026-10-27 (pedido do dono): fase 2, acervo de áudio e vídeo. Volume ainda desconhecido (planejado com 500 h e 2.000 h), maioria áudio de palestras, compartilhamento só entre usuários do app, custo conforme a proposta. Da Paneas, só conhecimento (sem código, servidores ou contas da empresa).
 - 2026-10-28 (piloto e decisões do dono, plano v3): transcrever no Mac do dono, com o Groq de reserva (ADR 0023); gravações ruidosas pesquisáveis com aviso de baixa confiança; teto mensal de gasto da mídia de US$ 10; originais não guardados por padrão (só os insubstituíveis, em arquivo frio, depois); ordem das fases piloto → A → B → C → D → E. Transcrições indexadas fora do vault (ADR 0024). Fase A = KBC-034 a KBC-040, na ordem da tabela acima.
+- 2026-10-28 (pedido do dono, "tudo de extrema qualidade; o player precisa ser muito bom, sem bug e com UI/UX moderna; testes criteriosos"): entram as telas T14 e T15 em `docs/design/screens.md`, a barra de qualidade da fase 2 acima e o KBC-041 (player completo), logo depois do KBC-034. O KBC-034 troca o player nativo pelo player próprio com os controles básicos e ganha "Remover" para masters; a velocidade sai do KBC-038 para o KBC-041. Fase A = KBC-034, KBC-041, KBC-036, KBC-038, KBC-039, KBC-040, KBC-035 e KBC-037.
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.

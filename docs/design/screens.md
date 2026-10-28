@@ -1,4 +1,4 @@
-# Telas e fluxos — Nova Alexandria (esqueleto + release 1)
+# Telas e fluxos — Nova Alexandria (esqueleto, release 1 e fase 2)
 
 Fonte: `docs/product/vision.md`, `docs/product/brief.md`, `docs/product/context.md` (## Design). Facetas reais do tópico `hermetismo` (`kb find --facets`, 2026-10-23).
 
@@ -324,6 +324,123 @@ Acessibilidade: o foco vai para o campo do código quando ele aparece; status em
 - Coluna de leitura de até 48rem, com os tamanhos de tipo da política (h1; h2 em `--text-lg`; texto e h3 em `--text-md`; legendas em `--text-sm`): marca discreta, h1 "Como usar a Nova Alexandria", introdução, sumário "Nesta página" (cartão; duas colunas a partir de 720 px) e as seções h2 com âncoras estáveis: `o-que-e`, `entrar`, `busca`, `pesquisa-com-ia`, `historico`, `sua-ia`, `preferencias`, `administradores` (rótulo "Só para administradores", texto em destaque, sem forma de botão), `perguntas-frequentes`. Abrir `/tutorial#<âncora>` rola até a seção e leva o foco ao título.
 - Cada seção: texto curto, passos numerados (círculos com o número) e figuras: captura real do app com destaques por letra (contorno laranja e letra A, B, C… num quadrado escuro no canto) que a legenda explica; as letras não se confundem com os passos numerados do texto (círculos); legenda + "Ver a imagem ampliada" (nova aba). Capturas altas (celular, lateral) ficam com até 20rem, centralizadas. Tabela dos três tipos de pesquisa (rola na horizontal no celular). "Voltar ao sumário" ao fim das seções; no pé, "Voltar à Nova Alexandria" e "Privacidade".
 - Imagens: WebP com hash no nome, `width`/`height` declarados, só a primeira do computador e a primeira do celular sem carregamento preguiçoso; total < 3 MB.
+
+## T14. Mídia: lista do acervo e envio (KBC-034, KBC-035)
+
+**Objetivo:** achar e abrir um áudio do acervo; para quem envia, mandar um áudio e acompanhar até ficar pronto. **Sucesso:** abrir um áudio em 1 clique a partir da lista; enviar um áudio em até 4 passos (escolher arquivo, conferir título, escolher autoria, enviar), sem voltar para corrigir.
+
+### Onde fica
+- Item **Mídia** na lateral, logo abaixo de **Acervo ▾** (UP-05: mesma posição em todas as telas), com a contagem de mídias prontas do acervo. Rotas: `/midia` (lista do acervo selecionado) e `/midia/{id}` (player, T15). Trocar de acervo na lateral troca a lista.
+- No celular, **Mídia** fica no menu ☰, e a lista ocupa a tela cheia com "← Voltar" (UP-04).
+
+### Lista (SL-14, SL-17, DS-07)
+- Cabeçalho: "Mídia — Hermetismo", a contagem ("42 áudios · 31 h") e, para quem tem `media-upload`, o botão primário **Enviar áudio** (SL-18). Com mais de 10 itens, um campo **Filtrar por título** (rótulo visível, SL-04) filtra na hora.
+- Cada linha: título (até 2 linhas, depois reticências com o título inteiro no `title` e no nome acessível), selo de autoria (o mesmo do T2), duração (`1:02:15`, algarismos tabulares), data do envio e o **status em texto** (UP-20): "Na fila", "Convertendo… 40%", "Transcrevendo…", "Pronta", "Falhou: <motivo>". Uma mídia com baixa confiança leva o selo "Baixa confiança" (KBC-038). Uma mídia com posição salva mostra a barra fina de progresso e "Continuar de 23:10" (KBC-041).
+- Ordem: mais recentes primeiro. A linha inteira é o alvo de clique (≥ 48 px de altura, MA-01), mas só abre o player quando a mídia está pronta. Nas outras, o clique não faz nada e o status explica por quê.
+- Enquanto há itens em "Na fila", "Convertendo" ou "Transcrevendo", a lista se atualiza a cada 5 s (como no T5), sem pular a rolagem nem roubar o foco. A mudança para "Pronta" é anunciada uma vez numa região `aria-live="polite"` ("Palestra de 1998 está pronta.").
+
+### Envio (MA-15 a MA-20, MA-23 a MA-26)
+1. **Enviar áudio** abre um painel lateral (diálogo no celular, tela cheia) com saída "Cancelar" (UP-04). No desktop, a área aceita arrastar e soltar; o botão "Escolher arquivo" é sempre a alternativa (UP-09).
+2. A regra aparece **antes** da escolha (MA-20): "mp3, m4a, wav, flac, ogg ou opus, até 500 MB". O arquivo errado é recusado na hora, ao lado do campo, com a correção (MA-25): "Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus." / "Este arquivo tem 612 MB. O limite é 500 MB."
+3. Campos, em uma coluna e com rótulo acima (MA-16, MA-17): **Título** (preenchido com o nome do arquivo sem extensão, editável), **Acervo** (o selecionado, trocável) e **Autoria**, com dois rádios sem pré-seleção (MA-19, SL-28): "Mestre Laércio" / "Outros autores". A autoria é obrigatória, porque uma escolha errada mistura as obras (ADR 0015).
+4. **Enviar** mostra o progresso real ("Enviando… 128 de 312 MB · 41%") com **Cancelar envio**. Sair da página durante o envio pede confirmação do navegador. Ao terminar, o painel fecha, a mídia aparece no topo da lista em "Na fila" e o foco vai para ela (UP-01).
+5. Se a conexão falhar, aparece "O envio parou: verifique a conexão e tente de novo." com **Tentar de novo**, mantendo os campos (MA-26). No KBC-035, o envio passa a continuar de onde parou.
+
+### Falhas e remoção (só masters)
+- "Falhou: o arquivo não é um áudio válido" não oferece nova tentativa. Uma falha temporária ("Falhou: a conversão parou 3 vezes") oferece **Tentar de novo** na própria linha (UP-13).
+- **Remover** fica no menu "⋯" da linha. Como apaga o áudio convertido e a transcrição sem volta, pede confirmação em diálogo (UP-07), que nomeia o item: "Remover 'Palestra de 1998'? O áudio e a transcrição serão apagados e não podem ser recuperados." Os botões são "Remover" (perigo) e "Cancelar".
+
+### Estados
+| Estado | Mostra | Ação |
+|---|---|---|
+| Carregando | Esqueleto de 5 linhas com a altura real | — |
+| Vazio, quem envia | "Ainda não há áudios neste acervo." + **Enviar áudio** | Enviar |
+| Vazio, quem não envia | "Ainda não há áudios neste acervo." | — |
+| Filtro sem resultado | "Nenhum áudio com 'xyz' no título." + **Limpar filtro** (SL-14) | Limpar |
+| Erro ao carregar | "Não consegui carregar a mídia deste acervo." + **Tentar de novo** | Tentar |
+| Sem acesso ao acervo / `KB_CHAT_MEDIA=off` | O item **Mídia** não aparece; a rota direta mostra a tela de não encontrado | — |
+| Conteúdo extremo | 500 itens: a lista é virtualizada; títulos de 200 caracteres quebram em 2 linhas | — |
+
+## T15. Player (KBC-034, KBC-041, KBC-038, KBC-039)
+
+**Objetivo:** ouvir uma palestra longa, lendo junto quando quiser, e voltar a um trecho sem procurar o minuto. **Contexto:** sentado, estudando no computador (fones, às vezes com anotações); no celular, ouvindo com a tela bloqueada ou trocando de app. **Sucesso:** voltar 15 s, mudar a velocidade e pular para uma frase sem errar o controle; retomar no dia seguinte, em outro aparelho, do ponto onde parou; nenhum controle depende só do mouse ou de gesto.
+
+Referência de convenções (UP-05): os controles de áudio longo dos apps de podcast e de vídeo mais usados: voltar 15 s e avançar 30 s, velocidade num menu, barra com tempo decorrido e restante e atalhos de teclado no padrão do YouTube.
+
+### Layout
+```
+Desktop (≥ 1024 px)                                           Celular (< 1024 px)
+┌──────────┬───────────────────────────────────┬──────────┐    ┌──────────────────────┐
+│ Lateral  │ ← Mídia   Palestra de 1998        │Transcrição│   │ ← Mídia              │
+│          │ ✦ Mestre Laércio · 1:02:15         │ (KBC-038) │   │ Palestra de 1998     │
+│          │ ┌───────────────────────────────┐ │ trecho    │   │ ✦ Mestre Laércio     │
+│          │ │ [legenda, quando ligada]      │ │ ativo     │   │ ━━━━━━●──────────    │
+│          │ │ ━━━━━━━━━━●──────────────────  │ │ destacado │   │ 23:10      -39:05    │
+│          │ │ 23:10                  -39:05 │ │ ...       │   │  ⟲15   ▶   30⟳       │
+│          │ │ ⟲15  ▶  30⟳   1,5×  CC  🔊 ⋯   │ │           │   │ 1,5×   CC   ⋯        │
+│          │ └───────────────────────────────┘ │           │   │ [legenda]            │
+│          │ Copiar link deste minuto          │           │   │ Transcrição (abaixo) │
+└──────────┴───────────────────────────────────┴──────────┘    └──────────────────────┘
+```
+- O player é um componente próprio sobre um único `<audio>` sem o atributo `controls`: os controles nativos variam entre navegadores e não seguem os temas (DS-12).
+- **Mini-player persistente (KBC-041):** ao sair de `/midia/{id}` com o áudio tocando, ele continua. Uma barra de 64 px aparece no pé da área principal (no celular, acima da caixa de pergunta) com o título (link de volta ao player), ⟲15, ▶/❚❚, a barra de progresso fina e ✕ ("Fechar o player", que pausa e salva a posição). Assim dá para ouvir enquanto busca.
+
+### Controles (UP-13, MA-06, SL-20)
+| Controle | Comportamento | Nome acessível |
+|---|---|---|
+| ▶ / ❚❚ (o maior, 56 px) | Tocar/pausar. Durante o carregamento, depois de 300 ms sem som (UP-14), vira um indicador de carregamento que continua clicável para pausar | "Tocar" / "Pausar" (muda com o estado) |
+| ⟲15 / 30⟳ | Volta 15 s / avança 30 s, sem passar de 0 ou do fim | "Voltar 15 segundos" / "Avançar 30 segundos" |
+| Barra de progresso | `role="slider"`. Clique ou arraste para pular; mostra o trecho já carregado em tom mais fraco; no desktop, passar o mouse mostra o tempo do ponto numa etiqueta (só um complemento, UP-09). Teclado: ←/→ 5 s, PageUp/PageDown 60 s, Home/End início/fim | "Posição", `aria-valuetext` "23 minutos e 10 segundos de 1 hora, 2 minutos e 15 segundos" |
+| Tempos | À esquerda o decorrido; à direita o restante (`-39:05`); tocar no restante alterna para a duração total, e a escolha é lembrada | — |
+| Velocidade | Botão com o valor ("1,5×") que abre um menu com 0,75× · 1× · 1,25× · 1,5× · 1,75× · 2×, o atual marcado com ✓ e em texto. Vale para todas as mídias e é guardada na conta (BR do KBC-041) | "Velocidade: 1,5 vezes" |
+| CC (KBC-038) | Liga/desliga a legenda, `aria-pressed`; a escolha é lembrada | "Legendas" |
+| Volume (só com ponteiro fino) | Botão de mudo + controle deslizante horizontal; escondido em telas de toque, onde o volume é o do aparelho (iOS ignora o volume da página) | "Silenciar" / "Volume, 80%" |
+| ⋯ | "Copiar link deste minuto" (KBC-038) e "Atalhos de teclado" | "Mais opções" |
+
+Os tempos usam `m:ss` abaixo de 1 h e `h:mm:ss` a partir de 1 h, em algarismos tabulares, para não tremer ao contar.
+
+### Atalhos de teclado (UP-09: todos também têm botão)
+Ativos quando o foco está no player, na transcrição ou em lugar nenhum, e **nunca** com o foco num campo de texto: Espaço ou K tocar/pausar · J voltar 15 s · L avançar 30 s · ←/→ 5 s · Shift+, e Shift+. diminuir/aumentar a velocidade · M silenciar · C legendas · 0–9 ir para 0%–90% · ? lista dos atalhos (diálogo com "Fechar" e Esc). A barra de progresso, quando focada, usa as próprias setas e não dispara o atalho duas vezes.
+
+### Sistema operacional (Media Session API)
+Título, autoria ("Mestre Laércio — Nova Alexandria") e o ícone do app na tela de bloqueio e na central de controle; tocar, pausar, voltar 15 s, avançar 30 s e arrastar a posição funcionam por lá e pelos botões de fone. A posição e a velocidade são informadas ao sistema (`setPositionState`), para a barra da tela de bloqueio ficar certa.
+
+### Retomar (KBC-041)
+- A posição é salva na conta a cada 10 s tocando, ao pausar, ao trocar de mídia e ao fechar a página (envio que sobrevive ao fechamento). Abrir a mídia de novo mostra "Continuar de 23:10" (botão primário) e "Começar do início". Nunca toca sozinho ao abrir (sem autoplay).
+- Ao chegar a 95% ou ao fim, a posição é zerada e a mídia conta como ouvida. O fim mostra **Ouvir de novo**.
+- Um link com `?t=` (KBC-038) ou um resultado da busca (KBC-039) vence a posição salva, porque a pessoa pediu aquele minuto.
+
+### Estados
+| Estado | Mostra | Ação |
+|---|---|---|
+| Carregando a mídia | Título e autoria (já conhecidos) + controles desativados com explicação no nome acessível | — |
+| Pronto, nunca ouvida | Controles ativos, posição 0:00 | Tocar |
+| Com posição salva | "Continuar de 23:10" / "Começar do início" | Escolher |
+| Tocando / pausado | ❚❚ / ▶; o título da aba ganha "▶ " enquanto toca | — |
+| Esperando dados | Indicador no botão principal após 300 ms; o tempo não anda | Pausar |
+| Erro de rede ou do arquivo | "Não consegui carregar o áudio. Verifique a conexão." + **Tentar de novo**, que retoma do mesmo segundo (MA-26) | Tentar |
+| Sessão expirada | Pausa e mostra "Sua sessão expirou. Entre de novo para continuar ouvindo." com **Entrar**; a posição já está salva | Entrar |
+| Mídia removida / sem acesso | Tela de não encontrado ("Esta mídia não está mais no acervo ou você não tem acesso a ela.") | Voltar à Mídia |
+| Ainda não pronta | O status da lista (T14) no lugar do player | — |
+| Terminou | **Ouvir de novo** | Ouvir |
+| Conteúdo extremo | 4 h de áudio: a barra continua precisa (1 px ≈ 9 s numa barra de 1.600 px; o teclado dá precisão de 5 s); título de 200 caracteres quebra em 2 linhas | — |
+
+### Transcrição ao lado (KBC-038)
+- Coluna de leitura (Source Serif 4, 65–75 caracteres) ao lado do player no desktop; no celular, abaixo dele, com o player fixo no topo ao rolar. Cada segmento é um botão com o tempo à esquerda ("12:34", algarismos tabulares) e o texto.
+- O segmento ativo tem fundo de destaque **e** uma barra lateral (UP-20). Ele fica visível sozinho, sem rolagem brusca (respeita `prefers-reduced-motion`: sem animação). A rolagem manual pausa o acompanhamento por 5 s, e aparece **Voltar ao trecho atual** enquanto ele estiver fora da vista.
+- Baixa confiança: "Transcrição automática de baixa confiança: pode haver trechos errados." acima do texto, em tom de aviso (não vermelho, UP-19), sempre visível.
+- Legenda sobre a área do player (fundo escuro translúcido, texto claro, contraste ≥ 4,5:1 em todos os temas), no máximo 2 linhas.
+
+### Acessibilidade e toque (MA-01 a MA-07, MA-29, WCAG 2.2 AA)
+- Alvos ≥ 44 × 44 px (≥ 48 px no celular); o botão principal tem 56 px e fica no centro, ao alcance do polegar (MA-06, MA-07).
+- Foco visível com contraste ≥ 3:1 em todos os controles e segmentos; a ordem de Tab segue a ordem visual (player, depois transcrição).
+- Nenhum anúncio a cada segundo: a região `aria-live` só fala em erros, em "pronta" e quando a pessoa pede. O slider fala o tempo em palavras.
+- Nenhum controle só por gesto ou por passar o mouse (UP-09, SL-22); arrastar a barra tem a alternativa do teclado e dos botões ±.
+- O estado é sempre também texto ou forma, nunca só cor (UP-20); as cores vêm dos tokens dos três temas.
+
+### Fora do escopo e perguntas em aberto
+- **Fora:** baixar o áudio; listas de reprodução e fila de próximos; faixas e capítulos (fase B); compilados (fase C); vídeo (KBC-035 usa o mesmo player com a área de vídeo); editar a transcrição.
+- **Precisa de teste com usuários** (UP-25): os rótulos ⟲15/30⟳ e o "Continuar de" são entendidos? O mini-player atrapalha a leitura dos resultados no celular? Entra no teste da fase 2 com 1 a 2 colegas (`docs/product/context.md`, ## Research).
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
