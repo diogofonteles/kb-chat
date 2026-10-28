@@ -43,7 +43,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @kb-chat/e2e exec playwright install --with-deps chromium
+      # Media specs (KBC-034) play real AAC: Google Chrome (Playwright's Chromium has no
+      # AAC/H.264) and WebKit (Safari), plus ffmpeg for the E2E server's media worker.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: pnpm --filter @kb-chat/e2e exec playwright install --with-deps chromium chrome webkit
       - run: pnpm e2e
       - if: failure()
         uses: actions/upload-artifact@v4
