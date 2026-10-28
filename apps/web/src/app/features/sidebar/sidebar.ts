@@ -1,3 +1,4 @@
+import { RouterLink, RouterLinkActive } from '@angular/router';
 import { DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -27,7 +28,7 @@ import { SettingsStore } from '@features/settings/settings-store.js';
 import { GoogleIdentity } from '@core/auth/google-identity.js';
 import { SessionStore } from '@core/auth/session-store.js';
 
-export type SidebarAction = 'new' | 'restore' | 'topic';
+export type SidebarAction = 'new' | 'restore' | 'topic' | 'media';
 
 const THEME_LABELS: Record<Theme, () => string> = {
   auto: () => $localize`:@@theme.auto:Automático (claro/escuro)`,
@@ -55,7 +56,7 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
  */
 @Component({
   selector: 'app-sidebar',
-  imports: [DecimalPipe, SettingsButton],
+  imports: [DecimalPipe, SettingsButton, RouterLink, RouterLinkActive],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -101,6 +102,10 @@ export class Sidebar {
   readonly acted = output<SidebarAction>();
 
   protected readonly theme = this.themes.theme;
+  /** "Mídia" (T14): when the server has the media library on and a collection is chosen. */
+  protected readonly mediaOn = computed(
+    () => this.session.me()?.media === true && this.chat.topicSlug() !== null,
+  );
   /** The signed-in person's initial, when Google gave no picture. */
   protected readonly initial = computed(() => {
     const me = this.session.me();
@@ -177,6 +182,10 @@ export class Sidebar {
       this.chat.restore(conversation);
     } else this.restorer.restore(conversation);
     this.acted.emit('restore');
+  }
+
+  protected openMedia(): void {
+    this.acted.emit('media');
   }
 
   protected changeTopic(slug: string): void {

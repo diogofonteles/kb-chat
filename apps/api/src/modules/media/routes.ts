@@ -88,8 +88,9 @@ const OPTIONS = {
     config: { access: MASTER },
     schema: { params: mediaParams, response: itemResponse },
   },
+  // Masters, or the uploader cancelling their own upload: decided by the service.
   remove: {
-    config: { access: MASTER },
+    config: { access: SIGNED_IN },
     schema: { params: mediaParams, response: { 204: z.undefined() } },
   },
 } as const;

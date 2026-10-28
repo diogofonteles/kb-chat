@@ -135,6 +135,9 @@ importers:
       '@kb-chat/contracts':
         specifier: workspace:*
         version: link:../../libs/contracts
+      '@kb-chat/player-core':
+        specifier: workspace:*
+        version: link:../../libs/player-core
       marked:
         specifier: 18.1.1
         version: 18.1.1

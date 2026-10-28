@@ -1,0 +1,96 @@
+import { DatePipe } from '@angular/common';
+import { httpResource } from '@angular/common/http';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+} from '@angular/core';
+import {
+  takeUntilDestroyed,
+  toObservable,
+  toSignal,
+} from '@angular/core/rxjs-interop';
+import { Title } from '@angular/platform-browser';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { mediaItemSchema, type MediaItem } from '@kb-chat/contracts';
+import { formatClock } from '@kb-chat/player-core';
+import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { MediaEngine } from '@core/media/media-engine.js';
+import { mediaStreamUrl, mediaUrl } from '@core/media/media-api.js';
+import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { distinctUntilChanged, filter, map } from 'rxjs';
+import { statusTextOf } from './media-labels.js';
+import { MediaPlayer } from './player/media-player.js';
+
+/**
+ * One media item (screens.md T15): its title, authorship and length, and the player once
+ * it is ready. Opening it never plays (KBC-041 BR-3); leaving it stops the audio until the
+ * mini-player of KBC-041 keeps it going.
+ */
+@Component({
+  selector: 'app-media-player-page',
+  imports: [RouterLink, DatePipe, AuthorshipBadge, MediaPlayer],
+  templateUrl: './media-player-page.html',
+  styleUrl: './media-player-page.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MediaPlayerPage {
+  private readonly engine = inject(MediaEngine);
+  private readonly title = inject(Title);
+  private readonly id = toSignal(
+    inject(ActivatedRoute).paramMap.pipe(
+      map((params) => params.get('id') ?? ''),
+    ),
+    { initialValue: '' },
+  );
+
+  protected readonly item = httpResource(
+    () => (this.id() ? mediaUrl(this.id()) : undefined),
+    { parse: (body) => mediaItemSchema.parse(body) },
+  );
+  protected readonly media = computed<MediaItem | null>(() =>
+    this.item.hasValue() ? this.item.value() : null,
+  );
+  protected readonly ready = computed(() => this.media()?.status === 'ready');
+  protected readonly status = computed(() => {
+    const media = this.media();
+    return media ? statusTextOf(media) : '';
+  });
+  protected readonly duration = computed(() => {
+    const ms = this.media()?.durationMs;
+    return ms === null || ms === undefined ? '' : formatClock(ms);
+  });
+  protected readonly loadError = computed(() => {
+    const err = this.item.error();
+    return err ? errorMessage(toUiErrorCode(err)) : '';
+  });
+
+  constructor() {
+    toObservable(this.media)
+      .pipe(
+        filter((media): media is MediaItem => media?.status === 'ready'),
+        distinctUntilChanged((a, b) => a.id === b.id),
+        takeUntilDestroyed(),
+      )
+      .subscribe((media) => this.open(media));
+    inject(DestroyRef).onDestroy(() => this.engine.unload());
+  }
+
+  protected reload(): void {
+    this.item.reload();
+  }
+
+  private open(media: MediaItem): void {
+    this.title.setTitle(
+      $localize`:@@route.mediaItemTitle:${media.title}:title: — Nova Alexandria`,
+    );
+    if (this.engine.source()?.id === media.id) return;
+    this.engine.load({
+      id: media.id,
+      title: media.title,
+      src: mediaStreamUrl(media.id),
+    });
+  }
+}

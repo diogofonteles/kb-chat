@@ -617,6 +617,42 @@ describe('Media library: removal (AC-13, FR-8)', () => {
   });
 });
 
+describe('Media library: cancelling an upload', () => {
+  it('lets the uploader remove their own item while it is uploading, and only then', async () => {
+    const media = await startMedia();
+    const uploader = await member(media, {
+      email: 'ana@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media-upload'],
+    });
+    const other = await member(media, {
+      email: 'bia@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'media-upload'],
+    });
+    const created = (
+      await uploader.call('POST', '/api/v1/topics/hermetismo/media', aRequest())
+    ).json();
+    expect(
+      (await other.call('DELETE', `/api/v1/media/${created.id}`)).statusCode,
+    ).toBe(403);
+    expect(
+      (await uploader.call('DELETE', `/api/v1/media/${created.id}`)).statusCode,
+    ).toBe(204);
+    const sent = (
+      await uploader.call('POST', '/api/v1/topics/hermetismo/media', aRequest())
+    ).json();
+    await upload(media, {
+      id: sent.id,
+      body: AUDIO,
+      headers: uploader.headers,
+    });
+    expect(
+      (await uploader.call('DELETE', `/api/v1/media/${sent.id}`)).statusCode,
+    ).toBe(403);
+  });
+});
+
 describe('Media library: off (FR-1)', () => {
   it('registers no media route and says media is off', async () => {
     const started = await start();

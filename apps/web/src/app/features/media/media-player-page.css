@@ -1,0 +1,112 @@
+:host {
+  display: block;
+}
+
+.page {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  color: var(--color-accent-strong);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.back:hover {
+  text-decoration: underline;
+}
+
+.head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: 1.25;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.not-ready,
+.notice {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-6);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.status {
+  font-weight: 600;
+}
+
+/* The player's box is reserved from the first paint: nothing jumps when it arrives. */
+.skeleton {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.bar,
+.player-box {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.bar {
+  height: 1rem;
+  width: 40%;
+}
+
+.title-bar {
+  height: 1.5rem;
+  width: 70%;
+}
+
+.player-box {
+  height: 9.5rem;
+  border-radius: var(--radius-lg);
+}

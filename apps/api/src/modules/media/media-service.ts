@@ -145,9 +145,16 @@ export class MediaService {
     return this.deps.files.read(path, range);
   }
 
-  /** Masters only (route access): the record, its jobs and every file go (FR-8). */
+  /**
+   * The record, its jobs and every file go (FR-8). Masters remove any item; the uploader
+   * may remove their own while it is still uploading (a cancelled upload).
+   */
   async remove(actor: MediaActor, mediaId: string): Promise<void> {
-    this.visible(actor, mediaId);
+    const media = this.visible(actor, mediaId);
+    const cancelling =
+      media.status === 'uploading' && media.ownerPrincipal === actor.principal;
+    if (!actor.isMaster && !cancelling)
+      throw new AppError('FORBIDDEN', 'Only a master may remove media');
     const rendition = this.deps.store.getRendition(mediaId);
     this.deps.store.deleteMedia(mediaId);
     const { files } = this.deps;

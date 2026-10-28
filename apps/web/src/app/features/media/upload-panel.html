@@ -1,0 +1,153 @@
+<!-- Escape closes the modal dialog (cancel); the backdrop is not a way out while sending. -->
+<dialog
+  #dialog
+  class="panel"
+  aria-labelledby="upload-title"
+  (close)="dialogClosed()"
+>
+  <form class="body" [formGroup]="form" (ngSubmit)="send()" novalidate>
+    <header class="head">
+      <h2 id="upload-title" i18n="@@media.upload.title">Enviar áudio</h2>
+      <p class="where">{{ topicTitle() }}</p>
+    </header>
+
+    <section
+      class="drop"
+      [class.dragging]="dragging()"
+      [class.invalid]="!!fileProblem()"
+      aria-labelledby="file-label"
+      (dragover)="dragOver($event)"
+      (dragleave)="dragging.set(false)"
+      (drop)="dropped($event)"
+    >
+      <p id="file-label" class="label" i18n="@@media.upload.file">Arquivo</p>
+      <p class="rule" id="file-rule">{{ rule }}</p>
+      @if (file(); as chosen) {
+        <p class="chosen">{{ chosen.name }}</p>
+      } @else {
+        <p class="hint" i18n="@@media.upload.dropHint">
+          Arraste o arquivo para cá ou
+        </p>
+      }
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="stage() === 'sending'"
+        (click)="chooseFile()"
+      >
+        @if (file()) {
+          <ng-container i18n="@@media.upload.chooseOther"
+            >Escolher outro arquivo</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@media.upload.choose"
+            >Escolher arquivo</ng-container
+          >
+        }
+      </button>
+      <input
+        #fileInput
+        class="visually-hidden"
+        type="file"
+        accept=".mp3,.m4a,.wav,.flac,.ogg,.opus,audio/*"
+        tabindex="-1"
+        aria-hidden="true"
+        (change)="fileChosen($event)"
+      />
+      @if (fileProblem(); as problem) {
+        <p class="error" role="alert">
+          <span aria-hidden="true">⚠</span> {{ problem }}
+        </p>
+      }
+    </section>
+
+    <label class="field">
+      <span class="label" i18n="@@media.upload.titleLabel">Título</span>
+      <input
+        type="text"
+        formControlName="title"
+        maxlength="200"
+        autocomplete="off"
+        [attr.aria-invalid]="submitted() && form.controls.title.invalid"
+        aria-describedby="title-error"
+      />
+      @if (submitted() && form.controls.title.invalid) {
+        <span id="title-error" class="error" i18n="@@media.upload.titleMissing"
+          ><span aria-hidden="true">⚠</span> Dê um título ao áudio.</span
+        >
+      }
+    </label>
+
+    <fieldset class="field">
+      <legend class="label" i18n="@@media.upload.authorship">Autoria</legend>
+      <div class="radios">
+        @for (option of authorships; track option.value) {
+          <label class="radio">
+            <input
+              type="radio"
+              formControlName="authorship"
+              [value]="option.value"
+            />
+            {{ option.label }}
+          </label>
+        }
+      </div>
+      @if (submitted() && form.controls.authorship.invalid) {
+        <span class="error" i18n="@@media.upload.authorshipMissing"
+          ><span aria-hidden="true">⚠</span> Escolha a autoria: ela separa a
+          obra do Mestre Laércio dos outros autores.</span
+        >
+      }
+    </fieldset>
+
+    @if (stage() === 'sending') {
+      <div class="progress" role="status">
+        <progress
+          max="100"
+          [value]="percent()"
+          aria-label="Progresso do envio"
+          i18n-aria-label="@@media.upload.progressLabel"
+        ></progress>
+        <p i18n="@@media.upload.sending">
+          Enviando… {{ sentText() }} · {{ percent() }}%
+        </p>
+      </div>
+    }
+    @if (failure()) {
+      <p class="error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ failure() }}
+      </p>
+    }
+
+    <footer class="actions">
+      @if (stage() === 'sending') {
+        <button
+          type="button"
+          class="secondary"
+          (click)="cancelUpload()"
+          i18n="@@media.upload.cancelSending"
+        >
+          Cancelar envio
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="secondary"
+          (click)="close()"
+          i18n="@@media.upload.cancel"
+        >
+          Cancelar
+        </button>
+        <button type="submit" class="primary">
+          @if (stage() === 'stopped') {
+            <ng-container i18n="@@media.upload.retry"
+              >Tentar de novo</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@media.upload.send">Enviar</ng-container>
+          }
+        </button>
+      }
+    </footer>
+  </form>
+</dialog>
