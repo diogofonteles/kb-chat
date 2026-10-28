@@ -81,6 +81,12 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@stryker-mutator/core':
+        specifier: 10.0.0
+        version: 10.0.0(@types/node@22.18.6)
+      '@stryker-mutator/vitest-runner':
+        specifier: 10.0.0
+        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@22.18.6))(vitest@4.1.10)
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6

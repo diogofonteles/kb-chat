@@ -23,8 +23,22 @@ export default defineConfig({
         'src/plugins/**/*.ts',
         'src/providers/**/*.ts',
         'src/mcp/**/*.ts',
+        'src/media-worker/**/*.ts',
+        'src/media-factory.ts',
       ],
-      thresholds: { lines: 80, functions: 80, branches: 80 },
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        // The phase-2 quality bar (docs/backlog/README.md): 90% on the media code.
+        'src/modules/media/**/*.ts': { lines: 90, functions: 90, branches: 90 },
+        'src/adapters/{media,sqlite}/**/*.ts': {
+          lines: 90,
+          functions: 90,
+          branches: 90,
+        },
+        'src/media-worker/**/*.ts': { lines: 90, functions: 90, branches: 90 },
+      },
     },
   },
 });

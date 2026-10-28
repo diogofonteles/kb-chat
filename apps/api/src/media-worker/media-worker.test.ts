@@ -1,0 +1,144 @@
+import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { WorkerJob } from '@kb-chat/contracts';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ffmpegBins, makeTone } from '../../test/media-tools.js';
+import { createLogger } from '../logger.js';
+import type { MediaJobsApi } from './api-client.js';
+import { MediaWorker } from './media-worker.js';
+
+const bins = ffmpegBins();
+let dir: string;
+let lines: string[];
+
+const aJob = (overrides: Partial<WorkerJob> = {}): WorkerJob => ({
+  id: '11111111-1111-4111-8111-111111111111',
+  leaseId: '22222222-2222-4222-8222-222222222222',
+  kind: 'transcode',
+  mediaId: '33333333-3333-4333-8333-333333333333',
+  attempt: 1,
+  sourcePath: 'tone.mp3',
+  targetPath: 'out.m4a',
+  leaseMs: 60_000,
+  ...overrides,
+});
+
+/** A fake API that records what the worker told it. */
+function fakeApi(overrides: Partial<MediaJobsApi> = {}) {
+  const told: string[] = [];
+  const api: MediaJobsApi = {
+    lease: async () => null,
+    heartbeat: async () => {
+      told.push('heartbeat');
+      return true;
+    },
+    complete: async () => {
+      told.push('complete');
+      return true;
+    },
+    fail: async (_job, failure) => {
+      told.push(`fail:${failure.failure}`);
+      return true;
+    },
+    ...overrides,
+  };
+  return { api, told };
+}
+
+const workerWith = (
+  api: MediaJobsApi,
+  extra: { aliveFile?: string; heartbeatMs?: number } = {},
+) =>
+  new MediaWorker({
+    api,
+    bins,
+    mediaDir: dir,
+    log: createLogger('info', {
+      write: (line: string) => void lines.push(line),
+    }),
+    pollMs: 20,
+    ...extra,
+  });
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'kbchat-worker-'));
+  lines = [];
+});
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+describe('MediaWorker', () => {
+  it('refuses a job path outside the media folder and reports a failed conversion', async () => {
+    const { api, told } = fakeApi();
+    await workerWith(api).process(
+      aJob({ targetPath: '../escape.m4a' }),
+      new AbortController().signal,
+    );
+    expect(told).toEqual(['fail:conversion-failed']);
+    expect(lines.join('')).toContain('outside the media directory');
+  });
+
+  it('logs, without crashing, when the failure cannot be reported', async () => {
+    const { api } = fakeApi({
+      fail: () => Promise.reject(new Error('API down')),
+    });
+    await workerWith(api).process(
+      aJob({ sourcePath: 'missing.mp3' }),
+      new AbortController().signal,
+    );
+    expect(lines.join('')).toContain('could not report the failure');
+  });
+
+  it('drops the result when the API says the lease was lost at completion', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 1);
+    const { api, told } = fakeApi({ complete: async () => false });
+    await workerWith(api).process(aJob(), new AbortController().signal);
+    expect(told).toEqual([]);
+    expect(existsSync(join(dir, 'out.m4a'))).toBe(false);
+    expect(lines.join('')).toContain('lease lost before completion');
+  });
+
+  it('stops ffmpeg when a heartbeat says the lease was lost', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 900);
+    const { api, told } = fakeApi({ heartbeat: async () => false });
+    await workerWith(api, { heartbeatMs: 30 }).process(
+      aJob(),
+      new AbortController().signal,
+    );
+    expect(told).toEqual([]);
+    expect(existsSync(join(dir, 'out.m4a'))).toBe(false);
+    expect(lines.join('')).toContain('lease lost: stopping the conversion');
+  });
+
+  it('keeps converting when one heartbeat fails on the network', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 2);
+    let beats = 0;
+    const { api, told } = fakeApi({
+      heartbeat: async () => {
+        beats++;
+        if (beats === 1) throw new Error('ECONNRESET');
+        return true;
+      },
+    });
+    await workerWith(api, { heartbeatMs: 10 }).process(
+      aJob(),
+      new AbortController().signal,
+    );
+    expect(told).toContain('complete');
+    expect(lines.join('')).toContain('heartbeat failed');
+  });
+
+  it('touches its alive file on every loop for the healthcheck', async () => {
+    const aliveFile = join(dir, 'alive');
+    const { api } = fakeApi();
+    const shutdown = new AbortController();
+    const loop = workerWith(api, { aliveFile }).run(shutdown.signal);
+    await expect.poll(() => existsSync(aliveFile)).toBe(true);
+    const first = statSync(aliveFile).mtimeMs;
+    await expect
+      .poll(() => statSync(aliveFile).mtimeMs > first, { timeout: 2_000 })
+      .toBe(true);
+    shutdown.abort();
+    await loop;
+  });
+});

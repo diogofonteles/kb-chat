@@ -1,0 +1,114 @@
+import {
+  CSRF_HEADER,
+  CSRF_HEADER_VALUE,
+  workerJobSchema,
+  type CompleteTranscodeRequest,
+  type FailJobRequest,
+  type WorkerJob,
+} from '@kb-chat/contracts';
+
+/** What the worker loop needs from the API (ADR 0022 §3); a fake stands in for tests. */
+export interface MediaJobsApi {
+  lease(): Promise<WorkerJob | null>;
+  /** False when the lease is no longer this worker's (409): drop the work. */
+  heartbeat(job: WorkerJob, progress: number | null): Promise<boolean>;
+  complete(
+    job: WorkerJob,
+    done: Omit<CompleteTranscodeRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean>;
+  fail(
+    job: WorkerJob,
+    failure: Omit<FailJobRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean>;
+}
+
+export class MediaApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'MediaApiError';
+  }
+}
+
+/** The worker protocol over HTTP, with the worker token. */
+export class HttpMediaJobsApi implements MediaJobsApi {
+  constructor(
+    private readonly options: {
+      readonly baseUrl: string;
+      readonly token: string;
+      readonly worker: string;
+      readonly fetch?: typeof fetch;
+    },
+  ) {}
+
+  async lease(): Promise<WorkerJob | null> {
+    const response = await this.post('/api/v1/media-worker/jobs/lease', {
+      worker: this.options.worker,
+      kinds: ['transcode'],
+    });
+    if (response.status === 204) return null;
+    if (!response.ok) throw await this.failure(response);
+    return workerJobSchema.parse(await response.json());
+  }
+
+  heartbeat(job: WorkerJob, progress: number | null): Promise<boolean> {
+    return this.onJob(job, 'heartbeat', { progress });
+  }
+
+  complete(
+    job: WorkerJob,
+    done: Omit<CompleteTranscodeRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean> {
+    return this.onJob(job, 'complete', done);
+  }
+
+  fail(
+    job: WorkerJob,
+    failure: Omit<FailJobRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean> {
+    return this.onJob(job, 'fail', failure);
+  }
+
+  /** 204 is done; 409 means the lease was lost; anything else is an error. */
+  private async onJob(
+    job: WorkerJob,
+    action: string,
+    body: object,
+  ): Promise<boolean> {
+    const response = await this.post(
+      `/api/v1/media-worker/jobs/${job.id}/${action}`,
+      {
+        worker: this.options.worker,
+        leaseId: job.leaseId,
+        ...body,
+      },
+    );
+    if (response.status === 204) return true;
+    if (response.status === 409) return false;
+    throw await this.failure(response);
+  }
+
+  private post(path: string, body: object): Promise<Response> {
+    const doFetch = this.options.fetch ?? fetch;
+    return doFetch(new URL(path, this.options.baseUrl), {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${this.options.token}`,
+        'content-type': 'application/json',
+        [CSRF_HEADER]: CSRF_HEADER_VALUE,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+  }
+
+  private async failure(response: Response): Promise<MediaApiError> {
+    const text = await response.text().catch(() => '');
+    return new MediaApiError(
+      response.status,
+      `API answered ${response.status}: ${text.slice(0, 300)}`,
+    );
+  }
+}

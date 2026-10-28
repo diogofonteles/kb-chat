@@ -1,0 +1,16 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": { "configFile": "vitest.stryker.config.ts" },
+  "mutate": [
+    "src/adapters/sqlite/sqlite-media-store.ts",
+    "src/modules/media/range.ts",
+    "src/modules/media/to-media-item.ts"
+  ],
+  "coverageAnalysis": "perTest",
+  "reporters": ["clear-text", "progress"],
+  "thresholds": { "high": 90, "low": 80, "break": 80 },
+  "inPlace": true,
+  "timeoutMS": 30000
+}
