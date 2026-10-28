@@ -147,7 +147,7 @@ describe('MediaListPage (T14)', () => {
   });
 
   it('refreshes every 5 s while something converts, and announces it once ready', async () => {
-    const { http, fixture, container } = await renderList(undefined, 20);
+    const { http, container } = await renderList(undefined, 20);
     http.expectOne(LIST_URL).flush({
       items: [
         aMediaItem({ status: 'processing', progress: 10, durationMs: null }),
@@ -157,10 +157,17 @@ describe('MediaListPage (T14)', () => {
     await vi.waitFor(() =>
       http.expectOne(LIST_URL).flush({ items: [aMediaItem()] }),
     );
-    await fixture.whenStable();
-    expect(
-      container.querySelector('[aria-live="polite"]')?.textContent,
-    ).toContain('Palestra de 1998 está pronta.');
+    // Not whenStable: one more tick may ask again before the polling sees it is ready.
+    await vi.waitFor(() => {
+      for (const extra of http.match(LIST_URL))
+        extra.flush({ items: [aMediaItem()] });
+      TestBed.tick();
+      expect(
+        container.querySelector('[aria-live="polite"]')?.textContent,
+      ).toContain('Palestra de 1998 está pronta.');
+    });
+    for (const extra of http.match(LIST_URL))
+      extra.flush({ items: [aMediaItem()] });
     // Nothing is moving anymore: no more requests.
     await new Promise((resolve) => setTimeout(resolve, 100));
     http.expectNone(LIST_URL);
