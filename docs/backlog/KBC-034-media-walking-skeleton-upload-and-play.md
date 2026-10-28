@@ -28,9 +28,9 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 - FR-2: Quando uma pessoa com `media-upload` envia um arquivo de áudio (mp3, m4a, wav, flac, ogg, opus) de até 500 MB com título, acervo e autoria, o sistema deve gravá-lo, criar a mídia com status "Na fila" e um trabalho `transcode`. (BR-1, BR-3)
 - FR-3: O `media-worker` deve reservar um trabalho por vez, mandar sinal de vida a cada 15 s, converter com ffmpeg (caminho absoluto, tempo limite), medir a duração com ffprobe e concluir; a mídia passa a "Pronta" e o arquivo enviado é apagado. (BR-4)
 - FR-4: Quando a reserva de um trabalho vence sem sinal de vida, a API deve devolvê-lo à fila; na 4ª vez, marcá-lo como "Falhou". (BR-5)
-- FR-5: `GET /api/v1/topics/{topic}/media` deve listar as mídias do acervo (título, autoria, duração, status) e `GET /api/v1/media/{id}/stream` deve entregar o áudio com Range (206), sem ler o arquivo inteiro. (BR-2)
+- FR-5: `GET /api/v1/topics/{topic}/media` deve listar as mídias do acervo (título, autoria, duração, status) e `GET /api/v1/media/{id}/stream` deve entregar o áudio com Range (206, `Accept-Ranges: bytes`, `Content-Range`, `ETag`, `If-Range`, 416 fora do arquivo, `Content-Type: audio/mp4`), sem ler o arquivo inteiro. (BR-2)
 - FR-6: A tela "Mídia" deve mostrar a lista do acervo selecionado, o status de cada item, o player do item aberto e, para quem tem `media-upload`, o botão "Enviar áudio", como em `docs/design/screens.md` T14 e T15.
-- FR-6a: O player deve ser um componente próprio sobre um `<audio>` sem `controls`, com tocar/pausar, voltar 15 s, avançar 30 s e barra de progresso (`role="slider"`, setas 5 s, PageUp/PageDown 60 s, Home/End), sem passar de 0 nem do fim, e com os estados "carregando", "esperando dados" (após 300 ms), "erro com Tentar de novo no mesmo segundo" e "terminou".
+- FR-6a: O player deve ser um componente próprio sobre um `<audio>` sem `controls`, com tocar/pausar, voltar 15 s, avançar 30 s e barra de progresso (`role="slider"`, setas 5 s, PageUp/PageDown 60 s, Home/End), sem passar de 0 nem do fim, e com os estados "carregando", "esperando dados" (após 300 ms seguidos, nunca durante um pulo pedido), "erro com Tentar de novo no mesmo segundo" e "terminou". O estado vem dos eventos do elemento (`playing`, `pause`, `waiting`, `ended`, `error`), nunca da chamada `play()`, cuja promessa recusada é tratada; uma carga antiga que termina depois de uma nova é descartada; limpar a fonte é `removeAttribute('src')` + `load()`. Um clique na trilha pula sem arrastar; o `aria-valuetext` fala o tempo e diz a duração só ao focar.
 - FR-7: Masters devem ver os trabalhos em "Falhou" com o motivo e poder "Tentar de novo".
 - FR-8: Quando um master confirma "Remover" numa mídia, o sistema deve apagar o registro, o arquivo convertido e os trabalhos pendentes dela; uma reprodução em andamento por outra pessoa passa a receber 404.
 
@@ -58,7 +58,7 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 | AC | Nível | Notas |
 |---|---|---|
 | AC-1 | E2E + integração | Áudio de 10 s gerado por ffmpeg no teste; worker real no E2E |
-| AC-2 | integração | Range: início, meio, sufixo e 416 |
+| AC-2 | integração + propriedades (fast-check) | Range: início, meio, sufixo, aberto, múltiplo (responde o primeiro ou 200), `If-Range` com ETag velho (200) e 416 |
 | AC-3, AC-4 | integração | Contas de teste do E2E |
 | AC-5, AC-6 | unitário (fila) + integração | Relógio falso para o vencimento |
 | AC-7 | integração | Diretório sem permissão |

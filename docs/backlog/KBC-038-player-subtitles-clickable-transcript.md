@@ -23,7 +23,10 @@ Como quem estuda, quero ouvir a palestra com legenda e com o texto ao lado, clic
 ## Functional requirements
 - FR-1: `GET /api/v1/media/{id}/subtitles.vtt` deve devolver o WebVTT da transcrição atual (cue ≤ 6 s e ≤ 84 caracteres, quebra em silêncio ≥ 0,5 s ou fim de frase), com as mesmas regras de acesso do stream.
 - FR-2: `GET /api/v1/media/{id}/transcript` deve devolver os segmentos com início e fim em ms, a confiança e a versão.
-- FR-3: Durante a reprodução, a tela deve destacar o segmento ativo e mantê-lo visível, sem roubar o foco nem rolar quando a pessoa está rolando o texto (pausa a rolagem automática por 5 s após rolagem manual).
+- FR-3: Durante a reprodução, a tela deve marcar o segmento ativo (`aria-current`, fundo e barra lateral) e mantê-lo visível, sem roubar o foco. Qualquer rolagem feita pela pessoa suspende o acompanhamento até ela clicar "Voltar ao trecho atual", tocar num segmento ou pular pelo player. O segmento ativo é achado por busca binária e o destaque é interpolado entre os eventos `timeupdate` (`requestAnimationFrame` só enquanto toca).
+- FR-7: A lista de segmentos deve ser um único ponto de Tab, com ↑/↓, Home/End e Enter/Espaço (tabindex móvel).
+- FR-8: "Buscar na transcrição" deve destacar as ocorrências (sem diferenciar acentos nem maiúsculas), mostrar "n de m", andar entre elas e oferecer "Tocar daqui"; com a busca aberta, o acompanhamento fica suspenso.
+- FR-9: A coluna da transcrição pode ser recolhida, com a escolha lembrada; selecionar texto oferece "Copiar com o link do minuto".
 - FR-4: Clicar ou pressionar Enter num segmento deve pular para o seu início e tocar.
 - FR-5: Abrir `/midia/{id}?t=754` deve posicionar em 12:34; "Copiar link deste minuto" deve copiar o link do segundo atual.
 - FR-6: O botão CC e o atalho C devem ligar e desligar a legenda; a escolha vale para todas as mídias da pessoa. Um `?t=` vence a posição salva do KBC-041.
@@ -35,7 +38,10 @@ Como quem estuda, quero ouvir a palestra com legenda e com o texto ao lado, clic
 ## Acceptance criteria
 - **AC-1** (FR-1): Given uma mídia transcrita, When a legenda é ligada, Then as legendas aparecem sincronizadas e nenhuma passa de 84 caracteres.
 - **AC-2** (FR-3, FR-4): Given a transcrição aberta, When a pessoa clica numa frase do minuto 20, Then o áudio pula para ela e a frase fica destacada.
-- **AC-3** (FR-3): Given a reprodução, When a pessoa rola o texto para cima, Then a rolagem automática para por 5 s e depois volta ao trecho ativo.
+- **AC-3** (FR-3): Given a reprodução, When a pessoa rola o texto para cima, Then o acompanhamento para (o texto não volta sozinho, nem depois de 30 s) e aparece "Voltar ao trecho atual"; When ela clica nele, Then o trecho ativo volta à vista e o acompanhamento recomeça.
+- **AC-8** (FR-7): Given o foco na transcrição, When a pessoa aperta ↓ duas vezes e Enter, Then o áudio toca do terceiro segmento, e um Tab sai da lista (não passa por cada segmento).
+- **AC-9** (FR-8): Given uma transcrição com "Salomão" em 3 lugares, When a pessoa busca "salomao", Then vê "1 de 3", Enter vai à 2ª ocorrência e "Tocar daqui" toca dela; When busca "xyz", Then vê "Nenhum trecho com 'xyz'."
+- **AC-10** (FR-9): Given o texto "o vegetal" selecionado no minuto 12:34, When a pessoa usa "Copiar com o link do minuto", Then a área de transferência tem o trecho entre aspas, o título e o link com `?t=754`; a transcrição recolhida continua recolhida ao abrir outra mídia.
 - **AC-4** (FR-6): Given a legenda ligada, When a pessoa abre outra mídia, Then a legenda continua ligada; When aperta C, Then ela desliga e o CC mostra `aria-pressed="false"`.
 - **AC-5** (FR-5): Given o link com `?t=754`, When aberto por quem tem acesso, Then começa em 12:34; por quem não tem, 404 com a mensagem de documento não encontrado.
 - **AC-6** (BR-2): Given uma transcrição de baixa confiança, When aberta, Then aparece "Transcrição automática de baixa confiança: pode haver trechos errados." acima do texto.
@@ -45,12 +51,15 @@ Como quem estuda, quero ouvir a palestra com legenda e com o texto ao lado, clic
 | AC | Nível | Notas |
 |---|---|---|
 | AC-1 | unitário (gerador de VTT) + E2E | Fixtures do piloto |
-| AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | componente + E2E | Áudio curto de teste com transcrição falsa |
+| AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | componente + E2E | Áudio curto de teste com transcrição falsa; a rolagem manual é feita por roda, toque e teclado |
+| AC-8 | componente + E2E | Conta as paradas de Tab |
+| AC-9 | unitário (normalização e busca) + E2E | |
+| AC-10 | componente + E2E | Lê a área de transferência com permissão no Playwright |
 | NFR-1 | E2E | Mede a diferença entre `currentTime` e o segmento destacado |
 | NFR-2 | E2E com medição | Transcrição sintética de 2 h; INP pelo Performance API do Playwright |
 
 ## References
-ADR: [0023](../adr/0023-transcription-pull-worker-on-the-owners-mac.md) (legendas), [0022](../adr/0022-media-library-store-queue-and-streaming.md) (stream) · Plano da fase 2 v3 (A5) · Tela: `docs/design/screens.md` T15 (transcrição ao lado) · Player do piloto: `report/legendas.html` (fora do repositório)
+ADR: [0023](../adr/0023-transcription-pull-worker-on-the-owners-mac.md) (legendas), [0022](../adr/0022-media-library-store-queue-and-streaming.md) (stream) · Plano da fase 2 v3 (A5) · Tela: `docs/design/screens.md` T15 (transcrição ao lado) · Benchmark: [`docs/research/2026-10-28-player-benchmark.md`](../research/2026-10-28-player-benchmark.md) · Player do piloto: `report/legendas.html` (fora do repositório)
 
 ## Open questions
 Nenhuma.
