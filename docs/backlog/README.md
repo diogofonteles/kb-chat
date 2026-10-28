@@ -53,15 +53,20 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 | Atividade → | Enviar | Converter e guardar | Transcrever | Ouvir e ler | Achar |
 |---|---|---|---|---|---|
 | **Esqueleto (KBC-034)** | Um áudio por vez, até 500 MB | Fila confiável, AAC no worker com CPU limitada | — (stub: sem texto) | Player próprio com os controles básicos e Range | Lista "Mídia" do acervo |
-| **Fase A** | Retomável, vídeo, cota, repetidos (KBC-035) | — | Mac do dono (KBC-036), termos editáveis (KBC-040), Groq de reserva (KBC-037) | Player completo: velocidade, teclado, tela de bloqueio, retomar, mini-player (KBC-041); legendas e transcrição clicável (KBC-038) | "Na fala" na busca, no minuto exato (KBC-039) |
+| **Fase A** | Retomável, vídeo, cota, repetidos (KBC-035) | — | Mac do dono (KBC-036), termos editáveis (KBC-040), Groq de reserva (KBC-037) | Player completo: velocidade, teclado, tela de bloqueio, retomar, mini-player (KBC-041); pulos configuráveis (KBC-043), timer para dormir (KBC-046), encurtar silêncios (KBC-044), marcadores com nota (KBC-042); legendas e transcrição clicável (KBC-038), palavra a palavra (KBC-045) | "Na fala" na busca, no minuto exato (KBC-039) |
 | **Fases B a E** | Importação em lote | Faixas e capítulos | Classificação | Compilados | Sinônimos, pesquisa com IA, coleções, compartilhamento, busca na web |
 
 | ID | Título | Fatia | Status | Depende de |
 |---|---|---|---|---|
 | [KBC-034](KBC-034-media-walking-skeleton-upload-and-play.md) | Mídia (esqueleto): enviar um áudio, converter numa fila confiável e ouvir no navegador | phase-2-a | ready | KBC-010, KBC-012 |
 | [KBC-041](KBC-041-full-player-controls-resume-and-mini-player.md) | Player completo: velocidade, volume, atalhos de teclado, controles do sistema, retomar de onde parou e mini-player | phase-2-a | ready | KBC-034 |
+| [KBC-043](KBC-043-configurable-skip-intervals.md) | Intervalos de pulo configuráveis | phase-2-a | ready | KBC-041 |
+| [KBC-046](KBC-046-sleep-timer.md) | Timer para dormir | phase-2-a | ready | KBC-041 |
+| [KBC-042](KBC-042-bookmarks-with-notes.md) | Marcadores com nota | phase-2-a | ready | KBC-041 |
+| [KBC-044](KBC-044-skip-silences.md) | Encurtar silêncios (mapa de silêncios no worker) | phase-2-a | ready | KBC-041 |
 | [KBC-036](KBC-036-transcription-on-the-mac-worker.md) | Transcrição no Mac do dono: transcritor pareado, VAD e termos, JSON bruto, filtro de repetições, baixa confiança | phase-2-a | ready | KBC-034 |
 | [KBC-038](KBC-038-player-subtitles-clickable-transcript.md) | Player com legendas e transcrição clicável | phase-2-a | ready | KBC-036, KBC-041 |
+| [KBC-045](KBC-045-word-by-word-highlight.md) | Destaque palavra a palavra | phase-2-a | ready | KBC-038 |
 | [KBC-039](KBC-039-media-in-search-exact-minute.md) | Mídia na busca, no minuto exato | phase-2-a | ready | KBC-036, KBC-038 |
 | [KBC-040](KBC-040-editable-term-list-and-retranscribe.md) | Lista de termos editável e "Transcrever de novo" | phase-2-a | ready | KBC-036 |
 | [KBC-035](KBC-035-resumable-upload-quotas-video-duplicates.md) | Envio retomável, vídeo 720p, cota por pessoa e arquivos repetidos | phase-2-a | ready | KBC-034 |
@@ -110,4 +115,5 @@ Pedido do dono (2026-10-28): código, infraestrutura e UI/UX de qualidade máxim
 - 2026-10-27 (pedido do dono): fase 2, acervo de áudio e vídeo. Volume ainda desconhecido (planejado com 500 h e 2.000 h), maioria áudio de palestras, compartilhamento só entre usuários do app, custo conforme a proposta. Da Paneas, só conhecimento (sem código, servidores ou contas da empresa).
 - 2026-10-28 (piloto e decisões do dono, plano v3): transcrever no Mac do dono, com o Groq de reserva (ADR 0023); gravações ruidosas pesquisáveis com aviso de baixa confiança; teto mensal de gasto da mídia de US$ 10; originais não guardados por padrão (só os insubstituíveis, em arquivo frio, depois); ordem das fases piloto → A → B → C → D → E. Transcrições indexadas fora do vault (ADR 0024). Fase A = KBC-034 a KBC-040, na ordem da tabela acima.
 - 2026-10-28 (pedido do dono, "tudo de extrema qualidade; o player precisa ser muito bom, sem bug e com UI/UX moderna; testes criteriosos"): entram as telas T14 e T15 em `docs/design/screens.md`, a barra de qualidade da fase 2 acima e o KBC-041 (player completo), logo depois do KBC-034. O KBC-034 troca o player nativo pelo player próprio com os controles básicos e ganha "Remover" para masters; a velocidade sai do KBC-038 para o KBC-041. Fase A = KBC-034, KBC-041, KBC-036, KBC-038, KBC-039, KBC-040, KBC-035 e KBC-037.
+- 2026-10-28 (decisão do dono, "vamos implementar todos os recursos"; "esse player servirá também para os vídeos"): entram na fase A os marcadores com nota (KBC-042), os pulos configuráveis (KBC-043), encurtar silêncios por mapa calculado no worker (KBC-044), o destaque palavra a palavra (KBC-045) e o timer para dormir (KBC-046). O player é próprio e em camadas que servem áudio e vídeo (ADR 0025); o KBC-035 só acrescenta a visão de vídeo. Ordem da fase A: KBC-034, KBC-041, KBC-043, KBC-046, KBC-042, KBC-044, KBC-036, KBC-038, KBC-045, KBC-039, KBC-040, KBC-035, KBC-037. Marcadores são privados de cada pessoa até a fase D (compartilhamento).
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.
