@@ -47,7 +47,7 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 - **AC-5** (FR-4, BR-5): Given um trabalho reservado cujo worker parou, When a reserva vence, Then ele volta à fila; após a 3ª nova tentativa, fica "Falhou" com o motivo e o master pode "Tentar de novo".
 - **AC-6** (BR-5): Given um arquivo .mp3 corrompido, When é enviado, Then a mídia fica "Falhou: o arquivo não é um áudio válido" sem novas tentativas.
 - **AC-7** (FR-1): Given `KB_CHAT_MEDIA=on` e `/data/media` somente leitura, When a API sobe, Then ela para com uma mensagem clara no log.
-- **AC-8** (limite): Given um arquivo de 501 MB ou um .pdf, When é enviado, Then a API recusa com `VALIDATION_FAILED` e a tela diz "Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus)."
+- **AC-8** (limite): Given um arquivo de 501 MB ou um .pdf, When é enviado, Then a API recusa com `VALIDATION_FAILED` e a tela diz "Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus)."; antes de enviar, a tela já recusa o arquivo escolhido dizendo o motivo e a correção ("Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus." ou "Este arquivo tem 501 MB. O limite é 500 MB.").
 - **AC-9**: fluxo de envio e reprodução em 1440 px e 390 px, nos três temas, sem violações sérias ou críticas do axe.
 - **AC-10** (FR-6a): Given uma mídia pronta de 10 s tocando, When a pessoa usa "Avançar 30 segundos", Then a posição vai para o fim, o estado é "terminou" e aparece "Ouvir de novo"; When usa "Voltar 15 segundos" em 0:05, Then vai para 0:00.
 - **AC-11** (FR-6a): Given o player com foco na barra de progresso, When a pessoa aperta → três vezes e End, Then a posição avança 15 s e depois vai ao fim, e o `aria-valuetext` diz o tempo em palavras.
