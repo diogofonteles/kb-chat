@@ -8,7 +8,9 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import type { Feature } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
-import { mediaEnabled } from './media-routes.js';
+import { MediaListPage } from './media-list-page.js';
+import { MediaPlayerPage } from './media-player-page.js';
+import { MEDIA_ROUTES, mediaEnabled } from './media-routes.js';
 
 @Component({ template: 'media page' })
 class MediaStub {}
@@ -58,5 +60,14 @@ describe('mediaEnabled (every feature granted per person)', () => {
     const landing = landingFor({ media: true }, ['media'], state);
     setTimeout(() => state.set({ kind: 'signed-in' }), 10);
     expect(await landing).toBe('/midia');
+  });
+
+  it('lazy-loads the media pages it declares', async () => {
+    const pages = await Promise.all(
+      MEDIA_ROUTES.map((route) =>
+        route.loadComponent ? route.loadComponent() : null,
+      ),
+    );
+    expect(pages).toEqual([MediaListPage, MediaPlayerPage]);
   });
 });

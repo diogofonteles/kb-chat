@@ -104,4 +104,28 @@ describe('MediaPlayerPage (T15)', () => {
     expect(media.calls.slice(-2)).toEqual(['pause', 'load:']);
     expect(TestBed.inject(MediaEngine).source()).toBeNull();
   });
+
+  it('tries again after a failed load', async () => {
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush(null, { status: 500, statusText: 'x' });
+    await harness.fixture.whenStable();
+    screen.getByRole('button', { name: 'Tentar de novo' }).click();
+    TestBed.tick();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: 'Palestra de 1998' }),
+    ).toBeTruthy();
+  });
+
+  it('keeps playing the same source when the item is shown again', async () => {
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    const engine = TestBed.inject(MediaEngine);
+    expect(engine.source()?.id).toBe(ITEM.id);
+    expect(media.calls.filter((call) => call.startsWith('load:'))).toHaveLength(
+      1,
+    );
+  });
 });

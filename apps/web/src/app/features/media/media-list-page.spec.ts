@@ -1,4 +1,5 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpBackend, provideHttpClient } from '@angular/common/http';
+import { MEDIA_UPLOAD_BACKEND } from '@core/media/media-api.js';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -30,6 +31,10 @@ async function renderList(
       chatStoreOn(),
       sessionAs(who),
       { provide: MEDIA_POLL_MS, useValue: 20 },
+      {
+        provide: MEDIA_UPLOAD_BACKEND,
+        useFactory: () => TestBed.inject(HttpBackend),
+      },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -251,5 +256,68 @@ describe('MediaListPage (T14)', () => {
     ]);
     expect(screen.queryByRole('button', { name: /Remover/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+  });
+
+  it('puts the new item on top and focuses it after an upload (UP-01)', async () => {
+    const { answer, http, fixture, container } = await renderList({
+      features: ['media-upload'],
+    });
+    await answer([]);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
+    );
+    await fixture.whenStable();
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+    const file = new File([new Uint8Array(3)], 'Nova.mp3', {
+      type: 'audio/mpeg',
+    });
+    Object.defineProperty(input, 'files', {
+      value: { item: () => file, length: 1 },
+    });
+    fireEvent.change(input as HTMLInputElement);
+    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    const created = aMediaItem({
+      id: mediaId(9),
+      title: 'Nova',
+      status: 'uploading',
+      durationMs: null,
+    });
+    http.expectOne({ method: 'POST', url: LIST_URL }).flush(created);
+    http
+      .expectOne(`/api/v1/media/${created.id}/file`)
+      .flush({ ...created, status: 'queued' });
+    TestBed.tick();
+    http
+      .expectOne({ method: 'GET', url: LIST_URL })
+      .flush({ items: [{ ...created, status: 'queued' }] });
+    await fixture.whenStable();
+    await vi.waitFor(() =>
+      expect(
+        (document.activeElement as HTMLElement | null)?.dataset['mediaId'],
+      ).toBe(created.id),
+    );
+    http.expectNone({ method: 'GET', url: LIST_URL });
+  });
+
+  it('closes the upload panel without uploading', async () => {
+    const { answer, fixture } = await renderList({
+      features: ['media-upload'],
+    });
+    await answer([]);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
+    );
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('has no title filter for a short list', async () => {
+    const { answer } = await renderList();
+    await answer([aMediaItem()]);
+    expect(screen.queryByRole('searchbox')).toBeNull();
   });
 });

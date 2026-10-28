@@ -35,3 +35,31 @@ export function makeTone(
     path,
   ]);
 }
+
+/**
+ * A long source that costs nothing to make: a low-rate WAV (no encoding), for tests that
+ * need a conversion still running when they interrupt it.
+ */
+export function makeLongWav(
+  bins: FfmpegBins,
+  path: string,
+  seconds: number,
+): void {
+  execFileSync(bins.ffmpeg, [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    `sine=frequency=440:duration=${seconds}:sample_rate=8000`,
+    '-ac',
+    '1',
+    '-c:a',
+    'pcm_s16le',
+    '-f',
+    'wav',
+    path,
+  ]);
+}

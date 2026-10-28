@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { WorkerJob } from '@kb-chat/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ffmpegBins, makeTone } from '../../test/media-tools.js';
+import { ffmpegBins, makeLongWav, makeTone } from '../../test/media-tools.js';
 import { createLogger } from '../logger.js';
 import type { MediaJobsApi } from './api-client.js';
 import { MediaWorker } from './media-worker.js';
@@ -67,7 +67,8 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe('MediaWorker', () => {
+// Real ffmpeg: generous limits, as the suite runs in parallel.
+describe('MediaWorker', { timeout: 30_000 }, () => {
   it('refuses a job path outside the media folder and reports a failed conversion', async () => {
     const { api, told } = fakeApi();
     await workerWith(api).process(
@@ -99,7 +100,7 @@ describe('MediaWorker', () => {
   });
 
   it('stops ffmpeg when a heartbeat says the lease was lost', async () => {
-    makeTone(bins, join(dir, 'tone.mp3'), 900);
+    makeLongWav(bins, join(dir, 'tone.mp3'), 1_800);
     const { api, told } = fakeApi({ heartbeat: async () => false });
     await workerWith(api, { heartbeatMs: 30 }).process(
       aJob(),
