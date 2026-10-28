@@ -138,7 +138,8 @@ describe('MediaPlayerPage (T15)', () => {
       .flush(
         aMediaItem({ status: 'processing', progress: 40, durationMs: null }),
       );
-    await harness.fixture.whenStable();
+    // Not whenStable: the next poll's request would keep it waiting for its answer.
+    TestBed.tick();
     await vi.waitFor(() => http.expectOne(ITEM_URL).flush(ITEM));
     await harness.fixture.whenStable();
     expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();

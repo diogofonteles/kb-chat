@@ -22,6 +22,8 @@ const LIST_URL = '/api/v1/topics/hermetismo/media';
 
 async function renderList(
   who: { features: Feature[]; master?: boolean } = { features: ['search'] },
+  /** Long by default: a poll firing during whenStable would keep it waiting. */
+  pollMs = 60_000,
 ) {
   const view = await render(MediaListPage, {
     providers: [
@@ -31,7 +33,7 @@ async function renderList(
       provideRouter([]),
       chatStoreOn(),
       sessionAs(who),
-      { provide: MEDIA_POLL_MS, useValue: 20 },
+      { provide: MEDIA_POLL_MS, useValue: pollMs },
       {
         provide: MEDIA_UPLOAD_BACKEND,
         useFactory: () => TestBed.inject(HttpBackend),
@@ -145,10 +147,12 @@ describe('MediaListPage (T14)', () => {
   });
 
   it('refreshes every 5 s while something converts, and announces it once ready', async () => {
-    const { answer, http, fixture, container } = await renderList();
-    await answer([
-      aMediaItem({ status: 'processing', progress: 10, durationMs: null }),
-    ]);
+    const { http, fixture, container } = await renderList(undefined, 20);
+    http.expectOne(LIST_URL).flush({
+      items: [
+        aMediaItem({ status: 'processing', progress: 10, durationMs: null }),
+      ],
+    });
     // The list asks again on its own (20 ms in this test, 5 s in the app).
     await vi.waitFor(() =>
       http.expectOne(LIST_URL).flush({ items: [aMediaItem()] }),
