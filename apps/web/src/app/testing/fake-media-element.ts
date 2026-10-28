@@ -15,13 +15,20 @@ export interface FakeMedia {
   setError(code: number | null): void;
 }
 
+interface FakeValues {
+  duration: number;
+  currentTime: number;
+  buffered: (readonly [number, number])[];
+  error: MediaError | null;
+}
+
 export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
   const element = document.createElement(tag);
-  const values = {
+  const values: FakeValues = {
     duration: Number.NaN,
     currentTime: 0,
-    buffered: [] as (readonly [number, number])[],
-    error: null as MediaError | null,
+    buffered: [],
+    error: null,
   };
   const fake: FakeMedia = {
     element,
@@ -35,7 +42,13 @@ export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
       (values.error =
         code === null ? null : ({ code, message: '' } as MediaError)),
   };
-  Object.defineProperties(element, {
+  defineTimeProperties(fake, values);
+  fakePlayback(fake);
+  return fake;
+}
+
+function defineTimeProperties(fake: FakeMedia, values: FakeValues): void {
+  Object.defineProperties(fake.element, {
     duration: { get: () => values.duration },
     currentTime: {
       get: () => values.currentTime,
@@ -53,20 +66,23 @@ export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
     },
     error: { get: () => values.error },
   });
+}
+
+const PLAY_ANSWERS: Record<FakeMedia['playAnswer'], () => Promise<void>> = {
+  resolve: () => Promise.resolve(),
+  'not-allowed': () =>
+    Promise.reject(new DOMException('no gesture', 'NotAllowedError')),
+  abort: () => Promise.reject(new DOMException('replaced', 'AbortError')),
+  fail: () => Promise.reject(new DOMException('cannot', 'NotSupportedError')),
+};
+
+function fakePlayback(fake: FakeMedia): void {
+  const { element } = fake;
   element.play = () => {
     fake.calls.push('play');
-    const answers = {
-      resolve: () => Promise.resolve(),
-      'not-allowed': () =>
-        Promise.reject(new DOMException('no gesture', 'NotAllowedError')),
-      abort: () => Promise.reject(new DOMException('replaced', 'AbortError')),
-      fail: () =>
-        Promise.reject(new DOMException('cannot', 'NotSupportedError')),
-    };
-    return answers[fake.playAnswer]();
+    return PLAY_ANSWERS[fake.playAnswer]();
   };
   element.pause = () => void fake.calls.push('pause');
   element.load = () =>
     void fake.calls.push(`load:${element.getAttribute('src') ?? ''}`);
-  return fake;
 }

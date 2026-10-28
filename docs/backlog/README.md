@@ -71,6 +71,7 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 | [KBC-040](KBC-040-editable-term-list-and-retranscribe.md) | Lista de termos editável e "Transcrever de novo" | phase-2-a | ready | KBC-036 |
 | [KBC-035](KBC-035-resumable-upload-quotas-video-duplicates.md) | Envio retomável, vídeo 720p, cota por pessoa e arquivos repetidos | phase-2-a | ready | KBC-034 |
 | [KBC-037](KBC-037-groq-transcription-fallback.md) | Groq como reserva da transcrição, com teto mensal | phase-2-a | ready | KBC-036 |
+| [KBC-047](KBC-047-people-groups-with-permissions.md) | Grupos de pessoas com permissões e acervos | backlog | draft | KBC-028 |
 
 ## Definição de pronto (global)
 
@@ -79,6 +80,7 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 - Telas validadas em 1440 px e 390 px contra `docs/design/screens.md`; WCAG 2.2 AA (axe sem violações sérias).
 - Textos de UI em pt-BR externalizados; nenhum termo interno do kb na tela.
 - A API nunca escreve no vault; nenhum segredo em log ou resposta.
+- **Toda funcionalidade nova tem permissão própria** (regra do dono, 2026-10-28): é liberada por pessoa (ou por grupo, com os perfis de convite e a aplicação em lote em "Pessoas e permissões"), nunca liga para todos sozinha; masters têm todas; o item diz qual permissão cria e a tela de pessoas a mostra.
 
 ### Barra de qualidade da fase 2 (vale para KBC-034 a KBC-041, além da definição global)
 
@@ -115,5 +117,6 @@ Pedido do dono (2026-10-28): código, infraestrutura e UI/UX de qualidade máxim
 - 2026-10-27 (pedido do dono): fase 2, acervo de áudio e vídeo. Volume ainda desconhecido (planejado com 500 h e 2.000 h), maioria áudio de palestras, compartilhamento só entre usuários do app, custo conforme a proposta. Da Paneas, só conhecimento (sem código, servidores ou contas da empresa).
 - 2026-10-28 (piloto e decisões do dono, plano v3): transcrever no Mac do dono, com o Groq de reserva (ADR 0023); gravações ruidosas pesquisáveis com aviso de baixa confiança; teto mensal de gasto da mídia de US$ 10; originais não guardados por padrão (só os insubstituíveis, em arquivo frio, depois); ordem das fases piloto → A → B → C → D → E. Transcrições indexadas fora do vault (ADR 0024). Fase A = KBC-034 a KBC-040, na ordem da tabela acima.
 - 2026-10-28 (pedido do dono, "tudo de extrema qualidade; o player precisa ser muito bom, sem bug e com UI/UX moderna; testes criteriosos"): entram as telas T14 e T15 em `docs/design/screens.md`, a barra de qualidade da fase 2 acima e o KBC-041 (player completo), logo depois do KBC-034. O KBC-034 troca o player nativo pelo player próprio com os controles básicos e ganha "Remover" para masters; a velocidade sai do KBC-038 para o KBC-041. Fase A = KBC-034, KBC-041, KBC-036, KBC-038, KBC-039, KBC-040, KBC-035 e KBC-037.
+- 2026-10-28 (regra do dono: "essa feature, assim como todas as outras que iremos desenvolver, devem ser liberadas por usuário (ou grupo de usuários)"): o KBC-034 ganha a permissão `media` ("Ouvir mídia"), além de `media-upload` ("Enviar áudios"); a regra entra na definição de pronto. Grupos de verdade (mudar o grupo muda todos os membros) viram o KBC-047, a decidir.
 - 2026-10-28 (decisão do dono, "vamos implementar todos os recursos"; "esse player servirá também para os vídeos"): entram na fase A os marcadores com nota (KBC-042), os pulos configuráveis (KBC-043), encurtar silêncios por mapa calculado no worker (KBC-044), o destaque palavra a palavra (KBC-045) e o timer para dormir (KBC-046). O player é próprio e em camadas que servem áudio e vídeo (ADR 0025); o KBC-035 só acrescenta a visão de vídeo. Ordem da fase A: KBC-034, KBC-041, KBC-043, KBC-046, KBC-042, KBC-044, KBC-036, KBC-038, KBC-045, KBC-039, KBC-040, KBC-035, KBC-037. Marcadores são privados de cada pessoa até a fase D (compartilhamento).
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.

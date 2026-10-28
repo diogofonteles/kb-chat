@@ -4,7 +4,7 @@
       <h2 id="media-title">
         <ng-container i18n="@@media.title">Mídia</ng-container>
         @if (topic(); as current) {
-          <span class="topic">— {{ current.title }}</span>
+          &ngsp;<span class="topic">— {{ current.title }}</span>
         }
       </h2>
       @if (list.hasValue() && items().length > 0) {
@@ -60,7 +60,7 @@
     <ul
       class="rows skeleton"
       aria-busy="true"
-      aria-label="Carregando"
+      aria-label="Carregando…"
       i18n-aria-label="@@app.loading"
     >
       @for (n of [1, 2, 3, 4, 5]; track n) {

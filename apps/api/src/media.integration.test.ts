@@ -208,7 +208,7 @@ describe('Media library: upload (KBC-034)', () => {
     const uploader = await member(media, {
       email: 'ana@example.com',
       topics: ['hermetismo'],
-      features: ['search', 'media-upload'],
+      features: ['search', 'media', 'media-upload'],
     });
     const created = await media.owner(
       'POST',
@@ -225,12 +225,31 @@ describe('Media library: upload (KBC-034)', () => {
 });
 
 describe('Media library: access (BR-1, BR-2)', () => {
-  it('forbids uploading without media-upload, even with search (AC-4)', async () => {
+  it('forbids every media route without "Ouvir mídia", even seeing the collection', async () => {
+    const media = await startMedia();
+    const item = await readyItem(media);
+    const searcher = await member(media, {
+      email: 'busca@example.com',
+      topics: ['hermetismo'],
+      features: ['search', 'research'],
+    });
+    for (const url of [
+      '/api/v1/topics/hermetismo/media',
+      `/api/v1/media/${item.id}`,
+      `/api/v1/media/${item.id}/stream`,
+    ]) {
+      const refused = await searcher.call('GET', url);
+      expect(refused.statusCode).toBe(403);
+      expect(refused.json().error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('forbids uploading without media-upload, even with media (AC-4)', async () => {
     const media = await startMedia();
     const reader = await member(media, {
       email: 'leitor@example.com',
       topics: ['hermetismo'],
-      features: ['search'],
+      features: ['search', 'media'],
     });
     const refused = await reader.call(
       'POST',
@@ -248,7 +267,7 @@ describe('Media library: access (BR-1, BR-2)', () => {
     const uploader = await member(media, {
       email: 'ana@example.com',
       topics: ['hermetismo'],
-      features: ['search', 'media-upload'],
+      features: ['search', 'media', 'media-upload'],
     });
     const created = await uploader.call(
       'POST',
@@ -271,7 +290,7 @@ describe('Media library: access (BR-1, BR-2)', () => {
     const outsider = await member(media, {
       email: 'fora@example.com',
       topics: ['alquimia'],
-      features: ['search'],
+      features: ['search', 'media'],
     });
     expect(
       (await outsider.call('GET', '/api/v1/topics/hermetismo/media'))
@@ -587,7 +606,7 @@ describe('Media library: removal (AC-13, FR-8)', () => {
     const uploader = await member(media, {
       email: 'ana@example.com',
       topics: ['hermetismo'],
-      features: ['search', 'media-upload'],
+      features: ['search', 'media', 'media-upload'],
     });
     expect(
       (await uploader.call('DELETE', `/api/v1/media/${item.id}`)).statusCode,
@@ -623,12 +642,12 @@ describe('Media library: cancelling an upload', () => {
     const uploader = await member(media, {
       email: 'ana@example.com',
       topics: ['hermetismo'],
-      features: ['search', 'media-upload'],
+      features: ['search', 'media', 'media-upload'],
     });
     const other = await member(media, {
       email: 'bia@example.com',
       topics: ['hermetismo'],
-      features: ['search', 'media-upload'],
+      features: ['search', 'media', 'media-upload'],
     });
     const created = (
       await uploader.call('POST', '/api/v1/topics/hermetismo/media', aRequest())

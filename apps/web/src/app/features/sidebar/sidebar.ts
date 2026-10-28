@@ -104,7 +104,10 @@ export class Sidebar {
   protected readonly theme = this.themes.theme;
   /** "Mídia" (T14): when the server has the media library on and a collection is chosen. */
   protected readonly mediaOn = computed(
-    () => this.session.me()?.media === true && this.chat.topicSlug() !== null,
+    () =>
+      this.session.me()?.media === true &&
+      this.session.can('media') &&
+      this.chat.topicSlug() !== null,
   );
   /** The signed-in person's initial, when Google gave no picture. */
   protected readonly initial = computed(() => {

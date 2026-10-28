@@ -1,0 +1,107 @@
+import { provideHttpClient } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { Title } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { screen } from '@testing-library/angular';
+import {
+  MEDIA_ELEMENT_FACTORY,
+  MediaEngine,
+} from '@core/media/media-engine.js';
+import {
+  fakeMediaElement,
+  type FakeMedia,
+} from '../../testing/fake-media-element.js';
+import { aMediaItem } from '../../testing/media-fixtures.js';
+import { MediaPlayerPage } from './media-player-page.js';
+
+const ITEM = aMediaItem();
+const ITEM_URL = `/api/v1/media/${ITEM.id}`;
+
+async function openPage(): Promise<{
+  harness: RouterTestingHarness;
+  http: HttpTestingController;
+  media: FakeMedia;
+}> {
+  const media = fakeMediaElement('audio');
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      provideRouter([
+        { path: 'midia/:id', component: MediaPlayerPage },
+        { path: 'outra', children: [] },
+      ]),
+      { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
+    ],
+  });
+  const harness = await RouterTestingHarness.create(`/midia/${ITEM.id}`);
+  return { harness, http: TestBed.inject(HttpTestingController), media };
+}
+
+describe('MediaPlayerPage (T15)', () => {
+  it('reserves the player while loading, then shows the item and loads it paused', async () => {
+    const { harness, http, media } = await openPage();
+    expect(
+      harness.routeNativeElement?.querySelector('.player-box'),
+    ).not.toBeNull();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: 'Palestra de 1998' }),
+    ).toBeTruthy();
+    expect(screen.getByText('1:02:15')).toBeTruthy();
+    expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+    expect(media.calls).toEqual([`load:/api/v1/media/${ITEM.id}/stream`]);
+    expect(TestBed.inject(Title).getTitle()).toBe(
+      'Palestra de 1998 — Nova Alexandria',
+    );
+  });
+
+  it('says an item that is not ready yet will appear when it is', async () => {
+    const { harness, http, media } = await openPage();
+    http
+      .expectOne(ITEM_URL)
+      .flush(
+        aMediaItem({ status: 'processing', progress: 40, durationMs: null }),
+      );
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Convertendo… 40%',
+    );
+    expect(screen.queryByRole('slider')).toBeNull();
+    expect(media.calls).toEqual([]);
+  });
+
+  it('says the item is gone (or not yours) and offers the way back', async () => {
+    const { harness, http } = await openPage();
+    http
+      .expectOne(ITEM_URL)
+      .flush(
+        { error: { code: 'MEDIA_NOT_FOUND', message: 'x' } },
+        { status: 404, statusText: 'Not Found' },
+      );
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Esta mídia não está mais no acervo ou você não tem acesso a ela.',
+    );
+    expect(
+      screen.getByRole('link', { name: 'Voltar à Mídia' }).getAttribute('href'),
+    ).toBe('/midia');
+  });
+
+  it('stops the audio when leaving the page', async () => {
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    await harness.navigateByUrl('/outra');
+    expect(media.calls.slice(-2)).toEqual(['pause', 'load:']);
+    expect(TestBed.inject(MediaEngine).source()).toBeNull();
+  });
+});

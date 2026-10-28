@@ -22,7 +22,8 @@ import { canSee, isMaster, viewerOf, type RouteAccess } from '../auth/index.js';
 import type { MediaActor, MediaService } from './media-service.js';
 import { serveMedia } from './serve-media.js';
 
-const SIGNED_IN: RouteAccess = {};
+/** Listening needs the `media` feature (owner's rule: every feature is granted per person). */
+const LISTEN: RouteAccess = { feature: 'media' };
 const UPLOAD: RouteAccess = { feature: 'media-upload' };
 const MASTER: RouteAccess = { master: true };
 const topicParams = z.object({ topic: topicSlugSchema });
@@ -64,7 +65,7 @@ const itemResponse = { 200: mediaItemSchema };
 /** Route options, declared once: access (ADR 0008) and contract schemas (ND-08). */
 const OPTIONS = {
   list: {
-    config: { access: { topicParam: 'topic' } },
+    config: { access: { ...LISTEN, topicParam: 'topic' } },
     schema: { params: topicParams, response: { 200: mediaListSchema } },
   },
   create: {
@@ -80,17 +81,17 @@ const OPTIONS = {
     schema: { params: mediaParams, response: itemResponse },
   },
   item: {
-    config: { access: SIGNED_IN },
+    config: { access: LISTEN },
     schema: { params: mediaParams, response: itemResponse },
   },
-  stream: { config: { access: SIGNED_IN }, schema: { params: mediaParams } },
+  stream: { config: { access: LISTEN }, schema: { params: mediaParams } },
   retry: {
     config: { access: MASTER },
     schema: { params: mediaParams, response: itemResponse },
   },
   // Masters, or the uploader cancelling their own upload: decided by the service.
   remove: {
-    config: { access: SIGNED_IN },
+    config: { access: {} },
     schema: { params: mediaParams, response: { 204: z.undefined() } },
   },
 } as const;

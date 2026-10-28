@@ -23,6 +23,7 @@ export const anOwner = (): Me =>
       'research',
       'collection-builder',
       'own-ai-settings',
+      'media',
       'media-upload',
     ],
     topics: ['alquimia', 'hermetismo'],

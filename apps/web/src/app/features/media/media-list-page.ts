@@ -4,6 +4,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  InjectionToken,
   Injector,
   afterNextRender,
   afterRenderEffect,
@@ -35,7 +36,10 @@ import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
 import { UploadPanel } from './upload-panel.js';
 
 /** While anything is queued or converting, the list refreshes this often (as T5 does). */
-export const MEDIA_POLL_MS = 5_000;
+export const MEDIA_POLL_MS = new InjectionToken<number>('MEDIA_POLL_MS', {
+  providedIn: 'root',
+  factory: () => 5_000,
+});
 /** The title filter appears from this many items on (T14). */
 export const FILTER_FROM = 11;
 
@@ -55,6 +59,7 @@ export class MediaListPage {
   private readonly session = inject(SessionStore);
   private readonly api = inject(MediaApi);
   private readonly injector = inject(Injector);
+  private readonly pollMs = inject(MEDIA_POLL_MS);
   private readonly removeDialog =
     viewChild<ElementRef<HTMLDialogElement>>('removeDialog');
   private readonly rows = viewChildren<ElementRef<HTMLElement>>('row');
@@ -178,7 +183,7 @@ export class MediaListPage {
     toObservable(inFlight)
       .pipe(
         distinctUntilChanged(),
-        switchMap((moving) => (moving ? interval(MEDIA_POLL_MS) : EMPTY)),
+        switchMap((moving) => (moving ? interval(this.pollMs) : EMPTY)),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.list.reload());
