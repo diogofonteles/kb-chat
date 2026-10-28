@@ -135,7 +135,10 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
     seconds: 2,
   });
   await openMedia(page);
-  await page.getByRole('button', { name: `Remover ${media.title}` }).click();
+  await page
+    .getByRole('button', { name: `Mais ações para ${media.title}` })
+    .click();
+  await page.getByRole('menuitem', { name: 'Remover' }).click();
   const confirm = page.getByRole('dialog', {
     name: `Remover "${media.title}"?`,
   });
@@ -144,7 +147,10 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
   await expect(
     page.getByRole('listitem').filter({ hasText: media.title }),
   ).toBeVisible();
-  await page.getByRole('button', { name: `Remover ${media.title}` }).click();
+  await page
+    .getByRole('button', { name: `Mais ações para ${media.title}` })
+    .click();
+  await page.getByRole('menuitem', { name: 'Remover' }).click();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: 'Remover' })

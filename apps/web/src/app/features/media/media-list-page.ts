@@ -33,6 +33,7 @@ import {
 } from 'rxjs';
 import { isInFlight, statusTextOf } from './media-labels.js';
 import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
+import { RowMenu } from './row-menu.js';
 import { UploadPanel } from './upload-panel.js';
 
 /** While anything is queued or converting, the list refreshes this often (as T5 does). */
@@ -49,7 +50,7 @@ export const FILTER_FROM = 11;
  */
 @Component({
   selector: 'app-media-list-page',
-  imports: [RouterLink, DatePipe, AuthorshipBadge, UploadPanel],
+  imports: [RouterLink, DatePipe, AuthorshipBadge, UploadPanel, RowMenu],
   templateUrl: './media-list-page.html',
   styleUrl: './media-list-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -108,8 +109,8 @@ export class MediaListPage {
     return statusTextOf(item);
   }
 
-  protected removeLabelOf(item: MediaItem): string {
-    return $localize`:@@media.removeLabel:Remover ${item.title}:title:`;
+  protected menuLabelOf(item: MediaItem): string {
+    return $localize`:@@media.moreActions:Mais ações para ${item.title}:title:`;
   }
 
   protected durationOf(item: MediaItem): string {

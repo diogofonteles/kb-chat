@@ -153,7 +153,6 @@ a.main:hover .title {
 
 .primary,
 .secondary,
-.remove,
 .danger {
   min-height: var(--target);
   padding: 0 var(--space-4);
@@ -168,14 +167,9 @@ a.main:hover .title {
   color: var(--color-on-accent);
 }
 
-.secondary,
-.remove {
+.secondary {
   border: 1px solid var(--color-border);
   background: var(--color-surface);
-}
-
-.remove {
-  color: var(--color-danger);
 }
 
 .danger {

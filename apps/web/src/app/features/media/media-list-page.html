@@ -143,14 +143,10 @@
                   Tentar de novo
                 </button>
               }
-              <button
-                type="button"
-                class="remove"
-                (click)="askRemove(item)"
-                [attr.aria-label]="removeLabelOf(item)"
-              >
-                <span i18n="@@media.remove">Remover</span>
-              </button>
+              <app-row-menu
+                [label]="menuLabelOf(item)"
+                (removeChosen)="askRemove(item)"
+              />
             </span>
           }
         </li>

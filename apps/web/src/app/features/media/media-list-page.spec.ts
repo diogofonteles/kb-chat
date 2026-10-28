@@ -188,8 +188,10 @@ describe('MediaListPage (T14)', () => {
     const item = aMediaItem();
     await answer([item]);
     fireEvent.click(
-      screen.getByRole('button', { name: 'Remover Palestra de 1998' }),
+      screen.getByRole('button', { name: 'Mais ações para Palestra de 1998' }),
     );
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remover' }));
     await fixture.whenStable();
     const dialog = screen.getByRole('dialog', {
       name: 'Remover "Palestra de 1998"?',
@@ -210,8 +212,10 @@ describe('MediaListPage (T14)', () => {
     });
     await answer([aMediaItem()]);
     fireEvent.click(
-      screen.getByRole('button', { name: 'Remover Palestra de 1998' }),
+      screen.getByRole('button', { name: 'Mais ações para Palestra de 1998' }),
     );
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remover' }));
     await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     await fixture.whenStable();
@@ -254,7 +258,7 @@ describe('MediaListPage (T14)', () => {
         canRetry: false,
       }),
     ]);
-    expect(screen.queryByRole('button', { name: /Remover/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Mais ações/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
   });
 

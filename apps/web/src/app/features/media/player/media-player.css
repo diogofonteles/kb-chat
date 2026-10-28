@@ -88,8 +88,9 @@
   position: absolute;
   top: 54%;
   left: 50%;
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   transform: translate(-50%, -50%);
 }
 

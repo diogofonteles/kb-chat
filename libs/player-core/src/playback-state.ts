@@ -123,13 +123,24 @@ const HANDLERS: { readonly [T in PlaybackEvent['type']]: Handler<T> } = {
     ...state,
     bufferingVisible: state.waiting && !state.userSeeking,
   }),
-  'seek-requested': (state, event) => ({
-    ...state,
-    userSeeking: true,
-    bufferingVisible: false,
-    currentMs: clampToDuration(event.targetMs, state.durationMs),
-    phase: state.phase === 'ended' ? 'paused' : state.phase,
-  }),
+  'seek-requested': (state, event) => {
+    const target = clampToDuration(event.targetMs, state.durationMs);
+    // A seek to the very end ends the media even while paused: browsers fire no `ended`
+    // then, and the player must offer "Ouvir de novo" all the same.
+    const atEnd = state.durationMs !== null && target >= state.durationMs;
+    const phase = atEnd
+      ? 'ended'
+      : state.phase === 'ended'
+        ? 'paused'
+        : state.phase;
+    return {
+      ...state,
+      userSeeking: true,
+      bufferingVisible: false,
+      currentMs: target,
+      phase,
+    };
+  },
   seeked: (state) => ({ ...state, userSeeking: false }),
   time: (state, event) =>
     // While a requested seek is in flight, the element still reports the old position.

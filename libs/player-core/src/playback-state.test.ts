@@ -175,6 +175,27 @@ describe('reducePlayback', () => {
       ).toBe(0);
     });
 
+    it('ends when the person seeks to the very end, even paused', () => {
+      const state = play(
+        [{ type: 'seek-requested', loadId: 1, targetMs: 99_000 }],
+        ready(),
+      );
+      expect(state).toMatchObject({ phase: 'ended', currentMs: 60_000 });
+      const playing = play([{ type: 'playing', loadId: 1 }], ready());
+      expect(
+        play([{ type: 'seek-requested', loadId: 1, targetMs: 60_000 }], playing)
+          .phase,
+      ).toBe('ended');
+    });
+
+    it('does not end on a seek when the duration is unknown', () => {
+      const state = play([
+        { type: 'load', loadId: 1 },
+        { type: 'seek-requested', loadId: 1, targetMs: 99_000 },
+      ]);
+      expect(state.phase).toBe('loading');
+    });
+
     it('leaves the ended state when the person seeks back', () => {
       const ended = play([{ type: 'ended', loadId: 1 }], ready());
       expect(ended).toMatchObject({ phase: 'ended', currentMs: 60_000 });
