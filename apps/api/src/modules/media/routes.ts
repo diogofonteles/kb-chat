@@ -69,11 +69,7 @@ const OPTIONS = {
     schema: { params: topicParams, response: { 200: mediaListSchema } },
   },
   create: {
-    config: {
-      access: { ...UPLOAD, topicParam: 'topic' },
-      // Until the quotas of KBC-035, creating items is bounded per client.
-      rateLimit: { max: 30, timeWindow: '1 minute' },
-    },
+    config: { access: { ...UPLOAD, topicParam: 'topic' } },
     schema: {
       params: topicParams,
       body: createMediaRequestSchema,
@@ -100,9 +96,22 @@ const OPTIONS = {
   },
 } as const;
 
+/** Until the quotas of KBC-035, creating items is bounded per client. */
+const createOptions = (perMinute: number) => ({
+  ...OPTIONS.create,
+  config: {
+    ...OPTIONS.create.config,
+    rateLimit: { max: perMinute, timeWindow: '1 minute' },
+  },
+});
+
 /** The media library's routes for people (KBC-034, ADR 0022). */
 export const mediaRoutes =
-  (service: MediaService): FastifyPluginAsync =>
+  (
+    service: MediaService,
+    /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
+    createPerMinute: number,
+  ): FastifyPluginAsync =>
   async (app) => {
     // The upload body is streamed to disk as it arrives, never buffered (FR-2).
     app.addContentTypeParser(
@@ -115,7 +124,7 @@ export const mediaRoutes =
     }));
     typed.post(
       '/api/v1/topics/:topic/media',
-      OPTIONS.create,
+      createOptions(createPerMinute),
       async (request, reply) => {
         const created = service.create(
           actorOf(request),

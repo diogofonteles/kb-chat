@@ -285,9 +285,11 @@ async function registerMedia(
   app: FastifyInstance,
   wiring: { media: MediaDeps; catalog: CatalogRegistry },
 ) {
-  const { store, files, workerToken } = wiring.media;
+  const { store, files, workerToken, createPerMinute } = wiring.media;
   const hasTopic = (topic: string) => wiring.catalog.get(topic) !== undefined;
-  await app.register(mediaRoutes(new MediaService({ store, files, hasTopic })));
+  await app.register(
+    mediaRoutes(new MediaService({ store, files, hasTopic }), createPerMinute),
+  );
   await app.register(
     workerRoutes({
       service: new WorkerService({ store, files }),

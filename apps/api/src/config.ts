@@ -178,6 +178,8 @@ export const configSchema = z
      * at least 32 characters (`openssl rand -base64 32`). Required with KB_CHAT_MEDIA=on.
      */
     KB_CHAT_MEDIA_WORKER_TOKEN: blankAsUnset(z.string().min(32).optional()),
+    /** Media items created per minute per client, until the quotas of KBC-035. */
+    MEDIA_CREATE_RATE_LIMIT: z.coerce.number().int().min(1).default(30),
   })
   .superRefine((config, context) => {
     if (config.KB_CHAT_MEDIA && !config.KB_CHAT_MEDIA_WORKER_TOKEN)

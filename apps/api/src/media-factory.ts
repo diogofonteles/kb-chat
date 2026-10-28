@@ -12,6 +12,8 @@ export interface MediaDeps {
   readonly store: MediaStorePort;
   readonly files: MediaFilesPort;
   readonly workerToken: string;
+  /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
+  readonly createPerMinute: number;
 }
 
 /**
@@ -35,7 +37,12 @@ export async function createMedia(
   });
   try {
     const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
-    return { store: new SqliteMediaStore(db), files, workerToken };
+    return {
+      store: new SqliteMediaStore(db),
+      files,
+      workerToken,
+      createPerMinute: config.MEDIA_CREATE_RATE_LIMIT,
+    };
   } catch (err) {
     throw new Error(
       `The media library cannot start: the media database in ${dir} did not open or migrate`,

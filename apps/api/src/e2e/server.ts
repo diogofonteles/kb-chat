@@ -76,6 +76,7 @@ const config = loadConfig({
   AUTH_RATE_LIMIT: '10000',
   // Every spec researches from the same address, at both widths.
   RESEARCH_RATE_LIMIT: '10000',
+  MEDIA_CREATE_RATE_LIMIT: '10000',
   KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
   // The media library (KBC-034) with the real worker below and real ffmpeg.
   KB_CHAT_MEDIA: 'on',
