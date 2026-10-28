@@ -4,6 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
 const API_PORT = process.env['KBC_E2E_API_PORT'] ?? '3117';
 const WEB_PORT = process.env['KBC_E2E_WEB_PORT'] ?? '4317';
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
+/** The media specs: they need a browser that plays AAC (see the media projects). */
+const MEDIA_SPECS = /media-.*\.spec\.ts$/;
 
 /**
  * E2E against the real API on the fixture vault (KB_CHAT_SEARCH=fixture: no QMD,
@@ -27,6 +29,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
+      testIgnore: MEDIA_SPECS,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
@@ -34,7 +37,36 @@ export default defineConfig({
     },
     {
       name: 'mobile',
+      testIgnore: MEDIA_SPECS,
       use: { ...devices['Pixel 5'], viewport: { width: 390, height: 844 } },
+    },
+    // Media (KBC-034, phase-2 quality bar): Playwright's Chromium cannot decode AAC or
+    // H.264, so media specs run in Google Chrome at both widths and in WebKit (Safari).
+    {
+      name: 'media-desktop',
+      testMatch: MEDIA_SPECS,
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: 'chrome',
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: 'media-mobile',
+      testMatch: MEDIA_SPECS,
+      use: {
+        ...devices['Pixel 5'],
+        channel: 'chrome',
+        viewport: { width: 390, height: 844 },
+      },
+    },
+    {
+      name: 'media-webkit',
+      testMatch: MEDIA_SPECS,
+      use: {
+        ...devices['Desktop Safari'],
+        viewport: { width: 1440, height: 900 },
+      },
     },
   ],
   webServer: [

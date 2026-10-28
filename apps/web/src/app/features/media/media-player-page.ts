@@ -15,7 +15,7 @@ import {
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { mediaItemSchema, type MediaItem } from '@kb-chat/contracts';
-import { formatClock } from '@kb-chat/player-core';
+import { formatDuration } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { mediaStreamUrl, mediaUrl } from '@core/media/media-api.js';
@@ -60,7 +60,7 @@ export class MediaPlayerPage {
   });
   protected readonly duration = computed(() => {
     const ms = this.media()?.durationMs;
-    return ms === null || ms === undefined ? '' : formatClock(ms);
+    return ms === null || ms === undefined ? '' : formatDuration(ms);
   });
   protected readonly loadError = computed(() => {
     const err = this.item.error();

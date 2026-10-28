@@ -13,6 +13,7 @@ import {
   errorKindOf,
   isOperable,
   reducePlayback,
+  type PlaybackErrorKind,
   type PlaybackEvent,
   type PlaybackState,
 } from '@kb-chat/player-core';
@@ -25,7 +26,8 @@ export interface PlayableSource {
 }
 
 /**
- * The media element the engine drives. In the app it is one `<audio>`; video (KBC-035)
+ * The media element the engine drives. In the app it is one hidden `<audio>` in the page
+ * (in the document, so the browser keeps it alive and tools can find it); video (KBC-035)
  * passes a `<video>`. Tests give a real element whose playback methods are faked.
  */
 export const MEDIA_ELEMENT_FACTORY = new InjectionToken<() => HTMLMediaElement>(
@@ -34,13 +36,31 @@ export const MEDIA_ELEMENT_FACTORY = new InjectionToken<() => HTMLMediaElement>(
     providedIn: 'root',
     factory: () => {
       const document = inject(DOCUMENT);
-      return () => document.createElement('audio');
+      return () => {
+        const audio = document.createElement('audio');
+        audio.hidden = true;
+        audio.dataset['mediaEngine'] = '';
+        document.body.append(audio);
+        return audio;
+      };
     },
   },
 );
 
 /** Waiting shorter than this is not shown (no flicker on each network pause). */
 export const BUFFERING_DEBOUNCE_MS = 300;
+
+/**
+ * Waiting this long means the connection is gone: browsers keep waiting forever without an
+ * error, so the engine stops and reports a network error the person can retry (AC-12).
+ */
+export const MEDIA_STALL_TIMEOUT_MS = new InjectionToken<number>(
+  'MEDIA_STALL_TIMEOUT_MS',
+  {
+    providedIn: 'root',
+    factory: () => 12_000,
+  },
+);
 
 type MediaEventName = keyof HTMLMediaElementEventMap;
 
@@ -52,6 +72,8 @@ type MediaEventName = keyof HTMLMediaElementEventMap;
 @Injectable({ providedIn: 'root' })
 export class MediaEngine {
   private readonly createElement = inject(MEDIA_ELEMENT_FACTORY);
+  private readonly stallTimeoutMs = inject(MEDIA_STALL_TIMEOUT_MS);
+  private stallTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly state = signal<PlaybackState>(INITIAL_PLAYBACK);
   private readonly current = signal<PlayableSource | null>(null);
   private element: HTMLMediaElement | null = null;
@@ -79,6 +101,13 @@ export class MediaEngine {
     element.preload = 'metadata';
     element.src = source.src;
     element.load();
+    // A source that never becomes playable (the connection dropped while loading) must not
+    // leave the player "loading" forever: the same stall timeout applies (AC-12).
+    const loadId = this.loads;
+    this.stallTimer = setTimeout(
+      () => this.onStalled(loadId),
+      this.stallTimeoutMs,
+    );
   }
 
   /** Asks to play; the state turns to playing only when the element says so. */
@@ -191,6 +220,19 @@ export class MediaEngine {
       () => this.dispatch({ type: 'buffering-elapsed', loadId }),
       BUFFERING_DEBOUNCE_MS,
     );
+    this.stallTimer = setTimeout(
+      () => this.onStalled(loadId),
+      this.stallTimeoutMs,
+    );
+  }
+
+  /** Still waiting (or loading) after the stall timeout: the network is gone; say so. */
+  private onStalled(loadId: number): void {
+    const { waiting, phase } = this.state();
+    if (loadId !== this.loads || (!waiting && phase !== 'loading')) return;
+    this.element?.pause();
+    this.dispatch({ type: 'error', loadId, kind: 'network' });
+    this.clearBuffering();
   }
 
   private onTime(element: HTMLMediaElement): void {
@@ -218,9 +260,20 @@ export class MediaEngine {
     this.dispatch({
       type: 'error',
       loadId: this.loads,
-      kind: errorKindOf(element.error?.code),
+      kind: this.errorKind(element.error?.code),
     });
     this.clearBuffering();
+  }
+
+  /**
+   * Safari reports a dropped connection as "source not supported" (code 4): once this
+   * source has proved playable (its duration is known), code 4 means the network.
+   */
+  private errorKind(code: number | undefined): PlaybackErrorKind {
+    const kind = errorKindOf(code);
+    return kind === 'unsupported' && this.state().durationMs !== null
+      ? 'network'
+      : kind;
   }
 
   private settle(event: PlaybackEvent): void {
@@ -238,6 +291,8 @@ export class MediaEngine {
 
   private clearBuffering(): void {
     if (this.bufferingTimer) clearTimeout(this.bufferingTimer);
+    if (this.stallTimer) clearTimeout(this.stallTimer);
     this.bufferingTimer = null;
+    this.stallTimer = null;
   }
 }

@@ -1,3 +1,5 @@
+import { createMedia } from '../media-factory.js';
+import { startMediaWorker } from './media-worker-runner.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,6 +41,9 @@ import {
   registerOpenRouterConsent,
 } from './openrouter-routes.js';
 
+/** Not a secret: the E2E server's media worker token (local, throwaway). */
+const E2E_MEDIA_WORKER_TOKEN = 'e2e-media-worker-token-0123456789abcdef';
+
 /** The owner of the E2E run: a master with the `owner` data the specs expect. */
 export const E2E_OWNER_EMAIL = 'owner@kb-chat.test';
 
@@ -72,6 +77,10 @@ const config = loadConfig({
   // Every spec researches from the same address, at both widths.
   RESEARCH_RATE_LIMIT: '10000',
   KB_CHAT_CODEX_RUNNER_URL: codexRunner.url,
+  // The media library (KBC-034) with the real worker below and real ffmpeg.
+  KB_CHAT_MEDIA: 'on',
+  KB_CHAT_MEDIA_DIR: mkdtempSync(join(tmpdir(), 'kbchat-e2e-media-')),
+  KB_CHAT_MEDIA_WORKER_TOKEN: E2E_MEDIA_WORKER_TOKEN,
 });
 const logger = createLogger(config.LOG_LEVEL);
 const vault = new FsVaultAdapter(config.KB_VAULT);
@@ -194,10 +203,12 @@ const access = {
   requests: new MemoryDocumentStore(),
   delivery: { email: outbox, sms: null },
 };
+const media = await createMedia(config);
 const app = await buildApp({
   config,
   auth,
   access,
+  media,
   vault,
   index,
   logger,
@@ -213,3 +224,9 @@ identity.register(app);
 registerOutbox(app, outbox);
 registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });
+startMediaWorker({
+  apiUrl: `http://127.0.0.1:${config.PORT}`,
+  token: E2E_MEDIA_WORKER_TOKEN,
+  mediaDir: config.KB_CHAT_MEDIA_DIR,
+  log: logger,
+});

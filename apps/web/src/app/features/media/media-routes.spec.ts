@@ -13,7 +13,11 @@ import { mediaEnabled } from './media-routes.js';
 @Component({ template: 'media page' })
 class MediaStub {}
 
-async function landingFor(me: { media: boolean } | null, features: Feature[]) {
+async function landingFor(
+  me: { media: boolean } | null,
+  features: Feature[],
+  state = signal<{ kind: string }>({ kind: 'signed-in' }),
+) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -24,6 +28,7 @@ async function landingFor(me: { media: boolean } | null, features: Feature[]) {
       {
         provide: SessionStore,
         useValue: {
+          state,
           me: signal(me),
           can: (feature: Feature) => features.includes(feature),
         },
@@ -46,5 +51,12 @@ describe('mediaEnabled (every feature granted per person)', () => {
 
   it('sends home when the server has media off', async () => {
     expect(await landingFor({ media: false }, ['media'])).toBe('/');
+  });
+
+  it('waits for the session before deciding (a link opened directly)', async () => {
+    const state = signal<{ kind: string }>({ kind: 'loading' });
+    const landing = landingFor({ media: true }, ['media'], state);
+    setTimeout(() => state.set({ kind: 'signed-in' }), 10);
+    expect(await landing).toBe('/midia');
   });
 });

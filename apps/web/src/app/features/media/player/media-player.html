@@ -19,6 +19,7 @@
     [bufferedEndMs]="playback().bufferedEndMs"
     [disabled]="!operable()"
     (seekRequested)="seekTo($event)"
+    (stepRequested)="stepBy($event)"
   />
 
   <div class="times">

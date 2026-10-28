@@ -30,7 +30,22 @@ export function formatClock(ms: number): string {
 export const formatRemaining = (
   currentMs: number,
   durationMs: number,
-): string => `-${formatClock(Math.max(0, durationMs - currentMs))}`;
+): string => {
+  const elapsed = Math.floor(Math.max(0, currentMs) / 1000) * 1000;
+  return `-${formatClock(Math.max(0, roundToSecond(durationMs) - elapsed))}`;
+};
+
+/**
+ * A total length to the nearest second: browsers report 119.99 s for a two-minute AAC file
+ * (encoder priming), which must read "2:00", not "1:59". Positions keep flooring.
+ */
+export function roundToSecond(ms: number): number {
+  return Number.isFinite(ms) ? Math.round(Math.max(0, ms) / 1000) * 1000 : 0;
+}
+
+/** `formatClock` of a total length (rounded to the second). */
+export const formatDuration = (ms: number): string =>
+  formatClock(roundToSecond(ms));
 
 /** The words of a spoken time, given by the app's i18n (singular, plural). */
 export interface SpokenUnits {

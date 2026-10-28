@@ -54,22 +54,33 @@ describe('SeekSlider (APG media seek slider)', () => {
   });
 
   it.each([
-    ['ArrowRight', false, 759_000],
-    ['ArrowLeft', false, 749_000],
-    ['ArrowRight', true, 764_000],
-    ['PageUp', false, 814_000],
-    ['PageDown', false, 694_000],
-    ['Home', false, 0],
-    ['End', false, 3_735_000],
+    ['ArrowRight', false, 5_000],
+    ['ArrowUp', false, 5_000],
+    ['ArrowLeft', false, -5_000],
+    ['ArrowRight', true, 10_000],
+    ['PageUp', false, 60_000],
+    ['PageDown', false, -60_000],
   ])(
-    'moves with %s (shift %s) to %i ms (AC-11)',
-    async (key, shiftKey, target) => {
-      const { slider, seekRequested } = await renderSlider();
+    'steps with %s (shift %s) by %i ms from the live position (AC-11)',
+    async (key, shiftKey, delta) => {
+      const { slider, seekRequested, fixture } = await renderSlider();
+      const stepRequested = vi.fn();
+      fixture.componentInstance.stepRequested.subscribe(stepRequested);
       const event = fireEvent.keyDown(slider, { key, shiftKey });
       expect(event).toBe(false); // preventDefault: no page scroll
-      expect(seekRequested).toHaveBeenCalledWith(target);
+      expect(stepRequested).toHaveBeenCalledWith(delta);
+      expect(seekRequested).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    ['Home', 0],
+    ['End', 3_735_000],
+  ])('goes to the edge with %s', async (key, target) => {
+    const { slider, seekRequested } = await renderSlider();
+    fireEvent.keyDown(slider, { key });
+    expect(seekRequested).toHaveBeenCalledWith(target);
+  });
 
   it('leaves other keys to the page', async () => {
     const { slider, seekRequested } = await renderSlider();

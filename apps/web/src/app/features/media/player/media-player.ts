@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import {
   formatClock,
+  formatDuration,
   formatRemaining,
   type PlaybackErrorKind,
 } from '@kb-chat/player-core';
@@ -62,7 +63,7 @@ export class MediaPlayer {
     if (durationMs === null) return '--:--';
     return this.showRemaining()
       ? formatRemaining(currentMs, durationMs)
-      : formatClock(durationMs);
+      : formatDuration(durationMs);
   });
   protected readonly rightTimeLabel = computed(() =>
     this.showRemaining()
@@ -98,6 +99,10 @@ export class MediaPlayer {
 
   protected seekTo(ms: number): void {
     this.engine.seek(ms);
+  }
+
+  protected stepBy(deltaMs: number): void {
+    this.engine.skip(deltaMs);
   }
 
   protected playAgain(): void {

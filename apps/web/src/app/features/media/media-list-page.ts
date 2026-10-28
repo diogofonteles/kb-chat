@@ -17,7 +17,7 @@ import {
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { mediaListSchema, type MediaItem } from '@kb-chat/contracts';
-import { formatClock } from '@kb-chat/player-core';
+import { formatDuration } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi, mediaListUrl } from '@core/media/media-api.js';
@@ -113,7 +113,7 @@ export class MediaListPage {
   }
 
   protected durationOf(item: MediaItem): string {
-    return item.durationMs === null ? '' : formatClock(item.durationMs);
+    return item.durationMs === null ? '' : formatDuration(item.durationMs);
   }
 
   protected filterBy(event: Event): void {

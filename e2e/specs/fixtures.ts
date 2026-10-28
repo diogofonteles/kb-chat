@@ -45,6 +45,12 @@ export async function fakeGoogle(page: Page): Promise<void> {
   await page.route('https://accounts.google.com/**', (route) =>
     route.fulfill({ contentType: 'text/javascript', body: FAKE_GIS }),
   );
+  // Web fonts come from Google too: a request that never ends holds the page's load event
+  // (a 60 s timeout seen in the media specs). The specs use the fallback fonts.
+  await page.route('https://fonts.googleapis.com/**', (route) =>
+    route.fulfill({ contentType: 'text/css', body: '' }),
+  );
+  await page.route('https://fonts.gstatic.com/**', (route) => route.abort());
 }
 
 /** Signs `api` (a page's or a standalone request context) in as `email`. */

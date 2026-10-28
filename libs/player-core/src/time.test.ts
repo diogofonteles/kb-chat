@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   clockParts,
   formatClock,
+  formatDuration,
   formatRemaining,
+  roundToSecond,
   spokenTime,
   type SpokenUnits,
 } from './time.js';
@@ -64,6 +66,23 @@ describe('formatRemaining', () => {
   it('shows the time left with a minus sign, never below zero', () => {
     expect(formatRemaining(1_390_000, 3_735_000)).toBe('-39:05');
     expect(formatRemaining(5_000, 3_000)).toBe('-0:00');
+  });
+});
+
+describe('remaining time and rounded lengths', () => {
+  it('counts down whole seconds from the rounded total', () => {
+    expect(formatRemaining(0, 119_990)).toBe('-2:00');
+    expect(formatRemaining(999, 119_990)).toBe('-2:00');
+    expect(formatRemaining(1_000, 119_990)).toBe('-1:59');
+    expect(formatRemaining(-50, 1_000)).toBe('-0:01');
+  });
+
+  it('reads a length to the nearest second (AAC priming: 119.99 s is 2:00)', () => {
+    expect(formatDuration(119_990)).toBe('2:00');
+    expect(formatDuration(120_499)).toBe('2:00');
+    expect(formatDuration(120_500)).toBe('2:01');
+    expect(roundToSecond(-5)).toBe(0);
+    expect(roundToSecond(Number.NaN)).toBe(0);
   });
 });
 

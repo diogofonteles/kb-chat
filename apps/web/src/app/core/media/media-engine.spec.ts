@@ -143,6 +143,49 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.playback().bufferingVisible).toBe(false);
   });
 
+  it('stops and reports a network error when the wait never ends (AC-12)', () => {
+    vi.useFakeTimers();
+    ready();
+    media.emit('playing');
+    media.emit('waiting');
+    vi.advanceTimersByTime(11_999);
+    expect(engine.playback().phase).toBe('playing');
+    vi.advanceTimersByTime(1);
+    expect(engine.playback()).toMatchObject({
+      phase: 'error',
+      error: 'network',
+    });
+    expect(media.calls.at(-1)).toBe('pause');
+  });
+
+  it('stops loading with a network error when the source never becomes playable', () => {
+    vi.useFakeTimers();
+    engine.load(LECTURE);
+    vi.advanceTimersByTime(12_000);
+    expect(engine.playback()).toMatchObject({
+      phase: 'error',
+      error: 'network',
+    });
+  });
+
+  it('keeps a source that became playable in time', () => {
+    vi.useFakeTimers();
+    ready();
+    vi.advanceTimersByTime(60_000);
+    expect(engine.playback().phase).toBe('paused');
+  });
+
+  it('forgets the stall timer when the data comes back', () => {
+    vi.useFakeTimers();
+    ready();
+    media.emit('playing');
+    media.emit('waiting');
+    vi.advanceTimersByTime(5_000);
+    media.emit('playing');
+    vi.advanceTimersByTime(20_000);
+    expect(engine.playback().phase).toBe('playing');
+  });
+
   it('drops a buffering timer of an older load', () => {
     vi.useFakeTimers();
     ready();
@@ -181,6 +224,20 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     media.setDuration(60);
     media.emit('loadedmetadata');
     expect(media.calls).toContain('seek:23');
+  });
+
+  it('reads Safari\'s "not supported" after a playable start as a network failure', () => {
+    ready();
+    media.setError(4);
+    media.emit('error');
+    expect(engine.playback().error).toBe('network');
+  });
+
+  it('keeps "not supported" for a source that never played', () => {
+    engine.load(LECTURE);
+    media.setError(4);
+    media.emit('error');
+    expect(engine.playback().error).toBe('unsupported');
   });
 
   it('treats a refused play without a gesture as normal, and a real refusal as an error', async () => {

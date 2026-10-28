@@ -13,6 +13,7 @@ import {
   formatClock,
   fractionOf,
   positionAtFraction,
+  roundToSecond,
   sliderMoveOf,
 } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
@@ -36,7 +37,13 @@ export class SeekSlider {
   readonly durationMs = input.required<number | null>();
   readonly bufferedEndMs = input(0);
   readonly disabled = input(false);
+  /** A position to go to (a click, a drag, Home/End). */
   readonly seekRequested = output<number>();
+  /**
+   * A step from wherever the media is now (arrows, PageUp/PageDown): the engine adds it to
+   * its live position, so held-down or fast keys never start from a stale value.
+   */
+  readonly stepRequested = output<number>();
 
   private readonly track = viewChild.required<ElementRef<HTMLElement>>('track');
   private readonly thumb = viewChild.required<ElementRef<HTMLElement>>('thumb');
@@ -57,15 +64,15 @@ export class SeekSlider {
   protected readonly valueNow = computed(() =>
     Math.floor(this.shownMs() / 1000),
   );
-  protected readonly valueMax = computed(() =>
-    Math.floor((this.durationMs() ?? 0) / 1000),
+  protected readonly valueMax = computed(
+    () => roundToSecond(this.durationMs() ?? 0) / 1000,
   );
   protected readonly valueText = computed(() => {
     if (!this.loaded())
       return $localize`:@@player.notLoaded:áudio ainda não carregado`;
     const now = speak(this.shownMs());
     return this.focused()
-      ? $localize`:@@player.positionOf:${now}:now: de ${speak(this.durationMs() ?? 0)}:total:`
+      ? $localize`:@@player.positionOf:${now}:now: de ${speak(roundToSecond(this.durationMs() ?? 0))}:total:`
       : now;
   });
   /** The time label next to the thumb (drag) or under the pointer (hover). */
@@ -85,12 +92,11 @@ export class SeekSlider {
     // The slider consumes its keys: no page scroll, no global shortcut on top (KBC-041).
     event.preventDefault();
     event.stopPropagation();
-    this.seekRequested.emit(
-      applySliderMove(move, {
-        currentMs: this.currentMs(),
-        durationMs: duration,
-      }),
-    );
+    if (move.kind === 'by') this.stepRequested.emit(move.deltaMs);
+    else
+      this.seekRequested.emit(
+        applySliderMove(move, { currentMs: 0, durationMs: duration }),
+      );
   }
 
   protected onPointerDown(event: PointerEvent): void {

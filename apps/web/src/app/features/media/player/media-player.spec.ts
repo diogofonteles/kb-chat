@@ -94,9 +94,19 @@ describe('MediaPlayer (T15 basic controls)', () => {
     ).toBe('1:02:15');
   });
 
-  it('seeks from the slider', async () => {
+  it('seeks from the slider, stepping from the live position on fast keys (AC-11)', async () => {
     const { media } = await renderPlayer(loaded);
-    fireEvent.keyDown(screen.getByRole('slider'), { key: 'End' });
+    const slider = screen.getByRole('slider');
+    // Three presses with no render between them, as a held-down arrow does.
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(media.calls.filter((call) => call.startsWith('seek:'))).toEqual([
+      'seek:5',
+      'seek:10',
+      'seek:15',
+    ]);
+    fireEvent.keyDown(slider, { key: 'End' });
     expect(media.calls.at(-1)).toBe('seek:3735');
   });
 
@@ -124,7 +134,6 @@ describe('MediaPlayer (T15 basic controls)', () => {
 
   it.each([
     [3, 'Este áudio não pôde ser tocado neste navegador.'],
-    [4, 'Este navegador não toca este áudio. Tente outro navegador.'],
     [1, 'O carregamento do áudio foi interrompido.'],
   ])('explains error code %i', async (code, message) => {
     const { media, fixture } = await renderPlayer(loaded);
@@ -132,6 +141,18 @@ describe('MediaPlayer (T15 basic controls)', () => {
     media.emit('error');
     await fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain(message);
+  });
+
+  it('says the browser cannot play a source that never loaded', async () => {
+    const { media, fixture } = await renderPlayer((fake, engine) =>
+      engine.load(SOURCE),
+    );
+    media.setError(4);
+    media.emit('error');
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Este navegador não toca este áudio. Tente outro navegador.',
+    );
   });
 
   it('offers "Ouvir de novo" at the end, which plays from the start', async () => {
