@@ -46,6 +46,26 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 | [KBC-033](KBC-033-default-collection-hint.md) | Acervo padrão no editor de convite e de perfil: dica quando nenhum acervo está marcado, pré-seleção do único marcado e aviso quando o padrão é limpo | release-1 | in-review | KBC-028 |
 | [KBC-009](KBC-009-build-and-grow-a-collection.md) | Montar ou ampliar um acervo (arquivos locais e web, contas Firecrawl/OpenRouter com saldos) | release-2 | draft | KBC-007 |
 
+### Fase 2 — acervo de mídia, fase A (do envio ao player com legenda e à busca)
+
+Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pelo dono; piloto em [`docs/research/2026-10-28-transcription-pilot.md`](../research/2026-10-28-transcription-pilot.md); ADRs [0022](../adr/0022-media-library-store-queue-and-streaming.md), [0023](../adr/0023-transcription-pull-worker-on-the-owners-mac.md) e [0024](../adr/0024-media-search-outside-the-vault.md).
+
+| Atividade → | Enviar | Converter e guardar | Transcrever | Ouvir e ler | Achar |
+|---|---|---|---|---|---|
+| **Esqueleto (KBC-034)** | Um áudio por vez, até 500 MB | Fila confiável, AAC no worker com CPU limitada | — (stub: sem texto) | Player nativo com Range | Lista "Mídia" do acervo |
+| **Fase A** | Retomável, vídeo, cota, repetidos (KBC-035) | — | Mac do dono (KBC-036), termos editáveis (KBC-040), Groq de reserva (KBC-037) | Legendas e transcrição clicável (KBC-038) | "Na fala" na busca, no minuto exato (KBC-039) |
+| **Fases B a E** | Importação em lote | Faixas e capítulos | Classificação | Compilados | Sinônimos, pesquisa com IA, coleções, compartilhamento, busca na web |
+
+| ID | Título | Fatia | Status | Depende de |
+|---|---|---|---|---|
+| [KBC-034](KBC-034-media-walking-skeleton-upload-and-play.md) | Mídia (esqueleto): enviar um áudio, converter numa fila confiável e ouvir no navegador | phase-2-a | ready | KBC-010, KBC-012 |
+| [KBC-036](KBC-036-transcription-on-the-mac-worker.md) | Transcrição no Mac do dono: transcritor pareado, VAD e termos, JSON bruto, filtro de repetições, baixa confiança | phase-2-a | ready | KBC-034 |
+| [KBC-038](KBC-038-player-subtitles-clickable-transcript.md) | Player com legendas e transcrição clicável | phase-2-a | ready | KBC-036 |
+| [KBC-039](KBC-039-media-in-search-exact-minute.md) | Mídia na busca, no minuto exato | phase-2-a | ready | KBC-036, KBC-038 |
+| [KBC-040](KBC-040-editable-term-list-and-retranscribe.md) | Lista de termos editável e "Transcrever de novo" | phase-2-a | ready | KBC-036 |
+| [KBC-035](KBC-035-resumable-upload-quotas-video-duplicates.md) | Envio retomável, vídeo 720p, cota por pessoa e arquivos repetidos | phase-2-a | ready | KBC-034 |
+| [KBC-037](KBC-037-groq-transcription-fallback.md) | Groq como reserva da transcrição, com teto mensal | phase-2-a | ready | KBC-036 |
+
 ## Definição de pronto (global)
 
 - Gates verdes: `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm format:check` (cobertura ≥ 80% em linhas por projeto).
@@ -73,4 +93,6 @@ O esqueleto atravessa todos os componentes: SPA → API → QMD MCP → vault �
 - 2026-10-27: em produção, um modelo gratuito no Exaustivo leu 38 de 2.555 documentos e escreveu uma cobertura falsa. O dono decidiu que, no Exaustivo, o aplicativo garante a varredura para todo provedor e mede a cobertura (KBC-030, ADR 0021); os sub-pesquisadores do KBC-018 saem do Exaustivo.
 - 2026-10-27: o dono pediu uma página de tutorial com imagens, aberta sem login (KBC-032), com todas as funcionalidades; as capturas são geradas por script contra o servidor E2E.
 - 2026-10-27 (relato do dono em produção): o "Acervo padrão" do convite parecia quebrado com nenhum acervo marcado. Entra o KBC-033: dica sob o campo, pré-seleção do único acervo marcado e aviso quando o padrão é limpo.
+- 2026-10-27 (pedido do dono): fase 2, acervo de áudio e vídeo. Volume ainda desconhecido (planejado com 500 h e 2.000 h), maioria áudio de palestras, compartilhamento só entre usuários do app, custo conforme a proposta. Da Paneas, só conhecimento (sem código, servidores ou contas da empresa).
+- 2026-10-28 (piloto e decisões do dono, plano v3): transcrever no Mac do dono, com o Groq de reserva (ADR 0023); gravações ruidosas pesquisáveis com aviso de baixa confiança; teto mensal de gasto da mídia de US$ 10; originais não guardados por padrão (só os insubstituíveis, em arquivo frio, depois); ordem das fases piloto → A → B → C → D → E. Transcrições indexadas fora do vault (ADR 0024). Fase A = KBC-034 a KBC-040, na ordem da tabela acima.
 - "Publicação" da release 1 = merge em `develop` no GitHub privado `diogofonteles/kb-chat` e app rodando localmente (`pnpm dev`). A promoção para `main` é decisão do dono.
