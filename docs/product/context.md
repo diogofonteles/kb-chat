@@ -26,6 +26,21 @@ Registrado no kickoff de 2026-10-23. Fonte: conversa com o dono (Diogo).
 | Stack | Angular (frontend), sob o devflow harness. |
 | Papéis | O dono decide produto, design e arquitetura e é o único usuário da v1. |
 
+## Fase 2 — acervo de mídia
+
+Decidido em 2026-10-27/28 (conversa com o dono e piloto em `docs/research/2026-10-28-transcription-pilot.md`):
+
+| Pergunta | Decisão |
+|---|---|
+| O que entra | Áudio e vídeo de palestras: guardar, transcrever, faixas, player com legendas, busca no minuto exato, pesquisa com IA e compilados, coleções, compartilhamento, upload e busca na web, em fases A a E. |
+| Volume | Desconhecido; planejado com 500 h e 2.000 h, maioria áudio. |
+| Compartilhamento | Só entre usuários do app. |
+| Transcrição | No Mac do dono (mlx-whisper turbo, VAD, lista de termos), Groq de reserva com teto (ADR 0023). |
+| Gravações ruidosas | Pesquisáveis, com aviso de baixa confiança. |
+| Custo | Teto mensal de US$ 10 para a mídia. |
+| Originais | Não guardados por padrão; os insubstituíveis, em arquivo frio, depois. |
+| Paneas | Só conhecimento; nada de código, servidores ou contas da empresa sem confirmação. |
+
 ## Restrições
 
 - **Custo:** créditos da OpenRouter são limitados (o saldo já acabou uma vez); a IA só roda sob pedido explícito, com custo visível.
