@@ -150,6 +150,7 @@ describe('MediaPlayerPage (T15)', () => {
     const { harness, http, media } = await openPage();
     http.expectOne(ITEM_URL).flush(ITEM);
     await harness.fixture.whenStable();
+    screen.getByRole('slider', { name: 'Posição' }).focus();
     media.setError(2);
     media.emit('error');
     TestBed.tick();
@@ -165,5 +166,11 @@ describe('MediaPlayerPage (T15)', () => {
     );
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
     expect(TestBed.inject(MediaEngine).source()).toBeNull();
+    // The slider is gone: the focus goes to the way out, not to <body> (NG-30).
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('link', { name: 'Voltar à Mídia' }),
+      ),
+    );
   });
 });

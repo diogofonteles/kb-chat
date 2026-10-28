@@ -14,6 +14,7 @@ import {
   viewChild,
 } from '@angular/core';
 import {
+  type AbstractControl,
   FormControl,
   FormGroup,
   ReactiveFormsModule,
@@ -71,7 +72,7 @@ export class UploadPanel implements OnInit {
   protected readonly form = new FormGroup({
     title: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.maxLength(200)],
+      validators: [notBlank, Validators.maxLength(200)],
     }),
     topic: new FormControl('', {
       nonNullable: true,
@@ -193,7 +194,7 @@ export class UploadPanel implements OnInit {
 
   private draftOf(file: File): Draft | null {
     const { title, topic, authorship } = this.form.getRawValue();
-    return authorship ? { file, title, topic, authorship } : null;
+    return authorship ? { file, title: title.trim(), topic, authorship } : null;
   }
 
   /**
@@ -253,6 +254,10 @@ export class UploadPanel implements OnInit {
     );
   }
 }
+
+/** A title is required, and spaces alone are not one (the API trims it too). */
+const notBlank = (control: AbstractControl<string>) =>
+  control.value.trim() ? null : { required: true };
 
 /** What an item was created for. */
 interface Draft {

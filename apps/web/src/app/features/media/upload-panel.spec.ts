@@ -274,6 +274,24 @@ describe('UploadPanel (T14, KBC-034)', () => {
     expect(context.uploaded).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses a title of only spaces before sending, and sends it trimmed', async () => {
+    const { container, http, fixture } = await renderPanel();
+    choose(container, audio());
+    const title = screen.getByRole('textbox', { name: 'Título' });
+    fireEvent.input(title, { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await fixture.whenStable();
+    expect(screen.getByText('Dê um título ao áudio.')).toBeTruthy();
+    expect(title.getAttribute('aria-invalid')).toBe('true');
+    http.expectNone({ method: 'POST' });
+    fireEvent.input(title, { target: { value: '  Aula 3  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    const created = http.expectOne({ method: 'POST' });
+    expect(created.request.body.title).toBe('Aula 3');
+    created.flush(CREATED);
+  });
+
   it('keeps a title the person typed when another file is chosen', async () => {
     const { container, fixture } = await renderPanel();
     choose(container, audio());

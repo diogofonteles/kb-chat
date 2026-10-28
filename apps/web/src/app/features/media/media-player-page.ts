@@ -4,8 +4,12 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
   inject,
+  viewChild,
 } from '@angular/core';
 import {
   takeUntilDestroyed,
@@ -80,6 +84,9 @@ export class MediaPlayerPage {
     return err !== undefined && toUiErrorCode(err) === 'MEDIA_NOT_FOUND';
   });
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  private readonly injector = inject(Injector);
+  private readonly backToList =
+    viewChild<ElementRef<HTMLAnchorElement>>('backToList');
 
   constructor() {
     toObservable(this.media)
@@ -124,7 +131,21 @@ export class MediaPlayerPage {
       .subscribe(() => this.item.reload());
     toObservable(this.notFound)
       .pipe(filter(Boolean), takeUntilDestroyed())
-      .subscribe(() => this.engine.unload());
+      .subscribe(() => {
+        this.engine.unload();
+        this.keepFocusOnPage();
+      });
+  }
+
+  /** The player is gone: a focus left on <body> goes to the way out (NG-30). */
+  private keepFocusOnPage(): void {
+    afterNextRender(
+      () => {
+        if (document.activeElement === document.body)
+          this.backToList()?.nativeElement.focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   protected reload(): void {
