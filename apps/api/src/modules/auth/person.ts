@@ -82,7 +82,13 @@ export const visibleTopics = (
   allTopics: readonly string[],
 ): string[] => allTopics.filter((topic) => canSeeTopic(person, topic));
 
-export function toMe(viewer: Viewer, allTopics: readonly string[]): Me {
+/** What `toMe` needs from the server: every collection slug and whether media is on. */
+export interface MeScope {
+  readonly topics: readonly string[];
+  readonly media: boolean;
+}
+
+export function toMe(viewer: Viewer, scope: MeScope): Me {
   const { person } = viewer;
   return {
     email: person.email,
@@ -90,8 +96,9 @@ export function toMe(viewer: Viewer, allTopics: readonly string[]): Me {
     picture: person.picture,
     role: person.role,
     features: effectiveFeatures(person),
-    topics: visibleTopics(person, allTopics),
+    topics: visibleTopics(person, scope.topics),
     isOwner: viewer.isOwner,
+    media: scope.media,
   };
 }
 

@@ -9,6 +9,7 @@ export const aMe = (overrides: Partial<Me> = {}): Me => ({
   features: ['search'],
   topics: ['hermetismo'],
   isOwner: false,
+  media: false,
   ...overrides,
 });
 
@@ -17,7 +18,13 @@ export const anOwner = (): Me =>
     email: 'owner@example.com',
     name: 'Owner',
     role: 'master',
-    features: ['search', 'research', 'collection-builder', 'own-ai-settings'],
+    features: [
+      'search',
+      'research',
+      'collection-builder',
+      'own-ai-settings',
+      'media-upload',
+    ],
     topics: ['alquimia', 'hermetismo'],
     isOwner: true,
   });

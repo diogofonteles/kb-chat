@@ -8,4 +8,5 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
     $localize`:@@feature.collectionBuilder:Montar/ampliar acervo`,
   'own-ai-settings': () =>
     $localize`:@@feature.ownAiSettings:Configurações de IA próprias`,
+  'media-upload': () => $localize`:@@feature.mediaUpload:Enviar áudios`,
 };
