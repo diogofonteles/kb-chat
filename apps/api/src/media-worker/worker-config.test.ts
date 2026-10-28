@@ -30,4 +30,10 @@ describe('loadWorkerConfig', () => {
     );
     expect(attempt).not.toThrow(/secret/);
   });
+
+  it('refuses to start with the empty token compose passes when it is unset', () => {
+    expect(() =>
+      loadWorkerConfig({ ...BASE, KB_CHAT_MEDIA_WORKER_TOKEN: '' }),
+    ).toThrow('KB_CHAT_MEDIA_WORKER_TOKEN');
+  });
 });

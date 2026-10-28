@@ -142,7 +142,9 @@ services:
     command: ['node', 'dist/media-worker-main.js']
     environment:
       KB_CHAT_MEDIA_API_URL: http://api:3000
-      KB_CHAT_MEDIA_WORKER_TOKEN: ${KB_CHAT_MEDIA_WORKER_TOKEN:?set KB_CHAT_MEDIA_WORKER_TOKEN (.env, runbook 9d)}
+      # Not `:?`: Compose interpolates this service even with the media profile off. The
+      # worker refuses to start without a token of 32+ characters (runbook 9d).
+      KB_CHAT_MEDIA_WORKER_TOKEN: ${KB_CHAT_MEDIA_WORKER_TOKEN:-}
       KB_CHAT_MEDIA_DIR: /data/media
       KB_CHAT_MEDIA_WORKER_NAME: vm
       FFMPEG_BIN: /usr/bin/ffmpeg
