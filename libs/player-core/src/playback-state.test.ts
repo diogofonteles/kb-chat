@@ -61,6 +61,32 @@ describe('reducePlayback', () => {
     expect(isBusy(waiting)).toBe(true);
   });
 
+  it('becomes paused on canplay alone, and a late duration never stops playback', () => {
+    const canPlay = play([
+      { type: 'load', loadId: 1 },
+      { type: 'canplay', loadId: 1 },
+    ]);
+    expect(canPlay.phase).toBe('paused');
+    const playing = play(
+      [
+        { type: 'playing', loadId: 1 },
+        { type: 'metadata', loadId: 1, durationMs: 61_000 },
+      ],
+      ready(),
+    );
+    expect(playing.phase).toBe('playing');
+    expect(playing.durationMs).toBe(61_000);
+  });
+
+  it('is not busy when "Tocar" was asked on a loaded source that is not waiting', () => {
+    const asked = reducePlayback(ready(), {
+      type: 'play-requested',
+      loadId: 1,
+    });
+    expect(asked.playRequested).toBe(true);
+    expect(isBusy(asked)).toBe(false);
+  });
+
   it('starts empty, loads, and becomes paused when it can play', () => {
     expect(INITIAL_PLAYBACK.phase).toBe('empty');
     const loading = play([{ type: 'load', loadId: 1 }]);
@@ -212,6 +238,17 @@ describe('reducePlayback', () => {
         play([{ type: 'seek-requested', loadId: 1, targetMs: -1 }], ready())
           .currentMs,
       ).toBe(0);
+    });
+
+    it('keeps playing while the person seeks', () => {
+      const state = play(
+        [
+          { type: 'playing', loadId: 1 },
+          { type: 'seek-requested', loadId: 1, targetMs: 30_000 },
+        ],
+        ready(),
+      );
+      expect(state.phase).toBe('playing');
     });
 
     it('leaves the ended state when the person seeks back', () => {

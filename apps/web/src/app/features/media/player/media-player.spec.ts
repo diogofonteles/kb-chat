@@ -104,6 +104,25 @@ describe('MediaPlayer (T15 basic controls)', () => {
     ).toBe('1:02:15');
   });
 
+  it('shows the end as the whole length, not one second short (Safari)', async () => {
+    const { media, fixture, container } = await renderPlayer((fake, engine) => {
+      engine.load(SOURCE);
+      fake.setDuration(119.99);
+      fake.emit('loadedmetadata');
+      fake.emit('canplay');
+    });
+    media.emit('seeked');
+    media.setCurrentTime(119.99);
+    media.emit('timeupdate');
+    await fixture.whenStable();
+    expect(container.querySelector('.elapsed')?.textContent).toBe('2:00');
+    expect(
+      screen
+        .getByRole('button', { name: /Tempo restante/ })
+        .textContent?.trim(),
+    ).toBe('-0:00');
+  });
+
   it('seeks from the slider, stepping from the live position on fast keys (AC-11)', async () => {
     const { media } = await renderPlayer(loaded);
     const slider = screen.getByRole('slider');

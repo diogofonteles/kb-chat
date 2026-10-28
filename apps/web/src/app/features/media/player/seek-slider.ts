@@ -13,6 +13,7 @@ import {
   formatClock,
   fractionOf,
   positionAtFraction,
+  positionToSecond,
   roundToSecond,
   sliderMoveOf,
 } from '@kb-chat/player-core';
@@ -61,16 +62,18 @@ export class SeekSlider {
   protected readonly bufferedPercent = computed(
     () => fractionOf(this.bufferedEndMs(), this.durationMs()) * 100,
   );
-  protected readonly valueNow = computed(() =>
-    Math.floor(this.shownMs() / 1000),
+  /** The position the slider speaks: the end reads as the whole length. */
+  private readonly shownSecondMs = computed(() =>
+    positionToSecond(this.shownMs(), this.durationMs()),
   );
+  protected readonly valueNow = computed(() => this.shownSecondMs() / 1000);
   protected readonly valueMax = computed(
     () => roundToSecond(this.durationMs() ?? 0) / 1000,
   );
   protected readonly valueText = computed(() => {
     if (!this.loaded())
       return $localize`:@@player.notLoaded:áudio ainda não carregado`;
-    const now = speak(this.shownMs());
+    const now = speak(this.shownSecondMs());
     return this.focused()
       ? $localize`:@@player.positionOf:${now}:now: de ${speak(roundToSecond(this.durationMs() ?? 0))}:total:`
       : now;

@@ -67,6 +67,7 @@ export function positionAtFraction(
 
 /** The fraction (0–1) of the track a position is at; 0 without a duration. */
 export function fractionOf(ms: number, durationMs: number | null): number {
-  if (!durationMs || durationMs <= 0) return 0;
-  return Math.min(1, Math.max(0, ms / durationMs));
+  const total = durationMs ?? 0;
+  if (!(total > 0)) return 0;
+  return Math.min(1, Math.max(0, ms / total));
 }

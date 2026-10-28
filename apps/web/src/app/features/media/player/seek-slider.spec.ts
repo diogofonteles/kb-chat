@@ -53,6 +53,16 @@ describe('SeekSlider (APG media seek slider)', () => {
     );
   });
 
+  it('reads the end as the whole length, though Safari stops at 119.99 s', async () => {
+    const { slider } = await renderSlider({
+      currentMs: 119_990,
+      durationMs: 119_990,
+    });
+    expect(slider.getAttribute('aria-valuenow')).toBe('120');
+    expect(slider.getAttribute('aria-valuemax')).toBe('120');
+    expect(slider.getAttribute('aria-valuetext')).toBe('2 minutos');
+  });
+
   it.each([
     ['ArrowRight', false, 5_000],
     ['ArrowUp', false, 5_000],

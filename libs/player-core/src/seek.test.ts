@@ -98,6 +98,7 @@ describe('positionAtFraction and fractionOf', () => {
     expect(fractionOf(10, null)).toBe(0);
     expect(fractionOf(10, 0)).toBe(0);
     expect(fractionOf(5, -10)).toBe(0);
+    expect(fractionOf(-5, -10)).toBe(0);
     expect(fractionOf(20, 10)).toBe(1);
     expect(fractionOf(-5, 10)).toBe(0);
   });

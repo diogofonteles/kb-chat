@@ -5,6 +5,7 @@ import {
   formatClock,
   formatDuration,
   formatRemaining,
+  positionToSecond,
   roundToSecond,
   spokenTime,
   type SpokenUnits,
@@ -83,6 +84,40 @@ describe('remaining time and rounded lengths', () => {
     expect(formatDuration(120_500)).toBe('2:01');
     expect(roundToSecond(-5)).toBe(0);
     expect(roundToSecond(Number.NaN)).toBe(0);
+  });
+});
+
+describe('positionToSecond', () => {
+  it('floors a position, but reads the end as the whole length (Safari stops at 119.99 s)', () => {
+    expect(positionToSecond(1_999, 120_000)).toBe(1_000);
+    expect(positionToSecond(119_000, 119_990)).toBe(119_000);
+    expect(positionToSecond(119_989, 119_990)).toBe(119_000);
+    expect(positionToSecond(119_990, 119_990)).toBe(120_000);
+    expect(positionToSecond(130_000, 119_990)).toBe(120_000);
+    expect(positionToSecond(-50, 1_000)).toBe(0);
+    expect(positionToSecond(5_400, null)).toBe(5_000);
+    expect(positionToSecond(Number.NaN, 1_000)).toBe(0);
+  });
+
+  it('never passes the length nor goes back as the position moves on', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 10_000_000 }),
+        fc.integer({ min: 0, max: 20_000_000 }),
+        fc.integer({ min: 0, max: 1_000 }),
+        (duration, at, step) => {
+          const now = positionToSecond(at, duration);
+          expect(now).toBeLessThanOrEqual(roundToSecond(duration));
+          expect(positionToSecond(at + step, duration)).toBeGreaterThanOrEqual(
+            now,
+          );
+        },
+      ),
+    );
+  });
+
+  it('makes the remaining time reach -0:00 at the end', () => {
+    expect(formatRemaining(119_990, 119_990)).toBe('-0:00');
   });
 });
 

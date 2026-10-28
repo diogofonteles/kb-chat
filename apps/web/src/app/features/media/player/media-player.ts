@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import {
   formatClock,
+  positionToSecond,
   formatDuration,
   formatRemaining,
   type PlaybackErrorKind,
@@ -52,7 +53,9 @@ export class MediaPlayer {
   protected readonly busy = this.engine.busy;
   protected readonly playing = this.engine.playing;
   protected readonly elapsed = computed(() =>
-    formatClock(this.playback().currentMs),
+    formatClock(
+      positionToSecond(this.playback().currentMs, this.playback().durationMs),
+    ),
   );
   protected readonly rightTime = computed(() => {
     const { currentMs, durationMs } = this.playback();

@@ -31,9 +31,24 @@ export const formatRemaining = (
   currentMs: number,
   durationMs: number,
 ): string => {
-  const elapsed = Math.floor(Math.max(0, currentMs) / 1000) * 1000;
+  const elapsed = positionToSecond(currentMs, durationMs);
   return `-${formatClock(Math.max(0, roundToSecond(durationMs) - elapsed))}`;
 };
+
+/**
+ * A position floored to the second, except at the end, which reads as the whole length:
+ * Safari stops a two-minute file at 119.99 s, which must read "2:00 de 2:00", not "1:59".
+ */
+export function positionToSecond(
+  currentMs: number,
+  durationMs: number | null,
+): number {
+  if (durationMs !== null && currentMs >= durationMs)
+    return roundToSecond(durationMs);
+  return Number.isFinite(currentMs)
+    ? Math.floor(Math.max(0, currentMs) / 1000) * 1000
+    : 0;
+}
 
 /**
  * A total length to the nearest second: browsers report 119.99 s for a two-minute AAC file
