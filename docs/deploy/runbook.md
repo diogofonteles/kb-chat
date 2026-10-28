@@ -266,6 +266,30 @@ Antes de ligar, confira o isolamento na própria VM: `sudo /srv/kb-chat/deploy/s
 - O login fica em `/srv/kb-chat/codex` (no backup cifrado). Para revogar: `exec codex codex logout`.
 - A sub-rede `172.30.0.0/24` é da rede `codex`; se outra rede Docker da VM já a usar, o `up` falha e diz isso.
 
+## 9d. 👤 DONO — acervo de mídia (KBC-034; só depois do KBC-041)
+
+A mídia fica desligada até o player completo (KBC-041) estar em produção, por decisão do dono. Para ligar, uma vez, na VM:
+
+```bash
+ssh -t ubuntu@<IP>
+# a pasta da mídia (o deploy também a cria): banco SQLite e áudio convertido, do usuário do app
+sudo install -d -o 10001 -g 10001 -m 0700 /srv/kb-chat/media
+# o token do processador de mídia, gerado na VM direto no .env, nunca exibido (ADR 0022)
+sudo sh -c 'printf "KB_CHAT_MEDIA_WORKER_TOKEN=%s\n" "$(openssl rand -base64 32)" >> /srv/kb-chat/deploy/.env'
+# liga a mídia na API e o contêiner do processador (some ",codex" se o Codex já estiver ligado)
+echo 'KB_CHAT_MEDIA=on' | sudo tee -a /srv/kb-chat/deploy/.env
+echo 'COMPOSE_PROFILES=media' | sudo tee -a /srv/kb-chat/deploy/.env
+cd /srv/kb-chat/deploy
+sudo docker compose --env-file .env --env-file release.env up -d --wait api media-worker
+sudo docker compose --env-file .env --env-file release.env ps media-worker   # healthy
+```
+
+- Com `KB_CHAT_MEDIA=on`, a API não sobe se `/data/media` não puder ser gravada, se faltar o token ou se uma migração falhar; o log diz o motivo (`docker compose logs api`).
+- O processador roda com 1 CPU e 2 GB: a conversão de 1 h de áudio leva cerca de 1 min, sem derrubar a busca.
+- Quem pode enviar: masters sempre; outras pessoas, com a permissão **Enviar áudios** em Pessoas e permissões.
+- O backup diário leva uma cópia consistente de `media.db` (nunca os áudios, que vêm de quem enviou).
+- Para desligar: `KB_CHAT_MEDIA=off` e tire `media` de `COMPOSE_PROFILES`; os arquivos ficam em `/srv/kb-chat/media`.
+
 ## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
 
 Tudo pela interface (ADR 0016, KBC-022); nada no `.env`.

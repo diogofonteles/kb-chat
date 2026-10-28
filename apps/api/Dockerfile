@@ -8,6 +8,8 @@
 #   kb     fallback search when qmd is down (`kb search`)
 #   claude Claude Code, only for the owner's subscription (KBC-007, KBC-010 BR-5)
 #   codex  Codex, run only by the `codex` service, the sandbox container (KBC-027, ADR 0020)
+# and ffmpeg/ffprobe for the `media-worker` service (KBC-034, ADR 0022), the same image with
+# another command.
 # Everything, the workspace and these global CLIs, is installed with pnpm (project rule);
 # versions are pinned.
 
@@ -58,7 +60,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate \
 # --- Runtime: non-root, tini as PID 1 (the CLIs run in their own process groups) ---
 FROM ${NODE_IMAGE} AS runtime
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends tini ca-certificates \
+  && apt-get install -y --no-install-recommends tini ca-certificates ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=clis /opt/clis /opt/clis
 
@@ -68,7 +70,7 @@ RUN groupadd --gid 10001 app \
   && useradd --uid 10001 --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app \
   && groupadd --gid 10002 codex \
   && useradd --uid 10002 --gid codex --no-create-home --home-dir /codex-home --shell /usr/sbin/nologin codex \
-  && mkdir -p /vault /data/state /home/app/.cache/qmd /home/app/.config/qmd /home/app/.claude \
+  && mkdir -p /vault /data/state /data/media /home/app/.cache/qmd /home/app/.config/qmd /home/app/.claude \
   && chown -R app:app /data /home/app
 
 ENV NODE_ENV=production \

@@ -37,6 +37,21 @@
 		respond 404
 	}
 
+	# Audio uploads (KBC-034): up to 500 MB, streamed to the API's disk, nothing else.
+	@mediaUpload {
+		method PUT
+		path_regexp mediaUpload ^/api/v1/media/[0-9a-f-]{36}/file$
+	}
+	handle @mediaUpload {
+		request_body {
+			max_size 501MB
+		}
+		reverse_proxy api:3000 {
+			# Hand the bytes to the API as they arrive (no buffering of 500 MB here).
+			request_buffers 0
+		}
+	}
+
 	handle /api/* {
 		request_body {
 			max_size 1MB

@@ -22,6 +22,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The media worker's tests convert real audio (KBC-034): ffmpeg and ffprobe.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: pnpm --filter @kb-chat/contracts build
       - run: pnpm lint
       - run: pnpm typecheck

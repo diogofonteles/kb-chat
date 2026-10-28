@@ -260,10 +260,22 @@ check_env() {
   if env_set SMTP_PASSWORD && ! env_set SMTP_USER; then
     log "SMTP_PASSWORD is set without SMTP_USER in $DEPLOY_DIR/.env"; return 1
   fi
+  if grep -Eq "^KB_CHAT_MEDIA=[\"' ]*on" "$DEPLOY_DIR/.env" && ! env_set KB_CHAT_MEDIA_WORKER_TOKEN; then
+    log "KB_CHAT_MEDIA=on needs KB_CHAT_MEDIA_WORKER_TOKEN in $DEPLOY_DIR/.env (runbook 9d)"; return 1
+  fi
   if ! env_set SMTP_USER && ! { env_set RESEND_API_KEY && env_set KB_CHAT_EMAIL_FROM; }; then
     log "no email provider in $DEPLOY_DIR/.env: set SMTP_USER and SMTP_PASSWORD (Gmail), or RESEND_API_KEY and KB_CHAT_EMAIL_FROM"
     return 1
   fi
+}
+
+# The media volume (ADR 0022) on a VM provisioned before KBC-034: owned by the app (10001).
+ensure_media_dir() {
+  local dir="${DEPLOY_DIR%/deploy}/media"
+  [ -d "$dir" ] && return 0
+  mkdir -p "$dir" && chmod 0700 "$dir"
+  if [ "$(id -u)" -eq 0 ]; then chown 10001:10001 "$dir"; fi
+  log "created $dir for the media library"
 }
 
 main() {
@@ -305,6 +317,7 @@ main() {
   fi
 
   take_lock
+  ensure_media_dir
   trap on_exit EXIT
   trap 'exit 130' INT TERM
 
