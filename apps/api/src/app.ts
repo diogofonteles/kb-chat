@@ -74,6 +74,15 @@ import {
   conversationRoutes,
 } from './modules/conversations/index.js';
 import { usageRoutes } from './modules/usage/index.js';
+import {
+  JANITOR_INTERVAL_MS,
+  MediaJanitor,
+  MediaService,
+  WorkerService,
+  mediaRoutes,
+  workerRoutes,
+} from './modules/media/index.js';
+import type { MediaDeps } from './media-factory.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
 import { mcpRoutes, peerOnlyMcp } from './mcp/mcp-routes.js';
@@ -143,6 +152,8 @@ export interface AppDeps {
    * never call it); `ai` must then be built with the same `house` to lend it.
    */
   readonly house?: HouseAi;
+  /** The media library (ADR 0022); without it no media route exists (KB_CHAT_MEDIA=off). */
+  readonly media?: MediaDeps;
 }
 
 type FullDeps = AppDeps & {
@@ -266,6 +277,25 @@ async function registerRoutes(
   await app.register(conversationRoutes(conversations));
   await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);
+  if (deps.media) await registerMedia(app, deps.media);
+}
+
+/** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
+async function registerMedia(app: FastifyInstance, media: MediaDeps) {
+  const { store, files, workerToken } = media;
+  await app.register(mediaRoutes(new MediaService({ store, files })));
+  await app.register(
+    workerRoutes({
+      service: new WorkerService({ store, files }),
+      token: workerToken,
+    }),
+  );
+  const janitor = new MediaJanitor({ store, files, log: app.log });
+  janitor.start(JANITOR_INTERVAL_MS);
+  app.addHook('onClose', async () => {
+    janitor.stop();
+    store.close();
+  });
 }
 
 /** The one-time codes, access requests and messages of KBC-014 (ADR 0011). */
@@ -309,6 +339,7 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
       loginRatePerMinute: config.AUTH_RATE_LIMIT,
       codeChannels: access.notifier.smsEnabled ? ['email', 'sms'] : ['email'],
       privacyContactEmail: config.KB_CHAT_OWNER_EMAIL ?? null,
+      mediaEnabled: deps.media !== undefined,
       notInvited: async (identity) => ({
         ticket: access.tickets.issue(identity),
         request: await access.requests.stateFor(identity),
@@ -430,7 +461,13 @@ async function registerAccess(
   const { deps, access, topics } = wiring;
   const rate = deps.config.AUTH_RATE_LIMIT;
   await app.register(
-    codeRoutes({ ...deps.auth, ...access, topics, verifyRatePerMinute: rate }),
+    codeRoutes({
+      ...deps.auth,
+      ...access,
+      topics,
+      verifyRatePerMinute: rate,
+      mediaEnabled: deps.media !== undefined,
+    }),
   );
   await app.register(
     accessRequestRoutes({

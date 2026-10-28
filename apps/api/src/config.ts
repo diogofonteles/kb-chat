@@ -159,8 +159,34 @@ export const configSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
+    /**
+     * The media library (phase 2, ADR 0022): off by default; with `on`, the API opens the
+     * media database and refuses to start when it cannot (fail fast).
+     */
+    KB_CHAT_MEDIA: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
+    /** The media database and files: /data/media in production (ADR 0022). */
+    KB_CHAT_MEDIA_DIR: z
+      .string()
+      .min(1)
+      .default('~/.kb-chat-media')
+      .transform(expandHome),
+    /**
+     * The media worker's token (secret, ADR 0022 §3): the API and the worker share it;
+     * at least 32 characters (`openssl rand -base64 32`). Required with KB_CHAT_MEDIA=on.
+     */
+    KB_CHAT_MEDIA_WORKER_TOKEN: blankAsUnset(z.string().min(32).optional()),
   })
   .superRefine((config, context) => {
+    if (config.KB_CHAT_MEDIA && !config.KB_CHAT_MEDIA_WORKER_TOKEN)
+      context.addIssue({
+        code: 'custom',
+        path: ['KB_CHAT_MEDIA_WORKER_TOKEN'],
+        message:
+          'KB_CHAT_MEDIA=on needs the media worker token: `openssl rand -base64 32`',
+      });
     // Half of the pair is a typo, not a choice: fail at boot in every environment.
     for (const [name, other] of [
       ['SMTP_USER', 'SMTP_PASSWORD'],
