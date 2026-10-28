@@ -8,7 +8,6 @@
   <form class="body" [formGroup]="form" (ngSubmit)="send()" novalidate>
     <header class="head">
       <h2 id="upload-title" i18n="@@media.upload.title">Enviar áudio</h2>
-      <p class="where">{{ topicTitle() }}</p>
     </header>
 
     <section
@@ -78,6 +77,15 @@
       }
     </label>
 
+    <label class="field">
+      <span class="label" i18n="@@media.upload.topic">Acervo</span>
+      <select formControlName="topic">
+        @for (option of topics(); track option.slug) {
+          <option [value]="option.slug">{{ option.title }}</option>
+        }
+      </select>
+    </label>
+
     <fieldset class="field">
       <legend class="label" i18n="@@media.upload.authorship">Autoria</legend>
       <div class="radios">
@@ -101,7 +109,7 @@
     </fieldset>
 
     @if (stage() === 'sending') {
-      <div class="progress" role="status">
+      <div class="progress">
         <progress
           max="100"
           [value]="percent()"

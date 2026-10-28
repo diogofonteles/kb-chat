@@ -19,6 +19,7 @@ import {
 } from '../../testing/fake-media-element.js';
 import { aMediaItem } from '../../testing/media-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
+import { MEDIA_POLL_MS } from './media-polling.js';
 
 const ITEM = aMediaItem();
 const ITEM_URL = `/api/v1/media/${ITEM.id}`;
@@ -39,6 +40,7 @@ async function openPage(): Promise<{
         { path: 'outra', children: [] },
       ]),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
+      { provide: MEDIA_POLL_MS, useValue: 20 },
     ],
   });
   const harness = await RouterTestingHarness.create(`/midia/${ITEM.id}`);
@@ -127,5 +129,40 @@ describe('MediaPlayerPage (T15)', () => {
     expect(media.calls.filter((call) => call.startsWith('load:'))).toHaveLength(
       1,
     );
+  });
+
+  it('asks again while converting and loads the audio once it is ready', async () => {
+    const { harness, http, media } = await openPage();
+    http
+      .expectOne(ITEM_URL)
+      .flush(
+        aMediaItem({ status: 'processing', progress: 40, durationMs: null }),
+      );
+    await harness.fixture.whenStable();
+    await vi.waitFor(() => http.expectOne(ITEM_URL).flush(ITEM));
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+    expect(media.calls).toEqual([`load:/api/v1/media/${ITEM.id}/stream`]);
+  });
+
+  it('shows "não encontrada" when the audio fails because the item was removed', async () => {
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    media.setError(2);
+    media.emit('error');
+    TestBed.tick();
+    http
+      .expectOne(ITEM_URL)
+      .flush(
+        { error: { code: 'MEDIA_NOT_FOUND', message: 'x' } },
+        { status: 404, statusText: 'Not Found' },
+      );
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Esta mídia não está mais no acervo ou você não tem acesso a ela.',
+    );
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    expect(TestBed.inject(MediaEngine).source()).toBeNull();
   });
 });

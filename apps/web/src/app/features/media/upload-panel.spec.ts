@@ -33,7 +33,13 @@ async function renderPanel() {
         useFactory: () => TestBed.inject(HttpBackend),
       },
     ],
-    inputs: { topic: 'hermetismo', topicTitle: 'Hermetismo' },
+    inputs: {
+      topic: 'hermetismo',
+      topics: [
+        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 },
+        { slug: 'alquimia', title: 'Alquimia', documentCount: 5 },
+      ],
+    },
     on: { uploaded, closed },
   });
   await view.fixture.whenStable();
@@ -153,7 +159,7 @@ describe('UploadPanel (T14, KBC-034)', () => {
       );
     await fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain(
-      'O servidor recusou este arquivo',
+      'Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus).',
     );
   });
 
@@ -202,5 +208,95 @@ describe('UploadPanel (T14, KBC-034)', () => {
     expect(screen.getByText('aula.flac')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  /** Fills the panel and sends; returns the create request. */
+  function sendAudio(
+    context: Awaited<ReturnType<typeof renderPanel>>,
+    file = audio(),
+  ) {
+    choose(context.container, file);
+    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /^(Enviar|Tentar de novo)$/ }),
+    );
+  }
+
+  it('removes the created item when Escape closes the panel mid-upload', async () => {
+    const context = await renderPanel();
+    sendAudio(context);
+    context.http.expectOne('/api/v1/topics/hermetismo/media').flush(CREATED);
+    const put = context.http.expectOne(`/api/v1/media/${CREATED.id}/file`);
+    screen.getByRole('dialog').dispatchEvent(new Event('close'));
+    expect(put.cancelled).toBe(true);
+    context.http
+      .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+      .flush(null);
+    expect(context.closed).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the created item when the person gives up after a failure', async () => {
+    const context = await renderPanel();
+    sendAudio(context);
+    context.http.expectOne('/api/v1/topics/hermetismo/media').flush(CREATED);
+    context.http
+      .expectOne(`/api/v1/media/${CREATED.id}/file`)
+      .error(new ProgressEvent('error'), { status: 0 });
+    await context.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    context.http
+      .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+      .flush(null);
+  });
+
+  it('creates a new item when the file changed after a failure, removing the old one', async () => {
+    const context = await renderPanel();
+    sendAudio(context);
+    context.http.expectOne('/api/v1/topics/hermetismo/media').flush(CREATED);
+    context.http
+      .expectOne(`/api/v1/media/${CREATED.id}/file`)
+      .error(new ProgressEvent('error'), { status: 0 });
+    await context.fixture.whenStable();
+    sendAudio(context, audio('Outra_aula.mp3', 5));
+    context.http
+      .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+      .flush(null);
+    const again = context.http.expectOne('/api/v1/topics/hermetismo/media');
+    expect(again.request.body).toMatchObject({
+      fileName: 'Outra_aula.mp3',
+      bytes: 5,
+      title: 'Outra aula',
+    });
+    again.flush({ ...CREATED, id: '22222222-2222-4222-8222-222222222222' });
+    context.http
+      .expectOne('/api/v1/media/22222222-2222-4222-8222-222222222222/file')
+      .flush({ ...CREATED, status: 'queued' });
+    expect(context.uploaded).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a title the person typed when another file is chosen', async () => {
+    const { container, fixture } = await renderPanel();
+    choose(container, audio());
+    const title = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Título',
+    });
+    fireEvent.input(title, { target: { value: 'Meu título' } });
+    choose(container, audio('Outra.mp3'));
+    await fixture.whenStable();
+    expect(title.value).toBe('Meu título');
+  });
+
+  it('sends to the collection chosen in "Acervo"', async () => {
+    const context = await renderPanel();
+    const select = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Acervo',
+    });
+    expect(select.value).toBe('hermetismo');
+    fireEvent.change(select, { target: { value: 'alquimia' } });
+    sendAudio(context);
+    context.http.expectOne('/api/v1/topics/alquimia/media').flush(CREATED);
+    context.http
+      .expectOne(`/api/v1/media/${CREATED.id}/file`)
+      .flush({ ...CREATED, status: 'queued' });
   });
 });

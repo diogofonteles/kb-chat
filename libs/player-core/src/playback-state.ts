@@ -26,6 +26,11 @@ export interface PlaybackState {
   readonly bufferingVisible: boolean;
   /** A seek the person asked for is in flight. */
   readonly userSeeking: boolean;
+  /**
+   * The person asked to play and the media has not started yet. Safari on iPhone loads
+   * nothing before that gesture, so "loading" alone is not "busy".
+   */
+  readonly playRequested: boolean;
   readonly error: PlaybackErrorKind | null;
 }
 
@@ -38,6 +43,7 @@ export type PlaybackEvent =
       readonly durationMs: number;
     }
   | { readonly type: 'canplay'; readonly loadId: number }
+  | { readonly type: 'play-requested'; readonly loadId: number }
   | { readonly type: 'playing'; readonly loadId: number }
   | { readonly type: 'pause'; readonly loadId: number }
   | { readonly type: 'waiting'; readonly loadId: number }
@@ -74,6 +80,7 @@ export const INITIAL_PLAYBACK: PlaybackState = {
   waiting: false,
   bufferingVisible: false,
   userSeeking: false,
+  playRequested: false,
   error: null,
 };
 
@@ -87,6 +94,8 @@ type Handler<T extends PlaybackEvent['type']> = (
 ) => PlaybackState;
 
 const notWaiting = { waiting: false, bufferingVisible: false } as const;
+/** The media stopped (paused, ended, failed): no play request is pending anymore. */
+const stopped = { ...notWaiting, playRequested: false } as const;
 
 const HANDLERS: { readonly [T in PlaybackEvent['type']]: Handler<T> } = {
   load: (_state, event) => ({
@@ -95,10 +104,13 @@ const HANDLERS: { readonly [T in PlaybackEvent['type']]: Handler<T> } = {
     loadId: event.loadId,
   }),
   unload: (state) => ({ ...INITIAL_PLAYBACK, loadId: state.loadId }),
+  // Knowing the duration is enough to operate the player (iPhone may send no `canplay`).
   metadata: (state, event) => ({
     ...state,
     durationMs: Math.max(0, event.durationMs),
+    phase: state.phase === 'loading' ? 'paused' : state.phase,
   }),
+  'play-requested': (state) => ({ ...state, playRequested: true }),
   canplay: (state) => ({
     ...state,
     ...notWaiting,
@@ -106,13 +118,13 @@ const HANDLERS: { readonly [T in PlaybackEvent['type']]: Handler<T> } = {
   }),
   playing: (state) => ({
     ...state,
-    ...notWaiting,
+    ...stopped,
     phase: 'playing',
     error: null,
   }),
   pause: (state) => ({
     ...state,
-    ...notWaiting,
+    ...stopped,
     phase:
       state.phase === 'ended' || state.phase === 'error'
         ? state.phase
@@ -123,24 +135,13 @@ const HANDLERS: { readonly [T in PlaybackEvent['type']]: Handler<T> } = {
     ...state,
     bufferingVisible: state.waiting && !state.userSeeking,
   }),
-  'seek-requested': (state, event) => {
-    const target = clampToDuration(event.targetMs, state.durationMs);
-    // A seek to the very end ends the media even while paused: browsers fire no `ended`
-    // then, and the player must offer "Ouvir de novo" all the same.
-    const atEnd = state.durationMs !== null && target >= state.durationMs;
-    const phase = atEnd
-      ? 'ended'
-      : state.phase === 'ended'
-        ? 'paused'
-        : state.phase;
-    return {
-      ...state,
-      userSeeking: true,
-      bufferingVisible: false,
-      currentMs: target,
-      phase,
-    };
-  },
+  'seek-requested': (state, event) => ({
+    ...state,
+    userSeeking: true,
+    bufferingVisible: false,
+    currentMs: clampToDuration(event.targetMs, state.durationMs),
+    phase: state.phase === 'ended' ? 'paused' : state.phase,
+  }),
   seeked: (state) => ({ ...state, userSeeking: false }),
   time: (state, event) =>
     // While a requested seek is in flight, the element still reports the old position.
@@ -156,13 +157,13 @@ const HANDLERS: { readonly [T in PlaybackEvent['type']]: Handler<T> } = {
   }),
   ended: (state) => ({
     ...state,
-    ...notWaiting,
+    ...stopped,
     phase: 'ended',
     currentMs: state.durationMs ?? state.currentMs,
   }),
   error: (state, event) => ({
     ...state,
-    ...notWaiting,
+    ...stopped,
     phase: 'error',
     error: event.kind,
   }),
@@ -198,6 +199,17 @@ export const isOperable = (state: PlaybackState): boolean =>
   state.phase === 'paused' ||
   state.phase === 'playing' ||
   state.phase === 'ended';
+
+/**
+ * "Tocar" works while the source loads too: on an iPhone nothing loads before that tap,
+ * and the tap is what starts it.
+ */
+export const canAskToPlay = (state: PlaybackState): boolean =>
+  isOperable(state) || state.phase === 'loading';
+
+/** Busy for the person: a requested play still loading, or a wait past the debounce. */
+export const isBusy = (state: PlaybackState): boolean =>
+  state.bufferingVisible || (state.phase === 'loading' && state.playRequested);
 
 /** `MediaError.code` (1–4) to the player's error kinds. */
 export function errorKindOf(code: number | undefined): PlaybackErrorKind {

@@ -15,7 +15,8 @@ import {
   mediaId,
   sessionAs,
 } from '../../testing/media-fixtures.js';
-import { MEDIA_POLL_MS, MediaListPage } from './media-list-page.js';
+import { MediaListPage } from './media-list-page.js';
+import { MEDIA_POLL_MS } from './media-polling.js';
 
 const LIST_URL = '/api/v1/topics/hermetismo/media';
 
@@ -203,6 +204,11 @@ describe('MediaListPage (T14)', () => {
       .flush(null);
     TestBed.tick();
     http.expectOne(LIST_URL).flush({ items: [] });
+    await fixture.whenStable();
+    expect(screen.getByText('Palestra de 1998 foi removido.')).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: /Mídia/ }),
+    );
   });
 
   it('removes nothing when the master cancels', async () => {

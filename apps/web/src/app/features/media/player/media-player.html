@@ -57,10 +57,10 @@
       type="button"
       class="play"
       [attr.aria-label]="playLabel()"
-      [disabled]="!operable()"
+      [disabled]="!canPlay()"
       (click)="toggle()"
     >
-      @if (buffering() || loading()) {
+      @if (busy()) {
         <span class="spinner" aria-hidden="true"></span>
       } @else if (playing()) {
         <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28">

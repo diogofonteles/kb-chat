@@ -5,12 +5,15 @@ import {
   InjectionToken,
   computed,
   inject,
+  isDevMode,
   signal,
 } from '@angular/core';
 import {
   INITIAL_PLAYBACK,
+  canAskToPlay,
   clampToDuration,
   errorKindOf,
+  isBusy,
   isOperable,
   reducePlayback,
   type PlaybackErrorKind,
@@ -36,16 +39,37 @@ export const MEDIA_ELEMENT_FACTORY = new InjectionToken<() => HTMLMediaElement>(
     providedIn: 'root',
     factory: () => {
       const document = inject(DOCUMENT);
-      return () => {
-        const audio = document.createElement('audio');
-        audio.hidden = true;
-        audio.dataset['mediaEngine'] = '';
-        document.body.append(audio);
-        return audio;
-      };
+      return () => createMediaElement(document, mediaTagOf(document));
     },
   },
 );
+
+/**
+ * The tag the engine uses: `<audio>`; in development only, `?mediaElement=video` gives a
+ * `<video>`, so the E2E proves the same engine on a real video element (ADR 0025, AC-14).
+ * A production build ignores the parameter.
+ */
+export function mediaTagOf(document: Document): 'audio' | 'video' {
+  const asked = new URLSearchParams(document.location.search).get(
+    'mediaElement',
+  );
+  return isDevMode() && asked === 'video' ? 'video' : 'audio';
+}
+
+function createMediaElement(
+  document: Document,
+  tag: 'audio' | 'video',
+): HTMLMediaElement {
+  const element = document.createElement(tag);
+  element.hidden = true;
+  element.dataset['mediaEngine'] = '';
+  if (element instanceof HTMLVideoElement) element.playsInline = true;
+  document.body.append(element);
+  return element;
+}
+
+/** How close to the end a paused seek counts as the end (browsers stop a few ms short). */
+const END_TOLERANCE_MS = 50;
 
 /** Waiting shorter than this is not shown (no flicker on each network pause). */
 export const BUFFERING_DEBOUNCE_MS = 300;
@@ -85,6 +109,10 @@ export class MediaEngine {
   readonly source = this.current.asReadonly();
   readonly playing = computed(() => this.state().phase === 'playing');
   readonly operable = computed(() => isOperable(this.state()));
+  /** "Tocar" may be pressed (also while the source loads: the tap starts it on iPhone). */
+  readonly canPlay = computed(() => canAskToPlay(this.state()));
+  /** Show the busy indicator: a requested play still loading, or a long wait. */
+  readonly busy = computed(() => isBusy(this.state()));
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
@@ -101,13 +129,6 @@ export class MediaEngine {
     element.preload = 'metadata';
     element.src = source.src;
     element.load();
-    // A source that never becomes playable (the connection dropped while loading) must not
-    // leave the player "loading" forever: the same stall timeout applies (AC-12).
-    const loadId = this.loads;
-    this.stallTimer = setTimeout(
-      () => this.onStalled(loadId),
-      this.stallTimeoutMs,
-    );
   }
 
   /** Asks to play; the state turns to playing only when the element says so. */
@@ -116,6 +137,10 @@ export class MediaEngine {
     if (!element || !this.current()) return;
     if (this.state().phase === 'ended') this.seek(0);
     const loadId = this.loads;
+    this.dispatch({ type: 'play-requested', loadId });
+    // Asked to play a source still loading (an iPhone loads only now): if it never becomes
+    // playable (the connection dropped), the stall timeout reports it (AC-12).
+    if (this.state().phase === 'loading') this.armStallTimer(loadId);
     // A refused play (autoplay policy, a newer load) leaves the state as the element reports.
     element.play()?.catch((err: unknown) => this.onPlayRefused(err, loadId));
   }
@@ -192,7 +217,7 @@ export class MediaEngine {
     on('playing', () => this.settle({ type: 'playing', loadId: this.loads }));
     on('pause', () => this.settle({ type: 'pause', loadId: this.loads }));
     on('waiting', () => this.onWaiting());
-    on('seeked', () => this.settle({ type: 'seeked', loadId: this.loads }));
+    on('seeked', () => this.onSeeked(element));
     on('timeupdate', () => this.onTime(element));
     on('progress', () => this.onBuffered(element));
     on('ended', () => this.settle({ type: 'ended', loadId: this.loads }));
@@ -212,6 +237,20 @@ export class MediaEngine {
     if (start !== null) this.seek(start);
   }
 
+  /**
+   * A seek to the very end while paused ends the media, though browsers fire no `ended`
+   * then: "Ouvir de novo" must show all the same. Playing, the browser ends it itself.
+   */
+  private onSeeked(element: HTMLMediaElement): void {
+    this.settle({ type: 'seeked', loadId: this.loads });
+    const { durationMs } = this.state();
+    const atEnd =
+      durationMs !== null &&
+      element.currentTime * 1000 >= durationMs - END_TOLERANCE_MS;
+    if (element.paused && atEnd)
+      this.dispatch({ type: 'ended', loadId: this.loads });
+  }
+
   private onWaiting(): void {
     const loadId = this.loads;
     this.dispatch({ type: 'waiting', loadId });
@@ -220,6 +259,11 @@ export class MediaEngine {
       () => this.dispatch({ type: 'buffering-elapsed', loadId }),
       BUFFERING_DEBOUNCE_MS,
     );
+    this.armStallTimer(loadId);
+  }
+
+  private armStallTimer(loadId: number): void {
+    if (this.stallTimer) clearTimeout(this.stallTimer);
     this.stallTimer = setTimeout(
       () => this.onStalled(loadId),
       this.stallTimeoutMs,
@@ -266,14 +310,13 @@ export class MediaEngine {
   }
 
   /**
-   * Safari reports a dropped connection as "source not supported" (code 4): once this
-   * source has proved playable (its duration is known), code 4 means the network.
+   * Our renditions are AAC in MP4, which every browser we support plays: "source not
+   * supported" (code 4) in practice means the request failed (Safari reports a dropped
+   * connection that way), so it is a network error the person can retry.
    */
   private errorKind(code: number | undefined): PlaybackErrorKind {
     const kind = errorKindOf(code);
-    return kind === 'unsupported' && this.state().durationMs !== null
-      ? 'network'
-      : kind;
+    return kind === 'unsupported' ? 'network' : kind;
   }
 
   private settle(event: PlaybackEvent): void {

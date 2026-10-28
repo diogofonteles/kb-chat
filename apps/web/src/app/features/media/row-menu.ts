@@ -46,6 +46,7 @@ import {
           type="button"
           role="menuitem"
           class="danger"
+          (focus)="focused.set(0)"
           (click)="choose()"
           i18n="@@media.remove"
         >
@@ -70,6 +71,8 @@ export class RowMenu {
   readonly removeChosen = output();
 
   protected readonly open = signal(false);
+  /** The item that has the focus, as the items report it. */
+  protected readonly focused = signal(0);
 
   protected toggle(): void {
     if (this.open()) this.close(true);
@@ -117,9 +120,8 @@ export class RowMenu {
   }
 
   private move(step: number): void {
-    const items = this.items().map((ref) => ref.nativeElement);
-    const current = items.indexOf(document.activeElement as HTMLButtonElement);
-    this.focusItem((current + step + items.length) % items.length);
+    const count = this.items().length;
+    this.focusItem((this.focused() + step + count) % count);
   }
 
   private focusItem(index: number): void {

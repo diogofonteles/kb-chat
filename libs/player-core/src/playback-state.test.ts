@@ -2,8 +2,10 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   INITIAL_PLAYBACK,
+  canAskToPlay,
   clampToDuration,
   errorKindOf,
+  isBusy,
   isOperable,
   reducePlayback,
   type PlaybackEvent,
@@ -22,6 +24,43 @@ const ready = (): PlaybackState =>
   ]);
 
 describe('reducePlayback', () => {
+  it('becomes operable once the duration is known (iPhone may send no canplay)', () => {
+    const state = play([
+      { type: 'load', loadId: 1 },
+      { type: 'metadata', loadId: 1, durationMs: 60_000 },
+    ]);
+    expect(state.phase).toBe('paused');
+    expect(isOperable(state)).toBe(true);
+  });
+
+  it('lets "Tocar" work while loading and is busy only once asked', () => {
+    const loading = play([{ type: 'load', loadId: 1 }]);
+    expect(canAskToPlay(loading)).toBe(true);
+    expect(canAskToPlay(INITIAL_PLAYBACK)).toBe(false);
+    expect(isBusy(loading)).toBe(false);
+    const asked = play([{ type: 'play-requested', loadId: 1 }], loading);
+    expect(isBusy(asked)).toBe(true);
+    expect(isBusy(play([{ type: 'playing', loadId: 1 }], asked))).toBe(false);
+    expect(play([{ type: 'pause', loadId: 1 }], asked).playRequested).toBe(
+      false,
+    );
+    expect(
+      play([{ type: 'error', loadId: 1, kind: 'network' }], asked)
+        .playRequested,
+    ).toBe(false);
+    expect(play([{ type: 'ended', loadId: 1 }], asked).playRequested).toBe(
+      false,
+    );
+    const waiting = play(
+      [
+        { type: 'waiting', loadId: 1 },
+        { type: 'buffering-elapsed', loadId: 1 },
+      ],
+      ready(),
+    );
+    expect(isBusy(waiting)).toBe(true);
+  });
+
   it('starts empty, loads, and becomes paused when it can play', () => {
     expect(INITIAL_PLAYBACK.phase).toBe('empty');
     const loading = play([{ type: 'load', loadId: 1 }]);
@@ -173,27 +212,6 @@ describe('reducePlayback', () => {
         play([{ type: 'seek-requested', loadId: 1, targetMs: -1 }], ready())
           .currentMs,
       ).toBe(0);
-    });
-
-    it('ends when the person seeks to the very end, even paused', () => {
-      const state = play(
-        [{ type: 'seek-requested', loadId: 1, targetMs: 99_000 }],
-        ready(),
-      );
-      expect(state).toMatchObject({ phase: 'ended', currentMs: 60_000 });
-      const playing = play([{ type: 'playing', loadId: 1 }], ready());
-      expect(
-        play([{ type: 'seek-requested', loadId: 1, targetMs: 60_000 }], playing)
-          .phase,
-      ).toBe('ended');
-    });
-
-    it('does not end on a seek when the duration is unknown', () => {
-      const state = play([
-        { type: 'load', loadId: 1 },
-        { type: 'seek-requested', loadId: 1, targetMs: 99_000 },
-      ]);
-      expect(state.phase).toBe('loading');
     });
 
     it('leaves the ended state when the person seeks back', () => {

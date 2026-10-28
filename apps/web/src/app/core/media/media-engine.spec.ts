@@ -8,6 +8,7 @@ import {
   BUFFERING_DEBOUNCE_MS,
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
+  mediaTagOf,
   type PlayableSource,
 } from './media-engine.js';
 
@@ -158,14 +159,30 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(media.calls.at(-1)).toBe('pause');
   });
 
-  it('stops loading with a network error when the source never becomes playable', () => {
+  it('reports a network error when a requested play never becomes playable (AC-12)', () => {
     vi.useFakeTimers();
     engine.load(LECTURE);
+    vi.advanceTimersByTime(60_000);
+    // Nothing asked yet: an iPhone loads nothing before the tap, which is not an error.
+    expect(engine.playback().phase).toBe('loading');
+    engine.play();
+    expect(engine.busy()).toBe(true);
     vi.advanceTimersByTime(12_000);
     expect(engine.playback()).toMatchObject({
       phase: 'error',
       error: 'network',
     });
+  });
+
+  it('lets "Tocar" work while loading, and the tap starts playing (iPhone)', () => {
+    engine.load(LECTURE);
+    expect(engine.canPlay()).toBe(true);
+    expect(engine.operable()).toBe(false);
+    engine.play();
+    expect(media.calls.at(-1)).toBe('play');
+    media.emit('playing');
+    expect(engine.playback().phase).toBe('playing');
+    expect(engine.busy()).toBe(false);
   });
 
   it('keeps a source that became playable in time', () => {
@@ -233,11 +250,39 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.playback().error).toBe('network');
   });
 
-  it('keeps "not supported" for a source that never played', () => {
+  it('reads "not supported" as the network even before any play (our files are AAC)', () => {
     engine.load(LECTURE);
     media.setError(4);
     media.emit('error');
-    expect(engine.playback().error).toBe('unsupported');
+    expect(engine.playback().error).toBe('network');
+  });
+
+  it('ends a paused seek to the very end, though the browser fires no ended', () => {
+    ready();
+    engine.seek(60_000);
+    media.emit('seeked');
+    expect(engine.playback().phase).toBe('ended');
+  });
+
+  it('does not end a playing seek near the end: the browser ends it itself', () => {
+    ready();
+    media.emit('playing');
+    Object.defineProperty(media.element, 'paused', {
+      configurable: true,
+      get: () => false,
+    });
+    engine.seek(60_000);
+    media.emit('seeked');
+    expect(engine.playback().phase).toBe('playing');
+    media.emit('ended');
+    expect(engine.playback().phase).toBe('ended');
+  });
+
+  it('keeps playing state on a paused seek away from the end', () => {
+    ready();
+    engine.seek(30_000);
+    media.emit('seeked');
+    expect(engine.playback().phase).toBe('paused');
   });
 
   it('treats a refused play without a gesture as normal, and a real refusal as an error', async () => {
@@ -296,5 +341,31 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
       2,
     );
     expect(engine.source()).toEqual(OTHER);
+  });
+});
+
+describe('MEDIA_ELEMENT_FACTORY', () => {
+  afterEach(() => window.history.replaceState({}, '', '/'));
+
+  it('puts one hidden <audio> in the page', () => {
+    const element = TestBed.inject(MEDIA_ELEMENT_FACTORY)();
+    expect(element.tagName).toBe('AUDIO');
+    expect(element.hidden).toBe(true);
+    expect(element.isConnected).toBe(true);
+    element.remove();
+  });
+
+  it('gives a <video> in development when asked, for the E2E of ADR 0025', () => {
+    window.history.replaceState({}, '', '/midia/x?mediaElement=video');
+    expect(mediaTagOf(document)).toBe('video');
+    const element = TestBed.inject(MEDIA_ELEMENT_FACTORY)();
+    expect(element.tagName).toBe('VIDEO');
+    expect((element as HTMLVideoElement).playsInline).toBe(true);
+    element.remove();
+  });
+
+  it('ignores any other value', () => {
+    window.history.replaceState({}, '', '/midia/x?mediaElement=img');
+    expect(mediaTagOf(document)).toBe('audio');
   });
 });

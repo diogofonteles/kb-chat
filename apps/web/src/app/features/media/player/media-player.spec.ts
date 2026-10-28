@@ -46,12 +46,22 @@ describe('MediaPlayer (T15 basic controls)', () => {
       ).toBe(true);
   });
 
-  it('shows a loading indicator inside the play button while loading', async () => {
-    const { container } = await renderPlayer((media, engine) =>
+  it('lets "Tocar" start a source still loading, then shows it is busy', async () => {
+    const { container, media, fixture } = await renderPlayer((fake, engine) =>
       engine.load(SOURCE),
     );
+    const play = screen.getByRole('button', { name: 'Tocar' });
+    expect(play.hasAttribute('disabled')).toBe(false);
     expect(
-      screen.getByRole('button', { name: 'Carregando o áudio' }),
+      screen
+        .getByRole('button', { name: 'Voltar 15 segundos' })
+        .hasAttribute('disabled'),
+    ).toBe(true);
+    fireEvent.click(play);
+    await fixture.whenStable();
+    expect(media.calls.at(-1)).toBe('play');
+    expect(
+      screen.getByRole('button', { name: 'Carregando. Pausar' }),
     ).toBeTruthy();
     expect(container.querySelector('.play .spinner')).not.toBeNull();
   });
@@ -143,7 +153,7 @@ describe('MediaPlayer (T15 basic controls)', () => {
     expect(screen.getByRole('alert').textContent).toContain(message);
   });
 
-  it('says the browser cannot play a source that never loaded', async () => {
+  it('says to check the connection when a source fails to load (Safari reports code 4)', async () => {
     const { media, fixture } = await renderPlayer((fake, engine) =>
       engine.load(SOURCE),
     );
@@ -151,7 +161,7 @@ describe('MediaPlayer (T15 basic controls)', () => {
     media.emit('error');
     await fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain(
-      'Este navegador não toca este áudio. Tente outro navegador.',
+      'Não consegui carregar o áudio. Verifique a conexão.',
     );
   });
 

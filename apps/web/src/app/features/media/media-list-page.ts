@@ -3,8 +3,8 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
-  InjectionToken,
   Injector,
   afterNextRender,
   afterRenderEffect,
@@ -33,14 +33,10 @@ import {
 } from 'rxjs';
 import { isInFlight, statusTextOf } from './media-labels.js';
 import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
+import { MEDIA_POLL_MS } from './media-polling.js';
 import { RowMenu } from './row-menu.js';
 import { UploadPanel } from './upload-panel.js';
 
-/** While anything is queued or converting, the list refreshes this often (as T5 does). */
-export const MEDIA_POLL_MS = new InjectionToken<number>('MEDIA_POLL_MS', {
-  providedIn: 'root',
-  factory: () => 5_000,
-});
 /** The title filter appears from this many items on (T14). */
 export const FILTER_FROM = 11;
 
@@ -64,10 +60,14 @@ export class MediaListPage {
   private readonly removeDialog =
     viewChild<ElementRef<HTMLDialogElement>>('removeDialog');
   private readonly rows = viewChildren<ElementRef<HTMLElement>>('row');
+  private readonly heading =
+    viewChild.required<ElementRef<HTMLElement>>('heading');
+  private readonly destroyRef = inject(DestroyRef);
   /** The item to focus once it is on screen (after an upload). */
   private pendingFocus: string | null = null;
 
   protected readonly topic = this.chat.topic;
+  protected readonly topics = this.chat.topicList;
   protected readonly list = httpResource(
     () => {
       const slug = this.chat.topicSlug();
@@ -142,11 +142,14 @@ export class MediaListPage {
 
   protected retry(item: MediaItem): void {
     this.actionError.set('');
-    this.api.retry(item.id).subscribe({
-      next: () => this.list.reload(),
-      error: (err: unknown) =>
-        this.actionError.set(errorMessage(toUiErrorCode(err))),
-    });
+    this.api
+      .retry(item.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.list.reload(),
+        error: (err: unknown) =>
+          this.actionError.set(errorMessage(toUiErrorCode(err))),
+      });
   }
 
   protected askRemove(item: MediaItem): void {
@@ -160,11 +163,23 @@ export class MediaListPage {
     const item = this.removing();
     this.removeDialog()?.nativeElement.close();
     if (!item) return;
-    this.api.remove(item.id).subscribe({
-      next: () => this.list.reload(),
-      error: (err: unknown) =>
-        this.actionError.set(errorMessage(toUiErrorCode(err))),
-    });
+    this.api
+      .remove(item.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.removed(item),
+        error: (err: unknown) =>
+          this.actionError.set(errorMessage(toUiErrorCode(err))),
+      });
+  }
+
+  /** The row is gone: say so and keep the focus on the page, not on <body> (NG-30). */
+  private removed(item: MediaItem): void {
+    this.list.reload();
+    this.announcement.set(
+      $localize`:@@media.removedAnnouncement:${item.title}:title: foi removido.`,
+    );
+    this.heading().nativeElement.focus();
   }
 
   protected cancelRemove(): void {

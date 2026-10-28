@@ -1,7 +1,7 @@
 <section class="media" aria-labelledby="media-title">
   <header class="head">
     <div class="titles">
-      <h2 id="media-title">
+      <h2 id="media-title" #heading tabindex="-1">
         <ng-container i18n="@@media.title">Mídia</ng-container>
         @if (topic(); as current) {
           &ngsp;<span class="topic">— {{ current.title }}</span>
@@ -160,7 +160,7 @@
 @if (uploading()) {
   <app-upload-panel
     [topic]="topic()?.slug ?? ''"
-    [topicTitle]="topic()?.title ?? ''"
+    [topics]="topics()"
     (uploaded)="uploaded($event)"
     (closed)="uploadClosed()"
   />

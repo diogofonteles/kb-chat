@@ -8,14 +8,16 @@
         <a class="secondary" routerLink="/midia" i18n="@@media.backToList"
           >Voltar à Mídia</a
         >
-        <button
-          type="button"
-          class="secondary"
-          (click)="reload()"
-          i18n="@@media.reload"
-        >
-          Tentar de novo
-        </button>
+        @if (!notFound()) {
+          <button
+            type="button"
+            class="secondary"
+            (click)="reload()"
+            i18n="@@media.reload"
+          >
+            Tentar de novo
+          </button>
+        }
       </div>
     </div>
   } @else if (media(); as current) {

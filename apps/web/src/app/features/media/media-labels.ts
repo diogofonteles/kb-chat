@@ -28,8 +28,10 @@ const STATUS_LABELS: Record<MediaStatus, (item: MediaItem) => string> = {
 export const statusTextOf = (item: MediaItem): string =>
   STATUS_LABELS[item.status](item);
 
-/** Items still moving: the list refreshes while one of them is on screen. */
+/**
+ * Items the server is working on (queued or converting): the list and the player page ask
+ * again until they settle. An upload in progress is not polled: its own panel reports it,
+ * and another person's half-sent file would keep every open page polling for a day.
+ */
 export const isInFlight = (item: MediaItem): boolean =>
-  item.status === 'uploading' ||
-  item.status === 'queued' ||
-  item.status === 'processing';
+  item.status === 'queued' || item.status === 'processing';

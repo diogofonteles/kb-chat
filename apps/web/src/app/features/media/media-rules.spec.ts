@@ -47,7 +47,7 @@ describe('statusTextOf (T14: status in words, UP-20)', () => {
 
   it('tells which items are still moving', () => {
     expect(isInFlight(anItem({ status: 'queued' }))).toBe(true);
-    expect(isInFlight(anItem({ status: 'uploading' }))).toBe(true);
+    expect(isInFlight(anItem({ status: 'uploading' }))).toBe(false);
     expect(isInFlight(anItem({ status: 'processing' }))).toBe(true);
     expect(isInFlight(anItem({ status: 'ready' }))).toBe(false);
     expect(isInFlight(anItem({ status: 'failed' }))).toBe(false);

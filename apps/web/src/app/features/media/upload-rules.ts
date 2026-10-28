@@ -7,10 +7,13 @@ import {
 export const uploadRule = (): string =>
   $localize`:@@media.upload.rule:mp3, m4a, wav, flac, ogg ou opus, até 500 MB`;
 
-const megabytes = (bytes: number): string =>
-  new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(
-    bytes / 1024 / 1024,
-  );
+/** Megabytes with a decimal below 10 MB ("2,9 MB"), whole above ("128 MB"). */
+const megabytes = (bytes: number): string => {
+  const mb = bytes / 1024 / 1024;
+  return new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: mb < 10 ? 1 : 0,
+  }).format(mb);
+};
 
 /** Why a chosen file cannot be sent, with the fix (MA-25); null when it can. */
 export function fileProblemOf(

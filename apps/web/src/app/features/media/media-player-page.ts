@@ -20,8 +20,16 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { mediaStreamUrl, mediaUrl } from '@core/media/media-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
-import { distinctUntilChanged, filter, map } from 'rxjs';
-import { statusTextOf } from './media-labels.js';
+import {
+  EMPTY,
+  distinctUntilChanged,
+  filter,
+  interval,
+  map,
+  switchMap,
+} from 'rxjs';
+import { isInFlight, statusTextOf } from './media-labels.js';
+import { MEDIA_POLL_MS } from './media-polling.js';
 import { MediaPlayer } from './player/media-player.js';
 
 /**
@@ -66,6 +74,12 @@ export class MediaPlayerPage {
     const err = this.item.error();
     return err ? errorMessage(toUiErrorCode(err)) : '';
   });
+  /** Removed, or not visible to this person: nothing to try again. */
+  protected readonly notFound = computed(() => {
+    const err = this.item.error();
+    return err !== undefined && toUiErrorCode(err) === 'MEDIA_NOT_FOUND';
+  });
+  private readonly pollMs = inject(MEDIA_POLL_MS);
 
   constructor() {
     toObservable(this.media)
@@ -75,7 +89,42 @@ export class MediaPlayerPage {
         takeUntilDestroyed(),
       )
       .subscribe((media) => this.open(media));
+    this.pollWhileConverting();
+    this.checkItemOnPlaybackError();
     inject(DestroyRef).onDestroy(() => this.engine.unload());
+  }
+
+  /** "Ela aparece aqui assim que estiver pronta" (T15): the page asks again meanwhile. */
+  private pollWhileConverting(): void {
+    const converting = computed(() => {
+      const media = this.media();
+      return media !== null && isInFlight(media);
+    });
+    toObservable(converting)
+      .pipe(
+        distinctUntilChanged(),
+        switchMap((moving) => (moving ? interval(this.pollMs) : EMPTY)),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.item.reload());
+  }
+
+  /**
+   * The audio failed: the item may have been removed (or access taken away) while it
+   * played. Asking for it again tells "não encontrada" from a connection problem.
+   */
+  private checkItemOnPlaybackError(): void {
+    toObservable(this.engine.playback)
+      .pipe(
+        map((playback) => playback.phase === 'error'),
+        distinctUntilChanged(),
+        filter(Boolean),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.item.reload());
+    toObservable(this.notFound)
+      .pipe(filter(Boolean), takeUntilDestroyed())
+      .subscribe(() => this.engine.unload());
   }
 
   protected reload(): void {

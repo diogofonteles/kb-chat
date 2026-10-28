@@ -47,13 +47,9 @@ export class MediaPlayer {
   protected readonly showRemaining = signal(true);
 
   protected readonly operable = this.engine.operable;
-  protected readonly loading = computed(
-    () => this.playback().phase === 'loading',
-  );
+  protected readonly canPlay = this.engine.canPlay;
   protected readonly ended = computed(() => this.playback().phase === 'ended');
-  protected readonly buffering = computed(
-    () => this.playback().bufferingVisible,
-  );
+  protected readonly busy = this.engine.busy;
   protected readonly playing = this.engine.playing;
   protected readonly elapsed = computed(() =>
     formatClock(this.playback().currentMs),
@@ -71,9 +67,7 @@ export class MediaPlayer {
       : $localize`:@@player.showRemaining:Duração total. Mostrar o tempo restante`,
   );
   protected readonly playLabel = computed(() => {
-    if (this.loading()) return $localize`:@@player.loading:Carregando o áudio`;
-    if (this.buffering())
-      return $localize`:@@player.buffering:Carregando. Pausar`;
+    if (this.busy()) return $localize`:@@player.buffering:Carregando. Pausar`;
     return this.playing()
       ? $localize`:@@player.pause:Pausar`
       : $localize`:@@player.play:Tocar`;

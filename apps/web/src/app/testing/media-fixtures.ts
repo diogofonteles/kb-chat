@@ -29,6 +29,7 @@ export const chatStoreOn = (slug = 'hermetismo', title = 'Hermetismo') => ({
   useValue: {
     topicSlug: signal(slug),
     topic: signal({ slug, title, documentCount: 10 }),
+    topicList: signal([{ slug, title, documentCount: 10 }]),
   },
 });
 
