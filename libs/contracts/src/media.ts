@@ -118,9 +118,13 @@ export const leaseRequestSchema = z.strictObject({
 });
 export type LeaseRequest = z.infer<typeof leaseRequestSchema>;
 
-/** A leased job: the paths are relative to the shared media directory. */
+/**
+ * A leased job: the paths are relative to the shared media directory. `leaseId` names this
+ * lease: a worker whose lease expired (the job went back to the queue) can no longer touch it.
+ */
 export const workerJobSchema = z.object({
   id: mediaJobIdSchema,
+  leaseId: z.uuid(),
   kind: mediaJobKindSchema,
   mediaId: mediaIdSchema,
   attempt: z.number().int().min(1),
@@ -130,14 +134,17 @@ export const workerJobSchema = z.object({
 });
 export type WorkerJob = z.infer<typeof workerJobSchema>;
 
-export const heartbeatRequestSchema = z.strictObject({
+const leaseOwnerSchema = z.strictObject({
   worker: z.string().min(1).max(100),
+  leaseId: z.uuid(),
+});
+
+export const heartbeatRequestSchema = leaseOwnerSchema.extend({
   progress: z.number().int().min(0).max(100).nullable(),
 });
 export type HeartbeatRequest = z.infer<typeof heartbeatRequestSchema>;
 
-export const completeTranscodeRequestSchema = z.strictObject({
-  worker: z.string().min(1).max(100),
+export const completeTranscodeRequestSchema = leaseOwnerSchema.extend({
   durationMs: z.number().int().min(0),
   bytes: z.number().int().min(1),
 });
@@ -145,8 +152,7 @@ export type CompleteTranscodeRequest = z.infer<
   typeof completeTranscodeRequestSchema
 >;
 
-export const failJobRequestSchema = z.strictObject({
-  worker: z.string().min(1).max(100),
+export const failJobRequestSchema = leaseOwnerSchema.extend({
   /** `invalid-audio` is permanent and never retried (KBC-034 BR-5). */
   failure: z.enum(['invalid-audio', 'conversion-failed']),
   /** For the log; never shown to people. */

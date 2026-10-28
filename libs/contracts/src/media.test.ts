@@ -88,6 +88,7 @@ describe('media contracts', () => {
   it('accepts only the worker failures a worker can report', () => {
     const fail = {
       worker: 'vm',
+      leaseId: '22222222-2222-4222-8222-222222222222',
       failure: 'invalid-audio',
       detail: 'no stream',
     };
