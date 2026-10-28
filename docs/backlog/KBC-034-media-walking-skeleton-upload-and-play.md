@@ -1,7 +1,7 @@
 ---
 id: KBC-034
 title: "Mídia (esqueleto): enviar um áudio, o aplicativo converte numa fila confiável e a pessoa ouve no navegador"
-status: ready
+status: done
 slice: phase-2-a
 outcome: o primeiro áudio do acervo toca no navegador a partir do servidor, com a base (banco, fila, processador de mídia) que as fases seguintes usam
 depends_on: [KBC-010, KBC-012]

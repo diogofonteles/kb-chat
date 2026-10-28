@@ -58,7 +58,7 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 
 | ID | Título | Fatia | Status | Depende de |
 |---|---|---|---|---|
-| [KBC-034](KBC-034-media-walking-skeleton-upload-and-play.md) | Mídia (esqueleto): enviar um áudio, converter numa fila confiável e ouvir no navegador | phase-2-a | ready | KBC-010, KBC-012 |
+| [KBC-034](KBC-034-media-walking-skeleton-upload-and-play.md) | Mídia (esqueleto): enviar um áudio, converter numa fila confiável e ouvir no navegador | phase-2-a | done | KBC-010, KBC-012 |
 | [KBC-041](KBC-041-full-player-controls-resume-and-mini-player.md) | Player completo: velocidade, volume, atalhos de teclado, controles do sistema, retomar de onde parou e mini-player | phase-2-a | ready | KBC-034 |
 | [KBC-043](KBC-043-configurable-skip-intervals.md) | Intervalos de pulo configuráveis | phase-2-a | ready | KBC-041 |
 | [KBC-046](KBC-046-sleep-timer.md) | Timer para dormir | phase-2-a | ready | KBC-041 |
