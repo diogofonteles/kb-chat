@@ -193,6 +193,15 @@ a.main:hover .title {
   margin: 0;
 }
 
+.sent-elsewhere {
+  margin: 0;
+  font-weight: 600;
+}
+
+.sent-elsewhere:empty {
+  display: none;
+}
+
 .error {
   margin: 0;
   color: var(--color-danger);

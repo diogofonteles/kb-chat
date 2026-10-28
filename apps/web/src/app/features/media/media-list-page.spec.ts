@@ -315,6 +315,52 @@ describe('MediaListPage (T14)', () => {
     http.expectNone({ method: 'GET', url: LIST_URL });
   });
 
+  it('says where an upload sent to another collection went, without moving the focus', async () => {
+    const { answer, http, fixture, container } = await renderList({
+      features: ['media-upload'],
+    });
+    await answer([]);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
+    );
+    await fixture.whenStable();
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+    const file = new File([new Uint8Array(3)], 'Nova.mp3', {
+      type: 'audio/mpeg',
+    });
+    Object.defineProperty(input, 'files', {
+      value: { item: () => file, length: 1 },
+    });
+    fireEvent.change(input as HTMLInputElement);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Acervo' }), {
+      target: { value: 'alquimia' },
+    });
+    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    const created = aMediaItem({
+      id: mediaId(9),
+      title: 'Nova',
+      topic: 'alquimia',
+      status: 'uploading',
+      durationMs: null,
+    });
+    http
+      .expectOne({ method: 'POST', url: '/api/v1/topics/alquimia/media' })
+      .flush(created);
+    http
+      .expectOne(`/api/v1/media/${created.id}/file`)
+      .flush({ ...created, status: 'queued' });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Nova foi enviado para o acervo Alquimia.',
+    );
+    http.expectNone({ method: 'GET', url: LIST_URL });
+    expect(
+      (document.activeElement as HTMLElement | null)?.dataset['mediaId'],
+    ).toBeUndefined();
+  });
+
   it('closes the upload panel without uploading', async () => {
     const { answer, fixture } = await renderList({
       features: ['media-upload'],

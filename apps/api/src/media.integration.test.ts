@@ -2,7 +2,7 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import type { MediaItem, WorkerJob } from '@kb-chat/contracts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LOCAL,
   MEDIA_WORKER_TOKEN,
@@ -256,7 +256,14 @@ describe('Media library: collections and races', () => {
       payload: body,
     });
     body.write(AUDIO.subarray(0, 10));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // The upload has really started: its partial file is on disk.
+    await vi.waitFor(() =>
+      expect(
+        readdirSync(join(media.mediaDir, 'uploads')).some((name) =>
+          name.endsWith('.part'),
+        ),
+      ).toBe(true),
+    );
     expect(
       (await media.owner('DELETE', `/api/v1/media/${created.id}`)).statusCode,
     ).toBe(204);

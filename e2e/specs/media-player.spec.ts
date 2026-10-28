@@ -178,7 +178,12 @@ test('AC-12: when the network drops mid-playback, the player says so and resumes
   await expect
     .poll(async () => (await audioState(page)).currentTime, { intervals: [50] })
     .toBeGreaterThanOrEqual(stoppedAt - 1);
-  expect((await audioState(page)).currentTime).toBeLessThan(stoppedAt + 1.5);
+  const resumedAt = (await audioState(page)).currentTime;
+  expect(resumedAt).toBeLessThan(stoppedAt + 1.5);
+  // And it really plays again: the clock moves on from there.
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(resumedAt + 0.5);
 });
 
 test('AC-14: the same engine drives a real <video> element', async ({

@@ -129,6 +129,25 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     expect(lines.join('')).toContain('heartbeat failed');
   });
 
+  it('keeps its alive file fresh during a long conversion (healthcheck)', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 2);
+    const aliveFile = join(dir, 'alive');
+    const touches: number[] = [];
+    const { api } = fakeApi({
+      heartbeat: async () => {
+        if (existsSync(aliveFile)) touches.push(statSync(aliveFile).mtimeMs);
+        return true;
+      },
+    });
+    // `process` alone never touches the file: only the job's heartbeat does.
+    await workerWith(api, { aliveFile, heartbeatMs: 10 }).process(
+      aJob(),
+      new AbortController().signal,
+    );
+    expect(existsSync(aliveFile)).toBe(true);
+    expect(new Set(touches).size).toBeGreaterThan(1);
+  });
+
   it('touches its alive file on every loop for the healthcheck', async () => {
     const aliveFile = join(dir, 'alive');
     const { api } = fakeApi();

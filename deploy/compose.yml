@@ -154,7 +154,8 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
     healthcheck:
-      # The worker touches the file on every loop (at most every 3 s, or between jobs).
+      # The worker touches the file on every loop (at most every 3 s) and on every heartbeat
+      # (15 s) while it converts.
       test:
         [
           'CMD',

@@ -36,6 +36,8 @@
     </label>
   }
 
+  <p class="sent-elsewhere" role="status">{{ sentElsewhere() }}</p>
+
   @if (actionError()) {
     <p class="error" role="alert">
       <span aria-hidden="true">⚠</span> {{ actionError() }}

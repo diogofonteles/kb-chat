@@ -98,6 +98,8 @@ export class MediaListPage {
   protected readonly removing = signal<MediaItem | null>(null);
   protected readonly actionError = signal('');
   protected readonly announcement = signal('');
+  /** Where the last upload went, when it was another collection. */
+  protected readonly sentElsewhere = signal('');
 
   constructor() {
     this.pollWhileInFlight();
@@ -127,6 +129,7 @@ export class MediaListPage {
   }
 
   protected openUpload(): void {
+    this.sentElsewhere.set('');
     this.uploading.set(true);
   }
 
@@ -134,8 +137,20 @@ export class MediaListPage {
     this.uploading.set(false);
   }
 
-  /** The new item lands on top, "Na fila", with the focus on it (UP-01). */
+  /**
+   * The new item lands on top, "Na fila", with the focus on it (UP-01); one sent to another
+   * collection is not on this list, so the page says where it went (UP-01, MA-25).
+   */
   protected uploaded(item: MediaItem): void {
+    if (item.topic !== this.chat.topicSlug()) {
+      const title =
+        this.topics().find((topic) => topic.slug === item.topic)?.title ??
+        item.topic;
+      this.sentElsewhere.set(
+        $localize`:@@media.sentElsewhere:${item.title}:title: foi enviado para o acervo ${title}:topic:.`,
+      );
+      return;
+    }
     this.pendingFocus = item.id;
     this.list.reload();
   }

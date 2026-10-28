@@ -72,8 +72,7 @@ export class WorkerService {
     const mediaId = this.deps.store.mediaOfJob(jobId);
     if (!mediaId) throw leaseLost();
     await this.assertWorkFile(mediaId, done);
-    // The lease must still be ours before the file moves (a beat checks it).
-    this.heartbeat(jobId, { ...leaseOf(done), progress: 100 });
+    await this.assertStillLeased(jobId, mediaId, done);
     const path = await this.promote(mediaId, done.leaseId);
     const finished = this.deps.store.completeTranscode({
       ...done,
@@ -95,6 +94,24 @@ export class WorkerService {
       throw leaseLost();
     }
     await this.deps.files.discardUpload(mediaId);
+  }
+
+  /**
+   * The lease must still be ours before the file moves (a beat checks it); when it is gone,
+   * this work file is nobody's.
+   */
+  private async assertStillLeased(
+    jobId: string,
+    mediaId: string,
+    done: CompleteTranscodeRequest,
+  ): Promise<void> {
+    try {
+      this.heartbeat(jobId, { ...leaseOf(done), progress: 100 });
+    } catch (err) {
+      const { files } = this.deps;
+      await files.remove([files.workPath(mediaId, done.leaseId)]);
+      throw err;
+    }
   }
 
   /** The lease's work file becomes the rendition (an atomic rename). */
