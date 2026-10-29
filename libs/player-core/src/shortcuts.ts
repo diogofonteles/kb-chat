@@ -43,14 +43,13 @@ const LETTERS: Readonly<Record<string, ShortcutAction>> = {
 /** Shift+, and Shift+. are the speed keys on any layout (some report the unshifted key). */
 const SHIFTED: Readonly<Record<string, string>> = { ',': '<', '.': '>' };
 
-/** Keys a focused control uses itself: the shortcut must not act a second time. */
-const CONSUMED: Readonly<Record<ShortcutTarget, readonly string[]>> = {
-  page: [],
-  button: [' ', 'Enter'],
-  slider: ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'],
-  field: [],
-  menu: [],
-  dialog: [],
+/**
+ * Shortcut keys a focused control already uses itself, so the shortcut must not act a
+ * second time: a button presses on Space, the time slider moves on the arrows (AC-8).
+ */
+const CONSUMED: Readonly<Partial<Record<ShortcutTarget, readonly string[]>>> = {
+  button: [' '],
+  slider: ['ArrowLeft', 'ArrowRight'],
 };
 
 export function shortcutOf(
@@ -61,7 +60,7 @@ export function shortcutOf(
   if (!enabled || press.ctrlKey || press.metaKey || press.altKey) return null;
   if (target === 'field' || target === 'menu' || target === 'dialog')
     return null;
-  if (CONSUMED[target].includes(press.key)) return null;
+  if (CONSUMED[target]?.includes(press.key)) return null;
   if (press.key === ' ') return { kind: 'toggle' };
   if (/^[0-9]$/.test(press.key))
     return { kind: 'seek-fraction', fraction: Number(press.key) / 10 };

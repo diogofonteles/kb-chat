@@ -32,7 +32,16 @@ describe('player shortcuts (T15, FR-6, BR-5)', () => {
   });
 
   it('ignores other keys', () => {
-    for (const key of ['a', 'x', 'Enter', 'Tab', 'Escape', 'F5', 'ArrowUp'])
+    for (const key of [
+      'a',
+      'x',
+      'Enter',
+      'Tab',
+      'Escape',
+      'F5',
+      'ArrowUp',
+      '12',
+    ])
       expect(shortcutOf(press(key), true)).toBeNull();
   });
 
@@ -63,6 +72,13 @@ describe('player shortcuts (T15, FR-6, BR-5)', () => {
     expect(shortcutOf(press('l', { target: 'button' }), true)).toEqual({
       kind: 'forward',
     });
+    // Elsewhere the same keys act.
+    expect(shortcutOf(press(' ', { target: 'page' }), true)).toEqual({
+      kind: 'toggle',
+    });
+    expect(shortcutOf(press('ArrowRight', { target: 'button' }), true)).toEqual(
+      { kind: 'seek-by', deltaMs: 5_000 },
+    );
   });
 
   it('reads Shift+, and Shift+. as the speed keys, whatever the layout says', () => {

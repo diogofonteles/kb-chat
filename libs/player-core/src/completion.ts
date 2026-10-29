@@ -5,11 +5,8 @@ export function isCompleted(
   positionMs: number,
   durationMs: number | null,
 ): boolean {
-  return (
-    durationMs !== null &&
-    durationMs > 0 &&
-    positionMs >= durationMs * COMPLETION_RATIO
-  );
+  const length = durationMs ?? 0;
+  return length > 0 && positionMs >= length * COMPLETION_RATIO;
 }
 
 /** The position "Continuar de" offers (FR-4): a saved one, not yet heard; else null. */
