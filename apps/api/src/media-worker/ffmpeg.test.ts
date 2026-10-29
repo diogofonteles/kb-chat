@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -98,6 +98,45 @@ describe('probe and transcodeAudio (real ffmpeg)', () => {
     const fake = join(dir, 'corrupt.mp3');
     writeFileSync(fake, 'this is not an mp3 at all, just text');
     await expect(probe(bins, fake)).rejects.toBeInstanceOf(InvalidMediaError);
+  });
+
+  /** A stand-in for ffprobe or ffmpeg: a shell script with a fixed behaviour. */
+  function fakeBinary(name: string, body: string): string {
+    const path = join(dir, name);
+    writeFileSync(path, `#!/bin/sh\n${body}\n`);
+    chmodSync(path, 0o755);
+    return path;
+  }
+
+  it('calls output that is not ffprobe JSON invalid media', async () => {
+    const ffprobe = fakeBinary('ffprobe-garbage', 'echo "not json"');
+    await expect(
+      probe({ ...bins, ffprobe }, join(dir, 'tone.mp3')),
+    ).rejects.toThrow('ffprobe printed no streams');
+  });
+
+  it('reads an unknown duration as 0, keeping the audio stream', async () => {
+    const ffprobe = fakeBinary(
+      'ffprobe-na',
+      `echo '{"streams":[{"codec_type":"audio"}],"format":{"duration":"N/A"}}'`,
+    );
+    await expect(
+      probe({ ...bins, ffprobe }, join(dir, 'tone.mp3')),
+    ).resolves.toEqual({ durationMs: 0, hasAudio: true });
+  });
+
+  it('stops a conversion that passes its time limit', async () => {
+    const ffmpeg = fakeBinary('ffmpeg-slow', 'exec sleep 5');
+    await expect(
+      transcodeAudio({
+        bins: { ...bins, ffmpeg },
+        source: join(dir, 'tone.mp3'),
+        target: join(dir, 'slow.m4a'),
+        durationMs: 3_000,
+        timeoutMs: 100,
+        onProgress: () => undefined,
+      }),
+    ).rejects.toThrow('ffmpeg timed out after 100 ms');
   });
 
   it('never blames the file when ffprobe itself is missing', async () => {
