@@ -160,11 +160,11 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     window.dispatchEvent(new Event('pagehide'));
     const sent = http.match({ method: 'PUT', url: urlOf(A.id) });
+    // Hiding queued it (with keepalive); leaving does not send the same one twice.
     expect(sent.length).toBe(1);
     expect(sent[0]?.request.keepalive).toBe(true);
     expect(sent[0]?.request.body.positionMs).toBe(12_500);
-    // Counted as delivered: it never overrides another device later (FR-3).
-    expect(JSON.parse(kept() ?? '{}').delivered).toBe(true);
+    expect(JSON.parse(kept() ?? '{}').delivered).toBe(false);
     Reflect.deleteProperty(document, 'visibilityState');
   });
 
@@ -293,7 +293,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     expect(puts()[0]?.request.keepalive).toBe(true);
   });
 
-  it('sends, as the page goes, a position still waiting for a media already closed', async () => {
+  it('lets the save of a media just closed outlive the page, without sending it twice', async () => {
     const { engine, playAt, start, http, saver } = setup();
     start();
     playAt(8);
@@ -301,14 +301,14 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     saver.saveNow();
     engine.unload();
     TestBed.tick();
-    // The close's save is still on its way when the page goes: it is sent once more,
-    // in a request that outlives the page.
+    // The close's save is already on its way with keepalive: it outlives the page, so
+    // leaving does not send it twice.
     window.dispatchEvent(new Event('pagehide'));
     const sent = http.match({ method: 'PUT', url: urlOf(A.id) });
     expect(sent.map((request) => request.request.body.positionMs)).toEqual([
-      8_000, 8_000,
+      8_000,
     ]);
-    expect(sent.every((request) => request.request.keepalive)).toBe(true);
+    expect(sent[0]?.request.keepalive).toBe(true);
   });
 
   it('sends each save on top of the server save it continues (FR-3)', () => {
@@ -411,5 +411,63 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     );
     window.dispatchEvent(new Event('pagehide'));
     expect(http.match({ method: 'PUT', url: urlOf(A.id) })).toEqual([]);
+  });
+
+  it('sends a hidden tab’s save through the queue, and sends it again if it failed (FR-3)', async () => {
+    const { playAt, start, puts, kept } = setup();
+    start();
+    playAt(3);
+    await vi.advanceTimersByTimeAsync(1_000);
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Reflect.deleteProperty(document, 'visibilityState');
+    puts()[0]?.flush(null, { status: 0, statusText: 'offline' });
+    // Not counted as delivered: the page stayed, and the next chance sends it again.
+    expect(JSON.parse(kept() ?? '{}').delivered).toBe(false);
+    playAt(4);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(puts()[0]?.request.body.positionMs).toBe(4_000);
+  });
+
+  it('never lets a hidden tab’s save pass one still on its way (FR-3)', async () => {
+    const { engine, media, playAt, start, pause, puts } = setup();
+    start();
+    playAt(3);
+    pause();
+    const inFlight = puts();
+    expect(inFlight.length).toBe(1);
+    engine.seek(33_000);
+    media.emit('seeked');
+    TestBed.tick();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Reflect.deleteProperty(document, 'visibilityState');
+    expect(puts()).toEqual([]);
+    inFlight[0]?.flush(savedAs(3_000, '2026-10-29T12:00:05.000Z'));
+    expect(puts()[0]?.request.body).toEqual({
+      positionMs: 33_000,
+      basedOn: '2026-10-29T12:00:05.000Z',
+    });
+  });
+
+  it('drops its copy of a media gone from the server, and stops sending it', () => {
+    const { start, playAt, pause, puts, kept, saver } = setup();
+    start();
+    playAt(3);
+    pause();
+    puts()[0]?.flush(
+      { error: { code: 'MEDIA_NOT_FOUND', message: 'x' } },
+      { status: 404, statusText: 'Not Found' },
+    );
+    expect(saver.gone()).toBe(A.id);
+    expect(kept()).toBeNull();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(puts()).toEqual([]);
   });
 });

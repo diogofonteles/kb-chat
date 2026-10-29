@@ -16,6 +16,7 @@ import {
   Subject,
   catchError,
   concatMap,
+  finalize,
   groupBy,
   mergeMap,
   tap,
@@ -72,6 +73,8 @@ export class ProgressSaver {
   private readonly confirmed = new Map<string, number>();
   /** Media with a position kept here and not yet confirmed: flushed as the page goes. */
   private readonly pending = new Set<string>();
+  /** The position on its way to the server, per media (a save from the queue). */
+  private readonly inFlight = new Map<string, number>();
   private readonly sends = new Subject<string>();
   private readonly goneId = signal<string | null>(null);
   private ticker: ReturnType<typeof setInterval> | null = null;
@@ -128,9 +131,11 @@ export class ProgressSaver {
   }
 
   private listenToLeaving(): void {
+    // Hidden, the page may stay: its saves go through the queue, in order, retried.
     const hidden = () => {
-      if (this.document.visibilityState === 'hidden') this.sendBeforeLeaving();
+      if (this.document.visibilityState === 'hidden') this.saveBeforeHiding();
     };
+    // Gone: nothing runs after this, so whatever is kept leaves now.
     const leaving = () => this.sendBeforeLeaving();
     const view = this.document.defaultView;
     this.document.addEventListener('visibilitychange', hidden);
@@ -195,7 +200,10 @@ export class ProgressSaver {
   private deliver(id: string): Observable<MediaProgress> {
     const kept = this.read(id);
     if (!kept || kept.delivered) return EMPTY;
-    return this.save(id, kept, { keepalive: true });
+    this.inFlight.set(id, kept.positionMs);
+    return this.save(id, kept, { keepalive: true }).pipe(
+      finalize(() => this.inFlight.delete(id)),
+    );
   }
 
   /**
@@ -225,7 +233,12 @@ export class ProgressSaver {
 
   private refused(id: string, err: unknown): void {
     if (!(err instanceof HttpErrorResponse)) return;
-    if (err.status === 404) this.goneId.set(id);
+    if (err.status === 404) {
+      // Gone for this person: nothing to keep or send any more.
+      this.goneId.set(id);
+      this.forget(id);
+      this.pending.delete(id);
+    }
     if (err.status === 409) {
       // Another device's save is newer: it wins; this browser's copy is dropped.
       const details: unknown = err.error?.error?.details;
@@ -255,17 +268,25 @@ export class ProgressSaver {
     } else this.write(id, { ...kept, basedOn: saved.positionUpdatedAt });
   }
 
+  /** The tab hides (a phone locks): what moved is kept and queued, like a pause. */
+  private saveBeforeHiding(): void {
+    if (this.engine.playing()) this.keep();
+    for (const id of this.pending) this.sends.next(id);
+  }
+
   /**
-   * The page goes (or hides): every position kept here and not yet confirmed (the one
-   * playing, one just closed) leaves in a save that outlives the page. If the page stays,
-   * its answer is handled like any other save.
+   * The page goes: every position kept here and not yet confirmed (the one playing, one
+   * just closed) leaves in a save that outlives the page, counted as delivered since
+   * nothing runs afterwards to retry it.
    */
   private sendBeforeLeaving(): void {
     // Only a playing position moved since it was last kept (a pause or a skip keeps it).
     if (this.engine.playing()) this.keep();
     for (const id of [...this.pending]) {
       const kept = this.read(id);
-      if (!kept || kept.delivered) continue;
+      // Already on its way with keepalive: it outlives the page by itself.
+      if (!kept || kept.delivered || this.inFlight.get(id) === kept.positionMs)
+        continue;
       this.write(id, { ...kept, delivered: true });
       this.save(id, kept, { keepalive: true }).subscribe();
     }
