@@ -215,7 +215,11 @@ export class MediaEngine {
     on('durationchange', () => this.onMetadata(element));
     on('canplay', () => this.settle({ type: 'canplay', loadId: this.loads }));
     on('playing', () => this.settle({ type: 'playing', loadId: this.loads }));
-    on('pause', () => this.settle({ type: 'pause', loadId: this.loads }));
+    // Events are queued: a pause the element no longer is in (the end's own, arriving after
+    // "Ouvir de novo" played again, as WebKit on Linux does) is stale and dropped.
+    on('pause', () => {
+      if (element.paused) this.settle({ type: 'pause', loadId: this.loads });
+    });
     on('waiting', () => this.onWaiting());
     on('seeked', () => this.onSeeked(element));
     on('timeupdate', () => this.onTime(element));
@@ -280,12 +284,14 @@ export class MediaEngine {
   }
 
   private onTime(element: HTMLMediaElement): void {
-    this.dispatch({
-      type: 'time',
-      loadId: this.loads,
-      currentMs: element.currentTime * 1000,
-    });
+    const currentMs = element.currentTime * 1000;
+    const before = this.state().currentMs;
+    this.dispatch({ type: 'time', loadId: this.loads, currentMs });
     this.onBuffered(element);
+    // The clock moving on an element that is not paused is playing, even if its `playing`
+    // event never comes (it can be lost after a seek from the end).
+    if (!element.paused && currentMs > before && !this.playing())
+      this.settle({ type: 'playing', loadId: this.loads });
   }
 
   /** The end of the buffered range that holds the current position. */

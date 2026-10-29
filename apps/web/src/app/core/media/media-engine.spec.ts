@@ -224,6 +224,47 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(media.calls.slice(-2)).toEqual(['seek:0', 'play']);
   });
 
+  it('ignores a pause the browser queued before "Ouvir de novo" played again (WebKit on Linux)', () => {
+    ready();
+    engine.play();
+    media.emit('playing');
+    media.setPaused(true);
+    media.emit('ended');
+    engine.play();
+    media.emit('playing');
+    // The end's own pause arrives late, while the element already plays again.
+    media.emit('pause');
+    expect(engine.playing()).toBe(true);
+  });
+
+  it('is playing once the clock moves on an unpaused element, even with no playing event', () => {
+    ready();
+    engine.play();
+    // A tick that does not move (the load's own) is not playback.
+    media.emit('timeupdate');
+    expect(engine.playing()).toBe(false);
+    media.setCurrentTime(0.25);
+    media.emit('timeupdate');
+    expect(engine.playing()).toBe(true);
+  });
+
+  it('does not take a requested seek for playback', () => {
+    ready();
+    engine.play();
+    engine.seek(30_000);
+    media.emit('timeupdate');
+    expect(engine.playing()).toBe(false);
+  });
+
+  it('does not call it playing when the clock moves on a paused element (a seek)', () => {
+    ready();
+    media.setCurrentTime(10);
+    media.emit('timeupdate');
+    media.setCurrentTime(20);
+    media.emit('timeupdate');
+    expect(engine.playing()).toBe(false);
+  });
+
   it('reports a network error and retries from the same second (AC-12)', () => {
     ready();
     media.emit('seeked');
@@ -267,10 +308,7 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
   it('does not end a playing seek near the end: the browser ends it itself', () => {
     ready();
     media.emit('playing');
-    Object.defineProperty(media.element, 'paused', {
-      configurable: true,
-      get: () => false,
-    });
+    media.setPaused(false);
     engine.seek(60_000);
     media.emit('seeked');
     expect(engine.playback().phase).toBe('playing');

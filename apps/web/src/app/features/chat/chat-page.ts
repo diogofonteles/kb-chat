@@ -80,7 +80,8 @@ export class ChatPage {
   );
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
-  private readonly composer = viewChild.required(Composer);
+  /** Absent on the media pages (/midia), which render in place of the conversation. */
+  private readonly composer = viewChild(Composer);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly drawer = viewChild<ElementRef<HTMLDialogElement>>('drawer');
@@ -167,7 +168,7 @@ export class ChatPage {
       // Grown to desktop with the drawer open: it goes away with the Menu button, so focus moves on.
       if (event.matches && drawer?.open) {
         drawer.close();
-        afterNextRender(() => this.composer().focus(), {
+        afterNextRender(() => this.composer()?.focus(), {
           injector: this.injector,
         });
       }
@@ -179,7 +180,7 @@ export class ChatPage {
     // The question box starts focused on desktop; on phones it would pop the keyboard.
     afterNextRender(() => {
       if (this.view?.matchMedia?.(DESKTOP_QUERY).matches)
-        this.composer().focus();
+        this.composer()?.focus();
     });
   }
 
@@ -201,7 +202,7 @@ export class ChatPage {
   protected menuClosed(): void {
     const target = this.focusAfterMenu;
     this.focusAfterMenu = 'menu';
-    if (target === 'composer') this.composer().focus();
+    if (target === 'composer') this.composer()?.focus();
     else this.menuButton()?.nativeElement.focus();
   }
 
@@ -220,7 +221,7 @@ export class ChatPage {
       this.focusAfterMenu = typing ? 'composer' : 'menu';
       this.closeMenu();
     } else if (typing) {
-      afterNextRender(() => this.composer().focus(), {
+      afterNextRender(() => this.composer()?.focus(), {
         injector: this.injector,
       });
     }
@@ -277,7 +278,9 @@ export class ChatPage {
   /** "Parar" disappears with the answer in flight: focus moves to the question box. */
   protected stopResearch(): void {
     this.research.stop();
-    afterNextRender(() => this.composer().focus(), { injector: this.injector });
+    afterNextRender(() => this.composer()?.focus(), {
+      injector: this.injector,
+    });
   }
 
   protected openHit(doc: DocumentRef, message: ChatMessage): void {
@@ -331,7 +334,7 @@ export class ChatPage {
     const cards = this.host.querySelectorAll<HTMLElement>('[data-doc-id]');
     const card = [...cards].find((element) => element.dataset['docId'] === id);
     if (card) card.focus();
-    else this.composer().focus();
+    else this.composer()?.focus();
   }
 
   protected reloadTopics(): void {
@@ -345,13 +348,13 @@ export class ChatPage {
    */
   protected focusOnSlash(event: KeyboardEvent): void {
     if (event.key !== '/') return;
-    if (this.composer().isEmptyField(event.target)) {
+    if (this.composer()?.isEmptyField(event.target)) {
       event.preventDefault();
       return;
     }
     const target = event.target as HTMLElement | null;
     if (target?.closest('input, textarea, select, [contenteditable]')) return;
     event.preventDefault();
-    this.composer().focus();
+    this.composer()?.focus();
   }
 }

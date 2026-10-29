@@ -13,6 +13,8 @@ export interface FakeMedia {
   setCurrentTime(seconds: number): void;
   setBuffered(ranges: readonly (readonly [number, number])[]): void;
   setError(code: number | null): void;
+  /** What `paused` says: `play()` clears it and `pause()` sets it, as in browsers. */
+  setPaused(paused: boolean): void;
 }
 
 interface FakeValues {
@@ -20,6 +22,7 @@ interface FakeValues {
   currentTime: number;
   buffered: (readonly [number, number])[];
   error: MediaError | null;
+  paused: boolean;
 }
 
 export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
@@ -29,6 +32,7 @@ export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
     currentTime: 0,
     buffered: [],
     error: null,
+    paused: true,
   };
   const fake: FakeMedia = {
     element,
@@ -41,9 +45,10 @@ export function fakeMediaElement(tag: 'audio' | 'video' = 'audio'): FakeMedia {
     setError: (code) =>
       (values.error =
         code === null ? null : ({ code, message: '' } as MediaError)),
+    setPaused: (paused) => (values.paused = paused),
   };
   defineTimeProperties(fake, values);
-  fakePlayback(fake);
+  fakePlayback(fake, values);
   return fake;
 }
 
@@ -65,6 +70,7 @@ function defineTimeProperties(fake: FakeMedia, values: FakeValues): void {
       }),
     },
     error: { get: () => values.error },
+    paused: { get: () => values.paused },
   });
 }
 
@@ -76,13 +82,17 @@ const PLAY_ANSWERS: Record<FakeMedia['playAnswer'], () => Promise<void>> = {
   fail: () => Promise.reject(new DOMException('cannot', 'NotSupportedError')),
 };
 
-function fakePlayback(fake: FakeMedia): void {
+function fakePlayback(fake: FakeMedia, values: FakeValues): void {
   const { element } = fake;
   element.play = () => {
     fake.calls.push('play');
+    if (fake.playAnswer === 'resolve') values.paused = false;
     return PLAY_ANSWERS[fake.playAnswer]();
   };
-  element.pause = () => void fake.calls.push('pause');
+  element.pause = () => {
+    fake.calls.push('pause');
+    values.paused = true;
+  };
   element.load = () =>
     void fake.calls.push(`load:${element.getAttribute('src') ?? ''}`);
 }
