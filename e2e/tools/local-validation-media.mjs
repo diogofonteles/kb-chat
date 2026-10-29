@@ -1,6 +1,6 @@
-// KBC-034 local validation: the media list (T14), the upload panel and the player (T15) in
-// every state, at 1440 and 390 px, in the three themes, on the E2E servers (Google Chrome:
-// it plays AAC). Usage: node e2e/tools/local-validation-media.mjs http://localhost:4327 <dir>
+// KBC-034 and KBC-041 local validation: the media list (T14), the upload panel, the player
+// (T15) in every state, its menus and shortcuts, "Continuar de" and the mini-player, at
+// 1440 and 390 px, in the three themes, on the E2E servers (Google Chrome: it plays AAC). Usage: node e2e/tools/local-validation-media.mjs http://localhost:4327 <dir>
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -86,10 +86,10 @@ for (const width of [1440, 390]) {
     await context.route('https://accounts.google.com/**', (r) =>
       r.fulfill({ body: '', contentType: 'text/javascript' }),
     );
-    await context.addInitScript(
-      (value) => localStorage.setItem('kb-chat.theme', value),
-      theme,
-    );
+    await context.addInitScript((value) => {
+      localStorage.setItem('kb-chat.theme', value);
+      localStorage.setItem('kb-chat.view', 'search');
+    }, theme);
     await signIn(context.request);
     const page = await context.newPage();
     const shot = async (name) => {
@@ -130,8 +130,9 @@ for (const width of [1440, 390]) {
     await shot('04-player-ready');
     await page.getByRole('button', { name: 'Tocar' }).click();
     await page.waitForTimeout(1500);
-    await page.getByRole('slider').focus();
-    await page.getByRole('slider').press('PageUp');
+    const position = page.getByRole('slider', { name: 'Posição' });
+    await position.focus();
+    await position.press('PageUp');
     await page.waitForTimeout(800);
     await shot('05-player-playing');
     await page.getByRole('button', { name: 'Pausar' }).click();
@@ -141,6 +142,39 @@ for (const width of [1440, 390]) {
     await page.getByRole('button', { name: 'Avançar 30 segundos' }).click();
     await page.getByRole('button', { name: 'Ouvir de novo' }).waitFor();
     await shot('06-player-ended');
+    await page.getByRole('button', { name: /^Velocidade/ }).click();
+    await shot('08-speed-menu');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Mais opções' }).click();
+    await page.getByRole('menuitem', { name: 'Atalhos de teclado' }).click();
+    await shot('09-shortcuts-dialog');
+    await page.keyboard.press('Escape');
+    // A saved position: back on the page, "Continuar de".
+    await position.focus();
+    await position.press('Home');
+    await position.press('PageUp');
+    await page.getByRole('button', { name: 'Tocar' }).click();
+    await page.waitForTimeout(1200);
+    await page.getByRole('button', { name: 'Pausar' }).click();
+    await page.waitForTimeout(600);
+    await page.goto('/midia');
+    await page.goto(`/midia/${lecture}`);
+    await page.getByRole('button', { name: /Continuar de/ }).waitFor();
+    await shot('10-resume');
+    // Playing, then away to search: the mini-player.
+    await page.getByRole('button', { name: /Continuar de/ }).click();
+    await page.getByRole('link', { name: '← Mídia' }).click();
+    const menu = page.getByRole('button', { name: 'Menu' });
+    if (await menu.isVisible()) await menu.click();
+    await page.getByRole('button', { name: /Nova conversa/ }).click();
+    await page.getByLabel('Sua pergunta').fill('ritmo');
+    await page.getByLabel('Sua pergunta').press('Enter');
+    await page.getByText(/documentos · Tudo ·/).waitFor();
+    await shot('11-mini-player-results');
+    await page
+      .getByRole('region', { name: 'Mini-player' })
+      .getByRole('button', { name: 'Fechar o player' })
+      .click();
     await page.goto('/midia/00000000-0000-4000-8000-000000000999');
     await page.getByRole('alert').waitFor();
     await shot('07-not-found');

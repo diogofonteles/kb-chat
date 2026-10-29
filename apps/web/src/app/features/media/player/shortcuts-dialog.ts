@@ -100,8 +100,8 @@ export class ShortcutsDialog {
     },
     { keys: ['M'], does: $localize`:@@player.shortcut.mute:Silenciar` },
     {
-      keys: ['0', '9'],
-      does: $localize`:@@player.shortcut.tenths:Ir para o início, ou para 10% a 90%`,
+      keys: [$localize`:@@player.key.digits:0 a 9`],
+      does: $localize`:@@player.shortcut.tenths:Ir para 0% a 90% da mídia`,
     },
     {
       keys: ['?'],
