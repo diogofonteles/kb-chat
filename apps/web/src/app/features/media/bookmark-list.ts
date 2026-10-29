@@ -4,14 +4,14 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
-  computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { MEDIA_BOOKMARK_NOTE_MAX } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
-import { speak } from '@core/i18n/spoken-time.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 
@@ -24,7 +24,7 @@ import { MediaEngine } from '@core/media/media-engine.js';
   selector: 'app-bookmark-list',
   template: `
     <section class="bookmarks" aria-labelledby="bookmarks-title">
-      <h3 id="bookmarks-title">
+      <h3 id="bookmarks-title" #heading tabindex="-1">
         <span i18n="@@bookmarks.title">Marcadores</span>
         @if (bookmarks().length) {
           <span class="count">{{ bookmarks().length }}</span>
@@ -37,6 +37,8 @@ import { MediaEngine } from '@core/media/media-engine.js';
           <button
             #undoButton
             type="button"
+            (focus)="undoFocused(true)"
+            (blur)="undoFocused(false)"
             (click)="undo()"
             i18n="@@bookmarks.undo"
           >
@@ -135,19 +137,22 @@ export class BookmarkList {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly undoButton =
     viewChild<ElementRef<HTMLButtonElement>>('undoButton');
+  private readonly heading =
+    viewChild.required<ElementRef<HTMLElement>>('heading');
+  private undoHadFocus = false;
 
   protected readonly bookmarks = this.store.bookmarks;
   protected readonly editingId = signal<string | null>(null);
   protected readonly noteMax = MEDIA_BOOKMARK_NOTE_MAX;
   protected readonly noNote = $localize`:@@bookmarks.noNote:Sem nota`;
-  protected readonly count = computed(() => this.bookmarks().length);
 
   protected clock(ms: number): string {
     return formatClock(ms);
   }
 
+  /** Holds the time it shows, so voice control finds it by what it says (WCAG 2.5.3). */
   protected playLabel(ms: number): string {
-    return $localize`:@@bookmarks.playFrom:Tocar de ${speak(ms)}:time:`;
+    return $localize`:@@bookmarks.playFrom:Tocar de ${formatClock(ms)}:time:`;
   }
 
   protected noteLabel(ms: number): string {
@@ -201,6 +206,29 @@ export class BookmarkList {
     const id = this.store.deleted()?.id;
     this.store.undo();
     if (id) this.focusLater(`[data-bookmark="${id}"] .time`);
+  }
+
+  constructor() {
+    // "Desfazer" goes when its 8 s end: a focus on it moves to the list's heading (NG-30).
+    effect(() => {
+      if (this.store.deleted() !== null) return;
+      untracked(() => {
+        if (!this.undoHadFocus) return;
+        this.undoHadFocus = false;
+        afterNextRender(
+          () => {
+            const active = this.host.nativeElement.ownerDocument.activeElement;
+            if (!active || active === active.ownerDocument.body)
+              this.heading().nativeElement.focus();
+          },
+          { injector: this.injector },
+        );
+      });
+    });
+  }
+
+  protected undoFocused(focused: boolean): void {
+    this.undoHadFocus = focused;
   }
 
   /** Bookmark ids are uuids: safe in a selector as they are. */

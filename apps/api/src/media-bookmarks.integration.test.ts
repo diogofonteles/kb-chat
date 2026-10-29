@@ -121,10 +121,12 @@ describe('Media bookmarks (KBC-042 FR-1)', () => {
       `/api/v1/media/${other.id}/bookmarks`,
       { id, positionMs: 0 },
     );
-    expect(taken.statusCode).toBe(409);
-    expect(
-      (await media.owner('PATCH', `${url}/${id}`, { note: '' })).statusCode,
-    ).toBe(400);
+    // Taken elsewhere: answered as unknown, telling nothing about it.
+    expect(taken.statusCode).toBe(404);
+    // A blank note is no note.
+    const blank = await media.owner('PATCH', `${url}/${id}`, { note: '   ' });
+    expect(blank.statusCode).toBe(200);
+    expect(blank.json().note).toBeNull();
   });
 
   it('keeps bookmarks out of a media that is not ready, or unknown', async () => {
@@ -185,6 +187,34 @@ describe('Media bookmarks (KBC-042 FR-1)', () => {
     expect(
       (await reader.call('GET', '/api/v1/media/bookmarks')).statusCode,
     ).toBe(403);
+  });
+});
+
+describe('Media bookmarks: the cap', () => {
+  it('keeps at most 1 000 per person and media, and says so (BOOKMARK_LIMIT)', async () => {
+    const media = await startMedia();
+    const item = await readyItem(media);
+    const url = `/api/v1/media/${item.id}/bookmarks`;
+    for (let i = 0; i < 1_000; i++)
+      expect(
+        (await media.owner('POST', url, { id: randomUUID(), positionMs: i }))
+          .statusCode,
+      ).toBe(201);
+    const over = await media.owner('POST', url, {
+      id: randomUUID(),
+      positionMs: 0,
+    });
+    expect(over.statusCode).toBe(409);
+    expect(over.json().error).toMatchObject({
+      code: 'BOOKMARK_LIMIT',
+      details: { limit: 1_000 },
+    });
+    // Another person still has their own room.
+    const listener = await member(media, listenerGrant);
+    expect(
+      (await listener.call('POST', url, { id: randomUUID(), positionMs: 0 }))
+        .statusCode,
+    ).toBe(201);
   });
 });
 

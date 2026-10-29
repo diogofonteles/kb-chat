@@ -51,7 +51,7 @@ const OPTIONS = {
   },
   remove: {
     config: { access: LISTEN },
-    schema: { params: oneBookmark },
+    schema: { params: oneBookmark, response: { 204: z.undefined() } },
   },
 } as const;
 

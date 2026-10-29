@@ -80,9 +80,7 @@ describe('BookmarkList (KBC-042 FR-3, FR-4)', () => {
 
   it('plays from a bookmark when its time is pressed (AC-2)', async () => {
     const { media } = await renderList();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Tocar de 12 minutos e 38 segundos' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar de 12:38' }));
     expect(media.calls).toContain('seek:758');
     expect(media.calls.at(-1)).toBe('play');
   });
@@ -142,7 +140,7 @@ describe('BookmarkList (KBC-042 FR-3, FR-4)', () => {
     expect(screen.getByText('lei do ritmo')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Desfazer' })).toBeNull();
     expect(document.activeElement).toBe(
-      screen.getByRole('button', { name: 'Tocar de 12 minutos e 38 segundos' }),
+      screen.getByRole('button', { name: 'Tocar de 12:38' }),
     );
     expect(http.match({ method: 'DELETE' })).toEqual([]);
   });

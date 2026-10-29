@@ -114,7 +114,7 @@ test('AC-2: three bookmarks show on the slider, and one plays from its time', as
   await expect(page.locator('app-seek-slider .mark')).toHaveCount(3);
   await list(page)
     .nth(1)
-    .getByRole('button', { name: 'Tocar de 40 segundos' })
+    .getByRole('button', { name: 'Tocar de 0:40' })
     .click();
   await expect(
     page.getByRole('button', { name: 'Pausar', exact: true }),
@@ -201,7 +201,7 @@ test('FR-5: "Meus marcadores" opens the media playing from the bookmark', async 
   await page.getByRole('link', { name: 'Meus marcadores' }).click();
   await page
     .getByRole('link', {
-      name: `${lecture.title}, tocar de 30 segundos`,
+      name: `${lecture.title} 0:30, tocar daqui`,
     })
     .click();
   await expect(
@@ -223,7 +223,13 @@ test('AC-9: marking, noting, playing from the list and undoing work with the key
 }) => {
   await openPlayer(page);
   const mark = page.getByRole('button', { name: 'Marcar este trecho' });
-  await mark.focus();
+  // From the time slider, Tab walks the controls up to 🔖.
+  await page.getByRole('slider', { name: 'Posição' }).focus();
+  for (let i = 0; i < 12; i++) {
+    if (await mark.evaluate((node) => node === document.activeElement)) break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(mark).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(
     page.getByRole('textbox', { name: /Nota do marcador/ }),
@@ -234,7 +240,12 @@ test('AC-9: marking, noting, playing from the list and undoing work with the key
   const time = list(page)
     .first()
     .getByRole('button', { name: /^Tocar de/ });
-  await time.focus();
+  // After 🔖 come "Mais opções" and the list.
+  for (let i = 0; i < 6; i++) {
+    if (await time.evaluate((node) => node === document.activeElement)) break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(time).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(
     list(page)
@@ -248,7 +259,11 @@ test('AC-9: marking, noting, playing from the list and undoing work with the key
   await expect(list(page).first()).toContainText('trecho importante');
 });
 
-test('NFR-2: 500 bookmarks list and respond fast', async ({ page }) => {
+test('NFR-2: 500 bookmarks list and respond fast', async ({
+  page,
+  browserName,
+}) => {
+  // Event Timing (INP) exists in Chromium only; WebKit still lists the 500.
   test.setTimeout(120_000);
   await seed(
     page,
@@ -256,6 +271,7 @@ test('NFR-2: 500 bookmarks list and respond fast', async ({ page }) => {
   );
   await openPlayer(page);
   await expect(list(page)).toHaveCount(500);
+  if (browserName !== 'chromium') return;
   await page.evaluate(() => {
     const durations: number[] = [];
     new PerformanceObserver((entries) => {
@@ -263,40 +279,67 @@ test('NFR-2: 500 bookmarks list and respond fast', async ({ page }) => {
     }).observe({
       type: 'event',
       durationThreshold: 16,
-      buffered: false,
     } as PerformanceObserverInit);
     Object.assign(window, { interactionDurations: durations });
   });
+  const durations = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as { interactionDurations: number[] })
+          .interactionDurations,
+    );
+  // Scrolling the whole list, then a click far down: each answers within 200 ms.
+  await page.mouse.wheel(0, 20_000);
   const target = list(page)
-    .nth(250)
+    .nth(450)
     .getByRole('button', { name: /^Tocar de/ });
-  await target.scrollIntoViewIfNeeded();
   await target.click();
-  await page.waitForTimeout(500);
-  const slowest = await page.evaluate(() =>
-    Math.max(
-      0,
-      ...(window as unknown as { interactionDurations: number[] })
-        .interactionDurations,
-    ),
-  );
-  expect(slowest).toBeLessThanOrEqual(200);
+  await expect(
+    page.getByRole('button', { name: 'Pausar', exact: true }),
+  ).toBeVisible();
+  await expect.poll(async () => (await durations()).length).toBeGreaterThan(0);
+  expect(Math.max(...(await durations()))).toBeLessThanOrEqual(200);
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {
   test(`the bookmarks pass axe in the ${theme} theme`, async ({ page }) => {
     await useTheme(page, theme);
-    await seed(page, [5_000]);
+    await seed(page, [5_000, 10_000]);
     await openPlayer(page);
+    const serious = async () =>
+      (await new AxeBuilder({ page }).analyze()).violations.filter(
+        (violation) => ['serious', 'critical'].includes(violation.impact ?? ''),
+      );
+    // The note open, an inline edit, "Desfazer", the save alert, "Meus marcadores".
     await page.getByRole('button', { name: 'Marcar este trecho' }).click();
     await expect(
       page.getByRole('textbox', { name: /Nota do marcador/ }),
     ).toBeVisible();
-    const violations = (
-      await new AxeBuilder({ page }).analyze()
-    ).violations.filter((violation) =>
-      ['serious', 'critical'].includes(violation.impact ?? ''),
+    expect(await serious()).toEqual([]);
+    await page.keyboard.press('Escape');
+    await list(page)
+      .nth(1)
+      .getByRole('button', { name: /^Editar/ })
+      .click();
+    expect(await serious()).toEqual([]);
+    await page.keyboard.press('Escape');
+    await list(page)
+      .nth(1)
+      .getByRole('button', { name: /^Apagar/ })
+      .click();
+    await expect(page.getByRole('button', { name: 'Desfazer' })).toBeVisible();
+    expect(await serious()).toEqual([]);
+    await page.route('**/bookmarks', (route) =>
+      route.request().method() === 'POST' ? route.abort() : route.continue(),
     );
-    expect(violations).toEqual([]);
+    await page.getByRole('button', { name: 'Marcar este trecho' }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    expect(await serious()).toEqual([]);
+    await page.unroute('**/bookmarks');
+    await page.goto('/midia/marcadores');
+    await expect(
+      page.getByRole('heading', { name: 'Meus marcadores' }),
+    ).toBeVisible();
+    expect(await serious()).toEqual([]);
   });
 }

@@ -69,11 +69,12 @@ export class BookmarkService {
     const item = this.deps.media.get(actor, mediaId);
     const existing = this.deps.bookmarks.bookmark(request.id);
     if (existing) {
+      // Another person's (or another media's): as if it did not exist (BR-1).
       if (
         existing.principal !== actor.principal ||
         existing.mediaId !== mediaId
       )
-        throw new AppError('MEDIA_CONFLICT', 'This bookmark id is taken');
+        throw unknownBookmark();
       return { bookmark: asBookmark(existing), created: false };
     }
     this.assertCreatable(actor, item, request.positionMs);
@@ -105,7 +106,7 @@ export class BookmarkService {
       MEDIA_BOOKMARKS_PER_MEDIA
     )
       throw new AppError(
-        'MEDIA_CONFLICT',
+        'BOOKMARK_LIMIT',
         `At most ${MEDIA_BOOKMARKS_PER_MEDIA} bookmarks per media`,
         { details: { limit: MEDIA_BOOKMARKS_PER_MEDIA } },
       );

@@ -22,7 +22,6 @@ import {
   catchError,
   concatMap,
   distinctUntilChanged,
-  map,
   of,
   switchMap,
   tap,
@@ -41,22 +40,42 @@ export const BOOKMARK_ID = new InjectionToken<() => string>('BOOKMARK_ID', {
   factory: () => () => crypto.randomUUID(),
 });
 
-/** What went wrong with a bookmark, for the alert with "Tentar de novo" (NFR-1). */
-export interface BookmarkFailure {
-  readonly id: string;
-  readonly kind: 'save' | 'delete';
+/**
+ * What went wrong in the media on screen (NFR-1): bookmarks not saved (with "Tentar de
+ * novo"), a deletion that did not go, or the cap of bookmarks reached (nothing to retry).
+ */
+export type BookmarkFailure =
+  | { readonly kind: 'save'; readonly count: number }
+  | { readonly kind: 'delete' }
+  | { readonly kind: 'limit' };
+
+/** A bookmark the server does not fully have yet: itself, or its latest note. */
+interface Outgoing {
+  readonly bookmark: MediaBookmark;
+  readonly created: boolean;
+  readonly noteToSend: boolean;
+  readonly failed: boolean;
 }
 
 type Write =
-  | { readonly kind: 'create'; readonly bookmark: MediaBookmark }
-  | { readonly kind: 'note'; readonly mediaId: string; readonly id: string };
+  | { readonly kind: 'create'; readonly id: string }
+  | { readonly kind: 'note'; readonly id: string }
+  | { readonly kind: 'delete'; readonly bookmark: MediaBookmark };
+
+const isLimit = (err: unknown): boolean =>
+  err instanceof HttpErrorResponse &&
+  err.status === 409 &&
+  (err.error as { error?: { code?: unknown } } | null)?.error?.code ===
+    'BOOKMARK_LIMIT';
 
 /**
  * The person's bookmarks in the media that is loaded (KBC-042): shown at once when made
- * (NFR-1), sent one after the other so a note never arrives before its bookmark, and kept
- * on screen when the server fails, with "Tentar de novo". A deleted bookmark can come back
- * for 8 s ("Desfazer", FR-4): the deletion is sent only then, or as the media changes or
- * the page goes.
+ * (NFR-1). Every write (create, note, delete) goes through one queue, in order, so a note
+ * never arrives before its bookmark and a deletion never before its creation. What the
+ * server does not have yet stays in an outbox for the whole session, per bookmark: leaving
+ * the media and coming back shows it again, with "Tentar de novo" when it failed. A deleted
+ * bookmark can come back for 8 s ("Desfazer", FR-4): the deletion is queued only then, or
+ * as the media changes, or sent at once as the page goes.
  */
 @Injectable({ providedIn: 'root' })
 export class BookmarksStore {
@@ -65,8 +84,9 @@ export class BookmarksStore {
   private readonly announcer = inject(PlayerAnnouncer);
   private readonly newId = inject(BOOKMARK_ID);
   private readonly list = signal<readonly MediaBookmark[]>([]);
-  private readonly unsavedIds = signal<ReadonlySet<string>>(new Set());
-  private readonly failure = signal<BookmarkFailure | null>(null);
+  private readonly outbox = signal<ReadonlyMap<string, Outgoing>>(new Map());
+  private readonly deleteFailedId = signal<string | null>(null);
+  private readonly limitReached = signal(false);
   private readonly editingId = signal<string | null>(null);
   private readonly deletedOne = signal<MediaBookmark | null>(null);
   private readonly loadedFor = signal<string | null>(null);
@@ -81,8 +101,21 @@ export class BookmarksStore {
   );
   /** The media whose bookmarks are listed (null while they load). */
   readonly mediaId = this.loadedFor.asReadonly();
-  readonly unsaved = this.unsavedIds.asReadonly();
-  readonly failed = this.failure.asReadonly();
+  /** Bookmarks the server does not have yet ("salvando…"). */
+  readonly unsaved = computed(
+    () =>
+      new Set(
+        [...this.outbox().values()]
+          .filter((out) => !out.created)
+          .map((out) => out.bookmark.id),
+      ),
+  );
+  readonly failed = computed<BookmarkFailure | null>(() => {
+    if (this.limitReached()) return { kind: 'limit' };
+    if (this.deleteFailedId() !== null) return { kind: 'delete' };
+    const count = this.failedHere().length;
+    return count > 0 ? { kind: 'save', count } : null;
+  });
   /** The bookmark whose note is open under the player (FR-2). */
   readonly editing = this.editingId.asReadonly();
   /** The bookmark "Desfazer" would bring back. */
@@ -129,12 +162,12 @@ export class BookmarksStore {
       updatedAt: now,
     };
     this.list.update((list) => [...list, bookmark]);
-    this.setUnsaved(bookmark.id, true);
+    this.track(bookmark, { created: false, noteToSend: false, failed: false });
     this.editingId.set(bookmark.id);
     this.announcer.say(
       $localize`:@@bookmarks.marked:Marcador em ${formatClock(bookmark.positionMs)}:time:`,
     );
-    this.writes.next({ kind: 'create', bookmark });
+    this.writes.next({ kind: 'create', id: bookmark.id });
   }
 
   /** The note as typed (trimmed; blank clears it), shown at once and then sent. */
@@ -144,40 +177,40 @@ export class BookmarksStore {
     const note = cleanNote(text);
     this.editingId.set(null);
     if (note === found.note) return;
-    this.replace({ ...found, note });
-    this.writes.next({ kind: 'note', mediaId: found.mediaId, id });
+    const bookmark = { ...found, note };
+    this.list.update((list) => list.map((b) => (b.id === id ? bookmark : b)));
+    const out = this.outbox().get(id);
+    this.track(bookmark, {
+      created: out?.created ?? true,
+      noteToSend: true,
+      failed: false,
+    });
+    this.writes.next({ kind: 'note', id });
   }
 
   editNote(id: string | null): void {
     this.editingId.set(id);
   }
 
-  /** "Tentar de novo": the bookmark and its note are sent again (idempotent). */
+  /** "Tentar de novo": every bookmark of this media that did not go is sent again. */
   retry(): void {
-    const failure = this.failure();
-    if (!failure) return;
-    this.failure.set(null);
-    const bookmark = this.list().find((b) => b.id === failure.id);
-    if (!bookmark) return;
-    if (failure.kind === 'delete') {
-      // Deleted again, now: the person already chose it once.
-      this.commitDelete(false);
-      this.list.update((list) => list.filter((b) => b.id !== bookmark.id));
-      this.deletedOne.set(bookmark);
-      this.commitDelete(false);
+    if (this.deleteFailedId() !== null) {
+      this.retryDelete();
       return;
     }
-    this.writes.next({ kind: 'create', bookmark });
-    if (bookmark.note !== null)
-      this.writes.next({
-        kind: 'note',
-        mediaId: bookmark.mediaId,
-        id: bookmark.id,
-      });
+    for (const out of this.failedHere()) {
+      this.track(out.bookmark, { ...out, failed: false });
+      if (!out.created)
+        this.writes.next({ kind: 'create', id: out.bookmark.id });
+      if (out.noteToSend)
+        this.writes.next({ kind: 'note', id: out.bookmark.id });
+    }
   }
 
+  /** "Fechar" on the alert: the cap notice or a failed deletion goes away. */
   dismissFailure(): void {
-    this.failure.set(null);
+    this.limitReached.set(false);
+    this.deleteFailedId.set(null);
   }
 
   /** Deletes at once on screen; "Desfazer" can bring it back for 8 s (FR-4). */
@@ -202,58 +235,85 @@ export class BookmarksStore {
     this.announcer.say($localize`:@@bookmarks.restored:Marcador de volta`);
   }
 
+  /** The server's list, with what this session still has to send for this media. */
   private load(mediaId: string): Observable<unknown> {
+    const shown = (saved: readonly MediaBookmark[]) => {
+      const local = [...this.outbox().values()]
+        .filter((out) => out.bookmark.mediaId === mediaId)
+        .map((out) => out.bookmark);
+      const ids = new Set(local.map((b) => b.id));
+      this.list.set([...saved.filter((b) => !ids.has(b.id)), ...local]);
+      this.loadedFor.set(mediaId);
+    };
     return this.api.list(mediaId).pipe(
-      tap((list) => {
-        this.list.set(list);
-        this.loadedFor.set(mediaId);
-      }),
+      tap(shown),
+      // Listed or not, marking still works: the new ones show and are sent.
       catchError(() => {
-        // Listed or not, marking still works: the new ones show and are sent.
-        this.loadedFor.set(mediaId);
+        shown([]);
         return EMPTY;
       }),
     );
   }
 
-  /** The media changes (or closes): a pending deletion goes now, the rest starts over. */
+  /** The media changes (or closes): a pending deletion is queued, the screen starts over. */
   private leave(): void {
     this.commitDelete(false);
     this.list.set([]);
-    this.unsavedIds.set(new Set());
-    this.failure.set(null);
+    this.deleteFailedId.set(null);
+    this.limitReached.set(false);
     this.editingId.set(null);
     this.loadedFor.set(null);
   }
 
   private send(write: Write): Observable<unknown> {
+    if (write.kind === 'delete') return this.sendDelete(write.bookmark, false);
+    const out = this.outbox().get(write.id);
+    // Deleted meanwhile, or already done: nothing to send.
+    if (!out || (write.kind === 'note' && !out.noteToSend)) return EMPTY;
+    const { bookmark } = out;
     const request =
       write.kind === 'create'
-        ? this.api.create(write.bookmark.mediaId, {
-            id: write.bookmark.id,
-            positionMs: write.bookmark.positionMs,
+        ? this.api.create(bookmark.mediaId, {
+            id: bookmark.id,
+            positionMs: bookmark.positionMs,
           })
-        : this.noteRequest(write.mediaId, write.id);
-    const id = write.kind === 'create' ? write.bookmark.id : write.id;
+        : this.api.updateNote(bookmark.mediaId, bookmark.id, bookmark.note);
     return request.pipe(
-      tap(() => {
-        if (write.kind === 'create') this.setUnsaved(id, false);
-      }),
-      catchError(() => {
-        this.failure.set({ id, kind: 'save' });
-        // The note stays where the person typed it (NFR-1).
-        if (this.list().some((b) => b.id === id)) this.editingId.set(id);
+      tap(() => this.delivered(write.kind, bookmark.id)),
+      catchError((err: unknown) => {
+        this.notDelivered(bookmark, err);
         return EMPTY;
       }),
     );
   }
 
-  /** The note as it is now on screen (a later edit wins over an earlier one). */
-  private noteRequest(mediaId: string, id: string): Observable<unknown> {
-    const current = this.list().find((b) => b.id === id);
-    return current
-      ? this.api.updateNote(mediaId, id, current.note).pipe(map(() => null))
-      : of(null);
+  private delivered(kind: 'create' | 'note', id: string): void {
+    const out = this.outbox().get(id);
+    if (!out) return;
+    const next = {
+      ...out,
+      created: out.created || kind === 'create',
+      // A newer note may have come while this one was on its way: it is queued too.
+      noteToSend: kind === 'note' ? false : out.noteToSend,
+    };
+    if (next.created && !next.noteToSend) this.untrack(id);
+    else this.track(out.bookmark, next);
+  }
+
+  private notDelivered(bookmark: MediaBookmark, err: unknown): void {
+    if (isLimit(err)) {
+      // Over the cap: this one cannot be kept; trying again would fail the same way.
+      this.untrack(bookmark.id);
+      this.list.update((list) => list.filter((b) => b.id !== bookmark.id));
+      if (this.editingId() === bookmark.id) this.editingId.set(null);
+      if (this.loadedFor() === bookmark.mediaId) this.limitReached.set(true);
+      return;
+    }
+    const out = this.outbox().get(bookmark.id);
+    if (out) this.track(out.bookmark, { ...out, failed: true });
+    // The note stays where the person typed it (NFR-1).
+    if (this.list().some((b) => b.id === bookmark.id))
+      this.editingId.set(bookmark.id);
   }
 
   private commitDelete(keepalive: boolean): void {
@@ -261,16 +321,48 @@ export class BookmarksStore {
     if (!bookmark) return;
     this.clearUndo();
     this.deletedOne.set(null);
-    this.setUnsaved(bookmark.id, false);
-    this.api.remove(bookmark.mediaId, bookmark.id, { keepalive }).subscribe({
-      error: (err: unknown) => {
-        // Already gone on the server (never saved, or deleted elsewhere): done.
-        if (err instanceof HttpErrorResponse && err.status === 404) return;
-        if (keepalive || this.loadedFor() !== bookmark.mediaId) return;
-        this.list.update((list) => [...list, bookmark]);
-        this.failure.set({ id: bookmark.id, kind: 'delete' });
-      },
-    });
+    const out = this.outbox().get(bookmark.id);
+    this.untrack(bookmark.id);
+    // Never reached the server and nothing on its way: nothing to delete there.
+    if (out && !out.created && out.failed) return;
+    if (keepalive) this.sendDelete(bookmark, true).subscribe();
+    else this.writes.next({ kind: 'delete', bookmark });
+  }
+
+  private sendDelete(
+    bookmark: MediaBookmark,
+    keepalive: boolean,
+  ): Observable<unknown> {
+    return this.api.remove(bookmark.mediaId, bookmark.id, { keepalive }).pipe(
+      catchError((err: unknown) => {
+        // Already gone on the server (deleted elsewhere): done.
+        const gone = err instanceof HttpErrorResponse && err.status === 404;
+        if (!gone && !keepalive && this.loadedFor() === bookmark.mediaId) {
+          this.list.update((list) => [...list, bookmark]);
+          this.deleteFailedId.set(bookmark.id);
+        }
+        return EMPTY;
+      }),
+    );
+  }
+
+  /** Deleted again, now: the person already chose it once. */
+  private retryDelete(): void {
+    const id = this.deleteFailedId();
+    this.deleteFailedId.set(null);
+    const bookmark = this.list().find((b) => b.id === id);
+    if (!bookmark) return;
+    this.commitDelete(false);
+    this.list.update((list) => list.filter((b) => b.id !== bookmark.id));
+    this.writes.next({ kind: 'delete', bookmark });
+  }
+
+  /** The bookmarks of the media on screen that failed to go. */
+  private failedHere(): Outgoing[] {
+    const mediaId = this.loadedFor();
+    return [...this.outbox().values()].filter(
+      (out) => out.failed && out.bookmark.mediaId === mediaId,
+    );
   }
 
   private clearUndo(): void {
@@ -278,17 +370,20 @@ export class BookmarksStore {
     this.undoTimer = null;
   }
 
-  private replace(bookmark: MediaBookmark): void {
-    this.list.update((list) =>
-      list.map((b) => (b.id === bookmark.id ? bookmark : b)),
+  private track(
+    bookmark: MediaBookmark,
+    state: Omit<Outgoing, 'bookmark'>,
+  ): void {
+    this.outbox.update((map) =>
+      new Map(map).set(bookmark.id, { bookmark, ...state }),
     );
   }
 
-  private setUnsaved(id: string, unsaved: boolean): void {
-    this.unsavedIds.update((ids) => {
-      const next = new Set(ids);
-      if (unsaved) next.add(id);
-      else next.delete(id);
+  private untrack(id: string): void {
+    this.outbox.update((map) => {
+      if (!map.has(id)) return map;
+      const next = new Map(map);
+      next.delete(id);
       return next;
     });
   }

@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { MEDIA_BOOKMARK_NOTE_MAX } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
+import { errorMessage } from '@core/api/api-error.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 
 /**
@@ -26,9 +27,23 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
     @if (failure(); as failed) {
       <div class="alert" role="alert">
         <p>{{ failureText() }}</p>
-        <button type="button" (click)="store.retry()" i18n="@@bookmarks.retry">
-          Tentar de novo
-        </button>
+        @if (failed.kind === 'limit') {
+          <button
+            type="button"
+            (click)="store.dismissFailure()"
+            i18n="@@bookmarks.dismiss"
+          >
+            Fechar
+          </button>
+        } @else {
+          <button
+            type="button"
+            (click)="store.retry()"
+            i18n="@@bookmarks.retry"
+          >
+            Tentar de novo
+          </button>
+        }
       </div>
     }
     @if (bookmark(); as current) {
@@ -91,11 +106,15 @@ export class BookmarkNote {
     return $localize`:@@bookmarks.noteLabel:Nota do marcador em ${formatClock(at)}:time:`;
   });
   protected readonly failure = this.store.failed;
-  protected readonly failureText = computed(() =>
-    this.failure()?.kind === 'delete'
-      ? $localize`:@@bookmarks.deleteFailed:Não consegui apagar o marcador.`
-      : $localize`:@@bookmarks.saveFailed:Não consegui salvar o marcador.`,
-  );
+  protected readonly failureText = computed(() => {
+    const failed = this.failure();
+    if (failed?.kind === 'limit') return errorMessage('BOOKMARK_LIMIT');
+    if (failed?.kind === 'delete')
+      return $localize`:@@bookmarks.deleteFailed:Não consegui apagar o marcador.`;
+    return failed && failed.count > 1
+      ? $localize`:@@bookmarks.saveFailedMany:Não consegui salvar ${failed.count}:count: marcadores.`
+      : $localize`:@@bookmarks.saveFailed:Não consegui salvar o marcador.`;
+  });
 
   constructor() {
     // A note that opens takes the focus (a new bookmark, or one that failed to save).

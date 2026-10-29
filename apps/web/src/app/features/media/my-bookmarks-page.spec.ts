@@ -53,7 +53,7 @@ describe('MyBookmarksPage (KBC-042 FR-5)', () => {
     });
     await harness.fixture.whenStable();
     const open = screen.getByRole('link', {
-      name: 'Palestra de 1998, tocar de 12 minutos e 38 segundos',
+      name: 'Palestra de 1998 12:38, tocar daqui',
     });
     expect(open.textContent).toContain('12:38');
     expect(screen.getByText('lei do ritmo')).toBeTruthy();

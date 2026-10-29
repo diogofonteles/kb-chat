@@ -7,7 +7,6 @@ import {
 } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
-import { speak } from '@core/i18n/spoken-time.js';
 import { MY_BOOKMARKS_URL } from '@core/media/bookmarks-api.js';
 
 /** What the player page reads to play from a bookmark (navigation state, not the URL). */
@@ -97,6 +96,6 @@ export class MyBookmarksPage {
   }
 
   protected openLabel(bookmark: MyMediaBookmark): string {
-    return $localize`:@@bookmarks.openFrom:${bookmark.mediaTitle}:title:, tocar de ${speak(bookmark.positionMs)}:time:`;
+    return $localize`:@@bookmarks.openFrom:${bookmark.mediaTitle}:title: ${formatClock(bookmark.positionMs)}:time:, tocar daqui`;
   }
 }

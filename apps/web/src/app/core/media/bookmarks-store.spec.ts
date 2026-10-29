@@ -138,7 +138,7 @@ describe('BookmarksStore (KBC-042)', () => {
     http
       .expectOne({ method: 'PATCH', url: `${URL}/${id}` })
       .flush(null, { status: 404, statusText: 'Not Found' });
-    expect(store.failed()).toEqual({ id, kind: 'save' });
+    expect(store.failed()).toEqual({ kind: 'save', count: 1 });
     expect(store.editing()).toBe(id);
     expect(store.bookmarks()[0]).toMatchObject({ id, note: 'lei do ritmo' });
     expect(store.unsaved().has(id)).toBe(true);
@@ -223,7 +223,7 @@ describe('BookmarksStore (KBC-042)', () => {
       .expectOne({ method: 'DELETE', url: `${URL}/${A}` })
       .flush(null, { status: 500, statusText: 'Error' });
     expect(store.bookmarks().map((b) => b.id)).toEqual([A]);
-    expect(store.failed()).toEqual({ id: A, kind: 'delete' });
+    expect(store.failed()).toEqual({ kind: 'delete' });
     store.retry();
     expect(store.bookmarks()).toEqual([]);
     http
@@ -266,5 +266,109 @@ describe('BookmarksStore (KBC-042)', () => {
     store.mark();
     expect(store.bookmarks()).toHaveLength(1);
     http.expectOne({ method: 'POST', url: URL });
+  });
+
+  it('sends again every bookmark that failed, not only the last one (NFR-1)', () => {
+    const { store, http, at } = setup();
+    at(10);
+    store.mark();
+    at(20);
+    store.mark();
+    // One after the other: the second goes once the first answers.
+    for (let i = 0; i < 2; i++)
+      http
+        .expectOne({ method: 'POST', url: URL })
+        .flush(null, { status: 503, statusText: 'Unavailable' });
+    expect(store.failed()).toEqual({ kind: 'save', count: 2 });
+    store.retry();
+    expect(store.failed()).toBeNull();
+    const first = http.expectOne({ method: 'POST', url: URL });
+    first.flush(saved(first.request.body.id, first.request.body.positionMs));
+    const second = http.expectOne({ method: 'POST', url: URL });
+    expect(
+      [first.request.body.positionMs, second.request.body.positionMs].sort(),
+    ).toEqual([18_000, 8_000].sort());
+  });
+
+  it('never brings back a bookmark deleted while its creation was on its way', () => {
+    const { store, http, at } = setup();
+    at(10);
+    store.mark();
+    const id = firstId(store);
+    const post = http.expectOne({ method: 'POST', url: URL });
+    store.remove(id);
+    store['commitDelete'](false);
+    // The deletion waits for the creation: then it goes, and the bookmark stays gone.
+    http.expectNone({ method: 'DELETE' });
+    post.flush(saved(id, 8_000));
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/${id}` })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    expect(store.bookmarks()).toEqual([]);
+    expect(store.unsaved().size).toBe(0);
+  });
+
+  it('keeps a failed bookmark of another media and shows it when that media opens again', () => {
+    const { store, http, at, engine } = setup();
+    at(10);
+    store.mark();
+    const id = firstId(store);
+    engine.load({ id: OTHER, title: 'Outra', src: '/o', durationMs: 1_000 });
+    TestBed.tick();
+    http
+      .expectOne({ method: 'GET', url: `/api/v1/media/${OTHER}/bookmarks` })
+      .flush({ items: [] });
+    http
+      .expectOne({ method: 'POST', url: URL })
+      .flush(null, { status: 503, statusText: 'Unavailable' });
+    // Not this media's: no alert here.
+    expect(store.failed()).toBeNull();
+    engine.load({
+      id: MEDIA,
+      title: 'Palestra',
+      src: '/s',
+      durationMs: 900_000,
+    });
+    TestBed.tick();
+    http.expectOne({ method: 'GET', url: URL }).flush({ items: [] });
+    expect(store.bookmarks().map((b) => b.id)).toEqual([id]);
+    expect(store.failed()).toEqual({ kind: 'save', count: 1 });
+    store.retry();
+    http.expectOne({ method: 'POST', url: URL });
+  });
+
+  it('says the cap is reached and drops that bookmark, with nothing to retry', () => {
+    const { store, http, at } = setup();
+    at(10);
+    store.mark();
+    http.expectOne({ method: 'POST', url: URL }).flush(
+      {
+        error: {
+          code: 'BOOKMARK_LIMIT',
+          message: 'cap',
+          details: { limit: 1000 },
+        },
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    expect(store.failed()).toEqual({ kind: 'limit' });
+    expect(store.bookmarks()).toEqual([]);
+    expect(store.editing()).toBeNull();
+    store.dismissFailure();
+    expect(store.failed()).toBeNull();
+  });
+
+  it('drops a bookmark that never reached the server when it is deleted', () => {
+    const { store, http, at } = setup();
+    at(10);
+    store.mark();
+    const id = firstId(store);
+    http
+      .expectOne({ method: 'POST', url: URL })
+      .flush(null, { status: 503, statusText: 'Unavailable' });
+    store.remove(id);
+    store['commitDelete'](false);
+    http.expectNone({ method: 'DELETE' });
+    expect(store.failed()).toBeNull();
   });
 });

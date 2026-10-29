@@ -155,11 +155,13 @@ export const MEDIA_BOOKMARK_NOTE_MAX = 2_000;
 export const MEDIA_BOOKMARKS_PER_MEDIA = 1_000;
 
 export const mediaBookmarkIdSchema = z.uuid();
+/** A note as kept: trimmed, at most 2 000 characters; blank means no note. */
 const bookmarkNoteSchema = z
   .string()
   .trim()
-  .min(1)
-  .max(MEDIA_BOOKMARK_NOTE_MAX);
+  .max(MEDIA_BOOKMARK_NOTE_MAX)
+  .nullable()
+  .transform((note) => (note === '' ? null : note));
 
 /** One person's mark in one media, with their note. */
 export const mediaBookmarkSchema = z.object({
@@ -184,7 +186,7 @@ export const mediaBookmarkListSchema = z.object({
 export const createMediaBookmarkRequestSchema = z.strictObject({
   id: mediaBookmarkIdSchema,
   positionMs: z.number().int().min(0),
-  note: bookmarkNoteSchema.nullable().optional(),
+  note: bookmarkNoteSchema.optional(),
 });
 export type CreateMediaBookmarkRequest = z.infer<
   typeof createMediaBookmarkRequestSchema
@@ -192,7 +194,7 @@ export type CreateMediaBookmarkRequest = z.infer<
 
 /** PATCH /api/v1/media/:id/bookmarks/:bookmarkId: the new note (null clears it). */
 export const updateMediaBookmarkRequestSchema = z.strictObject({
-  note: bookmarkNoteSchema.nullable(),
+  note: bookmarkNoteSchema,
 });
 export type UpdateMediaBookmarkRequest = z.infer<
   typeof updateMediaBookmarkRequestSchema

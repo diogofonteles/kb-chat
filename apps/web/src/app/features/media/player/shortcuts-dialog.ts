@@ -102,6 +102,10 @@ export class ShortcutsDialog {
     },
     { keys: ['M'], does: $localize`:@@player.shortcut.mute:Silenciar` },
     {
+      keys: ['B'],
+      does: $localize`:@@player.shortcut.bookmark:Marcar este trecho`,
+    },
+    {
       keys: [$localize`:@@player.key.digits:0 a 9`],
       does: $localize`:@@player.shortcut.tenths:Ir para 0% a 90% da mídia`,
     },
