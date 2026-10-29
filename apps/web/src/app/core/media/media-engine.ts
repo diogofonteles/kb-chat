@@ -16,8 +16,10 @@ import {
   isBusy,
   isOperable,
   reducePlayback,
+  DEFAULT_SPEED,
   type PlaybackErrorKind,
   type PlaybackEvent,
+  type PlaybackSpeed,
   type PlaybackState,
 } from '@kb-chat/player-core';
 
@@ -26,6 +28,10 @@ export interface PlayableSource {
   readonly id: string;
   readonly title: string;
   readonly src: string;
+  /** The length the server knows: positions saved to it never pass it (KBC-041 FR-2). */
+  readonly durationMs?: number | null;
+  /** Who is speaking, for the system's media controls (KBC-041 FR-7). */
+  readonly artist?: string;
 }
 
 /**
@@ -104,6 +110,9 @@ export class MediaEngine {
   private bufferingTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingStartMs: number | null = null;
   private loads = 0;
+  private readonly speedValue = signal<PlaybackSpeed>(DEFAULT_SPEED);
+  private readonly volumeValue = signal(1);
+  private readonly mutedValue = signal(false);
 
   readonly playback = this.state.asReadonly();
   readonly source = this.current.asReadonly();
@@ -113,6 +122,10 @@ export class MediaEngine {
   readonly canPlay = computed(() => canAskToPlay(this.state()));
   /** Show the busy indicator: a requested play still loading, or a long wait. */
   readonly busy = computed(() => isBusy(this.state()));
+  /** The speed every source plays at (KBC-041 FR-5). */
+  readonly speed = this.speedValue.asReadonly();
+  readonly volume = this.volumeValue.asReadonly();
+  readonly muted = this.mutedValue.asReadonly();
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
@@ -129,6 +142,28 @@ export class MediaEngine {
     element.preload = 'metadata';
     element.src = source.src;
     element.load();
+    // Loading puts the rate back to the default (HTML's load algorithm): set it again.
+    this.applySpeed(element);
+  }
+
+  /** Plays this and every later source at `speed`, keeping the voice's pitch. */
+  setSpeed(speed: PlaybackSpeed): void {
+    this.speedValue.set(speed);
+    if (this.element) this.applySpeed(this.element);
+  }
+
+  /** Sets the volume (0–1); raising it from silence unmutes (FR-9). */
+  setVolume(volume: number): void {
+    const element = this.ensureElement();
+    element.volume = Math.min(1, Math.max(0, volume));
+    if (element.volume > 0) element.muted = false;
+    this.syncVolume(element);
+  }
+
+  toggleMute(): void {
+    const element = this.ensureElement();
+    element.muted = !element.muted;
+    this.syncVolume(element);
   }
 
   /** Asks to play; the state turns to playing only when the element says so. */
@@ -154,8 +189,11 @@ export class MediaEngine {
     else this.play();
   }
 
-  /** Moves to `ms` inside the media; the slider and the skips go through here. */
-  seek(ms: number): void {
+  /**
+   * Moves to `ms` inside the media; the slider and the skips go through here. `fast` lets
+   * the browser land on a nearby keyframe (the system's seek bar asks for it, FR-7).
+   */
+  seek(ms: number, fast = false): void {
     const element = this.element;
     if (!element || !this.current()) return;
     const target = clampToDuration(ms, this.state().durationMs);
@@ -164,7 +202,9 @@ export class MediaEngine {
       loadId: this.loads,
       targetMs: target,
     });
-    element.currentTime = target / 1000;
+    if (fast && typeof element.fastSeek === 'function')
+      element.fastSeek(target / 1000);
+    else element.currentTime = target / 1000;
   }
 
   skip(deltaMs: number): void {
@@ -201,6 +241,18 @@ export class MediaEngine {
     return element;
   }
 
+  private applySpeed(element: HTMLMediaElement): void {
+    const speed = this.speedValue();
+    element.preservesPitch = true;
+    element.defaultPlaybackRate = speed;
+    element.playbackRate = speed;
+  }
+
+  private syncVolume(element: HTMLMediaElement): void {
+    this.volumeValue.set(element.volume);
+    this.mutedValue.set(element.muted);
+  }
+
   private dispatch(event: PlaybackEvent): void {
     this.state.update((state) => reducePlayback(state, event));
   }
@@ -226,6 +278,7 @@ export class MediaEngine {
     on('progress', () => this.onBuffered(element));
     on('ended', () => this.settle({ type: 'ended', loadId: this.loads }));
     on('error', () => this.onError(element));
+    on('volumechange', () => this.syncVolume(element));
   }
 
   private onMetadata(element: HTMLMediaElement): void {

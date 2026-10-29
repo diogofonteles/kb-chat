@@ -372,6 +372,45 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.playback().phase).toBe('empty');
   });
 
+  it('applies the speed now and to every source it loads, keeping the voice (FR-5)', () => {
+    ready();
+    engine.setSpeed(1.5);
+    expect(engine.speed()).toBe(1.5);
+    expect(media.element.playbackRate).toBe(1.5);
+    expect(media.element.defaultPlaybackRate).toBe(1.5);
+    expect(media.element.preservesPitch).toBe(true);
+    // A load puts the rate back to the default: the engine sets it again.
+    media.element.playbackRate = 1;
+    engine.load(OTHER);
+    expect(media.element.playbackRate).toBe(1.5);
+    expect(media.element.defaultPlaybackRate).toBe(1.5);
+  });
+
+  it('sets the volume and the mute, and follows changes made elsewhere (FR-9)', () => {
+    ready();
+    engine.setVolume(0.4);
+    expect(media.element.volume).toBe(0.4);
+    expect(engine.volume()).toBe(0.4);
+    engine.toggleMute();
+    expect(media.element.muted).toBe(true);
+    expect(engine.muted()).toBe(true);
+    media.element.muted = false;
+    media.element.volume = 0.7;
+    media.emit('volumechange');
+    expect(engine.muted()).toBe(false);
+    expect(engine.volume()).toBe(0.7);
+  });
+
+  it('keeps the volume inside 0–100% and unmutes when it is raised', () => {
+    ready();
+    engine.toggleMute();
+    engine.setVolume(1.4);
+    expect(engine.volume()).toBe(1);
+    expect(engine.muted()).toBe(false);
+    engine.setVolume(-1);
+    expect(engine.volume()).toBe(0);
+  });
+
   it('keeps one element for every source (one thing plays at a time)', () => {
     ready();
     ready(OTHER);
