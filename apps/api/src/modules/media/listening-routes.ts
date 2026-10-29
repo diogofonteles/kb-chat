@@ -50,10 +50,6 @@ export const listeningRoutes =
     );
     // The answer says what the server keeps now, with its time (FR-3).
     typed.put('/api/v1/media/:id/progress', OPTIONS.progress, (request) =>
-      service.saveProgress(
-        actorOf(request),
-        request.params.id,
-        request.body.positionMs,
-      ),
+      service.saveProgress(actorOf(request), request.params.id, request.body),
     );
   };

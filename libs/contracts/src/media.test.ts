@@ -130,15 +130,17 @@ describe('media contracts', () => {
     ).toBe(false);
   });
 
-  it('takes a position as whole, non-negative milliseconds (KBC-041 FR-2)', () => {
-    expect(mediaProgressRequestSchema.parse({ positionMs: 1_390_000 })).toEqual(
-      {
-        positionMs: 1_390_000,
-      },
-    );
+  it('takes a position as whole, non-negative milliseconds, with the save it continues (FR-2, FR-3)', () => {
+    const request = { positionMs: 1_390_000, basedOn: null };
+    expect(mediaProgressRequestSchema.parse(request)).toEqual(request);
     for (const positionMs of [-1, 1.5, '10'])
-      expect(mediaProgressRequestSchema.safeParse({ positionMs }).success).toBe(
-        false,
-      );
+      expect(
+        mediaProgressRequestSchema.safeParse({ positionMs, basedOn: null })
+          .success,
+      ).toBe(false);
+    // Required: a client can never skip the check against newer saves.
+    expect(
+      mediaProgressRequestSchema.safeParse({ positionMs: 1 }).success,
+    ).toBe(false);
   });
 });

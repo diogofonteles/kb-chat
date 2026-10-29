@@ -83,6 +83,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       (
         await reader.call('PUT', `/api/v1/media/${item.id}/progress`, {
           positionMs: 1,
+          basedOn: null,
         })
       ).statusCode,
     ).toBe(403);
@@ -99,6 +100,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
       `/api/v1/media/${item.id}/progress`,
       {
         positionMs: 23_000,
+        basedOn: null,
       },
     );
     expect(saved.statusCode).toBe(200);
@@ -123,6 +125,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
     const item = await readyItem(media);
     await media.owner('PUT', `/api/v1/media/${item.id}/progress`, {
       positionMs: DURATION_MS * 0.95,
+      basedOn: null,
     });
     const heard = (await media.owner('GET', `/api/v1/media/${item.id}`)).json();
     expect(heard.positionMs).toBe(0);
@@ -130,10 +133,43 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
     // Listening again from the start keeps it heard, with the new position.
     await media.owner('PUT', `/api/v1/media/${item.id}/progress`, {
       positionMs: 10_000,
+      basedOn: heard.positionUpdatedAt,
     });
     expect(
       (await media.owner('GET', `/api/v1/media/${item.id}`)).json(),
     ).toMatchObject({ positionMs: 10_000, completedAt: heard.completedAt });
+  });
+
+  it('refuses a save based on an older one: another device saved since (FR-3)', async () => {
+    const media = await startMedia();
+    const item = await readyItem(media);
+    const url = `/api/v1/media/${item.id}/progress`;
+    const laptop = (
+      await media.owner('PUT', url, {
+        positionMs: 30_000,
+        basedOn: null,
+      })
+    ).json();
+    const phone = await media.owner('PUT', url, {
+      positionMs: 90_000,
+      basedOn: laptop.positionUpdatedAt,
+    });
+    expect(phone.statusCode).toBe(200);
+    // The laptop, still on its first save, comes back with an older position.
+    const stale = await media.owner('PUT', url, {
+      positionMs: 31_000,
+      basedOn: laptop.positionUpdatedAt,
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe('MEDIA_CONFLICT');
+    expect(
+      (await media.owner('GET', `/api/v1/media/${item.id}`)).json().positionMs,
+    ).toBe(90_000);
+    // Never seen a save, while there is one: also refused.
+    expect(
+      (await media.owner('PUT', url, { positionMs: 1_000, basedOn: null }))
+        .statusCode,
+    ).toBe(409);
   });
 
   it('keeps each person’s position apart', async () => {
@@ -146,6 +182,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
     });
     await listener.call('PUT', `/api/v1/media/${item.id}/progress`, {
       positionMs: 60_000,
+      basedOn: null,
     });
     expect(
       (await media.owner('GET', `/api/v1/media/${item.id}`)).json().positionMs,
@@ -168,6 +205,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
       (
         await outsider.call('PUT', `/api/v1/media/${item.id}/progress`, {
           positionMs: 1_000,
+          basedOn: null,
         })
       ).statusCode,
     ).toBe(404);
@@ -184,7 +222,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
         await media.owner(
           'PUT',
           '/api/v1/media/22222222-2222-4222-8222-222222222222/progress',
-          { positionMs: 1 },
+          { positionMs: 1, basedOn: null },
         )
       ).statusCode,
     ).toBe(404);
@@ -196,7 +234,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
     const refused = await media.owner(
       'PUT',
       `/api/v1/media/${item.id}/progress`,
-      { positionMs: 0 },
+      { positionMs: 0, basedOn: null },
     );
     expect(refused.statusCode).toBe(409);
     expect(refused.json().error.code).toBe('MEDIA_NOT_READY');
@@ -207,6 +245,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
     const item = await readyItem(media);
     await media.owner('PUT', `/api/v1/media/${item.id}/progress`, {
       positionMs: 5_000,
+      basedOn: null,
     });
     const rows = () => {
       const db = new DatabaseSync(join(media.mediaDir, 'media.db'), {
@@ -227,6 +266,7 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
       (
         await media.owner('PUT', `/api/v1/media/${item.id}/progress`, {
           positionMs: 5_000,
+          basedOn: null,
         })
       ).statusCode,
     ).toBe(404);

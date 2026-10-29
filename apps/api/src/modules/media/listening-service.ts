@@ -1,5 +1,6 @@
 import {
   MEDIA_COMPLETION_RATIO,
+  type MediaItem,
   type MediaPreferences,
   type MediaProgress,
 } from '@kb-chat/contracts';
@@ -48,26 +49,22 @@ export class ListeningService {
 
   /**
    * The person's position in a media they can see. From 95% of its length the media is
-   * heard: the position goes back to 0 and the time it was heard is kept (BR-2).
+   * heard: the position goes back to 0 and the time it was heard is kept (BR-2). A save
+   * that continues an older one than the server's (another device saved since) is refused,
+   * so an old position never overwrites a newer one (FR-3).
    */
   saveProgress(
     actor: MediaActor,
     mediaId: string,
-    positionMs: number,
+    save: { readonly positionMs: number; readonly basedOn: string | null },
   ): MediaProgress {
     const item = this.deps.media.get(actor, mediaId);
-    const durationMs = item.durationMs;
-    if (item.status !== 'ready' || durationMs === null)
-      throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
-    if (positionMs > durationMs)
-      throw new AppError('VALIDATION_FAILED', 'The position is past the end', {
-        details: { field: 'positionMs' },
-      });
-    const now = this.now();
-    const heard = positionMs >= durationMs * MEDIA_COMPLETION_RATIO;
+    const durationMs = this.assertSavable(item, save);
+    const now = this.nextSaveTime(item.positionUpdatedAt);
+    const heard = save.positionMs >= durationMs * MEDIA_COMPLETION_RATIO;
     const progress = heard
       ? { positionMs: 0, completedAt: now.toISOString() }
-      : { positionMs, completedAt: item.completedAt };
+      : { positionMs: save.positionMs, completedAt: item.completedAt };
     this.deps.listening.saveProgress({
       principal: actor.principal,
       mediaId,
@@ -75,6 +72,34 @@ export class ListeningService {
       now,
     });
     return { ...progress, positionUpdatedAt: now.toISOString() };
+  }
+
+  /** The length of a media that may take this save, or why it may not. */
+  private assertSavable(
+    item: MediaItem,
+    save: { readonly positionMs: number; readonly basedOn: string | null },
+  ): number {
+    const durationMs = item.durationMs;
+    if (item.status !== 'ready' || durationMs === null)
+      throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
+    if (save.positionMs > durationMs)
+      throw new AppError('VALIDATION_FAILED', 'The position is past the end', {
+        details: { field: 'positionMs' },
+      });
+    if (save.basedOn !== item.positionUpdatedAt)
+      throw new AppError(
+        'MEDIA_CONFLICT',
+        'Another device saved a newer position',
+        { details: { positionUpdatedAt: item.positionUpdatedAt } },
+      );
+    return durationMs;
+  }
+
+  /** Save times only move forward, so each save is a distinct version (even in 1 ms). */
+  private nextSaveTime(previous: string | null): Date {
+    const now = this.now();
+    const after = previous === null ? 0 : Date.parse(previous) + 1;
+    return now.getTime() >= after ? now : new Date(after);
   }
 
   private now(): Date {

@@ -125,6 +125,11 @@ export type MediaPreferences = z.infer<typeof mediaPreferencesSchema>;
 /** PUT /api/v1/media/:id/progress: where the person is, in ms. */
 export const mediaProgressRequestSchema = z.strictObject({
   positionMs: z.number().int().min(0),
+  /**
+   * The server's save this one continues (`positionUpdatedAt` as the client last saw it;
+   * null when it saw none). A newer save from another device makes it a 409 (FR-3).
+   */
+  basedOn: z.iso.datetime().nullable(),
 });
 export type MediaProgressRequest = z.infer<typeof mediaProgressRequestSchema>;
 
