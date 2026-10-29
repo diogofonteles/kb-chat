@@ -4,6 +4,7 @@ import {
   type ShortcutAction,
   type ShortcutTarget,
 } from '@kb-chat/player-core';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 
@@ -50,6 +51,13 @@ const ONCE: ReadonlySet<ShortcutAction['kind']> = new Set([
   'mute',
   'help',
   'speed',
+  'bookmark',
+]);
+
+/** Actions that need the player page (its shortcuts list, its bookmark note). */
+const PAGE_ONLY: ReadonlySet<ShortcutAction['kind']> = new Set([
+  'help',
+  'bookmark',
 ]);
 
 /**
@@ -62,6 +70,7 @@ const ONCE: ReadonlySet<ShortcutAction['kind']> = new Set([
 export class PlayerShortcuts {
   private readonly engine = inject(MediaEngine);
   private readonly preferences = inject(ListeningPreferences);
+  private readonly bookmarks = inject(BookmarksStore);
   private readonly on = signal(storedEnabled());
   private readonly help = signal(0);
 
@@ -91,8 +100,9 @@ export class PlayerShortcuts {
       },
       this.on(),
     );
-    // The shortcuts list lives on the player page; the mini-player leaves "?" alone.
-    if (!action || (action.kind === 'help' && scope !== 'page')) return;
+    // The shortcuts list and the bookmarks live on the player page: the mini-player
+    // leaves "?" and B alone.
+    if (!action || (PAGE_ONLY.has(action.kind) && scope !== 'page')) return;
     event.preventDefault();
     if (event.repeat && ONCE.has(action.kind)) return;
     this.run(action);
@@ -116,6 +126,7 @@ export class PlayerShortcuts {
         if (durationMs) engine.seek(durationMs * fraction);
       },
       help: () => this.help.update((count) => count + 1),
+      bookmark: () => this.bookmarks.mark(),
     };
     (actions[action.kind] as (action: ShortcutAction) => void)(action);
   }
