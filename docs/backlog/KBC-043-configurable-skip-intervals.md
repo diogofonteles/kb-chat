@@ -1,7 +1,7 @@
 ---
 id: KBC-043
 title: "Intervalos de pulo configuráveis: escolher quanto voltar e quanto avançar"
-status: ready
+status: done
 slice: phase-2-a
 outcome: cada pessoa pula no ritmo do seu estudo (voltar pouco para reouvir uma frase, avançar muito para passar um trecho)
 depends_on: [KBC-041]

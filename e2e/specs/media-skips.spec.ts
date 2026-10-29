@@ -44,6 +44,8 @@ async function chooseSkips(page: Page, back: string, forward: string) {
     .check();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+  // Esc gives the focus back to where it was.
+  await expect(page.getByRole('button', { name: 'Mais opções' })).toBeFocused();
 }
 
 test('AC-1: back 5 s chosen, J goes from 1:00 to 0:55 and the button says it', async ({
