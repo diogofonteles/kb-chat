@@ -1,6 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { expect, ownerApi, pageAs } from './fixtures.js';
+import {
+  expect,
+  invite,
+  ownerApi,
+  pageAs,
+  signIn,
+  uniqueEmail,
+} from './fixtures.js';
 import {
   audioState,
   listenerTest as test,
@@ -129,6 +136,96 @@ test('AC-3, AC-12: another browser offers "Continuar de" silently, and continues
   await elsewhere.context().close();
 });
 
+test('AC-3: leaving the page never brings back an older position over another device', async ({
+  browser,
+}) => {
+  const { page: laptop, email } = await newListener(browser, {
+    viewport: null,
+  });
+  await openPlayer(laptop, lecture);
+  await laptop.getByRole('button', { name: 'Tocar' }).click();
+  await playPast(laptop, 1.5);
+  await laptop.getByRole('button', { name: 'Pausar' }).click();
+  // Away from the page: the laptop keeps nothing that could override later saves.
+  await laptop.getByRole('link', { name: '← Mídia' }).click();
+  await expect(laptop.getByRole('heading', { name: /Mídia — / })).toBeVisible();
+
+  const phone = await pageAs(browser, email, null);
+  await openPlayer(phone, lecture);
+  const slider = phone.getByRole('slider', { name: 'Posição' });
+  await slider.focus();
+  await slider.press('PageUp');
+  await phone
+    .getByRole('button', { name: /^(Tocar|Continuar de)/ })
+    .first()
+    .click();
+  await playPast(phone, 61);
+  const saved = phone.waitForResponse(
+    (response) =>
+      response.request().method() === 'PUT' &&
+      response.url().endsWith('/progress'),
+  );
+  await phone.getByRole('button', { name: 'Pausar' }).click();
+  await saved;
+  await phone.context().close();
+
+  await laptop.getByRole('link', { name: lecture.title }).click();
+  await expect(
+    laptop.getByRole('button', { name: /^Continuar de 1:0\d$/ }),
+  ).toBeVisible();
+  const item = await (
+    await laptop.request.get(`/api/v1/media/${lecture.id}`)
+  ).json();
+  expect(item.positionMs).toBeGreaterThan(60_000);
+  await laptop.context().close();
+});
+
+test('BR-2: two people in one browser never see each other’s position', async ({
+  browser,
+}) => {
+  const { page, email } = await newListener(browser, { viewport: null });
+  // Saves fail for the first person: the position stays in this browser, unsent.
+  await page.route('**/progress', (route) =>
+    route.abort('internetdisconnected'),
+  );
+  await openPlayer(page, lecture);
+  await page.getByRole('button', { name: 'Tocar' }).click();
+  await playPast(page, 1.5);
+  await page.getByRole('button', { name: 'Pausar' }).click();
+  expect(
+    await page.evaluate(
+      (person) =>
+        Object.keys(localStorage).some((key) =>
+          key.startsWith(
+            `kb-chat.media-position.${encodeURIComponent(person)}.`,
+          ),
+        ),
+      email,
+    ),
+  ).toBe(true);
+  // The first person's page goes away (its last save still fails), then another
+  // person signs in on this browser: only then may saves reach the server again.
+  await page.goto('about:blank');
+  await page.unroute('**/progress');
+  const owner = await ownerApi();
+  const other = uniqueEmail('outra');
+  await invite(owner, other, {
+    topics: ['hermetismo'],
+    features: ['search', 'media'],
+  });
+  await owner.dispose();
+  await signIn(page.request, other);
+  await openPlayer(page, lecture);
+  await expect(page.getByRole('button', { name: /Continuar de/ })).toHaveCount(
+    0,
+  );
+  expect(
+    (await (await page.request.get(`/api/v1/media/${lecture.id}`)).json())
+      .positionMs,
+  ).toBe(0);
+  await page.context().close();
+});
+
 test('AC-4: heard to the end, the media has no position to continue and counts as heard', async ({
   page,
 }) => {
@@ -189,8 +286,15 @@ test('AC-8: an arrow on the time slider moves 5 s, not also the shortcut', async
   await slider.focus();
   await slider.press('ArrowRight');
   await expect(slider).toHaveAttribute('aria-valuenow', '5');
-  await page.waitForTimeout(300);
-  expect(Math.round((await audioState(page)).currentTime)).toBe(5);
+  await expect
+    .poll(async () => Math.round((await audioState(page)).currentTime))
+    .toBe(5);
+  // The next press lands on 10: had the global shortcut also acted, it would pass 10.
+  await slider.press('ArrowRight');
+  await expect(slider).toHaveAttribute('aria-valuenow', '10');
+  await expect
+    .poll(async () => Math.round((await audioState(page)).currentTime))
+    .toBe(10);
 });
 
 test('AC-7, AC-14: "?" opens the shortcuts, which can be turned off; Esc gives the focus back', async ({
@@ -208,7 +312,12 @@ test('AC-7, AC-14: "?" opens the shortcuts, which can be turned off; Esc gives t
   await expect(dialog).toBeHidden();
   await focusPage(page);
   await page.keyboard.press('k');
-  await page.waitForTimeout(300);
+  await page.keyboard.press('l');
+  // A later action the page does see: once it shows, K and L were handled (and ignored).
+  await page.getByRole('button', { name: 'Avançar 30 segundos' }).click();
+  await expect
+    .poll(async () => Math.round((await audioState(page)).currentTime))
+    .toBe(30);
   expect((await audioState(page)).paused).toBe(true);
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeVisible();
 });
@@ -347,13 +456,18 @@ test('AC-13: no volume control where the volume is read-only (iPhone, simulated)
     });
   });
   await openPlayer(page, lecture);
-  await page.waitForTimeout(1_200);
+  // The player tells once it knows (`data-volume`): only then is "no control" an answer.
+  await expect(page.locator('.options')).toHaveAttribute('data-volume', 'off');
   await expect(page.getByRole('slider', { name: 'Volume' })).toHaveCount(0);
 });
 
 test('AC-13: mute and a volume in percent where the browser allows it', async ({
   page,
-}) => {
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name === 'media-mobile',
+    'a phone uses its own buttons: no volume control (fine pointer only)',
+  );
   await openPlayer(page, lecture);
   const volume = page.getByRole('slider', { name: 'Volume' });
   await expect(volume).toBeVisible();
@@ -415,7 +529,12 @@ test('NFR-2: at most one saved position every 10 s while playing', async ({
   });
   await openPlayer(page, lecture);
   await page.getByRole('button', { name: 'Tocar' }).click();
-  await page.waitForTimeout(35_000);
+  await expect
+    .poll(async () => (await audioState(page)).currentTime, {
+      timeout: 60_000,
+      intervals: [1_000],
+    })
+    .toBeGreaterThanOrEqual(35);
   expect(saves.length).toBeGreaterThanOrEqual(3);
   expect(saves.length).toBeLessThanOrEqual(4);
   for (let i = 1; i < saves.length; i++)
@@ -444,7 +563,14 @@ test('NFR-4: playing, skipping and the speed respond within 200 ms (INP)', async
   await page.getByRole('button', { name: 'Voltar 15 segundos' }).click();
   await page.getByRole('button', { name: 'Velocidade: 1 vezes' }).click();
   await page.getByRole('menuitemradio', { name: /1,25×/ }).click();
-  await page.waitForTimeout(500);
+  await expect.poll(() => playbackRate(page)).toBe(1.25);
+  // Two frames: the last interaction's timing entry is recorded.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
   const worst = await page.evaluate(() =>
     Math.max(
       0,

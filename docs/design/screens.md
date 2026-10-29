@@ -383,7 +383,7 @@ Desktop (≥ 1024 px)                                           Celular (< 1024 
 └──────────┴───────────────────────────────────┴──────────┘    └──────────────────────┘
 ```
 - O player é um componente próprio sobre um único elemento de mídia sem o atributo `controls`: os controles nativos variam entre navegadores e não seguem os temas (DS-12). Ele serve áudio agora e vídeo depois (ADR 0025): acima dos controles há uma área de mídia, vazia no áudio (só a legenda) e com o vídeo no KBC-035, com a proporção reservada desde a primeira pintura, tela cheia (F) e picture-in-picture. Nada nos controles, na transcrição ou nos marcadores muda entre áudio e vídeo.
-- **Mini-player persistente (KBC-041):** ao sair de `/midia/{id}` com o áudio tocando, ele continua. Uma barra de 64 px aparece no pé da área principal (no celular, acima da caixa de pergunta) com o título (link de volta ao player), ⟲15, ▶/❚❚, a barra de progresso fina e ✕ ("Fechar o player", que pausa e salva a posição). Assim dá para ouvir enquanto busca. A área principal ganha `scroll-padding-bottom` e margem inferior da altura do mini-player, para ele nunca esconder o elemento focado (WCAG 2.4.11).
+- **Mini-player persistente (KBC-041):** ao sair de `/midia/{id}` com o áudio tocando, ele continua. Uma barra de 64 px aparece no pé da área principal (no celular, acima da caixa de pergunta) com o título (link de volta ao player), ⟲15, ▶/❚❚, a barra de progresso fina e ✕ ("Fechar o player", que pausa e salva a posição). Assim dá para ouvir enquanto busca. O mini-player ocupa a última linha própria da área principal (não flutua sobre o conteúdo), então nunca esconde o elemento focado (WCAG 2.4.11).
 
 ### Controles (UP-13, MA-06, SL-20)
 | Controle | Comportamento | Nome acessível |

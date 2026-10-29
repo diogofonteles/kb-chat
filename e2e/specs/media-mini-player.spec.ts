@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, ownerApi } from './fixtures.js';
+import { CSRF, expect, ownerApi } from './fixtures.js';
 import {
   audioState,
   listenerTest as test,
@@ -193,4 +193,67 @@ test('AC-16: nothing focused hides behind the mini-player', async ({
       `${focused.what} (${focused.left},${focused.top})–(${focused.right},${focused.bottom})`,
     ).toBe(false);
   }
+});
+
+test('AC-16: on the media list too, nothing focused hides behind the mini-player', async ({
+  page,
+}) => {
+  await playLecture(page);
+  await page.getByRole('link', { name: '← Mídia' }).click();
+  await expect(page.getByRole('heading', { name: /Mídia — / })).toBeVisible();
+  const bar = await mini(page).boundingBox();
+  await page.getByRole('heading', { name: /Mídia — / }).click();
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press('Tab');
+    const focused = await page.evaluate(() => {
+      const element = document.activeElement;
+      if (!element || element === document.body) return null;
+      const rect = element.getBoundingClientRect();
+      return {
+        what: element.textContent?.trim().slice(0, 40) ?? element.tagName,
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        inMini: element.closest('app-mini-player') !== null,
+      };
+    });
+    if (!focused || focused.inMini) continue;
+    const box = bar ?? { x: 0, y: 0, width: 0, height: 0 };
+    const overlaps =
+      focused.bottom > box.y + 1 &&
+      focused.top < box.y + box.height - 1 &&
+      focused.right > box.x + 1 &&
+      focused.left < box.x + box.width - 1;
+    expect(overlaps, focused.what).toBe(false);
+  }
+});
+
+test('a media removed while it plays in the mini-player stops and says why', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const doomed = await uploadReady(owner, {
+    title: `Removida ${Date.now().toString(36)}`,
+    seconds: 60,
+  });
+  await page.goto(`/midia/${doomed.id}`);
+  await page.getByRole('button', { name: 'Tocar' }).click();
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(0.5);
+  await page.getByRole('link', { name: '← Mídia' }).click();
+  await expect(mini(page)).toBeVisible();
+  expect(
+    (
+      await owner.delete(`/api/v1/media/${doomed.id}`, { headers: CSRF })
+    ).status(),
+  ).toBe(204);
+  await owner.dispose();
+  // Its next save meets a 404: the bar stops and says it.
+  await mini(page).getByRole('button', { name: 'Pausar' }).click();
+  await expect(mini(page).getByRole('alert')).toContainText(
+    'Esta mídia não está mais no acervo',
+  );
+  expect((await audioState(page)).paused).toBe(true);
 });

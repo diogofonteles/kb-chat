@@ -1,5 +1,9 @@
 :host {
   display: block;
+  /* Its own row of the main area's grid (chat-page.css): it scrolls inside it, so the
+     mini-player below never covers what has the focus (KBC-041 FR-11). */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .page {

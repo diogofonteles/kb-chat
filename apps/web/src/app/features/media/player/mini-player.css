@@ -52,6 +52,32 @@
   text-decoration: underline;
 }
 
+.problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  font-weight: 600;
+}
+
+.retry {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .time {
   color: var(--color-text-muted);
   font-size: var(--text-sm);

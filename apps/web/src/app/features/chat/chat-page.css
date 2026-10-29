@@ -66,12 +66,6 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
-.conversation.media > app-media-list-page,
-.conversation.media > app-media-player-page {
-  min-height: 0;
-  overflow-y: auto;
-}
-
 .conversation.empty {
   grid-template-rows:
     auto minmax(0, 1fr) minmax(0, max-content) auto

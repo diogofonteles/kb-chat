@@ -18,14 +18,33 @@
     >
       <span class="played" [style.width.%]="percent()"></span>
     </div>
-    <a class="title" [routerLink]="['/midia', current.id]">{{
-      current.title
-    }}</a>
+    @if (gone()) {
+      <p class="problem" role="alert" i18n="@@mini.gone">
+        Esta mídia não está mais no acervo ou você não tem acesso a ela.
+      </p>
+    } @else if (failed()) {
+      <p class="problem" role="alert">
+        <span i18n="@@mini.failed">Não consegui continuar o áudio.</span>
+        <button
+          type="button"
+          class="retry"
+          (click)="retry()"
+          i18n="@@player.retry"
+        >
+          Tentar de novo
+        </button>
+      </p>
+    } @else {
+      <a class="title" [routerLink]="['/midia', current.id]">{{
+        current.title
+      }}</a>
+    }
     <span class="time">{{ elapsed() }}</span>
     <div class="actions">
       <button
         type="button"
         class="icon"
+        [disabled]="gone()"
         aria-label="Voltar 15 segundos"
         i18n-aria-label="@@player.back15"
         aria-keyshortcuts="J"
@@ -42,6 +61,7 @@
       <button
         type="button"
         class="icon play"
+        [disabled]="gone()"
         [attr.aria-label]="playLabel()"
         aria-keyshortcuts="K Space"
         (click)="toggle()"

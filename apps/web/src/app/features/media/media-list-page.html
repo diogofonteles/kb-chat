@@ -132,7 +132,15 @@
               [class.failed]="item.status === 'failed'"
               >{{ statusOf(item) }}</span
             >
+            @if (resumeTextOf(item); as resume) {
+              <span class="resume">{{ resume }}</span>
+            }
           </span>
+          @if (resumeTextOf(item)) {
+            <span class="position" aria-hidden="true"
+              ><span [style.width.%]="percentOf(item)"></span
+            ></span>
+          }
           @if (isMaster()) {
             <span class="actions">
               @if (item.canRetry) {

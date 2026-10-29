@@ -4,8 +4,8 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { MEDIA_SPEEDS } from '@kb-chat/contracts';
-import { SPEEDS } from '@kb-chat/player-core';
+import { MEDIA_COMPLETION_RATIO, MEDIA_SPEEDS } from '@kb-chat/contracts';
+import { COMPLETION_RATIO, SPEEDS } from '@kb-chat/player-core';
 import {
   fakeMediaElement,
   type FakeMedia,
@@ -32,8 +32,9 @@ function setup() {
 }
 
 describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
-  it('offers the same speeds the API accepts', () => {
+  it('offers the same speeds and the same 95% rule as the API (one rule, two libraries)', () => {
     expect([...SPEEDS]).toEqual([...MEDIA_SPEEDS]);
+    expect(COMPLETION_RATIO).toBe(MEDIA_COMPLETION_RATIO);
   });
 
   it('reads the account once and gives its speed to the engine', () => {

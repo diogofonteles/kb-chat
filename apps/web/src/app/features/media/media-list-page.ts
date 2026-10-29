@@ -18,7 +18,7 @@ import {
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { mediaListSchema, type MediaItem } from '@kb-chat/contracts';
-import { formatDuration } from '@kb-chat/player-core';
+import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi, mediaListUrl } from '@core/media/media-api.js';
@@ -117,6 +117,22 @@ export class MediaListPage {
 
   protected menuLabelOf(item: MediaItem): string {
     return $localize`:@@media.moreActions:Mais ações para ${item.title}:title:`;
+  }
+
+  /** "Continuar de 23:10" for a media with a saved position, not yet heard (T14). */
+  protected resumeTextOf(item: MediaItem): string {
+    const at =
+      item.status === 'ready'
+        ? resumeFrom(item.positionMs, item.durationMs)
+        : null;
+    return at === null
+      ? ''
+      : $localize`:@@media.resumeFrom:Continuar de ${formatClock(at)}:time:`;
+  }
+
+  /** How much of it was heard, for the thin bar under the row. */
+  protected percentOf(item: MediaItem): number {
+    return item.durationMs ? (item.positionMs / item.durationMs) * 100 : 0;
   }
 
   protected durationOf(item: MediaItem): string {

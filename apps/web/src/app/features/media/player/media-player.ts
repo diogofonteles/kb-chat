@@ -68,8 +68,14 @@ export class MediaPlayer {
   private readonly shortcutsDialog = viewChild.required(ShortcutsDialog);
   protected readonly playback = this.engine.playback;
   /** The volume control exists only where the page may set the volume (FR-9). */
-  protected readonly volumeSupported = toSignal(from(inject(VOLUME_SUPPORT)), {
-    initialValue: false,
+  private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
+  protected readonly volumeSupported = computed(
+    () => this.volumeAnswer() === true,
+  );
+  /** Whether the volume question was answered yet (`data-volume`, for tests and tools). */
+  protected readonly volumeState = computed(() => {
+    const answer = this.volumeAnswer();
+    return answer === undefined ? 'pending' : answer ? 'on' : 'off';
   });
 
   protected readonly operable = this.engine.operable;

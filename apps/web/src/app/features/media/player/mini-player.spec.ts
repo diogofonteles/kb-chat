@@ -16,6 +16,8 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
+import { SessionStore } from '@core/auth/session-store.js';
+import { signal } from '@angular/core';
 import { MiniPlayer } from './mini-player.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -26,7 +28,10 @@ const SOURCE = {
   durationMs: 600_000,
 };
 
-@Component({ template: '<app-mini-player />', imports: [MiniPlayer] })
+@Component({
+  template: '<main><h1>Conversa</h1><app-mini-player /></main>',
+  imports: [MiniPlayer],
+})
 class Shell {}
 
 async function setup(url = '/') {
@@ -38,6 +43,7 @@ async function setup(url = '/') {
       provideHttpClient(),
       provideHttpClientTesting(),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
+      { provide: SessionStore, useValue: { me: signal(null) } },
       provideRouter([
         { path: '', component: Shell },
         { path: 'midia/:id', component: Shell },
@@ -105,6 +111,43 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     ).toEqual({ positionMs: 150_000 });
     expect(engine.source()).toBeNull();
     expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
+    // The focus goes to the main area, not to <body> (WCAG 2.4.3).
+    expect(document.activeElement?.tagName).toBe('MAIN');
+  });
+
+  it('stops and says why when the media is gone from the server', async () => {
+    const { media, http, harness } = await setup();
+    media.setPaused(true);
+    media.emit('pause');
+    await harness.fixture.whenStable();
+    http
+      .expectOne({ method: 'PUT', url: `/api/v1/media/${ID}/progress` })
+      .flush(
+        { error: { code: 'MEDIA_NOT_FOUND', message: 'x' } },
+        { status: 404, statusText: 'Not Found' },
+      );
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Esta mídia não está mais no acervo',
+    );
+    expect(
+      screen
+        .getByRole('button', { name: /Tocar|Pausar/ })
+        .hasAttribute('disabled'),
+    ).toBe(true);
+    expect(media.calls.at(-1)).toBe('pause');
+  });
+
+  it('says the audio stopped on an error, and tries again', async () => {
+    const { media, harness } = await setup();
+    media.setError(2);
+    media.emit('error');
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui continuar o áudio.',
+    );
+    screen.getByRole('button', { name: 'Tentar de novo' }).click();
+    expect(media.calls).toContain('load:/s');
   });
 
   it('takes the player shortcuts while the focus is inside it', async () => {

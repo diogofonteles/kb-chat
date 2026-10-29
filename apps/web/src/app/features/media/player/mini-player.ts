@@ -1,11 +1,16 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   inject,
   input,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import {
+  takeUntilDestroyed,
+  toObservable,
+  toSignal,
+} from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { formatClock, positionToSecond } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
@@ -50,7 +55,18 @@ export class MiniPlayer {
   /** On phones, above the question box (screens.md T15); else at the foot. */
   readonly aboveComposer = input(false);
 
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
   protected readonly source = this.engine.source;
+  /** The server no longer has what plays for this person (removed, access taken away). */
+  protected readonly gone = computed(() => {
+    const source = this.source();
+    return source !== null && this.saver.gone() === source.id;
+  });
+  /** The audio stopped on an error (the network): say so, with "Tentar de novo". */
+  protected readonly failed = computed(
+    () => this.engine.playback().phase === 'error',
+  );
   protected readonly playing = this.engine.playing;
   protected readonly busy = this.engine.busy;
   /** On its own page the full player shows it: no mini-player there. */
@@ -84,6 +100,13 @@ export class MiniPlayer {
       : $localize`:@@player.play:Tocar`;
   });
 
+  constructor() {
+    // Gone from the server: stop at once (the page says why).
+    toObservable(this.gone)
+      .pipe(filter(Boolean), takeUntilDestroyed())
+      .subscribe(() => this.engine.pause());
+  }
+
   protected toggle(): void {
     this.engine.toggle();
   }
@@ -92,10 +115,22 @@ export class MiniPlayer {
     this.engine.skip(-SKIP_BACK_MS);
   }
 
-  /** "Fechar o player": stops, saves where it stopped and goes away (AC-11). */
+  protected retry(): void {
+    this.engine.retry();
+  }
+
+  /**
+   * "Fechar o player": stops, saves where it stopped and goes away (AC-11). The focus,
+   * which was on the button that goes, moves to the main area (WCAG 2.4.3).
+   */
   protected close(): void {
     this.engine.pause();
-    this.saver.saveNow();
+    if (!this.gone()) this.saver.saveNow();
     this.engine.unload();
+    const main = this.host.nativeElement.closest('main');
+    if (main) {
+      main.tabIndex = -1;
+      main.focus();
+    }
   }
 }
