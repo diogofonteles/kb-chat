@@ -162,6 +162,11 @@
   --menu-trigger-size: var(--text-md);
 }
 
+/* The trigger lays its content out as a grid: one item keeps ☾ beside its time. */
+.sleep-face {
+  white-space: nowrap;
+}
+
 .volume {
   display: flex;
   align-items: center;

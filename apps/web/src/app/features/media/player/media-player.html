@@ -159,7 +159,9 @@
         [options]="sleepOptions()"
         (chosen)="chooseSleep($event)"
       >
-        <span aria-hidden="true">☾</span>&nbsp;{{ sleepShown() }}
+        <span class="sleep-face"
+          ><span aria-hidden="true">☾</span> {{ sleepShown() }}</span
+        >
       </app-menu-button>
     }
 

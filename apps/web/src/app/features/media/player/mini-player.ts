@@ -45,12 +45,15 @@ export class MiniPlayer {
   private readonly saver = inject(ProgressSaver);
   private readonly preferences = inject(ListeningPreferences);
   private readonly sleepTimer = inject(SleepTimerService);
-  /** "Para em 14:59" while a sleep timer counts (KBC-046 FR-1). */
+  /**
+   * "☾ 14:59" while a sleep timer counts (KBC-046 FR-1): short, so the title keeps its
+   * room on a phone; "Para em" is there for screen readers.
+   */
   protected readonly sleepShown = computed(() => {
     const remaining = this.sleepTimer.remainingMs();
     return remaining === null
       ? ''
-      : $localize`:@@player.sleep.stopsAt:Para em ${formatClock(Math.ceil(remaining / 1000) * 1000)}:time:`;
+      : formatClock(Math.ceil(remaining / 1000) * 1000);
   });
   protected readonly announcer = inject(PlayerAnnouncer);
   protected readonly shortcuts = inject(PlayerShortcuts);

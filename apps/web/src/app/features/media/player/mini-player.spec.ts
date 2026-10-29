@@ -182,7 +182,11 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     const timer = TestBed.inject(SleepTimerService);
     timer.start(15);
     await harness.fixture.whenStable();
-    expect(bar.textContent).toContain('Para em 15:00');
+    // Seen as "☾ 15:00"; "Para em" is read, not shown.
+    expect(bar.textContent).toContain('☾ Para em 15:00');
+    expect(bar.querySelector('.sleep .visually-hidden')?.textContent).toBe(
+      'Para em ',
+    );
     timer.off();
     await harness.fixture.whenStable();
     expect(bar.textContent).not.toContain('Para em');
