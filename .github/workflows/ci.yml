@@ -96,11 +96,15 @@ jobs:
             browser: ''
           - name: media WebKit
             projects: --project=media-webkit
-            shard: 1/2
+            shard: 1/3
             browser: 'webkit'
           - name: media WebKit
             projects: --project=media-webkit
-            shard: 2/2
+            shard: 2/3
+            browser: 'webkit'
+          - name: media WebKit
+            projects: --project=media-webkit
+            shard: 3/3
             browser: 'webkit'
     steps:
       - uses: actions/checkout@v4
