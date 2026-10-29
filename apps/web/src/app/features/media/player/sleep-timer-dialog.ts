@@ -78,7 +78,7 @@ export class SleepTimerDialog {
   readonly closed = output();
 
   protected readonly choices = SLEEP_MINUTES;
-  /** The running timer's choice, shown pressed with ✓ (none while off). */
+  /** The running timer's choice, shown as current with ✓ (none while off). */
   protected readonly current = this.timer.choice;
 
   /** Every way out (a choice, Fechar, Esc) gives the focus back to where it was. */

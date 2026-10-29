@@ -241,6 +241,22 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await expect(dialog).toBeHidden();
   await expect(more).toBeFocused();
   await expect(moon(page)).toContainText('Para em 30:00');
+  // Opened again, the running choice is the current one, and only it.
+  await page.keyboard.press('ArrowUp');
+  await expect(
+    page.getByRole('menuitem', { name: 'Atalhos de teclado' }),
+  ).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(
+    page.getByRole('menuitem', { name: 'Timer para dormir' }),
+  ).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[aria-current="true"]')).toHaveText(
+    /^✓\s*30 min$/,
+  );
+  await page.keyboard.press('Escape');
+  await expect(more).toBeFocused();
   await moon(page).focus();
   await page.keyboard.press('Enter');
   // The ☾ menu opens on its first item; ↓ goes to "Desligar timer".

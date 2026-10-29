@@ -165,7 +165,7 @@ export class SleepTimerService {
 
   private fade(timer: SleepTimer): void {
     const factor = fadeFactor(timer);
-    // Muted, there is nothing to turn down; setting the volume would unmute it.
+    // Muted, there is nothing to turn down.
     if (!this.volumeWritable || factor >= 1 || this.engine.muted()) return;
     this.volumeBefore ??= this.engine.volume();
     this.engine.fadeVolume(this.volumeBefore * factor);
