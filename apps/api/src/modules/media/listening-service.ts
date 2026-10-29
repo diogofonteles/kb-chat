@@ -8,10 +8,12 @@ import { AppError } from '../../app-error.js';
 import type { ListeningStorePort } from '../../ports/listening-store.js';
 import type { MediaActor, MediaService } from './media-service.js';
 
-/** Before any choice: normal speed, remaining time on the right (screens.md T15). */
+/** Before any choice: normal speed, remaining time, back 15 s and forward 30 s (T15). */
 export const DEFAULT_PREFERENCES: MediaPreferences = {
   speed: 1,
   showRemaining: true,
+  skipBackSec: 15,
+  skipForwardSec: 30,
 };
 
 export interface ListeningServiceDeps {

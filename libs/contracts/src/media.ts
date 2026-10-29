@@ -114,11 +114,17 @@ export type MediaSpeed = (typeof MEDIA_SPEEDS)[number];
 /** From this share of its length a media counts as heard and its position resets (BR-2). */
 export const MEDIA_COMPLETION_RATIO = 0.95;
 
+/** How far "Voltar" and "Avançar" go, in seconds (KBC-043, screens.md T15 "Pulos"). */
+export const MEDIA_SKIP_BACK_SECONDS = [5, 10, 15, 30] as const;
+export const MEDIA_SKIP_FORWARD_SECONDS = [10, 15, 30, 45, 60] as const;
+
 /** GET/PUT /api/v1/media/preferences: one person's choices, for every media and device. */
 export const mediaPreferencesSchema = z.strictObject({
   speed: z.literal(MEDIA_SPEEDS),
   /** Remaining time (true) or total length (false) on the right of the time slider. */
   showRemaining: z.boolean(),
+  skipBackSec: z.literal(MEDIA_SKIP_BACK_SECONDS),
+  skipForwardSec: z.literal(MEDIA_SKIP_FORWARD_SECONDS),
 });
 export type MediaPreferences = z.infer<typeof mediaPreferencesSchema>;
 

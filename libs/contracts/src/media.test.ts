@@ -10,6 +10,13 @@ import {
   mediaProgressRequestSchema,
 } from './media.js';
 
+const PREFS = {
+  speed: 1,
+  showRemaining: true,
+  skipBackSec: 15,
+  skipForwardSec: 30,
+};
+
 const aRequest = {
   title: '  Palestra de 1998 ',
   authorship: 'mestre-laercio',
@@ -112,22 +119,19 @@ describe('media contracts', () => {
     expect(MEDIA_SPEEDS).toEqual([0.75, 1, 1.25, 1.5, 1.75, 2]);
     for (const speed of MEDIA_SPEEDS)
       expect(
-        mediaPreferencesSchema.safeParse({ speed, showRemaining: true })
-          .success,
+        mediaPreferencesSchema.safeParse({ ...PREFS, speed }).success,
       ).toBe(true);
     for (const speed of [3, 0.5, 1.1, '1.5'])
       expect(
-        mediaPreferencesSchema.safeParse({ speed, showRemaining: true })
-          .success,
+        mediaPreferencesSchema.safeParse({ ...PREFS, speed }).success,
       ).toBe(false);
     expect(
-      mediaPreferencesSchema.safeParse({ speed: 1, showRemaining: 'yes' })
+      mediaPreferencesSchema.safeParse({ ...PREFS, showRemaining: 'yes' })
         .success,
     ).toBe(false);
-    expect(
-      mediaPreferencesSchema.safeParse({ speed: 1, showRemaining: true, x: 1 })
-        .success,
-    ).toBe(false);
+    expect(mediaPreferencesSchema.safeParse({ ...PREFS, x: 1 }).success).toBe(
+      false,
+    );
   });
 
   it('takes a position as whole, non-negative milliseconds, with the save it continues (FR-2, FR-3)', () => {
@@ -141,6 +145,24 @@ describe('media contracts', () => {
     // Required: a client can never skip the check against newer saves.
     expect(
       mediaProgressRequestSchema.safeParse({ positionMs: 1 }).success,
+    ).toBe(false);
+  });
+
+  it('takes skips only from the "Pulos" menu (KBC-043 FR-1)', () => {
+    for (const skipBackSec of [5, 10, 15, 30])
+      expect(
+        mediaPreferencesSchema.safeParse({ ...PREFS, skipBackSec }).success,
+      ).toBe(true);
+    for (const skipForwardSec of [10, 15, 30, 45, 60])
+      expect(
+        mediaPreferencesSchema.safeParse({ ...PREFS, skipForwardSec }).success,
+      ).toBe(true);
+    for (const skipBackSec of [7, 0, 60])
+      expect(
+        mediaPreferencesSchema.safeParse({ ...PREFS, skipBackSec }).success,
+      ).toBe(false);
+    expect(
+      mediaPreferencesSchema.safeParse({ ...PREFS, skipForwardSec: 5 }).success,
     ).toBe(false);
   });
 });
