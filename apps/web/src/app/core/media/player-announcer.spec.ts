@@ -97,4 +97,21 @@ describe('PlayerAnnouncer (KBC-041 FR-10)', () => {
     expect(announcer.message().trim()).toBe(first);
     expect(announcer.count()).toBe(2);
   });
+
+  it('says why instead of "Pausado" for a pause someone else asked for (KBC-046)', () => {
+    const { engine, announcer, media } = setup();
+    engine.play();
+    media.emit('playing');
+    TestBed.tick();
+    announcer.sayOnNextPause('Pausado pelo timer');
+    media.setPaused(true);
+    media.emit('pause');
+    TestBed.tick();
+    expect(announcer.message()).toBe('Pausado pelo timer');
+    media.emit('playing');
+    TestBed.tick();
+    media.emit('pause');
+    TestBed.tick();
+    expect(announcer.message()).toBe('Pausado');
+  });
 });

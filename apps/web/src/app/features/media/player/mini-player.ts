@@ -17,6 +17,7 @@ import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
+import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { filter, map } from 'rxjs';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
@@ -43,6 +44,14 @@ export class MiniPlayer {
   private readonly engine = inject(MediaEngine);
   private readonly saver = inject(ProgressSaver);
   private readonly preferences = inject(ListeningPreferences);
+  private readonly sleepTimer = inject(SleepTimerService);
+  /** "Para em 14:59" while a sleep timer counts (KBC-046 FR-1). */
+  protected readonly sleepShown = computed(() => {
+    const remaining = this.sleepTimer.remainingMs();
+    return remaining === null
+      ? ''
+      : $localize`:@@player.sleep.stopsAt:Para em ${formatClock(Math.ceil(remaining / 1000) * 1000)}:time:`;
+  });
   protected readonly announcer = inject(PlayerAnnouncer);
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly router = inject(Router);

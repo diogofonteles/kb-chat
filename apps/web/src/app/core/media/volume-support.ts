@@ -26,7 +26,22 @@ export function probeVolume(
 }
 
 /**
- * The answer for this browser, asked once per app: a fine pointer (mouse or trackpad, the
+ * Whether the page may set the volume at all, asked once per app (false on iPhone and
+ * iPad). The sleep timer's fade uses it on any device (KBC-046 FR-2).
+ */
+export const VOLUME_WRITABLE = new InjectionToken<Promise<boolean>>(
+  'VOLUME_WRITABLE',
+  {
+    providedIn: 'root',
+    factory: () => {
+      const document = inject(DOCUMENT);
+      return probeVolume(() => document.createElement('audio'));
+    },
+  },
+);
+
+/**
+ * Whether the player shows its volume control: a fine pointer (mouse or trackpad, the
  * item's scope) and a volume the page may set. Phones use their own buttons.
  */
 export const VOLUME_SUPPORT = new InjectionToken<Promise<boolean>>(
@@ -34,12 +49,10 @@ export const VOLUME_SUPPORT = new InjectionToken<Promise<boolean>>(
   {
     providedIn: 'root',
     factory: () => {
-      const document = inject(DOCUMENT);
       const fine =
-        document.defaultView?.matchMedia?.('(pointer: fine)').matches;
-      return fine
-        ? probeVolume(() => document.createElement('audio'))
-        : Promise.resolve(false);
+        inject(DOCUMENT).defaultView?.matchMedia?.('(pointer: fine)').matches;
+      const writable = inject(VOLUME_WRITABLE);
+      return fine ? writable : Promise.resolve(false);
     },
   },
 );

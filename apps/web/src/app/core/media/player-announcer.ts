@@ -24,6 +24,8 @@ export class PlayerAnnouncer {
   private readonly text = signal('');
   private readonly said = signal(0);
   private readonly sliderHasFocus = signal(false);
+  /** Said in place of the next "Pausado" (a pause someone else asked for, with a reason). */
+  private nextPause: string | null = null;
   private readonly phase = computed(() => this.engine.playback().phase);
 
   /** The region's text; a repeat differs by a trailing space so it is read again. */
@@ -36,8 +38,11 @@ export class PlayerAnnouncer {
       map(([before, now]) => {
         if (now === 'playing' && before !== 'playing')
           return $localize`:@@player.announce.playing:Tocando`;
-        if (now === 'paused' && before === 'playing')
-          return $localize`:@@player.announce.paused:Pausado`;
+        if (now === 'paused' && before === 'playing') {
+          const reason = this.nextPause;
+          this.nextPause = null;
+          return reason ?? $localize`:@@player.announce.paused:Pausado`;
+        }
         return null;
       }),
     );
@@ -59,12 +64,18 @@ export class PlayerAnnouncer {
       .subscribe((message) => this.say(message));
   }
 
+  /** Says `message` instead of "Pausado" for the pause about to come (the sleep timer). */
+  sayOnNextPause(message: string): void {
+    this.nextPause = message;
+  }
+
   /** The time slider has the focus (it speaks the time itself): the region keeps quiet. */
   setSliderFocused(focused: boolean): void {
     this.sliderHasFocus.set(focused);
   }
 
-  private say(message: string): void {
+  /** Says a confirmed change in the status region (also used by the sleep timer). */
+  say(message: string): void {
     if (this.sliderHasFocus()) return;
     const repeat = message === this.text().trim();
     this.text.set(

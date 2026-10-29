@@ -17,7 +17,9 @@ import {
   positionToSecond,
   type PlaybackErrorKind,
 } from '@kb-chat/player-core';
+import { speak } from '@core/i18n/spoken-time.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
+import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { from } from 'rxjs';
@@ -27,6 +29,7 @@ import { PlayerVolume } from './player-volume.js';
 import { SeekSlider } from './seek-slider.js';
 import { ShortcutsDialog } from './shortcuts-dialog.js';
 import { SkipsDialog } from './skips-dialog.js';
+import { SleepTimerDialog } from './sleep-timer-dialog.js';
 
 const ERROR_MESSAGES: Record<PlaybackErrorKind, () => string> = {
   network: () =>
@@ -50,7 +53,13 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
  */
 @Component({
   selector: 'app-media-player',
-  imports: [SeekSlider, MenuButton, ShortcutsDialog, SkipsDialog],
+  imports: [
+    SeekSlider,
+    MenuButton,
+    ShortcutsDialog,
+    SkipsDialog,
+    SleepTimerDialog,
+  ],
   templateUrl: './media-player.html',
   styleUrl: './media-player.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,6 +71,8 @@ export class MediaPlayer {
   private readonly volumeMemory = inject(PlayerVolume);
   private readonly shortcutsDialog = viewChild.required(ShortcutsDialog);
   private readonly skipsDialog = viewChild.required(SkipsDialog);
+  private readonly sleepDialog = viewChild.required(SleepTimerDialog);
+  private readonly sleepTimer = inject(SleepTimerService);
   protected readonly playback = this.engine.playback;
   /** The volume control exists only where the page may set the volume (FR-9). */
   private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
@@ -128,10 +139,42 @@ export class MediaPlayer {
   protected readonly moreOptions: readonly MenuOption[] = [
     { id: 'skips', label: $localize`:@@player.skips.open:Pulos` },
     {
+      id: 'sleep',
+      label: $localize`:@@player.sleep.open:Timer para dormir`,
+    },
+    {
       id: 'shortcuts',
       label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
     },
   ];
+  /** The ☾ button, only while a sleep timer runs (KBC-046). */
+  protected readonly sleepOn = computed(
+    () => this.sleepTimer.timer().kind !== 'off',
+  );
+  protected readonly sleepShown = computed(() => {
+    const remaining = this.sleepTimer.remainingMs();
+    return remaining === null
+      ? $localize`:@@player.sleep.atEnd:No fim`
+      : $localize`:@@player.sleep.stopsAt:Para em ${formatClock(Math.ceil(remaining / 1000) * 1000)}:time:`;
+  });
+  protected readonly sleepLabel = computed(() => {
+    const remaining = this.sleepTimer.remainingMs();
+    return remaining === null
+      ? $localize`:@@player.sleep.labelEnd:Timer para dormir: no fim desta mídia`
+      : $localize`:@@player.sleep.label:Timer para dormir: para em ${speak(Math.ceil(remaining / 1000) * 1000)}:time:`;
+  });
+  protected readonly sleepOptions = computed<MenuOption[]>(() => [
+    ...(this.sleepTimer.remainingMs() === null
+      ? []
+      : [
+          {
+            id: 'extend',
+            label: $localize`:@@player.sleep.extend:Mais 5 minutos`,
+          },
+        ]),
+    { id: 'off', label: $localize`:@@player.sleep.off:Desligar timer` },
+  ]);
+
   /** The person's skips (KBC-043): the number on each button and in its name. */
   protected readonly skipBack = computed(
     () => this.preferences.value().skipBackSec,
@@ -206,6 +249,12 @@ export class MediaPlayer {
   protected chooseMore(id: string): void {
     if (id === 'shortcuts') this.shortcutsDialog().open();
     if (id === 'skips') this.skipsDialog().open();
+    if (id === 'sleep') this.sleepDialog().open();
+  }
+
+  protected chooseSleep(id: string): void {
+    if (id === 'extend') this.sleepTimer.extend();
+    if (id === 'off') this.sleepTimer.off();
   }
 
   protected toggleMute(): void {

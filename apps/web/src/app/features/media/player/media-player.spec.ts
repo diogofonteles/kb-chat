@@ -378,4 +378,71 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     await fixture.whenStable();
     expect(document.activeElement).toBe(more);
   });
+
+  async function chooseSleep(
+    fixture: { whenStable: () => Promise<unknown> },
+    name: string,
+  ) {
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Timer para dormir' }),
+    );
+    await fixture.whenStable();
+    const dialog = screen.getByRole('dialog', { name: 'Timer para dormir' });
+    fireEvent.click(within(dialog).getByRole('radio', { name }));
+    await fixture.whenStable();
+  }
+
+  it('starts a sleep timer from "Mais opções" and shows ☾ with the time left (KBC-046 FR-1)', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    expect(
+      screen.queryByRole('button', { name: /^Timer para dormir/ }),
+    ).toBeNull();
+    await chooseSleep(fixture, '15 min');
+    const moon = screen.getByRole('button', {
+      name: 'Timer para dormir: para em 15 minutos',
+    });
+    expect(moon.textContent).toContain('Para em 15:00');
+    // A choice closes the dialog and gives the focus back to "Mais opções".
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Mais opções' }),
+    );
+  });
+
+  it('adds 5 minutes and turns the timer off from the ☾ menu (KBC-046 FR-3, FR-4)', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    await chooseSleep(fixture, '15 min');
+    fireEvent.click(screen.getByRole('button', { name: /^Timer para dormir/ }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mais 5 minutos' }));
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: /^Timer para dormir/ }).textContent,
+    ).toContain('Para em 20:00');
+    fireEvent.click(screen.getByRole('button', { name: /^Timer para dormir/ }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Desligar timer' }));
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('button', { name: /^Timer para dormir/ }),
+    ).toBeNull();
+  });
+
+  it('says "No fim" for the end of the media, with nothing to add (KBC-046 AC-4)', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    await chooseSleep(fixture, 'No fim desta mídia');
+    const moon = screen.getByRole('button', {
+      name: 'Timer para dormir: no fim desta mídia',
+    });
+    expect(moon.textContent).toContain('No fim');
+    fireEvent.click(moon);
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Mais 5 minutos' }),
+    ).toBeNull();
+    expect(
+      screen.getByRole('menuitem', { name: 'Desligar timer' }),
+    ).toBeTruthy();
+  });
 });

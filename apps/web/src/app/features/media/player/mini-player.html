@@ -39,7 +39,12 @@
         current.title
       }}</a>
     }
-    <span class="time">{{ elapsed() }}</span>
+    <span class="time"
+      >{{ elapsed() }}
+      @if (sleepShown(); as sleep) {
+        <span class="sleep"><span aria-hidden="true">☾</span> {{ sleep }}</span>
+      }
+    </span>
     <div class="actions">
       <button
         type="button"
