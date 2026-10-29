@@ -32,10 +32,15 @@ jobs:
       - run: pnpm format:check
 
   e2e:
-    name: E2E (Playwright)
+    # Four shards in parallel: a GitHub runner gives Playwright 2 workers, so one job took
+    # ~18 min; each shard starts its own API and web servers.
+    name: E2E (Playwright) ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
-    # ~18 min of tests (three browsers for the media specs) plus the browser install.
-    timeout-minutes: 35
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -44,21 +49,25 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Media specs (KBC-034) play real AAC: Google Chrome (Playwright's Chromium has no
-      # AAC/H.264) and WebKit (Safari), plus ffmpeg for the E2E server's media worker.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      # Downloads from dl.google.com sometimes drop mid-way: up to 3 attempts.
-      - run: |
-          for attempt in 1 2 3; do
-            pnpm --filter @kb-chat/e2e exec playwright install --with-deps chromium chrome webkit && exit 0
-            echo "browser install failed (attempt $attempt)"; sleep 10
-          done
-          exit 1
-      - run: pnpm e2e
+      # Playwright's Chromium and WebKit, cached by the lockfile (the Playwright version).
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @kb-chat/e2e exec playwright install chromium webkit
+      # System libraries for both, then ffmpeg for the E2E server's media worker (KBC-034).
+      - run: pnpm --filter @kb-chat/e2e exec playwright install-deps chromium webkit
+      - run: sudo apt-get install -y --no-install-recommends ffmpeg
+      # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
+      # Chromium of Playwright has no AAC/H.264), no download needed.
+      - run: google-chrome --version
+      - run: pnpm --filter @kb-chat/e2e exec playwright test --shard=${{ matrix.shard }}/4
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: e2e/playwright-report
           retention-days: 7
 
