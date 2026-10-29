@@ -134,7 +134,7 @@ describe('MediaPlayerPage (T15)', () => {
   });
 
   it('asks again while converting and loads the audio once it is ready', async () => {
-    const { harness, http, media } = await openPage();
+    const { http, media } = await openPage();
     http
       .expectOne(ITEM_URL)
       .flush(
@@ -143,8 +143,15 @@ describe('MediaPlayerPage (T15)', () => {
     // Not whenStable: the next poll's request would keep it waiting for its answer.
     TestBed.tick();
     await vi.waitFor(() => http.expectOne(ITEM_URL).flush(ITEM));
-    await harness.fixture.whenStable();
-    expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+    // Not whenStable either: the player asks for the person's preferences as it appears,
+    // and a slow run may poll once more before the page sees the item is ready.
+    await vi.waitFor(() => {
+      for (const request of http.match(ITEM_URL)) request.flush(ITEM);
+      for (const request of http.match('/api/v1/media/preferences'))
+        request.flush({ speed: 1, showRemaining: true });
+      TestBed.tick();
+      expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+    });
     expect(media.calls).toEqual([`load:/api/v1/media/${ITEM.id}/stream`]);
   });
 
