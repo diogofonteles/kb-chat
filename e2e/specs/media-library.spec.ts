@@ -9,7 +9,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { makeMp3, uploadReady, useTheme } from './media-helpers.js';
+import { makeMp3, uniqueTag, uploadReady, useTheme } from './media-helpers.js';
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
@@ -31,7 +31,7 @@ const seriousViolations = async (page: Page) =>
 test('AC-1: a master uploads an MP3, sees it go to "Pronta" and opens it', async ({
   page,
 }) => {
-  const title = `Palestra ${Date.now().toString(36)}`;
+  const title = `Palestra ${uniqueTag()}`;
   const file = makeMp3(title.replace(/\s+/g, '_'), 8);
   await openMedia(page);
   await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
@@ -131,7 +131,7 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
 }) => {
   const owner = await ownerApi();
   const media = await uploadReady(owner, {
-    title: `Remover ${Date.now().toString(36)}`,
+    title: `Remover ${uniqueTag()}`,
     seconds: 2,
   });
   await openMedia(page);

@@ -375,6 +375,34 @@ describe('MediaListPage (T14)', () => {
     expect(screen.getByRole('status').textContent?.trim()).toBe('');
   });
 
+  it('shows "Continuar de" and the share heard on a media with a saved position (T14)', async () => {
+    const { answer, container } = await renderList();
+    await answer([
+      aMediaItem({ positionMs: 1_390_000, durationMs: 3_735_000 }),
+      aMediaItem({
+        id: mediaId(2),
+        title: 'Ouvida até o fim',
+        positionMs: 0,
+        completedAt: '2026-10-28T12:00:00.000Z',
+      }),
+    ]);
+    const [first, second] = screen.getAllByRole('listitem');
+    expect(first?.textContent).toContain('Continuar de 23:10');
+    const bar = container.querySelector<HTMLElement>('.position span');
+    expect(bar?.style.width).toMatch(/^37\.2/);
+    expect(second?.textContent).not.toContain('Continuar de');
+  });
+
+  it('brings an element that takes the focus fully into view (WCAG 2.4.11)', async () => {
+    const { answer } = await renderList();
+    await answer([aMediaItem()]);
+    const link = screen.getByRole('link', { name: /Palestra de 1998/ });
+    const scroll = vi.fn();
+    link.scrollIntoView = scroll;
+    fireEvent.focusIn(link);
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
   it('closes the upload panel without uploading', async () => {
     const { answer, fixture } = await renderList({
       features: ['media-upload'],

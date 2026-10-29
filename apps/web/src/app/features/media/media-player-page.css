@@ -1,5 +1,9 @@
 :host {
   display: block;
+  /* Its own row of the main area's grid (chat-page.css): it scrolls inside it, so the
+     mini-player below never covers what has the focus (KBC-041 FR-11). */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .page {
@@ -81,6 +85,27 @@
 
 .status {
   font-weight: 600;
+}
+
+/* "Continuar de" first: the main way back in (T15, Retomar). */
+.resume {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
 
 /* The player's box is reserved from the first paint: nothing jumps when it arrives. */

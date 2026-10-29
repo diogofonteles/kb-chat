@@ -41,6 +41,7 @@
       class="skip"
       aria-label="Voltar 15 segundos"
       i18n-aria-label="@@player.back15"
+      aria-keyshortcuts="J"
       [disabled]="!operable()"
       (click)="back()"
     >
@@ -57,6 +58,7 @@
       type="button"
       class="play"
       [attr.aria-label]="playLabel()"
+      aria-keyshortcuts="K Space"
       [disabled]="!canPlay()"
       (click)="toggle()"
     >
@@ -78,6 +80,7 @@
       class="skip"
       aria-label="Avançar 30 segundos"
       i18n-aria-label="@@player.forward30"
+      aria-keyshortcuts="L"
       [disabled]="!operable()"
       (click)="forward()"
     >
@@ -91,6 +94,78 @@
     </button>
   </div>
 
+  <div class="options" [attr.data-volume]="volumeState()">
+    <app-menu-button
+      class="speed"
+      kind="choice"
+      [label]="speedLabel()"
+      menuLabel="Velocidade"
+      i18n-menuLabel="@@player.speedMenu"
+      [options]="speedOptions()"
+      keyshortcuts="Shift+. Shift+,"
+      (chosen)="chooseSpeed($event)"
+    >
+      {{ speedShown() }}
+    </app-menu-button>
+
+    @if (volumeSupported()) {
+      <div class="volume">
+        <button
+          type="button"
+          class="mute"
+          aria-label="Silenciar"
+          i18n-aria-label="@@player.mute"
+          [attr.aria-pressed]="muted()"
+          aria-keyshortcuts="M"
+          (click)="toggleMute()"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+            <path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor" />
+            @if (muted()) {
+              <path
+                d="M16 9l5 6M21 9l-5 6"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            } @else {
+              <path
+                d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                fill="none"
+              />
+            }
+          </svg>
+        </button>
+        <input
+          type="range"
+          class="volume-slider"
+          min="0"
+          max="100"
+          step="5"
+          aria-label="Volume"
+          i18n-aria-label="@@player.volume"
+          [value]="volumePercent()"
+          [attr.aria-valuetext]="volumeText()"
+          (input)="setVolume($event)"
+        />
+      </div>
+    }
+
+    <app-menu-button
+      class="more"
+      label="Mais opções"
+      i18n-label="@@player.more"
+      keyshortcuts="?"
+      [options]="moreOptions"
+      (chosen)="chooseMore($event)"
+    >
+      <span aria-hidden="true">⋯</span>
+    </app-menu-button>
+  </div>
+
   @if (ended()) {
     <button
       type="button"
@@ -102,3 +177,5 @@
     </button>
   }
 </section>
+
+<app-shortcuts-dialog />

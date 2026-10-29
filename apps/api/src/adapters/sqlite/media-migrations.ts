@@ -63,4 +63,26 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX jobs_by_media ON jobs (media_id);
     `,
   },
+  {
+    version: 2,
+    name: 'listening-preferences-and-progress',
+    sql: `
+      CREATE TABLE media_preferences (
+        principal TEXT PRIMARY KEY,
+        speed REAL NOT NULL CHECK (speed IN (0.75, 1, 1.25, 1.5, 1.75, 2)),
+        show_remaining INTEGER NOT NULL CHECK (show_remaining IN (0, 1)),
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE media_progress (
+        principal TEXT NOT NULL,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        position_ms INTEGER NOT NULL CHECK (position_ms >= 0),
+        completed_at TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (principal, media_id)
+      ) STRICT;
+      CREATE INDEX media_progress_by_media ON media_progress (media_id);
+    `,
+  },
 ];

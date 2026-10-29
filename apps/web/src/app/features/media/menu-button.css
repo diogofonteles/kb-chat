@@ -6,13 +6,16 @@
 .trigger {
   display: grid;
   place-items: center;
-  width: var(--target);
+  min-width: var(--target);
   height: var(--target);
+  padding: 0 var(--menu-trigger-padding, 0);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
-  font-size: 1.25rem;
+  color: var(--menu-trigger-color, var(--color-text-muted));
+  font-size: var(--menu-trigger-size, 1.25rem);
+  font-weight: var(--menu-trigger-weight, normal);
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   cursor: pointer;
 }
@@ -39,7 +42,11 @@
 }
 
 .menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   min-height: var(--target);
+  white-space: nowrap;
   padding: 0 var(--space-3);
   border: none;
   border-radius: var(--radius-sm);
@@ -52,6 +59,12 @@
 .menu button:hover,
 .menu button:focus-visible {
   background: var(--color-surface-muted);
+}
+
+.check {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
 }
 
 .danger {

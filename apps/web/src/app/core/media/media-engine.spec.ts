@@ -92,6 +92,17 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(media.calls.at(-1)).toBe('pause');
   });
 
+  it('does not count opening at a saved position as a skip of the person', () => {
+    engine.load(LECTURE, 30_000);
+    media.setDuration(60);
+    media.emit('loadedmetadata');
+    media.emit('seeked');
+    expect(engine.seeksLanded()).toBe(0);
+    engine.skip(5_000);
+    media.emit('seeked');
+    expect(engine.seeksLanded()).toBe(1);
+  });
+
   it('starts at the asked second once the duration is known', () => {
     ready(LECTURE, 45_000);
     expect(media.calls).toContain('seek:45');
@@ -372,6 +383,45 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.playback().phase).toBe('empty');
   });
 
+  it('applies the speed now and to every source it loads, keeping the voice (FR-5)', () => {
+    ready();
+    engine.setSpeed(1.5);
+    expect(engine.speed()).toBe(1.5);
+    expect(media.element.playbackRate).toBe(1.5);
+    expect(media.element.defaultPlaybackRate).toBe(1.5);
+    expect(media.element.preservesPitch).toBe(true);
+    // A load puts the rate back to the default: the engine sets it again.
+    media.element.playbackRate = 1;
+    engine.load(OTHER);
+    expect(media.element.playbackRate).toBe(1.5);
+    expect(media.element.defaultPlaybackRate).toBe(1.5);
+  });
+
+  it('sets the volume and the mute, and follows changes made elsewhere (FR-9)', () => {
+    ready();
+    engine.setVolume(0.4);
+    expect(media.element.volume).toBe(0.4);
+    expect(engine.volume()).toBe(0.4);
+    engine.toggleMute();
+    expect(media.element.muted).toBe(true);
+    expect(engine.muted()).toBe(true);
+    media.element.muted = false;
+    media.element.volume = 0.7;
+    media.emit('volumechange');
+    expect(engine.muted()).toBe(false);
+    expect(engine.volume()).toBe(0.7);
+  });
+
+  it('keeps the volume inside 0–100% and unmutes when it is raised', () => {
+    ready();
+    engine.toggleMute();
+    engine.setVolume(1.4);
+    expect(engine.volume()).toBe(1);
+    expect(engine.muted()).toBe(false);
+    engine.setVolume(-1);
+    expect(engine.volume()).toBe(0);
+  });
+
   it('keeps one element for every source (one thing plays at a time)', () => {
     ready();
     ready(OTHER);
@@ -405,5 +455,27 @@ describe('MEDIA_ELEMENT_FACTORY', () => {
   it('ignores any other value', () => {
     window.history.replaceState({}, '', '/midia/x?mediaElement=img');
     expect(mediaTagOf(document)).toBe('audio');
+  });
+});
+
+describe('MediaEngine over many media (KBC-041 NFR-3)', () => {
+  it('opens and closes 20 media with one element and no extra listeners', () => {
+    document
+      .querySelectorAll('[data-media-engine]')
+      .forEach((element) => element.remove());
+    const added = vi.spyOn(HTMLMediaElement.prototype, 'addEventListener');
+    const engine = TestBed.inject(MediaEngine);
+    for (let i = 0; i < 20; i++) {
+      engine.load({ id: `m${i}`, title: `Palestra ${i}`, src: `/m${i}` });
+      engine.unload();
+    }
+    const elements = document.querySelectorAll('[data-media-engine]');
+    expect(elements.length).toBe(1);
+    const perElement = added.mock.calls.length;
+    engine.load({ id: 'again', title: 'Mais uma', src: '/again' });
+    engine.unload();
+    expect(added.mock.calls.length).toBe(perElement);
+    added.mockRestore();
+    elements.forEach((element) => element.remove());
   });
 });

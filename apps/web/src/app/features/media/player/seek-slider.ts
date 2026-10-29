@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   computed,
+  inject,
   input,
   output,
   signal,
@@ -18,6 +19,7 @@ import {
   sliderMoveOf,
 } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
+import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 
 /** Seeks while dragging at most this often (a request per pixel would flood the network). */
 const DRAG_SEEK_MS = 100;
@@ -52,6 +54,7 @@ export class SeekSlider {
   private readonly dragMs = signal<number | null>(null);
   private readonly hoverMs = signal<number | null>(null);
   protected readonly focused = signal(false);
+  private readonly announcer = inject(PlayerAnnouncer);
   private lastDragSeek = 0;
 
   private readonly shownMs = computed(() => this.dragMs() ?? this.currentMs());
@@ -145,5 +148,11 @@ export class SeekSlider {
     const fraction =
       rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
     return positionAtFraction(fraction, this.durationMs() ?? 0);
+  }
+
+  /** Focused, the slider speaks the time: the status region keeps quiet (FR-10). */
+  protected setFocused(focused: boolean): void {
+    this.focused.set(focused);
+    this.announcer.setSliderFocused(focused);
   }
 }

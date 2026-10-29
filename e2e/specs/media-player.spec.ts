@@ -1,8 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { expect, ownerApi, test } from './fixtures.js';
+import { expect, ownerApi } from './fixtures.js';
 import {
   audioState,
+  listenerTest as test,
+  uniqueTag,
   uploadReady,
   useTheme,
   type UploadedMedia,
@@ -13,7 +15,7 @@ let short: UploadedMedia;
 
 test.beforeAll(async () => {
   const owner = await ownerApi();
-  const tag = Date.now().toString(36);
+  const tag = uniqueTag();
   // 2 minutes: to seek and to drop the connection mid-way; 6 s: to reach the end.
   lecture = await uploadReady(owner, {
     title: `Aula longa ${tag}`,

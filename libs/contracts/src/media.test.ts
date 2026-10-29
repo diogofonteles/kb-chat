@@ -3,8 +3,11 @@ import {
   MEDIA_MAX_UPLOAD_BYTES,
   createMediaRequestSchema,
   failJobRequestSchema,
+  MEDIA_SPEEDS,
   hasAcceptedAudioExtension,
   mediaItemSchema,
+  mediaPreferencesSchema,
+  mediaProgressRequestSchema,
 } from './media.js';
 
 const aRequest = {
@@ -78,8 +81,14 @@ describe('media contracts', () => {
       bytes: null,
       createdAt: '2026-10-28T12:00:00.000Z',
       canRetry: false,
+      positionMs: 0,
+      completedAt: null,
+      positionUpdatedAt: null,
     };
     expect(mediaItemSchema.parse(item)).toEqual(item);
+    expect(mediaItemSchema.safeParse({ ...item, positionMs: -1 }).success).toBe(
+      false,
+    );
     expect(mediaItemSchema.safeParse({ ...item, progress: 101 }).success).toBe(
       false,
     );
@@ -96,6 +105,42 @@ describe('media contracts', () => {
     expect(
       failJobRequestSchema.safeParse({ ...fail, failure: 'too-many-attempts' })
         .success,
+    ).toBe(false);
+  });
+
+  it('accepts only the six speeds of the menu and the time display choice (KBC-041 FR-1)', () => {
+    expect(MEDIA_SPEEDS).toEqual([0.75, 1, 1.25, 1.5, 1.75, 2]);
+    for (const speed of MEDIA_SPEEDS)
+      expect(
+        mediaPreferencesSchema.safeParse({ speed, showRemaining: true })
+          .success,
+      ).toBe(true);
+    for (const speed of [3, 0.5, 1.1, '1.5'])
+      expect(
+        mediaPreferencesSchema.safeParse({ speed, showRemaining: true })
+          .success,
+      ).toBe(false);
+    expect(
+      mediaPreferencesSchema.safeParse({ speed: 1, showRemaining: 'yes' })
+        .success,
+    ).toBe(false);
+    expect(
+      mediaPreferencesSchema.safeParse({ speed: 1, showRemaining: true, x: 1 })
+        .success,
+    ).toBe(false);
+  });
+
+  it('takes a position as whole, non-negative milliseconds, with the save it continues (FR-2, FR-3)', () => {
+    const request = { positionMs: 1_390_000, basedOn: null };
+    expect(mediaProgressRequestSchema.parse(request)).toEqual(request);
+    for (const positionMs of [-1, 1.5, '10'])
+      expect(
+        mediaProgressRequestSchema.safeParse({ positionMs, basedOn: null })
+          .success,
+      ).toBe(false);
+    // Required: a client can never skip the check against newer saves.
+    expect(
+      mediaProgressRequestSchema.safeParse({ positionMs: 1 }).success,
     ).toBe(false);
   });
 });

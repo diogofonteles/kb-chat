@@ -10,6 +10,7 @@ import {
   UploadRefusedError,
   type MediaFilesPort,
 } from '../../ports/media-files.js';
+import type { ListeningStorePort } from '../../ports/listening-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import { toMediaItem } from './to-media-item.js';
 
@@ -25,6 +26,8 @@ export interface MediaServiceDeps {
   readonly files: MediaFilesPort;
   /** The collection exists in the vault (a master "sees" any slug, even a wrong one). */
   readonly hasTopic: (topic: string) => boolean;
+  /** Each person's position in each media (KBC-041). */
+  readonly listening: ListeningStorePort;
   readonly now?: () => Date;
 }
 
@@ -148,13 +151,22 @@ export class MediaService {
 
   list(actor: MediaActor, topic: string): MediaItem[] {
     this.assertTopic(topic);
-    return this.deps.store
-      .listMedia(topic)
-      .map((record) => toMediaItem(record, actor.isMaster));
+    const records = this.deps.store.listMedia(topic);
+    const progress = this.deps.listening.progressOf(
+      actor.principal,
+      records.map((record) => record.id),
+    );
+    return records.map((record) =>
+      toMediaItem(record, actor.isMaster, progress.get(record.id)),
+    );
   }
 
   get(actor: MediaActor, mediaId: string): MediaItem {
-    return toMediaItem(this.visible(actor, mediaId), actor.isMaster);
+    const record = this.visible(actor, mediaId);
+    const progress = this.deps.listening
+      .progressOf(actor.principal, [mediaId])
+      .get(mediaId);
+    return toMediaItem(record, actor.isMaster, progress);
   }
 
   async playable(actor: MediaActor, mediaId: string): Promise<PlayableFile> {

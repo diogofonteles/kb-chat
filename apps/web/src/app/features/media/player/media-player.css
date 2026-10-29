@@ -146,6 +146,48 @@
   justify-self: center;
 }
 
+.options {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+/* Menu triggers in the player read as text buttons: the speed shows its value. */
+.options app-menu-button {
+  --menu-trigger-padding: var(--space-3);
+  --menu-trigger-color: var(--color-text);
+  --menu-trigger-weight: 600;
+  --menu-trigger-size: var(--text-md);
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.mute {
+  display: grid;
+  place-items: center;
+  width: var(--target);
+  height: var(--target);
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.mute:hover {
+  background: var(--color-surface-muted);
+}
+
+.volume-slider {
+  width: 6rem;
+  accent-color: var(--color-accent);
+}
+
 @media (max-width: 1023px) {
   .player {
     padding: var(--space-3) var(--space-4) var(--space-4);

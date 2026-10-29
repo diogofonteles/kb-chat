@@ -16,8 +16,10 @@ import {
   isBusy,
   isOperable,
   reducePlayback,
+  DEFAULT_SPEED,
   type PlaybackErrorKind,
   type PlaybackEvent,
+  type PlaybackSpeed,
   type PlaybackState,
 } from '@kb-chat/player-core';
 
@@ -26,6 +28,10 @@ export interface PlayableSource {
   readonly id: string;
   readonly title: string;
   readonly src: string;
+  /** The length the server knows: positions saved to it never pass it (KBC-041 FR-2). */
+  readonly durationMs?: number | null;
+  /** Who is speaking, for the system's media controls (KBC-041 FR-7). */
+  readonly artist?: string;
 }
 
 /**
@@ -103,7 +109,14 @@ export class MediaEngine {
   private element: HTMLMediaElement | null = null;
   private bufferingTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingStartMs: number | null = null;
+  /** The seek to the start position of a load: the engine's, not the person's. */
+  private openingSeek = false;
   private loads = 0;
+  private readonly speedValue = signal<PlaybackSpeed>(DEFAULT_SPEED);
+  private readonly volumeValue = signal(1);
+  private readonly mutedValue = signal(false);
+  private readonly landedSeeks = signal(0);
+  private readonly playedSinceLoad = signal(false);
 
   readonly playback = this.state.asReadonly();
   readonly source = this.current.asReadonly();
@@ -113,6 +126,14 @@ export class MediaEngine {
   readonly canPlay = computed(() => canAskToPlay(this.state()));
   /** Show the busy indicator: a requested play still loading, or a long wait. */
   readonly busy = computed(() => isBusy(this.state()));
+  /** The speed every source plays at (KBC-041 FR-5). */
+  readonly speed = this.speedValue.asReadonly();
+  readonly volume = this.volumeValue.asReadonly();
+  readonly muted = this.mutedValue.asReadonly();
+  /** Counts the seeks the person asked for that landed (announcements, KBC-041 FR-10). */
+  readonly seeksLanded = this.landedSeeks.asReadonly();
+  /** The current source played at least once since it was loaded. */
+  readonly hasPlayed = this.playedSinceLoad.asReadonly();
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
@@ -124,11 +145,34 @@ export class MediaEngine {
     this.clearBuffering();
     this.loads++;
     this.current.set(source);
+    this.playedSinceLoad.set(false);
     this.pendingStartMs = startAtMs > 0 ? startAtMs : null;
     this.dispatch({ type: 'load', loadId: this.loads });
     element.preload = 'metadata';
     element.src = source.src;
     element.load();
+    // Loading puts the rate back to the default (HTML's load algorithm): set it again.
+    this.applySpeed(element);
+  }
+
+  /** Plays this and every later source at `speed`, keeping the voice's pitch. */
+  setSpeed(speed: PlaybackSpeed): void {
+    this.speedValue.set(speed);
+    if (this.element) this.applySpeed(this.element);
+  }
+
+  /** Sets the volume (0–1); raising it from silence unmutes (FR-9). */
+  setVolume(volume: number): void {
+    const element = this.ensureElement();
+    element.volume = Math.min(1, Math.max(0, volume));
+    if (element.volume > 0) element.muted = false;
+    this.syncVolume(element);
+  }
+
+  toggleMute(): void {
+    const element = this.ensureElement();
+    element.muted = !element.muted;
+    this.syncVolume(element);
   }
 
   /** Asks to play; the state turns to playing only when the element says so. */
@@ -154,8 +198,11 @@ export class MediaEngine {
     else this.play();
   }
 
-  /** Moves to `ms` inside the media; the slider and the skips go through here. */
-  seek(ms: number): void {
+  /**
+   * Moves to `ms` inside the media; the slider and the skips go through here. `fast` lets
+   * the browser land on a nearby keyframe (the system's seek bar asks for it, FR-7).
+   */
+  seek(ms: number, fast = false): void {
     const element = this.element;
     if (!element || !this.current()) return;
     const target = clampToDuration(ms, this.state().durationMs);
@@ -164,7 +211,9 @@ export class MediaEngine {
       loadId: this.loads,
       targetMs: target,
     });
-    element.currentTime = target / 1000;
+    if (fast && typeof element.fastSeek === 'function')
+      element.fastSeek(target / 1000);
+    else element.currentTime = target / 1000;
   }
 
   skip(deltaMs: number): void {
@@ -201,6 +250,18 @@ export class MediaEngine {
     return element;
   }
 
+  private applySpeed(element: HTMLMediaElement): void {
+    const speed = this.speedValue();
+    element.preservesPitch = true;
+    element.defaultPlaybackRate = speed;
+    element.playbackRate = speed;
+  }
+
+  private syncVolume(element: HTMLMediaElement): void {
+    this.volumeValue.set(element.volume);
+    this.mutedValue.set(element.muted);
+  }
+
   private dispatch(event: PlaybackEvent): void {
     this.state.update((state) => reducePlayback(state, event));
   }
@@ -214,7 +275,10 @@ export class MediaEngine {
     on('loadedmetadata', () => this.onMetadata(element));
     on('durationchange', () => this.onMetadata(element));
     on('canplay', () => this.settle({ type: 'canplay', loadId: this.loads }));
-    on('playing', () => this.settle({ type: 'playing', loadId: this.loads }));
+    on('playing', () => {
+      this.playedSinceLoad.set(true);
+      this.settle({ type: 'playing', loadId: this.loads });
+    });
     // Events are queued: a pause the element no longer is in (the end's own, arriving after
     // "Ouvir de novo" played again, as WebKit on Linux does) is stale and dropped.
     on('pause', () => {
@@ -226,6 +290,7 @@ export class MediaEngine {
     on('progress', () => this.onBuffered(element));
     on('ended', () => this.settle({ type: 'ended', loadId: this.loads }));
     on('error', () => this.onError(element));
+    on('volumechange', () => this.syncVolume(element));
   }
 
   private onMetadata(element: HTMLMediaElement): void {
@@ -238,7 +303,9 @@ export class MediaEngine {
     });
     const start = this.pendingStartMs;
     this.pendingStartMs = null;
-    if (start !== null) this.seek(start);
+    if (start === null) return;
+    this.openingSeek = true;
+    this.seek(start);
   }
 
   /**
@@ -246,7 +313,11 @@ export class MediaEngine {
    * then: "Ouvir de novo" must show all the same. Playing, the browser ends it itself.
    */
   private onSeeked(element: HTMLMediaElement): void {
+    // Only the person's skips count: opening at a saved position is not one (FR-3, FR-10).
+    const asked = this.state().userSeeking && !this.openingSeek;
+    this.openingSeek = false;
     this.settle({ type: 'seeked', loadId: this.loads });
+    if (asked) this.landedSeeks.update((count) => count + 1);
     const { durationMs } = this.state();
     const atEnd =
       durationMs !== null &&
@@ -290,8 +361,10 @@ export class MediaEngine {
     this.onBuffered(element);
     // The clock moving on an element that is not paused is playing, even if its `playing`
     // event never comes (it can be lost after a seek from the end).
-    if (!element.paused && currentMs > before && !this.playing())
+    if (!element.paused && currentMs > before && !this.playing()) {
+      this.playedSinceLoad.set(true);
       this.settle({ type: 'playing', loadId: this.loads });
+    }
   }
 
   /** The end of the buffered range that holds the current position. */

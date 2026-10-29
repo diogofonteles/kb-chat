@@ -15,6 +15,12 @@ export {
   type MediaActor,
   type MediaServiceDeps,
 } from './media-service.js';
+export { listeningRoutes } from './listening-routes.js';
+export {
+  DEFAULT_PREFERENCES,
+  ListeningService,
+  type ListeningServiceDeps,
+} from './listening-service.js';
 export { mediaRoutes } from './routes.js';
 export { WorkerService, type WorkerServiceDeps } from './worker-service.js';
 export { hasWorkerToken, workerRoutes } from './worker-routes.js';

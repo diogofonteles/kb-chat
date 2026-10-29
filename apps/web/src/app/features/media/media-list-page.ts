@@ -18,7 +18,7 @@ import {
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { mediaListSchema, type MediaItem } from '@kb-chat/contracts';
-import { formatDuration } from '@kb-chat/player-core';
+import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi, mediaListUrl } from '@core/media/media-api.js';
@@ -51,6 +51,7 @@ export const FILTER_FROM = 11;
   templateUrl: './media-list-page.html',
   styleUrl: './media-list-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(focusin)': 'keepInView($event)' },
 })
 export class MediaListPage {
   private readonly chat = inject(ChatStore);
@@ -111,12 +112,37 @@ export class MediaListPage {
     afterRenderEffect(() => this.focusPending(this.rows()));
   }
 
+  /**
+   * The page scrolls in its own row (above the mini-player): the element that takes the
+   * focus is brought fully into view, in every browser (WCAG 2.4.11, KBC-041 FR-11).
+   */
+  protected keepInView(event: FocusEvent): void {
+    if (event.target instanceof HTMLElement)
+      event.target.scrollIntoView?.({ block: 'nearest' });
+  }
+
   protected statusOf(item: MediaItem): string {
     return statusTextOf(item);
   }
 
   protected menuLabelOf(item: MediaItem): string {
     return $localize`:@@media.moreActions:Mais ações para ${item.title}:title:`;
+  }
+
+  /** "Continuar de 23:10" for a media with a saved position, not yet heard (T14). */
+  protected resumeTextOf(item: MediaItem): string {
+    const at =
+      item.status === 'ready'
+        ? resumeFrom(item.positionMs, item.durationMs)
+        : null;
+    return at === null
+      ? ''
+      : $localize`:@@media.resumeFrom:Continuar de ${formatClock(at)}:time:`;
+  }
+
+  /** How much of it was heard, for the thin bar under the row. */
+  protected percentOf(item: MediaItem): number {
+    return item.durationMs ? (item.positionMs / item.durationMs) * 100 : 0;
   }
 
   protected durationOf(item: MediaItem): string {

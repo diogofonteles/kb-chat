@@ -8,7 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { screen } from '@testing-library/angular';
+import { fireEvent, screen } from '@testing-library/angular';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -20,6 +20,7 @@ import {
 import { aMediaItem } from '../../testing/media-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
+import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 
 const ITEM = aMediaItem();
 const ITEM_URL = `/api/v1/media/${ITEM.id}`;
@@ -41,6 +42,7 @@ async function openPage(): Promise<{
       ]),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
       { provide: MEDIA_POLL_MS, useValue: 20 },
+      { provide: VOLUME_SUPPORT, useValue: Promise.resolve(false) },
     ],
   });
   const harness = await RouterTestingHarness.create(`/midia/${ITEM.id}`);
@@ -132,7 +134,7 @@ describe('MediaPlayerPage (T15)', () => {
   });
 
   it('asks again while converting and loads the audio once it is ready', async () => {
-    const { harness, http, media } = await openPage();
+    const { http, media } = await openPage();
     http
       .expectOne(ITEM_URL)
       .flush(
@@ -141,8 +143,15 @@ describe('MediaPlayerPage (T15)', () => {
     // Not whenStable: the next poll's request would keep it waiting for its answer.
     TestBed.tick();
     await vi.waitFor(() => http.expectOne(ITEM_URL).flush(ITEM));
-    await harness.fixture.whenStable();
-    expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+    // Not whenStable either: the player asks for the person's preferences as it appears,
+    // and a slow run may poll once more before the page sees the item is ready.
+    await vi.waitFor(() => {
+      for (const request of http.match(ITEM_URL)) request.flush(ITEM);
+      for (const request of http.match('/api/v1/media/preferences'))
+        request.flush({ speed: 1, showRemaining: true });
+      TestBed.tick();
+      expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
+    });
     expect(media.calls).toEqual([`load:/api/v1/media/${ITEM.id}/stream`]);
   });
 
@@ -172,5 +181,88 @@ describe('MediaPlayerPage (T15)', () => {
         screen.getByRole('link', { name: 'Voltar à Mídia' }),
       ),
     );
+  });
+
+  it('offers "Continuar de" at the saved position, without sound (AC-3, AC-12)', async () => {
+    localStorage.clear();
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush({ ...ITEM, positionMs: 1_390_000 });
+    await harness.fixture.whenStable();
+    media.setDuration(3_735);
+    media.emit('loadedmetadata');
+    await harness.fixture.whenStable();
+    expect(media.calls).not.toContain('play');
+    expect(media.calls).toContain('seek:1390');
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar de 23:10' }));
+    expect(media.calls.at(-1)).toBe('play');
+    media.emit('playing');
+    await harness.fixture.whenStable();
+    expect(screen.queryByRole('button', { name: /Continuar de/ })).toBeNull();
+    expect(TestBed.inject(Title).getTitle()).toBe(
+      `▶ ${ITEM.title} — Nova Alexandria`,
+    );
+  });
+
+  it('starts over from the beginning when asked', async () => {
+    localStorage.clear();
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush({ ...ITEM, positionMs: 60_000 });
+    await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Começar do início' }));
+    expect(media.calls.slice(-2)).toEqual(['seek:0', 'play']);
+  });
+
+  it('continues from this browser’s newer position, and sends it again', async () => {
+    localStorage.clear();
+    // Unsent, and no device saved since (the server's save time is still null).
+    localStorage.setItem(
+      `kb-chat.media-position..${ITEM.id}`,
+      JSON.stringify({ positionMs: 90_000, delivered: false, basedOn: null }),
+    );
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush({ ...ITEM, positionMs: 60_000 });
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Continuar de 1:30' }),
+    ).toBeTruthy();
+    expect(
+      http.expectOne({ method: 'PUT', url: `${ITEM_URL}/progress` }).request
+        .body,
+    ).toEqual({ positionMs: 90_000, basedOn: null });
+  });
+
+  it('has nothing to continue for a media heard to the end', async () => {
+    localStorage.clear();
+    const { harness, http } = await openPage();
+    http
+      .expectOne(ITEM_URL)
+      .flush({ ...ITEM, positionMs: 0, completedAt: '2026-10-28T12:00:00Z' });
+    await harness.fixture.whenStable();
+    expect(screen.queryByRole('button', { name: /Continuar de/ })).toBeNull();
+  });
+
+  it('keeps playing after leaving the page, for the mini-player (FR-8)', async () => {
+    localStorage.clear();
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    TestBed.inject(MediaEngine).play();
+    media.emit('playing');
+    await harness.navigateByUrl('/outra');
+    expect(media.calls).not.toContain('load:');
+    expect(TestBed.inject(MediaEngine).source()?.id).toBe(ITEM.id);
+  });
+
+  it('hands key presses to the player shortcuts (FR-6)', async () => {
+    localStorage.clear();
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    media.setDuration(3_735);
+    media.emit('loadedmetadata');
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'k', bubbles: true }),
+    );
+    expect(media.calls.at(-1)).toBe('play');
   });
 });

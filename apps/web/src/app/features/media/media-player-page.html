@@ -39,6 +39,21 @@
     </header>
 
     @if (ready()) {
+      @if (resumeAt() !== null) {
+        <div class="resume">
+          <button type="button" class="primary" (click)="resume()">
+            {{ resumeLabel() }}
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            (click)="startOver()"
+            i18n="@@player.startOver"
+          >
+            Começar do início
+          </button>
+        </div>
+      }
       <app-media-player />
     } @else {
       <p class="not-ready" role="status">

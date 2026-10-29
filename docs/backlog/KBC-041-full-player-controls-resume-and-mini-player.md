@@ -1,7 +1,7 @@
 ---
 id: KBC-041
 title: "Player completo: velocidade, volume, atalhos de teclado, controles do sistema, retomar de onde parou e mini-player persistente"
-status: ready
+status: done
 slice: phase-2-a
 outcome: quem estuda ouve palestras longas no ritmo que quer, controla pelo teclado, pela tela de bloqueio ou pelo fone, e continua de onde parou em qualquer aparelho
 depends_on: [KBC-034]

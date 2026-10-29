@@ -1,5 +1,9 @@
 :host {
   display: block;
+  /* Its own row of the main area's grid (chat-page.css): it scrolls inside it, so the
+     mini-player below never covers what has the focus (KBC-041 FR-11). */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .media {
@@ -127,6 +131,34 @@ a.main:hover .title {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+}
+
+.resume {
+  color: var(--color-accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The share already heard, at the foot of the row (T14); the text above says it. */
+.position {
+  position: absolute;
+  inset: auto var(--space-4) 0;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.position span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+
+@media (forced-colors: active) {
+  .position span {
+    background: CanvasText;
+  }
 }
 
 .status {

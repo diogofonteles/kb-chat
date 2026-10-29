@@ -37,6 +37,7 @@ import { ResearchStore } from '@features/research/research-store.js';
 import { ResearchThread } from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
 import { ViewSwitch } from './view-switch.js';
+import { MiniPlayer } from '@features/media/player/mini-player.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -57,6 +58,7 @@ const isMediaUrl = (url: string): boolean => /^\/midia(\/|\?|#|$)/.test(url);
     Sidebar,
     DecimalPipe,
     RouterOutlet,
+    MiniPlayer,
   ],
   providers: [
     ChatStore,

@@ -534,9 +534,12 @@ describe('ChatPage side panel (KBC-005)', () => {
       target: { value: 'alquimia' },
     });
     await view.fixture.whenStable();
-    expect(screen.getByRole('status').textContent).toContain(
-      'Nova conversa em Alquimia',
-    );
+    expect(
+      screen
+        .getAllByRole('status')
+        .map((region) => region.textContent)
+        .join(' '),
+    ).toContain('Nova conversa em Alquimia');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
       '1 documento',
     );

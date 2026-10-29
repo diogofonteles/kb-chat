@@ -1,5 +1,7 @@
 :host {
   display: grid;
+  /* One column that never grows past the sidebar (wider fonts would push "Sair" out). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-4);
   height: 100%;
@@ -164,6 +166,10 @@
 }
 
 select {
+  /* Fills its column and never widens it: a long option ("Automático (claro/escuro)") in
+     wider fonts would push the whole sidebar, "Sair" included, past its edge. */
+  width: 100%;
+  min-width: 0;
   min-height: var(--target);
   padding: 0 var(--space-2);
   /* Form controls need a 3:1 boundary (WCAG 1.4.11); the hairline border color is decorative. */

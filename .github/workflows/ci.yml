@@ -10,10 +10,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gates:
-    name: Lint, typecheck, test, build, format
+  # Split so the slowest part (the API's unit tests, ~2.5 min) does not add up with lint,
+  # typecheck, build and the other projects' tests: each runs in its own job, in parallel.
+  checks:
+    name: Lint, typecheck, build, format
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @kb-chat/contracts build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm format:check
+
+  test:
+    name: Unit tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            projects: '@kb-chat/api'
+            ffmpeg: true
+          - name: web
+            projects: '@kb-chat/web'
+          - name: libs
+            projects: '@kb-chat/contracts,@kb-chat/player-core'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,18 +54,58 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The media worker's tests convert real audio (KBC-034): ffmpeg and ffprobe.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - if: matrix.ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: pnpm --filter @kb-chat/contracts build
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-      - run: pnpm format:check
+      - run: pnpm exec nx run-many -t test -p ${{ matrix.projects }}
 
   e2e:
-    name: E2E (Playwright)
+    # Shards in parallel, split per project: a GitHub runner gives Playwright 2 workers, so
+    # one job took ~18 min; Playwright cuts a run in order, so plain shards put every slow
+    # WebKit media test (real audio) in the last one. Each shard starts its own servers.
+    name: E2E (Playwright) ${{ matrix.name }} ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: app
+            projects: --project=desktop --project=mobile
+            shard: 1/3
+            browser: 'chromium'
+          - name: app
+            projects: --project=desktop --project=mobile
+            shard: 2/3
+            browser: 'chromium'
+          - name: app
+            projects: --project=desktop --project=mobile
+            shard: 3/3
+            browser: 'chromium'
+          - name: media Chrome
+            projects: --project=media-desktop --project=media-mobile
+            shard: 1/3
+            browser: ''
+          - name: media Chrome
+            projects: --project=media-desktop --project=media-mobile
+            shard: 2/3
+            browser: ''
+          - name: media Chrome
+            projects: --project=media-desktop --project=media-mobile
+            shard: 3/3
+            browser: ''
+          - name: media WebKit
+            projects: --project=media-webkit
+            shard: 1/3
+            browser: 'webkit'
+          - name: media WebKit
+            projects: --project=media-webkit
+            shard: 2/3
+            browser: 'webkit'
+          - name: media WebKit
+            projects: --project=media-webkit
+            shard: 3/3
+            browser: 'webkit'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -43,21 +114,29 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Media specs (KBC-034) play real AAC: Google Chrome (Playwright's Chromium has no
-      # AAC/H.264) and WebKit (Safari), plus ffmpeg for the E2E server's media worker.
+      # Only the browser this group uses (none for Google Chrome, already on the runner),
+      # cached by the lockfile (the Playwright version).
+      - if: matrix.browser != ''
+        uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: matrix.browser != '' && steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @kb-chat/e2e exec playwright install ${{ matrix.browser }}
+      # WebKit needs system libraries the runner lacks (Chrome's are there); every group
+      # needs ffmpeg for the E2E server's media worker (KBC-034).
+      - if: matrix.browser == 'webkit'
+        run: pnpm --filter @kb-chat/e2e exec playwright install-deps webkit
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      # Downloads from dl.google.com sometimes drop mid-way: up to 3 attempts.
-      - run: |
-          for attempt in 1 2 3; do
-            pnpm --filter @kb-chat/e2e exec playwright install --with-deps chromium chrome webkit && exit 0
-            echo "browser install failed (attempt $attempt)"; sleep 10
-          done
-          exit 1
-      - run: pnpm e2e
+      # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
+      # Chromium of Playwright has no AAC/H.264), no download needed.
+      - run: google-chrome --version
+      - run: pnpm --filter @kb-chat/e2e exec playwright test ${{ matrix.projects }} --shard=${{ matrix.shard }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ strategy.job-index }}
           path: e2e/playwright-report
           retention-days: 7
 
