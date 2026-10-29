@@ -5,7 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { fireEvent, render, screen } from '@testing-library/angular';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -41,9 +41,12 @@ async function renderPlayer(
   const engine = TestBed.inject(MediaEngine);
   const http = TestBed.inject(HttpTestingController);
   // The account's choices, read once when the player appears.
-  http
-    .expectOne({ method: 'GET', url: PREFERENCES_URL })
-    .flush({ speed: 1, showRemaining: true });
+  http.expectOne({ method: 'GET', url: PREFERENCES_URL }).flush({
+    speed: 1,
+    showRemaining: true,
+    skipBackSec: 15,
+    skipForwardSec: 30,
+  });
   prepare(media, engine);
   await view.fixture.whenStable();
   return { ...view, media, engine, http };
@@ -248,7 +251,12 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     expect(media.element.playbackRate).toBe(1.5);
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
-    ).toEqual({ speed: 1.5, showRemaining: true });
+    ).toEqual({
+      speed: 1.5,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     expect(
       screen.getByRole('button', { name: 'Velocidade: 1,5 vezes' }).textContent,
     ).toContain('1,5×');
@@ -260,7 +268,12 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     await fixture.whenStable();
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
-    ).toEqual({ speed: 1, showRemaining: false });
+    ).toEqual({
+      speed: 1,
+      showRemaining: false,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     expect(screen.getByRole('button', { name: /Duração total/ })).toBeTruthy();
   });
 
@@ -321,6 +334,47 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     fireEvent.click(toggle);
     expect(localStorage.getItem('kb-chat.player.single-key')).toBe('off');
     fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(more);
+  });
+
+  it('chooses the skips in "Pulos", as labelled radio groups applied at once (KBC-043 FR-3, AC-1)', async () => {
+    const { fixture, media, http } = await renderPlayer(loaded);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pulos' }));
+    await fixture.whenStable();
+    const dialog = screen.getByRole('dialog', { name: 'Pulos' });
+    const back = screen.getByRole('group', { name: 'Voltar' });
+    expect(screen.getByRole('group', { name: 'Avançar' })).toBeTruthy();
+    expect(dialog.contains(back)).toBe(true);
+    const five = within(back).getByRole('radio', { name: '5 s' });
+    fireEvent.click(five);
+    await fixture.whenStable();
+    expect(
+      http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
+    ).toMatchObject({ skipBackSec: 5 });
+    const button = screen.getByRole('button', { name: 'Voltar 5 segundos' });
+    expect(button.textContent).toContain('5');
+    media.setCurrentTime(60);
+    media.emit('timeupdate');
+    fireEvent.click(button);
+    expect(media.calls.at(-1)).toBe('seek:55');
+  });
+
+  it('opens "Pulos" on the current choice and gives the focus back on "Fechar" (KBC-043)', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    const more = screen.getByRole('button', { name: 'Mais opções' });
+    fireEvent.click(more);
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pulos' }));
+    await fixture.whenStable();
+    const back = screen.getByRole('group', { name: 'Voltar' });
+    expect(document.activeElement).toBe(
+      within(back).getByRole('radio', { name: '15 s' }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Pulos' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
     await fixture.whenStable();
     expect(document.activeElement).toBe(more);
   });

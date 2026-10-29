@@ -148,7 +148,12 @@ describe('MediaPlayerPage (T15)', () => {
     await vi.waitFor(() => {
       for (const request of http.match(ITEM_URL)) request.flush(ITEM);
       for (const request of http.match('/api/v1/media/preferences'))
-        request.flush({ speed: 1, showRemaining: true });
+        request.flush({
+          speed: 1,
+          showRemaining: true,
+          skipBackSec: 15,
+          skipForwardSec: 30,
+        });
       TestBed.tick();
       expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();
     });

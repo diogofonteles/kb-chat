@@ -41,10 +41,18 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     const { preferences, engine, http } = setup();
     preferences.load();
     preferences.load();
-    http
-      .expectOne(PREFERENCES_URL)
-      .flush({ speed: 1.25, showRemaining: false });
-    expect(preferences.value()).toEqual({ speed: 1.25, showRemaining: false });
+    http.expectOne(PREFERENCES_URL).flush({
+      speed: 1.25,
+      showRemaining: false,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
+    expect(preferences.value()).toEqual({
+      speed: 1.25,
+      showRemaining: false,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     expect(engine.speed()).toBe(1.25);
   });
 
@@ -53,8 +61,18 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     preferences.setSpeed(1.5);
     expect(engine.speed()).toBe(1.5);
     const put = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
-    expect(put.request.body).toEqual({ speed: 1.5, showRemaining: true });
-    put.flush({ speed: 1.5, showRemaining: true });
+    expect(put.request.body).toEqual({
+      speed: 1.5,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
+    put.flush({
+      speed: 1.5,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
   });
 
   it('steps the speed one menu step, stopping at the ends (FR-5)', () => {
@@ -73,7 +91,12 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     expect(preferences.value().showRemaining).toBe(false);
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
-    ).toEqual({ speed: 1, showRemaining: false });
+    ).toEqual({
+      speed: 1,
+      showRemaining: false,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
   });
 
   it('keeps the choice in use when the account cannot be read or saved', () => {
@@ -99,9 +122,12 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     preferences.load();
     preferences.setSpeed(2);
     http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).flush({});
-    http
-      .expectOne({ method: 'GET', url: PREFERENCES_URL })
-      .flush({ speed: 0.75, showRemaining: true });
+    http.expectOne({ method: 'GET', url: PREFERENCES_URL }).flush({
+      speed: 0.75,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     expect(preferences.value().speed).toBe(2);
     expect(engine.speed()).toBe(2);
   });
@@ -112,8 +138,37 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     preferences.stepSpeed(1);
     const first = http.match({ method: 'PUT', url: PREFERENCES_URL });
     expect(first.length).toBe(1);
-    first[0]?.flush({ speed: 1.25, showRemaining: true });
+    first[0]?.flush({
+      speed: 1.25,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     const second = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
-    expect(second.request.body).toEqual({ speed: 1.5, showRemaining: true });
+    expect(second.request.body).toEqual({
+      speed: 1.5,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
+  });
+
+  it('keeps the skips the person chose and gives them in ms (KBC-043)', () => {
+    const { preferences, http } = setup();
+    expect(preferences.skipBackMs()).toBe(15_000);
+    expect(preferences.skipForwardMs()).toBe(30_000);
+    preferences.setSkipBack(5);
+    expect(preferences.skipBackMs()).toBe(5_000);
+    const put = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
+    expect(put.request.body).toMatchObject({
+      skipBackSec: 5,
+      skipForwardSec: 30,
+    });
+    put.flush(put.request.body);
+    preferences.setSkipForward(45);
+    expect(preferences.skipForwardMs()).toBe(45_000);
+    expect(
+      http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
+    ).toMatchObject({ skipBackSec: 5, skipForwardSec: 45 });
   });
 });

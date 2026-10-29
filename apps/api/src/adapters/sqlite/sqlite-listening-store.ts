@@ -16,7 +16,8 @@ export class SqliteListeningStore implements ListeningStorePort {
   preferencesOf(principal: string): MediaPreferences | null {
     const row = this.db
       .prepare(
-        'SELECT speed, show_remaining FROM media_preferences WHERE principal = ?',
+        `SELECT speed, show_remaining, skip_back_sec, skip_forward_sec
+         FROM media_preferences WHERE principal = ?`,
       )
       .get(principal);
     // Read back through the contract: a bad row fails loudly instead of reaching a player.
@@ -24,6 +25,8 @@ export class SqliteListeningStore implements ListeningStorePort {
       ? mediaPreferencesSchema.parse({
           speed: Number(row['speed']),
           showRemaining: Number(row['show_remaining']) === 1,
+          skipBackSec: Number(row['skip_back_sec']),
+          skipForwardSec: Number(row['skip_forward_sec']),
         })
       : null;
   }
@@ -35,15 +38,19 @@ export class SqliteListeningStore implements ListeningStorePort {
   }): void {
     this.db
       .prepare(
-        `INSERT INTO media_preferences (principal, speed, show_remaining, updated_at)
-         VALUES (?, ?, ?, ?)
+        `INSERT INTO media_preferences
+           (principal, speed, show_remaining, skip_back_sec, skip_forward_sec, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (principal) DO UPDATE SET speed = excluded.speed,
-           show_remaining = excluded.show_remaining, updated_at = excluded.updated_at`,
+           show_remaining = excluded.show_remaining, skip_back_sec = excluded.skip_back_sec,
+           skip_forward_sec = excluded.skip_forward_sec, updated_at = excluded.updated_at`,
       )
       .run(
         input.principal,
         input.preferences.speed,
         input.preferences.showRemaining ? 1 : 0,
+        input.preferences.skipBackSec,
+        input.preferences.skipForwardSec,
         input.now.toISOString(),
       );
   }

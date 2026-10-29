@@ -45,8 +45,7 @@
         type="button"
         class="icon"
         [disabled]="gone()"
-        aria-label="Voltar 15 segundos"
-        i18n-aria-label="@@player.back15"
+        [attr.aria-label]="backLabel()"
         aria-keyshortcuts="J"
         (click)="back()"
       >
@@ -56,7 +55,7 @@
             fill="currentColor"
           />
         </svg>
-        <span class="skip-amount" aria-hidden="true">15</span>
+        <span class="skip-amount" aria-hidden="true">{{ skipBack() }}</span>
       </button>
       <button
         type="button"

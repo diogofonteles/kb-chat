@@ -85,4 +85,14 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX media_progress_by_media ON media_progress (media_id);
     `,
   },
+  {
+    version: 3,
+    name: 'listening-skip-lengths',
+    sql: `
+      ALTER TABLE media_preferences ADD COLUMN skip_back_sec INTEGER NOT NULL DEFAULT 15
+        CHECK (skip_back_sec IN (5, 10, 15, 30));
+      ALTER TABLE media_preferences ADD COLUMN skip_forward_sec INTEGER NOT NULL DEFAULT 30
+        CHECK (skip_forward_sec IN (10, 15, 30, 45, 60));
+    `,
+  },
 ];

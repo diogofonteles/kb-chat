@@ -19,16 +19,33 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     const media = await startMedia();
     const first = await media.owner('GET', '/api/v1/media/preferences');
     expect(first.statusCode).toBe(200);
-    expect(first.json()).toEqual({ speed: 1, showRemaining: true });
+    expect(first.json()).toEqual({
+      speed: 1,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     const saved = await media.owner('PUT', '/api/v1/media/preferences', {
       speed: 1.5,
       showRemaining: false,
+      skipBackSec: 10,
+      skipForwardSec: 45,
     });
     expect(saved.statusCode).toBe(200);
-    expect(saved.json()).toEqual({ speed: 1.5, showRemaining: false });
+    expect(saved.json()).toEqual({
+      speed: 1.5,
+      showRemaining: false,
+      skipBackSec: 10,
+      skipForwardSec: 45,
+    });
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
-    ).toEqual({ speed: 1.5, showRemaining: false });
+    ).toEqual({
+      speed: 1.5,
+      showRemaining: false,
+      skipBackSec: 10,
+      skipForwardSec: 45,
+    });
   });
 
   it('refuses a speed outside the menu and changes nothing (AC-2)', async () => {
@@ -36,12 +53,19 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     const refused = await media.owner('PUT', '/api/v1/media/preferences', {
       speed: 3,
       showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
     });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().error.code).toBe('VALIDATION_FAILED');
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
-    ).toEqual({ speed: 1, showRemaining: true });
+    ).toEqual({
+      speed: 1,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
   });
 
   it('keeps each person’s choices apart', async () => {
@@ -54,10 +78,17 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     await media.owner('PUT', '/api/v1/media/preferences', {
       speed: 2,
       showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
     });
     expect(
       (await listener.call('GET', '/api/v1/media/preferences')).json(),
-    ).toEqual({ speed: 1, showRemaining: true });
+    ).toEqual({
+      speed: 1,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
   });
 
   it('needs "Ouvir mídia", for the position too', async () => {
@@ -75,6 +106,8 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
         await reader.call('PUT', '/api/v1/media/preferences', {
           speed: 1,
           showRemaining: true,
+          skipBackSec: 15,
+          skipForwardSec: 30,
         })
       ).statusCode,
     ).toBe(403);
@@ -87,6 +120,23 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+});
+
+describe('Media listening: skip lengths (KBC-043)', () => {
+  it('refuses a skip off the "Pulos" menu and changes nothing (AC-4)', async () => {
+    const media = await startMedia();
+    const refused = await media.owner('PUT', '/api/v1/media/preferences', {
+      speed: 1,
+      showRemaining: true,
+      skipBackSec: 7,
+      skipForwardSec: 30,
+    });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.code).toBe('VALIDATION_FAILED');
+    expect(
+      (await media.owner('GET', '/api/v1/media/preferences')).json(),
+    ).toMatchObject({ skipBackSec: 15, skipForwardSec: 30 });
   });
 });
 

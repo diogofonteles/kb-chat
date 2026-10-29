@@ -12,6 +12,7 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
+import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { PlayerShortcuts, targetOf } from './player-shortcuts.js';
 
 function setup() {
@@ -183,5 +184,15 @@ describe('PlayerShortcuts (FR-6)', () => {
     shortcuts.handle(asked, 'mini-player');
     expect(asked.defaultPrevented).toBe(false);
     expect(shortcuts.helpAsked()).toBe(0);
+  });
+
+  it('goes back and forward by the skips the person chose (KBC-043 AC-1)', () => {
+    const { shortcuts, media, engine, http } = setup();
+    engine.seek(60_000);
+    const preferences = TestBed.inject(ListeningPreferences);
+    preferences.setSkipBack(5);
+    shortcuts.handle(press('j'));
+    expect(media.calls.at(-1)).toBe('seek:55');
+    http.match(() => true).forEach((request) => request.flush({}));
   });
 });

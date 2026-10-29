@@ -7,9 +7,6 @@ import {
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 
-export const SKIP_BACK_MS = 15_000;
-export const SKIP_FORWARD_MS = 30_000;
-
 const STORAGE_KEY = 'kb-chat.player.single-key';
 
 /** Where the focus is, as the shortcuts care about it (BR-5). */
@@ -109,8 +106,8 @@ export class PlayerShortcuts {
       ) => void;
     } = {
       toggle: () => engine.toggle(),
-      back: () => engine.skip(-SKIP_BACK_MS),
-      forward: () => engine.skip(SKIP_FORWARD_MS),
+      back: () => engine.skip(-this.preferences.skipBackMs()),
+      forward: () => engine.skip(this.preferences.skipForwardMs()),
       'seek-by': ({ deltaMs }) => engine.skip(deltaMs),
       speed: ({ direction }) => this.preferences.stepSpeed(direction),
       mute: () => engine.toggleMute(),

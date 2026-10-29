@@ -3,6 +3,9 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../testing/fake-media-element.js';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { ListeningPreferences } from './listening-preferences.js';
 import { MEDIA_ELEMENT_FACTORY, MediaEngine } from './media-engine.js';
 import {
   MEDIA_SESSION,
@@ -46,6 +49,8 @@ function setup() {
     providers: [
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
       { provide: MEDIA_SESSION, useValue: session },
+      provideHttpClient(),
+      provideHttpClientTesting(),
     ],
   });
   const engine = TestBed.inject(MediaEngine);
@@ -104,6 +109,14 @@ describe('MediaSessionAdapter (KBC-041 FR-7)', () => {
     media.element.fastSeek = fastSeek;
     act('seekto', { seekTime: 120, fastSeek: true });
     expect(fastSeek).toHaveBeenCalledWith(120);
+  });
+
+  it('skips by the person’s choice when the system gives no offset (KBC-043 AC-2)', () => {
+    const { media, ready, act } = setup();
+    ready();
+    TestBed.inject(ListeningPreferences).setSkipForward(45);
+    act('seekforward');
+    expect(media.calls.at(-1)).toBe('seek:45');
   });
 
   it('tells the system the position, the speed and the length (AC-9)', () => {
