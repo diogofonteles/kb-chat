@@ -81,6 +81,10 @@ export const mediaItemSchema = z.object({
   createdAt: z.iso.datetime(),
   /** A master may queue the conversion again (a failure that is not permanent). */
   canRetry: z.boolean(),
+  /** Where the person who asks stopped (KBC-041 FR-2): 0 when never heard or heard to the end. */
+  positionMs: z.number().int().min(0),
+  /** When that person heard it to 95% or more (BR-2); null otherwise. */
+  completedAt: z.iso.datetime().nullable(),
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
@@ -95,6 +99,29 @@ export const createMediaRequestSchema = z.strictObject({
   bytes: z.number().int().min(1).max(MEDIA_MAX_UPLOAD_BYTES),
 });
 export type CreateMediaRequest = z.infer<typeof createMediaRequestSchema>;
+
+/* ---------- Listening: speed, display and position, per person (KBC-041) ---------- */
+
+/** The playback speeds of the player's menu (screens.md T15). */
+export const MEDIA_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+export type MediaSpeed = (typeof MEDIA_SPEEDS)[number];
+
+/** From this share of its length a media counts as heard and its position resets (BR-2). */
+export const MEDIA_COMPLETION_RATIO = 0.95;
+
+/** GET/PUT /api/v1/media/preferences: one person's choices, for every media and device. */
+export const mediaPreferencesSchema = z.strictObject({
+  speed: z.literal(MEDIA_SPEEDS),
+  /** Remaining time (true) or total length (false) on the right of the time slider. */
+  showRemaining: z.boolean(),
+});
+export type MediaPreferences = z.infer<typeof mediaPreferencesSchema>;
+
+/** PUT /api/v1/media/:id/progress: where the person is, in ms. */
+export const mediaProgressRequestSchema = z.strictObject({
+  positionMs: z.number().int().min(0),
+});
+export type MediaProgressRequest = z.infer<typeof mediaProgressRequestSchema>;
 
 /** True when a file name ends with an accepted audio extension. */
 export function hasAcceptedAudioExtension(fileName: string): boolean {
