@@ -44,6 +44,10 @@ export function makeMp3(name: string, seconds: number): string {
   return path;
 }
 
+/** A tag no other parallel test shares (time plus randomness), for titles. */
+export const uniqueTag = (): string =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
 export interface UploadedMedia {
   readonly id: string;
   readonly title: string;

@@ -3,6 +3,7 @@ import { CSRF, expect, ownerApi } from './fixtures.js';
 import {
   audioState,
   listenerTest as test,
+  uniqueTag,
   uploadReady,
   type UploadedMedia,
 } from './media-helpers.js';
@@ -12,7 +13,7 @@ let lecture: UploadedMedia;
 test.beforeAll(async () => {
   const owner = await ownerApi();
   lecture = await uploadReady(owner, {
-    title: `Palestra no mini-player ${Date.now().toString(36)}`,
+    title: `Palestra no mini-player ${uniqueTag()}`,
     seconds: 120,
   });
   await owner.dispose();
@@ -234,7 +235,7 @@ test('a media removed while it plays in the mini-player stops and says why', asy
 }) => {
   const owner = await ownerApi();
   const doomed = await uploadReady(owner, {
-    title: `Removida ${Date.now().toString(36)}`,
+    title: `Removida ${uniqueTag()}`,
     seconds: 60,
   });
   await page.goto(`/midia/${doomed.id}`);

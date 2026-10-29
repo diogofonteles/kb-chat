@@ -109,6 +109,8 @@ export class MediaEngine {
   private element: HTMLMediaElement | null = null;
   private bufferingTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingStartMs: number | null = null;
+  /** The seek to the start position of a load: the engine's, not the person's. */
+  private openingSeek = false;
   private loads = 0;
   private readonly speedValue = signal<PlaybackSpeed>(DEFAULT_SPEED);
   private readonly volumeValue = signal(1);
@@ -301,7 +303,9 @@ export class MediaEngine {
     });
     const start = this.pendingStartMs;
     this.pendingStartMs = null;
-    if (start !== null) this.seek(start);
+    if (start === null) return;
+    this.openingSeek = true;
+    this.seek(start);
   }
 
   /**
@@ -309,7 +313,9 @@ export class MediaEngine {
    * then: "Ouvir de novo" must show all the same. Playing, the browser ends it itself.
    */
   private onSeeked(element: HTMLMediaElement): void {
-    const asked = this.state().userSeeking;
+    // Only the person's skips count: opening at a saved position is not one (FR-3, FR-10).
+    const asked = this.state().userSeeking && !this.openingSeek;
+    this.openingSeek = false;
     this.settle({ type: 'seeked', loadId: this.loads });
     if (asked) this.landedSeeks.update((count) => count + 1);
     const { durationMs } = this.state();

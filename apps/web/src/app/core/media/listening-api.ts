@@ -29,16 +29,19 @@ export class ListeningApi {
       .pipe(map((body) => mediaPreferencesSchema.parse(body)));
   }
 
-  /** Saves a position; the answer is what the server keeps, with its time (FR-3). */
+  /**
+   * Saves a position that continues the server's save `basedOn` (null: none seen); the
+   * answer is what the server keeps, with its time. A 409 means another device saved since.
+   */
   saveProgress(
     id: string,
-    positionMs: number,
+    save: { readonly positionMs: number; readonly basedOn: string | null },
     options: { readonly keepalive?: boolean } = {},
   ): Observable<MediaProgress> {
     return this.http
       .put(
         progressUrl(id),
-        { positionMs: Math.floor(positionMs) },
+        { positionMs: Math.floor(save.positionMs), basedOn: save.basedOn },
         // `keepalive` lets the request outlive the page as it goes away (pagehide).
         { keepalive: options.keepalive ?? false },
       )

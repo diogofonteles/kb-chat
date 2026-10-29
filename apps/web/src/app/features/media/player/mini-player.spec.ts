@@ -108,7 +108,7 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     expect(
       http.expectOne({ method: 'PUT', url: `/api/v1/media/${ID}/progress` })
         .request.body,
-    ).toEqual({ positionMs: 150_000 });
+    ).toEqual({ positionMs: 150_000, basedOn: null });
     expect(engine.source()).toBeNull();
     expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
     // The focus goes to the main area, not to <body> (WCAG 2.4.3).

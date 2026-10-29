@@ -228,7 +228,7 @@ describe('MediaPlayerPage (T15)', () => {
     expect(
       http.expectOne({ method: 'PUT', url: `${ITEM_URL}/progress` }).request
         .body,
-    ).toEqual({ positionMs: 90_000 });
+    ).toEqual({ positionMs: 90_000, basedOn: null });
   });
 
   it('has nothing to continue for a media heard to the end', async () => {

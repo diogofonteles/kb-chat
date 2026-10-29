@@ -45,12 +45,14 @@ describe('ListeningApi (KBC-041)', () => {
 
   it('saves a position as whole milliseconds and reads what the server keeps', async () => {
     const { api, http } = setup();
-    const saved = firstValueFrom(api.saveProgress(ID, 23_456.7));
+    const saved = firstValueFrom(
+      api.saveProgress(ID, { positionMs: 23_456.7, basedOn: null }),
+    );
     const put = http.expectOne({
       method: 'PUT',
       url: `/api/v1/media/${ID}/progress`,
     });
-    expect(put.request.body).toEqual({ positionMs: 23_456 });
+    expect(put.request.body).toEqual({ positionMs: 23_456, basedOn: null });
     expect(put.request.keepalive).toBe(false);
     const kept = {
       positionMs: 23_456,
@@ -63,9 +65,18 @@ describe('ListeningApi (KBC-041)', () => {
 
   it('can send one that outlives the page (FR-3)', () => {
     const { api, http } = setup();
-    api.saveProgress(ID, 61_000.9, { keepalive: true }).subscribe();
+    api
+      .saveProgress(
+        ID,
+        { positionMs: 61_000.9, basedOn: '2026-10-29T12:00:00.000Z' },
+        { keepalive: true },
+      )
+      .subscribe();
     const put = http.expectOne(`/api/v1/media/${ID}/progress`);
     expect(put.request.keepalive).toBe(true);
-    expect(put.request.body).toEqual({ positionMs: 61_000 });
+    expect(put.request.body).toEqual({
+      positionMs: 61_000,
+      basedOn: '2026-10-29T12:00:00.000Z',
+    });
   });
 });

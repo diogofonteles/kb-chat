@@ -195,16 +195,49 @@ export class ProgressSaver {
   private deliver(id: string): Observable<MediaProgress> {
     const kept = this.read(id);
     if (!kept || kept.delivered) return EMPTY;
-    // keepalive: a navigation or a closed tab does not cancel a save on its way.
-    return this.api.saveProgress(id, kept.positionMs, { keepalive: true }).pipe(
-      tap((saved) => this.confirm(id, kept.positionMs, saved)),
-      catchError((err: unknown) => {
-        if (err instanceof HttpErrorResponse && err.status === 404)
-          this.goneId.set(id);
-        // Otherwise kept in the browser: the next chance sends it again.
-        return EMPTY;
-      }),
-    );
+    return this.save(id, kept, { keepalive: true });
+  }
+
+  /**
+   * Sends a kept position on top of the save it continues (keepalive: a navigation or a
+   * closed tab does not cancel it). A 409 says another device saved since: this copy is
+   * stale and goes; a 404 says the media is gone for this person.
+   */
+  private save(
+    id: string,
+    kept: KeptPosition,
+    options: { readonly keepalive: boolean },
+  ): Observable<MediaProgress> {
+    return this.api
+      .saveProgress(
+        id,
+        { positionMs: kept.positionMs, basedOn: kept.basedOn },
+        options,
+      )
+      .pipe(
+        tap((saved) => this.confirm(id, kept.positionMs, saved)),
+        catchError((err: unknown) => {
+          this.refused(id, err);
+          return EMPTY;
+        }),
+      );
+  }
+
+  private refused(id: string, err: unknown): void {
+    if (!(err instanceof HttpErrorResponse)) return;
+    if (err.status === 404) this.goneId.set(id);
+    if (err.status === 409) {
+      // Another device's save is newer: it wins; this browser's copy is dropped.
+      const details: unknown = err.error?.error?.details;
+      const newer =
+        typeof details === 'object' && details !== null
+          ? (details as { positionUpdatedAt?: unknown }).positionUpdatedAt
+          : undefined;
+      if (typeof newer === 'string') this.bases.set(id, newer);
+      this.forget(id);
+      this.pending.delete(id);
+    }
+    // Otherwise kept in the browser: the next chance sends it again.
   }
 
   private confirm(id: string, sentMs: number, saved: MediaProgress): void {
@@ -220,18 +253,17 @@ export class ProgressSaver {
   }
 
   /**
-   * The page goes away: every position kept here and not yet confirmed (the one playing,
-   * one just closed) leaves in a save that outlives the page, counted as delivered.
+   * The page goes (or hides): every position kept here and not yet confirmed (the one
+   * playing, one just closed) leaves in a save that outlives the page. If the page stays,
+   * its answer is handled like any other save.
    */
   private sendBeforeLeaving(): void {
     this.keep();
-    for (const id of this.pending) {
+    for (const id of [...this.pending]) {
       const kept = this.read(id);
       if (!kept || kept.delivered) continue;
-      this.api
-        .saveProgress(id, kept.positionMs, { keepalive: true })
-        .subscribe({ error: () => undefined });
       this.write(id, { ...kept, delivered: true });
+      this.save(id, kept, { keepalive: true }).subscribe();
     }
   }
 

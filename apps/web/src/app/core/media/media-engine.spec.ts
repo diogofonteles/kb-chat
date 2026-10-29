@@ -92,6 +92,17 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(media.calls.at(-1)).toBe('pause');
   });
 
+  it('does not count opening at a saved position as a skip of the person', () => {
+    engine.load(LECTURE, 30_000);
+    media.setDuration(60);
+    media.emit('loadedmetadata');
+    media.emit('seeked');
+    expect(engine.seeksLanded()).toBe(0);
+    engine.skip(5_000);
+    media.emit('seeked');
+    expect(engine.seeksLanded()).toBe(1);
+  });
+
   it('starts at the asked second once the duration is known', () => {
     ready(LECTURE, 45_000);
     expect(media.calls).toContain('seek:45');

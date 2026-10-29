@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DOCUMENT, DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -114,6 +114,7 @@ export class MediaPlayerPage {
   });
   private readonly pollMs = inject(MEDIA_POLL_MS);
   private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
   private readonly backToList =
     viewChild<ElementRef<HTMLAnchorElement>>('backToList');
 
@@ -200,7 +201,7 @@ export class MediaPlayerPage {
   private keepFocusOnPage(): void {
     afterNextRender(
       () => {
-        if (document.activeElement === document.body)
+        if (this.document.activeElement === this.document.body)
           this.backToList()?.nativeElement.focus();
       },
       { injector: this.injector },

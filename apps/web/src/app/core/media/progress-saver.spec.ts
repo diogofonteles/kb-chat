@@ -105,7 +105,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     // The pause waits for the first save to answer.
     expect(puts()).toEqual([]);
     first[0]?.flush(savedAs(10_000));
-    expect(puts()[0]?.request.body).toEqual({ positionMs: 11_000 });
+    expect(puts()[0]?.request.body.positionMs).toBe(11_000);
   });
 
   it('sends at once on pause, and never the same position twice', async () => {
@@ -115,7 +115,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     pause();
     const [paused] = puts();
-    expect(paused?.request.body).toEqual({ positionMs: 4_000 });
+    expect(paused?.request.body.positionMs).toBe(4_000);
     paused?.flush(savedAs(4_000));
     media.setPaused(false);
     media.emit('playing');
@@ -131,7 +131,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     engine.load(B);
     TestBed.tick();
-    expect(puts()[0]?.request.body).toEqual({ positionMs: 7_000 });
+    expect(puts()[0]?.request.body.positionMs).toBe(7_000);
   });
 
   it('keeps a skip made while paused, so leaving sends where the person is', () => {
@@ -145,7 +145,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     TestBed.tick();
     engine.load(B);
     TestBed.tick();
-    expect(puts()[0]?.request.body).toEqual({ positionMs: 200_000 });
+    expect(puts()[0]?.request.body.positionMs).toBe(200_000);
   });
 
   it('sends one save that outlives the page when it is hidden or goes away', async () => {
@@ -162,7 +162,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     const sent = http.match({ method: 'PUT', url: urlOf(A.id) });
     expect(sent.length).toBe(1);
     expect(sent[0]?.request.keepalive).toBe(true);
-    expect(sent[0]?.request.body).toEqual({ positionMs: 12_500 });
+    expect(sent[0]?.request.body.positionMs).toBe(12_500);
     // Counted as delivered: it never overrides another device later (FR-3).
     expect(JSON.parse(kept() ?? '{}').delivered).toBe(true);
     Reflect.deleteProperty(document, 'visibilityState');
@@ -175,7 +175,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     puts()[0]?.flush(null, { status: 0, statusText: 'offline' });
     pause();
-    expect(puts()[0]?.request.body).toEqual({ positionMs: 10_000 });
+    expect(puts()[0]?.request.body.positionMs).toBe(10_000);
   });
 
   it('never sends past the end the server knows', () => {
@@ -183,7 +183,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     start();
     playAt(600.02);
     pause();
-    expect(puts()[0]?.request.body).toEqual({ positionMs: 600_000 });
+    expect(puts()[0]?.request.body.positionMs).toBe(600_000);
   });
 
   it('forgets the browser copy once the server has it', async () => {
@@ -201,7 +201,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     start();
     playAt(3.4);
     saver.saveNow();
-    expect(puts()[0]?.request.body).toEqual({ positionMs: 3_400 });
+    expect(puts()[0]?.request.body.positionMs).toBe(3_400);
   });
 
   it('starts from an unsent position only if no device saved one since (AC-3)', () => {
@@ -216,7 +216,7 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
       positionUpdatedAt: T0,
     });
     expect(saver.startFrom(item)).toBe(90_000);
-    expect(puts()[0]?.request.body).toEqual({ positionMs: 90_000 });
+    expect(puts()[0]?.request.body.positionMs).toBe(90_000);
   });
 
   it('starts from the server when another device saved later, and drops the stale copy', () => {
@@ -309,5 +309,68 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
       8_000, 8_000,
     ]);
     expect(sent.every((request) => request.request.keepalive)).toBe(true);
+  });
+
+  it('sends each save on top of the server save it continues (FR-3)', () => {
+    const { playAt, start, pause, puts } = setup();
+    start();
+    playAt(2);
+    pause();
+    const first = puts()[0];
+    expect(first?.request.body).toEqual({ positionMs: 2_000, basedOn: null });
+    first?.flush(savedAs(2_000, '2026-10-29T12:00:01.000Z'));
+    playAt(5);
+    TestBed.inject(ProgressSaver).saveNow();
+    expect(puts()[0]?.request.body).toEqual({
+      positionMs: 5_000,
+      basedOn: '2026-10-29T12:00:01.000Z',
+    });
+  });
+
+  it('drops its copy when another device saved since (409), and continues from that save', () => {
+    const { playAt, start, pause, puts, kept } = setup();
+    start();
+    playAt(2);
+    pause();
+    puts()[0]?.flush(
+      {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'x',
+          details: { positionUpdatedAt: '2026-10-29T12:30:00.000Z' },
+        },
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    expect(kept()).toBeNull();
+    playAt(9);
+    TestBed.inject(ProgressSaver).saveNow();
+    expect(puts()[0]?.request.body).toEqual({
+      positionMs: 9_000,
+      basedOn: '2026-10-29T12:30:00.000Z',
+    });
+  });
+
+  it('handles the answer of a save sent as the tab hid, when the page stays', async () => {
+    const { playAt, start, http, kept } = setup();
+    start();
+    playAt(4);
+    await vi.advanceTimersByTimeAsync(500);
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Reflect.deleteProperty(document, 'visibilityState');
+    http
+      .expectOne({ method: 'PUT', url: urlOf(A.id) })
+      .flush(savedAs(4_000, '2026-10-29T12:00:02.000Z'));
+    // Confirmed: nothing kept, and the next save continues it.
+    expect(kept()).toBeNull();
+    playAt(6);
+    TestBed.inject(ProgressSaver).saveNow();
+    expect(
+      http.expectOne({ method: 'PUT', url: urlOf(A.id) }).request.body.basedOn,
+    ).toBe('2026-10-29T12:00:02.000Z');
   });
 });

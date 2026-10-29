@@ -12,6 +12,7 @@ import {
   audioState,
   listenerTest as test,
   newListener,
+  uniqueTag,
   uploadReady,
   useTheme,
   type UploadedMedia,
@@ -23,7 +24,7 @@ let short: UploadedMedia;
 
 test.beforeAll(async () => {
   const owner = await ownerApi();
-  const tag = Date.now().toString(36);
+  const tag = uniqueTag();
   lecture = await uploadReady(owner, {
     title: `Palestra completa ${tag}`,
     seconds: 120,
@@ -169,7 +170,7 @@ test('AC-3: leaving the page never brings back an older position over another de
   await saved;
   await phone.context().close();
 
-  await laptop.getByRole('link', { name: lecture.title }).click();
+  await laptop.locator(`a[href="/midia/${lecture.id}"]`).click();
   await expect(
     laptop.getByRole('button', { name: /^Continuar de 1:0\d$/ }),
   ).toBeVisible();
