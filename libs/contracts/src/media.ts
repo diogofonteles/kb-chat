@@ -147,6 +147,65 @@ export const mediaProgressSchema = z.object({
 });
 export type MediaProgress = z.infer<typeof mediaProgressSchema>;
 
+/* ---------- Bookmarks (KBC-042) ---------- */
+
+/** The longest note of a bookmark. */
+export const MEDIA_BOOKMARK_NOTE_MAX = 2_000;
+/** The most bookmarks one person keeps in one media. */
+export const MEDIA_BOOKMARKS_PER_MEDIA = 1_000;
+
+export const mediaBookmarkIdSchema = z.uuid();
+const bookmarkNoteSchema = z.string().trim().min(1).max(MEDIA_BOOKMARK_NOTE_MAX);
+
+/** One person's mark in one media, with their note. */
+export const mediaBookmarkSchema = z.object({
+  id: mediaBookmarkIdSchema,
+  mediaId: mediaIdSchema,
+  positionMs: z.number().int().min(0),
+  note: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type MediaBookmark = z.infer<typeof mediaBookmarkSchema>;
+
+/** GET /api/v1/media/:id/bookmarks: the person's marks in that media, by position. */
+export const mediaBookmarkListSchema = z.object({
+  items: z.array(mediaBookmarkSchema),
+});
+
+/**
+ * POST /api/v1/media/:id/bookmarks. The client names the bookmark (a new uuid): the mark
+ * shows at once with its final id, and sending it again never makes a second one.
+ */
+export const createMediaBookmarkRequestSchema = z.strictObject({
+  id: mediaBookmarkIdSchema,
+  positionMs: z.number().int().min(0),
+  note: bookmarkNoteSchema.nullable().optional(),
+});
+export type CreateMediaBookmarkRequest = z.infer<
+  typeof createMediaBookmarkRequestSchema
+>;
+
+/** PATCH /api/v1/media/:id/bookmarks/:bookmarkId: the new note (null clears it). */
+export const updateMediaBookmarkRequestSchema = z.strictObject({
+  note: bookmarkNoteSchema.nullable(),
+});
+export type UpdateMediaBookmarkRequest = z.infer<
+  typeof updateMediaBookmarkRequestSchema
+>;
+
+/** A mark in "Meus marcadores", with the media it belongs to. */
+export const myMediaBookmarkSchema = mediaBookmarkSchema.extend({
+  mediaTitle: z.string(),
+  mediaDurationMs: z.number().int().min(0).nullable(),
+});
+export type MyMediaBookmark = z.infer<typeof myMediaBookmarkSchema>;
+
+/** GET /api/v1/media/bookmarks: the person's marks in every media they still see. */
+export const myMediaBookmarkListSchema = z.object({
+  items: z.array(myMediaBookmarkSchema),
+});
+
 /** True when a file name ends with an accepted audio extension. */
 export function hasAcceptedAudioExtension(fileName: string): boolean {
   const dot = fileName.lastIndexOf('.');

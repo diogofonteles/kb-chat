@@ -80,6 +80,8 @@ import {
   MediaService,
   WorkerService,
   listeningRoutes,
+  bookmarkRoutes,
+  BookmarkService,
   ListeningService,
   mediaRoutes,
   workerRoutes,
@@ -287,7 +289,7 @@ async function registerMedia(
   app: FastifyInstance,
   wiring: { media: MediaDeps; catalog: CatalogRegistry },
 ) {
-  const { store, listening, files, workerToken, createPerMinute } =
+  const { store, listening, bookmarks, files, workerToken, createPerMinute } =
     wiring.media;
   const hasTopic = (topic: string) => wiring.catalog.get(topic) !== undefined;
   const media = new MediaService({ store, files, hasTopic, listening });
@@ -295,6 +297,7 @@ async function registerMedia(
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
   );
+  await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
   await app.register(
     workerRoutes({
       service: new WorkerService({ store, files }),
