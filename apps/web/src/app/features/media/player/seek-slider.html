@@ -26,8 +26,8 @@
     [attr.aria-disabled]="disabled() || !loaded() ? 'true' : null"
     [style.left.%]="playedPercent()"
     (keydown)="onKeydown($event)"
-    (focus)="focused.set(true)"
-    (blur)="focused.set(false)"
+    (focus)="setFocused(true)"
+    (blur)="setFocused(false)"
   ></div>
   @if (tip(); as shown) {
     <span class="tip" aria-hidden="true" [style.left.%]="shown.percent">{{

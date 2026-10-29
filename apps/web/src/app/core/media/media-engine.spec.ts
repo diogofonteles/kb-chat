@@ -446,3 +446,25 @@ describe('MEDIA_ELEMENT_FACTORY', () => {
     expect(mediaTagOf(document)).toBe('audio');
   });
 });
+
+describe('MediaEngine over many media (KBC-041 NFR-3)', () => {
+  it('opens and closes 20 media with one element and no extra listeners', () => {
+    document
+      .querySelectorAll('[data-media-engine]')
+      .forEach((element) => element.remove());
+    const added = vi.spyOn(HTMLMediaElement.prototype, 'addEventListener');
+    const engine = TestBed.inject(MediaEngine);
+    for (let i = 0; i < 20; i++) {
+      engine.load({ id: `m${i}`, title: `Palestra ${i}`, src: `/m${i}` });
+      engine.unload();
+    }
+    const elements = document.querySelectorAll('[data-media-engine]');
+    expect(elements.length).toBe(1);
+    const perElement = added.mock.calls.length;
+    engine.load({ id: 'again', title: 'Mais uma', src: '/again' });
+    engine.unload();
+    expect(added.mock.calls.length).toBe(perElement);
+    added.mockRestore();
+    elements.forEach((element) => element.remove());
+  });
+});

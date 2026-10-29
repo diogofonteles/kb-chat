@@ -83,6 +83,27 @@
   font-weight: 600;
 }
 
+/* "Continuar de" first: the main way back in (T15, Retomar). */
+.resume {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
 /* The player's box is reserved from the first paint: nothing jumps when it arrives. */
 .skeleton {
   display: grid;

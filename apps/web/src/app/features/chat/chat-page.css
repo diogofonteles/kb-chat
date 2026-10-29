@@ -36,7 +36,8 @@
   /* One column that may shrink: with the document panel open on a narrow desktop, the
      results and the question box wrap instead of spilling under the panel. */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* The last row is the mini-player's (KBC-041): empty when it is closed. */
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
   /* The top bar adapts to this column, not to the window (the document panel narrows it). */
@@ -62,7 +63,7 @@
 }
 
 .conversation.media {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .conversation.media > app-media-list-page,
@@ -74,7 +75,7 @@
 .conversation.empty {
   grid-template-rows:
     auto minmax(0, 1fr) minmax(0, max-content) auto
-    minmax(0, 1.25fr);
+    minmax(0, 1.25fr) auto;
 }
 
 .conversation.empty > .thread {
@@ -386,7 +387,12 @@
   /* Phones: the start screen fills the space above the docked question box, so a long list
      of suggestions scrolls instead of pushing the greeting off screen. */
   .conversation.empty {
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+
+  /* With the mini-player open, the question box takes the last row, under it (T15). */
+  .conversation:has(> app-mini-player.open) > .composer-dock {
+    grid-row: -2 / -1;
   }
 
   .conversation.empty > .thread {

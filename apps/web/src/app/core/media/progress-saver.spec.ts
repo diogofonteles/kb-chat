@@ -162,4 +162,12 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     puts()[0]?.flush(null);
     expect(saver.localPosition(A.id)).toBeNull();
   });
+
+  it('saves at once when the player is closed', async () => {
+    const { playAt, start, puts, saver } = setup();
+    start();
+    playAt(3.4);
+    saver.saveNow();
+    expect(puts()[0]?.request.body).toEqual({ positionMs: 3_400 });
+  });
 });

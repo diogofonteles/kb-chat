@@ -1,0 +1,79 @@
+<p class="visually-hidden" role="status">{{ announcer.message() }}</p>
+@if (visible() && source(); as current) {
+  <section
+    class="mini"
+    [class.above-composer]="aboveComposer()"
+    aria-label="Player"
+    i18n-aria-label="@@mini.region"
+  >
+    <div
+      class="progress"
+      role="progressbar"
+      aria-label="Posição"
+      i18n-aria-label="@@mini.progress"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      [attr.aria-valuenow]="roundedPercent()"
+      [attr.aria-valuetext]="positionText()"
+    >
+      <span class="played" [style.width.%]="percent()"></span>
+    </div>
+    <a class="title" [routerLink]="['/midia', current.id]">{{
+      current.title
+    }}</a>
+    <span class="time">{{ elapsed() }}</span>
+    <div class="actions">
+      <button
+        type="button"
+        class="icon"
+        aria-label="Voltar 15 segundos"
+        i18n-aria-label="@@player.back15"
+        aria-keyshortcuts="J"
+        (click)="back()"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+          <path
+            d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"
+            fill="currentColor"
+          />
+        </svg>
+        <span class="skip-amount" aria-hidden="true">15</span>
+      </button>
+      <button
+        type="button"
+        class="icon play"
+        [attr.aria-label]="playLabel()"
+        aria-keyshortcuts="K Space"
+        (click)="toggle()"
+      >
+        @if (busy()) {
+          <span class="spinner" aria-hidden="true"></span>
+        } @else if (playing()) {
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+            <path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" />
+          </svg>
+        } @else {
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+            <path d="M8 5v14l11-7z" fill="currentColor" />
+          </svg>
+        }
+      </button>
+      <button
+        type="button"
+        class="icon"
+        aria-label="Fechar o player"
+        i18n-aria-label="@@mini.close"
+        (click)="close()"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+          <path
+            d="M6 6l12 12M18 6L6 18"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </div>
+  </section>
+}

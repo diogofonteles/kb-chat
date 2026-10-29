@@ -29,6 +29,8 @@ export class ProgressSaver {
   private readonly document = inject(DOCUMENT);
   /** The last position the server confirmed, per media. */
   private readonly confirmed = new Map<string, number>();
+  /** The position on its way to the server, per media: not sent a second time. */
+  private readonly sending = new Map<string, number>();
   private ticker: ReturnType<typeof setInterval> | null = null;
   private lastSentAt = 0;
   private followed: PlayableSource | null = null;
@@ -62,6 +64,19 @@ export class ProgressSaver {
     } catch {
       return null;
     }
+  }
+
+  /** Keeps and sends the position now ("Fechar o player", before the media goes). */
+  saveNow(): void {
+    const source = this.followed;
+    if (!source) return;
+    this.keep();
+    this.send(source.id);
+  }
+
+  /** Sends a position this browser kept and the server never confirmed (FR-3). */
+  resend(id: string): void {
+    this.send(id);
   }
 
   private follow(source: PlayableSource | null, playing: boolean): void {
@@ -111,12 +126,23 @@ export class ProgressSaver {
 
   private send(id: string): void {
     const position = this.localPosition(id);
-    if (position === null || this.confirmed.get(id) === position) return;
+    if (position === null || this.known(id, position)) return;
+    this.sending.set(id, position);
     this.api.saveProgress(id, position).subscribe({
-      next: () => this.confirm(id, position),
+      next: () => {
+        this.sending.delete(id);
+        this.confirm(id, position);
+      },
       // Kept in the browser: the next chance sends it again.
-      error: () => undefined,
+      error: () => this.sending.delete(id),
     });
+  }
+
+  /** The server has this position, or it is on its way there. */
+  private known(id: string, position: number): boolean {
+    return (
+      this.confirmed.get(id) === position || this.sending.get(id) === position
+    );
   }
 
   private confirm(id: string, position: number): void {
@@ -134,7 +160,7 @@ export class ProgressSaver {
     if (!source) return;
     this.keep();
     const position = this.localPosition(source.id);
-    if (position === null || this.confirmed.get(source.id) === position) return;
+    if (position === null || this.known(source.id, position)) return;
     this.api.saveProgressOnExit(source.id, position);
   }
 

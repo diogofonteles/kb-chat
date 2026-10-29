@@ -110,8 +110,15 @@ export class MediaSessionAdapter {
     };
     session.metadata =
       typeof MediaMetadata === 'function' ? new MediaMetadata(init) : init;
+    const handlers = this.handlers();
+    for (const action of ACTIONS)
+      this.setHandler(session, action, handlers[action] ?? null);
+  }
+
+  /** The system's buttons, mapped to the engine (T15: back 15 s, forward 30 s). */
+  private handlers(): Record<string, MediaSessionActionHandler> {
     const engine = this.engine;
-    const handlers: Record<string, MediaSessionActionHandler> = {
+    return {
       play: () => engine.play(),
       pause: () => engine.pause(),
       stop: () => engine.pause(),
@@ -124,8 +131,6 @@ export class MediaSessionAdapter {
           engine.seek(details.seekTime * 1000, details.fastSeek === true);
       },
     };
-    for (const action of ACTIONS)
-      this.setHandler(session, action, handlers[action] ?? null);
   }
 
   private close(session: SessionLike): void {
