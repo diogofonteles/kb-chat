@@ -60,15 +60,37 @@ jobs:
       - run: pnpm exec nx run-many -t test -p ${{ matrix.projects }}
 
   e2e:
-    # Six shards in parallel: a GitHub runner gives Playwright 2 workers, so one job took
-    # ~18 min and four shards up to 5 min; each shard starts its own API and web servers.
-    name: E2E (Playwright) ${{ matrix.shard }}/6
+    # Shards in parallel, split per project: a GitHub runner gives Playwright 2 workers, so
+    # one job took ~18 min; Playwright cuts a run in order, so plain shards put every slow
+    # WebKit media test (real audio) in the last one. Each shard starts its own servers.
+    name: E2E (Playwright) ${{ matrix.name }} ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        include:
+          - name: app
+            projects: --project=desktop --project=mobile
+            shard: 1/3
+          - name: app
+            projects: --project=desktop --project=mobile
+            shard: 2/3
+          - name: app
+            projects: --project=desktop --project=mobile
+            shard: 3/3
+          - name: media Chrome
+            projects: --project=media-desktop --project=media-mobile
+            shard: 1/2
+          - name: media Chrome
+            projects: --project=media-desktop --project=media-mobile
+            shard: 2/2
+          - name: media WebKit
+            projects: --project=media-webkit
+            shard: 1/2
+          - name: media WebKit
+            projects: --project=media-webkit
+            shard: 2/2
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -91,11 +113,11 @@ jobs:
       # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
       # Chromium of Playwright has no AAC/H.264), no download needed.
       - run: google-chrome --version
-      - run: pnpm --filter @kb-chat/e2e exec playwright test --shard=${{ matrix.shard }}/6
+      - run: pnpm --filter @kb-chat/e2e exec playwright test ${{ matrix.projects }} --shard=${{ matrix.shard }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.shard }}
+          name: playwright-report-${{ strategy.job-index }}
           path: e2e/playwright-report
           retention-days: 7
 
