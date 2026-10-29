@@ -23,23 +23,56 @@ describe('ListeningApi (KBC-041)', () => {
   it('reads and saves the preferences through the contract', async () => {
     const { api, http } = setup();
     const read = firstValueFrom(api.preferences());
-    http
-      .expectOne({ method: 'GET', url: PREFERENCES_URL })
-      .flush({ speed: 1.5, showRemaining: false });
-    await expect(read).resolves.toEqual({ speed: 1.5, showRemaining: false });
+    http.expectOne({ method: 'GET', url: PREFERENCES_URL }).flush({
+      speed: 1.5,
+      showRemaining: false,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
+    await expect(read).resolves.toEqual({
+      speed: 1.5,
+      showRemaining: false,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     const saved = firstValueFrom(
-      api.savePreferences({ speed: 2, showRemaining: true }),
+      api.savePreferences({
+        speed: 2,
+        showRemaining: true,
+        skipBackSec: 15,
+        skipForwardSec: 30,
+      }),
     );
     const put = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
-    expect(put.request.body).toEqual({ speed: 2, showRemaining: true });
-    put.flush({ speed: 2, showRemaining: true });
-    await expect(saved).resolves.toEqual({ speed: 2, showRemaining: true });
+    expect(put.request.body).toEqual({
+      speed: 2,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
+    put.flush({
+      speed: 2,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
+    await expect(saved).resolves.toEqual({
+      speed: 2,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
   });
 
   it('refuses preferences outside the contract', async () => {
     const { api, http } = setup();
     const read = firstValueFrom(api.preferences());
-    http.expectOne(PREFERENCES_URL).flush({ speed: 3, showRemaining: true });
+    http.expectOne(PREFERENCES_URL).flush({
+      speed: 3,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    });
     await expect(read).rejects.toThrow();
   });
 

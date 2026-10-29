@@ -18,6 +18,7 @@ import {
 } from '../../../testing/fake-media-element.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { signal } from '@angular/core';
+import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { MiniPlayer } from './mini-player.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -163,5 +164,13 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
     await harness.fixture.whenStable();
     expect(screen.getAllByRole('status').length).toBe(1);
     expect(TestBed.inject(Router).url).toBe('/');
+  });
+
+  it('goes back by the person’s skip, and says so (KBC-043 FR-2)', async () => {
+    const { media, harness } = await setup();
+    TestBed.inject(ListeningPreferences).setSkipBack(10);
+    await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar 10 segundos' }));
+    expect(media.calls.at(-1)).toBe('seek:140');
   });
 });

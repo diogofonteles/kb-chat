@@ -22,16 +22,11 @@ import { MediaEngine } from '@core/media/media-engine.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { from } from 'rxjs';
 import { MenuButton, type MenuOption } from '../menu-button.js';
-import {
-  PlayerShortcuts,
-  SKIP_BACK_MS,
-  SKIP_FORWARD_MS,
-} from './player-shortcuts.js';
+import { PlayerShortcuts } from './player-shortcuts.js';
 import { PlayerVolume } from './player-volume.js';
 import { SeekSlider } from './seek-slider.js';
 import { ShortcutsDialog } from './shortcuts-dialog.js';
-
-export { SKIP_BACK_MS, SKIP_FORWARD_MS };
+import { SkipsDialog } from './skips-dialog.js';
 
 const ERROR_MESSAGES: Record<PlaybackErrorKind, () => string> = {
   network: () =>
@@ -55,7 +50,7 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
  */
 @Component({
   selector: 'app-media-player',
-  imports: [SeekSlider, MenuButton, ShortcutsDialog],
+  imports: [SeekSlider, MenuButton, ShortcutsDialog, SkipsDialog],
   templateUrl: './media-player.html',
   styleUrl: './media-player.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -66,6 +61,7 @@ export class MediaPlayer {
   private readonly shortcuts = inject(PlayerShortcuts);
   private readonly volumeMemory = inject(PlayerVolume);
   private readonly shortcutsDialog = viewChild.required(ShortcutsDialog);
+  private readonly skipsDialog = viewChild.required(SkipsDialog);
   protected readonly playback = this.engine.playback;
   /** The volume control exists only where the page may set the volume (FR-9). */
   private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
@@ -130,11 +126,27 @@ export class MediaPlayer {
     })),
   );
   protected readonly moreOptions: readonly MenuOption[] = [
+    { id: 'skips', label: $localize`:@@player.skips.open:Pulos` },
     {
       id: 'shortcuts',
       label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
     },
   ];
+  /** The person's skips (KBC-043): the number on each button and in its name. */
+  protected readonly skipBack = computed(
+    () => this.preferences.value().skipBackSec,
+  );
+  protected readonly skipForward = computed(
+    () => this.preferences.value().skipForwardSec,
+  );
+  protected readonly backLabel = computed(
+    () =>
+      $localize`:@@player.backBy:Voltar ${this.skipBack()}:seconds: segundos`,
+  );
+  protected readonly forwardLabel = computed(
+    () =>
+      $localize`:@@player.forwardBy:Avançar ${this.skipForward()}:seconds: segundos`,
+  );
 
   protected readonly muted = this.engine.muted;
   protected readonly volumePercent = computed(() =>
@@ -158,11 +170,11 @@ export class MediaPlayer {
   }
 
   protected back(): void {
-    this.engine.skip(-SKIP_BACK_MS);
+    this.engine.skip(-this.preferences.skipBackMs());
   }
 
   protected forward(): void {
-    this.engine.skip(SKIP_FORWARD_MS);
+    this.engine.skip(this.preferences.skipForwardMs());
   }
 
   protected seekTo(ms: number): void {
@@ -193,6 +205,7 @@ export class MediaPlayer {
 
   protected chooseMore(id: string): void {
     if (id === 'shortcuts') this.shortcutsDialog().open();
+    if (id === 'skips') this.skipsDialog().open();
   }
 
   protected toggleMute(): void {

@@ -39,8 +39,7 @@
     <button
       type="button"
       class="skip"
-      aria-label="Voltar 15 segundos"
-      i18n-aria-label="@@player.back15"
+      [attr.aria-label]="backLabel()"
       aria-keyshortcuts="J"
       [disabled]="!operable()"
       (click)="back()"
@@ -51,7 +50,7 @@
           fill="currentColor"
         />
       </svg>
-      <span class="skip-amount" aria-hidden="true">15</span>
+      <span class="skip-amount" aria-hidden="true">{{ skipBack() }}</span>
     </button>
 
     <button
@@ -78,8 +77,7 @@
     <button
       type="button"
       class="skip"
-      aria-label="Avançar 30 segundos"
-      i18n-aria-label="@@player.forward30"
+      [attr.aria-label]="forwardLabel()"
       aria-keyshortcuts="L"
       [disabled]="!operable()"
       (click)="forward()"
@@ -90,7 +88,7 @@
           fill="currentColor"
         />
       </svg>
-      <span class="skip-amount" aria-hidden="true">30</span>
+      <span class="skip-amount" aria-hidden="true">{{ skipForward() }}</span>
     </button>
   </div>
 
@@ -179,3 +177,4 @@
 </section>
 
 <app-shortcuts-dialog />
+<app-skips-dialog />

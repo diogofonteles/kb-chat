@@ -7,6 +7,7 @@ import {
   inject,
   untracked,
 } from '@angular/core';
+import { ListeningPreferences } from './listening-preferences.js';
 import { MediaEngine, type PlayableSource } from './media-engine.js';
 
 /** The part of `navigator.mediaSession` the player uses. */
@@ -29,8 +30,6 @@ export const MEDIA_SESSION = new InjectionToken<SessionLike | null>(
   },
 );
 
-const SKIP_BACK_S = 15;
-const SKIP_FORWARD_S = 30;
 const ICON_SIZES = [96, 128, 192, 256, 384, 512];
 const ACTIONS: readonly MediaSessionAction[] = [
   'play',
@@ -50,6 +49,7 @@ const ACTIONS: readonly MediaSessionAction[] = [
 export class MediaSessionAdapter {
   private readonly engine = inject(MediaEngine);
   private readonly session = inject(MEDIA_SESSION);
+  private readonly preferences = inject(ListeningPreferences);
   /** What the position state depends on: not every time update, only real changes. */
   private readonly positionInputs = computed(
     () => {
@@ -115,17 +115,26 @@ export class MediaSessionAdapter {
       this.setHandler(session, action, handlers[action] ?? null);
   }
 
-  /** The system's buttons, mapped to the engine (T15: back 15 s, forward 30 s). */
+  /** The system's buttons, mapped to the engine and the person's skips. */
   private handlers(): Record<string, MediaSessionActionHandler> {
     const engine = this.engine;
     return {
       play: () => engine.play(),
       pause: () => engine.pause(),
       stop: () => engine.pause(),
+      // Without an offset from the system, the person's own skips (KBC-043 FR-2).
       seekbackward: (details) =>
-        engine.skip(-(details.seekOffset ?? SKIP_BACK_S) * 1000),
+        engine.skip(
+          details.seekOffset === undefined
+            ? -this.preferences.skipBackMs()
+            : -details.seekOffset * 1000,
+        ),
       seekforward: (details) =>
-        engine.skip((details.seekOffset ?? SKIP_FORWARD_S) * 1000),
+        engine.skip(
+          details.seekOffset === undefined
+            ? this.preferences.skipForwardMs()
+            : details.seekOffset * 1000,
+        ),
       seekto: (details) => {
         if (details.seekTime !== undefined)
           engine.seek(details.seekTime * 1000, details.fastSeek === true);

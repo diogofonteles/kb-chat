@@ -18,7 +18,8 @@ import { MediaEngine } from '@core/media/media-engine.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
 import { filter, map } from 'rxjs';
-import { PlayerShortcuts, SKIP_BACK_MS } from './player-shortcuts.js';
+import { ListeningPreferences } from '@core/media/listening-preferences.js';
+import { PlayerShortcuts } from './player-shortcuts.js';
 
 /**
  * The persistent mini-player (screens.md T15, KBC-041 FR-8): while a media plays and the
@@ -41,6 +42,7 @@ import { PlayerShortcuts, SKIP_BACK_MS } from './player-shortcuts.js';
 export class MiniPlayer {
   private readonly engine = inject(MediaEngine);
   private readonly saver = inject(ProgressSaver);
+  private readonly preferences = inject(ListeningPreferences);
   protected readonly announcer = inject(PlayerAnnouncer);
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly router = inject(Router);
@@ -56,6 +58,14 @@ export class MiniPlayer {
   readonly aboveComposer = input(false);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  protected readonly skipBack = computed(
+    () => this.preferences.value().skipBackSec,
+  );
+  protected readonly backLabel = computed(
+    () =>
+      $localize`:@@player.backBy:Voltar ${this.skipBack()}:seconds: segundos`,
+  );
 
   protected readonly source = this.engine.source;
   /** The server no longer has what plays for this person (removed, access taken away). */
@@ -112,7 +122,7 @@ export class MiniPlayer {
   }
 
   protected back(): void {
-    this.engine.skip(-SKIP_BACK_MS);
+    this.engine.skip(-this.preferences.skipBackMs());
   }
 
   protected retry(): void {

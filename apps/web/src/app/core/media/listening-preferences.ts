@@ -1,6 +1,10 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { MediaPreferences } from '@kb-chat/contracts';
+import type {
+  MEDIA_SKIP_BACK_SECONDS,
+  MEDIA_SKIP_FORWARD_SECONDS,
+  MediaPreferences,
+} from '@kb-chat/contracts';
 import {
   DEFAULT_SPEED,
   stepSpeed,
@@ -13,7 +17,12 @@ import { MediaEngine } from './media-engine.js';
 const DEFAULTS: MediaPreferences = {
   speed: DEFAULT_SPEED,
   showRemaining: true,
+  skipBackSec: 15,
+  skipForwardSec: 30,
 };
+
+export type SkipBackSeconds = (typeof MEDIA_SKIP_BACK_SECONDS)[number];
+export type SkipForwardSeconds = (typeof MEDIA_SKIP_FORWARD_SECONDS)[number];
 
 /**
  * The person's speed and time display (KBC-041 FR-1, BR-1): read from the account once,
@@ -32,6 +41,9 @@ export class ListeningPreferences {
   private changed = false;
 
   readonly value = this.current.asReadonly();
+  /** How far "Voltar" and "Avançar" go, everywhere (buttons, J/L, lock screen; KBC-043). */
+  readonly skipBackMs = computed(() => this.current().skipBackSec * 1000);
+  readonly skipForwardMs = computed(() => this.current().skipForwardSec * 1000);
 
   constructor() {
     this.saves
@@ -65,6 +77,14 @@ export class ListeningPreferences {
 
   stepSpeed(direction: 1 | -1): void {
     this.setSpeed(stepSpeed(this.current().speed, direction));
+  }
+
+  setSkipBack(skipBackSec: SkipBackSeconds): void {
+    this.save({ ...this.current(), skipBackSec });
+  }
+
+  setSkipForward(skipForwardSec: SkipForwardSeconds): void {
+    this.save({ ...this.current(), skipForwardSec });
   }
 
   toggleShowRemaining(): void {
