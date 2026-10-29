@@ -23,6 +23,8 @@ describe('player shortcuts (T15, FR-6, BR-5)', () => {
     ['<', { kind: 'speed', direction: -1 }],
     ['>', { kind: 'speed', direction: 1 }],
     ['m', { kind: 'mute' }],
+    ['b', { kind: 'bookmark' }],
+    ['B', { kind: 'bookmark' }],
     ['0', { kind: 'seek-fraction', fraction: 0 }],
     ['5', { kind: 'seek-fraction', fraction: 0.5 }],
     ['9', { kind: 'seek-fraction', fraction: 0.9 }],
