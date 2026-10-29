@@ -149,6 +149,34 @@ for (const width of [1440, 390]) {
     await page.getByRole('menuitem', { name: 'Atalhos de teclado' }).click();
     await shot('09-shortcuts-dialog');
     await page.keyboard.press('Escape');
+    // "Pulos" (KBC-043): the dialog, then the buttons with the chosen numbers.
+    await page.getByRole('button', { name: 'Mais opções' }).click();
+    await page.getByRole('menuitem', { name: 'Pulos' }).click();
+    const skips = page.getByRole('dialog', { name: 'Pulos' });
+    await skips
+      .getByRole('group', { name: 'Voltar' })
+      .getByRole('radio', { name: '10 s', exact: true })
+      .check();
+    await skips
+      .getByRole('group', { name: 'Avançar' })
+      .getByRole('radio', { name: '45 s', exact: true })
+      .check();
+    await shot('09b-skips-dialog');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Voltar 10 segundos' }).waitFor();
+    await shot('09c-player-skips');
+    // Back to the defaults, so the next theme starts the same.
+    await page.getByRole('button', { name: 'Mais opções' }).click();
+    await page.getByRole('menuitem', { name: 'Pulos' }).click();
+    await skips
+      .getByRole('group', { name: 'Voltar' })
+      .getByRole('radio', { name: '15 s', exact: true })
+      .check();
+    await skips
+      .getByRole('group', { name: 'Avançar' })
+      .getByRole('radio', { name: '30 s', exact: true })
+      .check();
+    await page.keyboard.press('Escape');
     // A saved position: back on the page, "Continuar de".
     await position.focus();
     await position.press('Home');
