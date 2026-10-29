@@ -115,7 +115,7 @@ describe('BookmarkList (KBC-042 FR-3, FR-4)', () => {
     await fixture.whenStable();
     const again = screen.getByRole('textbox') as HTMLInputElement;
     again.value = 'ritmo e polaridade';
-    submitForm(again);
+    pressEnter(again);
     await fixture.whenStable();
     expect(
       http.expectOne({ method: 'PATCH', url: `${URL}/${B}` }).request.body,
@@ -163,9 +163,7 @@ describe('BookmarkList (KBC-042 FR-3, FR-4)', () => {
   });
 });
 
-/** Submits the form a field belongs to (as Enter would). */
-function submitForm(field: HTMLElement): void {
-  const form = field.closest('form');
-  if (!form) throw new Error('no form');
-  fireEvent.submit(form);
+/** Enter in the field, as the person would. */
+function pressEnter(field: HTMLElement): void {
+  fireEvent.keyDown(field, { key: 'Enter' });
 }

@@ -63,10 +63,8 @@ import { MediaEngine } from '@core/media/media-engine.js';
                 {{ clock(bookmark.positionMs) }}
               </button>
               @if (editingId() === bookmark.id) {
-                <form
-                  class="edit"
-                  (submit)="saveEdit($event, bookmark.id, editField.value)"
-                >
+                <!-- No <form>: the Enter that pressed "Editar" must not save too. -->
+                <div class="edit">
                   <label
                     class="visually-hidden"
                     [attr.for]="'note-' + bookmark.id"
@@ -80,9 +78,18 @@ import { MediaEngine } from '@core/media/media-engine.js';
                     [maxLength]="noteMax"
                     [value]="bookmark.note ?? ''"
                     (keydown.escape)="cancelEdit($event, bookmark.id)"
+                    (keydown.enter)="
+                      saveEdit($event, bookmark.id, editField.value)
+                    "
                   />
-                  <button type="submit" i18n="@@bookmarks.save">Salvar</button>
-                </form>
+                  <button
+                    type="button"
+                    (click)="saveEdit($event, bookmark.id, editField.value)"
+                    i18n="@@bookmarks.save"
+                  >
+                    Salvar
+                  </button>
+                </div>
               } @else {
                 <p class="note" [class.none]="bookmark.note === null">
                   {{ bookmark.note ?? noNote }}

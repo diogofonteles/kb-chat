@@ -32,8 +32,11 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
       </div>
     }
     @if (bookmark(); as current) {
-      <form class="note" (submit)="save($event, field.value)">
-        <label for="bookmark-note" class="label">{{ label() }}</label>
+      <!-- No <form>: an Enter that opened the note (on 🔖) must not submit it too. -->
+      <div class="note" role="group" aria-labelledby="bookmark-note-label">
+        <label id="bookmark-note-label" for="bookmark-note" class="label">{{
+          label()
+        }}</label>
         <div class="row">
           <input
             #field
@@ -43,8 +46,14 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
             [maxLength]="noteMax"
             [value]="current.note ?? ''"
             (keydown.escape)="close($event)"
+            (keydown.enter)="save($event, field.value)"
           />
-          <button type="submit" class="save" i18n="@@bookmarks.save">
+          <button
+            type="button"
+            class="save"
+            (click)="save($event, field.value)"
+            i18n="@@bookmarks.save"
+          >
             Salvar
           </button>
           <button
@@ -56,7 +65,7 @@ import { BookmarksStore } from '@core/media/bookmarks-store.js';
             Fechar
           </button>
         </div>
-      </form>
+      </div>
     }
   `,
   styleUrl: './bookmark-note.css',

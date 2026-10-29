@@ -484,7 +484,7 @@ describe('MediaPlayer (KBC-042 bookmarks)', () => {
     });
     fireEvent.input(field, { target: { value: 'lei do ritmo' } });
     (field as HTMLInputElement).value = 'lei do ritmo';
-    submitForm(field);
+    pressEnter(field);
     await fixture.whenStable();
     expect(http.expectOne({ method: 'PATCH' }).request.body).toEqual({
       note: 'lei do ritmo',
@@ -515,7 +515,7 @@ describe('MediaPlayer (KBC-042 bookmarks)', () => {
     await fixture.whenStable();
     const field = screen.getByRole('textbox') as HTMLInputElement;
     field.value = 'polaridade';
-    submitForm(field);
+    pressEnter(field);
     http
       .expectOne({ method: 'POST', url: BOOKMARKS })
       .flush(null, { status: 503, statusText: 'Unavailable' });
@@ -567,9 +567,7 @@ describe('MediaPlayer (KBC-042 bookmarks)', () => {
   });
 });
 
-/** Submits the form a field belongs to (as Enter would). */
-function submitForm(field: HTMLElement): void {
-  const form = field.closest('form');
-  if (!form) throw new Error('no form');
-  fireEvent.submit(form);
+/** Enter in the field, as the person would. */
+function pressEnter(field: HTMLElement): void {
+  fireEvent.keyDown(field, { key: 'Enter' });
 }
