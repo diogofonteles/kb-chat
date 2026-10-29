@@ -1,5 +1,7 @@
 :host {
   display: grid;
+  /* One column that never grows past the sidebar (wider fonts would push "Sair" out). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-4);
   height: 100%;

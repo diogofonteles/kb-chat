@@ -51,6 +51,7 @@ export const FILTER_FROM = 11;
   templateUrl: './media-list-page.html',
   styleUrl: './media-list-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(focusin)': 'keepInView($event)' },
 })
 export class MediaListPage {
   private readonly chat = inject(ChatStore);
@@ -109,6 +110,15 @@ export class MediaListPage {
     this.pollWhileInFlight();
     this.announceReady();
     afterRenderEffect(() => this.focusPending(this.rows()));
+  }
+
+  /**
+   * The page scrolls in its own row (above the mini-player): the element that takes the
+   * focus is brought fully into view, in every browser (WCAG 2.4.11, KBC-041 FR-11).
+   */
+  protected keepInView(event: FocusEvent): void {
+    if (event.target instanceof HTMLElement)
+      event.target.scrollIntoView?.({ block: 'nearest' });
   }
 
   protected statusOf(item: MediaItem): string {
