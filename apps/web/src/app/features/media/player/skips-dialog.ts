@@ -95,7 +95,12 @@ export class SkipsDialog {
   open(): void {
     const active = this.document.activeElement;
     this.opener = active instanceof HTMLElement ? active : null;
-    this.dialog().nativeElement.showModal();
+    const dialog = this.dialog().nativeElement;
+    dialog.showModal();
+    // The focus starts on the current choice, not on the first option.
+    dialog
+      .querySelector<HTMLInputElement>('input[name="skip-back"]:checked')
+      ?.focus();
   }
 
   protected close(): void {

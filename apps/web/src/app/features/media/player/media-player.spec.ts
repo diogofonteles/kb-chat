@@ -361,4 +361,21 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     fireEvent.click(button);
     expect(media.calls.at(-1)).toBe('seek:55');
   });
+
+  it('opens "Pulos" on the current choice and gives the focus back on "Fechar" (KBC-043)', async () => {
+    const { fixture } = await renderPlayer(loaded);
+    const more = screen.getByRole('button', { name: 'Mais opções' });
+    fireEvent.click(more);
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pulos' }));
+    await fixture.whenStable();
+    const back = screen.getByRole('group', { name: 'Voltar' });
+    expect(document.activeElement).toBe(
+      within(back).getByRole('radio', { name: '15 s' }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Pulos' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(more);
+  });
 });
