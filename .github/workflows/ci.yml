@@ -10,10 +10,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gates:
-    name: Lint, typecheck, test, build, format
+  # Split so the slowest part (the API's unit tests, ~2.5 min) does not add up with lint,
+  # typecheck, build and the other projects' tests: each runs in its own job, in parallel.
+  checks:
+    name: Lint, typecheck, build, format
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @kb-chat/contracts build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm format:check
+
+  test:
+    name: Unit tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            projects: '@kb-chat/api'
+            ffmpeg: true
+          - name: web
+            projects: '@kb-chat/web'
+          - name: libs
+            projects: '@kb-chat/contracts,@kb-chat/player-core'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -23,24 +54,21 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The media worker's tests convert real audio (KBC-034): ffmpeg and ffprobe.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - if: matrix.ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: pnpm --filter @kb-chat/contracts build
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-      - run: pnpm format:check
+      - run: pnpm exec nx run-many -t test -p ${{ matrix.projects }}
 
   e2e:
-    # Four shards in parallel: a GitHub runner gives Playwright 2 workers, so one job took
-    # ~18 min; each shard starts its own API and web servers.
-    name: E2E (Playwright) ${{ matrix.shard }}/4
+    # Six shards in parallel: a GitHub runner gives Playwright 2 workers, so one job took
+    # ~18 min and four shards up to 5 min; each shard starts its own API and web servers.
+    name: E2E (Playwright) ${{ matrix.shard }}/6
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -63,7 +91,7 @@ jobs:
       # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
       # Chromium of Playwright has no AAC/H.264), no download needed.
       - run: google-chrome --version
-      - run: pnpm --filter @kb-chat/e2e exec playwright test --shard=${{ matrix.shard }}/4
+      - run: pnpm --filter @kb-chat/e2e exec playwright test --shard=${{ matrix.shard }}/6
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
