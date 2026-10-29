@@ -1,7 +1,7 @@
 ---
 id: KBC-046
 title: "Timer para dormir: parar sozinho depois de um tempo ou no fim da mídia, com o som diminuindo"
-status: ready
+status: done
 slice: phase-2-a
 outcome: quem ouve palestras antes de dormir não perde a posição nem deixa o áudio tocando a noite toda
 depends_on: [KBC-041]

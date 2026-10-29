@@ -84,6 +84,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sleep {
+  margin-left: var(--space-2);
+  white-space: nowrap;
+}
+
 .actions {
   display: flex;
   align-items: center;

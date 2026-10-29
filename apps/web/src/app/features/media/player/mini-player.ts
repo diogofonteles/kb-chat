@@ -17,6 +17,7 @@ import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
+import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { filter, map } from 'rxjs';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { PlayerShortcuts } from './player-shortcuts.js';
@@ -43,6 +44,19 @@ export class MiniPlayer {
   private readonly engine = inject(MediaEngine);
   private readonly saver = inject(ProgressSaver);
   private readonly preferences = inject(ListeningPreferences);
+  private readonly sleepTimer = inject(SleepTimerService);
+  /**
+   * "☾ 14:59" (or "☾ No fim") while a sleep timer is on (KBC-046 FR-1): short, so the
+   * title keeps its room on a phone; "Timer para dormir:" is there for screen readers.
+   */
+  protected readonly sleepShown = computed(() => {
+    const timer = this.sleepTimer.timer();
+    if (timer.kind === 'end-of-media')
+      return $localize`:@@player.sleep.atEnd:No fim`;
+    return timer.kind === 'minutes'
+      ? formatClock(Math.ceil(timer.remainingMs / 1000) * 1000)
+      : '';
+  });
   protected readonly announcer = inject(PlayerAnnouncer);
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly router = inject(Router);

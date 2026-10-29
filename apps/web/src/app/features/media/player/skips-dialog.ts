@@ -72,7 +72,7 @@ import {
       </button>
     </dialog>
   `,
-  styleUrl: './skips-dialog.css',
+  styleUrl: './player-dialog.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SkipsDialog {

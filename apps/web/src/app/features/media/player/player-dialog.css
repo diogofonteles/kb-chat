@@ -36,6 +36,19 @@ legend {
   font-weight: 600;
 }
 
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.group-label {
+  flex-basis: 100%;
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
+
 .choice {
   display: inline-flex;
   align-items: center;
@@ -44,8 +57,18 @@ legend {
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+
+/* A choice that is a button (the sleep timer's): the current one shows by ✓, border and weight. */
+.choice[aria-current='true'] {
+  border-color: var(--color-accent);
+  border-width: 2px;
+  font-weight: 600;
 }
 
 /* The chosen one shows by its filled radio and a stronger border, never by color alone. */

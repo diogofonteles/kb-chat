@@ -148,6 +148,7 @@
 
 .options {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: var(--space-4);
@@ -159,6 +160,11 @@
   --menu-trigger-color: var(--color-text);
   --menu-trigger-weight: 600;
   --menu-trigger-size: var(--text-md);
+}
+
+/* The trigger lays its content out as a grid: one item keeps ☾ beside its time. */
+.sleep-face {
+  white-space: nowrap;
 }
 
 .volume {

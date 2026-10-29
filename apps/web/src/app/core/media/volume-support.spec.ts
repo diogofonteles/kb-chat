@@ -1,5 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { VOLUME_SUPPORT, probeVolume } from './volume-support.js';
+import {
+  VOLUME_SUPPORT,
+  VOLUME_WRITABLE,
+  probeVolume,
+} from './volume-support.js';
 
 /** A media element whose volume either takes a write (and says so later) or ignores it. */
 function probeElement(behaviour: 'writable' | 'read-only' | 'silent') {
@@ -43,6 +47,32 @@ describe('VOLUME_SUPPORT', () => {
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: () => ({ matches: false }),
+    });
+    await expect(TestBed.inject(VOLUME_SUPPORT)).resolves.toBe(false);
+  });
+
+  it('offers the volume with a fine pointer where the page may set it', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({ matches: true }),
+    });
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: VOLUME_WRITABLE, useValue: Promise.resolve(true) },
+      ],
+    });
+    await expect(TestBed.inject(VOLUME_SUPPORT)).resolves.toBe(true);
+  });
+
+  it('offers no volume with a fine pointer where the volume is read-only', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({ matches: true }),
+    });
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: VOLUME_WRITABLE, useValue: Promise.resolve(false) },
+      ],
     });
     await expect(TestBed.inject(VOLUME_SUPPORT)).resolves.toBe(false);
   });

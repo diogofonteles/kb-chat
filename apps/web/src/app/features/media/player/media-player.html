@@ -152,7 +152,21 @@
       </div>
     }
 
+    @if (sleepOn()) {
+      <app-menu-button
+        class="sleep"
+        [label]="sleepLabel()"
+        [options]="sleepOptions()"
+        (chosen)="chooseSleep($event)"
+      >
+        <span class="sleep-face"
+          ><span aria-hidden="true">☾</span> {{ sleepShown() }}</span
+        >
+      </app-menu-button>
+    }
+
     <app-menu-button
+      #more
       class="more"
       label="Mais opções"
       i18n-label="@@player.more"
@@ -178,3 +192,4 @@
 
 <app-shortcuts-dialog />
 <app-skips-dialog />
+<app-sleep-timer-dialog />

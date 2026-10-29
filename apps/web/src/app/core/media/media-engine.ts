@@ -169,6 +169,16 @@ export class MediaEngine {
     this.syncVolume(element);
   }
 
+  /**
+   * Sets the volume (0–1) for a fade the app runs (the sleep timer): the person's mute
+   * stays as it is, whatever the volume.
+   */
+  fadeVolume(volume: number): void {
+    const element = this.ensureElement();
+    element.volume = Math.min(1, Math.max(0, volume));
+    this.syncVolume(element);
+  }
+
   toggleMute(): void {
     const element = this.ensureElement();
     element.muted = !element.muted;
