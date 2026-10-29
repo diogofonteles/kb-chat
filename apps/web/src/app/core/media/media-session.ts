@@ -53,14 +53,19 @@ export class MediaSessionAdapter {
   /** What the position state depends on: not every time update, only real changes. */
   private readonly positionInputs = computed(
     () => {
-      const { durationMs, phase, userSeeking } = this.engine.playback();
-      return { durationMs, phase, userSeeking, speed: this.engine.speed() };
+      const { durationMs, phase } = this.engine.playback();
+      return {
+        durationMs,
+        phase,
+        seeks: this.engine.seeksLanded(),
+        speed: this.engine.speed(),
+      };
     },
     {
       equal: (a, b) =>
         a.durationMs === b.durationMs &&
         a.phase === b.phase &&
-        a.userSeeking === b.userSeeking &&
+        a.seeks === b.seeks &&
         a.speed === b.speed,
     },
   );

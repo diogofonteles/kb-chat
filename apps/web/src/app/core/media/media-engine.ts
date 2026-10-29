@@ -113,6 +113,7 @@ export class MediaEngine {
   private readonly speedValue = signal<PlaybackSpeed>(DEFAULT_SPEED);
   private readonly volumeValue = signal(1);
   private readonly mutedValue = signal(false);
+  private readonly landedSeeks = signal(0);
 
   readonly playback = this.state.asReadonly();
   readonly source = this.current.asReadonly();
@@ -126,6 +127,8 @@ export class MediaEngine {
   readonly speed = this.speedValue.asReadonly();
   readonly volume = this.volumeValue.asReadonly();
   readonly muted = this.mutedValue.asReadonly();
+  /** Counts the seeks the person asked for that landed (announcements, KBC-041 FR-10). */
+  readonly seeksLanded = this.landedSeeks.asReadonly();
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
@@ -299,7 +302,9 @@ export class MediaEngine {
    * then: "Ouvir de novo" must show all the same. Playing, the browser ends it itself.
    */
   private onSeeked(element: HTMLMediaElement): void {
+    const asked = this.state().userSeeking;
     this.settle({ type: 'seeked', loadId: this.loads });
+    if (asked) this.landedSeeks.update((count) => count + 1);
     const { durationMs } = this.state();
     const atEnd =
       durationMs !== null &&
