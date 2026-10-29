@@ -10,3 +10,7 @@ playwright-report/
 *.log
 .DS_Store
 deploy/oci/oci.env
+/tmp/
+.stryker-tmp/
+reports/mutation/
+stryker-setup-*.js

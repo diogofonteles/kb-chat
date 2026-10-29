@@ -1,3 +1,4 @@
+import { FEATURES } from '@kb-chat/contracts';
 import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -207,7 +208,9 @@ describe('sign-in (BR-1, BR-2)', () => {
     })('GET', '/api/v1/me');
     expect(me.json()).toMatchObject({
       email: OWNER_EMAIL,
-      features: ['search', 'research', 'collection-builder', 'own-ai-settings'],
+      // A master has every feature, media upload included (KBC-034 BR-1).
+      features: [...FEATURES],
+      media: false,
     });
   });
 

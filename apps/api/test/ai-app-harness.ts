@@ -1,4 +1,5 @@
 /** The app as main builds it, for the AI integration tests (KBC-022, KBC-023). */
+import { createMedia } from '../src/media-factory.js';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -94,7 +95,12 @@ export interface StartOptions {
   readonly codexHome?: string;
   /** An existing state folder (a restart over the same files). */
   readonly state?: string;
+  /** The media library on (KBC-034), under `<state>/media`, with MEDIA_WORKER_TOKEN. */
+  readonly media?: boolean;
 }
+
+/** The media worker token of `start({ media: true })`. */
+export const MEDIA_WORKER_TOKEN = 'test-media-worker-token-0123456789abcdef';
 
 let runner: CodexRunner | null = null;
 
@@ -118,6 +124,11 @@ async function testConfig(state: string, options: StartOptions) {
     KB_CHAT_OWNER_EMAIL: OWNER_EMAIL,
     WEB_ORIGIN: WEB,
     LOG_LEVEL: 'info',
+    ...(options.media && {
+      KB_CHAT_MEDIA: 'on',
+      KB_CHAT_MEDIA_DIR: join(state, 'media'),
+      KB_CHAT_MEDIA_WORKER_TOKEN: MEDIA_WORKER_TOKEN,
+    }),
   });
 }
 
@@ -235,7 +246,8 @@ export async function start(options: StartOptions = {}): Promise<Started> {
   const core = await buildCore(config, logger);
   const auth = testAuth(state, keys);
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
-  current = await buildApp({ config, ...core, ai, auth, house, logger });
+  const media = await createMedia(config);
+  current = await buildApp({ config, ...core, ai, auth, house, logger, media });
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
   if (options.claude || options.codexHome)
     await current.listen({ host: '127.0.0.1', port: config.PORT });

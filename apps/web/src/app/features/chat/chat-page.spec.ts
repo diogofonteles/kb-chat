@@ -8,8 +8,14 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import {
+  Component,
+  ErrorHandler,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
@@ -727,5 +733,54 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
       type: 'open_doc',
       position: 2,
     });
+  });
+});
+
+@Component({ template: '' })
+class MediaStub {}
+
+describe('ChatPage on the media pages (no question box)', () => {
+  it('opens /midia on a desktop and handles "/" without a missing question box (NG0951)', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    // A desktop width: the page focuses the question box on load there.
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+    const handleError = vi.fn();
+    try {
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(withInterceptors([fakeStartRequests])),
+          provideHttpClientTesting(),
+          FAKE_ANSWERS,
+          { provide: UsageLog, useValue: usage },
+          { provide: ErrorHandler, useValue: { handleError } },
+          provideRouter([
+            {
+              path: '',
+              component: ChatPage,
+              children: [{ path: 'midia', component: MediaStub }],
+            },
+          ]),
+        ],
+      });
+      const harness = await RouterTestingHarness.create('/midia');
+      TestBed.inject(HttpTestingController)
+        .match('/api/v1/topics')
+        .forEach((request) => request.flush(TOPICS));
+      await harness.fixture.whenStable();
+      fireEvent.keyDown(document.body, { key: '/' });
+      await harness.fixture.whenStable();
+      expect(handleError).not.toHaveBeenCalled();
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
   });
 });

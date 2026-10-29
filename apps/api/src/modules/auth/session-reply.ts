@@ -9,6 +9,8 @@ export interface SessionOpening {
   readonly people: PeopleService;
   readonly sessions: SessionService;
   readonly topics: () => readonly string[];
+  /** The media library is on (KB_CHAT_MEDIA); off when not given. */
+  readonly mediaEnabled?: boolean;
 }
 
 /** A new session cookie for `person` (ADR 0008), the same for Google and one-time codes. */
@@ -23,5 +25,8 @@ export async function openSession(
     'set-cookie',
     sessionCookie(token, isSecureHost(http.request.headers.host)),
   );
-  return toMe(deps.people.viewerOf(person), deps.topics());
+  return toMe(deps.people.viewerOf(person), {
+    topics: deps.topics(),
+    media: deps.mediaEnabled ?? false,
+  });
 }

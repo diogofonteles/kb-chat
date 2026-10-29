@@ -31,6 +31,14 @@ export const API_ERROR_CODES = [
   'AI_CAPACITY_EXHAUSTED',
   /** An AI provider's account API did not answer (KBC-022: OpenRouter key management). */
   'PROVIDER_UNAVAILABLE',
+  /** A media item that does not exist or sits in a collection the person cannot see. */
+  'MEDIA_NOT_FOUND',
+  /** The media item is not converted yet (or failed): nothing to stream. */
+  'MEDIA_NOT_READY',
+  /** The upload is larger than announced or than the limit. */
+  'PAYLOAD_TOO_LARGE',
+  /** The media item is not waiting for its file (already sent, or abandoned). */
+  'MEDIA_CONFLICT',
   'INTERNAL',
 ] as const;
 

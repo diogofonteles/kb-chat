@@ -17,6 +17,9 @@ import type {
   SearchMode,
 } from '@kb-chat/contracts';
 import { httpResource } from '@angular/common/http';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { suggestionListSchema } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { suggestionsUrl } from '@core/api/kb-api.js';
@@ -37,6 +40,8 @@ import { ViewSwitch } from './view-switch.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
+const isMediaUrl = (url: string): boolean => /^\/midia(\/|\?|#|$)/.test(url);
+
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free
  * search engine and the research agent (KBC-008), each with its own conversation.
@@ -51,6 +56,7 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
     DocumentPanel,
     Sidebar,
     DecimalPipe,
+    RouterOutlet,
   ],
   providers: [
     ChatStore,
@@ -74,7 +80,8 @@ export class ChatPage {
   );
   private readonly injector = inject(Injector);
   private readonly view = inject(DOCUMENT).defaultView;
-  private readonly composer = viewChild.required(Composer);
+  /** Absent on the media pages (/midia), which render in place of the conversation. */
+  private readonly composer = viewChild(Composer);
   private readonly host =
     inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly drawer = viewChild<ElementRef<HTMLDialogElement>>('drawer');
@@ -97,8 +104,21 @@ export class ChatPage {
       : this.messages().length === 0,
   );
   /** On phones the panel covers the conversation: make it inert so Tab stays in the panel. */
+  private readonly router = inject(Router);
+  /** /midia and /midia/:id render in this layout instead of the conversation (T14, T15). */
+  protected readonly onMedia = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => isMediaUrl(this.router.url)),
+    ),
+    { initialValue: isMediaUrl(this.router.url) },
+  );
+  /** The document panel belongs to the conversation: hidden on the media pages. */
+  protected readonly panel = computed(() =>
+    this.onMedia() ? null : this.opened(),
+  );
   protected readonly covered = computed(
-    () => this.opened() !== null && !this.desktop(),
+    () => this.panel() !== null && !this.desktop(),
   );
   /** The largest subjects as one-click starting points (KBC-006 FR-1); hidden when unavailable. */
   private readonly suggestionList = httpResource(
@@ -148,7 +168,7 @@ export class ChatPage {
       // Grown to desktop with the drawer open: it goes away with the Menu button, so focus moves on.
       if (event.matches && drawer?.open) {
         drawer.close();
-        afterNextRender(() => this.composer().focus(), {
+        afterNextRender(() => this.composer()?.focus(), {
           injector: this.injector,
         });
       }
@@ -160,7 +180,7 @@ export class ChatPage {
     // The question box starts focused on desktop; on phones it would pop the keyboard.
     afterNextRender(() => {
       if (this.view?.matchMedia?.(DESKTOP_QUERY).matches)
-        this.composer().focus();
+        this.composer()?.focus();
     });
   }
 
@@ -182,7 +202,7 @@ export class ChatPage {
   protected menuClosed(): void {
     const target = this.focusAfterMenu;
     this.focusAfterMenu = 'menu';
-    if (target === 'composer') this.composer().focus();
+    if (target === 'composer') this.composer()?.focus();
     else this.menuButton()?.nativeElement.focus();
   }
 
@@ -192,13 +212,16 @@ export class ChatPage {
   }
 
   protected sidebarActed(action: SidebarAction): void {
+    // A conversation started or restored from the media pages shows the conversation.
+    if ((action === 'new' || action === 'restore') && this.onMedia())
+      void this.router.navigateByUrl('/');
     // A new conversation (or another collection) is ready to type into.
-    const typing = action !== 'restore';
+    const typing = action === 'new' || (action === 'topic' && !this.onMedia());
     if (this.drawer()?.nativeElement.open) {
       this.focusAfterMenu = typing ? 'composer' : 'menu';
       this.closeMenu();
     } else if (typing) {
-      afterNextRender(() => this.composer().focus(), {
+      afterNextRender(() => this.composer()?.focus(), {
         injector: this.injector,
       });
     }
@@ -255,7 +278,9 @@ export class ChatPage {
   /** "Parar" disappears with the answer in flight: focus moves to the question box. */
   protected stopResearch(): void {
     this.research.stop();
-    afterNextRender(() => this.composer().focus(), { injector: this.injector });
+    afterNextRender(() => this.composer()?.focus(), {
+      injector: this.injector,
+    });
   }
 
   protected openHit(doc: DocumentRef, message: ChatMessage): void {
@@ -309,7 +334,7 @@ export class ChatPage {
     const cards = this.host.querySelectorAll<HTMLElement>('[data-doc-id]');
     const card = [...cards].find((element) => element.dataset['docId'] === id);
     if (card) card.focus();
-    else this.composer().focus();
+    else this.composer()?.focus();
   }
 
   protected reloadTopics(): void {
@@ -323,13 +348,13 @@ export class ChatPage {
    */
   protected focusOnSlash(event: KeyboardEvent): void {
     if (event.key !== '/') return;
-    if (this.composer().isEmptyField(event.target)) {
+    if (this.composer()?.isEmptyField(event.target)) {
       event.preventDefault();
       return;
     }
     const target = event.target as HTMLElement | null;
     if (target?.closest('input, textarea, select, [contenteditable]')) return;
     event.preventDefault();
-    this.composer().focus();
+    this.composer()?.focus();
   }
 }

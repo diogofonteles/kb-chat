@@ -40,6 +40,8 @@ export interface AuthRouteDeps {
   readonly loginRatePerMinute: number;
   /** Every collection slug in the vault (a master sees them all). */
   readonly topics: () => readonly string[];
+  /** The media library is on (KB_CHAT_MEDIA); off when not given. */
+  readonly mediaEnabled?: boolean;
   /** Where a one-time sign-in code can go (KBC-014 BR-9). */
   readonly codeChannels: readonly CodeChannel[];
   /** Public: the contact the privacy policy names (KBC-016). */
@@ -112,7 +114,11 @@ function registerSession(app: FastifyInstance, deps: AuthRouteDeps) {
   typed.get(
     '/api/v1/me',
     { config: { access: SIGNED_IN }, schema: { response: { 200: meSchema } } },
-    async (request) => toMe(viewerOf(request), deps.topics()),
+    async (request) =>
+      toMe(viewerOf(request), {
+        topics: deps.topics(),
+        media: deps.mediaEnabled ?? false,
+      }),
   );
 }
 

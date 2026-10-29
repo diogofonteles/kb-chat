@@ -1,0 +1,37 @@
+<div
+  #track
+  class="track"
+  [class.disabled]="disabled() || !loaded()"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerCancel()"
+  (pointerleave)="onPointerLeave()"
+>
+  <div class="rail" aria-hidden="true">
+    <div class="buffered" [style.width.%]="bufferedPercent()"></div>
+    <div class="played" [style.width.%]="playedPercent()"></div>
+  </div>
+  <div
+    #thumb
+    class="thumb"
+    role="slider"
+    tabindex="0"
+    aria-label="Posição"
+    i18n-aria-label="@@player.position"
+    aria-valuemin="0"
+    [attr.aria-valuemax]="valueMax()"
+    [attr.aria-valuenow]="valueNow()"
+    [attr.aria-valuetext]="valueText()"
+    [attr.aria-disabled]="disabled() || !loaded() ? 'true' : null"
+    [style.left.%]="playedPercent()"
+    (keydown)="onKeydown($event)"
+    (focus)="focused.set(true)"
+    (blur)="focused.set(false)"
+  ></div>
+  @if (tip(); as shown) {
+    <span class="tip" aria-hidden="true" [style.left.%]="shown.percent">{{
+      shown.text
+    }}</span>
+  }
+</div>

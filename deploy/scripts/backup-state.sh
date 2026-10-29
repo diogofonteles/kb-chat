@@ -5,6 +5,8 @@
 #   claude/  the owner's Claude Code login
 #   codex/   the owner's Codex login (KBC-027, ADR 0020)
 #   deploy/  .env (secrets), release.env, releases.log
+#   media/backup/media.db  a consistent snapshot of the media database (ADR 0022), taken by
+#            the API container (`VACUUM INTO`); never the audio files (re-creatable).
 # Not saved: the vault and the QMD index (their source of truth is the owner's Mac).
 # The archive is encrypted with age to a public key; the private key never is on the VM.
 # Upload uses the instance's own identity (OCI instance principal): no API key on disk. The
@@ -41,9 +43,27 @@ object="state/kb-chat-state-$stamp.tar.zst.age"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# The media database: a snapshot taken inside the API container, where node:sqlite is.
+snapshot_media() {
+  [ -f "$ROOT/media/media.db" ] || return 0
+  local api
+  api="$(docker ps -q -f label=com.docker.compose.project=kb-chat -f label=com.docker.compose.service=api | head -n 1)"
+  [ -n "$api" ] || die "the media database exists but the api container is not running"
+  docker exec "$api" node --disable-warning=ExperimentalWarning -e "
+    const fs = require('node:fs');
+    const { DatabaseSync } = require('node:sqlite');
+    fs.mkdirSync('/data/media/backup', { recursive: true });
+    fs.rmSync('/data/media/backup/media.db', { force: true });
+    const db = new DatabaseSync('/data/media/media.db', { readOnly: true });
+    db.exec(\"VACUUM INTO '/data/media/backup/media.db'\");
+    db.close();
+  " || die "could not snapshot the media database"
+}
+snapshot_media
+
 # Paths relative to ROOT, so a restore lands in the same place; missing ones are skipped.
 paths=()
-for path in state claude codex deploy/.env deploy/release.env deploy/releases.log; do
+for path in state claude codex media/backup/media.db deploy/.env deploy/release.env deploy/releases.log; do
   if [ -e "$ROOT/$path" ]; then paths+=("$path"); fi
 done
 [ "${#paths[@]}" -gt 0 ] || die "nothing to back up under $ROOT"

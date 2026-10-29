@@ -17,6 +17,14 @@ describe('loadConfig', () => {
     expect(config.KB_VAULT.startsWith(homedir())).toBe(true);
   });
 
+  it('bounds media creation at 30 per minute unless MEDIA_CREATE_RATE_LIMIT says otherwise', () => {
+    expect(loadConfig({}).MEDIA_CREATE_RATE_LIMIT).toBe(30);
+    expect(
+      loadConfig({ MEDIA_CREATE_RATE_LIMIT: '5' }).MEDIA_CREATE_RATE_LIMIT,
+    ).toBe(5);
+    expect(() => loadConfig({ MEDIA_CREATE_RATE_LIMIT: '0' })).toThrow();
+  });
+
   it('parses a host list and fails on an invalid value', () => {
     expect(loadConfig({ ALLOWED_HOSTS: 'a, b' }).ALLOWED_HOSTS).toEqual([
       'a',

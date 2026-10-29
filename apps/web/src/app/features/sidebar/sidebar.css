@@ -283,3 +283,26 @@ select {
   line-height: 1.5rem;
   text-align: center;
 }
+
+/* "Mídia" (T14): a link, styled like the other sidebar actions; the current page is marked
+   by a bar and weight, not color alone (UP-20). */
+.media-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.media-link:hover {
+  background: var(--color-surface-muted);
+}
+
+.media-link.active {
+  background: var(--color-surface-muted);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  font-weight: 600;
+}

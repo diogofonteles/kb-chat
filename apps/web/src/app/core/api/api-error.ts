@@ -88,6 +88,14 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.aiCapacity:A IA gratuita da aplicação está sem capacidade agora. Tente mais tarde ou conecte a sua própria IA.`,
   PROVIDER_UNAVAILABLE: () =>
     $localize`:@@error.providerUnavailable:O OpenRouter não respondeu agora. Tente de novo em instantes.`,
+  MEDIA_NOT_FOUND: () =>
+    $localize`:@@error.mediaNotFound:Esta mídia não está mais no acervo ou você não tem acesso a ela.`,
+  MEDIA_NOT_READY: () =>
+    $localize`:@@error.mediaNotReady:Esta mídia ainda não está pronta para tocar.`,
+  PAYLOAD_TOO_LARGE: () =>
+    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido. Envie um áudio de até 500 MB.`,
+  MEDIA_CONFLICT: () =>
+    $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { OWNER, buildApp } from './app.js';
+import { createMedia } from './media-factory.js';
 import { applyUsageRetention } from './modules/usage/index.js';
 import {
   assertAiConfigured,
@@ -109,6 +110,9 @@ const access = {
   ),
   delivery: createDelivery(config, logger),
 };
+// KBC-034 FR-1: with KB_CHAT_MEDIA=on, a media library that cannot open stops the start.
+const media = await createMedia(config);
+
 const app = await buildApp({
   config,
   auth,
@@ -123,6 +127,7 @@ const app = await buildApp({
   usage,
   conversations,
   house,
+  media,
 });
 
 const shutdown = async (): Promise<void> => {

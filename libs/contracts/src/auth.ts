@@ -10,13 +10,17 @@ import { topicSlugSchema } from './topics.js';
 
 /**
  * What a person may use (KBC-010): search the documents, research with AI, build or extend
- * a collection (KBC-009) and keep their own AI settings and keys.
+ * a collection (KBC-009), keep their own AI settings and keys, listen to the media of the
+ * collections they see and upload audio to them (KBC-034). Every feature is granted per
+ * person (owner's rule, 2026-10-28): a new feature never comes on for everyone by itself.
  */
 export const FEATURES = [
   'search',
   'research',
   'collection-builder',
   'own-ai-settings',
+  'media',
+  'media-upload',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;
@@ -63,6 +67,8 @@ export const meSchema = z.object({
   topics: z.array(topicSlugSchema),
   /** The account in KB_CHAT_OWNER_EMAIL: the only one that may use the subscriptions. */
   isOwner: z.boolean(),
+  /** The server has the media library on (KB_CHAT_MEDIA, ADR 0022). */
+  media: z.boolean(),
 });
 export type Me = z.infer<typeof meSchema>;
 

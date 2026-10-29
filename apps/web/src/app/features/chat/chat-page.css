@@ -56,6 +56,21 @@
    after the first question the box docks at the bottom. The greeting's row takes its
    content height first and only the spacers around it shrink, so a short window never
    clips the greeting: it scrolls in its own row instead. */
+/* The media pages (T14, T15) take the conversation's place under the top bar and scroll. */
+.conversation > router-outlet {
+  display: none;
+}
+
+.conversation.media {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.conversation.media > app-media-list-page,
+.conversation.media > app-media-player-page {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .conversation.empty {
   grid-template-rows:
     auto minmax(0, 1fr) minmax(0, max-content) auto

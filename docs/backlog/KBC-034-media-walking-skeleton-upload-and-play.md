@@ -1,7 +1,7 @@
 ---
 id: KBC-034
 title: "Mídia (esqueleto): enviar um áudio, o aplicativo converte numa fila confiável e a pessoa ouve no navegador"
-status: ready
+status: done
 slice: phase-2-a
 outcome: o primeiro áudio do acervo toca no navegador a partir do servidor, com a base (banco, fila, processador de mídia) que as fases seguintes usam
 depends_on: [KBC-010, KBC-012]
@@ -18,7 +18,7 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 
 ## Business rules
 - BR-1: só envia mídia quem tem a permissão `media-upload` (masters têm todas). Convites e perfis não a concedem por padrão.
-- BR-2: quem vê os documentos de um acervo vê e ouve a mídia desse acervo; quem não vê recebe 404, como nos documentos (ADR 0008).
+- BR-2: ouve a mídia de um acervo quem tem a permissão `media` ("Ouvir mídia") e vê esse acervo; sem a permissão, 403; sem o acervo, 404, como nos documentos (ADR 0008). Emenda de 2026-10-28 (regra do dono: toda funcionalidade é liberada por pessoa ou grupo).
 - BR-3: toda mídia pertence a um acervo e tem autoria (`mestre-laercio` ou `outros-autores`, ADR 0015), escolhidos no envio.
 - BR-4: o original enviado não é guardado; só a cópia convertida (decisão do dono, 2026-10-28).
 - BR-5: um trabalho que falha por erro temporário volta à fila até 3 vezes; depois fica em "Falhou" com o motivo. Um arquivo inválido falha na hora, sem nova tentativa.
@@ -42,12 +42,12 @@ Como master, quero enviar um áudio de palestra e ouvi-lo no navegador, para com
 ## Acceptance criteria
 - **AC-1** (FR-2, FR-3): Given um master no acervo "hermetismo", When envia um mp3 de 3 min com título e autoria, Then o item aparece "Na fila", depois "Convertendo" e "Pronto", com a duração certa, e toca no player.
 - **AC-2** (FR-5): Given uma mídia pronta de 1 h, When o player pula para 45:00, Then a requisição recebe 206 com o `Content-Range` pedido e o áudio toca dali.
-- **AC-3** (BR-2): Given uma pessoa sem acesso ao acervo, When pede a lista ou o stream de uma mídia dele, Then recebe 404.
+- **AC-3** (BR-2): Given uma pessoa sem acesso ao acervo, When pede a lista ou o stream de uma mídia dele, Then recebe 404; Given uma pessoa que vê o acervo mas não tem "Ouvir mídia", When pede a lista, o item ou o stream, Then recebe 403 e não vê "Mídia" na lateral.
 - **AC-4** (BR-1): Given uma pessoa com `search` mas sem `media-upload`, When abre "Mídia", Then não vê "Enviar áudio", e `POST` de envio responde 403.
 - **AC-5** (FR-4, BR-5): Given um trabalho reservado cujo worker parou, When a reserva vence, Then ele volta à fila; após a 3ª nova tentativa, fica "Falhou" com o motivo e o master pode "Tentar de novo".
 - **AC-6** (BR-5): Given um arquivo .mp3 corrompido, When é enviado, Then a mídia fica "Falhou: o arquivo não é um áudio válido" sem novas tentativas.
 - **AC-7** (FR-1): Given `KB_CHAT_MEDIA=on` e `/data/media` somente leitura, When a API sobe, Then ela para com uma mensagem clara no log.
-- **AC-8** (limite): Given um arquivo de 501 MB ou um .pdf, When é enviado, Then a API recusa com `VALIDATION_FAILED` e a tela diz "Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus)."
+- **AC-8** (limite): Given um arquivo de 501 MB ou um .pdf, When é enviado, Then a API recusa com `VALIDATION_FAILED` e a tela diz "Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus)."; antes de enviar, a tela já recusa o arquivo escolhido dizendo o motivo e a correção ("Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus." ou "Este arquivo tem 501 MB. O limite é 500 MB.").
 - **AC-9**: fluxo de envio e reprodução em 1440 px e 390 px, nos três temas, sem violações sérias ou críticas do axe.
 - **AC-10** (FR-6a): Given uma mídia pronta de 10 s tocando, When a pessoa usa "Avançar 30 segundos", Then a posição vai para o fim, o estado é "terminou" e aparece "Ouvir de novo"; When usa "Voltar 15 segundos" em 0:05, Then vai para 0:00.
 - **AC-11** (FR-6a): Given o player com foco na barra de progresso, When a pessoa aperta → três vezes e End, Then a posição avança 15 s e depois vai ao fim, e o `aria-valuetext` diz o tempo em palavras.

@@ -102,6 +102,33 @@
     </select>
   </label>
 
+  @if (mediaOn()) {
+    <a
+      class="media-link"
+      routerLink="/midia"
+      routerLinkActive="active"
+      ariaCurrentWhenActive="page"
+      (click)="openMedia()"
+    >
+      <svg
+        class="icon"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      >
+        <path d="M9 18V6l11-2v12" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="17" cy="16" r="3" />
+      </svg>
+      <span i18n="@@sidebar.media">Mídia</span>
+    </a>
+  }
+
   <label class="field">
     <span class="label" i18n="@@sidebar.theme">Tema</span>
     <select #themeSelect (change)="changeTheme(themeSelect.value)">

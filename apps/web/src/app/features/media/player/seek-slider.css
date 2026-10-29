@@ -1,0 +1,85 @@
+:host {
+  display: block;
+}
+
+/* A tall hit area (44 px) around a thin rail: easy to hit with a finger (MA-01). */
+.track {
+  position: relative;
+  height: var(--target);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.track.disabled {
+  cursor: default;
+}
+
+.rail {
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 0.3rem;
+  transform: translateY(-50%);
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+
+.buffered,
+.played {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+
+.buffered {
+  background: color-mix(in srgb, var(--color-text-muted) 45%, transparent);
+}
+
+.played {
+  background: var(--color-accent);
+}
+
+.thumb {
+  position: absolute;
+  top: 50%;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-surface);
+  transform: translate(-50%, -50%);
+  transition: transform 120ms var(--ease);
+}
+
+.track:not(.disabled):hover .thumb,
+.thumb:focus-visible {
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.track.disabled .thumb {
+  background: var(--color-text-muted);
+}
+
+.tip {
+  position: absolute;
+  bottom: calc(100% - 0.25rem);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+/* High contrast and forced colors: the rail and the thumb keep their shapes. */
+@media (forced-colors: active) {
+  .played,
+  .thumb {
+    background: CanvasText;
+  }
+  .rail {
+    border: 1px solid CanvasText;
+  }
+}

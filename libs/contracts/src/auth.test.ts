@@ -30,6 +30,7 @@ describe('auth contracts', () => {
       features: ['search'],
       topics: ['hermetismo'],
       isOwner: false,
+      media: true,
     };
     expect(meSchema.parse(me)).toEqual(me);
     expect(meSchema.safeParse({ ...me, topics: ['../x'] }).success).toBe(false);

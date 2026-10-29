@@ -30,7 +30,8 @@ services:
       TRUST_PROXY: uniquelocal
       # The public host, plus loopback for the container healthcheck and the MCP calls of
       # the CLIs the API spawns (ADR 0007), plus its address on the Codex network (ADR 0020).
-      ALLOWED_HOSTS: ${KB_CHAT_DOMAIN:?set KB_CHAT_DOMAIN (.env)},127.0.0.1,localhost,172.30.0.2
+      # `api` is how the media worker reaches it on the internal network (ADR 0022).
+      ALLOWED_HOSTS: ${KB_CHAT_DOMAIN:?set KB_CHAT_DOMAIN (.env)},127.0.0.1,localhost,172.30.0.2,api
       # Codex never runs in this container (KBC-027, ADR 0020): its turns go to the `codex`
       # service, which reaches the turn's MCP endpoint here, by token, from its fixed address.
       KB_CHAT_CODEX_RUNNER_URL: http://172.30.0.10:8790
@@ -55,6 +56,11 @@ services:
       # Seals every AI key kept on disk (ADR 0016); the API refuses to start without it. No AI
       # key goes here: the master connects the app's AI in the UI ("IA da aplicação").
       KB_CHAT_SECRETS_KEY: ${KB_CHAT_SECRETS_KEY:?set KB_CHAT_SECRETS_KEY (.env, runbook step 5)}
+      # The media library (KBC-034, ADR 0022): off until the owner turns it on (runbook 9d).
+      # With `on`, the API refuses to start without a writable /data/media and the token.
+      KB_CHAT_MEDIA: ${KB_CHAT_MEDIA:-off}
+      KB_CHAT_MEDIA_DIR: /data/media
+      KB_CHAT_MEDIA_WORKER_TOKEN: ${KB_CHAT_MEDIA_WORKER_TOKEN:-}
     volumes:
       # The vault is read-only for the API (Q7); rsync from the owner's Mac writes it.
       - ${KB_CHAT_DATA:-/srv/kb-chat}/vault:/vault:ro
@@ -65,6 +71,8 @@ services:
       - ${KB_CHAT_DATA:-/srv/kb-chat}/state:/data/state
       # Claude Code login of the owner (`claude /login`, once, over SSH).
       - ${KB_CHAT_DATA:-/srv/kb-chat}/claude:/home/app/.claude
+      # The media database and the converted audio (ADR 0022), shared with media-worker.
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/media:/data/media
     networks:
       internal: {}
       codex:
@@ -117,6 +125,57 @@ services:
         ipv4_address: 172.30.0.10
     mem_limit: ${CODEX_MEM_LIMIT:-2g}
     pids_limit: 256
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  # The media worker (KBC-034, ADR 0022 §3): the API image with another command, capped to
+  # 1 CPU and 2 GB so an ffmpeg run never starves the site (the pilot kept HTTP 200 on all
+  # 64 checks at this cap). It sees only the media volume and its token: no .env, no state,
+  # no logins. Opt in with COMPOSE_PROFILES=media (with KB_CHAT_MEDIA=on, runbook 9d).
+  media-worker:
+    image: ${KB_CHAT_REGISTRY:-ghcr.io/diogofonteles}/kb-chat-api:${KB_CHAT_TAG:?set KB_CHAT_TAG (release.env)}
+    profiles: [media]
+    restart: unless-stopped
+    init: false # tini is the image's entrypoint
+    command: ['node', 'dist/media-worker-main.js']
+    environment:
+      KB_CHAT_MEDIA_API_URL: http://api:3000
+      # Not `:?`: Compose interpolates this service even with the media profile off. The
+      # worker refuses to start without a token of 32+ characters (runbook 9d).
+      KB_CHAT_MEDIA_WORKER_TOKEN: ${KB_CHAT_MEDIA_WORKER_TOKEN:-}
+      KB_CHAT_MEDIA_DIR: /data/media
+      KB_CHAT_MEDIA_WORKER_NAME: vm
+      FFMPEG_BIN: /usr/bin/ffmpeg
+      FFPROBE_BIN: /usr/bin/ffprobe
+      KB_CHAT_MEDIA_ALIVE_FILE: /tmp/media-worker.alive
+    volumes:
+      - ${KB_CHAT_DATA:-/srv/kb-chat}/media:/data/media
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      # The worker touches the file on every loop (at most every 3 s) and on every heartbeat
+      # (15 s) while it converts.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "const s=require('fs').statSync('/tmp/media-worker.alive');process.exit(Date.now()-s.mtimeMs<120000?0:1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [internal]
+    cpus: 1.0
+    mem_limit: 2g
+    pids_limit: 128
     logging: *logging
     security_opt:
       - no-new-privileges:true
