@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
-import type { MediaItem, WorkerJob } from '@kb-chat/contracts';
+import type { MediaItem } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LOCAL,
@@ -10,115 +10,23 @@ import {
   closeApp,
   signIn,
   start,
-  type Call,
-  type Started,
 } from '../test/ai-app-harness.js';
+import {
+  AUDIO,
+  CONVERTED,
+  aRequest,
+  convert,
+  leaseJob,
+  member,
+  queuedItem,
+  readyItem,
+  startMedia,
+  upload,
+  worker,
+  type Media,
+} from '../test/media-harness.js';
 
 afterEach(closeApp);
-
-const WORKER = { ...LOCAL, authorization: `Bearer ${MEDIA_WORKER_TOKEN}` };
-const AUDIO = Buffer.from('ID3 fake mp3 bytes for the upload test');
-const CONVERTED = Buffer.from('0123456789abcdefghij'); // 20 bytes of "AAC"
-
-const aRequest = (overrides: object = {}) => ({
-  title: 'Palestra de 1998',
-  authorship: 'mestre-laercio',
-  fileName: 'palestra.mp3',
-  bytes: AUDIO.length,
-  ...overrides,
-});
-
-interface Media {
-  readonly started: Started;
-  readonly owner: Call;
-  readonly ownerHeaders: Record<string, string>;
-  readonly mediaDir: string;
-}
-
-async function startMedia(): Promise<Media> {
-  const started = await start({ media: true });
-  const ownerHeaders = await signIn(started, 'owner@example.com');
-  return {
-    started,
-    owner: caller(started.app, ownerHeaders),
-    ownerHeaders,
-    mediaDir: join(started.state, 'media'),
-  };
-}
-
-/** A member who sees `topics` with `features`. */
-async function member(
-  media: Media,
-  grant: { email: string; topics: string[]; features: string[] },
-): Promise<{ call: Call; headers: Record<string, string> }> {
-  const invited = await media.owner('POST', '/api/v1/people', {
-    email: grant.email,
-    sendEmail: false,
-  });
-  await media.owner('PATCH', `/api/v1/people/${invited.json().id}`, {
-    topics: grant.topics,
-    features: grant.features,
-  });
-  const headers = await signIn(media.started, grant.email);
-  return { call: caller(media.started.app, headers), headers };
-}
-
-const upload = (
-  media: Media,
-  input: { id: string; body: Buffer; headers?: Record<string, string> },
-) =>
-  media.started.app.inject({
-    method: 'PUT',
-    url: `/api/v1/media/${input.id}/file`,
-    headers: {
-      ...(input.headers ?? media.ownerHeaders),
-      'content-type': 'application/octet-stream',
-    },
-    payload: input.body,
-  });
-
-/** An item created and uploaded by the owner: waiting in the queue. */
-async function queuedItem(media: Media): Promise<MediaItem> {
-  const created = await media.owner(
-    'POST',
-    '/api/v1/topics/hermetismo/media',
-    aRequest(),
-  );
-  expect(created.statusCode).toBe(201);
-  const sent = await upload(media, { id: created.json().id, body: AUDIO });
-  expect(sent.statusCode).toBe(200);
-  return sent.json();
-}
-
-const worker = (media: Media, url: string, payload: object) =>
-  media.started.app.inject({ method: 'POST', url, headers: WORKER, payload });
-
-async function leaseJob(media: Media): Promise<WorkerJob> {
-  const leased = await worker(media, '/api/v1/media-worker/jobs/lease', {
-    worker: 'vm',
-    kinds: ['transcode'],
-  });
-  expect(leased.statusCode).toBe(200);
-  return leased.json();
-}
-
-/** Plays the worker: writes the "converted" file and completes the job. */
-async function convert(media: Media, job: WorkerJob) {
-  writeFileSync(join(media.mediaDir, job.targetPath), CONVERTED);
-  return worker(media, `/api/v1/media-worker/jobs/${job.id}/complete`, {
-    worker: 'vm',
-    leaseId: job.leaseId,
-    durationMs: 180_000,
-    bytes: CONVERTED.length,
-  });
-}
-
-async function readyItem(media: Media): Promise<MediaItem> {
-  const item = await queuedItem(media);
-  const done = await convert(media, await leaseJob(media));
-  expect(done.statusCode).toBe(204);
-  return { ...item, status: 'ready' };
-}
 
 describe('Media library: upload (KBC-034)', () => {
   it('says the media library is on in /me', async () => {

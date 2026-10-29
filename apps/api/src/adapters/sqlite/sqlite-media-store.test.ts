@@ -391,19 +391,31 @@ describe('openMediaDatabase', () => {
       reopened.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get()?.[
         'n'
       ],
-    ).toBe(1);
+    ).toBe(MEDIA_MIGRATIONS.length);
     reopened.close();
   });
 
   it('applies new migrations in order and rolls back a broken one', () => {
     const db = openMediaDatabase(':memory:', MEDIA_MIGRATIONS);
+    const last = MEDIA_MIGRATIONS.length;
     const next = [
-      { version: 3, name: 'c', sql: 'CREATE TABLE c (x INTEGER) STRICT;' },
-      { version: 2, name: 'b', sql: 'CREATE TABLE b (x INTEGER) STRICT;' },
+      {
+        version: last + 2,
+        name: 'c',
+        sql: 'CREATE TABLE c (x INTEGER) STRICT;',
+      },
+      {
+        version: last + 1,
+        name: 'b',
+        sql: 'CREATE TABLE b (x INTEGER) STRICT;',
+      },
     ];
-    expect(applyMigrations(db, [...MEDIA_MIGRATIONS, ...next])).toEqual([2, 3]);
+    expect(applyMigrations(db, [...MEDIA_MIGRATIONS, ...next])).toEqual([
+      last + 1,
+      last + 2,
+    ]);
     const broken = {
-      version: 4,
+      version: last + 3,
       name: 'd',
       sql: 'CREATE TABLE d (x INTEGER); BOOM;',
     };

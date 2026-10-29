@@ -79,6 +79,8 @@ import {
   MediaJanitor,
   MediaService,
   WorkerService,
+  listeningRoutes,
+  ListeningService,
   mediaRoutes,
   workerRoutes,
 } from './modules/media/index.js';
@@ -285,10 +287,13 @@ async function registerMedia(
   app: FastifyInstance,
   wiring: { media: MediaDeps; catalog: CatalogRegistry },
 ) {
-  const { store, files, workerToken, createPerMinute } = wiring.media;
+  const { store, listening, files, workerToken, createPerMinute } =
+    wiring.media;
   const hasTopic = (topic: string) => wiring.catalog.get(topic) !== undefined;
+  const media = new MediaService({ store, files, hasTopic, listening });
+  await app.register(mediaRoutes(media, createPerMinute));
   await app.register(
-    mediaRoutes(new MediaService({ store, files, hasTopic }), createPerMinute),
+    listeningRoutes(new ListeningService({ listening, media })),
   );
   await app.register(
     workerRoutes({
