@@ -85,6 +85,11 @@ export const mediaItemSchema = z.object({
   positionMs: z.number().int().min(0),
   /** When that person heard it to 95% or more (BR-2); null otherwise. */
   completedAt: z.iso.datetime().nullable(),
+  /**
+   * When the server saved that person's position (its clock); null when never saved. A
+   * browser's unsent copy is used only if no other device saved one since (FR-3).
+   */
+  positionUpdatedAt: z.iso.datetime().nullable(),
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
@@ -122,6 +127,14 @@ export const mediaProgressRequestSchema = z.strictObject({
   positionMs: z.number().int().min(0),
 });
 export type MediaProgressRequest = z.infer<typeof mediaProgressRequestSchema>;
+
+/** The answer to PUT …/progress: what the server keeps now for that person. */
+export const mediaProgressSchema = z.object({
+  positionMs: z.number().int().min(0),
+  completedAt: z.iso.datetime().nullable(),
+  positionUpdatedAt: z.iso.datetime(),
+});
+export type MediaProgress = z.infer<typeof mediaProgressSchema>;
 
 /** True when a file name ends with an accepted audio extension. */
 export function hasAcceptedAudioExtension(fileName: string): boolean {

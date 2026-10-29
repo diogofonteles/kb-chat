@@ -6,6 +6,7 @@ import {
 import type {
   ListeningProgress,
   ListeningStorePort,
+  SavedProgress,
 } from '../../ports/listening-store.js';
 
 /** Preferences and positions in the media database (KBC-041, migration 2). */
@@ -50,13 +51,13 @@ export class SqliteListeningStore implements ListeningStorePort {
   progressOf(
     principal: string,
     mediaIds: readonly string[],
-  ): ReadonlyMap<string, ListeningProgress> {
-    const found = new Map<string, ListeningProgress>();
+  ): ReadonlyMap<string, SavedProgress> {
+    const found = new Map<string, SavedProgress>();
     if (mediaIds.length === 0) return found;
     const marks = mediaIds.map(() => '?').join(', ');
     const rows = this.db
       .prepare(
-        `SELECT media_id, position_ms, completed_at FROM media_progress
+        `SELECT media_id, position_ms, completed_at, updated_at FROM media_progress
          WHERE principal = ? AND media_id IN (${marks})`,
       )
       .all(principal, ...mediaIds);
@@ -65,6 +66,7 @@ export class SqliteListeningStore implements ListeningStorePort {
         positionMs: Number(row['position_ms']),
         completedAt:
           row['completed_at'] === null ? null : String(row['completed_at']),
+        updatedAt: String(row['updated_at']),
       });
     return found;
   }

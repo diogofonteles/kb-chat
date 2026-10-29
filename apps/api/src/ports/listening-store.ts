@@ -7,6 +7,11 @@ export interface ListeningProgress {
   readonly completedAt: string | null;
 }
 
+/** A saved position, with when the server saved it. */
+export interface SavedProgress extends ListeningProgress {
+  readonly updatedAt: string;
+}
+
 /**
  * Each person's way of listening (KBC-041): their preferences and their position in each
  * media. Kept in the media database (ADR 0022); a removed media takes its positions along.
@@ -22,7 +27,7 @@ export interface ListeningStorePort {
   progressOf(
     principal: string,
     mediaIds: readonly string[],
-  ): ReadonlyMap<string, ListeningProgress>;
+  ): ReadonlyMap<string, SavedProgress>;
   saveProgress(input: {
     readonly principal: string;
     readonly mediaId: string;

@@ -2,6 +2,7 @@ import {
   mediaIdSchema,
   mediaPreferencesSchema,
   mediaProgressRequestSchema,
+  mediaProgressSchema,
 } from '@kb-chat/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -31,6 +32,7 @@ const OPTIONS = {
     schema: {
       params: z.object({ id: mediaIdSchema }),
       body: mediaProgressRequestSchema,
+      response: { 200: mediaProgressSchema },
     },
   },
 } as const;
@@ -46,16 +48,12 @@ export const listeningRoutes =
     typed.put('/api/v1/media/preferences', OPTIONS.savePreferences, (request) =>
       service.savePreferences(actorOf(request), request.body),
     );
-    typed.put(
-      '/api/v1/media/:id/progress',
-      OPTIONS.progress,
-      async (request, reply) => {
-        service.saveProgress(
-          actorOf(request),
-          request.params.id,
-          request.body.positionMs,
-        );
-        return reply.code(204).send();
-      },
+    // The answer says what the server keeps now, with its time (FR-3).
+    typed.put('/api/v1/media/:id/progress', OPTIONS.progress, (request) =>
+      service.saveProgress(
+        actorOf(request),
+        request.params.id,
+        request.body.positionMs,
+      ),
     );
   };

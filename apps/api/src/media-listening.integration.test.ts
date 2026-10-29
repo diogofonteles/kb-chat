@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
@@ -58,7 +60,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     ).toEqual({ speed: 1, showRemaining: true });
   });
 
-  it('needs "Ouvir mídia"', async () => {
+  it('needs "Ouvir mídia", for the position too', async () => {
     const media = await startMedia();
     const reader = await member(media, {
       email: 'leitor@example.com',
@@ -73,6 +75,14 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
         await reader.call('PUT', '/api/v1/media/preferences', {
           speed: 1,
           showRemaining: true,
+        })
+      ).statusCode,
+    ).toBe(403);
+    const item = await readyItem(media);
+    expect(
+      (
+        await reader.call('PUT', `/api/v1/media/${item.id}/progress`, {
+          positionMs: 1,
         })
       ).statusCode,
     ).toBe(403);
@@ -91,11 +101,18 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
         positionMs: 23_000,
       },
     );
-    expect(saved.statusCode).toBe(204);
+    expect(saved.statusCode).toBe(200);
+    const kept = saved.json();
+    expect(kept).toMatchObject({ positionMs: 23_000, completedAt: null });
+    expect(Date.parse(kept.positionUpdatedAt)).not.toBeNaN();
     const listed = (
       await media.owner('GET', '/api/v1/topics/hermetismo/media')
     ).json().items[0];
-    expect(listed).toMatchObject({ positionMs: 23_000, completedAt: null });
+    expect(listed).toMatchObject({
+      positionMs: 23_000,
+      completedAt: null,
+      positionUpdatedAt: kept.positionUpdatedAt,
+    });
     expect(
       (await media.owner('GET', `/api/v1/media/${item.id}`)).json(),
     ).toMatchObject({ positionMs: 23_000, completedAt: null });
@@ -191,9 +208,21 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
     await media.owner('PUT', `/api/v1/media/${item.id}/progress`, {
       positionMs: 5_000,
     });
+    const rows = () => {
+      const db = new DatabaseSync(join(media.mediaDir, 'media.db'), {
+        readOnly: true,
+      });
+      const count = db
+        .prepare('SELECT COUNT(*) AS n FROM media_progress WHERE media_id = ?')
+        .get(item.id)?.['n'];
+      db.close();
+      return Number(count);
+    };
+    expect(rows()).toBe(1);
     expect(
       (await media.owner('DELETE', `/api/v1/media/${item.id}`)).statusCode,
     ).toBe(204);
+    expect(rows()).toBe(0);
     expect(
       (
         await media.owner('PUT', `/api/v1/media/${item.id}/progress`, {

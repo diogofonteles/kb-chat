@@ -1,6 +1,7 @@
 import {
   MEDIA_COMPLETION_RATIO,
   type MediaPreferences,
+  type MediaProgress,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { ListeningStorePort } from '../../ports/listening-store.js';
@@ -49,7 +50,11 @@ export class ListeningService {
    * The person's position in a media they can see. From 95% of its length the media is
    * heard: the position goes back to 0 and the time it was heard is kept (BR-2).
    */
-  saveProgress(actor: MediaActor, mediaId: string, positionMs: number): void {
+  saveProgress(
+    actor: MediaActor,
+    mediaId: string,
+    positionMs: number,
+  ): MediaProgress {
     const item = this.deps.media.get(actor, mediaId);
     const durationMs = item.durationMs;
     if (item.status !== 'ready' || durationMs === null)
@@ -60,14 +65,16 @@ export class ListeningService {
       });
     const now = this.now();
     const heard = positionMs >= durationMs * MEDIA_COMPLETION_RATIO;
+    const progress = heard
+      ? { positionMs: 0, completedAt: now.toISOString() }
+      : { positionMs, completedAt: item.completedAt };
     this.deps.listening.saveProgress({
       principal: actor.principal,
       mediaId,
-      progress: heard
-        ? { positionMs: 0, completedAt: now.toISOString() }
-        : { positionMs, completedAt: item.completedAt },
+      progress,
       now,
     });
+    return { ...progress, positionUpdatedAt: now.toISOString() };
   }
 
   private now(): Date {

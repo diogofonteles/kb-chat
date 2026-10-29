@@ -83,6 +83,7 @@ describe('media contracts', () => {
       canRetry: false,
       positionMs: 0,
       completedAt: null,
+      positionUpdatedAt: null,
     };
     expect(mediaItemSchema.parse(item)).toEqual(item);
     expect(mediaItemSchema.safeParse({ ...item, positionMs: -1 }).success).toBe(
