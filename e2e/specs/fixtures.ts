@@ -114,10 +114,26 @@ export async function pageAs(
   email: string,
   viewport: { width: number; height: number } | null,
 ): Promise<Page> {
+  return pageWith(browser, email, { viewport });
+}
+
+export interface PageOptions {
+  readonly viewport: { width: number; height: number } | null;
+  /** Runs in every page of the context before the app (registered before any page). */
+  readonly initScript?: () => void;
+}
+
+/** `pageAs`, with a script that runs before the app in every page of the context. */
+export async function pageWith(
+  browser: Browser,
+  email: string,
+  options: PageOptions,
+): Promise<Page> {
   const context = await browser.newContext({
     baseURL: WEB_ORIGIN,
-    viewport: viewport ?? undefined,
+    viewport: options.viewport ?? undefined,
   });
+  if (options.initScript) await context.addInitScript(options.initScript);
   const page = await context.newPage();
   await fakeGoogle(page);
   await signIn(page.request, email);

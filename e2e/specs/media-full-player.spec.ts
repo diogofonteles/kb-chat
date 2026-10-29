@@ -57,7 +57,7 @@ async function playPast(page: Page, seconds: number) {
 test('AC-1: the speed chosen plays on the next media and follows the account to another browser', async ({
   browser,
 }) => {
-  const { page, email } = await newListener(browser, null);
+  const { page, email } = await newListener(browser, { viewport: null });
   await openPlayer(page, lecture);
   await page.getByRole('button', { name: 'Velocidade: 1 vezes' }).click();
   await page.getByRole('menuitemradio', { name: /1,5×/ }).click();
@@ -98,7 +98,7 @@ test('AC-2, AC-5: the API refuses a speed off the menu and a position outside th
 test('AC-3, AC-12: another browser offers "Continuar de" silently, and continues from there', async ({
   browser,
 }) => {
-  const { page, email } = await newListener(browser, null);
+  const { page, email } = await newListener(browser, { viewport: null });
   await openPlayer(page, lecture);
   const slider = page.getByRole('slider', { name: 'Posição' });
   await slider.focus();
@@ -213,34 +213,90 @@ test('AC-7, AC-14: "?" opens the shortcuts, which can be turned off; Esc gives t
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeVisible();
 });
 
-test('AC-9: the lock screen buttons and the position reach the player', async ({
+test('AC-9: the lock screen shows the title, the authorship and the app icon', async ({
   page,
+}) => {
+  await openPlayer(page, lecture);
+  test.skip(
+    !(await page.evaluate(() => 'mediaSession' in navigator)),
+    'no Media Session here',
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const metadata = navigator.mediaSession.metadata;
+        return metadata
+          ? {
+              title: metadata.title,
+              artist: metadata.artist,
+              icons: metadata.artwork.length,
+              state: navigator.mediaSession.playbackState,
+            }
+          : null;
+      }),
+    )
+    .toEqual({
+      title: lecture.title,
+      artist: 'Outros autores — Nova Alexandria',
+      icons: 6,
+      state: 'paused',
+    });
+  await page.getByRole('button', { name: 'Tocar' }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.mediaSession.playbackState))
+    .toBe('playing');
+});
+
+test('AC-9: the lock screen buttons and the position reach the player', async ({
+  browser,
+  viewport,
   browserName,
 }) => {
-  await page.addInitScript(() => {
-    const session = navigator.mediaSession;
-    if (!session) return;
-    const handlers: Record<string, MediaSessionActionHandler | null> = {};
-    const positions: MediaPositionState[] = [];
-    const setHandler = session.setActionHandler.bind(session);
-    session.setActionHandler = (action, handler) => {
-      handlers[action] = handler;
-      try {
-        setHandler(action, handler);
-      } catch {
-        // An action this browser does not know.
-      }
-    };
-    const setPosition = session.setPositionState.bind(session);
-    session.setPositionState = (state) => {
-      if (state) positions.push(state);
-      setPosition(state);
-    };
-    Object.assign(window, { mediaSessionSpy: { handlers, positions } });
+  // Chromium only: WebKit sometimes runs a context's init script after the app, so the spy
+  // on the system's buttons cannot be trusted there (decision in work/KBC-041). The
+  // adapter is unit tested, and the test above checks WebKit's lock screen itself.
+  test.skip(browserName !== 'chromium', 'the spy needs a reliable init script');
+  const { page } = await newListener(browser, {
+    viewport,
+    initScript: () => {
+      const session = navigator.mediaSession;
+      if (!session) return;
+      const handlers: Record<string, MediaSessionActionHandler | null> = {};
+      const positions: MediaPositionState[] = [];
+      const setHandler = session.setActionHandler.bind(session);
+      session.setActionHandler = (action, handler) => {
+        handlers[action] = handler;
+        try {
+          setHandler(action, handler);
+        } catch {
+          // An action this browser does not know.
+        }
+      };
+      const setPosition = session.setPositionState.bind(session);
+      session.setPositionState = (state) => {
+        if (state) positions.push(state);
+        setPosition(state);
+      };
+      Object.assign(window, { mediaSessionSpy: { handlers, positions } });
+    },
   });
   await openPlayer(page, lecture);
-  const act = (action: string, details: object = {}) =>
-    page.evaluate(
+  const act = async (action: string, details: object = {}) => {
+    // The player registers its handlers once the media is open: wait for this one.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (name) =>
+            typeof (
+              window as unknown as {
+                mediaSessionSpy: { handlers: Record<string, unknown> };
+              }
+            ).mediaSessionSpy.handlers[name] === 'function',
+          action,
+        ),
+      )
+      .toBe(true);
+    await page.evaluate(
       ([name, extra]) => {
         const spy = (
           window as unknown as {
@@ -253,10 +309,7 @@ test('AC-9: the lock screen buttons and the position reach the player', async ({
       },
       [action, details] as const,
     );
-  test.skip(
-    !(await page.evaluate(() => 'mediaSession' in navigator)),
-    `no Media Session in ${browserName}`,
-  );
+  };
   await act('seekforward');
   await expect
     .poll(async () => (await audioState(page)).currentTime)

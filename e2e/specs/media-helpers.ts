@@ -8,8 +8,9 @@ import {
   expect,
   invite,
   ownerApi,
-  pageAs,
+  pageWith,
   test as base,
+  type PageOptions,
   uniqueEmail,
 } from './fixtures.js';
 
@@ -122,16 +123,16 @@ export async function useTheme(
  */
 export async function newListener(
   browser: Browser,
-  viewport: { width: number; height: number } | null,
-  email = uniqueEmail('ouvinte'),
+  options: PageOptions & { readonly email?: string },
 ): Promise<{ page: Page; email: string }> {
+  const email = options.email ?? uniqueEmail('ouvinte');
   const owner = await ownerApi();
   await invite(owner, email, {
     topics: ['hermetismo'],
     features: ['search', 'media'],
   });
   await owner.dispose();
-  return { page: await pageAs(browser, email, viewport), email };
+  return { page: await pageWith(browser, email, options), email };
 }
 
 /** Player specs: `page` is a fresh listener's, not the shared owner's. */
@@ -146,7 +147,7 @@ export const listenerTest = base.extend<{ page: Page }>({
     },
     use: (page: Page) => Promise<void>,
   ) => {
-    const { page } = await newListener(browser, viewport);
+    const { page } = await newListener(browser, { viewport });
     await use(page);
     await page.context().close();
   },
