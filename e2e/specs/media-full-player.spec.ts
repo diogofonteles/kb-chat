@@ -181,6 +181,54 @@ test('AC-3: leaving the page never brings back an older position over another de
   await laptop.context().close();
 });
 
+test('AC-3: a page only opened (not played) never sends its old position over a newer one', async ({
+  browser,
+}) => {
+  const { page: laptop, email } = await newListener(browser, {
+    viewport: null,
+  });
+  const headers = { 'x-requested-with': 'kb-chat' };
+  const first = await laptop.request.put(`/api/v1/media/${other.id}/progress`, {
+    data: { positionMs: 5_000, basedOn: null },
+    headers,
+  });
+  expect(first.status()).toBe(200);
+  // The laptop opens the media at 0:05 and leaves it there.
+  await openPlayer(laptop, other);
+  await expect(
+    laptop.getByRole('button', { name: 'Continuar de 0:05' }),
+  ).toBeVisible();
+  // Meanwhile the phone saves 0:12.
+  const phone = await pageAs(browser, email, null);
+  const newer = await phone.request.put(`/api/v1/media/${other.id}/progress`, {
+    data: {
+      positionMs: 12_000,
+      basedOn: (await first.json()).positionUpdatedAt,
+    },
+    headers,
+  });
+  expect(newer.status()).toBe(200);
+  await phone.context().close();
+  // The laptop's tab is hidden, then closed: the server keeps the phone's 0:12.
+  await laptop.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await laptop.context().close();
+  const owner = await pageAs(browser, email, null);
+  await expect
+    .poll(
+      async () =>
+        (await (await owner.request.get(`/api/v1/media/${other.id}`)).json())
+          .positionMs,
+    )
+    .toBe(12_000);
+  await owner.context().close();
+});
+
 test('BR-2: two people in one browser never see each other’s position', async ({
   browser,
 }) => {

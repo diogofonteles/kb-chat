@@ -373,4 +373,43 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
       http.expectOne({ method: 'PUT', url: urlOf(A.id) }).request.body.basedOn,
     ).toBe('2026-10-29T12:00:02.000Z');
   });
+
+  it('never sends a position nobody moved: opened only, hidden, then closed (AC-3)', () => {
+    const { engine, media, http, saver } = setup();
+    saver.startFrom(
+      aMediaItem({ id: A.id, positionMs: 5_000, positionUpdatedAt: T0 }),
+    );
+    engine.load(A, 5_000);
+    media.setDuration(600);
+    media.emit('loadedmetadata');
+    media.emit('seeked');
+    TestBed.tick();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
+    Reflect.deleteProperty(document, 'visibilityState');
+    expect(http.match({ method: 'PUT', url: urlOf(A.id) })).toEqual([]);
+  });
+
+  it('after another device won (409), never sends the same old position again', () => {
+    const { playAt, start, pause, puts, http } = setup();
+    start();
+    playAt(5);
+    pause();
+    puts()[0]?.flush(
+      {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'x',
+          details: { positionUpdatedAt: '2026-10-29T12:30:00.000Z' },
+        },
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    window.dispatchEvent(new Event('pagehide'));
+    expect(http.match({ method: 'PUT', url: urlOf(A.id) })).toEqual([]);
+  });
 });

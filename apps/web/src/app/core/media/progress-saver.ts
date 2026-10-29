@@ -234,6 +234,9 @@ export class ProgressSaver {
           ? (details as { positionUpdatedAt?: unknown }).positionUpdatedAt
           : undefined;
       if (typeof newer === 'string') this.bases.set(id, newer);
+      // That position lost: it is never kept again as if it were new.
+      const lost = this.read(id);
+      if (lost) this.confirmed.set(id, lost.positionMs);
       this.forget(id);
       this.pending.delete(id);
     }
@@ -258,7 +261,8 @@ export class ProgressSaver {
    * its answer is handled like any other save.
    */
   private sendBeforeLeaving(): void {
-    this.keep();
+    // Only a playing position moved since it was last kept (a pause or a skip keeps it).
+    if (this.engine.playing()) this.keep();
     for (const id of [...this.pending]) {
       const kept = this.read(id);
       if (!kept || kept.delivered) continue;
