@@ -40,6 +40,8 @@ export class SeekSlider {
   readonly durationMs = input.required<number | null>();
   readonly bufferedEndMs = input(0);
   readonly disabled = input(false);
+  /** Where the person's bookmarks are, in ms (KBC-042 FR-3). */
+  readonly marks = input<readonly number[]>([]);
   /** A position to go to (a click, a drag, Home/End). */
   readonly seekRequested = output<number>();
   /**
@@ -61,6 +63,11 @@ export class SeekSlider {
   protected readonly loaded = computed(() => (this.durationMs() ?? 0) > 0);
   protected readonly playedPercent = computed(
     () => fractionOf(this.shownMs(), this.durationMs()) * 100,
+  );
+  protected readonly markPercents = computed(() =>
+    this.loaded()
+      ? this.marks().map((ms) => fractionOf(ms, this.durationMs()) * 100)
+      : [],
   );
   protected readonly bufferedPercent = computed(
     () => fractionOf(this.bufferedEndMs(), this.durationMs()) * 100,

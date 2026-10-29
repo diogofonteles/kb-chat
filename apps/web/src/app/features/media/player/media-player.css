@@ -173,6 +173,7 @@
   gap: var(--space-1);
 }
 
+.bookmark,
 .mute {
   display: grid;
   place-items: center;
@@ -185,8 +186,14 @@
   cursor: pointer;
 }
 
+.bookmark:hover:not(:disabled),
 .mute:hover {
   background: var(--color-surface-muted);
+}
+
+.bookmark:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
 }
 
 .volume-slider {

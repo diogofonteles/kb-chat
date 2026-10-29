@@ -64,6 +64,12 @@ function setup(existing: MediaBookmark[] = []) {
   return { engine, store, announcer, http, media, at };
 }
 
+function firstId(store: BookmarksStore): string {
+  const first = store.bookmarks()[0];
+  if (!first) throw new Error('no bookmark');
+  return first.id;
+}
+
 describe('BookmarksStore (KBC-042)', () => {
   afterEach(() => vi.useRealTimers());
 
@@ -102,7 +108,7 @@ describe('BookmarksStore (KBC-042)', () => {
     const { store, http, at } = setup();
     at(100);
     store.mark();
-    const id = store.bookmarks()[0]!.id;
+    const id = firstId(store);
     store.saveNote(id, '  lei do ritmo ');
     expect(store.bookmarks()[0]?.note).toBe('lei do ritmo');
     expect(store.editing()).toBeNull();
@@ -124,7 +130,7 @@ describe('BookmarksStore (KBC-042)', () => {
     const { store, http, at } = setup();
     at(100);
     store.mark();
-    const id = store.bookmarks()[0]!.id;
+    const id = firstId(store);
     store.saveNote(id, 'lei do ritmo');
     http
       .expectOne({ method: 'POST', url: URL })

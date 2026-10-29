@@ -446,3 +446,130 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     ).toBeTruthy();
   });
 });
+
+describe('MediaPlayer (KBC-042 bookmarks)', () => {
+  const BOOKMARKS = '/api/v1/media/m1/bookmarks';
+  // The server's answer names the media by its uuid (the test source is "m1").
+  const MEDIA_UUID = '11111111-1111-4111-8111-111111111111';
+
+  async function withBookmarks(items: object[] = []) {
+    const view = await renderPlayer(loaded);
+    view.http.expectOne({ method: 'GET', url: BOOKMARKS }).flush({ items });
+    await view.fixture.whenStable();
+    return view;
+  }
+
+  it('marks 2 s back without pausing and opens the note with the focus (FR-2, AC-1)', async () => {
+    const { fixture, media, http, engine } = await withBookmarks();
+    engine.play();
+    media.emit('playing');
+    media.setCurrentTime(760);
+    media.emit('timeupdate');
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar este trecho' }));
+    await fixture.whenStable();
+    const field = screen.getByRole('textbox', {
+      name: 'Nota do marcador em 12:38',
+    });
+    expect(document.activeElement).toBe(field);
+    expect(engine.playing()).toBe(true);
+    const post = http.expectOne({ method: 'POST', url: BOOKMARKS });
+    expect(post.request.body).toMatchObject({ positionMs: 758_000 });
+    post.flush({
+      ...post.request.body,
+      mediaId: MEDIA_UUID,
+      note: null,
+      createdAt: '2026-10-29T10:00:00Z',
+      updatedAt: '2026-10-29T10:00:00Z',
+    });
+    fireEvent.input(field, { target: { value: 'lei do ritmo' } });
+    (field as HTMLInputElement).value = 'lei do ritmo';
+    submitForm(field);
+    await fixture.whenStable();
+    expect(http.expectOne({ method: 'PATCH' }).request.body).toEqual({
+      note: 'lei do ritmo',
+    });
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Marcar este trecho' }),
+    );
+  });
+
+  it('closes the note on Esc, with no note, and gives the focus back', async () => {
+    const { fixture, http } = await withBookmarks();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar este trecho' }));
+    await fixture.whenStable();
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+    await fixture.whenStable();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Marcar este trecho' }),
+    );
+    http.expectOne({ method: 'POST', url: BOOKMARKS });
+    expect(http.match({ method: 'PATCH' })).toEqual([]);
+  });
+
+  it('says it could not save, keeps the note and tries again (NFR-1, AC-8)', async () => {
+    const { fixture, http } = await withBookmarks();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar este trecho' }));
+    await fixture.whenStable();
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    field.value = 'polaridade';
+    submitForm(field);
+    http
+      .expectOne({ method: 'POST', url: BOOKMARKS })
+      .flush(null, { status: 503, statusText: 'Unavailable' });
+    http
+      .match({ method: 'PATCH' })
+      .forEach((patch) =>
+        patch.flush(null, { status: 404, statusText: 'Not Found' }),
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui salvar o marcador.',
+    );
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe(
+      'polaridade',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    await fixture.whenStable();
+    expect(screen.queryByRole('alert')).toBeNull();
+    http.expectOne({ method: 'POST', url: BOOKMARKS });
+  });
+
+  it('cannot mark before the bookmarks of the media are known', async () => {
+    await renderPlayer(loaded);
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Marcar este trecho',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it('puts each bookmark on the time slider (FR-3)', async () => {
+    const at = '2026-10-29T10:00:00Z';
+    const { container } = await withBookmarks(
+      [
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      ].map((id, i) => ({
+        id,
+        mediaId: MEDIA_UUID,
+        positionMs: (i + 1) * 60_000,
+        note: null,
+        createdAt: at,
+        updatedAt: at,
+      })),
+    );
+    expect(container.querySelectorAll('.mark')).toHaveLength(2);
+  });
+});
+
+/** Submits the form a field belongs to (as Enter would). */
+function submitForm(field: HTMLElement): void {
+  const form = field.closest('form');
+  if (!form) throw new Error('no form');
+  fireEvent.submit(form);
+}

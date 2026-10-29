@@ -14,6 +14,7 @@
   }
 
   <app-seek-slider
+    [marks]="bookmarks.positions()"
     [currentMs]="playback().currentMs"
     [durationMs]="playback().durationMs"
     [bufferedEndMs]="playback().bufferedEndMs"
@@ -165,6 +166,27 @@
       </app-menu-button>
     }
 
+    <button
+      #markButton
+      type="button"
+      class="bookmark"
+      aria-label="Marcar este trecho"
+      i18n-aria-label="@@player.mark"
+      aria-keyshortcuts="B"
+      [disabled]="!canMark()"
+      (click)="mark()"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
+        <path
+          d="M6 3h12v18l-6-4.5L6 21z"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+
     <app-menu-button
       #more
       class="more"
@@ -177,6 +199,8 @@
       <span aria-hidden="true">⋯</span>
     </app-menu-button>
   </div>
+
+  <app-bookmark-note (closed)="noteClosed()" />
 
   @if (ended()) {
     <button

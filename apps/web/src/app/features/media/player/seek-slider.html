@@ -12,6 +12,14 @@
     <div class="buffered" [style.width.%]="bufferedPercent()"></div>
     <div class="played" [style.width.%]="playedPercent()"></div>
   </div>
+  @if (markPercents().length) {
+    <!-- Bookmarks (KBC-042): seen here, reached by the keyboard in the list. -->
+    <div class="marks" aria-hidden="true">
+      @for (percent of markPercents(); track $index) {
+        <span class="mark" [style.left.%]="percent"></span>
+      }
+    </div>
+  }
   <div
     #thumb
     class="thumb"

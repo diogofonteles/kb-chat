@@ -10,6 +10,7 @@ import type { Feature } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaListPage } from './media-list-page.js';
 import { MediaPlayerPage } from './media-player-page.js';
+import { MyBookmarksPage } from './my-bookmarks-page.js';
 import { MEDIA_ROUTES, mediaEnabled } from './media-routes.js';
 
 @Component({ template: 'media page' })
@@ -68,6 +69,12 @@ describe('mediaEnabled (every feature granted per person)', () => {
         route.loadComponent ? route.loadComponent() : null,
       ),
     );
-    expect(pages).toEqual([MediaListPage, MediaPlayerPage]);
+    expect(pages).toEqual([MediaListPage, MyBookmarksPage, MediaPlayerPage]);
+    // "marcadores" comes before ":id", or it would be taken for a media id.
+    expect(MEDIA_ROUTES.map((route) => route.path)).toEqual([
+      'midia',
+      'midia/marcadores',
+      'midia/:id',
+    ]);
   });
 });

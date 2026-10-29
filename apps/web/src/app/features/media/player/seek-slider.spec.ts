@@ -7,6 +7,7 @@ async function renderSlider(
     currentMs: number;
     durationMs: number | null;
     disabled: boolean;
+    marks: readonly number[];
   }> = {},
 ) {
   const seekRequested = vi.fn();
@@ -164,5 +165,25 @@ describe('SeekSlider (APG media seek slider)', () => {
     const { track, seekRequested } = await renderSlider();
     fireEvent.pointerDown(track, { button: 2, clientX: 600 });
     expect(seekRequested).not.toHaveBeenCalled();
+  });
+
+  it('shows the bookmarks as marks on the rail, hidden from screen readers (KBC-042 FR-3)', async () => {
+    const { container } = await renderSlider({
+      durationMs: 100_000,
+      marks: [10_000, 50_000],
+    });
+    const marks = [...container.querySelectorAll<HTMLElement>('.mark')];
+    expect(marks.map((mark) => mark.style.left)).toEqual(['10%', '50%']);
+    expect(container.querySelector('.marks')?.getAttribute('aria-hidden')).toBe(
+      'true',
+    );
+  });
+
+  it('shows no marks before the length is known', async () => {
+    const { container } = await renderSlider({
+      durationMs: null,
+      marks: [10_000],
+    });
+    expect(container.querySelector('.marks')).toBeNull();
   });
 });

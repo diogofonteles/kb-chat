@@ -155,7 +155,11 @@ export const MEDIA_BOOKMARK_NOTE_MAX = 2_000;
 export const MEDIA_BOOKMARKS_PER_MEDIA = 1_000;
 
 export const mediaBookmarkIdSchema = z.uuid();
-const bookmarkNoteSchema = z.string().trim().min(1).max(MEDIA_BOOKMARK_NOTE_MAX);
+const bookmarkNoteSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MEDIA_BOOKMARK_NOTE_MAX);
 
 /** One person's mark in one media, with their note. */
 export const mediaBookmarkSchema = z.object({

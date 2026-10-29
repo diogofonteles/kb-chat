@@ -2,10 +2,14 @@ import {
   MEDIA_BOOKMARKS_PER_MEDIA,
   type CreateMediaBookmarkRequest,
   type MediaBookmark,
+  type MediaItem,
   type MyMediaBookmark,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { BookmarkStorePort } from '../../ports/bookmark-store.js';
+import type {
+  BookmarkStorePort,
+  BookmarkWithMedia,
+} from '../../ports/bookmark-store.js';
 import type { MediaActor, MediaService } from './media-service.js';
 
 export interface BookmarkServiceDeps {
@@ -17,6 +21,29 @@ export interface BookmarkServiceDeps {
 
 const unknownBookmark = () =>
   new AppError('MEDIA_NOT_FOUND', 'Unknown bookmark');
+
+/** A bookmark as the contract shows it (no owner). */
+const asBookmark = (stored: MediaBookmark): MediaBookmark => ({
+  id: stored.id,
+  mediaId: stored.mediaId,
+  positionMs: stored.positionMs,
+  note: stored.note,
+  createdAt: stored.createdAt,
+  updatedAt: stored.updatedAt,
+});
+
+/** A bookmark of "Meus marcadores" (no collection: it only filters). */
+const asMine = (stored: BookmarkWithMedia): MyMediaBookmark => ({
+  ...asBookmark(stored),
+  mediaTitle: stored.mediaTitle,
+  mediaDurationMs: stored.mediaDurationMs,
+});
+
+/** One bookmark of one media. */
+export interface BookmarkRef {
+  readonly mediaId: string;
+  readonly id: string;
+}
 
 /**
  * Each person's bookmarks (KBC-042): only their own, only in media they can see (BR-1,
@@ -47,22 +74,9 @@ export class BookmarkService {
         existing.mediaId !== mediaId
       )
         throw new AppError('MEDIA_CONFLICT', 'This bookmark id is taken');
-      const { principal: _owner, ...bookmark } = existing;
-      return { bookmark, created: false };
+      return { bookmark: asBookmark(existing), created: false };
     }
-    if (item.durationMs !== null && request.positionMs > item.durationMs)
-      throw new AppError('VALIDATION_FAILED', 'The position is past the end', {
-        details: { field: 'positionMs' },
-      });
-    if (
-      this.deps.bookmarks.countOf(actor.principal, mediaId) >=
-      MEDIA_BOOKMARKS_PER_MEDIA
-    )
-      throw new AppError(
-        'MEDIA_CONFLICT',
-        `At most ${MEDIA_BOOKMARKS_PER_MEDIA} bookmarks per media`,
-        { details: { limit: MEDIA_BOOKMARKS_PER_MEDIA } },
-      );
+    this.assertCreatable(actor, item, request.positionMs);
     const now = this.now().toISOString();
     const bookmark: MediaBookmark = {
       id: request.id,
@@ -76,32 +90,51 @@ export class BookmarkService {
     return { bookmark, created: true };
   }
 
+  /** Within the media's length, and under the cap per person and media. */
+  private assertCreatable(
+    actor: MediaActor,
+    item: Pick<MediaItem, 'id' | 'durationMs'>,
+    positionMs: number,
+  ): void {
+    if (item.durationMs !== null && positionMs > item.durationMs)
+      throw new AppError('VALIDATION_FAILED', 'The position is past the end', {
+        details: { field: 'positionMs' },
+      });
+    if (
+      this.deps.bookmarks.countOf(actor.principal, item.id) >=
+      MEDIA_BOOKMARKS_PER_MEDIA
+    )
+      throw new AppError(
+        'MEDIA_CONFLICT',
+        `At most ${MEDIA_BOOKMARKS_PER_MEDIA} bookmarks per media`,
+        { details: { limit: MEDIA_BOOKMARKS_PER_MEDIA } },
+      );
+  }
+
   updateNote(
     actor: MediaActor,
-    mediaId: string,
-    id: string,
+    ref: BookmarkRef,
     note: string | null,
   ): MediaBookmark {
-    this.deps.media.get(actor, mediaId);
+    this.deps.media.get(actor, ref.mediaId);
     const changed = this.deps.bookmarks.updateNote({
       principal: actor.principal,
-      mediaId,
-      id,
+      mediaId: ref.mediaId,
+      id: ref.id,
       note,
       now: this.now(),
     });
-    const saved = changed ? this.deps.bookmarks.bookmark(id) : null;
+    const saved = changed ? this.deps.bookmarks.bookmark(ref.id) : null;
     if (!saved) throw unknownBookmark();
-    const { principal: _owner, ...bookmark } = saved;
-    return bookmark;
+    return asBookmark(saved);
   }
 
-  remove(actor: MediaActor, mediaId: string, id: string): void {
-    this.deps.media.get(actor, mediaId);
+  remove(actor: MediaActor, ref: BookmarkRef): void {
+    this.deps.media.get(actor, ref.mediaId);
     const removed = this.deps.bookmarks.deleteBookmark({
       principal: actor.principal,
-      mediaId,
-      id,
+      mediaId: ref.mediaId,
+      id: ref.id,
     });
     if (!removed) throw unknownBookmark();
   }
@@ -111,7 +144,7 @@ export class BookmarkService {
     return this.deps.bookmarks
       .allOf(actor.principal)
       .filter((bookmark) => actor.canSee(bookmark.mediaTopic))
-      .map(({ mediaTopic: _topic, ...bookmark }) => bookmark);
+      .map(asMine);
   }
 
   private now(): Date {

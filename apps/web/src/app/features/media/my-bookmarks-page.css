@@ -1,0 +1,116 @@
+:host {
+  display: block;
+  /* Its own row of the main area's grid (chat-page.css), like the other media pages. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.page {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+.back {
+  justify-self: start;
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  min-height: var(--target);
+  align-content: center;
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.open:hover .title {
+  text-decoration: underline;
+}
+
+.title {
+  overflow-wrap: anywhere;
+}
+
+.time {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.note.none,
+.empty,
+.loading {
+  color: var(--color-text-muted);
+}
+
+.note.none {
+  font-style: italic;
+}
+
+.empty,
+.loading {
+  margin: 0;
+}
+
+.notice {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.secondary {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

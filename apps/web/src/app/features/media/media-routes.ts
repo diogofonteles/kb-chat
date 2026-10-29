@@ -23,7 +23,10 @@ export const mediaEnabled: CanMatchFn = () => {
   );
 };
 
-/** /midia and /midia/:id (screens.md T14, T15), inside the chat page's layout. */
+/**
+ * /midia, /midia/marcadores and /midia/:id (screens.md T14, T15), inside the chat page's
+ * layout.
+ */
 export const MEDIA_ROUTES: Routes = [
   {
     path: 'midia',
@@ -31,6 +34,13 @@ export const MEDIA_ROUTES: Routes = [
     title: $localize`:@@route.mediaTitle:Mídia — Nova Alexandria`,
     loadComponent: () =>
       import('./media-list-page.js').then((m) => m.MediaListPage),
+  },
+  {
+    path: 'midia/marcadores',
+    canMatch: [mediaEnabled],
+    title: $localize`:@@route.myBookmarksTitle:Meus marcadores — Nova Alexandria`,
+    loadComponent: () =>
+      import('./my-bookmarks-page.js').then((m) => m.MyBookmarksPage),
   },
   {
     path: 'midia/:id',

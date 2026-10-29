@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   Injector,
   afterNextRender,
   computed,
@@ -22,6 +23,7 @@ import {
 import { speak } from '@core/i18n/spoken-time.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { from } from 'rxjs';
@@ -32,6 +34,7 @@ import { SeekSlider } from './seek-slider.js';
 import { ShortcutsDialog } from './shortcuts-dialog.js';
 import { SkipsDialog } from './skips-dialog.js';
 import { SleepTimerDialog } from './sleep-timer-dialog.js';
+import { BookmarkNote } from './bookmark-note.js';
 
 const ERROR_MESSAGES: Record<PlaybackErrorKind, () => string> = {
   network: () =>
@@ -61,6 +64,7 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
     ShortcutsDialog,
     SkipsDialog,
     SleepTimerDialog,
+    BookmarkNote,
   ],
   templateUrl: './media-player.html',
   styleUrl: './media-player.css',
@@ -77,6 +81,13 @@ export class MediaPlayer {
   private readonly more = viewChild.required<MenuButton>('more');
   private readonly injector = inject(Injector);
   private readonly sleepTimer = inject(SleepTimerService);
+  protected readonly bookmarks = inject(BookmarksStore);
+  private readonly markButton =
+    viewChild.required<ElementRef<HTMLButtonElement>>('markButton');
+  /** Marking needs the loaded media's bookmarks (KBC-042 FR-2). */
+  protected readonly canMark = computed(
+    () => this.operable() && this.bookmarks.mediaId() !== null,
+  );
   protected readonly playback = this.engine.playback;
   /** The volume control exists only where the page may set the volume (FR-9). */
   private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
@@ -262,6 +273,15 @@ export class MediaPlayer {
     this.sleepTimer.off();
     // The ☾ button had the focus and goes away: "Mais opções" takes it (WCAG 2.4.3).
     afterNextRender(() => this.more().focus(), { injector: this.injector });
+  }
+
+  protected mark(): void {
+    this.bookmarks.mark();
+  }
+
+  /** The note closed: the focus goes back to "Marcar este trecho" (NG-30). */
+  protected noteClosed(): void {
+    this.markButton().nativeElement.focus();
   }
 
   protected toggleMute(): void {
