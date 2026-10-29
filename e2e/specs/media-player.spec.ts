@@ -1,8 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { expect, ownerApi, test } from './fixtures.js';
+import { expect, ownerApi } from './fixtures.js';
 import {
   audioState,
+  listenerTest as test,
   uploadReady,
   useTheme,
   type UploadedMedia,

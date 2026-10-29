@@ -125,6 +125,15 @@ describe('MediaSessionAdapter (KBC-041 FR-7)', () => {
     });
   });
 
+  it('tells the new position after a seek alone, with no other change', () => {
+    const { session, media, ready, act } = setup();
+    ready();
+    act('seekforward');
+    media.emit('seeked');
+    TestBed.tick();
+    expect(session.positions.at(-1)?.position).toBe(30);
+  });
+
   it('follows playing and paused, and clears everything when the player closes', () => {
     const { session, engine, media, ready } = setup();
     ready();

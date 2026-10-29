@@ -77,9 +77,9 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
 
   it('is not shown on the media’s own page', async () => {
     const { harness } = await setup(`/midia/${ID}`);
-    expect(screen.queryByRole('region', { name: 'Player' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
     await harness.navigateByUrl('/');
-    expect(screen.getByRole('region', { name: 'Player' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Mini-player' })).toBeTruthy();
   });
 
   it('pauses, goes back 15 s and plays from the bar', async () => {
@@ -104,7 +104,7 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
         .request.body,
     ).toEqual({ positionMs: 150_000 });
     expect(engine.source()).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Player' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
   });
 
   it('takes the player shortcuts while the focus is inside it', async () => {

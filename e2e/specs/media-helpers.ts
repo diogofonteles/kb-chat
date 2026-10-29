@@ -2,8 +2,16 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { APIRequestContext, Page } from '@playwright/test';
-import { CSRF, expect } from './fixtures.js';
+import type { APIRequestContext, Browser, Page } from '@playwright/test';
+import {
+  CSRF,
+  expect,
+  invite,
+  ownerApi,
+  pageAs,
+  test as base,
+  uniqueEmail,
+} from './fixtures.js';
 
 const ffmpeg = (): string =>
   process.env['FFMPEG_BIN'] ??
@@ -107,3 +115,39 @@ export async function useTheme(
     theme,
   );
 }
+
+/**
+ * A person who may listen (KBC-041): speed and positions are per person, so each test
+ * listens as its own new member and parallel tests never see each other's choices.
+ */
+export async function newListener(
+  browser: Browser,
+  viewport: { width: number; height: number } | null,
+  email = uniqueEmail('ouvinte'),
+): Promise<{ page: Page; email: string }> {
+  const owner = await ownerApi();
+  await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['search', 'media'],
+  });
+  await owner.dispose();
+  return { page: await pageAs(browser, email, viewport), email };
+}
+
+/** Player specs: `page` is a fresh listener's, not the shared owner's. */
+export const listenerTest = base.extend<{ page: Page }>({
+  page: async (
+    {
+      browser,
+      viewport,
+    }: {
+      browser: Browser;
+      viewport: { width: number; height: number } | null;
+    },
+    use: (page: Page) => Promise<void>,
+  ) => {
+    const { page } = await newListener(browser, viewport);
+    await use(page);
+    await page.context().close();
+  },
+});
