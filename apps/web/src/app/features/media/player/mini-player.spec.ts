@@ -178,17 +178,20 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
   it('shows when a sleep timer will stop the audio, and nothing once it is off (KBC-046 FR-1)', async () => {
     const { harness } = await setup();
     const bar = screen.getByRole('region', { name: 'Mini-player' });
-    expect(bar.textContent).not.toContain('Para em');
+    expect(bar.textContent).not.toContain('Timer para dormir');
     const timer = TestBed.inject(SleepTimerService);
     timer.start(15);
     await harness.fixture.whenStable();
-    // Seen as "☾ 15:00"; "Para em" is read, not shown.
-    expect(bar.textContent).toContain('☾ Para em 15:00');
+    // Seen as "☾ 15:00"; what it is gets read, not shown.
+    expect(bar.textContent).toContain('☾ Timer para dormir: 15:00');
     expect(bar.querySelector('.sleep .visually-hidden')?.textContent).toBe(
-      'Para em ',
+      'Timer para dormir: ',
     );
+    timer.start('end-of-media');
+    await harness.fixture.whenStable();
+    expect(bar.textContent).toContain('☾ Timer para dormir: No fim');
     timer.off();
     await harness.fixture.whenStable();
-    expect(bar.textContent).not.toContain('Para em');
+    expect(bar.textContent).not.toContain('Timer para dormir');
   });
 });

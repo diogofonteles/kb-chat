@@ -1,6 +1,8 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  Injector,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -72,6 +74,8 @@ export class MediaPlayer {
   private readonly shortcutsDialog = viewChild.required(ShortcutsDialog);
   private readonly skipsDialog = viewChild.required(SkipsDialog);
   private readonly sleepDialog = viewChild.required(SleepTimerDialog);
+  private readonly more = viewChild.required<MenuButton>('more');
+  private readonly injector = inject(Injector);
   private readonly sleepTimer = inject(SleepTimerService);
   protected readonly playback = this.engine.playback;
   /** The volume control exists only where the page may set the volume (FR-9). */
@@ -254,7 +258,10 @@ export class MediaPlayer {
 
   protected chooseSleep(id: string): void {
     if (id === 'extend') this.sleepTimer.extend();
-    if (id === 'off') this.sleepTimer.off();
+    if (id !== 'off') return;
+    this.sleepTimer.off();
+    // The ☾ button had the focus and goes away: "Mais opções" takes it (WCAG 2.4.3).
+    afterNextRender(() => this.more().focus(), { injector: this.injector });
   }
 
   protected toggleMute(): void {

@@ -167,6 +167,11 @@ export class MenuButton {
     items.at(index < 0 ? items.length - 1 : index)?.nativeElement.focus();
   }
 
+  /** Puts the focus on the trigger (a neighbour that went away hands it here). */
+  focus(): void {
+    this.trigger().nativeElement.focus();
+  }
+
   private close(refocus: boolean): void {
     this.open.set(false);
     if (refocus) this.trigger().nativeElement.focus();

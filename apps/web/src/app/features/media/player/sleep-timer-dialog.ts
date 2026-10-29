@@ -12,7 +12,7 @@ import { SleepTimerService } from '@core/media/sleep-timer.js';
 
 /**
  * "Timer para dormir" (screens.md T15, KBC-046): 5 to 60 minutes or "No fim desta mídia".
- * A choice starts the timer and closes the dialog; Esc and "Fechar" close it too, and the
+ * A choice (a button) starts the timer and closes the dialog; Esc and "Fechar" close it too, and the
  * focus goes back to where it was.
  */
 @Component({
@@ -25,23 +25,36 @@ import { SleepTimerService } from '@core/media/sleep-timer.js';
       (close)="closed.emit()"
     >
       <h2 id="sleep-title" i18n="@@sleep.title">Timer para dormir</h2>
-      <fieldset>
-        <legend i18n="@@sleep.stopAfter">Parar depois de</legend>
+      <!-- Buttons, not radios: an arrow key never starts a timer (WCAG 3.2.2). -->
+      <div class="choices" role="group" aria-labelledby="sleep-stop-after">
+        <p id="sleep-stop-after" class="group-label" i18n="@@sleep.stopAfter">
+          Parar depois de
+        </p>
         @for (minutes of choices; track minutes) {
-          <label class="choice">
-            <input type="radio" name="sleep-timer" (change)="choose(minutes)" />
+          <button
+            type="button"
+            class="choice"
+            [attr.aria-pressed]="current() === minutes"
+            (click)="choose(minutes)"
+          >
+            @if (current() === minutes) {
+              <span aria-hidden="true">✓</span>
+            }
             <span i18n="@@sleep.minutes">{{ minutes }} min</span>
-          </label>
+          </button>
         }
-        <label class="choice">
-          <input
-            type="radio"
-            name="sleep-timer"
-            (change)="choose('end-of-media')"
-          />
+        <button
+          type="button"
+          class="choice"
+          [attr.aria-pressed]="current() === 'end-of-media'"
+          (click)="choose('end-of-media')"
+        >
+          @if (current() === 'end-of-media') {
+            <span aria-hidden="true">✓</span>
+          }
           <span i18n="@@sleep.endOfMedia">No fim desta mídia</span>
-        </label>
-      </fieldset>
+        </button>
+      </div>
       <button
         type="button"
         class="close"
@@ -65,6 +78,8 @@ export class SleepTimerDialog {
   readonly closed = output();
 
   protected readonly choices = SLEEP_MINUTES;
+  /** The running timer's choice, shown pressed with ✓ (none while off). */
+  protected readonly current = this.timer.choice;
 
   /** Every way out (a choice, Fechar, Esc) gives the focus back to where it was. */
   constructor() {

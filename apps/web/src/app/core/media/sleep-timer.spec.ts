@@ -172,4 +172,70 @@ describe('SleepTimerService (KBC-046)', () => {
     TestBed.tick();
     expect(timer.timer()).toEqual({ kind: 'off' });
   });
+
+  it('leaves a muted player muted: nothing to turn down (FR-2)', async () => {
+    const { timer, engine, media, pass } = setup();
+    await Promise.resolve();
+    engine.toggleMute();
+    TestBed.tick();
+    timer.start(5);
+    await pass(295_000);
+    await pass(2_000);
+    expect(media.element.muted).toBe(true);
+    await pass(5_000);
+    expect(media.calls.at(-1)).toBe('pause');
+    expect(media.element.muted).toBe(true);
+    expect(engine.muted()).toBe(true);
+  });
+
+  it('gives the sound back on a pause during the fade, and waits for play (BR-1)', async () => {
+    const { timer, engine, media, pass } = setup();
+    await Promise.resolve();
+    engine.setVolume(1);
+    timer.start(5);
+    await pass(295_000);
+    expect(media.element.volume).toBeLessThan(1);
+    media.setPaused(true);
+    media.emit('pause');
+    TestBed.tick();
+    expect(media.element.volume).toBe(1);
+    const calls = media.calls.length;
+    // Paused: no count of its own keeps running.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(timer.remainingMs()).toBe(5_000);
+    expect(media.calls.length).toBe(calls);
+    media.setPaused(false);
+    media.emit('playing');
+    TestBed.tick();
+    await pass(1_000);
+    expect(media.element.volume).toBeCloseTo(0.4);
+  });
+
+  it('says "Mais 5 minutos" and "Desligar timer" when used', async () => {
+    const { timer, announcer, pass } = setup();
+    await Promise.resolve();
+    timer.start(5);
+    await pass(270_000);
+    timer.extend();
+    TestBed.tick();
+    expect(announcer.message()).toBe(
+      'Timer para dormir: para em 5 minutos e 30 segundos',
+    );
+    timer.off();
+    TestBed.tick();
+    expect(announcer.message()).toBe('Timer desligado');
+  });
+
+  it('keeps what the person chose while on, and forgets it when off', async () => {
+    const { timer } = setup();
+    await Promise.resolve();
+    expect(timer.choice()).toBeNull();
+    timer.start('end-of-media');
+    expect(timer.choice()).toBe('end-of-media');
+    timer.start(30);
+    expect(timer.choice()).toBe(30);
+    timer.off();
+    expect(timer.choice()).toBeNull();
+  });
 });

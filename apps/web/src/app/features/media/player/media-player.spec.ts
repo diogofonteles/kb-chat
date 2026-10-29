@@ -390,7 +390,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     );
     await fixture.whenStable();
     const dialog = screen.getByRole('dialog', { name: 'Timer para dormir' });
-    fireEvent.click(within(dialog).getByRole('radio', { name }));
+    fireEvent.click(within(dialog).getByRole('button', { name }));
     await fixture.whenStable();
   }
 

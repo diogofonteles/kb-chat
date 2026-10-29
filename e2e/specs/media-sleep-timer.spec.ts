@@ -37,7 +37,7 @@ async function chooseTimer(page: Page, choice: string) {
   await page.getByRole('button', { name: 'Mais opções' }).click();
   await page.getByRole('menuitem', { name: 'Timer para dormir' }).click();
   const dialog = page.getByRole('dialog', { name: 'Timer para dormir' });
-  await dialog.getByRole('radio', { name: choice, exact: true }).check();
+  await dialog.getByRole('button', { name: choice, exact: true }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -170,7 +170,7 @@ test('AC-6: closing the player turns the timer off', async ({ page }) => {
   await play(page);
   await page.getByRole('link', { name: '← Mídia' }).click();
   const mini = page.getByRole('region', { name: 'Mini-player' });
-  await expect(mini).toContainText(/Para em 1[45]:\d\d/);
+  await expect(mini).toContainText(/Timer para dormir: 1[45]:\d\d/);
   await mini.getByRole('button', { name: 'Fechar o player' }).click();
   await expect(mini).toHaveCount(0);
   await page.goto(`/midia/${lecture.id}`);
@@ -209,6 +209,53 @@ test('NFR-1: with the tab hidden and no time update, it still pauses on time', a
   await expect
     .poll(async () => (await audioState(page)).paused, { timeout: 2_000 })
     .toBe(true);
+});
+
+test('the timer is chosen and turned off with the keyboard only', async ({
+  page,
+}) => {
+  await openPlayer(page);
+  const more = page.getByRole('button', { name: 'Mais opções' });
+  await more.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('menuitem', { name: 'Timer para dormir' }),
+  ).toBeVisible();
+  // ↑ from the trigger lands on the last item.
+  await page.keyboard.press('Escape');
+  await more.focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('menuitem', { name: 'Timer para dormir' }).focus();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'Timer para dormir' });
+  await expect(dialog).toBeVisible();
+  // Arrows never start a timer; Tab walks the choices and Enter picks one.
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowDown');
+  await expect(dialog).toBeVisible();
+  await expect(moon(page)).toHaveCount(0);
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: '30 min' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+  await expect(more).toBeFocused();
+  await expect(moon(page)).toContainText('Para em 30:00');
+  await moon(page).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('menuitem', { name: 'Desligar timer' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(moon(page)).toHaveCount(0);
+  await expect(more).toBeFocused();
+  await expect(page.getByRole('status')).toContainText('Timer desligado');
+});
+
+test('BR-2: opening another media turns the timer off', async ({ page }) => {
+  await openPlayer(page);
+  await chooseTimer(page, '15 min');
+  await expect(moon(page)).toBeVisible();
+  await page.goto(`/midia/${short.id}`);
+  await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();
+  await expect(moon(page)).toHaveCount(0);
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {

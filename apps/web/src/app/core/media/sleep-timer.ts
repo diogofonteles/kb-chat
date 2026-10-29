@@ -17,15 +17,19 @@ import {
   type SleepTimer,
 } from '@kb-chat/player-core';
 import { distinctUntilChanged, filter, map, pairwise } from 'rxjs';
+import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from './media-engine.js';
 import { PlayerAnnouncer } from './player-announcer.js';
 import { ProgressSaver } from './progress-saver.js';
 import { VOLUME_WRITABLE } from './volume-support.js';
 
-/** The real clock the timer counts (ms); tests give a controlled one. */
+/**
+ * The real clock the timer counts (ms): monotonic, so a change of the system's clock does
+ * not move it; tests give a controlled one.
+ */
 export const SLEEP_TIMER_CLOCK = new InjectionToken<() => number>(
   'SLEEP_TIMER_CLOCK',
-  { providedIn: 'root', factory: () => () => Date.now() },
+  { providedIn: 'root', factory: () => () => performance.now() },
 );
 
 const minutesText = (minutes: number): string =>
@@ -46,6 +50,7 @@ export class SleepTimerService {
   private readonly saver = inject(ProgressSaver);
   private readonly clock = inject(SLEEP_TIMER_CLOCK);
   private readonly state = signal<SleepTimer>(TIMER_OFF);
+  private readonly chosen = signal<SleepMinutes | 'end-of-media' | null>(null);
   private volumeWritable = false;
   /** The volume before the fade started, given back when it ends either way. */
   private volumeBefore: number | null = null;
@@ -54,6 +59,8 @@ export class SleepTimerService {
   private fallback: ReturnType<typeof setTimeout> | null = null;
 
   readonly timer = this.state.asReadonly();
+  /** What the person chose for the running timer (null while off). */
+  readonly choice = this.chosen.asReadonly();
   readonly remainingMs = computed(() => {
     const timer = this.state();
     return timer.kind === 'minutes' ? timer.remainingMs : null;
@@ -75,7 +82,7 @@ export class SleepTimerService {
         filter(([before]) => before !== null),
         takeUntilDestroyed(),
       )
-      .subscribe(() => this.off());
+      .subscribe(() => this.stop());
     // "No fim desta mídia": the end pauses the media; the timer has done its job.
     toObservable(computed(() => this.engine.playback().phase))
       .pipe(
@@ -91,6 +98,7 @@ export class SleepTimerService {
   start(choice: SleepMinutes | 'end-of-media'): void {
     this.giveVolumeBack();
     this.state.set(startTimer(choice));
+    this.chosen.set(choice);
     this.countedAt = this.clock();
     this.wasPlaying = this.engine.playing();
     this.announcer.say(
@@ -107,13 +115,27 @@ export class SleepTimerService {
     this.state.update(extendTimer);
     this.giveVolumeBack();
     this.scheduleFallback();
+    const remaining = this.remainingMs();
+    if (remaining !== null)
+      this.announcer.say(
+        $localize`:@@sleep.announce.extended:Timer para dormir: para em ${speak(Math.ceil(remaining / 1000) * 1000)}:time:`,
+      );
   }
 
-  /** "Desligar timer": the sound comes back if it was going down. */
+  /** "Desligar timer": the sound comes back if it was going down, and it is said. */
   off(): void {
+    const wasOn = this.state().kind !== 'off';
+    this.stop();
+    if (wasOn)
+      this.announcer.say($localize`:@@sleep.announce.off:Timer desligado`);
+  }
+
+  /** Off, with nothing said (the player closed, or the timer did its job). */
+  private stop(): void {
     this.clearFallback();
     this.giveVolumeBack();
     this.state.set(TIMER_OFF);
+    this.chosen.set(null);
   }
 
   /** Real time since the last count, counted only if the media played meanwhile. */
@@ -130,13 +152,21 @@ export class SleepTimerService {
       this.finish(true);
       return;
     }
+    if (!this.wasPlaying) {
+      // Paused: nothing counts, so nothing to wait for; the sound is whole again until
+      // it plays (the fade picks up from where the count is).
+      this.clearFallback();
+      this.giveVolumeBack();
+      return;
+    }
     this.fade(next);
     this.scheduleFallback();
   }
 
   private fade(timer: SleepTimer): void {
     const factor = fadeFactor(timer);
-    if (!this.volumeWritable || factor >= 1) return;
+    // Muted, there is nothing to turn down; setting the volume would unmute it.
+    if (!this.volumeWritable || factor >= 1 || this.engine.muted()) return;
     this.volumeBefore ??= this.engine.volume();
     this.engine.setVolume(this.volumeBefore * factor);
   }
@@ -150,9 +180,8 @@ export class SleepTimerService {
       this.announcer.sayOnNextPause(done);
       this.engine.pause();
     } else this.announcer.say(done);
-    this.giveVolumeBack();
+    this.stop();
     this.saver.saveNow();
-    this.state.set(TIMER_OFF);
   }
 
   private giveVolumeBack(): void {
