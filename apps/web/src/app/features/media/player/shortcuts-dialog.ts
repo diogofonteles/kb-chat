@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -71,6 +72,7 @@ interface ShortcutRow {
 })
 export class ShortcutsDialog {
   protected readonly shortcuts = inject(PlayerShortcuts);
+  private readonly document = inject(DOCUMENT);
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private opener: HTMLElement | null = null;
@@ -115,7 +117,7 @@ export class ShortcutsDialog {
   }
 
   open(): void {
-    const active = document.activeElement;
+    const active = this.document.activeElement;
     this.opener = active instanceof HTMLElement ? active : null;
     this.dialog().nativeElement.showModal();
   }

@@ -17,7 +17,13 @@ export function targetOf(target: EventTarget | null): ShortcutTarget {
   if (!(target instanceof Element)) return 'page';
   if (target.closest('dialog, [role="dialog"], [role="alertdialog"]'))
     return 'dialog';
-  if (target.closest('[role="menu"], [role^="menuitem"]')) return 'menu';
+  // A menu, or a button whose menu is open (a key pressed before the focus moves in).
+  if (
+    target.closest(
+      '[role="menu"], [role^="menuitem"], [aria-haspopup][aria-expanded="true"]',
+    )
+  )
+    return 'menu';
   if (target.matches('input[type="range"], [role="slider"]')) return 'slider';
   if (
     target.closest(
@@ -37,6 +43,17 @@ function storedEnabled(): boolean {
     return true;
   }
 }
+
+/** Where the keys come from: the player page, or the mini-player (no shortcuts list). */
+export type ShortcutScope = 'page' | 'mini-player';
+
+/** Actions that switch something: a held key acts once, not on every repeat (FR-6). */
+const ONCE: ReadonlySet<ShortcutAction['kind']> = new Set([
+  'toggle',
+  'mute',
+  'help',
+  'speed',
+]);
 
 /**
  * The player's single-key shortcuts (screens.md T15, KBC-041 FR-6): the player page and
@@ -64,7 +81,7 @@ export class PlayerShortcuts {
     }
   }
 
-  handle(event: KeyboardEvent): void {
+  handle(event: KeyboardEvent, scope: ShortcutScope = 'page'): void {
     if (event.defaultPrevented || !this.engine.source()) return;
     const action = shortcutOf(
       {
@@ -77,8 +94,10 @@ export class PlayerShortcuts {
       },
       this.on(),
     );
-    if (!action) return;
+    // The shortcuts list lives on the player page; the mini-player leaves "?" alone.
+    if (!action || (action.kind === 'help' && scope !== 'page')) return;
     event.preventDefault();
+    if (event.repeat && ONCE.has(action.kind)) return;
     this.run(action);
   }
 

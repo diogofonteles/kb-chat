@@ -113,7 +113,8 @@
         <button
           type="button"
           class="mute"
-          [attr.aria-label]="muteLabel()"
+          aria-label="Silenciar"
+          i18n-aria-label="@@player.mute"
           [attr.aria-pressed]="muted()"
           aria-keyshortcuts="M"
           (click)="toggleMute()"
@@ -147,7 +148,7 @@
           aria-label="Volume"
           i18n-aria-label="@@player.volume"
           [value]="volumePercent()"
-          [attr.aria-valuetext]="volumePercent() + '%'"
+          [attr.aria-valuetext]="volumeText()"
           (input)="setVolume($event)"
         />
       </div>
@@ -157,6 +158,7 @@
       class="more"
       label="Mais opções"
       i18n-label="@@player.more"
+      keyshortcuts="?"
       [options]="moreOptions"
       (chosen)="chooseMore($event)"
     >

@@ -39,9 +39,15 @@ function setup() {
 }
 
 /** A key pressed with the focus on `target`. */
-function press(key: string, target: Element = document.body, shift = false) {
+function press(
+  key: string,
+  target: Element = document.body,
+  shift = false,
+  repeat = false,
+) {
   const event = new KeyboardEvent('keydown', {
     key,
+    repeat,
     shiftKey: shift,
     cancelable: true,
     bubbles: true,
@@ -149,5 +155,34 @@ describe('PlayerShortcuts (FR-6)', () => {
     handled.preventDefault();
     shortcuts.handle(handled);
     expect(media.calls).not.toContain('play');
+  });
+
+  it('acts once for a held key that switches something, and keeps skipping on a held L (FR-6)', () => {
+    const { shortcuts, media, engine, http } = setup();
+    shortcuts.handle(press('k'));
+    const held = press('k', document.body, false, true);
+    shortcuts.handle(held);
+    expect(held.defaultPrevented).toBe(true);
+    expect(media.calls.filter((call) => call === 'play').length).toBe(1);
+    shortcuts.handle(press('m'));
+    shortcuts.handle(press('m', document.body, false, true));
+    expect(engine.muted()).toBe(true);
+    shortcuts.handle(press('>', document.body, true));
+    shortcuts.handle(press('>', document.body, true, true));
+    expect(engine.speed()).toBe(1.25);
+    shortcuts.handle(press('l'));
+    shortcuts.handle(press('l', document.body, false, true));
+    expect(media.calls.filter((call) => call.startsWith('seek:')).length).toBe(
+      2,
+    );
+    http.match(() => true).forEach((request) => request.flush({}));
+  });
+
+  it('leaves "?" alone in the mini-player, which has no shortcuts list', () => {
+    const { shortcuts } = setup();
+    const asked = press('?', document.body, true);
+    shortcuts.handle(asked, 'mini-player');
+    expect(asked.defaultPrevented).toBe(false);
+    expect(shortcuts.helpAsked()).toBe(0);
   });
 });

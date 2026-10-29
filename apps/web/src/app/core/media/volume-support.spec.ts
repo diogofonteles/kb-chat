@@ -1,4 +1,5 @@
-import { probeVolume } from './volume-support.js';
+import { TestBed } from '@angular/core/testing';
+import { VOLUME_SUPPORT, probeVolume } from './volume-support.js';
 
 /** A media element whose volume either takes a write (and says so later) or ignores it. */
 function probeElement(behaviour: 'writable' | 'read-only' | 'silent') {
@@ -32,5 +33,17 @@ describe('probeVolume (KBC-041 FR-9)', () => {
     const answer = probeVolume(probeElement('silent'), 500);
     await vi.advanceTimersByTimeAsync(500);
     await expect(answer).resolves.toBe(false);
+  });
+});
+
+describe('VOLUME_SUPPORT', () => {
+  afterEach(() => Reflect.deleteProperty(window, 'matchMedia'));
+
+  it('offers no volume without a fine pointer (phones and tablets use their buttons)', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    await expect(TestBed.inject(VOLUME_SUPPORT)).resolves.toBe(false);
   });
 });

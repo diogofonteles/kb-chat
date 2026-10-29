@@ -25,14 +25,21 @@ export function probeVolume(
   });
 }
 
-/** The answer for this browser, asked once per app. */
+/**
+ * The answer for this browser, asked once per app: a fine pointer (mouse or trackpad, the
+ * item's scope) and a volume the page may set. Phones use their own buttons.
+ */
 export const VOLUME_SUPPORT = new InjectionToken<Promise<boolean>>(
   'VOLUME_SUPPORT',
   {
     providedIn: 'root',
     factory: () => {
       const document = inject(DOCUMENT);
-      return probeVolume(() => document.createElement('audio'));
+      const fine =
+        document.defaultView?.matchMedia?.('(pointer: fine)').matches;
+      return fine
+        ? probeVolume(() => document.createElement('audio'))
+        : Promise.resolve(false);
     },
   },
 );

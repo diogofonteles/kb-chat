@@ -1,10 +1,12 @@
 import { Injectable, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { MediaPreferences } from '@kb-chat/contracts';
 import {
   DEFAULT_SPEED,
   stepSpeed,
   type PlaybackSpeed,
 } from '@kb-chat/player-core';
+import { EMPTY, Subject, catchError, concatMap } from 'rxjs';
 import { ListeningApi } from './listening-api.js';
 import { MediaEngine } from './media-engine.js';
 
@@ -24,10 +26,23 @@ export class ListeningPreferences {
   private readonly engine = inject(MediaEngine);
   private readonly current = signal<MediaPreferences>(DEFAULTS);
   private loading = false;
+  /** Saves go one after the other: the account ends with the last choice (FR-1). */
+  private readonly saves = new Subject<MediaPreferences>();
   /** A choice made here before the account answered wins over that answer. */
   private changed = false;
 
   readonly value = this.current.asReadonly();
+
+  constructor() {
+    this.saves
+      .pipe(
+        concatMap((preferences) =>
+          this.api.savePreferences(preferences).pipe(catchError(() => EMPTY)),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe();
+  }
 
   /** Reads the account's choices; asked by the player, only the first call reads. */
   load(): void {
@@ -60,6 +75,6 @@ export class ListeningPreferences {
   private save(preferences: MediaPreferences): void {
     this.changed = true;
     this.current.set(preferences);
-    this.api.savePreferences(preferences).subscribe({ error: () => undefined });
+    this.saves.next(preferences);
   }
 }

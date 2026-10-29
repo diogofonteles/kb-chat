@@ -135,6 +135,12 @@ export class MediaSessionAdapter {
 
   private close(session: SessionLike): void {
     session.metadata = null;
+    try {
+      // Without arguments: the system forgets the position too.
+      session.setPositionState();
+    } catch {
+      // An older browser that needs a state.
+    }
     for (const action of ACTIONS) this.setHandler(session, action, null);
   }
 

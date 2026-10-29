@@ -70,7 +70,7 @@ describe('PlayerAnnouncer (KBC-041 FR-10)', () => {
 
   it('stays quiet while the time slider has the focus: it speaks itself', async () => {
     const { engine, announcer, media } = setup();
-    announcer.sliderFocused.set(true);
+    announcer.setSliderFocused(true);
     engine.skip(30_000);
     media.emit('seeked');
     engine.play();

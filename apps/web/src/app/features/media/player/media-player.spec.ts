@@ -279,9 +279,10 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     fireEvent.click(mute);
     await fixture.whenStable();
     expect(media.element.muted).toBe(true);
+    // One name, and the pressed state says it is on (not a name that also changes).
     expect(
       screen
-        .getByRole('button', { name: 'Ativar o som' })
+        .getByRole('button', { name: 'Silenciar' })
         .getAttribute('aria-pressed'),
     ).toBe('true');
   });

@@ -30,7 +30,7 @@ import { PlayerShortcuts, SKIP_BACK_MS } from './player-shortcuts.js';
   host: {
     '[class.open]': 'visible()',
     // Keys pressed inside the mini-player work as on the player page (FR-6).
-    '(keydown)': 'shortcuts.handle($event)',
+    '(keydown)': "shortcuts.handle($event, 'mini-player')",
   },
 })
 export class MiniPlayer {

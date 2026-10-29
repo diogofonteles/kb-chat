@@ -153,6 +153,6 @@ export class SeekSlider {
   /** Focused, the slider speaks the time: the status region keeps quiet (FR-10). */
   protected setFocused(focused: boolean): void {
     this.focused.set(focused);
-    this.announcer.sliderFocused.set(focused);
+    this.announcer.setSliderFocused(focused);
   }
 }

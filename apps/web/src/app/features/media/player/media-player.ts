@@ -134,11 +134,7 @@ export class MediaPlayer {
   protected readonly volumePercent = computed(() =>
     Math.round((this.muted() ? 0 : this.engine.volume()) * 100),
   );
-  protected readonly muteLabel = computed(() =>
-    this.muted()
-      ? $localize`:@@player.unmute:Ativar o som`
-      : $localize`:@@player.mute:Silenciar`,
-  );
+  protected readonly volumeText = computed(() => `${this.volumePercent()}%`);
 
   constructor() {
     this.preferences.load();

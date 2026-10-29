@@ -230,5 +230,4 @@ export class MediaPlayerPage {
       at ?? 0,
     );
   }
-
 }

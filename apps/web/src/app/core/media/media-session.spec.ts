@@ -25,7 +25,7 @@ function fakeSession() {
     positions: [],
     setActionHandler: (action, handler) => handlers.set(action, handler),
     setPositionState: (state) => {
-      if (state) session.positions.push(state);
+      session.positions.push(state ?? { position: -1 });
     },
   };
   return session;
@@ -150,6 +150,8 @@ describe('MediaSessionAdapter (KBC-041 FR-7)', () => {
     expect(session.metadata).toBeNull();
     expect(session.playbackState).toBe('none');
     expect(session.handlers.get('play')).toBeNull();
+    // The system forgets the position too.
+    expect(session.positions.at(-1)).toEqual({ position: -1 });
   });
 
   it('does nothing in a browser without Media Session', () => {

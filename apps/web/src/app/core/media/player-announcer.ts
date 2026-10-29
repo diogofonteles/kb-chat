@@ -1,13 +1,8 @@
-import {
-  Injectable,
-  computed,
-  effect,
-  inject,
-  signal,
-  untracked,
-} from '@angular/core';
-import type { PlaybackPhase, PlaybackSpeed } from '@kb-chat/player-core';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import type { PlaybackSpeed } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
+import { debounceTime, filter, map, merge, pairwise, skip } from 'rxjs';
 import { MediaEngine } from './media-engine.js';
 
 /** Skips closer than this make one announcement, with the final position (AC-15). */
@@ -28,60 +23,49 @@ export class PlayerAnnouncer {
   private readonly engine = inject(MediaEngine);
   private readonly text = signal('');
   private readonly said = signal(0);
-  private seekTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly sliderHasFocus = signal(false);
   private readonly phase = computed(() => this.engine.playback().phase);
-  private readonly seeking = computed(() => this.engine.playback().userSeeking);
 
   /** The region's text; a repeat differs by a trailing space so it is read again. */
   readonly message = this.text.asReadonly();
   readonly count = this.said.asReadonly();
-  /** Set by the time slider while focused: the region stays quiet. */
-  readonly sliderFocused = signal(false);
 
   constructor() {
-    let previousPhase: PlaybackPhase | null = null;
-    effect(() => {
-      const phase = this.phase();
-      untracked(() => {
-        if (phase === 'playing' && previousPhase !== 'playing')
-          this.say($localize`:@@player.announce.playing:Tocando`);
-        if (phase === 'paused' && previousPhase === 'playing')
-          this.say($localize`:@@player.announce.paused:Pausado`);
-        previousPhase = phase;
-      });
-    });
-    let previousSpeed: PlaybackSpeed | null = null;
-    effect(() => {
-      const speed = this.engine.speed();
-      untracked(() => {
-        if (previousSpeed !== null && speed !== previousSpeed)
-          this.say(speedText(speed));
-        previousSpeed = speed;
-      });
-    });
-    let landed = 0;
-    effect(() => {
-      const count = this.engine.seeksLanded();
-      untracked(() => {
-        if (count > landed) this.positionSoon();
-        landed = count;
-      });
-    });
+    const playing = toObservable(this.phase).pipe(
+      pairwise(),
+      map(([before, now]) => {
+        if (now === 'playing' && before !== 'playing')
+          return $localize`:@@player.announce.playing:Tocando`;
+        if (now === 'paused' && before === 'playing')
+          return $localize`:@@player.announce.paused:Pausado`;
+        return null;
+      }),
+    );
+    const speed = toObservable(this.engine.speed).pipe(skip(1), map(speedText));
+    // The skips the person made, once they stop skipping: where they landed.
+    const position = toObservable(this.engine.seeksLanded).pipe(
+      filter((landed) => landed > 0),
+      debounceTime(ANNOUNCE_SEEK_AFTER_MS),
+      map(
+        () =>
+          $localize`:@@player.announce.position:Posição ${speak(this.engine.playback().currentMs)}:position:`,
+      ),
+    );
+    merge(playing, speed, position)
+      .pipe(
+        filter((message): message is string => message !== null),
+        takeUntilDestroyed(),
+      )
+      .subscribe((message) => this.say(message));
   }
 
-  /** A skip landed: say where, once the person stops skipping. */
-  private positionSoon(): void {
-    if (this.seekTimer) clearTimeout(this.seekTimer);
-    this.seekTimer = setTimeout(() => {
-      this.seekTimer = null;
-      this.say(
-        $localize`:@@player.announce.position:Posição ${speak(this.engine.playback().currentMs)}:position:`,
-      );
-    }, ANNOUNCE_SEEK_AFTER_MS);
+  /** The time slider has the focus (it speaks the time itself): the region keeps quiet. */
+  setSliderFocused(focused: boolean): void {
+    this.sliderHasFocus.set(focused);
   }
 
   private say(message: string): void {
-    if (this.sliderFocused()) return;
+    if (this.sliderHasFocus()) return;
     const repeat = message === this.text().trim();
     this.text.set(
       repeat && !this.text().endsWith(' ') ? `${message} ` : message,

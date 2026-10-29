@@ -104,4 +104,15 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     expect(preferences.value().speed).toBe(2);
     expect(engine.speed()).toBe(2);
   });
+
+  it('saves changes one after the other, so the account ends with the last one', () => {
+    const { preferences, http } = setup();
+    preferences.stepSpeed(1);
+    preferences.stepSpeed(1);
+    const first = http.match({ method: 'PUT', url: PREFERENCES_URL });
+    expect(first.length).toBe(1);
+    first[0]?.flush({ speed: 1.25, showRemaining: true });
+    const second = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
+    expect(second.request.body).toEqual({ speed: 1.5, showRemaining: true });
+  });
 });
