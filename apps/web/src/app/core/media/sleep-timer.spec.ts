@@ -238,4 +238,23 @@ describe('SleepTimerService (KBC-046)', () => {
     timer.off();
     expect(timer.choice()).toBeNull();
   });
+
+  it('keeps a mute made during the fade, whatever comes next (FR-2)', async () => {
+    const { timer, engine, media, pass } = setup();
+    await Promise.resolve();
+    engine.setVolume(0.8);
+    timer.start(5);
+    await pass(295_000);
+    expect(media.element.volume).toBeLessThan(0.8);
+    engine.toggleMute();
+    TestBed.tick();
+    timer.extend();
+    TestBed.tick();
+    expect(media.element.volume).toBeCloseTo(0.8);
+    expect(media.element.muted).toBe(true);
+    await pass(296_000);
+    timer.off();
+    expect(media.element.muted).toBe(true);
+    expect(engine.muted()).toBe(true);
+  });
 });

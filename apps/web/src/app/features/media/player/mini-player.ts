@@ -47,7 +47,7 @@ export class MiniPlayer {
   private readonly sleepTimer = inject(SleepTimerService);
   /**
    * "☾ 14:59" (or "☾ No fim") while a sleep timer is on (KBC-046 FR-1): short, so the
-   * title keeps its room on a phone; "Para em" is there for screen readers.
+   * title keeps its room on a phone; "Timer para dormir:" is there for screen readers.
    */
   protected readonly sleepShown = computed(() => {
     const timer = this.sleepTimer.timer();

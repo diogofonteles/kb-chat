@@ -422,6 +422,19 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.volume()).toBe(0);
   });
 
+  it('fades the volume inside 0–100% without touching the mute (KBC-046)', () => {
+    ready();
+    engine.toggleMute();
+    engine.fadeVolume(0.5);
+    expect(engine.volume()).toBe(0.5);
+    expect(engine.muted()).toBe(true);
+    engine.fadeVolume(2);
+    expect(engine.volume()).toBe(1);
+    engine.fadeVolume(-1);
+    expect(engine.volume()).toBe(0);
+    expect(media.element.muted).toBe(true);
+  });
+
   it('keeps one element for every source (one thing plays at a time)', () => {
     ready();
     ready(OTHER);

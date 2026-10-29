@@ -25,7 +25,7 @@ import { SleepTimerService } from '@core/media/sleep-timer.js';
       (close)="closed.emit()"
     >
       <h2 id="sleep-title" i18n="@@sleep.title">Timer para dormir</h2>
-      <!-- Buttons, not radios: an arrow key never starts a timer (WCAG 3.2.2). -->
+      <!-- Buttons, not radios: an arrow key never starts a timer (WCAG 3.2.2); the running one is current, not pressed (choosing it starts it over). -->
       <div class="choices" role="group" aria-labelledby="sleep-stop-after">
         <p id="sleep-stop-after" class="group-label" i18n="@@sleep.stopAfter">
           Parar depois de
@@ -34,7 +34,7 @@ import { SleepTimerService } from '@core/media/sleep-timer.js';
           <button
             type="button"
             class="choice"
-            [attr.aria-pressed]="current() === minutes"
+            [attr.aria-current]="current() === minutes ? 'true' : null"
             (click)="choose(minutes)"
           >
             @if (current() === minutes) {
@@ -46,7 +46,7 @@ import { SleepTimerService } from '@core/media/sleep-timer.js';
         <button
           type="button"
           class="choice"
-          [attr.aria-pressed]="current() === 'end-of-media'"
+          [attr.aria-current]="current() === 'end-of-media' ? 'true' : null"
           (click)="choose('end-of-media')"
         >
           @if (current() === 'end-of-media') {

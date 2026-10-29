@@ -64,8 +64,8 @@ legend {
   cursor: pointer;
 }
 
-/* A choice that is a button (the sleep timer's): pressed shows by ✓, border and weight. */
-.choice[aria-pressed='true'] {
+/* A choice that is a button (the sleep timer's): the current one shows by ✓, border and weight. */
+.choice[aria-current='true'] {
   border-color: var(--color-accent);
   border-width: 2px;
   font-weight: 600;

@@ -217,15 +217,16 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await openPlayer(page);
   const more = page.getByRole('button', { name: 'Mais opções' });
   await more.focus();
-  await page.keyboard.press('Enter');
+  // ↑ on the trigger opens the menu on its last item ("Atalhos de teclado"); ↑ again
+  // reaches "Timer para dormir".
+  await page.keyboard.press('ArrowUp');
+  await expect(
+    page.getByRole('menuitem', { name: 'Atalhos de teclado' }),
+  ).toBeFocused();
+  await page.keyboard.press('ArrowUp');
   await expect(
     page.getByRole('menuitem', { name: 'Timer para dormir' }),
-  ).toBeVisible();
-  // ↑ from the trigger lands on the last item.
-  await page.keyboard.press('Escape');
-  await more.focus();
-  await page.keyboard.press('Enter');
-  await page.getByRole('menuitem', { name: 'Timer para dormir' }).focus();
+  ).toBeFocused();
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Timer para dormir' });
   await expect(dialog).toBeVisible();
@@ -242,20 +243,32 @@ test('the timer is chosen and turned off with the keyboard only', async ({
   await expect(moon(page)).toContainText('Para em 30:00');
   await moon(page).focus();
   await page.keyboard.press('Enter');
-  await page.getByRole('menuitem', { name: 'Desligar timer' }).focus();
+  // The ☾ menu opens on its first item; ↓ goes to "Desligar timer".
+  await expect(
+    page.getByRole('menuitem', { name: 'Mais 5 minutos' }),
+  ).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(
+    page.getByRole('menuitem', { name: 'Desligar timer' }),
+  ).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(moon(page)).toHaveCount(0);
   await expect(more).toBeFocused();
   await expect(page.getByRole('status')).toContainText('Timer desligado');
 });
 
-test('BR-2: opening another media turns the timer off', async ({ page }) => {
+test('BR-2: opening another media in the app turns the timer off, silently', async ({
+  page,
+}) => {
   await openPlayer(page);
   await chooseTimer(page, '15 min');
   await expect(moon(page)).toBeVisible();
-  await page.goto(`/midia/${short.id}`);
+  await page.getByRole('link', { name: '← Mídia' }).click();
+  await page.locator(`a[href="/midia/${short.id}"]`).click();
+  await expect(page.getByRole('heading', { name: short.title })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tocar' })).toBeEnabled();
   await expect(moon(page)).toHaveCount(0);
+  await expect(page.getByRole('status')).not.toContainText('Timer desligado');
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {

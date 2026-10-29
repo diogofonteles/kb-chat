@@ -168,7 +168,7 @@ export class SleepTimerService {
     // Muted, there is nothing to turn down; setting the volume would unmute it.
     if (!this.volumeWritable || factor >= 1 || this.engine.muted()) return;
     this.volumeBefore ??= this.engine.volume();
-    this.engine.setVolume(this.volumeBefore * factor);
+    this.engine.fadeVolume(this.volumeBefore * factor);
   }
 
   /** Pause, give the sound back, keep the position, and say it (FR-2). */
@@ -186,7 +186,7 @@ export class SleepTimerService {
 
   private giveVolumeBack(): void {
     if (this.volumeBefore === null) return;
-    this.engine.setVolume(this.volumeBefore);
+    this.engine.fadeVolume(this.volumeBefore);
     this.volumeBefore = null;
   }
 
