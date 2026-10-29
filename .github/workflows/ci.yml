@@ -73,24 +73,35 @@ jobs:
           - name: app
             projects: --project=desktop --project=mobile
             shard: 1/3
+            browser: 'chromium'
           - name: app
             projects: --project=desktop --project=mobile
             shard: 2/3
+            browser: 'chromium'
           - name: app
             projects: --project=desktop --project=mobile
             shard: 3/3
+            browser: 'chromium'
           - name: media Chrome
             projects: --project=media-desktop --project=media-mobile
-            shard: 1/2
+            shard: 1/3
+            browser: ''
           - name: media Chrome
             projects: --project=media-desktop --project=media-mobile
-            shard: 2/2
+            shard: 2/3
+            browser: ''
+          - name: media Chrome
+            projects: --project=media-desktop --project=media-mobile
+            shard: 3/3
+            browser: ''
           - name: media WebKit
             projects: --project=media-webkit
             shard: 1/2
+            browser: 'webkit'
           - name: media WebKit
             projects: --project=media-webkit
             shard: 2/2
+            browser: 'webkit'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -99,17 +110,21 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Playwright's Chromium and WebKit, cached by the lockfile (the Playwright version).
-      - uses: actions/cache@v4
+      # Only the browser this group uses (none for Google Chrome, already on the runner),
+      # cached by the lockfile (the Playwright version).
+      - if: matrix.browser != ''
+        uses: actions/cache@v4
         id: browsers
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-      - if: steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter @kb-chat/e2e exec playwright install chromium webkit
-      # System libraries for both, then ffmpeg for the E2E server's media worker (KBC-034).
-      - run: pnpm --filter @kb-chat/e2e exec playwright install-deps chromium webkit
-      - run: sudo apt-get install -y --no-install-recommends ffmpeg
+          key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: matrix.browser != '' && steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @kb-chat/e2e exec playwright install ${{ matrix.browser }}
+      # WebKit needs system libraries the runner lacks (Chrome's are there); every group
+      # needs ffmpeg for the E2E server's media worker (KBC-034).
+      - if: matrix.browser == 'webkit'
+        run: pnpm --filter @kb-chat/e2e exec playwright install-deps webkit
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
       # Chromium of Playwright has no AAC/H.264), no download needed.
       - run: google-chrome --version
