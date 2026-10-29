@@ -284,4 +284,30 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     );
     expect(saver.gone()).toBe(A.id);
   });
+
+  it('sends every save so that it survives a navigation', () => {
+    const { playAt, start, pause, puts } = setup();
+    start();
+    playAt(2);
+    pause();
+    expect(puts()[0]?.request.keepalive).toBe(true);
+  });
+
+  it('sends, as the page goes, a position still waiting for a media already closed', async () => {
+    const { engine, playAt, start, http, saver } = setup();
+    start();
+    playAt(8);
+    await vi.advanceTimersByTimeAsync(1_000);
+    saver.saveNow();
+    engine.unload();
+    TestBed.tick();
+    // The close's save is still on its way when the page goes: it is sent once more,
+    // in a request that outlives the page.
+    window.dispatchEvent(new Event('pagehide'));
+    const sent = http.match({ method: 'PUT', url: urlOf(A.id) });
+    expect(sent.map((request) => request.request.body.positionMs)).toEqual([
+      8_000, 8_000,
+    ]);
+    expect(sent.every((request) => request.request.keepalive)).toBe(true);
+  });
 });

@@ -171,10 +171,21 @@ for (const width of [1440, 390]) {
     await page.getByLabel('Sua pergunta').press('Enter');
     await page.getByText(/documentos · Tudo ·/).waitFor();
     await shot('11-mini-player-results');
+    const saved = page.waitForResponse((response) =>
+      response.url().endsWith('/progress'),
+    );
     await page
       .getByRole('region', { name: 'Mini-player' })
       .getByRole('button', { name: 'Fechar o player' })
       .click();
+    await saved;
+    // The list shows where the person stopped (T14).
+    await page.goto('/midia');
+    await page
+      .getByText(/Continuar de/)
+      .first()
+      .waitFor();
+    await shot('12-list-resume');
     await page.goto('/midia/00000000-0000-4000-8000-000000000999');
     await page.getByRole('alert').waitFor();
     await shot('07-not-found');

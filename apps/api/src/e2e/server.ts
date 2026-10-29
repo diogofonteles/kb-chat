@@ -225,9 +225,16 @@ identity.register(app);
 registerOutbox(app, outbox);
 registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });
-startMediaWorker({
+const stopWorker = startMediaWorker({
   apiUrl: `http://127.0.0.1:${config.PORT}`,
   token: E2E_MEDIA_WORKER_TOKEN,
   mediaDir: config.KB_CHAT_MEDIA_DIR,
   log: logger,
 });
+// A stop signal ends the whole server: never an API left running without its worker
+// (a later run would reuse it and its uploads would wait in the queue forever).
+for (const signal of ['SIGTERM', 'SIGINT'] as const)
+  process.once(signal, () => {
+    stopWorker();
+    void app.close().finally(() => process.exit(0));
+  });

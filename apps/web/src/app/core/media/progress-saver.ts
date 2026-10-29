@@ -70,6 +70,8 @@ export class ProgressSaver {
   private readonly bases = new Map<string, string | null>();
   /** The last position the server confirmed, per media: not kept again unchanged. */
   private readonly confirmed = new Map<string, number>();
+  /** Media with a position kept here and not yet confirmed: flushed as the page goes. */
+  private readonly pending = new Set<string>();
   private readonly sends = new Subject<string>();
   private readonly goneId = signal<string | null>(null);
   private ticker: ReturnType<typeof setInterval> | null = null;
@@ -108,6 +110,7 @@ export class ProgressSaver {
     const kept = this.read(item.id);
     if (kept && !kept.delivered && kept.basedOn === item.positionUpdatedAt) {
       this.bases.set(item.id, kept.basedOn);
+      this.pending.add(item.id);
       this.sends.next(item.id);
       return kept.positionMs;
     }
@@ -180,6 +183,7 @@ export class ProgressSaver {
     const kept = this.read(source.id);
     if (kept?.positionMs === positionMs) return;
     if (!kept && this.confirmed.get(source.id) === positionMs) return;
+    this.pending.add(source.id);
     this.write(source.id, {
       positionMs,
       delivered: false,
@@ -191,7 +195,8 @@ export class ProgressSaver {
   private deliver(id: string): Observable<MediaProgress> {
     const kept = this.read(id);
     if (!kept || kept.delivered) return EMPTY;
-    return this.api.saveProgress(id, kept.positionMs).pipe(
+    // keepalive: a navigation or a closed tab does not cancel a save on its way.
+    return this.api.saveProgress(id, kept.positionMs, { keepalive: true }).pipe(
       tap((saved) => this.confirm(id, kept.positionMs, saved)),
       catchError((err: unknown) => {
         if (err instanceof HttpErrorResponse && err.status === 404)
@@ -208,21 +213,26 @@ export class ProgressSaver {
     const kept = this.read(id);
     if (!kept) return;
     // Sent and unchanged: done. Moved on meanwhile: that newer one continues this save.
-    if (kept.positionMs === sentMs) this.forget(id);
-    else this.write(id, { ...kept, basedOn: saved.positionUpdatedAt });
+    if (kept.positionMs === sentMs) {
+      this.forget(id);
+      this.pending.delete(id);
+    } else this.write(id, { ...kept, basedOn: saved.positionUpdatedAt });
   }
 
-  /** The page goes away: a save that outlives it, counted as delivered. */
+  /**
+   * The page goes away: every position kept here and not yet confirmed (the one playing,
+   * one just closed) leaves in a save that outlives the page, counted as delivered.
+   */
   private sendBeforeLeaving(): void {
-    const source = this.followed;
-    if (!source) return;
     this.keep();
-    const kept = this.read(source.id);
-    if (!kept || kept.delivered) return;
-    this.api
-      .saveProgress(source.id, kept.positionMs, { keepalive: true })
-      .subscribe({ error: () => undefined });
-    this.write(source.id, { ...kept, delivered: true });
+    for (const id of this.pending) {
+      const kept = this.read(id);
+      if (!kept || kept.delivered) continue;
+      this.api
+        .saveProgress(id, kept.positionMs, { keepalive: true })
+        .subscribe({ error: () => undefined });
+      this.write(id, { ...kept, delivered: true });
+    }
   }
 
   private stopTicker(): void {

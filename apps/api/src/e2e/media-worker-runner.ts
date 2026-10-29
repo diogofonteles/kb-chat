@@ -20,14 +20,15 @@ function binary(name: 'ffmpeg' | 'ffprobe'): string {
 
 /**
  * The media worker of the E2E run, in this process: it leases from the API over HTTP,
- * with real ffmpeg, as the media-worker container does in production (ADR 0022).
+ * with real ffmpeg, as the media-worker container does in production (ADR 0022). The
+ * returned function stops it; the server decides when (it also closes the API then).
  */
 export function startMediaWorker(options: {
   readonly apiUrl: string;
   readonly token: string;
   readonly mediaDir: string;
   readonly log: FastifyBaseLogger;
-}): void {
+}): () => void {
   const worker = new MediaWorker({
     api: new HttpMediaJobsApi({
       baseUrl: options.apiUrl,
@@ -40,6 +41,6 @@ export function startMediaWorker(options: {
     pollMs: 300,
   });
   const shutdown = new AbortController();
-  process.once('SIGTERM', () => shutdown.abort());
   void worker.run(shutdown.signal);
+  return () => shutdown.abort();
 }
