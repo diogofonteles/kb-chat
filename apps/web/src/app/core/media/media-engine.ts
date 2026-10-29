@@ -114,6 +114,7 @@ export class MediaEngine {
   private readonly volumeValue = signal(1);
   private readonly mutedValue = signal(false);
   private readonly landedSeeks = signal(0);
+  private readonly playedSinceLoad = signal(false);
 
   readonly playback = this.state.asReadonly();
   readonly source = this.current.asReadonly();
@@ -129,6 +130,8 @@ export class MediaEngine {
   readonly muted = this.mutedValue.asReadonly();
   /** Counts the seeks the person asked for that landed (announcements, KBC-041 FR-10). */
   readonly seeksLanded = this.landedSeeks.asReadonly();
+  /** The current source played at least once since it was loaded. */
+  readonly hasPlayed = this.playedSinceLoad.asReadonly();
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
@@ -140,6 +143,7 @@ export class MediaEngine {
     this.clearBuffering();
     this.loads++;
     this.current.set(source);
+    this.playedSinceLoad.set(false);
     this.pendingStartMs = startAtMs > 0 ? startAtMs : null;
     this.dispatch({ type: 'load', loadId: this.loads });
     element.preload = 'metadata';
@@ -269,7 +273,10 @@ export class MediaEngine {
     on('loadedmetadata', () => this.onMetadata(element));
     on('durationchange', () => this.onMetadata(element));
     on('canplay', () => this.settle({ type: 'canplay', loadId: this.loads }));
-    on('playing', () => this.settle({ type: 'playing', loadId: this.loads }));
+    on('playing', () => {
+      this.playedSinceLoad.set(true);
+      this.settle({ type: 'playing', loadId: this.loads });
+    });
     // Events are queued: a pause the element no longer is in (the end's own, arriving after
     // "Ouvir de novo" played again, as WebKit on Linux does) is stale and dropped.
     on('pause', () => {
@@ -348,8 +355,10 @@ export class MediaEngine {
     this.onBuffered(element);
     // The clock moving on an element that is not paused is playing, even if its `playing`
     // event never comes (it can be lost after a seek from the end).
-    if (!element.paused && currentMs > before && !this.playing())
+    if (!element.paused && currentMs > before && !this.playing()) {
+      this.playedSinceLoad.set(true);
       this.settle({ type: 'playing', loadId: this.loads });
+    }
   }
 
   /** The end of the buffered range that holds the current position. */

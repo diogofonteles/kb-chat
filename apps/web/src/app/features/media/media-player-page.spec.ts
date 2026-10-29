@@ -207,7 +207,11 @@ describe('MediaPlayerPage (T15)', () => {
 
   it('continues from this browser’s newer position, and sends it again', async () => {
     localStorage.clear();
-    localStorage.setItem(`kb-chat.media-position.${ITEM.id}`, '90000');
+    // Unsent, and no device saved since (the server's save time is still null).
+    localStorage.setItem(
+      `kb-chat.media-position..${ITEM.id}`,
+      JSON.stringify({ positionMs: 90_000, delivered: false, basedOn: null }),
+    );
     const { harness, http } = await openPage();
     http.expectOne(ITEM_URL).flush({ ...ITEM, positionMs: 60_000 });
     await harness.fixture.whenStable();

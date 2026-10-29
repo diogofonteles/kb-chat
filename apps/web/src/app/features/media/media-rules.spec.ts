@@ -17,6 +17,7 @@ const anItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   canRetry: false,
   positionMs: 0,
   completedAt: null,
+  positionUpdatedAt: null,
   ...overrides,
 });
 

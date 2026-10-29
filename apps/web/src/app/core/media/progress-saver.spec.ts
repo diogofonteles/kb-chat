@@ -4,11 +4,14 @@ import {
   provideHttpClientTesting,
   type TestRequest,
 } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { SessionStore } from '@core/auth/session-store.js';
 import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../testing/fake-media-element.js';
+import { aMediaItem } from '../../testing/media-fixtures.js';
 import { MEDIA_ELEMENT_FACTORY, MediaEngine } from './media-engine.js';
 import { ProgressSaver } from './progress-saver.js';
 
@@ -20,21 +23,29 @@ const A = {
 };
 const B = { ...A, id: '22222222-2222-4222-8222-222222222222', src: '/b' };
 const urlOf = (id: string) => `/api/v1/media/${id}/progress`;
+const T0 = '2026-10-29T10:00:00.000Z';
+const savedAs = (positionMs: number, at = '2026-10-29T12:00:00.000Z') => ({
+  positionMs,
+  completedAt: null,
+  positionUpdatedAt: at,
+});
+const keyOf = (email: string, id = A.id) =>
+  `kb-chat.media-position.${encodeURIComponent(email)}.${id}`;
 
-function setup() {
-  localStorage.clear();
+function setup(email = 'ana@example.com') {
   const media: FakeMedia = fakeMediaElement();
+  const me = signal<{ email: string } | null>({ email });
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(),
       provideHttpClientTesting(),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
+      { provide: SessionStore, useValue: { me } },
     ],
   });
   const engine = TestBed.inject(MediaEngine);
   const saver = TestBed.inject(ProgressSaver);
   const http = TestBed.inject(HttpTestingController);
-  /** Loads `source`, plays it, and has the element report `seconds`. */
   const playAt = (seconds: number) => {
     media.setCurrentTime(seconds);
     media.emit('timeupdate');
@@ -47,49 +58,69 @@ function setup() {
     media.emit('playing');
     TestBed.tick();
   };
+  const pause = () => {
+    media.setPaused(true);
+    media.emit('pause');
+    TestBed.tick();
+  };
   const puts = (id = A.id): TestRequest[] =>
     http.match({ method: 'PUT', url: urlOf(id) });
-  return { engine, saver, http, media, playAt, start, puts };
+  const kept = (id = A.id) => localStorage.getItem(keyOf(email, id));
+  return { engine, saver, http, media, playAt, start, pause, puts, kept, me };
 }
 
 describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers();
   });
+  afterEach(() => vi.useRealTimers());
 
-  it('keeps the position in the browser every second and sends it every 10 s while playing', async () => {
-    const { playAt, start, puts, saver } = setup();
+  it('keeps the position every second and sends it every 10 s while playing', async () => {
+    const { playAt, start, puts, kept } = setup();
     start();
     for (let second = 1; second <= 35; second++) {
       playAt(second);
       await vi.advanceTimersByTimeAsync(1_000);
+      // Each save answers before the next: they go one after the other.
+      puts().forEach((request) =>
+        request.flush(savedAs(request.request.body.positionMs)),
+      );
     }
-    const sent = puts();
-    expect(sent.length).toBe(3);
-    expect(sent.map((request) => request.request.body.positionMs)).toEqual([
-      10_000, 20_000, 30_000,
-    ]);
-    sent.forEach((request) => request.flush(null));
-    expect(saver.localPosition(A.id)).toBe(35_000);
+    expect(JSON.parse(kept() ?? '{}')).toMatchObject({
+      positionMs: 35_000,
+      delivered: false,
+    });
+  });
+
+  it('sends saves of one media one after the other, never two at once', async () => {
+    const { playAt, start, pause, puts } = setup();
+    start();
+    playAt(10);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const first = puts();
+    expect(first.length).toBe(1);
+    playAt(11);
+    pause();
+    // The pause waits for the first save to answer.
+    expect(puts()).toEqual([]);
+    first[0]?.flush(savedAs(10_000));
+    expect(puts()[0]?.request.body).toEqual({ positionMs: 11_000 });
   });
 
   it('sends at once on pause, and never the same position twice', async () => {
-    const { media, playAt, start, puts } = setup();
+    const { media, playAt, start, pause, puts } = setup();
     start();
     playAt(4);
     await vi.advanceTimersByTimeAsync(1_000);
-    media.setPaused(true);
-    media.emit('pause');
-    TestBed.tick();
+    pause();
     const [paused] = puts();
     expect(paused?.request.body).toEqual({ positionMs: 4_000 });
-    paused?.flush(null);
+    paused?.flush(savedAs(4_000));
+    media.setPaused(false);
     media.emit('playing');
-    media.setPaused(true);
-    media.emit('pause');
     TestBed.tick();
+    pause();
     expect(puts()).toEqual([]);
   });
 
@@ -103,10 +134,22 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     expect(puts()[0]?.request.body).toEqual({ positionMs: 7_000 });
   });
 
-  it('saves when the tab is hidden and, with a request that outlives it, when the page goes', async () => {
-    const fetch = vi.fn(() => Promise.resolve(new Response(null)));
-    vi.stubGlobal('fetch', fetch);
-    const { playAt, start } = setup();
+  it('keeps a skip made while paused, so leaving sends where the person is', () => {
+    const { engine, media, start, pause, puts, playAt } = setup();
+    start();
+    playAt(1);
+    pause();
+    puts()[0]?.flush(savedAs(1_000));
+    engine.seek(200_000);
+    media.emit('seeked');
+    TestBed.tick();
+    engine.load(B);
+    TestBed.tick();
+    expect(puts()[0]?.request.body).toEqual({ positionMs: 200_000 });
+  });
+
+  it('sends one save that outlives the page when it is hidden or goes away', async () => {
+    const { playAt, start, http, kept } = setup();
     start();
     playAt(12.5);
     await vi.advanceTimersByTimeAsync(500);
@@ -115,59 +158,130 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
       get: () => 'hidden',
     });
     document.dispatchEvent(new Event('visibilitychange'));
-    expect(fetch).toHaveBeenCalledTimes(1);
-    playAt(13.5);
     window.dispatchEvent(new Event('pagehide'));
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls[1]).toEqual([
-      urlOf(A.id),
-      expect.objectContaining({
-        keepalive: true,
-        body: '{"positionMs":13500}',
-      }),
-    ]);
+    const sent = http.match({ method: 'PUT', url: urlOf(A.id) });
+    expect(sent.length).toBe(1);
+    expect(sent[0]?.request.keepalive).toBe(true);
+    expect(sent[0]?.request.body).toEqual({ positionMs: 12_500 });
+    // Counted as delivered: it never overrides another device later (FR-3).
+    expect(JSON.parse(kept() ?? '{}').delivered).toBe(true);
     Reflect.deleteProperty(document, 'visibilityState');
   });
 
   it('sends a failed position again at the next chance', async () => {
-    const { media, playAt, start, puts } = setup();
+    const { playAt, start, pause, puts } = setup();
     start();
     playAt(10);
     await vi.advanceTimersByTimeAsync(10_000);
     puts()[0]?.flush(null, { status: 0, statusText: 'offline' });
-    media.setPaused(true);
-    media.emit('pause');
-    TestBed.tick();
+    pause();
     expect(puts()[0]?.request.body).toEqual({ positionMs: 10_000 });
   });
 
-  it('never sends past the end the server knows', async () => {
-    const { playAt, start, puts, media } = setup();
+  it('never sends past the end the server knows', () => {
+    const { playAt, start, pause, puts } = setup();
     start();
     playAt(600.02);
-    media.setPaused(true);
-    media.emit('pause');
-    TestBed.tick();
+    pause();
     expect(puts()[0]?.request.body).toEqual({ positionMs: 600_000 });
   });
 
   it('forgets the browser copy once the server has it', async () => {
-    const { playAt, start, puts, saver, media } = setup();
+    const { playAt, start, pause, puts, kept } = setup();
     start();
     playAt(5);
     await vi.advanceTimersByTimeAsync(1_000);
-    media.setPaused(true);
-    media.emit('pause');
-    TestBed.tick();
-    puts()[0]?.flush(null);
-    expect(saver.localPosition(A.id)).toBeNull();
+    pause();
+    puts()[0]?.flush(savedAs(5_000));
+    expect(kept()).toBeNull();
   });
 
-  it('saves at once when the player is closed', async () => {
+  it('saves at once when the player is closed', () => {
     const { playAt, start, puts, saver } = setup();
     start();
     playAt(3.4);
     saver.saveNow();
     expect(puts()[0]?.request.body).toEqual({ positionMs: 3_400 });
+  });
+
+  it('starts from an unsent position only if no device saved one since (AC-3)', () => {
+    const { saver, puts } = setup();
+    localStorage.setItem(
+      keyOf('ana@example.com'),
+      JSON.stringify({ positionMs: 90_000, delivered: false, basedOn: T0 }),
+    );
+    const item = aMediaItem({
+      id: A.id,
+      positionMs: 60_000,
+      positionUpdatedAt: T0,
+    });
+    expect(saver.startFrom(item)).toBe(90_000);
+    expect(puts()[0]?.request.body).toEqual({ positionMs: 90_000 });
+  });
+
+  it('starts from the server when another device saved later, and drops the stale copy', () => {
+    const { saver, puts, kept } = setup();
+    localStorage.setItem(
+      keyOf('ana@example.com'),
+      JSON.stringify({ positionMs: 2_000, delivered: false, basedOn: T0 }),
+    );
+    const item = aMediaItem({
+      id: A.id,
+      positionMs: 65_000,
+      positionUpdatedAt: '2026-10-29T11:00:00.000Z',
+    });
+    expect(saver.startFrom(item)).toBe(65_000);
+    expect(puts()).toEqual([]);
+    expect(kept()).toBeNull();
+  });
+
+  it('starts from the server when the browser copy was already delivered', () => {
+    const { saver, puts } = setup();
+    localStorage.setItem(
+      keyOf('ana@example.com'),
+      JSON.stringify({ positionMs: 2_000, delivered: true, basedOn: T0 }),
+    );
+    expect(
+      saver.startFrom(
+        aMediaItem({ id: A.id, positionMs: 65_000, positionUpdatedAt: T0 }),
+      ),
+    ).toBe(65_000);
+    expect(puts()).toEqual([]);
+  });
+
+  it('keeps each person’s copy apart in a shared browser (BR-2)', () => {
+    localStorage.setItem(
+      keyOf('ana@example.com'),
+      JSON.stringify({ positionMs: 90_000, delivered: false, basedOn: null }),
+    );
+    const { saver } = setup('bruno@example.com');
+    expect(
+      saver.startFrom(
+        aMediaItem({ id: A.id, positionMs: 0, positionUpdatedAt: null }),
+      ),
+    ).toBe(0);
+  });
+
+  it('ignores a damaged browser copy', () => {
+    const { saver, puts } = setup();
+    localStorage.setItem(keyOf('ana@example.com'), '{"positionMs":"x"}');
+    expect(
+      saver.startFrom(
+        aMediaItem({ id: A.id, positionMs: 4_000, positionUpdatedAt: null }),
+      ),
+    ).toBe(4_000);
+    expect(puts()).toEqual([]);
+  });
+
+  it('says when the server no longer has the media for this person', () => {
+    const { start, playAt, pause, puts, saver } = setup();
+    start();
+    playAt(3);
+    pause();
+    puts()[0]?.flush(
+      { error: { code: 'MEDIA_NOT_FOUND', message: 'x' } },
+      { status: 404, statusText: 'Not Found' },
+    );
+    expect(saver.gone()).toBe(A.id);
   });
 });

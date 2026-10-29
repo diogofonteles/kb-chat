@@ -10,6 +10,7 @@ import {
   computed,
   effect,
   inject,
+  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
@@ -94,8 +95,17 @@ export class MediaPlayerPage {
     const err = this.item.error();
     return err !== undefined && toUiErrorCode(err) === 'MEDIA_NOT_FOUND';
   });
-  /** Where "Continuar de" starts; null when there is nothing to continue. */
-  protected readonly resumeAt = signal<number | null>(null);
+  /** Where "Continuar de" would start, for the media opened now. */
+  private readonly offer = signal<number | null>(null);
+  /** The person chose ("Continuar de" or "Começar do início"): the offer goes. */
+  private readonly answered = linkedSignal({
+    source: this.offer,
+    computation: () => false,
+  });
+  /** Offered until the person chooses or the media plays some other way (▶, K). */
+  protected readonly resumeAt = computed(() =>
+    this.answered() || this.engine.hasPlayed() ? null : this.offer(),
+  );
   protected readonly resumeLabel = computed(() => {
     const at = this.resumeAt();
     return at === null
@@ -129,13 +139,13 @@ export class MediaPlayerPage {
 
   /** "Continuar de 23:10": plays from where the person stopped. */
   protected resume(): void {
-    this.resumeAt.set(null);
+    this.answered.set(true);
     this.engine.play();
   }
 
   /** "Começar do início". */
   protected startOver(): void {
-    this.resumeAt.set(null);
+    this.answered.set(true);
     this.engine.seek(0);
     this.engine.play();
   }
@@ -147,9 +157,6 @@ export class MediaPlayerPage {
       if (!media) return;
       const title = $localize`:@@route.mediaItemTitle:${media.title}:title: — Nova Alexandria`;
       this.title.setTitle(this.engine.playing() ? `▶ ${title}` : title);
-    });
-    effect(() => {
-      if (this.engine.playing()) this.resumeAt.set(null);
     });
   }
 
@@ -205,15 +212,13 @@ export class MediaPlayerPage {
   }
 
   /**
-   * Loads the media paused at the saved position (this browser's, when it has a newer one
-   * the server has not confirmed yet). Coming back from the mini-player keeps what plays.
+   * Loads the media paused at the saved position (this browser's unsent one when no other
+   * device saved since, FR-3). Coming back from the mini-player keeps what plays.
    */
   private open(media: MediaItem): void {
     if (this.engine.source()?.id === media.id) return;
-    const kept = this.saver.localPosition(media.id);
-    if (kept !== null) this.saver.resend(media.id);
-    const at = resumeFrom(kept ?? media.positionMs, media.durationMs);
-    this.resumeAt.set(at);
+    const at = resumeFrom(this.saver.startFrom(media), media.durationMs);
+    this.offer.set(at);
     this.engine.load(
       {
         id: media.id,
@@ -225,4 +230,5 @@ export class MediaPlayerPage {
       at ?? 0,
     );
   }
+
 }

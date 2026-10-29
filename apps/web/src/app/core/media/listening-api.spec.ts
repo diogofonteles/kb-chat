@@ -20,8 +20,6 @@ function setup() {
 }
 
 describe('ListeningApi (KBC-041)', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
   it('reads and saves the preferences through the contract', async () => {
     const { api, http } = setup();
     const read = firstValueFrom(api.preferences());
@@ -45,7 +43,7 @@ describe('ListeningApi (KBC-041)', () => {
     await expect(read).rejects.toThrow();
   });
 
-  it('saves a position as whole milliseconds', async () => {
+  it('saves a position as whole milliseconds and reads what the server keeps', async () => {
     const { api, http } = setup();
     const saved = firstValueFrom(api.saveProgress(ID, 23_456.7));
     const put = http.expectOne({
@@ -53,24 +51,21 @@ describe('ListeningApi (KBC-041)', () => {
       url: `/api/v1/media/${ID}/progress`,
     });
     expect(put.request.body).toEqual({ positionMs: 23_456 });
-    put.flush(null, { status: 204, statusText: 'No Content' });
-    await expect(saved).resolves.toBeNull();
+    expect(put.request.keepalive).toBe(false);
+    const kept = {
+      positionMs: 23_456,
+      completedAt: null,
+      positionUpdatedAt: '2026-10-29T12:00:00.000Z',
+    };
+    put.flush(kept);
+    await expect(saved).resolves.toEqual(kept);
   });
 
-  it('saves a position as the page closes with a request that outlives it (FR-3)', () => {
-    const fetch = vi.fn(() => Promise.resolve(new Response(null)));
-    vi.stubGlobal('fetch', fetch);
-    const { api } = setup();
-    api.saveProgressOnExit(ID, 61_000.9);
-    expect(fetch).toHaveBeenCalledWith(`/api/v1/media/${ID}/progress`, {
-      method: 'PUT',
-      keepalive: true,
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-        'x-requested-with': 'kb-chat',
-      },
-      body: JSON.stringify({ positionMs: 61_000 }),
-    });
+  it('can send one that outlives the page (FR-3)', () => {
+    const { api, http } = setup();
+    api.saveProgress(ID, 61_000.9, { keepalive: true }).subscribe();
+    const put = http.expectOne(`/api/v1/media/${ID}/progress`);
+    expect(put.request.keepalive).toBe(true);
+    expect(put.request.body).toEqual({ positionMs: 61_000 });
   });
 });

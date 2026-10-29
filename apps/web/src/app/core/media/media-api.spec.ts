@@ -32,6 +32,7 @@ const ITEM: MediaItem = {
   canRetry: false,
   positionMs: 0,
   completedAt: null,
+  positionUpdatedAt: null,
 };
 
 function setup() {

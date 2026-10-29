@@ -2,9 +2,10 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   mediaPreferencesSchema,
+  mediaProgressSchema,
   type MediaPreferences,
+  type MediaProgress,
 } from '@kb-chat/contracts';
-import { CSRF } from '@core/auth/auth-interceptor.js';
 import { map, type Observable } from 'rxjs';
 import { mediaUrl } from './media-api.js';
 
@@ -28,26 +29,19 @@ export class ListeningApi {
       .pipe(map((body) => mediaPreferencesSchema.parse(body)));
   }
 
-  saveProgress(id: string, positionMs: number): Observable<null> {
+  /** Saves a position; the answer is what the server keeps, with its time (FR-3). */
+  saveProgress(
+    id: string,
+    positionMs: number,
+    options: { readonly keepalive?: boolean } = {},
+  ): Observable<MediaProgress> {
     return this.http
-      .put(progressUrl(id), { positionMs: Math.floor(positionMs) })
-      .pipe(map(() => null));
-  }
-
-  /**
-   * The last position as the page goes away (`pagehide`): a `keepalive` request outlives
-   * the page, which an HttpClient request does not (FR-3).
-   */
-  saveProgressOnExit(id: string, positionMs: number): void {
-    void fetch(progressUrl(id), {
-      method: 'PUT',
-      keepalive: true,
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-        [CSRF.header]: CSRF.value,
-      },
-      body: JSON.stringify({ positionMs: Math.floor(positionMs) }),
-    }).catch(() => undefined);
+      .put(
+        progressUrl(id),
+        { positionMs: Math.floor(positionMs) },
+        // `keepalive` lets the request outlive the page as it goes away (pagehide).
+        { keepalive: options.keepalive ?? false },
+      )
+      .pipe(map((body) => mediaProgressSchema.parse(body)));
   }
 }
