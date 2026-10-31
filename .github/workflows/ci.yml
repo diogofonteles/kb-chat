@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -46,9 +46,9 @@ jobs:
           - name: libs
             projects: '@kb-chat/contracts,@kb-chat/player-core'
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -107,9 +107,9 @@ jobs:
             shard: 3/3
             browser: 'webkit'
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -117,7 +117,7 @@ jobs:
       # Only the browser this group uses (none for Google Chrome, already on the runner),
       # cached by the lockfile (the Playwright version).
       - if: matrix.browser != ''
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: browsers
         with:
           path: ~/.cache/ms-playwright
@@ -134,7 +134,7 @@ jobs:
       - run: google-chrome --version
       - run: pnpm --filter @kb-chat/e2e exec playwright test ${{ matrix.projects }} --shard=${{ matrix.shard }}
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ strategy.job-index }}
           path: e2e/playwright-report
@@ -149,10 +149,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
       - name: Build the API image (it carries the runner and Codex)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/api/Dockerfile
