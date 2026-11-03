@@ -4,7 +4,8 @@
   Nova Alexandria transcriber (KBC-036, ADR 0023). Template: replace REPO_DIR with the
   absolute path of this repository's checkout and USER_HOME with your home directory, then
   `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist`.
-  The token stays in the Keychain; nothing secret goes in this file.
+  The token stays in the Keychain; nothing secret goes in this file. `--extra diarize`
+  installs Senko so the worker can separate voices too (KBC-064); drop it to transcribe only.
 -->
 <plist version="1.0">
 <dict>
@@ -14,6 +15,8 @@
   <array>
     <string>/opt/homebrew/bin/uv</string>
     <string>run</string>
+    <string>--extra</string>
+    <string>diarize</string>
     <string>--project</string>
     <string>REPO_DIR/tools/transcriber</string>
     <string>transcriber</string>
