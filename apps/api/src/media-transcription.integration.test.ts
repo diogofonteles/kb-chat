@@ -112,7 +112,14 @@ describe('Transcription: the worker protocol (KBC-036)', () => {
     const media = await startMedia();
     const { token, transcriber } = await pair(media);
     const item = await readyForTranscription(media);
-    expect((await itemOf(media, item.id)).transcription).toMatchObject({
+    const ready = await itemOf(media, item.id);
+    // KBC-049: an upload that names an author is queued for transcription all the same.
+    expect(ready.author).toEqual({
+      slug: 'mestre-laercio',
+      name: 'Mestre Laércio',
+      main: true,
+    });
+    expect(ready.transcription).toMatchObject({
       status: 'waiting',
       confidence: null,
       version: null,
