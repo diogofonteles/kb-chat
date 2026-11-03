@@ -11,6 +11,18 @@ export const WINDOW_MS = 10 * 60_000;
 /** A silence this long before a segment makes it a cut candidate (KBC-044's map later). */
 export const CANDIDATE_SILENCE_MS = 1_000;
 
+/** The marks around the transcript in the prompt; text inside may never close them. */
+const DATA_MARK = /<\s*\/?\s*transcri[cç][aã]o\s*>/giu;
+
+/**
+ * Text from the recording or the upload (speech, title, names) made safe to quote in the
+ * prompt: one line, without the transcript marks, so it can neither forge a segment line
+ * ("\n[999] …") nor step out of the data (KBC-067 review: prompt injection).
+ */
+export function asData(text: string): string {
+  return text.replace(DATA_MARK, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** One segment as sent: its 1-based id, times, text and voice (null without KBC-064). */
 export interface PromptSegment {
   readonly id: number;
@@ -29,7 +41,7 @@ export function toPromptSegments(
     id: index + 1,
     startMs: segment.startMs,
     endMs: segment.endMs,
-    text: segment.text.trim(),
+    text: asData(segment.text),
     voice: voices?.[index] ?? null,
   }));
 }
