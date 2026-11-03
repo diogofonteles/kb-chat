@@ -1,12 +1,18 @@
 import {
   MAX_MEDIA_HITS,
+  MEDIA_COUNT_CAP,
   searchRequestSchema,
+  type Authorship,
   type KindCounts,
   type MediaHit,
   type SearchRequest,
   type SearchResponse,
 } from '@kb-chat/contracts';
-import type { MediaSearchPort } from '../../ports/media-search.js';
+import type {
+  AuthorRule,
+  AuthorshipTally,
+  MediaSearchPort,
+} from '../../ports/media-search.js';
 import type { CatalogRegistry } from '../catalog/index.js';
 import {
   authorRuleOf,
@@ -52,9 +58,38 @@ interface SpokenPart {
   readonly hits: readonly MediaHit[];
   /** null: the collection has no audio this person may hear. */
   readonly count: number | null;
+  /** Matches per "Autoria" group, whatever group is chosen (a disjunctive facet). */
+  readonly byAuthorship?: AuthorshipTally;
 }
 
 const NO_AUDIO: SpokenPart = { hits: [], count: null };
+
+/** The passages' total under the "Autoria" choice, from the tally (up to the cap). */
+const totalUnder = (rule: AuthorRule, tally: AuthorshipTally): number => {
+  if (rule.kind === 'main') return tally.main;
+  if (rule.kind === 'others') return tally.others;
+  return Math.min(tally.main + tally.others, MEDIA_COUNT_CAP);
+};
+
+/** The "Autoria" counts with the passages' added (the facet covers both kinds). */
+function withSpokenAuthorships(
+  facets: SearchResponse['facets'],
+  spoken: SpokenPart['byAuthorship'],
+): SearchResponse['facets'] {
+  if (!spoken) return facets;
+  const added: Partial<Record<Authorship, number>> = {
+    'mestre-laercio': spoken.main,
+    'outros-autores': spoken.others,
+  };
+  const known = new Set(facets.authorships.map((one) => one.value));
+  const merged = facets.authorships.map((one) => ({
+    value: one.value,
+    count: one.count + (added[one.value] ?? 0),
+  }));
+  for (const [value, count] of Object.entries(added) as [Authorship, number][])
+    if (!known.has(value) && count > 0) merged.push({ value, count });
+  return { ...facets, authorships: merged };
+}
 
 /**
  * The free search over texts and spoken passages (KBC-039, ADR 0024 §2): the vault's
@@ -84,9 +119,12 @@ export class SearchWithMedia {
           nextOffset: null,
           hiddenOffTopic: 0,
         };
-    const media =
-      parsed.kinds.includes('audio') && parsed.offset === 0 ? spoken.hits : [];
-    return { ...texts, media: [...media], kinds };
+    const audio = parsed.kinds.includes('audio');
+    const media = audio && parsed.offset === 0 ? spoken.hits : [];
+    const facets = audio
+      ? withSpokenAuthorships(texts.facets, spoken.byAuthorship)
+      : texts.facets;
+    return { ...texts, facets, media: [...media], kinds };
   }
 
   /** The passages, timed and never failing the search: a broken index means texts only. */
@@ -112,27 +150,44 @@ export class SearchWithMedia {
     { q, filters }: ParsedRequest,
     viewer: SearchViewer,
   ): SpokenPart {
-    const { media, authors } = this.deps;
+    const { media } = this.deps;
     if (!media || !viewer.mayHear) return NO_AUDIO;
     const visible = this.visibleScope(topic, viewer);
     if (!media.hasTranscripts(visible)) return NO_AUDIO;
+    if (hasDocumentOnlyFilters(filters)) return { hits: [], count: 0 };
     const topics =
       filters.topics.length > 0
         ? visible.filter((slug) => filters.topics.includes(slug))
         : visible;
+    return this.passagesIn(media, { terms: termsOf(q), topics, filters });
+  }
+
+  /** The passages under the "Autoria" choice, and the count of each group. */
+  private passagesIn(
+    media: MediaSearchPort,
+    input: {
+      readonly terms: readonly string[];
+      readonly topics: readonly string[];
+      readonly filters: ParsedRequest['filters'];
+    },
+  ): SpokenPart {
+    const { terms, topics, filters } = input;
+    const { authors } = this.deps;
     const mainOf = new Map(topics.map((slug) => [slug, authors.mainOf(slug)]));
+    const byAuthorship = media.tally({ terms, topics, mainOf });
     const rule = authorRuleOf(filters.authorships, mainOf);
-    if (rule === null || hasDocumentOnlyFilters(filters))
-      return { hits: [], count: 0 };
+    if (rule === null) return { hits: [], count: 0, byAuthorship };
     const found = media.search({
-      terms: termsOf(q),
+      terms,
       topics,
       authors: rule,
       limit: MAX_MEDIA_HITS,
+      count: false,
     });
     return {
       hits: found.matches.map((match) => toMediaHit(match, authors)),
-      count: found.total,
+      count: totalUnder(rule, byAuthorship),
+      byAuthorship,
     };
   }
 

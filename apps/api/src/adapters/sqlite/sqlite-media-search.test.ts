@@ -211,6 +211,23 @@ describe('SqliteMediaSearch', () => {
         .matches.map((m) => m.title)
         .sort();
     expect(titles({ kind: 'main', mainOf })).toEqual(['Do Mestre']);
+    expect(
+      search.tally({ terms: ['lupunamanta'], topics: ['udv'], mainOf }),
+    ).toEqual({ main: 1, others: 2 });
+    expect(
+      search.tally({
+        terms: ['lupunamanta'],
+        topics: ['udv'],
+        mainOf: new Map([['udv', null]]),
+      }),
+    ).toEqual({ main: 0, others: 3 });
+    expect(search.tally({ terms: [], topics: ['udv'], mainOf })).toEqual({
+      main: 0,
+      others: 0,
+    });
+    expect(search.search(query(['lupunamanta'], { count: false })).total).toBe(
+      0,
+    );
     expect(titles({ kind: 'others', mainOf })).toEqual([
       'De outro',
       'Sem autor',

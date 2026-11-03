@@ -343,6 +343,15 @@ describe('spoken passages in the search (KBC-039)', () => {
       filters: { topics: ['udv/palavra-do-mestre'] },
     });
 
+    const authorshipCount = (body: SearchResponse, value: string) =>
+      body.facets.authorships.find((one) => one.value === value)?.count;
+    // The "Autoria" counts take the passages in, whatever group is chosen.
+    for (const one of [main, others, synthesis]) {
+      expect(authorshipCount(one.body, 'mestre-laercio')).toBe(1);
+      expect(
+        authorshipCount(one.body, 'outros-autores'),
+      ).toBeGreaterThanOrEqual(1);
+    }
     expect(titles(main.body.media)).toEqual(['Do Mestre']);
     expect(titles(others.body.media)).toEqual(['De outro']);
     expect(synthesis.body.media).toEqual([]);
@@ -419,6 +428,12 @@ describe('spoken passages in the search (KBC-039)', () => {
     expect(titles(audioOnly.body.media)).toEqual(['Sobre a Hoasca']);
     expect(audioOnly.body.kinds).toEqual({ text: 1, audio: 1 });
     expect(textOnly.body.media).toEqual([]);
+    // Without audio chosen, the facet counts are the texts' only.
+    expect(
+      textOnly.body.facets.authorships.find(
+        (one) => one.value === 'mestre-laercio',
+      ),
+    ).toBeUndefined();
     expect(textOnly.body.items.map((item) => item.title)).toEqual([
       'História da Hoasca',
     ]);

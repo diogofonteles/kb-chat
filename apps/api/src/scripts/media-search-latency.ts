@@ -205,13 +205,22 @@ function timeOne(
 ): { readonly ms: number; readonly total: number } {
   const startedAt = performance.now();
   search.hasTranscripts(scenario.topics);
-  const found = search.search({
-    terms: termsOf(q),
+  // As the API does: one tally for the "Autoria" counts, then the passages.
+  const terms = termsOf(q);
+  const tally = search.tally({
+    terms,
+    topics: scenario.topics,
+    mainOf: MAIN_OF,
+  });
+  search.search({
+    terms,
     topics: scenario.topics,
     authors: scenario.authors,
     limit: MAX_MEDIA_HITS,
+    count: false,
   });
-  return { ms: performance.now() - startedAt, total: found.total };
+  const total = tally.main + tally.others;
+  return { ms: performance.now() - startedAt, total };
 }
 
 const CASES = SCENARIOS.flatMap((scenario) =>

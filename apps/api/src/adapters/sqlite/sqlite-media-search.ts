@@ -5,6 +5,7 @@ import {
 } from '@kb-chat/contracts';
 import type {
   AuthorRule,
+  AuthorshipTally,
   MediaSearchPort,
   MediaSearchQuery,
   MediaSearchResult,
@@ -59,6 +60,9 @@ const FROM_MATCHES = `FROM segments_fts f
   JOIN transcripts t ON t.id = s.transcript_id
   JOIN media m ON m.id = t.media_id`;
 
+/** Matches read to tally both groups (each shown up to MEDIA_COUNT_CAP). */
+const TALLY_CAP = 2 * MEDIA_COUNT_CAP;
+
 /** The most matches in the whole index that are ranked by relevance (NFR-1). */
 const RANKED = 10_000;
 /** Past RANKED, this many times the limit are read to put normal confidence first. */
@@ -102,6 +106,7 @@ export class SqliteMediaSearch implements MediaSearchPort {
     topics,
     authors,
     limit,
+    count = true,
   }: MediaSearchQuery): MediaSearchResult {
     if (terms.length === 0 || topics.length === 0)
       return { matches: [], total: 0 };
@@ -109,12 +114,43 @@ export class SqliteMediaSearch implements MediaSearchPort {
     const where = `WHERE segments_fts MATCH ? AND ${scope.sql}`;
     const values = [toMatchExpression(terms), ...scope.values];
     const matches = this.top(where, values, limit);
+    return { matches, total: count ? this.countWhere(where, values) : 0 };
+  }
+
+  tally({
+    terms,
+    topics,
+    mainOf,
+  }: Parameters<MediaSearchPort['tally']>[0]): AuthorshipTally {
+    if (terms.length === 0 || topics.length === 0)
+      return { main: 0, others: 0 };
+    const mains = topics.flatMap((topic) => [topic, mainOf.get(topic) ?? null]);
+    const row = this.db
+      .prepare(
+        `SELECT count(*) AS n, coalesce(sum(a = main), 0) AS main FROM (
+           SELECT ${AUTHOR} AS a,
+             CASE m.topic ${topics.map(() => 'WHEN ? THEN ?').join(' ')} END AS main
+           ${FROM_MATCHES}
+           WHERE segments_fts MATCH ? AND m.topic IN (${placeholders(topics.length)})
+           LIMIT ?)`,
+      )
+      .get(...mains, toMatchExpression(terms), ...topics, TALLY_CAP);
+    const all = Number(row?.['n'] ?? 0);
+    const main = Number(row?.['main'] ?? 0);
+    return {
+      main: Math.min(main, MEDIA_COUNT_CAP),
+      others: Math.min(all - main, MEDIA_COUNT_CAP),
+    };
+  }
+
+  /** Matching segments, up to MEDIA_COUNT_CAP. */
+  private countWhere(where: string, values: readonly SQLInputValue[]): number {
     const counted = this.db
       .prepare(
         `SELECT count(*) AS n FROM (SELECT 1 ${FROM_MATCHES} ${where} LIMIT ?)`,
       )
       .get(...values, MEDIA_COUNT_CAP);
-    return { matches, total: Number(counted?.['n'] ?? 0) };
+    return Number(counted?.['n'] ?? 0);
   }
 
   /**

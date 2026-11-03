@@ -19,6 +19,14 @@ export interface MediaSearchQuery {
   readonly topics: readonly string[];
   readonly authors: AuthorRule;
   readonly limit: number;
+  /** Count the matches too (default); off when the caller has the tally already. */
+  readonly count?: boolean;
+}
+
+/** Matching segments per "Autoria" group, each up to MEDIA_COUNT_CAP. */
+export interface AuthorshipTally {
+  readonly main: number;
+  readonly others: number;
 }
 
 /** One matching segment of a current transcript. */
@@ -47,6 +55,15 @@ export interface MediaSearchResult {
 /** The transcripts' own index (ADR 0024 §1), in the media database. */
 export interface MediaSearchPort {
   search(query: MediaSearchQuery): MediaSearchResult;
+  /**
+   * Matching segments by the collection's main author and by everyone else, in one pass
+   * (the "Autoria" counts and the passages' total, NFR-1).
+   */
+  tally(query: {
+    readonly terms: readonly string[];
+    readonly topics: readonly string[];
+    readonly mainOf: ReadonlyMap<string, string | null>;
+  }): AuthorshipTally;
   /** Whether any of these collections has a searchable (transcribed) media. */
   hasTranscripts(topics: readonly string[]): boolean;
 }
