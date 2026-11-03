@@ -131,6 +131,8 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
     await vi.waitFor(() =>
       expect(screen.getByRole('button', { name: 'Copiado' })).toBeTruthy(),
     );
+    // Said in the live region too: a button's new text is not always announced (UP-01).
+    expect(screen.getByRole('status').textContent).toContain('Token copiado.');
     expect(writeText).toHaveBeenCalledWith(
       'nat_the-secret-token-of-the-mac-0123456789',
     );
@@ -220,5 +222,75 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
     http.expectOne(URL).flush({ items: [] });
     await result.fixture.whenStable();
     expect(document.body.textContent).toContain('Nenhum transcritor pareado.');
+  });
+
+  it('moves the focus where it is useful when what held it goes away (WCAG 2.4.3)', async () => {
+    const { fixture, http } = await renderPanel([aTranscriber()]);
+    const revoke = () =>
+      screen.getByRole('button', { name: 'Revogar Mac do dono' });
+    fireEvent.click(revoke());
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Cancelar' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(revoke());
+    fireEvent.click(revoke());
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Revogar' }));
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/${aTranscriber().id}` })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [] });
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: 'Pareados' }),
+    );
+    expect(screen.getByRole('status').textContent).toContain(
+      '"Mac do dono" revogado.',
+    );
+  });
+
+  it('gives the focus back to the name field after "Pronto, já copiei"', async () => {
+    const { fixture, http } = await renderPanel();
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: 'Mac' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    http.expectOne({ method: 'POST', url: URL }).flush({
+      transcriber: aTranscriber(),
+      token: 'nat_the-secret-token-of-the-mac-0123456789',
+    });
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [aTranscriber()] });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Pronto, já copiei' }));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByLabelText(/Nome do transcritor/),
+    );
+  });
+
+  it('says at the field that the name is taken (MA-23)', async () => {
+    const { fixture, http } = await renderPanel([aTranscriber()]);
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: 'Mac do dono' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    http
+      .expectOne({ method: 'POST', url: URL })
+      .flush(
+        { error: { code: 'MEDIA_CONFLICT', message: 'taken' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await fixture.whenStable();
+    const field = screen.getByLabelText(/Nome do transcritor/);
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(document.body.textContent).toContain(
+      'Já existe um transcritor com esse nome. Escolha outro.',
+    );
+    expect(document.activeElement).toBe(field);
   });
 });

@@ -6,6 +6,7 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
+  LOCALE_ID,
   afterNextRender,
   afterRenderEffect,
   computed,
@@ -33,7 +34,7 @@ import {
   switchMap,
 } from 'rxjs';
 import {
-  isInFlight,
+  pollEveryOf,
   isLowConfidence,
   lowNoticeOf,
   statusTextOf,
@@ -65,6 +66,7 @@ export class MediaListPage {
   private readonly api = inject(MediaApi);
   private readonly injector = inject(Injector);
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  private readonly locale = inject(LOCALE_ID);
   private readonly removeDialog =
     viewChild<ElementRef<HTMLDialogElement>>('removeDialog');
   private readonly rows = viewChildren<ElementRef<HTMLElement>>('row');
@@ -129,7 +131,7 @@ export class MediaListPage {
 
   /** Where its transcription is (KBC-036 FR-1), next to the status. */
   protected transcriptionOf(item: MediaItem): string {
-    return transcriptionTextOf(item);
+    return transcriptionTextOf(item, this.locale);
   }
 
   protected isLow(item: MediaItem): boolean {
@@ -259,11 +261,11 @@ export class MediaListPage {
   }
 
   private pollWhileInFlight(): void {
-    const inFlight = computed(() => this.items().some(isInFlight));
-    toObservable(inFlight)
+    const every = computed(() => pollEveryOf(this.items(), this.pollMs));
+    toObservable(every)
       .pipe(
         distinctUntilChanged(),
-        switchMap((moving) => (moving ? interval(this.pollMs) : EMPTY)),
+        switchMap((ms) => (ms === null ? EMPTY : interval(ms))),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.list.reload());

@@ -6,6 +6,7 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
+  LOCALE_ID,
   afterNextRender,
   computed,
   effect,
@@ -40,7 +41,7 @@ import {
   switchMap,
 } from 'rxjs';
 import {
-  isInFlight,
+  pollEveryOf,
   isLowConfidence,
   statusTextOf,
   transcriptionTextOf,
@@ -93,7 +94,9 @@ export class MediaPlayerPage {
     const media = this.media();
     if (!media) return '';
     const done = media.transcription.status === 'done';
-    return done && isLowConfidence(media) ? '' : transcriptionTextOf(media);
+    return done && isLowConfidence(media)
+      ? ''
+      : transcriptionTextOf(media, this.locale);
   });
   protected readonly lowConfidence = computed(() => {
     const media = this.media();
@@ -130,6 +133,7 @@ export class MediaPlayerPage {
       : $localize`:@@player.resume:Continuar de ${formatClock(at)}:time:`;
   });
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
   /** Opened from "Meus marcadores": plays from that bookmark (KBC-042 FR-5). */
@@ -184,14 +188,14 @@ export class MediaPlayerPage {
 
   /** "Ela aparece aqui assim que estiver pronta" (T15): the page asks again meanwhile. */
   private pollWhileConverting(): void {
-    const converting = computed(() => {
+    const every = computed(() => {
       const media = this.media();
-      return media !== null && isInFlight(media);
+      return media ? pollEveryOf([media], this.pollMs) : null;
     });
-    toObservable(converting)
+    toObservable(every)
       .pipe(
         distinctUntilChanged(),
-        switchMap((moving) => (moving ? interval(this.pollMs) : EMPTY)),
+        switchMap((ms) => (ms === null ? EMPTY : interval(ms))),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.item.reload());

@@ -44,46 +44,56 @@ export const statusTextOf = (item: MediaItem): string =>
 export const isInFlight = (item: MediaItem): boolean =>
   item.status === 'queued' ||
   item.status === 'processing' ||
-  isTranscribing(item.transcription);
+  item.transcription.status === 'transcribing';
 
 /**
- * A transcription that will move soon: running, or waiting while a transcriber is on. One
- * waiting for a Mac that is off is not polled: nothing changes until it comes back.
+ * A transcription waiting while a transcriber is on: it starts some time, maybe in days
+ * (the queue may be long), so it is asked about now and then, not every 5 s. One waiting
+ * for a Mac that is off is not asked about at all: nothing moves until it comes back.
  */
-const isTranscribing = (transcription: MediaTranscription): boolean =>
-  transcription.status === 'transcribing' ||
-  (transcription.status === 'waiting' && transcription.transcriber === 'on');
+export const isWaitingForTranscriber = (item: MediaItem): boolean =>
+  item.status === 'ready' &&
+  item.transcription.status === 'waiting' &&
+  item.transcription.transcriber === 'on';
 
-/** "03/11 às 14:05": when the transcriber was last seen, in the person's locale. */
-const seenAt = (iso: string): string =>
-  formatDate(
-    iso,
-    $localize`:@@media.transcription.offDateFormat:dd/MM 'às' HH:mm`,
-    'pt-BR',
-  );
+/** 12 × 5 s: a minute between asks while a transcription only waits. */
+export const SLOW_POLL_FACTOR = 12;
+
+/** How often a page asks again: `fastMs` while moving, a minute while waiting, or never. */
+export function pollEveryOf(
+  items: readonly MediaItem[],
+  fastMs: number,
+): number | null {
+  if (items.some(isInFlight)) return fastMs;
+  return items.some(isWaitingForTranscriber) ? fastMs * SLOW_POLL_FACTOR : null;
+}
+
+/**
+ * "03/11/2026 às 14:05": when the transcriber was last seen, in the app's locale and in the
+ * same format as "Transcritores" (UP-05).
+ */
+export const SEEN_AT_FORMAT = "dd/MM/yyyy 'às' HH:mm";
+const seenAt = (iso: string, locale: string): string =>
+  formatDate(iso, SEEN_AT_FORMAT, locale);
+
+type Label = (transcription: MediaTranscription, locale: string) => string;
 
 /** Why the transcription waits, after "Aguardando o transcritor" (FR-1). */
-const WAITING_REASONS: Record<
-  TranscriberPresence,
-  (transcription: MediaTranscription) => string
-> = {
+const WAITING_REASONS: Record<TranscriberPresence, Label> = {
   on: () => '',
-  off: (transcription) =>
+  off: (transcription, locale) =>
     transcription.transcriberOffSince
-      ? $localize`:@@media.transcription.offSince: · desligado desde ${seenAt(transcription.transcriberOffSince)}:date:`
+      ? $localize`:@@media.transcription.offSince: · desligado desde ${seenAt(transcription.transcriberOffSince, locale)}:date:`
       : '',
   none: () =>
     $localize`:@@media.transcription.noTranscriber: · nenhum transcritor pareado`,
 };
 
-const TRANSCRIPTION_LABELS: Record<
-  TranscriptionStatus,
-  (transcription: MediaTranscription) => string
-> = {
+const TRANSCRIPTION_LABELS: Record<TranscriptionStatus, Label> = {
   none: () => '',
-  waiting: (transcription) =>
+  waiting: (transcription, locale) =>
     $localize`:@@media.transcription.waiting:Aguardando o transcritor` +
-    WAITING_REASONS[transcription.transcriber](transcription),
+    WAITING_REASONS[transcription.transcriber](transcription, locale),
   transcribing: () =>
     $localize`:@@media.transcription.transcribing:Transcrevendo…`,
   done: (transcription) =>
@@ -98,9 +108,12 @@ export const LOW_CONFIDENCE = (): string =>
   $localize`:@@media.transcription.low:Transcrição automática de baixa confiança`;
 
 /** Where the transcription is, in words (UP-20); '' when there is nothing to say yet. */
-export const transcriptionTextOf = (item: MediaItem): string =>
+export const transcriptionTextOf = (item: MediaItem, locale: string): string =>
   item.status === 'ready'
-    ? TRANSCRIPTION_LABELS[item.transcription.status](item.transcription)
+    ? TRANSCRIPTION_LABELS[item.transcription.status](
+        item.transcription,
+        locale,
+      )
     : '';
 
 /** The current transcript is of low confidence (BR-5). */

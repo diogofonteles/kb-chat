@@ -15,15 +15,16 @@
   </label>
   <div class="row">
     <input
+      #nameInput
       id="transcriber-name"
       class="input"
       type="text"
       maxlength="60"
       autocomplete="off"
       [value]="name()"
-      [attr.aria-invalid]="nameError() ? 'true' : null"
+      [attr.aria-invalid]="nameProblem() ? 'true' : null"
       [attr.aria-describedby]="
-        nameError()
+        nameProblem()
           ? 'transcriber-name-hint transcriber-name-error'
           : 'transcriber-name-hint'
       "
@@ -38,25 +39,29 @@
       Parear transcritor
     </button>
   </div>
-  @if (nameError()) {
+  @if (nameProblem(); as problem) {
     <p class="field-error" id="transcriber-name-error">
       <span aria-hidden="true">⚠</span>
-      <ng-container i18n="@@transcribers.nameRequired"
-        >Dê um nome ao transcritor.</ng-container
-      >
+      @if (problem === 'taken') {
+        <ng-container i18n="@@transcribers.nameTaken"
+          >Já existe um transcritor com esse nome. Escolha outro.</ng-container
+        >
+      } @else {
+        <ng-container i18n="@@transcribers.nameRequired"
+          >Dê um nome ao transcritor.</ng-container
+        >
+      }
     </p>
   }
-  <p class="status" role="status" [class.error]="failed() !== null">
-    @if (failed() === 'pair') {
-      <span aria-hidden="true">⚠</span>
-      <ng-container i18n="@@transcribers.pairFailed"
-        >Não consegui parear. Tente de novo.</ng-container
-      >
-    } @else if (failed() === 'revoke') {
-      <span aria-hidden="true">⚠</span>
-      <ng-container i18n="@@transcribers.revokeFailed"
-        >Não consegui revogar. Tente de novo.</ng-container
-      >
+  <p
+    class="status"
+    role="status"
+    [class.error]="notice()?.kind === 'error'"
+    [class.empty]="!notice()"
+  >
+    @if (notice(); as current) {
+      <span aria-hidden="true">{{ current.kind === 'error' ? '⚠' : '✓' }}</span>
+      {{ current.text }}
     }
   </p>
 </form>
@@ -148,6 +153,8 @@
 
 <section class="block" aria-labelledby="transcribers-list-title">
   <h4
+    #listTitle
+    tabindex="-1"
     id="transcribers-list-title"
     class="block-title"
     i18n="@@transcribers.listTitle"
@@ -222,7 +229,8 @@
                 <button
                   type="button"
                   class="secondary"
-                  (click)="cancelRevoke()"
+                  [attr.data-cancel-revoke]="item.id"
+                  (click)="cancelRevoke(item.id)"
                   i18n="@@transcribers.revokeCancel"
                 >
                   Cancelar
@@ -233,6 +241,7 @@
             <button
               type="button"
               class="secondary"
+              [attr.data-revoke]="item.id"
               [attr.aria-label]="revokeLabelOf(item)"
               (click)="askRevoke(item.id)"
               i18n="@@transcribers.revoke"

@@ -1,6 +1,7 @@
 import { aMediaItem, aTranscription } from '../../testing/media-fixtures.js';
 import {
   isInFlight,
+  pollEveryOf,
   lowNoticeOf,
   transcriptionTextOf,
 } from './media-labels.js';
@@ -29,7 +30,9 @@ describe('transcriptionTextOf (KBC-036 FR-1, BR-5)', () => {
     ],
     [{ status: 'failed' as const }, 'A transcrição falhou'],
   ])('%o reads "%s"', (transcription, text) => {
-    expect(transcriptionTextOf(withTranscription(transcription))).toBe(text);
+    expect(transcriptionTextOf(withTranscription(transcription), 'pt-BR')).toBe(
+      text,
+    );
   });
 
   it('says since when the transcriber is off, in local time (AC-2)', () => {
@@ -40,15 +43,19 @@ describe('transcriptionTextOf (KBC-036 FR-1, BR-5)', () => {
         transcriber: 'off',
         transcriberOffSince: offSince,
       }),
+      'pt-BR',
     );
     expect(text).toBe(
-      'Aguardando o transcritor · desligado desde 03/11 às 14:05',
+      'Aguardando o transcritor · desligado desde 03/11/2026 às 14:05',
     );
   });
 
   it('says nothing while the item is not playable yet', () => {
     expect(
-      transcriptionTextOf(withTranscription({ status: 'waiting' }, 'queued')),
+      transcriptionTextOf(
+        withTranscription({ status: 'waiting' }, 'queued'),
+        'pt-BR',
+      ),
     ).toBe('');
   });
 
@@ -71,16 +78,24 @@ describe('transcriptionTextOf (KBC-036 FR-1, BR-5)', () => {
     ).toBe('');
   });
 
-  it('polls a transcription that moves, never one waiting for a Mac that is off', () => {
+  it('asks every 5 s while transcribing, every minute while waiting for an on Mac, never for an off one', () => {
+    const at = (transcription: Parameters<typeof aTranscription>[0]) =>
+      pollEveryOf([withTranscription(transcription)], 5_000);
+    expect(at({ status: 'transcribing' })).toBe(5_000);
+    expect(at({ status: 'waiting', transcriber: 'on' })).toBe(60_000);
+    expect(at({ status: 'waiting', transcriber: 'off' })).toBeNull();
+    expect(at({ status: 'done' })).toBeNull();
+    expect(
+      pollEveryOf(
+        [
+          withTranscription({ status: 'waiting', transcriber: 'on' }),
+          withTranscription({ status: 'transcribing' }),
+        ],
+        5_000,
+      ),
+    ).toBe(5_000);
     expect(isInFlight(withTranscription({ status: 'transcribing' }))).toBe(
       true,
     );
-    expect(
-      isInFlight(withTranscription({ status: 'waiting', transcriber: 'on' })),
-    ).toBe(true);
-    expect(
-      isInFlight(withTranscription({ status: 'waiting', transcriber: 'off' })),
-    ).toBe(false);
-    expect(isInFlight(withTranscription({ status: 'done' }))).toBe(false);
   });
 });
