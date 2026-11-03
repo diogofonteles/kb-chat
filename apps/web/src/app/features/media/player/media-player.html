@@ -193,7 +193,7 @@
       label="Mais opções"
       i18n-label="@@player.more"
       keyshortcuts="?"
-      [options]="moreOptions"
+      [options]="moreOptions()"
       (chosen)="chooseMore($event)"
     >
       <span aria-hidden="true">⋯</span>
@@ -217,3 +217,4 @@
 <app-shortcuts-dialog />
 <app-skips-dialog />
 <app-sleep-timer-dialog />
+<app-silences-dialog />

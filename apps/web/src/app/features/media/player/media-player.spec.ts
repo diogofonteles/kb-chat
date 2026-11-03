@@ -46,6 +46,7 @@ async function renderPlayer(
     showRemaining: true,
     skipBackSec: 15,
     skipForwardSec: 30,
+    skipSilences: false,
   });
   prepare(media, engine);
   await view.fixture.whenStable();
@@ -256,6 +257,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(
       screen.getByRole('button', { name: 'Velocidade: 1,5 vezes' }).textContent,
@@ -273,6 +275,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
       showRemaining: false,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(screen.getByRole('button', { name: /Duração total/ })).toBeTruthy();
   });
@@ -379,6 +382,65 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
     await fixture.whenStable();
     expect(document.activeElement).toBe(more);
+  });
+
+  it('turns "Encurtar silêncios" on from "Mais opções", saves it and shows the time saved (KBC-044)', async () => {
+    const { fixture, http } = await renderPlayer(loaded);
+    http.expectOne('/api/v1/media/m1/silences').flush({
+      status: 'ready',
+      version: 1,
+      minSilenceMs: 1_000,
+      intervals: [{ startMs: 4_700, endMs: 7_700 }],
+    });
+    const more = screen.getByRole('button', { name: 'Mais opções' });
+    fireEvent.click(more);
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Encurtar silêncios' }),
+    );
+    await fixture.whenStable();
+    const dialog = screen.getByRole('dialog', { name: 'Encurtar silêncios' });
+    const option = within(dialog).getByRole('checkbox', {
+      name: 'Encurtar silêncios',
+    });
+    expect(document.activeElement).toBe(option);
+    expect(option.getAttribute('aria-describedby')).toBe('silences-hint');
+    expect(within(dialog).getByRole('status').textContent).toContain(
+      'Tempo economizado nesta mídia: 0:00',
+    );
+    fireEvent.click(option);
+    await fixture.whenStable();
+    expect(
+      http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
+    ).toMatchObject({ skipSilences: true });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(more);
+    fireEvent.click(more);
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('menuitem', { name: 'Encurtar silêncios: ligado' }),
+    ).toBeTruthy();
+  });
+
+  it('says the silences are still being measured while the map is pending (KBC-044)', async () => {
+    const { fixture, http } = await renderPlayer(loaded);
+    http.expectOne('/api/v1/media/m1/silences').flush({
+      status: 'pending',
+      version: null,
+      minSilenceMs: 1_000,
+      intervals: [],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Encurtar silêncios' }),
+    );
+    await fixture.whenStable();
+    const dialog = screen.getByRole('dialog', { name: 'Encurtar silêncios' });
+    expect(within(dialog).getByRole('status').textContent).toContain(
+      'Os silêncios desta mídia ainda estão sendo medidos.',
+    );
   });
 
   async function chooseSleep(
