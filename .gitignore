@@ -14,3 +14,6 @@ deploy/oci/oci.env
 .stryker-tmp/
 reports/mutation/
 stryker-setup-*.js
+
+# Python bytecode (research scripts, tools/transcriber)
+__pycache__/
