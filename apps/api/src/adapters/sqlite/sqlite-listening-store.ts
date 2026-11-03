@@ -24,6 +24,17 @@ function toSavedProgress(row: Row): SavedProgress {
   };
 }
 
+/** The player's (KBC-041, KBC-043, KBC-044) and the library's (KBC-051) choices. */
+const SAVE_PREFERENCES = `INSERT INTO media_preferences
+    (principal, speed, show_remaining, skip_back_sec, skip_forward_sec, skip_silences,
+     library_sort, library_view, library_filters, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT (principal) DO UPDATE SET speed = excluded.speed,
+    show_remaining = excluded.show_remaining, skip_back_sec = excluded.skip_back_sec,
+    skip_forward_sec = excluded.skip_forward_sec, skip_silences = excluded.skip_silences,
+    library_sort = excluded.library_sort, library_view = excluded.library_view,
+    library_filters = excluded.library_filters, updated_at = excluded.updated_at`;
+
 const PROGRESS_COLUMNS =
   'media_id, position_ms, completed_at, updated_at, played_at';
 
@@ -62,18 +73,7 @@ export class SqliteListeningStore implements ListeningStorePort {
   }): void {
     const { preferences } = input;
     this.db
-      .prepare(
-        `INSERT INTO media_preferences
-           (principal, speed, show_remaining, skip_back_sec, skip_forward_sec, skip_silences,
-            library_sort, library_view, library_filters, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (principal) DO UPDATE SET speed = excluded.speed,
-           show_remaining = excluded.show_remaining, skip_back_sec = excluded.skip_back_sec,
-           skip_forward_sec = excluded.skip_forward_sec,
-           skip_silences = excluded.skip_silences,
-           library_sort = excluded.library_sort, library_view = excluded.library_view,
-           library_filters = excluded.library_filters, updated_at = excluded.updated_at`,
-      )
+      .prepare(SAVE_PREFERENCES)
       .run(
         input.principal,
         preferences.speed,
