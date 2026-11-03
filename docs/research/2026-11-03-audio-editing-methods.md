@@ -1,6 +1,6 @@
 # Edição de áudio com IA — como dividir palestras em perguntas e respostas, identificar quem fala e titular, de forma prática, rápida e barata (KBC-063)
 
-Data: 2026-11-03. Pedido: `docs/backlog/KBC-063-research-audio-editing-methods.md` (dono, 2026-11-03: "fazer uma busca em artigos, textos e em vídeos do youtube de maneiras para fazer isso / uma pessoa que já tem experiência com isso é Fabio Akita"; "pesquisar no repositório público dele projetos que já façam isso"; "outros autores de vídeos no youtube … de forma prática, rápida e com o menor custo possível"). Este relatório é a **parte de mesa** (pesquisa); o teste prático com 2 gravações do acervo (FR-5, AC-5) está descrito na seção 10 e espera o material do dono.
+Data: 2026-11-03. Pedido: `docs/backlog/KBC-063-research-audio-editing-methods.md` (dono, 2026-11-03: "fazer uma busca em artigos, textos e em vídeos do youtube de maneiras para fazer isso / uma pessoa que já tem experiência com isso é Fabio Akita"; "pesquisar no repositório público dele projetos que já façam isso"; "outros autores de vídeos no youtube … de forma prática, rápida e com o menor custo possível"). Este relatório é a **parte de mesa** (pesquisa); o teste prático com gravações do acervo (FR-5, AC-5) foi rodado em parte em 2026-11-03 — reconhecimento do orador e propostas de faixas; DER, acerto dos limites e a nota cega do dono pendentes — e está resumido na seção 10, com os relatórios [de oradores](2026-11-03-audio-editing-test-speakers.md) e [de faixas](2026-11-03-audio-editing-test-tracks.md).
 
 Convenções:
 
@@ -25,7 +25,8 @@ Convenções:
 5. **Fabio Akita** não tem projeto público de diarização ou cortes; ensina método: bancada A/B com gabarito antes de escolher modelo (FrankSherlock, GPL-3.0, só ideia), agrupar → a pessoa nomeia → buscar por pessoa, validar a saída da IA e pedir de novo, não deixar a IA reescrever o texto-fonte, cortar por fim de frase [verificado, A1, A3]. Os vídeos dele de áudio são em português, mas sobre dublagem e legendas, não sobre falantes.
 6. **Benchmark de produtos**: nomear cada voz uma vez ouvindo uma amostra (Descript), juntar vozes duplicadas (MacWhisper, Sonix), marcar o que a máquina gerou (Apple), o manual sempre vence (Apple, YouTube, Spotify). Evitar: gerar e publicar sozinho (YouTube), falha silenciosa de falantes (Descript, Adobe Podcast, MacWhisper). Os capítulos automáticos do Spotify existem **só em inglês** [verificado, P13] — sinal de que capítulos com IA em pt ainda não são produto pronto.
 7. **Decisões**: nenhum item KBC-064 a KBC-073 muda de escopo; mudam modelo, prompt, limiares e estimativas (seção 9), agora com o português como primeiro critério. O teste mede no nosso áudio em pt o que os artigos não cobrem.
-8. **Gasto do item até aqui**: US$ 0,08 no OpenRouter (kb) e 179 créditos do Firecrawl dentro da cota mensal já paga (seção 11). Sobram ≈ US$ 4,92 do teto de US$ 5.
+8. **Gasto do item**: US$ 0,0755 no OpenRouter na pesquisa de mesa (kb) + US$ 0,0041 no teste prático = **US$ 0,0796**, e 179 créditos do Firecrawl dentro da cota mensal já paga (seção 11). Sobram ≈ US$ 4,92 do teto de US$ 5.
+9. **Teste prático (parcialmente rodado, seção 10)** — mudanças que ele sugere, **a confirmar com a nota do dono**: **KBC-064** → Senko foi o mais forte dos que rodaram (pyannote `community-1` não testado: sem token do Hugging Face); **KBC-067** → DeepSeek V4 Flash primeiro na API (válido de primeira, US$ 0,005/h), o modelo local ainda não serve de padrão (1 janela inválida em 4, faixas picadas, ≈ 11 min/h); **KBC-071** → ECAPA com T = 0,4, margem ≥ 0,1 para o 2º perfil e ≥ 10 s de fala, calibrando com ≥ 5 oradores antes de ligar [verificado: [teste de oradores](2026-11-03-audio-editing-test-speakers.md), [teste de faixas](2026-11-03-audio-editing-test-tracks.md)].
 
 ---
 
@@ -241,13 +242,29 @@ Rodrigo Branas: nenhum vídeo sobre áudio, transcrição ou diarização achado
 | KBC-072 | Boas práticas e antipadrões da seção 8; estimativas a mostrar: "Indicar quem fala: grátis, ≈ 3 min por hora no computador do transcritor"; "Propor faixas com IA: grátis no Mac" ou "≈ US$ 0,01" (arredondando para cima ≈ US$ 0,003–0,006/h); perguntar o número de vozes (opcional). Textos e títulos sempre em pt-BR (capítulos automáticos do Spotify só existem em inglês [P13]). | Os textos de estimativa (BR-4) trocam "≈ US$ 0,02" por valores do teste; nada mais muda |
 | KBC-073 | "Sugerir de novo com IA" numa faixa de 5 min: ≈ 2 mil tokens ≈ US$ 0,0003 [inferido]; mesmo modelo do KBC-067.                                                                                                                                                                                                                                                                                                                                                                                   | **Nada muda** (o "≈ US$ 0,001 por faixa" já cobre)                                                                       |
 
+**Mudanças sugeridas pelo teste prático (a confirmar com a nota do dono)** — detalhes na seção 10:
+
+- **KBC-064**: **Senko** foi o mais forte dos que rodaram — separou nas 4 gravações as vozes que a transcrição mostra, em 2–7 s de máquina por hora de áudio, MIT [verificado]. O pyannote `community-1` **não foi testado** (modelo de acesso controlado, sem token do Hugging Face); a escolha final pede essa comparação e o DER com a marcação do dono.
+- **KBC-067**: **DeepSeek V4 Flash primeiro na API** (4 de 4 janelas válidas de primeira, US$ 0,0048/h, 37 s/h; faixas nas mesmas trocas de voz das perguntas), Qwen3 235B depois (juntou a entrevista inteira numa faixa) — inverte a ordem acima. **O modelo local (Qwen3-30B-A3B) ainda não serve de padrão**: 1 janela inválida em 4 (saída cortada), faixas picadas, ≈ 11 min por hora de áudio [verificado; forma das faixas inferida antes da nota cega do dono].
+- **KBC-071**: **ECAPA** confirmado; regra inicial **T = 0,4, margem ≥ 0,1 para o 2º perfil, grupo com ≥ 10 s de fala**, sempre como sugestão; os vetores CAM++ do Senko deram falso positivo e não servem para perfis. **Calibrar com ≥ 5 oradores** (≥ 2 gravações cada, incluindo plateia e leitores) antes de ligar para o usuário [verificado com 2 oradores].
+
 **ADR 0029 — revisão proposta** (não reabre decisões): registrar o português como critério de escolha dos modelos; em "Decision" §1 o modelo `pyannote/speaker-diarization-community-1` (CC-BY-4.0, atribuição) e, em §3, ECAPA-TDNN para os perfis de voz; em §7, que o padrão é o modelo local no Mac quando o teste mostrar ≥ 80 % de faixas aceitas, com a API barata (Qwen3 235B, ≈ US$ 0,003/h) como reserva e, se o Sabiazinho-4 vencer nos títulos em pt, um provedor brasileiro a mais (ADR 0016). Fazer a revisão depois do teste, com os números.
 
-## 10. Teste prático (pendente)
+## 10. Teste prático (parcialmente rodado)
 
-Mede o que decide (FR-5, AC-5): DER, reconhecimento do orador, tempo de máquina e acerto das faixas por abordagem — **tudo no nosso áudio em português**, que é justamente o que os artigos não cobrem (nenhum DER de diarização em pt-BR publicado; nenhum teste de pergunta e resposta ou de títulos em pt). Nada roda antes do material do dono.
+Mede o que decide (FR-5, AC-5): DER, reconhecimento do orador, tempo de máquina e acerto das faixas por abordagem — **tudo no nosso áudio em português**, que é justamente o que os artigos não cobrem (nenhum DER de diarização em pt-BR publicado; nenhum teste de pergunta e resposta ou de títulos em pt).
 
-### 10.1 O que o dono precisa fornecer
+**Situação em 2026-11-03**, com dois pares de gravações do mesmo orador escolhidos pelo dono (Mestre José Luiz e Mestre Monteiro; nome tirado do título da gravação de referência) e autorização do dono para mandar só o texto das 2 gravações de teste à API:
+
+| Parte | Situação | Relatório |
+| --- | --- | --- |
+| Separação de vozes (Senko e base ECAPA; pyannote não testado, sem token do Hugging Face) | **Feita** sem gabarito: grupos, tempo de fala e tempo de máquina | [teste de oradores](2026-11-03-audio-editing-test-speakers.md) |
+| Reconhecimento do orador (KBC-071) | **Feito**: 2 de 2 reconhecidos, 0 falso positivo com T = 0,4 e margem 0,1 | [teste de oradores](2026-11-03-audio-editing-test-speakers.md) |
+| Faixas e títulos (local, Qwen3 235B, DeepSeek V4 Flash; Sabiazinho-4 sem chave) | **Feitas** as propostas, validade, custo e tempo | [teste de faixas](2026-11-03-audio-editing-test-tracks.md) |
+| DER e acerto dos limites das faixas | **Pendente**: falta a marcação à mão do dono (10.1) | — |
+| Nota cega dos títulos e limites | **Pendente**: o dono avalia as propostas às cegas | [teste de faixas, seção 6](2026-11-03-audio-editing-test-tracks.md) |
+
+### 10.1 O que o dono precisa fornecer (plano original; itens 2 e 3 ainda pendentes)
 
 Ajuste do dono (2026-11-03): no começo quem diz quem fala é a pessoa (ainda não há cadastro de oradores, KBC-065); o reconhecimento automático é medido com **dois áudios do mesmo orador**.
 
@@ -263,32 +280,38 @@ O que o teste mede com esse material:
 - **Faixas de pergunta e resposta**: as propostas das 2 abordagens (modelo local e API barata Qwen3 235B) contra o gabarito do dono; se houver chave da Maritaca, uma abordagem C com o brasileiro Sabiazinho-4. Os títulos em pt de cada abordagem vão numa planilha para o dono marcar "ok / não" sem saber de qual modelo vieram.
 - **Tempo de máquina** de cada passo por hora de áudio.
 
-### 10.2 Plano dos scripts em `docs/research/scripts/` (desenho; não rodados)
+### 10.2 Scripts entregues em `docs/research/scripts/`
 
-Ambiente isolado: um `venv` próprio fora dos repositórios (`~/dev/personal/kb-chat-research/`), modelos baixados uma vez e depois execução sem rede e com escrita só na pasta do teste (`sandbox-exec` do macOS, ou o padrão do `ai-jail`) [inferido; a confirmar com o dono antes de rodar código de terceiros].
+Ambiente isolado: `venv` próprio fora dos repositórios (`~/dev/personal/kb-chat-research/`), modelos baixados uma vez; áudio, transcrições, vetores e saídas dos modelos ficam só nessa pasta [verificado].
 
-| Script                         | Entrada → saída                                                                                                                                                                                            |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prepare_audio.sh`             | Rendição AAC do acervo → FLAC 16 kHz mono inteiro e o trecho de 10 min (ffmpeg)                                                                                                                             |
-| `annotation_to_rttm.py`        | Planilha do dono (CSV) → RTTM de referência e JSON do gabarito de faixas                                                                                                                                    |
-| `diarize_pyannote.py`          | FLAC → RTTM (normal e exclusiva), tempo de parede, pico de memória (`/usr/bin/time -l`), versão do modelo; `--num-speakers` opcional                                                                       |
-| `diarize_senko.py`             | Idem com Senko                                                                                                                                                                                              |
-| `diarize_nemotron.sh`          | Idem com o CLI da FluidAudio (preset `offline`) [inferido: confirmar o nome do comando no README]                                                                                                            |
-| `der.py`                       | RTTM de referência × hipótese → DER, perda, falso alarme e troca, com colar 0,25 s e 0 s, sobreposição incluída (`pyannote.metrics`)                                                                         |
-| `propose_tracks.py`            | Transcrição JSON + RTTM + mapa de silêncios → janelas, prompt único; `--engine local` (mlx-lm, Qwen3-30B-A3B 4 bits) ou `--engine openrouter` (Qwen3 235B; DeepSeek V4 Flash como reserva) ou `--engine maritaca` (Sabiazinho-4, se houver chave); grava faixas, tokens, custo real (campo `usage`) e tempo |
-| `score_tracks.py`              | Faixas propostas × gabarito → limite certo (até 1 segmento), precisão, revocação, F1; planilha de títulos para o dono marcar "ok / não"                                                                      |
-| `speaker_id_eval.py`  | Perfil temporário do orador no áudio A (ECAPA e vetores do `community-1`) × vozes do áudio B → acerto, curva de falso positivo por limiar e o limiar com FP ≤ 2 %; o perfil é apagado ao fim                                                                                                                       |
+| Script | Faz |
+| --- | --- |
+| `prepare_audio.sh` | m4a do acervo (só leitura) → WAV 16 kHz mono na pasta de pesquisa |
+| `diarize_ecapa.py` | base: Silero VAD + ECAPA em janelas de 1,5/0,75 s + agrupamento aglomerativo por cosseno + absorção de grupos < 10 s |
+| `diarize_senko.py` | diarização com Senko; grava grupos e centróides CAM++ |
+| `transcribe.py` | mlx-whisper large-v3-turbo, pt, tempo por palavra |
+| `recognize_speakers.py` | perfis das referências × grupos dos testes (ecapa, senko, senko+ecapa), decisão por T e margem |
+| `cluster_matrix.py` | matriz de cosseno entre todos os grupos das 4 gravações |
+| `label_transcript.py` | voz por segmento do Whisper e amostras por grupo para o dono conferir |
+| `build_segments.py` | segmentos numerados `[id] mm:ss Voz: texto` com o nome só onde a voz foi reconhecida |
+| `propose_tracks.py` | janelas de 6 min, prompt em pt-BR, `--engine local` (mlx-lm) ou `--engine openrouter`, validação, 1 nova tentativa, custo e tempo |
+| `blind_proposals.py` | propostas lado a lado às cegas, com a chave separada |
+| `openrouter_balance.py` | saldo do OpenRouter (créditos − uso) antes e depois |
 
-Custo previsto do teste: 2 gravações × ~1,5 h × (US$ 0,003 Qwen3 235B + US$ 0,006 Sabiazinho-4) × 3 variações de prompt ≈ **US$ 0,08** na API; o resto é local (US$ 0) [inferido]. Se o gasto chegar ao teto (AC-7), o teste para e este relatório diz o que ficou sem medir.
+Ainda não existem (dependem da marcação do dono ou do token): `annotation_to_rttm.py`, `der.py`, `score_tracks.py`, `diarize_pyannote.py`; `diarize_nemotron.sh` saiu do plano (Nemotron só via Swift/CoreML).
 
-## 11. Gasto da pesquisa de mesa (duas rodadas)
+Custo previsto do teste: 2 gravações × ~1,5 h × (US$ 0,003 Qwen3 235B + US$ 0,006 Sabiazinho-4) × 3 variações de prompt ≈ **US$ 0,08** na API [inferido]. Custo real das faixas: **US$ 0,0041** (2 gravações curtas, 2 modelos, 1 rodada; saldo do OpenRouter antes e depois) [verificado]; o resto foi local (US$ 0).
+
+## 11. Gasto do item (pesquisa de mesa em duas rodadas + teste prático)
 
 | Conta                          | Antes (2026-11-03 14:57 UTC)                    | Depois da 1ª rodada (15:18 UTC)  | Depois da rodada do português (15:36 UTC) | Gasto total                                                                                                 |
 | ------------------------------ | ----------------------------------------------- | -------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | OpenRouter (`/api/v1/credits`) | total 20,00; uso 13,8041 → saldo **US$ 6,1959** | uso 13,8672 → saldo US$ 6,1328   | uso 13,8796 → saldo **US$ 6,1204**        | **US$ 0,0755** (0,0631 + 0,0124; kb: ingestão, classificação e resumos de 43 fontes, 2 delas na quarentena)                        |
 | Firecrawl (`credit-usage`)     | **5.075** créditos                              | 4.939 (o painel atrasava)        | **4.896** créditos                        | **179 créditos**, dentro da cota mensal já paga (custo marginal US$ 0)                                      |
 
-Total do item até aqui: **US$ 0,08** em dinheiro novo; sobram ≈ US$ 4,92 do teto de US$ 5 para o teste. O kb registra menos do que o OpenRouter cobra (~40 % a menos); por isso o gasto acima vem do saldo, não do log do kb.
+Teste prático (faixas pela API, 2026-11-03 16:03 UTC → depois das chamadas): saldo **US$ 6,118888 → US$ 6,114768**, gasto **US$ 0,0041** [verificado, [teste de faixas](2026-11-03-audio-editing-test-tracks.md)]; o resto do teste rodou no Mac (US$ 0).
+
+**Total do item: US$ 0,0755 (pesquisa) + US$ 0,0041 (teste) = US$ 0,0796** em dinheiro novo, mais 179 créditos do Firecrawl dentro da cota mensal já paga; sobram ≈ US$ 4,92 do teto de US$ 5. O kb registra menos do que o OpenRouter cobra (~40 % a menos); por isso o gasto acima vem do saldo, não do log do kb.
 
 ## 12. Fontes (todas acessadas em 2026-11-03)
 
@@ -344,7 +367,7 @@ Fabio Akita (posts; repositórios com URL na tabela 6.2):
 
 - A1 https://www.akitaonrails.com/2026/04/09/como-a-elevenlabs-nao-foi-morta-pelo-qwen3-tts/
 - A2 https://www.akitaonrails.com/2026/02/16/vibe-code-do-zero-a-producao-em-6-dias-the-m-akita-chronicles/
-- A3 https://www.akitaonrails.com/2026/02/23/vibe-code-fiz-um-indexador-inteligente-de-imagens-com-ia-em-2-dias/ · https://github.com/akitaonrails/FrankSherlock/blob/main/_research_ab_test/docs/RESULTS.md
+- A3 https://www.akitaonrails.com/2026/02/23/vibe-code-fiz-um-indexador-inteligente-de-imagens-com-ia-em-2-dias/ · https://github.com/akitaonrails/FrankSherlock/blob/master/_research_ab_test/docs/RESULTS.md
 - A4 https://www.akitaonrails.com/2026/03/07/portando-10-mil-linhas-de-python-pra-crystal-com-claude-easy-subtitle/
 - A5 https://www.akitaonrails.com/2026/10/22/llm-benchmark-v4-o-veredito-de-open-source-ate-out-2026/
 - A6 https://www.akitaonrails.com/2023/11/29/akitando-148-o-que-ias-podem-fazer-exemplos-de-ferramentas/
