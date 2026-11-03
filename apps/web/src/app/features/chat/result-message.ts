@@ -91,7 +91,7 @@ export class ResultMessage {
     const spoken = response?.media.length ?? 0;
     if (spoken === 0) return this.count();
     // "Textos" not chosen: no "0 documentos" before the passages.
-    return response?.total === 0
+    return !this.message().kinds.includes('text')
       ? describeSpokenCount(spoken)
       : `${this.count()} · ${describeSpokenCount(spoken)}`;
   });

@@ -210,6 +210,23 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
     );
   });
 
+  it('keeps "0 documentos" when the texts were searched and none matched', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        message: withAudio({
+          response: aResponse([], {
+            media: [aMediaHit()],
+            kinds: { text: 0, audio: 1 },
+          }),
+        }),
+      },
+    });
+    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
+      /^0 documentos · 1 trecho na fala · Tudo/,
+    );
+  });
+
   it('opens a passage with its place among the results (FR-4)', async () => {
     const passageOpened = vi.fn();
     await render(ResultMessage, {
