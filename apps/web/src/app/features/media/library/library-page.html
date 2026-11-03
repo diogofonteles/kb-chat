@@ -1,4 +1,8 @@
-<section class="library" aria-labelledby="library-title">
+<section
+  class="library"
+  aria-labelledby="library-title"
+  [class.selecting]="selected().size > 0"
+>
   <header class="head">
     <h2 id="library-title" #heading tabindex="-1" i18n="@@library.title">
       Biblioteca

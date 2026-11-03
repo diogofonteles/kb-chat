@@ -4,6 +4,13 @@
      mini-player below never covers what has the focus (KBC-041 FR-11). */
   min-height: 0;
   overflow-y: auto;
+  /* What takes the focus is never hidden under the selection bar (WCAG 2.4.11). */
+  scroll-padding-bottom: 6rem;
+}
+
+/* Room under the last row while the selection bar is at the foot. */
+.library.selecting {
+  padding-bottom: 7rem;
 }
 
 .library {
