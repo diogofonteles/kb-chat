@@ -17,7 +17,7 @@ export const CAPACITY_NEEDED: Readonly<Record<ResearchProfile, number>> = {
 export interface Reservation {
   /** Researches left today after this one. */
   readonly remaining: number;
-  /** Gives the units back (a turn that failed before any model answered). */
+  /** Gives the units back (a turn that failed with no visible answer). */
   refund(): Promise<void>;
 }
 
@@ -38,7 +38,8 @@ export class HouseQuota {
       principal,
       startOfAppDay(this.now()),
     );
-    // A refund never gives more than the day's quota (it is dated at its reservation).
+    // A refund never gives more than the day's quota: it is dated at its reservation. Only a
+    // refund written before KBC-061, dated at the failure, could still land on a later day.
     return Math.min(dailyLimit, Math.max(0, dailyLimit - used));
   }
 
