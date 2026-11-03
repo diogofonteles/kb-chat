@@ -1,0 +1,703 @@
+{
+  "source": "Pilot 2026-10-28, mlx-vad, noisy excerpt (trecho 3), cd03-05, first chunks (AC-5)",
+  "chunks": [
+    {
+      "offset": 0.1,
+      "end": 24.0,
+      "result": {
+        "text": " É como outra coisa que eu preciso definir. A cadeia, a cadeia, a cadeia, a adição para a diretoria da associação do ministro do secretário do secretário do secretário do secretário, a do que a pedia não tem. Não, até agora não tem a quantidade.",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 4.14,
+            "text": " É como outra coisa que eu preciso definir.",
+            "temperature": 0.0,
+            "avg_logprob": -0.731702880859375,
+            "compression_ratio": 1.7602739726027397,
+            "no_speech_prob": 1.3222182029815066e-11,
+            "words": [
+              {
+                "word": " É",
+                "start": 0.0,
+                "end": 0.32,
+                "probability": 0.52490234375
+              },
+              {
+                "word": " como",
+                "start": 0.32,
+                "end": 0.52,
+                "probability": 0.93994140625
+              },
+              {
+                "word": " outra",
+                "start": 0.52,
+                "end": 0.74,
+                "probability": 0.97216796875
+              },
+              {
+                "word": " coisa",
+                "start": 0.74,
+                "end": 1.02,
+                "probability": 0.99072265625
+              },
+              {
+                "word": " que",
+                "start": 1.02,
+                "end": 1.22,
+                "probability": 0.96142578125
+              },
+              {
+                "word": " eu",
+                "start": 1.22,
+                "end": 1.4,
+                "probability": 0.8681640625
+              },
+              {
+                "word": " preciso",
+                "start": 1.4,
+                "end": 3.12,
+                "probability": 0.29150390625
+              },
+              {
+                "word": " definir.",
+                "start": 3.12,
+                "end": 4.14,
+                "probability": 0.72412109375
+              }
+            ]
+          },
+          {
+            "start": 4.56,
+            "end": 19.5,
+            "text": " A cadeia, a cadeia, a cadeia, a adição para a diretoria da associação do ministro do secretário do secretário do secretário do secretário, a do que a pedia não tem.",
+            "temperature": 0.0,
+            "avg_logprob": -0.731702880859375,
+            "compression_ratio": 1.7602739726027397,
+            "no_speech_prob": 1.3222182029815066e-11,
+            "words": [
+              {
+                "word": " A",
+                "start": 4.56,
+                "end": 5.18,
+                "probability": 0.5146484375
+              },
+              {
+                "word": " cadeia,",
+                "start": 5.18,
+                "end": 5.7,
+                "probability": 0.385009765625
+              },
+              {
+                "word": " a",
+                "start": 5.8,
+                "end": 6.14,
+                "probability": 0.626953125
+              },
+              {
+                "word": " cadeia,",
+                "start": 6.14,
+                "end": 6.48,
+                "probability": 0.810546875
+              },
+              {
+                "word": " a",
+                "start": 6.5,
+                "end": 6.64,
+                "probability": 0.87744140625
+              },
+              {
+                "word": " cadeia,",
+                "start": 6.64,
+                "end": 7.96,
+                "probability": 0.55078125
+              },
+              {
+                "word": " a",
+                "start": 7.96,
+                "end": 9.52,
+                "probability": 0.89697265625
+              },
+              {
+                "word": " adição",
+                "start": 9.52,
+                "end": 9.96,
+                "probability": 0.15625
+              },
+              {
+                "word": " para",
+                "start": 9.96,
+                "end": 10.4,
+                "probability": 0.830078125
+              },
+              {
+                "word": " a",
+                "start": 10.4,
+                "end": 11.92,
+                "probability": 0.4580078125
+              },
+              {
+                "word": " diretoria",
+                "start": 11.92,
+                "end": 12.36,
+                "probability": 0.60107421875
+              },
+              {
+                "word": " da",
+                "start": 12.36,
+                "end": 12.58,
+                "probability": 0.89208984375
+              },
+              {
+                "word": " associação",
+                "start": 12.58,
+                "end": 13.26,
+                "probability": 0.79736328125
+              },
+              {
+                "word": " do",
+                "start": 13.26,
+                "end": 14.54,
+                "probability": 0.365478515625
+              },
+              {
+                "word": " ministro",
+                "start": 14.54,
+                "end": 14.96,
+                "probability": 0.51318359375
+              },
+              {
+                "word": " do",
+                "start": 14.96,
+                "end": 15.34,
+                "probability": 0.07208251953125
+              },
+              {
+                "word": " secretário",
+                "start": 15.34,
+                "end": 15.48,
+                "probability": 0.478271484375
+              },
+              {
+                "word": " do",
+                "start": 15.48,
+                "end": 15.64,
+                "probability": 0.293212890625
+              },
+              {
+                "word": " secretário",
+                "start": 15.64,
+                "end": 15.8,
+                "probability": 0.53271484375
+              },
+              {
+                "word": " do",
+                "start": 15.8,
+                "end": 15.8,
+                "probability": 0.335205078125
+              },
+              {
+                "word": " secretário",
+                "start": 15.8,
+                "end": 16.16,
+                "probability": 0.6748046875
+              },
+              {
+                "word": " do",
+                "start": 16.16,
+                "end": 16.16,
+                "probability": 0.2279052734375
+              },
+              {
+                "word": " secretário,",
+                "start": 16.16,
+                "end": 16.32,
+                "probability": 0.82177734375
+              },
+              {
+                "word": " a",
+                "start": 17.3,
+                "end": 17.48,
+                "probability": 0.27880859375
+              },
+              {
+                "word": " do",
+                "start": 17.48,
+                "end": 17.68,
+                "probability": 0.06439208984375
+              },
+              {
+                "word": " que",
+                "start": 17.68,
+                "end": 17.92,
+                "probability": 0.74365234375
+              },
+              {
+                "word": " a",
+                "start": 17.92,
+                "end": 18.12,
+                "probability": 0.86669921875
+              },
+              {
+                "word": " pedia",
+                "start": 18.12,
+                "end": 18.98,
+                "probability": 0.36376953125
+              },
+              {
+                "word": " não",
+                "start": 18.98,
+                "end": 19.24,
+                "probability": 0.72998046875
+              },
+              {
+                "word": " tem.",
+                "start": 19.24,
+                "end": 19.5,
+                "probability": 0.640625
+              }
+            ]
+          },
+          {
+            "start": 21.000000000000004,
+            "end": 23.28,
+            "text": " Não, até agora não tem a quantidade.",
+            "temperature": 0.0,
+            "avg_logprob": -0.731702880859375,
+            "compression_ratio": 1.7602739726027397,
+            "no_speech_prob": 1.3222182029815066e-11,
+            "words": [
+              {
+                "word": " Não,",
+                "start": 21.000000000000004,
+                "end": 21.62,
+                "probability": 0.7109375
+              },
+              {
+                "word": " até",
+                "start": 21.76,
+                "end": 22.02,
+                "probability": 0.9814453125
+              },
+              {
+                "word": " agora",
+                "start": 22.02,
+                "end": 22.24,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " não",
+                "start": 22.24,
+                "end": 22.44,
+                "probability": 0.95458984375
+              },
+              {
+                "word": " tem",
+                "start": 22.44,
+                "end": 22.74,
+                "probability": 0.94970703125
+              },
+              {
+                "word": " a",
+                "start": 22.74,
+                "end": 22.84,
+                "probability": 0.52685546875
+              },
+              {
+                "word": " quantidade.",
+                "start": 22.84,
+                "end": 23.28,
+                "probability": 0.81884765625
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 25.0,
+      "end": 51.5,
+      "result": {
+        "text": " E o que eu disse, aqueles que quiserem se candidatar é quem? Eu sei, eu sei, eu sei que tem que ser prestatio, joelho, pastor, que lhe atua. Só que ele não pode mais se candidatar é a mulher. Mulher não pode. Porque o cargo que ele assumiu na diretoria, aquele mesmo rechou. Aquele que relato que tem dado não pode.",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 26.2,
+            "text": " E o que eu disse, aqueles que quiserem se candidatar é quem? Eu sei, eu sei, eu sei que tem que ser prestatio, joelho, pastor, que lhe atua. Só que ele não pode mais se candidatar é a mulher. Mulher não pode. Porque o cargo que ele assumiu na diretoria, aquele mesmo rechou. Aquele que relato que tem dado não pode.",
+            "temperature": 0.0,
+            "avg_logprob": -0.6402007482385123,
+            "compression_ratio": 1.671875,
+            "no_speech_prob": 1.0167649708292537e-11,
+            "words": [
+              {
+                "word": " E",
+                "start": 0.0,
+                "end": 0.36,
+                "probability": 0.0782470703125
+              },
+              {
+                "word": " o",
+                "start": 0.36,
+                "end": 0.46,
+                "probability": 0.179443359375
+              },
+              {
+                "word": " que",
+                "start": 0.46,
+                "end": 0.6,
+                "probability": 0.253662109375
+              },
+              {
+                "word": " eu",
+                "start": 0.6,
+                "end": 0.6,
+                "probability": 0.17578125
+              },
+              {
+                "word": " disse,",
+                "start": 0.6,
+                "end": 0.7,
+                "probability": 0.21484375
+              },
+              {
+                "word": " aqueles",
+                "start": 0.88,
+                "end": 1.24,
+                "probability": 0.56005859375
+              },
+              {
+                "word": " que",
+                "start": 1.24,
+                "end": 1.64,
+                "probability": 0.9921875
+              },
+              {
+                "word": " quiserem",
+                "start": 1.64,
+                "end": 2.36,
+                "probability": 0.9052734375
+              },
+              {
+                "word": " se",
+                "start": 2.36,
+                "end": 3.08,
+                "probability": 0.3623046875
+              },
+              {
+                "word": " candidatar",
+                "start": 3.08,
+                "end": 3.54,
+                "probability": 0.9921875
+              },
+              {
+                "word": " é",
+                "start": 3.54,
+                "end": 3.72,
+                "probability": 0.380859375
+              },
+              {
+                "word": " quem?",
+                "start": 3.72,
+                "end": 3.92,
+                "probability": 0.78125
+              },
+              {
+                "word": " Eu",
+                "start": 5.82,
+                "end": 6.3,
+                "probability": 0.439453125
+              },
+              {
+                "word": " sei,",
+                "start": 6.3,
+                "end": 6.68,
+                "probability": 0.488037109375
+              },
+              {
+                "word": " eu",
+                "start": 7.54,
+                "end": 7.74,
+                "probability": 0.10247802734375
+              },
+              {
+                "word": " sei,",
+                "start": 7.74,
+                "end": 7.74,
+                "probability": 0.7939453125
+              },
+              {
+                "word": " eu",
+                "start": 7.74,
+                "end": 7.86,
+                "probability": 0.184326171875
+              },
+              {
+                "word": " sei",
+                "start": 7.86,
+                "end": 7.94,
+                "probability": 0.80810546875
+              },
+              {
+                "word": " que",
+                "start": 7.94,
+                "end": 8.0,
+                "probability": 0.63330078125
+              },
+              {
+                "word": " tem",
+                "start": 8.0,
+                "end": 8.26,
+                "probability": 0.54443359375
+              },
+              {
+                "word": " que",
+                "start": 8.26,
+                "end": 8.4,
+                "probability": 0.3017578125
+              },
+              {
+                "word": " ser",
+                "start": 8.4,
+                "end": 8.56,
+                "probability": 0.828125
+              },
+              {
+                "word": " prestatio,",
+                "start": 8.56,
+                "end": 9.24,
+                "probability": 0.285888671875
+              },
+              {
+                "word": " joelho,",
+                "start": 9.36,
+                "end": 9.86,
+                "probability": 0.60986328125
+              },
+              {
+                "word": " pastor,",
+                "start": 10.02,
+                "end": 10.22,
+                "probability": 0.115478515625
+              },
+              {
+                "word": " que",
+                "start": 10.36,
+                "end": 10.5,
+                "probability": 0.160888671875
+              },
+              {
+                "word": " lhe",
+                "start": 10.5,
+                "end": 10.6,
+                "probability": 0.245361328125
+              },
+              {
+                "word": " atua.",
+                "start": 10.6,
+                "end": 10.72,
+                "probability": 0.246337890625
+              },
+              {
+                "word": " Só",
+                "start": 11.76,
+                "end": 12.24,
+                "probability": 0.990234375
+              },
+              {
+                "word": " que",
+                "start": 12.24,
+                "end": 12.36,
+                "probability": 0.8759765625
+              },
+              {
+                "word": " ele",
+                "start": 12.36,
+                "end": 12.46,
+                "probability": 0.5849609375
+              },
+              {
+                "word": " não",
+                "start": 12.46,
+                "end": 12.56,
+                "probability": 0.998046875
+              },
+              {
+                "word": " pode",
+                "start": 12.56,
+                "end": 12.86,
+                "probability": 0.99169921875
+              },
+              {
+                "word": " mais",
+                "start": 12.86,
+                "end": 13.06,
+                "probability": 0.99560546875
+              },
+              {
+                "word": " se",
+                "start": 13.06,
+                "end": 13.24,
+                "probability": 0.7978515625
+              },
+              {
+                "word": " candidatar",
+                "start": 13.24,
+                "end": 13.6,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " é",
+                "start": 13.6,
+                "end": 13.7,
+                "probability": 0.1068115234375
+              },
+              {
+                "word": " a",
+                "start": 13.7,
+                "end": 13.72,
+                "probability": 0.47998046875
+              },
+              {
+                "word": " mulher.",
+                "start": 13.72,
+                "end": 13.98,
+                "probability": 0.9716796875
+              },
+              {
+                "word": " Mulher",
+                "start": 15.14,
+                "end": 15.62,
+                "probability": 0.857421875
+              },
+              {
+                "word": " não",
+                "start": 15.62,
+                "end": 15.82,
+                "probability": 0.73291015625
+              },
+              {
+                "word": " pode.",
+                "start": 15.82,
+                "end": 16.14,
+                "probability": 0.9697265625
+              },
+              {
+                "word": " Porque",
+                "start": 17.64,
+                "end": 18.12,
+                "probability": 0.89306640625
+              },
+              {
+                "word": " o",
+                "start": 18.12,
+                "end": 18.3,
+                "probability": 0.97314453125
+              },
+              {
+                "word": " cargo",
+                "start": 18.3,
+                "end": 18.6,
+                "probability": 0.9365234375
+              },
+              {
+                "word": " que",
+                "start": 18.6,
+                "end": 18.82,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " ele",
+                "start": 18.82,
+                "end": 19.0,
+                "probability": 0.998046875
+              },
+              {
+                "word": " assumiu",
+                "start": 19.0,
+                "end": 20.02,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " na",
+                "start": 20.02,
+                "end": 20.62,
+                "probability": 0.98291015625
+              },
+              {
+                "word": " diretoria,",
+                "start": 20.62,
+                "end": 21.18,
+                "probability": 0.88916015625
+              },
+              {
+                "word": " aquele",
+                "start": 21.6,
+                "end": 22.68,
+                "probability": 0.720703125
+              },
+              {
+                "word": " mesmo",
+                "start": 22.68,
+                "end": 22.94,
+                "probability": 0.93212890625
+              },
+              {
+                "word": " rechou.",
+                "start": 22.94,
+                "end": 23.46,
+                "probability": 0.420654296875
+              },
+              {
+                "word": " Aquele",
+                "start": 24.16,
+                "end": 24.64,
+                "probability": 0.8740234375
+              },
+              {
+                "word": " que",
+                "start": 24.64,
+                "end": 24.8,
+                "probability": 0.853515625
+              },
+              {
+                "word": " relato",
+                "start": 24.8,
+                "end": 25.22,
+                "probability": 0.4755859375
+              },
+              {
+                "word": " que",
+                "start": 25.22,
+                "end": 25.4,
+                "probability": 0.1483154296875
+              },
+              {
+                "word": " tem",
+                "start": 25.4,
+                "end": 25.48,
+                "probability": 0.1405029296875
+              },
+              {
+                "word": " dado",
+                "start": 25.48,
+                "end": 25.62,
+                "probability": 0.90185546875
+              },
+              {
+                "word": " não",
+                "start": 25.62,
+                "end": 25.86,
+                "probability": 0.50390625
+              },
+              {
+                "word": " pode.",
+                "start": 25.86,
+                "end": 26.2,
+                "probability": 0.97900390625
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

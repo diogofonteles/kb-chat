@@ -1,0 +1,417 @@
+{
+  "source": "Pilot 2026-10-28, mlx-vad, noisy excerpt (trecho 3), cd03-08, first chunks (AC-5)",
+  "chunks": [
+    {
+      "offset": 0.1,
+      "end": 23.6,
+      "result": {
+        "text": " Estava lá no Acre, olha, estava lá no Mestre do Meio, lá também, o Devin que se ajudava. A palavra de Cuxa mostrou, superou.",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 13.54,
+            "text": " Estava lá no Acre, olha, estava lá no Mestre do Meio, lá também, o Devin que se ajudava.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7647363413935122,
+            "compression_ratio": 1.1743119266055047,
+            "no_speech_prob": 4.0940695278379735e-11,
+            "words": [
+              {
+                "word": " Estava",
+                "start": 0.0,
+                "end": 0.74,
+                "probability": 0.58154296875
+              },
+              {
+                "word": " lá",
+                "start": 0.74,
+                "end": 1.14,
+                "probability": 0.96728515625
+              },
+              {
+                "word": " no",
+                "start": 1.14,
+                "end": 1.42,
+                "probability": 0.92626953125
+              },
+              {
+                "word": " Acre,",
+                "start": 1.42,
+                "end": 2.06,
+                "probability": 0.6708984375
+              },
+              {
+                "word": " olha,",
+                "start": 2.3,
+                "end": 3.08,
+                "probability": 0.6220703125
+              },
+              {
+                "word": " estava",
+                "start": 3.68,
+                "end": 4.52,
+                "probability": 0.92822265625
+              },
+              {
+                "word": " lá",
+                "start": 4.52,
+                "end": 5.2,
+                "probability": 0.9599609375
+              },
+              {
+                "word": " no",
+                "start": 5.2,
+                "end": 5.88,
+                "probability": 0.8515625
+              },
+              {
+                "word": " Mestre",
+                "start": 5.88,
+                "end": 6.38,
+                "probability": 0.414794921875
+              },
+              {
+                "word": " do",
+                "start": 6.38,
+                "end": 6.66,
+                "probability": 0.50390625
+              },
+              {
+                "word": " Meio,",
+                "start": 6.66,
+                "end": 7.18,
+                "probability": 0.68017578125
+              },
+              {
+                "word": " lá",
+                "start": 8.68,
+                "end": 9.0,
+                "probability": 0.89501953125
+              },
+              {
+                "word": " também,",
+                "start": 9.0,
+                "end": 9.4,
+                "probability": 0.966796875
+              },
+              {
+                "word": " o",
+                "start": 10.84,
+                "end": 11.96,
+                "probability": 0.462646484375
+              },
+              {
+                "word": " Devin",
+                "start": 11.96,
+                "end": 12.62,
+                "probability": 0.1024169921875
+              },
+              {
+                "word": " que",
+                "start": 12.62,
+                "end": 12.9,
+                "probability": 0.03411865234375
+              },
+              {
+                "word": " se",
+                "start": 12.9,
+                "end": 13.04,
+                "probability": 0.1007080078125
+              },
+              {
+                "word": " ajudava.",
+                "start": 13.04,
+                "end": 13.54,
+                "probability": 0.5205078125
+              }
+            ]
+          },
+          {
+            "start": 15.02,
+            "end": 23.16,
+            "text": " A palavra de Cuxa mostrou, superou.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7647363413935122,
+            "compression_ratio": 1.1743119266055047,
+            "no_speech_prob": 4.0940695278379735e-11,
+            "words": [
+              {
+                "word": " A",
+                "start": 15.02,
+                "end": 15.68,
+                "probability": 0.96826171875
+              },
+              {
+                "word": " palavra",
+                "start": 15.68,
+                "end": 16.22,
+                "probability": 0.89990234375
+              },
+              {
+                "word": " de",
+                "start": 16.22,
+                "end": 16.76,
+                "probability": 0.2218017578125
+              },
+              {
+                "word": " Cuxa",
+                "start": 16.76,
+                "end": 17.4,
+                "probability": 0.47705078125
+              },
+              {
+                "word": " mostrou,",
+                "start": 17.4,
+                "end": 20.42,
+                "probability": 0.8974609375
+              },
+              {
+                "word": " superou.",
+                "start": 22.28,
+                "end": 23.16,
+                "probability": 0.9462890625
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 24.3,
+      "end": 51.3,
+      "result": {
+        "text": " E eu vi nas suas palavras também, um inferiço. Eu vi, eu estava lá, no país, da... E aí E aí E aí E aí E aí",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 16.34,
+            "text": " E eu vi nas suas palavras também, um inferiço. Eu vi, eu estava lá, no país, da...",
+            "temperature": 0.0,
+            "avg_logprob": -0.6576461791992188,
+            "compression_ratio": 1.0,
+            "no_speech_prob": 2.854768678395292e-11,
+            "words": [
+              {
+                "word": " E",
+                "start": 0.0,
+                "end": 0.54,
+                "probability": 0.5673828125
+              },
+              {
+                "word": " eu",
+                "start": 0.54,
+                "end": 0.84,
+                "probability": 0.9482421875
+              },
+              {
+                "word": " vi",
+                "start": 0.84,
+                "end": 1.2,
+                "probability": 0.9306640625
+              },
+              {
+                "word": " nas",
+                "start": 1.2,
+                "end": 1.52,
+                "probability": 0.65625
+              },
+              {
+                "word": " suas",
+                "start": 1.52,
+                "end": 1.9,
+                "probability": 0.822265625
+              },
+              {
+                "word": " palavras",
+                "start": 1.9,
+                "end": 2.38,
+                "probability": 0.358154296875
+              },
+              {
+                "word": " também,",
+                "start": 2.38,
+                "end": 3.48,
+                "probability": 0.89599609375
+              },
+              {
+                "word": " um",
+                "start": 4.64,
+                "end": 5.4,
+                "probability": 0.576171875
+              },
+              {
+                "word": " inferiço.",
+                "start": 5.4,
+                "end": 6.26,
+                "probability": 0.457275390625
+              },
+              {
+                "word": " Eu",
+                "start": 8.14,
+                "end": 9.22,
+                "probability": 0.98486328125
+              },
+              {
+                "word": " vi,",
+                "start": 9.22,
+                "end": 9.66,
+                "probability": 0.984375
+              },
+              {
+                "word": " eu",
+                "start": 10.48,
+                "end": 11.46,
+                "probability": 0.552734375
+              },
+              {
+                "word": " estava",
+                "start": 11.46,
+                "end": 11.78,
+                "probability": 0.9765625
+              },
+              {
+                "word": " lá,",
+                "start": 11.78,
+                "end": 12.18,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " no",
+                "start": 12.72,
+                "end": 12.8,
+                "probability": 0.2440185546875
+              },
+              {
+                "word": " país,",
+                "start": 12.8,
+                "end": 13.34,
+                "probability": 0.201171875
+              },
+              {
+                "word": " da...",
+                "start": 13.64,
+                "end": 16.34,
+                "probability": 0.5048828125
+              }
+            ]
+          },
+          {
+            "start": 16.34,
+            "end": 18.34,
+            "text": " E aí",
+            "temperature": 0.0,
+            "avg_logprob": -0.8396668207077753,
+            "compression_ratio": 1.7058823529411764,
+            "no_speech_prob": 3.5768293882298963e-10,
+            "words": [
+              {
+                "word": " E",
+                "start": 16.34,
+                "end": 17.4,
+                "probability": 0.199951171875
+              },
+              {
+                "word": " aí",
+                "start": 17.4,
+                "end": 18.34,
+                "probability": 0.95947265625
+              }
+            ]
+          },
+          {
+            "start": 20.26,
+            "end": 20.34,
+            "text": " E aí",
+            "temperature": 0.0,
+            "avg_logprob": -0.8396668207077753,
+            "compression_ratio": 1.7058823529411764,
+            "no_speech_prob": 3.5768293882298963e-10,
+            "words": [
+              {
+                "word": " E",
+                "start": 20.26,
+                "end": 20.26,
+                "probability": 0.80126953125
+              },
+              {
+                "word": " aí",
+                "start": 20.26,
+                "end": 20.96,
+                "probability": 0.99853515625
+              }
+            ]
+          },
+          {
+            "start": 21.4,
+            "end": 21.76,
+            "text": " E aí",
+            "temperature": 0.0,
+            "avg_logprob": -0.8396668207077753,
+            "compression_ratio": 1.7058823529411764,
+            "no_speech_prob": 3.5768293882298963e-10,
+            "words": [
+              {
+                "word": " E",
+                "start": 21.4,
+                "end": 21.4,
+                "probability": 0.91943359375
+              },
+              {
+                "word": " aí",
+                "start": 21.4,
+                "end": 21.76,
+                "probability": 0.99853515625
+              }
+            ]
+          },
+          {
+            "start": 21.76,
+            "end": 23.06,
+            "text": " E aí",
+            "temperature": 0.0,
+            "avg_logprob": -0.8396668207077753,
+            "compression_ratio": 1.7058823529411764,
+            "no_speech_prob": 3.5768293882298963e-10,
+            "words": [
+              {
+                "word": " E",
+                "start": 21.76,
+                "end": 21.88,
+                "probability": 0.93115234375
+              },
+              {
+                "word": " aí",
+                "start": 21.88,
+                "end": 23.06,
+                "probability": 0.998046875
+              }
+            ]
+          },
+          {
+            "start": 23.06,
+            "end": 25.36,
+            "text": " E aí",
+            "temperature": 0.0,
+            "avg_logprob": -0.8396668207077753,
+            "compression_ratio": 1.7058823529411764,
+            "no_speech_prob": 3.5768293882298963e-10,
+            "words": [
+              {
+                "word": " E",
+                "start": 23.06,
+                "end": 23.32,
+                "probability": 0.93994140625
+              },
+              {
+                "word": " aí",
+                "start": 23.32,
+                "end": 25.36,
+                "probability": 0.998046875
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

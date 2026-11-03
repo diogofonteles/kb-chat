@@ -1,0 +1,1258 @@
+{
+  "source": "Pilot 2026-10-28, mlx-vad, noisy excerpt (trecho 3), cd03-06, first chunks (AC-5)",
+  "chunks": [
+    {
+      "offset": 0.3,
+      "end": 21.4,
+      "result": {
+        "text": " Portanto, qualquer um que é da sessão, pode ser candidato. Não sei, não é que é tarde? Todo direito de ir. Já, para os mestres aqui, quem quiser, pode caminhar. Agora eu quero que tenha.",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 6.58,
+            "text": " Portanto, qualquer um que é da sessão, pode ser candidato.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7282143831253052,
+            "compression_ratio": 1.3402777777777777,
+            "no_speech_prob": 1.1119982538942974e-11,
+            "words": [
+              {
+                "word": " Portanto,",
+                "start": 0.0,
+                "end": 0.58,
+                "probability": 0.85546875
+              },
+              {
+                "word": " qualquer",
+                "start": 1.6,
+                "end": 2.3,
+                "probability": 0.9755859375
+              },
+              {
+                "word": " um",
+                "start": 2.3,
+                "end": 2.66,
+                "probability": 0.9873046875
+              },
+              {
+                "word": " que",
+                "start": 2.66,
+                "end": 4.36,
+                "probability": 0.564453125
+              },
+              {
+                "word": " é",
+                "start": 4.36,
+                "end": 4.46,
+                "probability": 0.73974609375
+              },
+              {
+                "word": " da",
+                "start": 4.46,
+                "end": 4.58,
+                "probability": 0.9345703125
+              },
+              {
+                "word": " sessão,",
+                "start": 4.58,
+                "end": 5.32,
+                "probability": 0.59912109375
+              },
+              {
+                "word": " pode",
+                "start": 5.64,
+                "end": 6.04,
+                "probability": 0.82958984375
+              },
+              {
+                "word": " ser",
+                "start": 6.04,
+                "end": 6.24,
+                "probability": 0.264892578125
+              },
+              {
+                "word": " candidato.",
+                "start": 6.24,
+                "end": 6.58,
+                "probability": 0.4384765625
+              }
+            ]
+          },
+          {
+            "start": 9.08,
+            "end": 11.62,
+            "text": " Não sei, não é que é tarde?",
+            "temperature": 0.0,
+            "avg_logprob": -0.7282143831253052,
+            "compression_ratio": 1.3402777777777777,
+            "no_speech_prob": 1.1119982538942974e-11,
+            "words": [
+              {
+                "word": " Não",
+                "start": 9.08,
+                "end": 9.62,
+                "probability": 0.068115234375
+              },
+              {
+                "word": " sei,",
+                "start": 9.62,
+                "end": 9.86,
+                "probability": 0.79345703125
+              },
+              {
+                "word": " não",
+                "start": 10.92,
+                "end": 11.12,
+                "probability": 0.1845703125
+              },
+              {
+                "word": " é",
+                "start": 11.12,
+                "end": 11.22,
+                "probability": 0.390869140625
+              },
+              {
+                "word": " que",
+                "start": 11.22,
+                "end": 11.26,
+                "probability": 0.42431640625
+              },
+              {
+                "word": " é",
+                "start": 11.26,
+                "end": 11.4,
+                "probability": 0.410888671875
+              },
+              {
+                "word": " tarde?",
+                "start": 11.4,
+                "end": 11.62,
+                "probability": 0.39501953125
+              }
+            ]
+          },
+          {
+            "start": 11.86,
+            "end": 12.78,
+            "text": " Todo direito de ir.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7282143831253052,
+            "compression_ratio": 1.3402777777777777,
+            "no_speech_prob": 1.1119982538942974e-11,
+            "words": [
+              {
+                "word": " Todo",
+                "start": 11.86,
+                "end": 12.14,
+                "probability": 0.209228515625
+              },
+              {
+                "word": " direito",
+                "start": 12.14,
+                "end": 12.42,
+                "probability": 0.546875
+              },
+              {
+                "word": " de",
+                "start": 12.42,
+                "end": 12.66,
+                "probability": 0.168701171875
+              },
+              {
+                "word": " ir.",
+                "start": 12.66,
+                "end": 12.78,
+                "probability": 0.489990234375
+              }
+            ]
+          },
+          {
+            "start": 13.56,
+            "end": 17.52,
+            "text": " Já, para os mestres aqui, quem quiser, pode caminhar.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7282143831253052,
+            "compression_ratio": 1.3402777777777777,
+            "no_speech_prob": 1.1119982538942974e-11,
+            "words": [
+              {
+                "word": " Já,",
+                "start": 13.56,
+                "end": 14.12,
+                "probability": 0.1502685546875
+              },
+              {
+                "word": " para",
+                "start": 14.26,
+                "end": 14.42,
+                "probability": 0.1202392578125
+              },
+              {
+                "word": " os",
+                "start": 14.42,
+                "end": 14.62,
+                "probability": 0.276611328125
+              },
+              {
+                "word": " mestres",
+                "start": 14.62,
+                "end": 14.94,
+                "probability": 0.513671875
+              },
+              {
+                "word": " aqui,",
+                "start": 14.94,
+                "end": 15.2,
+                "probability": 0.330078125
+              },
+              {
+                "word": " quem",
+                "start": 15.3,
+                "end": 15.4,
+                "probability": 0.45263671875
+              },
+              {
+                "word": " quiser,",
+                "start": 15.4,
+                "end": 15.54,
+                "probability": 0.356689453125
+              },
+              {
+                "word": " pode",
+                "start": 16.22,
+                "end": 16.76,
+                "probability": 0.45361328125
+              },
+              {
+                "word": " caminhar.",
+                "start": 16.76,
+                "end": 17.52,
+                "probability": 0.8564453125
+              }
+            ]
+          },
+          {
+            "start": 18.42,
+            "end": 19.96,
+            "text": " Agora eu quero que tenha.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7282143831253052,
+            "compression_ratio": 1.3402777777777777,
+            "no_speech_prob": 1.1119982538942974e-11,
+            "words": [
+              {
+                "word": " Agora",
+                "start": 18.42,
+                "end": 18.98,
+                "probability": 0.9833984375
+              },
+              {
+                "word": " eu",
+                "start": 18.98,
+                "end": 19.16,
+                "probability": 0.7138671875
+              },
+              {
+                "word": " quero",
+                "start": 19.16,
+                "end": 19.44,
+                "probability": 0.998046875
+              },
+              {
+                "word": " que",
+                "start": 19.44,
+                "end": 19.62,
+                "probability": 0.99169921875
+              },
+              {
+                "word": " tenha.",
+                "start": 19.62,
+                "end": 19.96,
+                "probability": 0.49267578125
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 23.7,
+      "end": 48.2,
+      "result": {
+        "text": " Dois candidatos, dois, dois, dois, dois, qualquer coisa. Sendo um só, não é ele não. É a nomeação. Sendo um só, é a nomeação. Só quer dizer, se não aparece em candidatos, dois para cada coisa, continua na nomeação.",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 11.6,
+            "text": " Dois candidatos, dois, dois, dois, dois, qualquer coisa. Sendo um só, não é ele não. É a nomeação. Sendo um só, é a nomeação.",
+            "temperature": 0.2,
+            "avg_logprob": -0.45526666783574804,
+            "compression_ratio": 1.6962962962962962,
+            "no_speech_prob": 1.1294239848913534e-11,
+            "words": [
+              {
+                "word": " Dois",
+                "start": 0.0,
+                "end": 0.48,
+                "probability": 0.6357421875
+              },
+              {
+                "word": " candidatos,",
+                "start": 0.48,
+                "end": 1.02,
+                "probability": 0.93994140625
+              },
+              {
+                "word": " dois,",
+                "start": 1.44,
+                "end": 1.84,
+                "probability": 0.267578125
+              },
+              {
+                "word": " dois,",
+                "start": 3.8,
+                "end": 3.88,
+                "probability": 0.50830078125
+              },
+              {
+                "word": " dois,",
+                "start": 3.88,
+                "end": 3.92,
+                "probability": 0.496826171875
+              },
+              {
+                "word": " dois,",
+                "start": 3.92,
+                "end": 4.12,
+                "probability": 0.29931640625
+              },
+              {
+                "word": " qualquer",
+                "start": 4.24,
+                "end": 4.5,
+                "probability": 0.352294921875
+              },
+              {
+                "word": " coisa.",
+                "start": 4.5,
+                "end": 4.88,
+                "probability": 0.99462890625
+              },
+              {
+                "word": " Sendo",
+                "start": 5.32,
+                "end": 5.68,
+                "probability": 0.95068359375
+              },
+              {
+                "word": " um",
+                "start": 5.68,
+                "end": 5.88,
+                "probability": 0.96826171875
+              },
+              {
+                "word": " só,",
+                "start": 5.88,
+                "end": 6.28,
+                "probability": 0.95751953125
+              },
+              {
+                "word": " não",
+                "start": 6.52,
+                "end": 6.86,
+                "probability": 0.89892578125
+              },
+              {
+                "word": " é",
+                "start": 6.86,
+                "end": 6.94,
+                "probability": 0.95654296875
+              },
+              {
+                "word": " ele",
+                "start": 6.94,
+                "end": 7.1,
+                "probability": 0.32568359375
+              },
+              {
+                "word": " não.",
+                "start": 7.1,
+                "end": 7.32,
+                "probability": 0.75634765625
+              },
+              {
+                "word": " É",
+                "start": 8.16,
+                "end": 8.78,
+                "probability": 0.93603515625
+              },
+              {
+                "word": " a",
+                "start": 8.78,
+                "end": 8.9,
+                "probability": 0.5224609375
+              },
+              {
+                "word": " nomeação.",
+                "start": 8.9,
+                "end": 9.3,
+                "probability": 0.92578125
+              },
+              {
+                "word": " Sendo",
+                "start": 9.98,
+                "end": 10.6,
+                "probability": 0.89599609375
+              },
+              {
+                "word": " um",
+                "start": 10.6,
+                "end": 10.72,
+                "probability": 0.9853515625
+              },
+              {
+                "word": " só,",
+                "start": 10.72,
+                "end": 10.92,
+                "probability": 0.99267578125
+              },
+              {
+                "word": " é",
+                "start": 10.98,
+                "end": 11.04,
+                "probability": 0.990234375
+              },
+              {
+                "word": " a",
+                "start": 11.04,
+                "end": 11.12,
+                "probability": 0.96728515625
+              },
+              {
+                "word": " nomeação.",
+                "start": 11.12,
+                "end": 11.6,
+                "probability": 0.9990234375
+              }
+            ]
+          },
+          {
+            "start": 12.72,
+            "end": 22.42,
+            "text": " Só quer dizer, se não aparece em candidatos, dois para cada coisa, continua na nomeação.",
+            "temperature": 0.2,
+            "avg_logprob": -0.45526666783574804,
+            "compression_ratio": 1.6962962962962962,
+            "no_speech_prob": 1.1294239848913534e-11,
+            "words": [
+              {
+                "word": " Só",
+                "start": 12.72,
+                "end": 13.34,
+                "probability": 0.177734375
+              },
+              {
+                "word": " quer",
+                "start": 13.34,
+                "end": 13.58,
+                "probability": 0.5537109375
+              },
+              {
+                "word": " dizer,",
+                "start": 13.58,
+                "end": 13.74,
+                "probability": 0.970703125
+              },
+              {
+                "word": " se",
+                "start": 13.88,
+                "end": 14.0,
+                "probability": 0.63427734375
+              },
+              {
+                "word": " não",
+                "start": 14.0,
+                "end": 14.08,
+                "probability": 0.904296875
+              },
+              {
+                "word": " aparece",
+                "start": 14.08,
+                "end": 14.34,
+                "probability": 0.10821533203125
+              },
+              {
+                "word": " em",
+                "start": 14.34,
+                "end": 14.6,
+                "probability": 0.10833740234375
+              },
+              {
+                "word": " candidatos,",
+                "start": 14.6,
+                "end": 15.2,
+                "probability": 0.9580078125
+              },
+              {
+                "word": " dois",
+                "start": 16.08,
+                "end": 16.38,
+                "probability": 0.974609375
+              },
+              {
+                "word": " para",
+                "start": 16.38,
+                "end": 16.62,
+                "probability": 0.50537109375
+              },
+              {
+                "word": " cada",
+                "start": 16.62,
+                "end": 16.8,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " coisa,",
+                "start": 16.8,
+                "end": 17.12,
+                "probability": 0.9990234375
+              },
+              {
+                "word": " continua",
+                "start": 18.46,
+                "end": 18.8,
+                "probability": 0.336669921875
+              },
+              {
+                "word": " na",
+                "start": 18.8,
+                "end": 22.06,
+                "probability": 0.34228515625
+              },
+              {
+                "word": " nomeação.",
+                "start": 22.06,
+                "end": 22.42,
+                "probability": 0.802734375
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 49.3,
+      "end": 73.4,
+      "result": {
+        "text": " Se não haver, nem estou não haver, não haver nada. Só se elever, é cheio de coisas mais, é que está. Porque nós falamos de eleição, mas todos nós falamos, né? Sabemos que não houve eleição. Para que ele se houve, porque eu disse.",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 5.7,
+            "text": " Se não haver, nem estou não haver, não haver nada. Só se elever, é cheio de coisas mais, é que está.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7857466803656684,
+            "compression_ratio": 1.5947712418300655,
+            "no_speech_prob": 4.605106920796409e-11,
+            "words": [
+              {
+                "word": " Se",
+                "start": 0.0,
+                "end": 0.38,
+                "probability": 0.1041259765625
+              },
+              {
+                "word": " não",
+                "start": 0.38,
+                "end": 0.54,
+                "probability": 0.86865234375
+              },
+              {
+                "word": " haver,",
+                "start": 0.54,
+                "end": 0.82,
+                "probability": 0.291748046875
+              },
+              {
+                "word": " nem",
+                "start": 1.08,
+                "end": 1.56,
+                "probability": 0.9013671875
+              },
+              {
+                "word": " estou",
+                "start": 1.56,
+                "end": 1.74,
+                "probability": 0.2381591796875
+              },
+              {
+                "word": " não",
+                "start": 1.74,
+                "end": 1.9,
+                "probability": 0.1729736328125
+              },
+              {
+                "word": " haver,",
+                "start": 1.9,
+                "end": 2.16,
+                "probability": 0.83935546875
+              },
+              {
+                "word": " não",
+                "start": 2.26,
+                "end": 2.34,
+                "probability": 0.206298828125
+              },
+              {
+                "word": " haver",
+                "start": 2.34,
+                "end": 2.64,
+                "probability": 0.394287109375
+              },
+              {
+                "word": " nada.",
+                "start": 2.64,
+                "end": 2.64,
+                "probability": 0.7666015625
+              },
+              {
+                "word": " Só",
+                "start": 3.02,
+                "end": 3.38,
+                "probability": 0.6513671875
+              },
+              {
+                "word": " se",
+                "start": 3.38,
+                "end": 3.54,
+                "probability": 0.61767578125
+              },
+              {
+                "word": " elever,",
+                "start": 3.54,
+                "end": 3.88,
+                "probability": 0.580078125
+              },
+              {
+                "word": " é",
+                "start": 4.12,
+                "end": 4.26,
+                "probability": 0.4326171875
+              },
+              {
+                "word": " cheio",
+                "start": 4.26,
+                "end": 4.34,
+                "probability": 0.57763671875
+              },
+              {
+                "word": " de",
+                "start": 4.34,
+                "end": 4.46,
+                "probability": 0.6455078125
+              },
+              {
+                "word": " coisas",
+                "start": 4.46,
+                "end": 4.68,
+                "probability": 0.236328125
+              },
+              {
+                "word": " mais,",
+                "start": 4.68,
+                "end": 5.02,
+                "probability": 0.2130126953125
+              },
+              {
+                "word": " é",
+                "start": 5.12,
+                "end": 5.28,
+                "probability": 0.1170654296875
+              },
+              {
+                "word": " que",
+                "start": 5.28,
+                "end": 5.5,
+                "probability": 0.55126953125
+              },
+              {
+                "word": " está.",
+                "start": 5.5,
+                "end": 5.7,
+                "probability": 0.383056640625
+              }
+            ]
+          },
+          {
+            "start": 11.84,
+            "end": 17.8,
+            "text": " Porque nós falamos de eleição, mas todos nós falamos, né? Sabemos que não houve eleição.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7857466803656684,
+            "compression_ratio": 1.5947712418300655,
+            "no_speech_prob": 4.605106920796409e-11,
+            "words": [
+              {
+                "word": " Porque",
+                "start": 11.84,
+                "end": 12.36,
+                "probability": 0.712890625
+              },
+              {
+                "word": " nós",
+                "start": 12.36,
+                "end": 12.6,
+                "probability": 0.8330078125
+              },
+              {
+                "word": " falamos",
+                "start": 12.6,
+                "end": 13.08,
+                "probability": 0.982421875
+              },
+              {
+                "word": " de",
+                "start": 13.08,
+                "end": 13.3,
+                "probability": 0.5615234375
+              },
+              {
+                "word": " eleição,",
+                "start": 13.3,
+                "end": 13.88,
+                "probability": 0.58203125
+              },
+              {
+                "word": " mas",
+                "start": 14.26,
+                "end": 15.02,
+                "probability": 0.982421875
+              },
+              {
+                "word": " todos",
+                "start": 15.02,
+                "end": 15.4,
+                "probability": 0.78125
+              },
+              {
+                "word": " nós",
+                "start": 15.4,
+                "end": 15.64,
+                "probability": 0.9716796875
+              },
+              {
+                "word": " falamos,",
+                "start": 15.64,
+                "end": 16.04,
+                "probability": 0.96484375
+              },
+              {
+                "word": " né?",
+                "start": 16.16,
+                "end": 16.22,
+                "probability": 0.09564208984375
+              },
+              {
+                "word": " Sabemos",
+                "start": 16.34,
+                "end": 16.78,
+                "probability": 0.68017578125
+              },
+              {
+                "word": " que",
+                "start": 16.78,
+                "end": 16.96,
+                "probability": 0.98779296875
+              },
+              {
+                "word": " não",
+                "start": 16.96,
+                "end": 17.14,
+                "probability": 0.9765625
+              },
+              {
+                "word": " houve",
+                "start": 17.14,
+                "end": 17.38,
+                "probability": 0.83349609375
+              },
+              {
+                "word": " eleição.",
+                "start": 17.38,
+                "end": 17.8,
+                "probability": 0.5615234375
+              }
+            ]
+          },
+          {
+            "start": 19.14,
+            "end": 23.2,
+            "text": " Para que ele se houve, porque eu disse.",
+            "temperature": 0.0,
+            "avg_logprob": -0.7857466803656684,
+            "compression_ratio": 1.5947712418300655,
+            "no_speech_prob": 4.605106920796409e-11,
+            "words": [
+              {
+                "word": " Para",
+                "start": 19.14,
+                "end": 19.56,
+                "probability": 0.16064453125
+              },
+              {
+                "word": " que",
+                "start": 19.56,
+                "end": 19.74,
+                "probability": 0.476806640625
+              },
+              {
+                "word": " ele",
+                "start": 19.74,
+                "end": 19.9,
+                "probability": 0.5009765625
+              },
+              {
+                "word": " se",
+                "start": 19.9,
+                "end": 20.04,
+                "probability": 0.17529296875
+              },
+              {
+                "word": " houve,",
+                "start": 20.04,
+                "end": 20.38,
+                "probability": 0.6728515625
+              },
+              {
+                "word": " porque",
+                "start": 20.84,
+                "end": 22.56,
+                "probability": 0.7666015625
+              },
+              {
+                "word": " eu",
+                "start": 22.56,
+                "end": 22.92,
+                "probability": 0.177978515625
+              },
+              {
+                "word": " disse.",
+                "start": 22.92,
+                "end": 23.2,
+                "probability": 0.615234375
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 74.1,
+      "end": 96.3,
+      "result": {
+        "text": " planta de vento, planta de surpresa, planta de caras, planta de caras, planta de caras, planta de caras, planta de caras, planta de caras, dividia-se a sua coisa. Que todos eles formam eleitos. Então, houve a versão ou houve a nomeação? Agora, vai ter perguntas-se de quando a pessoa é uma lei se tratava? Já foi com a discussão?",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 7.06,
+            "text": " planta de vento, planta de surpresa, planta de caras, planta de caras, planta de caras, planta de caras, planta de caras, planta de caras, dividia-se a sua coisa.",
+            "temperature": 0.2,
+            "avg_logprob": -0.7728970614346591,
+            "compression_ratio": 1.8770949720670391,
+            "no_speech_prob": 1.4063182909862526e-11,
+            "words": [
+              {
+                "word": " planta",
+                "start": 0.0,
+                "end": 0.68,
+                "probability": 0.5400390625
+              },
+              {
+                "word": " de",
+                "start": 0.68,
+                "end": 0.86,
+                "probability": 0.1624755859375
+              },
+              {
+                "word": " vento,",
+                "start": 0.86,
+                "end": 1.28,
+                "probability": 0.409423828125
+              },
+              {
+                "word": " planta",
+                "start": 1.34,
+                "end": 1.62,
+                "probability": 0.94921875
+              },
+              {
+                "word": " de",
+                "start": 1.62,
+                "end": 1.76,
+                "probability": 0.84130859375
+              },
+              {
+                "word": " surpresa,",
+                "start": 1.76,
+                "end": 2.16,
+                "probability": 0.335205078125
+              },
+              {
+                "word": " planta",
+                "start": 2.36,
+                "end": 2.62,
+                "probability": 0.984375
+              },
+              {
+                "word": " de",
+                "start": 2.62,
+                "end": 2.76,
+                "probability": 0.93603515625
+              },
+              {
+                "word": " caras,",
+                "start": 2.76,
+                "end": 3.2,
+                "probability": 0.0870361328125
+              },
+              {
+                "word": " planta",
+                "start": 3.4,
+                "end": 3.44,
+                "probability": 0.6708984375
+              },
+              {
+                "word": " de",
+                "start": 3.44,
+                "end": 3.44,
+                "probability": 0.90087890625
+              },
+              {
+                "word": " caras,",
+                "start": 3.44,
+                "end": 3.44,
+                "probability": 0.6259765625
+              },
+              {
+                "word": " planta",
+                "start": 3.44,
+                "end": 3.54,
+                "probability": 0.525390625
+              },
+              {
+                "word": " de",
+                "start": 3.54,
+                "end": 3.78,
+                "probability": 0.90869140625
+              },
+              {
+                "word": " caras,",
+                "start": 3.78,
+                "end": 4.02,
+                "probability": 0.7822265625
+              },
+              {
+                "word": " planta",
+                "start": 4.02,
+                "end": 4.14,
+                "probability": 0.41845703125
+              },
+              {
+                "word": " de",
+                "start": 4.14,
+                "end": 4.14,
+                "probability": 0.916015625
+              },
+              {
+                "word": " caras,",
+                "start": 4.14,
+                "end": 4.14,
+                "probability": 0.875
+              },
+              {
+                "word": " planta",
+                "start": 4.14,
+                "end": 4.44,
+                "probability": 0.41357421875
+              },
+              {
+                "word": " de",
+                "start": 4.44,
+                "end": 4.5,
+                "probability": 0.92236328125
+              },
+              {
+                "word": " caras,",
+                "start": 4.5,
+                "end": 4.68,
+                "probability": 0.919921875
+              },
+              {
+                "word": " planta",
+                "start": 4.68,
+                "end": 4.74,
+                "probability": 0.4248046875
+              },
+              {
+                "word": " de",
+                "start": 4.74,
+                "end": 4.84,
+                "probability": 0.9267578125
+              },
+              {
+                "word": " caras,",
+                "start": 4.84,
+                "end": 4.9,
+                "probability": 0.93896484375
+              },
+              {
+                "word": " dividia",
+                "start": 5.58,
+                "end": 6.36,
+                "probability": 0.26904296875
+              },
+              {
+                "word": "-se",
+                "start": 6.36,
+                "end": 6.52,
+                "probability": 0.80224609375
+              },
+              {
+                "word": " a",
+                "start": 6.52,
+                "end": 6.66,
+                "probability": 0.397705078125
+              },
+              {
+                "word": " sua",
+                "start": 6.66,
+                "end": 6.78,
+                "probability": 0.128662109375
+              },
+              {
+                "word": " coisa.",
+                "start": 6.78,
+                "end": 7.06,
+                "probability": 0.088623046875
+              }
+            ]
+          },
+          {
+            "start": 7.900000000000001,
+            "end": 13.84,
+            "text": " Que todos eles formam eleitos. Então, houve a versão ou houve a nomeação?",
+            "temperature": 0.2,
+            "avg_logprob": -0.7728970614346591,
+            "compression_ratio": 1.8770949720670391,
+            "no_speech_prob": 1.4063182909862526e-11,
+            "words": [
+              {
+                "word": " Que",
+                "start": 7.900000000000001,
+                "end": 8.38,
+                "probability": 0.56591796875
+              },
+              {
+                "word": " todos",
+                "start": 8.38,
+                "end": 8.78,
+                "probability": 0.9716796875
+              },
+              {
+                "word": " eles",
+                "start": 8.78,
+                "end": 9.1,
+                "probability": 0.71923828125
+              },
+              {
+                "word": " formam",
+                "start": 9.1,
+                "end": 9.64,
+                "probability": 0.62548828125
+              },
+              {
+                "word": " eleitos.",
+                "start": 9.64,
+                "end": 10.12,
+                "probability": 0.43310546875
+              },
+              {
+                "word": " Então,",
+                "start": 10.58,
+                "end": 10.82,
+                "probability": 0.703125
+              },
+              {
+                "word": " houve",
+                "start": 11.12,
+                "end": 11.22,
+                "probability": 0.9521484375
+              },
+              {
+                "word": " a",
+                "start": 11.22,
+                "end": 11.32,
+                "probability": 0.378173828125
+              },
+              {
+                "word": " versão",
+                "start": 11.32,
+                "end": 11.56,
+                "probability": 0.1766357421875
+              },
+              {
+                "word": " ou",
+                "start": 11.56,
+                "end": 12.88,
+                "probability": 0.6767578125
+              },
+              {
+                "word": " houve",
+                "start": 12.88,
+                "end": 13.12,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " a",
+                "start": 13.12,
+                "end": 13.2,
+                "probability": 0.9736328125
+              },
+              {
+                "word": " nomeação?",
+                "start": 13.2,
+                "end": 13.84,
+                "probability": 0.5498046875
+              }
+            ]
+          },
+          {
+            "start": 15.54,
+            "end": 21.58,
+            "text": " Agora, vai ter perguntas-se de quando a pessoa é uma lei se tratava? Já foi com a discussão?",
+            "temperature": 0.2,
+            "avg_logprob": -0.7728970614346591,
+            "compression_ratio": 1.8770949720670391,
+            "no_speech_prob": 1.4063182909862526e-11,
+            "words": [
+              {
+                "word": " Agora,",
+                "start": 15.54,
+                "end": 16.02,
+                "probability": 0.533203125
+              },
+              {
+                "word": " vai",
+                "start": 16.12,
+                "end": 16.26,
+                "probability": 0.1463623046875
+              },
+              {
+                "word": " ter",
+                "start": 16.26,
+                "end": 16.38,
+                "probability": 0.7099609375
+              },
+              {
+                "word": " perguntas",
+                "start": 16.38,
+                "end": 16.88,
+                "probability": 0.63330078125
+              },
+              {
+                "word": "-se",
+                "start": 16.88,
+                "end": 17.04,
+                "probability": 0.405517578125
+              },
+              {
+                "word": " de",
+                "start": 17.04,
+                "end": 17.1,
+                "probability": 0.2022705078125
+              },
+              {
+                "word": " quando",
+                "start": 17.1,
+                "end": 17.6,
+                "probability": 0.9443359375
+              },
+              {
+                "word": " a",
+                "start": 17.6,
+                "end": 18.0,
+                "probability": 0.8359375
+              },
+              {
+                "word": " pessoa",
+                "start": 18.0,
+                "end": 18.2,
+                "probability": 0.209716796875
+              },
+              {
+                "word": " é",
+                "start": 18.2,
+                "end": 18.42,
+                "probability": 0.185546875
+              },
+              {
+                "word": " uma",
+                "start": 18.42,
+                "end": 18.56,
+                "probability": 0.118408203125
+              },
+              {
+                "word": " lei",
+                "start": 18.56,
+                "end": 18.84,
+                "probability": 0.251220703125
+              },
+              {
+                "word": " se",
+                "start": 18.84,
+                "end": 19.02,
+                "probability": 0.092041015625
+              },
+              {
+                "word": " tratava?",
+                "start": 19.02,
+                "end": 19.5,
+                "probability": 0.58154296875
+              },
+              {
+                "word": " Já",
+                "start": 20.56,
+                "end": 20.82,
+                "probability": 0.34423828125
+              },
+              {
+                "word": " foi",
+                "start": 20.82,
+                "end": 21.04,
+                "probability": 0.411865234375
+              },
+              {
+                "word": " com",
+                "start": 21.04,
+                "end": 21.18,
+                "probability": 0.32763671875
+              },
+              {
+                "word": " a",
+                "start": 21.18,
+                "end": 21.2,
+                "probability": 0.368896484375
+              },
+              {
+                "word": " discussão?",
+                "start": 21.2,
+                "end": 21.58,
+                "probability": 0.5185546875
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
