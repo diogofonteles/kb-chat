@@ -91,6 +91,16 @@ const passages = (page: Page) =>
 const documents = (page: Page) =>
   page.locator('app-result-message').last().locator('[data-doc-id]');
 
+/** The texts painted as the found passage over the transcript (CSS Custom Highlight API). */
+const paintedPassage = (page: Page) =>
+  page.evaluate(() => {
+    type Registry = { get(name: string): Iterable<Range> | undefined };
+    const registry = (CSS as unknown as { highlights: Registry }).highlights;
+    return Array.from(registry.get('transcript-passage') ?? [], (range) =>
+      range.toString().trim(),
+    );
+  });
+
 const seriousViolations = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((violation) =>
     ['serious', 'critical'].includes(violation.impact ?? ''),
@@ -131,6 +141,15 @@ test('AC-1, AC-10: "tiuaco mariri" finds the passage at 8:15 and plays it from 8
   await expect(
     panel.getByRole('link', { name: 'Abrir na página da mídia' }),
   ).toHaveAttribute('href', /\?t=493$/);
+  // The transcript below the player, with the found segment painted and in view.
+  const transcript = panel.locator('app-transcript-panel');
+  await expect(
+    transcript.getByRole('heading', { name: 'Transcrição' }),
+  ).toBeVisible();
+  await expect
+    .poll(() => paintedPassage(page))
+    .toEqual([`Tiuaco é Mariri ${tag}`]);
+  await expect(transcript.getByText(`Tiuaco é Mariri ${tag}`)).toBeInViewport();
 });
 
 test('AC-9: without "Textos" only the passage shows; with it again both, mixed', async ({
@@ -185,6 +204,9 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await passages(page).click();
     await expect(page.getByRole('dialog', { name: title })).toBeVisible();
     await expect(page.getByRole('slider', { name: 'Posição' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Transcrição' }),
+    ).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth,
