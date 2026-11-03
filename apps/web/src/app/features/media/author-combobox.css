@@ -3,7 +3,6 @@
 }
 
 .combo {
-  position: relative;
   display: grid;
   gap: var(--space-1);
 }
@@ -31,12 +30,11 @@ input {
   font: inherit;
 }
 
+/* In the panel's flow, under the field: it pushes the rest down, never covers it. */
 .options {
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  z-index: 2;
-  margin: var(--space-1) 0 0;
+  max-height: 22rem;
+  overflow-y: auto;
+  margin: 0;
   padding: var(--space-1) 0;
   list-style: none;
   border: 1px solid var(--color-border);

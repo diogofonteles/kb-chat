@@ -126,6 +126,8 @@ export class AuthorCombobox {
     const count = this.options().length;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
+      // Before the list arrives: open it, so it shows as soon as it does.
+      this.open.set(true);
       if (count === 0) return;
       const step = event.key === 'ArrowDown' ? 1 : -1;
       const from = this.expanded() ? this.active() : -1;

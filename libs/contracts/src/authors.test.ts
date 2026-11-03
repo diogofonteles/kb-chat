@@ -14,15 +14,21 @@ describe('author contracts (KBC-049)', () => {
       'Mestre Gabriel',
     );
     expect(authorCreateSchema.safeParse({ name: '  ' }).success).toBe(false);
-    expect(
-      authorCreateSchema.safeParse({ name: 'A', slug: 'a' }).success,
-    ).toBe(false);
+    expect(authorCreateSchema.safeParse({ name: 'A', slug: 'a' }).success).toBe(
+      false,
+    );
   });
 
   it('lets PATCH change only the main author, or clear it', () => {
-    expect(topicUpdateSchema.safeParse({ mainAuthor: 'mestre-gabriel' }).success).toBe(true);
-    expect(topicUpdateSchema.safeParse({ mainAuthor: null }).success).toBe(true);
-    expect(topicUpdateSchema.safeParse({ mainAuthor: 'Mestre' }).success).toBe(false);
+    expect(
+      topicUpdateSchema.safeParse({ mainAuthor: 'mestre-gabriel' }).success,
+    ).toBe(true);
+    expect(topicUpdateSchema.safeParse({ mainAuthor: null }).success).toBe(
+      true,
+    );
+    expect(topicUpdateSchema.safeParse({ mainAuthor: 'Mestre' }).success).toBe(
+      false,
+    );
     expect(topicUpdateSchema.safeParse({}).success).toBe(false);
   });
 });
