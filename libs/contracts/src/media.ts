@@ -301,10 +301,16 @@ export function hasAcceptedAudioExtension(fileName: string): boolean {
 /* ---------- The media worker protocol (ADR 0022 §3) ---------- */
 
 /**
- * Converting for the browser and measuring its silences (VM worker, KBC-044), and
- * transcribing (a paired transcriber, ADR 0023).
+ * Converting for the browser and measuring its silences (VM worker, KBC-044),
+ * transcribing (a paired transcriber, ADR 0023) and separating the voices of a transcribed
+ * recording (a paired transcriber, ADR 0029 §1).
  */
-export const MEDIA_JOB_KINDS = ['transcode', 'transcribe', 'silences'] as const;
+export const MEDIA_JOB_KINDS = [
+  'transcode',
+  'transcribe',
+  'silences',
+  'diarize',
+] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;
 
@@ -470,11 +476,24 @@ export const mediaSilencesSchema = z.object({
 export type MediaSilenceStatus = (typeof SILENCE_MAP_STATUSES)[number];
 export type MediaSilences = z.infer<typeof mediaSilencesSchema>;
 
+/** The most voices a separation finds or a person may announce (KBC-064 BR-4). */
+export const MAX_VOICES = 10;
+export const voiceCountSchema = z.number().int().min(1).max(MAX_VOICES);
+
+/** A leased voice separation (KBC-064): the audio as for a transcription, and the hint. */
+export const diarizeJobSchema = transcribeJobSchema.extend({
+  kind: z.literal('diarize'),
+  /** How many voices the person said there are (BR-4); null lets the model estimate. */
+  voices: voiceCountSchema.nullable(),
+});
+export type DiarizeJob = z.infer<typeof diarizeJobSchema>;
+
 /** POST …/jobs/lease answers one of these, by the kinds the token may lease. */
 export const leasedJobSchema = z.union([
   workerJobSchema,
   transcribeJobSchema,
   silencesJobSchema,
+  diarizeJobSchema,
 ]);
 export type LeasedWorkerJob = z.infer<typeof leasedJobSchema>;
 
@@ -609,3 +628,126 @@ export type CompleteTranscribeRequest = z.infer<
 
 /** The largest raw result the API takes (an hour of speech is a few MB). */
 export const MAX_RAW_TRANSCRIPT_BYTES = 64 * 1024 * 1024;
+
+/* ---------- Voices of a recording (KBC-064, ADR 0029 §1) ---------- */
+
+/** The engines a transcriber may separate voices with (the model is swappable). */
+export const DIARIZATION_ENGINES = ['senko', 'pyannote'] as const;
+
+/** The most turns one separation may send (an hour of debate is a few thousand). */
+export const MAX_SPEAKER_TURNS = 100_000;
+
+/**
+ * One turn as the transcriber found it: seconds from the start, and the engine's own name
+ * for the voice. Strict: a voice print (embedding) has no field to travel in (BR-1).
+ */
+export const rawSpeakerTurnSchema = z
+  .strictObject({
+    start: finite.min(0),
+    end: finite.min(0),
+    voice: z.string().min(1).max(40),
+  })
+  .refine(inOrder, ORDER);
+export type RawSpeakerTurn = z.infer<typeof rawSpeakerTurnSchema>;
+
+/** POST /api/v1/media-worker/jobs/:id/diarization: the turns of a diarize job, nothing else. */
+export const completeDiarizeRequestSchema = leaseOwnerSchema.extend({
+  engine: z.enum(DIARIZATION_ENGINES),
+  model: z.string().min(1).max(200),
+  parametersVersion: z.string().min(1).max(40),
+  parameters: z.record(z.string(), z.unknown()),
+  /** The hint the job carried (BR-4). */
+  requestedVoices: voiceCountSchema.nullable(),
+  elapsedMs: z.number().int().min(0),
+  raw: z.strictObject({
+    turns: z.array(rawSpeakerTurnSchema).max(MAX_SPEAKER_TURNS),
+  }),
+});
+export type CompleteDiarizeRequest = z.infer<
+  typeof completeDiarizeRequestSchema
+>;
+
+/** The largest separation result the API takes. */
+export const MAX_DIARIZATION_BYTES = 16 * 1024 * 1024;
+
+/** POST /api/v1/media/:id/diarize: "Separar vozes", with the optional number of voices. */
+export const diarizeRequestSchema = z.strictObject({
+  voices: voiceCountSchema.nullable().optional(),
+});
+export type DiarizeRequest = z.infer<typeof diarizeRequestSchema>;
+
+/** Where a media item's voice separation is: never asked, waiting, running, done, given up. */
+export const DIARIZATION_STATUSES = [
+  'none',
+  'waiting',
+  'diarizing',
+  'done',
+  'failed',
+] as const;
+export const diarizationStatusSchema = z.enum(DIARIZATION_STATUSES);
+export type DiarizationStatus = z.infer<typeof diarizationStatusSchema>;
+
+/** A voice of one recording: "Voz N", numbered by who speaks first; never a person. */
+export const voiceIndexSchema = z.number().int().min(1).max(MAX_VOICES);
+
+export const speakerTurnSchema = z.object({
+  voice: voiceIndexSchema,
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(0),
+});
+export type SpeakerTurn = z.infer<typeof speakerTurnSchema>;
+
+/**
+ * The voice of one segment of the current transcript (the one that speaks most of it), in
+ * the transcript's order; null where no voice was found (silence, music).
+ */
+export const segmentVoiceSchema = z.object({
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(0),
+  voice: voiceIndexSchema.nullable(),
+});
+export type SegmentVoice = z.infer<typeof segmentVoiceSchema>;
+
+/** The current separation of a recording, read against its current transcript. */
+export const diarizationSchema = z.object({
+  version: z.number().int().min(1),
+  createdAt: z.iso.datetime(),
+  /** The transcript the voices are shown on (the current one). */
+  transcriptVersion: z.number().int().min(1),
+  /** Made on an older transcript (BR-3): shown with "Feita sobre uma transcrição anterior". */
+  staleTranscript: z.boolean(),
+  requestedVoices: voiceCountSchema.nullable(),
+  voiceCount: z.number().int().min(0).max(MAX_VOICES),
+  voices: z.array(
+    z.object({
+      voice: voiceIndexSchema,
+      speakingMs: z.number().int().min(0),
+    }),
+  ),
+  turns: z.array(speakerTurnSchema),
+  segments: z.array(segmentVoiceSchema),
+});
+export type Diarization = z.infer<typeof diarizationSchema>;
+
+/** GET /api/v1/media/:id/speakers: for `media-edit` only (FR-4). */
+export const mediaSpeakersSchema = z.object({
+  mediaId: mediaIdSchema,
+  status: diarizationStatusSchema,
+  /** A transcriber that separates voices is on, off, or none is marked for it (AC-9). */
+  transcriber: transcriberPresenceSchema,
+  transcriberOffSince: z.iso.datetime().nullable(),
+  /** "Separar vozes" is possible now: a current transcript and nothing queued or running. */
+  canRequest: z.boolean(),
+  /** The newest separation; null before the first. */
+  diarization: diarizationSchema.nullable(),
+});
+export type MediaSpeakers = z.infer<typeof mediaSpeakersSchema>;
+
+/** PATCH /api/v1/media/transcribers/:id: what a paired transcriber may do (FR-6). */
+export const TRANSCRIBER_KINDS = ['transcribe', 'diarize'] as const;
+export const updateTranscriberRequestSchema = z.strictObject({
+  kinds: z.array(z.enum(TRANSCRIBER_KINDS)).min(1),
+});
+export type UpdateTranscriberRequest = z.infer<
+  typeof updateTranscriberRequestSchema
+>;
