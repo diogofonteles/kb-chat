@@ -24,12 +24,14 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     const saved = await media.owner('PUT', '/api/v1/media/preferences', {
       speed: 1.5,
       showRemaining: false,
       skipBackSec: 10,
       skipForwardSec: 45,
+      skipSilences: false,
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toEqual({
@@ -37,6 +39,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       showRemaining: false,
       skipBackSec: 10,
       skipForwardSec: 45,
+      skipSilences: false,
     });
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
@@ -45,6 +48,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       showRemaining: false,
       skipBackSec: 10,
       skipForwardSec: 45,
+      skipSilences: false,
     });
   });
 
@@ -55,6 +59,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().error.code).toBe('VALIDATION_FAILED');
@@ -65,6 +70,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
   });
 
@@ -80,6 +86,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(
       (await listener.call('GET', '/api/v1/media/preferences')).json(),
@@ -88,6 +95,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
   });
 
@@ -108,6 +116,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
           showRemaining: true,
           skipBackSec: 15,
           skipForwardSec: 30,
+          skipSilences: false,
         })
       ).statusCode,
     ).toBe(403);
@@ -131,6 +140,7 @@ describe('Media listening: skip lengths (KBC-043)', () => {
       showRemaining: true,
       skipBackSec: 7,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().error.code).toBe('VALIDATION_FAILED');

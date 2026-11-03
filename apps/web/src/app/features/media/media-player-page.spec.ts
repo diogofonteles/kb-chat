@@ -184,6 +184,7 @@ describe('MediaPlayerPage (T15)', () => {
           showRemaining: true,
           skipBackSec: 15,
           skipForwardSec: 30,
+          skipSilences: false,
         });
       TestBed.tick();
       expect(screen.getByRole('slider', { name: 'Posição' })).toBeTruthy();

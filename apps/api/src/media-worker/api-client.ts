@@ -1,23 +1,32 @@
 import {
   CSRF_HEADER,
   CSRF_HEADER_VALUE,
-  workerJobSchema,
+  vmWorkerJobSchema,
+  type CompleteSilencesRequest,
   type CompleteTranscodeRequest,
   type FailJobRequest,
+  type SilencesJob,
+  type VmWorkerJob,
   type WorkerJob,
 } from '@kb-chat/contracts';
 
 /** What the worker loop needs from the API (ADR 0022 §3); a fake stands in for tests. */
 export interface MediaJobsApi {
-  lease(): Promise<WorkerJob | null>;
+  /** The oldest conversion or silences job (KBC-044), or null when there is none. */
+  lease(): Promise<VmWorkerJob | null>;
   /** False when the lease is no longer this worker's (409): drop the work. */
-  heartbeat(job: WorkerJob, progress: number | null): Promise<boolean>;
+  heartbeat(job: VmWorkerJob, progress: number | null): Promise<boolean>;
   complete(
     job: WorkerJob,
     done: Omit<CompleteTranscodeRequest, 'worker' | 'leaseId'>,
   ): Promise<boolean>;
+  /** The pauses found in a silences job (KBC-044 FR-1). */
+  completeSilences(
+    job: SilencesJob,
+    done: Omit<CompleteSilencesRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean>;
   fail(
-    job: WorkerJob,
+    job: VmWorkerJob,
     failure: Omit<FailJobRequest, 'worker' | 'leaseId'>,
   ): Promise<boolean>;
 }
@@ -43,17 +52,17 @@ export class HttpMediaJobsApi implements MediaJobsApi {
     },
   ) {}
 
-  async lease(): Promise<WorkerJob | null> {
+  async lease(): Promise<VmWorkerJob | null> {
     const response = await this.post('/api/v1/media-worker/jobs/lease', {
       worker: this.options.worker,
-      kinds: ['transcode'],
+      kinds: ['transcode', 'silences'],
     });
     if (response.status === 204) return null;
     if (!response.ok) throw await this.failure(response);
-    return workerJobSchema.parse(await response.json());
+    return vmWorkerJobSchema.parse(await response.json());
   }
 
-  heartbeat(job: WorkerJob, progress: number | null): Promise<boolean> {
+  heartbeat(job: VmWorkerJob, progress: number | null): Promise<boolean> {
     return this.onJob(job, 'heartbeat', { progress });
   }
 
@@ -64,8 +73,15 @@ export class HttpMediaJobsApi implements MediaJobsApi {
     return this.onJob(job, 'complete', done);
   }
 
+  completeSilences(
+    job: SilencesJob,
+    done: Omit<CompleteSilencesRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean> {
+    return this.onJob(job, 'silences', done);
+  }
+
   fail(
-    job: WorkerJob,
+    job: VmWorkerJob,
     failure: Omit<FailJobRequest, 'worker' | 'leaseId'>,
   ): Promise<boolean> {
     return this.onJob(job, 'fail', failure);
@@ -73,7 +89,7 @@ export class HttpMediaJobsApi implements MediaJobsApi {
 
   /** 204 is done; 409 means the lease was lost; anything else is an error. */
   private async onJob(
-    job: WorkerJob,
+    job: VmWorkerJob,
     action: string,
     body: object,
   ): Promise<boolean> {

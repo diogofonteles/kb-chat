@@ -19,6 +19,7 @@ const DEFAULTS: MediaPreferences = {
   showRemaining: true,
   skipBackSec: 15,
   skipForwardSec: 30,
+  skipSilences: false,
 };
 
 export type SkipBackSeconds = (typeof MEDIA_SKIP_BACK_SECONDS)[number];
@@ -85,6 +86,11 @@ export class ListeningPreferences {
 
   setSkipForward(skipForwardSec: SkipForwardSeconds): void {
     this.save({ ...this.current(), skipForwardSec });
+  }
+
+  /** "Encurtar silêncios" (KBC-044), for every media and device (BR-2: off by default). */
+  setSkipSilences(skipSilences: boolean): void {
+    this.save({ ...this.current(), skipSilences });
   }
 
   toggleShowRemaining(): void {

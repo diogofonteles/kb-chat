@@ -6,3 +6,4 @@ export * from './shortcuts.js';
 export * from './speeds.js';
 export * from './sleep-timer.js';
 export * from './bookmarks.js';
+export * from './silence-skip.js';

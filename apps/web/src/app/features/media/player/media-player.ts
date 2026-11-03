@@ -34,6 +34,8 @@ import { SeekSlider } from './seek-slider.js';
 import { ShortcutsDialog } from './shortcuts-dialog.js';
 import { SkipsDialog } from './skips-dialog.js';
 import { SleepTimerDialog } from './sleep-timer-dialog.js';
+import { SilencesDialog } from './silences-dialog.js';
+import { SilenceSkipper } from '@core/media/silence-skipper.js';
 import { BookmarkNote } from './bookmark-note.js';
 
 const ERROR_MESSAGES: Record<PlaybackErrorKind, () => string> = {
@@ -64,6 +66,7 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
     ShortcutsDialog,
     SkipsDialog,
     SleepTimerDialog,
+    SilencesDialog,
     BookmarkNote,
   ],
   templateUrl: './media-player.html',
@@ -78,6 +81,9 @@ export class MediaPlayer {
   private readonly shortcutsDialog = viewChild.required(ShortcutsDialog);
   private readonly skipsDialog = viewChild.required(SkipsDialog);
   private readonly sleepDialog = viewChild.required(SleepTimerDialog);
+  private readonly silencesDialog = viewChild.required(SilencesDialog);
+  /** Skips long pauses while the option is on (KBC-044); lives with the engine. */
+  private readonly silences = inject(SilenceSkipper);
   private readonly more = viewChild.required<MenuButton>('more');
   private readonly injector = inject(Injector);
   private readonly sleepTimer = inject(SleepTimerService);
@@ -151,8 +157,14 @@ export class MediaPlayer {
       checked: speed === this.speed(),
     })),
   );
-  protected readonly moreOptions: readonly MenuOption[] = [
+  protected readonly moreOptions = computed<readonly MenuOption[]>(() => [
     { id: 'skips', label: $localize`:@@player.skips.open:Pulos` },
+    {
+      id: 'silences',
+      label: this.silences.enabled()
+        ? $localize`:@@player.silences.openOn:Encurtar silêncios: ligado`
+        : $localize`:@@player.silences.open:Encurtar silêncios`,
+    },
     {
       id: 'sleep',
       label: $localize`:@@player.sleep.open:Timer para dormir`,
@@ -161,7 +173,7 @@ export class MediaPlayer {
       id: 'shortcuts',
       label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
     },
-  ];
+  ]);
   /** The ☾ button, only while a sleep timer runs (KBC-046). */
   protected readonly sleepOn = computed(
     () => this.sleepTimer.timer().kind !== 'off',
@@ -265,6 +277,7 @@ export class MediaPlayer {
     if (id === 'shortcuts') this.shortcutsDialog().open();
     if (id === 'skips') this.skipsDialog().open();
     if (id === 'sleep') this.sleepDialog().open();
+    if (id === 'silences') this.silencesDialog().open();
   }
 
   protected chooseSleep(id: string): void {

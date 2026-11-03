@@ -6,8 +6,14 @@ import {
   MEDIA_SPEEDS,
   hasAcceptedAudioExtension,
   mediaItemSchema,
+  completeSilencesRequestSchema,
+  leasedJobSchema,
   mediaPreferencesSchema,
   mediaProgressRequestSchema,
+  mediaSilencesSchema,
+  saveMediaPreferencesRequestSchema,
+  SILENCE_DETECTOR,
+  vmWorkerJobSchema,
 } from './media.js';
 
 const PREFS = {
@@ -15,6 +21,7 @@ const PREFS = {
   showRemaining: true,
   skipBackSec: 15,
   skipForwardSec: 30,
+  skipSilences: false,
 };
 
 const aRequest = {
@@ -182,5 +189,71 @@ describe('media contracts', () => {
     expect(
       mediaPreferencesSchema.safeParse({ ...PREFS, skipForwardSec: 5 }).success,
     ).toBe(false);
+  });
+
+  it('keeps "Encurtar silêncios" on the account; an older client may leave it out (KBC-044)', () => {
+    const older = {
+      speed: 1,
+      showRemaining: true,
+      skipBackSec: 15,
+      skipForwardSec: 30,
+    };
+    expect(mediaPreferencesSchema.safeParse(older).success).toBe(false);
+    expect(saveMediaPreferencesRequestSchema.parse(older)).toEqual(older);
+    expect(
+      saveMediaPreferencesRequestSchema.safeParse({
+        ...PREFS,
+        skipSilences: 'yes',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('measures silences at −35 dB for 1 s, and the VM leases conversions and silences (KBC-044)', () => {
+    expect(SILENCE_DETECTOR).toEqual({
+      version: 1,
+      noiseDb: -35,
+      minSilenceMs: 1_000,
+    });
+    const job = {
+      id: '11111111-1111-4111-8111-111111111111',
+      leaseId: '22222222-2222-4222-8222-222222222222',
+      kind: 'silences',
+      mediaId: '33333333-3333-4333-8333-333333333333',
+      attempt: 1,
+      sourcePath: 'audio/x.m4a',
+      leaseMs: 60_000,
+      detector: SILENCE_DETECTOR,
+    };
+    expect(vmWorkerJobSchema.parse(job)).toEqual(job);
+    expect(leasedJobSchema.parse(job)).toEqual(job);
+  });
+
+  it('refuses a pause that does not end after it starts, and serves the map in ms', () => {
+    const done = {
+      worker: 'vm',
+      leaseId: '22222222-2222-4222-8222-222222222222',
+      detectorVersion: 1,
+      elapsedMs: 10,
+    };
+    expect(
+      completeSilencesRequestSchema.safeParse({
+        ...done,
+        intervals: [{ startMs: 2_000, endMs: 2_000 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      completeSilencesRequestSchema.safeParse({
+        ...done,
+        intervals: [{ startMs: 1_000, endMs: 2_200 }],
+      }).success,
+    ).toBe(true);
+    expect(
+      mediaSilencesSchema.safeParse({
+        status: 'pending',
+        version: null,
+        minSilenceMs: 1_000,
+        intervals: [],
+      }).success,
+    ).toBe(true);
   });
 });

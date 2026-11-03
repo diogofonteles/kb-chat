@@ -8,6 +8,7 @@ import { SqliteListeningStore } from './adapters/sqlite/sqlite-listening-store.j
 import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-ledger.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
 import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposal-store.js';
+import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
 import type { BookmarkStorePort } from './ports/bookmark-store.js';
@@ -16,6 +17,7 @@ import type { MediaFilesPort } from './ports/media-files.js';
 import type { MediaSpendLedgerPort } from './ports/media-spend-ledger.js';
 import type { MediaStorePort } from './ports/media-store.js';
 import type { TrackProposalStorePort } from './ports/track-proposal-store.js';
+import type { SilenceStorePort } from './ports/silence-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
 import type { TranscriptStorePort } from './ports/transcript-store.js';
 
@@ -40,6 +42,8 @@ export interface MediaDeps {
     readonly runCapUsd: number;
     readonly monthlyCapUsd: number;
   };
+  /** Silence maps (KBC-044). */
+  readonly silences: SilenceStorePort;
   readonly files: MediaFilesPort;
   readonly workerToken: string;
   /** Keys the transcriber token hashes (KB_CHAT_SECRETS_KEY, ADR 0017). */
@@ -82,10 +86,8 @@ export async function createMedia(
   };
 }
 
-/** The queue, each person's listening and bookmarks share one database (ADR 0022). */
-function openStores(
-  dir: string,
-): Pick<
+/** The stores that live in the media database. */
+type MediaStores = Pick<
   MediaDeps,
   | 'store'
   | 'listening'
@@ -94,7 +96,11 @@ function openStores(
   | 'transcribers'
   | 'trackProposals'
   | 'spend'
-> {
+  | 'silences'
+>;
+
+/** The queue, each person's listening and bookmarks share one database (ADR 0022). */
+function openStores(dir: string): MediaStores {
   try {
     const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
     return {
@@ -105,6 +111,7 @@ function openStores(
       transcribers: new SqliteTranscriberStore(db),
       trackProposals: new SqliteTrackProposalStore(db),
       spend: new SqliteMediaSpendLedger(db),
+      silences: new SqliteSilenceStore(db),
     };
   } catch (err) {
     throw new Error(

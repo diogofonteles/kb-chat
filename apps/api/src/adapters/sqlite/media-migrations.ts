@@ -342,4 +342,65 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    // KBC-044 (ADR 0025 §3): each media item's silence map, measured by the VM worker in a
+    // `silences` job. SQLite cannot change a CHECK, so jobs are rebuilt as in version 5.
+    // Versions 7 and 8 are KBC-051's and KBC-064's (open in parallel): KBC-064 also
+    // rebuilds jobs, so whichever lands later keeps every kind (and its `voices` column).
+    version: 10,
+    name: 'silence-maps',
+    sql: `
+      CREATE TABLE jobs_silences (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('transcode', 'transcribe', 'silences')),
+        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        lease_id TEXT,
+        lease_until INTEGER,
+        heartbeat_at INTEGER,
+        worker TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        -- The silencedetect parameter set a silences job measures with (a newer one
+        -- measures again what an older one gave up on).
+        detector_version INTEGER CHECK (detector_version IS NULL OR detector_version >= 1)
+      ) STRICT;
+      INSERT INTO jobs_silences (id, media_id, kind, status, attempts, lease_id, lease_until,
+        heartbeat_at, worker, error, created_at, updated_at)
+        SELECT id, media_id, kind, status, attempts, lease_id, lease_until, heartbeat_at,
+          worker, error, created_at, updated_at FROM jobs;
+      DROP TABLE jobs;
+      ALTER TABLE jobs_silences RENAME TO jobs;
+      CREATE INDEX jobs_queued ON jobs (kind, created_at) WHERE status = 'queued';
+      CREATE INDEX jobs_leased ON jobs (lease_until) WHERE status = 'leased';
+      CREATE INDEX jobs_by_media ON jobs (media_id, kind, created_at);
+      CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
+
+      -- One current map per media item, measured on its audio rendition; the detector
+      -- version says which parameters made it (an older one is measured again).
+      CREATE TABLE media_silence_maps (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        rendition TEXT NOT NULL CHECK (rendition IN ('audio')),
+        detector_version INTEGER NOT NULL CHECK (detector_version >= 1),
+        noise_db REAL NOT NULL,
+        min_silence_ms INTEGER NOT NULL CHECK (min_silence_ms > 0),
+        interval_count INTEGER NOT NULL CHECK (interval_count >= 0),
+        elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms >= 0),
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE media_silences (
+        media_id TEXT NOT NULL REFERENCES media_silence_maps (media_id) ON DELETE CASCADE,
+        start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+        end_ms INTEGER NOT NULL CHECK (end_ms > start_ms),
+        PRIMARY KEY (media_id, start_ms)
+      ) STRICT, WITHOUT ROWID;
+
+      -- "Encurtar silêncios", off by default (BR-2).
+      ALTER TABLE media_preferences ADD COLUMN skip_silences INTEGER NOT NULL DEFAULT 0
+        CHECK (skip_silences IN (0, 1));
+    `,
+  },
 ];

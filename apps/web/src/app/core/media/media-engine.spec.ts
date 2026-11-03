@@ -103,6 +103,27 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.seeksLanded()).toBe(1);
   });
 
+  it('does not count a skipped silence as a skip of the person (KBC-044)', () => {
+    ready();
+    engine.skipSilence(7_550);
+    expect(media.calls.at(-1)).toBe('seek:7.55');
+    media.emit('seeked');
+    expect(engine.seeksLanded()).toBe(0);
+    engine.seek(20_000);
+    media.emit('seeked');
+    expect(engine.seeksLanded()).toBe(1);
+  });
+
+  it('reads the position live from the element, and skips nothing without a source', () => {
+    expect(engine.positionNowMs()).toBe(0);
+    engine.skipSilence(1_000);
+    expect(media.calls).not.toContain('seek:1');
+    ready();
+    media.setCurrentTime(12.345);
+    expect(engine.positionNowMs()).toBeCloseTo(12_345);
+    expect(engine.playback().currentMs).toBe(0);
+  });
+
   it('starts at the asked second once the duration is known', () => {
     ready(LECTURE, 45_000);
     expect(media.calls).toContain('seek:45');

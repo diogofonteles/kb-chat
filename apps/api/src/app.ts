@@ -94,12 +94,14 @@ import {
   JANITOR_INTERVAL_MS,
   MediaJanitor,
   MediaService,
+  SilenceService,
   WorkerService,
   listeningRoutes,
   bookmarkRoutes,
   BookmarkService,
   ListeningService,
   mediaRoutes,
+  silenceRoutes,
   transcriberRoutes,
   TranscriberService,
   TranscriptionService,
@@ -414,7 +416,11 @@ function mediaService({
 /** The workers' protocol: the VM's conversions and the paired transcribers' (ADR 0023). */
 async function registerWorker(
   app: FastifyInstance,
-  wiring: { media: MediaDeps; transcribers: TranscriberService },
+  wiring: {
+    media: MediaDeps;
+    transcribers: TranscriberService;
+    silences: SilenceService;
+  },
 ) {
   const { store, files, transcripts } = wiring.media;
   await app.register(
@@ -422,13 +428,14 @@ async function registerWorker(
       service: new WorkerService({ store, files }),
       transcribers: wiring.transcribers,
       transcription: new TranscriptionService({ store, transcripts, files }),
+      silences: wiring.silences,
     }),
   );
 }
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
-  const { store, listening, bookmarks, files, workerToken, createPerMinute } =
+  const { store, listening, bookmarks, workerToken, createPerMinute } =
     wiring.media;
   const transcribers = new TranscriberService({
     store: wiring.media.transcribers,
@@ -442,12 +449,37 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     listeningRoutes(new ListeningService({ listening, media })),
   );
   await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
-  await registerWorker(app, { media: wiring.media, transcribers });
+  const silences = new SilenceService({
+    store,
+    silences: wiring.media.silences,
+    media,
+  });
+  await app.register(silenceRoutes(silences));
+  await registerWorker(app, { media: wiring.media, transcribers, silences });
   const proposals = await registerProposals(app, {
     ...wiring,
     service: media,
   });
-  const janitor = new MediaJanitor({ store, files, log: app.log });
+  startJanitor(app, { media: wiring.media, silences, proposals });
+}
+
+/** The queue's janitor, which also backfills silence maps (KBC-044 FR-2). */
+function startJanitor(
+  app: FastifyInstance,
+  wiring: {
+    media: MediaDeps;
+    silences: SilenceService;
+    proposals: ProposalService;
+  },
+): void {
+  const { store, files } = wiring.media;
+  const { proposals } = wiring;
+  const janitor = new MediaJanitor({
+    store,
+    files,
+    log: app.log,
+    backfillSilences: () => wiring.silences.backfill(),
+  });
   janitor.start(JANITOR_INTERVAL_MS);
   app.addHook('onClose', async () => {
     // Runs in flight end as interrupted before the database closes.
