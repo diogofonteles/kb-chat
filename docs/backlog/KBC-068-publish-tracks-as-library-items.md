@@ -21,7 +21,7 @@ Como quem estuda, quero que cada faixa de pergunta e resposta seja um item que e
 - BR-2: uma faixa herda o acervo e as permissões da origem; mover a origem de acervo (KBC-050) move as faixas.
 - BR-3: a faixa é cortada sem recodificar; o começo e o fim reais podem diferir do pedido em até um quadro AAC (≈ 23 ms), e o tempo gravado é o real.
 - BR-4: a transcrição da faixa é sempre derivada da transcrição atual da origem; uma transcrição nova da origem atualiza as faixas.
-- BR-5: reaprovar mantém o identificador de uma faixa quando ela se sobrepõe ≥ 70 % à faixa anterior; quem ouvia mantém a posição (limitada à nova duração), os favoritos e as playlists. Uma faixa que sai da edição é arquivada: some da Biblioteca, mas favoritos e playlists mostram "Faixa removida da edição".
+- BR-5: reaprovar mantém o identificador de uma faixa quando ela se sobrepõe ≥ 70 % à faixa anterior; quem ouvia mantém os favoritos e as playlists, e a posição e os marcadores são remapeados pelo tempo absoluto na gravação (regra do KBC-073 BR-4). Uma faixa que sai da edição é arquivada: some da Biblioteca, mas favoritos e playlists mostram "Faixa removida da edição".
 - BR-6: na busca, uma ocorrência dentro de uma faixa aprovada aponta para a faixa (com o título dela) e não repete a gravação completa no mesmo trecho.
 
 ## Functional requirements
