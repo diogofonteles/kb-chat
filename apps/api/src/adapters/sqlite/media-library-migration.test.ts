@@ -5,6 +5,8 @@ import { MEDIA_MIGRATIONS } from './media-migrations.js';
 import { SqliteListeningStore } from './sqlite-listening-store.js';
 
 const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < 7);
+/** Up to this migration: later ones are tested on their own. */
+const THROUGH = MEDIA_MIGRATIONS.filter((one) => one.version <= 7);
 const MEDIA_ID = '33333333-3333-4333-8333-333333333333';
 const SAVED_AT = '2026-10-30T10:00:00.000Z';
 
@@ -27,7 +29,9 @@ describe('migration 7: the media library (KBC-051)', () => {
        VALUES ('p', 1.5, 0, ?)`,
     ).run(SAVED_AT);
 
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([7]);
+    expect(applyMigrations(db, THROUGH)).toEqual([7]);
+    // The store reads columns of later migrations too (KBC-044's skip_silences).
+    applyMigrations(db, MEDIA_MIGRATIONS);
 
     const store = new SqliteListeningStore(db);
     expect(store.allProgressOf('p').get(MEDIA_ID)).toEqual({
@@ -41,6 +45,7 @@ describe('migration 7: the media library (KBC-051)', () => {
       showRemaining: false,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
       librarySort: 'recently-played',
       libraryView: 'list',
       libraryFilters: { states: [], authors: [], topic: null },

@@ -78,6 +78,7 @@ const PREFERENCES: ListeningPreferences = {
   showRemaining: true,
   skipBackSec: 15,
   skipForwardSec: 30,
+  skipSilences: false,
   ...DEFAULT_LIBRARY_PREFERENCES,
 };
 
