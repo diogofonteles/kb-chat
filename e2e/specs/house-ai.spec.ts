@@ -119,6 +119,12 @@ test('AC-5: the quota spent offers the person their own AI', async ({
       .getByRole('alert')
       .filter({ hasText: 'Suas pesquisas com IA de hoje acabaram' }),
   ).toBeVisible();
+  // KBC-061: the quota may be back (a new day, a refund): asking again finds out.
+  await expect(
+    person.getByRole('button', { name: 'Tentar de novo' }),
+  ).toBeVisible();
+  if (process.env['KBC_EVIDENCE'])
+    await person.screenshot({ path: process.env['KBC_EVIDENCE'] });
   await person.getByRole('button', { name: 'Conectar a minha IA' }).click();
   const dialog = person.getByRole('dialog', { name: 'Configurações' });
   await expect(dialog.getByText('Quem atende você agora')).toBeVisible();
