@@ -1,13 +1,16 @@
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { formatClock } from '@kb-chat/player-core';
-import { ActAsApi, RESTART_APP } from '@core/auth/act-as-api.js';
+import { ActAsApi, RESTART_APP, VIEW_CHANNEL } from '@core/auth/act-as-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { interval } from 'rxjs';
 
@@ -52,7 +55,11 @@ export class ActingBanner {
   private readonly session = inject(SessionStore);
   private readonly api = inject(ActAsApi);
   private readonly restart = inject(RESTART_APP);
-  private readonly now = signal(Date.now());
+  /** The monotonic clock: the browser's wall clock may be off from the server's. */
+  private readonly clock = () => performance.now();
+  private readonly now = signal(this.clock());
+  /** When /me said how much was left, on the monotonic clock. */
+  private readonly receivedAt = signal(this.clock());
 
   protected readonly acting = computed(
     () => this.session.me()?.actingAs ?? null,
@@ -63,14 +70,17 @@ export class ActingBanner {
   });
   private readonly remainingMs = computed(() => {
     const acting = this.acting();
-    return acting ? Math.max(0, Date.parse(acting.endsAt) - this.now()) : 0;
+    if (!acting) return 0;
+    return Math.max(0, acting.remainingMs - (this.now() - this.receivedAt()));
   });
   protected readonly left = computed(() =>
     formatClock(Math.ceil(this.remainingMs() / 1000) * 1000),
   );
+  /** Empty until the band is on screen, so screen readers announce what comes in. */
+  private readonly shown = signal(false);
   /** Said once as it starts, once a minute before the end (not every second). */
   protected readonly said = computed(() => {
-    if (!this.acting()) return '';
+    if (!this.acting() || !this.shown()) return '';
     return this.remainingMs() <= ONE_MINUTE_MS
       ? $localize`:@@acting.lastMinute:Falta 1 minuto para voltar à sua conta.`
       : $localize`:@@acting.started:Você está vendo como ${this.personName()}:name:.`;
@@ -78,13 +88,30 @@ export class ActingBanner {
   protected readonly busy = signal(false);
 
   constructor() {
+    effect(() => {
+      // A new answer from /me restarts the countdown from what the server said.
+      this.acting();
+      this.receivedAt.set(this.clock());
+      this.now.set(this.clock());
+    });
+    this.listenToOtherTabs();
     interval(1_000)
       .pipe(takeUntilDestroyed())
       .subscribe(() => {
-        this.now.set(Date.now());
+        this.shown.set(true);
+        this.now.set(this.clock());
         // The server ended it too: the next request is the master's own again.
         if (this.acting() && this.remainingMs() === 0) this.restart();
       });
+  }
+
+  /** Another tab started or ended acting: this one follows (no tab writes as the other). */
+  private listenToOtherTabs(): void {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel(VIEW_CHANNEL);
+    const view = inject(DOCUMENT).defaultView;
+    channel.onmessage = () => view?.location.assign('/');
+    inject(DestroyRef).onDestroy(() => channel.close());
   }
 
   protected back(): void {

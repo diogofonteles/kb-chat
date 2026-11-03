@@ -135,6 +135,10 @@ export function toMe(viewer: Viewer, scope: MeScope): Me {
           reason: viewer.actor.acting.reason,
           startedAt: viewer.actor.acting.startedAt,
           endsAt: viewer.actor.acting.endsAt,
+          remainingMs: Math.max(
+            0,
+            Date.parse(viewer.actor.acting.endsAt) - Date.now(),
+          ),
         }
       : null,
   };

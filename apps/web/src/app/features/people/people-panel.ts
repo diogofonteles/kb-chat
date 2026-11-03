@@ -361,7 +361,9 @@ export class PeoplePanel {
     return (
       this.session.me()?.canActAs === true &&
       !person.isOwner &&
-      person.role !== 'master'
+      person.role !== 'master' &&
+      // Before the first sign-in their data has no lasting owner yet.
+      person.lastLoginAt !== null
     );
   }
 

@@ -24,9 +24,23 @@ export const RESTART_APP = new InjectionToken<() => void>('RESTART_APP', {
   providedIn: 'root',
   factory: () => {
     const view = inject(DOCUMENT).defaultView;
-    return () => view?.location.assign('/');
+    return () => {
+      // The master's other tabs change view too: none keeps writing as the other one.
+      announceViewChange();
+      view?.location.assign('/');
+    };
   },
 });
+
+/** The channel the app's tabs hear a change of view on (KBC-060). */
+export const VIEW_CHANNEL = 'kb-chat.view';
+
+function announceViewChange(): void {
+  if (typeof BroadcastChannel === 'undefined') return;
+  const channel = new BroadcastChannel(VIEW_CHANNEL);
+  channel.postMessage('changed');
+  channel.close();
+}
 
 /** A master acting as a person (KBC-060): start, end, the audit and one's own accesses. */
 @Injectable({ providedIn: 'root' })

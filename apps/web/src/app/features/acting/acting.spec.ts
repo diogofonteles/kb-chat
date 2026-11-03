@@ -25,7 +25,7 @@ const dono = {
   email: 'owner@example.com',
 };
 
-const acting = (endsAt: string): Me =>
+const acting = (remainingMs: number): Me =>
   aMe({
     email: ana.email,
     name: ana.name,
@@ -34,7 +34,8 @@ const acting = (endsAt: string): Me =>
       actor: dono,
       reason: 'não vê os marcadores',
       startedAt: '2026-11-03T12:00:00.000Z',
-      endsAt,
+      endsAt: '2026-11-03T12:30:00.000Z',
+      remainingMs,
     },
   });
 
@@ -56,9 +57,11 @@ describe('ActingBanner (KBC-060 FR-5)', () => {
   afterEach(() => vi.useRealTimers());
 
   it('says whose view it is and the time left, and is said once to screen readers', async () => {
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    vi.setSystemTime(new Date('2026-11-03T12:00:19Z'));
-    const { fixture } = await renderBanner(acting('2026-11-03T12:30:00.000Z'));
+    vi.useFakeTimers({
+      toFake: ['performance', 'setInterval', 'clearInterval'],
+    });
+    // The browser's own clock is irrelevant: the server said 29:41 were left.
+    const { fixture } = await renderBanner(acting(29 * 60_000 + 41_000));
     vi.advanceTimersByTime(1_000);
     await fixture.whenStable();
     expect(screen.getByText('Ana Souza')).toBeTruthy();
@@ -69,12 +72,11 @@ describe('ActingBanner (KBC-060 FR-5)', () => {
   });
 
   it('warns a minute before the end and goes back at the end', async () => {
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    vi.setSystemTime(new Date('2026-11-03T12:29:00Z'));
-    const { fixture, restart } = await renderBanner(
-      acting('2026-11-03T12:30:00.000Z'),
-    );
-    vi.advanceTimersByTime(1_000);
+    vi.useFakeTimers({
+      toFake: ['performance', 'setInterval', 'clearInterval'],
+    });
+    const { fixture, restart } = await renderBanner(acting(61_000));
+    vi.advanceTimersByTime(2_000);
     await fixture.whenStable();
     expect(screen.getByRole('status').textContent).toContain(
       'Falta 1 minuto para voltar à sua conta.',
@@ -84,9 +86,7 @@ describe('ActingBanner (KBC-060 FR-5)', () => {
   });
 
   it('"Voltar para a minha conta" ends it and reloads, even if it had already ended', async () => {
-    const { fixture, http, restart } = await renderBanner(
-      acting('2999-01-01T00:00:00.000Z'),
-    );
+    const { fixture, http, restart } = await renderBanner(acting(20 * 60_000));
     fireEvent.click(
       screen.getByRole('button', { name: 'Voltar para a minha conta' }),
     );

@@ -3,6 +3,7 @@ import {
   OWNER_EMAIL,
   caller,
   closeApp,
+  research,
   signIn,
   start,
   withPeople,
@@ -299,5 +300,130 @@ describe('Acting as a person (KBC-060)', () => {
     });
     const acting = await time();
     expect(acting - own).toBeLessThan(20);
+  });
+
+  it('refuses every action that is only the person’s, route by route (AC-5)', async () => {
+    const { owner, memberId } = await scene();
+    await owner('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    const ONLY_THE_PERSON: readonly [string, string, object][] = [
+      [
+        'PUT',
+        '/api/v1/settings',
+        { ai: { keys: { openrouter: 'sk-or-fake-key-xx' } } },
+      ],
+      ['PUT', '/api/v1/settings', { ai: { keys: { openrouter: null } } }],
+      ['PUT', '/api/v1/settings', { ai: { provider: 'app' } }],
+      ['PUT', '/api/v1/settings', { ai: { dailyCapUsd: 5 } }],
+      [
+        'POST',
+        '/api/v1/settings/ai/test',
+        { provider: 'openrouter', key: 'sk-or-fake-key-xx' },
+      ],
+      ['POST', '/api/v1/openrouter/connect', { purpose: 'own' }],
+    ];
+    for (const [method, url, payload] of ONLY_THE_PERSON) {
+      const response = await owner(method as 'PUT' | 'POST', url, payload);
+      expect(response.statusCode, `${method} ${url}`).toBe(403);
+      expect(response.json().error.code, `${method} ${url}`).toBe(
+        'NOT_WHILE_ACTING',
+      );
+    }
+    const callback = await owner(
+      'GET',
+      '/api/v1/openrouter/callback?code=x&state=y',
+    );
+    expect(callback.statusCode).toBe(403);
+  });
+
+  it('audits a research made as the person, though it answers by streaming (FR-4)', async () => {
+    const { owner, memberId } = await scene();
+    await owner('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    await research(owner);
+    await owner('DELETE', '/api/v1/act-as');
+    const audit = (await owner('GET', '/api/v1/act-as/audit')).json().items;
+    expect(audit).toContainEqual(
+      expect.objectContaining({
+        kind: 'write',
+        method: 'POST',
+        route: '/api/v1/topics/:topic/research',
+      }),
+    );
+  });
+
+  it('never acts as someone who has not signed in yet: their data would move at sign-in', async () => {
+    const { owner } = await scene();
+    const invited = await owner('POST', '/api/v1/people', {
+      email: 'nunca@example.com',
+      sendEmail: false,
+    });
+    const refused = await owner(
+      'POST',
+      `/api/v1/people/${invited.json().id}/act-as`,
+      { reason: REASON },
+    );
+    expect(refused.statusCode).toBe(403);
+  });
+
+  it('goes back to the master’s own view when the master loses the grant or the person is removed (BR-5)', async () => {
+    const { owner, memberId, master, masterId } = await scene();
+    await owner('PATCH', `/api/v1/people/${masterId}`, { canActAs: true });
+    await master('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    expect((await master('GET', '/api/v1/me')).json().actingAs).not.toBeNull();
+    await owner('PATCH', `/api/v1/people/${masterId}`, { canActAs: false });
+    expect((await master('GET', '/api/v1/me')).json()).toMatchObject({
+      email: 'bruno@example.com',
+      actingAs: null,
+    });
+    await owner('PATCH', `/api/v1/people/${masterId}`, { canActAs: true });
+    await master('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    expect(
+      (await owner('DELETE', `/api/v1/people/${memberId}`)).statusCode,
+    ).toBeLessThan(300);
+    expect((await master('GET', '/api/v1/me')).json()).toMatchObject({
+      email: 'bruno@example.com',
+      actingAs: null,
+    });
+    const ends = (await owner('GET', '/api/v1/act-as/audit'))
+      .json()
+      .items.filter((e: { kind: string }) => e.kind === 'end');
+    expect(ends.map((e: { endedBy: string }) => e.endedBy)).toEqual([
+      'access',
+      'access',
+    ]);
+    // The removed person is still named in the audit as they were.
+    expect(ends[0].person.email).toBe('ana@example.com');
+  });
+
+  it('shows a session that timed out with no request after as ended, at the 30 minutes (BR-7)', async () => {
+    const { owner, member, memberId } = await scene();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-03T12:00:00Z'));
+    await owner('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    vi.setSystemTime(new Date('2026-11-03T13:00:00Z'));
+    const [access] = (await member('GET', '/api/v1/me/accesses')).json().items;
+    expect(access).toMatchObject({
+      startedAt: '2026-11-03T12:00:00.000Z',
+      endedAt: '2026-11-03T12:30:00.000Z',
+    });
+  });
+
+  it('tells the browser the time left by the server’s clock', async () => {
+    const { owner, memberId } = await scene();
+    await owner('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    const left = (await owner('GET', '/api/v1/me')).json().actingAs.remainingMs;
+    expect(left).toBeGreaterThan(29 * 60_000);
+    expect(left).toBeLessThanOrEqual(30 * 60_000);
   });
 });

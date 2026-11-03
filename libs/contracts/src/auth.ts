@@ -78,12 +78,16 @@ export const actingSchema = z.object({
   reason: z.string(),
   startedAt: z.iso.datetime(),
   endsAt: z.iso.datetime(),
+  /** What is left by the server's clock when it answered (the browser's may differ). */
+  remainingMs: z.number().int().min(0).default(0),
 });
 export type Acting = z.infer<typeof actingSchema>;
 
 /** One line of the act-as audit (append-only, kept 12 months). */
 export const actAsAuditEntrySchema = z.object({
   at: z.iso.datetime(),
+  /** One acting session: its start, writes and end share it. */
+  actingId: z.uuid().optional(),
   kind: z.enum(['start', 'end', 'write']),
   actor: auditPersonSchema,
   person: auditPersonSchema,

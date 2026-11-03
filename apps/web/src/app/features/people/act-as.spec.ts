@@ -47,7 +47,10 @@ const bruno = aPerson({
   role: 'master',
 });
 
-async function renderPanel(me = anOwner()) {
+async function renderPanel(
+  me = anOwner(),
+  people: Person[] = [owner, aPerson(), bruno],
+) {
   const restart = vi.fn();
   const result = await render(PeoplePanel, {
     providers: [
@@ -62,7 +65,7 @@ async function renderPanel(me = anOwner()) {
     ],
   });
   const http = TestBed.inject(HttpTestingController);
-  http.expectOne('/api/v1/people').flush({ items: [owner, aPerson(), bruno] });
+  http.expectOne('/api/v1/people').flush({ items: people });
   http.expectOne('/api/v1/topics').flush(TOPICS);
   http.match('/api/v1/access-requests').forEach((r) => r.flush({ items: [] }));
   http
@@ -166,5 +169,15 @@ describe('Ver como outra pessoa (KBC-060)', () => {
     expect(
       screen.queryByRole('checkbox', { name: 'Pode ver como outra pessoa' }),
     ).toBeNull();
+  });
+
+  it('offers no "Ver como" on someone who has not signed in yet', async () => {
+    const { fixture } = await renderPanel(anOwner(), [
+      owner,
+      aPerson({ lastLoginAt: null }),
+      bruno,
+    ]);
+    await open(/Ana Souza/, fixture);
+    expect(screen.queryByRole('button', { name: /^Ver como$/ })).toBeNull();
   });
 });

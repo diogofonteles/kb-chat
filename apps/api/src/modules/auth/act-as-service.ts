@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { ActAsAuditEntry, Acting } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { ActAsAuditPort } from '../../ports/act-as-audit.js';
@@ -43,28 +44,45 @@ export class ActAsService {
     readonly reason: string;
   }): Promise<Acting> {
     const { master, session, reason } = input;
-    if (!mayActAs(master))
-      throw new AppError('FORBIDDEN', 'Acting as a person is not granted');
-    const person = await this.deps.people.find(input.personId);
-    if (!person) throw new AppError('NOT_FOUND', 'Unknown person');
-    if (!this.mayBeActedAs(person) || person.id === master.person.id)
-      throw new AppError('FORBIDDEN', 'This person cannot be acted as');
+    const person = await this.target(master, input.personId);
     const now = this.now();
     const acting: StoredActing = {
+      id: randomUUID(),
       personId: person.id,
+      personName: person.name,
+      personEmail: person.email,
       reason,
       startedAt: now.toISOString(),
       endsAt: new Date(now.getTime() + ACT_AS_MS).toISOString(),
     };
-    await this.deps.sessions.update({ ...session, actingAs: acting });
+    // Audited first: no session acts without its line (NFR-2).
     await this.record('start', { master: master.person, person, acting });
+    await this.deps.sessions.update({ ...session, actingAs: acting });
     return {
       person: auditPersonOf(person),
       actor: auditPersonOf(master.person),
       reason,
       startedAt: acting.startedAt,
       endsAt: acting.endsAt,
+      remainingMs: ACT_AS_MS,
     };
+  }
+
+  /** Who the master may act as now, or why not (BR-1, BR-2). */
+  private async target(
+    master: Viewer,
+    personId: string,
+  ): Promise<StoredPerson> {
+    if (!mayActAs(master))
+      throw new AppError('FORBIDDEN', 'Acting as a person is not granted');
+    const person = await this.deps.people.find(personId);
+    if (!person) throw new AppError('NOT_FOUND', 'Unknown person');
+    if (!this.mayBeActedAs(person) || person.id === master.person.id)
+      throw new AppError('FORBIDDEN', 'This person cannot be acted as');
+    // Before the first sign-in their data has no lasting owner yet (it moves at sign-in).
+    if (person.lastLoginAt === null)
+      throw new AppError('FORBIDDEN', 'This person has not signed in yet');
+    return person;
   }
 
   /** "Voltar para a minha conta", or "Sair" while acting (it never signs the master out). */
@@ -104,6 +122,7 @@ export class ActAsService {
     return this.deps.audit.append({
       at: this.now().toISOString(),
       kind: 'write',
+      ...(actor.acting.id && { actingId: actor.acting.id }),
       actor: auditPersonOf(actor.viewer.person),
       person: auditPersonOf(viewer.person),
       reason: actor.acting.reason,
@@ -122,7 +141,7 @@ export class ActAsService {
     const entries = (await this.deps.audit.since(this.retentionStart())).filter(
       (entry) => entry.person.id === personId,
     );
-    return sessionsOf(entries).reverse();
+    return sessionsOf(entries, this.now()).reverse();
   }
 
   /** Drops the audit older than 12 months (run by the janitor). */
@@ -161,12 +180,18 @@ export class ActAsService {
     },
     endedBy?: EndedBy,
   ): Promise<void> {
+    // A person removed meanwhile is named as they were when it started.
     const person = who.person
       ? auditPersonOf(who.person)
-      : { id: who.acting.personId, name: '', email: 'removed@invalid.test' };
+      : {
+          id: who.acting.personId,
+          name: who.acting.personName ?? '',
+          email: who.acting.personEmail ?? 'removed@invalid.test',
+        };
     return this.deps.audit.append({
       at: this.now().toISOString(),
       kind,
+      ...(who.acting.id && { actingId: who.acting.id }),
       actor: auditPersonOf(who.master),
       person,
       reason: who.acting.reason,
@@ -189,32 +214,49 @@ export class ActAsService {
   }
 }
 
-/** Start/end pairs into sessions, with how many writes each had. */
-function sessionsOf(entries: readonly ActAsAuditEntry[]) {
-  const sessions: {
-    actorName: string;
-    actorEmail: string;
-    reason: string;
-    startedAt: string;
-    endedAt: string | null;
-    writes: number;
-  }[] = [];
+/**
+ * Start/end pairs into sessions, with how many writes each had. A session whose end was
+ * never written (it timed out with no request after, or its master lost the right) ended
+ * at the latest 30 minutes after it started (BR-5).
+ */
+interface AccessSession {
+  actorName: string;
+  actorEmail: string;
+  reason: string;
+  startedAt: string;
+  endedAt: string | null;
+  writes: number;
+}
+
+function sessionsOf(entries: readonly ActAsAuditEntry[], now: Date) {
+  const sessions = new Map<string, AccessSession>();
+  const keyOf = (entry: ActAsAuditEntry) =>
+    entry.actingId ?? `${entry.actor.email}:${entry.reason}`;
   for (const entry of entries) {
-    if (entry.kind === 'start')
-      sessions.push({
-        actorName: entry.actor.name,
-        actorEmail: entry.actor.email,
-        reason: entry.reason,
-        startedAt: entry.at,
-        endedAt: null,
-        writes: 0,
-      });
-    const open = sessions.findLast(
-      (s) => s.endedAt === null && s.actorEmail === entry.actor.email,
-    );
-    if (!open) continue;
-    if (entry.kind === 'write') open.writes += 1;
-    if (entry.kind === 'end') open.endedAt = entry.at;
+    const key = keyOf(entry);
+    if (entry.kind === 'start') sessions.set(key, startedBy(entry));
+    const session = sessions.get(key);
+    if (!session) continue;
+    if (entry.kind === 'write') session.writes += 1;
+    if (entry.kind === 'end') session.endedAt = entry.at;
   }
-  return sessions;
+  return [...sessions.values()].map((session) => closedBy(session, now));
+}
+
+const startedBy = (entry: ActAsAuditEntry): AccessSession => ({
+  actorName: entry.actor.name,
+  actorEmail: entry.actor.email,
+  reason: entry.reason,
+  startedAt: entry.at,
+  endedAt: null,
+  writes: 0,
+});
+
+/** No end written: it ended at the latest 30 minutes after it started. */
+function closedBy(session: AccessSession, now: Date): AccessSession {
+  if (session.endedAt !== null) return session;
+  const latestEnd = Date.parse(session.startedAt) + ACT_AS_MS;
+  return latestEnd <= now.getTime()
+    ? { ...session, endedAt: new Date(latestEnd).toISOString() }
+    : session;
 }

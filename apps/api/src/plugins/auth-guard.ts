@@ -25,18 +25,16 @@ const authGuard: FastifyPluginAsync<ViewerSources> = async (app, sources) => {
     const denial = denialOf(access, resolved.viewer, request.params);
     if (denial) throw denial;
   });
-  // A write while acting is audited before its answer leaves (KBC-060 FR-4, NFR-2).
-  app.addHook('onSend', async (request, reply, payload) => {
+  // A write while acting is audited before it runs (KBC-060 FR-4, NFR-2): also a route
+  // that answers by streaming (research, SSE), which never reaches onSend.
+  app.addHook('preHandler', async (request) => {
     const viewer = request.viewer;
-    if (!viewer?.actor || !sources.actAs || SAFE.has(request.method))
-      return payload;
-    if (reply.statusCode >= 400 || ACTING_ITSELF.has(routeOf(request)))
-      return payload;
+    if (!viewer?.actor || !sources.actAs || SAFE.has(request.method)) return;
+    if (ACTING_ITSELF.has(routeOf(request))) return;
     await sources.actAs.recordWrite(viewer, {
       method: request.method,
       route: routeOf(request),
     });
-    return payload;
   });
 };
 
