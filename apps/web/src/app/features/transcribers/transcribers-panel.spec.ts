@@ -1,0 +1,224 @@
+import { provideHttpClient } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { fireEvent, render, screen } from '@testing-library/angular';
+import type { Transcriber } from '@kb-chat/contracts';
+import { TranscribersPanel } from './transcribers-panel.js';
+
+const URL = '/api/v1/media/transcribers';
+
+const aTranscriber = (overrides: Partial<Transcriber> = {}): Transcriber => ({
+  id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  name: 'Mac do dono',
+  kinds: ['transcribe'],
+  createdAt: '2026-11-03T10:00:00.000Z',
+  lastSeenAt: null,
+  online: false,
+  currentJob: null,
+  ...overrides,
+});
+
+async function renderPanel(items: Transcriber[] = []) {
+  const result = await render(TranscribersPanel, {
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+    ],
+  });
+  const http = TestBed.inject(HttpTestingController);
+  http.expectOne(URL).flush({ items });
+  await result.fixture.whenStable();
+  return { ...result, http };
+}
+
+describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('says none is paired and what that means', async () => {
+    await renderPanel();
+    expect(document.body.textContent).toContain(
+      'Nenhum transcritor pareado. Sem um, os áudios ficam aguardando a transcrição.',
+    );
+  });
+
+  it('lists each one on or off in words, when it was last seen and what it transcribes', async () => {
+    await renderPanel([
+      aTranscriber({
+        online: true,
+        lastSeenAt: new Date(2026, 10, 3, 14, 5).toISOString(),
+        currentJob: {
+          mediaId: '11111111-1111-4111-8111-111111111111',
+          title: 'Palestra de 1998',
+        },
+      }),
+      aTranscriber({
+        id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        name: 'Mac velho',
+      }),
+    ]);
+    const [first, second] = screen.getAllByRole('listitem');
+    expect(first?.textContent).toContain('Ligado');
+    expect(first?.textContent).toContain(
+      'visto por último em 03/11/2026 às 14:05',
+    );
+    expect(first?.textContent).toContain('transcrevendo "Palestra de 1998"');
+    expect(second?.textContent).toContain('Desligado');
+    expect(second?.textContent).toContain('ainda não foi visto');
+  });
+
+  it('asks for a name before pairing (MA-23)', async () => {
+    const { fixture } = await renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    await fixture.whenStable();
+    expect(
+      screen.getByLabelText(/Nome do transcritor/).getAttribute('aria-invalid'),
+    ).toBe('true');
+    expect(document.body.textContent).toContain('Dê um nome ao transcritor.');
+  });
+
+  it('pairs and shows the token once, with the command for the Mac', async () => {
+    const { fixture, http } = await renderPanel();
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: '  Mac do dono ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    const request = http.expectOne({ method: 'POST', url: URL });
+    expect(request.request.body).toEqual({ name: 'Mac do dono' });
+    request.flush({
+      transcriber: aTranscriber(),
+      token: 'nat_the-secret-token-of-the-mac-0123456789',
+    });
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [aTranscriber()] });
+    await fixture.whenStable();
+    const box = screen.getByRole('region', { name: '"Mac do dono" pareado' });
+    expect(box.textContent).toContain(
+      'nat_the-secret-token-of-the-mac-0123456789',
+    );
+    expect(box.textContent).toContain(
+      'uv run --project tools/transcriber transcriber pair --api-url http://localhost',
+    );
+    expect(box.textContent).toContain('aparece só esta vez');
+    fireEvent.click(screen.getByRole('button', { name: 'Pronto, já copiei' }));
+    await fixture.whenStable();
+    expect(document.body.textContent).not.toContain('nat_the-secret-token');
+  });
+
+  it('copies the token and says so', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    const { fixture, http } = await renderPanel();
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: 'Mac' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    http.expectOne({ method: 'POST', url: URL }).flush({
+      transcriber: aTranscriber(),
+      token: 'nat_the-secret-token-of-the-mac-0123456789',
+    });
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [aTranscriber()] });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar token' }));
+    await vi.waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Copiado' })).toBeTruthy(),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      'nat_the-secret-token-of-the-mac-0123456789',
+    );
+    writeText.mockRejectedValueOnce(new Error('denied'));
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar comando' }));
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Não deu para copiar' }),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('says when pairing failed', async () => {
+    const { fixture, http } = await renderPanel();
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: 'Mac' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    http
+      .expectOne({ method: 'POST', url: URL })
+      .flush({}, { status: 500, statusText: 'Error' });
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Não consegui parear. Tente de novo.',
+    );
+  });
+
+  it('revokes only after the confirmation (UP-07)', async () => {
+    const { fixture, http } = await renderPanel([aTranscriber()]);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Revogar Mac do dono' }),
+    );
+    await fixture.whenStable();
+    expect(document.body.textContent).toContain('Revogar "Mac do dono"?');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Revogar Mac do dono' }),
+    );
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Revogar' }));
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/${aTranscriber().id}` })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [] });
+    await fixture.whenStable();
+    expect(document.body.textContent).toContain('Nenhum transcritor pareado.');
+  });
+
+  it('says when revoking failed', async () => {
+    const { fixture, http } = await renderPanel([aTranscriber()]);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Revogar Mac do dono' }),
+    );
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Revogar' }));
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/${aTranscriber().id}` })
+      .flush({}, { status: 500, statusText: 'Error' });
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [aTranscriber()] });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Não consegui revogar. Tente de novo.',
+    );
+  });
+
+  it('offers to try again when the list did not load', async () => {
+    const result = await render(TranscribersPanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(URL).flush({}, { status: 500, statusText: 'Error' });
+    await result.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui carregar os transcritores.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    TestBed.tick();
+    http.expectOne(URL).flush({ items: [] });
+    await result.fixture.whenStable();
+    expect(document.body.textContent).toContain('Nenhum transcritor pareado.');
+  });
+});

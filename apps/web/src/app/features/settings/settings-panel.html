@@ -151,6 +151,17 @@
         </h3>
         <app-people-panel />
       </section>
+    } @else if (section() === 'transcribers') {
+      <section class="section" aria-labelledby="settings-transcribers">
+        <h3
+          id="settings-transcribers"
+          class="section-title"
+          i18n="@@settings.transcribersTitle"
+        >
+          Transcritores
+        </h3>
+        <app-transcribers-panel />
+      </section>
     } @else if (section() === 'audit') {
       <section class="section" aria-labelledby="settings-audit">
         <h3
