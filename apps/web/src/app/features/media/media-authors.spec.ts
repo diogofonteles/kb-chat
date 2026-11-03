@@ -16,9 +16,13 @@ const ITEMS = [
 ];
 
 describe('the media "Autoria" filter (KBC-049 FR-4)', () => {
-  it('lists the main author with ✦ first, the others by name, then "Outros autores"', () => {
+  it('lists the main author first, said in words, the others by name, then "Outros autores"', () => {
     expect(authorFilterOptions(ITEMS)).toEqual([
-      { value: 'mestre-gabriel', label: '✦ Mestre Gabriel', count: 2 },
+      {
+        value: 'mestre-gabriel',
+        label: 'Mestre Gabriel (principal)',
+        count: 2,
+      },
       { value: 'ana', label: 'Ana', count: 1 },
       { value: NO_AUTHOR, label: 'Outros autores', count: 1 },
     ]);

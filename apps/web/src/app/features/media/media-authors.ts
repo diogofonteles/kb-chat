@@ -33,7 +33,7 @@ function countAuthors(items: readonly MediaItem[]): Map<string, AuthorCount> {
 }
 
 /**
- * The "Autoria" choices of a list (KBC-049 FR-4): the main author first with ✦, the others
+ * The "Autoria" choices of a list (KBC-049 FR-4): the main author first, "(principal)", the others
  * by name, then "Outros autores" for the media with none; each with its count.
  */
 export function authorFilterOptions(
@@ -46,7 +46,10 @@ export function authorFilterOptions(
     )
     .map(([slug, { name, main, count }]) => ({
       value: slug,
-      label: main ? `✦ ${name}` : name,
+      // A native option reads its symbols aloud: the text says it instead of ✦.
+      label: main
+        ? $localize`:@@media.authorFilter.main:${name}:name: (principal)`
+        : name,
       count,
     }));
   const none = items.filter((item) => item.author === null).length;

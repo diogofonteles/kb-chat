@@ -100,3 +100,25 @@ input[aria-invalid='true'] {
   background: var(--color-accent);
   color: var(--color-on-accent);
 }
+
+#collection-main-author-hint p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+
+select:disabled {
+  opacity: 0.75;
+}
+
+/* "Tentar de novo" after a failed list: a text button, at least the touch target tall. */
+.link {
+  min-height: var(--target);
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  color: var(--color-accent-strong);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}

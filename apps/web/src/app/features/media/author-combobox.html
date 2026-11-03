@@ -18,7 +18,7 @@
     [attr.aria-expanded]="expanded()"
     [attr.aria-controls]="listId"
     [attr.aria-activedescendant]="activeId()"
-    [attr.aria-describedby]="helpId"
+    [attr.aria-describedby]="helpId + ' ' + statusId"
     (focus)="load()"
     (input)="typed($event)"
     (click)="toggle()"
@@ -53,4 +53,26 @@
       </li>
     }
   </ul>
+  <div class="status" aria-live="polite" [id]="statusId">
+    @if (newName(); as name) {
+      @if (typoOf(); as author) {
+        <p class="typo">
+          <ng-container i18n="@@media.author.typo"
+            >Você quis dizer «{{ author.name }}»?</ng-container
+          >
+          <button
+            type="button"
+            class="link"
+            (click)="takeSuggestion(author.name)"
+            i18n="@@media.author.takeTypo"
+          >
+            Usar «{{ author.name }}»
+          </button>
+        </p>
+      }
+      <p class="new" i18n="@@media.author.new">
+        Novo autor: «{{ name }}» será cadastrado neste acervo.
+      </p>
+    }
+  </div>
 </div>

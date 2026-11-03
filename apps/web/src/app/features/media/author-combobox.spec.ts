@@ -118,4 +118,24 @@ describe('AuthorCombobox (KBC-049 FR-3, APG combobox)', () => {
     field.dispatchEvent(again);
     expect(again.defaultPrevented).toBe(false);
   });
+
+  it('says a new name will be registered, and offers the author it is a typo of (MA-27)', async () => {
+    const { field, fixture, changed } = await renderField();
+
+    fireEvent.input(field, { target: { value: 'Mestre Gabriell' } });
+    await fixture.whenStable();
+
+    expect(
+      screen.getByText(
+        'Novo autor: «Mestre Gabriell» será cadastrado neste acervo.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Você quis dizer «Mestre Gabriel»?')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Usar «Mestre Gabriel»' }),
+    );
+    await fixture.whenStable();
+    expect(changed).toHaveBeenLastCalledWith('Mestre Gabriel');
+    expect(screen.queryByText(/Novo autor/)).toBeNull();
+  });
 });

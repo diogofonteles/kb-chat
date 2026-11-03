@@ -106,38 +106,62 @@ const NO_AUTHOR = '';
               #mainAuthorSelect
               id="collection-main-author"
               aria-describedby="collection-main-author-hint"
+              [disabled]="!authorList.hasValue()"
               (change)="mainAuthor.set(mainAuthorSelect.value)"
             >
-              <option
-                [value]="noAuthor"
-                [selected]="mainAuthor() === noAuthor"
-                i18n="@@collection.noMainAuthor"
-              >
-                Nenhum
-              </option>
-              @for (author of authors(); track author.slug) {
+              @if (authorList.hasValue()) {
                 <option
-                  [value]="author.slug"
-                  [selected]="mainAuthor() === author.slug"
+                  [value]="noAuthor"
+                  [selected]="mainAuthor() === noAuthor"
+                  i18n="@@collection.noMainAuthor"
                 >
-                  {{ author.name }}
+                  Nenhum
+                </option>
+                @for (author of authors(); track author.slug) {
+                  <option
+                    [value]="author.slug"
+                    [selected]="mainAuthor() === author.slug"
+                  >
+                    {{ author.name }}
+                  </option>
+                }
+              } @else {
+                <!-- Until the list arrives, what the collection has now, never a false "Nenhum". -->
+                <option [value]="mainAuthor()" selected>
+                  {{ currentMainName() }}
                 </option>
               }
             </select>
           </label>
-          <p id="collection-main-author-hint" class="hint">
-            @if (authors().length === 0 && authorList.hasValue()) {
-              <ng-container i18n="@@collection.noAuthorsYet"
-                >Este acervo ainda não tem autores: eles são cadastrados ao
-                enviar um áudio.</ng-container
-              >
+          <div id="collection-main-author-hint" class="hint">
+            @if (authorList.error()) {
+              <p class="error" role="alert">
+                <ng-container i18n="@@collection.authorsFailed"
+                  >Não foi possível carregar os autores.</ng-container
+                >
+                <button
+                  type="button"
+                  class="link"
+                  (click)="authorList.reload()"
+                  i18n="@@collection.authorsRetry"
+                >
+                  Tentar de novo
+                </button>
+              </p>
+            } @else if (authorList.isLoading()) {
+              <p i18n="@@collection.authorsLoading">Carregando os autores…</p>
+            } @else if (authors().length === 0) {
+              <p i18n="@@collection.noAuthorsYet">
+                Este acervo ainda não tem autores: eles são cadastrados ao
+                enviar um áudio.
+              </p>
             } @else {
-              <ng-container i18n="@@collection.mainAuthorHint"
-                >Aparece com ✦ nos selos e filtros, e a IA nunca atribui a ele o
-                que é de outros autores.</ng-container
-              >
+              <p i18n="@@collection.mainAuthorHint">
+                Aparece com ✦ nos selos e filtros, e a IA nunca atribui a ele o
+                que é de outros autores.
+              </p>
             }
-          </p>
+          </div>
         }
         @if (!editing()) {
           <label class="field" for="collection-parent">
@@ -252,6 +276,12 @@ export class CollectionDialog {
   );
   protected readonly authors = computed(() =>
     this.authorList.hasValue() ? this.authorList.value().items : [],
+  );
+  /** The main author the collection has now, while its list is not here. */
+  protected readonly currentMainName = computed(
+    () =>
+      this.editing()?.mainAuthor?.name ??
+      $localize`:@@collection.noMainAuthor:Nenhum`,
   );
 
   /** The address the collection gets (or keeps, when editing). */

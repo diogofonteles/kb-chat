@@ -171,7 +171,7 @@ describe('MediaListPage (T14)', () => {
       [...filter.options].map((option) => option.textContent?.trim()),
     ).toEqual([
       'Todos',
-      '✦ Mestre Gabriel (1)',
+      'Mestre Gabriel (principal) (1)',
       'Ana (1)',
       'Outros autores (1)',
     ]);

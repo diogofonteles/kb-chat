@@ -202,6 +202,40 @@ describe('CollectionDialog (KBC-048 FR-6, FR-2)', () => {
     http.expectNone({ method: 'GET' });
   });
 
+  it('KBC-049 review: keeps the current main author while the list loads, never a false "Nenhum"', async () => {
+    const { dialog } = await renderDialog();
+    dialog.openEdit({ ...UDV, mainAuthor: { slug: 'ana', name: 'Ana' } });
+    TestBed.tick();
+
+    const select = mainAuthorSelect();
+    expect(select.disabled).toBe(true);
+    expect(select.selectedOptions[0]?.textContent?.trim()).toBe('Ana');
+    expect(screen.getByText('Carregando os autores…')).toBeTruthy();
+  });
+
+  it('KBC-049 review: says the list failed and tries again', async () => {
+    const { dialog, fixture, http } = await renderDialog();
+    dialog.openEdit({ ...UDV, mainAuthor: { slug: 'ana', name: 'Ana' } });
+    TestBed.tick();
+    http
+      .expectOne('/api/v1/topics/udv/authors')
+      .flush(null, { status: 503, statusText: 'Unavailable' });
+    await fixture.whenStable();
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não foi possível carregar os autores.',
+    );
+    expect(mainAuthorSelect().selectedOptions[0]?.textContent?.trim()).toBe(
+      'Ana',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    await openedWithAuthors(fixture, http, [
+      { slug: 'ana', name: 'Ana', main: true },
+    ]);
+    expect(mainAuthorSelect().disabled).toBe(false);
+    expect(mainAuthorSelect().value).toBe('ana');
+  });
+
   it('KBC-049: says a collection has no authors yet', async () => {
     const { dialog, fixture, http } = await renderDialog();
     dialog.openEdit(UDV);

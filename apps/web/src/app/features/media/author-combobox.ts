@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { authorListSchema } from '@kb-chat/contracts';
 import { authorsUrl } from '@core/media/authors-api.js';
-import { suggestAuthors } from './author-suggestions.js';
+import { closeMatch, suggestAuthors } from './author-suggestions.js';
 
 /** One line of the list: an author of the collection or the offer to register the text. */
 interface AuthorOption {
@@ -45,6 +45,7 @@ export class AuthorCombobox {
   protected readonly inputId = `${this.id}-input`;
   protected readonly listId = `${this.id}-list`;
   protected readonly helpId = `${this.id}-help`;
+  protected readonly statusId = `${this.id}-status`;
 
   /** The list is asked for once the person reaches the field, not before. */
   private readonly wanted = signal(false);
@@ -79,6 +80,16 @@ export class AuthorCombobox {
         : []),
     ];
   });
+  /** The typed name is no author yet: it will be registered on sending (MA-27). */
+  protected readonly newName = computed(() => {
+    if (!this.list.hasValue()) return null;
+    const { register } = suggestAuthors(this.authors(), this.name());
+    return register;
+  });
+  /** An author the new name is probably a typo of ("você quis dizer…"). */
+  protected readonly typoOf = computed(() =>
+    this.newName() ? closeMatch(this.authors(), this.name()) : null,
+  );
   protected readonly expanded = computed(
     () => this.open() && this.options().length > 0,
   );
@@ -88,6 +99,12 @@ export class AuthorCombobox {
 
   protected load(): void {
     this.wanted.set(true);
+  }
+
+  /** "Você quis dizer «Mestre Gabriel»?": takes the existing author instead. */
+  protected takeSuggestion(name: string): void {
+    this.name.set(name);
+    this.close();
   }
 
   protected optionId(index: number): string {

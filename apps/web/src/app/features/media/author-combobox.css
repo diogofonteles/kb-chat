@@ -72,3 +72,38 @@ input {
 .mark {
   color: var(--color-accent);
 }
+
+.status p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+
+.new {
+  color: var(--color-text-muted);
+}
+
+.typo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  font-weight: 600;
+}
+
+.link {
+  min-height: var(--target);
+  padding: 0 var(--space-1);
+  border: none;
+  background: none;
+  color: var(--color-accent-strong);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* On a phone, a short list: "Enviar" stays within reach (UP-13). */
+@media (max-width: 40rem) {
+  .options {
+    max-height: 11rem;
+  }
+}

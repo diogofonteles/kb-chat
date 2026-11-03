@@ -1,5 +1,9 @@
 import type { Author } from '@kb-chat/contracts';
-import { MAX_SUGGESTIONS, suggestAuthors } from './author-suggestions.js';
+import {
+  MAX_SUGGESTIONS,
+  closeMatch,
+  suggestAuthors,
+} from './author-suggestions.js';
 
 const author = (name: string, main = false): Author => ({
   slug: name
@@ -52,5 +56,20 @@ describe('author suggestions (KBC-049 FR-3)', () => {
     expect(suggestAuthors(many, 'silva').authors).toHaveLength(MAX_SUGGESTIONS);
     // Six keystrokes, so each one well under the 100 ms budget.
     expect(elapsed).toBeLessThan(100);
+  });
+});
+
+describe('a typo before registering (KBC-049 review, MA-27)', () => {
+  const known = [author('Mestre Gabriel', true), author('Ana Souza')];
+
+  it('asks about the author a name is a typo of', () => {
+    expect(closeMatch(known, 'Mestre Gabriell')?.name).toBe('Mestre Gabriel');
+    expect(closeMatch(known, 'mestre grabiel')?.name).toBe('Mestre Gabriel');
+  });
+
+  it('asks nothing for an author already known, a far name or a short one', () => {
+    expect(closeMatch(known, 'mestre gabriel')).toBeNull();
+    expect(closeMatch(known, 'Mestre Pedro')).toBeNull();
+    expect(closeMatch(known, 'Ana')).toBeNull();
   });
 });

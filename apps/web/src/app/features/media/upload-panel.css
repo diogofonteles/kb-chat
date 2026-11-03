@@ -138,10 +138,15 @@
 }
 
 .actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
   margin-top: auto;
+  /* Stays in view while the author list is open, also on a phone (UP-13). */
+  padding-block: var(--space-3);
+  background: var(--color-surface);
 }
 
 .primary,

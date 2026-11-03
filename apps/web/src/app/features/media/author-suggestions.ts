@@ -40,3 +40,47 @@ export function suggestAuthors(
     register: slug && !known ? text.trim() : null,
   };
 }
+
+/** At most this many edits apart, a typed name is taken for a typo of an author's. */
+const TYPO_EDITS = 2;
+/** Shorter names are too easy to confuse to suggest one for the other. */
+const TYPO_MIN_CHARS = 4;
+
+/** Edits (insert, remove, replace) between two short texts. */
+function editsBetween(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j += 1)
+      row[j] = Math.min(
+        (previous[j] ?? 0) + 1,
+        (row[j - 1] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    previous = row;
+  }
+  return previous[b.length] ?? 0;
+}
+
+/**
+ * An author the typed name is probably a typo of ("Mestre Gabriell" → "Mestre Gabriel"),
+ * asked before a new author is registered for good (KBC-049 review, MA-27); null when the
+ * name is an author already or nothing is that close.
+ */
+export function closeMatch(
+  authors: readonly Author[],
+  text: string,
+): Author | null {
+  const query = fold(text);
+  if (query.length < TYPO_MIN_CHARS) return null;
+  if (authors.some((author) => fold(author.name) === query)) return null;
+  let best: { author: Author; edits: number } | null = null;
+  for (const author of authors) {
+    const name = fold(author.name);
+    if (Math.abs(name.length - query.length) > TYPO_EDITS) continue;
+    const edits = editsBetween(name, query);
+    if (edits <= TYPO_EDITS && (!best || edits < best.edits))
+      best = { author, edits };
+  }
+  return best?.author ?? null;
+}
