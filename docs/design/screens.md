@@ -447,9 +447,195 @@ Título, autoria ("Mestre Laércio — Nova Alexandria") e o ícone do app na te
 - O estado é sempre também texto ou forma, nunca só cor (UP-20); as cores vêm dos tokens dos três temas.
 
 ### Fora do escopo e perguntas em aberto
-- **Fora:** baixar o áudio; listas de reprodução e fila de próximos; faixas e capítulos no slider e na transcrição (fase B); compilados (fase C); vídeo (KBC-035 usa o mesmo player com a área de vídeo); editar a transcrição.
+- **Fora:** baixar o áudio, listas de reprodução e fila de próximos (entram com a Biblioteca, T16 a T19: KBC-053, KBC-054, KBC-056); faixas e capítulos no slider e na transcrição (fase B); compilados (fase C); vídeo (KBC-035 usa o mesmo player com a área de vídeo); editar a transcrição.
 - Marcadores com nota, pulos configuráveis, encurtar silêncios, palavra a palavra e timer para dormir entraram por decisão do dono em 2026-10-28 (KBC-042 a KBC-046).
 - **Precisa de teste com usuários** (UP-25): os rótulos ⟲15/30⟳ e o "Continuar de" são entendidos? O mini-player atrapalha a leitura dos resultados no celular? Entra no teste da fase 2 com 1 a 2 colegas (`docs/product/context.md`, ## Research).
+
+## T16. Biblioteca (KBC-051, KBC-052, KBC-055, KBC-059; ⤓ do KBC-056)
+
+**Objetivo:** navegar só na mídia, no modelo do "Your Library" do Spotify: continuar o que estava ouvindo, achar uma palestra (áudio ou vídeo) pelos filtros e chegar às próprias listas. **Contexto:** em casa no desktop, escolhendo o que estudar; no celular, retomando no trajeto. **Sucesso:** retomar a última palestra em 1 clique a partir da Biblioteca; achar uma palestra por autor e estado em até 3 ações (chip, chip, clique); nenhum controle depende de arrastar ou de passar o mouse.
+
+Benchmark: [`docs/research/2026-10-29-media-library-benchmark.md`](../research/2026-10-29-media-library-benchmark.md). Convenções adotadas do Spotify (UP-05): filtros em chips no topo, ordenação num menu, alternância lista/grade, fixados no topo, "Recentes" lembrados; o que não serve a um acervo de estudo ficou fora (recomendações, social, anúncios).
+
+### Onde fica
+- Item **Biblioteca** na lateral, no lugar de **Mídia** (mesma posição, UP-05), só para quem tem `media-library`; quem só tem `media` continua com a lista T14. Rotas: `/biblioteca`, `/biblioteca/playlists/{id}` (T17), `/biblioteca/pastas/{id}`, `/biblioteca/autores/{acervo}/{autor}`, `/biblioteca/baixadas` (T19). `/midia` leva a `/biblioteca` com o acervo como filtro; o player continua em `/midia/{id}` (T15).
+- No celular, **Biblioteca** fica no menu ☰ e ocupa a tela cheia, com o mini-player no pé (KBC-041). Sem rede, a lateral mostra só **Baixadas** (KBC-056).
+
+### Layout
+```
+Desktop (≥ 1024 px)                                        Celular (< 1024 px)
+┌──────────┬──────────────────────────────────────────┐    ┌────────────────────────┐
+│ Lateral  │ Biblioteca                 [Enviar mídia] │    │ ← Biblioteca     🔍  ⋯ │
+│ Buscar   │ [🔍 Buscar na biblioteca            ]     │    │ Continuar ouvindo  →   │
+│ Biblio-  │ Continuar ouvindo                   ver ▸ │    │ ┌──────┐┌──────┐       │
+│ teca •   │ ┌────────┐┌────────┐┌────────┐            │    │ │23:10 ││Vídeo │ ...   │
+│ Baixadas │ │Palestra││Aula 3  ││Vídeo · │  (rola →) │    │ └──────┘└──────┘       │
+│          │ │▶ 23:10 ││▶ 05:02 ││▶ 41:00 │            │    │ [Áudio][Vídeo][Não ouv]│
+│          │ └────────┘└────────┘└────────┘            │    │ (chips rolam →)        │
+│          │ Listas: 📌 ♥ Favoritas · 12 · 9:40        │    │ Listas                 │
+│          │         📌 Curso de Cabala · 8 · 7:12     │    │ ♥ Favoritas  12 · 9:40 │
+│          │         ▸ UDV (pasta, 3 playlists)        │    │ Curso de Cabala  8     │
+│          │ Ouvidas recentemente      Limpar recentes │    │ Todas · 42 · Recentes ▾│
+│          │ Todas · 42 mídias · 31 h                  │    │ ▶ Palestra de 1998     │
+│          │ [Áudio][Vídeo][Não ouvidas][Em andamento] │    │   ✦ M. Laércio · 1:02  │
+│          │ [Ouvidas][Favoritas][Baixadas][Autoria ▾] │    │   Continuar de 23:10   │
+│          │ [Acervo ▾]     Ordenar: Recentes ▾  ☰ ▦   │    │ ...                    │
+│          │ ☐ ▶ Título · ✦ Autor · Acervo · 1:02:15 · │    │ [mini-player]          │
+│          │     Vídeo · Em andamento ━━━─ ♥ ⤓ ⋯       │    └────────────────────────┘
+│          │ [mini-player]                              │
+└──────────┴──────────────────────────────────────────┘
+```
+
+Hierarquia (UP-16): (1) **Continuar ouvindo**, a ação mais frequente; (2) a busca e as listas (Favoritas, playlists); (3) "Todas" com chips e ordenação; (4) "Ouvidas recentemente", recolhível no celular. No máximo 3 tamanhos de tipo (UP-17); o acento só no ▶ e no item ativo (UP-18).
+
+### Cabeçalho e busca
+- Título "Biblioteca" (h1) e, para quem tem `media-upload`, **Enviar mídia** (primário, SL-18), que abre o painel de envio do T14.
+- **Buscar na biblioteca** (rótulo visível, SL-04; ✕ para limpar, SL-06) filtra título e autor na hora (debounce 200 ms). Sem resultado: "Nenhuma mídia com '…' no título ou no autor." + **Limpar busca** + **Buscar na fala** (abre a busca de mídia do KBC-039 com a palavra, SL-14).
+
+### Continuar ouvindo e Ouvidas recentemente
+- **Continuar ouvindo**: até 10 cartões em faixa horizontal com rolagem (setas ◂ ▸ no desktop, também pelo teclado; no celular, deslizar **e** "Ver tudo", UP-09). Cartão: capa gerada (iniciais do título sobre a cor do acervo), título em 2 linhas, autor, selo "Vídeo" quando for, barra de progresso com "Continuar de 23:10" em texto (UP-20) e ▶ que toca direto do ponto salvo. Some quando vazio.
+- **Ouvidas recentemente**: lista compacta das últimas 50, com "há 2 dias"; **Limpar recentes** pede confirmação em linha (MA-27: "Limpar as mídias ouvidas recentemente? Suas posições, favoritas e marcadores continuam." · **Limpar** · **Cancelar**). Vazio depois de limpar: "Nada ouvido desde que você limpou."
+
+### Listas (KBC-052, KBC-054, KBC-055)
+- **Favoritas** primeiro ("♥ Favoritas · 12 mídias · 9:40"), depois os fixados (📌 e o texto "Fixada", até 4), as pastas (recolhíveis, `aria-expanded`, "UDV · 3 playlists") e as playlists; **Compartilhadas comigo** (KBC-058) por último, com "De <nome>".
+- **Nova playlist** e **Nova pasta** no topo da seção; ordenação própria ("Recentes", "Adicionadas", "A–Z", "Personalizada"). Em "Personalizada", arrastar no desktop **e** **Mover para cima/baixo** no ⋯ de cada lista (UP-09, MA-02).
+- **Autores** (KBC-059): link "Autores" abre a lista de autores com contagem; o nome do autor em qualquer linha leva à página dele.
+
+### Todas: chips, ordenação e visão (SL-13, SL-15, SL-16)
+- Contagem acima ("42 mídias · 31 h"), atualizada e anunciada em `aria-live="polite"` a cada filtro.
+- Chips combináveis, cada um com estado em texto e `aria-pressed` (UP-20): **Áudio** · **Vídeo** (só aparecem quando o acervo tem os dois) · **Não ouvidas** · **Em andamento** · **Ouvidas** · **Favoritas** (KBC-052) · **Baixadas** (KBC-056) · **Autoria ▾**/autor (KBC-049) · **Acervo ▾** (com sub-acervos recuados, KBC-048). Os chips sem item no conjunto atual não aparecem (SL-16). Com filtro ativo, **Limpar filtros**.
+- No celular, os chips rolam na horizontal **sem esconder opções** atrás da rolagem sem pista (MA-18): o último visível fica cortado pela metade e há **Filtros (3)**, que abre uma tela com todos, **Aplicar** fixo e **Cancelar** (SL-21).
+- **Ordenar** (menu): Ouvidas recentemente (padrão) · Adicionadas recentemente · Título A–Z · Duração · Autor; na página do autor também "Mais antigas primeiro". A escolha, a visão e os filtros ficam na conta (KBC-051 BR-7).
+- **Visão**: ☰ lista (padrão) / ▦ grade, botões com nome ("Ver em lista"/"Ver em grade") e `aria-pressed`.
+- **Linha** (SL-17, DS-06): ▶ (toca direto), título (até 2 linhas), ✦ autor (link, KBC-059), acervo, duração (`1:02:15`, algarismos tabulares), selo "Vídeo", estado ("Não ouvida" omitido; "Em andamento" com barra e "Continuar de"; "Ouvida" com ✓ em texto), ♥, ⤓/estado de download, ⋯ (Tocar a seguir, Adicionar à fila, Adicionar à playlist, Marcar como ouvida/não ouvida, Baixar/Remover download, Ir para o autor, Copiar link). A linha toda abre o player (≥ 48 px, MA-01); os botões internos param a propagação e têm o título no nome acessível ("Favoritar Palestra de 1998").
+- **Grade**: cartões de 160 px (desktop) e 2 colunas no celular, com a capa gerada, título em 2 linhas, autor e duração; as mesmas ações no ⋯.
+- **Seleção múltipla**: caixa por linha (só na lista) e "Selecionar todas as 42"; com seleção, uma barra fixa "3 selecionadas · Marcar como ouvida · Marcar como não ouvida · Adicionar à playlist · Adicionar à fila · Baixar · Cancelar seleção".
+
+### Variação: página do autor (KBC-059) e da pasta (KBC-055)
+- Autor: "← Biblioteca", h1 com ✦ quando principal, acervo, "12 mídias · 9:40 · Você ouviu 3 de 12", **Tocar tudo** (primário) e **Aleatório**, depois "Continuar ouvindo" do autor e "Todas" com os mesmos chips (ordem padrão "Mais antigas primeiro").
+- Pasta: h1 com o nome, "3 playlists · 21:30", **Tocar tudo**, a lista das playlists e ⋯ (Renomear, Apagar pasta com **Desfazer**: "Pasta apagada. As playlists voltaram para a Biblioteca.").
+
+### Estados
+| Estado | Mostra | Ação |
+|---|---|---|
+| Carregando | Esqueleto da faixa "Continuar ouvindo" (3 cartões) e de 8 linhas, na altura real | — |
+| Biblioteca vazia, quem envia | "Ainda não há mídias nos seus acervos." + **Enviar mídia** | Enviar |
+| Biblioteca vazia, quem não envia | "Ainda não há mídias nos acervos liberados para você." | — |
+| Sem nada para continuar | A faixa "Continuar ouvindo" não aparece | — |
+| Filtros sem resultado | "Nenhuma mídia com estes filtros." + **Limpar filtros** (SL-14) | Limpar |
+| Erro ao carregar | "Não consegui carregar a Biblioteca." + **Tentar de novo**; o que já estava na tela continua | Tentar |
+| Ação falhou (♥, marcar ouvida) | O estado volta e a região de status diz o que falhou ("Não consegui marcar como ouvida. Tente de novo.") | — |
+| Sem rede (KBC-056) | A Biblioteca mostra só o chip **Baixadas** ligado e a nota "Sem conexão: mostrando só as mídias baixadas." | — |
+| Sem permissão | O item **Biblioteca** não aparece; a rota direta mostra a tela de não encontrado | — |
+| Conteúdo extremo | 2.000 mídias: lista virtualizada; títulos de 200 caracteres quebram em 2 linhas com reticências e o título inteiro no nome acessível; 500 playlists com busca na seção | — |
+
+### Acessibilidade e toque (WCAG 2.2 AA, MA-01 a MA-07)
+- A faixa "Continuar ouvindo" é uma lista (`role="list"`) com as setas como botões; nada só por deslizar (UP-09).
+- Chips são botões com `aria-pressed`; o menu de ordenação é um botão com menu (APG "Menu Button"); "Filtros (3)" diz quantos estão ativos no nome.
+- A lista é um único ponto de Tab por linha (a linha) mais os botões internos; com 2.000 itens virtualizados, o foco nunca cai num item não renderizado (a virtualização mantém o item focado).
+- Alvos ≥ 44 × 44 px (≥ 48 px no celular); ♥ e ⤓ com nome que inclui o título; estado nunca só por cor (UP-20); `prefers-reduced-motion` respeitado nas faixas.
+
+### Fora do escopo e perguntas em aberto
+- **Fora:** recomendações ("parecidas", mixes, DJ), social (seguir, perfis públicos, Jam), capa enviada pela pessoa, link público de playlist (mídia só entre usuários do app).
+- **Precisa de teste com usuários** (UP-25): "Biblioteca", "A seguir" e "Baixadas" são entendidos? A faixa "Continuar ouvindo" é achada no celular? Entra no teste da fase 2 com 1 a 2 colegas (`docs/product/context.md`, ## Research).
+
+## T17. Playlist (KBC-054, KBC-055, KBC-057, KBC-058)
+
+**Objetivo:** montar e ouvir um percurso de estudo na ordem escolhida. **Sucesso:** criar uma playlist com 3 mídias em menos de 2 minutos; reordenar só com o teclado; tocar do primeiro item não ouvido em 1 clique.
+
+### Layout
+```
+Desktop                                                    Celular
+┌──────────┬──────────────────────────────────────────┐    ┌────────────────────────┐
+│ Lateral  │ ← Biblioteca                              │    │ ← Biblioteca        ⋯  │
+│          │ [capa]  Curso de Cabala                   │    │ [capa] Curso de Cabala │
+│          │         8 mídias · 7:12 · faltam 5:40     │    │ 8 mídias · 7:12        │
+│          │         "Aulas na ordem do Mestre…"        │    │ [▶ Tocar] [⤮] [⤓] [⋯] │
+│          │ [▶ Tocar] [⤮ Aleatório] [⤓ Baixar ◯] [⋯] │    │ 🔍 Buscar na playlist  │
+│          │ 🔍 Buscar na playlist                      │    │ 1 ⋮ Aula 1   ✓ Ouvida  │
+│          │ #  Título                 Autor  Dur.  ⋯  │    │ 2 ⋮ Aula 2   23:10     │
+│          │ 1 ⋮ Aula 1 · ✓ Ouvida      ✦ M.L. 52:10 ⋯ │    │ ...                    │
+│          │ 2 ⋮ Aula 2 · Continuar 23:10     48:03 ⋯  │    │ [mini-player]          │
+└──────────┴──────────────────────────────────────────┘    └────────────────────────┘
+```
+- Cabeçalho: capa gerada (mosaico das 4 primeiras ou iniciais), nome (h1), "n mídias · duração · faltam h:mm" (só o não ouvido), descrição (até 3 linhas, **Ver mais**). **Tocar** (primário) começa do primeiro item não ouvido; **Aleatório** liga o embaralhar do KBC-053; **Baixar** é uma chave (`role="switch"`, KBC-057) com "1,2 GB · faltam 300 MB"; ⋯: Renomear, Editar descrição, Mover para pasta, Fixar, Compartilhar (KBC-058), Apagar.
+- Linhas numeradas com ⋮ (alça de arrastar, só complemento) e ⋯ com **Mover para cima**, **Mover para baixo**, **Mover para o topo**, Remover da playlist (com **Desfazer** por 8 s), mais as ações da linha da Biblioteca. Mudança de ordem anunciada ("Aula 3 movida para a posição 1 de 8").
+- **Compartilhada** (KBC-058): selo "Compartilhada" e "De <nome>" para quem recebeu; quem só ouve não vê alça nem remover; cada linha diz "Adicionada por <nome>" quando a playlist tem mais de um editor.
+- **Compartilhar** (diálogo): campo **E-mail da pessoa** (rótulo acima, MA-16), rádios **Pode ouvir** (marcado) / **Pode editar** (MA-19), **Convidar**; a resposta é sempre a mesma (KBC-058 BR-5); a nota "As pessoas só ouvem as mídias dos acervos que já podem ver."; a lista de pessoas com o papel (seleção) e **Remover acesso** (com Desfazer).
+
+### Estados
+| Estado | Mostra | Ação |
+|---|---|---|
+| Carregando | Esqueleto do cabeçalho e de 6 linhas | — |
+| Vazia | "Esta playlist ainda está vazia. Adicione mídias pelo ⋯ de qualquer mídia ou:" + **Ir para a Biblioteca** | Ir |
+| Itens ocultos | "1 mídia oculta: você não tem mais acesso a ela." sob o cabeçalho | — |
+| Mudou em outro aparelho | "A playlist mudou em outro aparelho. Mostramos a ordem atual." (status) | — |
+| Erro ao salvar ordem | A ordem volta e "Não consegui salvar a nova ordem. Tente de novo." | — |
+| Sem rede | Só leitura: "Sem conexão: as playlists não podem ser editadas agora." (KBC-057) | — |
+| Apagada / sem acesso | Tela de não encontrado ("Esta playlist não existe mais ou não foi compartilhada com você.") | Voltar à Biblioteca |
+| Conteúdo extremo | 1.000 itens virtualizados; nome de 100 caracteres em 2 linhas | — |
+
+## T18. A seguir (KBC-053)
+
+**Objetivo:** ver e ajustar o que toca depois, sem perder o ponto atual. **Sucesso:** tocar uma mídia a seguir em 2 ações (⋯ → Tocar a seguir); reordenar e remover só com o teclado.
+
+- Abre pelo botão **A seguir** (ícone de lista + texto no desktop; no celular, no ⋯ do player e tocando no título do mini-player). No desktop é um painel à direita (substitui a coluna da transcrição enquanto aberto, com **Fechar** e Esc); no celular, tela cheia com "← Voltar".
+- Três grupos com títulos (h2): **Tocando agora** (título, autor, tempo); **Na fila** (n) com **Limpar fila** (com Desfazer); **A seguir de: <lista>** (contexto). Cada item com ⋮ (arrastar, complemento), ⋯ (Mover para cima/baixo, Remover) e a duração.
+- Controles do player (T15) ganham ⏮ **Anterior** e ⏭ **Próxima** dos dois lados do ▶ (40 px; ▶ continua o maior, 56 px), **Aleatório** (`aria-pressed`, "Aleatório ligado") e **Repetir** (botão de 3 estados com o texto no nome: "Repetir: desligado / lista / esta mídia"; o ícone de "esta mídia" tem o "1"). Atalhos Shift+N e Shift+P (com as regras de atalho do T15). O mini-player ganha ⏭.
+- Fim da lista com **Continuar com a próxima da lista** desligado: "A seguir: <título>" + **Tocar**. Mídia pulada: aviso na região de status ("Pulamos '…': ela não está mais disponível para você.").
+- Estados: fila vazia ("Nada na fila. Use 'Tocar a seguir' ou 'Adicionar à fila' no ⋯ de qualquer mídia."); 500 itens (virtualizada; "A fila chegou a 500 mídias." ao passar).
+- Acessibilidade: a lista é `role="list"`; depois de remover, o foco vai ao item seguinte (ou ao anterior no fim), nunca ao topo (WCAG 2.4.3); as mudanças são anunciadas uma vez.
+
+## T19. Baixadas (KBC-056, KBC-057)
+
+**Objetivo:** ouvir sem rede e controlar o espaço do aparelho. **Contexto:** celular, antes de sair de casa (baixar) e no trajeto sem sinal (ouvir). **Sucesso:** baixar uma palestra em 2 ações (⤓ → confirmar); abrir e tocar uma baixada no modo avião em ≤ 3 s; saber quanto espaço sobra sem abrir outra tela.
+
+### Baixar (⤓)
+- ⤓ **Baixar** na linha, no player (⋯ e botão próprio no celular) e no menu ⋯. Áudio: começa na hora, com o tamanho no aviso ("Baixando 'Palestra de 1998' · 15 MB"). Vídeo: um menu com **Vídeo (720p) · 400 MB** e **Só o áudio · 30 MB** (a escolha mais leve primeiro, sem pré-seleção enganosa, SL-28).
+- O ícone da linha mostra o estado em forma e texto (UP-20): ⤓ "Baixar" · anel de progresso com "41%" · ✓ "Baixada" · ⚠ "Falhou". O primeiro download pede o armazenamento persistente do navegador (sem tela nossa antes; se negado, a nota em Baixadas).
+
+### Tela Baixadas
+```
+Celular (390 px)
+┌──────────────────────────────┐
+│ ← Biblioteca   Baixadas      │
+│ Neste aparelho: 1,3 de 5 GB  │
+│ ━━━━━━─────────── 3,1 GB livre│
+│ Remover depois de ouvidas ◯  │
+│ Baixando (1)                 │
+│ Aula 3 · 41% · 120 de 290 MB │
+│   [Pausar] [Cancelar]        │
+│ Curso de Cabala (lista) ✓    │
+│ Palestra de 1998 · 15 MB  ⋯  │
+│ ...                          │
+│ Aparelhos (2 de 5)           │
+│ iPhone de Diogo (este)  ✎    │
+│ Chrome no Mac   [Remover]    │
+│ [Remover todas as baixadas]  │
+└──────────────────────────────┘
+```
+- Topo: espaço "Neste aparelho: 1,3 de 5 GB" com a barra e o livre real do aparelho (`storage.estimate`), **Mudar limite** (seleção 1–20 GB até o máximo que o master liberar). Abaixo, **Remover baixadas depois de ouvidas** (`role="switch"`, desligado, KBC-057).
+- Grupos: **Baixando** (com **Pausar**/**Continuar**/**Cancelar** e "Na espera"), **Listas baixadas** (KBC-057: "Curso de Cabala · Tudo baixado" ou "Faltam 2: sem espaço neste aparelho." com **Ver o que falta**) e as mídias (título, autor, "Vídeo · 720p" ou "Só o áudio", tamanho, "Expira se ficar 30 dias sem internet"). ⋯ por mídia: Tocar, **Remover do aparelho** (com Desfazer enquanto o arquivo ainda não foi apagado: 8 s).
+- **Aparelhos (n de 5)**: nome editável em linha, "(este)", último contato; **Remover** pede confirmação em linha ("Remover 'Chrome no Mac'? As mídias baixadas nele param de tocar no próximo contato." · **Remover** · **Cancelar**).
+- **Remover todas as baixadas** (secundário de perigo) com confirmação em diálogo (UP-07), que diz o espaço liberado.
+- Avisos fixos quando se aplicam (tom de aviso, não vermelho, UP-19): "O navegador pode apagar as mídias baixadas se faltar espaço." (+ no iPhone: "Adicione o app à tela de início para guardar com mais segurança.") · "Os downloads só andam com o app aberto."
+
+### Estados
+| Estado | Mostra | Ação |
+|---|---|---|
+| Nada baixado | "Nenhuma mídia baixada neste aparelho. Use ⤓ numa mídia para ouvir sem internet." + **Ir para a Biblioteca** | Ir |
+| Sem rede | Banner "Sem conexão. Só as mídias baixadas estão disponíveis." no topo do app; Baixadas e o player funcionam; as outras telas mostram o mesmo texto com **Ir para Baixadas** | Ir |
+| Licença expirada (30 dias) | Na mídia: "Conecte-se à internet para continuar ouvindo." e ▶ desabilitado com a explicação | — |
+| Revogada | Aviso uma vez: "'…' foi removida das Baixadas: <motivo>." (sem acesso ao acervo · mídia removida · permissão retirada · aparelho removido) | — |
+| Sem espaço | "Este download passa do limite de 5 GB deste aparelho. Remova algo em Baixadas ou baixe só o áudio (30 MB)." | Ver Baixadas |
+| Limite de aparelhos | "Você já baixa mídias em 5 aparelhos. Remova um em Baixadas para usar este." + a lista | Remover |
+| Parte apagada pelo navegador | "Precisa baixar de novo" + **Baixar de novo** | Baixar |
+| Falha de rede no download | "O download parou: verifique a conexão. Ele continua de onde parou." + **Continuar** (MA-26) | Continuar |
+| Nova versão do app | "Nova versão disponível" + **Atualizar**; nunca recarrega sozinho tocando | Atualizar |
+
+### Acessibilidade
+- O progresso é um `progressbar` com `aria-valuetext` ("41%, 120 de 290 megabytes"); a região de status anuncia só a cada 25% e no fim ("'Aula 3' baixada."), nunca a cada parte.
+- Chaves com `role="switch"` e o estado em texto; confirmações em linha com o foco em **Cancelar** (MA-27); alvos ≥ 48 px no celular.
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 
