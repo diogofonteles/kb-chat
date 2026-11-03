@@ -1,6 +1,7 @@
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import { Readable } from 'node:stream';
 import type { DiarizeJob, TranscribeJob } from '@kb-chat/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -31,6 +32,8 @@ let store: SqliteMediaStore;
 let transcripts: SqliteTranscriptStore;
 let diarizations: SqliteDiarizationStore;
 let files: FsMediaFiles;
+let database: DatabaseSync;
+const openDb = () => database;
 
 const now = () => clock;
 const workers = () => new WorkerService({ store, files, now });
@@ -120,6 +123,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'kbchat-diarize-'));
   clock = T0;
   const db = openMediaDatabase(':memory:', MEDIA_MIGRATIONS);
+  database = db;
   store = new SqliteMediaStore(db);
   transcripts = new SqliteTranscriptStore(db);
   diarizations = new SqliteDiarizationStore(db);
@@ -200,5 +204,63 @@ describe('A separation whose Mac stopped (KBC-064 AC-7)', () => {
     });
     expect(diarizations.latestJob(MEDIA_ID)?.status).toBe('queued');
     expect(store.getMedia(MEDIA_ID)?.status).toBe('ready');
+  });
+});
+
+describe('Edges of a separation (KBC-064)', () => {
+  const actor = {
+    principal: 'owner',
+    isMaster: true,
+    canSee: () => true,
+  };
+  const ask = () =>
+    diarizations.requestDiarization({
+      mediaId: MEDIA_ID,
+      jobId: crypto.randomUUID(),
+      voices: null,
+      now: clock,
+    });
+
+  it('drops its raw file when the lease is lost while it is stored', async () => {
+    await transcribedItem();
+    ask();
+    const job = leaseFor('transcriber:mac');
+    diarizations.completeDiarize = () => false;
+    await expect(complete(job, 'transcriber:mac')).rejects.toMatchObject({
+      code: 'MEDIA_CONFLICT',
+    });
+    expect(
+      readdirSync(join(dir, 'transcripts', MEDIA_ID)).filter((name) =>
+        name.startsWith('diarization-'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('refuses turns for an item whose transcript went meanwhile', async () => {
+    await transcribedItem();
+    ask();
+    const job = leaseFor('transcriber:mac');
+    openDb().exec(`DELETE FROM transcripts WHERE media_id = '${MEDIA_ID}'`);
+    await expect(complete(job, 'transcriber:mac')).rejects.toMatchObject({
+      code: 'MEDIA_NOT_READY',
+    });
+  });
+
+  it('still says "done" when the job rows are gone, and nothing before a transcript', async () => {
+    await transcribedItem();
+    ask();
+    await complete(leaseFor('transcriber:mac'), 'transcriber:mac');
+    openDb().exec(`DELETE FROM jobs WHERE kind = 'diarize'`);
+    expect(diarization().speakers(actor, MEDIA_ID)).toMatchObject({
+      status: 'done',
+      canRequest: true,
+      transcriber: 'none',
+    });
+    openDb().exec(`DELETE FROM transcripts WHERE media_id = '${MEDIA_ID}'`);
+    expect(diarization().speakers(actor, MEDIA_ID)).toMatchObject({
+      status: 'none',
+      canRequest: false,
+      diarization: null,
+    });
   });
 });

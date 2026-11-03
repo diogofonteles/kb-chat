@@ -60,32 +60,23 @@ function numberVoices(
   const order = new Map<string, number>();
   for (const turn of turns)
     if (!order.has(turn.voice)) order.set(turn.voice, order.size + 1);
-  const overflow = mostSpoken(turns, order);
-  return turns.map((turn) => {
-    const index = order.get(turn.voice) ?? overflow;
-    return {
-      voice: index > MAX_VOICES ? overflow : index,
-      startMs: turn.startMs,
-      endMs: turn.endMs,
-    };
-  });
+  const numbered = turns.map((turn) => ({
+    voice: order.get(turn.voice) ?? 1,
+    startMs: turn.startMs,
+    endMs: turn.endMs,
+  }));
+  const top = mostSpoken(numbered.filter((turn) => turn.voice <= MAX_VOICES));
+  return numbered.map((turn) =>
+    turn.voice > MAX_VOICES ? { ...turn, voice: top } : turn,
+  );
 }
 
-/** The number of the voice that speaks most among the first MAX_VOICES. */
-function mostSpoken(
-  turns: readonly { voice: string; startMs: number; endMs: number }[],
-  order: ReadonlyMap<string, number>,
-): number {
-  const spoken = new Map<number, number>();
-  for (const turn of turns) {
-    const index = order.get(turn.voice) ?? 1;
-    if (index <= MAX_VOICES)
-      spoken.set(index, (spoken.get(index) ?? 0) + turn.endMs - turn.startMs);
-  }
-  let best = 1;
-  for (const [voice, ms] of spoken)
-    if (ms > (spoken.get(best) ?? 0)) best = voice;
-  return best;
+/** The voice that speaks longest (the first one on a tie). */
+function mostSpoken(turns: readonly SpeakerTurn[]): number {
+  let best = { voice: 1, speakingMs: -1 };
+  for (const one of speakingTimeOf(turns))
+    if (one.speakingMs > best.speakingMs) best = one;
+  return best.voice;
 }
 
 /** Back-to-back turns of the same voice become one. */
@@ -133,19 +124,31 @@ export function dominantVoices(
 ): (number | null)[] {
   let first = 0;
   return spans.map((span) => {
-    while (first < turns.length && (turns[first]?.endMs ?? 0) <= span.startMs)
-      first++;
+    first = skipEndedBy(turns, first, span.startMs);
     const share = new Map<number, number>();
-    for (let index = first; index < turns.length; index++) {
-      const turn = turns[index];
-      if (!turn || turn.startMs >= span.endMs) break;
+    for (
+      let index = first, turn = turns[index];
+      turn && turn.startMs < span.endMs;
+      turn = turns[++index]
+    )
       share.set(
         turn.voice,
         (share.get(turn.voice) ?? 0) + overlapOf(span, turn),
       );
-    }
     return pickLargest(share);
   });
+}
+
+/** From `from` on, the index of the first turn still going at `ms`. */
+function skipEndedBy(
+  turns: readonly SpeakerTurn[],
+  from: number,
+  ms: number,
+): number {
+  let index = from;
+  for (let turn = turns[index]; turn && turn.endMs <= ms; turn = turns[index])
+    index++;
+  return index;
 }
 
 function pickLargest(share: ReadonlyMap<number, number>): number | null {
@@ -172,8 +175,7 @@ export function wordVoicesOf(input: {
   let current = 0;
   return input.words.map((word) => {
     const middle = (word.startMs + word.endMs) / 2;
-    while (current < turns.length && (turns[current]?.endMs ?? 0) <= middle)
-      current++;
+    current = skipEndedBy(turns, current, middle);
     const turn = turns[current];
     return turn && turn.startMs <= middle
       ? turn.voice

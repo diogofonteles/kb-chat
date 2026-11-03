@@ -104,4 +104,21 @@ describe('the voice of segments and words', () => {
       { voice: 2, speakingMs: 6_000 },
     ]);
   });
+
+  it('gives a word past the last turn its segment voice, or none', () => {
+    expect(
+      wordVoicesOf({
+        words: [
+          { segment: 0, startMs: 20_000, endMs: 20_400 },
+          { segment: 1, startMs: 21_000, endMs: 21_400 },
+        ],
+        turns,
+        segmentVoices: [2, null],
+      }),
+    ).toEqual([2, null]);
+  });
+
+  it('gives no voice to any span when nothing was said', () => {
+    expect(dominantVoices([{ startMs: 0, endMs: 1_000 }], [])).toEqual([null]);
+  });
 });
