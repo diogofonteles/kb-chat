@@ -33,6 +33,13 @@ const ITEM: MediaItem = {
   positionMs: 0,
   completedAt: null,
   positionUpdatedAt: null,
+  transcription: {
+    status: 'none',
+    confidence: null,
+    version: null,
+    transcriber: 'none',
+    transcriberOffSince: null,
+  },
 };
 
 function setup() {

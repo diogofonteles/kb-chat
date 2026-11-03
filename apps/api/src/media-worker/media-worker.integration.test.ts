@@ -112,11 +112,14 @@ describe(
       expect(ready.status).toBe('ready');
       expect(ready.durationMs).toBeGreaterThan(9_900);
       expect(ready.durationMs).toBeLessThan(10_200);
-      // BR-4: only the converted copy stays; no work file is left behind.
+      // BR-4: only the converted copy stays, plus the transcriber's FLAC (KBC-036); no
+      // work file is left behind.
       expect(existsSync(join(env.mediaDir, job.sourcePath))).toBe(false);
-      expect(readdirSync(join(env.mediaDir, 'audio'))).toEqual([
+      expect(readdirSync(join(env.mediaDir, 'audio')).sort()).toEqual([
+        `${item.id}.flac`,
         `${item.id}.m4a`,
       ]);
+      expect(ready.transcription.status).toBe('waiting');
       const stream = await env.owner('GET', `/api/v1/media/${item.id}/stream`);
       expect(stream.statusCode).toBe(200);
       expect(stream.rawPayload.length).toBe(ready.bytes);

@@ -54,4 +54,6 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm format:check   # 
 pnpm tutorial:screenshots                   # regenerates the /tutorial pictures (KBC-032, README)
 pnpm e2e                                    # Playwright, ports 3117/4317 (KBC_E2E_API_PORT/KBC_E2E_WEB_PORT to move them), desktop 1440 + mobile 390
 pnpm --filter @kb-chat/api latency          # p95 per search mode against a running API (Q1/Q2)
+(cd tools/transcriber && uv run ruff check && uv run ruff format --check && uv run pytest)   # the Mac transcriber (KBC-036, Python with uv)
+pnpm --filter @kb-chat/api exec tsx src/scripts/transcript-calibration.ts <raw-dir>   # post-filter and confidence over raw transcripts (manual, ADR 0023)
 ```

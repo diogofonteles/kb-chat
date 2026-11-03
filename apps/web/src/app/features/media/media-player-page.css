@@ -135,3 +135,17 @@
   height: 9.5rem;
   border-radius: var(--radius-lg);
 }
+
+/* BR-5: a warning tone, never red (UP-19), with a sign besides the colour (UP-20). */
+.low-confidence {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.low-confidence::before {
+  content: '⚠ ' / '';
+}

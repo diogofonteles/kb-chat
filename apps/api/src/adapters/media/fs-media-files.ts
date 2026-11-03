@@ -1,6 +1,15 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { access, constants, mkdir, rename, rm, stat } from 'node:fs/promises';
-import { isAbsolute, join, normalize, sep } from 'node:path';
+import {
+  access,
+  constants,
+  mkdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { Transform, type Readable, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {
@@ -11,6 +20,7 @@ import {
 
 const UPLOADS = 'uploads';
 const AUDIO = 'audio';
+const TRANSCRIPTS = 'transcripts';
 
 /** Counts the bytes going through and stops the stream as soon as they pass the limit. */
 class ByteLimit extends Transform {
@@ -49,6 +59,38 @@ export class FsMediaFiles implements MediaFilesPort {
 
   workPath(mediaId: string, leaseId: string): string {
     return `${AUDIO}/${mediaId}.${leaseId}.work.m4a`;
+  }
+
+  flacPath(mediaId: string): string {
+    return `${AUDIO}/${mediaId}.flac`;
+  }
+
+  flacWorkPath(mediaId: string, leaseId: string): string {
+    return `${AUDIO}/${mediaId}.${leaseId}.work.flac`;
+  }
+
+  transcriptPath(mediaId: string, transcriptId: string): string {
+    return `${TRANSCRIPTS}/${mediaId}/${transcriptId}.json`;
+  }
+
+  async writeFile(path: string, data: string): Promise<void> {
+    const target = this.resolve(path);
+    const temp = `${target}.${randomUUID()}.tmp`;
+    await mkdir(dirname(target), { recursive: true });
+    try {
+      await writeFile(temp, data, { flag: 'wx' });
+      await rename(temp, target);
+    } catch (err) {
+      await rm(temp, { force: true });
+      throw err;
+    }
+  }
+
+  async removeTranscripts(mediaId: string): Promise<void> {
+    await rm(this.resolve(`${TRANSCRIPTS}/${mediaId}`), {
+      recursive: true,
+      force: true,
+    });
   }
 
   async promote(from: string, to: string): Promise<void> {

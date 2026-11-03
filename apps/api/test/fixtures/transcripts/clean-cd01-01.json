@@ -1,0 +1,952 @@
+{
+  "source": "Pilot 2026-10-28, mlx-vad, clean narrative (trecho 1), cd01-01, first chunks (AC-5)",
+  "chunks": [
+    {
+      "offset": 0.1,
+      "end": 26.0,
+      "result": {
+        "text": " Existia um rei denominado Inca. Este rei tinha uma conselheira, uma mulher que se chamava Hoasca. A conselheira do rei. Era a mulher que adivinhava.",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 4.54,
+            "text": " Existia um rei denominado Inca.",
+            "temperature": 0.0,
+            "avg_logprob": -0.27833238141290073,
+            "compression_ratio": 1.3703703703703705,
+            "no_speech_prob": 1.5172542042196646e-11,
+            "words": [
+              {
+                "word": " Existia",
+                "start": 0.0,
+                "end": 0.9,
+                "probability": 0.9228515625
+              },
+              {
+                "word": " um",
+                "start": 0.9,
+                "end": 1.7,
+                "probability": 0.97705078125
+              },
+              {
+                "word": " rei",
+                "start": 1.7,
+                "end": 2.12,
+                "probability": 0.9697265625
+              },
+              {
+                "word": " denominado",
+                "start": 2.12,
+                "end": 3.96,
+                "probability": 0.8330078125
+              },
+              {
+                "word": " Inca.",
+                "start": 3.96,
+                "end": 4.54,
+                "probability": 0.828125
+              }
+            ]
+          },
+          {
+            "start": 8.3,
+            "end": 17.82,
+            "text": " Este rei tinha uma conselheira, uma mulher que se chamava Hoasca.",
+            "temperature": 0.0,
+            "avg_logprob": -0.27833238141290073,
+            "compression_ratio": 1.3703703703703705,
+            "no_speech_prob": 1.5172542042196646e-11,
+            "words": [
+              {
+                "word": " Este",
+                "start": 8.040000000000001,
+                "end": 8.6,
+                "probability": 0.923828125
+              },
+              {
+                "word": " rei",
+                "start": 8.6,
+                "end": 9.02,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " tinha",
+                "start": 9.02,
+                "end": 11.26,
+                "probability": 0.90283203125
+              },
+              {
+                "word": " uma",
+                "start": 11.26,
+                "end": 12.22,
+                "probability": 0.98193359375
+              },
+              {
+                "word": " conselheira,",
+                "start": 12.22,
+                "end": 12.96,
+                "probability": 0.98779296875
+              },
+              {
+                "word": " uma",
+                "start": 13.16,
+                "end": 14.18,
+                "probability": 0.9912109375
+              },
+              {
+                "word": " mulher",
+                "start": 14.18,
+                "end": 14.58,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " que",
+                "start": 14.58,
+                "end": 16.26,
+                "probability": 0.5546875
+              },
+              {
+                "word": " se",
+                "start": 16.26,
+                "end": 16.46,
+                "probability": 0.994140625
+              },
+              {
+                "word": " chamava",
+                "start": 16.46,
+                "end": 17.02,
+                "probability": 0.998046875
+              },
+              {
+                "word": " Hoasca.",
+                "start": 17.02,
+                "end": 17.82,
+                "probability": 0.038604736328125
+              }
+            ]
+          },
+          {
+            "start": 17.9,
+            "end": 19.18,
+            "text": " A conselheira do rei.",
+            "temperature": 0.0,
+            "avg_logprob": -0.27833238141290073,
+            "compression_ratio": 1.3703703703703705,
+            "no_speech_prob": 1.5172542042196646e-11,
+            "words": [
+              {
+                "word": " A",
+                "start": 17.9,
+                "end": 18.14,
+                "probability": 0.95068359375
+              },
+              {
+                "word": " conselheira",
+                "start": 18.14,
+                "end": 18.7,
+                "probability": 0.9951171875
+              },
+              {
+                "word": " do",
+                "start": 18.7,
+                "end": 18.82,
+                "probability": 0.9990234375
+              },
+              {
+                "word": " rei.",
+                "start": 18.82,
+                "end": 19.18,
+                "probability": 0.9970703125
+              }
+            ]
+          },
+          {
+            "start": 23.240000000000002,
+            "end": 25.56,
+            "text": " Era a mulher que adivinhava.",
+            "temperature": 0.0,
+            "avg_logprob": -0.27833238141290073,
+            "compression_ratio": 1.3703703703703705,
+            "no_speech_prob": 1.5172542042196646e-11,
+            "words": [
+              {
+                "word": " Era",
+                "start": 23.240000000000002,
+                "end": 24.36,
+                "probability": 0.986328125
+              },
+              {
+                "word": " a",
+                "start": 24.36,
+                "end": 24.46,
+                "probability": 0.9716796875
+              },
+              {
+                "word": " mulher",
+                "start": 24.46,
+                "end": 24.66,
+                "probability": 1.0
+              },
+              {
+                "word": " que",
+                "start": 24.66,
+                "end": 24.82,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " adivinhava.",
+                "start": 24.82,
+                "end": 25.56,
+                "probability": 0.990234375
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 27.2,
+      "end": 53.0,
+      "result": {
+        "text": " Sabia de tudo que tinha a passar. E assim aconselhava o rei, orientava como o rei devia fazer, como era que ele poderia ser vitorioso. Tudo, o Asca, dirigia. Até que um dia...",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 4.08,
+            "text": " Sabia de tudo que tinha a passar.",
+            "temperature": 0.0,
+            "avg_logprob": -0.2862146771143353,
+            "compression_ratio": 1.3134328358208955,
+            "no_speech_prob": 1.3791064644441686e-11,
+            "words": [
+              {
+                "word": " Sabia",
+                "start": 0.0,
+                "end": 0.64,
+                "probability": 0.818359375
+              },
+              {
+                "word": " de",
+                "start": 0.64,
+                "end": 0.8,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " tudo",
+                "start": 0.8,
+                "end": 1.16,
+                "probability": 0.99951171875
+              },
+              {
+                "word": " que",
+                "start": 1.16,
+                "end": 3.06,
+                "probability": 0.8427734375
+              },
+              {
+                "word": " tinha",
+                "start": 3.06,
+                "end": 3.36,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " a",
+                "start": 3.36,
+                "end": 3.64,
+                "probability": 0.99365234375
+              },
+              {
+                "word": " passar.",
+                "start": 3.64,
+                "end": 4.08,
+                "probability": 0.99951171875
+              }
+            ]
+          },
+          {
+            "start": 6.3,
+            "end": 17.74,
+            "text": " E assim aconselhava o rei, orientava como o rei devia fazer, como era que ele poderia ser vitorioso.",
+            "temperature": 0.0,
+            "avg_logprob": -0.2862146771143353,
+            "compression_ratio": 1.3134328358208955,
+            "no_speech_prob": 1.3791064644441686e-11,
+            "words": [
+              {
+                "word": " E",
+                "start": 5.960000000000002,
+                "end": 6.4,
+                "probability": 0.998046875
+              },
+              {
+                "word": " assim",
+                "start": 6.4,
+                "end": 6.74,
+                "probability": 0.9599609375
+              },
+              {
+                "word": " aconselhava",
+                "start": 6.74,
+                "end": 7.58,
+                "probability": 0.98486328125
+              },
+              {
+                "word": " o",
+                "start": 7.58,
+                "end": 7.72,
+                "probability": 0.94189453125
+              },
+              {
+                "word": " rei,",
+                "start": 7.72,
+                "end": 8.04,
+                "probability": 0.990234375
+              },
+              {
+                "word": " orientava",
+                "start": 8.72,
+                "end": 9.5,
+                "probability": 0.9990234375
+              },
+              {
+                "word": " como",
+                "start": 9.5,
+                "end": 11.2,
+                "probability": 0.5830078125
+              },
+              {
+                "word": " o",
+                "start": 11.2,
+                "end": 11.36,
+                "probability": 0.998046875
+              },
+              {
+                "word": " rei",
+                "start": 11.36,
+                "end": 11.56,
+                "probability": 1.0
+              },
+              {
+                "word": " devia",
+                "start": 11.56,
+                "end": 11.88,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " fazer,",
+                "start": 11.88,
+                "end": 12.32,
+                "probability": 0.9990234375
+              },
+              {
+                "word": " como",
+                "start": 13.5,
+                "end": 15.4,
+                "probability": 0.98486328125
+              },
+              {
+                "word": " era",
+                "start": 15.4,
+                "end": 15.74,
+                "probability": 0.99951171875
+              },
+              {
+                "word": " que",
+                "start": 15.74,
+                "end": 16.2,
+                "probability": 0.99560546875
+              },
+              {
+                "word": " ele",
+                "start": 16.2,
+                "end": 16.32,
+                "probability": 0.99951171875
+              },
+              {
+                "word": " poderia",
+                "start": 16.32,
+                "end": 16.68,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " ser",
+                "start": 16.68,
+                "end": 17.0,
+                "probability": 0.99951171875
+              },
+              {
+                "word": " vitorioso.",
+                "start": 17.0,
+                "end": 17.74,
+                "probability": 0.99755859375
+              }
+            ]
+          },
+          {
+            "start": 18.24,
+            "end": 20.48,
+            "text": " Tudo, o Asca, dirigia.",
+            "temperature": 0.0,
+            "avg_logprob": -0.2862146771143353,
+            "compression_ratio": 1.3134328358208955,
+            "no_speech_prob": 1.3791064644441686e-11,
+            "words": [
+              {
+                "word": " Tudo,",
+                "start": 18.24,
+                "end": 18.94,
+                "probability": 0.97998046875
+              },
+              {
+                "word": " o",
+                "start": 19.22,
+                "end": 19.26,
+                "probability": 0.28466796875
+              },
+              {
+                "word": " Asca,",
+                "start": 19.26,
+                "end": 19.7,
+                "probability": 0.323974609375
+              },
+              {
+                "word": " dirigia.",
+                "start": 19.86,
+                "end": 20.48,
+                "probability": 0.99609375
+              }
+            ]
+          },
+          {
+            "start": 23.92,
+            "end": 25.58,
+            "text": " Até que um dia...",
+            "temperature": 0.0,
+            "avg_logprob": -0.2862146771143353,
+            "compression_ratio": 1.3134328358208955,
+            "no_speech_prob": 1.3791064644441686e-11,
+            "words": [
+              {
+                "word": " Até",
+                "start": 23.92,
+                "end": 24.8,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " que",
+                "start": 24.8,
+                "end": 24.96,
+                "probability": 1.0
+              },
+              {
+                "word": " um",
+                "start": 24.96,
+                "end": 25.08,
+                "probability": 0.99072265625
+              },
+              {
+                "word": " dia...",
+                "start": 25.08,
+                "end": 25.58,
+                "probability": 0.83984375
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 54.0,
+      "end": 78.5,
+      "result": {
+        "text": " Hoasca morreu. O rei ficando desorientado pela morte da sua conselheira, mas o que pôde fazer foi cavar uma sepultura e sepultar Hoasca. Depois de alguns dias",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 1.16,
+            "text": " Hoasca morreu.",
+            "temperature": 0.0,
+            "avg_logprob": -0.1631742257338304,
+            "compression_ratio": 1.2232142857142858,
+            "no_speech_prob": 1.0355323369626301e-11,
+            "words": [
+              {
+                "word": " Hoasca",
+                "start": 0.0,
+                "end": 0.64,
+                "probability": 0.474609375
+              },
+              {
+                "word": " morreu.",
+                "start": 0.64,
+                "end": 1.16,
+                "probability": 0.99267578125
+              }
+            ]
+          },
+          {
+            "start": 3.06,
+            "end": 20.84,
+            "text": " O rei ficando desorientado pela morte da sua conselheira, mas o que pôde fazer foi cavar uma sepultura e sepultar Hoasca.",
+            "temperature": 0.0,
+            "avg_logprob": -0.1631742257338304,
+            "compression_ratio": 1.2232142857142858,
+            "no_speech_prob": 1.0355323369626301e-11,
+            "words": [
+              {
+                "word": " O",
+                "start": 2.7200000000000006,
+                "end": 3.2,
+                "probability": 0.90869140625
+              },
+              {
+                "word": " rei",
+                "start": 3.2,
+                "end": 3.42,
+                "probability": 0.9765625
+              },
+              {
+                "word": " ficando",
+                "start": 3.42,
+                "end": 3.84,
+                "probability": 0.92822265625
+              },
+              {
+                "word": " desorientado",
+                "start": 3.84,
+                "end": 4.82,
+                "probability": 0.998046875
+              },
+              {
+                "word": " pela",
+                "start": 4.82,
+                "end": 6.82,
+                "probability": 0.86328125
+              },
+              {
+                "word": " morte",
+                "start": 6.82,
+                "end": 7.24,
+                "probability": 0.998046875
+              },
+              {
+                "word": " da",
+                "start": 7.24,
+                "end": 8.78,
+                "probability": 0.927734375
+              },
+              {
+                "word": " sua",
+                "start": 8.78,
+                "end": 8.94,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " conselheira,",
+                "start": 8.94,
+                "end": 9.58,
+                "probability": 0.99169921875
+              },
+              {
+                "word": " mas",
+                "start": 9.92,
+                "end": 11.08,
+                "probability": 0.99169921875
+              },
+              {
+                "word": " o",
+                "start": 11.08,
+                "end": 12.02,
+                "probability": 0.96630859375
+              },
+              {
+                "word": " que",
+                "start": 12.02,
+                "end": 12.14,
+                "probability": 0.99853515625
+              },
+              {
+                "word": " pôde",
+                "start": 12.14,
+                "end": 12.38,
+                "probability": 0.98046875
+              },
+              {
+                "word": " fazer",
+                "start": 12.38,
+                "end": 12.74,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " foi",
+                "start": 12.74,
+                "end": 13.12,
+                "probability": 0.99365234375
+              },
+              {
+                "word": " cavar",
+                "start": 13.12,
+                "end": 14.64,
+                "probability": 0.974609375
+              },
+              {
+                "word": " uma",
+                "start": 14.64,
+                "end": 14.74,
+                "probability": 0.99658203125
+              },
+              {
+                "word": " sepultura",
+                "start": 14.74,
+                "end": 15.32,
+                "probability": 0.998046875
+              },
+              {
+                "word": " e",
+                "start": 15.32,
+                "end": 15.76,
+                "probability": 0.98095703125
+              },
+              {
+                "word": " sepultar",
+                "start": 15.76,
+                "end": 18.2,
+                "probability": 0.9912109375
+              },
+              {
+                "word": " Hoasca.",
+                "start": 18.2,
+                "end": 20.84,
+                "probability": 0.9814453125
+              }
+            ]
+          },
+          {
+            "start": 22.56,
+            "end": 23.98,
+            "text": " Depois de alguns dias",
+            "temperature": 0.0,
+            "avg_logprob": -0.1990459987095424,
+            "compression_ratio": 0.7777777777777778,
+            "no_speech_prob": 3.826230651760021e-11,
+            "words": [
+              {
+                "word": " Depois",
+                "start": 22.56,
+                "end": 23.18,
+                "probability": 0.95166015625
+              },
+              {
+                "word": " de",
+                "start": 23.18,
+                "end": 23.36,
+                "probability": 0.998046875
+              },
+              {
+                "word": " alguns",
+                "start": 23.36,
+                "end": 23.58,
+                "probability": 0.9990234375
+              },
+              {
+                "word": " dias",
+                "start": 23.58,
+                "end": 23.98,
+                "probability": 0.9970703125
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "offset": 80.9,
+      "end": 106.6,
+      "result": {
+        "text": " Ele vem visitar a sepultura de Hoasca, encontra nascido no centro da sepultura um pé de árvore desconhecido de todas as outras árvores, diferente de todas as outras. O rei examinou bem e viu que era uma árvore diferente das outras e disse",
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 15.98,
+            "text": " Ele vem visitar a sepultura de Hoasca, encontra nascido no centro da sepultura um pé de árvore desconhecido de todas as outras árvores, diferente de todas as outras.",
+            "temperature": 0.0,
+            "avg_logprob": -0.10192856318514112,
+            "compression_ratio": 1.6241610738255035,
+            "no_speech_prob": 1.1065788042829983e-11,
+            "words": [
+              {
+                "word": " Ele",
+                "start": 0.0,
+                "end": 0.32,
+                "probability": 0.58984375
+              },
+              {
+                "word": " vem",
+                "start": 0.32,
+                "end": 0.5,
+                "probability": 0.9140625
+              },
+              {
+                "word": " visitar",
+                "start": 0.5,
+                "end": 0.96,
+                "probability": 0.9951171875
+              },
+              {
+                "word": " a",
+                "start": 0.96,
+                "end": 1.1,
+                "probability": 0.962890625
+              },
+              {
+                "word": " sepultura",
+                "start": 1.1,
+                "end": 1.54,
+                "probability": 0.9453125
+              },
+              {
+                "word": " de",
+                "start": 1.54,
+                "end": 1.68,
+                "probability": 0.97705078125
+              },
+              {
+                "word": " Hoasca,",
+                "start": 1.68,
+                "end": 2.16,
+                "probability": 0.5341796875
+              },
+              {
+                "word": " encontra",
+                "start": 2.54,
+                "end": 3.8,
+                "probability": 0.8955078125
+              },
+              {
+                "word": " nascido",
+                "start": 3.8,
+                "end": 4.52,
+                "probability": 0.9443359375
+              },
+              {
+                "word": " no",
+                "start": 4.52,
+                "end": 5.74,
+                "probability": 0.8984375
+              },
+              {
+                "word": " centro",
+                "start": 5.74,
+                "end": 5.98,
+                "probability": 0.99609375
+              },
+              {
+                "word": " da",
+                "start": 5.98,
+                "end": 6.14,
+                "probability": 0.9931640625
+              },
+              {
+                "word": " sepultura",
+                "start": 6.14,
+                "end": 6.78,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " um",
+                "start": 6.78,
+                "end": 9.3,
+                "probability": 0.67431640625
+              },
+              {
+                "word": " pé",
+                "start": 9.3,
+                "end": 9.5,
+                "probability": 0.9912109375
+              },
+              {
+                "word": " de",
+                "start": 9.5,
+                "end": 9.62,
+                "probability": 0.978515625
+              },
+              {
+                "word": " árvore",
+                "start": 9.62,
+                "end": 10.04,
+                "probability": 0.98828125
+              },
+              {
+                "word": " desconhecido",
+                "start": 10.04,
+                "end": 12.28,
+                "probability": 0.9501953125
+              },
+              {
+                "word": " de",
+                "start": 12.28,
+                "end": 12.44,
+                "probability": 0.99609375
+              },
+              {
+                "word": " todas",
+                "start": 12.44,
+                "end": 12.76,
+                "probability": 0.99267578125
+              },
+              {
+                "word": " as",
+                "start": 12.76,
+                "end": 13.02,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " outras",
+                "start": 13.02,
+                "end": 13.32,
+                "probability": 0.9931640625
+              },
+              {
+                "word": " árvores,",
+                "start": 13.32,
+                "end": 13.86,
+                "probability": 0.9873046875
+              },
+              {
+                "word": " diferente",
+                "start": 14.44,
+                "end": 14.84,
+                "probability": 0.9697265625
+              },
+              {
+                "word": " de",
+                "start": 14.84,
+                "end": 15.14,
+                "probability": 0.99609375
+              },
+              {
+                "word": " todas",
+                "start": 15.14,
+                "end": 15.38,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " as",
+                "start": 15.38,
+                "end": 15.62,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " outras.",
+                "start": 15.62,
+                "end": 15.98,
+                "probability": 0.99951171875
+              }
+            ]
+          },
+          {
+            "start": 16.58,
+            "end": 25.26,
+            "text": " O rei examinou bem e viu que era uma árvore diferente das outras e disse",
+            "temperature": 0.0,
+            "avg_logprob": -0.10192856318514112,
+            "compression_ratio": 1.6241610738255035,
+            "no_speech_prob": 1.1065788042829983e-11,
+            "words": [
+              {
+                "word": " O",
+                "start": 16.58,
+                "end": 17.34,
+                "probability": 0.994140625
+              },
+              {
+                "word": " rei",
+                "start": 17.34,
+                "end": 18.38,
+                "probability": 0.9716796875
+              },
+              {
+                "word": " examinou",
+                "start": 18.38,
+                "end": 19.76,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " bem",
+                "start": 19.76,
+                "end": 20.08,
+                "probability": 0.99951171875
+              },
+              {
+                "word": " e",
+                "start": 20.08,
+                "end": 20.94,
+                "probability": 0.9755859375
+              },
+              {
+                "word": " viu",
+                "start": 20.94,
+                "end": 21.16,
+                "probability": 0.99658203125
+              },
+              {
+                "word": " que",
+                "start": 21.16,
+                "end": 21.32,
+                "probability": 0.98779296875
+              },
+              {
+                "word": " era",
+                "start": 21.32,
+                "end": 21.44,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " uma",
+                "start": 21.44,
+                "end": 21.6,
+                "probability": 0.9970703125
+              },
+              {
+                "word": " árvore",
+                "start": 21.6,
+                "end": 22.04,
+                "probability": 1.0
+              },
+              {
+                "word": " diferente",
+                "start": 22.04,
+                "end": 22.96,
+                "probability": 0.9287109375
+              },
+              {
+                "word": " das",
+                "start": 22.96,
+                "end": 23.22,
+                "probability": 0.99755859375
+              },
+              {
+                "word": " outras",
+                "start": 23.22,
+                "end": 23.62,
+                "probability": 0.99951171875
+              },
+              {
+                "word": " e",
+                "start": 23.62,
+                "end": 24.88,
+                "probability": 0.77099609375
+              },
+              {
+                "word": " disse",
+                "start": 24.88,
+                "end": 25.26,
+                "probability": 0.99609375
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

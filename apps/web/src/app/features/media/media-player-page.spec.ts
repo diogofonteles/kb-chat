@@ -17,7 +17,7 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../testing/fake-media-element.js';
-import { aMediaItem } from '../../testing/media-fixtures.js';
+import { aMediaItem, aTranscription } from '../../testing/media-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
@@ -81,6 +81,37 @@ describe('MediaPlayerPage (T15)', () => {
     );
     expect(screen.queryByRole('slider')).toBeNull();
     expect(media.calls).toEqual([]);
+  });
+
+  it('says the transcript is automatic and of low confidence, apart (BR-5)', async () => {
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush(
+      aMediaItem({
+        transcription: aTranscription({ status: 'done', confidence: 'low' }),
+      }),
+    );
+    await harness.fixture.whenStable();
+    expect(document.body.textContent).toContain(
+      'Transcrição automática de baixa confiança: pode haver trechos errados.',
+    );
+    expect(document.body.textContent).not.toContain('Transcrita');
+  });
+
+  it('says the transcription waits for the transcriber (FR-1)', async () => {
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush(
+      aMediaItem({
+        transcription: aTranscription({
+          status: 'waiting',
+          transcriber: 'none',
+        }),
+      }),
+    );
+    await harness.fixture.whenStable();
+    expect(document.body.textContent).toContain(
+      'Aguardando o transcritor · nenhum transcritor pareado',
+    );
+    expect(document.body.textContent).not.toContain('baixa confiança');
   });
 
   it('says the item is gone (or not yours) and offers the way back', async () => {

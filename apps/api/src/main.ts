@@ -11,7 +11,7 @@ import {
   loadConfig,
 } from './config.js';
 import { SealedSettingsStore } from './adapters/sealed-settings-store.js';
-import { SecretBox, loadSecretsKey } from './adapters/secret-box.js';
+import { SecretBox, deriveKey, loadSecretsKey } from './adapters/secret-box.js';
 import { createHouseAi } from './house-ai-factory.js';
 import { JsonDocumentStore } from './adapters/json-document-store.js';
 import { createDelivery } from './delivery-factory.js';
@@ -47,13 +47,12 @@ assertDeliveryConfigured(config);
 assertAiConfigured(config);
 const logger = createLogger(config.LOG_LEVEL);
 // Every provider key on disk is sealed with this key (ADR 0017).
-const sealer = new SecretBox(
-  await loadSecretsKey({
-    configured: config.KB_CHAT_SECRETS_KEY,
-    stateDir: config.KB_CHAT_STATE_DIR,
-    hosted: isHosted(config),
-  }),
-);
+const secretsKey = await loadSecretsKey({
+  configured: config.KB_CHAT_SECRETS_KEY,
+  stateDir: config.KB_CHAT_STATE_DIR,
+  hosted: isHosted(config),
+});
+const sealer = new SecretBox(secretsKey);
 // The vault plus the collections created on the screen (ADR 0028); the vault stays read-only.
 const collections = new CollectionRegistry(
   new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
@@ -135,7 +134,9 @@ const access = {
   delivery: createDelivery(config, logger),
 };
 // KBC-034 FR-1: with KB_CHAT_MEDIA=on, a media library that cannot open stops the start.
-const media = await createMedia(config);
+const media = await createMedia(config, {
+  tokenKey: deriveKey(secretsKey, 'transcriber-tokens'),
+});
 
 const app = await buildApp({
   config,

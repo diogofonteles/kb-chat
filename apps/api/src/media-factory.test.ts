@@ -12,6 +12,7 @@ import { loadConfig } from './config.js';
 import { createMedia } from './media-factory.js';
 
 const TOKEN = 'a-media-worker-token-of-at-least-32-chars';
+const SECRETS = { tokenKey: Buffer.alloc(32, 1) };
 let root: string;
 
 const configWith = (env: Record<string, string>) =>
@@ -28,7 +29,7 @@ afterEach(() => {
 describe('createMedia (KBC-034 FR-1)', () => {
   it('opens nothing when media is off', async () => {
     expect(
-      await createMedia(configWith({ KB_CHAT_MEDIA: 'off' })),
+      await createMedia(configWith({ KB_CHAT_MEDIA: 'off' }), SECRETS),
     ).toBeUndefined();
   });
 
@@ -38,6 +39,7 @@ describe('createMedia (KBC-034 FR-1)', () => {
         KB_CHAT_MEDIA: 'on',
         KB_CHAT_MEDIA_DIR: join(root, 'media'),
       }),
+      SECRETS,
     );
     expect(media?.workerToken).toBe(TOKEN);
     expect(media?.store.listMedia('hermetismo')).toEqual([]);
@@ -50,7 +52,7 @@ describe('createMedia (KBC-034 FR-1)', () => {
       KB_CHAT_MEDIA: 'on',
       KB_CHAT_MEDIA_DIR: join(root, 'media'),
     });
-    await expect(createMedia(config)).rejects.toThrow(
+    await expect(createMedia(config, SECRETS)).rejects.toThrow(
       `The media library cannot start: ${join(root, 'media')} is not writable (KB_CHAT_MEDIA=on)`,
     );
   });
@@ -60,7 +62,7 @@ describe('createMedia (KBC-034 FR-1)', () => {
     mkdirSync(join(dir, 'media.db'), { recursive: true }); // a folder where the file goes
     writeFileSync(join(dir, 'media.db', 'x'), 'not a database');
     const config = configWith({ KB_CHAT_MEDIA: 'on', KB_CHAT_MEDIA_DIR: dir });
-    await expect(createMedia(config)).rejects.toThrow(
+    await expect(createMedia(config, SECRETS)).rejects.toThrow(
       /did not open or migrate/,
     );
   });
@@ -85,7 +87,7 @@ describe('createMedia (KBC-034 FR-1)', () => {
       ...configWith({ KB_CHAT_MEDIA: 'on' }),
       KB_CHAT_MEDIA_WORKER_TOKEN: undefined,
     };
-    await expect(createMedia(config)).rejects.toThrow(
+    await expect(createMedia(config, SECRETS)).rejects.toThrow(
       /needs KB_CHAT_MEDIA_WORKER_TOKEN/,
     );
   });

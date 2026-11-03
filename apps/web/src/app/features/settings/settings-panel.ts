@@ -21,6 +21,7 @@ import {
 import { SessionStore } from '@core/auth/session-store.js';
 import { PeoplePanel } from '@features/people/people-panel.js';
 import { HouseAiPanel } from '@features/house-ai/house-ai-panel.js';
+import { TranscribersPanel } from '@features/transcribers/transcribers-panel.js';
 import { AiStatusCard } from './ai-status-card.js';
 import { PreferencesForm } from './preferences-form.js';
 import { ActAsAudit } from '@features/acting/act-as-audit.js';
@@ -44,6 +45,10 @@ const SECTIONS: readonly { id: SettingsSection; label: () => string }[] = [
     label: () => $localize`:@@settings.people:Pessoas e permissões`,
   },
   {
+    id: 'transcribers',
+    label: () => $localize`:@@settings.transcribers:Transcritores`,
+  },
+  {
     id: 'audit',
     label: () => $localize`:@@settings.audit:Auditoria do Ver como`,
   },
@@ -64,6 +69,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'invalid';
     PreferencesForm,
     PeoplePanel,
     HouseAiPanel,
+    TranscribersPanel,
     AiStatusCard,
     ActAsAudit,
     MyAccesses,
@@ -86,6 +92,9 @@ export class SettingsPanel {
         (id !== 'ai' || this.store.ownAi()) &&
         (id !== 'people' || this.session.isMaster()) &&
         (id !== 'house' || this.session.isMaster()) &&
+        // KBC-036 BR-1: masters pair the Macs, only where the media library is on.
+        (id !== 'transcribers' ||
+          (this.session.isMaster() && this.session.me()?.media === true)) &&
         (id !== 'audit' || this.session.me()?.canActAs === true),
     ).map(({ id, label }) => ({ id, label: label() })),
   );

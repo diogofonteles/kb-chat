@@ -107,6 +107,7 @@ describe('SqliteMediaStore catalog', () => {
     const media = queued();
     const job = leased();
     store.completeTranscode({
+      transcribeJobId: crypto.randomUUID(),
       ...owner(job),
       durationMs: 1_000,
       now: at(5),
@@ -175,6 +176,7 @@ describe('SqliteMediaStore queue', () => {
     ).toEqual({
       requeued: 0,
       failed: 0,
+      transcriptionsGivenUp: [],
     });
   });
 
@@ -205,6 +207,7 @@ describe('SqliteMediaStore queue', () => {
     expect(store.heartbeat({ ...owner(job, 'other'), ...beat })).toBe(false);
     expect(
       store.completeTranscode({
+        transcribeJobId: crypto.randomUUID(),
         ...stranger,
         durationMs: 1,
         now: at(1),
@@ -227,6 +230,7 @@ describe('SqliteMediaStore queue', () => {
     const job = leased();
     expect(
       store.completeTranscode({
+        transcribeJobId: crypto.randomUUID(),
         ...owner(job),
         durationMs: 180_000,
         now: at(30),
@@ -287,7 +291,11 @@ describe('SqliteMediaStore queue', () => {
         now: at(attempt * 100 + 61),
         maxAttempts: MAX_ATTEMPTS,
       });
-      expect(reaped).toEqual({ requeued: 1, failed: 0 });
+      expect(reaped).toEqual({
+        requeued: 1,
+        failed: 0,
+        transcriptionsGivenUp: [],
+      });
       expect(store.getMedia(media.id)).toMatchObject({
         status: 'queued',
         progress: null,
@@ -299,6 +307,7 @@ describe('SqliteMediaStore queue', () => {
     ).toEqual({
       requeued: 0,
       failed: 1,
+      transcriptionsGivenUp: [],
     });
     expect(store.getMedia(media.id)).toMatchObject({
       status: 'failed',
@@ -315,6 +324,7 @@ describe('SqliteMediaStore queue', () => {
     ).toEqual({
       requeued: 0,
       failed: 0,
+      transcriptionsGivenUp: [],
     });
   });
 
@@ -325,6 +335,7 @@ describe('SqliteMediaStore queue', () => {
     const fresh = leased(62);
     expect(
       store.completeTranscode({
+        transcribeJobId: crypto.randomUUID(),
         ...owner(stale),
         durationMs: 1,
         now: at(63),

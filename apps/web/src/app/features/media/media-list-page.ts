@@ -6,6 +6,7 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
+  LOCALE_ID,
   afterNextRender,
   afterRenderEffect,
   computed,
@@ -32,7 +33,13 @@ import {
   pairwise,
   switchMap,
 } from 'rxjs';
-import { isInFlight, statusTextOf } from './media-labels.js';
+import {
+  pollEveryOf,
+  isLowConfidence,
+  lowNoticeOf,
+  statusTextOf,
+  transcriptionTextOf,
+} from './media-labels.js';
 import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { RowMenu } from './row-menu.js';
@@ -59,6 +66,7 @@ export class MediaListPage {
   private readonly api = inject(MediaApi);
   private readonly injector = inject(Injector);
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  private readonly locale = inject(LOCALE_ID);
   private readonly removeDialog =
     viewChild<ElementRef<HTMLDialogElement>>('removeDialog');
   private readonly rows = viewChildren<ElementRef<HTMLElement>>('row');
@@ -119,6 +127,19 @@ export class MediaListPage {
   protected keepInView(event: FocusEvent): void {
     if (event.target instanceof HTMLElement)
       event.target.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  /** Where its transcription is (KBC-036 FR-1), next to the status. */
+  protected transcriptionOf(item: MediaItem): string {
+    return transcriptionTextOf(item, this.locale);
+  }
+
+  protected isLow(item: MediaItem): boolean {
+    return isLowConfidence(item);
+  }
+
+  protected lowNoticeOf(item: MediaItem): string {
+    return lowNoticeOf(item);
   }
 
   protected statusOf(item: MediaItem): string {
@@ -240,11 +261,11 @@ export class MediaListPage {
   }
 
   private pollWhileInFlight(): void {
-    const inFlight = computed(() => this.items().some(isInFlight));
-    toObservable(inFlight)
+    const every = computed(() => pollEveryOf(this.items(), this.pollMs));
+    toObservable(every)
       .pipe(
         distinctUntilChanged(),
-        switchMap((moving) => (moving ? interval(this.pollMs) : EMPTY)),
+        switchMap((ms) => (ms === null ? EMPTY : interval(ms))),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.list.reload());

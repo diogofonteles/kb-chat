@@ -140,6 +140,18 @@
               [class.failed]="item.status === 'failed'"
               >{{ statusOf(item) }}</span
             >
+            @if (transcriptionOf(item); as transcription) {
+              <span
+                class="transcription"
+                [class.low]="
+                  item.transcription.status === 'done' && isLow(item)
+                "
+                >{{ transcription }}</span
+              >
+            }
+            @if (lowNoticeOf(item); as notice) {
+              <span class="transcription low">{{ notice }}</span>
+            }
             @if (resumeTextOf(item); as resume) {
               <span class="resume">{{ resume }}</span>
             }

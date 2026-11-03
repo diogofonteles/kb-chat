@@ -28,4 +28,27 @@ export {
 } from './listening-service.js';
 export { mediaRoutes } from './routes.js';
 export { WorkerService, type WorkerServiceDeps } from './worker-service.js';
-export { hasWorkerToken, workerRoutes } from './worker-routes.js';
+export { workerRoutes, type WorkerRoutesDeps } from './worker-routes.js';
+export {
+  TranscriberService,
+  type Presence,
+  type TranscriberServiceDeps,
+  type WorkerIdentity,
+} from './transcriber-service.js';
+export {
+  TranscriptionService,
+  type TranscriptionServiceDeps,
+} from './transcription-service.js';
+export { transcriberRoutes } from './transcriber-routes.js';
+export {
+  FILTER_VERSION,
+  deriveTranscript,
+  type DerivedTranscript,
+  type FilterStats,
+} from './transcript-filter.js';
+export {
+  CONFIDENCE_RULES,
+  CONFIDENCE_VERSION,
+  confidenceOf,
+  type ConfidenceVerdict,
+} from './transcript-confidence.js';

@@ -96,4 +96,30 @@ describe('Configurações per permission (KBC-010)', () => {
     http.expectOne('/api/v1/invite-profiles').flush({ items: [] });
     await fixture.whenStable();
   });
+
+  it('shows "Transcritores" to a master only where the media library is on (KBC-036 BR-1)', async () => {
+    const { http, fixture } = await openSettingsAs({
+      ...anOwner(),
+      media: true,
+    });
+    http.expectOne('/api/v1/ai/providers').flush({ items: [], active: 'none' });
+    flushAiStatus(http);
+    TestBed.tick();
+    expect(sectionNames()).toContain('Transcritores');
+    expect(sectionNames().indexOf('Transcritores')).toBe(
+      sectionNames().indexOf('Pessoas e permissões') + 1,
+    );
+    for (const request of http.match(() => true)) request.flush({});
+    await fixture.whenStable();
+  });
+
+  it('hides "Transcritores" from a member who listens to media', async () => {
+    const { http, fixture } = await openSettingsAs(
+      aMe({ features: ['search', 'media', 'media-upload'], media: true }),
+    );
+    TestBed.tick();
+    expect(sectionNames()).not.toContain('Transcritores');
+    for (const request of http.match(() => true)) request.flush({});
+    await fixture.whenStable();
+  });
 });

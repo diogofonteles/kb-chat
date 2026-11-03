@@ -6,10 +6,14 @@ import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
 import { SqliteBookmarkStore } from './adapters/sqlite/sqlite-bookmark-store.js';
 import { SqliteListeningStore } from './adapters/sqlite/sqlite-listening-store.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
+import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
+import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
 import type { BookmarkStorePort } from './ports/bookmark-store.js';
 import type { ListeningStorePort } from './ports/listening-store.js';
 import type { MediaFilesPort } from './ports/media-files.js';
 import type { MediaStorePort } from './ports/media-store.js';
+import type { TranscriberStorePort } from './ports/transcriber-store.js';
+import type { TranscriptStorePort } from './ports/transcript-store.js';
 
 /** The media library's adapters and the worker token (ADR 0022). */
 export interface MediaDeps {
@@ -18,8 +22,14 @@ export interface MediaDeps {
   readonly listening: ListeningStorePort;
   /** Each person's bookmarks (KBC-042). */
   readonly bookmarks: BookmarkStorePort;
+  /** Transcripts and the term list (KBC-036). */
+  readonly transcripts: TranscriptStorePort;
+  /** Paired transcribers (KBC-036). */
+  readonly transcribers: TranscriberStorePort;
   readonly files: MediaFilesPort;
   readonly workerToken: string;
+  /** Keys the transcriber token hashes (KB_CHAT_SECRETS_KEY, ADR 0017). */
+  readonly tokenKey: Buffer;
   /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
   readonly createPerMinute: number;
 }
@@ -30,6 +40,7 @@ export interface MediaDeps {
  */
 export async function createMedia(
   config: AppConfig,
+  secrets: { readonly tokenKey: Buffer },
 ): Promise<MediaDeps | undefined> {
   if (!config.KB_CHAT_MEDIA) return undefined;
   const dir = config.KB_CHAT_MEDIA_DIR;
@@ -47,6 +58,7 @@ export async function createMedia(
     ...openStores(dir),
     files,
     workerToken,
+    tokenKey: secrets.tokenKey,
     createPerMinute: config.MEDIA_CREATE_RATE_LIMIT,
   };
 }
@@ -54,13 +66,18 @@ export async function createMedia(
 /** The queue, each person's listening and bookmarks share one database (ADR 0022). */
 function openStores(
   dir: string,
-): Pick<MediaDeps, 'store' | 'listening' | 'bookmarks'> {
+): Pick<
+  MediaDeps,
+  'store' | 'listening' | 'bookmarks' | 'transcripts' | 'transcribers'
+> {
   try {
     const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
     return {
       store: new SqliteMediaStore(db),
       listening: new SqliteListeningStore(db),
       bookmarks: new SqliteBookmarkStore(db),
+      transcripts: new SqliteTranscriptStore(db),
+      transcribers: new SqliteTranscriberStore(db),
     };
   } catch (err) {
     throw new Error(

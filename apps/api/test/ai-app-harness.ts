@@ -259,7 +259,7 @@ export async function start(options: StartOptions = {}): Promise<Started> {
   const core = await buildCore(config, logger);
   const auth = testAuth(state, keys);
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
-  const media = await createMedia(config);
+  const media = await createMedia(config, { tokenKey: randomBytes(32) });
   current = await buildApp({ config, ...core, ai, auth, house, logger, media });
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
   if (options.claude || options.codexHome)

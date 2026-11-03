@@ -65,6 +65,45 @@ export const MEDIA_FAILURES = [
 export const mediaFailureSchema = z.enum(MEDIA_FAILURES);
 export type MediaFailure = z.infer<typeof mediaFailureSchema>;
 
+/* ---------- Transcription (KBC-036, ADR 0023) ---------- */
+
+/** `low`: searchable and playable, always with the notice (BR-5). */
+export const TRANSCRIPT_CONFIDENCES = ['normal', 'low'] as const;
+export const transcriptConfidenceSchema = z.enum(TRANSCRIPT_CONFIDENCES);
+export type TranscriptConfidence = z.infer<typeof transcriptConfidenceSchema>;
+
+/**
+ * Where a media item's transcription is: not asked yet (not converted), waiting for a
+ * transcriber, being transcribed, done (the newest version is current) or given up.
+ */
+export const TRANSCRIPTION_STATUSES = [
+  'none',
+  'waiting',
+  'transcribing',
+  'done',
+  'failed',
+] as const;
+export const transcriptionStatusSchema = z.enum(TRANSCRIPTION_STATUSES);
+export type TranscriptionStatus = z.infer<typeof transcriptionStatusSchema>;
+
+/** Whether a transcriber can pick the job up: seen in the last hour, not, or none paired. */
+export const TRANSCRIBER_PRESENCES = ['on', 'off', 'none'] as const;
+export const transcriberPresenceSchema = z.enum(TRANSCRIBER_PRESENCES);
+export type TranscriberPresence = z.infer<typeof transcriberPresenceSchema>;
+
+export const mediaTranscriptionSchema = z.object({
+  status: transcriptionStatusSchema,
+  /** The current version's; null before the first transcript. */
+  confidence: transcriptConfidenceSchema.nullable(),
+  /** The current version (1, 2, …); null before the first transcript. */
+  version: z.number().int().min(1).nullable(),
+  /** While waiting: is a transcriber on (FR-1)? */
+  transcriber: transcriberPresenceSchema,
+  /** With `off`: the last time one was seen (or paired, if never seen). */
+  transcriberOffSince: z.iso.datetime().nullable(),
+});
+export type MediaTranscription = z.infer<typeof mediaTranscriptionSchema>;
+
 export const mediaItemSchema = z.object({
   id: mediaIdSchema,
   topic: topicSlugSchema,
@@ -90,6 +129,8 @@ export const mediaItemSchema = z.object({
    * browser's unsent copy is used only if no other device saved one since (FR-3).
    */
   positionUpdatedAt: z.iso.datetime().nullable(),
+  /** Where its automatic transcription is (KBC-036). */
+  transcription: mediaTranscriptionSchema,
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
@@ -222,7 +263,8 @@ export function hasAcceptedAudioExtension(fileName: string): boolean {
 
 /* ---------- The media worker protocol (ADR 0022 §3) ---------- */
 
-export const MEDIA_JOB_KINDS = ['transcode'] as const;
+/** Converting for the browser (VM worker) and transcribing (a paired transcriber, ADR 0023). */
+export const MEDIA_JOB_KINDS = ['transcode', 'transcribe'] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;
 
@@ -241,11 +283,13 @@ export type LeaseRequest = z.infer<typeof leaseRequestSchema>;
 export const workerJobSchema = z.object({
   id: mediaJobIdSchema,
   leaseId: z.uuid(),
-  kind: mediaJobKindSchema,
+  kind: z.literal('transcode'),
   mediaId: mediaIdSchema,
   attempt: z.number().int().min(1),
   sourcePath: z.string().min(1),
   targetPath: z.string().min(1),
+  /** Where the 16 kHz mono FLAC for the transcriber goes (ADR 0022 §4); absent from older APIs. */
+  flacTargetPath: z.string().min(1).optional(),
   leaseMs: z.number().int().min(1),
 });
 export type WorkerJob = z.infer<typeof workerJobSchema>;
@@ -263,6 +307,11 @@ export type HeartbeatRequest = z.infer<typeof heartbeatRequestSchema>;
 export const completeTranscodeRequestSchema = leaseOwnerSchema.extend({
   durationMs: z.number().int().min(0),
   bytes: z.number().int().min(1),
+  /**
+   * Bytes of the 16 kHz mono FLAC made in the same run for the transcriber (ADR 0022 §4),
+   * at the work path with `.flac`; absent from a worker that made none.
+   */
+  flacBytes: z.number().int().min(1).optional(),
 });
 export type CompleteTranscodeRequest = z.infer<
   typeof completeTranscodeRequestSchema
@@ -275,3 +324,157 @@ export const failJobRequestSchema = leaseOwnerSchema.extend({
   detail: z.string().max(2_000),
 });
 export type FailJobRequest = z.infer<typeof failJobRequestSchema>;
+
+/**
+ * A leased transcode job: the paths are relative to the shared media directory (the VM
+ * worker). A transcribe job (below) is fetched over HTTP instead.
+ */
+export const transcribeJobSchema = z.object({
+  id: mediaJobIdSchema,
+  leaseId: z.uuid(),
+  kind: z.literal('transcribe'),
+  mediaId: mediaIdSchema,
+  attempt: z.number().int().min(1),
+  leaseMs: z.number().int().min(1),
+  /** Known once converted; null for an item converted before durations were kept. */
+  durationMs: z.number().int().min(0).nullable(),
+  /** GET it (with `?leaseId=`) for the job's 16 kHz mono FLAC (or the audio rendition). */
+  audioPath: z.string().min(1),
+});
+export type TranscribeJob = z.infer<typeof transcribeJobSchema>;
+
+/** POST …/jobs/lease answers one of the two, by the kinds the token may lease. */
+export const leasedJobSchema = z.union([workerJobSchema, transcribeJobSchema]);
+export type LeasedWorkerJob = z.infer<typeof leasedJobSchema>;
+
+/** A transcriber is "on" when seen within this window (FR-1: the last hour). */
+export const TRANSCRIBER_ONLINE_MS = 60 * 60 * 1000;
+
+/* ---------- Transcribers: paired workers ("Transcritores", masters only) ---------- */
+
+export const transcriberIdSchema = z.uuid();
+
+export const transcriberSchema = z.object({
+  id: transcriberIdSchema,
+  name: z.string().min(1).max(60),
+  kinds: z.array(mediaJobKindSchema),
+  createdAt: z.iso.datetime(),
+  lastSeenAt: z.iso.datetime().nullable(),
+  /** Seen within TRANSCRIBER_ONLINE_MS. */
+  online: z.boolean(),
+  /** The item it holds now, if any. */
+  currentJob: z
+    .object({ mediaId: mediaIdSchema, title: z.string() })
+    .nullable(),
+});
+export type Transcriber = z.infer<typeof transcriberSchema>;
+
+export const transcriberListSchema = z.object({
+  items: z.array(transcriberSchema),
+});
+export type TranscriberList = z.infer<typeof transcriberListSchema>;
+
+/** POST /api/v1/media/transcribers: the name the Mac goes by. */
+export const pairTranscriberRequestSchema = z.strictObject({
+  name: z.string().trim().min(1).max(60),
+});
+export type PairTranscriberRequest = z.infer<
+  typeof pairTranscriberRequestSchema
+>;
+
+/** The answer to pairing: the token, shown this once and never again (BR-1). */
+export const pairedTranscriberSchema = z.object({
+  transcriber: transcriberSchema,
+  token: z.string().min(32),
+});
+export type PairedTranscriber = z.infer<typeof pairedTranscriberSchema>;
+
+/** GET /api/v1/media-worker/terms: the term list put in every chunk's prompt. */
+export const transcriptionTermsSchema = z.object({
+  version: z.number().int().min(1),
+  terms: z.array(z.string().min(1)),
+});
+export type TranscriptionTerms = z.infer<typeof transcriptionTermsSchema>;
+
+/*
+ * The raw result, as the transcriber produced it (ADR 0023 §3-4): one entry per chunk with
+ * its offset in the track, each holding whisper's own output. Unknown keys are kept: the
+ * file is stored as received and is the source of truth for every later derivation.
+ */
+const finite = z.number().refine(Number.isFinite);
+const inOrder = (span: { start: number; end: number }) =>
+  span.start <= span.end;
+const ORDER = { error: 'start must not come after end' };
+
+/** Bounds of one raw result (an hour of speech is ~10 000 words in ~150 chunks). */
+export const RAW_TRANSCRIPT_LIMITS = {
+  chunks: 20_000,
+  segmentsPerChunk: 2_000,
+  wordsPerSegment: 2_000,
+  segmentText: 10_000,
+  wordText: 200,
+} as const;
+
+export const rawWordSchema = z
+  .looseObject({
+    word: z.string().max(RAW_TRANSCRIPT_LIMITS.wordText),
+    start: finite,
+    end: finite,
+    probability: finite.nullable().optional(),
+  })
+  .refine(inOrder, ORDER);
+export const rawSegmentSchema = z
+  .looseObject({
+    start: finite,
+    end: finite,
+    text: z.string().max(RAW_TRANSCRIPT_LIMITS.segmentText),
+    avg_logprob: finite.nullable().optional(),
+    compression_ratio: finite.nullable().optional(),
+    no_speech_prob: finite.nullable().optional(),
+    temperature: finite.nullable().optional(),
+    words: z
+      .array(rawWordSchema)
+      .max(RAW_TRANSCRIPT_LIMITS.wordsPerSegment)
+      .optional(),
+  })
+  .refine(inOrder, ORDER);
+export const rawChunkSchema = z
+  .looseObject({
+    /** Seconds from the start of the track. */
+    offset: finite.min(0),
+    end: finite.min(0),
+    result: z.looseObject({
+      segments: z
+        .array(rawSegmentSchema)
+        .max(RAW_TRANSCRIPT_LIMITS.segmentsPerChunk),
+    }),
+  })
+  .refine((chunk) => chunk.offset <= chunk.end, ORDER);
+export const rawTranscriptSchema = z.looseObject({
+  chunks: z.array(rawChunkSchema).max(RAW_TRANSCRIPT_LIMITS.chunks),
+});
+export type RawTranscript = z.infer<typeof rawTranscriptSchema>;
+export type RawSegment = z.infer<typeof rawSegmentSchema>;
+
+/** POST /api/v1/media-worker/jobs/:id/transcript: the raw result of a transcribe job. */
+export const completeTranscribeRequestSchema = leaseOwnerSchema.extend({
+  provider: z.enum(['mlx-whisper']),
+  model: z.string().min(1).max(200),
+  /** The worker's parameter set (VAD, temperatures, …), versioned in one config file. */
+  parametersVersion: z.string().min(1).max(40),
+  parameters: z.record(z.string(), z.unknown()),
+  /** The term list version the prompts used (GET …/terms). */
+  termsVersion: z.number().int().min(1),
+  /** `skipped` when speech was under 40 % of the track (BR-4). */
+  vad: z.enum(['applied', 'skipped']),
+  speechRatio: z.number().min(0).max(1),
+  /** Wall time of the transcription on the worker. */
+  elapsedMs: z.number().int().min(0),
+  raw: rawTranscriptSchema,
+});
+export type CompleteTranscribeRequest = z.infer<
+  typeof completeTranscribeRequestSchema
+>;
+
+/** The largest raw result the API takes (an hour of speech is a few MB). */
+export const MAX_RAW_TRANSCRIPT_BYTES = 64 * 1024 * 1024;

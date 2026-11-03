@@ -6,6 +6,7 @@ import {
   DestroyRef,
   ElementRef,
   Injector,
+  LOCALE_ID,
   afterNextRender,
   computed,
   effect,
@@ -39,7 +40,12 @@ import {
   map,
   switchMap,
 } from 'rxjs';
-import { isInFlight, statusTextOf } from './media-labels.js';
+import {
+  pollEveryOf,
+  isLowConfidence,
+  statusTextOf,
+  transcriptionTextOf,
+} from './media-labels.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
@@ -83,6 +89,19 @@ export class MediaPlayerPage {
     const media = this.media();
     return media ? statusTextOf(media) : '';
   });
+  /** Where the transcription is (KBC-036); the low notice says it apart (BR-5). */
+  protected readonly transcription = computed(() => {
+    const media = this.media();
+    if (!media) return '';
+    const done = media.transcription.status === 'done';
+    return done && isLowConfidence(media)
+      ? ''
+      : transcriptionTextOf(media, this.locale);
+  });
+  protected readonly lowConfidence = computed(() => {
+    const media = this.media();
+    return media !== null && media.status === 'ready' && isLowConfidence(media);
+  });
   protected readonly duration = computed(() => {
     const ms = this.media()?.durationMs;
     return ms === null || ms === undefined ? '' : formatDuration(ms);
@@ -114,6 +133,7 @@ export class MediaPlayerPage {
       : $localize`:@@player.resume:Continuar de ${formatClock(at)}:time:`;
   });
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
   /** Opened from "Meus marcadores": plays from that bookmark (KBC-042 FR-5). */
@@ -168,14 +188,14 @@ export class MediaPlayerPage {
 
   /** "Ela aparece aqui assim que estiver pronta" (T15): the page asks again meanwhile. */
   private pollWhileConverting(): void {
-    const converting = computed(() => {
+    const every = computed(() => {
       const media = this.media();
-      return media !== null && isInFlight(media);
+      return media ? pollEveryOf([media], this.pollMs) : null;
     });
-    toObservable(converting)
+    toObservable(every)
       .pipe(
         distinctUntilChanged(),
-        switchMap((moving) => (moving ? interval(this.pollMs) : EMPTY)),
+        switchMap((ms) => (ms === null ? EMPTY : interval(ms))),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.item.reload());
