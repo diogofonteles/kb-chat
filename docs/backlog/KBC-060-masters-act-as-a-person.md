@@ -1,7 +1,7 @@
 ---
 id: KBC-060
 title: "Ver como outra pessoa: o master usa o app com a visão e os dados de alguém, com auditoria"
-status: ready
+status: done
 slice: phase-2-a
 outcome: o master reproduz em minutos o problema que uma pessoa relata e corrige a configuração dela, sem pedir prints nem a conta da pessoa
 depends_on: [KBC-010]

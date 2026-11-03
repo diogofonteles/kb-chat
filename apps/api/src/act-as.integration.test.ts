@@ -3,6 +3,7 @@ import {
   OWNER_EMAIL,
   caller,
   closeApp,
+  connectHouse,
   research,
   signIn,
   start,
@@ -338,20 +339,28 @@ describe('Acting as a person (KBC-060)', () => {
   });
 
   it('audits a research made as the person, though it answers by streaming (FR-4)', async () => {
-    const { owner, memberId } = await scene();
+    const { started, owner, memberId } = await scene();
+    // The app's AI answers Ana, so the research really opens its stream.
+    await connectHouse(started, owner);
+    await owner('PATCH', `/api/v1/people/${memberId}`, {
+      ai: { appAi: 'house', dailyResearches: 5 },
+    });
     await owner('POST', `/api/v1/people/${memberId}/act-as`, {
       reason: REASON,
     });
-    await research(owner);
+    const events = await research(owner);
+    expect(events.at(-1)?.type).toBe('done');
     await owner('DELETE', '/api/v1/act-as');
     const audit = (await owner('GET', '/api/v1/act-as/audit')).json().items;
-    expect(audit).toContainEqual(
-      expect.objectContaining({
-        kind: 'write',
-        method: 'POST',
-        route: '/api/v1/topics/:topic/research',
-      }),
-    );
+    expect(audit.map((e: { kind: string }) => e.kind)).toEqual([
+      'end',
+      'write',
+      'start',
+    ]);
+    expect(audit[1]).toMatchObject({
+      method: 'POST',
+      route: '/api/v1/topics/:topic/research',
+    });
   });
 
   it('never acts as someone who has not signed in yet: their data would move at sign-in', async () => {
