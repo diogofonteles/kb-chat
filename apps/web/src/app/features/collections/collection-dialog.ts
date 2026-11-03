@@ -1,3 +1,4 @@
+import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -12,21 +13,27 @@ import {
 import {
   TOPIC_DESCRIPTION_MAX,
   TOPIC_TITLE_MAX,
+  authorListSchema,
   topicSlugOf,
   type Topic,
+  type TopicUpdate,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { KbApi } from '@core/api/kb-api.js';
+import { authorsUrl } from '@core/media/authors-api.js';
 import type { Observable } from 'rxjs';
 
 /** No parent: a top-level collection. */
 const TOP_LEVEL = '';
+/** No main author ("Nenhum"). */
+const NO_AUTHOR = '';
 
 /**
  * "Novo acervo" and "Editar acervo" (KBC-048 FR-6, FR-2): name, short description and, when
  * creating, the collection it goes in (top level only, BR-2); the address it gets is shown
- * before creating and never changes (BR-4). Esc and "Cancelar" close it, and the browser gives
- * the focus back to the button that opened it.
+ * before creating and never changes (BR-4). Editing a top-level collection also chooses its
+ * main author among its authors (KBC-049 FR-2); a sub-collection uses its parent's. Esc and
+ * "Cancelar" close it, and the browser gives the focus back to the button that opened it.
  */
 @Component({
   selector: 'app-collection-dialog',
@@ -92,6 +99,46 @@ const TOP_LEVEL = '';
             (input)="description.set(descriptionInput.value)"
           ></textarea>
         </label>
+        @if (choosesMainAuthor()) {
+          <label class="field" for="collection-main-author">
+            <span i18n="@@collection.mainAuthor">Autor principal</span>
+            <select
+              #mainAuthorSelect
+              id="collection-main-author"
+              aria-describedby="collection-main-author-hint"
+              (change)="mainAuthor.set(mainAuthorSelect.value)"
+            >
+              <option
+                [value]="noAuthor"
+                [selected]="mainAuthor() === noAuthor"
+                i18n="@@collection.noMainAuthor"
+              >
+                Nenhum
+              </option>
+              @for (author of authors(); track author.slug) {
+                <option
+                  [value]="author.slug"
+                  [selected]="mainAuthor() === author.slug"
+                >
+                  {{ author.name }}
+                </option>
+              }
+            </select>
+          </label>
+          <p id="collection-main-author-hint" class="hint">
+            @if (authors().length === 0 && authorList.hasValue()) {
+              <ng-container i18n="@@collection.noAuthorsYet"
+                >Este acervo ainda não tem autores: eles são cadastrados ao
+                enviar um áudio.</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@collection.mainAuthorHint"
+                >Aparece com ✦ nos selos e filtros, e a IA nunca atribui a ele o
+                que é de outros autores.</ng-container
+              >
+            }
+          </p>
+        }
         @if (!editing()) {
           <label class="field" for="collection-parent">
             <span i18n="@@collection.parent">Dentro de</span>
@@ -168,6 +215,9 @@ export class CollectionDialog {
   protected readonly titleMax = TOPIC_TITLE_MAX;
   protected readonly descriptionMax = TOPIC_DESCRIPTION_MAX;
   protected readonly topLevel = TOP_LEVEL;
+  protected readonly noAuthor = NO_AUTHOR;
+  /** The main author chosen in the dialog (its id), or "" for none. */
+  protected readonly mainAuthor = signal(NO_AUTHOR);
   protected readonly editing = signal<Topic | null>(null);
   protected readonly name = signal('');
   protected readonly description = signal('');
@@ -185,6 +235,23 @@ export class CollectionDialog {
       (topic) =>
         topic.parent === null && topic.canOpen && !topic.slug.includes('/'),
     ),
+  );
+
+  /** Only a top-level collection chooses its main author (KBC-049 BR-1). */
+  protected readonly choosesMainAuthor = computed(
+    () => this.editing()?.parent === null,
+  );
+  protected readonly authorList = httpResource(
+    () => {
+      const current = this.editing();
+      return current && this.choosesMainAuthor()
+        ? authorsUrl(current.slug)
+        : undefined;
+    },
+    { parse: (body) => authorListSchema.parse(body) },
+  );
+  protected readonly authors = computed(() =>
+    this.authorList.hasValue() ? this.authorList.value().items : [],
   );
 
   /** The address the collection gets (or keeps, when editing). */
@@ -209,6 +276,7 @@ export class CollectionDialog {
     this.reset(topic);
     this.name.set(topic.title);
     this.description.set(topic.description);
+    this.mainAuthor.set(topic.mainAuthor?.slug ?? NO_AUTHOR);
     this.show();
   }
 
@@ -247,9 +315,20 @@ export class CollectionDialog {
     const description = this.description().trim();
     const current = this.editing();
     if (current)
-      return this.api.renameTopic(current.slug, { title, description });
+      return this.api.renameTopic(current.slug, this.changes(current, title));
     const parent = this.parent() === TOP_LEVEL ? null : this.parent();
     return this.api.createTopic({ title, description, parent });
+  }
+
+  /** The names, and the main author only when it changed (KBC-049 FR-2). */
+  private changes(current: Topic, title: string): TopicUpdate {
+    const description = this.description().trim();
+    const chosen = this.mainAuthor() || null;
+    const changed =
+      this.choosesMainAuthor() && chosen !== (current.mainAuthor?.slug ?? null);
+    return changed
+      ? { title, description, mainAuthor: chosen }
+      : { title, description };
   }
 
   private reset(editing: Topic | null): void {
@@ -257,6 +336,7 @@ export class CollectionDialog {
     this.name.set('');
     this.description.set('');
     this.parent.set(TOP_LEVEL);
+    this.mainAuthor.set(NO_AUTHOR);
     this.invalid.set(false);
     this.failure.set(null);
     this.busy.set(false);
