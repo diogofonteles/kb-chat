@@ -204,7 +204,9 @@ export class LibraryPage {
   /** "42 mídias · 31 h", read aloud at each change (aria-live, AC-14). */
   protected readonly countText = computed(() => {
     const page = this.lastPage();
-    return page ? countTextOf(page.total, page.totalDurationMs) : '';
+    return page && !this.libraryEmpty()
+      ? countTextOf(page.total, page.totalDurationMs)
+      : '';
   });
   /** Nothing at all in the library (not a filter's doing). */
   protected readonly libraryEmpty = computed(

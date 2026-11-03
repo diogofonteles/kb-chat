@@ -28,32 +28,34 @@
     </div>
   </header>
 
-  <div class="search">
-    <label class="label" for="library-search" i18n="@@library.search"
-      >Buscar na biblioteca</label
-    >
-    <div class="search-box">
-      <input
-        id="library-search"
-        type="search"
-        autocomplete="off"
-        maxlength="200"
-        [value]="query()"
-        (input)="search($event)"
-      />
-      @if (query()) {
-        <button
-          type="button"
-          class="clear-search"
-          aria-label="Limpar busca"
-          i18n-aria-label="@@library.clearSearch"
-          (click)="clearSearch()"
-        >
-          <span aria-hidden="true">✕</span>
-        </button>
-      }
+  @if (!libraryEmpty()) {
+    <div class="search">
+      <label class="label" for="library-search" i18n="@@library.search"
+        >Buscar na biblioteca</label
+      >
+      <div class="search-box">
+        <input
+          id="library-search"
+          type="search"
+          autocomplete="off"
+          maxlength="200"
+          [value]="query()"
+          (input)="search($event)"
+        />
+        @if (query()) {
+          <button
+            type="button"
+            class="clear-search"
+            aria-label="Limpar busca"
+            i18n-aria-label="@@library.clearSearch"
+            (click)="clearSearch()"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        }
+      </div>
     </div>
-  </div>
+  }
 
   @if (actionError()) {
     <p class="error" role="alert">
