@@ -104,6 +104,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.notWhileActing:Isto só a própria pessoa pode fazer.`,
   TOPIC_EXISTS: () =>
     $localize`:@@error.topicExists:Já existe um acervo com esse nome.`,
+  MEDIA_SPEND_CAP: () =>
+    $localize`:@@error.mediaSpendCap:O limite de gasto da mídia foi atingido; a análise não rodou.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

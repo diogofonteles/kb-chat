@@ -36,6 +36,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   NOT_WHILE_ACTING: 403,
   VIEW_CHANGED: 409,
   TOPIC_EXISTS: 409,
+  MEDIA_SPEND_CAP: 429,
   INTERNAL: 500,
 };
 

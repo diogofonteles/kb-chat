@@ -47,6 +47,8 @@ export const API_ERROR_CODES = [
   'VIEW_CHANGED',
   /** A collection with that slug (the name without accents) already exists (KBC-048). */
   'TOPIC_EXISTS',
+  /** A media AI run would cross its own cap or the media monthly budget (KBC-067 BR-3). */
+  'MEDIA_SPEND_CAP',
   'INTERNAL',
 ] as const;
 

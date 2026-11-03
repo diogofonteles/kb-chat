@@ -12,4 +12,6 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
   'media-upload': () => $localize`:@@feature.mediaUpload:Enviar áudios`,
   'collection-create': () =>
     $localize`:@@feature.collectionCreate:Criar acervos`,
+  'media-edit': () => $localize`:@@feature.mediaEdit:Editar áudios`,
+  'media-edit-ai': () => $localize`:@@feature.mediaEditAi:Propor faixas com IA`,
 };
