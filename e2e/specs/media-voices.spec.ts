@@ -135,6 +135,19 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
       voicesBlock(page).getByRole('button', { name: 'Separar vozes de novo' }),
     ).toBeVisible();
     expect(await seriousViolations(page, 'app-voices-panel')).toEqual([]);
+    // The transcript beside the player labels each change of voice (FR-5).
+    const transcript = page.getByRole('list', {
+      name: 'Trechos da transcrição',
+    });
+    await expect(transcript.getByText(/^Voz \d+$/)).toHaveText([
+      'Voz 1',
+      'Voz 2',
+      'Voz 1',
+      'Voz 2',
+      'Voz 3',
+      'Voz 2',
+    ]);
+    expect(await seriousViolations(page, 'app-transcript-panel')).toEqual([]);
   });
 }
 
@@ -186,6 +199,16 @@ test('AC-2: a person who only listens sees no voices and the API refuses them', 
 }) => {
   const owner = await ownerApi();
   const media = await transcribedAudio(owner);
+  const asked = await owner.post(`/api/v1/media/${media.id}/diarize`, {
+    data: {},
+    headers: CSRF,
+  });
+  expect(asked.status()).toBe(202);
+  const separated = await owner.post(`/api/e2e/media/${media.id}/diarization`, {
+    data: { turns: TURNS },
+    headers: CSRF,
+  });
+  expect(separated.status(), await separated.text()).toBe(204);
   const email = uniqueEmail('ouvinte-vozes');
   await invite(owner, email, { topics: ['hermetismo'], features: ['media'] });
   await owner.dispose();
@@ -198,11 +221,21 @@ test('AC-2: a person who only listens sees no voices and the API refuses them', 
   await expect(page.getByRole('button', { name: /Separar vozes/ })).toHaveCount(
     0,
   );
-  const asked = await page.request.post(`/api/v1/media/${media.id}/diarize`, {
+  // The transcript is there, with no voice labels, and its body carries no voices.
+  await expect(
+    page.getByText('Mestre, o senhor está lembrado daquele dia?'),
+  ).toBeVisible();
+  await expect(page.getByText(/^Voz \d+$/)).toHaveCount(0);
+  const transcript = await page.request.get(
+    `/api/v1/media/${media.id}/transcript`,
+  );
+  expect(transcript.status()).toBe(200);
+  expect(await transcript.json()).not.toHaveProperty('speakers');
+  const refused = await page.request.post(`/api/v1/media/${media.id}/diarize`, {
     data: {},
     headers: CSRF,
   });
-  expect(asked.status()).toBe(403);
+  expect(refused.status()).toBe(403);
   const read = await page.request.get(`/api/v1/media/${media.id}/speakers`);
   expect(read.status()).toBe(403);
   await page.context().close();
