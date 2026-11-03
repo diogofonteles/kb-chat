@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mediaIdSchema } from './media.js';
 import { searchModeSchema } from './search.js';
 
 /** Start-screen suggestions: the largest subjects of a collection (KBC-006 BR-1). */
@@ -46,6 +47,15 @@ export const usageEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('open_doc'),
     /** 1-based place among the results; null when opened from an AI citation or a copy. */
+    position: z.number().int().positive().nullable(),
+  }),
+  /** A spoken passage opened from the results (KBC-039 FR-4): phase 2's main metric. */
+  z.object({
+    type: z.literal('media_hit_opened'),
+    mediaId: mediaIdSchema,
+    /** The passage's start (the player opens 2 s before). */
+    startMs: z.number().int().nonnegative(),
+    /** 1-based place among the results shown (texts and passages together). */
     position: z.number().int().positive().nullable(),
   }),
   z.object({ type: z.literal('ai_answer'), usd: z.number().nonnegative() }),
