@@ -13,6 +13,7 @@ import {
   type LibraryFilters,
   type LibrarySort,
   type LibraryView,
+  type ListeningState,
   type Topic,
 } from '@kb-chat/contracts';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
@@ -33,9 +34,8 @@ interface Chip<T> {
 }
 
 /**
- * "Todas"'s controls (screens.md T16, SL-13/15/16; audio only, video comes later): combinable
- * chips with aria-pressed, the
- * Autoria and Acervo choices, "Limpar filtros", the order (APG menu button) and the list or
+ * "Todas"'s controls (screens.md T16, SL-13/15/16; audio only, video comes later): the
+ * state chips with aria-pressed, the Autoria and Acervo choices, "Limpar filtros", the order (APG menu button) and the list or
  * grid view. A chip with nothing behind it is not shown, unless it is on.
  */
 @Component({
@@ -56,7 +56,7 @@ export class LibraryControls {
   readonly sortChange = output<LibrarySort>();
   readonly viewChange = output<LibraryView>();
 
-  protected readonly stateChips = computed(() => {
+  protected readonly stateChips = computed<Chip<ListeningState>[]>(() => {
     const { states } = this.filters();
     return LISTENING_STATES.filter(
       (value) => this.facets().states.includes(value) || states.includes(value),
