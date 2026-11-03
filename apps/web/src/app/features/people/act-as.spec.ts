@@ -83,21 +83,15 @@ describe('Ver como outra pessoa (KBC-060)', () => {
   it('offers "Ver como" on a member only, never on the owner or a master (BR-2)', async () => {
     const { fixture } = await renderPanel();
     await open(/Ana Souza/, fixture);
-    expect(
-      screen.getByRole('button', { name: 'Ver como', exact: true }),
-    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Ver como$/ })).toBeTruthy();
     await open(/Bruno/, fixture);
-    expect(
-      screen.queryByRole('button', { name: 'Ver como', exact: true }),
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Ver como$/ })).toBeNull();
   });
 
   it('asks for a reason, then starts and reloads the app as the person (FR-1, AC-9)', async () => {
     const { fixture, http, restart } = await renderPanel();
     await open(/Ana Souza/, fixture);
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Ver como', exact: true }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /^Ver como$/ }));
     await fixture.whenStable();
     const dialog = screen.getByRole('dialog', { name: 'Ver como Ana Souza' });
     const start = within(dialog).getByRole('button', {
@@ -130,9 +124,7 @@ describe('Ver como outra pessoa (KBC-060)', () => {
   it('says why it could not start, and stays', async () => {
     const { fixture, http, restart } = await renderPanel();
     await open(/Ana Souza/, fixture);
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Ver como', exact: true }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /^Ver como$/ }));
     await fixture.whenStable();
     const dialog = screen.getByRole('dialog', { name: 'Ver como Ana Souza' });
     const reason = within(dialog).getByRole('textbox', { name: 'Motivo' });
@@ -169,9 +161,7 @@ describe('Ver como outra pessoa (KBC-060)', () => {
       aMe({ role: 'master', email: 'bruno@example.com', canActAs: false }),
     );
     await open(/Ana Souza/, fixture);
-    expect(
-      screen.queryByRole('button', { name: 'Ver como', exact: true }),
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Ver como$/ })).toBeNull();
     await open(/Bruno/, fixture);
     expect(
       screen.queryByRole('checkbox', { name: 'Pode ver como outra pessoa' }),
