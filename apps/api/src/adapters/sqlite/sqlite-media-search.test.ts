@@ -272,6 +272,23 @@ describe('SqliteMediaSearch', () => {
     expect(found.total).toBe(1_000);
   });
 
+  it('counts each authorship group with its own limit (2,500 by the main author + 50)', () => {
+    const mainOf = new Map<string, string | null>([['udv', 'mestre-gabriel']]);
+    const gabriel = aMedia({ author: 'mestre-gabriel' });
+    transcribe(
+      gabriel,
+      Array.from({ length: 2_500 }, (_, i) => segment(i * 10, 'Vegetal.')),
+    );
+    const other = aMedia({ author: 'outro' });
+    transcribe(
+      other,
+      Array.from({ length: 50 }, (_, i) => segment(i * 10, 'Vegetal.')),
+    );
+    expect(
+      search.tally({ terms: ['vegetal'], topics: ['udv'], mainOf }),
+    ).toEqual({ main: 1_000, others: 50 });
+  });
+
   it('has nothing for no words', () => {
     expect(search.search(query([]))).toEqual({ matches: [], total: 0 });
   });

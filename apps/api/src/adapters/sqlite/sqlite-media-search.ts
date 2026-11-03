@@ -60,9 +60,6 @@ const FROM_MATCHES = `FROM segments_fts f
   JOIN transcripts t ON t.id = s.transcript_id
   JOIN media m ON m.id = t.media_id`;
 
-/** Matches read to tally both groups (each shown up to MEDIA_COUNT_CAP). */
-const TALLY_CAP = 2 * MEDIA_COUNT_CAP;
-
 /** The most matches in the whole index that are ranked by relevance (NFR-1). */
 const RANKED = 10_000;
 /** Past RANKED, this many times the limit are read to put normal confidence first. */
@@ -117,6 +114,10 @@ export class SqliteMediaSearch implements MediaSearchPort {
     return { matches, total: count ? this.countWhere(where, values) : 0 };
   }
 
+  /**
+   * Each group counted with its own limit: a main author who fills the cap never hides
+   * the others' passages (and the reverse).
+   */
   tally({
     terms,
     topics,
@@ -124,23 +125,14 @@ export class SqliteMediaSearch implements MediaSearchPort {
   }: Parameters<MediaSearchPort['tally']>[0]): AuthorshipTally {
     if (terms.length === 0 || topics.length === 0)
       return { main: 0, others: 0 };
-    const mains = topics.flatMap((topic) => [topic, mainOf.get(topic) ?? null]);
-    const row = this.db
-      .prepare(
-        `SELECT count(*) AS n, coalesce(sum(a = main), 0) AS main FROM (
-           SELECT ${AUTHOR} AS a,
-             CASE m.topic ${topics.map(() => 'WHEN ? THEN ?').join(' ')} END AS main
-           ${FROM_MATCHES}
-           WHERE segments_fts MATCH ? AND m.topic IN (${placeholders(topics.length)})
-           LIMIT ?)`,
-      )
-      .get(...mains, toMatchExpression(terms), ...topics, TALLY_CAP);
-    const all = Number(row?.['n'] ?? 0);
-    const main = Number(row?.['main'] ?? 0);
-    return {
-      main: Math.min(main, MEDIA_COUNT_CAP),
-      others: Math.min(all - main, MEDIA_COUNT_CAP),
+    const countFor = (kind: 'main' | 'others'): number => {
+      const scope = scopeClause(topics, { kind, mainOf });
+      return this.countWhere(`WHERE segments_fts MATCH ? AND ${scope.sql}`, [
+        toMatchExpression(terms),
+        ...scope.values,
+      ]);
     };
+    return { main: countFor('main'), others: countFor('others') };
   }
 
   /** Matching segments, up to MEDIA_COUNT_CAP. */
