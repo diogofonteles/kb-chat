@@ -89,11 +89,10 @@ export class FilterBar {
    */
   protected readonly active = computed(() => {
     const single = selectedAuthorship(this.filters()) !== null;
-    return activeFilters(
-      this.filters(),
-      this.order(),
-      this.topicNames(),
-    ).filter((filter) => !(single && filter.key === 'authorships'));
+    return activeFilters(this.filters(), this.order(), {
+      topicNames: this.topicNames(),
+      authorships: this.labels(),
+    }).filter((filter) => !(single && filter.key === 'authorships'));
   });
   protected readonly authorships = computed(() =>
     authorshipOptions(this.facets(), this.filters(), this.labels()),

@@ -8,6 +8,7 @@ import {
   FACET_TITLES,
   facetValueLabel,
   type FacetKey,
+  type FacetNames,
 } from '@core/i18n/facet-labels.js';
 
 /** Facets in display order; depth goes last because most documents share one level (screens.md). */
@@ -65,7 +66,7 @@ function toFacetGroup(
   const option = (value: FacetValue, count: number): FacetOption => ({
     value,
     count,
-    label: facetValueLabel(key, value, topicNames),
+    label: facetValueLabel(key, value, { topicNames }),
     selected: selected.includes(value),
   });
   const counted = (
@@ -105,11 +106,11 @@ const shown = (group: FacetGroup): boolean =>
 export function activeFilters(
   filters: SearchFilters,
   order: readonly string[] = [],
-  topicNames: ReadonlyMap<string, string> = new Map(),
+  names: FacetNames = {},
 ): ActiveFilter[] {
   const active = FILTER_KEYS.flatMap((key) =>
     selectedValues(filters, key).map((value) => {
-      const label = `${FACET_TITLES[key]}: ${facetValueLabel(key, value, topicNames)}`;
+      const label = `${FACET_TITLES[key]}: ${facetValueLabel(key, value, names)}`;
       return {
         key,
         value,

@@ -242,6 +242,31 @@ describe('FilterBar authorship control (KBC-020 AC-2)', () => {
     expect(screen.queryByRole('radio', { name: /Laércio/ })).toBeNull();
   });
 
+  it('names the removable "Autoria" chips by the main author too (KBC-049)', async () => {
+    const udv = aTopic({
+      slug: 'udv',
+      title: 'UDV',
+      mainAuthor: { slug: 'mestre-gabriel', name: 'Mestre Gabriel' },
+    });
+    await render(FilterBar, {
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ChatStore, useValue: { topic: signal(udv) } },
+      ],
+      inputs: {
+        facets: FACETS,
+        filters: {
+          ...NO_FILTERS,
+          authorships: ['mestre-laercio', 'outros-autores'],
+        },
+      },
+    });
+    expect(
+      screen.getByRole('button', { name: 'Remover Autoria: Mestre Gabriel' }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Laércio/)).toBeNull();
+  });
+
   it('filters by one group at once and goes back to every group with Todos', async () => {
     const view = await renderBar();
     fireEvent.click(radio(/Mestre Laércio/));

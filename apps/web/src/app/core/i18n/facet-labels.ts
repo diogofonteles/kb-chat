@@ -105,14 +105,22 @@ export const FACET_TITLES: Record<FacetKey, string> = {
   topics: $localize`:@@facet.topics:Sub-acervo`,
 };
 
+/** How the open page names collections and authorships (KBC-048, KBC-049). */
+export interface FacetNames {
+  /** Collections by slug (their slug otherwise). */
+  readonly topicNames?: ReadonlyMap<string, string>;
+  /** The collection's authorship labels: its main author's name (KBC-049). */
+  readonly authorships?: Record<Authorship, string>;
+}
+
 /**
- * Display label of one facet value; concepts are already human names, collections are named
- * by `topicNames` (their slug otherwise).
+ * Display label of one facet value; concepts are already human names, collections and
+ * authorships are named by `names`.
  */
 export function facetValueLabel(
   key: FacetKey,
   value: string | number,
-  topicNames: ReadonlyMap<string, string> = new Map(),
+  { topicNames = new Map(), authorships = AUTHORSHIP_LABELS }: FacetNames = {},
 ): string {
   if (key === 'topics') return topicNames.get(String(value)) ?? String(value);
   if (key === 'genres') return GENRE_LABELS[value as Genre] ?? String(value);
@@ -121,6 +129,6 @@ export function facetValueLabel(
   if (key === 'relevances')
     return RELEVANCE_LABELS[value as Relevance] ?? String(value);
   if (key === 'authorships')
-    return AUTHORSHIP_LABELS[value as Authorship] ?? String(value);
+    return authorships[value as Authorship] ?? String(value);
   return String(value);
 }
