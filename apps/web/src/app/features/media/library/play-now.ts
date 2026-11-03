@@ -34,7 +34,7 @@ export class PlayNow {
         title: item.title,
         src: mediaStreamUrl(item.id),
         durationMs: item.durationMs,
-        artist: AUTHORSHIP_LABELS[item.authorship],
+        artist: item.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
       },
       at,
     );

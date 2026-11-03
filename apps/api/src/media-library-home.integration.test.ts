@@ -37,7 +37,8 @@ async function ready(
   input: {
     title: string;
     topic?: string;
-    authorship?: 'mestre-laercio' | 'outros-autores';
+    /** An author of the collection (KBC-049); none is "Outros autores". */
+    author?: 'mestre-laercio';
   },
 ): Promise<string> {
   const created = await media.owner(
@@ -45,7 +46,7 @@ async function ready(
     `/api/v1/topics/${input.topic ?? 'hermetismo'}/media`,
     aRequest({
       title: input.title,
-      authorship: input.authorship ?? 'outros-autores',
+      author: input.author ?? null,
     }),
   );
   expect(created.statusCode).toBe(201);
@@ -375,17 +376,17 @@ describe('Media library: marking (FR-3, BR-5)', () => {
 });
 
 describe('Media library: filters, search, sort and pages (FR-1, BR-6)', () => {
-  it('narrows by state and authorship together and counts (AC-6)', async () => {
+  it('narrows by state and author together and counts (AC-6)', async () => {
     const media = await startMedia();
     const mestre = [
-      await ready(media, { title: 'Mestre um', authorship: 'mestre-laercio' }),
+      await ready(media, { title: 'Mestre um', author: 'mestre-laercio' }),
       await ready(media, {
         title: 'Mestre dois',
-        authorship: 'mestre-laercio',
+        author: 'mestre-laercio',
       }),
       await ready(media, {
         title: 'Mestre três',
-        authorship: 'mestre-laercio',
+        author: 'mestre-laercio',
       }),
     ];
     const other = await ready(media, { title: 'Outro em andamento' });
@@ -400,24 +401,26 @@ describe('Media library: filters, search, sort and pages (FR-1, BR-6)', () => {
     const page = (
       await media.owner(
         'GET',
-        `${LIBRARY}?state=in-progress&authorship=mestre-laercio`,
+        `${LIBRARY}?state=in-progress&author=mestre-laercio`,
       )
     ).json();
     expect(page.total).toBe(2);
     expect(titles(page.items).sort()).toEqual(['Mestre dois', 'Mestre um']);
     expect(page.totalDurationMs).toBe(360_000);
     expect(page.facets.states).toEqual(['in-progress', 'unheard']);
-    expect(page.facets.authorships).toEqual([
-      'mestre-laercio',
-      'outros-autores',
-    ]);
+    expect(
+      page.facets.authors.map((one: { slug: string }) => one.slug),
+    ).toEqual(['mestre-laercio']);
+    expect(page.facets.otherAuthors).toBe(true);
+    const others = (await media.owner('GET', `${LIBRARY}?author=-`)).json();
+    expect(titles(others.items)).toEqual(['Outro em andamento']);
   });
 
   it('finds by title or author, without accents, and finds nothing for an absent word (AC-12)', async () => {
     const media = await startMedia();
     await ready(media, {
       title: 'Ensino do Mestre',
-      authorship: 'mestre-laercio',
+      author: 'mestre-laercio',
     });
     await ready(media, { title: 'Palestra sobre Hermes' });
     const byAuthor = (await media.owner('GET', `${LIBRARY}?q=LAÉRCIO`)).json();
@@ -473,7 +476,7 @@ describe('Media library: choices in the account (FR-5, BR-7)', () => {
       libraryView: 'grid',
       libraryFilters: {
         states: ['in-progress'],
-        authorships: [],
+        authors: [],
         topic: 'hermetismo',
       },
     });
@@ -491,7 +494,7 @@ describe('Media library: choices in the account (FR-5, BR-7)', () => {
       libraryView: 'grid',
       libraryFilters: {
         states: ['in-progress'],
-        authorships: [],
+        authors: [],
         topic: 'hermetismo',
       },
     });

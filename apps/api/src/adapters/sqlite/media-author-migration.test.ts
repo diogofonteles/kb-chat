@@ -13,7 +13,7 @@ const AUTHOR_VERSION = AUTHOR_MIGRATION.version;
 const BEFORE_AUTHORS = MEDIA_MIGRATIONS.filter(
   (one) => one.version < AUTHOR_VERSION,
 );
-/** Up to this migration: later ones (KBC-064's diarization) are not what it proves. */
+/** Up to this migration: later ones (the library, diarization) are not what it proves. */
 const THROUGH_AUTHORS = MEDIA_MIGRATIONS.filter(
   (one) => one.version <= AUTHOR_VERSION,
 );

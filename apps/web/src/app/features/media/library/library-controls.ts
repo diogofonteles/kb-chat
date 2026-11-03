@@ -8,7 +8,7 @@ import {
 import {
   LIBRARY_SORTS,
   LISTENING_STATES,
-  MEDIA_AUTHORSHIPS,
+  NO_AUTHOR,
   type LibraryFacets,
   type LibraryFilters,
   type LibrarySort,
@@ -16,7 +16,6 @@ import {
   type ListeningState,
   type Topic,
 } from '@kb-chat/contracts';
-import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { treeTitle } from '@core/topics/topic-tree.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import {
@@ -66,17 +65,31 @@ export class LibraryControls {
       pressed: states.includes(value),
     }));
   });
-  protected readonly authorships = computed(() =>
-    MEDIA_AUTHORSHIPS.filter((value) =>
-      this.facets().authorships.includes(value),
-    ).map((value) => ({ value, label: AUTHORSHIP_LABELS[value] })),
-  );
+  /** The authors with media (KBC-049): the main one first, then "Outros autores". */
+  protected readonly authors = computed(() => {
+    const { authors, otherAuthors } = this.facets();
+    const named = authors.map((author) => ({
+      value: author.slug,
+      // A native option reads its symbols aloud: the text says it instead of ✦.
+      label: author.main
+        ? $localize`:@@media.authorFilter.main:${author.name}:name:, principal`
+        : author.name,
+    }));
+    return otherAuthors
+      ? [
+          ...named,
+          {
+            value: NO_AUTHOR,
+            label: $localize`:@@authorship.others:Outros autores`,
+          },
+        ]
+      : named;
+  });
   protected readonly showAuthorship = computed(
-    () =>
-      this.authorships().length > 1 || this.filters().authorships.length > 0,
+    () => this.authors().length > 1 || this.filters().authors.length > 0,
   );
   protected readonly authorship = computed(
-    () => this.filters().authorships[0] ?? '',
+    () => this.filters().authors[0] ?? '',
   );
   /** Collections holding media, each parent with its sub-collections (ADR 0028). */
   protected readonly topicOptions = computed(() => {
@@ -113,8 +126,8 @@ export class LibraryControls {
   protected chooseAuthorship(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) return;
-    const value = MEDIA_AUTHORSHIPS.find((one) => one === target.value);
-    this.filtersChange.emit({ kind: 'authorship', authorship: value ?? null });
+    const value = this.authors().find((one) => one.value === target.value);
+    this.filtersChange.emit({ kind: 'author', author: value?.value ?? null });
   }
 
   protected chooseTopic(event: Event): void {

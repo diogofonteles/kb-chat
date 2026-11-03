@@ -11,6 +11,13 @@ import {
   sortLibrary,
 } from './library-query.js';
 
+/** The collection's main author (KBC-049). */
+const MESTRE = {
+  slug: 'mestre-laercio',
+  name: 'Mestre Laércio',
+  main: true,
+};
+
 let next = 0;
 /** A ready, unheard audio; each call a new id and a later creation time. */
 function anItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
@@ -19,7 +26,7 @@ function anItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
     id: `00000000-0000-4000-8000-${String(next).padStart(12, '0')}`,
     topic: 'hermetismo',
     title: `Palestra ${next}`,
-    authorship: 'outros-autores',
+    author: null,
     status: 'ready',
     progress: null,
     failure: null,
@@ -45,7 +52,7 @@ function anItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
 
 const NO_FILTER = {
   states: [],
-  authorships: [],
+  authors: [],
   topics: null,
   query: '',
 } as const;
@@ -56,10 +63,10 @@ describe('normalizeText and matchesQuery', () => {
     expect(normalizeText('  Mestre   LAÉRCIO ')).toBe('mestre laercio');
   });
 
-  it('needs every word, in the title or the authorship', () => {
+  it('needs every word, in the title or the author’s name', () => {
     const item = anItem({
       title: 'Ensino de 1998',
-      authorship: 'mestre-laercio',
+      author: MESTRE,
     });
     expect(matchesQuery(item, 'laercio 1998')).toBe(true);
     expect(matchesQuery(item, 'laercio 1999')).toBe(false);
@@ -69,7 +76,7 @@ describe('normalizeText and matchesQuery', () => {
 
 describe('filterLibrary (BR-6)', () => {
   const playing = anItem({ title: 'Andando', positionMs: 5 });
-  const fresh = anItem({ title: 'Nova', authorship: 'mestre-laercio' });
+  const fresh = anItem({ title: 'Nova', author: MESTRE });
   const freshOther = anItem({ title: 'Outra nova' });
   const heard = anItem({
     title: 'Ouvida',
@@ -84,7 +91,7 @@ describe('filterLibrary (BR-6)', () => {
         filterLibrary(all, {
           ...NO_FILTER,
           states: ['unheard'],
-          authorships: ['mestre-laercio'],
+          authors: ['mestre-laercio'],
         }),
       ),
     ).toEqual(['Nova']);
@@ -112,19 +119,19 @@ describe('sortLibrary', () => {
     title: 'Beta',
     durationMs: 300,
     lastPlayedAt: '2026-11-02T00:00:00.000Z',
-    authorship: 'outros-autores',
+    author: null,
   });
   const b = anItem({
     title: 'alfa',
     durationMs: 100,
     lastPlayedAt: null,
-    authorship: 'mestre-laercio',
+    author: MESTRE,
   });
   const c = anItem({
     title: 'Ágape',
     durationMs: null,
     lastPlayedAt: '2026-11-03T00:00:00.000Z',
-    authorship: 'mestre-laercio',
+    author: MESTRE,
   });
   const items = [a, b, c];
 
@@ -175,12 +182,20 @@ describe('sortLibrary', () => {
 });
 
 describe('facetsOf (SL-16)', () => {
-  it('lists only the states, authorships and collections that exist', () => {
+  it('lists only the states, authors and collections that exist', () => {
     expect(
-      facetsOf([anItem({ topic: 'alquimia' }), anItem({ positionMs: 9 })]),
+      facetsOf([
+        anItem({ topic: 'alquimia', author: MESTRE }),
+        anItem({
+          topic: 'alquimia',
+          author: { ...MESTRE, name: 'Outro nome' },
+        }),
+        anItem({ positionMs: 9 }),
+      ]),
     ).toEqual({
       states: ['in-progress', 'unheard'],
-      authorships: ['outros-autores'],
+      authors: [MESTRE],
+      otherAuthors: true,
       topics: ['alquimia', 'hermetismo'],
     });
   });

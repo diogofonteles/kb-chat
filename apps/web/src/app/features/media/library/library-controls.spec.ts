@@ -7,7 +7,7 @@ import type { FilterChange } from './library-labels.js';
 
 const NONE: LibraryFilters = {
   states: [],
-  authorships: [],
+  authors: [],
   topic: null,
 };
 
@@ -20,7 +20,10 @@ async function renderControls(filters: LibraryFilters = NONE) {
     inputs: {
       facets: {
         states: ['unheard', 'in-progress'],
-        authorships: ['mestre-laercio', 'outros-autores'],
+        authors: [
+          { slug: 'mestre-laercio', name: 'Mestre Laércio', main: true },
+        ],
+        otherAuthors: true,
         topics: ['udv/palavra-do-mestre', 'alquimia'],
       },
       filters,
@@ -72,7 +75,7 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     expect(changes).toEqual([{ kind: 'clear' }]);
   });
 
-  it('chooses an authorship and a collection, the parent of a sub-collection included (AC-5)', async () => {
+  it('chooses an author and a collection, the parent of a sub-collection included (AC-5)', async () => {
     const { changes } = await renderControls();
     const topic = screen.getByLabelText('Acervo') as HTMLSelectElement;
     expect([...topic.options].map((option) => option.value)).toEqual([
@@ -87,7 +90,7 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     });
     expect(changes).toEqual([
       { kind: 'topic', topic: 'udv' },
-      { kind: 'authorship', authorship: 'mestre-laercio' },
+      { kind: 'author', author: 'mestre-laercio' },
     ]);
   });
 

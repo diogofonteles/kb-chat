@@ -28,7 +28,7 @@
         >
           Todas
         </option>
-        @for (option of authorships(); track option.value) {
+        @for (option of authors(); track option.value) {
           <option
             [value]="option.value"
             [selected]="option.value === authorship()"

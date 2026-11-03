@@ -1,12 +1,12 @@
 import { z } from 'zod';
+import { authorSchema } from './authors.js';
 import {
-  MEDIA_AUTHORSHIPS,
-  mediaAuthorshipSchema,
   mediaIdSchema,
   mediaItemSchema,
   mediaPreferencesSchema,
   type MediaItem,
 } from './media.js';
+import { authorSlugSchema } from './slugs.js';
 import { topicSlugSchema } from './topics.js';
 
 /**
@@ -51,13 +51,23 @@ export const LIBRARY_VIEWS = ['list', 'grid'] as const;
 export const libraryViewSchema = z.enum(LIBRARY_VIEWS);
 export type LibraryView = z.infer<typeof libraryViewSchema>;
 
+/** The "Autoria" choice for media with no author ("Outros autores", KBC-049). */
+export const NO_AUTHOR = '-';
+/** An author of a collection, or NO_AUTHOR. */
+export const libraryAuthorSchema = z.union([
+  authorSlugSchema,
+  z.literal(NO_AUTHOR),
+]);
+/** The most authors one filter names. */
+export const LIBRARY_AUTHORS_MAX = 20;
+
 /**
  * The library's filters as kept in the account (BR-7): within a group the chips add up
- * (Não ouvidas or Em andamento), across groups they narrow (Em andamento and an authorship).
+ * (Não ouvidas or Em andamento), across groups they narrow (Em andamento and an author).
  */
 export const libraryFiltersSchema = z.strictObject({
   states: z.array(listeningStateSchema).max(LISTENING_STATES.length),
-  authorships: z.array(mediaAuthorshipSchema).max(MEDIA_AUTHORSHIPS.length),
+  authors: z.array(libraryAuthorSchema).max(LIBRARY_AUTHORS_MAX),
   /** A collection, its sub-collections included (ADR 0028); null for all. */
   topic: topicSlugSchema.nullable(),
 });
@@ -65,7 +75,7 @@ export type LibraryFilters = z.infer<typeof libraryFiltersSchema>;
 
 export const NO_LIBRARY_FILTERS: LibraryFilters = {
   states: [],
-  authorships: [],
+  authors: [],
   topic: null,
 };
 
@@ -90,7 +100,7 @@ const csvOf = <T extends z.ZodType<unknown, string>>(item: T) =>
 /** GET /api/v1/media/library: the filters, the search, the order and the page. */
 export const libraryQuerySchema = z.strictObject({
   state: csvOf(listeningStateSchema).optional(),
-  authorship: csvOf(mediaAuthorshipSchema).optional(),
+  author: csvOf(libraryAuthorSchema).optional(),
   topic: topicSlugSchema.optional(),
   q: z.string().max(LIBRARY_QUERY_MAX).optional(),
   sort: librarySortSchema.optional(),
@@ -112,7 +122,10 @@ export type LibraryItem = z.infer<typeof libraryItemSchema>;
 /** What exists in the person's library, so a chip with nothing behind it is not shown. */
 export const libraryFacetsSchema = z.object({
   states: z.array(listeningStateSchema),
-  authorships: z.array(mediaAuthorshipSchema),
+  /** The authors with media in the library (KBC-049), each once. */
+  authors: z.array(authorSchema),
+  /** Some media have no author ("Outros autores"). */
+  otherAuthors: z.boolean(),
   /** The collections holding the person's media. */
   topics: z.array(topicSlugSchema),
 });

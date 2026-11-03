@@ -49,10 +49,11 @@ async function signIn(request, email) {
 const admin = await browser.newContext({ baseURL: base });
 await signIn(admin.request, 'owner@kb-chat.test');
 
-async function upload(title, seconds, authorship = 'outros-autores') {
+/** `author`: an author of hermetismo (KBC-049), or null for "Outros autores". */
+async function upload(title, seconds, author = null) {
   const body = tone(title.replace(/\W+/g, '-').slice(0, 40), seconds);
   const created = await admin.request.post('/api/v1/topics/hermetismo/media', {
-    data: { title, authorship, fileName: 'a.mp3', bytes: body.length },
+    data: { title, author, fileName: 'a.mp3', bytes: body.length },
     headers: CSRF,
   });
   const { id } = await created.json();
@@ -188,7 +189,7 @@ for (const [width, viewport] of widths) {
   await page
     .locator('button[aria-pressed="true"]', { hasText: 'Em andamento' })
     .waitFor();
-  await page.getByLabel('Autoria').selectOption('outros-autores');
+  await page.getByLabel('Autoria').selectOption('-');
   await search(page, `${tag} burracheira`);
   await page.getByText('Nenhuma mídia').waitFor();
   await shot(page, `${width}-07-search-no-result`);

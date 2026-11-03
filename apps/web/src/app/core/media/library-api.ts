@@ -35,7 +35,7 @@ export function libraryUrlOf(
   const params = new URLSearchParams();
   const lists = {
     state: filters.states,
-    authorship: filters.authorships,
+    author: filters.authors,
   };
   for (const [name, values] of Object.entries(lists))
     if (values.length > 0) params.set(name, values.join(','));

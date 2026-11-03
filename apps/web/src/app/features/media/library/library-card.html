@@ -21,7 +21,7 @@
   <span class="title" [title]="item().title">{{ item().title }}</span>
 }
 <span class="meta">
-  <app-authorship-badge [authorship]="item().authorship" />
+  <app-authorship-badge [mediaAuthor]="item().author" />
   @if (duration()) {
     <span class="duration">{{ duration() }}</span>
   }

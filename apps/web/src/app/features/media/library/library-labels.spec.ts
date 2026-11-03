@@ -83,7 +83,7 @@ describe('library labels (T16)', () => {
     expect(
       activeFiltersOf({
         states: ['heard', 'unheard'],
-        authorships: [],
+        authors: [],
         topic: 'hermetismo',
       }),
     ).toBe(3);
@@ -97,20 +97,19 @@ describe('library labels (T16)', () => {
       state: 'in-progress',
     });
     const both = applyFilterChange(pressed, {
-      kind: 'authorship',
-      authorship: 'outros-autores',
+      kind: 'author',
+      author: '-',
     });
     expect(both).toEqual({
       states: ['in-progress'],
-      authorships: ['outros-autores'],
+      authors: ['-'],
       topic: null,
     });
     expect(applyFilterChange(both, { kind: 'topic', topic: 'udv' }).topic).toBe(
       'udv',
     );
     expect(
-      applyFilterChange(both, { kind: 'authorship', authorship: null })
-        .authorships,
+      applyFilterChange(both, { kind: 'author', author: null }).authors,
     ).toEqual([]);
     expect(applyFilterChange(both, { kind: 'clear' })).toEqual(NO_FILTERS);
   });

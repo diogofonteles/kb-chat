@@ -1,5 +1,6 @@
 import {
   DEFAULT_LIBRARY_PREFERENCES,
+  type Author,
   type LibraryHome,
   type LibraryItem,
   type LibraryPage,
@@ -19,7 +20,7 @@ import {
 } from './library-query.js';
 import { nextSaveTime } from './listening-service.js';
 import type { MediaActor } from './media-service.js';
-import { toMediaItem } from './to-media-item.js';
+import { mediaAuthorOf, toMediaItem } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
 export interface LibraryServiceDeps {
@@ -28,6 +29,8 @@ export interface LibraryServiceDeps {
   /** The collection and its sub-collections (ADR 0028); default: itself. */
   readonly scopeOf?: (topic: string) => readonly string[];
   readonly presence?: () => Presence;
+  /** One author of the collection's list (KBC-049, a sub-collection uses its parent's). */
+  readonly authorOf: (topic: string, slug: string) => Author | null;
   readonly now?: () => Date;
 }
 
@@ -44,7 +47,7 @@ export class LibraryService {
     const matching = sortLibrary(
       filterLibrary(items, {
         states: query.state ?? [],
-        authorships: query.authorship ?? [],
+        authors: query.author ?? [],
         topics: this.scope(actor, query.topic),
         query: query.q ?? '',
       }),
@@ -128,7 +131,11 @@ export class LibraryService {
       .map((record) => {
         const saved = progress.get(record.id);
         return {
-          ...toMediaItem(record, actor.isMaster, { progress: saved, presence }),
+          ...toMediaItem(record, actor.isMaster, {
+            progress: saved,
+            presence,
+            author: mediaAuthorOf(record, this.deps.authorOf),
+          }),
           kind: record.kind,
           lastPlayedAt: saved?.playedAt ?? null,
         };

@@ -59,7 +59,8 @@ const aPage = (
   totalDurationMs: items.reduce((sum, item) => sum + (item.durationMs ?? 0), 0),
   facets: {
     states: ['in-progress', 'unheard'],
-    authorships: ['mestre-laercio', 'outros-autores'],
+    authors: [{ slug: 'mestre-laercio', name: 'Mestre Laércio', main: true }],
+    otherAuthors: true,
     topics: ['hermetismo'],
   },
   ...overrides,
@@ -206,13 +207,16 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(media.calls).toContain('play');
   });
 
-  it('asks again with the pressed chip and the authorship, says it in aria-pressed and announces the count (AC-6, AC-14)', async () => {
+  it('asks again with the pressed chip and the author, says it in aria-pressed and announces the count (AC-6, AC-14)', async () => {
     const { open, http, settle, tick } = await renderLibrary();
     await open(
-      aPage([anItem(1), anItem(2, { authorship: 'outros-autores' })], {
+      aPage([anItem(1), anItem(2, { author: null })], {
         facets: {
           states: ['in-progress', 'unheard'],
-          authorships: ['mestre-laercio', 'outros-autores'],
+          authors: [
+            { slug: 'mestre-laercio', name: 'Mestre Laércio', main: true },
+          ],
+          otherAuthors: true,
           topics: ['hermetismo'],
         },
       }),
@@ -229,7 +233,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     await tick();
     http
       .expectOne(
-        '/api/v1/media/library?state=in-progress&authorship=mestre-laercio&sort=recently-played',
+        '/api/v1/media/library?state=in-progress&author=mestre-laercio&sort=recently-played',
       )
       .flush(
         aPage([anItem(1, { positionMs: 5 }), anItem(4, { positionMs: 5 })]),
@@ -243,7 +247,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(saves.at(-1)?.request.body).toEqual({
       libraryFilters: {
         states: ['in-progress'],
-        authorships: ['mestre-laercio'],
+        authors: ['mestre-laercio'],
         topic: null,
       },
     });
@@ -299,7 +303,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       ...PREFERENCES,
       libraryFilters: {
         states: ['heard'],
-        authorships: [],
+        authors: [],
         topic: null,
       },
     });
@@ -312,7 +316,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
   it('tells an empty library apart for who sends and who only listens', async () => {
     const empty = aPage([], {
       total: 0,
-      facets: { states: [], authorships: [], topics: [] },
+      facets: { states: [], authors: [], otherAuthors: false, topics: [] },
     });
     const reader = await renderLibrary();
     await reader.open(empty);

@@ -92,7 +92,7 @@ describe('listeningPreferencesUpdateSchema (FR-5)', () => {
       listeningPreferencesUpdateSchema.safeParse({
         libraryFilters: {
           states: ['paused'],
-          authorships: [],
+          authors: [],
           topic: null,
         },
       }).success,

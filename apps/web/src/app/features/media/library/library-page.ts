@@ -197,7 +197,7 @@ export class LibraryPage {
     () =>
       this.lastPage()?.facets ?? {
         states: [],
-        authorships: [],
+        authors: [],
         topics: [],
       },
   );
@@ -336,7 +336,7 @@ export class LibraryPage {
   protected showInProgress(): void {
     this.changeFilters({
       states: ['in-progress'],
-      authorships: [],
+      authors: [],
       topic: null,
     });
   }

@@ -385,7 +385,7 @@ function synthetic(n: number) {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
     topic: 'hermetismo',
     title: `Palestra sintética ${String(n).padStart(4, '0')}`,
-    authorship: 'outros-autores',
+    author: null,
     status: 'ready',
     progress: null,
     failure: null,
@@ -427,7 +427,8 @@ async function serveMany(route: Route) {
       totalDurationMs: items.length * 3_600_000,
       facets: {
         states: ['in-progress', 'unheard'],
-        authorships: ['outros-autores'],
+        authors: [],
+        otherAuthors: true,
         topics: ['hermetismo'],
       },
     },

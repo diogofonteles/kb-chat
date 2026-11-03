@@ -498,16 +498,13 @@ function diarizationService(wiring: {
 /** The media library home of each person (KBC-051): all their collections at once. */
 async function registerLibrary(
   app: FastifyInstance,
-  wiring: {
-    media: MediaDeps;
-    catalog: CatalogRegistry;
-    transcribers: TranscriberService;
-  },
+  wiring: MediaWiring & { transcribers: TranscriberService },
 ) {
   const { store, listening } = wiring.media;
   const service = new LibraryService({
     store,
     listening,
+    authorOf: (topic, slug) => wiring.authors.authorOf(topic, slug),
     presence: () => wiring.transcribers.presence(),
     scopeOf: (topic) =>
       wiring.catalog.scope(topic).map((one) => one.topic.slug),

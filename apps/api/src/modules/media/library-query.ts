@@ -7,7 +7,8 @@ import {
   type LibraryItem,
   type LibrarySort,
   type ListeningState,
-  type MediaAuthorship,
+  type MediaAuthor,
+  NO_AUTHOR,
 } from '@kb-chat/contracts';
 
 /**
@@ -16,11 +17,13 @@ import {
  * each rule is tested without the app.
  */
 
-/** What "Buscar na biblioteca" matches besides the title (until KBC-049 names authors). */
-const AUTHORSHIP_WORDS: Record<MediaAuthorship, string> = {
-  'mestre-laercio': 'mestre laercio',
-  'outros-autores': 'outros autores',
-};
+/** What "Buscar na biblioteca" matches besides the title: the author's name (KBC-049). */
+const OTHER_AUTHORS_WORDS = 'outros autores';
+const authorWordsOf = (author: MediaAuthor): string =>
+  author?.name ?? OTHER_AUTHORS_WORDS;
+/** The "Autoria" value of an item: its author's id, or NO_AUTHOR. */
+const authorValueOf = (item: LibraryItem): string =>
+  item.author?.slug ?? NO_AUTHOR;
 
 /** Lower case, no accents, single spaces: "Laércio" is found by "laercio". */
 export function normalizeText(text: string): string {
@@ -34,7 +37,8 @@ export function normalizeText(text: string): string {
 
 export interface LibraryFilter {
   readonly states: readonly ListeningState[];
-  readonly authorships: readonly MediaAuthorship[];
+  /** Author ids, NO_AUTHOR for "Outros autores". */
+  readonly authors: readonly string[];
   /** The chosen collection and its sub-collections; null for every collection. */
   readonly topics: ReadonlySet<string> | null;
   readonly query: string;
@@ -47,13 +51,11 @@ const allows = <T>(chosen: readonly T[], value: T): boolean =>
 export function matchesQuery(item: LibraryItem, query: string): boolean {
   const words = normalizeText(query).split(' ').filter(Boolean);
   if (words.length === 0) return true;
-  const haystack = normalizeText(
-    `${item.title} ${AUTHORSHIP_WORDS[item.authorship]}`,
-  );
+  const haystack = normalizeText(`${item.title} ${authorWordsOf(item.author)}`);
   return words.every((word) => haystack.includes(word));
 }
 
-/** Within a group the chips add up; across groups they narrow (state and authorship). */
+/** Within a group the chips add up; across groups they narrow (state and author). */
 export function filterLibrary(
   items: readonly LibraryItem[],
   filter: LibraryFilter,
@@ -61,7 +63,7 @@ export function filterLibrary(
   return items.filter(
     (item) =>
       allows(filter.states, listeningStateOf(item)) &&
-      allows(filter.authorships, item.authorship) &&
+      allows(filter.authors, authorValueOf(item)) &&
       (filter.topics === null || filter.topics.has(item.topic)) &&
       matchesQuery(item, filter.query),
   );
@@ -90,11 +92,11 @@ const ORDERS: Record<LibrarySort, (a: LibraryItem, b: LibraryItem) => number> =
     duration: (a, b) =>
       (a.durationMs ?? Number.MAX_SAFE_INTEGER) -
         (b.durationMs ?? Number.MAX_SAFE_INTEGER) || byTitle(a, b),
+    // By name; media with no author ("Outros autores") last.
     author: (a, b) =>
-      collator.compare(
-        AUTHORSHIP_WORDS[a.authorship],
-        AUTHORSHIP_WORDS[b.authorship],
-      ) || byTitle(a, b),
+      Number(a.author === null) - Number(b.author === null) ||
+      collator.compare(authorWordsOf(a.author), authorWordsOf(b.author)) ||
+      byTitle(a, b),
   };
 
 export function sortLibrary(
@@ -104,16 +106,28 @@ export function sortLibrary(
   return [...items].sort(ORDERS[sort]);
 }
 
-/** The states, authorships and collections that exist (SL-16: no empty chip). */
+/** The states, authors and collections that exist (SL-16: no empty chip). */
 export function facetsOf(items: readonly LibraryItem[]): LibraryFacets {
   const distinct = <T>(pick: (item: LibraryItem) => T): T[] => [
     ...new Set(items.map(pick)),
   ];
   return {
     states: distinct(listeningStateOf).sort(),
-    authorships: distinct((item) => item.authorship).sort(),
+    authors: authorsOf(items),
+    otherAuthors: items.some((item) => item.author === null),
     topics: distinct((item) => item.topic).sort(),
   };
+}
+
+/** Each author once (the first name seen), the main ones first, then by name. */
+function authorsOf(items: readonly LibraryItem[]) {
+  const bySlug = new Map<string, NonNullable<MediaAuthor>>();
+  for (const { author } of items)
+    if (author && !bySlug.has(author.slug)) bySlug.set(author.slug, author);
+  return [...bySlug.values()].sort(
+    (a, b) =>
+      Number(b.main) - Number(a.main) || collator.compare(a.name, b.name),
+  );
 }
 
 export interface LibrarySlice {
