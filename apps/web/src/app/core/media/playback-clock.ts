@@ -40,8 +40,9 @@ interface Estimate {
 }
 
 /**
- * Where playback is now, smoother than `timeupdate` (every ~250 ms): while playing, the
- * last reported time moved on at the rate on every frame (ADR 0025 §4, KBC-038 NFR-1).
+ * Where playback is now, smoother than `timeupdate` (every ~250 ms, and far less often in
+ * WebKit): while playing, the element's time is read on every frame and moved on at the
+ * rate between its changes (ADR 0025 §4, KBC-038 NFR-1).
  * Frames are asked for only while playing (not waiting for data) and a view on screen
  * shows the time that finely: the transcript, or the full player's subtitles with cues.
  * Otherwise (the mini-player, no transcript) it is the media element's time.
@@ -89,7 +90,7 @@ export class PlaybackClock {
       scan(
         (last: Estimate, nowMs: number) =>
           interpolate(last.anchor, {
-            reportedMs: this.engine.playback().currentMs,
+            reportedMs: this.engine.currentMsNow(),
             nowMs,
             rate: this.engine.speed(),
           }),

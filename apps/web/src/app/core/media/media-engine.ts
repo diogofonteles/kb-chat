@@ -138,6 +138,18 @@ export class MediaEngine {
   /** The current source played at least once since it was loaded. */
   readonly hasPlayed = this.playedSinceLoad.asReadonly();
 
+  /**
+   * The media element's time right now, in ms: for views that follow playback frame by
+   * frame (the transcript, subtitles), since some browsers (WebKit) fire `timeupdate`
+   * seldom. State still comes only from the element's events.
+   */
+  currentMsNow(): number {
+    const seconds = this.element?.currentTime;
+    return seconds !== undefined && Number.isFinite(seconds)
+      ? seconds * 1000
+      : this.state().currentMs;
+  }
+
   constructor() {
     inject(DestroyRef).onDestroy(() => this.unload());
   }
