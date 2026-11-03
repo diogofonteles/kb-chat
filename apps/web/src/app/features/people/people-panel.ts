@@ -1,4 +1,9 @@
-import { DatePipe, NgTemplateOutlet, formatDate } from '@angular/common';
+import {
+  DOCUMENT,
+  DatePipe,
+  NgTemplateOutlet,
+  formatDate,
+} from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -12,6 +17,7 @@ import {
   inject,
   linkedSignal,
   signal,
+  viewChild,
   viewChildren,
 } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -41,6 +47,7 @@ import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { servingLabel } from '@features/house-ai/app-ai-labels.js';
 import { NO_LENDING, type Lending } from './lending.js';
 import { PersonEditor } from './person-editor.js';
+import { ActAsDialog } from './act-as-dialog.js';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesPanel } from './invite-profiles-panel.js';
 import { InviteProfilesStore } from './invite-profiles-store.js';
@@ -66,6 +73,7 @@ interface Outcome<T> {
   selector: 'app-people-panel',
   imports: [
     PersonEditor,
+    ActAsDialog,
     AccessRequestsList,
     AiAssignmentBar,
     InvitePresetEditor,
@@ -85,6 +93,7 @@ export class PeoplePanel {
   private readonly session = inject(SessionStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
+  private readonly document = inject(DOCUMENT);
   /** The invitation profiles (KBC-028), shared with the profiles section. */
   protected readonly profiles = inject(InviteProfilesStore);
   private readonly rows = viewChildren<ElementRef<HTMLButtonElement>>('row');
@@ -345,6 +354,39 @@ export class PeoplePanel {
     afterNextRender(() => this.resendButtons()[0]?.nativeElement.focus(), {
       injector: this.injector,
     });
+  }
+
+  /** "Ver como" (KBC-060): the owner, or a master it granted; never the owner or a master. */
+  protected mayActAs(person: Person): boolean {
+    return (
+      this.session.me()?.canActAs === true &&
+      !person.isOwner &&
+      person.role !== 'master' &&
+      // Before the first sign-in their data has no lasting owner yet.
+      person.lastLoginAt !== null
+    );
+  }
+
+  protected readonly ownerView = computed(
+    () => this.session.me()?.isOwner === true,
+  );
+  protected readonly actingTarget = signal<Person | null>(null);
+  private readonly actAsDialog = viewChild(ActAsDialog);
+  private actAsOpener: HTMLElement | null = null;
+
+  protected askActAs(person: Person): void {
+    const active = this.document.activeElement;
+    this.actAsOpener = active instanceof HTMLElement ? active : null;
+    this.actingTarget.set(person);
+    afterNextRender(() => this.actAsDialog()?.open(), {
+      injector: this.injector,
+    });
+  }
+
+  /** Esc or "Cancelar": the focus goes back to "Ver como" (NG-30). */
+  protected actAsClosed(): void {
+    this.actingTarget.set(null);
+    this.actAsOpener?.focus();
   }
 
   protected change(person: Person, patch: PersonUpdate): void {

@@ -172,6 +172,12 @@ function registerPatch(app: FastifyInstance, deps: PeopleRouteDeps) {
     },
     async (request) => {
       const { params, body } = request;
+      // "Ver como outra pessoa" is the owner's to give (KBC-060 BR-1).
+      if (body.canActAs !== undefined && !viewerOf(request).isOwner)
+        throw new AppError(
+          'FORBIDDEN',
+          'Only the owner grants acting as a person',
+        );
       assertKnownTopics(deps, body.topics);
       assertMayLend(deps, request, body.ai?.appAi);
       const by = viewerOf(request).person.email;

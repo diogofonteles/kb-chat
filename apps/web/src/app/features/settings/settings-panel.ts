@@ -23,6 +23,8 @@ import { PeoplePanel } from '@features/people/people-panel.js';
 import { HouseAiPanel } from '@features/house-ai/house-ai-panel.js';
 import { AiStatusCard } from './ai-status-card.js';
 import { PreferencesForm } from './preferences-form.js';
+import { ActAsAudit } from '@features/acting/act-as-audit.js';
+import { MyAccesses } from '@features/acting/my-accesses.js';
 import { SettingsStore, type SettingsSection } from './settings-store.js';
 
 export type { SettingsSection } from './settings-store.js';
@@ -41,6 +43,14 @@ const SECTIONS: readonly { id: SettingsSection; label: () => string }[] = [
     id: 'people',
     label: () => $localize`:@@settings.people:Pessoas e permissões`,
   },
+  {
+    id: 'audit',
+    label: () => $localize`:@@settings.audit:Auditoria do Ver como`,
+  },
+  {
+    id: 'accesses',
+    label: () => $localize`:@@settings.accesses:Acessos à sua conta`,
+  },
   { id: 'about', label: () => $localize`:@@settings.about:Sobre` },
 ];
 
@@ -55,6 +65,8 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'invalid';
     PeoplePanel,
     HouseAiPanel,
     AiStatusCard,
+    ActAsAudit,
+    MyAccesses,
   ],
   templateUrl: './settings-panel.html',
   styleUrl: './settings-panel.css',
@@ -73,7 +85,8 @@ export class SettingsPanel {
       ({ id }) =>
         (id !== 'ai' || this.store.ownAi()) &&
         (id !== 'people' || this.session.isMaster()) &&
-        (id !== 'house' || this.session.isMaster()),
+        (id !== 'house' || this.session.isMaster()) &&
+        (id !== 'audit' || this.session.me()?.canActAs === true),
     ).map(({ id, label }) => ({ id, label: label() })),
   );
   protected readonly section = linkedSignal<SettingsSection>(() => {

@@ -280,6 +280,9 @@
             [topics]="topics()"
             [busy]="busy()"
             [profiles]="profiles.list()"
+            [mayActAs]="mayActAs(person)"
+            [ownerView]="ownerView()"
+            (actAs)="askActAs(person)"
             (changed)="change(person, $event)"
             (profileApplied)="applyProfile(person, $event)"
             (revoked)="revoke(person)"
@@ -319,3 +322,7 @@
     {{ notice()?.text ?? '' }}
   </p>
 </ng-template>
+
+@if (actingTarget(); as target) {
+  <app-act-as-dialog [person]="target" (closed)="actAsClosed()" />
+}

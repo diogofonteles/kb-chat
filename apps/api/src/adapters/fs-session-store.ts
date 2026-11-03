@@ -15,6 +15,17 @@ const storedSessionSchema = z.object({
   createdAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),
   refreshedAt: z.iso.datetime(),
+  actingAs: z
+    .object({
+      id: z.uuid().optional(),
+      personId: z.string().min(1),
+      personName: z.string().optional(),
+      personEmail: z.string().optional(),
+      reason: z.string(),
+      startedAt: z.iso.datetime(),
+      endsAt: z.iso.datetime(),
+    })
+    .optional(),
 });
 
 /**

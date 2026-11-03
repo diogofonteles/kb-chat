@@ -18,7 +18,12 @@ import { createDelivery } from './delivery-factory.js';
 import { JsonPeopleStore } from './adapters/json-people-store.js';
 import { FsSessionStore } from './adapters/fs-session-store.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
-import { PeopleService, SessionService } from './modules/auth/index.js';
+import {
+  ActAsService,
+  PeopleService,
+  SessionService,
+} from './modules/auth/index.js';
+import { FsActAsAudit } from './adapters/fs-act-as-audit.js';
 import { createLogger } from './logger.js';
 import { JsonlSpendLedger } from './adapters/jsonl-spend-ledger.js';
 import { JsonlUsageLog } from './adapters/jsonl-usage-log.js';
@@ -61,15 +66,23 @@ const agent = createResearchAgent({
   budgets: budgetsFromConfig(config),
 });
 // Sign-in with Google and who may use what (KBC-010, ADR 0008).
+const people = new PeopleService({
+  store: new JsonPeopleStore(join(config.KB_CHAT_STATE_DIR, 'people.json')),
+  ownerEmail: config.KB_CHAT_OWNER_EMAIL,
+});
+const sessions = new SessionService({
+  store: new FsSessionStore(join(config.KB_CHAT_STATE_DIR, 'sessions')),
+});
 const auth = {
-  people: new PeopleService({
-    store: new JsonPeopleStore(join(config.KB_CHAT_STATE_DIR, 'people.json')),
-    ownerEmail: config.KB_CHAT_OWNER_EMAIL,
-  }),
-  sessions: new SessionService({
-    store: new FsSessionStore(join(config.KB_CHAT_STATE_DIR, 'sessions')),
-  }),
+  people,
+  sessions,
   verifier: createGoogleVerifier(config.GOOGLE_CLIENT_ID),
+  // Masters acting as a person, audited on disk (KBC-060, ADR 0027).
+  actAs: new ActAsService({
+    sessions,
+    people,
+    audit: new FsActAsAudit(join(config.KB_CHAT_STATE_DIR, 'audit')),
+  }),
 };
 // The app's own AI, configured by a master in the UI (KBC-022, ADR 0016).
 const house = await createHouseAi({

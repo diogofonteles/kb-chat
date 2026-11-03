@@ -2,9 +2,11 @@ export {
   PUBLIC,
   SIGNED_IN,
   assertFeature,
+  assertNotActing,
   canSee,
   denialOf,
   principalOf,
+  sessionOf,
   viewerOf,
   type RouteAccess,
 } from './access.js';
@@ -54,7 +56,18 @@ export {
   type Viewer,
 } from './person.js';
 export { aiOf, applyAiUpdate } from './person-ai.js';
-export { resolveViewer, type ViewerSources } from './resolve-viewer.js';
+export {
+  ACT_AS_MS,
+  AUDIT_MONTHS,
+  ActAsService,
+  type ActAsServiceDeps,
+} from './act-as-service.js';
+export { actAsRoutes } from './act-as-routes.js';
+export {
+  resolveViewer,
+  type ResolvedViewer,
+  type ViewerSources,
+} from './resolve-viewer.js';
 export { authRoutes, type AuthRouteDeps } from './routes.js';
 export {
   SESSION_TTL_MS,

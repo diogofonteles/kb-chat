@@ -28,7 +28,7 @@ export type SettingsPanel = 'settings' | 'onboarding';
 
 /** The sections of Configurações; `people` is "Pessoas e permissões" (masters, KBC-010). */
 export type SettingsSection =
-  'ai' | 'house' | 'preferences' | 'people' | 'about';
+  'ai' | 'house' | 'preferences' | 'people' | 'audit' | 'accesses' | 'about';
 
 /** How an OpenRouter round trip ended (`?openrouter=` on the way back, KBC-022). */
 export type ConnectOutcome = 'connected' | 'error';

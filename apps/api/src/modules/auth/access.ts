@@ -1,3 +1,4 @@
+import type { StoredSession } from '../../ports/session-store.js';
 import type { Feature } from '@kb-chat/contracts';
 import type { FastifyRequest } from 'fastify';
 import { AppError } from '../../app-error.js';
@@ -15,6 +16,8 @@ export type RouteAccess =
       readonly topicParam?: 'topic';
       readonly feature?: Feature;
       readonly master?: true;
+      /** Only the person may do this, never a master acting as them (KBC-060 BR-4). */
+      readonly notWhileActing?: true;
     };
 
 declare module 'fastify' {
@@ -24,6 +27,8 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** The signed-in person, set by the auth guard; null on public routes. */
     viewer: Viewer | null;
+    /** The session the request came with (KBC-060: acting lives on it). */
+    session: StoredSession | null;
   }
 }
 
@@ -46,6 +51,8 @@ export function denialOf(
   params: unknown,
 ): AppError | null {
   if (access.public) return null;
+  if (access.notWhileActing && viewer.actor)
+    return new AppError('NOT_WHILE_ACTING', 'Only the person may do this');
   if (access.topicParam) {
     const topic = topicOf(params, access.topicParam);
     if (typeof topic !== 'string' || !canSeeTopic(viewer.person, topic))
@@ -66,6 +73,18 @@ export function viewerOf(request: FastifyRequest): Viewer {
 
 export const principalOf = (request: FastifyRequest): string =>
   viewerOf(request).principal;
+
+/** Inside a route: refuses what only the person may do while a master acts as them. */
+export function assertNotActing(request: FastifyRequest): void {
+  if (viewerOf(request).actor)
+    throw new AppError('NOT_WHILE_ACTING', 'Only the person may do this');
+}
+
+/** The session of a request behind the guard. */
+export function sessionOf(request: FastifyRequest): StoredSession {
+  if (!request.session) throw new AppError('UNAUTHENTICATED', 'Sign in first');
+  return request.session;
+}
 
 /** A check inside a route whose body decides the feature (PUT /settings with `ai`). */
 export function assertFeature(request: FastifyRequest, feature: Feature): void {

@@ -1,3 +1,4 @@
+import type { StoredActing } from '../../ports/session-store.js';
 import {
   DEFAULT_PERSON_AI,
   FEATURES,
@@ -44,6 +45,8 @@ export const storedPersonSchema = z.object({
   principal: z.string().min(1).optional(),
   /** Which app AI serves the person and their limits (KBC-022); absent: the house default. */
   ai: personAiSchema.optional(),
+  /** May act as another person (KBC-060): only the owner sets it, master by master. */
+  canActAs: z.boolean().optional(),
   /** Set in the invitation (KBC-028): the person's Settings until they save their own. */
   initialPreferences: initialPreferencesSchema.optional(),
 });
@@ -61,7 +64,32 @@ export interface Viewer {
   /** Whose data: OWNER_PRINCIPAL for the owner, else the Google `sub`. */
   readonly principal: string;
   readonly isOwner: boolean;
+  /**
+   * Set while a master acts as this person (KBC-060, ADR 0027): the real signed-in account
+   * and what its session keeps. Everything else above is the person's.
+   */
+  readonly actor?: ActingActor;
 }
+
+export interface ActingActor {
+  readonly viewer: Viewer;
+  readonly acting: StoredActing;
+}
+
+/** The owner always; a master only when the owner granted it (ADR 0027). */
+export const mayActAs = (viewer: Viewer): boolean =>
+  viewer.isOwner ||
+  (isMaster(viewer.person) && viewer.person.canActAs === true);
+
+/** Neither the owner nor a master can be acted as (BR-2). */
+export const mayBeActedAs = (person: StoredPerson, isOwner: boolean): boolean =>
+  !isOwner && !isMaster(person);
+
+export const auditPersonOf = (person: StoredPerson) => ({
+  id: person.id,
+  name: person.name,
+  email: person.email,
+});
 
 export const isMaster = (person: StoredPerson): boolean =>
   person.role === 'master';
@@ -99,6 +127,20 @@ export function toMe(viewer: Viewer, scope: MeScope): Me {
     topics: visibleTopics(person, scope.topics),
     isOwner: viewer.isOwner,
     media: scope.media,
+    canActAs: !viewer.actor && mayActAs(viewer),
+    actingAs: viewer.actor
+      ? {
+          person: auditPersonOf(person),
+          actor: auditPersonOf(viewer.actor.viewer.person),
+          reason: viewer.actor.acting.reason,
+          startedAt: viewer.actor.acting.startedAt,
+          endsAt: viewer.actor.acting.endsAt,
+          remainingMs: Math.max(
+            0,
+            Date.parse(viewer.actor.acting.endsAt) - Date.now(),
+          ),
+        }
+      : null,
   };
 }
 
@@ -111,6 +153,7 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   topics: person.topics,
   features: person.features,
   isOwner,
+  canActAs: isOwner || (isMaster(person) && person.canActAs === true),
   phone: person.phone ?? null,
   invitation: person.invitation ?? null,
   invitedBy: person.invitedBy,

@@ -81,9 +81,15 @@ export class SleepTimerDialog {
   /** The running timer's choice, shown as current with ✓ (none while off). */
   protected readonly current = this.timer.choice;
 
-  /** Every way out (a choice, Fechar, Esc) gives the focus back to where it was. */
+  /**
+   * Every way out (a choice, Fechar, Esc) gives the focus back to where it was, unless it already
+   * moved on: the close event comes a task later, after the browser may have restored it itself.
+   */
   constructor() {
-    this.closed.subscribe(() => this.opener?.focus());
+    this.closed.subscribe(() => {
+      const active = this.document.activeElement;
+      if (!active || active === this.document.body) this.opener?.focus();
+    });
   }
 
   open(): void {

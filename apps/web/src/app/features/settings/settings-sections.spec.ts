@@ -55,7 +55,12 @@ describe('Configurações per permission (KBC-010)', () => {
     for (const request of http.match('/api/v1/topics')) request.flush(TOPICS);
     await fixture.whenStable();
 
-    expect(sectionNames()).toEqual(['Preferências', 'Sobre']);
+    // Everyone sees who acted as them (KBC-060 BR-7); the audit only with the grant.
+    expect(sectionNames()).toEqual([
+      'Preferências',
+      'Acessos à sua conta',
+      'Sobre',
+    ]);
     expect(
       screen.getByRole('heading', { name: 'Preferências', level: 3 }),
     ).toBeTruthy();
@@ -74,6 +79,8 @@ describe('Configurações per permission (KBC-010)', () => {
       'IA da aplicação',
       'Preferências',
       'Pessoas e permissões',
+      'Auditoria do Ver como',
+      'Acessos à sua conta',
       'Sobre',
     ]);
     expect(

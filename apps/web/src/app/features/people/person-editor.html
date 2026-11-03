@@ -110,7 +110,31 @@
   </fieldset>
 }
 
+@if (ownerView() && isMaster() && !who.isOwner) {
+  <label class="check grant">
+    <input
+      #grant
+      type="checkbox"
+      [checked]="who.canActAs"
+      [disabled]="busy()"
+      (change)="changed.emit({ canActAs: grant.checked })"
+    />
+    <span i18n="@@people.canActAs">Pode ver como outra pessoa</span>
+  </label>
+}
+
 <div class="actions">
+  @if (mayActAs()) {
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="busy()"
+      (click)="actAs.emit()"
+      i18n="@@people.actAs"
+    >
+      Ver como
+    </button>
+  }
   <button
     type="button"
     class="secondary"

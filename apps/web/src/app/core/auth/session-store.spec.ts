@@ -11,6 +11,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { aMe, anOwner } from '../../testing/session-fixtures.js';
 import { CSRF, authInterceptor } from './auth-interceptor.js';
+import { RELOAD_VIEW, VIEW } from './current-view.js';
 import { RELOAD_PAGE, SessionStore } from './session-store.js';
 
 const reload = vi.fn();
@@ -136,5 +137,75 @@ describe('authInterceptor', () => {
 
     expect(session.state().kind).toBe('signed-out');
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('says whose view the tab writes as: its own, or the person a master acts as (KBC-060)', async () => {
+    const contracts = await import('@kb-chat/contracts');
+    expect(VIEW).toEqual({
+      header: contracts.VIEW_HEADER,
+      own: contracts.OWN_VIEW,
+    });
+    const { session, http, client } = setup();
+    client.put('/api/v1/settings', {}).subscribe();
+    // Before /me answers, no view is claimed.
+    expect(
+      http.expectOne('/api/v1/settings').request.headers.has('x-kb-chat-view'),
+    ).toBe(false);
+    session.start();
+    http.expectOne('/api/v1/me').flush(anOwner());
+    client.get('/api/v1/topics').subscribe();
+    client.put('/api/v1/settings', {}).subscribe();
+    expect(
+      http.expectOne('/api/v1/topics').request.headers.has('x-kb-chat-view'),
+    ).toBe(false);
+    expect(
+      http.expectOne('/api/v1/settings').request.headers.get('x-kb-chat-view'),
+    ).toBe('self');
+  });
+
+  it('writes as the person while acting, and reloads when the server has another view', () => {
+    const reloadView = vi.fn();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: RELOAD_PAGE, useValue: vi.fn() },
+        { provide: RELOAD_VIEW, useValue: reloadView },
+      ],
+    });
+    const session = TestBed.inject(SessionStore);
+    const http = TestBed.inject(HttpTestingController);
+    const client = TestBed.inject(HttpClient);
+    session.start();
+    const ana = {
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'Ana',
+      email: 'ana@example.com',
+    };
+    http.expectOne('/api/v1/me').flush(
+      aMe({
+        actingAs: {
+          person: ana,
+          actor: {
+            ...ana,
+            id: '22222222-2222-4222-8222-222222222222',
+            email: 'owner@example.com',
+          },
+          reason: 'r',
+          startedAt: '2026-11-03T12:00:00.000Z',
+          endsAt: '2026-11-03T12:30:00.000Z',
+          remainingMs: 60_000,
+        },
+      }),
+    );
+    client.put('/api/v1/settings', {}).subscribe({ error: () => undefined });
+    const write = http.expectOne('/api/v1/settings');
+    expect(write.request.headers.get('x-kb-chat-view')).toBe(ana.id);
+    write.flush(
+      { error: { code: 'VIEW_CHANGED', message: 'x' } },
+      { status: 409, statusText: 'Conflict' },
+    );
+    expect(reloadView).toHaveBeenCalledOnce();
   });
 });
