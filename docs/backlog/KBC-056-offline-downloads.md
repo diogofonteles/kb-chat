@@ -9,6 +9,8 @@ depends_on: [KBC-051, KBC-035]
 
 # KBC-056 — Baixar para ouvir offline
 
+> **Vídeo numa versão posterior** (dono, 2026-11-03: "todo que for de vídeos será para uma versão posterior"): neste item vale só o áudio; a parte de vídeo (critérios, requisitos e testes com vídeo) passou para o [KBC-077](KBC-077-offline-video.md).
+
 ## Story
 Como quem estuda no trajeto, em viagem ou com sinal fraco, quero baixar palestras (áudio ou vídeo) no aparelho e ouvi-las sem internet, com a legenda e a transcrição, para não depender da rede.
 

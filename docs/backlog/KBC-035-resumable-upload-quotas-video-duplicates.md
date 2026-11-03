@@ -9,6 +9,8 @@ depends_on: [KBC-034]
 
 # KBC-035 — Envio retomável, vídeo, cota e arquivos repetidos
 
+> **Vídeo numa versão posterior** (dono, 2026-11-03: "todo que for de vídeos será para uma versão posterior"): neste item vale só o áudio; a parte de vídeo (critérios, requisitos e testes com vídeo) passou para o [KBC-074](KBC-074-video-upload-720p-and-player-view.md).
+
 ## Story
 Como pessoa com `media-upload`, quero enviar vários áudios ou vídeos grandes de uma vez, retomando se a conexão cair, para montar o acervo sem recomeçar envios.
 
