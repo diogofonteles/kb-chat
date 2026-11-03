@@ -11,7 +11,7 @@ import sys
 import threading
 from pathlib import Path
 
-from .secret import TokenError, load_token, save_keychain
+from .secret import CachedToken, TokenError, load_token, save_keychain
 
 CONFIG_FILE = (
     Path.home() / "Library" / "Application Support" / "nova-alexandria-transcriber" / "config.json"
@@ -32,6 +32,13 @@ def save_config(config: dict, path: Path = CONFIG_FILE) -> None:
 
 
 def pair(args: argparse.Namespace) -> int:
+    from .api import check_api_url
+
+    try:
+        api_url = check_api_url(args.api_url)
+    except ValueError as err:
+        print(str(err), file=sys.stderr)
+        return 2
     token = getpass.getpass("Cole o token: ").strip()
     if len(token) < 32:
         print("Esse não parece o token mostrado na tela Transcritores.", file=sys.stderr)
@@ -41,7 +48,7 @@ def pair(args: argparse.Namespace) -> int:
     except TokenError as err:
         print(str(err), file=sys.stderr)
         return 1
-    save_config({"api_url": args.api_url.rstrip("/"), "name": args.name or socket.gethostname()})
+    save_config({"api_url": api_url, "name": args.name or socket.gethostname()})
     print("Pareado. Rode `uv run --project tools/transcriber transcriber run` ou carregue o plist.")
     return 0
 
@@ -61,9 +68,10 @@ def run(args: argparse.Namespace) -> int:
         )
         return 2
     try:
+        api = ApiClient(api_url, CachedToken(load_token), name[:100])
         load_token()
         ffmpeg_bin()
-    except (TokenError, RuntimeError) as err:
+    except (TokenError, RuntimeError, ValueError) as err:
         print(str(err), file=sys.stderr)
         return 2
     model, count = _mlx()
@@ -71,7 +79,7 @@ def run(args: argparse.Namespace) -> int:
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stop.set())
     worker = Worker(
-        api=ApiClient(api_url, load_token, name[:100]),
+        api=api,
         model=model,
         find_speech=silero_speech,
         decode=decode_pcm16k,

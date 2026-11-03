@@ -23,8 +23,31 @@ class ApiError(Exception):
     """Any other unexpected answer (or the API unreachable)."""
 
 
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def check_api_url(url: str) -> str:
+    """The API address: HTTPS, or plain HTTP on this machine only (E2E, local validation).
+
+    The token goes in every request: over plain HTTP anyone on the way could read it.
+    """
+    parts = urllib.parse.urlsplit(url)
+    local = parts.hostname in LOCAL_HOSTS
+    secure = parts.scheme == "https" or (parts.scheme == "http" and local)
+    if secure and parts.hostname:
+        return url.rstrip("/")
+    raise ValueError(f"Endereço da API recusado: {url}. Use https:// (http:// só para localhost).")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is never followed: urllib would resend the Authorization header to it."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
 class ApiClient:
-    """Each call reads the token again, so a re-pair is picked up without a restart."""
+    """The token comes from `token` (cached by the caller); a 401 asks it to read it again."""
 
     def __init__(
         self,
@@ -33,10 +56,11 @@ class ApiClient:
         worker: str,
         timeout_s: float = 30.0,
     ) -> None:
-        self._base = base_url.rstrip("/")
+        self._base = check_api_url(base_url)
         self._token = token
         self.worker = worker
         self._timeout = timeout_s
+        self._opener = urllib.request.build_opener(_NoRedirect)
 
     def lease(self) -> dict | None:
         status, body = self._post(
@@ -62,7 +86,7 @@ class ApiClient:
         query = urllib.parse.urlencode({"leaseId": job["leaseId"]})
         request = self._build("GET", f"{job['audioPath']}?{query}")
         try:
-            with urllib.request.urlopen(request, timeout=self._timeout) as response:  # noqa: S310
+            with self._opener.open(request, timeout=self._timeout) as response:
                 kind = response.headers.get_content_type()
                 suffix = SUFFIX_BY_TYPE.get(kind, ".audio")
                 with tempfile.NamedTemporaryFile(dir=directory, suffix=suffix, delete=False) as out:
@@ -70,6 +94,7 @@ class ApiClient:
                     return Path(out.name)
         except urllib.error.HTTPError as err:
             if err.code == 401:
+                self._forget_token()
                 raise Unauthorized from err
             if err.code == 404:
                 return None
@@ -97,7 +122,13 @@ class ApiClient:
         raise ApiError(f"{action} answered {status}")
 
     def _post(self, path: str, body: dict) -> tuple[int, bytes]:
-        return self._request("POST", path, json.dumps(body).encode("utf-8"))
+        # NaN is not JSON: the API would refuse the whole result (json_safe turns it to None).
+        return self._request("POST", path, json.dumps(body, allow_nan=False).encode("utf-8"))
+
+    def _forget_token(self) -> None:
+        forget = getattr(self._token, "forget", None)
+        if forget is not None:
+            forget()
 
     def _build(self, method: str, path: str, data: bytes | None = None) -> urllib.request.Request:
         headers = {"authorization": f"Bearer {self._token()}"}
@@ -111,11 +142,14 @@ class ApiClient:
     def _request(self, method: str, path: str, data: bytes | None = None) -> tuple[int, Any]:
         request = self._build(method, path, data)
         try:
-            with urllib.request.urlopen(request, timeout=self._timeout) as response:  # noqa: S310
+            with self._opener.open(request, timeout=self._timeout) as response:
                 return response.status, response.read()
         except urllib.error.HTTPError as err:
             if err.code == 401:
+                self._forget_token()
                 raise Unauthorized from err
+            if 300 <= err.code < 400:
+                raise ApiError(f"{method} {path} was redirected: not followed") from err
             return err.code, err.read()
         except (urllib.error.URLError, TimeoutError, OSError) as err:
             raise ApiError(f"{method} {path} failed: {err}") from err

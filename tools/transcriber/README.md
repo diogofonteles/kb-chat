@@ -21,7 +21,10 @@ once. On the Mac, run the command the screen shows and paste the token when aske
 uv run --project tools/transcriber transcriber pair --api-url https://<app-origin>
 ```
 
-The token goes to the macOS Keychain (service `nova-alexandria-transcriber`), and the API URL
+The API URL must be `https://` (plain `http://` is accepted only for `localhost`), and the
+worker never follows a redirect, so the token is never sent anywhere else. The token goes to
+the macOS Keychain (service `nova-alexandria-transcriber`, written through `security -i`, so it
+is never in a process's arguments), and the API URL
 and name to `~/Library/Application Support/nova-alexandria-transcriber/config.json` (0600).
 Alternatively set `KB_CHAT_TRANSCRIBER_TOKEN_FILE` to a file with mode 0600; never keep the
 token in the repository. `KB_CHAT_API_URL` and `KB_CHAT_TRANSCRIBER_NAME` override the config.
@@ -44,7 +47,9 @@ launchctl bootout gui/$UID/com.nova-alexandria.transcriber          # stop it
 ```
 
 SIGTERM (launchctl bootout, Ctrl-C) stops between chunks without uploading; the job's lease
-expires and the API puts it back in the queue.
+expires and the API puts it back in the queue. A track transcribed whole (under 40 % speech,
+no VAD) is one call to the model, so the stop waits for it: the plist gives it 300 s
+(`ExitTimeOut`) before launchd kills it.
 
 ## Revoke
 

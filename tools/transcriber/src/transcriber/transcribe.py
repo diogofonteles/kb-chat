@@ -1,5 +1,6 @@
 """One track to its raw result: VAD chunks with the terms in every prompt (ADR 0023 §3)."""
 
+import math
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -60,8 +61,28 @@ def json_safe(value: Any) -> Any:
     if isinstance(value, np.ndarray):
         return json_safe(value.tolist())
     if isinstance(value, np.generic):
-        return value.item()
+        return json_safe(value.item())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None  # whisper can give NaN (avg_logprob); JSON has no NaN
     return value
+
+
+def ordered(result: dict) -> dict:
+    """Times in order: a word or segment that ends before it starts ends where it starts.
+
+    The API refuses `end < start`; whisper's word timestamps may cross by a few ms.
+    """
+    for segment in result.get("segments", []):
+        _order(segment)
+        for word in segment.get("words", []) or []:
+            _order(word)
+    return result
+
+
+def _order(span: dict) -> None:
+    start, end = span.get("start"), span.get("end")
+    if isinstance(start, int | float) and isinstance(end, int | float) and end < start:
+        span["end"] = start
 
 
 def transcribe_track(
@@ -93,7 +114,7 @@ def transcribe_track(
             raise Stopped
         piece = pcm[int(start * SAMPLE_RATE) : int(end * SAMPLE_RATE)]
         result = model(piece, **_options(prompt))
-        raw["chunks"].append({"offset": start, "end": end, "result": json_safe(result)})
+        raw["chunks"].append({"offset": start, "end": end, "result": ordered(json_safe(result))})
         if on_progress is not None:
             on_progress(int((index + 1) * 100 / len(chunks)))
     if stop is not None and stop.is_set():

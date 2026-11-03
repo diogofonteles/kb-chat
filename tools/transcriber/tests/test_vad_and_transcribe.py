@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from transcriber.config import PARAMETERS
-from transcriber.transcribe import Stopped, build_prompt, json_safe, transcribe_track
+from transcriber.transcribe import Stopped, build_prompt, json_safe, ordered, transcribe_track
 from transcriber.vad import merge_chunks, speech_ratio
 
 from .conftest import FakeModel
@@ -94,3 +94,24 @@ def test_cuts_the_term_list_at_whole_terms_to_fit_the_prompt():
     assert prompt == ", ".join(terms[:20]) + "."
     assert build_prompt([], count=len) == ""
     assert PARAMETERS["prompt_max_tokens"] == 224
+
+
+def test_nan_becomes_none_and_crossed_times_are_put_in_order():
+    result = json_safe(
+        {
+            "segments": [
+                {
+                    "start": 1.0,
+                    "end": 0.5,
+                    "avg_logprob": float("nan"),
+                    "compression_ratio": np.float32("inf"),
+                    "words": [{"word": " a", "start": 0.9, "end": 0.8}],
+                }
+            ]
+        }
+    )
+    (segment,) = ordered(result)["segments"]
+    assert segment["avg_logprob"] is None
+    assert segment["compression_ratio"] is None
+    assert segment["end"] == 1.0
+    assert segment["words"][0]["end"] == 0.9

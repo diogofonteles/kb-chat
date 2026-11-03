@@ -1,11 +1,12 @@
 import logging
 import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 import pytest
 
-from transcriber.api import ApiClient
+from transcriber.api import ApiClient, ApiError, Unauthorized, check_api_url
 from transcriber.audio import InvalidAudio
 from transcriber.config import PARAMETERS, PARAMETERS_VERSION
 from transcriber.worker import REVOKED, Worker
@@ -149,3 +150,79 @@ def test_audio_that_is_not_ours_is_dropped(fake_api):
 def test_an_unreachable_api_backs_off():
     api = type("Api", (), {"url": "http://127.0.0.1:9"})()
     assert worker(api).step() == "error"
+
+
+def test_an_unexpected_error_gives_the_job_back_and_the_loop_goes_on(fake_api):
+    def decode(path):
+        raise KeyError("sample_rate")
+
+    assert worker(fake_api, decode=decode).step() == "error"
+    (fail,) = fake_api.bodies("fail")
+    assert fail["failure"] == "conversion-failed"
+    assert "KeyError" in fail["detail"]
+
+
+def test_a_401_asks_the_token_source_to_read_it_again(fake_api):
+    reads = []
+
+    class Source:
+        def __call__(self):
+            return "wrong-token"
+
+        def forget(self):
+            reads.append("forget")
+
+    api = ApiClient(fake_api.url, Source(), "mac-test")
+    with pytest.raises(Unauthorized):
+        api.lease()
+    assert reads == ["forget"]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://nova.example.com",
+        "http://localhost:3000",
+        "http://127.0.0.1:3217",
+        "http://[::1]:80",
+    ],
+)
+def test_the_api_address_is_https_or_this_machine(url):
+    assert check_api_url(url) == url
+
+
+@pytest.mark.parametrize(
+    "url", ["http://nova.example.com", "http://192.168.0.10:3000", "ftp://x", "https://"]
+)
+def test_a_plain_http_address_elsewhere_is_refused(url):
+    with pytest.raises(ValueError, match="https://"):
+        check_api_url(url)
+    with pytest.raises(ValueError):
+        ApiClient(url, lambda: TOKEN, "mac-test")
+
+
+def test_a_redirect_is_not_followed_with_the_token(fake_api):
+    """A 302 elsewhere would get the Authorization header from urllib: never follow it."""
+    elsewhere = []
+
+    class Redirect(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.send_response(302)
+            self.send_header("location", f"{fake_api.url}/stolen")
+            self.send_header("content-length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        api = ApiClient(f"http://127.0.0.1:{server.server_address[1]}", lambda: TOKEN, "m")
+        with pytest.raises(ApiError, match="redirected"):
+            api.lease()
+    finally:
+        server.shutdown()
+        server.server_close()
+    elsewhere = [path for _, path, _, _ in fake_api.calls if path == "/stolen"]
+    assert elsewhere == []

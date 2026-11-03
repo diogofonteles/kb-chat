@@ -85,8 +85,10 @@ class Worker:
         except ApiError as err:
             log.warning("could not lease a job: %s", err)
             return "error"
-        if job is None:
-            return "idle"
+        return "idle" if job is None else self._run_job(job)
+
+    def _run_job(self, job: dict) -> str:
+        """Processes one job; 'job', or 'revoked'/'error' when it could not finish."""
         try:
             self.process(job)
         except (Unauthorized, TokenError) as err:
@@ -95,7 +97,19 @@ class Worker:
         except ApiError as err:
             log.warning("job %s: the API failed: %s", job["id"], err)
             return "error"
+        # One bad job must not stop the Mac's worker: it is given back, the loop goes on.
+        except Exception as err:
+            log.exception("job %s: unexpected failure", job["id"])
+            self._report_crash(job, err)
+            return "error"
         return "job"
+
+    def _report_crash(self, job: dict, err: Exception) -> None:
+        """Gives the job back as retryable; the lease would expire anyway if this fails."""
+        try:
+            self.api.fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
+        except Exception:
+            log.warning("job %s: could not report the failure", job["id"])
 
     def process(self, job: dict) -> None:
         stop = _JobStop(self.stop)

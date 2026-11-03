@@ -1,8 +1,10 @@
 """The worker token: in the macOS Keychain, or in a 0600 file. Never in the repository or a log."""
 
 import os
+import re
 import stat
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from .config import KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE
@@ -25,9 +27,9 @@ def read_token_file(path: Path) -> str:
     return token
 
 
-def read_keychain() -> str:
+def read_keychain(service: str = KEYCHAIN_SERVICE, account: str = KEYCHAIN_ACCOUNT) -> str:
     done = subprocess.run(
-        ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", KEYCHAIN_ACCOUNT, "-w"],
+        ["security", "find-generic-password", "-s", service, "-a", account, "-w"],
         capture_output=True,
         text=True,
         check=False,
@@ -40,26 +42,50 @@ def read_keychain() -> str:
     return done.stdout.strip()
 
 
-def save_keychain(token: str) -> None:
-    """Stores the token; `security -w` as the last option without a value reads it from stdin."""
+TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,200}$")
+
+
+def save_keychain(
+    token: str, service: str = KEYCHAIN_SERVICE, account: str = KEYCHAIN_ACCOUNT
+) -> None:
+    """Stores the token without a terminal and without putting it in any process's argv.
+
+    `security -i` reads its commands from stdin: the token travels in the command line it
+    reads, never in `security`'s own arguments (visible in `ps`) and never at a prompt that
+    `security add-generic-password -w` would open on the TTY.
+    """
+    if not TOKEN_PATTERN.match(token):
+        raise TokenError("Esse não parece o token mostrado na tela Transcritores.")
+    command = f"add-generic-password -U -s {service} -a {account} -w {token}\n"
     done = subprocess.run(
-        [
-            "security",
-            "add-generic-password",
-            "-U",
-            "-s",
-            KEYCHAIN_SERVICE,
-            "-a",
-            KEYCHAIN_ACCOUNT,
-            "-w",
-        ],
-        input=f"{token}\n{token}\n",
+        ["security", "-i"], input=command, capture_output=True, text=True, check=False
+    )
+    if done.returncode != 0 or done.stderr.strip():
+        raise TokenError(f"The Keychain refused the token: {done.stderr.strip()}")
+
+
+def delete_keychain(service: str, account: str = KEYCHAIN_ACCOUNT) -> None:
+    subprocess.run(
+        ["security", "delete-generic-password", "-s", service, "-a", account],
         capture_output=True,
-        text=True,
         check=False,
     )
-    if done.returncode != 0:
-        raise TokenError(f"The Keychain refused the token: {done.stderr.strip()}")
+
+
+class CachedToken:
+    """The token, read once and again only after the API refused it (a re-pair, 401)."""
+
+    def __init__(self, load: Callable[[], str]) -> None:
+        self._load = load
+        self._token: str | None = None
+
+    def __call__(self) -> str:
+        if self._token is None:
+            self._token = self._load()
+        return self._token
+
+    def forget(self) -> None:
+        self._token = None
 
 
 def load_token() -> str:
