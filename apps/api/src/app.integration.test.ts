@@ -54,8 +54,22 @@ describe('GET /api/v1/topics', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       items: [
-        { slug: 'alquimia', title: 'Alquimia Prática', documentCount: 1 },
-        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 22 },
+        {
+          slug: 'alquimia',
+          title: 'Alquimia Prática',
+          documentCount: 1,
+          parent: null,
+          description: '',
+          canOpen: true,
+        },
+        {
+          slug: 'hermetismo',
+          title: 'Hermetismo',
+          documentCount: 22,
+          parent: null,
+          description: '',
+          canOpen: true,
+        },
       ],
       defaultSlug: null,
     });

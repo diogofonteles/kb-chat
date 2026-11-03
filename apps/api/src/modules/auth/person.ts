@@ -101,9 +101,21 @@ export const effectiveFeatures = (person: StoredPerson): Feature[] =>
 export const hasFeature = (person: StoredPerson, feature: Feature): boolean =>
   isMaster(person) || person.features.includes(feature);
 
-/** Exact slug match; a master sees every collection. */
-export const canSeeTopic = (person: StoredPerson, topic: string): boolean =>
-  isMaster(person) || person.topics.includes(topic);
+/** The collection a sub-collection sits in (`udv` of `udv/palavra-do-mestre`), or null. */
+export const parentSlugOf = (topic: string): string | null => {
+  const cut = topic.lastIndexOf('/');
+  return cut < 0 ? null : topic.slice(0, cut);
+};
+
+/**
+ * The slug or the collection it sits in (access to a collection includes its
+ * sub-collections, KBC-048 BR-3); a master sees every collection.
+ */
+export function canSeeTopic(person: StoredPerson, topic: string): boolean {
+  if (isMaster(person) || person.topics.includes(topic)) return true;
+  const parent = parentSlugOf(topic);
+  return parent !== null && person.topics.includes(parent);
+}
 
 export const visibleTopics = (
   person: StoredPerson,

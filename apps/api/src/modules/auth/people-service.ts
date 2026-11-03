@@ -160,6 +160,23 @@ export class PeopleService {
     );
   }
 
+  /** Whoever creates a collection gets access to it (KBC-048 BR-5); a no-op for masters. */
+  grantTopic(id: string, topic: string, by: string): Promise<StoredPerson> {
+    const context = { by, now: this.now() };
+    return this.change((people) => {
+      const person = people.find((one) => one.id === id);
+      if (!person) throw new AppError('FORBIDDEN', 'Unknown person');
+      if (isMaster(person) || person.topics.includes(topic))
+        return { people, result: person };
+      const topics = [...person.topics, topic];
+      return rules.update(
+        people,
+        { id, patch: { topics }, context },
+        this.ownerEmail,
+      );
+    });
+  }
+
   /** One app AI for several people or for everyone (KBC-022); answers how many changed. */
   assignAi(
     request: {

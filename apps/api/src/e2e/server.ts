@@ -15,6 +15,10 @@ import { JsonSettingsStore } from '../adapters/json-settings-store.js';
 import { createAiProviders } from '../providers/create-ai-providers.js';
 import { CatalogRegistry } from '../modules/catalog/index.js';
 import {
+  CollectionRegistry,
+  CollectionsVault,
+} from '../modules/topics/index.js';
+import {
   budgetsFromConfig,
   createResearchAgent,
 } from '../research-agent-factory.js';
@@ -84,7 +88,13 @@ const config = loadConfig({
   KB_CHAT_MEDIA_WORKER_TOKEN: E2E_MEDIA_WORKER_TOKEN,
 });
 const logger = createLogger(config.LOG_LEVEL);
-const vault = new FsVaultAdapter(config.KB_VAULT);
+const collections = new CollectionRegistry(
+  new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
+);
+const vault = new CollectionsVault(
+  new FsVaultAdapter(config.KB_VAULT),
+  collections,
+);
 const index = await createSearchIndex({ config, vault, log: logger });
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
@@ -220,6 +230,7 @@ const app = await buildApp({
   usage,
   conversations,
   house,
+  collections,
 });
 identity.register(app);
 registerOutbox(app, outbox);

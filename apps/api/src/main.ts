@@ -32,6 +32,10 @@ import { JsonSettingsStore } from './adapters/json-settings-store.js';
 import { createAiProviders } from './providers/create-ai-providers.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
 import {
+  CollectionRegistry,
+  CollectionsVault,
+} from './modules/topics/index.js';
+import {
   budgetsFromConfig,
   createResearchAgent,
 } from './research-agent-factory.js';
@@ -50,7 +54,14 @@ const sealer = new SecretBox(
     hosted: isHosted(config),
   }),
 );
-const vault = new FsVaultAdapter(config.KB_VAULT);
+// The vault plus the collections created on the screen (ADR 0028); the vault stays read-only.
+const collections = new CollectionRegistry(
+  new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
+);
+const vault = new CollectionsVault(
+  new FsVaultAdapter(config.KB_VAULT),
+  collections,
+);
 const index = await createSearchIndex({ config, vault, log: logger });
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
@@ -141,6 +152,7 @@ const app = await buildApp({
   conversations,
   house,
   media,
+  collections,
 });
 
 const shutdown = async (): Promise<void> => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { topicSlugSchema } from './topics.js';
 import {
   authorshipSchema,
   depthLevelSchema,
@@ -63,6 +64,8 @@ export const documentRefSchema = z.object({
 export type DocumentRef = z.infer<typeof documentRefSchema>;
 
 export const searchHitSchema = documentFacetsSchema.extend({
+  /** The collection the document is in: a sub-collection when searching its parent. */
+  topic: topicSlugSchema,
   id: z.string(),
   title: z.string(),
   snippet: z.string(),

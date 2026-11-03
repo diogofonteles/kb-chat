@@ -45,6 +45,8 @@ export const API_ERROR_CODES = [
   'NOT_WHILE_ACTING',
   /** The tab wrote as one view (the person's or the master's) the session no longer has. */
   'VIEW_CHANGED',
+  /** A collection with that slug (the name without accents) already exists (KBC-048). */
+  'TOPIC_EXISTS',
   'INTERNAL',
 ] as const;
 
