@@ -92,6 +92,9 @@ export class SearchService {
       ...refined,
       items,
       capped: found.some((one) => one.capped),
+      // Texts only: SearchWithMedia adds the spoken passages (KBC-039).
+      media: [],
+      kinds: { text: refined.total, audio: null },
       mode,
       tookMs: Math.round(performance.now() - startedAt),
     };

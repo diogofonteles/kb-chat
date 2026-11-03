@@ -5,3 +5,10 @@ export {
   type SearchServiceDeps,
 } from './search-service.js';
 export { cleanSnippet } from './snippet.js';
+export {
+  SearchWithMedia,
+  type MediaReport,
+  type SearchContext,
+  type SearchViewer,
+  type SearchWithMediaDeps,
+} from './search-with-media.js';
