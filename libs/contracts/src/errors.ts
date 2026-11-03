@@ -43,6 +43,8 @@ export const API_ERROR_CODES = [
   'BOOKMARK_LIMIT',
   /** Only the person may do this, not a master acting as them (KBC-060). */
   'NOT_WHILE_ACTING',
+  /** The tab wrote as one view (the person's or the master's) the session no longer has. */
+  'VIEW_CHANGED',
   'INTERNAL',
 ] as const;
 

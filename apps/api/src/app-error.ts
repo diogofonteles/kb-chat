@@ -34,6 +34,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   MEDIA_CONFLICT: 409,
   BOOKMARK_LIMIT: 409,
   NOT_WHILE_ACTING: 403,
+  VIEW_CHANGED: 409,
   INTERNAL: 500,
 };
 

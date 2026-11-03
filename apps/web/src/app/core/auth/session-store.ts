@@ -17,6 +17,7 @@ import {
 import { toUiErrorCode, type UiErrorCode } from '@core/api/api-error.js';
 import { catchError, map, of, tap, type Observable } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { CurrentView, VIEW, announceViewChange } from './current-view.js';
 import { AuthApi } from './auth-api.js';
 import { SessionEvents } from './session-events.js';
 
@@ -66,6 +67,7 @@ function notInvitedDetailsOf(err: unknown): NotInvitedDetails | null {
 export class SessionStore {
   private readonly api = inject(AuthApi);
   private readonly reloadPage = inject(RELOAD_PAGE);
+  private readonly view = inject(CurrentView);
   private readonly current = signal<SessionState>({ kind: 'loading' });
 
   readonly state = this.current.asReadonly();
@@ -116,6 +118,8 @@ export class SessionStore {
   signOut(): Observable<void> {
     return this.api.signOut().pipe(
       catchError(() => of(undefined)),
+      // While acting, "Sair" brings the master back: the other tabs change view too.
+      tap(() => announceViewChange()),
       tap(() => this.end()),
     );
   }
@@ -136,8 +140,14 @@ export class SessionStore {
   }
 
   private settle(result: Me | SessionState): void {
-    this.current.set(
-      'kind' in result ? result : { kind: 'signed-in', me: result },
+    const state: SessionState =
+      'kind' in result ? result : { kind: 'signed-in', me: result };
+    this.current.set(state);
+    // Whose view this tab writes as (KBC-060 BR-3).
+    this.view.set(
+      state.kind === 'signed-in'
+        ? (state.me.actingAs?.person.id ?? VIEW.own)
+        : null,
     );
   }
 

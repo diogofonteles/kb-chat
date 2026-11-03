@@ -10,7 +10,10 @@ import {
   type MyAccess,
 } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
+import { announceViewChange } from './current-view.js';
 import { personUrl } from './auth-api.js';
+
+export { VIEW_CHANNEL } from './current-view.js';
 
 export const ACT_AS_URL = '/api/v1/act-as';
 export const ACT_AS_AUDIT_URL = '/api/v1/act-as/audit';
@@ -31,16 +34,6 @@ export const RESTART_APP = new InjectionToken<() => void>('RESTART_APP', {
     };
   },
 });
-
-/** The channel the app's tabs hear a change of view on (KBC-060). */
-export const VIEW_CHANNEL = 'kb-chat.view';
-
-function announceViewChange(): void {
-  if (typeof BroadcastChannel === 'undefined') return;
-  const channel = new BroadcastChannel(VIEW_CHANNEL);
-  channel.postMessage('changed');
-  channel.close();
-}
 
 /** A master acting as a person (KBC-060): start, end, the audit and one's own accesses. */
 @Injectable({ providedIn: 'root' })

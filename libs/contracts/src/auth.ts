@@ -57,6 +57,14 @@ export type GoogleLoginRequest = z.infer<typeof googleLoginRequestSchema>;
 
 /* ---------- Acting as a person (KBC-060, ADR 0027) ---------- */
 
+/**
+ * Sent with every write: whose view the tab shows (`self`, or the id of the person a master
+ * acts as). A write from a tab whose view the session no longer has answers VIEW_CHANGED,
+ * so an old tab never writes as the wrong person.
+ */
+export const VIEW_HEADER = 'x-kb-chat-view';
+export const OWN_VIEW = 'self';
+
 /** POST /api/v1/people/:id/act-as: why the master acts as this person (kept in the audit). */
 export const actAsRequestSchema = z.strictObject({
   reason: z.string().trim().min(3).max(500),
@@ -79,7 +87,7 @@ export const actingSchema = z.object({
   startedAt: z.iso.datetime(),
   endsAt: z.iso.datetime(),
   /** What is left by the server's clock when it answered (the browser's may differ). */
-  remainingMs: z.number().int().min(0).default(0),
+  remainingMs: z.number().int().min(0),
 });
 export type Acting = z.infer<typeof actingSchema>;
 
@@ -88,7 +96,8 @@ export const actAsAuditEntrySchema = z.object({
   at: z.iso.datetime(),
   /** One acting session: its start, writes and end share it. */
   actingId: z.uuid().optional(),
-  kind: z.enum(['start', 'end', 'write']),
+  /** `refused`: a write audited before it ran, then refused (it changed nothing). */
+  kind: z.enum(['start', 'end', 'write', 'refused']),
   actor: auditPersonSchema,
   person: auditPersonSchema,
   reason: z.string(),

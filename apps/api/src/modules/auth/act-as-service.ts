@@ -55,9 +55,7 @@ export class ActAsService {
       startedAt: now.toISOString(),
       endsAt: new Date(now.getTime() + ACT_AS_MS).toISOString(),
     };
-    // Audited first: no session acts without its line (NFR-2).
-    await this.record('start', { master: master.person, person, acting });
-    await this.deps.sessions.update({ ...session, actingAs: acting });
+    await this.begin(session, { master: master.person, person, acting });
     return {
       person: auditPersonOf(person),
       actor: auditPersonOf(master.person),
@@ -66,6 +64,21 @@ export class ActAsService {
       endsAt: acting.endsAt,
       remainingMs: ACT_AS_MS,
     };
+  }
+
+  /** Audited first: no session acts without its line (NFR-2). */
+  private async begin(
+    session: StoredSession,
+    who: { master: StoredPerson; person: StoredPerson; acting: StoredActing },
+  ): Promise<void> {
+    await this.record('start', who);
+    try {
+      await this.deps.sessions.update({ ...session, actingAs: who.acting });
+    } catch (err) {
+      // It never began: the audit says it ended at once.
+      await this.record('end', who, 'access');
+      throw err;
+    }
   }
 
   /** Who the master may act as now, or why not (BR-1, BR-2). */
@@ -116,12 +129,15 @@ export class ActAsService {
   }
 
   /** A write made while acting (FR-4): the route pattern and method, never the body. */
-  recordWrite(viewer: Viewer, write: { method: string; route: string }) {
+  recordWrite(
+    viewer: Viewer,
+    write: { method: string; route: string; refused?: boolean },
+  ) {
     const actor = viewer.actor;
     if (!actor) return Promise.resolve();
     return this.deps.audit.append({
       at: this.now().toISOString(),
-      kind: 'write',
+      kind: write.refused ? 'refused' : 'write',
       ...(actor.acting.id && { actingId: actor.acting.id }),
       actor: auditPersonOf(actor.viewer.person),
       person: auditPersonOf(viewer.person),
@@ -156,6 +172,13 @@ export class ActAsService {
   ): Promise<void> {
     const acting = session.actingAs;
     if (!acting) return;
+    const person = await this.deps.people.find(acting.personId);
+    // Audited first, like the start (NFR-2).
+    await this.record(
+      'end',
+      { master, person: person ?? null, acting },
+      endedBy,
+    );
     await this.deps.sessions.update({
       id: session.id,
       personId: session.personId,
@@ -163,12 +186,6 @@ export class ActAsService {
       expiresAt: session.expiresAt,
       refreshedAt: session.refreshedAt,
     });
-    const person = await this.deps.people.find(acting.personId);
-    await this.record(
-      'end',
-      { master, person: person ?? null, acting },
-      endedBy,
-    );
   }
 
   private record(
@@ -238,6 +255,8 @@ function sessionsOf(entries: readonly ActAsAuditEntry[], now: Date) {
     const session = sessions.get(key);
     if (!session) continue;
     if (entry.kind === 'write') session.writes += 1;
+    if (entry.kind === 'refused')
+      session.writes = Math.max(0, session.writes - 1);
     if (entry.kind === 'end') session.endedAt = entry.at;
   }
   return [...sessions.values()].map((session) => closedBy(session, now));

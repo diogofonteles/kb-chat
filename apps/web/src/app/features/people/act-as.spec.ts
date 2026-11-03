@@ -120,6 +120,7 @@ describe('Ver como outra pessoa (KBC-060)', () => {
       reason: 'não vê os marcadores',
       startedAt: '2026-11-03T12:00:00.000Z',
       endsAt: '2026-11-03T12:30:00.000Z',
+      remainingMs: 30 * 60_000,
     });
     expect(restart).toHaveBeenCalledOnce();
   });

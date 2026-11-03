@@ -426,4 +426,66 @@ describe('Acting as a person (KBC-060)', () => {
     expect(left).toBeGreaterThan(29 * 60_000);
     expect(left).toBeLessThanOrEqual(30 * 60_000);
   });
+
+  it('refuses a write from a tab that still shows another view, and changes nothing (BR-3)', async () => {
+    const { started, owner, member, memberId } = await scene();
+    const headers = await signIn(started, OWNER_EMAIL);
+    const as = (view: string): Call =>
+      caller(started.app, { ...headers, 'x-kb-chat-view': view });
+    await as('self')('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    // A tab still showing the owner's own view writes: refused, nothing changes.
+    const stale = await as('self')('PUT', '/api/v1/settings', {
+      preferences: { theme: 'dark' },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe('VIEW_CHANGED');
+    expect(
+      (await member('GET', '/api/v1/settings')).json().preferences.theme,
+    ).not.toBe('dark');
+    // The tab that knows it shows Ana writes as Ana.
+    expect(
+      (
+        await as(memberId)('PUT', '/api/v1/settings', {
+          preferences: { theme: 'dark' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    await as(memberId)('DELETE', '/api/v1/act-as');
+    // Back to self: a tab still showing Ana is refused.
+    const old = await as(memberId)('PUT', '/api/v1/settings', {
+      preferences: { theme: 'light' },
+    });
+    expect(old.json().error.code).toBe('VIEW_CHANGED');
+    expect(
+      (await owner('GET', '/api/v1/settings')).json().preferences.theme,
+    ).not.toBe('light');
+  });
+
+  it('records a write refused after its audit as refused, not as a change (FR-4)', async () => {
+    const { owner, member, memberId } = await scene();
+    await owner('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: REASON,
+    });
+    await owner('PUT', '/api/v1/settings', {
+      ai: { keys: { openrouter: 'sk-or-fake-key-xx' } },
+    });
+    await owner('PUT', '/api/v1/settings', { preferences: { theme: 'dark' } });
+    await owner('DELETE', '/api/v1/act-as');
+    const kinds = (await owner('GET', '/api/v1/act-as/audit'))
+      .json()
+      .items.map((e: { kind: string }) => e.kind);
+    expect(kinds).toEqual(['end', 'write', 'refused', 'write', 'start']);
+    const [access] = (await member('GET', '/api/v1/me/accesses')).json().items;
+    expect(access.writes).toBe(1);
+  });
+
+  it('declares exactly the routes only the person may use (BR-4)', async () => {
+    const { started } = await scene();
+    expect([...started.app.personOnlyRoutes].sort()).toEqual([
+      'GET /api/v1/openrouter/callback',
+      'POST /api/v1/openrouter/connect',
+    ]);
+  });
 });

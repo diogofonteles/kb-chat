@@ -14,6 +14,7 @@ const KIND_LABELS: Record<ActAsAuditEntry['kind'], () => string> = {
   start: () => $localize`:@@audit.start:Começou`,
   end: () => $localize`:@@audit.end:Terminou`,
   write: () => $localize`:@@audit.write:Alterou`,
+  refused: () => $localize`:@@audit.refused:Recusado (nada mudou)`,
 };
 
 const ENDED_LABELS: Record<
