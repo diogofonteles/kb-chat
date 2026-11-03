@@ -15,6 +15,8 @@ export interface RunOptions {
   readonly signal?: AbortSignal;
   /** Each stdout line as it arrives (ffmpeg's -progress). */
   readonly onLine?: (line: string) => void;
+  /** Each stderr line as it arrives (ffmpeg's filter reports, e.g. silencedetect). */
+  readonly onErrorLine?: (line: string) => void;
 }
 
 interface Collected {
@@ -43,7 +45,7 @@ export function runProcess(
       timedOut: false,
       aborted: false,
     };
-    collectOutput(child, { state, onLine: options.onLine });
+    collectOutput(child, state, options);
     const release = watchForKill(child, { state, options });
     let settled = false;
     // 'error' (the program did not start) may be followed by 'close': answer once.
@@ -91,16 +93,18 @@ function watchForKill(
 
 function collectOutput(
   child: ChildProcess,
-  sink: { state: Collected; onLine?: (line: string) => void },
+  state: Collected,
+  sink: Pick<RunOptions, 'onLine' | 'onErrorLine'>,
 ): void {
   if (child.stdout)
     createInterface({ input: child.stdout }).on('line', (line) => {
-      sink.state.stdout += `${line}\n`;
+      state.stdout += `${line}\n`;
       sink.onLine?.(line);
     });
+  const { onErrorLine } = sink;
+  if (child.stderr && onErrorLine)
+    createInterface({ input: child.stderr }).on('line', onErrorLine);
   child.stderr?.on('data', (chunk: Buffer) => {
-    sink.state.stderr = (sink.state.stderr + chunk.toString()).slice(
-      -STDERR_TAIL * 2,
-    );
+    state.stderr = (state.stderr + chunk.toString()).slice(-STDERR_TAIL * 2);
   });
 }

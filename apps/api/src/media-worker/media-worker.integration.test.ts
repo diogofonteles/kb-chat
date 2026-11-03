@@ -89,9 +89,11 @@ async function uploadFile(env: Running, file: string): Promise<MediaItem> {
 const itemOf = async (env: Running, id: string): Promise<MediaItem> =>
   (await env.owner('GET', `/api/v1/media/${id}`)).json();
 
+/** The next conversion (the queue also holds silences jobs, KBC-044, after each one). */
 async function leased(env: Running): Promise<WorkerJob> {
   const job = await env.api.lease();
   if (!job) throw new Error('no job to lease');
+  if (job.kind !== 'transcode') throw new Error(`leased a ${job.kind} job`);
   return job;
 }
 
@@ -219,6 +221,7 @@ describe(
         lease: () => Promise.reject(new Error('ECONNREFUSED')),
         heartbeat: () => Promise.resolve(true),
         complete: () => Promise.resolve(true),
+        completeSilences: () => Promise.resolve(true),
         fail: () => Promise.resolve(true),
       };
       const shutdown = new AbortController();

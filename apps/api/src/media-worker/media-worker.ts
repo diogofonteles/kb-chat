@@ -1,6 +1,6 @@
 import { stat, rm, utimes, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, normalize, sep } from 'node:path';
-import type { WorkerJob } from '@kb-chat/contracts';
+import type { SilencesJob, VmWorkerJob, WorkerJob } from '@kb-chat/contracts';
 import type { FastifyBaseLogger } from 'fastify';
 import type { MediaJobsApi } from './api-client.js';
 import {
@@ -9,6 +9,7 @@ import {
   transcodeAudio,
   type FfmpegBins,
 } from './ffmpeg.js';
+import { detectSilences } from './silence-detector.js';
 
 export interface MediaWorkerDeps {
   readonly api: MediaJobsApi;
@@ -25,6 +26,9 @@ const HEARTBEAT_MS = 15_000;
 /** At least half an hour, or twice the audio's length (1 h converts in ~50 s on the VM). */
 const timeoutFor = (durationMs: number) =>
   Math.max(30 * 60_000, 2 * durationMs);
+/** Silences take ~18 s per hour on the VM (ADR 0022): ten minutes, or the audio's length. */
+const silencesTimeoutFor = (durationMs: number) =>
+  Math.max(10 * 60_000, durationMs);
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -64,8 +68,65 @@ export class MediaWorker {
     this.deps.log.info('media worker stopped');
   }
 
-  /** Converts one job; never throws (failures are reported to the API or logged). */
-  async process(job: WorkerJob, shutdown: AbortSignal): Promise<void> {
+  /** Runs one job; never throws (failures are reported to the API or logged). */
+  async process(job: VmWorkerJob, shutdown: AbortSignal): Promise<void> {
+    if (job.kind === 'silences') return this.processSilences(job, shutdown);
+    return this.processTranscode(job, shutdown);
+  }
+
+  /**
+   * Measures the pauses of a ready item's audio (KBC-044 FR-1). A failure is reported as
+   * one the queue retries: the item stays ready, without a map until it works.
+   */
+  private async processSilences(
+    job: SilencesJob,
+    shutdown: AbortSignal,
+  ): Promise<void> {
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    shutdown.addEventListener('abort', stop, { once: true });
+    const beats = this.startHeartbeat(job, { progress: null, abort });
+    try {
+      await this.measure(job, abort.signal);
+    } catch (err) {
+      if (!abort.signal.aborted) await this.reportFailure(job, err);
+    } finally {
+      clearInterval(beats);
+      shutdown.removeEventListener('abort', stop);
+    }
+  }
+
+  private async measure(job: SilencesJob, signal: AbortSignal): Promise<void> {
+    const { bins, log, api } = this.deps;
+    const source = this.resolve(job.sourcePath);
+    const started = Date.now();
+    const { durationMs } = await probe(bins, source, signal);
+    const intervals = await detectSilences({
+      bins,
+      source,
+      detector: job.detector,
+      durationMs,
+      timeoutMs: silencesTimeoutFor(durationMs),
+      signal,
+    });
+    const elapsedMs = Date.now() - started;
+    const done = await api.completeSilences(job, {
+      detectorVersion: job.detector.version,
+      intervals,
+      elapsedMs,
+    });
+    if (!done) throw new LeaseLostError();
+    log.info(
+      { job: job.id, pauses: intervals.length, elapsedMs },
+      'silences measured',
+    );
+  }
+
+  /** Converts one job (KBC-034). */
+  private async processTranscode(
+    job: WorkerJob,
+    shutdown: AbortSignal,
+  ): Promise<void> {
     const abort = new AbortController();
     const stop = () => abort.abort();
     shutdown.addEventListener('abort', stop, { once: true });
@@ -82,11 +143,7 @@ export class MediaWorker {
         signal: abort.signal,
       });
     } catch (err) {
-      await Promise.all(
-        [target.path, target.flac]
-          .filter((path) => path !== '')
-          .map((path) => rm(path, { force: true })),
-      );
+      await removeFiles([target.path, target.flac]);
       if (!abort.signal.aborted) await this.reportFailure(job, err);
     } finally {
       clearInterval(beats);
@@ -145,18 +202,19 @@ export class MediaWorker {
   }
 
   private startHeartbeat(
-    job: WorkerJob,
-    state: { progress: { percent: number }; abort: AbortController },
+    job: VmWorkerJob,
+    state: { progress: { percent: number } | null; abort: AbortController },
   ): NodeJS.Timeout {
     return setInterval(() => {
       // A long conversion is the worker working: the healthcheck must see it alive.
       void this.touchAlive();
-      this.deps.api.heartbeat(job, state.progress.percent).then(
+      const percent = state.progress?.percent ?? null;
+      this.deps.api.heartbeat(job, percent).then(
         (held) => {
           if (held) return;
           this.deps.log.warn(
             { job: job.id },
-            'lease lost: stopping the conversion',
+            `lease lost: stopping the ${job.kind === 'silences' ? 'silence detection' : 'conversion'}`,
           );
           state.abort.abort();
         },
@@ -166,7 +224,7 @@ export class MediaWorker {
     }, this.deps.heartbeatMs ?? HEARTBEAT_MS);
   }
 
-  private async reportFailure(job: WorkerJob, err: unknown): Promise<void> {
+  private async reportFailure(job: VmWorkerJob, err: unknown): Promise<void> {
     const detail = err instanceof Error ? err.message : String(err);
     if (err instanceof LeaseLostError) {
       this.deps.log.warn(
@@ -177,7 +235,10 @@ export class MediaWorker {
     }
     const failure =
       err instanceof InvalidMediaError ? 'invalid-audio' : 'conversion-failed';
-    this.deps.log.error({ job: job.id, failure, detail }, 'conversion failed');
+    this.deps.log.error(
+      { job: job.id, kind: job.kind, failure, detail },
+      'media job failed',
+    );
     await this.deps.api
       .fail(job, { failure, detail: detail.slice(0, 2_000) })
       .catch((reportErr: unknown) =>
@@ -202,6 +263,15 @@ export class MediaWorker {
       throw new Error(`job path outside the media directory: ${path}`);
     return join(this.deps.mediaDir, relative);
   }
+}
+
+/** Removes the given work files (empty paths are none). */
+async function removeFiles(paths: readonly string[]): Promise<void> {
+  await Promise.all(
+    paths
+      .filter((path) => path !== '')
+      .map((path) => rm(path, { force: true })),
+  );
 }
 
 class LeaseLostError extends Error {

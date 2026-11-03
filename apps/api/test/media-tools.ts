@@ -63,3 +63,46 @@ export function makeLongWav(
     path,
   ]);
 }
+
+/** Where each pause starts (ms), the ffmpeg expression that mutes them and the length (s). */
+function pausesOf(pausesSec: readonly number[]) {
+  const starts: number[] = [];
+  const spans: string[] = [];
+  let at = 1;
+  for (const pause of pausesSec) {
+    starts.push(Math.round(at * 1000));
+    spans.push(`between(t,${at},${at + pause})`);
+    at += pause + 1;
+  }
+  return { starts, silent: spans.length > 0 ? spans.join('+') : '0', at };
+}
+
+/**
+ * A tone with pauses of known length (KBC-044 AC-1): 1 s of tone, then each pause in
+ * turn followed by 1 s of tone, as MP3 at `path`. Returns where each pause starts (ms).
+ */
+export function makeToneWithPauses(
+  bins: FfmpegBins,
+  path: string,
+  pausesSec: readonly number[],
+): number[] {
+  const { starts, silent, at } = pausesOf(pausesSec);
+  execFileSync(bins.ffmpeg, [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    `aevalsrc='if(${silent},0,0.5*sin(2*PI*440*t))':s=44100:d=${at}`,
+    '-ac',
+    '1',
+    '-c:a',
+    'libmp3lame',
+    '-b:a',
+    '128k',
+    path,
+  ]);
+  return starts;
+}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { WorkerJob } from '@kb-chat/contracts';
+import {
+  SILENCE_DETECTOR,
+  type SilencesJob,
+  type WorkerJob,
+} from '@kb-chat/contracts';
 import { HttpMediaJobsApi, MediaApiError } from './api-client.js';
 
 const JOB: WorkerJob = {
@@ -40,7 +44,36 @@ describe('HttpMediaJobsApi', () => {
     expect(headers.get('x-requested-with')).toBe('kb-chat');
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
       worker: 'vm',
-      kinds: ['transcode'],
+      kinds: ['transcode', 'silences'],
+    });
+  });
+
+  it('reads a silences job and sends its pauses (KBC-044)', async () => {
+    const silences: SilencesJob = {
+      id: JOB.id,
+      leaseId: JOB.leaseId,
+      kind: 'silences',
+      mediaId: JOB.mediaId,
+      attempt: 1,
+      sourcePath: 'audio/x.m4a',
+      leaseMs: 60_000,
+      detector: SILENCE_DETECTOR,
+    };
+    expect(await apiAnswering(200, silences).api.lease()).toEqual(silences);
+    const { api, calls } = apiAnswering(204);
+    const done = {
+      detectorVersion: 1,
+      intervals: [{ startMs: 1_000, endMs: 2_500 }],
+      elapsedMs: 30,
+    };
+    expect(await api.completeSilences(silences, done)).toBe(true);
+    expect(calls[0]?.url).toBe(
+      `http://api:3000/api/v1/media-worker/jobs/${JOB.id}/silences`,
+    );
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
+      worker: 'vm',
+      leaseId: JOB.leaseId,
+      ...done,
     });
   });
 
