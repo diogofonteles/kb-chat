@@ -1,4 +1,4 @@
-import { aHit, aResponse } from '../../testing/fixtures.js';
+import { aHit, aMediaHit, aResponse } from '../../testing/fixtures.js';
 import {
   NO_FILTERS,
   hasFilters,
@@ -14,6 +14,7 @@ const ask: Ask = {
   question: 'ritmo',
   mode: 'all',
   filters: NO_FILTERS,
+  kinds: ['text', 'audio'],
 };
 const start = (a: Ask = ask): readonly ChatMessage[] =>
   reduceChat([], { type: 'started', ask: a });
@@ -116,6 +117,31 @@ describe('reduceChat', () => {
       rev: 1,
     });
     expect(failedMore[0]?.loadingMore).toBe(false);
+  });
+
+  it('KBC-039: keeps the first page\'s spoken passages and counts after "Mostrar mais"', () => {
+    const passage = aMediaHit();
+    const first = reduceChat(start(), {
+      type: 'done',
+      id: 1,
+      rev: 1,
+      response: aResponse([aHit()], {
+        nextOffset: 1,
+        media: [passage],
+        kinds: { text: 2, audio: 1 },
+      }),
+    });
+    const more = reduceChat(first, {
+      type: 'more-done',
+      id: 1,
+      rev: 1,
+      response: aResponse([aHit({ id: 'b.md' })], {
+        media: [],
+        kinds: { text: 2, audio: 1 },
+      }),
+    });
+    expect(more[0]?.response?.media).toEqual([passage]);
+    expect(more[0]?.response?.items).toHaveLength(2);
   });
 
   it('starts a page from scratch when the message has no response yet', () => {

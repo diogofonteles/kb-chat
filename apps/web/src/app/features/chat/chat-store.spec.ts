@@ -16,7 +16,7 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { Subject } from 'rxjs';
 import { FakeConversationsServer } from '../../testing/fake-conversations.js';
-import { TOPICS, aResponse } from '../../testing/fixtures.js';
+import { TOPICS, aMediaHit, aResponse } from '../../testing/fixtures.js';
 import { ChatStore } from './chat-store.js';
 
 const GENRE: SearchFilters = { ...EMPTY_FILTERS, genres: ['paper'] };
@@ -31,6 +31,7 @@ async function setup() {
     topic: string;
     q: string;
     reply: Subject<SearchResponse>;
+    kinds?: readonly string[];
   }[] = [];
   TestBed.configureTestingModule({
     providers: [
@@ -42,9 +43,12 @@ async function setup() {
       {
         provide: KbApi,
         useValue: {
-          search: (topic: string, request: { q: string }) => {
+          search: (
+            topic: string,
+            request: { q: string; kinds?: readonly string[] },
+          ) => {
             const reply = new Subject<SearchResponse>();
-            searches.push({ topic, q: request.q, reply });
+            searches.push({ topic, q: request.q, reply, kinds: request.kinds });
             return reply;
           },
         },
@@ -170,5 +174,43 @@ describe('ChatStore conversations (KBC-005)', () => {
     store.ask('pedra');
     expect(searches[0]?.topic).toBe('alquimia');
     expect(store.topicNotice()).toBeNull();
+  });
+});
+
+describe('ChatStore and spoken passages (KBC-039)', () => {
+  it('searches every kind by default and remembers "Buscar em" for the next searches (BR-4)', async () => {
+    const { store, searches, answer } = await setup();
+    store.ask('hoasca');
+    answer(0);
+    expect(searches[0]?.kinds).toEqual(['text', 'audio']);
+    const message = store.messages()[0];
+    if (!message) throw new Error('no message');
+    store.chooseKinds(message, ['audio']);
+    expect(searches[1]?.kinds).toEqual(['audio']);
+    expect(store.messages()).toHaveLength(1);
+    store.ask('mariri');
+    expect(searches[2]?.kinds).toEqual(['audio']);
+    TestBed.tick();
+    expect(localStorage.getItem('kb-chat.search-kinds')).toBe('["audio"]');
+  });
+
+  it('opens a passage in the reading panel, logs it and closes the document (FR-4, AC-7)', async () => {
+    const { store } = await setup();
+    store.open('hermetismo', { id: 'a.md', title: 'A' });
+    const hit = aMediaHit();
+    store.openMedia(hit, { messageId: 1, position: 2 });
+    expect(store.openDocument()).toBeNull();
+    expect(store.openPassage()).toEqual({ hit, messageId: 1 });
+    expect(usage.track).toHaveBeenLastCalledWith({
+      type: 'media_hit_opened',
+      mediaId: hit.mediaId,
+      startMs: 495_000,
+      position: 2,
+    });
+    store.open('hermetismo', { id: 'b.md', title: 'B' });
+    expect(store.openPassage()).toBeNull();
+    store.openMedia(hit, { messageId: null, position: null });
+    store.close();
+    expect(store.openPassage()).toBeNull();
   });
 });

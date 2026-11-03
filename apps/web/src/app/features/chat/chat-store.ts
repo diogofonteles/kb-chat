@@ -12,7 +12,9 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
   type DocumentRef,
+  type MediaHit,
   type SearchConversation,
+  type SearchKind,
   type SearchFilters,
   type SearchMode,
   type SearchResponse,
@@ -47,6 +49,7 @@ import {
   type ChatMessage,
 } from './chat-message.js';
 import { readModePreference, writeModePreference } from './mode-preference.js';
+import { readKindsPreference, writeKindsPreference } from './search-kinds.js';
 
 /** Chip clicks within this window become one search (QA-7). */
 const REFINE_DEBOUNCE_MS = 250;
@@ -59,6 +62,13 @@ export interface OpenDocument {
   readonly messageId: number | null;
   /** Its question, highlighted in the text. */
   readonly question: string | null;
+}
+
+/** A spoken passage open in the reading panel (KBC-039 FR-6). */
+export interface OpenPassage {
+  readonly hit: MediaHit;
+  /** The message whose results opened it. */
+  readonly messageId: number | null;
 }
 
 /** localStorage access itself can throw (blocked site data); the app then runs without it. */
@@ -176,6 +186,11 @@ export class ChatStore {
     readModePreference(this.storage),
   );
   readonly mode = this.modeState.asReadonly();
+  /** "Buscar em", remembered in this browser (KBC-039 BR-4). */
+  private readonly kindsState = signal<readonly SearchKind[]>(
+    readKindsPreference(this.storage),
+  );
+  readonly kinds = this.kindsState.asReadonly();
 
   readonly messages = toSignal(
     merge(
@@ -207,12 +222,15 @@ export class ChatStore {
 
   private readonly openState = signal<OpenDocument | null>(null);
   readonly openDocument = this.openState.asReadonly();
+  private readonly passageState = signal<OpenPassage | null>(null);
+  readonly openPassage = this.passageState.asReadonly();
   /** Documents left through "Veja também", for "← Voltar" inside the panel. */
   private readonly historyState = signal<readonly OpenDocument[]>([]);
   readonly canGoBack = computed(() => this.historyState().length > 0);
 
   constructor() {
     effect(() => writeModePreference(this.storage, this.modeState()));
+    effect(() => writeKindsPreference(this.storage, this.kindsState()));
   }
 
   /** Writes the conversation to the history when its summary changed (not on every page or chip). */
@@ -304,6 +322,7 @@ export class ChatStore {
       question: trimmed,
       mode,
       filters,
+      kinds: this.kindsState(),
       origin,
     });
   }
@@ -319,6 +338,16 @@ export class ChatStore {
       filters,
       origin: 'refine',
       delayMs: REFINE_DEBOUNCE_MS,
+    });
+  }
+
+  /** "Buscar em" changed on a message: remembered, and that message runs again. */
+  chooseKinds(message: ChatMessage, kinds: readonly SearchKind[]): void {
+    this.kindsState.set(kinds);
+    this.rerun(message, {
+      filters: message.filters,
+      origin: 'refine',
+      kinds,
     });
   }
 
@@ -338,6 +367,7 @@ export class ChatStore {
       position: index === undefined || index < 0 ? null : index + 1,
     });
     this.historyState.set([]);
+    this.passageState.set(null);
     this.openState.set({
       topic,
       id: doc.id,
@@ -345,6 +375,28 @@ export class ChatStore {
       messageId: from?.id ?? null,
       question: from?.question ?? null,
     });
+  }
+
+  /**
+   * A spoken passage opens in the reading panel and plays (KBC-039 FR-6); the opening is
+   * the phase's main metric (FR-4). `position` is its 1-based place among the results.
+   */
+  openMedia(
+    hit: MediaHit,
+    from: {
+      readonly messageId: number | null;
+      readonly position: number | null;
+    },
+  ): void {
+    this.usage.track({
+      type: 'media_hit_opened',
+      mediaId: hit.mediaId,
+      startMs: hit.startMs,
+      position: from.position,
+    });
+    this.historyState.set([]);
+    this.openState.set(null);
+    this.passageState.set({ hit, messageId: from.messageId });
   }
 
   /** Opens a related document in the same panel, remembering the current one. */
@@ -366,6 +418,7 @@ export class ChatStore {
   close(): void {
     this.historyState.set([]);
     this.openState.set(null);
+    this.passageState.set(null);
   }
 
   private reset(): void {
@@ -382,7 +435,10 @@ export class ChatStore {
       filters,
       origin,
       delayMs = 0,
-    }: Pick<Ask, 'filters' | 'origin' | 'delayMs'>,
+      kinds = message.kinds,
+    }: Pick<Ask, 'filters' | 'origin' | 'delayMs'> & {
+      readonly kinds?: readonly SearchKind[];
+    },
   ): void {
     const { id, topic, question, mode } = message;
     this.asks.next({
@@ -392,6 +448,7 @@ export class ChatStore {
       question,
       mode,
       filters,
+      kinds,
       delayMs,
       origin,
     });
@@ -399,7 +456,12 @@ export class ChatStore {
 
   private run(ask: Ask): Observable<ChatEvent> {
     const { id, rev } = ask;
-    const request = { q: ask.question, mode: ask.mode, filters: ask.filters };
+    const request = {
+      q: ask.question,
+      mode: ask.mode,
+      filters: ask.filters,
+      kinds: [...ask.kinds],
+    };
     const search = this.api.search(ask.topic, request);
     // A refine waits briefly; switchMap cancels the timer when another chip click arrives (QA-7).
     const delayed = ask.delayMs
@@ -437,6 +499,7 @@ export class ChatStore {
         q: message.question,
         mode: message.mode,
         filters: message.filters,
+        kinds: [...message.kinds],
         offset,
       })
       .pipe(
