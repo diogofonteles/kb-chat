@@ -112,6 +112,8 @@ for (const theme of ['light', 'dark']) {
     await signIn(context.request);
     const page = await context.newPage();
     await page.goto('/');
+    // The owner opens in "Pesquisa com IA": the free search is the other view.
+    await page.getByRole('radio', { name: 'Buscar documentos' }).check();
     const box = page.getByRole('textbox', { name: 'Sua pergunta' });
     await box.fill(`setuplicidade ${tag}`);
     await box.press('Enter');
