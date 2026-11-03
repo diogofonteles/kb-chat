@@ -92,6 +92,21 @@ export const AUDIO_RENDITION_ARGS = [
   'mp4',
 ] as const;
 
+/** The transcriber's input (ADR 0022 §4): 16 kHz mono FLAC, from the same decoding. */
+export const FLAC_FOR_TRANSCRIPTION_ARGS = [
+  '-vn',
+  '-map',
+  '0:a:0',
+  '-ac',
+  '1',
+  '-ar',
+  '16000',
+  '-c:a',
+  'flac',
+  '-f',
+  'flac',
+] as const;
+
 /** Percent done from one ffmpeg `-progress` line, given the input's duration. */
 export function progressOf(line: string, durationMs: number): number | null {
   const match = line.match(/^out_time_(?:us|ms)=(\d+)$/);
@@ -101,7 +116,10 @@ export function progressOf(line: string, durationMs: number): number | null {
   return Math.max(0, Math.min(99, Math.floor((doneMs / durationMs) * 100)));
 }
 
-const transcodeArgs = (source: string, target: string) => [
+const transcodeArgs = (
+  source: string,
+  targets: { audio: string; flac?: string },
+) => [
   '-hide_banner',
   '-nostdin',
   '-y',
@@ -111,7 +129,8 @@ const transcodeArgs = (source: string, target: string) => [
   '-progress',
   'pipe:1',
   '-nostats',
-  target,
+  targets.audio,
+  ...(targets.flac ? [...FLAC_FOR_TRANSCRIPTION_ARGS, targets.flac] : []),
 ];
 
 /** Converts `source` into the audio rendition at `target`, reporting progress. */
@@ -119,6 +138,8 @@ export async function transcodeAudio(input: {
   readonly bins: FfmpegBins;
   readonly source: string;
   readonly target: string;
+  /** Also writes the transcriber's FLAC here, in the same run. */
+  readonly flacTarget?: string;
   readonly durationMs: number;
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
@@ -126,7 +147,10 @@ export async function transcodeAudio(input: {
 }): Promise<void> {
   const result = await runProcess(
     input.bins.ffmpeg,
-    transcodeArgs(input.source, input.target),
+    transcodeArgs(input.source, {
+      audio: input.target,
+      flac: input.flacTarget,
+    }),
     {
       timeoutMs: input.timeoutMs,
       signal: input.signal,
@@ -136,9 +160,16 @@ export async function transcodeAudio(input: {
       },
     },
   );
+  assertFinished(result, input.timeoutMs);
+}
+
+function assertFinished(
+  result: Awaited<ReturnType<typeof runProcess>>,
+  timeoutMs: number,
+): void {
   if (result.aborted) throw new Error('conversion aborted');
   if (result.timedOut)
-    throw new Error(`ffmpeg timed out after ${input.timeoutMs} ms`);
+    throw new Error(`ffmpeg timed out after ${timeoutMs} ms`);
   if (result.code !== 0)
     throw new Error(
       `ffmpeg exited with ${result.code}: ${result.stderrTail.trim()}`,

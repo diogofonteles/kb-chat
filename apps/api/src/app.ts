@@ -93,13 +93,16 @@ import {
   BookmarkService,
   ListeningService,
   mediaRoutes,
+  transcriberRoutes,
+  TranscriberService,
+  TranscriptionService,
   workerRoutes,
 } from './modules/media/index.js';
 import type { MediaDeps } from './media-factory.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
 import { mcpRoutes, peerOnlyMcp } from './mcp/mcp-routes.js';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { SecretBox } from './adapters/secret-box.js';
 import { createHouseAi, type HouseAi } from './house-ai-factory.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
@@ -333,18 +336,42 @@ async function registerRoutes(
 function mediaService({
   media,
   catalog,
+  transcribers,
 }: {
   media: MediaDeps;
   catalog: CatalogRegistry;
+  transcribers: TranscriberService;
 }): MediaService {
   const { store, files, listening } = media;
   return new MediaService({
     store,
     files,
     listening,
+    presence: () => transcribers.presence(),
+    requestTranscription: (mediaId) =>
+      media.transcripts.requestTranscription({
+        mediaId,
+        jobId: randomUUID(),
+        now: new Date(),
+      }),
     hasTopic: (topic) => catalog.get(topic) !== undefined,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
   });
+}
+
+/** The workers' protocol: the VM's conversions and the paired transcribers' (ADR 0023). */
+async function registerWorker(
+  app: FastifyInstance,
+  wiring: { media: MediaDeps; transcribers: TranscriberService },
+) {
+  const { store, files, transcripts } = wiring.media;
+  await app.register(
+    workerRoutes({
+      service: new WorkerService({ store, files }),
+      transcribers: wiring.transcribers,
+      transcription: new TranscriptionService({ store, transcripts, files }),
+    }),
+  );
 }
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
@@ -354,18 +381,19 @@ async function registerMedia(
 ) {
   const { store, listening, bookmarks, files, workerToken, createPerMinute } =
     wiring.media;
-  const media = mediaService(wiring);
+  const transcribers = new TranscriberService({
+    store: wiring.media.transcribers,
+    tokenKey: wiring.media.tokenKey,
+    vmToken: workerToken,
+  });
+  const media = mediaService({ ...wiring, transcribers });
   await app.register(mediaRoutes(media, createPerMinute));
+  await app.register(transcriberRoutes({ transcribers, media }));
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
   );
   await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
-  await app.register(
-    workerRoutes({
-      service: new WorkerService({ store, files }),
-      token: workerToken,
-    }),
-  );
+  await registerWorker(app, { media: wiring.media, transcribers });
   const janitor = new MediaJanitor({ store, files, log: app.log });
   janitor.start(JANITOR_INTERVAL_MS);
   app.addHook('onClose', async () => {

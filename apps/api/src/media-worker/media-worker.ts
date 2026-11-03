@@ -71,16 +71,22 @@ export class MediaWorker {
     shutdown.addEventListener('abort', stop, { once: true });
     const progress = { percent: 0 };
     const beats = this.startHeartbeat(job, { progress, abort });
-    const target = { path: '' };
+    const target = { path: '', flac: '' };
     try {
       target.path = this.resolve(job.targetPath);
+      target.flac = job.flacTargetPath ? this.resolve(job.flacTargetPath) : '';
       await this.transcode(job, {
         target: target.path,
+        flacTarget: target.flac || undefined,
         progress,
         signal: abort.signal,
       });
     } catch (err) {
-      if (target.path) await rm(target.path, { force: true });
+      await Promise.all(
+        [target.path, target.flac]
+          .filter((path) => path !== '')
+          .map((path) => rm(path, { force: true })),
+      );
       if (!abort.signal.aborted) await this.reportFailure(job, err);
     } finally {
       clearInterval(beats);
@@ -90,7 +96,12 @@ export class MediaWorker {
 
   private async transcode(
     job: WorkerJob,
-    run: { target: string; progress: { percent: number }; signal: AbortSignal },
+    run: {
+      target: string;
+      flacTarget?: string;
+      progress: { percent: number };
+      signal: AbortSignal;
+    },
   ): Promise<void> {
     const { bins, log } = this.deps;
     const source = this.resolve(job.sourcePath);
@@ -102,18 +113,19 @@ export class MediaWorker {
       bins,
       source,
       target: run.target,
+      flacTarget: run.flacTarget,
       durationMs: input.durationMs,
       timeoutMs: timeoutFor(input.durationMs),
       signal: run.signal,
       onProgress: (percent) => (run.progress.percent = percent),
     });
-    await this.complete(job, { target: run.target, signal: run.signal });
+    await this.complete(job, run);
   }
 
   /** Reads the result back and hands it to the API; a lost lease drops it. */
   private async complete(
     job: WorkerJob,
-    run: { target: string; signal: AbortSignal },
+    run: { target: string; flacTarget?: string; signal: AbortSignal },
   ): Promise<void> {
     // An unreadable result is the conversion's fault, never the uploaded file's.
     const output = await probe(this.deps.bins, run.target, run.signal).catch(
@@ -122,9 +134,11 @@ export class MediaWorker {
       },
     );
     const { size } = await stat(run.target);
+    const flac = run.flacTarget ? await stat(run.flacTarget) : null;
     const done = await this.deps.api.complete(job, {
       durationMs: output.durationMs,
       bytes: size,
+      ...(flac ? { flacBytes: flac.size } : {}),
     });
     if (!done) throw new LeaseLostError();
     this.deps.log.info({ job: job.id, bytes: size }, 'converted');

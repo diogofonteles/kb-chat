@@ -214,7 +214,7 @@ const access = {
   requests: new MemoryDocumentStore(),
   delivery: { email: outbox, sms: null },
 };
-const media = await createMedia(config);
+const media = await createMedia(config, { tokenKey: Buffer.alloc(32, 9) });
 const app = await buildApp({
   config,
   auth,

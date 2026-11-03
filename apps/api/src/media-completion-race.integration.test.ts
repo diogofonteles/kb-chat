@@ -60,7 +60,7 @@ describe('WorkerService completion race', () => {
     const { files, id } = await itemOn(store);
     const service = new WorkerService({ store, files });
     const job = service.lease({ worker: 'vm', kinds: ['transcode'] });
-    if (!job) throw new Error('no job');
+    if (job?.kind !== 'transcode') throw new Error('no job');
     writeFileSync(join(dir, job.targetPath), 'aac');
     await expect(
       service.completeTranscode(job.id, {
@@ -81,7 +81,7 @@ describe('WorkerService completion race', () => {
     const { files, id } = await itemOn(store);
     const service = new WorkerService({ store, files });
     const job = service.lease({ worker: 'vm', kinds: ['transcode'] });
-    if (!job) throw new Error('no job');
+    if (job?.kind !== 'transcode') throw new Error('no job');
     writeFileSync(join(dir, job.targetPath), 'aac');
     await expect(
       service.completeTranscode(job.id, {

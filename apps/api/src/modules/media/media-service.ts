@@ -10,9 +10,13 @@ import {
   UploadRefusedError,
   type MediaFilesPort,
 } from '../../ports/media-files.js';
-import type { ListeningStorePort } from '../../ports/listening-store.js';
+import type {
+  ListeningStorePort,
+  SavedProgress,
+} from '../../ports/listening-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
-import { toMediaItem } from './to-media-item.js';
+import { toMediaItem, type ItemView } from './to-media-item.js';
+import type { Presence } from './transcriber-service.js';
 
 /** Who acts on the media library: their principal, the collections they see, the role. */
 export interface MediaActor {
@@ -30,6 +34,10 @@ export interface MediaServiceDeps {
   readonly scopeOf?: (topic: string) => readonly string[];
   /** Each person's position in each media (KBC-041). */
   readonly listening: ListeningStorePort;
+  /** Whether a transcriber is on (KBC-036 FR-1); "none" when not given. */
+  readonly presence?: () => Presence;
+  /** Queues a new transcription; false when one is already waiting or running. */
+  readonly requestTranscription?: (mediaId: string) => boolean;
   readonly now?: () => Date;
 }
 
@@ -93,7 +101,7 @@ export class MediaService {
       uploadBytes: request.bytes,
       now: this.now(),
     });
-    return toMediaItem(record, actor.isMaster);
+    return toMediaItem(record, actor.isMaster, this.view());
   }
 
   /** The file of an item created by this person; it goes to the queue when complete. */
@@ -127,7 +135,7 @@ export class MediaService {
       this.receiving.delete(mediaId);
     }
     const queued = await this.queue(mediaId);
-    return toMediaItem(queued, actor.isMaster);
+    return toMediaItem(queued, actor.isMaster, this.view());
   }
 
   /** The file arrived: queue the conversion, unless the item was removed meanwhile. */
@@ -164,8 +172,12 @@ export class MediaService {
       actor.principal,
       records.map((record) => record.id),
     );
+    const presence = this.deps.presence?.();
     return records.map((record) =>
-      toMediaItem(record, actor.isMaster, progress.get(record.id)),
+      toMediaItem(record, actor.isMaster, {
+        progress: progress.get(record.id),
+        presence,
+      }),
     );
   }
 
@@ -174,7 +186,7 @@ export class MediaService {
     const progress = this.deps.listening
       .progressOf(actor.principal, [mediaId])
       .get(mediaId);
-    return toMediaItem(record, actor.isMaster, progress);
+    return toMediaItem(record, actor.isMaster, this.view(progress));
   }
 
   async playable(actor: MediaActor, mediaId: string): Promise<PlayableFile> {
@@ -209,8 +221,29 @@ export class MediaService {
     await files.discardUpload(mediaId);
     await files.remove([
       files.audioPath(mediaId),
+      files.flacPath(mediaId),
       ...(rendition ? [rendition.path] : []),
     ]);
+    await files.removeTranscripts(mediaId);
+  }
+
+  /**
+   * Masters only (route access): transcribe a ready item again; the new transcript becomes
+   * a new version and the current one (BR-3).
+   */
+  transcribeAgain(actor: MediaActor, mediaId: string): MediaItem {
+    const media = this.visible(actor, mediaId);
+    const queue = this.deps.requestTranscription;
+    if (media.status !== 'ready' || !queue || !queue(mediaId))
+      throw new AppError(
+        'MEDIA_CONFLICT',
+        'This media cannot be transcribed again now',
+      );
+    return this.get(actor, mediaId);
+  }
+
+  private view(progress?: SavedProgress): ItemView {
+    return { progress, presence: this.deps.presence?.() };
   }
 
   /** Masters only (route access): a failure that a new conversion may fix (FR-7). */
@@ -224,6 +257,7 @@ export class MediaService {
     return toMediaItem(
       this.deps.store.retryMedia({ mediaId, now: this.now() }),
       actor.isMaster,
+      this.view(),
     );
   }
 
