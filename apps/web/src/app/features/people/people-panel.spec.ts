@@ -27,6 +27,7 @@ const aPerson = (overrides: Partial<Person> = {}): Person => ({
   topics: [],
   features: ['search'],
   isOwner: false,
+  canActAs: false,
   phone: null,
   invitation: null,
   invitedBy: 'owner@example.com',
@@ -42,6 +43,7 @@ const owner = aPerson({
   name: 'Owner',
   role: 'master',
   isOwner: true,
+  canActAs: false,
   lastLoginAt: '2026-10-24T12:30:00.000Z',
 });
 

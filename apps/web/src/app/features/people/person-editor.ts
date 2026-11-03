@@ -50,7 +50,12 @@ export class PersonEditor {
   readonly lending = input<Lending>(NO_LENDING);
   /** The invitation profiles a master can apply here (KBC-028 FR-4). */
   readonly profiles = input<readonly InviteProfile[]>([]);
+  /** The signed-in account may act as this person (KBC-060): shows "Ver como". */
+  readonly mayActAs = input(false);
+  /** The owner looks: only it grants "Ver como" to a master (BR-1). */
+  readonly ownerView = input(false);
   readonly changed = output<PersonUpdate>();
+  readonly actAs = output();
   readonly revoked = output();
   /** "Aplicar perfil", once confirmed: the profile's id. */
   readonly profileApplied = output<string>();

@@ -11,6 +11,7 @@ const person = (overrides: Partial<Person>): Person => ({
   topics: [],
   features: ['search'],
   isOwner: false,
+  canActAs: false,
   phone: null,
   invitation: null,
   invitedBy: 'owner@example.com',

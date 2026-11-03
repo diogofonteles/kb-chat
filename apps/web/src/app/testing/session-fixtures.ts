@@ -10,6 +10,8 @@ export const aMe = (overrides: Partial<Me> = {}): Me => ({
   topics: ['hermetismo'],
   isOwner: false,
   media: false,
+  canActAs: false,
+  actingAs: null,
   ...overrides,
 });
 
@@ -28,4 +30,5 @@ export const anOwner = (): Me =>
     ],
     topics: ['alquimia', 'hermetismo'],
     isOwner: true,
+    canActAs: true,
   });

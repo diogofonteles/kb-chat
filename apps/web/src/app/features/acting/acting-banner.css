@@ -1,0 +1,54 @@
+:host {
+  display: contents;
+}
+
+/* Inverted colors: no other notice of the app looks like this one (ADR 0027). */
+.band {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.what {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+button {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 2px solid var(--color-bg);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .band {
+    border-bottom: 2px solid CanvasText;
+  }
+}

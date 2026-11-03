@@ -43,6 +43,7 @@ const approvedAna: Person = {
   topics: [],
   features: ['search'],
   isOwner: false,
+  canActAs: false,
   phone: '+5581999990000',
   invitation: null,
   invitedBy: 'owner@example.com',
