@@ -9,6 +9,8 @@ depends_on: [KBC-036, KBC-038]
 
 # KBC-039 — Mídia na busca, no minuto exato
 
+> **Vídeo numa versão posterior** (dono, 2026-11-03: "todo que for de vídeos será para uma versão posterior"): neste item vale só o áudio; a parte de vídeo (critérios, requisitos e testes com vídeo) passou para o [KBC-075](KBC-075-video-in-search.md).
+
 ## Story
 Como quem estuda, quero que a busca também encontre o que foi dito nas palestras, abrindo o áudio no minuto certo, para não ouvir horas de gravação.
 

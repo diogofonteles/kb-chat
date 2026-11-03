@@ -9,6 +9,8 @@ depends_on: [KBC-041]
 
 # KBC-051 — Biblioteca de mídia
 
+> **Vídeo numa versão posterior** (dono, 2026-11-03: "todo que for de vídeos será para uma versão posterior"): neste item vale só o áudio; a parte de vídeo (critérios, requisitos e testes com vídeo) passou para o [KBC-076](KBC-076-video-in-the-library.md).
+
 ## Story
 Como quem estuda pelas palestras, quero uma Biblioteca só de áudios e vídeos, no modelo do Spotify, onde eu continue o que estava ouvindo, veja o que ouvi por último e filtre e ordene tudo o que posso ouvir, para navegar só na mídia sem passar pela busca de documentos.
 
