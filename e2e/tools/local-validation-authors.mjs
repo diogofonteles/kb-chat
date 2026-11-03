@@ -107,6 +107,12 @@ for (const width of [1440, 390]) {
   await dialog.getByText(/Você quis dizer/).waitFor();
   await page.keyboard.press('Escape');
   await page.screenshot({ path: `${out}/upload-author-typo-${width}.png` });
+  await field.fill('A'.repeat(60));
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: `${out}/upload-author-long-${width}.png` });
+  report.push(`${width} long name overflow ${await overflow(page)}`);
+  await field.fill('Mestre "Gabriel"');
+  await page.screenshot({ path: `${out}/upload-author-invalid-${width}.png` });
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 
