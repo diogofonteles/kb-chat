@@ -66,7 +66,7 @@ export async function uploadReady(
     {
       data: {
         title: input.title,
-        authorship: 'outros-autores',
+        author: null,
         fileName: 'aula.mp3',
         bytes: body.length,
       },
