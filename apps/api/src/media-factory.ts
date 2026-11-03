@@ -5,13 +5,17 @@ import { openMediaDatabase } from './adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
 import { SqliteBookmarkStore } from './adapters/sqlite/sqlite-bookmark-store.js';
 import { SqliteListeningStore } from './adapters/sqlite/sqlite-listening-store.js';
+import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-ledger.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
+import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposal-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
 import type { BookmarkStorePort } from './ports/bookmark-store.js';
 import type { ListeningStorePort } from './ports/listening-store.js';
 import type { MediaFilesPort } from './ports/media-files.js';
+import type { MediaSpendLedgerPort } from './ports/media-spend-ledger.js';
 import type { MediaStorePort } from './ports/media-store.js';
+import type { TrackProposalStorePort } from './ports/track-proposal-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
 import type { TranscriptStorePort } from './ports/transcript-store.js';
 
@@ -26,6 +30,16 @@ export interface MediaDeps {
   readonly transcripts: TranscriptStorePort;
   /** Paired transcribers (KBC-036). */
   readonly transcribers: TranscriberStorePort;
+  /** The AI's proposal runs and draft tracks (KBC-067). */
+  readonly trackProposals: TrackProposalStorePort;
+  /** The media monthly spend ledger (ADR 0022 §7). */
+  readonly spend: MediaSpendLedgerPort;
+  /** The media AI's model and caps (KBC-067, ADR 0029). */
+  readonly ai: {
+    readonly model: string;
+    readonly runCapUsd: number;
+    readonly monthlyCapUsd: number;
+  };
   readonly files: MediaFilesPort;
   readonly workerToken: string;
   /** Keys the transcriber token hashes (KB_CHAT_SECRETS_KEY, ADR 0017). */
@@ -60,6 +74,11 @@ export async function createMedia(
     workerToken,
     tokenKey: secrets.tokenKey,
     createPerMinute: config.MEDIA_CREATE_RATE_LIMIT,
+    ai: {
+      model: config.MEDIA_AI_MODEL,
+      runCapUsd: config.MEDIA_AI_RUN_CAP_USD,
+      monthlyCapUsd: config.MEDIA_MONTHLY_CAP_USD,
+    },
   };
 }
 
@@ -68,7 +87,13 @@ function openStores(
   dir: string,
 ): Pick<
   MediaDeps,
-  'store' | 'listening' | 'bookmarks' | 'transcripts' | 'transcribers'
+  | 'store'
+  | 'listening'
+  | 'bookmarks'
+  | 'transcripts'
+  | 'transcribers'
+  | 'trackProposals'
+  | 'spend'
 > {
   try {
     const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
@@ -78,6 +103,8 @@ function openStores(
       bookmarks: new SqliteBookmarkStore(db),
       transcripts: new SqliteTranscriptStore(db),
       transcribers: new SqliteTranscriberStore(db),
+      trackProposals: new SqliteTrackProposalStore(db),
+      spend: new SqliteMediaSpendLedger(db),
     };
   } catch (err) {
     throw new Error(

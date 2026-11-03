@@ -180,6 +180,15 @@ export const configSchema = z
     KB_CHAT_MEDIA_WORKER_TOKEN: blankAsUnset(z.string().min(32).optional()),
     /** Media items created per minute per client, until the quotas of KBC-035. */
     MEDIA_CREATE_RATE_LIMIT: z.coerce.number().int().min(1).default(30),
+    /**
+     * The model the app's AI proposes tracks with (KBC-067), on the house OpenRouter account
+     * a master connected (ADR 0016); KBC-063 measured DeepSeek V4 Flash at US$ 0.005/h.
+     */
+    MEDIA_AI_MODEL: z.string().min(1).default('deepseek/deepseek-v4-flash'),
+    /** The media monthly spend cap in US$ (ADR 0022 §7: US$ 10, owner 2026-10-28). */
+    MEDIA_MONTHLY_CAP_USD: z.coerce.number().min(0).max(1000).default(10),
+    /** The cap of one media AI run in US$ (ADR 0029, owner 2026-11-03: US$ 0.25). */
+    MEDIA_AI_RUN_CAP_USD: z.coerce.number().min(0).max(100).default(0.25),
   })
   .superRefine((config, context) => {
     if (config.KB_CHAT_MEDIA && !config.KB_CHAT_MEDIA_WORKER_TOKEN)

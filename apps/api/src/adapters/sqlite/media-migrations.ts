@@ -270,4 +270,76 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX media_by_author ON media (author) WHERE author IS NOT NULL;
     `,
   },
+  {
+    // KBC-067 (ADR 0029 §4 and §7, ADR 0022 §7): the media monthly spend ledger, the AI's
+    // proposal runs and the draft tracks they write, invisible to listeners until approved.
+    // Versions 7 and 8 are KBC-051's and KBC-064's (open in parallel); only new tables here.
+    version: 9,
+    name: 'track-proposals',
+    sql: `
+      -- One row per paid media run: reserved first, then settled (spent) or refunded.
+      CREATE TABLE media_spend (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('track-proposal')),
+        media_id TEXT,
+        principal TEXT NOT NULL,
+        reserved_usd REAL NOT NULL CHECK (reserved_usd >= 0),
+        spent_usd REAL NOT NULL DEFAULT 0 CHECK (spent_usd >= 0),
+        status TEXT NOT NULL CHECK (status IN ('reserved', 'settled', 'refunded')),
+        created_at TEXT NOT NULL,
+        settled_at TEXT
+      ) STRICT;
+      CREATE INDEX media_spend_by_time ON media_spend (created_at);
+
+      CREATE TABLE media_proposal_runs (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        transcript_id TEXT NOT NULL REFERENCES transcripts (id) ON DELETE CASCADE,
+        principal TEXT NOT NULL,
+        model TEXT NOT NULL,
+        spend_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'done', 'failed')),
+        windows_total INTEGER NOT NULL CHECK (windows_total >= 1),
+        windows_done INTEGER NOT NULL DEFAULT 0 CHECK (windows_done >= 0),
+        estimate_usd REAL NOT NULL CHECK (estimate_usd >= 0),
+        spent_usd REAL NOT NULL DEFAULT 0 CHECK (spent_usd >= 0),
+        failure TEXT CHECK (failure IN ('provider', 'invalid-output', 'run-cap', 'interrupted')),
+        created_at TEXT NOT NULL,
+        finished_at TEXT
+      ) STRICT;
+      CREATE INDEX media_proposal_runs_by_media ON media_proposal_runs (media_id, created_at);
+      -- One run at a time per recording.
+      CREATE UNIQUE INDEX media_proposal_runs_running ON media_proposal_runs (media_id)
+        WHERE status = 'running';
+
+      CREATE TABLE media_draft_tracks (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES media_proposal_runs (id) ON DELETE CASCADE,
+        source TEXT NOT NULL CHECK (source IN ('ai', 'manual')),
+        edited INTEGER NOT NULL DEFAULT 0 CHECK (edited IN (0, 1)),
+        first_segment INTEGER NOT NULL CHECK (first_segment >= 1),
+        last_segment INTEGER NOT NULL CHECK (last_segment >= first_segment),
+        start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+        end_ms INTEGER NOT NULL CHECK (end_ms - start_ms >= 5000),
+        kind TEXT NOT NULL CHECK (kind IN ('qa', 'talk')),
+        title TEXT CHECK (title IS NULL OR length(title) BETWEEN 1 AND 80),
+        asker_voice INTEGER CHECK (asker_voice IS NULL OR asker_voice BETWEEN 1 AND 10),
+        answerer_voice INTEGER CHECK (answerer_voice IS NULL OR answerer_voice BETWEEN 1 AND 10),
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX media_draft_tracks_by_media ON media_draft_tracks (media_id, start_ms);
+      CREATE INDEX media_draft_tracks_by_run ON media_draft_tracks (run_id);
+
+      -- Names suggested for the voices from context, never from the voice (KBC-067 BR-5).
+      CREATE TABLE media_voice_suggestions (
+        run_id TEXT NOT NULL REFERENCES media_proposal_runs (id) ON DELETE CASCADE,
+        voice INTEGER NOT NULL CHECK (voice BETWEEN 1 AND 10),
+        name TEXT CHECK (name IS NULL OR length(name) BETWEEN 1 AND 80),
+        audience INTEGER NOT NULL CHECK (audience IN (0, 1)),
+        reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 300),
+        PRIMARY KEY (run_id, voice)
+      ) STRICT;
+    `,
+  },
 ];

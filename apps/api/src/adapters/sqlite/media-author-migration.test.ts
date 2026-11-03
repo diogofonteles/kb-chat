@@ -13,6 +13,10 @@ const AUTHOR_VERSION = AUTHOR_MIGRATION.version;
 const BEFORE_AUTHORS = MEDIA_MIGRATIONS.filter(
   (one) => one.version < AUTHOR_VERSION,
 );
+/** Up to this migration: later ones (KBC-064's diarization) are not what it proves. */
+const THROUGH_AUTHORS = MEDIA_MIGRATIONS.filter(
+  (one) => one.version <= AUTHOR_VERSION,
+);
 
 /** A media database as it was before KBC-049, with one item of each authorship. */
 function databaseOfToday(): DatabaseSync {
@@ -33,7 +37,7 @@ describe('the media-author migration (KBC-049 FR-5, AC-5)', () => {
   it("turns the Mestre's media into his author id and the others into no author, losing nothing", () => {
     const db = databaseOfToday();
 
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([AUTHOR_VERSION]);
+    expect(applyMigrations(db, THROUGH_AUTHORS)).toEqual([AUTHOR_VERSION]);
 
     const rows = db
       .prepare('SELECT id, title, author, authorship FROM media ORDER BY id')

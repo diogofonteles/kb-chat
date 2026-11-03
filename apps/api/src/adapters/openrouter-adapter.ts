@@ -82,7 +82,38 @@ export interface OpenRouterOptions {
    * The search-read loop gives the model room to think between steps instead.
    */
   readonly reasoning?: boolean;
+  /**
+   * Media proposals (KBC-067): ask for a JSON object, route only to providers that neither
+   * keep nor train on the text (OpenRouter's `data_collection: deny`), at a low temperature.
+   */
+  readonly request?: {
+    readonly jsonOutput?: boolean;
+    readonly denyDataCollection?: boolean;
+    /** Only Zero Data Retention endpoints (OpenRouter's `provider.zdr`). */
+    readonly zeroRetention?: boolean;
+    readonly temperature?: number;
+  };
   readonly fetch?: typeof fetch;
+}
+
+/** The optional request fields of `OpenRouterOptions.request`, in OpenRouter's wire names. */
+function requestExtras(
+  request: OpenRouterOptions['request'],
+): Record<string, unknown> {
+  return {
+    ...(request?.jsonOutput && { response_format: { type: 'json_object' } }),
+    ...(request?.denyDataCollection || request?.zeroRetention
+      ? {
+          provider: {
+            ...(request.denyDataCollection && { data_collection: 'deny' }),
+            ...(request.zeroRetention && { zdr: true }),
+          },
+        }
+      : {}),
+    ...(request?.temperature !== undefined && {
+      temperature: request.temperature,
+    }),
+  };
 }
 
 type Chunk = z.infer<typeof chunkSchema>;
@@ -330,6 +361,7 @@ export class OpenRouterAdapter implements AgentLlmPort {
       stream: true,
       usage: { include: true },
       reasoning: { enabled: this.options.reasoning ?? false },
+      ...requestExtras(this.options.request),
     };
   }
 

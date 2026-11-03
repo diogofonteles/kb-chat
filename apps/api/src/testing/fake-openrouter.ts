@@ -40,6 +40,23 @@ export const FAKE_FREE_MODELS: readonly FakeModel[] = [
   },
 ];
 
+/**
+ * A scripted chat answer (KBC-067): an HTTP failure, or the text built from the request's
+ * body with the cost OpenRouter would report.
+ */
+export type FakeChatScript =
+  | { readonly status: number }
+  | ((body: FakeChatBody) => {
+      readonly content: string;
+      readonly cost?: number;
+    });
+
+/** A chat request as the fake received it. */
+export interface FakeChatBody {
+  readonly messages?: readonly { role: string; content: unknown }[];
+  readonly [field: string]: unknown;
+}
+
 interface ChatCall {
   readonly models: readonly string[];
   readonly authorization: string | null;
@@ -67,6 +84,10 @@ export class FakeOpenRouter {
   /** Models that answer 429, as if their free capacity ran out. */
   readonly busy = new Set<string>();
   readonly chats: ChatCall[] = [];
+  /** Every chat request body, as sent. */
+  readonly chatBodies: FakeChatBody[] = [];
+  /** Answers used in order before the default one. */
+  readonly scripted: FakeChatScript[] = [];
   readonly createdKeys = new Map<string, { key: string; limit: number }>();
   /** Key management answers 500 (to test what happens when OpenRouter fails). */
   failManagement = false;
@@ -157,6 +178,17 @@ export class FakeOpenRouter {
     return json({ data: { hash } });
   }
 
+  /** Records the body; the next scripted answer when there is one. */
+  private scriptedFor(
+    body: unknown,
+    chain: readonly string[],
+  ): Response | null {
+    const sent = (body ?? {}) as FakeChatBody;
+    this.chatBodies.push(sent);
+    const script = this.scripted.shift();
+    return script ? scriptedReply(script, sent, chain) : null;
+  }
+
   private chat(auth: string | null, body: unknown): Response {
     if (!this.isValid(auth)) return json({ error: { code: 401 } }, 401);
     const { models = [], model } = (body ?? {}) as {
@@ -165,6 +197,12 @@ export class FakeOpenRouter {
     };
     const chain = models.length > 0 ? models : model ? [model] : [];
     this.chats.push({ models: chain, authorization: auth });
+    const scripted = this.scriptedFor(body, chain);
+    return scripted ?? this.houseReply(chain);
+  }
+
+  /** The default answer: the first model of the chain that is not busy. */
+  private houseReply(chain: readonly string[]): Response {
     const served = chain.find((id) => !this.busy.has(id));
     if (!served)
       return json(
@@ -186,4 +224,24 @@ export class FakeOpenRouter {
       '[DONE]',
     ]);
   }
+}
+
+function scriptedReply(
+  script: FakeChatScript,
+  body: FakeChatBody,
+  chain: readonly string[],
+): Response {
+  if (typeof script !== 'function')
+    return json({ error: { code: script.status } }, script.status);
+  const { content, cost = 0 } = script(body);
+  const model = chain[0] ?? 'openrouter';
+  return sse([
+    JSON.stringify({ model, choices: [{ delta: { content } }] }),
+    JSON.stringify({
+      model,
+      choices: [],
+      usage: { prompt_tokens: 1000, completion_tokens: 100, cost },
+    }),
+    '[DONE]',
+  ]);
 }
