@@ -38,7 +38,8 @@ export class HouseQuota {
       principal,
       startOfAppDay(this.now()),
     );
-    return Math.max(0, dailyLimit - used);
+    // A refund never gives more than the day's quota (it is dated at its reservation).
+    return Math.min(dailyLimit, Math.max(0, dailyLimit - used));
   }
 
   /** Takes the profile's units, or refuses with HOUSE_QUOTA_EXHAUSTED; one at a time. */
@@ -61,21 +62,35 @@ export class HouseQuota {
       throw new AppError('HOUSE_QUOTA_EXHAUSTED', 'House quota spent today', {
         details: { remaining: left, dailyResearches: dailyLimit },
       });
-    await this.append(principal, profile, units);
+    const reservedAt = this.now();
+    await this.append(principal, { profile, units, at: reservedAt });
     let refunded = false;
     return {
       remaining: left - units,
       refund: async () => {
         if (refunded) return;
         refunded = true;
-        await this.append(principal, profile, -units);
+        // Dated at the reservation: a turn that fails after midnight gives back the day
+        // it was taken from, not the new one (KBC-061).
+        await this.append(principal, {
+          profile,
+          units: -units,
+          at: reservedAt,
+        });
       },
     };
   }
 
-  private append(principal: string, profile: ResearchProfile, units: number) {
-    const ts = this.now().toISOString();
-    return this.deps.ledger.append({ ts, principal, units, profile });
+  private append(
+    principal: string,
+    entry: { profile: ResearchProfile; units: number; at: Date },
+  ) {
+    return this.deps.ledger.append({
+      ts: entry.at.toISOString(),
+      principal,
+      units: entry.units,
+      profile: entry.profile,
+    });
   }
 
   private now(): Date {

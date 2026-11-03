@@ -70,3 +70,30 @@ describe('HouseQuota counts the day in Recife (KBC-061)', () => {
     expect(await quota.remaining('mariano', 5)).toBe(5);
   });
 });
+
+describe('HouseQuota refunds the day it was taken from (KBC-061)', () => {
+  it('never lets a refund after midnight grow the new day past the quota', async () => {
+    const entries: { ts: string; units: number }[] = [];
+    let now = new Date('2026-11-04T02:55:00Z'); // 23:55 on 03/11 in Recife
+    const quota = new HouseQuota({
+      ledger: {
+        append: async (entry) => {
+          entries.push(entry);
+        },
+        unitsSince: async (_principal, since) =>
+          entries
+            .filter((entry) => Date.parse(entry.ts) >= since.getTime())
+            .reduce((sum, entry) => sum + entry.units, 0),
+      },
+      now: () => now,
+    });
+    const reservation = await quota.reserve('p', {
+      profile: 'exhaustive',
+      dailyLimit: 5,
+    });
+    now = new Date('2026-11-04T03:10:00Z'); // 00:10 on 04/11: it fails now
+    await reservation.refund();
+    expect(entries.at(-1)?.ts).toBe('2026-11-04T02:55:00.000Z');
+    expect(await quota.remaining('p', 5)).toBe(5);
+  });
+});

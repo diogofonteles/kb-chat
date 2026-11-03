@@ -161,4 +161,19 @@ describe('HouseResearchRunner gives the day back when no answer came (KBC-061)',
     const next = await drain(runner(new RecordingRunner()).run(input('fast')));
     expect(next.at(-1)?.type).toBe('done');
   });
+
+  it('refunds an answer that was written and then taken back before failing', async () => {
+    const { runner, used } = withLedger();
+    await drain(
+      runner(
+        new ScriptedRunner([
+          { type: 'token', text: 'plano', segment: 0 },
+          { type: 'retract', segment: 0 },
+          { type: 'step', step: { kind: 'sweep', text: 'lote 1' } },
+          { type: 'error', code: 'PROVIDER_UNAVAILABLE' },
+        ]),
+      ).run(input('exhaustive')),
+    );
+    expect(used()).toBe(0);
+  });
 });

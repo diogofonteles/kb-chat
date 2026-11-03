@@ -100,6 +100,13 @@ const LENT_PLAN: Record<LentSubscription, AppPlan> = {
   'chatgpt-subscription': 'app-chatgpt-subscription',
 };
 
+/** What a person spent on the paid fallback this month, in Recife (KBC-061). */
+export const spentThisMonth = (
+  ledger: Pick<SpendLedgerPort, 'spentSince'>,
+  principal: string,
+  now: Date,
+): Promise<number> => ledger.spentSince(principal, startOfAppMonth(now));
+
 /** The house plan behind the registry: assignment, model chain, quota and spend (ADR 0016). */
 export class AppAiPlan implements AppAiPort {
   private readonly handlers: Partial<Record<LentAi, AppAiHandler>>;
@@ -282,10 +289,7 @@ export class AppAiPlan implements AppAiPort {
     if (!model || !enabled || !price) return null;
     const fits = async (pendingPlusEstimate: number) => {
       const now = this.deps.now?.() ?? new Date();
-      const spent = await this.deps.houseSpend.spentSince(
-        principal,
-        startOfAppMonth(now),
-      );
+      const spent = await spentThisMonth(this.deps.houseSpend, principal, now);
       return spent + pendingPlusEstimate <= monthlyCapUsd;
     };
     return {

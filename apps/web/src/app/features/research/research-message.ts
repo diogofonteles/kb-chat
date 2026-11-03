@@ -135,8 +135,9 @@ export class ResearchMessage {
     return usd ? formatCost(usd) : '';
   });
   /**
-   * Asking again fits a failure or a stop, never a spent daily cap (that needs Settings).
-   * A spent house quota may be back (a new day, a refund): asking again finds out (KBC-061).
+   * Asking again fits a failure or a stop, except DAILY_CAP_REACHED (the person's own spend
+   * cap, changed in Settings). HOUSE_QUOTA_EXHAUSTED may be over (a new day, a refund):
+   * asking again finds out (KBC-061).
    */
   protected readonly canRetry = computed(() => {
     const turn = this.turn();

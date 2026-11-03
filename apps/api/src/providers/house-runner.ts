@@ -129,10 +129,14 @@ export class HouseResearchRunner implements ResearchRunnerPort {
     reservation: Reservation;
     inner: ResearchRunnerPort;
   }): AsyncIterable<ResearchEvent> {
-    let answered = false;
+    // Segments of the answer still on screen: a retracted one was never an answer.
+    const shown = new Set<number>();
     for await (const event of inner.run(input)) {
-      answered ||= ANSWERED.has(event.type);
-      if (event.type === 'error' && !answered) await reservation.refund();
+      if (ANSWERED.has(event.type) && 'segment' in event)
+        shown.add(event.segment);
+      if (event.type === 'retract') shown.delete(event.segment);
+      if (event.type === 'error' && shown.size === 0)
+        await reservation.refund();
       yield event.type === 'done' ? this.labelled(event, reservation) : event;
     }
   }

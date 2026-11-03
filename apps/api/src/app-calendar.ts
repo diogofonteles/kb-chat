@@ -4,17 +4,29 @@
  */
 export const APP_TIME_ZONE = 'America/Recife';
 
+/** One formatter per zone: building one is far slower than using it. */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatterOf(timeZone: string): Intl.DateTimeFormat {
+  let format = formatters.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    formatters.set(timeZone, format);
+  }
+  return format;
+}
+
 const partsIn = (instant: Date, timeZone: string) => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(instant);
+  const parts = formatterOf(timeZone).formatToParts(instant);
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     Number(parts.find((part) => part.type === type)?.value);
   return {
