@@ -112,6 +112,11 @@ import { mcpRoutes, peerOnlyMcp } from './mcp/mcp-routes.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { SecretBox } from './adapters/secret-box.js';
 import { createHouseAi, type HouseAi } from './house-ai-factory.js';
+import { createTrackProposals } from './track-proposals-factory.js';
+import {
+  type ProposalService,
+  trackProposalRoutes,
+} from './modules/track-proposals/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
 import {
@@ -377,6 +382,8 @@ interface MediaWiring {
   readonly media: MediaDeps;
   readonly catalog: CatalogRegistry;
   readonly authors: AuthorsService;
+  /** The app's AI a master connected: the media AI runs on it (KBC-067, ADR 0016). */
+  readonly house: HouseAi;
 }
 
 /** A collection's media, with its sub-collections' (ADR 0028). */
@@ -436,12 +443,35 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   );
   await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
   await registerWorker(app, { media: wiring.media, transcribers });
+  const proposals = await registerProposals(app, {
+    ...wiring,
+    service: media,
+  });
   const janitor = new MediaJanitor({ store, files, log: app.log });
   janitor.start(JANITOR_INTERVAL_MS);
   app.addHook('onClose', async () => {
+    // Runs in flight end as interrupted before the database closes.
+    await proposals.stop();
     janitor.stop();
     store.close();
   });
+}
+
+/** The AI's track proposals (KBC-067): runs a restart cut short end first, then the routes. */
+async function registerProposals(
+  app: FastifyInstance,
+  wiring: MediaWiring & { readonly service: MediaService },
+): Promise<ProposalService> {
+  const proposals = createTrackProposals({
+    ...wiring,
+    findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
+    log: app.log,
+  });
+  const interrupted = proposals.recover();
+  if (interrupted > 0)
+    app.log.warn({ interrupted }, 'track proposals interrupted by a restart');
+  await app.register(trackProposalRoutes(proposals));
+  return proposals;
 }
 
 /** The one-time codes, access requests and messages of KBC-014 (ADR 0011). */

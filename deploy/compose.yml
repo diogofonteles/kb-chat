@@ -61,6 +61,10 @@ services:
       KB_CHAT_MEDIA: ${KB_CHAT_MEDIA:-off}
       KB_CHAT_MEDIA_DIR: /data/media
       KB_CHAT_MEDIA_WORKER_TOKEN: ${KB_CHAT_MEDIA_WORKER_TOKEN:-}
+      # Track proposals with the app's AI (KBC-067): model and US$ caps (ADR 0029).
+      MEDIA_AI_MODEL: ${MEDIA_AI_MODEL:-deepseek/deepseek-v4-flash}
+      MEDIA_MONTHLY_CAP_USD: ${MEDIA_MONTHLY_CAP_USD:-10}
+      MEDIA_AI_RUN_CAP_USD: ${MEDIA_AI_RUN_CAP_USD:-0.25}
     volumes:
       # The vault is read-only for the API (Q7); rsync from the owner's Mac writes it.
       - ${KB_CHAT_DATA:-/srv/kb-chat}/vault:/vault:ro
