@@ -512,9 +512,13 @@ export const transcriberSchema = z.object({
   lastSeenAt: z.iso.datetime().nullable(),
   /** Seen within TRANSCRIBER_ONLINE_MS. */
   online: z.boolean(),
-  /** The item it holds now, if any. */
+  /** The item it holds now, if any, and what it does to it (KBC-064: transcribe or separate). */
   currentJob: z
-    .object({ mediaId: mediaIdSchema, title: z.string() })
+    .object({
+      mediaId: mediaIdSchema,
+      title: z.string(),
+      kind: mediaJobKindSchema.default('transcribe'),
+    })
     .nullable(),
 });
 export type Transcriber = z.infer<typeof transcriberSchema>;

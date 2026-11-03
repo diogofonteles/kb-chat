@@ -16,6 +16,7 @@ export interface TranscriberRecord {
   readonly currentJob: {
     readonly mediaId: string;
     readonly title: string;
+    readonly kind: MediaJobKind;
   } | null;
 }
 

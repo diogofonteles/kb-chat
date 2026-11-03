@@ -141,6 +141,39 @@ export class TranscribersPanel {
     return $localize`:@@transcribers.revokeLabel:Revogar ${transcriber.name}:name:`;
   }
 
+  protected separatesVoices(transcriber: Transcriber): boolean {
+    return transcriber.kinds.includes('diarize');
+  }
+
+  /** "Separa vozes: Mac do dono": which one, in a list of alike boxes (WCAG 2.5.3). */
+  protected diarizeLabelOf(transcriber: Transcriber): string {
+    return $localize`:@@transcribers.diarizeLabel:Separa vozes: ${transcriber.name}:name:`;
+  }
+
+  /** Marks or unmarks "Separa vozes" (KBC-064 FR-6); the status says what changed. */
+  protected toggleDiarize(transcriber: Transcriber, event: Event): void {
+    const on = (event.target as HTMLInputElement).checked;
+    this.busy.set(true);
+    this.notice.set(null);
+    this.api
+      .setKinds(transcriber.id, on ? ['transcribe', 'diarize'] : ['transcribe'])
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () =>
+          this.settle({
+            kind: 'ok',
+            text: on
+              ? $localize`:@@transcribers.diarizeOn:"${transcriber.name}:name:" agora separa vozes.`
+              : $localize`:@@transcribers.diarizeOff:"${transcriber.name}:name:" não separa mais vozes.`,
+          }),
+        error: () =>
+          this.settle({
+            kind: 'error',
+            text: $localize`:@@transcribers.diarizeFailed:Não consegui mudar. Tente de novo.`,
+          }),
+      });
+  }
+
   protected revoke(transcriber: Transcriber): void {
     this.busy.set(true);
     this.notice.set(null);

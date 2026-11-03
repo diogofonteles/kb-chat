@@ -20,7 +20,9 @@ const COLUMNS = `t.id, t.name, t.kinds, t.created_at, t.last_seen_at,
      AND j.status = 'leased' ORDER BY j.updated_at DESC LIMIT 1) AS job_media,
   (SELECT m.title FROM jobs j JOIN media m ON m.id = j.media_id
      WHERE j.worker = '${TRANSCRIBER_LEASE_PREFIX}' || t.id AND j.status = 'leased'
-     ORDER BY j.updated_at DESC LIMIT 1) AS job_title`;
+     ORDER BY j.updated_at DESC LIMIT 1) AS job_title,
+  (SELECT j.kind FROM jobs j WHERE j.worker = '${TRANSCRIBER_LEASE_PREFIX}' || t.id
+     AND j.status = 'leased' ORDER BY j.updated_at DESC LIMIT 1) AS job_kind`;
 
 function toRecord(row: Row): TranscriberRecord {
   const mediaId = row['job_media'];
@@ -33,7 +35,11 @@ function toRecord(row: Row): TranscriberRecord {
       row['last_seen_at'] === null ? null : String(row['last_seen_at']),
     currentJob:
       typeof mediaId === 'string'
-        ? { mediaId, title: String(row['job_title']) }
+        ? {
+            mediaId,
+            title: String(row['job_title']),
+            kind: mediaJobKindSchema.parse(row['job_kind']),
+          }
         : null,
   };
 }

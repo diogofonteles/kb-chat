@@ -54,6 +54,7 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         currentJob: {
           mediaId: '11111111-1111-4111-8111-111111111111',
           title: 'Palestra de 1998',
+          kind: 'transcribe',
         },
       }),
       aTranscriber({
@@ -298,5 +299,51 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       'Já existe um transcritor com esse nome. Escolha outro.',
     );
     expect(document.activeElement).toBe(field);
+  });
+
+  it('marks a transcriber to separate voices and says so (KBC-064 FR-6)', async () => {
+    const { fixture, http } = await renderPanel([aTranscriber()]);
+    const box = screen.getByRole('checkbox', {
+      name: 'Separa vozes: Mac do dono',
+    });
+    expect((box as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(box);
+    const patch = http.expectOne({
+      method: 'PATCH',
+      url: `${URL}/${aTranscriber().id}`,
+    });
+    expect(patch.request.body).toEqual({ kinds: ['transcribe', 'diarize'] });
+    patch.flush(aTranscriber({ kinds: ['transcribe', 'diarize'] }));
+    TestBed.tick();
+    http.expectOne(URL).flush({
+      items: [aTranscriber({ kinds: ['transcribe', 'diarize'] })],
+    });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      '"Mac do dono" agora separa vozes.',
+    );
+    expect(
+      (
+        screen.getByRole('checkbox', {
+          name: 'Separa vozes: Mac do dono',
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+  });
+
+  it('says what a transcriber is doing: separating voices or transcribing', async () => {
+    await renderPanel([
+      aTranscriber({
+        kinds: ['transcribe', 'diarize'],
+        currentJob: {
+          mediaId: '11111111-1111-4111-8111-111111111111',
+          title: 'Entrevista',
+          kind: 'diarize',
+        },
+      }),
+    ]);
+    expect(screen.getByRole('listitem').textContent).toContain(
+      'separando as vozes de "Entrevista"',
+    );
   });
 });

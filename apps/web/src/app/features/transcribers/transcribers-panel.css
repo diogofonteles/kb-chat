@@ -197,6 +197,23 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+/* "Separa vozes" (KBC-064 FR-6): the whole line is the target (MA, 44 px). */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  cursor: pointer;
+  justify-self: start;
+}
+
+.check input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
 .confirm {
   display: grid;
   gap: var(--space-2);
