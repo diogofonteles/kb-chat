@@ -45,8 +45,9 @@ const ONE_MINUTE_MS = 60_000;
           Voltar para a minha conta
         </button>
       </div>
+      <!-- Only while acting: the page's own status region stays the only one otherwise. -->
+      <p class="visually-hidden" role="status">{{ said() }}</p>
     }
-    <p class="visually-hidden" role="status">{{ said() }}</p>
   `,
   styleUrl: './acting-banner.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -97,10 +97,10 @@ describe('ActingBanner (KBC-060 FR-5)', () => {
     expect(restart).toHaveBeenCalledOnce();
   });
 
-  it('shows nothing when nobody acts', async () => {
+  it('shows nothing when nobody acts, not even an empty status region', async () => {
     await renderBanner(aMe());
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.getByRole('status').textContent?.trim()).toBe('');
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });
 
