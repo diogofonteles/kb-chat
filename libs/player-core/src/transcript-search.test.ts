@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  foldForSearch,
-  highlightParts,
-  searchSegments,
-} from './transcript-search.js';
+import { foldForSearch, searchSegments } from './transcript-search.js';
 
 describe('foldForSearch', () => {
   it('drops accents and case, keeping where each character came from', () => {
@@ -55,39 +51,5 @@ describe('searchSegments (KBC-038 FR-8, AC-9)', () => {
       { segment: 0, start: 0, end: 2 },
       { segment: 0, start: 2, end: 4 },
     ]);
-  });
-});
-
-describe('highlightParts', () => {
-  it('cuts the text around matches, telling the current one apart', () => {
-    expect(
-      highlightParts('o rei e o rei', [
-        { start: 10, end: 13, current: true },
-        { start: 2, end: 5, current: false },
-      ]),
-    ).toEqual([
-      { text: 'o ', kind: 'plain' },
-      { text: 'rei', kind: 'match' },
-      { text: ' e o ', kind: 'plain' },
-      { text: 'rei', kind: 'current' },
-    ]);
-  });
-
-  it('gives the plain text without marks, and skips an overlapping mark', () => {
-    expect(highlightParts('texto', [])).toEqual([
-      { text: 'texto', kind: 'plain' },
-    ]);
-    expect(
-      highlightParts('abc', [
-        { start: 0, end: 2, current: false },
-        { start: 1, end: 3, current: false },
-      ]),
-    ).toEqual([
-      { text: 'ab', kind: 'match' },
-      { text: 'c', kind: 'plain' },
-    ]);
-    expect(
-      highlightParts('ab', [{ start: 0, end: 2, current: false }]),
-    ).toEqual([{ text: 'ab', kind: 'match' }]);
   });
 });

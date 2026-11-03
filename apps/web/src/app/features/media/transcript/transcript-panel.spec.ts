@@ -13,7 +13,11 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
-import { TranscriptPanel } from './transcript-panel.js';
+import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
+import {
+  TRANSCRIPT_SEARCH_DEBOUNCE_MS,
+  TranscriptPanel,
+} from './transcript-panel.js';
 
 const MEDIA = '11111111-1111-4111-8111-111111111111';
 
@@ -37,8 +41,12 @@ const transcriptOf = (
   ...overrides,
 });
 
-async function renderPanel(transcript = transcriptOf()) {
+/** What the search painted last, per highlight, as the texts of its ranges. */
+const painted = new Map<string, string[]>();
+
+async function renderPanel(transcript = transcriptOf(), debounceMs = 0) {
   localStorage.clear();
+  painted.clear();
   const media: FakeMedia = fakeMediaElement();
   const view = await render(TranscriptPanel, {
     inputs: { transcript, title: 'Palestra de 1998' },
@@ -46,6 +54,18 @@ async function renderPanel(transcript = transcriptOf()) {
       provideZonelessChangeDetection(),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
       { provide: ANIMATION_FRAMES, useValue: EMPTY },
+      { provide: TRANSCRIPT_SEARCH_DEBOUNCE_MS, useValue: debounceMs },
+      {
+        provide: SEARCH_HIGHLIGHTS,
+        useValue: {
+          show: (name: string, ranges: readonly Range[]) =>
+            painted.set(
+              name,
+              ranges.map((range) => range.toString()),
+            ),
+          clear: (name: string) => painted.delete(name),
+        },
+      },
     ],
   });
   const engine = TestBed.inject(MediaEngine);
@@ -75,6 +95,17 @@ async function at(
 
 const timeButtons = () =>
   screen.getAllByRole('button', { name: /^\d+:\d{2}, tocar de / });
+
+/** Types into the search field and lets the (test-short) pause pass. */
+async function typeQuery(
+  field: HTMLElement,
+  value: string,
+  view: Awaited<ReturnType<typeof renderPanel>>['view'],
+) {
+  fireEvent.input(field, { target: { value } });
+  await new Promise((resolve) => setTimeout(resolve));
+  await view.fixture.whenStable();
+}
 
 const focused = () => document.activeElement as HTMLElement;
 
@@ -225,15 +256,22 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
   it('searches without accents or case, walks the occurrences and plays from one (AC-9)', async () => {
     const { media, view } = await renderPanel();
     const field = screen.getByLabelText('Buscar na transcrição');
-    fireEvent.input(field, { target: { value: 'salomao' } });
-    await view.fixture.whenStable();
+    await typeQuery(field, 'salomao', view);
     expect(screen.getByRole('status').textContent).toBe('1 de 3');
-    expect(document.querySelectorAll('mark')).toHaveLength(3);
-    expect(document.querySelector('mark.current')?.textContent).toBe('Salomão');
+    // Painted, not marked up: the DOM text stays as it is.
+    expect(document.querySelectorAll('mark')).toHaveLength(0);
+    expect(painted.get('transcript-match')).toEqual(['Salomao', 'SALOMÃO']);
+    expect(painted.get('transcript-current')).toEqual(['Salomão']);
+    expect(document.querySelector('li.current-hit')?.textContent).toContain(
+      'Existia um rei chamado Salomão.',
+    );
     fireEvent.keyDown(field, { key: 'Enter' });
     await view.fixture.whenStable();
     expect(screen.getByRole('status').textContent).toBe('2 de 3');
-    expect(document.querySelector('mark.current')?.textContent).toBe('Salomao');
+    expect(painted.get('transcript-current')).toEqual(['Salomao']);
+    expect(document.querySelector('li.current-hit')?.textContent).toContain(
+      'Salomao era sábio.',
+    );
     // With the search open, the list does not follow.
     expect(
       screen.getByRole('button', { name: 'Voltar ao trecho atual' }),
@@ -251,11 +289,28 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     expect(screen.getByRole('status').textContent).toBe('1 de 3');
   });
 
+  it('searches only once typing pauses, and Enter searches at once (NFR-2)', async () => {
+    const { view } = await renderPanel(transcriptOf(), 10_000);
+    const field = screen.getByLabelText('Buscar na transcrição');
+    fireEvent.input(field, { target: { value: 'salomao' } });
+    await view.fixture.whenStable();
+    // Nothing searched yet, but the list already stops following.
+    expect(screen.getByRole('status').textContent).toBe('');
+    expect(
+      screen.getByRole('button', { name: 'Voltar ao trecho atual' }),
+    ).toBeTruthy();
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await view.fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toBe('1 de 3');
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await view.fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toBe('2 de 3');
+  });
+
   it('says when nothing matches, and Esc clears the search', async () => {
     const { view } = await renderPanel();
     const field = screen.getByLabelText('Buscar na transcrição');
-    fireEvent.input(field, { target: { value: 'xyz' } });
-    await view.fixture.whenStable();
+    await typeQuery(field, 'xyz', view);
     expect(screen.getByRole('status').textContent).toBe(
       "Nenhum trecho com 'xyz'.",
     );
@@ -267,6 +322,8 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     // The live region stays, empty, so the next result is announced too.
     expect(screen.getByRole('status').textContent).toBe('');
     expect((field as HTMLInputElement).value).toBe('');
+    expect(painted.get('transcript-match')).toEqual([]);
+    expect(painted.get('transcript-current')).toEqual([]);
   });
 
   it('shows the low-confidence notice above the text (AC-6, BR-2)', async () => {
@@ -341,7 +398,7 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
       .closest('li') as HTMLElement;
     const range = document.createRange();
     range.setStart(list, Array.from(list.childNodes).indexOf(fourth));
-    range.setEnd(fourth.querySelector('.text span')?.firstChild as Text, 8);
+    range.setEnd(fourth.querySelector('.text')?.firstChild as Text, 8);
     document.getSelection()?.removeAllRanges();
     document.getSelection()?.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));

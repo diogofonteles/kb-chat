@@ -4,6 +4,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  InjectionToken,
   Renderer2,
   Injector,
   afterNextRender,
@@ -16,25 +17,28 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import {
+  takeUntilDestroyed,
+  toObservable,
+  toSignal,
+} from '@angular/core/rxjs-interop';
 import type { MediaTranscript } from '@kb-chat/contracts';
 import {
   formatClock,
-  highlightParts,
   lastStartedAt,
   minuteLink,
   prepareSearch,
   quoteWithLink,
   searchPrepared,
   type SearchHit,
-  type TextPart,
 } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { mediaPagePath } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { PlaybackClock } from '@core/media/playback-clock.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
-import { skip } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, merge, skip } from 'rxjs';
+import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 
 /** One segment as the list shows it. */
 interface SegmentView {
@@ -43,8 +47,6 @@ interface SegmentView {
   readonly clock: string;
   readonly label: string;
   readonly text: string;
-  /** Only for a segment with occurrences of the search. */
-  readonly parts: readonly TextPart[] | null;
 }
 
 /** A passage the person selected in the list, and where its first segment starts. */
@@ -60,6 +62,12 @@ const STEPS: Readonly<Record<string, number>> = {
   PageDown: 10,
   PageUp: -10,
 };
+
+/** The pause after typing before the transcript is searched (tests set 0). */
+export const TRANSCRIPT_SEARCH_DEBOUNCE_MS = new InjectionToken<number>(
+  'TRANSCRIPT_SEARCH_DEBOUNCE_MS',
+  { providedIn: 'root', factory: () => 150 },
+);
 
 /** Keys that move between occurrences in the search field (Enter too). */
 const HIT_STEPS: Readonly<Record<string, number>> = {
@@ -113,8 +121,25 @@ export class TranscriptPanel {
   );
   /** Off once the person scrolls or moves through the list themselves (FR-3). */
   private readonly tracking = signal(true);
-  protected readonly query = signal('');
-  protected readonly searching = computed(() => this.query().trim() !== '');
+  /** What is in the search field now. */
+  protected readonly typed = signal('');
+  /** Enter and Esc apply the field at once, without waiting for the pause. */
+  private readonly applied = new Subject<string>();
+  /**
+   * The query searched: the field once typing pauses (NFR-2: a keystroke does no work over
+   * the 20 000 words), or at once on Enter/Esc.
+   */
+  protected readonly query = toSignal(
+    merge(
+      toObservable(this.typed).pipe(
+        debounceTime(inject(TRANSCRIPT_SEARCH_DEBOUNCE_MS)),
+      ),
+      this.applied,
+    ).pipe(distinctUntilChanged()),
+    { initialValue: '' },
+  );
+  /** Typing stops the following at once (FR-8), before the search runs. */
+  protected readonly searching = computed(() => this.typed().trim() !== '');
   /** With the search open, the list does not follow either (FR-8). */
   protected readonly following = computed(
     () => this.tracking() && !this.searching(),
@@ -140,7 +165,7 @@ export class TranscriptPanel {
     computation: () => 0,
   });
   protected readonly searchStatus = computed(() => {
-    if (!this.searching()) return '';
+    if (this.query().trim() === '') return '';
     const count = this.hits().length;
     const query = this.query().trim();
     return count === 0
@@ -148,7 +173,7 @@ export class TranscriptPanel {
       : $localize`:@@transcript.search.count:${this.currentHit() + 1}:current: de ${count}:total:`;
   });
   /** The segments as listed, made once per transcript (labels and times). */
-  private readonly plainView = computed<SegmentView[]>(() =>
+  protected readonly view = computed<SegmentView[]>(() =>
     this.segments().map((segment, index) => ({
       index,
       startMs: segment.startMs,
@@ -156,23 +181,12 @@ export class TranscriptPanel {
       // The name starts with the visible time, for voice control (WCAG 2.5.3).
       label: $localize`:@@transcript.playFromClock:${formatClock(segment.startMs)}:clock:, tocar de ${speak(segment.startMs)}:time:`,
       text: segment.text,
-      parts: null,
     })),
   );
-  /** Segments with occurrences get their highlighted parts; the others stay the same. */
-  protected readonly view = computed<SegmentView[]>(() => {
-    const plain = this.plainView();
-    const marks = marksBySegment(this.hits(), this.currentHit());
-    if (marks.size === 0) return plain;
-    return plain.map((item) =>
-      marks.has(item.index)
-        ? {
-            ...item,
-            parts: highlightParts(item.text, marks.get(item.index) ?? []),
-          }
-        : item,
-    );
-  });
+  /** The segment of the current occurrence: its outline shows it in any browser. */
+  protected readonly currentHitSegment = computed(
+    () => this.hits()[this.currentHit()]?.segment ?? -1,
+  );
   protected readonly selected = signal<Selected | null>(null);
 
   constructor() {
@@ -183,14 +197,61 @@ export class TranscriptPanel {
     toObservable(this.engine.seeksLanded)
       .pipe(skip(1), takeUntilDestroyed())
       .subscribe(() => this.resumeTracking());
-    afterRenderEffect(() => {
-      const index = this.activeIndex();
-      if (this.following() && index >= 0) this.reveal(index);
+    // Measure, then scroll: one layout per change, never a read after a write.
+    afterRenderEffect({
+      earlyRead: () => {
+        const index = this.activeIndex();
+        return this.following() && index >= 0
+          ? this.scrollTargetOf(index)
+          : null;
+      },
+      write: (target) => this.scrollList(target()),
     });
-    afterRenderEffect(() => {
-      const hit = this.hits()[this.currentHit()];
-      if (hit) this.reveal(hit.segment);
+    afterRenderEffect({
+      earlyRead: () => {
+        const hit = this.hits()[this.currentHit()];
+        return hit ? this.scrollTargetOf(hit.segment) : null;
+      },
+      write: (target) => this.scrollList(target()),
     });
+    this.paintSearch(destroyRef);
+  }
+
+  /** The occurrences painted over the text, the current one apart (no DOM change). */
+  private paintSearch(destroyRef: DestroyRef): void {
+    const highlights = inject(SEARCH_HIGHLIGHTS);
+    afterRenderEffect({
+      write: () => {
+        const hits = this.hits();
+        const current = this.currentHit();
+        const ranges = hits.map((hit) => this.rangeOf(hit));
+        highlights.show(
+          'transcript-match',
+          ranges.filter(
+            (range, index): range is Range => !!range && index !== current,
+          ),
+        );
+        const now = ranges[current];
+        highlights.show('transcript-current', now ? [now] : []);
+      },
+    });
+    destroyRef.onDestroy(() => {
+      highlights.clear('transcript-match');
+      highlights.clear('transcript-current');
+    });
+  }
+
+  /** The text of an occurrence, in its segment's text node. */
+  private rangeOf(hit: SearchHit): Range | null {
+    const node =
+      this.items()[hit.segment]?.nativeElement.querySelector(
+        '.text',
+      )?.firstChild;
+    if (!(node instanceof Text)) return null;
+    const range = this.document.createRange();
+    range.setStart(node, Math.min(hit.start, node.length));
+    range.setEnd(node, Math.min(hit.end, node.length));
+    return range;
   }
 
   /**
@@ -264,14 +325,23 @@ export class TranscriptPanel {
 
   protected search(event: Event): void {
     if (event.target instanceof HTMLInputElement)
-      this.query.set(event.target.value);
+      this.typed.set(event.target.value);
   }
 
-  /** Enter/↓ next, Shift+Enter/↑ previous, Esc clears (FR-8). */
+  /**
+   * Enter/↓ next, Shift+Enter/↑ previous, Esc clears (FR-8). Enter on a query not searched
+   * yet searches it (the first occurrence) instead of moving.
+   */
   protected searchKeys(event: KeyboardEvent): void {
     if (event.key === 'Escape' && this.searching()) {
       event.preventDefault();
-      this.query.set('');
+      this.typed.set('');
+      this.applied.next('');
+      return;
+    }
+    if (event.key === 'Enter' && this.typed() !== this.query()) {
+      event.preventDefault();
+      this.applied.next(this.typed());
       return;
     }
     const step =
@@ -389,21 +459,34 @@ export class TranscriptPanel {
    * it is already comfortably in view; smooth unless reduced motion is asked.
    */
   private reveal(index: number, behavior: ScrollBehavior = 'smooth'): void {
+    this.scrollList(this.scrollTargetOf(index), behavior);
+  }
+
+  /** Where the list must scroll for the segment to sit in its upper third; null when in view. */
+  private scrollTargetOf(index: number): number | null {
     const list = this.list()?.nativeElement;
     const item = this.items()[index]?.nativeElement;
-    if (!list || !item) return;
+    if (!list || !item) return null;
     const margin = list.clientHeight * COMFORT;
     const top = item.offsetTop;
     const bottom = top + item.offsetHeight;
     const inView =
       top >= list.scrollTop + margin &&
       bottom <= list.scrollTop + list.clientHeight - margin;
-    if (inView) return;
+    return inView ? null : Math.max(0, top - list.clientHeight / 3);
+  }
+
+  /** Scrolls only the list (never the page), smooth unless reduced motion is asked. */
+  private scrollList(
+    target: number | null,
+    behavior: ScrollBehavior = 'smooth',
+  ): void {
+    const list = this.list()?.nativeElement;
+    if (!list || target === null) return;
     const reduced =
       this.document.defaultView?.matchMedia?.(
         '(prefers-reduced-motion: reduce)',
       ).matches ?? false;
-    const target = Math.max(0, top - list.clientHeight / 3);
     if (typeof list.scrollTo === 'function')
       list.scrollTo({ top: target, behavior: reduced ? 'instant' : behavior });
     else list.scrollTop = target;
@@ -412,24 +495,6 @@ export class TranscriptPanel {
 
 const COPY_FAILED = () =>
   $localize`:@@transcript.copyFailed:Não consegui copiar. Copie o trecho à mão.`;
-
-/** Each segment's occurrences, the current one told apart. */
-function marksBySegment(
-  hits: readonly SearchHit[],
-  current: number,
-): Map<number, { start: number; end: number; current: boolean }[]> {
-  const marks = new Map<
-    number,
-    { start: number; end: number; current: boolean }[]
-  >();
-  hits.forEach((hit, index) =>
-    marks.set(hit.segment, [
-      ...(marks.get(hit.segment) ?? []),
-      { start: hit.start, end: hit.end, current: index === current },
-    ]),
-  );
-  return marks;
-}
 
 /**
  * Where the selected passage starts: the segment holding its start, or (a selection that

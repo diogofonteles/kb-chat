@@ -513,8 +513,8 @@ test('NFR-2: a 2 h transcript (~20 000 words) opens and answers clicks and keys 
   await owner.dispose();
   // Event Timing: the longest interaction (click, key) from the page's own measurements.
   await page.addInitScript(() => {
-    const durations: number[] = [];
-    Object.assign(window, { kbcInteractions: durations });
+    const durations: { name: string; duration: number; step: string }[] = [];
+    Object.assign(window, { kbcInteractions: durations, kbcStep: '' });
     // Event Timing fields newer than this project's DOM typings.
     type EventEntry = PerformanceEntry & { readonly interactionId?: number };
     const options: PerformanceObserverInit & { durationThreshold: number } = {
@@ -524,32 +524,67 @@ test('NFR-2: a 2 h transcript (~20 000 words) opens and answers clicks and keys 
     };
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries() as EventEntry[])
-        if (entry.interactionId) durations.push(entry.duration);
+        if (entry.interactionId)
+          durations.push({
+            name: entry.name,
+            duration: entry.duration,
+            step: (window as unknown as { kbcStep: string }).kbcStep,
+          });
     }).observe(options);
   });
   await openPlayer(page, long);
   await expect(segmentsList(page).locator('li')).toHaveCount(1_500);
+  // KBC_E2E_CPU_THROTTLE=4 slows the CPU like a modest CI runner (Chromium only).
+  const throttle = Number(process.env['KBC_E2E_CPU_THROTTLE'] ?? '1');
+  if (throttle > 1)
+    await (
+      await page.context().newCDPSession(page)
+    ).send('Emulation.setCPUThrottlingRate', { rate: throttle });
+  const step = (name: string) =>
+    page.evaluate((value) => Object.assign(window, { kbcStep: value }), name);
   for (const n of [3, 400, 900, 1_499]) {
+    await step(`click ${n}`);
     const text = segmentsList(page).getByText(`Trecho ${n} fala do assunto`);
     await text.scrollIntoViewIfNeeded();
     await text.click();
   }
+  await step('keys');
   await activeSegment(page).getByRole('button').focus();
   for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowUp');
   await page.keyboard.press('Home');
+  await step('search');
   await page
     .getByLabel('Buscar na transcrição')
     .pressSequentially('assunto 14');
+  const status = page.locator('app-transcript-panel [role="status"]');
+  // "assunto 14": 14, 140–149 and 1 400–1 499, searched once typing pauses.
+  await expect(status).toHaveText('1 de 111');
   await page.keyboard.press('Enter');
-  await expect(page.locator('app-transcript-panel [role="status"]')).toHaveText(
-    // "assunto 14": 14, 140–149 and 1 400–1 499; Enter went to the 2nd.
-    '2 de 111',
-  );
+  await expect(status).toHaveText('2 de 111');
   const durations = await page.evaluate(
-    () => (window as unknown as { kbcInteractions: number[] }).kbcInteractions,
+    () =>
+      (
+        window as unknown as {
+          kbcInteractions: { name: string; duration: number; step: string }[];
+        }
+      ).kbcInteractions,
   );
   expect(durations.length).toBeGreaterThan(0);
-  expect(Math.max(...durations)).toBeLessThanOrEqual(200);
+  const slowest = [...durations].sort((a, b) => b.duration - a.duration);
+  const worst = slowest[0]?.duration ?? 0;
+  process.stdout.write(
+    `NFR-2 slowest: ${slowest
+      .slice(0, 3)
+      .map((one) => `${one.step}/${one.name} ${one.duration}`)
+      .join(', ')}\n`,
+  );
+  // The measured value goes into the report, to compare machines (CI, throttling).
+  testInfo.annotations.push({
+    type: 'INP',
+    description: `${worst} ms (CPU ×${throttle})`,
+  });
+  process.stdout.write(`NFR-2 INP: ${worst} ms (CPU ×${throttle})\n`);
+  expect(worst).toBeLessThanOrEqual(200);
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {

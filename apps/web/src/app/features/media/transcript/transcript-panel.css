@@ -125,6 +125,8 @@
   border-left: 3px solid transparent;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   cursor: pointer;
+  /* A change inside one segment never lays out the other ~1,500 (NFR-2). */
+  contain: layout style;
 }
 
 .segment:hover {
@@ -162,18 +164,11 @@
   overflow-wrap: anywhere;
 }
 
-mark {
-  padding-inline: 2px;
-  border-radius: 2px;
-  background: var(--color-mark);
-  color: var(--color-text);
-}
-
-/* The current occurrence: an outline besides the colour (UP-20). */
-/* The current occurrence: a ring inside its own box (it never touches the next words)
-   besides the colour (UP-20). */
-mark.current {
-  box-shadow: inset 0 0 0 2px var(--color-accent);
+/* The current search occurrence's segment: an outline, in any browser and besides the
+   painted colours (UP-20). The occurrences themselves are painted in styles.css. */
+.segment.current-hit {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .back-to-current {
@@ -199,7 +194,7 @@ mark.current {
     border-left-color: Highlight;
   }
 
-  mark.current {
-    outline: 2px solid Highlight;
+  .segment.current-hit {
+    outline-color: Highlight;
   }
 }

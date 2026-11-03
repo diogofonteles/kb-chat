@@ -80,35 +80,3 @@ export const searchSegments = (
   texts: readonly string[],
   query: string,
 ): SearchHit[] => searchPrepared(prepareSearch(texts), query);
-
-export type TextPartKind = 'plain' | 'match' | 'current';
-
-export interface TextPart {
-  readonly text: string;
-  readonly kind: TextPartKind;
-}
-
-/** A segment's text cut around its occurrences, the current one told apart. */
-export function highlightParts(
-  text: string,
-  marks: readonly {
-    readonly start: number;
-    readonly end: number;
-    readonly current: boolean;
-  }[],
-): TextPart[] {
-  const parts: TextPart[] = [];
-  let at = 0;
-  for (const mark of [...marks].sort((a, b) => a.start - b.start)) {
-    if (mark.start < at) continue;
-    if (mark.start > at)
-      parts.push({ text: text.slice(at, mark.start), kind: 'plain' });
-    parts.push({
-      text: text.slice(mark.start, mark.end),
-      kind: mark.current ? 'current' : 'match',
-    });
-    at = mark.end;
-  }
-  if (at < text.length) parts.push({ text: text.slice(at), kind: 'plain' });
-  return parts;
-}

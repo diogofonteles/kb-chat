@@ -52,6 +52,18 @@ textarea {
   font-weight: 700;
 }
 
+/* Transcript search (KBC-038 FR-8): occurrences painted with the CSS Custom Highlight API,
+   which leaves the text's DOM alone (selection, find and layout stay as they are). */
+::highlight(transcript-match) {
+  background-color: var(--color-mark);
+  color: var(--color-text);
+}
+
+::highlight(transcript-current) {
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
