@@ -235,24 +235,22 @@ async function chooseMainAuthor(page: Page, slug: string, name: string) {
   if (!desktop(page)) await page.keyboard.press('Escape');
 }
 
-test('FR-2: the owner chooses the main author in "Editar acervo"; badges and the search "Autoria" follow', async ({
+test('FR-2: the owner chooses the main author in "Editar acervo" and the badges follow', async ({
   page,
 }) => {
+  // Only this test's own collection changes: the search "Autoria" labels are proven by the
+  // filter bar's component tests, never on a shared fixture collection (TE-18).
   const owner = await ownerApi();
   const udv = await aUdv(owner);
-  for (const topic of [udv.slug, 'alquimia'])
-    await owner.post(authorsUrl(topic), {
-      headers: CSRF,
-      data: { name: 'Mestre Gabriel' },
-    });
+  await owner.post(authorsUrl(udv.slug), {
+    headers: CSRF,
+    data: { name: 'Mestre Gabriel' },
+  });
   const title = `Sessão ${uniqueTag()}`;
   await owner.post(`/api/v1/topics/${encodeURIComponent(udv.slug)}/media`, {
     headers: CSRF,
     data: { title, author: 'mestre-gabriel', fileName: 'a.mp3', bytes: 10 },
   });
-  await page.addInitScript(() =>
-    localStorage.setItem('kb-chat.view', 'search'),
-  );
   await page.goto('/');
   await expect(page.getByLabel('Sua pergunta')).toBeVisible();
 
@@ -262,23 +260,11 @@ test('FR-2: the owner chooses the main author in "Editar acervo"; badges and the
   await expect(row.locator('.authorship-badge')).toHaveText(
     /✦\s*Mestre Gabriel/,
   );
-
-  try {
-    await page.goto('/');
-    await chooseMainAuthor(page, 'alquimia', 'Mestre Gabriel');
-    await page.getByLabel('Sua pergunta').fill('pedra filosofal');
-    await page.getByRole('button', { name: 'Buscar' }).click();
-    const control = page.getByRole('radiogroup', { name: 'Autoria' });
-    await expect(
-      control.getByRole('radio', { name: /Mestre Gabriel/ }),
-    ).toBeVisible();
-    await expect(control.getByText(/Laércio/)).toHaveCount(0);
-  } finally {
-    // The fixture collection goes back as other specs know it.
-    await owner.patch('/api/v1/topics/alquimia', {
-      headers: CSRF,
-      data: { mainAuthor: null },
-    });
-    await owner.dispose();
-  }
+  const saved = await owner.get('/api/v1/topics');
+  expect(
+    (
+      (await saved.json()) as { items: { slug: string; mainAuthor: unknown }[] }
+    ).items.find((one) => one.slug === udv.slug)?.mainAuthor,
+  ).toEqual({ slug: 'mestre-gabriel', name: 'Mestre Gabriel' });
+  await owner.dispose();
 });
