@@ -14,6 +14,8 @@ export interface WeekUsage {
   /** Share of sessions that used a filter. */
   readonly sessionsWithFilter: number;
   readonly spendUsd: number;
+  /** Spoken passages opened from the results (KBC-039 FR-4: phase 2's main metric). */
+  readonly mediaHitsOpened: number;
 }
 
 const DAY_MS = 86_400_000;
@@ -39,6 +41,7 @@ interface WeekAccumulator {
   filteredSessions: Set<string>;
   searches: SearchOutcome[];
   spendUsd: number;
+  mediaHitsOpened: number;
 }
 
 const share = (part: number, whole: number): number =>
@@ -49,6 +52,7 @@ const emptyWeek = (): WeekAccumulator => ({
   filteredSessions: new Set(),
   searches: [],
   spendUsd: 0,
+  mediaHitsOpened: 0,
 });
 
 /** Accumulators per week, created on first use. */
@@ -87,6 +91,7 @@ function accumulate(records: readonly UsageRecord[]): Weeks {
     const acc = weeks.at(record.ts);
     acc.sessions.add(record.sessionId);
     if (usedFilter(record)) acc.filteredSessions.add(record.sessionId);
+    if (record.type === 'media_hit_opened') acc.mediaHitsOpened++;
     if (isNewSearch(record)) {
       const outcome = { opened: false, ai: false };
       acc.searches.push(outcome);
@@ -123,34 +128,39 @@ export function weeklyUsage(
       ),
       sessionsWithFilter: share(acc.filteredSessions.size, acc.sessions.size),
       spendUsd: acc.spendUsd,
+      mediaHitsOpened: acc.mediaHitsOpened,
     }));
 }
 
 const percent = (value: number): string => `${Math.round(value * 100)}%`;
 
+const HEADER = [
+  'Semana',
+  'Sessões',
+  'Buscas',
+  '% c/ documento',
+  '% c/ IA',
+  '% sessões c/ filtro',
+  'Gasto (US$)',
+  'Trechos ouvidos',
+];
+
+const cellsOf = (row: WeekUsage): string[] => [
+  row.week,
+  String(row.sessions),
+  String(row.searches),
+  percent(row.searchesWithOpenDoc),
+  percent(row.searchesWithAi),
+  percent(row.sessionsWithFilter),
+  // Answers cost fractions of a cent: four decimals keep a week of light use visible.
+  row.spendUsd.toFixed(4),
+  String(row.mediaHitsOpened),
+];
+
 /** Plain-text table for the terminal (the report is for the owner, in pt-BR). */
 export function formatWeeklyUsage(rows: readonly WeekUsage[]): string {
-  const header = [
-    'Semana',
-    'Sessões',
-    'Buscas',
-    '% c/ documento',
-    '% c/ IA',
-    '% sessões c/ filtro',
-    'Gasto (US$)',
-  ];
-  const lines = rows.map((row) => [
-    row.week,
-    String(row.sessions),
-    String(row.searches),
-    percent(row.searchesWithOpenDoc),
-    percent(row.searchesWithAi),
-    percent(row.sessionsWithFilter),
-    // Answers cost fractions of a cent: four decimals keep a week of light use visible.
-    row.spendUsd.toFixed(4),
-  ]);
-  const table = [header, ...lines];
-  const widths = header.map((_, column) =>
+  const table = [HEADER, ...rows.map(cellsOf)];
+  const widths = HEADER.map((_, column) =>
     Math.max(...table.map((cells) => (cells[column] ?? '').length)),
   );
   return table
