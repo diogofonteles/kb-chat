@@ -1,0 +1,318 @@
+import { randomUUID } from 'node:crypto';
+import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
+import {
+  draftTrackSourceSchema,
+  proposalFailureSchema,
+  proposalStatusSchema,
+  trackKindSchema,
+  type DraftTrack,
+  type DraftTracks,
+  type ProposalFailure,
+  type ProposalRun,
+  type VoiceSuggestion,
+} from '@kb-chat/contracts';
+import type {
+  InterruptedRun,
+  KeptRange,
+  NewProposalRun,
+  ProposedTrack,
+  TrackExtension,
+  TrackProposalStorePort,
+} from '../../ports/track-proposal-store.js';
+import { inTransaction } from './media-database.js';
+
+type Row = Record<string, SQLOutputValue>;
+
+const text = (row: Row, column: string): string => String(row[column]);
+const textOrNull = (row: Row, column: string): string | null =>
+  row[column] === null ? null : String(row[column]);
+const numberOrNull = (row: Row, column: string): number | null =>
+  row[column] === null ? null : Number(row[column]);
+
+const RUN_COLUMNS = `r.id, r.media_id, r.status, r.model, r.windows_total, r.windows_done,
+  r.estimate_usd, r.spent_usd, r.failure, r.created_at, r.finished_at,
+  (SELECT count(*) FROM media_draft_tracks t WHERE t.run_id = r.id) AS tracks`;
+
+function toRun(row: Row): ProposalRun {
+  const failure = textOrNull(row, 'failure');
+  return {
+    id: text(row, 'id'),
+    mediaId: text(row, 'media_id'),
+    status: proposalStatusSchema.parse(row['status']),
+    model: text(row, 'model'),
+    windowsTotal: Number(row['windows_total']),
+    windowsDone: Number(row['windows_done']),
+    tracks: Number(row['tracks']),
+    estimateUsd: Number(row['estimate_usd']),
+    spentUsd: Number(row['spent_usd']),
+    failure: failure === null ? null : proposalFailureSchema.parse(failure),
+    createdAt: text(row, 'created_at'),
+    finishedAt: textOrNull(row, 'finished_at'),
+  };
+}
+
+function toTrack(row: Row): DraftTrack {
+  return {
+    id: text(row, 'id'),
+    runId: textOrNull(row, 'run_id'),
+    source: draftTrackSourceSchema.parse(row['source']),
+    edited: row['edited'] === 1,
+    firstSegment: Number(row['first_segment']),
+    lastSegment: Number(row['last_segment']),
+    startMs: Number(row['start_ms']),
+    endMs: Number(row['end_ms']),
+    kind: trackKindSchema.parse(row['kind']),
+    title: textOrNull(row, 'title'),
+    askerVoice: numberOrNull(row, 'asker_voice'),
+    answererVoice: numberOrNull(row, 'answerer_voice'),
+  };
+}
+
+const toVoice = (row: Row): VoiceSuggestion => ({
+  voice: Number(row['voice']),
+  name: textOrNull(row, 'name'),
+  audience: row['audience'] === 1,
+  reason: text(row, 'reason'),
+});
+
+/** A person's tracks and the ones a person changed: no run replaces them (BR-6). */
+const KEPT = `(source = 'manual' OR edited = 1)`;
+
+/** The AI's proposal runs and draft tracks in `media.db` (KBC-067, ADR 0029 §4). */
+export class SqliteTrackProposalStore implements TrackProposalStorePort {
+  constructor(private readonly db: DatabaseSync) {}
+
+  startRun(run: NewProposalRun): ProposalRun | null {
+    const running = this.db
+      .prepare(
+        `SELECT 1 FROM media_proposal_runs WHERE media_id = ? AND status = 'running'`,
+      )
+      .get(run.mediaId);
+    if (running) return null;
+    this.db
+      .prepare(
+        `INSERT INTO media_proposal_runs (id, media_id, transcript_id, principal, model,
+           spend_id, status, windows_total, estimate_usd, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)`,
+      )
+      .run(
+        run.id,
+        run.mediaId,
+        run.transcriptId,
+        run.principal,
+        run.model,
+        run.spendId,
+        run.windowsTotal,
+        run.estimateUsd,
+        run.now.toISOString(),
+      );
+    return this.getRun(run.id);
+  }
+
+  getRun(runId: string): ProposalRun | null {
+    const row = this.db
+      .prepare(
+        `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r WHERE r.id = ?`,
+      )
+      .get(runId);
+    return row ? toRun(row) : null;
+  }
+
+  spendIdOf(runId: string): string | null {
+    const row = this.db
+      .prepare('SELECT spend_id FROM media_proposal_runs WHERE id = ?')
+      .get(runId);
+    return row ? text(row, 'spend_id') : null;
+  }
+
+  saveWindow(input: {
+    runId: string;
+    extendLast: TrackExtension | null;
+    tracks: readonly ProposedTrack[];
+    voices: readonly VoiceSuggestion[];
+    spentUsd: number;
+  }): void {
+    inTransaction(this.db, () => {
+      if (input.extendLast) this.extendLast(input.runId, input.extendLast);
+      const mediaId = this.mediaOf(input.runId);
+      for (const track of input.tracks)
+        this.insertTrack({ runId: input.runId, mediaId, track });
+      for (const voice of input.voices) this.upsertVoice(input.runId, voice);
+      this.db
+        .prepare(
+          `UPDATE media_proposal_runs SET windows_done = windows_done + 1, spent_usd = ?
+           WHERE id = ?`,
+        )
+        .run(input.spentUsd, input.runId);
+    });
+  }
+
+  finishRun(input: {
+    runId: string;
+    failure: ProposalFailure | null;
+    spentUsd: number;
+    now: Date;
+  }): void {
+    inTransaction(this.db, () => {
+      const mediaId = this.mediaOf(input.runId);
+      if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
+      else this.dropRunOutput(input.runId);
+      this.db
+        .prepare(
+          `UPDATE media_proposal_runs SET status = ?, failure = ?, spent_usd = ?,
+             finished_at = ? WHERE id = ?`,
+        )
+        .run(
+          input.failure === null ? 'done' : 'failed',
+          input.failure,
+          input.spentUsd,
+          input.now.toISOString(),
+          input.runId,
+        );
+    });
+  }
+
+  keptRanges(mediaId: string): KeptRange[] {
+    return this.db
+      .prepare(
+        `SELECT start_ms, end_ms FROM media_draft_tracks WHERE media_id = ? AND ${KEPT}
+         ORDER BY start_ms`,
+      )
+      .all(mediaId)
+      .map((row) => ({
+        startMs: Number(row['start_ms']),
+        endMs: Number(row['end_ms']),
+      }));
+  }
+
+  draft(mediaId: string): DraftTracks {
+    const runRow = this.db
+      .prepare(
+        `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r
+         WHERE r.media_id = ? AND r.status <> 'failed'
+         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1`,
+      )
+      .get(mediaId);
+    const run = runRow ? toRun(runRow) : null;
+    const tracks = this.db
+      .prepare(
+        `SELECT * FROM media_draft_tracks
+         WHERE media_id = ? AND (${KEPT} OR run_id = ?) ORDER BY start_ms`,
+      )
+      .all(mediaId, run?.id ?? null)
+      .map(toTrack);
+    const voices = this.db
+      .prepare(
+        'SELECT * FROM media_voice_suggestions WHERE run_id = ? ORDER BY voice',
+      )
+      .all(run?.id ?? null)
+      .map(toVoice);
+    return { run, tracks, voices };
+  }
+
+  interruptRunning(now: Date): InterruptedRun[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, spend_id, spent_usd FROM media_proposal_runs WHERE status = 'running'`,
+      )
+      .all();
+    const runs = rows.map((row) => ({
+      runId: text(row, 'id'),
+      spendId: text(row, 'spend_id'),
+      spentUsd: Number(row['spent_usd']),
+    }));
+    for (const run of runs)
+      this.finishRun({
+        runId: run.runId,
+        failure: 'interrupted',
+        spentUsd: run.spentUsd,
+        now,
+      });
+    return runs;
+  }
+
+  private mediaOf(runId: string): string {
+    const row = this.db
+      .prepare('SELECT media_id FROM media_proposal_runs WHERE id = ?')
+      .get(runId);
+    if (!row) throw new Error(`Unknown proposal run ${runId}`);
+    return text(row, 'media_id');
+  }
+
+  private extendLast(runId: string, extension: TrackExtension): void {
+    this.db
+      .prepare(
+        `UPDATE media_draft_tracks SET last_segment = ?, end_ms = ?
+         WHERE id = (SELECT id FROM media_draft_tracks WHERE run_id = ?
+                     ORDER BY start_ms DESC LIMIT 1)`,
+      )
+      .run(extension.lastSegment, extension.endMs, runId);
+  }
+
+  private insertTrack(input: {
+    runId: string;
+    mediaId: string;
+    track: ProposedTrack;
+  }): void {
+    const { track } = input;
+    this.db
+      .prepare(
+        `INSERT INTO media_draft_tracks (id, media_id, run_id, source, first_segment,
+           last_segment, start_ms, end_ms, kind, title, asker_voice, answerer_voice, created_at)
+         VALUES (?, ?, ?, 'ai', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        randomUUID(),
+        input.mediaId,
+        input.runId,
+        track.firstSegment,
+        track.lastSegment,
+        track.startMs,
+        track.endMs,
+        track.kind,
+        track.title,
+        track.askerVoice,
+        track.answererVoice,
+        new Date().toISOString(),
+      );
+  }
+
+  /** A later window may name a voice an earlier one left unnamed; a name is never undone. */
+  private upsertVoice(runId: string, voice: VoiceSuggestion): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_voice_suggestions (run_id, voice, name, audience, reason)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (run_id, voice) DO UPDATE SET
+           name = excluded.name, audience = excluded.audience, reason = excluded.reason
+         WHERE media_voice_suggestions.name IS NULL AND excluded.name IS NOT NULL`,
+      )
+      .run(
+        runId,
+        voice.voice,
+        voice.name,
+        voice.audience ? 1 : 0,
+        voice.reason,
+      );
+  }
+
+  private dropOlderProposals(mediaId: string, runId: string): void {
+    this.db
+      .prepare(
+        `DELETE FROM media_draft_tracks
+         WHERE media_id = ? AND source = 'ai' AND edited = 0 AND run_id <> ?`,
+      )
+      .run(mediaId, runId);
+  }
+
+  private dropRunOutput(runId: string): void {
+    this.db
+      .prepare(
+        `DELETE FROM media_draft_tracks WHERE run_id = ? AND source = 'ai' AND edited = 0`,
+      )
+      .run(runId);
+    this.db
+      .prepare('DELETE FROM media_voice_suggestions WHERE run_id = ?')
+      .run(runId);
+  }
+}

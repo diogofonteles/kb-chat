@@ -426,7 +426,8 @@ describe('openMediaDatabase', () => {
 
   it('applies new migrations in order and rolls back a broken one', () => {
     const db = openMediaDatabase(':memory:', MEDIA_MIGRATIONS);
-    const last = MEDIA_MIGRATIONS.length;
+    // The highest version, not the count: parallel branches may leave a gap (KBC-064 is 8).
+    const last = Math.max(...MEDIA_MIGRATIONS.map((one) => one.version));
     const next = [
       {
         version: last + 2,
