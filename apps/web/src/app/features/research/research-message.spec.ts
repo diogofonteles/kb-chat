@@ -451,7 +451,7 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     expect(footer).not.toContain('restantes');
   });
 
-  it('offers one’s own AI when the quota is spent, without "Tentar de novo"', async () => {
+  it('offers one’s own AI when the quota is spent, and "Tentar de novo" for when it is back (KBC-061)', async () => {
     const { settings } = await renderMessage(
       aTurn({
         phase: 'error',
@@ -463,7 +463,7 @@ describe('ResearchMessage on the app’s AI (KBC-022 AC-4, AC-5)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Suas pesquisas com IA de hoje acabaram (5 por dia)',
     );
-    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Conectar a minha IA' }),
     );

@@ -134,17 +134,17 @@ export class ResearchMessage {
     const usd = this.turn().usd;
     return usd ? formatCost(usd) : '';
   });
-  /** Asking again fits a failure or a stop, never a spent daily cap (that needs Settings). */
+  /**
+   * Asking again fits a failure or a stop, except DAILY_CAP_REACHED (the person's own spend
+   * cap, changed in Settings). HOUSE_QUOTA_EXHAUSTED may be over (a new day, a refund):
+   * asking again finds out (KBC-061).
+   */
   protected readonly canRetry = computed(() => {
     const turn = this.turn();
     // A failed or stopped turn from the history can be asked again too (KBC-029); a sweep
     // that can go on offers that, not starting over (design review, UP-15).
     if (!this.last() || this.canContinue()) return false;
-    if (turn.phase === 'error')
-      return (
-        turn.error !== 'DAILY_CAP_REACHED' &&
-        turn.error !== 'HOUSE_QUOTA_EXHAUSTED'
-      );
+    if (turn.phase === 'error') return turn.error !== 'DAILY_CAP_REACHED';
     return turn.phase === 'done' && turn.interrupted;
   });
   protected readonly capReached = computed(
