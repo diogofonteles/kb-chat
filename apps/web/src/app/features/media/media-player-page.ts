@@ -268,6 +268,13 @@ export class MediaPlayerPage {
     this.transcript.reload();
   }
 
+  /** "Vozes" shows a new separation: the transcript reads its voices again (KBC-064 FR-5). */
+  protected readVoicesOf(version: number): void {
+    if (!this.transcript.hasValue()) return;
+    if (this.transcript.value().speakers?.version !== version)
+      this.transcript.reload();
+  }
+
   /** "Começar do início". */
   protected startOver(): void {
     this.answered.set(true);

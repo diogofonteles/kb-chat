@@ -145,7 +145,11 @@
   @if (ready()) {
     <app-bookmark-list class="bookmarks" />
     @if (canEdit() && media(); as current) {
-      <app-voices-panel class="voices" [mediaId]="current.id" />
+      <app-voices-panel
+        class="voices"
+        [mediaId]="current.id"
+        (separated)="readVoicesOf($event)"
+      />
     }
   }
 </article>

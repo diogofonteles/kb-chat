@@ -8,7 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { fireEvent, screen } from '@testing-library/angular';
+import { fireEvent, screen, within } from '@testing-library/angular';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -536,10 +536,83 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
   });
 
   it('shows nothing of voices to a person who only listens, and asks for none', async () => {
-    const { harness, http } = await openPage(undefined, { features: ['media'] });
+    const { harness, http } = await openPage(undefined, {
+      features: ['media'],
+    });
     http.expectOne(ITEM_URL).flush(ITEM);
     await harness.fixture.whenStable();
     expect(screen.queryByRole('heading', { name: 'Vozes' })).toBeNull();
     http.expectNone(`${ITEM_URL}/speakers`);
+  });
+});
+
+describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)', () => {
+  const VOICED_ITEM = aMediaItem({
+    transcription: aTranscription({ status: 'done', version: 1 }),
+  });
+  const transcriptRequest = (r: { urlWithParams: string }) =>
+    r.urlWithParams === `${ITEM_URL}/transcript?v=1`;
+  const TWO_SEGMENTS: MediaTranscript = {
+    mediaId: ITEM.id,
+    version: 1,
+    confidence: 'normal',
+    segments: [
+      { startMs: 0, endMs: 3_000, text: 'Existia um rei.' },
+      { startMs: 3_000, endMs: 6_000, text: 'Que rei?' },
+    ],
+  };
+  const separation = {
+    version: 1,
+    createdAt: '2026-11-03T12:00:00.000Z',
+    transcriptVersion: 1,
+    staleTranscript: false,
+    requestedVoices: null,
+    voiceCount: 2,
+    voices: [
+      { voice: 1, speakingMs: 3_000 },
+      { voice: 2, speakingMs: 3_000 },
+    ],
+    turns: [
+      { voice: 1, startMs: 0, endMs: 3_000 },
+      { voice: 2, startMs: 3_000, endMs: 6_000 },
+    ],
+  };
+
+  it('asks for the transcript again once "Vozes" shows a separation it lacks, and labels it', async () => {
+    localStorage.clear();
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-edit'],
+    });
+    http.expectOne(ITEM_URL).flush(VOICED_ITEM);
+    await settle();
+    http.expectOne(transcriptRequest).flush(TWO_SEGMENTS);
+    http.expectOne(`${ITEM_URL}/speakers`).flush({
+      mediaId: ITEM.id,
+      status: 'done',
+      transcriber: 'on',
+      transcriberOffSince: null,
+      canRequest: true,
+      diarization: {
+        ...separation,
+        segments: [
+          { startMs: 0, endMs: 3_000, voice: 1 },
+          { startMs: 3_000, endMs: 6_000, voice: 2 },
+        ],
+      },
+    });
+    await settle();
+    http.expectOne(transcriptRequest).flush({
+      ...TWO_SEGMENTS,
+      segments: TWO_SEGMENTS.segments.map((segment, index) => ({
+        ...segment,
+        voice: index + 1,
+      })),
+      speakers: separation,
+    });
+    await harness.fixture.whenStable();
+    const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
+    expect(within(list).getByText('Voz 1')).toBeTruthy();
+    expect(within(list).getByText('Voz 2')).toBeTruthy();
+    http.expectNone(transcriptRequest);
   });
 });

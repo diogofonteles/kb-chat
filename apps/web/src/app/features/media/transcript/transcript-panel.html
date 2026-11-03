@@ -96,6 +96,9 @@
             >
               {{ segment.clock }}
             </button>
+            @if (segment.voice !== null) {
+              <app-voice-tag class="voice" [voice]="segment.voice" />
+            }
             <span class="text" [id]="'transcript-text-' + segment.index">{{
               segment.text
             }}</span>

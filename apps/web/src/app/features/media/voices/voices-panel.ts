@@ -10,7 +10,11 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import {
+  outputFromObservable,
+  takeUntilDestroyed,
+  toObservable,
+} from '@angular/core/rxjs-interop';
 import {
   MAX_VOICES,
   mediaSpeakersSchema,
@@ -20,7 +24,7 @@ import {
 import { formatClock } from '@kb-chat/player-core';
 import { seenAtFormat } from '@core/i18n/date-formats.js';
 import { SpeakersApi, speakersUrl } from '@core/media/speakers-api.js';
-import { EMPTY, distinctUntilChanged, interval, switchMap } from 'rxjs';
+import { EMPTY, distinctUntilChanged, filter, interval, switchMap } from 'rxjs';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import { SLOW_POLL_FACTOR } from '../media-labels.js';
 import { VoiceTag } from './voice-tag.js';
@@ -71,7 +75,8 @@ function parseVoices(text: string): number | null | 'invalid' {
  * "Vozes" on the audio page (screens.md T15; KBC-064 FR-1, FR-4): for whoever edits
  * recordings. Asks the Mac to separate the voices, with an optional number of voices,
  * follows the job in words and lists the voices found. The labels in the transcript
- * itself come with KBC-038's panel (`app-voice-tag`, `voiceChangeStarts`).
+ * itself are KBC-038's panel's (`app-voice-tag`, `voiceChangeStarts`): `separated` tells
+ * the page which separation is current, so it reads the transcript's voices again.
  */
 @Component({
   selector: 'app-voices-panel',
@@ -81,11 +86,18 @@ function parseVoices(text: string): number | null | 'invalid' {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VoicesPanel {
-  readonly mediaId = input.required<string>();
   private readonly api = inject(SpeakersApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly locale = inject(LOCALE_ID);
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  readonly mediaId = input.required<string>();
+  /** The current separation's version, each time a new one is shown. */
+  readonly separated = outputFromObservable(
+    toObservable(computed(() => this.diarization()?.version ?? null)).pipe(
+      filter((version): version is number => version !== null),
+      distinctUntilChanged(),
+    ),
+  );
 
   protected readonly speakers = httpResource(
     () => speakersUrl(this.mediaId()),
