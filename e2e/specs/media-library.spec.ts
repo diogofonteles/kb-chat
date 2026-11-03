@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -23,14 +23,30 @@ async function openMedia(page: Page) {
   ).toBeVisible();
 }
 
+/**
+ * Someone who lists and sends with the list of T14: masters have every feature, so they
+ * get the library (KBC-051) instead; the list is for "Ouvir mídia" without it.
+ */
+async function uploaderPage(browser: Browser): Promise<Page> {
+  const owner = await ownerApi();
+  const email = uniqueEmail('envia');
+  await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['search', 'media', 'media-upload'],
+  });
+  await owner.dispose();
+  return pageAs(browser, email, test.info().project.use.viewport ?? null);
+}
+
 const seriousViolations = async (page: Page) =>
   (await new AxeBuilder({ page }).analyze()).violations.filter((violation) =>
     ['serious', 'critical'].includes(violation.impact ?? ''),
   );
 
-test('AC-1: a master uploads an MP3, sees it go to "Pronta" and opens it', async ({
-  page,
+test('AC-1: a person who may upload sends an MP3, sees it go to "Pronta" and opens it', async ({
+  browser,
 }) => {
+  const page = await uploaderPage(browser);
   const title = `Palestra ${uniqueTag()}`;
   const file = makeMp3(title.replace(/\s+/g, '_'), 8);
   await openMedia(page);
@@ -55,8 +71,9 @@ test('AC-1: a master uploads an MP3, sees it go to "Pronta" and opens it', async
 });
 
 test('AC-8: a file that is not audio is refused before sending', async ({
-  page,
+  browser,
 }) => {
+  const page = await uploaderPage(browser);
   await openMedia(page);
   await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
@@ -133,7 +150,11 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
     title: `Remover ${uniqueTag()}`,
     seconds: 2,
   });
-  await openMedia(page);
+  // Masters have every feature: they manage the media from the library (KBC-051).
+  await page.goto('/biblioteca');
+  await page.getByLabel('Buscar na biblioteca').fill(media.title);
+  const row = page.getByRole('listitem').filter({ hasText: media.title });
+  await expect(row).toBeVisible();
   await page
     .getByRole('button', { name: `Mais ações para ${media.title}` })
     .click();
@@ -143,9 +164,7 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
   });
   await expect(confirm).toContainText('não podem ser recuperados');
   await confirm.getByRole('button', { name: 'Cancelar' }).click();
-  await expect(
-    page.getByRole('listitem').filter({ hasText: media.title }),
-  ).toBeVisible();
+  await expect(row).toBeVisible();
   await page
     .getByRole('button', { name: `Mais ações para ${media.title}` })
     .click();
@@ -154,12 +173,10 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
     .getByRole('dialog')
     .getByRole('button', { name: 'Remover' })
     .click();
+  await expect(row).toHaveCount(0);
+  // Focus goes to the page's heading, so a keyboard user is not lost (AC-13).
   await expect(
-    page.getByRole('listitem').filter({ hasText: media.title }),
-  ).toHaveCount(0);
-  // Focus goes to the list's heading, so a keyboard user is not lost (AC-13).
-  await expect(
-    page.getByRole('heading', { name: /Mídia — Hermetismo/ }),
+    page.getByRole('heading', { name: 'Biblioteca', level: 2 }),
   ).toBeFocused();
   expect((await owner.get(`/api/v1/media/${media.id}/stream`)).status()).toBe(
     404,
@@ -168,8 +185,9 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {
   test(`AC-9: the list and the upload panel pass axe in the ${theme} theme`, async ({
-    page,
+    browser,
   }) => {
+    const page = await uploaderPage(browser);
     const owner = await ownerApi();
     await uploadReady(owner, { title: `Acessível ${theme}`, seconds: 1 });
     await useTheme(page, theme);
