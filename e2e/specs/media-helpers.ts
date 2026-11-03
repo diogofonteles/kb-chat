@@ -27,8 +27,14 @@ const dir = mkdtempSync(join(tmpdir(), 'kbchat-e2e-audio-'));
 export function makeMp3(
   name: string,
   seconds: number,
-  source = `sine=frequency=330:duration=${seconds}`,
+  options: {
+    /** The lavfi source; a 330 Hz tone by default. */
+    readonly source?: string;
+    readonly bitrate?: string;
+  } = {},
 ): string {
+  const source = options.source ?? `sine=frequency=330:duration=${seconds}`;
+  const bitrate = options.bitrate ?? '96k';
   const path = join(dir, `${name}.mp3`);
   execFileSync(ffmpeg(), [
     '-hide_banner',
@@ -42,7 +48,7 @@ export function makeMp3(
     '-c:a',
     'libmp3lame',
     '-b:a',
-    '96k',
+    bitrate,
     path,
   ]);
   return path;
@@ -72,10 +78,23 @@ export const toneWithPauses = (
 /** Uploads through the API (POST, then PUT of the bytes) and waits until it is ready. */
 export async function uploadReady(
   api: APIRequestContext,
-  input: { title: string; seconds: number; topic?: string; source?: string },
+  input: {
+    title: string;
+    seconds: number;
+    topic?: string;
+    /** The lavfi source (KBC-044: a tone with pauses). */
+    source?: string;
+    /** A long tone at a low bitrate keeps the upload small (KBC-038 NFR-2). */
+    bitrate?: string;
+    /** How long to wait for the conversion. */
+    readyWithinMs?: number;
+  },
 ): Promise<UploadedMedia> {
   const body = readFileSync(
-    makeMp3(input.title.replace(/\W+/g, '-'), input.seconds, input.source),
+    makeMp3(input.title.replace(/\W+/g, '-'), input.seconds, {
+      source: input.source,
+      bitrate: input.bitrate,
+    }),
   );
   const created = await api.post(
     `/api/v1/topics/${input.topic ?? 'hermetismo'}/media`,
@@ -105,7 +124,7 @@ export async function uploadReady(
           }
         ).status,
       {
-        timeout: 30_000,
+        timeout: input.readyWithinMs ?? 30_000,
       },
     )
     .toBe('ready');
