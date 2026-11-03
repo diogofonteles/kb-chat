@@ -107,10 +107,11 @@ export class SqliteSilenceStore implements SilenceStorePort {
       if (!mediaId) return null;
       this.db
         .prepare(
-          `INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at)
-           VALUES (?, ?, 'silences', 'queued', ?, ?)`,
+          `INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at,
+             detector_version)
+           VALUES (?, ?, 'silences', 'queued', ?, ?, ?)`,
         )
-        .run(input.jobId, mediaId, at, at);
+        .run(input.jobId, mediaId, at, at, input.detectorVersion);
       return mediaId;
     });
   }
@@ -127,7 +128,10 @@ export class SqliteSilenceStore implements SilenceStorePort {
     );
   }
 
-  /** The oldest ready item without a map of this version, never given up on. */
+  /**
+   * The oldest ready item without a map of this version that this version never gave up
+   * on (a newer detector version measures again what an older one could not).
+   */
   private oldestWithoutMap(detectorVersion: number): string | null {
     const row = this.db
       .prepare(
@@ -135,10 +139,24 @@ export class SqliteSilenceStore implements SilenceStorePort {
            AND NOT EXISTS (SELECT 1 FROM media_silence_maps s
                            WHERE s.media_id = m.id AND s.detector_version = ?)
            AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.media_id = m.id
-                           AND j.kind = 'silences' AND j.status IN ('failed', 'dead'))
+                           AND j.kind = 'silences' AND j.status IN ('failed', 'dead')
+                           AND j.detector_version = ?)
          ORDER BY created_at, id LIMIT 1`,
       )
-      .get(detectorVersion);
+      .get(detectorVersion, detectorVersion);
     return row ? String(row['id']) : null;
+  }
+
+  gaveUp(mediaId: string, detectorVersion: number): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT
+           EXISTS (SELECT 1 FROM jobs WHERE media_id = ? AND kind = 'silences'
+                   AND status IN ('failed', 'dead') AND detector_version = ?) AS gave_up,
+           EXISTS (SELECT 1 FROM jobs WHERE media_id = ? AND kind = 'silences'
+                   AND status IN ('queued', 'leased')) AS waiting`,
+      )
+      .get(mediaId, detectorVersion, mediaId);
+    return Number(row?.['gave_up']) === 1 && Number(row?.['waiting']) === 0;
   }
 }

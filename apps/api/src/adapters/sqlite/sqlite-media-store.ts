@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
+  SILENCE_DETECTOR,
   mediaFailureSchema,
   mediaJobKindSchema,
   mediaStatusSchema,
@@ -299,6 +300,7 @@ export class SqliteMediaStore implements MediaStorePort {
         mediaId: result.rendition.mediaId,
         kind: 'silences',
         at,
+        detectorVersion: SILENCE_DETECTOR.version,
       });
       return true;
     });
@@ -415,13 +417,23 @@ export class SqliteMediaStore implements MediaStorePort {
     mediaId: string;
     kind: MediaJobKind;
     at: string;
+    /** A silences job's detector version (KBC-044); null for the other kinds. */
+    detectorVersion?: number;
   }): void {
     this.db
       .prepare(
-        `INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at)
-         VALUES (?, ?, ?, 'queued', ?, ?)`,
+        `INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at,
+           detector_version)
+         VALUES (?, ?, ?, 'queued', ?, ?, ?)`,
       )
-      .run(job.id, job.mediaId, job.kind, job.at, job.at);
+      .run(
+        job.id,
+        job.mediaId,
+        job.kind,
+        job.at,
+        job.at,
+        job.detectorVersion ?? null,
+      );
   }
 
   /** The oldest queued job of the asked kinds, leased in the same statement. */

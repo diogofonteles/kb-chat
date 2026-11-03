@@ -41,7 +41,9 @@ export class SilenceService {
     const map = this.deps.silences.mapOf(mediaId);
     if (!map)
       return {
-        status: 'pending',
+        status: this.deps.silences.gaveUp(mediaId, SILENCE_DETECTOR.version)
+          ? 'failed'
+          : 'pending',
         version: null,
         minSilenceMs: SILENCE_DETECTOR.minSilenceMs,
         intervals: [],

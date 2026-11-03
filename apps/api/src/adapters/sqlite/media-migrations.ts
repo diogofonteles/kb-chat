@@ -362,7 +362,10 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         worker TEXT,
         error TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        -- The silencedetect parameter set a silences job measures with (a newer one
+        -- measures again what an older one gave up on).
+        detector_version INTEGER CHECK (detector_version IS NULL OR detector_version >= 1)
       ) STRICT;
       INSERT INTO jobs_silences (id, media_id, kind, status, attempts, lease_id, lease_until,
         heartbeat_at, worker, error, created_at, updated_at)

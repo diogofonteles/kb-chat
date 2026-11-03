@@ -169,6 +169,37 @@ describe('Silence maps: the API (KBC-044)', () => {
   });
 });
 
+describe('Silence maps given up (review R1)', () => {
+  it('says the map failed after the last attempt, and a newer detector measures it again', async () => {
+    const media = await startMedia();
+    const item = await readyItem(media);
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const job = await leaseSilences(media);
+      expect(job.attempt).toBe(attempt);
+      await worker(media, `/api/v1/media-worker/jobs/${job.id}/fail`, {
+        worker: 'vm',
+        leaseId: job.leaseId,
+        failure: 'conversion-failed',
+        detail: 'silencedetect crashed',
+      });
+    }
+    expect(
+      (await media.owner('GET', `/api/v1/media/${item.id}/silences`)).json(),
+    ).toMatchObject({ status: 'failed', intervals: [] });
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    const store = new SqliteSilenceStore(db);
+    const queue = (detectorVersion: number) =>
+      store.queueBackfill({
+        detectorVersion,
+        jobId: crypto.randomUUID(),
+        now: new Date(),
+      });
+    expect(queue(1)).toBeNull();
+    expect(queue(2)).toBe(item.id);
+    db.close();
+  });
+});
+
 describe('Silence skipping preference (KBC-044 BR-2)', () => {
   it('starts off, is kept on the account, and a client that does not send it keeps it', async () => {
     const media = await startMedia();

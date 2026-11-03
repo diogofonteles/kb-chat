@@ -428,8 +428,11 @@ export type CompleteSilencesRequest = z.infer<
   typeof completeSilencesRequestSchema
 >;
 
-/** Whether a media item's silence map exists yet (FR-1: made after the conversion). */
-export const SILENCE_MAP_STATUSES = ['pending', 'ready'] as const;
+/**
+ * Whether a media item's silence map exists: still to be measured (FR-1: after the
+ * conversion), measured, or given up after the queue's last attempt (AC-5).
+ */
+export const SILENCE_MAP_STATUSES = ['pending', 'ready', 'failed'] as const;
 
 /**
  * GET /api/v1/media/:id/silences (FR-3, with the stream's access rules): the pauses of
@@ -444,6 +447,7 @@ export const mediaSilencesSchema = z.object({
   minSilenceMs: z.number().int().min(1),
   intervals: z.array(silenceIntervalSchema),
 });
+export type MediaSilenceStatus = (typeof SILENCE_MAP_STATUSES)[number];
 export type MediaSilences = z.infer<typeof mediaSilencesSchema>;
 
 /** POST …/jobs/lease answers one of these, by the kinds the token may lease. */

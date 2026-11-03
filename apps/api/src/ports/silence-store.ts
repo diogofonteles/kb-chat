@@ -39,6 +39,11 @@ export interface SilenceStorePort {
     readonly now: Date;
   }): boolean;
   /**
+   * The queue gave up measuring this item with `detectorVersion` (its last silences job
+   * failed or died) and nothing is waiting to try again.
+   */
+  gaveUp(mediaId: string, detectorVersion: number): boolean;
+  /**
    * Backfill (FR-2): when no silences job is queued or leased, queues one with `jobId`
    * for the oldest ready item without a map of `detectorVersion` (and never given up);
    * the item's id, or null when nothing was queued.
