@@ -1,7 +1,7 @@
 import type { LlmMessage, LlmPrice } from '../../ports/llm.js';
 import { tokensOf } from '../spend/index.js';
 import { SYSTEM_PROMPT, windowPrompt, type FixedContext } from './prompt.js';
-import { normalized, type NameEvidence } from './proposal-validation.js';
+import { wordsOf, type NameEvidence } from './proposal-validation.js';
 import { splitWindows, voiceStats, type PromptSegment } from './windows.js';
 
 /** Output budget per window: enough for ~40 compact tracks (KBC-063: 3,000 held one window). */
@@ -78,7 +78,7 @@ export function buildPlan(input: {
   const windows = splitWindows(segments);
   const evidence: NameEvidence = {
     voices: new Set(context.voices.map((stat) => stat.voice)),
-    spoken: normalized(segments.map((segment) => segment.text).join(' ')),
+    spoken: wordsOf(segments.map((segment) => segment.text).join(' ')),
     knownNames: [
       ...context.knownNames,
       ...(context.author ? [context.author] : []),

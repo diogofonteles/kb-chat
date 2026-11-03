@@ -85,6 +85,15 @@ export const normalized = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+/**
+ * The words of a text, normalized and separated by one space, punctuation dropped: names
+ * are compared word by word, so "Ana" is not found inside "banana" (AC-9).
+ */
+export const wordsOf = (text: string): string =>
+  normalized(text)
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
 /** A title of 1 to 80 characters, or none for the person to write (BR-4, AC-9). */
 export function titleOf(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -205,7 +214,7 @@ export function acceptTracks(
 /** What a voice name must be backed by: the speech itself or the collection's names. */
 export interface NameEvidence {
   readonly voices: ReadonlySet<number>;
-  /** The whole transcript, normalized. */
+  /** The whole transcript as `wordsOf` gives it. */
   readonly spoken: string;
   readonly knownNames: readonly string[];
 }
@@ -216,9 +225,11 @@ function justifiedName(
 ): string | null {
   const trimmed = name?.trim() ?? '';
   if (trimmed.length === 0 || trimmed.length > 80) return null;
-  const wanted = normalized(trimmed);
-  const known = evidence.knownNames.some((one) => normalized(one) === wanted);
-  return known || evidence.spoken.includes(wanted) ? trimmed : null;
+  const wanted = wordsOf(trimmed);
+  if (wanted.length === 0) return null;
+  const known = evidence.knownNames.some((one) => wordsOf(one) === wanted);
+  const said = ` ${evidence.spoken} `.includes(` ${wanted} `);
+  return known || said ? trimmed : null;
 }
 
 function suggestionOf(

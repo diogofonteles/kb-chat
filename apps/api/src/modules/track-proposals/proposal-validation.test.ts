@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   acceptTracks,
   acceptVoices,
-  normalized,
+  wordsOf,
   parseWindowReply,
   titleOf,
   type TrackRules,
@@ -156,9 +156,7 @@ describe('acceptTracks (KBC-067 FR-2, ADR 0029 §4)', () => {
 describe('acceptVoices (KBC-067 BR-5)', () => {
   const evidence = {
     voices: new Set([1, 2, 3]),
-    spoken: normalized(
-      'Mestre, o senhor pode falar? Meu nome é João da Silva.',
-    ),
+    spoken: wordsOf('Mestre, o senhor pode falar? Meu nome é João da Silva.'),
     knownNames: ['Mestre Gabriel'],
   };
 
@@ -201,6 +199,22 @@ describe('acceptVoices (KBC-067 BR-5)', () => {
         evidence,
       ),
     ).toEqual([{ voice: 2, name: null, audience: true, reason: 'pergunta' }]);
+  });
+});
+
+describe('names are found by whole words (AC-9)', () => {
+  it('does not find "Ana" inside "banana", but finds it said on its own', () => {
+    const suggest = (spoken: string) =>
+      acceptVoices([{ voz: 'Voz 1', nome: 'Ana', motivo: 'é chamada assim' }], {
+        voices: new Set([1]),
+        spoken: wordsOf(spoken),
+        knownNames: [],
+      });
+    expect(suggest('Comprei uma banana, Ivone.')).toEqual([]);
+    expect(suggest('Obrigado, Ana! Pode falar.')).toEqual([
+      { voice: 1, name: 'Ana', audience: false, reason: 'é chamada assim' },
+    ]);
+    expect(wordsOf('  Mestre—José, Luiz! ')).toBe('mestre jose luiz');
   });
 });
 
