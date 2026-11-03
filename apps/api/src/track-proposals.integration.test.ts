@@ -129,7 +129,7 @@ describe('Track proposals over HTTP (KBC-067)', () => {
     expect(body).toMatchObject({
       model: MODEL.id,
       response_format: { type: 'json_object' },
-      provider: { data_collection: 'deny' },
+      provider: { data_collection: 'deny', zdr: true },
     });
     for (const message of body?.messages ?? [])
       expect(typeof message.content).toBe('string');
@@ -196,6 +196,17 @@ describe('Track proposals over HTTP (KBC-067)', () => {
       `${proposals(item.id)}/${crypto.randomUUID()}`,
     );
     expect(run.statusCode).toBe(404);
+  });
+
+  it('limits the paid route to 6 requests a minute per client (ND-22)', async () => {
+    const { media, item } = await transcribed();
+    const codes: number[] = [];
+    for (let attempt = 0; attempt < 7; attempt++)
+      codes.push(
+        (await media.owner('POST', proposals(item.id), { dryRun: true }))
+          .statusCode,
+      );
+    expect(codes).toEqual([200, 200, 200, 200, 200, 200, 429]);
   });
 
   it('needs a transcript and the house account', async () => {

@@ -23,7 +23,8 @@ export interface TrackProposalWiring {
 
 /**
  * The media AI (KBC-067 BR-7, ADR 0029 §7): the house OpenRouter account a master connected
- * (ADR 0016), on the model of MEDIA_AI_MODEL, JSON out, only providers that keep no data.
+ * (ADR 0016), on the model of MEDIA_AI_MODEL, JSON out, only providers that neither train on
+ * nor keep the text (`data_collection: deny`, `zdr`: DeepSeek V4 Flash has ZDR endpoints).
  * One adapter per key, so the model's price is fetched once.
  */
 function mediaLlm(wiring: TrackProposalWiring): () => LlmPort | null {
@@ -41,6 +42,7 @@ function mediaLlm(wiring: TrackProposalWiring): () => LlmPort | null {
           request: {
             jsonOutput: true,
             denyDataCollection: true,
+            zeroRetention: true,
             temperature: PROPOSAL_TEMPERATURE,
           },
         }),

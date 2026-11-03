@@ -89,6 +89,8 @@ export interface OpenRouterOptions {
   readonly request?: {
     readonly jsonOutput?: boolean;
     readonly denyDataCollection?: boolean;
+    /** Only Zero Data Retention endpoints (OpenRouter's `provider.zdr`). */
+    readonly zeroRetention?: boolean;
     readonly temperature?: number;
   };
   readonly fetch?: typeof fetch;
@@ -100,9 +102,14 @@ function requestExtras(
 ): Record<string, unknown> {
   return {
     ...(request?.jsonOutput && { response_format: { type: 'json_object' } }),
-    ...(request?.denyDataCollection && {
-      provider: { data_collection: 'deny' },
-    }),
+    ...(request?.denyDataCollection || request?.zeroRetention
+      ? {
+          provider: {
+            ...(request.denyDataCollection && { data_collection: 'deny' }),
+            ...(request.zeroRetention && { zdr: true }),
+          },
+        }
+      : {}),
     ...(request?.temperature !== undefined && {
       temperature: request.temperature,
     }),

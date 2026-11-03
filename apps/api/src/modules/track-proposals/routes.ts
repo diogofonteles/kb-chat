@@ -21,6 +21,8 @@ import type { ProposalService } from './proposal-service.js';
 /** Proposing with AI needs its own feature on top of editing (KBC-067 BR-2, ADR 0029 §9). */
 const PROPOSE: RouteAccess = { feature: 'media-edit-ai' };
 const EDIT: RouteAccess = { feature: 'media-edit' };
+/** Runs a person may start per minute: each spends money (ND-22); the month caps the rest. */
+const PROPOSALS_PER_MINUTE = 6;
 const mediaParams = z.object({ id: mediaIdSchema });
 const runParams = z.object({ id: mediaIdSchema, runId: z.uuid() });
 
@@ -41,7 +43,10 @@ function proposer(request: FastifyRequest): MediaActor {
 
 const OPTIONS = {
   propose: {
-    config: { access: PROPOSE },
+    config: {
+      access: PROPOSE,
+      rateLimit: { max: PROPOSALS_PER_MINUTE, timeWindow: '1 minute' },
+    },
     schema: {
       params: mediaParams,
       body: proposalRequestSchema,
