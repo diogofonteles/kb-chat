@@ -11,6 +11,8 @@ import {
 
 // KBC-039: spoken passages in the free search, mixed with the documents, opening the
 // player in the reading panel 2 s before the passage (audio only; video is KBC-075).
+// The seeded talks say words no other spec searches for ("ritmo" is theirs), so their
+// result summaries stay as they expect.
 
 /** One spoken sentence at `at` seconds, as a transcriber's raw result. */
 const rawOf = (at: number, text: string) => ({
@@ -129,14 +131,14 @@ test('AC-9: without "Textos" only the passage shows; with it again both, mixed',
   const tag = uniqueTag();
   const owner = await ownerApi();
   await talkSaying(owner, {
-    title: `Sobre o ritmo ${tag}`,
-    text: `O ritmo da vida ${tag}`,
+    title: `Sobre a setuplicidade ${tag}`,
+    text: `A setuplicidade da vida ${tag}`,
   });
   await owner.dispose();
   await page.goto('/');
   await page.evaluate(() => localStorage.removeItem('kb-chat.search-kinds'));
 
-  await ask(page, `ritmo ${tag}`);
+  await ask(page, `setuplicidade ${tag}`);
   await expect(passages(page)).toHaveCount(1);
   const reach = page.getByRole('group', { name: 'Buscar em' });
   await expect(reach).toBeVisible();
