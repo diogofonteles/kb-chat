@@ -170,8 +170,21 @@ export const mediaPreferencesSchema = z.strictObject({
   showRemaining: z.boolean(),
   skipBackSec: z.literal(MEDIA_SKIP_BACK_SECONDS),
   skipForwardSec: z.literal(MEDIA_SKIP_FORWARD_SECONDS),
+  /** "Encurtar silêncios" (KBC-044): off until the person turns it on (BR-2). */
+  skipSilences: z.boolean(),
 });
 export type MediaPreferences = z.infer<typeof mediaPreferencesSchema>;
+
+/**
+ * PUT /api/v1/media/preferences. `skipSilences` may be absent (a client from before
+ * KBC-044): the account then keeps its stored choice instead of turning it off.
+ */
+export const saveMediaPreferencesRequestSchema = mediaPreferencesSchema.extend({
+  skipSilences: z.boolean().optional(),
+});
+export type SaveMediaPreferencesRequest = z.infer<
+  typeof saveMediaPreferencesRequestSchema
+>;
 
 /** PUT /api/v1/media/:id/progress: where the person is, in ms. */
 export const mediaProgressRequestSchema = z.strictObject({
@@ -267,8 +280,11 @@ export function hasAcceptedAudioExtension(fileName: string): boolean {
 
 /* ---------- The media worker protocol (ADR 0022 §3) ---------- */
 
-/** Converting for the browser (VM worker) and transcribing (a paired transcriber, ADR 0023). */
-export const MEDIA_JOB_KINDS = ['transcode', 'transcribe'] as const;
+/**
+ * Converting for the browser and measuring its silences (VM worker, KBC-044), and
+ * transcribing (a paired transcriber, ADR 0023).
+ */
+export const MEDIA_JOB_KINDS = ['transcode', 'transcribe', 'silences'] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;
 
@@ -347,8 +363,95 @@ export const transcribeJobSchema = z.object({
 });
 export type TranscribeJob = z.infer<typeof transcribeJobSchema>;
 
-/** POST …/jobs/lease answers one of the two, by the kinds the token may lease. */
-export const leasedJobSchema = z.union([workerJobSchema, transcribeJobSchema]);
+/* ---------- Silence maps (KBC-044, ADR 0025 §3) ---------- */
+
+/** One pause of a media item, in ms of the original timeline (end after start). */
+export const silenceIntervalSchema = z
+  .object({
+    startMs: z.number().int().min(0),
+    endMs: z.number().int().min(0),
+  })
+  .refine((span) => span.startMs < span.endMs, {
+    error: 'startMs must come before endMs',
+  });
+export type SilenceInterval = z.infer<typeof silenceIntervalSchema>;
+
+/** The most pauses one map holds (a 4 h recording with a pause every 2 s is 7 200). */
+export const MAX_SILENCE_INTERVALS = 20_000;
+
+/**
+ * How the worker measures silences (FR-1): ffmpeg `silencedetect` at −35 dB for 1.0 s.
+ * The version names this set: a map of an older version is measured again (backfill).
+ */
+export const SILENCE_DETECTOR = {
+  version: 1,
+  noiseDb: -35,
+  minSilenceMs: 1_000,
+} as const;
+
+export const silenceDetectorSchema = z.object({
+  version: z.number().int().min(1),
+  noiseDb: z.number().max(0),
+  minSilenceMs: z.number().int().min(1),
+});
+
+/** A leased silences job (VM worker): measure the audio rendition at `sourcePath`. */
+export const silencesJobSchema = z.object({
+  id: mediaJobIdSchema,
+  leaseId: z.uuid(),
+  kind: z.literal('silences'),
+  mediaId: mediaIdSchema,
+  attempt: z.number().int().min(1),
+  /** The audio rendition, relative to the shared media directory. */
+  sourcePath: z.string().min(1),
+  leaseMs: z.number().int().min(1),
+  detector: silenceDetectorSchema,
+});
+export type SilencesJob = z.infer<typeof silencesJobSchema>;
+
+/** The jobs the VM worker leases: conversions and silence maps. */
+export const vmWorkerJobSchema = z.discriminatedUnion('kind', [
+  workerJobSchema,
+  silencesJobSchema,
+]);
+export type VmWorkerJob = z.infer<typeof vmWorkerJobSchema>;
+
+/** POST /api/v1/media-worker/jobs/:id/silences: the pauses found, in order, not overlapping. */
+export const completeSilencesRequestSchema = leaseOwnerSchema.extend({
+  /** The detector version the job asked for. */
+  detectorVersion: z.number().int().min(1),
+  intervals: z.array(silenceIntervalSchema).max(MAX_SILENCE_INTERVALS),
+  /** Wall time of the detection on the worker (NFR-1). */
+  elapsedMs: z.number().int().min(0),
+});
+export type CompleteSilencesRequest = z.infer<
+  typeof completeSilencesRequestSchema
+>;
+
+/** Whether a media item's silence map exists yet (FR-1: made after the conversion). */
+export const SILENCE_MAP_STATUSES = ['pending', 'ready'] as const;
+
+/**
+ * GET /api/v1/media/:id/silences (FR-3, with the stream's access rules): the pauses of
+ * the current map, in order; empty while pending. Also the base for track snapping
+ * (KBC-066).
+ */
+export const mediaSilencesSchema = z.object({
+  status: z.enum(SILENCE_MAP_STATUSES),
+  /** The detector version of the map; null while pending. */
+  version: z.number().int().min(1).nullable(),
+  /** The shortest pause the map holds. */
+  minSilenceMs: z.number().int().min(1),
+  intervals: z.array(silenceIntervalSchema),
+});
+export type MediaSilences = z.infer<typeof mediaSilencesSchema>;
+
+/** POST …/jobs/lease answers one of these, by the kinds the token may lease. */
+export const leasedJobSchema = z.union([
+  workerJobSchema,
+  transcribeJobSchema,
+  silencesJobSchema,
+]);
 export type LeasedWorkerJob = z.infer<typeof leasedJobSchema>;
 
 /** A transcriber is "on" when seen within this window (FR-1: the last hour). */
