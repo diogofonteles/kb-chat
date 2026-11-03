@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   PILOT_FIXTURES,
@@ -54,7 +55,7 @@ function expectWithinRules(cues: readonly SubtitleCue[]): void {
     expect(cue.endMs - cue.startMs).toBeLessThanOrEqual(
       SUBTITLE_RULES.maxCueMs,
     );
-    expect(cue.endMs).toBeGreaterThanOrEqual(cue.startMs);
+    expect(cue.endMs).toBeGreaterThan(cue.startMs);
     for (const line of cue.text.split('\n'))
       expect(line.length).toBeLessThanOrEqual(SUBTITLE_RULES.maxLineChars);
     const next = cues[index + 1];
@@ -155,7 +156,7 @@ describe('cuesOf (KBC-038 FR-1, ADR 0023 §8)', () => {
     expect(cues.at(-1)?.text).toBe('Depois.');
     const sung = cues.slice(1, -1);
     expect(sung[0]?.startMs).toBe(10_000);
-    expect(sung.length).toBeGreaterThanOrEqual(4);
+    expect(sung.length).toBeGreaterThanOrEqual(3);
     expect(sung.map(flat).join(' ')).toBe(text);
     expectWithinRules(cues);
   });
@@ -181,6 +182,97 @@ describe('cuesOf (KBC-038 FR-1, ADR 0023 §8)', () => {
     expect(cues[0]?.endMs).toBe(700);
   });
 
+  it('keeps dense speech within two lines of 42, 6 s and in order, losing no word (property)', () => {
+    const word = fc.stringMatching(/^[a-zçãéõ]{1,45}[.,]?$/);
+    fc.assert(
+      fc.property(
+        fc.array(word, { minLength: 1, maxLength: 120 }),
+        fc.integer({ min: 120, max: 400 }),
+        (texts, stepMs) => {
+          const words = texts.map((text, index) => ({
+            segment: 0,
+            startMs: index * stepMs,
+            endMs: index * stepMs + stepMs - 20,
+            text,
+            probability: 0.9,
+          }));
+          const cues = cuesOf({
+            segments: [segmentAt(0, texts.length * stepMs, '')],
+            words,
+          });
+          expectWithinRules(cues);
+          expect(cues.map(flat).join(' ').replace(/\s+/g, '')).toBe(
+            texts.join(''),
+          );
+        },
+      ),
+      { numRuns: 300 },
+    );
+  });
+
+  it('shows a word with no length for a moment, and drops one hidden by the next', () => {
+    const words: DerivedWord[] = [
+      {
+        segment: 0,
+        startMs: 1_000,
+        endMs: 1_000,
+        text: 'Sim.',
+        probability: 1,
+      },
+      {
+        segment: 0,
+        startMs: 1_200,
+        endMs: 1_200,
+        text: 'Não.',
+        probability: 1,
+      },
+      {
+        segment: 0,
+        startMs: 3_000,
+        endMs: 3_000,
+        text: 'Fim.',
+        probability: 1,
+      },
+    ];
+    const cues = cuesOf({ segments: [segmentAt(0, 4_000, '')], words });
+    expect(cues).toEqual([
+      { startMs: 1_000, endMs: 1_200, text: 'Sim.' },
+      { startMs: 1_200, endMs: 1_700, text: 'Não.' },
+      { startMs: 3_000, endMs: 3_500, text: 'Fim.' },
+    ]);
+    const hidden = cuesOf({
+      segments: [
+        segmentAt(5_000, 5_000, 'Zero.'),
+        segmentAt(5_000, 6_000, 'Um.'),
+      ],
+      words: [],
+    });
+    expect(hidden.every((cue) => cue.endMs > cue.startMs)).toBe(true);
+  });
+
+  it('keeps cues in order and apart when segment times overlap', () => {
+    const cues = cuesOf({
+      segments: [
+        segmentAt(10_000, 14_000, 'Depois, sem palavras.'),
+        segmentAt(2_000, 12_000, 'Antes, também sem palavras.'),
+      ],
+      words: [],
+    });
+    expect(cues.map((cue) => cue.text)).toEqual([
+      'Antes, também sem palavras.',
+      'Depois, sem palavras.',
+    ]);
+    expectWithinRules(cues);
+  });
+
+  it('shows a short segment without words once, not a word every few seconds', () => {
+    const cues = cuesOf({
+      segments: [segmentAt(0, 30_000, 'Olá mundo.')],
+      words: [],
+    });
+    expect(cues).toEqual([{ startMs: 0, endMs: 6_000, text: 'Olá mundo.' }]);
+  });
+
   it('gives no cue for an empty transcript', () => {
     expect(cuesOf({ segments: [], words: [] })).toEqual([]);
     expect(cuesOf({ segments: [segmentAt(0, 1, '  ')], words: [] })).toEqual(
@@ -200,8 +292,20 @@ describe('linesOf', () => {
     expect(`${first} ${second}`).toBe(long);
   });
 
-  it('leaves a text without spaces as it is', () => {
-    expect(linesOf('x'.repeat(50))).toBe('x'.repeat(50));
+  it('never lets a line pass 42 characters, even when no split fits two lines', () => {
+    expect(linesOf('x'.repeat(50))).toBe(`${'x'.repeat(42)}\n${'x'.repeat(8)}`);
+    const uneven = `${'a'.repeat(47)} ${'b'.repeat(27)}`;
+    for (const line of linesOf(uneven).split('\n'))
+      expect(line.length).toBeLessThanOrEqual(42);
+  });
+
+  it('splits where both lines fit: 42 and 41 for 84 characters', () => {
+    const text = `${'a'.repeat(20)} ${'b'.repeat(21)} ${'c'.repeat(20)} ${'d'.repeat(20)}`;
+    expect(
+      linesOf(text)
+        .split('\n')
+        .map((line) => line.length),
+    ).toEqual([42, 41]);
   });
 });
 

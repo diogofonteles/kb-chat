@@ -18,6 +18,8 @@ export const SUBTITLE_RULES = {
   maxLineChars: 42,
   /** Whisper stretches a word over the pause after it: its end counts only this far. */
   maxWordMs: 1_200,
+  /** A cue whose words have no length still shows this long (up to the next cue). */
+  minCueMs: 500,
 } as const;
 
 export interface SubtitleCue {
@@ -53,7 +55,28 @@ const joinWords = (words: readonly TimedWord[]): string =>
     .filter((text) => text.length > 0)
     .join(' ');
 
-/** True when `word` must start a new cue after `current` (silence, sentence, 6 s, 84). */
+/**
+ * Where to break `text` into two lines of at most 42 characters, the most even split:
+ * -1 when it fits on one line, null when no split fits.
+ */
+function lineBreakOf(text: string): number | null {
+  const max = SUBTITLE_RULES.maxLineChars;
+  if (text.length <= max) return -1;
+  let best: number | null = null;
+  let bestLongest = Number.POSITIVE_INFINITY;
+  for (let at = text.indexOf(' '); at !== -1; at = text.indexOf(' ', at + 1)) {
+    const longest = Math.max(at, text.length - at - 1);
+    if (longest <= max && longest < bestLongest)
+      [best, bestLongest] = [at, longest];
+  }
+  return best;
+}
+
+/** The text fits the caption area: one line, or two of at most 42 characters. */
+export const fitsTwoLines = (text: string): boolean =>
+  lineBreakOf(text) !== null;
+
+/** True when `word` must start a new cue after `current` (silence, sentence, 6 s, 2 lines). */
 function breaksBefore(current: readonly TimedWord[], word: TimedWord): boolean {
   const first = current[0];
   const last = current[current.length - 1];
@@ -61,7 +84,7 @@ function breaksBefore(current: readonly TimedWord[], word: TimedWord): boolean {
   if (SENTENCE_END.test(last.text)) return true;
   if (word.startMs - last.endMs >= SUBTITLE_RULES.silenceMs) return true;
   if (word.endMs - first.startMs > SUBTITLE_RULES.maxCueMs) return true;
-  return joinWords([...current, word]).length > SUBTITLE_RULES.maxCueChars;
+  return !fitsTwoLines(joinWords([...current, word]));
 }
 
 function groupWords(words: readonly TimedWord[]): TimedWord[][] {
@@ -78,26 +101,37 @@ function groupWords(words: readonly TimedWord[]): TimedWord[][] {
   return groups;
 }
 
-/** Words of the text, a word longer than a whole cue cut into cue-sized parts. */
+/** A word longer than a line, cut into line-sized parts. */
+const LINE_SIZED = new RegExp(`.{1,${SUBTITLE_RULES.maxLineChars}}`, 'gsu');
+
+/** Words of the text, each at most a line long. */
 const tokensOf = (text: string): string[] =>
   text
     .split(/\s+/)
     .filter((token) => token.length > 0)
-    .flatMap(
-      (token) =>
-        token.match(new RegExp(`.{1,${SUBTITLE_RULES.maxCueChars}}`, 'gsu')) ??
-        [],
-    );
+    .flatMap((token) => token.match(LINE_SIZED) ?? []);
 
-/** About `count` pieces of similar length, none over the cue limit. */
+/** Words, each at most a line long, and each one cut so (one-word groups fit too). */
+const wordsFitting = (words: readonly TimedWord[]): TimedWord[] =>
+  words.flatMap((word) => {
+    const parts = tokensOf(word.text);
+    if (parts.length <= 1) return [word];
+    const step = (word.endMs - word.startMs) / parts.length;
+    return parts.map((text, index) => ({
+      text,
+      startMs: Math.round(word.startMs + step * index),
+      endMs: Math.round(word.startMs + step * (index + 1)),
+    }));
+  });
+
+/** About `count` pieces of similar length, each fitting two lines. */
 function piecesOf(text: string, count: number): string[] {
   const target = Math.ceil(text.length / count);
   const pieces: string[] = [];
   let current = '';
   for (const token of tokensOf(text)) {
     const joined = current ? `${current} ${token}` : token;
-    const full =
-      joined.length > SUBTITLE_RULES.maxCueChars || current.length >= target;
+    const full = !fitsTwoLines(joined) || current.length >= target;
     if (current && full) {
       pieces.push(current);
       current = token;
@@ -108,18 +142,15 @@ function piecesOf(text: string, count: number): string[] {
 }
 
 /**
- * A text over a span, in as many cues as the limits need, each timed by its share of the
- * characters (a segment without word times, or one word longer than a cue).
+ * A segment without word times over its span: as few cues as the text needs, each timed by
+ * its share of the characters and shown 6 s at most (two words in 30 s make one cue, not
+ * one cue per word).
  */
 function spreadText(text: string, span: Span): SubtitleCue[] {
   const length = text.trim().length;
   if (length === 0) return [];
   const duration = Math.max(0, span.endMs - span.startMs);
-  const count = Math.max(
-    1,
-    Math.ceil(length / SUBTITLE_RULES.maxCueChars),
-    Math.ceil(duration / SUBTITLE_RULES.maxCueMs),
-  );
+  const count = Math.max(1, Math.ceil(length / SUBTITLE_RULES.maxCueChars));
   const pieces = piecesOf(text.trim(), count);
   const total = pieces.reduce((sum, piece) => sum + piece.length, 0);
   let done = 0;
@@ -133,36 +164,45 @@ function spreadText(text: string, span: Span): SubtitleCue[] {
 }
 
 const cuesOfWords = (words: readonly TimedWord[]): SubtitleCue[] =>
-  groupWords(words).flatMap((group) => {
+  groupWords(wordsFitting(words)).flatMap((group) => {
     const first = group[0];
     const last = group[group.length - 1];
     if (!first || !last) return [];
-    const span = { startMs: first.startMs, endMs: last.endMs };
-    return spreadText(joinWords(group), span);
+    return [
+      { startMs: first.startMs, endMs: last.endMs, text: joinWords(group) },
+    ];
   });
 
-/** Two lines of at most 42 characters when the text is longer than one (the best split). */
+/**
+ * The caption's lines: never more than 42 characters each. The cues are built to fit two
+ * (`fitsTwoLines`); a text that does not is wrapped every 42 characters rather than let a
+ * line run longer.
+ */
 export function linesOf(text: string): string {
-  if (text.length <= SUBTITLE_RULES.maxLineChars) return text;
-  let best = -1;
-  let bestLongest = Number.POSITIVE_INFINITY;
-  for (let at = text.indexOf(' '); at !== -1; at = text.indexOf(' ', at + 1)) {
-    const longest = Math.max(at, text.length - at - 1);
-    if (longest < bestLongest) [best, bestLongest] = [at, longest];
-  }
-  return best === -1 ? text : `${text.slice(0, best)}\n${text.slice(best + 1)}`;
+  const at = lineBreakOf(text);
+  if (at === -1) return text;
+  if (at !== null) return `${text.slice(0, at)}\n${text.slice(at + 1)}`;
+  return (text.match(LINE_SIZED) ?? []).map((line) => line.trim()).join('\n');
 }
 
-/** No cue runs into the next one (whisper's word times may overlap). */
-const separated = (cues: readonly SubtitleCue[]): SubtitleCue[] =>
-  cues.map((cue, index) => {
-    const next = cues[index + 1];
-    const endMs =
-      next && next.startMs > cue.startMs
-        ? Math.min(cue.endMs, next.startMs)
-        : cue.endMs;
-    return { ...cue, endMs: Math.max(endMs, cue.startMs) };
+/**
+ * In time order, none running into the next (segment and word times may overlap), each
+ * lasting: a cue with no length shows `minCueMs` up to the next one, or is dropped when
+ * the next starts at the same moment (it could never be seen).
+ */
+function separated(cues: readonly SubtitleCue[]): SubtitleCue[] {
+  const ordered = [...cues].sort((a, b) => a.startMs - b.startMs);
+  return ordered.flatMap((cue, index) => {
+    const next = ordered[index + 1];
+    const limit = next ? next.startMs : Number.POSITIVE_INFINITY;
+    const wanted =
+      cue.endMs > cue.startMs
+        ? cue.endMs
+        : cue.startMs + SUBTITLE_RULES.minCueMs;
+    const endMs = Math.min(wanted, limit);
+    return endMs > cue.startMs ? [{ ...cue, endMs }] : [];
   });
+}
 
 function wordsBySegment(
   words: readonly DerivedWord[],
