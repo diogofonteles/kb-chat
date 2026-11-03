@@ -54,6 +54,7 @@ const TOKEN_PREFIX = 'nat_';
 /** At most one "seen" write per transcriber in this window. */
 const TOUCH_EVERY_MS = 10_000;
 
+const unique = <T>(values: readonly T[]): T[] => [...new Set(values)];
 const sameName = (a: string, b: string): boolean =>
   a.toLocaleLowerCase('pt-BR') === b.toLocaleLowerCase('pt-BR');
 const digest = (value: string) => createHash('sha256').update(value).digest();
@@ -95,6 +96,16 @@ export class TranscriberService {
     return this.deps.store.list().map((record) => this.toTranscriber(record));
   }
 
+  /**
+   * What a paired transcriber may lease (KBC-064 FR-6): transcriptions, voice separations or
+   * both. A job it holds now keeps its lease; the next lease follows the new kinds.
+   */
+  setKinds(id: string, kinds: readonly MediaJobKind[]): Transcriber {
+    const record = this.deps.store.setKinds({ id, kinds: unique(kinds) });
+    if (!record) throw new AppError('NOT_FOUND', 'Unknown transcriber');
+    return this.toTranscriber(record);
+  }
+
   revoke(id: string): void {
     if (!this.deps.store.revoke({ id, now: this.now() }))
       throw new AppError('NOT_FOUND', 'Unknown transcriber');
@@ -112,11 +123,15 @@ export class TranscriberService {
   }
 
   /**
-   * "On" when one was seen within the hour; otherwise "off" since the last time any was
-   * seen (or, when none ever was, since the newest was paired); "none" when none is paired.
+   * For the transcribers that lease `kind` (KBC-064 AC-9: one that does not separate voices
+   * never says a separation will start): "on" when one was seen within the hour; otherwise
+   * "off" since the last time any was seen (or, when none ever was, since the newest was
+   * paired); "none" when none is paired for it.
    */
-  presence(): Presence {
-    const records = this.deps.store.list();
+  presence(kind: MediaJobKind = 'transcribe'): Presence {
+    const records = this.deps.store
+      .list()
+      .filter((record) => record.kinds.includes(kind));
     if (records.length === 0) return { transcriber: 'none', offSince: null };
     if (records.some((record) => this.isOnline(record)))
       return { transcriber: 'on', offSince: null };

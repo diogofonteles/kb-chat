@@ -1,0 +1,204 @@
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import type { DiarizeJob, TranscribeJob } from '@kb-chat/contracts';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FsMediaFiles } from './adapters/media/fs-media-files.js';
+import { openMediaDatabase } from './adapters/sqlite/media-database.js';
+import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
+import { SqliteDiarizationStore } from './adapters/sqlite/sqlite-diarization-store.js';
+import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
+import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
+import { createLogger } from './logger.js';
+import {
+  DiarizationService,
+  JOB_LEASE_MS,
+  MediaJanitor,
+  TranscriptionService,
+  WorkerService,
+} from './modules/media/index.js';
+import {
+  CONVERSATION_TURNS,
+  conversationRaw,
+} from '../test/diarization-harness.js';
+
+const T0 = new Date('2026-11-03T12:00:00.000Z');
+const MEDIA_ID = '22222222-2222-4222-8222-222222222222';
+let dir: string;
+let clock: Date;
+let store: SqliteMediaStore;
+let transcripts: SqliteTranscriptStore;
+let diarizations: SqliteDiarizationStore;
+let files: FsMediaFiles;
+
+const now = () => clock;
+const workers = () => new WorkerService({ store, files, now });
+const diarization = () =>
+  new DiarizationService({ store, transcripts, diarizations, files, now });
+const janitor = () =>
+  new MediaJanitor({ store, files, log: createLogger('silent'), now });
+
+/** An item converted and transcribed, as the owner's Mac would leave it. */
+async function transcribedItem(): Promise<void> {
+  store.createMedia({
+    id: MEDIA_ID,
+    topic: 'hermetismo',
+    title: 'Entrevista',
+    author: null,
+    legacyAuthorship: 'outros-autores',
+    ownerPrincipal: 'owner',
+    fileName: 'a.mp3',
+    uploadBytes: 3,
+    now: clock,
+  });
+  await files.saveUpload({
+    mediaId: MEDIA_ID,
+    body: Readable.from([Buffer.from('abc')]),
+    expectedBytes: 3,
+  });
+  store.markUploaded({
+    mediaId: MEDIA_ID,
+    jobId: crypto.randomUUID(),
+    now: clock,
+  });
+  const job = workers().lease({ worker: 'vm', kinds: ['transcode'] });
+  if (job?.kind !== 'transcode') throw new Error('no conversion');
+  await files.writeFile(job.targetPath, 'aac');
+  await workers().completeTranscode(job.id, {
+    worker: 'vm',
+    leaseId: job.leaseId,
+    durationMs: 60_000,
+    bytes: 3,
+  });
+  const transcribe = workers().lease({ worker: 'mac', kinds: ['transcribe'] });
+  if (transcribe?.kind !== 'transcribe') throw new Error('no transcription');
+  await completeTranscript(transcribe);
+}
+
+const completeTranscript = (job: TranscribeJob) =>
+  new TranscriptionService({ store, transcripts, files, now }).complete(
+    { jobId: job.id, leaseId: job.leaseId, worker: 'mac' },
+    {
+      worker: 'mac',
+      leaseId: job.leaseId,
+      provider: 'mlx-whisper',
+      model: 'mlx-community/whisper-large-v3-turbo',
+      parametersVersion: '2026-10-28.1',
+      parameters: {},
+      termsVersion: 1,
+      vad: 'applied',
+      speechRatio: 0.9,
+      elapsedMs: 100,
+      raw: conversationRaw(),
+    },
+  );
+
+function leaseFor(worker: string): DiarizeJob {
+  const job = workers().lease({ worker, kinds: ['transcribe', 'diarize'] });
+  if (job?.kind !== 'diarize') throw new Error('no separation');
+  return job;
+}
+
+const complete = (job: DiarizeJob, worker: string) =>
+  diarization().complete(
+    { jobId: job.id, leaseId: job.leaseId, worker },
+    {
+      worker,
+      leaseId: job.leaseId,
+      engine: 'senko',
+      model: 'senko',
+      parametersVersion: '2026-11-03.1',
+      parameters: {},
+      requestedVoices: null,
+      elapsedMs: 10,
+      raw: { turns: [...CONVERSATION_TURNS] },
+    },
+  );
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'kbchat-diarize-'));
+  clock = T0;
+  const db = openMediaDatabase(':memory:', MEDIA_MIGRATIONS);
+  store = new SqliteMediaStore(db);
+  transcripts = new SqliteTranscriptStore(db);
+  diarizations = new SqliteDiarizationStore(db);
+  files = new FsMediaFiles(dir);
+});
+afterEach(() => {
+  store.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+describe('A separation whose Mac stopped (KBC-064 AC-7)', () => {
+  it('goes back to the queue when the lease expires and is stored once', async () => {
+    await transcribedItem();
+    diarizations.requestDiarization({
+      mediaId: MEDIA_ID,
+      jobId: crypto.randomUUID(),
+      voices: null,
+      now: clock,
+    });
+    const lost = leaseFor('transcriber:mac-1');
+    clock = new Date(T0.getTime() + JOB_LEASE_MS + 1);
+    expect(await janitor().sweep()).toMatchObject({ requeued: 1, failed: 0 });
+    expect(diarizations.latestJob(MEDIA_ID)?.status).toBe('queued');
+    expect(store.getMedia(MEDIA_ID)?.status).toBe('ready');
+
+    const retaken = leaseFor('transcriber:mac-2');
+    expect(retaken.attempt).toBe(2);
+    await complete(retaken, 'transcriber:mac-2');
+    await expect(complete(lost, 'transcriber:mac-1')).rejects.toMatchObject({
+      code: 'MEDIA_CONFLICT',
+    });
+    expect(diarizations.latest(MEDIA_ID)?.version).toBe(1);
+    // The late result left no raw file behind: one separation, one file.
+    const raws = readdirSync(join(dir, 'transcripts', MEDIA_ID)).filter(
+      (name) => name.startsWith('diarization-'),
+    );
+    expect(raws).toHaveLength(1);
+  });
+
+  it('gives a separation up after the last attempt, keeping the item and its transcript', async () => {
+    await transcribedItem();
+    diarizations.requestDiarization({
+      mediaId: MEDIA_ID,
+      jobId: crypto.randomUUID(),
+      voices: 3,
+      now: clock,
+    });
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      leaseFor('transcriber:mac');
+      clock = new Date(clock.getTime() + JOB_LEASE_MS + 1);
+      await janitor().sweep();
+    }
+    expect(diarizations.latestJob(MEDIA_ID)).toEqual({
+      status: 'dead',
+      voices: 3,
+    });
+    expect(store.getMedia(MEDIA_ID)).toMatchObject({
+      status: 'ready',
+      failure: null,
+      transcription: { jobStatus: 'done', version: 1 },
+    });
+  });
+
+  it('fails a crashed separation as retryable without touching the item', async () => {
+    await transcribedItem();
+    diarizations.requestDiarization({
+      mediaId: MEDIA_ID,
+      jobId: crypto.randomUUID(),
+      voices: null,
+      now: clock,
+    });
+    const job = leaseFor('transcriber:mac');
+    await workers().fail(job.id, {
+      worker: 'transcriber:mac',
+      leaseId: job.leaseId,
+      failure: 'conversion-failed',
+      detail: 'coreml out of memory',
+    });
+    expect(diarizations.latestJob(MEDIA_ID)?.status).toBe('queued');
+    expect(store.getMedia(MEDIA_ID)?.status).toBe('ready');
+  });
+});
