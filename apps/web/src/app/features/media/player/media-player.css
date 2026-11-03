@@ -186,16 +186,18 @@
   color: #fffdf8;
   line-height: 1.4;
   text-align: center;
-  text-wrap: balance;
   /* Never clipped: the cues already hold two lines of at most 42 characters. */
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
 
-/* Narrow players (phones): a smaller size keeps 42 characters on one line. */
-@container player (max-width: 26rem) {
+/* Narrow players (phones): the size follows the player's width so a 42-character line
+   stays one line (two lines at most on screen), never below 12 px. */
+@container player (max-width: 34rem) {
   .caption {
-    font-size: var(--text-sm);
+    padding-inline: var(--space-2);
+    font-size: clamp(0.75rem, 3.5cqi, var(--text-md));
+    letter-spacing: -0.01em;
   }
 }
 

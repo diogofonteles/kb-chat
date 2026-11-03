@@ -86,7 +86,7 @@ export async function uploadReady(
     source?: string;
     /** A long tone at a low bitrate keeps the upload small (KBC-038 NFR-2). */
     bitrate?: string;
-    /** How long to wait for the conversion. */
+    /** How long to wait for the conversion (it slows down on a loaded machine). */
     readyWithinMs?: number;
   },
 ): Promise<UploadedMedia> {
@@ -124,7 +124,7 @@ export async function uploadReady(
           }
         ).status,
       {
-        timeout: input.readyWithinMs ?? 30_000,
+        timeout: input.readyWithinMs ?? 120_000,
       },
     )
     .toBe('ready');

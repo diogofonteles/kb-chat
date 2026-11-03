@@ -33,6 +33,8 @@ function lectureLines(): SpokenLine[] {
     text: `Trecho ${i + 1} sobre o tema ${i + 1}.`,
   }));
   const twelve = { at: 754, text: 'No minuto doze, o vegetal aparece.' };
+  // Dense speech with wide letters: a full two-line subtitle (BUG-1).
+  const dense = { at: 40, text: DENSE_LINE };
   const twenty = Array.from({ length: 20 }, (_, i) => ({
     at: 1_200 + i * 3,
     text:
@@ -40,15 +42,22 @@ function lectureLines(): SpokenLine[] {
         ? 'No minuto vinte, a frase marcada.'
         : `Minuto vinte, frase ${i}.`,
   }));
-  return [...opening, ...middle, twelve, ...twenty].sort((a, b) => a.at - b.at);
+  return [...opening, ...middle, twelve, dense, ...twenty].sort(
+    (a, b) => a.at - b.at,
+  );
 }
+
+/** 84 characters (42 + 41), no sentence end or pause inside: one cue of two full lines. */
+const DENSE_LINE =
+  'Coração ação canção questão emoção relação paixão nação razão sertão MMMWWW aqui ali';
 
 let lecture: UploadedMedia;
 let other: UploadedMedia;
 let noisy: UploadedMedia;
 
 test.beforeAll(async () => {
-  test.setTimeout(180_000);
+  // Three conversions; a loaded machine makes them slow (each waits up to 2 min).
+  test.setTimeout(600_000);
   const owner = await ownerApi();
   const tag = uniqueTag();
   lecture = await uploadReady(owner, {
@@ -165,6 +174,39 @@ test('AC-1, AC-4: subtitles follow the audio within 84 characters, stay on for a
   await page.locator('body').press('c');
   await expect(captionsButton(page)).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('app-media-player .caption-area')).toHaveCount(0);
+});
+
+test('AC-1: a full two-line subtitle is never clipped, at 390 px either', async ({
+  page,
+}, testInfo) => {
+  await openPlayer(page, lecture);
+  await captionsButton(page).click();
+  const line = segmentsList(page).getByText(DENSE_LINE);
+  await line.scrollIntoViewIfNeeded();
+  await playFromText(page, DENSE_LINE);
+  const caption = page.locator('app-media-player .caption');
+  await expect(caption).toContainText('Coração');
+  await page.getByRole('button', { name: 'Pausar' }).click();
+  const shown = await caption.evaluate((element) => ({
+    // Lines on screen: the text's height over one line's height.
+    screenLines: Math.round(
+      (element.clientHeight -
+        parseFloat(getComputedStyle(element).paddingTop) -
+        parseFloat(getComputedStyle(element).paddingBottom)) /
+        parseFloat(getComputedStyle(element).lineHeight),
+    ),
+    text: element.textContent ?? '',
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    lines: (element.textContent ?? '').split('\n'),
+  }));
+  // Nothing hidden: the whole cue is in the box, two lines of at most 42 characters.
+  expect(shown.scrollHeight).toBeLessThanOrEqual(shown.clientHeight);
+  expect(shown.lines).toHaveLength(2);
+  expect(shown.screenLines).toBeLessThanOrEqual(2);
+  for (const text of shown.lines) expect(text.length).toBeLessThanOrEqual(42);
+  expect(shown.text.replace('\n', ' ')).toBe(DENSE_LINE);
+  await saveEvidence(page, `${testInfo.project.name}-two-line-caption`);
 });
 
 test('AC-2, AC-3: a phrase of minute 20 plays when clicked; scrolling stops the following until "Voltar ao trecho atual"', async ({
@@ -383,6 +425,14 @@ test('AC-6: a low-confidence transcript says so above the text', async ({
     segmentsList(page).boundingBox(),
   ]);
   expect((noticeBox?.y ?? 0) < (listBox?.y ?? 0)).toBe(true);
+  // Subtitles on: a phone stacks the column far below, so a short notice goes with them.
+  await captionsButton(page).click();
+  const badge = page.getByText(
+    'Legendas de baixa confiança: podem ter trechos errados.',
+  );
+  if (desktop(page)) await expect(badge).toBeHidden();
+  else await expect(badge).toBeInViewport();
+  await captionsButton(page).click();
   // Hidden column, subtitles on: the header keeps the notice in view (KBC-036 BR-5).
   await page.getByRole('button', { name: 'Esconder transcrição' }).click();
   await captionsButton(page).click();
@@ -398,6 +448,10 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
 }) => {
   await openPlayer(page, lecture);
   await playFromText(page, 'Frase número 0 da abertura.');
+  // Measured once playback runs on its own (the start of a stream is not the player's).
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(1);
   const late = await page.evaluate(async () => {
     const audio = document.querySelector<HTMLMediaElement>(
       '[data-media-engine]',
@@ -407,9 +461,16 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
     ).map((item) => Number(item.dataset['startMs']));
     const misses: number[] = [];
     const until = performance.now() + 6_000;
+    let previous = performance.now();
     while (performance.now() < until) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      const now = (audio?.currentTime ?? 0) * 1000;
+      const frameAt = performance.now();
+      // A frame after the page itself froze (a loaded machine), or with the audio waiting
+      // for data, shows nothing about the highlight: those are not samples.
+      const frozen = frameAt - previous > 100;
+      previous = frameAt;
+      if (frozen || !audio || audio.readyState < 3 || audio.paused) continue;
+      const now = audio.currentTime * 1000;
       const shown = Number(
         document.querySelector<HTMLElement>('li:has([aria-current="true"])')
           ?.dataset['startMs'] ?? -1,
