@@ -307,6 +307,14 @@ describe('ProposalService: a run (KBC-067 FR-2, FR-3)', () => {
     expect(ctx.llm.calls).toHaveLength(1);
   });
 
+  it('prices a call from the list when the provider reports no cost', async () => {
+    const ctx = setup({ replies: [wholeWindow()] });
+    ctx.llm.costPerCall = null;
+    const run = await runToEnd(ctx);
+    // 100 input and 50 output tokens at US$ 1e-7 and 2e-7.
+    expect(run.spentUsd).toBeCloseTo(100 * 1e-7 + 50 * 2e-7, 12);
+  });
+
   it('refuses a second run while one is running', async () => {
     const ctx = setup({ replies: [HANG] });
     await ctx.service.start(OWNER, ctx.mediaId);

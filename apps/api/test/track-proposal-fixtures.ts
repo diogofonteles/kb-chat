@@ -142,8 +142,8 @@ export class StubLlm implements LlmPort {
   readonly model = 'stub/model';
   readonly billing = 'per-token' as const;
   readonly calls: LlmMessage[][] = [];
-  /** US$ the provider reports per call. */
-  costPerCall = 0.001;
+  /** US$ the provider reports per call; null when it reports none. */
+  costPerCall: number | null = 0.001;
 
   constructor(
     readonly replies: StubReply[],
