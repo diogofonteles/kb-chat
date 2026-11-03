@@ -16,7 +16,7 @@ import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { Subject } from 'rxjs';
 import { FakeConversationsServer } from '../../testing/fake-conversations.js';
-import { TOPICS, aMediaHit, aResponse } from '../../testing/fixtures.js';
+import { TOPICS, aHit, aMediaHit, aResponse } from '../../testing/fixtures.js';
 import { ChatStore } from './chat-store.js';
 
 const GENRE: SearchFilters = { ...EMPTY_FILTERS, genres: ['paper'] };
@@ -212,5 +212,29 @@ describe('ChatStore and spoken passages (KBC-039)', () => {
     store.openMedia(hit, { messageId: null, position: null });
     store.close();
     expect(store.openPassage()).toBeNull();
+  });
+
+  it("counts a document's place among texts and passages, as for a passage (FR-4)", async () => {
+    const { store, answer } = await setup();
+    store.ask('hoasca');
+    answer(
+      0,
+      aResponse(
+        [aHit({ id: 'a.md', score: 0.9 }), aHit({ id: 'b.md', score: 0.2 })],
+        { media: [aMediaHit({ score: 0.5 })] },
+      ),
+    );
+    const message = store.messages()[0];
+    if (!message) throw new Error('no message');
+    store.open('hermetismo', { id: 'b.md', title: 'B' }, message);
+    expect(usage.track).toHaveBeenLastCalledWith({
+      type: 'open_doc',
+      position: 3,
+    });
+    store.open('hermetismo', { id: 'copia.md', title: 'Cópia' }, message);
+    expect(usage.track).toHaveBeenLastCalledWith({
+      type: 'open_doc',
+      position: null,
+    });
   });
 });

@@ -49,6 +49,7 @@ import {
   type ChatMessage,
 } from './chat-message.js';
 import { readModePreference, writeModePreference } from './mode-preference.js';
+import { mixReferences } from './references.js';
 import { readKindsPreference, writeKindsPreference } from './search-kinds.js';
 
 /** Chip clicks within this window become one search (QA-7). */
@@ -99,6 +100,18 @@ export interface AskOptions {
 }
 
 const newConversationId = (): string => crypto.randomUUID();
+
+/**
+ * A document's 1-based place in the list on screen, spoken passages included (KBC-039),
+ * as `media_hit_opened` counts it; null when it is not in the list (a copy, a citation).
+ */
+function placeOf(response: SearchResponse | null, id: string): number | null {
+  if (!response) return null;
+  const index = mixReferences(response.items, response.media).findIndex(
+    (one) => one.kind === 'text' && one.hit.id === id,
+  );
+  return index < 0 ? null : index + 1;
+}
 
 const countFilters = (filters: SearchFilters): number =>
   Object.values(filters).reduce((sum, values) => sum + values.length, 0);
@@ -361,10 +374,9 @@ export class ChatStore {
     doc: DocumentRef,
     from?: Pick<ChatMessage, 'id' | 'question' | 'response'>,
   ): void {
-    const index = from?.response?.items.findIndex((hit) => hit.id === doc.id);
     this.usage.track({
       type: 'open_doc',
-      position: index === undefined || index < 0 ? null : index + 1,
+      position: placeOf(from?.response ?? null, doc.id),
     });
     this.historyState.set([]);
     this.passageState.set(null);

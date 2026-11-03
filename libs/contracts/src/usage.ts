@@ -46,7 +46,10 @@ export const usageEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('open_doc'),
-    /** 1-based place among the results; null when opened from an AI citation or a copy. */
+    /**
+     * 1-based place in the results on screen, spoken passages included (KBC-039: as
+     * `media_hit_opened` counts it); null when opened from an AI citation or a copy.
+     */
     position: z.number().int().positive().nullable(),
   }),
   /** A spoken passage opened from the results (KBC-039 FR-4): phase 2's main metric. */
