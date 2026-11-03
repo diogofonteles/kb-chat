@@ -138,4 +138,28 @@ describe('AuthorCombobox (KBC-049 FR-3, APG combobox)', () => {
     expect(changed).toHaveBeenLastCalledWith('Mestre Gabriel');
     expect(screen.queryByText(/Novo autor/)).toBeNull();
   });
+
+  it.each([
+    ['a quoted name', 'Mestre "Gabriel"'],
+    ['guillemets', 'Mestre «Gabriel»'],
+    ['a 61-character name', 'a'.repeat(61)],
+  ])(
+    "says %s breaks the API's rule and offers no registration",
+    async (_, value) => {
+      const { field, fixture } = await renderField();
+      expect(field.getAttribute('maxlength')).toBe('60');
+
+      fireEvent.input(field, { target: { value } });
+      await fixture.whenStable();
+
+      expect(field.getAttribute('aria-invalid')).toBe('true');
+      expect(
+        screen.getByText(
+          /O nome do autor deve ter uma linha e até 60 caracteres/,
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByText(/Novo autor/)).toBeNull();
+      expect(screen.queryByRole('option', { name: /Cadastrar/ })).toBeNull();
+    },
+  );
 });

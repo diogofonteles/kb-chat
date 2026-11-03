@@ -20,7 +20,7 @@ describe('the media "Autoria" filter (KBC-049 FR-4)', () => {
     expect(authorFilterOptions(ITEMS)).toEqual([
       {
         value: 'mestre-gabriel',
-        label: 'Mestre Gabriel (principal)',
+        label: 'Mestre Gabriel, principal',
         count: 2,
       },
       { value: 'ana', label: 'Ana', count: 1 },

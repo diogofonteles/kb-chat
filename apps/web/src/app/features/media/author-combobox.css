@@ -76,6 +76,17 @@ input {
 .status p {
   margin: var(--space-1) 0 0;
   font-size: var(--text-sm);
+  /* A 60-character name with no space never pushes the panel sideways. */
+  overflow-wrap: anywhere;
+}
+
+.status .error {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+input[aria-invalid='true'] {
+  border-color: var(--color-danger);
 }
 
 .new {

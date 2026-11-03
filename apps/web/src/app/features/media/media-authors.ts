@@ -48,7 +48,7 @@ export function authorFilterOptions(
       value: slug,
       // A native option reads its symbols aloud: the text says it instead of ✦.
       label: main
-        ? $localize`:@@media.authorFilter.main:${name}:name: (principal)`
+        ? $localize`:@@media.authorFilter.main:${name}:name:, principal`
         : name,
       count,
     }));

@@ -1,4 +1,15 @@
-import { authorSlugOf, type Author } from '@kb-chat/contracts';
+import {
+  authorNameSchema,
+  authorSlugOf,
+  type Author,
+} from '@kb-chat/contracts';
+
+/**
+ * Whether a typed name breaks the API's rule (the shared contract: one line, at most 60
+ * characters, no quotes nor « »); a blank field is no author, not an error.
+ */
+export const isInvalidAuthorName = (text: string): boolean =>
+  text.trim() !== '' && !authorNameSchema.safeParse(text).success;
 
 /** At most this many suggestions, so the list is scanned at a glance (SL-11). */
 export const MAX_SUGGESTIONS = 8;
@@ -35,9 +46,10 @@ export function suggestAuthors(
     author.main ? 0 : fold(author.name).startsWith(query) ? 1 : 2;
   const sorted = [...matching].sort((a, b) => rank(a) - rank(b));
   const known = authors.some((author) => author.slug === slug);
+  const registrable = slug && !known && !isInvalidAuthorName(text);
   return {
     authors: sorted.slice(0, MAX_SUGGESTIONS),
-    register: slug && !known ? text.trim() : null,
+    register: registrable ? text.trim() : null,
   };
 }
 

@@ -286,6 +286,72 @@ describe('UploadPanel (T14, KBC-034)', () => {
     expect(context.uploaded).toHaveBeenCalledTimes(1);
   });
 
+  it("sends nothing while the author's name breaks the API's rule (KBC-049 QA)", async () => {
+    const { container, fixture, http } = await renderPanel();
+    choose(container, audio());
+    const field = screen.getByRole('combobox', { name: 'Autor' });
+    fireEvent.input(field, { target: { value: 'Mestre "Gabriel"' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await fixture.whenStable();
+
+    http.expectNone({ method: 'POST' });
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('tells a refused author as an author problem, never as the file (KBC-049 QA)', async () => {
+    const { container, fixture, http } = await renderPanel();
+    choose(container, audio());
+    fireEvent.input(screen.getByRole('combobox', { name: 'Autor' }), {
+      target: { value: 'Mestre Gabriel' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    http
+      .expectOne({ method: 'POST', url: '/api/v1/topics/hermetismo/authors' })
+      .flush(
+        {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'x',
+            details: { field: 'name' },
+          },
+        },
+        { status: 400, statusText: 'Bad Request' },
+      );
+    await fixture.whenStable();
+
+    const alert = screen.getByRole('alert').textContent ?? '';
+    expect(alert).toContain('O nome do autor não foi aceito');
+    expect(alert).not.toContain('500 MB');
+    http.expectNone('/api/v1/topics/hermetismo/media');
+  });
+
+  it('tells an author the collection lost as an author problem too', async () => {
+    const { container, fixture, http } = await renderPanel();
+    choose(container, audio());
+    fireEvent.input(screen.getByRole('combobox', { name: 'Autor' }), {
+      target: { value: 'Mestre Gabriel' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    http
+      .expectOne({ method: 'POST', url: '/api/v1/topics/hermetismo/authors' })
+      .flush({ slug: 'mestre-gabriel', name: 'Mestre Gabriel', main: false });
+    http.expectOne('/api/v1/topics/hermetismo/media').flush(
+      {
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Unknown author',
+          details: { field: 'author' },
+        },
+      },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    await fixture.whenStable();
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'O nome do autor não foi aceito',
+    );
+  });
+
   it('refuses a title of only spaces before sending, and sends it trimmed', async () => {
     const { container, http, fixture } = await renderPanel();
     choose(container, audio());

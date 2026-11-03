@@ -7,9 +7,13 @@ import {
   model,
   signal,
 } from '@angular/core';
-import { authorListSchema } from '@kb-chat/contracts';
+import { AUTHOR_NAME_MAX, authorListSchema } from '@kb-chat/contracts';
 import { authorsUrl } from '@core/media/authors-api.js';
-import { closeMatch, suggestAuthors } from './author-suggestions.js';
+import {
+  closeMatch,
+  isInvalidAuthorName,
+  suggestAuthors,
+} from './author-suggestions.js';
 
 /** One line of the list: an author of the collection or the offer to register the text. */
 interface AuthorOption {
@@ -46,6 +50,10 @@ export class AuthorCombobox {
   protected readonly listId = `${this.id}-list`;
   protected readonly helpId = `${this.id}-help`;
   protected readonly statusId = `${this.id}-status`;
+  /** The API's limit (the shared contract): the field never takes more. */
+  protected readonly nameMax = AUTHOR_NAME_MAX;
+  /** The typed name breaks the API's rule: said here, and the panel will not send it. */
+  protected readonly invalid = computed(() => isInvalidAuthorName(this.name()));
 
   /** The list is asked for once the person reaches the field, not before. */
   private readonly wanted = signal(false);

@@ -10,7 +10,7 @@
     type="text"
     role="combobox"
     autocomplete="off"
-    maxlength="120"
+    [attr.maxlength]="nameMax"
     aria-autocomplete="list"
     [id]="inputId"
     [value]="name()"
@@ -19,6 +19,7 @@
     [attr.aria-controls]="listId"
     [attr.aria-activedescendant]="activeId()"
     [attr.aria-describedby]="helpId + ' ' + statusId"
+    [attr.aria-invalid]="invalid() ? 'true' : null"
     (focus)="load()"
     (input)="typed($event)"
     (click)="toggle()"
@@ -54,7 +55,12 @@
     }
   </ul>
   <div class="status" aria-live="polite" [id]="statusId">
-    @if (newName(); as name) {
+    @if (invalid()) {
+      <p class="error" i18n="@@media.author.invalid">
+        <span aria-hidden="true">⚠</span> O nome do autor deve ter uma linha e
+        até 60 caracteres, sem aspas nem « ».
+      </p>
+    } @else if (newName(); as name) {
       @if (typoOf(); as author) {
         <p class="typo">
           <ng-container i18n="@@media.author.typo"
