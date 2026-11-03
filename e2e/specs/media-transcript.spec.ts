@@ -269,6 +269,10 @@ test('AC-3: moving through the list with the keyboard also stops the following',
 }) => {
   await openPlayer(page, lecture);
   await playFromText(page, 'Frase número 3 da abertura.');
+  // The jump has landed (a late "seeked" counts as a skip and resumes the following).
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(6.2);
   await activeSegment(page).getByRole('button').focus();
   await page.keyboard.press('ArrowUp');
   await expect(backToCurrent(page)).toBeVisible();
