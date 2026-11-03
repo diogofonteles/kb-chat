@@ -72,10 +72,18 @@ async function talkSaying(
 }
 
 /** Types the question in the box and sends it. */
+/**
+ * Asks once the page can search (the collection loaded, the button enabled), as the other
+ * specs do: an Enter pressed before that is dropped (QA BUG-4).
+ */
 async function ask(page: Page, question: string) {
-  const box = page.getByRole('textbox', { name: 'Sua pergunta' });
-  await box.fill(question);
-  await box.press('Enter');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(
+    'Hermetismo',
+  );
+  await page.getByLabel('Sua pergunta').fill(question);
+  const send = page.getByRole('button', { name: 'Buscar' });
+  await expect(send).toBeEnabled();
+  await send.click();
 }
 
 const passages = (page: Page) =>
