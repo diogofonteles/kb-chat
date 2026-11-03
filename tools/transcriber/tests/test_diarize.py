@@ -166,6 +166,8 @@ def test_the_worker_leases_a_separation_and_uploads_only_the_turns(fake_api):
     assert upload["engine"] == "senko"
     assert upload["parametersVersion"] == DIARIZE_PARAMETERS_VERSION
     assert upload["requestedVoices"] == 3
+    # The API takes plain parameter values only (BR-1): nothing here may hold a vector.
+    assert all(isinstance(v, str | int | float | bool) for v in upload["parameters"].values())
     assert set(upload["raw"]) == {"turns"}
     assert len({t["voice"] for t in upload["raw"]["turns"]}) == 3
     # Only names and times travel: no vector, under any key, in the turns.

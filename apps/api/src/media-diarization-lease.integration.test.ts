@@ -264,3 +264,25 @@ describe('Edges of a separation (KBC-064)', () => {
     });
   });
 });
+
+describe('A database that fails while a separation is stored (review round 1)', () => {
+  it('leaves no raw file behind', async () => {
+    await transcribedItem();
+    diarizations.requestDiarization({
+      mediaId: MEDIA_ID,
+      jobId: crypto.randomUUID(),
+      voices: null,
+      now: clock,
+    });
+    const job = leaseFor('transcriber:mac');
+    diarizations.completeDiarize = () => {
+      throw new Error('disk full');
+    };
+    await expect(complete(job, 'transcriber:mac')).rejects.toThrow('disk full');
+    expect(
+      readdirSync(join(dir, 'transcripts', MEDIA_ID)).filter((name) =>
+        name.startsWith('diarization-'),
+      ),
+    ).toEqual([]);
+  });
+});

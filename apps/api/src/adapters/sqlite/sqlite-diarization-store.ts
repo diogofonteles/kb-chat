@@ -75,14 +75,21 @@ export class SqliteDiarizationStore implements DiarizationStorePort {
     });
   }
 
-  heldDiarization(owner: LeaseOwner): { mediaId: string } | null {
+  heldDiarization(
+    owner: LeaseOwner,
+  ): { mediaId: string; voices: number | null } | null {
     const row = this.db
       .prepare(
-        `SELECT media_id FROM jobs WHERE id = ? AND lease_id = ? AND worker = ?
+        `SELECT media_id, voices FROM jobs WHERE id = ? AND lease_id = ? AND worker = ?
            AND status = 'leased' AND kind = 'diarize'`,
       )
       .get(owner.jobId, owner.leaseId, owner.worker);
-    return row ? { mediaId: text(row, 'media_id') } : null;
+    return row
+      ? {
+          mediaId: text(row, 'media_id'),
+          voices: nullableNumber(row, 'voices'),
+        }
+      : null;
   }
 
   completeDiarize(input: {

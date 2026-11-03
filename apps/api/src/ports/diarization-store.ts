@@ -56,8 +56,13 @@ export interface DiarizationStorePort {
     readonly voices: number | null;
     readonly now: Date;
   }): boolean;
-  /** The item of the diarize job the owner holds now; null when it holds no such job. */
-  heldDiarization(owner: LeaseOwner): { readonly mediaId: string } | null;
+  /**
+   * The item and the voices hint of the diarize job the owner holds now; null when it holds
+   * no such job.
+   */
+  heldDiarization(
+    owner: LeaseOwner,
+  ): { readonly mediaId: string; readonly voices: number | null } | null;
   /** Closes the lease and stores the separation as the item's newest version. */
   completeDiarize(input: {
     readonly owner: LeaseOwner;

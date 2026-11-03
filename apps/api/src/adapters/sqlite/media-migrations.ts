@@ -274,7 +274,10 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     // KBC-064 (ADR 0029 §1): the voices of a recording, separated on the owner's Mac. Jobs
     // gain the kind 'diarize' and its hint (`voices`); SQLite cannot change a CHECK, so
     // the table is rebuilt as in version 5. No table holds a voice print (BR-1).
-    // Version 7 is KBC-051's (open in parallel); the two touch different tables.
+    // Version 7 is KBC-051's (open in parallel); the two touch different tables. KBC-044
+    // also rebuilds `jobs` (as 7, kind 'silences'): whichever merges second renumbers after
+    // the other and rebuilds `jobs` with all four kinds, keeping `voices` and its CHECK and
+    // the four indexes, with a test that a 'diarize' row keeps its voices.
     version: 8,
     name: 'diarization',
     sql: `

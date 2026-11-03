@@ -55,7 +55,10 @@ const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
 
-/** The newest job decides while it runs; otherwise a stored separation means done. */
+/**
+ * The newest job decides: waiting, running, failed (the earlier result, if any, stays in the
+ * body) or done; with no job, a stored separation means done.
+ */
 const STATUS_BY_JOB: Record<
   JobStatus,
   (hasResult: boolean) => DiarizationStatus
@@ -63,8 +66,9 @@ const STATUS_BY_JOB: Record<
   queued: () => 'waiting',
   leased: () => 'diarizing',
   done: (has) => (has ? 'done' : 'none'),
-  failed: (has) => (has ? 'done' : 'failed'),
-  dead: (has) => (has ? 'done' : 'failed'),
+  // A failed new run says so, even with an earlier result still shown (QA BUG-2).
+  failed: () => 'failed',
+  dead: () => 'failed',
 };
 
 function statusOf(
@@ -166,42 +170,52 @@ export class DiarizationService {
    */
   async complete(
     owner: LeaseOwner,
-    done: CompleteDiarizeRequest,
+    sent: CompleteDiarizeRequest,
   ): Promise<void> {
     const { diarizations, files } = this.deps;
     const job = diarizations.heldDiarization(owner);
     if (!job) throw leaseLost();
-    const diarization = await this.keepRaw(job.mediaId, done);
-    if (
-      !diarizations.completeDiarize({ owner, now: this.now(), diarization })
-    ) {
-      await files.remove([diarization.rawPath]);
-      throw leaseLost();
+    // The hint is the job's (BR-4, AC-6), whatever the worker says it was.
+    const done = { ...sent, requestedVoices: job.voices };
+    const diarization = this.derive(job.mediaId, done);
+    await files.writeFile(diarization.rawPath, rawFileOf(done));
+    let stored = false;
+    try {
+      stored = diarizations.completeDiarize({
+        owner,
+        now: this.now(),
+        diarization,
+      });
+    } finally {
+      if (!stored) await files.remove([diarization.rawPath]);
     }
+    if (!stored) throw leaseLost();
   }
 
-  /** Checks the turns, writes the raw file and derives what is stored with it. */
-  private async keepRaw(
+  /**
+   * Checks the turns against the item and the job, and derives what is stored with them;
+   * more voices than the person announced is a wrong result, refused whole.
+   */
+  private derive(
     mediaId: string,
     done: CompleteDiarizeRequest,
-  ): Promise<NewDiarization> {
+  ): NewDiarization {
     const { transcripts, store, files } = this.deps;
     const durationMs = store.getMedia(mediaId)?.durationMs ?? null;
     assertWithin(done, durationMs);
     const [transcript] = transcripts.transcripts(mediaId);
     if (!transcript)
       throw new AppError('MEDIA_NOT_READY', 'This media has no transcript');
-    const id = randomUUID();
-    const rawPath = files.diarizationPath(mediaId, id);
-    await files.writeFile(rawPath, rawFileOf(done));
     const turns = deriveTurns(done.raw.turns, durationMs);
+    assertVoices(turns, done.requestedVoices);
+    const id = randomUUID();
     return {
       id,
       mediaId,
       transcriptId: transcript.id,
       ...provenanceOf(done),
       voiceCount: voiceCountOf(turns),
-      rawPath,
+      rawPath: files.diarizationPath(mediaId, id),
       derivationVersion: DERIVATION_VERSION,
       turns,
       ...this.voicesOn(transcript.id, turns),
@@ -274,6 +288,17 @@ function assertWithin(
   );
   if (last > durationMs + END_SLACK_MS)
     throw new AppError('VALIDATION_FAILED', 'Turns end after the media', {
+      details: { field: 'raw' },
+    });
+}
+
+/** At most the number of voices the person announced (BR-4). */
+function assertVoices(
+  turns: readonly SpeakerTurn[],
+  requested: number | null,
+): void {
+  if (requested !== null && voiceCountOf(turns) > requested)
+    throw new AppError('VALIDATION_FAILED', 'More voices than were asked for', {
       details: { field: 'raw' },
     });
 }

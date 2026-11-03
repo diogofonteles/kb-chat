@@ -189,6 +189,17 @@ describe('VoicesPanel (KBC-064 FR-1, FR-4)', () => {
     expect(screen.getByRole('button', { name: 'Separar vozes' })).toBeTruthy();
   });
 
+  it('says a new run failed and still shows the earlier voices (QA BUG-2)', async () => {
+    await renderPanel(
+      speakers({ status: 'failed', diarization: aDiarization() }),
+    );
+    expect(status()).toBe('A separação de vozes falhou');
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(
+      screen.getByRole('button', { name: 'Separar vozes de novo' }),
+    ).toBeTruthy();
+  });
+
   it('explains why there is no button before the transcript', async () => {
     await renderPanel(speakers({ canRequest: false }));
     expect(document.body.textContent).toContain(

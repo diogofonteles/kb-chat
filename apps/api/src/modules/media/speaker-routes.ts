@@ -6,11 +6,14 @@ import {
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import type { RouteAccess } from '../auth/index.js';
+import { assertFeature, type RouteAccess } from '../auth/index.js';
 import type { DiarizationService } from './diarization-service.js';
 import { actorOf } from './routes.js';
 
-/** Voices are for whoever edits recordings (KBC-064 BR-2, FR-4); masters have it too. */
+/**
+ * Voices are for whoever edits recordings and may listen to them (KBC-064 BR-2, FR-4):
+ * `media-edit` by the route, `media` by the hook below; masters have both.
+ */
 const EDIT: RouteAccess = { feature: 'media-edit' };
 const mediaParams = z.object({ id: mediaIdSchema });
 
@@ -33,6 +36,9 @@ const OPTIONS = {
 export const speakerRoutes =
   (service: DiarizationService): FastifyPluginAsync =>
   async (app) => {
+    app.addHook('preHandler', async (request) =>
+      assertFeature(request, 'media'),
+    );
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.get('/api/v1/media/:id/speakers', OPTIONS.speakers, (request) =>
       Promise.resolve(service.speakers(actorOf(request), request.params.id)),

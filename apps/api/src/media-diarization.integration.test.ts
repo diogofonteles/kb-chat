@@ -18,6 +18,7 @@ import {
 } from '../test/diarization-harness.js';
 import { member, startMedia, type Media } from '../test/media-harness.js';
 import {
+  asTranscriber,
   pair,
   readyForTranscription,
   sendTranscript,
@@ -463,5 +464,129 @@ describe('The transcriber holds one job at a time (KBC-064 BR-5)', () => {
     // Oldest first: the separation was asked before the second item was ready.
     expect((await leaseDiarization(media, token)).mediaId).toBe(mediaId);
     expect((await lease(media, token)).statusCode).toBe(204);
+  });
+});
+
+describe('Review round 1 (KBC-064)', () => {
+  /** Any array of numbers in a text: a vector, whatever key it hides under. */
+  const NUMERIC_ARRAY = /\[\s*-?\d/;
+
+  it('refuses parameters that are not plain values, whole, and saves nothing (BR-1)', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await ready(media);
+    await requestVoices(media, mediaId);
+    const job = await leaseDiarization(media, token);
+    for (const parameters of [
+      { embedding: [0.11, 0.22, 0.33] },
+      { centroids: { A: [0.5] } },
+      { nested: { threshold: 0.3 } },
+    ]) {
+      const refused = await sendTurns(media, {
+        token,
+        job,
+        body: { ...turnsOf(job), parameters },
+      });
+      expect(refused.statusCode).toBe(400);
+    }
+    expect((await speakersOf(media, mediaId)).diarization).toBeNull();
+    const folder = join(media.mediaDir, 'transcripts', mediaId);
+    expect(
+      readdirSync(folder).filter((name) => name.startsWith('diarization-')),
+    ).toEqual([]);
+  });
+
+  it('keeps no array of numbers in any separation row or raw file', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await ready(media);
+    await separate(media, { token, mediaId });
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    const texts = [
+      'diarizations',
+      'media_speaker_turns',
+      'media_segment_voices',
+      'media_word_voices',
+    ].flatMap((table) =>
+      db
+        .prepare(`SELECT * FROM ${table}`)
+        .all()
+        .flatMap((row) => Object.values(row).map(String)),
+    );
+    db.close();
+    expect(texts.length).toBeGreaterThan(0);
+    expect(texts.filter((text) => NUMERIC_ARRAY.test(text))).toEqual([]);
+    const folder = join(media.mediaDir, 'transcripts', mediaId);
+    const raws = readdirSync(folder)
+      .filter((name) => name.startsWith('diarization-'))
+      .map((name) => readFileSync(join(folder, name), 'utf8'));
+    expect(raws).toHaveLength(1);
+    expect(raws.filter((raw) => NUMERIC_ARRAY.test(raw))).toEqual([]);
+  });
+
+  it('says a failed new run failed, still showing the earlier voices (QA BUG-2)', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await ready(media);
+    await separate(media, { token, mediaId });
+    expect((await requestVoices(media, mediaId)).statusCode).toBe(202);
+    {
+      const job = await leaseDiarization(media, token);
+      const failed = await asTranscriber(media, token, {
+        method: 'POST',
+        url: `/api/v1/media-worker/jobs/${job.id}/fail`,
+        payload: {
+          worker: 'mac',
+          leaseId: job.leaseId,
+          failure: 'invalid-audio',
+          detail: 'broken',
+        },
+      });
+      expect(failed.statusCode).toBe(204);
+    }
+    expect(await speakersOf(media, mediaId)).toMatchObject({
+      status: 'failed',
+      canRequest: true,
+      diarization: { version: 1, voiceCount: 3 },
+    });
+  });
+
+  it('takes the number of voices from the job, and refuses more voices than asked (AC-6)', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await ready(media);
+    await requestVoices(media, mediaId, { voices: 2 });
+    const job = await leaseDiarization(media, token);
+    const tooMany = await sendTurns(media, {
+      token,
+      job,
+      body: { ...turnsOf(job), requestedVoices: 3 },
+    });
+    expect(tooMany.statusCode).toBe(400);
+    const two = CONVERSATION_TURNS.map((turn) =>
+      turn.voice === 'SPEAKER_03' ? { ...turn, voice: 'SPEAKER_02' } : turn,
+    );
+    const lied = await sendTurns(media, {
+      token,
+      job,
+      body: { ...turnsOf(job, two), requestedVoices: null },
+    });
+    expect(lied.statusCode).toBe(204);
+    expect((await speakersOf(media, mediaId)).diarization).toMatchObject({
+      requestedVoices: 2,
+      voiceCount: 2,
+    });
+  });
+
+  it('refuses a person with `media-edit` but not `media` (owner decision)', async () => {
+    const media = await startMedia();
+    const { mediaId } = await ready(media);
+    const { call } = await member(media, {
+      email: 'so-editor@example.com',
+      topics: ['hermetismo'],
+      features: ['media-edit'],
+    });
+    expect(
+      (await call('GET', `/api/v1/media/${mediaId}/speakers`)).statusCode,
+    ).toBe(403);
+    expect(
+      (await call('POST', `/api/v1/media/${mediaId}/diarize`, {})).statusCode,
+    ).toBe(403);
   });
 });

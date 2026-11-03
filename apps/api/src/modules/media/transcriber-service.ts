@@ -98,7 +98,8 @@ export class TranscriberService {
 
   /**
    * What a paired transcriber may lease (KBC-064 FR-6): transcriptions, voice separations or
-   * both. A job it holds now keeps its lease; the next lease follows the new kinds.
+   * both, from the next call on. A job of a kind it no longer has cannot be finished by it:
+   * its calls get 404, the lease expires and the job goes back to the queue.
    */
   setKinds(id: string, kinds: readonly MediaJobKind[]): Transcriber {
     const record = this.deps.store.setKinds({ id, kinds: unique(kinds) });
