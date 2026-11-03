@@ -48,6 +48,7 @@ export {
 } from './transcript-filter.js';
 export {
   CONFIDENCE_RULES,
+  CONFIDENCE_VERSION,
   confidenceOf,
   type ConfidenceVerdict,
 } from './transcript-confidence.js';

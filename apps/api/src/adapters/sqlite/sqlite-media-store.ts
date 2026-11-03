@@ -201,6 +201,7 @@ export class SqliteMediaStore implements MediaStorePort {
   leaseJob(request: LeaseRequest): LeasedJob | null {
     if (request.kinds.length === 0) return null;
     return inTransaction(this.db, () => {
+      if (request.oneAtATime && this.holdsLease(request.worker)) return null;
       const row = this.takeOldestQueued(request);
       if (!row) return null;
       const job = toLeasedJob(row);
@@ -214,6 +215,24 @@ export class SqliteMediaStore implements MediaStorePort {
         });
       return job;
     });
+  }
+
+  private holdsLease(worker: string): boolean {
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM jobs WHERE worker = ? AND status = 'leased' LIMIT 1`,
+        )
+        .get(worker) !== undefined
+    );
+  }
+
+  /** What a job is (conversion or transcription); null when it does not exist. */
+  kindOfJob(jobId: string): MediaJobKind | null {
+    const row = this.db
+      .prepare('SELECT kind FROM jobs WHERE id = ?')
+      .get(jobId);
+    return row ? mediaJobKindSchema.parse(row['kind']) : null;
   }
 
   heartbeat(beat: Heartbeat): boolean {
@@ -322,14 +341,21 @@ export class SqliteMediaStore implements MediaStorePort {
         )
         .all(input.now.getTime());
       let failed = 0;
+      const transcriptionsGivenUp: string[] = [];
       for (const row of expired) {
         const givenUp = Number(row['attempts']) >= input.maxAttempts;
+        const mediaId = text(row, 'media_id');
         this.releaseExpired({ jobId: text(row, 'id'), givenUp, at });
         if (givenUp) failed++;
         if (row['kind'] === 'transcode')
-          this.afterExpiry({ mediaId: text(row, 'media_id'), givenUp, at });
+          this.afterExpiry({ mediaId, givenUp, at });
+        else if (givenUp) transcriptionsGivenUp.push(mediaId);
       }
-      return { requeued: expired.length - failed, failed };
+      return {
+        requeued: expired.length - failed,
+        failed,
+        transcriptionsGivenUp,
+      };
     });
   }
 

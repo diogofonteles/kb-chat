@@ -154,6 +154,9 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         last_seen_at TEXT,
         revoked_at TEXT
       ) STRICT;
+      -- Two active transcribers never share a name: the list says which one to revoke.
+      CREATE UNIQUE INDEX transcribers_active_name ON transcribers (lower(name))
+        WHERE revoked_at IS NULL;
 
       -- The term list put in every chunk's prompt, by version (KBC-040 edits it later).
       CREATE TABLE terms (
@@ -211,6 +214,7 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         elapsed_ms INTEGER NOT NULL,
         raw_path TEXT NOT NULL,
         filter_version INTEGER NOT NULL,
+        confidence_version INTEGER NOT NULL,
         confidence TEXT NOT NULL CHECK (confidence IN ('normal', 'low')),
         word_count INTEGER NOT NULL,
         removed_words INTEGER NOT NULL,

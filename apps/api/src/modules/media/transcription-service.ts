@@ -12,7 +12,8 @@ import type {
   NewTranscript,
   TranscriptStorePort,
 } from '../../ports/transcript-store.js';
-import { confidenceOf } from './transcript-confidence.js';
+import { assertPlausible } from './transcript-bounds.js';
+import { CONFIDENCE_VERSION, confidenceOf } from './transcript-confidence.js';
 import { FILTER_VERSION, deriveTranscript } from './transcript-filter.js';
 import type { PlayableFile } from './media-service.js';
 
@@ -28,6 +29,18 @@ const FLAC_MIME = 'audio/flac';
 const notYours = () => new AppError('NOT_FOUND', 'No such job for this worker');
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
+
+/** How a transcript was made: the worker's model, parameters, terms and VAD. */
+const provenanceOf = (done: CompleteTranscribeRequest) => ({
+  provider: done.provider,
+  model: done.model,
+  parameters: JSON.stringify(done.parameters),
+  parametersVersion: done.parametersVersion,
+  termsVersion: done.termsVersion,
+  vad: done.vad,
+  speechRatio: done.speechRatio,
+  elapsedMs: done.elapsedMs,
+});
 
 /** The raw result as stored: everything the worker sent but its lease (ADR 0023 §4). */
 function rawFileOf(done: CompleteTranscribeRequest): string {
@@ -86,7 +99,8 @@ export class TranscriptionService {
   ): Promise<void> {
     const job = this.heldTranscription(owner);
     if (!job) throw leaseLost();
-    const { files, transcripts } = this.deps;
+    const { files, transcripts, store } = this.deps;
+    assertPlausible(done.raw, store.getMedia(job.mediaId)?.durationMs ?? null);
     const id = randomUUID();
     const rawPath = files.transcriptPath(job.mediaId, id);
     await files.writeFile(rawPath, rawFileOf(done));
@@ -118,16 +132,10 @@ export class TranscriptionService {
     return {
       id: input.id,
       mediaId: input.mediaId,
-      provider: done.provider,
-      model: done.model,
-      parameters: JSON.stringify(done.parameters),
-      parametersVersion: done.parametersVersion,
-      termsVersion: done.termsVersion,
-      vad: done.vad,
-      speechRatio: done.speechRatio,
-      elapsedMs: done.elapsedMs,
+      ...provenanceOf(done),
       rawPath: input.rawPath,
       filterVersion: FILTER_VERSION,
+      confidenceVersion: CONFIDENCE_VERSION,
       confidence: verdict.confidence,
       wordCount: verdict.wordCount,
       removedWords: derived.stats.removedWords,

@@ -5,6 +5,7 @@ import type {
   HeartbeatRequest,
   LeaseRequest,
   LeasedWorkerJob,
+  MediaJobKind,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaFilesPort } from '../../ports/media-files.js';
@@ -40,10 +41,13 @@ export class WorkerService {
    * The oldest job of the asked kinds. A conversion names its files on the shared disk; a
    * transcription names the route its audio is fetched from (the Mac has no shared disk).
    */
-  lease(request: LeaseRequest): LeasedWorkerJob | null {
+  lease(
+    request: LeaseRequest & { readonly oneAtATime?: boolean },
+  ): LeasedWorkerJob | null {
     const job = this.deps.store.leaseJob({
       kinds: request.kinds,
       worker: request.worker,
+      oneAtATime: request.oneAtATime,
       now: this.now(),
       leaseMs: JOB_LEASE_MS,
     });
@@ -71,6 +75,11 @@ export class WorkerService {
       durationMs: this.deps.store.getMedia(job.mediaId)?.durationMs ?? null,
       audioPath: `/api/v1/media-worker/jobs/${job.id}/audio`,
     };
+  }
+
+  /** What a job is, for the routes to check it against the token's kinds (BR-2). */
+  kindOf(jobId: string): MediaJobKind | null {
+    return this.deps.store.kindOfJob(jobId);
   }
 
   heartbeat(jobId: string, beat: HeartbeatRequest): void {
@@ -185,6 +194,7 @@ export class WorkerService {
    */
   async fail(jobId: string, failure: FailJobRequest): Promise<void> {
     const mediaId = this.deps.store.mediaOfJob(jobId);
+    const kind = this.deps.store.kindOfJob(jobId);
     const recorded = this.deps.store.failJob({
       jobId,
       ...failure,
@@ -192,7 +202,16 @@ export class WorkerService {
       maxAttempts: MAX_JOB_ATTEMPTS,
     });
     if (!recorded) throw leaseLost();
-    if (failure.failure === 'invalid-audio' && mediaId)
+    if (!mediaId) return;
+    if (kind === 'transcribe') return this.afterTranscriptionFailure(mediaId);
+    if (failure.failure === 'invalid-audio')
       await this.deps.files.discardUpload(mediaId);
+  }
+
+  /** A transcription given up for good keeps no FLAC (ADR 0022 §4: made for it only). */
+  private async afterTranscriptionFailure(mediaId: string): Promise<void> {
+    const status = this.deps.store.getMedia(mediaId)?.transcription.jobStatus;
+    if (status === 'failed' || status === 'dead')
+      await this.deps.files.remove([this.deps.files.flacPath(mediaId)]);
   }
 }

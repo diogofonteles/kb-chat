@@ -5,6 +5,9 @@ import type { DerivedTranscript } from './transcript-filter.js';
  * ADR 0023 §6, calibrated on the pilot's 111 tracks (work/KBC-036/spec.md): the noisy
  * excerpt's tracks come out low, the clean excerpts' normal.
  */
+/** Bump whenever a rule below changes: each transcript keeps the version it was judged by. */
+export const CONFIDENCE_VERSION = 1;
+
 export const CONFIDENCE_RULES = {
   /** A segment whisper doubted: mean token log-probability under this… */
   minAvgLogprob: -0.6,

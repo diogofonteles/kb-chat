@@ -35,6 +35,7 @@ function toSummary(row: Row): TranscriptSummary {
     vad: vadOf(row['vad']),
     rawPath: text(row, 'raw_path'),
     filterVersion: Number(row['filter_version']),
+    confidenceVersion: Number(row['confidence_version']),
     wordCount: Number(row['word_count']),
     removedWords: Number(row['removed_words']),
     createdAt: text(row, 'created_at'),
@@ -119,7 +120,7 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
     return this.db
       .prepare(
         `SELECT id, media_id, version, confidence, vad, raw_path, filter_version,
-           word_count, removed_words, created_at
+           confidence_version, word_count, removed_words, created_at
          FROM transcripts WHERE media_id = ? ORDER BY version DESC`,
       )
       .all(mediaId)
@@ -206,9 +207,10 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
 
 const INSERT_TRANSCRIPT = `INSERT INTO transcripts (id, media_id, version, provider, model,
     parameters, parameters_version, terms_version, vad, speech_ratio, elapsed_ms, raw_path,
-    filter_version, confidence, word_count, removed_words, low_words, created_at)
+    filter_version, confidence_version, confidence, word_count, removed_words, low_words,
+    created_at)
   VALUES (?, ?, (SELECT coalesce(max(version), 0) + 1 FROM transcripts WHERE media_id = ?),
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /** The values of INSERT_TRANSCRIPT, in its order. */
 const transcriptRow = (t: NewTranscript, at: string) =>
@@ -226,6 +228,7 @@ const transcriptRow = (t: NewTranscript, at: string) =>
     t.elapsedMs,
     t.rawPath,
     t.filterVersion,
+    t.confidenceVersion,
     t.confidence,
     t.wordCount,
     t.removedWords,

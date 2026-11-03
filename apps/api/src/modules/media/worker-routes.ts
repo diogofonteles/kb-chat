@@ -6,6 +6,7 @@ import {
   heartbeatRequestSchema,
   leaseRequestSchema,
   leasedJobSchema,
+  type MediaJobKind,
   mediaJobIdSchema,
   transcriptionTermsSchema,
 } from '@kb-chat/contracts';
@@ -17,6 +18,7 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import { TRANSCRIBER_LEASE_PREFIX } from '../../ports/transcriber-store.js';
 import { PUBLIC } from '../auth/index.js';
 import { serveMedia } from './serve-media.js';
 import type {
@@ -58,13 +60,38 @@ function identityOf(request: FastifyRequest): WorkerIdentity {
  * Whose lease a call names: a paired transcriber's leases carry its token's name, whatever
  * the body says; the VM worker names itself (ADR 0022 §3).
  */
-const ownerOf = (
+function ownerOf(
   request: FastifyRequest,
   body: { worker: string; leaseId: string },
-) => ({
-  worker: identityOf(request).leaseName ?? body.worker,
-  leaseId: body.leaseId,
-});
+) {
+  const { leaseName } = identityOf(request);
+  // The VM names itself, but never as a paired transcriber (BR-2).
+  if (!leaseName && body.worker.startsWith(TRANSCRIBER_LEASE_PREFIX))
+    throw notThisWorkers();
+  return { worker: leaseName ?? body.worker, leaseId: body.leaseId };
+}
+
+const notThisWorkers = () =>
+  new AppError('NOT_FOUND', 'No such job for this worker');
+
+/**
+ * A job whose kind the token may not lease is not there for it (404, BR-2): the VM never
+ * touches a transcription, a transcriber never a conversion.
+ */
+function assertJobKind(
+  request: FastifyRequest,
+  input: { jobId: string; service: WorkerService; only?: MediaJobKind },
+): void {
+  const kind = input.service.kindOf(input.jobId);
+  if (!kind) return;
+  const allowed = identityOf(request).kinds.includes(kind);
+  if (!allowed || (input.only && kind !== input.only)) throw notThisWorkers();
+}
+
+/** The routes below are the transcriber's only (ADR 0023): other tokens get 404. */
+function assertTranscriber(request: FastifyRequest): void {
+  if (!identityOf(request).kinds.includes('transcribe')) throw notThisWorkers();
+}
 
 /** The kinds asked that this token may lease; none of them is 403. */
 function allowedKinds(
@@ -124,7 +151,8 @@ export const workerRoutes =
     app.decorateRequest('workerIdentity', null);
     app.addHook('onRequest', identifyWorker(deps.transcribers));
     registerLease(app, deps.service);
-    registerBeatAndFail(app, deps.service);
+    registerBeat(app, deps.service);
+    registerFail(app, deps.service);
     registerTranscode(app, deps.service);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
@@ -140,22 +168,22 @@ function registerLease(app: FastifyInstance, service: WorkerService): void {
       const job = service.lease({
         worker: identity.leaseName ?? request.body.worker,
         kinds: allowedKinds(identity, request.body.kinds),
+        // ADR 0023: a paired transcriber holds one job at a time.
+        oneAtATime: identity.leaseName !== null,
       });
       return job ? reply.code(200).send(job) : reply.code(204).send();
     },
   );
 }
 
-function registerBeatAndFail(
-  app: FastifyInstance,
-  service: WorkerService,
-): void {
+function registerBeat(app: FastifyInstance, service: WorkerService): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     '/api/v1/media-worker/jobs/:id/heartbeat',
     route(heartbeatRequestSchema),
     async (request, reply) => {
       const { body } = request;
+      assertJobKind(request, { jobId: request.params.id, service });
       service.heartbeat(request.params.id, {
         ...ownerOf(request, body),
         progress: body.progress,
@@ -163,10 +191,15 @@ function registerBeatAndFail(
       return reply.code(204).send();
     },
   );
+}
+
+function registerFail(app: FastifyInstance, service: WorkerService): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     '/api/v1/media-worker/jobs/:id/fail',
     route(failJobRequestSchema),
     async (request, reply) => {
+      assertJobKind(request, { jobId: request.params.id, service });
       await service.fail(request.params.id, {
         ...request.body,
         ...ownerOf(request, request.body),
@@ -182,6 +215,11 @@ function registerTranscode(app: FastifyInstance, service: WorkerService): void {
     '/api/v1/media-worker/jobs/:id/complete',
     route(completeTranscodeRequestSchema),
     async (request, reply) => {
+      assertJobKind(request, {
+        jobId: request.params.id,
+        service,
+        only: 'transcode',
+      });
       await service.completeTranscode(request.params.id, {
         ...request.body,
         ...ownerOf(request, request.body),
@@ -197,14 +235,16 @@ function registerTranscriberReads(
   transcription: TranscriptionService,
 ): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  typed.get('/api/v1/media-worker/terms', OPTIONS.terms, async () =>
-    transcription.terms(),
-  );
+  typed.get('/api/v1/media-worker/terms', OPTIONS.terms, async (request) => {
+    assertTranscriber(request);
+    return transcription.terms();
+  });
   typed.get(
     '/api/v1/media-worker/jobs/:id/audio',
     OPTIONS.audio,
     async (request, reply) => {
       const { id } = request.params;
+      assertTranscriber(request);
       const owner = {
         jobId: id,
         ...ownerOf(request, { worker: '', leaseId: request.query.leaseId }),
@@ -225,6 +265,7 @@ function registerTranscript(
     '/api/v1/media-worker/jobs/:id/transcript',
     OPTIONS.transcript,
     async (request, reply) => {
+      assertTranscriber(request);
       const owner = {
         jobId: request.params.id,
         ...ownerOf(request, request.body),

@@ -40,6 +40,8 @@ export interface NewTranscript {
   /** The raw JSON file, relative to the media directory. */
   readonly rawPath: string;
   readonly filterVersion: number;
+  /** The confidence rules the verdict came from (ADR 0023 §6, versioned like the filter). */
+  readonly confidenceVersion: number;
   readonly confidence: TranscriptConfidence;
   readonly wordCount: number;
   readonly removedWords: number;
@@ -57,6 +59,7 @@ export interface TranscriptSummary {
   readonly vad: 'applied' | 'skipped';
   readonly rawPath: string;
   readonly filterVersion: number;
+  readonly confidenceVersion: number;
   readonly wordCount: number;
   readonly removedWords: number;
   readonly createdAt: string;

@@ -40,7 +40,16 @@ export class MediaJanitor {
     });
     for (const mediaId of abandoned)
       await this.deps.files.discardUpload(mediaId);
-    const result = { ...reaped, abandoned: abandoned.length };
+    // A transcription given up keeps no FLAC: a new one is served the AAC rendition.
+    const { files } = this.deps;
+    await files.remove(
+      reaped.transcriptionsGivenUp.map((id) => files.flacPath(id)),
+    );
+    const result = {
+      requeued: reaped.requeued,
+      failed: reaped.failed,
+      abandoned: abandoned.length,
+    };
     if (result.requeued + result.failed + result.abandoned > 0)
       this.deps.log.info({ media: result }, 'media janitor sweep');
     return result;

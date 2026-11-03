@@ -402,30 +402,56 @@ export type TranscriptionTerms = z.infer<typeof transcriptionTermsSchema>;
  * file is stored as received and is the source of truth for every later derivation.
  */
 const finite = z.number().refine(Number.isFinite);
-export const rawWordSchema = z.looseObject({
-  word: z.string(),
-  start: finite,
-  end: finite,
-  probability: finite.nullable().optional(),
-});
-export const rawSegmentSchema = z.looseObject({
-  start: finite,
-  end: finite,
-  text: z.string(),
-  avg_logprob: finite.nullable().optional(),
-  compression_ratio: finite.nullable().optional(),
-  no_speech_prob: finite.nullable().optional(),
-  temperature: finite.nullable().optional(),
-  words: z.array(rawWordSchema).optional(),
-});
-export const rawChunkSchema = z.looseObject({
-  /** Seconds from the start of the track. */
-  offset: finite.min(0),
-  end: finite.min(0),
-  result: z.looseObject({ segments: z.array(rawSegmentSchema) }),
-});
+const inOrder = (span: { start: number; end: number }) =>
+  span.start <= span.end;
+const ORDER = { error: 'start must not come after end' };
+
+/** Bounds of one raw result (an hour of speech is ~10 000 words in ~150 chunks). */
+export const RAW_TRANSCRIPT_LIMITS = {
+  chunks: 20_000,
+  segmentsPerChunk: 2_000,
+  wordsPerSegment: 2_000,
+  segmentText: 10_000,
+  wordText: 200,
+} as const;
+
+export const rawWordSchema = z
+  .looseObject({
+    word: z.string().max(RAW_TRANSCRIPT_LIMITS.wordText),
+    start: finite,
+    end: finite,
+    probability: finite.nullable().optional(),
+  })
+  .refine(inOrder, ORDER);
+export const rawSegmentSchema = z
+  .looseObject({
+    start: finite,
+    end: finite,
+    text: z.string().max(RAW_TRANSCRIPT_LIMITS.segmentText),
+    avg_logprob: finite.nullable().optional(),
+    compression_ratio: finite.nullable().optional(),
+    no_speech_prob: finite.nullable().optional(),
+    temperature: finite.nullable().optional(),
+    words: z
+      .array(rawWordSchema)
+      .max(RAW_TRANSCRIPT_LIMITS.wordsPerSegment)
+      .optional(),
+  })
+  .refine(inOrder, ORDER);
+export const rawChunkSchema = z
+  .looseObject({
+    /** Seconds from the start of the track. */
+    offset: finite.min(0),
+    end: finite.min(0),
+    result: z.looseObject({
+      segments: z
+        .array(rawSegmentSchema)
+        .max(RAW_TRANSCRIPT_LIMITS.segmentsPerChunk),
+    }),
+  })
+  .refine((chunk) => chunk.offset <= chunk.end, ORDER);
 export const rawTranscriptSchema = z.looseObject({
-  chunks: z.array(rawChunkSchema),
+  chunks: z.array(rawChunkSchema).max(RAW_TRANSCRIPT_LIMITS.chunks),
 });
 export type RawTranscript = z.infer<typeof rawTranscriptSchema>;
 export type RawSegment = z.infer<typeof rawSegmentSchema>;

@@ -65,7 +65,7 @@ export class SqliteTranscriberStore implements TranscriberStorePort {
     return this.db
       .prepare(
         `SELECT ${COLUMNS} FROM transcribers t WHERE t.revoked_at IS NULL
-         ORDER BY t.created_at, t.id`,
+         ORDER BY t.created_at, t.rowid`,
       )
       .all()
       .map(toRecord);

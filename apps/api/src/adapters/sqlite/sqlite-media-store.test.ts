@@ -176,6 +176,7 @@ describe('SqliteMediaStore queue', () => {
     ).toEqual({
       requeued: 0,
       failed: 0,
+      transcriptionsGivenUp: [],
     });
   });
 
@@ -290,7 +291,11 @@ describe('SqliteMediaStore queue', () => {
         now: at(attempt * 100 + 61),
         maxAttempts: MAX_ATTEMPTS,
       });
-      expect(reaped).toEqual({ requeued: 1, failed: 0 });
+      expect(reaped).toEqual({
+        requeued: 1,
+        failed: 0,
+        transcriptionsGivenUp: [],
+      });
       expect(store.getMedia(media.id)).toMatchObject({
         status: 'queued',
         progress: null,
@@ -302,6 +307,7 @@ describe('SqliteMediaStore queue', () => {
     ).toEqual({
       requeued: 0,
       failed: 1,
+      transcriptionsGivenUp: [],
     });
     expect(store.getMedia(media.id)).toMatchObject({
       status: 'failed',
@@ -318,6 +324,7 @@ describe('SqliteMediaStore queue', () => {
     ).toEqual({
       requeued: 0,
       failed: 0,
+      transcriptionsGivenUp: [],
     });
   });
 

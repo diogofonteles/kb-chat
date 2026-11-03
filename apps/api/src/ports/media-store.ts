@@ -81,6 +81,11 @@ export interface LeaseRequest {
   readonly worker: string;
   readonly now: Date;
   readonly leaseMs: number;
+  /**
+   * A worker holding a lease gets nothing more (ADR 0023: one job at a time per paired
+   * transcriber, so a leaked token cannot drain the queue's audio).
+   */
+  readonly oneAtATime?: boolean;
 }
 
 export interface Heartbeat extends LeaseOwner {
@@ -109,6 +114,8 @@ export interface JobFailure extends LeaseOwner {
 export interface ReapResult {
   readonly requeued: number;
   readonly failed: number;
+  /** Items whose transcription was given up: their FLAC serves nothing now. */
+  readonly transcriptionsGivenUp: readonly string[];
 }
 
 /**
@@ -135,6 +142,8 @@ export interface MediaStorePort {
   }): MediaRecord;
 
   leaseJob(request: LeaseRequest): LeasedJob | null;
+  /** What a job is; null when it does not exist (anymore). */
+  kindOfJob(jobId: string): MediaJobKind | null;
   /** The media item a job converts; null when the job does not exist (anymore). */
   mediaOfJob(jobId: string): string | null;
   /** False when the lease is no longer this worker's (expired, re-leased, removed). */

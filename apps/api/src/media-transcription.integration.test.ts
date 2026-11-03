@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { MediaItem, Transcriber } from '@kb-chat/contracts';
+import type { MediaItem, RawTranscript, Transcriber } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
-import { closeApp } from '../test/ai-app-harness.js';
+import { LOCAL, MEDIA_WORKER_TOKEN, closeApp } from '../test/ai-app-harness.js';
 import {
   convert,
   leaseJob,
@@ -20,6 +20,7 @@ import {
   pair,
   readyForTranscription,
   sendTranscript,
+  transcriptOf,
 } from '../test/transcription-harness.js';
 import { pilotRaw } from '../test/transcript-fixtures.js';
 
@@ -411,5 +412,210 @@ describe('Transcription: the transcriber presence on the item (KBC-036 FR-1)', (
       ['Mac 1', false],
       ['Mac 2', false],
     ]);
+  });
+});
+
+describe('Transcription: review round 1 (KBC-036)', () => {
+  const lease = (media: Media, token: string) =>
+    asTranscriber(media, token, {
+      method: 'POST',
+      url: '/api/v1/media-worker/jobs/lease',
+      payload: { worker: 'mac', kinds: ['transcribe'] },
+    });
+
+  it('leases one job at a time per transcriber; another transcriber takes the next (ADR 0023)', async () => {
+    const media = await startMedia();
+    const first = await pair(media, 'Mac 1');
+    const second = await pair(media, 'Mac 2');
+    await readyForTranscription(media);
+    await readyForTranscription(media);
+    const held = await leaseTranscription(media, first.token);
+    expect((await lease(media, first.token)).statusCode).toBe(204);
+    const other = await leaseTranscription(media, second.token);
+    expect(other.id).not.toBe(held.id);
+    await sendTranscript(media, { token: first.token, job: held });
+    expect((await lease(media, first.token)).statusCode).toBe(204);
+  });
+
+  it('refuses a worker token on every route of people and masters (BR-2)', async () => {
+    const media = await startMedia();
+    const { token } = await pair(media);
+    const item = await readyForTranscription(media);
+    for (const bearer of [token, MEDIA_WORKER_TOKEN])
+      for (const url of [
+        '/api/v1/me',
+        '/api/v1/topics/hermetismo/media',
+        `/api/v1/media/${item.id}`,
+        `/api/v1/media/${item.id}/stream`,
+        '/api/v1/media/transcribers',
+        '/api/v1/people',
+      ]) {
+        const answer = await media.started.app.inject({
+          method: 'GET',
+          url,
+          headers: { ...LOCAL, authorization: `Bearer ${bearer}` },
+        });
+        expect([401, 403], `${url}`).toContain(answer.statusCode);
+      }
+  });
+
+  it("keeps the VM token off the transcriber routes and off a transcriber's lease (BR-2)", async () => {
+    const media = await startMedia();
+    const { token, transcriber } = await pair(media);
+    await readyForTranscription(media);
+    const job = await leaseTranscription(media, token);
+    const vm = { ...LOCAL, authorization: `Bearer ${MEDIA_WORKER_TOKEN}` };
+    const asVm = (method: 'GET' | 'POST', url: string, payload?: object) =>
+      media.started.app.inject({ method, url, headers: vm, payload });
+    const posing = transcriptOf(job);
+    const sent = await asVm(
+      'POST',
+      `/api/v1/media-worker/jobs/${job.id}/transcript`,
+      { ...posing, worker: `transcriber:${transcriber.id}` },
+    );
+    expect(sent.statusCode).toBe(404);
+    expect(
+      (await asVm('GET', `${job.audioPath}?leaseId=${job.leaseId}`)).statusCode,
+    ).toBe(404);
+    expect((await asVm('GET', '/api/v1/media-worker/terms')).statusCode).toBe(
+      404,
+    );
+    const beat = await asVm(
+      'POST',
+      `/api/v1/media-worker/jobs/${job.id}/heartbeat`,
+      {
+        worker: `transcriber:${transcriber.id}`,
+        leaseId: job.leaseId,
+        progress: 1,
+      },
+    );
+    expect(beat.statusCode).toBe(404);
+    const done = await sendTranscript(media, { token, job });
+    expect(done.statusCode).toBe(204);
+  });
+
+  it('keeps a transcriber off the conversion routes of its own job', async () => {
+    const media = await startMedia();
+    const { token } = await pair(media);
+    await readyForTranscription(media);
+    const job = await leaseTranscription(media, token);
+    const complete = await asTranscriber(media, token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/complete`,
+      payload: { worker: 'mac', leaseId: job.leaseId, durationMs: 1, bytes: 1 },
+    });
+    expect(complete.statusCode, complete.body).toBe(404);
+  });
+
+  it.each([
+    [
+      'a segment that ends before it starts',
+      {
+        chunks: [
+          {
+            offset: 0,
+            end: 5,
+            result: { segments: [{ start: 3, end: 1, text: 'x' }] },
+          },
+        ],
+      },
+    ],
+    [
+      'a word that ends before it starts',
+      {
+        chunks: [
+          {
+            offset: 0,
+            end: 5,
+            result: {
+              segments: [
+                {
+                  start: 0,
+                  end: 2,
+                  text: 'x',
+                  words: [{ word: 'x', start: 2, end: 1 }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+    [
+      'a time past the audio',
+      { chunks: [{ offset: 900, end: 905, result: { segments: [] } }] },
+    ],
+    [
+      'more words than the audio can hold',
+      {
+        chunks: [
+          {
+            offset: 0,
+            end: 100,
+            result: {
+              segments: Array.from({ length: 4 }, () => ({
+                start: 0,
+                end: 100,
+                text: 'a',
+                words: Array.from({ length: 1_900 }, () => ({
+                  word: 'a',
+                  start: 0,
+                  end: 0.1,
+                })),
+              })),
+            },
+          },
+        ],
+      },
+    ],
+  ])('refuses a raw result with %s (400)', async (_reason, raw) => {
+    const media = await startMedia();
+    const { token } = await pair(media);
+    await readyForTranscription(media);
+    const job = await leaseTranscription(media, token);
+    const sent = await sendTranscript(media, {
+      token,
+      job,
+      raw: raw as RawTranscript,
+    });
+    expect(sent.statusCode).toBe(400);
+  });
+
+  it('refuses a second active transcriber with the same name, whatever the case', async () => {
+    const media = await startMedia();
+    const { transcriber } = await pair(media, 'Mac do dono');
+    const again = await media.owner('POST', '/api/v1/media/transcribers', {
+      name: 'mac DO dono',
+    });
+    expect(again.statusCode).toBe(409);
+    await media.owner('DELETE', `/api/v1/media/transcribers/${transcriber.id}`);
+    expect(
+      (
+        await media.owner('POST', '/api/v1/media/transcribers', {
+          name: 'Mac do dono',
+        })
+      ).statusCode,
+    ).toBe(201);
+  });
+
+  it('drops the FLAC when the transcription is given up for good', async () => {
+    const media = await startMedia();
+    const { token } = await pair(media);
+    const item = await readyForTranscription(media);
+    const job = await leaseTranscription(media, token);
+    const flac = join(media.mediaDir, 'audio', `${item.id}.flac`);
+    expect(existsSync(flac)).toBe(true);
+    const failed = await asTranscriber(media, token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/fail`,
+      payload: {
+        worker: 'mac',
+        leaseId: job.leaseId,
+        failure: 'invalid-audio',
+        detail: 'ffmpeg could not decode',
+      },
+    });
+    expect(failed.statusCode).toBe(204);
+    expect(existsSync(flac)).toBe(false);
   });
 });

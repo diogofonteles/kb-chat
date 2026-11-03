@@ -48,6 +48,8 @@ const TOKEN_PREFIX = 'nat_';
 /** At most one "seen" write per transcriber in this window. */
 const TOUCH_EVERY_MS = 10_000;
 
+const sameName = (a: string, b: string): boolean =>
+  a.toLocaleLowerCase('pt-BR') === b.toLocaleLowerCase('pt-BR');
 const digest = (value: string) => createHash('sha256').update(value).digest();
 const isSame = (a: string, b: string) => timingSafeEqual(digest(a), digest(b));
 
@@ -64,6 +66,13 @@ export class TranscriberService {
   }
 
   pair(input: { name: string; pairedBy: string }): PairedTranscriber {
+    const taken = this.deps.store
+      .list()
+      .some((one) => sameName(one.name, input.name));
+    if (taken)
+      throw new AppError('MEDIA_CONFLICT', 'A transcriber has this name', {
+        details: { field: 'name' },
+      });
     const token = `${TOKEN_PREFIX}${randomBytes(32).toString('base64url')}`;
     const record = this.deps.store.pair({
       id: randomUUID(),

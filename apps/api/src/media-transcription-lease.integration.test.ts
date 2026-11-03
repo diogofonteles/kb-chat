@@ -59,7 +59,7 @@ async function readyItem(): Promise<void> {
   await workers().completeTranscode(job.id, {
     worker: 'vm',
     leaseId: job.leaseId,
-    durationMs: 1_000,
+    durationMs: 600_000,
     bytes: 3,
   });
 }
@@ -136,6 +136,7 @@ describe('A transcription whose Mac stopped (KBC-036 AC-8)', () => {
 
   it('gives a transcription up after the last attempt, leaving the item ready', async () => {
     await readyItem();
+    await files.writeFile(files.flacPath(MEDIA_ID), 'fLaC');
     const janitor = new MediaJanitor({
       store,
       files,
@@ -152,6 +153,8 @@ describe('A transcription whose Mac stopped (KBC-036 AC-8)', () => {
       failure: null,
       transcription: { jobStatus: 'dead' },
     });
+    // Nothing will use its FLAC now: the janitor drops it.
+    expect(await files.stat(files.flacPath(MEDIA_ID))).toBeNull();
   });
 
   it('stores the derived segments and words of the newest version', async () => {
@@ -162,6 +165,7 @@ describe('A transcription whose Mac stopped (KBC-036 AC-8)', () => {
       version: 1,
       vad: 'applied',
       filterVersion: 1,
+      confidenceVersion: 1,
     });
     const segments = transcripts.segments(current?.id ?? '');
     const words = transcripts.words(current?.id ?? '');

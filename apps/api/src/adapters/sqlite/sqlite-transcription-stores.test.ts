@@ -43,6 +43,7 @@ const aTranscript = (
   elapsedMs: 10,
   rawPath: 'transcripts/x.json',
   filterVersion: 1,
+  confidenceVersion: 1,
   confidence: 'normal',
   wordCount: 1,
   removedWords: 0,
