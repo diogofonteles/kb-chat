@@ -11,6 +11,12 @@ dependencies = [
   "mlx-whisper==0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 
+# KBC-064: voice separation with Senko (MIT), Apple silicon only. `uv sync --extra diarize`.
+[project.optional-dependencies]
+diarize = [
+  "senko==0.1.0 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
 [project.scripts]
 transcriber = "transcriber.cli:main"
 
@@ -30,8 +36,14 @@ name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
+# The Mac (the worker) and Linux (CI) only: Senko pins an old torch for other systems.
+[tool.uv]
+environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
+
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+# Senko is not on PyPI: the commit measured in KBC-063.
+senko = { git = "https://github.com/narcotic-sh/senko.git", rev = "1bcb09041bfa170b4a5a4b0af92f66eff76204d5" }
 
 [tool.ruff]
 line-length = 100

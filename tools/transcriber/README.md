@@ -29,6 +29,25 @@ and name to `~/Library/Application Support/nova-alexandria-transcriber/config.js
 Alternatively set `KB_CHAT_TRANSCRIBER_TOKEN_FILE` to a file with mode 0600; never keep the
 token in the repository. `KB_CHAT_API_URL` and `KB_CHAT_TRANSCRIBER_NAME` override the config.
 
+## Separating voices (KBC-064)
+
+The same worker separates the voices of a transcribed recording ("Voz 1", "Voz 2"…) when
+the `diarize` extra is installed and the transcriber is marked **Separa vozes** in
+Transcritores. The engine is [Senko](https://github.com/narcotic-sh/senko) (MIT, commit
+`1bcb090`, CoreML on Apple silicon), the best measured on our Portuguese recordings
+(`docs/research/2026-11-03-audio-editing-test-speakers.md`): a few seconds per hour of audio.
+
+```bash
+uv sync --project tools/transcriber --extra diarize
+```
+
+Only start, end and a voice name per turn go to the API (ADR 0029 §1). The engine's voice
+centroids stay in memory, are used only to join voices down to the number a person
+announced (or 10), and are dropped when the job ends; nothing is written to disk.
+`transcriber run --no-diarize` keeps the worker to transcriptions. The engine sits behind
+the `Diarizer` protocol in [`src/transcriber/diarize.py`](src/transcriber/diarize.py), so
+pyannote `community-1` can come in as another engine (it needs a Hugging Face token).
+
 ## Run
 
 ```bash
@@ -65,4 +84,5 @@ uv run ruff check && uv run ruff format --check && uv run pytest
 ```
 
 Tests use a fake model and a fake API; the sung-track test (AC-3) runs the real Silero VAD
-on a synthetic signal.
+on a synthetic signal. With the `diarize` extra on a Mac, `test_senko_two_voices.py` runs
+the real Senko on a conversation synthesized with `say` (skipped elsewhere).

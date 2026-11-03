@@ -1,7 +1,8 @@
-"""The loop: lease one transcribe job, fetch its audio, transcribe, upload the raw result.
+"""The loop: lease one job, fetch its audio, transcribe it or separate its voices, upload.
 
 A lost lease (409) or a shutdown stops the job between chunks and uploads nothing; the
-lease then expires and the API puts the job back in the queue (ADR 0022 §2).
+lease then expires and the API puts the job back in the queue (ADR 0022 §2). One job at a
+time: a transcription and a separation never run together on this Mac (KBC-064 BR-5).
 """
 
 import logging
@@ -17,6 +18,8 @@ import numpy as np
 from .api import ApiClient, ApiError, Unauthorized
 from .audio import InvalidAudio
 from .config import (
+    DIARIZE_PARAMETERS,
+    DIARIZE_PARAMETERS_VERSION,
     ERROR_BACKOFF_S,
     HEARTBEAT_S,
     PARAMETERS,
@@ -24,6 +27,7 @@ from .config import (
     POLL_S,
     UNAUTHORIZED_BACKOFF_S,
 )
+from .diarize import Diarizer, separate
 from .secret import TokenError
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
@@ -56,10 +60,20 @@ class Worker:
     unauthorized_backoff_s: float = UNAUTHORIZED_BACKOFF_S
     error_backoff_s: float = ERROR_BACKOFF_S
     count_tokens: TokenCounter = estimate_tokens
+    # Voice separation (KBC-064): without an engine, the worker never asks for it.
+    diarizer: Diarizer | None = None
+
+    @property
+    def kinds(self) -> tuple[str, ...]:
+        return ("transcribe", "diarize") if self.diarizer else ("transcribe",)
 
     def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
         """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
-        log.info("transcriber started (parameters %s)", PARAMETERS_VERSION)
+        log.info(
+            "transcriber started (parameters %s, jobs: %s)",
+            PARAMETERS_VERSION,
+            ", ".join(self.kinds),
+        )
         while not self.stop.is_set():
             outcome = self.step()
             if outcome == "job" and once:
@@ -78,7 +92,7 @@ class Worker:
     def step(self) -> str:
         """One lease attempt: 'job', 'idle', 'revoked' or 'error'."""
         try:
-            job = self.api.lease()
+            job = self.api.lease(self.kinds)
         except (Unauthorized, TokenError) as err:
             log.error(REVOKED if isinstance(err, Unauthorized) else str(err))
             return "revoked"
@@ -119,22 +133,18 @@ class Worker:
         beats.start()
         try:
             with tempfile.TemporaryDirectory(prefix="transcriber-") as work:
-                self._transcribe(job, Path(work), progress, stop)
+                if job["kind"] == "diarize":
+                    self._diarize(job, Path(work), progress, stop)
+                else:
+                    self._transcribe(job, Path(work), progress, stop)
         finally:
             done.set()
             beats.join(timeout=5)
 
     def _transcribe(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
         terms = self.api.terms()
-        audio = self.api.download(job, work)
-        if audio is None:
-            log.warning("job %s: its audio is not ours (404): dropped", job["id"])
-            return
-        try:
-            pcm = self.decode(audio)
-        except InvalidAudio as err:
-            log.error("job %s: the audio cannot be decoded", job["id"])
-            self.api.fail(job, "invalid-audio", str(err))
+        pcm = self._audio_of(job, work)
+        if pcm is None:
             return
         started = time.monotonic()
         try:
@@ -156,6 +166,53 @@ class Worker:
             return
         elapsed_ms = int((time.monotonic() - started) * 1000)
         self._upload(job, terms, result, elapsed_ms, stop)
+
+    def _diarize(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Separates the voices of the job's audio and uploads only the turns (BR-1)."""
+        if self.diarizer is None:
+            raise RuntimeError("leased a separation without a diarization engine")
+        pcm = self._audio_of(job, work)
+        if pcm is None:
+            return
+        progress["percent"] = 10
+        started = time.monotonic()
+        try:
+            turns = separate(pcm, diarizer=self.diarizer, voices=job.get("voices"), scratch=work)
+        except Exception as err:
+            log.exception("job %s: voice separation failed", job["id"])
+            self.api.fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
+            return
+        progress["percent"] = 100
+        if stop.is_set():
+            log.warning("job %s stopped before the upload: nothing uploaded", job["id"])
+            return
+        body = {
+            "engine": self.diarizer.engine,
+            "model": self.diarizer.model,
+            "parametersVersion": DIARIZE_PARAMETERS_VERSION,
+            "parameters": DIARIZE_PARAMETERS,
+            "requestedVoices": job.get("voices"),
+            "elapsedMs": int((time.monotonic() - started) * 1000),
+            "raw": {"turns": turns},
+        }
+        if self.api.upload_diarization(job, body):
+            voices = len({turn["voice"] for turn in turns})
+            log.info("job %s: %d voices, %d turns", job["id"], voices, len(turns))
+        else:
+            log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
+
+    def _audio_of(self, job: dict, work: Path) -> np.ndarray | None:
+        """The job's audio as 16 kHz PCM; None when it is not ours or cannot be decoded."""
+        audio = self.api.download(job, work)
+        if audio is None:
+            log.warning("job %s: its audio is not ours (404): dropped", job["id"])
+            return None
+        try:
+            return self.decode(audio)
+        except InvalidAudio as err:
+            log.error("job %s: the audio cannot be decoded", job["id"])
+            self.api.fail(job, "invalid-audio", str(err))
+            return None
 
     def _upload(self, job: dict, terms: dict, result, elapsed_ms: int, stop: _JobStop) -> None:
         if stop.is_set():

@@ -56,6 +56,7 @@ def pair(args: argparse.Namespace) -> int:
 def run(args: argparse.Namespace) -> int:
     from .api import ApiClient
     from .audio import decode_pcm16k, ffmpeg_bin
+    from .diarize import senko_or_none
     from .vad import silero_speech
     from .worker import Worker
 
@@ -85,6 +86,9 @@ def run(args: argparse.Namespace) -> int:
         decode=decode_pcm16k,
         stop=stop,
         count_tokens=count,
+        # KBC-064: separates voices too when the `diarize` extra (Senko) is installed and
+        # not turned off; the API still gives it a separation only if marked in Transcritores.
+        diarizer=None if args.no_diarize else senko_or_none(),
     )
     if args.poll:
         worker.poll_s = args.poll
@@ -115,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
         "--exit-when-idle", action="store_true", help="exit when the queue is empty"
     )
     running.add_argument("--poll", type=float, help="seconds between leases when idle (30)")
+    running.add_argument(
+        "--no-diarize", action="store_true", help="never lease voice separations (KBC-064)"
+    )
     running.set_defaults(handler=run)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
