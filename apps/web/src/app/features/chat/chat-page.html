@@ -214,6 +214,7 @@
                 [message]="message"
                 [topicTitle]="topic()?.title ?? ''"
                 [activeId]="opened()?.id ?? null"
+                [places]="places()"
                 (opened)="openHit($event, message)"
                 (retried)="retry(message)"
                 (modeSwitched)="askAgainIn(message, $event)"

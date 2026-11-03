@@ -13,7 +13,10 @@ import type {
   ConversationKind,
   ConversationStatus,
   ConversationSummary,
+  Topic,
 } from '@kb-chat/contracts';
+import { treeTitle } from '@core/topics/topic-tree.js';
+import { CollectionDialog } from '@features/collections/collection-dialog.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
@@ -56,7 +59,13 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
  */
 @Component({
   selector: 'app-sidebar',
-  imports: [DecimalPipe, SettingsButton, RouterLink, RouterLinkActive],
+  imports: [
+    DecimalPipe,
+    SettingsButton,
+    RouterLink,
+    RouterLinkActive,
+    CollectionDialog,
+  ],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -189,6 +198,18 @@ export class Sidebar {
 
   protected openMedia(): void {
     this.acted.emit('media');
+  }
+
+  /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
+  protected readonly canCreateCollections = computed(() =>
+    this.session.can('collection-create'),
+  );
+  protected readonly treeTitle = treeTitle;
+
+  /** A new collection opens at once (≤ 2 s, NFR-1); a renamed one keeps its place. */
+  protected collectionSaved(topic: Topic): void {
+    this.chat.putTopic(topic);
+    if (topic.slug !== this.chat.topicSlug()) this.changeTopic(topic.slug);
   }
 
   protected changeTopic(slug: string): void {

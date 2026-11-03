@@ -4,11 +4,14 @@
     class="card"
     [attr.data-doc-id]="hit().id"
     [attr.aria-pressed]="active()"
-    (click)="opened.emit(hit())"
+    (click)="open(hit())"
   >
     <app-authorship-badge class="authorship" [authorship]="hit().authorship" />
     <span class="title">{{ hit().title }}</span>
     <span class="snippet">{{ hit().snippet }}</span>
+    @if (place(); as where) {
+      <span class="place" i18n="@@card.place">em {{ where }}</span>
+    }
     @if (facets()) {
       <span class="facets">{{ facets() }}</span>
     }
@@ -44,7 +47,7 @@
                 type="button"
                 class="copy"
                 [attr.data-doc-id]="copy.id"
-                (click)="opened.emit(copy)"
+                (click)="open(copy)"
               >
                 {{ copy.title }} <span class="copy-path">{{ copy.id }}</span>
               </button>

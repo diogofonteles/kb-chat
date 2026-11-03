@@ -24,6 +24,7 @@ import type { MediaAuthorship, MediaItem, Topic } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { MediaApi } from '@core/media/media-api.js';
+import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import { Subscription, concatMap, of, tap, type Observable } from 'rxjs';
 import {
   fileProblemOf,
@@ -58,6 +59,9 @@ export class UploadPanel implements OnInit {
   readonly topic = input.required<string>();
   /** The collections the person sees: the upload may go to another one (T14). */
   readonly topics = input.required<readonly Topic[]>();
+  /** Where a file can go: every collection the person opens, as a tree. */
+  protected readonly choices = computed(() => openable(this.topics()));
+  protected readonly treeTitle = treeTitle;
   readonly uploaded = output<MediaItem>();
   readonly closed = output();
 

@@ -55,6 +55,7 @@
   overflow: hidden;
 }
 
+.place,
 .facets,
 .concepts {
   font-size: var(--text-sm);

@@ -92,15 +92,48 @@
       (change)="changeTopic(topicSelect.value)"
     >
       @for (topic of chat.topicList(); track topic.slug) {
-        <option
-          [value]="topic.slug"
-          [selected]="topic.slug === chat.topicSlug()"
-        >
-          {{ topic.title }} ({{ topic.documentCount | number }})
-        </option>
+        @if (topic.canOpen) {
+          <option
+            [value]="topic.slug"
+            [selected]="topic.slug === chat.topicSlug()"
+          >
+            {{ treeTitle(topic) }} ({{ topic.documentCount | number }})
+          </option>
+        } @else {
+          <!-- A parent shown only as the title of its group (KBC-048 BR-3). -->
+          <option [value]="topic.slug" disabled>{{ topic.title }}</option>
+        }
       }
     </select>
   </label>
+
+  @if (canCreateCollections()) {
+    <div class="collection-actions">
+      <button
+        type="button"
+        class="collection-action"
+        (click)="collectionDialog.openNew()"
+        i18n="@@sidebar.newCollection"
+      >
+        + Novo acervo
+      </button>
+      @if (chat.topic(); as current) {
+        <button
+          type="button"
+          class="collection-action"
+          (click)="collectionDialog.openEdit(current)"
+          i18n="@@sidebar.editCollection"
+        >
+          Editar acervo
+        </button>
+      }
+    </div>
+  }
+  <app-collection-dialog
+    #collectionDialog
+    [topics]="chat.topicList()"
+    (saved)="collectionSaved($event)"
+  />
 
   @if (mediaOn()) {
     <a

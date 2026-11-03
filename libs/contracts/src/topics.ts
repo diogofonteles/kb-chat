@@ -49,9 +49,12 @@ export const topicUpdateSchema = z
     title: topicTitleSchema.optional(),
     description: topicDescriptionSchema.optional(),
   })
-  .refine((body) => body.title !== undefined || body.description !== undefined, {
-    error: 'nothing to change',
-  });
+  .refine(
+    (body) => body.title !== undefined || body.description !== undefined,
+    {
+      error: 'nothing to change',
+    },
+  );
 export type TopicUpdate = z.input<typeof topicUpdateSchema>;
 
 /**

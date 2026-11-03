@@ -2,10 +2,12 @@ import type {
   KbDocument,
   SearchHit,
   SearchResponse,
+  Topic,
   TopicList,
 } from '@kb-chat/contracts';
 
 export const aHit = (overrides: Partial<SearchHit> = {}): SearchHit => ({
+  topic: 'hermetismo',
   id: 'raw/articles/a-lei-do-ritmo.md',
   title: 'A Lei do Ritmo',
   snippet: 'Os pitagóricos afirmavam que o Universo inteiro…',
@@ -83,10 +85,20 @@ export const aDocument = (overrides: Partial<KbDocument> = {}): KbDocument => ({
   ...overrides,
 });
 
+export const aTopic = (
+  topic: Pick<Topic, 'slug' | 'title'> & Partial<Topic>,
+): Topic => ({
+  documentCount: 0,
+  parent: null,
+  description: '',
+  canOpen: true,
+  ...topic,
+});
+
 export const TOPICS: TopicList = {
   items: [
-    { slug: 'hermetismo', title: 'Hermetismo', documentCount: 4235 },
-    { slug: 'alquimia', title: 'Alquimia', documentCount: 1 },
+    aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 4235 }),
+    aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 1 }),
   ],
   defaultSlug: null,
 };

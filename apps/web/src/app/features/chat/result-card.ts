@@ -13,6 +13,9 @@ import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 const VISIBLE_CONCEPTS = 2;
 
 /** One search hit: title, snippet, facets in text and its near-identical copies (screens.md T2). */
+/** A result or one of its copies, with the collection it opens in (KBC-048). */
+export type OpenedHit = DocumentRef & { readonly topic: string };
+
 @Component({
   selector: 'app-result-card',
   imports: [AuthorshipBadge],
@@ -23,9 +26,15 @@ const VISIBLE_CONCEPTS = 2;
 export class ResultCard {
   readonly hit = input.required<SearchHit>();
   readonly active = input(false);
-  readonly opened = output<DocumentRef>();
+  /** The sub-collection the hit is in, when searching its parent (ADR 0028). */
+  readonly place = input<string | null>(null);
+  readonly opened = output<OpenedHit>();
 
   protected readonly copiesOpen = signal(false);
+
+  protected open(doc: DocumentRef): void {
+    this.opened.emit({ id: doc.id, title: doc.title, topic: this.hit().topic });
+  }
   protected readonly facets = computed(() => describeFacets(this.hit()));
   protected readonly concepts = computed(() =>
     this.hit().concepts.slice(0, VISIBLE_CONCEPTS).join(' · '),

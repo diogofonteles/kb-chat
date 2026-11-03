@@ -6,11 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import type {
-  DocumentRef,
-  SearchFilters,
-  SearchMode,
-} from '@kb-chat/contracts';
+import type { SearchFilters, SearchMode } from '@kb-chat/contracts';
 import { errorMessage } from '@core/api/api-error.js';
 import { modeLabel } from '@core/i18n/facet-labels.js';
 import { hasFilters, type ChatMessage } from './chat-message.js';
@@ -20,7 +16,7 @@ import {
   toggleFilter,
   type ActiveFilter,
 } from './filter-model.js';
-import { ResultCard } from './result-card.js';
+import { ResultCard, type OpenedHit } from './result-card.js';
 import { describeResultCount } from './result-count.js';
 
 /** The system's answer to one question: summary, filters, cards and every state (screens.md T2). */
@@ -35,7 +31,9 @@ export class ResultMessage {
   readonly message = input.required<ChatMessage>();
   readonly topicTitle = input('');
   readonly activeId = input<string | null>(null);
-  readonly opened = output<DocumentRef>();
+  /** Titles of the sub-collections searched with the chosen one (ADR 0028). */
+  readonly places = input<ReadonlyMap<string, string>>(new Map());
+  readonly opened = output<OpenedHit>();
   readonly retried = output();
   readonly modeSwitched = output<SearchMode>();
   readonly filtersChanged = output<SearchFilters>();

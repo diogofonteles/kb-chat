@@ -31,6 +31,7 @@ import { ChatStore } from './chat-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { provideResearchRestorer } from '@features/research/research-restorer.js';
 import { Composer } from './composer.js';
+import type { OpenedHit } from './result-card.js';
 import { describeForAnnouncement } from './result-count.js';
 import { ResultMessage } from './result-message.js';
 import { ResearchStore } from '@features/research/research-store.js';
@@ -94,6 +95,16 @@ export class ChatPage {
   protected readonly desktop = signal(this.matchesDesktop());
 
   protected readonly topic = this.store.topic;
+  /** The chosen collection's sub-collections, named on their results (ADR 0028). */
+  protected readonly places = computed(() => {
+    const slug = this.store.topicSlug();
+    return new Map(
+      this.store
+        .topicList()
+        .filter((one) => one.parent !== null && one.parent === slug)
+        .map((one) => [one.slug, one.title]),
+    );
+  });
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
   protected readonly currentView = this.views.current;
@@ -285,8 +296,9 @@ export class ChatPage {
     });
   }
 
-  protected openHit(doc: DocumentRef, message: ChatMessage): void {
-    this.store.open(message.topic, doc, message);
+  /** A hit opens in its own collection: a sub-collection when searching the parent. */
+  protected openHit(hit: OpenedHit, message: ChatMessage): void {
+    this.store.open(hit.topic, { id: hit.id, title: hit.title }, message);
   }
 
   /** A subject chip in the panel filters the message that opened it (KBC-003 FR-5). */

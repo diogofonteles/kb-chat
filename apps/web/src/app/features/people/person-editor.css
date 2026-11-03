@@ -39,6 +39,16 @@
   accent-color: var(--color-accent);
 }
 
+/* A sub-collection sits under its parent (KBC-048 FR-5). */
+.check.child {
+  padding-left: var(--space-6);
+}
+
+.inherited {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 .group:disabled .check {
   cursor: default;
   color: var(--color-text-muted);

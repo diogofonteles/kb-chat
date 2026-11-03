@@ -41,6 +41,7 @@
               <app-result-card
                 [hit]="hit"
                 [active]="hit.id === activeId()"
+                [place]="places().get(hit.topic) ?? null"
                 (opened)="opened.emit($event)"
               />
             </li>

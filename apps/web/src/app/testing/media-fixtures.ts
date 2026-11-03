@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import type { Feature, MediaItem } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { aTopic } from './fixtures.js';
 
 /** A valid media id (the contract requires UUIDs): the n-th of a list. */
 export const mediaId = (n: number): string =>
@@ -31,10 +32,10 @@ export const chatStoreOn = (slug = 'hermetismo', title = 'Hermetismo') => ({
   provide: ChatStore,
   useValue: {
     topicSlug: signal(slug),
-    topic: signal({ slug, title, documentCount: 10 }),
+    topic: signal(aTopic({ slug, title, documentCount: 10 })),
     topicList: signal([
-      { slug, title, documentCount: 10 },
-      { slug: 'alquimia', title: 'Alquimia', documentCount: 4 },
+      aTopic({ slug, title, documentCount: 10 }),
+      aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 4 }),
     ]),
   },
 });
