@@ -17,7 +17,11 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../testing/fake-media-element.js';
-import { aMediaItem, aTranscription } from '../../testing/media-fixtures.js';
+import {
+  aMediaItem,
+  aTranscription,
+  sessionAs,
+} from '../../testing/media-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
@@ -28,7 +32,10 @@ import { EMPTY } from 'rxjs';
 const ITEM = aMediaItem();
 const ITEM_URL = `/api/v1/media/${ITEM.id}`;
 
-async function openPage(url = `/midia/${ITEM.id}`): Promise<{
+async function openPage(
+  url = `/midia/${ITEM.id}`,
+  who?: Parameters<typeof sessionAs>[0],
+): Promise<{
   harness: RouterTestingHarness;
   http: HttpTestingController;
   media: FakeMedia;
@@ -47,6 +54,7 @@ async function openPage(url = `/midia/${ITEM.id}`): Promise<{
       { provide: MEDIA_POLL_MS, useValue: 20 },
       { provide: VOLUME_SUPPORT, useValue: Promise.resolve(false) },
       { provide: ANIMATION_FRAMES, useValue: EMPTY },
+      ...(who ? [sessionAs(who)] : []),
     ],
   });
   const harness = await RouterTestingHarness.create(url);
@@ -502,5 +510,36 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     http.expectOne(transcriptRequest).flush(TRANSCRIPT);
     await harness.fixture.whenStable();
     expect(screen.getByText('Existia um rei.')).toBeTruthy();
+  });
+});
+
+describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
+  it('shows the voices block to whoever edits recordings', async () => {
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-edit'],
+    });
+    http.expectOne(ITEM_URL).flush(ITEM);
+    // The item renders, then the block asks for the voices (a pending read keeps it unstable).
+    await Promise.resolve();
+    TestBed.tick();
+    http.expectOne(`${ITEM_URL}/speakers`).flush({
+      mediaId: ITEM.id,
+      status: 'none',
+      transcriber: 'on',
+      transcriberOffSince: null,
+      canRequest: true,
+      diarization: null,
+    });
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('heading', { name: 'Vozes' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Separar vozes' })).toBeTruthy();
+  });
+
+  it('shows nothing of voices to a person who only listens, and asks for none', async () => {
+    const { harness, http } = await openPage(undefined, { features: ['media'] });
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    expect(screen.queryByRole('heading', { name: 'Vozes' })).toBeNull();
+    http.expectNone(`${ITEM_URL}/speakers`);
   });
 });
