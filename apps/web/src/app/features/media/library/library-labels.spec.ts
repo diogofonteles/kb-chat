@@ -80,12 +80,11 @@ describe('library labels (T16)', () => {
   it('counts the active filters and toggles a chip', () => {
     expect(
       activeFiltersOf({
-        kinds: ['video'],
         states: ['heard', 'unheard'],
         authorships: [],
         topic: 'hermetismo',
       }),
-    ).toBe(4);
+    ).toBe(3);
     expect(toggled(['a', 'b'], 'a')).toEqual(['b']);
     expect(toggled(['b'], 'a')).toEqual(['b', 'a']);
   });

@@ -222,22 +222,19 @@ describe('Media library: what each person sees (BR-2, NFR-3)', () => {
 });
 
 describe('Media library: home (FR-2, BR-3, BR-4)', () => {
-  it('lists in-progress media, the most recently played first, with the video kind (AC-3)', async () => {
+  it('lists in-progress media, the most recently played first (AC-3)', async () => {
     const media = await startMedia();
     const older = await ready(media, { title: 'Mais antiga' });
-    const video = await ready(media, { title: 'Vídeo do meio' });
+    const middle = await ready(media, { title: 'Do meio' });
     const newest = await ready(media, { title: 'Mais recente' });
     const heard = await ready(media, { title: 'Já ouvida' });
-    withDb(media, (db) =>
-      db.prepare("UPDATE media SET kind = 'video' WHERE id = ?").run(video),
-    );
     await playedAt(media, media.owner, {
       id: older,
       positionMs: 10_000,
       at: '2026-11-01T10:00:00.000Z',
     });
     await playedAt(media, media.owner, {
-      id: video,
+      id: middle,
       positionMs: 20_000,
       at: '2026-11-02T10:00:00.000Z',
     });
@@ -255,17 +252,17 @@ describe('Media library: home (FR-2, BR-3, BR-4)', () => {
     const home = (await media.owner('GET', HOME)).json();
     expect(titles(home.continueListening)).toEqual([
       'Mais recente',
-      'Vídeo do meio',
+      'Do meio',
       'Mais antiga',
     ]);
     expect(home.continueListening[1]).toMatchObject({
-      kind: 'video',
+      kind: 'audio',
       positionMs: 20_000,
     });
     expect(titles(home.recentlyPlayed)).toEqual([
       'Já ouvida',
       'Mais recente',
-      'Vídeo do meio',
+      'Do meio',
       'Mais antiga',
     ]);
   });
@@ -378,20 +375,21 @@ describe('Media library: marking (FR-3, BR-5)', () => {
 });
 
 describe('Media library: filters, search, sort and pages (FR-1, BR-6)', () => {
-  it('narrows by kind and state together and counts (AC-6)', async () => {
+  it('narrows by state and authorship together and counts (AC-6)', async () => {
     const media = await startMedia();
-    const videos = [
-      await ready(media, { title: 'Vídeo um' }),
-      await ready(media, { title: 'Vídeo dois' }),
-      await ready(media, { title: 'Vídeo três' }),
+    const mestre = [
+      await ready(media, { title: 'Mestre um', authorship: 'mestre-laercio' }),
+      await ready(media, {
+        title: 'Mestre dois',
+        authorship: 'mestre-laercio',
+      }),
+      await ready(media, {
+        title: 'Mestre três',
+        authorship: 'mestre-laercio',
+      }),
     ];
-    const audio = await ready(media, { title: 'Áudio em andamento' });
-    withDb(media, (db) =>
-      db
-        .prepare("UPDATE media SET kind = 'video' WHERE id IN (?, ?, ?)")
-        .run(...videos),
-    );
-    for (const id of [videos[0], videos[1], audio])
+    const other = await ready(media, { title: 'Outro em andamento' });
+    for (const id of [mestre[0], mestre[1], other])
       if (id)
         await playedAt(media, media.owner, {
           id,
@@ -400,13 +398,19 @@ describe('Media library: filters, search, sort and pages (FR-1, BR-6)', () => {
         });
 
     const page = (
-      await media.owner('GET', `${LIBRARY}?kind=video&state=in-progress`)
+      await media.owner(
+        'GET',
+        `${LIBRARY}?state=in-progress&authorship=mestre-laercio`,
+      )
     ).json();
     expect(page.total).toBe(2);
-    expect(titles(page.items).sort()).toEqual(['Vídeo dois', 'Vídeo um']);
+    expect(titles(page.items).sort()).toEqual(['Mestre dois', 'Mestre um']);
     expect(page.totalDurationMs).toBe(360_000);
-    expect(page.facets.kinds).toEqual(['audio', 'video']);
     expect(page.facets.states).toEqual(['in-progress', 'unheard']);
+    expect(page.facets.authorships).toEqual([
+      'mestre-laercio',
+      'outros-autores',
+    ]);
   });
 
   it('finds by title or author, without accents, and finds nothing for an absent word (AC-12)', async () => {
@@ -427,7 +431,7 @@ describe('Media library: filters, search, sort and pages (FR-1, BR-6)', () => {
   it('refuses an unknown chip or order with 400', async () => {
     const media = await startMedia();
     expect(
-      (await media.owner('GET', `${LIBRARY}?kind=podcast`)).statusCode,
+      (await media.owner('GET', `${LIBRARY}?state=paused`)).statusCode,
     ).toBe(400);
     expect(
       (await media.owner('GET', `${LIBRARY}?sort=random`)).statusCode,
@@ -468,7 +472,6 @@ describe('Media library: choices in the account (FR-5, BR-7)', () => {
       librarySort: 'duration',
       libraryView: 'grid',
       libraryFilters: {
-        kinds: [],
         states: ['in-progress'],
         authorships: [],
         topic: 'hermetismo',
@@ -487,7 +490,6 @@ describe('Media library: choices in the account (FR-5, BR-7)', () => {
       librarySort: 'duration',
       libraryView: 'grid',
       libraryFilters: {
-        kinds: [],
         states: ['in-progress'],
         authorships: [],
         topic: 'hermetismo',

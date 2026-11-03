@@ -38,9 +38,6 @@
   @if (duration()) {
     <span class="duration">{{ duration() }}</span>
   }
-  @if (isVideo()) {
-    <span class="badge">{{ kindLabel }}</span>
-  }
   @if (status()) {
     <span class="status" [class.failed]="item().status === 'failed'">{{
       status()

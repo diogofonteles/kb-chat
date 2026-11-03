@@ -43,7 +43,7 @@ describe('migration 7: the media library (KBC-051)', () => {
       skipForwardSec: 30,
       librarySort: 'recently-played',
       libraryView: 'list',
-      libraryFilters: { kinds: [], states: [], authorships: [], topic: null },
+      libraryFilters: { states: [], authorships: [], topic: null },
     });
     expect(store.recentsClearedAt('p')).toBeNull();
     db.close();

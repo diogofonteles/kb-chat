@@ -15,7 +15,10 @@ import { topicSlugSchema } from './topics.js';
  * or grid view and "Marcar como ouvida".
  */
 
-/** Audio now; video arrives with KBC-035 (the column exists since the first migration). */
+/**
+ * Audio now. Video (KBC-035) and its library parts are for a later version (owner,
+ * 2026-11-03): the kind is in the contract so they can arrive without a break.
+ */
 export const MEDIA_KINDS = ['audio', 'video'] as const;
 export const mediaKindSchema = z.enum(MEDIA_KINDS);
 export type MediaKind = z.infer<typeof mediaKindSchema>;
@@ -50,10 +53,9 @@ export type LibraryView = z.infer<typeof libraryViewSchema>;
 
 /**
  * The library's filters as kept in the account (BR-7): within a group the chips add up
- * (Áudio or Vídeo), across groups they narrow (Vídeo and Em andamento).
+ * (Não ouvidas or Em andamento), across groups they narrow (Em andamento and an authorship).
  */
 export const libraryFiltersSchema = z.strictObject({
-  kinds: z.array(mediaKindSchema).max(MEDIA_KINDS.length),
   states: z.array(listeningStateSchema).max(LISTENING_STATES.length),
   authorships: z.array(mediaAuthorshipSchema).max(MEDIA_AUTHORSHIPS.length),
   /** A collection, its sub-collections included (ADR 0028); null for all. */
@@ -62,7 +64,6 @@ export const libraryFiltersSchema = z.strictObject({
 export type LibraryFilters = z.infer<typeof libraryFiltersSchema>;
 
 export const NO_LIBRARY_FILTERS: LibraryFilters = {
-  kinds: [],
   states: [],
   authorships: [],
   topic: null,
@@ -78,7 +79,7 @@ export const MARK_PLAYED_MAX = 200;
 /** The longest "Buscar na biblioteca". */
 export const LIBRARY_QUERY_MAX = 200;
 
-/** A comma-separated list in the query string (`kind=audio,video`), each value checked. */
+/** A comma-separated list in the query string (`state=unheard,heard`), each value checked. */
 const csvOf = <T extends z.ZodType<unknown, string>>(item: T) =>
   z
     .string()
@@ -88,7 +89,6 @@ const csvOf = <T extends z.ZodType<unknown, string>>(item: T) =>
 
 /** GET /api/v1/media/library: the filters, the search, the order and the page. */
 export const libraryQuerySchema = z.strictObject({
-  kind: csvOf(mediaKindSchema).optional(),
   state: csvOf(listeningStateSchema).optional(),
   authorship: csvOf(mediaAuthorshipSchema).optional(),
   topic: topicSlugSchema.optional(),
@@ -111,7 +111,6 @@ export type LibraryItem = z.infer<typeof libraryItemSchema>;
 
 /** What exists in the person's library, so a chip with nothing behind it is not shown. */
 export const libraryFacetsSchema = z.object({
-  kinds: z.array(mediaKindSchema),
   states: z.array(listeningStateSchema),
   authorships: z.array(mediaAuthorshipSchema),
   /** The collections holding the person's media. */

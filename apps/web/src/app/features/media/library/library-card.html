@@ -25,9 +25,6 @@
   @if (duration()) {
     <span class="duration">{{ duration() }}</span>
   }
-  @if (isVideo()) {
-    <span class="badge">{{ kindLabel }}</span>
-  }
   @if (!resume() && state()) {
     <span class="state">{{ state() }}</span>
   }

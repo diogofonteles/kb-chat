@@ -5,7 +5,6 @@ import { aTopic } from '../../../testing/fixtures.js';
 import { LibraryControls } from './library-controls.js';
 
 const NONE: LibraryFilters = {
-  kinds: [],
   states: [],
   authorships: [],
   topic: null,
@@ -19,7 +18,6 @@ async function renderControls(filters: LibraryFilters = NONE) {
     providers: [provideZonelessChangeDetection()],
     inputs: {
       facets: {
-        kinds: ['audio', 'video'],
         states: ['unheard', 'in-progress'],
         authorships: ['mestre-laercio', 'outros-autores'],
         topics: ['udv/palavra-do-mestre', 'alquimia'],
@@ -50,7 +48,7 @@ async function renderControls(filters: LibraryFilters = NONE) {
 describe('LibraryControls (T16, SL-13/15/16)', () => {
   it('shows only the chips with media behind them', async () => {
     await renderControls();
-    expect(screen.getByRole('button', { name: 'Áudio' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Áudio' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Não ouvidas' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Ouvidas' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Limpar filtros' })).toBeNull();
@@ -58,8 +56,8 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
 
   it('presses a chip into the filters', async () => {
     const { changes } = await renderControls();
-    fireEvent.click(screen.getByRole('button', { name: 'Vídeo' }));
-    expect(changes).toEqual([{ ...NONE, kinds: ['video'] }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Não ouvidas' }));
+    expect(changes).toEqual([{ ...NONE, states: ['unheard'] }]);
   });
 
   it('marks a pressed chip with aria-pressed and offers to clear', async () => {

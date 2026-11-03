@@ -189,7 +189,6 @@ export class LibraryPage {
   protected readonly facets = computed(
     () =>
       this.lastPage()?.facets ?? {
-        kinds: [],
         states: [],
         authorships: [],
         topics: [],
@@ -315,13 +314,12 @@ export class LibraryPage {
   }
 
   protected clearFilters(): void {
-    this.changeFilters({ kinds: [], states: [], authorships: [], topic: null });
+    this.changeFilters({ states: [], authorships: [], topic: null });
   }
 
   /** "Ver tudo" of "Continuar ouvindo": "Todas" with only what is in progress. */
   protected showInProgress(): void {
     this.changeFilters({
-      kinds: [],
       states: ['in-progress'],
       authorships: [],
       topic: null,

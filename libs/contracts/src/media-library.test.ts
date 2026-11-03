@@ -33,19 +33,17 @@ describe('libraryQuerySchema (FR-1)', () => {
   it('reads comma-separated chips', () => {
     expect(
       libraryQuerySchema.parse({
-        kind: 'audio,video',
-        state: 'in-progress',
+        state: 'in-progress,heard',
         sort: 'duration',
       }),
     ).toEqual({
-      kind: ['audio', 'video'],
-      state: ['in-progress'],
+      state: ['in-progress', 'heard'],
       sort: 'duration',
     });
   });
 
   it('refuses an unknown chip, sort or cursor', () => {
-    expect(libraryQuerySchema.safeParse({ kind: 'podcast' }).success).toBe(
+    expect(libraryQuerySchema.safeParse({ state: 'paused' }).success).toBe(
       false,
     );
     expect(libraryQuerySchema.safeParse({ sort: 'random' }).success).toBe(
@@ -93,8 +91,7 @@ describe('listeningPreferencesUpdateSchema (FR-5)', () => {
     expect(
       listeningPreferencesUpdateSchema.safeParse({
         libraryFilters: {
-          kinds: ['podcast'],
-          states: [],
+          states: ['paused'],
           authorships: [],
           topic: null,
         },

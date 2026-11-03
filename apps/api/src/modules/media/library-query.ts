@@ -8,7 +8,6 @@ import {
   type LibrarySort,
   type ListeningState,
   type MediaAuthorship,
-  type MediaKind,
 } from '@kb-chat/contracts';
 
 /**
@@ -34,7 +33,6 @@ export function normalizeText(text: string): string {
 }
 
 export interface LibraryFilter {
-  readonly kinds: readonly MediaKind[];
   readonly states: readonly ListeningState[];
   readonly authorships: readonly MediaAuthorship[];
   /** The chosen collection and its sub-collections; null for every collection. */
@@ -55,14 +53,13 @@ export function matchesQuery(item: LibraryItem, query: string): boolean {
   return words.every((word) => haystack.includes(word));
 }
 
-/** Within a group the chips add up; across groups they narrow (Vídeo and Em andamento). */
+/** Within a group the chips add up; across groups they narrow (state and authorship). */
 export function filterLibrary(
   items: readonly LibraryItem[],
   filter: LibraryFilter,
 ): LibraryItem[] {
   return items.filter(
     (item) =>
-      allows(filter.kinds, item.kind) &&
       allows(filter.states, listeningStateOf(item)) &&
       allows(filter.authorships, item.authorship) &&
       (filter.topics === null || filter.topics.has(item.topic)) &&
@@ -107,13 +104,12 @@ export function sortLibrary(
   return [...items].sort(ORDERS[sort]);
 }
 
-/** The kinds, states, authorships and collections that exist (SL-16: no empty chip). */
+/** The states, authorships and collections that exist (SL-16: no empty chip). */
 export function facetsOf(items: readonly LibraryItem[]): LibraryFacets {
   const distinct = <T>(pick: (item: LibraryItem) => T): T[] => [
     ...new Set(items.map(pick)),
   ];
   return {
-    kinds: distinct((item) => item.kind).sort(),
     states: distinct(listeningStateOf).sort(),
     authorships: distinct((item) => item.authorship).sort(),
     topics: distinct((item) => item.topic).sort(),

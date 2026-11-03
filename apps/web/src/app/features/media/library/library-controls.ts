@@ -9,7 +9,6 @@ import {
   LIBRARY_SORTS,
   LISTENING_STATES,
   MEDIA_AUTHORSHIPS,
-  MEDIA_KINDS,
   type LibraryFacets,
   type LibraryFilters,
   type LibrarySort,
@@ -20,7 +19,6 @@ import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { treeTitle } from '@core/topics/topic-tree.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import {
-  KIND_LABELS,
   SORT_LABELS,
   STATE_CHIP_LABELS,
   activeFiltersOf,
@@ -35,7 +33,8 @@ interface Chip<T> {
 }
 
 /**
- * "Todas"'s controls (screens.md T16, SL-13/15/16): combinable chips with aria-pressed, the
+ * "Todas"'s controls (screens.md T16, SL-13/15/16; audio only, video comes later): combinable
+ * chips with aria-pressed, the
  * Autoria and Acervo choices, "Limpar filtros", the order (APG menu button) and the list or
  * grid view. A chip with nothing behind it is not shown, unless it is on.
  */
@@ -57,18 +56,6 @@ export class LibraryControls {
   readonly sortChange = output<LibrarySort>();
   readonly viewChange = output<LibraryView>();
 
-  /** Áudio and Vídeo only when the library has both (T16). */
-  protected readonly kindChips = computed<Chip<(typeof MEDIA_KINDS)[number]>[]>(
-    () => {
-      const { kinds } = this.filters();
-      if (this.facets().kinds.length < 2 && kinds.length === 0) return [];
-      return MEDIA_KINDS.map((value) => ({
-        value,
-        label: KIND_LABELS[value](),
-        pressed: kinds.includes(value),
-      }));
-    },
-  );
   protected readonly stateChips = computed(() => {
     const { states } = this.filters();
     return LISTENING_STATES.filter(
@@ -119,14 +106,6 @@ export class LibraryControls {
       $localize`:@@library.sortBy:Ordenar: ${SORT_LABELS[this.sort()]()}:sort:`,
   );
 
-  protected toggleKind(value: (typeof MEDIA_KINDS)[number]): void {
-    const filters = this.filters();
-    this.filtersChange.emit({
-      ...filters,
-      kinds: toggled(filters.kinds, value),
-    });
-  }
-
   protected toggleState(value: (typeof LISTENING_STATES)[number]): void {
     const filters = this.filters();
     this.filtersChange.emit({
@@ -153,7 +132,6 @@ export class LibraryControls {
 
   protected clear(): void {
     this.filtersChange.emit({
-      kinds: [],
       states: [],
       authorships: [],
       topic: null,

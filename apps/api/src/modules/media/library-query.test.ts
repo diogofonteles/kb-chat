@@ -44,7 +44,6 @@ function anItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
 }
 
 const NO_FILTER = {
-  kinds: [],
   states: [],
   authorships: [],
   topics: null,
@@ -69,35 +68,31 @@ describe('normalizeText and matchesQuery', () => {
 });
 
 describe('filterLibrary (BR-6)', () => {
-  const video = anItem({
-    title: 'Vídeo andando',
-    kind: 'video',
-    positionMs: 5,
-  });
-  const videoNew = anItem({ title: 'Vídeo novo', kind: 'video' });
-  const audio = anItem({ title: 'Áudio andando', positionMs: 5 });
+  const playing = anItem({ title: 'Andando', positionMs: 5 });
+  const fresh = anItem({ title: 'Nova', authorship: 'mestre-laercio' });
+  const freshOther = anItem({ title: 'Outra nova' });
   const heard = anItem({
     title: 'Ouvida',
     completedAt: '2026-11-01T00:00:00.000Z',
     topic: 'hermetismo/sub',
   });
-  const all = [video, videoNew, audio, heard];
+  const all = [playing, fresh, freshOther, heard];
 
   it('adds up chips of one group and narrows across groups', () => {
     expect(
       titles(
         filterLibrary(all, {
           ...NO_FILTER,
-          kinds: ['video'],
-          states: ['in-progress'],
+          states: ['unheard'],
+          authorships: ['mestre-laercio'],
         }),
       ),
-    ).toEqual(['Vídeo andando']);
+    ).toEqual(['Nova']);
     expect(
       titles(
         filterLibrary(all, { ...NO_FILTER, states: ['in-progress', 'heard'] }),
       ),
-    ).toEqual(['Vídeo andando', 'Áudio andando', 'Ouvida']);
+    ).toEqual(['Andando', 'Ouvida']);
   });
 
   it('keeps only the chosen collections', () => {
@@ -180,14 +175,10 @@ describe('sortLibrary', () => {
 });
 
 describe('facetsOf (SL-16)', () => {
-  it('lists only the kinds, states, authorships and collections that exist', () => {
+  it('lists only the states, authorships and collections that exist', () => {
     expect(
-      facetsOf([
-        anItem({ kind: 'video', topic: 'alquimia' }),
-        anItem({ positionMs: 9 }),
-      ]),
+      facetsOf([anItem({ topic: 'alquimia' }), anItem({ positionMs: 9 })]),
     ).toEqual({
-      kinds: ['audio', 'video'],
       states: ['in-progress', 'unheard'],
       authorships: ['outros-autores'],
       topics: ['alquimia', 'hermetismo'],

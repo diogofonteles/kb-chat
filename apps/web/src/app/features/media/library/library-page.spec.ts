@@ -58,9 +58,8 @@ const aPage = (
   total: items.length,
   totalDurationMs: items.reduce((sum, item) => sum + (item.durationMs ?? 0), 0),
   facets: {
-    kinds: ['audio'],
     states: ['in-progress', 'unheard'],
-    authorships: ['mestre-laercio'],
+    authorships: ['mestre-laercio', 'outros-autores'],
     topics: ['hermetismo'],
   },
   ...overrides,
@@ -150,7 +149,7 @@ const pause = () =>
   new Promise((resolve) => setTimeout(resolve, SEARCH_DEBOUNCE_MS + 50));
 
 describe('LibraryPage (T16, KBC-051)', () => {
-  it('shows skeletons first, then "Continuar ouvindo" with where to resume and the video badge (AC-3)', async () => {
+  it('shows skeletons first, then "Continuar ouvindo" with where to resume (AC-3)', async () => {
     const { open } = await renderLibrary();
     expect(screen.getByRole('list', { name: 'Carregando…' })).toBeTruthy();
     const playing = [
@@ -159,7 +158,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         positionMs: 1_390_000,
         durationMs: 3_600_000,
       }),
-      anItem(2, { title: 'Um vídeo', kind: 'video', positionMs: 302_000 }),
+      anItem(2, { title: 'Outra aula', positionMs: 302_000 }),
     ];
     await open(
       aPage([...playing, anItem(3)]),
@@ -170,11 +169,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
     const cards = within(strip).getAllByRole('listitem');
     expect(
       cards.map((card) => within(card).getByRole('link').textContent?.trim()),
-    ).toEqual(['Mais recente', 'Um vídeo']);
+    ).toEqual(['Mais recente', 'Outra aula']);
     expect(
       within(cards[0] as HTMLElement).getByText('Continuar de 23:10'),
     ).toBeTruthy();
-    expect(within(cards[1] as HTMLElement).getByText('Vídeo')).toBeTruthy();
+    expect(
+      within(cards[1] as HTMLElement).getByText('Continuar de 5:02'),
+    ).toBeTruthy();
     expect(
       within(cards[0] as HTMLElement).getByRole('button', {
         name: 'Tocar Mais recente',
@@ -205,35 +206,33 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(media.calls).toContain('play');
   });
 
-  it('asks again with the pressed chips, says it in aria-pressed and announces the count (AC-6, AC-14)', async () => {
+  it('asks again with the pressed chip and the authorship, says it in aria-pressed and announces the count (AC-6, AC-14)', async () => {
     const { open, http, settle, tick } = await renderLibrary();
     await open(
-      aPage([anItem(1), anItem(2, { kind: 'video' })], {
+      aPage([anItem(1), anItem(2, { authorship: 'outros-autores' })], {
         facets: {
-          kinds: ['audio', 'video'],
           states: ['in-progress', 'unheard'],
-          authorships: ['mestre-laercio'],
+          authorships: ['mestre-laercio', 'outros-autores'],
           topics: ['hermetismo'],
         },
       }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Vídeo' }));
-    await tick();
-    http
-      .expectOne('/api/v1/media/library?kind=video&sort=recently-played')
-      .flush(aPage([anItem(2, { kind: 'video' })]));
-    await settle();
     fireEvent.click(screen.getByRole('button', { name: 'Em andamento' }));
     await tick();
     http
+      .expectOne('/api/v1/media/library?state=in-progress&sort=recently-played')
+      .flush(aPage([anItem(1, { positionMs: 5 })]));
+    await settle();
+    fireEvent.change(screen.getByLabelText('Autoria'), {
+      target: { value: 'mestre-laercio' },
+    });
+    await tick();
+    http
       .expectOne(
-        '/api/v1/media/library?kind=video&state=in-progress&sort=recently-played',
+        '/api/v1/media/library?state=in-progress&authorship=mestre-laercio&sort=recently-played',
       )
       .flush(
-        aPage([
-          anItem(2, { kind: 'video', positionMs: 5 }),
-          anItem(4, { kind: 'video', positionMs: 5 }),
-        ]),
+        aPage([anItem(1, { positionMs: 5 }), anItem(4, { positionMs: 5 })]),
       );
     // Saves go one after the other: the second leaves once the first is answered.
     http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
@@ -243,9 +242,8 @@ describe('LibraryPage (T16, KBC-051)', () => {
     );
     expect(saves.at(-1)?.request.body).toEqual({
       libraryFilters: {
-        kinds: ['video'],
         states: ['in-progress'],
-        authorships: [],
+        authorships: ['mestre-laercio'],
         topic: null,
       },
     });
@@ -260,10 +258,11 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(count.getAttribute('aria-live')).toBe('polite');
   });
 
-  it('hides the Áudio and Vídeo chips while the library has only audio (T16)', async () => {
+  it('shows no kind chips: the library is audio only for now (owner, 2026-11-03)', async () => {
     const { open } = await renderLibrary();
     await open(aPage([anItem(1)]));
     expect(screen.queryByRole('button', { name: 'Vídeo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Áudio' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Não ouvidas' })).toBeTruthy();
   });
 
@@ -299,7 +298,6 @@ describe('LibraryPage (T16, KBC-051)', () => {
     await open(aPage([], { total: 0 }), aHome(), {
       ...PREFERENCES,
       libraryFilters: {
-        kinds: [],
         states: ['heard'],
         authorships: [],
         topic: null,
@@ -314,7 +312,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
   it('tells an empty library apart for who sends and who only listens', async () => {
     const empty = aPage([], {
       total: 0,
-      facets: { kinds: [], states: [], authorships: [], topics: [] },
+      facets: { states: [], authorships: [], topics: [] },
     });
     const reader = await renderLibrary();
     await reader.open(empty);

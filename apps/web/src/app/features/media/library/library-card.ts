@@ -10,7 +10,6 @@ import type { LibraryItem } from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
-  KIND_LABELS,
   coverToneOf,
   initialsOf,
   percentOf,
@@ -40,8 +39,6 @@ export class LibraryCard {
   protected readonly ready = computed(() => this.item().status === 'ready');
   protected readonly initials = computed(() => initialsOf(this.item().title));
   protected readonly tone = computed(() => coverToneOf(this.item().topic));
-  protected readonly isVideo = computed(() => this.item().kind === 'video');
-  protected readonly kindLabel = KIND_LABELS.video();
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
     return ms === null ? '' : formatDuration(ms);

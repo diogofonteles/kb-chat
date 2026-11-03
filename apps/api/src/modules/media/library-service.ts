@@ -43,7 +43,6 @@ export class LibraryService {
     const items = this.itemsOf(actor);
     const matching = sortLibrary(
       filterLibrary(items, {
-        kinds: query.kind ?? [],
         states: query.state ?? [],
         authorships: query.authorship ?? [],
         topics: this.scope(actor, query.topic),

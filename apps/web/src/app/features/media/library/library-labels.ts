@@ -4,16 +4,10 @@ import {
   type LibraryItem,
   type LibrarySort,
   type ListeningState,
-  type MediaKind,
 } from '@kb-chat/contracts';
 import { formatClock, resumeFrom } from '@kb-chat/player-core';
 
 /** The library's words (screens.md T16); every one in pt-BR through $localize. */
-
-export const KIND_LABELS: Record<MediaKind, () => string> = {
-  audio: () => $localize`:@@library.kind.audio:Áudio`,
-  video: () => $localize`:@@library.kind.video:Vídeo`,
-};
 
 /** The chips name the group in the plural ("Não ouvidas"), the row says one ("Ouvida"). */
 export const STATE_CHIP_LABELS: Record<ListeningState, () => string> = {
@@ -122,10 +116,7 @@ export function coverToneOf(topic: string): number {
 
 /** How many filters are on (for "Limpar filtros"). */
 export const activeFiltersOf = (filters: LibraryFilters): number =>
-  filters.kinds.length +
-  filters.states.length +
-  filters.authorships.length +
-  (filters.topic ? 1 : 0);
+  filters.states.length + filters.authorships.length + (filters.topic ? 1 : 0);
 
 /** The list with the value added or taken out (a chip pressed). */
 export function toggled<T>(values: readonly T[], value: T): T[] {

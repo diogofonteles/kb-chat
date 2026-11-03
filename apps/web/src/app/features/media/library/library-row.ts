@@ -11,12 +11,7 @@ import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { statusTextOf } from '../media-labels.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
-import {
-  KIND_LABELS,
-  percentOf,
-  resumeTextOf,
-  stateTextOf,
-} from './library-labels.js';
+import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 
 /** What the row's "⋯" can do. */
 export type RowAction = 'mark-played' | 'mark-unplayed' | 'remove';
@@ -52,8 +47,6 @@ export class LibraryRow {
   readonly retried = output();
 
   protected readonly ready = computed(() => this.item().status === 'ready');
-  protected readonly isVideo = computed(() => this.item().kind === 'video');
-  protected readonly kindLabel = KIND_LABELS.video();
   protected readonly duration = computed(() => {
     const ms = this.item().durationMs;
     return ms === null ? '' : formatDuration(ms);

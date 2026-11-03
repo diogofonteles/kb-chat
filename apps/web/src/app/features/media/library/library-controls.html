@@ -4,19 +4,6 @@
   aria-label="Filtros"
   i18n-aria-label="@@library.filters"
 >
-  @for (chip of kindChips(); track chip.value) {
-    <button
-      type="button"
-      class="chip"
-      [attr.aria-pressed]="chip.pressed"
-      (click)="toggleKind(chip.value)"
-    >
-      @if (chip.pressed) {
-        <span aria-hidden="true">✓ </span>
-      }
-      {{ chip.label }}
-    </button>
-  }
   @for (chip of stateChips(); track chip.value) {
     <button
       type="button"

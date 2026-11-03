@@ -34,7 +34,6 @@ export function libraryUrlOf(
   const { filters } = request;
   const params = new URLSearchParams();
   const lists = {
-    kind: filters.kinds,
     state: filters.states,
     authorship: filters.authorships,
   };
