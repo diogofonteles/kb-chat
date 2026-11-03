@@ -74,7 +74,7 @@ test('AC-2: with no transcriber seen for 2 h, a ready audio waits and says since
   await openMedia(page);
   const row = page.getByRole('listitem').filter({ hasText: title });
   await expect(row).toContainText(
-    /Aguardando o transcritor · desligado desde \d{2}\/\d{2} às \d{2}:\d{2}/,
+    /Aguardando o transcritor · desligado desde \d{2}\/\d{2}\/\d{4} às \d{2}:\d{2}/,
   );
   await row.getByRole('link', { name: title }).click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
@@ -154,3 +154,42 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     ).toHaveCount(0);
   });
 }
+
+test('AC-10: "Transcritores" works by keyboard, and the focus never falls to the page (WCAG 2.4.3)', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const dialog = await openSettings(page);
+  await dialog.getByRole('button', { name: 'Transcritores' }).click();
+  const name = `Mac teclado ${uniqueTag()}`;
+  const field = dialog.getByLabel('Nome do transcritor');
+  await field.focus();
+  await page.keyboard.type(name);
+  await page.keyboard.press('Enter');
+  const box = dialog.getByRole('region', { name: `"${name}" pareado` });
+  await expect(box).toBeFocused();
+  const done = box.getByRole('button', { name: 'Pronto, já copiei' });
+  await done.focus();
+  await page.keyboard.press('Enter');
+  await expect(field).toBeFocused();
+
+  const item = dialog.getByRole('listitem').filter({ hasText: name });
+  const revoke = item.getByRole('button', { name: `Revogar ${name}` });
+  await revoke.focus();
+  await page.keyboard.press('Enter');
+  const cancel = item.getByRole('button', { name: 'Cancelar' });
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(revoke).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  const confirm = item.getByRole('button', { name: 'Revogar', exact: true });
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog.getByRole('heading', { name: 'Pareados' })).toBeFocused();
+  await expect(dialog.getByRole('status')).toContainText(`"${name}" revogado.`);
+  await expect(
+    dialog.getByRole('listitem').filter({ hasText: name }),
+  ).toHaveCount(0);
+});
