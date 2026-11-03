@@ -271,42 +271,13 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
-    // KBC-064 (ADR 0029 §1): the voices of a recording, separated on the owner's Mac. Jobs
-    // gain the kind 'diarize' and its hint (`voices`); SQLite cannot change a CHECK, so
-    // the table is rebuilt as in version 5. No table holds a voice print (BR-1).
-    // Version 7 is KBC-051's (open in parallel); the two touch different tables. KBC-044
-    // also rebuilds `jobs` (as 7, kind 'silences'): whichever merges second renumbers after
-    // the other and rebuilds `jobs` with all four kinds, keeping `voices` and its CHECK and
-    // the four indexes, with a test that a 'diarize' row keeps its voices.
+    // KBC-064 (ADR 0029 §1): the voices of a recording, separated on the owner's Mac: its
+    // own tables only. No table holds a voice print (BR-1). The `jobs` kind 'diarize' and
+    // its hint come in version 11, after KBC-044's rebuild of `jobs` (10). Version 7 is
+    // KBC-051's, 9 KBC-067's, 12 KBC-039's (all open in parallel, other tables).
     version: 8,
     name: 'diarization',
     sql: `
-      CREATE TABLE jobs_v7 (
-        id TEXT PRIMARY KEY,
-        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('transcode', 'transcribe', 'diarize')),
-        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
-        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
-        lease_id TEXT,
-        lease_until INTEGER,
-        heartbeat_at INTEGER,
-        worker TEXT,
-        error TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        voices INTEGER CHECK (voices IS NULL OR voices BETWEEN 1 AND 10)
-      ) STRICT;
-      INSERT INTO jobs_v7 (id, media_id, kind, status, attempts, lease_id, lease_until,
-        heartbeat_at, worker, error, created_at, updated_at)
-        SELECT id, media_id, kind, status, attempts, lease_id, lease_until, heartbeat_at,
-          worker, error, created_at, updated_at FROM jobs;
-      DROP TABLE jobs;
-      ALTER TABLE jobs_v7 RENAME TO jobs;
-      CREATE INDEX jobs_queued ON jobs (kind, created_at) WHERE status = 'queued';
-      CREATE INDEX jobs_leased ON jobs (lease_until) WHERE status = 'leased';
-      CREATE INDEX jobs_by_media ON jobs (media_id, kind, created_at);
-      CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
-
       -- One row per separation; the raw JSON file is the source of truth (re-derivable).
       CREATE TABLE diarizations (
         id TEXT PRIMARY KEY,
@@ -482,6 +453,43 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       -- "Encurtar silêncios", off by default (BR-2).
       ALTER TABLE media_preferences ADD COLUMN skip_silences INTEGER NOT NULL DEFAULT 0
         CHECK (skip_silences IN (0, 1));
+    `,
+  },
+  {
+    // KBC-064 after KBC-044 (10): `jobs` takes the kind 'diarize' and its hint (`voices`),
+    // keeping 'silences' and `detector_version`. SQLite cannot change a CHECK, so the
+    // table is rebuilt as in 5 and 10, with every column and the same four indexes.
+    version: 11,
+    name: 'jobs-diarize',
+    sql: `
+      CREATE TABLE jobs_diarize (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL
+          CHECK (kind IN ('transcode', 'transcribe', 'silences', 'diarize')),
+        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        lease_id TEXT,
+        lease_until INTEGER,
+        heartbeat_at INTEGER,
+        worker TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        detector_version INTEGER CHECK (detector_version IS NULL OR detector_version >= 1),
+        -- How many voices the person announced for a separation (KBC-064 BR-4).
+        voices INTEGER CHECK (voices IS NULL OR voices BETWEEN 1 AND 10)
+      ) STRICT;
+      INSERT INTO jobs_diarize (id, media_id, kind, status, attempts, lease_id, lease_until,
+        heartbeat_at, worker, error, created_at, updated_at, detector_version)
+        SELECT id, media_id, kind, status, attempts, lease_id, lease_until, heartbeat_at,
+          worker, error, created_at, updated_at, detector_version FROM jobs;
+      DROP TABLE jobs;
+      ALTER TABLE jobs_diarize RENAME TO jobs;
+      CREATE INDEX jobs_queued ON jobs (kind, created_at) WHERE status = 'queued';
+      CREATE INDEX jobs_leased ON jobs (lease_until) WHERE status = 'leased';
+      CREATE INDEX jobs_by_media ON jobs (media_id, kind, created_at);
+      CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
     `,
   },
   {

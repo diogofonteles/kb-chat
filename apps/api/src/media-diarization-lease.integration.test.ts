@@ -286,3 +286,28 @@ describe('A database that fails while a separation is stored (review round 1)', 
     ).toEqual([]);
   });
 });
+
+describe('Separations beside silence maps (KBC-064 with KBC-044)', () => {
+  it('leases a separation while the item’s silences job waits or runs, and expires each on its own', async () => {
+    await transcribedItem();
+    diarizations.requestDiarization({
+      mediaId: MEDIA_ID,
+      jobId: crypto.randomUUID(),
+      voices: 2,
+      now: clock,
+    });
+    const silences = workers().lease({ worker: 'vm', kinds: ['silences'] });
+    expect(silences?.kind).toBe('silences');
+    // A transcriber never takes a silences job, and one running does not hold voices back.
+    const job = leaseFor('transcriber:mac');
+    expect(job).toMatchObject({ kind: 'diarize', voices: 2 });
+    expect(job).not.toHaveProperty('detector');
+    clock = new Date(clock.getTime() + JOB_LEASE_MS + 1);
+    expect(await janitor().sweep()).toMatchObject({ requeued: 2, failed: 0 });
+    expect(diarizations.latestJob(MEDIA_ID)).toEqual({
+      status: 'queued',
+      voices: 2,
+    });
+    expect(store.getMedia(MEDIA_ID)?.status).toBe('ready');
+  });
+});

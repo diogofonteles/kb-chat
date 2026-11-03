@@ -654,7 +654,6 @@ export const rawSpeakerTurnSchema = z
   .refine(inOrder, ORDER);
 export type RawSpeakerTurn = z.infer<typeof rawSpeakerTurnSchema>;
 
-/** POST /api/v1/media-worker/jobs/:id/diarization: the turns of a diarize job, nothing else. */
 /**
  * The engine's parameters, plain values only (BR-1): no array or object can carry a vector,
  * so a voice print has nowhere to hide in the stored row or raw file.
@@ -668,6 +667,7 @@ export const diarizeParametersSchema = z
     error: 'at most 30 parameters',
   });
 
+/** POST /api/v1/media-worker/jobs/:id/diarization: the turns of a diarize job, nothing else. */
 export const completeDiarizeRequestSchema = leaseOwnerSchema.extend({
   engine: z.enum(DIARIZATION_ENGINES),
   model: z.string().min(1).max(200),
