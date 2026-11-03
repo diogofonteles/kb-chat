@@ -24,6 +24,11 @@ export const topicSchema = z.object({
   canOpen: z.boolean().default(true),
   /** The person may rename it: a master any, others what they created (KBC-048). */
   canRename: z.boolean().default(false),
+  /** Its main author (KBC-049 BR-2); a sub-collection shows its parent's. */
+  mainAuthor: z
+    .object({ slug: z.string(), name: z.string() })
+    .nullable()
+    .default(null),
 });
 export type Topic = z.infer<typeof topicSchema>;
 
@@ -45,14 +50,25 @@ export const topicCreateSchema = z.strictObject({
 });
 export type TopicCreate = z.input<typeof topicCreateSchema>;
 
-/** PATCH /api/v1/topics/:slug: only the name and the description; the slug never changes. */
+/**
+ * PATCH /api/v1/topics/:slug: the name, the description and the main author (KBC-049, an
+ * author of the collection or null); the slug never changes.
+ */
 export const topicUpdateSchema = z
   .strictObject({
     title: topicTitleSchema.optional(),
     description: topicDescriptionSchema.optional(),
+    mainAuthor: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]*$/)
+      .nullable()
+      .optional(),
   })
   .refine(
-    (body) => body.title !== undefined || body.description !== undefined,
+    (body) =>
+      body.title !== undefined ||
+      body.description !== undefined ||
+      body.mainAuthor !== undefined,
     {
       error: 'nothing to change',
     },

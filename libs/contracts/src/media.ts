@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { authorSchema, authorSlugSchema } from './authors.js';
 import { topicSlugSchema } from './topics.js';
 
 /**
@@ -34,10 +35,12 @@ export const MEDIA_UPLOAD_MIME_TYPES = [
   'application/octet-stream',
 ] as const;
 
-/** Media has the two authorships an uploader can tell apart (ADR 0015). */
-export const MEDIA_AUTHORSHIPS = ['mestre-laercio', 'outros-autores'] as const;
-export const mediaAuthorshipSchema = z.enum(MEDIA_AUTHORSHIPS);
-export type MediaAuthorship = z.infer<typeof mediaAuthorshipSchema>;
+/**
+ * Who a media item is by (KBC-049): one of its collection's authors, or null for
+ * "Outros autores" (no author informed).
+ */
+export const mediaAuthorSchema = authorSchema.nullable();
+export type MediaAuthor = z.infer<typeof mediaAuthorSchema>;
 
 export const mediaIdSchema = z.uuid();
 
@@ -108,7 +111,7 @@ export const mediaItemSchema = z.object({
   id: mediaIdSchema,
   topic: topicSlugSchema,
   title: z.string().min(1).max(200),
-  authorship: mediaAuthorshipSchema,
+  author: mediaAuthorSchema,
   status: mediaStatusSchema,
   /** Conversion progress (0–100) while processing; null otherwise. */
   progress: z.number().int().min(0).max(100).nullable(),
@@ -140,7 +143,8 @@ export type MediaList = z.infer<typeof mediaListSchema>;
 /** POST /api/v1/topics/:topic/media: the metadata; the file follows with PUT …/file. */
 export const createMediaRequestSchema = z.strictObject({
   title: z.string().trim().min(1).max(200),
-  authorship: mediaAuthorshipSchema,
+  /** An author of the collection (registered first with POST …/authors), or null. */
+  author: authorSlugSchema.nullable(),
   fileName: z.string().min(1).max(255),
   bytes: z.number().int().min(1).max(MEDIA_MAX_UPLOAD_BYTES),
 });
