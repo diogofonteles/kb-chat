@@ -1,3 +1,4 @@
+import { AppError } from './app-error.js';
 import { basename, join } from 'node:path';
 import { JsonDocumentStore } from './adapters/json-document-store.js';
 import {
@@ -40,6 +41,8 @@ import {
   RequestTickets,
   SendLimits,
   SessionService,
+  ActAsService,
+  actAsRoutes,
   authRoutes,
   codeRoutes,
   hasFeature,
@@ -58,6 +61,7 @@ import type { Delivery } from './delivery-factory.js';
 import type { DocumentStorePort } from './ports/document-store.js';
 import { MemoryPeopleStore } from './adapters/memory-people-store.js';
 import { MemorySessionStore } from './adapters/memory-session-store.js';
+import { MemoryActAsAudit } from './adapters/memory-act-as-audit.js';
 import { createGoogleVerifier } from './adapters/google-id-token-verifier.js';
 import type { IdentityVerifierPort } from './ports/identity-verifier.js';
 import type { AgentLlmPort } from './ports/llm.js';
@@ -123,6 +127,8 @@ export interface AuthDeps {
   readonly people: PeopleService;
   readonly sessions: SessionService;
   readonly verifier: IdentityVerifierPort;
+  /** Masters acting as a person (KBC-060); its audit in memory when not given. */
+  readonly actAs?: ActAsService;
 }
 
 export interface AppDeps {
@@ -161,7 +167,7 @@ export interface AppDeps {
 }
 
 type FullDeps = AppDeps & {
-  auth: AuthDeps;
+  auth: AuthDeps & { actAs: ActAsService };
   house: HouseAi;
   access: AccessDeps;
   ai: AiProviders;
@@ -212,6 +218,7 @@ async function registerResearch(
     spendRoutes({ serviceFor: spendFor, ledger, people: () => spenders(deps) }),
   );
   const hasTopic = (topic: string) => catalog.get(topic) !== undefined;
+  refuseOwnAiWhileActing(app, ai);
   await app.register(
     researchRoutes({
       runner,
@@ -220,6 +227,24 @@ async function registerResearch(
       ...recording,
     }),
   );
+}
+
+/** The research routes that run the person's AI. */
+const RESEARCH_TURNS = new Set(['/api/v1/topics/:topic/research']);
+
+/**
+ * A master acting as a person may research only with the app's AI, never with the person's
+ * own key or account: that spends their money (KBC-060 BR-4).
+ */
+function refuseOwnAiWhileActing(app: FastifyInstance, ai: AiProviders): void {
+  app.addHook('preHandler', async (request) => {
+    const viewer = request.viewer;
+    if (!viewer?.actor || request.method !== 'POST') return;
+    if (!RESEARCH_TURNS.has(request.routeOptions.url ?? '')) return;
+    const status = await ai.registry.status(viewer.principal);
+    if (status.source === 'own')
+      throw new AppError('NOT_WHILE_ACTING', "The person's own AI is theirs");
+  });
 }
 
 /** Everyone who has signed in, with the principal their spend is kept under. */
@@ -341,6 +366,16 @@ function buildAccess(deps: FullDeps) {
 }
 
 /** Sign-in, who is signed in and "Pessoas e permissões" (KBC-010, ADR 0008; KBC-014). */
+/** The act-as audit keeps 12 months (ADR 0027): pruned at start and once a day. */
+function pruneActAsAudit(app: FastifyInstance, actAs: ActAsService): void {
+  const prune = () =>
+    actAs.prune().catch((err: unknown) => app.log.warn({ err }, 'audit prune'));
+  void prune();
+  const timer = setInterval(prune, 24 * 60 * 60_000);
+  timer.unref();
+  app.addHook('onClose', async () => clearInterval(timer));
+}
+
 async function registerAuth(app: FastifyInstance, deps: FullDeps) {
   const { config, catalog, auth } = deps;
   const topics = () => catalog.topics().map(({ topic }) => topic.slug);
@@ -360,6 +395,8 @@ async function registerAuth(app: FastifyInstance, deps: FullDeps) {
       }),
     }),
   );
+  await app.register(actAsRoutes(auth.actAs));
+  pruneActAsAudit(app, auth.actAs);
   // KBC-026: inviting sends an e-mail through the same notifier as the codes.
   const invitations = new Invitations({
     people: auth.people,
@@ -568,7 +605,7 @@ async function completeDeps(deps: AppDeps): Promise<FullDeps> {
       ledger,
       budgets: budgetsFromConfig(deps.config),
     });
-  const auth = deps.auth ?? inMemoryAuth(deps.config);
+  const auth = withActAs(deps.auth ?? inMemoryAuth(deps.config));
   const house = deps.house ?? (await inMemoryHouse(deps.config));
   return {
     ...deps,
@@ -583,6 +620,20 @@ async function completeDeps(deps: AppDeps): Promise<FullDeps> {
     ledger,
     usage: deps.usage ?? new MemoryUsageLog(),
     conversations: deps.conversations ?? new MemoryConversationStore(),
+  };
+}
+
+/** Acting as a person (KBC-060): its audit in memory unless main gave one on disk. */
+function withActAs(auth: AuthDeps): AuthDeps & { actAs: ActAsService } {
+  return {
+    ...auth,
+    actAs:
+      auth.actAs ??
+      new ActAsService({
+        sessions: auth.sessions,
+        people: auth.people,
+        audit: new MemoryActAsAudit(),
+      }),
   };
 }
 

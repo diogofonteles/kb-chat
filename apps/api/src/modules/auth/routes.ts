@@ -1,3 +1,4 @@
+import type { ActAsService } from './act-as-service.js';
 import {
   authConfigSchema,
   googleLoginRequestSchema,
@@ -42,6 +43,8 @@ export interface AuthRouteDeps {
   readonly topics: () => readonly string[];
   /** The media library is on (KB_CHAT_MEDIA); off when not given. */
   readonly mediaEnabled?: boolean;
+  /** Masters acting as a person (KBC-060): "Sair" while acting only ends it. */
+  readonly actAs?: ActAsService;
   /** Where a one-time sign-in code can go (KBC-014 BR-9). */
   readonly codeChannels: readonly CodeChannel[];
   /** Public: the contact the privacy policy names (KBC-016). */
@@ -131,6 +134,10 @@ function registerLogout(app: FastifyInstance, deps: AuthRouteDeps) {
     },
     async (request, reply) => {
       const token = sessionTokenOf(request);
+      // Acting as a person: "Sair" brings the master back, never signs them out (BR-4).
+      const session = token ? await deps.sessions.resolve(token) : null;
+      if (session && deps.actAs && (await deps.actAs.stop(session)))
+        return reply.code(204).send();
       if (token) await deps.sessions.destroy(token);
       const secure = isSecureHost(request.headers.host);
       return reply

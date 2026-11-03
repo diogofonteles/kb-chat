@@ -41,6 +41,8 @@ export const API_ERROR_CODES = [
   'MEDIA_CONFLICT',
   /** One person keeps at most 1 000 bookmarks per media (KBC-042). */
   'BOOKMARK_LIMIT',
+  /** Only the person may do this, not a master acting as them (KBC-060). */
+  'NOT_WHILE_ACTING',
   'INTERNAL',
 ] as const;
 

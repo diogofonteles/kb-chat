@@ -55,6 +55,65 @@ export const googleLoginRequestSchema = z.object({
 });
 export type GoogleLoginRequest = z.infer<typeof googleLoginRequestSchema>;
 
+/* ---------- Acting as a person (KBC-060, ADR 0027) ---------- */
+
+/** POST /api/v1/people/:id/act-as: why the master acts as this person (kept in the audit). */
+export const actAsRequestSchema = z.strictObject({
+  reason: z.string().trim().min(3).max(500),
+});
+export type ActAsRequest = z.infer<typeof actAsRequestSchema>;
+
+/** Someone in the act-as audit, by name and e-mail at the time. */
+export const auditPersonSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  email: z.email(),
+});
+
+/** The person a master is acting as, on `GET /me` and the answer to start. */
+export const actingSchema = z.object({
+  person: auditPersonSchema,
+  /** The master who acts (the real signed-in account). */
+  actor: auditPersonSchema,
+  reason: z.string(),
+  startedAt: z.iso.datetime(),
+  endsAt: z.iso.datetime(),
+});
+export type Acting = z.infer<typeof actingSchema>;
+
+/** One line of the act-as audit (append-only, kept 12 months). */
+export const actAsAuditEntrySchema = z.object({
+  at: z.iso.datetime(),
+  kind: z.enum(['start', 'end', 'write']),
+  actor: auditPersonSchema,
+  person: auditPersonSchema,
+  reason: z.string(),
+  /** A write: the method and the route pattern (never the body). */
+  method: z.string().optional(),
+  route: z.string().optional(),
+  /** An end: why it ended. */
+  endedBy: z.enum(['actor', 'timeout', 'access']).optional(),
+});
+export type ActAsAuditEntry = z.infer<typeof actAsAuditEntrySchema>;
+
+/** GET /api/v1/act-as/audit: newest first. */
+export const actAsAuditListSchema = z.object({
+  items: z.array(actAsAuditEntrySchema),
+});
+
+/** GET /api/v1/me/accesses: each time someone acted as the person (BR-7). */
+export const myAccessSchema = z.object({
+  actorName: z.string(),
+  actorEmail: z.email(),
+  reason: z.string(),
+  startedAt: z.iso.datetime(),
+  /** Null while it goes on. */
+  endedAt: z.iso.datetime().nullable(),
+  writes: z.number().int().min(0),
+});
+export type MyAccess = z.infer<typeof myAccessSchema>;
+export const myAccessListSchema = z.object({ items: z.array(myAccessSchema) });
+
 /** GET /api/v1/me: who is signed in and what they may see (FR-2). */
 export const meSchema = z.object({
   email: z.email(),
@@ -69,6 +128,10 @@ export const meSchema = z.object({
   isOwner: z.boolean(),
   /** The server has the media library on (KB_CHAT_MEDIA, ADR 0022). */
   media: z.boolean(),
+  /** The account may act as another person (KBC-060): the owner, and masters it grants. */
+  canActAs: z.boolean().default(false),
+  /** Set while a master acts as this person: everything above is the person's. */
+  actingAs: actingSchema.nullable().default(null),
 });
 export type Me = z.infer<typeof meSchema>;
 
@@ -104,6 +167,8 @@ export const personSchema = z.object({
   lastLoginAt: z.iso.datetime().nullable(),
   /** Preferences set in the invitation (KBC-028), until the person saves their own. */
   initialPreferences: initialPreferencesSchema.optional(),
+  /** May act as another person (KBC-060): set by the owner, master by master. */
+  canActAs: z.boolean().default(false),
   /** Which app AI serves the person and their limits (KBC-022); an older API sends none. */
   ai: personAiSchema.default(() => ({
     ...DEFAULT_PERSON_AI,
@@ -134,6 +199,8 @@ export const personUpdateSchema = z
     topics: z.array(topicSlugSchema).max(500),
     features: z.array(featureSchema).max(FEATURES.length),
     ai: personAiUpdateSchema,
+    /** Only the owner may change it (KBC-060 BR-1). */
+    canActAs: z.boolean(),
   })
   .partial();
 export type PersonUpdate = z.infer<typeof personUpdateSchema>;

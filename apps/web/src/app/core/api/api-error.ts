@@ -98,6 +98,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
   BOOKMARK_LIMIT: () =>
     $localize`:@@error.bookmarkLimit:Você chegou ao limite de 1.000 marcadores nesta mídia. Apague algum para marcar outro.`,
+  NOT_WHILE_ACTING: () =>
+    $localize`:@@error.notWhileActing:Isto só a própria pessoa pode fazer.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { AppError } from '../app-error.js';
 import {
@@ -14,15 +14,39 @@ import {
  */
 const authGuard: FastifyPluginAsync<ViewerSources> = async (app, sources) => {
   app.decorateRequest('viewer', null);
+  app.decorateRequest('session', null);
   app.addHook('onRequest', async (request) => {
     const access = request.routeOptions.config.access ?? {};
     if (access.public) return;
-    const viewer = await resolveViewer(request, sources);
-    if (!viewer) throw new AppError('UNAUTHENTICATED', 'Sign in first');
-    request.viewer = viewer;
-    const denial = denialOf(access, viewer, request.params);
+    const resolved = await resolveViewer(request, sources);
+    if (!resolved) throw new AppError('UNAUTHENTICATED', 'Sign in first');
+    request.viewer = resolved.viewer;
+    request.session = resolved.session;
+    const denial = denialOf(access, resolved.viewer, request.params);
     if (denial) throw denial;
   });
+  // A write while acting is audited before its answer leaves (KBC-060 FR-4, NFR-2).
+  app.addHook('onSend', async (request, reply, payload) => {
+    const viewer = request.viewer;
+    if (!viewer?.actor || !sources.actAs || SAFE.has(request.method))
+      return payload;
+    if (reply.statusCode >= 400 || ACTING_ITSELF.has(routeOf(request)))
+      return payload;
+    await sources.actAs.recordWrite(viewer, {
+      method: request.method,
+      route: routeOf(request),
+    });
+    return payload;
+  });
 };
+
+/** Ending the acting is its own audit line ("end"), not a write. */
+const ACTING_ITSELF = new Set(['/api/v1/act-as', '/api/v1/auth/logout']);
+
+const routeOf = (request: FastifyRequest): string =>
+  request.routeOptions.url ?? request.url;
+
+/** Methods that read: not audited one by one (ADR 0027). */
+const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export default fp(authGuard, { name: 'auth-guard' });

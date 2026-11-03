@@ -196,14 +196,17 @@ export function update(
   const { id, patch } = change;
   const target = find(people, id);
   if (patch.role === 'member') guardMasterLoss(people, target, ownerEmail);
+  const role = patch.role ?? target.role;
   const next: StoredPerson = {
     ...target,
-    role: patch.role ?? target.role,
+    role,
     topics: patch.topics ? unique(patch.topics) : target.topics,
     features: patch.features ? unique(patch.features) : target.features,
     ...(patch.ai && {
       ai: applyAiUpdate(aiOf(target), patch.ai, change.context),
     }),
+    // Only a master may hold it; losing the role takes it away (KBC-060 BR-1).
+    canActAs: role === 'master' && (patch.canActAs ?? target.canActAs ?? false),
   };
   return { people: replace(people, next), result: next };
 }

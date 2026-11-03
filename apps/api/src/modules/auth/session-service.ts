@@ -57,6 +57,11 @@ export class SessionService {
     return refreshed;
   }
 
+  /** Saves a session as given (acting as a person is kept on it, KBC-060). */
+  update(session: StoredSession): Promise<void> {
+    return this.deps.store.put(session);
+  }
+
   destroy(token: string): Promise<void> {
     return this.deps.store.remove(sessionIdOf(token));
   }
