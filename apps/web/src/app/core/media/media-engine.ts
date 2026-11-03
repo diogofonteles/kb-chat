@@ -109,8 +109,11 @@ export class MediaEngine {
   private element: HTMLMediaElement | null = null;
   private bufferingTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingStartMs: number | null = null;
-  /** The seek to the start position of a load: the engine's, not the person's. */
-  private openingSeek = false;
+  /**
+   * A seek the app makes on its own (the start position of a load, a skipped silence):
+   * not the person's, so it is neither announced nor counted (FR-3, FR-10).
+   */
+  private ownSeek = false;
   private loads = 0;
   private readonly speedValue = signal<PlaybackSpeed>(DEFAULT_SPEED);
   private readonly volumeValue = signal(1);
@@ -226,6 +229,27 @@ export class MediaEngine {
     else element.currentTime = target / 1000;
   }
 
+  /**
+   * Jumps over a silence (KBC-044): a seek the app makes, not the person, so it is not
+   * announced as a new position and does not count as the person's skip.
+   */
+  skipSilence(toMs: number): void {
+    if (!this.element || !this.current()) return;
+    this.ownSeek = true;
+    this.seek(toMs);
+  }
+
+  /**
+   * Where the element is right now, read live: `playback().currentMs` moves only on
+   * `timeupdate` (every ~250 ms), too coarse to catch a pause on time (KBC-044 NFR-2).
+   */
+  positionNowMs(): number {
+    const element = this.element;
+    return element && this.current()
+      ? element.currentTime * 1000
+      : this.state().currentMs;
+  }
+
   skip(deltaMs: number): void {
     this.seek(this.state().currentMs + deltaMs);
   }
@@ -314,7 +338,7 @@ export class MediaEngine {
     const start = this.pendingStartMs;
     this.pendingStartMs = null;
     if (start === null) return;
-    this.openingSeek = true;
+    this.ownSeek = true;
     this.seek(start);
   }
 
@@ -324,8 +348,8 @@ export class MediaEngine {
    */
   private onSeeked(element: HTMLMediaElement): void {
     // Only the person's skips count: opening at a saved position is not one (FR-3, FR-10).
-    const asked = this.state().userSeeking && !this.openingSeek;
-    this.openingSeek = false;
+    const asked = this.state().userSeeking && !this.ownSeek;
+    this.ownSeek = false;
     this.settle({ type: 'seeked', loadId: this.loads });
     if (asked) this.landedSeeks.update((count) => count + 1);
     const { durationMs } = this.state();

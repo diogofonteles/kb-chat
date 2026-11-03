@@ -46,12 +46,14 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       showRemaining: false,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(preferences.value()).toEqual({
       speed: 1.25,
       showRemaining: false,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(engine.speed()).toBe(1.25);
   });
@@ -66,12 +68,14 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     put.flush({
       speed: 1.5,
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
   });
 
@@ -96,6 +100,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       showRemaining: false,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
   });
 
@@ -127,6 +132,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     expect(preferences.value().speed).toBe(2);
     expect(engine.speed()).toBe(2);
@@ -143,6 +149,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     const second = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
     expect(second.request.body).toEqual({
@@ -150,6 +157,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       showRemaining: true,
       skipBackSec: 15,
       skipForwardSec: 30,
+      skipSilences: false,
     });
   });
 
@@ -163,6 +171,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     expect(put.request.body).toMatchObject({
       skipBackSec: 5,
       skipForwardSec: 30,
+      skipSilences: false,
     });
     put.flush(put.request.body);
     preferences.setSkipForward(45);
