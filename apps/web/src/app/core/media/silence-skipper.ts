@@ -1,6 +1,7 @@
 import {
   DestroyRef,
   Injectable,
+  InjectionToken,
   computed,
   inject,
   signal,
@@ -15,10 +16,21 @@ import {
   delayUntil,
   nextSkipIndex,
   reachedSkip,
+  skipAfterLanding,
   skipsOf,
   type SilenceSkip,
 } from '@kb-chat/player-core';
-import { catchError, distinctUntilChanged, map, of, switchMap } from 'rxjs';
+import {
+  EMPTY,
+  catchError,
+  distinctUntilChanged,
+  expand,
+  map,
+  of,
+  switchMap,
+  timer,
+  type Observable,
+} from 'rxjs';
 import { ListeningPreferences } from './listening-preferences.js';
 import { MediaEngine } from './media-engine.js';
 import { PlayerAnnouncer } from './player-announcer.js';
@@ -29,15 +41,24 @@ const LEAD_MS = 15;
 /** A check this close before the skip point counts as reaching it. */
 const EARLY_MS = 30;
 
-/** The map of the loaded media as read: absent (none loaded), failed, or the answer. */
+/** The map of the loaded media as read: absent (none loaded), unreadable, or the answer. */
 type LoadedMap =
   | { readonly mediaId: string; readonly silences: MediaSilences }
-  | { readonly mediaId: string; readonly silences: 'failed' }
+  | { readonly mediaId: string; readonly silences: 'unreadable' }
   | null;
 
-/** Where the map of the loaded media is, for "Encurtar silêncios" (KBC-044). */
+/**
+ * Where the map of the loaded media is, for "Encurtar silêncios" (KBC-044): read, being
+ * measured, given up by the worker, without long pauses, ready, or not readable now.
+ */
 export type SilenceMapState =
-  'loading' | 'pending' | 'none' | 'ready' | 'unavailable';
+  'loading' | 'pending' | 'failed' | 'none' | 'ready' | 'unavailable';
+
+/** A map still being measured is read again this often while its media is loaded. */
+export const SILENCES_REREAD_MS = new InjectionToken<number>(
+  'SILENCES_REREAD_MS',
+  { providedIn: 'root', factory: () => 60_000 },
+);
 
 /** The skip the player waits for: which one, of which media, since which person's seek. */
 interface Armed {
@@ -61,6 +82,7 @@ export class SilenceSkipper {
   private readonly preferences = inject(ListeningPreferences);
   private readonly announcer = inject(PlayerAnnouncer);
   private readonly api = inject(SilencesApi);
+  private readonly rereadMs = inject(SILENCES_REREAD_MS);
   private readonly mediaId = computed(() => this.engine.source()?.id ?? null);
   private readonly loaded = toSignal(
     toObservable(this.mediaId).pipe(
@@ -80,15 +102,15 @@ export class SilenceSkipper {
   /** The skips of the loaded media's map, in order. */
   readonly skips = computed<readonly SilenceSkip[]>(() => {
     const loaded = this.current();
-    return loaded && loaded.silences !== 'failed'
+    return loaded && loaded.silences !== 'unreadable'
       ? skipsOf(loaded.silences.intervals)
       : [];
   });
   readonly mapState = computed<SilenceMapState>(() => {
     const loaded = this.current();
     if (!loaded) return 'loading';
-    if (loaded.silences === 'failed') return 'unavailable';
-    if (loaded.silences.status === 'pending') return 'pending';
+    if (loaded.silences === 'unreadable') return 'unavailable';
+    if (loaded.silences.status !== 'ready') return loaded.silences.status;
     return this.skips().length === 0 ? 'none' : 'ready';
   });
   /** Time jumped over in the loaded media during this session (FR-4). */
@@ -126,10 +148,20 @@ export class SilenceSkipper {
     return loaded && loaded.mediaId === this.mediaId() ? loaded : null;
   }
 
-  private read(mediaId: string) {
-    return this.api.silences(mediaId).pipe(
-      map((silences): LoadedMap => ({ mediaId, silences })),
-      catchError(() => of<LoadedMap>({ mediaId, silences: 'failed' })),
+  /** Reads the map, and again every while it is still being measured. */
+  private read(mediaId: string): Observable<LoadedMap> {
+    const once = () =>
+      this.api.silences(mediaId).pipe(
+        map((silences): LoadedMap => ({ mediaId, silences })),
+        catchError(() => of<LoadedMap>({ mediaId, silences: 'unreadable' })),
+      );
+    return once().pipe(
+      expand((loaded) =>
+        loaded?.silences !== 'unreadable' &&
+        loaded?.silences.status === 'pending'
+          ? timer(this.rereadMs).pipe(switchMap(once))
+          : EMPTY,
+      ),
     );
   }
 
@@ -137,6 +169,9 @@ export class SilenceSkipper {
   private check(): void {
     this.clearTimer();
     const mediaId = this.mediaId();
+    // Stalled: the clock stands still, so no timer is armed until data comes back (the
+    // armed pause stays armed: playing on reaches it).
+    if (this.engine.playback().waiting) return;
     // A seek in flight (the person's or a skip) lands first; then the next one is armed.
     if (!this.canSkip() || mediaId === null) {
       this.armed = null;
@@ -168,9 +203,20 @@ export class SilenceSkipper {
     return this.skips()[armed.index] ?? null;
   }
 
+  /**
+   * Arms the next pause ahead. Playing on keeps the one armed; after a landing (the
+   * person's jump, opening, starting to play) a pause the position is already in, even in
+   * its first 0.15 s, is heard in full (BR-3).
+   */
   private arm(mediaId: string, now: number): void {
     const skips = this.skips();
-    const index = nextSkipIndex(skips, now);
+    const armed = this.armedSkip(mediaId);
+    const index =
+      armed && this.armed && armed.toMs > now
+        ? this.armed.index
+        : armed
+          ? nextSkipIndex(skips, now)
+          : skipAfterLanding(skips, now);
     const skip = skips[index];
     if (index < 0 || !skip) {
       this.armed = null;

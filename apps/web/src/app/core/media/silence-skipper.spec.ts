@@ -237,4 +237,60 @@ describe('SilenceSkipper (KBC-044)', () => {
     TestBed.tick();
     expect(skipper.mapState()).toBe('ready');
   });
+  it('hears in full a pause the person lands in, even in its first 0.15 s (BR-3, review R1)', async () => {
+    const { engine, media, jumps, play, startAt, turnOn } = setup();
+    turnOn();
+    await startAt(3_000);
+    engine.seek(4_750);
+    media.emit('seeked');
+    TestBed.tick();
+    await play(6_000);
+    expect(jumps.map((jump) => jump.toMs)).toEqual([11_850]);
+  });
+
+  it('arms no timer while the media waits for data, and jumps once it plays on (review R1)', async () => {
+    const { media, jumps, play, startAt, turnOn } = setup();
+    turnOn();
+    await startAt(4_000);
+    await play(800);
+    expect(jumps).toEqual([]);
+    media.emit('waiting');
+    TestBed.tick();
+    // The clock stands still at ~4.8 s: nothing is scheduled again and again.
+    const before = vi.getTimerCount();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(before);
+    expect(jumps).toEqual([]);
+    media.emit('playing');
+    TestBed.tick();
+    await play(200);
+    expect(jumps.map((jump) => jump.toMs)).toEqual([7_550]);
+  });
+
+  it('reads a map still being measured again after a while (review R1)', async () => {
+    const { skipper, http } = setup({
+      ...MAP,
+      status: 'pending',
+      version: null,
+      intervals: [],
+    });
+    expect(skipper.mapState()).toBe('pending');
+    await vi.advanceTimersByTimeAsync(60_000);
+    http.expectOne(SILENCES_URL).flush(MAP);
+    TestBed.tick();
+    expect(skipper.mapState()).toBe('ready');
+    await vi.advanceTimersByTimeAsync(120_000);
+    http.expectNone(SILENCES_URL);
+  });
+
+  it('says the map could not be measured when the worker gave up (review R1)', () => {
+    const { skipper } = setup({
+      ...MAP,
+      status: 'failed',
+      version: null,
+      intervals: [],
+    });
+    expect(skipper.mapState()).toBe('failed');
+    expect(skipper.skips()).toEqual([]);
+  });
 });

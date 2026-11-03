@@ -16,6 +16,8 @@ export interface Silence {
 
 /** The part of a pause the player jumps over: from `fromMs` it seeks to `toMs`. */
 export interface SilenceSkip {
+  /** Where the pause itself starts (0.15 s before `fromMs`). */
+  readonly startMs: number;
   readonly fromMs: number;
   readonly toMs: number;
 }
@@ -25,6 +27,7 @@ export function skipsOf(silences: readonly Silence[]): SilenceSkip[] {
   return silences
     .filter((pause) => pause.endMs - pause.startMs >= SHORTEN_FROM_MS)
     .map((pause) => ({
+      startMs: pause.startMs,
       fromMs: pause.startMs + KEPT_EDGE_MS,
       toMs: pause.endMs - KEPT_EDGE_MS,
     }))
@@ -48,6 +51,21 @@ export function nextSkipIndex(
     else high = middle;
   }
   return low < skips.length ? low : -1;
+}
+
+/**
+ * The first skip of a pause that starts after `positionMs`, or -1: where the player waits
+ * after the person jumped (or it opened) at `positionMs`. A landing even in the first
+ * 0.15 s of a pause is the person's choice: that pause is heard in full (BR-3).
+ */
+export function skipAfterLanding(
+  skips: readonly SilenceSkip[],
+  positionMs: number,
+): number {
+  const index = nextSkipIndex(skips, positionMs);
+  const skip = skips[index];
+  if (index < 0 || !skip || skip.startMs > positionMs) return index;
+  return index + 1 < skips.length ? index + 1 : -1;
 }
 
 /**
