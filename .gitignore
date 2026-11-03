@@ -17,3 +17,8 @@ stryker-setup-*.js
 
 # Python bytecode (research scripts, tools/transcriber)
 __pycache__/
+
+# The transcriber's environment and tool caches (KBC-036)
+.venv/
+.pytest_cache/
+.ruff_cache/
