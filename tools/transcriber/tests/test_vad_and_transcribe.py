@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from transcriber.config import PARAMETERS
-from transcriber.transcribe import Stopped, build_prompt, json_safe, ordered, transcribe_track
+from transcriber.transcribe import Stopped, build_prompt, json_safe, sanitized, transcribe_track
 from transcriber.vad import merge_chunks, speech_ratio
 
 from .conftest import FakeModel
@@ -110,8 +110,31 @@ def test_nan_becomes_none_and_crossed_times_are_put_in_order():
             ]
         }
     )
-    (segment,) = ordered(result)["segments"]
+    (segment,) = sanitized(result)["segments"]
     assert segment["avg_logprob"] is None
     assert segment["compression_ratio"] is None
     assert segment["end"] == 1.0
     assert segment["words"][0]["end"] == 0.9
+
+
+def test_spans_without_finite_times_are_dropped_before_upload():
+    result = json_safe(
+        {
+            "segments": [
+                {"start": float("nan"), "end": 1.0, "text": " lost"},
+                {
+                    "start": 1.0,
+                    "end": 2.0,
+                    "text": " kept",
+                    "words": [
+                        {"word": " kept", "start": 1.0, "end": 1.5},
+                        {"word": " gone", "start": None, "end": 1.9},
+                        {"word": " gone", "start": 1.6, "end": float("inf")},
+                    ],
+                },
+            ]
+        }
+    )
+    (segment,) = sanitized(result)["segments"]
+    assert segment["text"] == " kept"
+    assert [word["word"] for word in segment["words"]] == [" kept"]

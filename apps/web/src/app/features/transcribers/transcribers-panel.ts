@@ -18,6 +18,7 @@ import {
   type PairedTranscriber,
   type Transcriber,
 } from '@kb-chat/contracts';
+import { seenAtFormat } from '@core/i18n/date-formats.js';
 import {
   TranscribersApi,
   transcribersUrl,
@@ -62,6 +63,8 @@ export class TranscribersPanel {
   private readonly pairedBox = viewChild<ElementRef<HTMLElement>>('pairedBox');
   private readonly nameInput =
     viewChild.required<ElementRef<HTMLInputElement>>('nameInput');
+  private readonly pairButton =
+    viewChild.required<ElementRef<HTMLButtonElement>>('pairButton');
   private readonly listTitle =
     viewChild.required<ElementRef<HTMLElement>>('listTitle');
   private copyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -72,6 +75,8 @@ export class TranscribersPanel {
   protected readonly items = computed<Transcriber[]>(() =>
     this.list.hasValue() ? this.list.value().items : [],
   );
+  /** The same "visto em" format as the media list's (UP-05). */
+  protected readonly seenAtFormat = seenAtFormat();
   protected readonly name = signal('');
   protected readonly nameProblem = signal<NameProblem>(null);
   protected readonly busy = signal(false);
@@ -144,11 +149,7 @@ export class TranscribersPanel {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => this.revoked(transcriber),
-        error: () =>
-          this.settle({
-            kind: 'error',
-            text: $localize`:@@transcribers.revokeFailed:Não consegui revogar. Tente de novo.`,
-          }),
+        error: () => this.revokeFailed(transcriber.id),
       });
   }
 
@@ -189,6 +190,17 @@ export class TranscribersPanel {
       kind: 'error',
       text: $localize`:@@transcribers.pairFailed:Não consegui parear. Tente de novo.`,
     });
+    // The button was disabled while it waited, which drops the focus: give it back.
+    this.focusAfterRender(() => this.pairButton().nativeElement);
+  }
+
+  /** The question stays open; the focus goes back to its "Revogar" to try again. */
+  private revokeFailed(id: string): void {
+    this.settle({
+      kind: 'error',
+      text: $localize`:@@transcribers.revokeFailed:Não consegui revogar. Tente de novo.`,
+    });
+    this.focusAfterRender(() => this.find(`[data-confirm-revoke="${id}"]`));
   }
 
   /** The row went: the focus goes to the list's title and the status says what happened. */

@@ -31,6 +31,7 @@
       (input)="editName($event)"
     />
     <button
+      #pairButton
       type="submit"
       class="primary"
       [disabled]="busy()"
@@ -196,8 +197,7 @@
               }
               @if (item.lastSeenAt; as seen) {
                 <span i18n="@@transcribers.lastSeen"
-                  >visto por último em
-                  {{ seen | date: "dd/MM/yyyy 'às' HH:mm" }}</span
+                  >visto por último em {{ seen | date: seenAtFormat }}</span
                 >
               } @else {
                 <span i18n="@@transcribers.neverSeen">ainda não foi visto</span>
@@ -220,6 +220,7 @@
                 <button
                   type="button"
                   class="danger"
+                  [attr.data-confirm-revoke]="item.id"
                   [disabled]="busy()"
                   (click)="revoke(item)"
                   i18n="@@transcribers.revokeConfirm"

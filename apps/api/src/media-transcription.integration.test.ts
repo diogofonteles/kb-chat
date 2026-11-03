@@ -494,6 +494,19 @@ describe('Transcription: review round 1 (KBC-036)', () => {
     expect(done.statusCode).toBe(204);
   });
 
+  it("refuses the VM token leasing under a transcriber's name (BR-2)", async () => {
+    const media = await startMedia();
+    const { transcriber } = await pair(media);
+    await queuedItem(media);
+    const posing = await worker(media, '/api/v1/media-worker/jobs/lease', {
+      worker: `transcriber:${transcriber.id}`,
+      kinds: ['transcode'],
+    });
+    expect(posing.statusCode).toBe(403);
+    // Under its own name it still leases the conversion.
+    expect((await leaseJob(media)).kind).toBe('transcode');
+  });
+
   it('keeps a transcriber off the conversion routes of its own job', async () => {
     const media = await startMedia();
     const { token } = await pair(media);

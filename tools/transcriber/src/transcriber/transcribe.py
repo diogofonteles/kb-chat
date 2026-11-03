@@ -67,22 +67,31 @@ def json_safe(value: Any) -> Any:
     return value
 
 
-def ordered(result: dict) -> dict:
-    """Times in order: a word or segment that ends before it starts ends where it starts.
+def sanitized(result: dict) -> dict:
+    """What the API accepts: spans with finite times, in order.
 
-    The API refuses `end < start`; whisper's word timestamps may cross by a few ms.
+    A word or segment without a finite start and end (whisper's NaN became None) is dropped;
+    one that ends before it starts ends where it starts (word timestamps may cross by ms).
     """
-    for segment in result.get("segments", []):
+    segments = [span for span in result.get("segments", []) if _timed(span)]
+    for segment in segments:
         _order(segment)
-        for word in segment.get("words", []) or []:
-            _order(word)
-    return result
+        if segment.get("words"):
+            segment["words"] = [word for word in segment["words"] if _timed(word)]
+            for word in segment["words"]:
+                _order(word)
+    return {**result, "segments": segments}
+
+
+def _timed(span: dict) -> bool:
+    return all(
+        isinstance(span.get(key), int | float) and math.isfinite(span[key])
+        for key in ("start", "end")
+    )
 
 
 def _order(span: dict) -> None:
-    start, end = span.get("start"), span.get("end")
-    if isinstance(start, int | float) and isinstance(end, int | float) and end < start:
-        span["end"] = start
+    span["end"] = max(span["end"], span["start"])
 
 
 def transcribe_track(
@@ -114,7 +123,7 @@ def transcribe_track(
             raise Stopped
         piece = pcm[int(start * SAMPLE_RATE) : int(end * SAMPLE_RATE)]
         result = model(piece, **_options(prompt))
-        raw["chunks"].append({"offset": start, "end": end, "result": ordered(json_safe(result))})
+        raw["chunks"].append({"offset": start, "end": end, "result": sanitized(json_safe(result))})
         if on_progress is not None:
             on_progress(int((index + 1) * 100 / len(chunks)))
     if stop is not None and stop.is_set():

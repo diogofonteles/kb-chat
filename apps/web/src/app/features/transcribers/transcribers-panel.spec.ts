@@ -160,6 +160,9 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
     expect(screen.getByRole('status').textContent).toContain(
       'Não consegui parear. Tente de novo.',
     );
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Parear transcritor' }),
+    );
   });
 
   it('revokes only after the confirmation (UP-07)', async () => {
@@ -200,6 +203,9 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
     await fixture.whenStable();
     expect(screen.getByRole('status').textContent).toContain(
       'Não consegui revogar. Tente de novo.',
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Revogar' }),
     );
   });
 

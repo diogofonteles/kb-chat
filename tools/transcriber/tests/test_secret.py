@@ -1,3 +1,4 @@
+import os
 import shutil
 import sys
 import uuid
@@ -89,8 +90,10 @@ def test_the_cached_token_is_read_once_and_again_after_forget():
 
 
 @pytest.mark.skipif(
-    sys.platform != "darwin" or shutil.which("security") is None,
-    reason="the macOS Keychain exists only on a Mac",
+    sys.platform != "darwin"
+    or shutil.which("security") is None
+    or os.environ.get("KB_CHAT_TEST_REAL_KEYCHAIN") != "1",
+    reason="writes to the login Keychain: opt in with KB_CHAT_TEST_REAL_KEYCHAIN=1 on a Mac",
 )
 def test_the_real_keychain_stores_and_returns_the_token():
     """The real `security` (no mock): a throwaway item, removed at the end."""

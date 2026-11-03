@@ -1,4 +1,5 @@
 import { formatDate } from '@angular/common';
+import { seenAtFormat } from '@core/i18n/date-formats.js';
 import type {
   MediaFailure,
   MediaItem,
@@ -68,13 +69,9 @@ export function pollEveryOf(
   return items.some(isWaitingForTranscriber) ? fastMs * SLOW_POLL_FACTOR : null;
 }
 
-/**
- * "03/11/2026 às 14:05": when the transcriber was last seen, in the app's locale and in the
- * same format as "Transcritores" (UP-05).
- */
-export const SEEN_AT_FORMAT = "dd/MM/yyyy 'às' HH:mm";
+/** When the transcriber was last seen, in the app's locale and shared format (UP-05). */
 const seenAt = (iso: string, locale: string): string =>
-  formatDate(iso, SEEN_AT_FORMAT, locale);
+  formatDate(iso, seenAtFormat(), locale);
 
 type Label = (transcription: MediaTranscription, locale: string) => string;
 

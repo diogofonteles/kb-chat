@@ -64,12 +64,29 @@ function ownerOf(
   request: FastifyRequest,
   body: { worker: string; leaseId: string },
 ) {
-  const { leaseName } = identityOf(request);
-  // The VM names itself, but never as a paired transcriber (BR-2).
-  if (!leaseName && body.worker.startsWith(TRANSCRIBER_LEASE_PREFIX))
-    throw notThisWorkers();
-  return { worker: leaseName ?? body.worker, leaseId: body.leaseId };
+  return {
+    worker: workerNameOf(request, body.worker, notThisWorkers),
+    leaseId: body.leaseId,
+  };
 }
+
+/**
+ * The name a call's leases carry: a paired transcriber's is its token's; the VM names
+ * itself, but never as a paired transcriber (BR-2), or `refuse` is thrown.
+ */
+function workerNameOf(
+  request: FastifyRequest,
+  named: string,
+  refuse: () => AppError,
+): string {
+  const { leaseName } = identityOf(request);
+  if (leaseName) return leaseName;
+  if (named.startsWith(TRANSCRIBER_LEASE_PREFIX)) throw refuse();
+  return named;
+}
+
+const notTheVmsName = () =>
+  new AppError('FORBIDDEN', 'This worker may not take that name');
 
 const notThisWorkers = () =>
   new AppError('NOT_FOUND', 'No such job for this worker');
@@ -166,7 +183,7 @@ function registerLease(app: FastifyInstance, service: WorkerService): void {
     async (request, reply) => {
       const identity = identityOf(request);
       const job = service.lease({
-        worker: identity.leaseName ?? request.body.worker,
+        worker: workerNameOf(request, request.body.worker, notTheVmsName),
         kinds: allowedKinds(identity, request.body.kinds),
         // ADR 0023: a paired transcriber holds one job at a time.
         oneAtATime: identity.leaseName !== null,
