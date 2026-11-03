@@ -103,6 +103,10 @@ for (const width of [1440, 390]) {
   await page.waitForTimeout(200);
   await page.screenshot({ path: `${out}/upload-author-register-${width}.png` });
   report.push(`${width} dialog overflow ${await overflow(page)}`);
+  await field.fill('Mestre Gabriell');
+  await dialog.getByText(/Você quis dizer/).waitFor();
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: `${out}/upload-author-typo-${width}.png` });
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 
