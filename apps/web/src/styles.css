@@ -59,6 +59,14 @@ textarea {
   color: var(--color-text);
 }
 
+/* The passage opened from a search hit (KBC-039 AC-10): marked and underlined, so it
+   reads apart from the search's occurrences without relying on colour alone. */
+::highlight(transcript-passage) {
+  background-color: var(--color-mark);
+  color: var(--color-text);
+  text-decoration: underline 2px var(--color-accent-strong);
+}
+
 ::highlight(transcript-current) {
   background-color: var(--color-accent);
   color: var(--color-on-accent);

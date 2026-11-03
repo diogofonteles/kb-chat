@@ -18,12 +18,16 @@ import {
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
 import { aMediaHit } from '../../../testing/fixtures.js';
-import { aMediaItem } from '../../../testing/media-fixtures.js';
+import { aMediaItem, aTranscription } from '../../../testing/media-fixtures.js';
+import { SEARCH_HIGHLIGHTS } from '../transcript/search-highlights.js';
 import { PassagePanel } from './passage-panel.js';
 import { playbackStartOf } from './passage-focus.js';
 
 const HIT = aMediaHit({ mediaId: aMediaItem().id });
 const ITEM_URL = `/api/v1/media/${HIT.mediaId}`;
+
+/** What was painted last over the transcript, per highlight, as the ranges' texts. */
+const painted = new Map<string, string[]>();
 
 async function openPanel(passage: MediaHit = HIT): Promise<{
   media: FakeMedia;
@@ -41,6 +45,17 @@ async function openPanel(passage: MediaHit = HIT): Promise<{
       provideRouter([]),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
       { provide: VOLUME_SUPPORT, useValue: Promise.resolve(false) },
+      {
+        provide: SEARCH_HIGHLIGHTS,
+        useValue: {
+          show: (name: string, ranges: readonly Range[]) =>
+            painted.set(
+              name,
+              ranges.map((range) => range.toString()),
+            ),
+          clear: (name: string) => painted.delete(name),
+        },
+      },
     ],
     inputs: { passage },
     on: { closed },
@@ -139,6 +154,44 @@ describe('PassagePanel (KBC-039 FR-3, FR-6)', () => {
     );
     expect(media.calls.filter((call) => call.startsWith('load:'))).toHaveLength(
       1,
+    );
+  });
+
+  it('shows the transcript beside the player with the found passage painted (AC-10)', async () => {
+    painted.clear();
+    const { http } = await openPanel();
+    http.expectOne(ITEM_URL).flush(
+      aMediaItem({
+        transcription: aTranscription({
+          status: 'done',
+          confidence: 'normal',
+          version: 3,
+        }),
+      }),
+    );
+    await screen.findByRole('slider', { name: 'Posição' });
+    http.expectOne(`${ITEM_URL}/transcript?v=3`).flush({
+      mediaId: HIT.mediaId,
+      version: 3,
+      confidence: 'normal',
+      segments: [
+        { startMs: 490_000, endMs: 495_000, text: 'Antes do trecho.' },
+        {
+          startMs: 495_000,
+          endMs: 499_000,
+          text: 'Tiuaco é Mariri na história.',
+        },
+        { startMs: 499_000, endMs: 503_000, text: 'Depois do trecho.' },
+      ],
+    });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Transcrição' }),
+    ).toBeTruthy();
+    await vi.waitFor(() =>
+      expect(painted.get('transcript-passage')).toEqual([
+        'Tiuaco é Mariri na história.',
+      ]),
     );
   });
 });

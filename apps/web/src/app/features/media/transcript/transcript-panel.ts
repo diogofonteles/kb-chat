@@ -37,6 +37,7 @@ import { mediaPagePath } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { PlaybackClock } from '@core/media/playback-clock.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
+import type { PassageFocus } from '../search-hit/passage-focus.js';
 import { Subject, debounceTime, distinctUntilChanged, merge, skip } from 'rxjs';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 
@@ -102,6 +103,8 @@ export class TranscriptPanel {
   readonly transcript = input.required<MediaTranscript>();
   /** The media's title, for "Copiar com o link do minuto". */
   readonly title = input.required<string>();
+  /** The passage opened from a search hit, painted over its segments (KBC-039 AC-10). */
+  readonly passage = input<PassageFocus | null>(null);
 
   private readonly engine = inject(MediaEngine);
   private readonly clock = inject(PlaybackClock);
@@ -215,6 +218,53 @@ export class TranscriptPanel {
       write: (target) => this.scrollList(target()),
     });
     this.paintSearch(destroyRef);
+    this.paintPassage(destroyRef);
+  }
+
+  /**
+   * The found passage painted like the search (no DOM change). It reads neither the clock
+   * nor the query, so playing and typing never repaint it (KBC-038 NFR-2).
+   */
+  private paintPassage(destroyRef: DestroyRef): void {
+    const highlights = inject(SEARCH_HIGHLIGHTS);
+    afterRenderEffect({
+      write: () => {
+        const passage = this.passage();
+        const ranges =
+          passage?.mediaId === this.transcript().mediaId
+            ? this.passageIndexes(passage).flatMap((index) => {
+                const range = this.segmentRange(index);
+                return range ? [range] : [];
+              })
+            : [];
+        highlights.show('transcript-passage', ranges);
+      },
+    });
+    destroyRef.onDestroy(() => highlights.clear('transcript-passage'));
+  }
+
+  /** The segments a passage overlaps (a hit is one segment; times keep it robust). */
+  private passageIndexes(passage: PassageFocus): number[] {
+    return this.segments().flatMap((segment, index) =>
+      segment.startMs < passage.endMs && segment.endMs > passage.startMs
+        ? [index]
+        : [],
+    );
+  }
+
+  /** A segment's whole text, in its text node. */
+  private segmentRange(index: number): Range | null {
+    const node = this.textNodeOf(index);
+    if (!node) return null;
+    const range = this.document.createRange();
+    range.selectNodeContents(node);
+    return range;
+  }
+
+  private textNodeOf(index: number): Text | null {
+    const node =
+      this.items()[index]?.nativeElement.querySelector('.text')?.firstChild;
+    return node instanceof Text ? node : null;
   }
 
   /** The occurrences painted over the text, the current one apart (no DOM change). */
@@ -243,11 +293,8 @@ export class TranscriptPanel {
 
   /** The text of an occurrence, in its segment's text node. */
   private rangeOf(hit: SearchHit): Range | null {
-    const node =
-      this.items()[hit.segment]?.nativeElement.querySelector(
-        '.text',
-      )?.firstChild;
-    if (!(node instanceof Text)) return null;
+    const node = this.textNodeOf(hit.segment);
+    if (!node) return null;
     const range = this.document.createRange();
     range.setStart(node, Math.min(hit.start, node.length));
     range.setEnd(node, Math.min(hit.end, node.length));

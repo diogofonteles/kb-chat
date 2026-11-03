@@ -1,8 +1,12 @@
 import { DOCUMENT } from '@angular/common';
 import { InjectionToken, inject } from '@angular/core';
 
-/** The two looks of the search: every occurrence, and the current one. */
-export type SearchHighlightName = 'transcript-match' | 'transcript-current';
+/**
+ * The looks painted over the transcript: every search occurrence, the current one, and
+ * the passage opened from a search hit (KBC-039 AC-10).
+ */
+export type SearchHighlightName =
+  'transcript-match' | 'transcript-current' | 'transcript-passage';
 
 /**
  * Paints ranges of text without touching the DOM (CSS Custom Highlight API): marking

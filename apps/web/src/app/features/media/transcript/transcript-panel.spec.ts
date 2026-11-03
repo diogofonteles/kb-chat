@@ -13,6 +13,7 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
+import type { PassageFocus } from '../search-hit/passage-focus.js';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 import {
   TRANSCRIPT_SEARCH_DEBOUNCE_MS,
@@ -44,12 +45,16 @@ const transcriptOf = (
 /** What the search painted last, per highlight, as the texts of its ranges. */
 const painted = new Map<string, string[]>();
 
-async function renderPanel(transcript = transcriptOf(), debounceMs = 0) {
+async function renderPanel(
+  transcript = transcriptOf(),
+  debounceMs = 0,
+  passage: PassageFocus | null = null,
+) {
   localStorage.clear();
   painted.clear();
   const media: FakeMedia = fakeMediaElement();
   const view = await render(TranscriptPanel, {
-    inputs: { transcript, title: 'Palestra de 1998' },
+    inputs: { transcript, title: 'Palestra de 1998', passage },
     providers: [
       provideZonelessChangeDetection(),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
@@ -452,5 +457,27 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
       'Não consegui copiar. Copie o trecho à mão.',
     );
     document.getSelection()?.removeAllRanges();
+  });
+
+  it('paints the passage opened from a search hit, and nothing for another media (KBC-039 AC-10)', async () => {
+    const passage = { mediaId: MEDIA, startMs: 5_000, endMs: 9_000 };
+    const { view } = await renderPanel(transcriptOf(), 0, passage);
+    expect(painted.get('transcript-passage')).toEqual([
+      'Ele tinha uma conselheira.',
+    ]);
+
+    await view.rerender({
+      inputs: { passage: { ...passage, mediaId: 'other' } },
+      partialUpdate: true,
+    });
+    await view.fixture.whenStable();
+    expect(painted.get('transcript-passage')).toEqual([]);
+  });
+
+  it('paints no passage when opened without one, and clears it when it goes', async () => {
+    const { view } = await renderPanel();
+    expect(painted.get('transcript-passage')).toEqual([]);
+    view.fixture.destroy();
+    expect(painted.has('transcript-passage')).toBe(false);
   });
 });

@@ -124,6 +124,14 @@ mark {
   color: var(--color-accent-strong);
 }
 
+/* KBC-038's transcript, its list scrolling inside this height (as on the media page). */
+.transcript {
+  display: flex;
+  flex-direction: column;
+  height: min(60dvh, 32rem);
+  min-width: 0;
+}
+
 .notice {
   display: grid;
   gap: var(--space-2);

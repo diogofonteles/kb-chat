@@ -14,6 +14,7 @@ import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
   mediaItemSchema,
+  mediaTranscriptSchema,
   type MediaHit,
   type MediaItem,
 } from '@kb-chat/contracts';
@@ -22,12 +23,17 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
-import { mediaStreamUrl, mediaUrl } from '@core/media/media-api.js';
+import {
+  mediaStreamUrl,
+  mediaTranscriptUrl,
+  mediaUrl,
+} from '@core/media/media-api.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { textParts } from '@core/text/text-parts.js';
 import { distinctUntilChanged, filter } from 'rxjs';
 import { MediaPlayer } from '../player/media-player.js';
+import { TranscriptPanel } from '../transcript/transcript-panel.js';
 import { playbackStartOf, type PassageFocus } from './passage-focus.js';
 
 interface Target {
@@ -41,12 +47,11 @@ const sameTarget = (a: Target, b: Target): boolean =>
 /**
  * A spoken passage opened from the results (KBC-039 FR-3, FR-6, screens.md T2/T15): in
  * the reading panel, where texts open, the player plays from 2 s before the passage, with
- * the passage itself shown marked. The transcript beside it, with this segment marked, is
- * KBC-038's panel, given `focus` (MediaHitFocus) when it arrives.
+ * the passage itself shown marked, and KBC-038's transcript below with the passage painted.
  */
 @Component({
   selector: 'app-passage-panel',
-  imports: [AuthorshipBadge, MediaPlayer, RouterLink],
+  imports: [AuthorshipBadge, MediaPlayer, RouterLink, TranscriptPanel],
   templateUrl: './passage-panel.html',
   styleUrl: './passage-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -75,7 +80,7 @@ export class PassagePanel {
   private readonly media = computed(() =>
     this.item.hasValue() ? this.item.value() : null,
   );
-  /** What KBC-038's transcript panel will mark: this segment of this media. */
+  /** What KBC-038's transcript panel paints: this segment of this media. */
   protected readonly focus = computed((): PassageFocus => ({
     mediaId: this.passage().mediaId,
     startMs: this.passage().startMs,
@@ -96,6 +101,21 @@ export class PassagePanel {
     t: Math.floor(playbackStartOf(this.passage()) / 1000),
   }));
   protected readonly ready = computed(() => this.media()?.status === 'ready');
+  /**
+   * The current transcript, once the audio is ready; the version in the query fetches a
+   * new one instead of the cache (as the media page does). Without it the passage above
+   * still shows what was found.
+   */
+  protected readonly transcript = httpResource(
+    () => {
+      const media = this.media();
+      const version = media?.transcription.version ?? null;
+      return media?.status === 'ready' && version !== null
+        ? { url: mediaTranscriptUrl(media.id), params: { v: version } }
+        : undefined;
+    },
+    { parse: (body) => mediaTranscriptSchema.parse(body) },
+  );
   protected readonly loadError = computed(() => {
     const err = this.item.error();
     if (!err) return '';

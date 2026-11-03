@@ -61,6 +61,15 @@
       i18n="@@passage.openPage"
       >Abrir na página da mídia</a
     >
+    @if (transcript.hasValue()) {
+      <div class="transcript">
+        <app-transcript-panel
+          [transcript]="transcript.value()"
+          [title]="passage().title"
+          [passage]="focus()"
+        />
+      </div>
+    }
   } @else if (item.hasValue()) {
     <p class="notice" role="status" i18n="@@passage.notReady">
       Este áudio ainda não está pronto para ouvir.
