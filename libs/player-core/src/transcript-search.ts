@@ -1,0 +1,96 @@
+/**
+ * "Buscar na transcrição" (KBC-038 FR-8): occurrences found without regard to accents or
+ * case ("salomao" finds "Salomão"), with their places in the original text to highlight.
+ */
+
+/** The text as search compares it, and where each of its characters came from. */
+export interface FoldedText {
+  readonly folded: string;
+  /** `offsets[i]`: index in the original text of folded character `i`; one more at the end. */
+  readonly offsets: readonly number[];
+}
+
+const foldChar = (char: string): string =>
+  char
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLocaleLowerCase('pt-BR');
+
+export function foldForSearch(text: string): FoldedText {
+  let folded = '';
+  const offsets: number[] = [];
+  let index = 0;
+  for (const char of text) {
+    const part = foldChar(char);
+    offsets.push(...Array.from({ length: part.length }, () => index));
+    folded += part;
+    index += char.length;
+  }
+  offsets.push(text.length);
+  return { folded, offsets };
+}
+
+/** One occurrence: the segment and the characters `start..end` of its text. */
+export interface SearchHit {
+  readonly segment: number;
+  readonly start: number;
+  readonly end: number;
+}
+
+function hitsIn(text: string, query: string, segment: number): SearchHit[] {
+  const { folded, offsets } = foldForSearch(text);
+  const hits: SearchHit[] = [];
+  for (
+    let at = folded.indexOf(query);
+    at !== -1;
+    at = folded.indexOf(query, at + query.length)
+  )
+    hits.push({
+      segment,
+      start: offsets[at] ?? 0,
+      end: offsets[at + query.length] ?? text.length,
+    });
+  return hits;
+}
+
+/** Every occurrence of `query` in the segments' texts, in reading order. */
+export function searchSegments(
+  texts: readonly string[],
+  query: string,
+): SearchHit[] {
+  const wanted = foldForSearch(query.trim().replace(/\s+/g, ' ')).folded;
+  if (!wanted) return [];
+  return texts.flatMap((text, segment) => hitsIn(text, wanted, segment));
+}
+
+export type TextPartKind = 'plain' | 'match' | 'current';
+
+export interface TextPart {
+  readonly text: string;
+  readonly kind: TextPartKind;
+}
+
+/** A segment's text cut around its occurrences, the current one told apart. */
+export function highlightParts(
+  text: string,
+  marks: readonly {
+    readonly start: number;
+    readonly end: number;
+    readonly current: boolean;
+  }[],
+): TextPart[] {
+  const parts: TextPart[] = [];
+  let at = 0;
+  for (const mark of [...marks].sort((a, b) => a.start - b.start)) {
+    if (mark.start < at) continue;
+    if (mark.start > at)
+      parts.push({ text: text.slice(at, mark.start), kind: 'plain' });
+    parts.push({
+      text: text.slice(mark.start, mark.end),
+      kind: mark.current ? 'current' : 'match',
+    });
+    at = mark.end;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), kind: 'plain' });
+  return parts;
+}
