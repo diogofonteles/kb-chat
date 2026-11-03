@@ -83,7 +83,8 @@ export class SilencesDialog {
   protected readonly note = computed(() => {
     const state = this.skipper.mapState();
     if (state !== 'ready') return MAP_NOTES[state]();
-    const saved = formatClock(this.skipper.savedMs());
+    // To the nearest second: 2.7 s saved reads 0:03, as the person would say it.
+    const saved = formatClock(Math.round(this.skipper.savedMs() / 1000) * 1000);
     return $localize`:@@silences.saved:Tempo economizado nesta mídia: ${saved}:saved:`;
   });
 
