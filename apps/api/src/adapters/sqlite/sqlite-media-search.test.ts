@@ -241,6 +241,20 @@ describe('SqliteMediaSearch', () => {
     expect(found.total).toBe(8);
   });
 
+  it('takes a very common word unranked, normal confidence still first (NFR-1)', () => {
+    const low = aMedia({ title: 'Ruidosa' });
+    transcribe(low, [segment(0, 'Vegetal.')], 'low');
+    const many = aMedia({ title: 'Longa' });
+    transcribe(
+      many,
+      Array.from({ length: 10_001 }, (_, i) => segment(i * 10, 'Vegetal.')),
+    );
+    const found = search.search(query(['vegetal'], { limit: 5 }));
+    expect(found.matches).toHaveLength(5);
+    expect(found.matches.every((m) => m.confidence === 'normal')).toBe(true);
+    expect(found.total).toBe(1_000);
+  });
+
   it('has nothing for no words', () => {
     expect(search.search(query([]))).toEqual({ matches: [], total: 0 });
   });

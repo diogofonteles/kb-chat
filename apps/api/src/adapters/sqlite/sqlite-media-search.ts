@@ -59,6 +59,26 @@ const FROM_MATCHES = `FROM segments_fts f
   JOIN transcripts t ON t.id = s.transcript_id
   JOIN media m ON m.id = t.media_id`;
 
+/** The most matches in the whole index that are ranked by relevance (NFR-1). */
+const RANKED = 10_000;
+/** Past RANKED, this many times the limit are read to put normal confidence first. */
+const UNRANKED_POOL = 4;
+
+const SELECT_MATCHES = `SELECT m.id AS media_id, m.topic, m.title, ${AUTHOR} AS author,
+    highlight(segments_fts, 0, char(2), char(3)) AS marked,
+    s.start_ms, s.end_ms, t.confidence, bm25(segments_fts) AS bm25
+  ${FROM_MATCHES}`;
+
+/** Normal confidence first (BR-3), then relevance, then the earlier passage. */
+const ORDER = `ORDER BY t.confidence = 'low', bm25(segments_fts), s.start_ms`;
+
+const byConfidenceThenRelevance = (
+  a: MediaSegmentMatch,
+  b: MediaSegmentMatch,
+): number =>
+  Number(a.confidence === 'low') - Number(b.confidence === 'low') ||
+  a.bm25 - b.bm25;
+
 function toMatch(row: Record<string, unknown>): MediaSegmentMatch {
   return {
     mediaId: String(row['media_id']),
@@ -88,23 +108,46 @@ export class SqliteMediaSearch implements MediaSearchPort {
     const scope = scopeClause(topics, authors);
     const where = `WHERE segments_fts MATCH ? AND ${scope.sql}`;
     const values = [toMatchExpression(terms), ...scope.values];
-    const matches = this.db
-      .prepare(
-        `SELECT m.id AS media_id, m.topic, m.title, ${AUTHOR} AS author,
-           highlight(segments_fts, 0, char(2), char(3)) AS marked,
-           s.start_ms, s.end_ms, t.confidence, bm25(segments_fts) AS bm25
-         ${FROM_MATCHES} ${where}
-         ORDER BY t.confidence = 'low', bm25(segments_fts), s.start_ms
-         LIMIT ?`,
-      )
-      .all(...values, limit)
-      .map(toMatch);
+    const matches = this.top(where, values, limit);
     const counted = this.db
       .prepare(
         `SELECT count(*) AS n FROM (SELECT 1 ${FROM_MATCHES} ${where} LIMIT ?)`,
       )
       .get(...values, MEDIA_COUNT_CAP);
     return { matches, total: Number(counted?.['n'] ?? 0) };
+  }
+
+  /**
+   * The best passages (NFR-1): ranking every match of a word said in a large share of
+   * 2,000 h costs more than the budget, and such a word ranks nothing useful. Up to
+   * RANKED matches in the whole index, all are ranked; past that, the first matches of the
+   * person's collections are taken unranked, normal confidence still first (BR-3).
+   */
+  private top(
+    where: string,
+    values: readonly SQLInputValue[],
+    limit: number,
+  ): MediaSegmentMatch[] {
+    const [match] = values;
+    const common = Number(
+      this.db
+        .prepare(
+          `SELECT count(*) AS n FROM (SELECT 1 FROM segments_fts
+             WHERE segments_fts MATCH ? LIMIT ${RANKED + 1})`,
+        )
+        .get(match ?? '')?.['n'] ?? 0,
+    );
+    if (common <= RANKED)
+      return this.db
+        .prepare(`${SELECT_MATCHES} ${where} ${ORDER} LIMIT ?`)
+        .all(...values, limit)
+        .map(toMatch);
+    return this.db
+      .prepare(`${SELECT_MATCHES} ${where} LIMIT ?`)
+      .all(...values, limit * UNRANKED_POOL)
+      .map(toMatch)
+      .sort(byConfidenceThenRelevance)
+      .slice(0, limit);
   }
 
   hasTranscripts(topics: readonly string[]): boolean {
