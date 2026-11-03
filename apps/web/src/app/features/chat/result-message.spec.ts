@@ -192,6 +192,24 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
     );
   });
 
+  it('says only the passages when the texts are not searched', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        message: withAudio({
+          kinds: ['audio'],
+          response: aResponse([], {
+            media: [aMediaHit()],
+            kinds: { text: 2, audio: 1 },
+          }),
+        }),
+      },
+    });
+    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
+      /^1 trecho na fala · Tudo/,
+    );
+  });
+
   it('opens a passage with its place among the results (FR-4)', async () => {
     const passageOpened = vi.fn();
     await render(ResultMessage, {

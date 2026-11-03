@@ -87,10 +87,13 @@ export class ResultMessage {
   });
   /** "3 documentos" or "3 documentos · 2 trechos na fala" (one text: no stray spaces). */
   protected readonly found = computed(() => {
-    const spoken = this.response()?.media.length ?? 0;
-    return spoken > 0
-      ? `${this.count()} · ${describeSpokenCount(spoken)}`
-      : this.count();
+    const response = this.response();
+    const spoken = response?.media.length ?? 0;
+    if (spoken === 0) return this.count();
+    // "Textos" not chosen: no "0 documentos" before the passages.
+    return response?.total === 0
+      ? describeSpokenCount(spoken)
+      : `${this.count()} · ${describeSpokenCount(spoken)}`;
   });
   protected readonly modeName = computed(() => modeLabel(this.message().mode));
   protected readonly count = computed(() => {
