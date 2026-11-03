@@ -148,6 +148,51 @@ describe('MediaListPage (T14)', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(11);
   });
 
+  it('filters by author, the main one with ✦, "Outros autores" for none (KBC-049 FR-4)', async () => {
+    const { answer, fixture } = await renderList();
+    const gabriel = {
+      slug: 'mestre-gabriel',
+      name: 'Mestre Gabriel',
+      main: true,
+    };
+    await answer([
+      aMediaItem({ id: mediaId(1), title: 'Aula A', author: gabriel }),
+      aMediaItem({ id: mediaId(2), title: 'Aula B', author: null }),
+      aMediaItem({
+        id: mediaId(3),
+        title: 'Aula C',
+        author: { slug: 'ana', name: 'Ana', main: false },
+      }),
+    ]);
+    const filter = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Autoria',
+    });
+    expect(
+      [...filter.options].map((option) => option.textContent?.trim()),
+    ).toEqual([
+      'Todos',
+      '✦ Mestre Gabriel (1)',
+      'Ana (1)',
+      'Outros autores (1)',
+    ]);
+    expect(
+      screen.getByText('Outros autores', {
+        selector: '.authorship-badge *, .authorship-badge',
+      }),
+    ).toBeTruthy();
+
+    fireEvent.change(filter, { target: { value: '-' } });
+    await fixture.whenStable();
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByText('Aula B')).toBeTruthy();
+  });
+
+  it('has no author filter when every item has the same authorship', async () => {
+    const { answer } = await renderList();
+    await answer([aMediaItem()]);
+    expect(screen.queryByRole('combobox', { name: 'Autoria' })).toBeNull();
+  });
+
   it('refreshes every 5 s while something converts, and announces it once ready', async () => {
     const { http, container } = await renderList(undefined, 20);
     http.expectOne(LIST_URL).flush({
@@ -299,7 +344,6 @@ describe('MediaListPage (T14)', () => {
       value: { item: () => file, length: 1 },
     });
     fireEvent.change(input as HTMLInputElement);
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     const created = aMediaItem({
       id: mediaId(9),
@@ -345,7 +389,6 @@ describe('MediaListPage (T14)', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Acervo' }), {
       target: { value: 'alquimia' },
     });
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     const created = aMediaItem({
       id: mediaId(9),

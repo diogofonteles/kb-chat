@@ -94,6 +94,7 @@ export const aTopic = (
   description: '',
   canOpen: true,
   canRename: false,
+  mainAuthor: null,
   ...topic,
 });
 

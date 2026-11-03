@@ -34,6 +34,11 @@ import {
   switchMap,
 } from 'rxjs';
 import {
+  ANY_AUTHOR,
+  authorFilterOptions,
+  matchesAuthor,
+} from './media-authors.js';
+import {
   pollEveryOf,
   isLowConfidence,
   lowNoticeOf,
@@ -89,8 +94,23 @@ export class MediaListPage {
     this.list.hasValue() ? this.list.value().items : [],
   );
   protected readonly query = signal('');
+  /** "Autoria" (KBC-049 FR-4): every author by default, reset on a switch. */
+  protected readonly author = linkedSignal({
+    source: this.chat.topicSlug,
+    computation: () => ANY_AUTHOR,
+  });
+  protected readonly authorOptions = computed(() =>
+    authorFilterOptions(this.items()),
+  );
+  /** Shown when the list has two or more authorships to tell apart. */
+  protected readonly showAuthorFilter = computed(
+    () => this.authorOptions().length >= 2,
+  );
   protected readonly visible = computed(() =>
-    this.items().filter((item) => matchesTitle(item, this.query())),
+    this.items().filter(
+      (item) =>
+        matchesTitle(item, this.query()) && matchesAuthor(item, this.author()),
+    ),
   );
   protected readonly showFilter = computed(
     () => this.items().length >= FILTER_FROM,
@@ -175,8 +195,14 @@ export class MediaListPage {
       this.query.set(event.target.value);
   }
 
+  protected filterByAuthor(event: Event): void {
+    if (event.target instanceof HTMLSelectElement)
+      this.author.set(event.target.value);
+  }
+
   protected clearFilter(): void {
     this.query.set('');
+    this.author.set(ANY_AUTHOR);
   }
 
   protected openUpload(): void {

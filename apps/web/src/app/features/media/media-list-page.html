@@ -32,16 +32,42 @@
     </div>
   </header>
 
-  @if (showFilter()) {
-    <label class="filter">
-      <span class="label" i18n="@@media.filter">Filtrar por título</span>
-      <input
-        type="search"
-        autocomplete="off"
-        [value]="query()"
-        (input)="filterBy($event)"
-      />
-    </label>
+  @if (showFilter() || showAuthorFilter()) {
+    <div class="filters">
+      @if (showFilter()) {
+        <label class="filter">
+          <span class="label" i18n="@@media.filter">Filtrar por título</span>
+          <input
+            type="search"
+            autocomplete="off"
+            [value]="query()"
+            (input)="filterBy($event)"
+          />
+        </label>
+      }
+      @if (showAuthorFilter()) {
+        <label class="filter author-filter">
+          <span class="label" i18n="@@media.authorFilter">Autoria</span>
+          <select (change)="filterByAuthor($event)">
+            <option
+              value=""
+              [selected]="author() === ''"
+              i18n="@@authorship.all"
+            >
+              Todos
+            </option>
+            @for (option of authorOptions(); track option.value) {
+              <option
+                [value]="option.value"
+                [selected]="author() === option.value"
+              >
+                {{ option.label }} ({{ option.count }})
+              </option>
+            }
+          </select>
+        </label>
+      }
+    </div>
   }
 
   <p class="sent-elsewhere" role="status">{{ sentElsewhere() }}</p>
@@ -93,9 +119,13 @@
     </div>
   } @else if (visible().length === 0) {
     <div class="empty">
-      <p i18n="@@media.filterEmpty">
-        Nenhum áudio com "{{ query() }}" no título.
-      </p>
+      @if (query()) {
+        <p i18n="@@media.filterEmpty">
+          Nenhum áudio com "{{ query() }}" no título.
+        </p>
+      } @else {
+        <p i18n="@@media.authorFilterEmpty">Nenhum áudio desta autoria.</p>
+      }
       <button
         type="button"
         class="secondary"
@@ -129,7 +159,7 @@
             </span>
           }
           <span class="meta">
-            <app-authorship-badge [authorship]="item.authorship" />
+            <app-authorship-badge [mediaAuthor]="item.author" />
             @if (item.durationMs !== null) {
               <span class="duration">{{ durationOf(item) }}</span>
             }

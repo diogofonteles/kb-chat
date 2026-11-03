@@ -84,33 +84,49 @@ describe('UploadPanel (T14, KBC-034)', () => {
     );
   });
 
-  it('asks for a file and the authorship before sending, sending nothing', async () => {
-    const { container, fixture, http } = await renderPanel();
+  it('asks for a file before sending, sending nothing', async () => {
+    const { fixture, http } = await renderPanel();
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     await fixture.whenStable();
     expect(screen.getByText('Escolha um arquivo de áudio.')).toBeTruthy();
-    choose(container, audio());
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
-    await fixture.whenStable();
-    expect(screen.getByText(/Escolha a autoria/)).toBeTruthy();
     http.expectNone('/api/v1/topics/hermetismo/media');
   });
 
-  it('has no authorship chosen in advance (SL-28)', async () => {
+  it('has no author chosen in advance and says what a blank one means (SL-28, KBC-049)', async () => {
     await renderPanel();
-    for (const radio of screen.getAllByRole<HTMLInputElement>('radio'))
-      expect(radio.checked).toBe(false);
+    const author = screen.getByRole<HTMLInputElement>('combobox', {
+      name: 'Autor',
+    });
+    expect(author.value).toBe('');
+    expect(author.getAttribute('aria-describedby')).toBeTruthy();
+    expect(screen.getByText(/Em branco, o áudio fica em/)).toBeTruthy();
   });
 
   it('creates the item, sends the file with real progress, then hands it over (AC-1)', async () => {
     const { container, fixture, http, uploaded } = await renderPanel();
     choose(container, audio());
-    fireEvent.click(screen.getByRole('radio', { name: /Mestre Laércio/ }));
+    const field = screen.getByRole('combobox', { name: 'Autor' });
+    fireEvent.focus(field);
+    fireEvent.input(field, { target: { value: ' Mestre Gabriel ' } });
+    http
+      .expectOne({ method: 'GET', url: '/api/v1/topics/hermetismo/authors' })
+      .flush({ items: [] });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    // KBC-049 AC-1: the typed name is registered in the collection first.
+    const author = http.expectOne({
+      method: 'POST',
+      url: '/api/v1/topics/hermetismo/authors',
+    });
+    expect(author.request.body).toEqual({ name: 'Mestre Gabriel' });
+    author.flush({
+      slug: 'mestre-gabriel',
+      name: 'Mestre Gabriel',
+      main: false,
+    });
     const create = http.expectOne('/api/v1/topics/hermetismo/media');
     expect(create.request.body).toEqual({
       title: 'Palestra de 1998',
-      authorship: 'mestre-laercio',
+      author: 'mestre-gabriel',
       fileName: 'Palestra_de_1998.mp3',
       bytes: 3,
     });
@@ -129,7 +145,6 @@ describe('UploadPanel (T14, KBC-034)', () => {
   it('keeps the fields when the connection breaks and sends again to the same item (MA-26)', async () => {
     const { container, fixture, http, uploaded } = await renderPanel();
     choose(container, audio());
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     http.expectOne('/api/v1/topics/hermetismo/media').flush(CREATED);
     http
@@ -150,7 +165,6 @@ describe('UploadPanel (T14, KBC-034)', () => {
   it('explains a file the server refused', async () => {
     const { container, fixture, http } = await renderPanel();
     choose(container, audio());
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     http
       .expectOne('/api/v1/topics/hermetismo/media')
@@ -167,7 +181,6 @@ describe('UploadPanel (T14, KBC-034)', () => {
   it('cancels a running upload and removes the half-sent item', async () => {
     const { container, fixture, http } = await renderPanel();
     choose(container, audio());
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     http.expectOne('/api/v1/topics/hermetismo/media').flush(CREATED);
     const put = http.expectOne(`/api/v1/media/${CREATED.id}/file`);
@@ -185,7 +198,6 @@ describe('UploadPanel (T14, KBC-034)', () => {
     window.dispatchEvent(idle);
     expect(idle.defaultPrevented).toBe(false);
     choose(container, audio());
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     http.expectOne('/api/v1/topics/hermetismo/media').flush(CREATED);
     http.expectOne(`/api/v1/media/${CREATED.id}/file`);
@@ -217,7 +229,6 @@ describe('UploadPanel (T14, KBC-034)', () => {
     file = audio(),
   ) {
     choose(context.container, file);
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(
       screen.getByRole('button', { name: /^(Enviar|Tentar de novo)$/ }),
     );
@@ -280,7 +291,6 @@ describe('UploadPanel (T14, KBC-034)', () => {
     choose(container, audio());
     const title = screen.getByRole('textbox', { name: 'Título' });
     fireEvent.input(title, { target: { value: '   ' } });
-    fireEvent.click(screen.getByRole('radio', { name: /Outros autores/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     await fixture.whenStable();
     expect(screen.getByText('Dê um título ao áudio.')).toBeTruthy();
@@ -289,7 +299,10 @@ describe('UploadPanel (T14, KBC-034)', () => {
     fireEvent.input(title, { target: { value: '  Aula 3  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     const created = http.expectOne({ method: 'POST' });
-    expect(created.request.body.title).toBe('Aula 3');
+    expect(created.request.body).toMatchObject({
+      title: 'Aula 3',
+      author: null,
+    });
     created.flush(CREATED);
   });
 

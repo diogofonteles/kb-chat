@@ -1,4 +1,5 @@
 import type {
+  Authorship,
   SweepCoverage,
   SweepProgress,
   SweepStopReason,
@@ -30,10 +31,11 @@ export const stopReasonText = (reason: SweepStopReason): string =>
 export function targetText(
   target: SweepTarget,
   phrases: readonly string[],
+  labels: Record<Authorship, string> = AUTHORSHIP_LABELS,
 ): string {
   const parts = [
     target.authorship &&
-      $localize`:@@sweep.authorship:autoria ${AUTHORSHIP_LABELS[target.authorship]}:label:`,
+      $localize`:@@sweep.authorship:autoria ${labels[target.authorship]}:label:`,
     target.entity &&
       $localize`:@@sweep.entity:entidade “${target.entity}:name:”`,
     target.source && $localize`:@@sweep.source:origem “${target.source}:name:”`,

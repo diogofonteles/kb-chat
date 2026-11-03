@@ -1,3 +1,4 @@
+import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -69,6 +70,7 @@ export class FilterBar {
   readonly topicNames = input<ReadonlyMap<string, string>>(new Map());
   readonly filtersChange = output<SearchFilters>();
 
+  private readonly labels = injectAuthorshipLabels();
   protected readonly openKey = signal<FacetKey | null>(null);
   protected readonly expanded = signal<ReadonlySet<FacetKey>>(new Set());
   protected readonly sheetOpen = signal(false);
@@ -94,7 +96,7 @@ export class FilterBar {
     ).filter((filter) => !(single && filter.key === 'authorships'));
   });
   protected readonly authorships = computed(() =>
-    authorshipOptions(this.facets(), this.filters()),
+    authorshipOptions(this.facets(), this.filters(), this.labels()),
   );
   protected readonly barId = `filters-${nextBarId++}`;
   protected readonly activeCount = computed(() => countActive(this.filters()));

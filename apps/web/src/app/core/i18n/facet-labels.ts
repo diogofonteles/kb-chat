@@ -34,6 +34,17 @@ export const AUTHORSHIP_LABELS: Record<Authorship, string> = {
   'nao-classificado': $localize`:@@authorship.unclassified:Não classificado`,
 };
 
+/**
+ * The labels of one collection (KBC-049, ADR 0030): the `mestre-laercio` group is its main
+ * author, named as the collection names him ("Mestre Laércio" when it has none).
+ */
+export const authorshipLabelsOf = (
+  mainAuthor: string | null,
+): Record<Authorship, string> => ({
+  ...AUTHORSHIP_LABELS,
+  ...(mainAuthor && { 'mestre-laercio': mainAuthor }),
+});
+
 export const DEPTH_LABELS: Record<DepthLevel, string> = {
   0: $localize`:@@depth.0:Introdutório`,
   1: $localize`:@@depth.1:Intermediário`,

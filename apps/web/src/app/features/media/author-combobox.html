@@ -1,0 +1,56 @@
+<div class="combo">
+  <label class="label" [for]="inputId" i18n="@@media.upload.author"
+    >Autor</label
+  >
+  <p class="help" [id]="helpId" i18n="@@media.upload.authorHelp">
+    Escolha um autor do acervo ou digite um novo. Em branco, o áudio fica em
+    "Outros autores".
+  </p>
+  <input
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    maxlength="120"
+    aria-autocomplete="list"
+    [id]="inputId"
+    [value]="name()"
+    [disabled]="disabled()"
+    [attr.aria-expanded]="expanded()"
+    [attr.aria-controls]="listId"
+    [attr.aria-activedescendant]="activeId()"
+    [attr.aria-describedby]="helpId"
+    (focus)="load()"
+    (input)="typed($event)"
+    (click)="toggle()"
+    (keydown)="keydown($event)"
+    (blur)="close()"
+  />
+  <ul
+    class="options"
+    role="listbox"
+    aria-label="Autores do acervo"
+    i18n-aria-label="@@media.author.listLabel"
+    [id]="listId"
+    [hidden]="!expanded()"
+  >
+    @for (option of options(); track option.key; let index = $index) {
+      <li
+        role="option"
+        [id]="optionId(index)"
+        [class.active]="index === active()"
+        [class.register]="option.key === '+new'"
+        [attr.aria-selected]="index === active()"
+        tabindex="-1"
+        (mousedown)="choose($event, option)"
+      >
+        @if (option.main) {
+          <span class="mark" aria-hidden="true">✦</span>
+          <span class="visually-hidden" i18n="@@media.author.mainPrefix"
+            >Autor principal:&nbsp;</span
+          >
+        }
+        {{ option.label }}
+      </li>
+    }
+  </ul>
+</div>

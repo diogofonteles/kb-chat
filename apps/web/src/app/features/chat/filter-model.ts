@@ -163,6 +163,8 @@ export function selectedAuthorship(filters: SearchFilters): Authorship | null {
 export function authorshipOptions(
   facets: ResultFacets,
   filters: SearchFilters,
+  /** The collection's labels: its main author's name for the main group (KBC-049). */
+  labels: Record<Authorship, string> = AUTHORSHIP_LABELS,
 ): AuthorshipOption[] {
   const selected = selectedAuthorship(filters);
   const countOf = (value: Authorship): number =>
@@ -178,7 +180,7 @@ export function authorshipOptions(
     },
     ...AUTHORSHIP_CHOICES.map((value) => ({
       value,
-      label: AUTHORSHIP_LABELS[value],
+      label: labels[value],
       count: countOf(value),
       selected: selected === value,
       mestre: value === 'mestre-laercio',
