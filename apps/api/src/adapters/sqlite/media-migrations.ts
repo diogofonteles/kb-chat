@@ -403,4 +403,29 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         CHECK (skip_silences IN (0, 1));
     `,
   },
+  {
+    // KBC-039 (ADR 0024 §1): the spoken words of each media's current transcript, searchable
+    // without accents or case. A row's rowid is its segment's, so the row joins back to the
+    // segment, its transcript and its media (collection and author are read from there).
+    // Only current versions are indexed: a new version replaces its media's rows in the
+    // transaction that stores it (sqlite-transcript-store.ts).
+    // Version 12: 7 is KBC-051's, 9 KBC-067's, 10 KBC-044's, 11 KBC-064's (open in parallel).
+    version: 12,
+    name: 'transcript-segments-fts',
+    sql: `
+      CREATE VIRTUAL TABLE segments_fts USING fts5(
+        text,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      INSERT INTO segments_fts (rowid, text)
+        SELECT s.rowid, s.text FROM segments s
+        JOIN transcripts t ON t.id = s.transcript_id
+        WHERE t.version = (SELECT max(version) FROM transcripts c WHERE c.media_id = t.media_id);
+      -- A removed media takes its transcripts (cascade) and, before them, their index rows.
+      CREATE TRIGGER transcripts_unindex BEFORE DELETE ON transcripts BEGIN
+        DELETE FROM segments_fts WHERE rowid IN
+          (SELECT rowid FROM segments WHERE transcript_id = old.id);
+      END;
+    `,
+  },
 ];

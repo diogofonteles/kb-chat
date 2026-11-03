@@ -19,12 +19,28 @@ export function openMediaDatabase(
     db.exec('PRAGMA foreign_keys = ON');
     db.exec('PRAGMA busy_timeout = 5000');
     db.exec('PRAGMA synchronous = NORMAL');
+    assertFullTextSearch(db);
     applyMigrations(db, migrations);
     return db;
   } catch (err) {
     db.close();
     throw err;
   }
+}
+
+/**
+ * The transcripts' search index is FTS5 (ADR 0024): a Node whose SQLite lacks it (before
+ * 22.21 was not checked) stops the API with the reason instead of a bare SQL error.
+ */
+export function assertFullTextSearch(db: DatabaseSync): void {
+  const options = db
+    .prepare('PRAGMA compile_options')
+    .all()
+    .map((row) => String(row['compile_options']));
+  if (!options.includes('ENABLE_FTS5'))
+    throw new Error(
+      `The media library needs SQLite with FTS5: Node ${process.versions.node} lacks it (use a current Node 22)`,
+    );
 }
 
 /** Applies, in order and each in its own transaction, the migrations not applied yet. */
