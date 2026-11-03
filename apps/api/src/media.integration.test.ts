@@ -44,7 +44,7 @@ describe('Media library: upload (KBC-034)', () => {
     expect(created.json()).toMatchObject({
       topic: 'hermetismo',
       title: 'Palestra de 1998',
-      authorship: 'mestre-laercio',
+      author: { slug: 'mestre-laercio', name: 'Mestre Laércio', main: true },
       status: 'uploading',
       canRetry: false,
     });
@@ -65,7 +65,8 @@ describe('Media library: upload (KBC-034)', () => {
     [{ bytes: 500 * 1024 * 1024 + 1 }, 'a file over 500 MB'],
     [{ fileName: 'apostila.pdf' }, 'a file that is not audio'],
     [{ title: '   ' }, 'a blank title'],
-    [{ authorship: 'sintese' }, 'an authorship media cannot have'],
+    [{ authorship: 'sintese' }, 'the authorship field of before KBC-049'],
+    [{ author: 'ninguem' }, 'an author the collection does not have'],
   ])('refuses %o: %s (AC-8)', async (overrides, reason) => {
     expect(reason).not.toBe('');
     const media = await startMedia();

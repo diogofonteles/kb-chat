@@ -1,7 +1,9 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import type { ResultFacets } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
+import { aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
+import { ChatStore } from './chat-store.js';
 import { FilterBar } from './filter-bar.js';
 
 const FACETS: ResultFacets = {
@@ -218,6 +220,51 @@ describe('FilterBar authorship control (KBC-020 AC-2)', () => {
       '3',
     );
     expect((radio(/^Todos/) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("names the main group by the open collection's main author (KBC-049 FR-4)", async () => {
+    const udv = aTopic({
+      slug: 'udv',
+      title: 'UDV',
+      mainAuthor: { slug: 'mestre-gabriel', name: 'Mestre Gabriel' },
+    });
+    await render(FilterBar, {
+      providers: [
+        provideZonelessChangeDetection(),
+        // Only the open collection is read from the page's store.
+        { provide: ChatStore, useValue: { topic: signal(udv) } },
+      ],
+      inputs: { facets: FACETS, filters: NO_FILTERS },
+    });
+    const main = radio(/Mestre Gabriel/).closest('label');
+    expect(main?.textContent).toContain('✦');
+    expect(main?.textContent).toContain('6');
+    expect(screen.queryByRole('radio', { name: /Laércio/ })).toBeNull();
+  });
+
+  it('names the removable "Autoria" chips by the main author too (KBC-049)', async () => {
+    const udv = aTopic({
+      slug: 'udv',
+      title: 'UDV',
+      mainAuthor: { slug: 'mestre-gabriel', name: 'Mestre Gabriel' },
+    });
+    await render(FilterBar, {
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ChatStore, useValue: { topic: signal(udv) } },
+      ],
+      inputs: {
+        facets: FACETS,
+        filters: {
+          ...NO_FILTERS,
+          authorships: ['mestre-laercio', 'outros-autores'],
+        },
+      },
+    });
+    expect(
+      screen.getByRole('button', { name: 'Remover Autoria: Mestre Gabriel' }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Laércio/)).toBeNull();
   });
 
   it('filters by one group at once and goes back to every group with Todos', async () => {

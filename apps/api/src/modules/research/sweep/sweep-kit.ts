@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import type { SourceBook } from '../source-book.js';
 import type { SweepPlanner } from './sweep-planner.js';
 
@@ -6,4 +7,6 @@ export interface SweepKit {
   readonly sweeps: SweepPlanner;
   readonly book: SourceBook;
   readonly topicTitle: string;
+  /** The collection's main author (KBC-049), or null. */
+  readonly mainAuthor: MainAuthorIdentity | null;
 }

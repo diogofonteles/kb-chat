@@ -28,7 +28,7 @@
     <header class="head">
       <h2 id="media-item-title">{{ current.title }}</h2>
       <p class="meta">
-        <app-authorship-badge [authorship]="current.authorship" />
+        <app-authorship-badge [mediaAuthor]="current.author" />
         @if (duration()) {
           <span class="duration">{{ duration() }}</span>
         }

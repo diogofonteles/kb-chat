@@ -25,7 +25,7 @@ export const CONVERTED = Buffer.from('0123456789abcdefghij'); // 20 bytes of "AA
 
 export const aRequest = (overrides: object = {}) => ({
   title: 'Palestra de 1998',
-  authorship: 'mestre-laercio',
+  author: 'mestre-laercio',
   fileName: 'palestra.mp3',
   bytes: AUDIO.length,
   ...overrides,

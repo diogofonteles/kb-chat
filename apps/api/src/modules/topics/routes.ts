@@ -28,6 +28,7 @@ import {
 import {
   listTopics,
   type CollectionActor,
+  type MainAuthorOf,
   type TopicsService,
   type TopicsServiceDeps,
 } from './topics-service.js';
@@ -37,6 +38,8 @@ export interface TopicsDeps {
   readonly service: TopicsService;
   /** Settings' default collection or KB_TOPIC; ignored when it names no topic in the vault. */
   readonly preferredTopic?: (principal: string) => string | undefined;
+  /** Each collection's main author (KBC-049). */
+  readonly mainAuthorOf?: MainAuthorOf;
 }
 
 /** "Criar acervos" creates and renames (KBC-048 BR-1); renaming also needs the collection. */
@@ -78,6 +81,7 @@ function registerList(typed: Typed, deps: TopicsDeps): void {
         renamable: hasFeature(viewerOf(request).person, 'collection-create')
           ? await deps.service.renamableBy(actorOf(request))
           : undefined,
+        mainAuthorOf: deps.mainAuthorOf,
       }),
   );
 }

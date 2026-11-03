@@ -43,7 +43,6 @@ test('AC-1: a master uploads an MP3, sees it go to "Pronta" and opens it', async
   await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(
     title,
   );
-  await dialog.getByRole('radio', { name: /Outros autores/ }).check();
   await dialog.getByRole('button', { name: 'Enviar' }).click();
   await expect(dialog).toBeHidden();
   const row = page.getByRole('listitem').filter({ hasText: title });
@@ -94,7 +93,7 @@ test('AC-4: "Ouvir mídia" without "Enviar áudios" shows the list but no upload
   const refused = await page.request.post('/api/v1/topics/hermetismo/media', {
     data: {
       title: 'x',
-      authorship: 'outros-autores',
+      author: null,
       fileName: 'x.mp3',
       bytes: 3,
     },

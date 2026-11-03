@@ -37,17 +37,40 @@ export function applyMigrations(
     name TEXT NOT NULL,
     applied_at TEXT NOT NULL
   ) STRICT`);
-  const applied = new Set(
-    db
-      .prepare('SELECT version FROM schema_migrations')
-      .all()
-      .map((row) => Number(row['version'])),
-  );
+  const applied = appliedMigrations(db);
+  assertSameNames(applied, migrations);
   const pending = [...migrations]
     .sort((a, b) => a.version - b.version)
     .filter((migration) => !applied.has(migration.version));
   for (const migration of pending) applyMigration(db, migration);
   return pending.map((migration) => migration.version);
+}
+
+/** The versions already applied, with the name each one had. */
+function appliedMigrations(db: DatabaseSync): Map<number, string> {
+  return new Map(
+    db
+      .prepare('SELECT version, name FROM schema_migrations')
+      .all()
+      .map((row) => [Number(row['version']), String(row['name'])]),
+  );
+}
+
+/**
+ * A version applied under another name means two branches numbered their migrations alike
+ * (KBC-049 and KBC-036): the API refuses to start instead of skipping one in silence.
+ */
+function assertSameNames(
+  applied: ReadonlyMap<number, string>,
+  migrations: readonly Migration[],
+): void {
+  for (const migration of migrations) {
+    const name = applied.get(migration.version);
+    if (name !== undefined && name !== migration.name)
+      throw new Error(
+        `Media migration ${migration.version} was applied as "${name}", not "${migration.name}"`,
+      );
+  }
 }
 
 function applyMigration(db: DatabaseSync, migration: Migration): void {

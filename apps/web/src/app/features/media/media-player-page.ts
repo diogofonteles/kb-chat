@@ -272,7 +272,7 @@ export class MediaPlayerPage {
       title: media.title,
       src: mediaStreamUrl(media.id),
       durationMs: media.durationMs,
-      artist: AUTHORSHIP_LABELS[media.authorship],
+      artist: media.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
     };
   }
 }

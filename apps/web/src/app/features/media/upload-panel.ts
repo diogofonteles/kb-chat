@@ -20,12 +20,23 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import type { MediaAuthorship, MediaItem, Topic } from '@kb-chat/contracts';
+import { apiErrorSchema, type MediaItem, type Topic } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
-import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
+import { AuthorsApi } from '@core/media/authors-api.js';
 import { MediaApi } from '@core/media/media-api.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
-import { Subscription, concatMap, of, tap, type Observable } from 'rxjs';
+import {
+  Subscription,
+  catchError,
+  concatMap,
+  map,
+  of,
+  tap,
+  throwError,
+  type Observable,
+} from 'rxjs';
+import { isInvalidAuthorName } from './author-suggestions.js';
+import { AuthorCombobox } from './author-combobox.js';
 import {
   fileProblemOf,
   sentOf,
@@ -37,12 +48,13 @@ type Stage = 'choosing' | 'sending' | 'stopped';
 
 /**
  * "Enviar áudio" (screens.md T14, KBC-034): choose a file (button or drop), check the
- * rule before sending, a title, the authorship (no preselection, ADR 0015), then the real
- * progress with "Cancelar envio". A broken connection keeps the fields (MA-26).
+ * rule before sending, a title, the author (KBC-049: one of the collection's or a new one,
+ * blank for "Outros autores"), then the real progress with "Cancelar envio". A broken
+ * connection keeps the fields (MA-26).
  */
 @Component({
   selector: 'app-upload-panel',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, AuthorCombobox],
   templateUrl: './upload-panel.html',
   styleUrl: './upload-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +62,7 @@ type Stage = 'choosing' | 'sending' | 'stopped';
 })
 export class UploadPanel implements OnInit {
   private readonly api = inject(MediaApi);
+  private readonly authorsApi = inject(AuthorsApi);
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly fileInput =
@@ -66,13 +79,8 @@ export class UploadPanel implements OnInit {
   readonly closed = output();
 
   protected readonly rule = uploadRule();
-  protected readonly authorships: readonly {
-    value: MediaAuthorship;
-    label: string;
-  }[] = [
-    { value: 'mestre-laercio', label: AUTHORSHIP_LABELS['mestre-laercio'] },
-    { value: 'outros-autores', label: AUTHORSHIP_LABELS['outros-autores'] },
-  ];
+  /** The author's name as typed or chosen; blank is "Outros autores". */
+  protected readonly authorName = signal('');
   protected readonly form = new FormGroup({
     title: new FormControl('', {
       nonNullable: true,
@@ -82,11 +90,9 @@ export class UploadPanel implements OnInit {
       nonNullable: true,
       validators: Validators.required,
     }),
-    authorship: new FormControl<MediaAuthorship | null>(
-      null,
-      Validators.required,
-    ),
   });
+  /** The "Acervo" field as a signal: the author suggestions follow it. */
+  protected readonly chosenTopic = signal('');
   protected readonly file = signal<File | null>(null);
   protected readonly fileProblem = signal<string | null>(null);
   protected readonly stage = signal<Stage>('choosing');
@@ -119,6 +125,11 @@ export class UploadPanel implements OnInit {
 
   ngOnInit(): void {
     this.form.controls.topic.setValue(this.topic());
+    this.chosenTopic.set(this.topic());
+  }
+
+  protected topicChosen(): void {
+    this.chosenTopic.set(this.form.controls.topic.value);
   }
 
   protected chooseFile(): void {
@@ -150,7 +161,10 @@ export class UploadPanel implements OnInit {
         $localize`:@@media.upload.noFile:Escolha um arquivo de áudio.`,
       );
     const draft = file ? this.draftOf(file) : null;
-    if (!file || !draft || this.fileProblem() || this.form.invalid) return;
+    // A name the API would refuse is said under the "Autor" field and never sent.
+    const badAuthor = isInvalidAuthorName(this.authorName());
+    if (!file || !draft || this.fileProblem() || this.form.invalid || badAuthor)
+      return;
     this.stage.set('sending');
     this.failure.set('');
     this.sending = this.itemFor(draft)
@@ -196,28 +210,50 @@ export class UploadPanel implements OnInit {
     }
   }
 
-  private draftOf(file: File): Draft | null {
-    const { title, topic, authorship } = this.form.getRawValue();
-    return authorship ? { file, title: title.trim(), topic, authorship } : null;
+  private draftOf(file: File): Draft {
+    const { title, topic } = this.form.getRawValue();
+    return {
+      file,
+      title: title.trim(),
+      topic,
+      author: this.authorName().trim(),
+    };
   }
 
   /**
    * The item for this draft: the one created before when the person only retries; a new
-   * one (the old removed) when they changed the file, the title, the collection or authorship.
+   * one (the old removed) when they changed the file, the title, the collection or author.
    */
   private itemFor(draft: Draft): Observable<MediaItem> {
     if (this.created && sameDraft(this.created.draft, draft))
       return of(this.created.item);
     this.discardCreated();
-    const { file, title, topic, authorship } = draft;
-    return this.api
-      .create(topic, {
-        title,
-        authorship,
-        fileName: file.name,
-        bytes: file.size,
-      })
-      .pipe(tap((item) => (this.created = { item, draft })));
+    const { file, title, topic } = draft;
+    return this.authorOf(draft).pipe(
+      concatMap((author) =>
+        this.api.create(topic, {
+          title,
+          author,
+          fileName: file.name,
+          bytes: file.size,
+        }),
+      ),
+      tap((item) => (this.created = { item, draft })),
+    );
+  }
+
+  /**
+   * The author's id: the name is registered in the collection first (a name it already
+   * has answers with that author, FR-1); none for a blank field.
+   */
+  private authorOf({ topic, author }: Draft): Observable<string | null> {
+    if (!author) return of(null);
+    return this.authorsApi.create(topic, author).pipe(
+      map(({ slug }) => slug),
+      catchError((err: unknown) =>
+        throwError(() => (refused(err) ? new AuthorRefused() : err)),
+      ),
+    );
   }
 
   private finish(item: MediaItem): void {
@@ -252,11 +288,36 @@ export class UploadPanel implements OnInit {
     this.failure.set(
       offline
         ? $localize`:@@media.upload.stopped:O envio parou: verifique a conexão e tente de novo.`
-        : code === 'VALIDATION_FAILED'
-          ? $localize`:@@media.upload.refused:Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus).`
-          : errorMessage(code),
+        : err instanceof AuthorRefused || refusedField(err) === 'author'
+          ? $localize`:@@media.upload.authorRefused:O nome do autor não foi aceito: use uma linha, até 60 caracteres, sem aspas nem « ».`
+          : code === 'VALIDATION_FAILED'
+            ? $localize`:@@media.upload.refused:Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus).`
+            : errorMessage(code),
     );
   }
+}
+
+/** The author's name was refused (400): told as an author problem, never as the file's. */
+class AuthorRefused extends Error {
+  constructor() {
+    super('The author name was refused');
+  }
+}
+
+const refused = (err: unknown): boolean =>
+  err instanceof HttpErrorResponse && err.status === 400;
+
+/** The field a 400 names (`details.field` of the API's error envelope), if any. */
+function refusedField(err: unknown): string | null {
+  if (!refused(err) || !(err instanceof HttpErrorResponse)) return null;
+  const parsed = apiErrorSchema.safeParse(err.error);
+  const details = parsed.success ? parsed.data.error.details : null;
+  return typeof details === 'object' &&
+    details !== null &&
+    'field' in details &&
+    typeof details.field === 'string'
+    ? details.field
+    : null;
 }
 
 /** A title is required, and spaces alone are not one (the API trims it too). */
@@ -268,11 +329,12 @@ interface Draft {
   readonly file: File;
   readonly title: string;
   readonly topic: string;
-  readonly authorship: MediaAuthorship;
+  /** The author's name; blank is none. */
+  readonly author: string;
 }
 
 const sameDraft = (a: Draft, b: Draft): boolean =>
   a.file === b.file &&
   a.title === b.title &&
   a.topic === b.topic &&
-  a.authorship === b.authorship;
+  a.author === b.author;

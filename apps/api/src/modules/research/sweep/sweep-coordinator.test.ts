@@ -139,6 +139,7 @@ async function sweep(
   const outcome = await coordinator.run({
     topic: 'hermetismo',
     topicTitle: 'Hermetismo',
+    mainAuthor: { name: 'Mestre Laércio' },
     question: 'Quais livros o Mestre cita?',
     layout,
     book: new SourceBook(),

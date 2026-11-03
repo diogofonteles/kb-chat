@@ -19,7 +19,7 @@ const PREFS = {
 
 const aRequest = {
   title: '  Palestra de 1998 ',
-  authorship: 'mestre-laercio',
+  author: 'mestre-laercio',
   fileName: 'palestra.mp3',
   bytes: 3_000_000,
 };
@@ -45,10 +45,21 @@ describe('media contracts', () => {
     ).toBe(true);
   });
 
-  it('accepts only the two media authorships and no extra fields', () => {
+  it('takes an author id or null, and no extra fields (KBC-049)', () => {
     expect(
-      createMediaRequestSchema.safeParse({ ...aRequest, authorship: 'sintese' })
-        .success,
+      createMediaRequestSchema.safeParse({ ...aRequest, author: null }).success,
+    ).toBe(true);
+    expect(
+      createMediaRequestSchema.safeParse({
+        ...aRequest,
+        author: 'Mestre Gabriel',
+      }).success,
+    ).toBe(false);
+    expect(
+      createMediaRequestSchema.safeParse({
+        ...aRequest,
+        authorship: 'mestre-laercio',
+      }).success,
     ).toBe(false);
     expect(
       createMediaRequestSchema.safeParse({ ...aRequest, extra: 1 }).success,
@@ -80,7 +91,7 @@ describe('media contracts', () => {
       id: '11111111-1111-4111-8111-111111111111',
       topic: 'hermetismo',
       title: 'Palestra',
-      authorship: 'outros-autores',
+      author: { slug: 'mestre-gabriel', name: 'Mestre Gabriel', main: true },
       status: 'failed',
       progress: null,
       failure: 'invalid-audio',

@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import type { SweepPlan } from '@kb-chat/contracts';
 import type { VaultReaderPort } from '../../../ports/vault-reader.js';
 import {
@@ -8,7 +9,7 @@ import {
 import { acceptsEntry, type DocFilter } from '../doc-filter.js';
 import type { TextFinder } from '../text-finder.js';
 import { defaultPlan } from './plan-tool.js';
-import { AUTHORSHIP_LABELS, oneLine } from '../tool-output.js';
+import { authorshipLabels, oneLine } from '../tool-output.js';
 
 /**
  * Characters read on each side of an occurrence when a sweep has phrases: enough for the
@@ -72,6 +73,8 @@ export interface SweepPlannerDeps {
   readonly catalog: CatalogRegistry;
   readonly vault: VaultReaderPort;
   readonly finder: TextFinder;
+  /** The collection's main author (KBC-049): the label of its documents. */
+  readonly mainAuthorOf?: (topic: string) => MainAuthorIdentity | null;
 }
 
 const filterOf = ({ target }: SweepPlan): DocFilter => ({
@@ -224,7 +227,8 @@ export class SweepPlanner {
   ): Promise<string> {
     const body = (await this.body(topic, unit.entry)) ?? '';
     const { entry } = unit;
-    const head = `[D${label}] ${oneLine(entry.title, 160)} · autoria: ${AUTHORSHIP_LABELS[entry.authorship]}${entry.author ? ` (${oneLine(entry.author, 80)})` : ''} — caracteres ${unit.start}–${unit.end} de ${body.length}`;
+    const labels = authorshipLabels(this.deps.mainAuthorOf?.(topic) ?? null);
+    const head = `[D${label}] ${oneLine(entry.title, 160)} · autoria: ${labels[entry.authorship]}${entry.author ? ` (${oneLine(entry.author, 80)})` : ''} — caracteres ${unit.start}–${unit.end} de ${body.length}`;
     return `${head}\n<<<DOCUMENTO\n${body.slice(unit.start, unit.end)}\nDOCUMENTO>>>`;
   }
 

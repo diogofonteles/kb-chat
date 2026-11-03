@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import type {
   ResearchEvent,
   ResearchTurn,
@@ -47,6 +48,8 @@ export interface SweepTurnHost {
   readonly sweeps: SweepPlanner;
   readonly topic: string;
   readonly topicTitle: string;
+  /** The collection's main author (KBC-049), or null. */
+  readonly mainAuthor: MainAuthorIdentity | null;
   readonly question: string;
   readonly history: readonly ResearchTurn[];
   readonly book: SourceBook;
@@ -148,7 +151,7 @@ export async function* runSweepTurn(
 }
 
 const answerMessages = (host: SweepTurnHost, outcome: SweepOutcome) =>
-  sweepAnswerMessages(host.topicTitle, {
+  sweepAnswerMessages(host, {
     question: host.question,
     history: host.history,
     findings: outcome.findings.lines(),

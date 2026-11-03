@@ -79,34 +79,18 @@
 
     <label class="field">
       <span class="label" i18n="@@media.upload.topic">Acervo</span>
-      <select formControlName="topic">
+      <select formControlName="topic" (change)="topicChosen()">
         @for (option of choices(); track option.slug) {
           <option [value]="option.slug">{{ treeTitle(option) }}</option>
         }
       </select>
     </label>
 
-    <fieldset class="field">
-      <legend class="label" i18n="@@media.upload.authorship">Autoria</legend>
-      <div class="radios">
-        @for (option of authorships; track option.value) {
-          <label class="radio">
-            <input
-              type="radio"
-              formControlName="authorship"
-              [value]="option.value"
-            />
-            {{ option.label }}
-          </label>
-        }
-      </div>
-      @if (submitted() && form.controls.authorship.invalid) {
-        <span class="error" i18n="@@media.upload.authorshipMissing"
-          ><span aria-hidden="true">⚠</span> Escolha a autoria: ela separa a
-          obra do Mestre Laércio dos outros autores.</span
-        >
-      }
-    </fieldset>
+    <app-author-combobox
+      [topic]="chosenTopic()"
+      [disabled]="stage() === 'sending'"
+      [(name)]="authorName"
+    />
 
     @if (stage() === 'sending') {
       <div class="progress">

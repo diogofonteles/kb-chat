@@ -7,7 +7,12 @@ import { sweepTurnHost } from './sweep-turn.js';
 async function host(input: { requestBudget?: number } = {}) {
   const tools = await memoryTools(new MemoryVault({}));
   return sweepTurnHost({
-    kit: { sweeps: tools.sweeps, book: new SourceBook(), topicTitle: 'T' },
+    kit: {
+      sweeps: tools.sweeps,
+      book: new SourceBook(),
+      topicTitle: 'T',
+      mainAuthor: null,
+    },
     input: {
       topic: 'hermetismo',
       question: 'q',

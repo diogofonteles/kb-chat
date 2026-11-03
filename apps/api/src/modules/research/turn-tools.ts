@@ -28,6 +28,7 @@ export class TurnResearchTools implements ResearchToolsPort {
       sweeps: this.tools.sweeps,
       book: this.book,
       topicTitle: this.tools.topicTitle(this.topic) ?? this.topic,
+      mainAuthor: this.tools.mainAuthor(this.topic),
     };
   }
 

@@ -2,11 +2,13 @@ import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
 import type { SourceBook } from './source-book.js';
-import { quote } from './tool-output.js';
+import { quote, type AuthorshipLabels } from './tool-output.js';
 
 export interface ToolContext {
   readonly topic: string;
   readonly book: SourceBook;
+  /** How this collection names each authorship (KBC-049: its main author); set by the tools. */
+  readonly labels?: AuthorshipLabels;
 }
 
 /** A tool call ready to run: the steps shown to the reader and the text for the model. */

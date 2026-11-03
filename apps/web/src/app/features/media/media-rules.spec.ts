@@ -7,7 +7,7 @@ const anItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   id: '11111111-1111-4111-8111-111111111111',
   topic: 'hermetismo',
   title: 'Palestra de 1998',
-  authorship: 'mestre-laercio',
+  author: { slug: 'mestre-laercio', name: 'Mestre Laércio', main: true },
   status: 'ready',
   progress: null,
   failure: null,

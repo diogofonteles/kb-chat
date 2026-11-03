@@ -10,7 +10,7 @@ const aRecord = (transcription: TranscriptionRecord): MediaRecord => ({
   id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   topic: 'hermetismo',
   title: 'Palestra',
-  authorship: 'mestre-laercio',
+  author: 'mestre-laercio',
   ownerPrincipal: 'owner',
   fileName: 'a.mp3',
   uploadBytes: 3,

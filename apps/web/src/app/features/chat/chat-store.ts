@@ -240,8 +240,17 @@ export class ChatStore {
    * without asking for the whole list again (KBC-048 FR-3).
    */
   putTopic(topic: Topic): void {
+    // Its sub-collections show its main author too (KBC-049 BR-1).
+    const inherit = (one: Topic): Topic =>
+      one.parent === topic.slug
+        ? { ...one, mainAuthor: topic.mainAuthor }
+        : one;
     this.topics.update(
-      (list) => list && { ...list, items: [...withTopic(list.items, topic)] },
+      (list) =>
+        list && {
+          ...list,
+          items: [...withTopic(list.items, topic)].map(inherit),
+        },
     );
   }
 

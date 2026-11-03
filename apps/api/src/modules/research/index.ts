@@ -40,6 +40,7 @@ export {
   buildResearchMessages,
   OUTSIDE_MARK,
   researchSystemPrompt,
+  type MainAuthorIdentity,
 } from './prompt.js';
 export { CoverageLineFilter } from './sweep/coverage-filter.js';
 export { PLAN_STEPS, PLAN_SWEEP_TOOL, defaultPlan } from './sweep/plan-tool.js';

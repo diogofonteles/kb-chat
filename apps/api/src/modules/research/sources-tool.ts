@@ -9,7 +9,13 @@ import {
   type PreparedCall,
   type ToolContext,
 } from './tool-context.js';
-import { AUTHORSHIP_LABELS, foldName, oneLine, quote } from './tool-output.js';
+import {
+  AUTHORSHIP_LABELS,
+  foldName,
+  oneLine,
+  quote,
+  type AuthorshipLabels,
+} from './tool-output.js';
 import { sourcesArgsSchema } from './tool-schemas.js';
 
 type SourcesArgs = z.output<typeof sourcesArgsSchema>;
@@ -63,10 +69,13 @@ function section(
 }
 
 /** "Autoria: Mestre Laércio 3 · Outros autores 2 · …": the whole collection per group (KBC-020). */
-function authorshipLine(entries: readonly CatalogEntry[]): string {
+function authorshipLine(
+  entries: readonly CatalogEntry[],
+  labels: AuthorshipLabels,
+): string {
   const counts = AUTHORSHIPS.map(
     (group) =>
-      `${AUTHORSHIP_LABELS[group]} ${entries.filter((e) => e.authorship === group).length}`,
+      `${labels[group]} ${entries.filter((e) => e.authorship === group).length}`,
   );
   return `Autoria: ${counts.join(' · ')} documento(s).`;
 }
@@ -78,12 +87,15 @@ function authorshipLine(entries: readonly CatalogEntry[]): string {
 export class SourcesTool {
   constructor(private readonly catalog: CatalogRegistry) {}
 
-  prepare(raw: unknown, { topic }: ToolContext): PreparedCall {
+  prepare(
+    raw: unknown,
+    { topic, labels = AUTHORSHIP_LABELS }: ToolContext,
+  ): PreparedCall {
     const args = parsedArgs(sourcesArgsSchema, raw);
     if (typeof args === 'string') return failed(args);
     const about = [
       args.query && ` sobre ${quote(args.query)}`,
-      args.authorship && ` de autoria ${AUTHORSHIP_LABELS[args.authorship]}`,
+      args.authorship && ` de autoria ${labels[args.authorship]}`,
     ]
       .filter(Boolean)
       .join('');
@@ -91,18 +103,22 @@ export class SourcesTool {
       steps: [
         { kind: 'subjects', text: `Listando as origens e entidades${about}` },
       ],
-      run: async () => this.list(topic, args),
+      run: async () => this.list(topic, args, labels),
     };
   }
 
-  private list(topic: string, args: SourcesArgs): string {
+  private list(
+    topic: string,
+    args: SourcesArgs,
+    labels: AuthorshipLabels,
+  ): string {
     const catalog = this.catalog.get(topic);
     if (!catalog) return 'O acervo deste tópico não está disponível.';
     const all = [...catalog.entries.values()];
     const entries = args.authorship
       ? all.filter((entry) => entry.authorship === args.authorship)
       : all;
-    const lines: string[] = [authorshipLine(all)];
+    const lines: string[] = [authorshipLine(all, labels)];
     if (args.kind !== 'entities')
       lines.push(
         ...section(

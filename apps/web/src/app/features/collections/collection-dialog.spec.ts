@@ -36,6 +36,22 @@ async function renderDialog() {
 
 const nameBox = () => screen.getByRole('textbox', { name: 'Nome' });
 
+/** Answers the authors the edit dialog asks for (KBC-049), then lets it settle. */
+async function openedWithAuthors(
+  fixture: { whenStable(): Promise<unknown> },
+  http: HttpTestingController,
+  items: { slug: string; name: string; main: boolean }[],
+) {
+  TestBed.tick();
+  http
+    .expectOne({ method: 'GET', url: '/api/v1/topics/udv/authors' })
+    .flush({ items });
+  await fixture.whenStable();
+}
+
+const mainAuthorSelect = () =>
+  screen.getByRole<HTMLSelectElement>('combobox', { name: 'Autor principal' });
+
 describe('CollectionDialog (KBC-048 FR-6, FR-2)', () => {
   it('shows the address the name becomes and creates it inside the chosen parent', async () => {
     const { dialog, fixture, http, saved } = await renderDialog();
@@ -110,7 +126,7 @@ describe('CollectionDialog (KBC-048 FR-6, FR-2)', () => {
   it('AC-6: editing keeps the address and sends only the names', async () => {
     const { dialog, fixture, http } = await renderDialog();
     dialog.openEdit(UDV);
-    await fixture.whenStable();
+    await openedWithAuthors(fixture, http, []);
     expect(screen.getByRole('heading', { name: 'Editar acervo' })).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Dentro de' })).toBeNull();
     expect((nameBox() as HTMLInputElement).value).toBe('UDV');
@@ -126,6 +142,105 @@ describe('CollectionDialog (KBC-048 FR-6, FR-2)', () => {
       title: 'União do Vegetal',
       description: '',
     });
+  });
+
+  it("KBC-049 FR-2: chooses the main author among the collection's, and sends it", async () => {
+    const { dialog, fixture, http, saved } = await renderDialog();
+    dialog.openEdit(UDV);
+    await openedWithAuthors(fixture, http, [
+      { slug: 'ana', name: 'Ana', main: false },
+      { slug: 'mestre-gabriel', name: 'Mestre Gabriel', main: false },
+    ]);
+    const select = mainAuthorSelect();
+    expect(
+      [...select.options].map((option) => option.textContent?.trim()),
+    ).toEqual(['Nenhum', 'Ana', 'Mestre Gabriel']);
+    expect(select.value).toBe('');
+
+    fireEvent.change(select, { target: { value: 'mestre-gabriel' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    const request = http.expectOne({
+      method: 'PATCH',
+      url: '/api/v1/topics/udv',
+    });
+    expect(request.request.body).toEqual({
+      title: 'UDV',
+      description: '',
+      mainAuthor: 'mestre-gabriel',
+    });
+    const updated = {
+      ...UDV,
+      mainAuthor: { slug: 'mestre-gabriel', name: 'Mestre Gabriel' },
+    };
+    request.flush(updated);
+    expect(saved).toHaveBeenCalledWith(updated);
+  });
+
+  it('KBC-049: clears the main author with "Nenhum" and says when there are no authors yet', async () => {
+    const { dialog, fixture, http } = await renderDialog();
+    dialog.openEdit({ ...UDV, mainAuthor: { slug: 'ana', name: 'Ana' } });
+    await openedWithAuthors(fixture, http, [
+      { slug: 'ana', name: 'Ana', main: true },
+    ]);
+    expect(mainAuthorSelect().value).toBe('ana');
+    fireEvent.change(mainAuthorSelect(), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    expect(
+      http.expectOne({ method: 'PATCH', url: '/api/v1/topics/udv' }).request
+        .body,
+    ).toMatchObject({ mainAuthor: null });
+  });
+
+  it('KBC-049 BR-1: a sub-collection has no main author of its own to choose', async () => {
+    const { dialog, fixture, http } = await renderDialog();
+    dialog.openEdit(PALAVRA);
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('combobox', { name: 'Autor principal' }),
+    ).toBeNull();
+    http.expectNone({ method: 'GET' });
+  });
+
+  it('KBC-049 review: keeps the current main author while the list loads, never a false "Nenhum"', async () => {
+    const { dialog } = await renderDialog();
+    dialog.openEdit({ ...UDV, mainAuthor: { slug: 'ana', name: 'Ana' } });
+    TestBed.tick();
+
+    const select = mainAuthorSelect();
+    expect(select.disabled).toBe(true);
+    expect(select.selectedOptions[0]?.textContent?.trim()).toBe('Ana');
+    expect(screen.getByText('Carregando os autores…')).toBeTruthy();
+  });
+
+  it('KBC-049 review: says the list failed and tries again', async () => {
+    const { dialog, fixture, http } = await renderDialog();
+    dialog.openEdit({ ...UDV, mainAuthor: { slug: 'ana', name: 'Ana' } });
+    TestBed.tick();
+    http
+      .expectOne('/api/v1/topics/udv/authors')
+      .flush(null, { status: 503, statusText: 'Unavailable' });
+    await fixture.whenStable();
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não foi possível carregar os autores.',
+    );
+    expect(mainAuthorSelect().selectedOptions[0]?.textContent?.trim()).toBe(
+      'Ana',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    await openedWithAuthors(fixture, http, [
+      { slug: 'ana', name: 'Ana', main: true },
+    ]);
+    expect(mainAuthorSelect().disabled).toBe(false);
+    expect(mainAuthorSelect().value).toBe('ana');
+  });
+
+  it('KBC-049: says a collection has no authors yet', async () => {
+    const { dialog, fixture, http } = await renderDialog();
+    dialog.openEdit(UDV);
+    await openedWithAuthors(fixture, http, []);
+    expect(screen.getByText(/ainda não tem autores/)).toBeTruthy();
   });
 
   it('Enter in the name creates it, and the button says it is saving meanwhile', async () => {

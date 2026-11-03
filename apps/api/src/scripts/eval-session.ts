@@ -18,6 +18,8 @@ import { CatalogRegistry } from '../modules/catalog/index.js';
 import type { ResearchRunnerPort } from '../ports/research-runner.js';
 import { createAiProviders } from '../providers/create-ai-providers.js';
 import { createResearchAgent } from '../research-agent-factory.js';
+import { JsonDocumentStore } from '../adapters/json-document-store.js';
+import { AuthorDirectory, AuthorsService } from '../modules/authors/index.js';
 import { createSearchIndex } from '../search-index-factory.js';
 
 /** The runner the API would use now for the profile, with the kb tools really served. */
@@ -49,9 +51,21 @@ async function composeAgent(config: AppConfig) {
   const ledger = new JsonlSpendLedger(
     join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
   );
+  // Each collection's main author, read (never written) as the API keeps it (KBC-049).
+  const directory = new AuthorDirectory(
+    new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'authors.json')),
+  );
+  await directory.load();
+  const authors = new AuthorsService({ directory, catalog });
   return {
     index,
-    agent: createResearchAgent({ catalog, index, vault, ledger }),
+    agent: createResearchAgent({
+      catalog,
+      index,
+      vault,
+      ledger,
+      mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
+    }),
   };
 }
 

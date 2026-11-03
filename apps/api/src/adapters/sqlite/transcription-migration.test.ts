@@ -6,6 +6,8 @@ import { MEDIA_MIGRATIONS } from './media-migrations.js';
 import { SqliteTranscriptStore } from './sqlite-transcript-store.js';
 
 const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < 5);
+/** Up to this migration: later ones (KBC-049's media-author) are not what it proves. */
+const THROUGH = MEDIA_MIGRATIONS.filter((one) => one.version <= 5);
 
 function insertMedia(db: DatabaseSync, id: string, status: string): void {
   db.prepare(
@@ -25,7 +27,7 @@ describe('migration 5: transcription (KBC-036)', () => {
   it('applies on an empty database with the term list v1', () => {
     const db = new DatabaseSync(':memory:');
     db.exec('PRAGMA foreign_keys = ON');
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([1, 2, 3, 4, 5]);
+    expect(applyMigrations(db, THROUGH)).toEqual([1, 2, 3, 4, 5]);
     const terms = new SqliteTranscriptStore(db).currentTerms();
     expect(terms.version).toBe(1);
     expect(terms.terms).toHaveLength(32);
@@ -39,7 +41,7 @@ describe('migration 5: transcription (KBC-036)', () => {
     applyMigrations(db, BEFORE);
     insertMedia(db, '33333333-3333-4333-8333-333333333333', 'ready');
     insertMedia(db, '44444444-4444-4444-8444-444444444444', 'queued');
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([5]);
+    expect(applyMigrations(db, THROUGH)).toEqual([5]);
     const jobs = db
       .prepare(
         'SELECT id, media_id, kind, status FROM jobs ORDER BY kind, media_id',

@@ -22,7 +22,7 @@ const ITEM: MediaItem = {
   id: '11111111-1111-4111-8111-111111111111',
   topic: 'hermetismo',
   title: 'Palestra',
-  authorship: 'outros-autores',
+  author: null,
   status: 'queued',
   progress: null,
   failure: null,
@@ -76,7 +76,7 @@ describe('MediaApi', () => {
     api
       .create('hermetismo', {
         title: 'P',
-        authorship: 'outros-autores',
+        author: null,
         fileName: 'p.mp3',
         bytes: 3,
       })

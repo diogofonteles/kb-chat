@@ -49,7 +49,7 @@ async function create(title, body, send = true) {
   const created = await admin.request.post('/api/v1/topics/hermetismo/media', {
     data: {
       title,
-      authorship: 'mestre-laercio',
+      author: 'mestre-laercio',
       fileName: 'a.mp3',
       bytes: body.length,
     },

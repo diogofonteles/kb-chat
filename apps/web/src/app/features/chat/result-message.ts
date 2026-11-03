@@ -9,6 +9,7 @@ import {
 import type { SearchFilters, SearchMode, Topic } from '@kb-chat/contracts';
 import { errorMessage } from '@core/api/api-error.js';
 import { modeLabel } from '@core/i18n/facet-labels.js';
+import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import { hasFilters, type ChatMessage } from './chat-message.js';
 import { FilterBar } from './filter-bar.js';
 import {
@@ -71,12 +72,13 @@ export class ResultMessage {
   protected readonly filtered = computed(() =>
     hasFilters(this.message().filters),
   );
+  /** The open collection's labels: its main author's name (KBC-049). */
+  private readonly labels = injectAuthorshipLabels();
   protected readonly removable = computed(() =>
-    activeFilters(
-      this.message().filters,
-      this.message().filterOrder,
-      this.topicNames(),
-    ),
+    activeFilters(this.message().filters, this.message().filterOrder, {
+      topicNames: this.topicNames(),
+      authorships: this.labels(),
+    }),
   );
   protected readonly canTrySemantic = computed(
     () => this.message().mode !== 'semantic',

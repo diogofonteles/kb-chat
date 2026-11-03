@@ -12,8 +12,8 @@ import type {
   ResearchPlan,
   SweepCoverage,
 } from '@kb-chat/contracts';
-import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
   citedSource,
   formatCost,
@@ -93,11 +93,13 @@ export class ResearchMessage {
     renderAnswer(this.turn().text, this.turn().sources),
   );
   protected readonly cited = computed(() => citedSources(this.turn()));
+  /** The open collection's labels: its main author's name (KBC-049). */
+  private readonly labels = injectAuthorshipLabels();
   /** Mixed authorships are listed apart, the Mestre's first (KBC-020 FR-7). */
   protected readonly sourceGroups = computed(() =>
     groupByAuthorship(this.cited())?.map((group) => ({
       ...group,
-      label: AUTHORSHIP_LABELS[group.authorship],
+      label: this.labels()[group.authorship],
     })),
   );
   /** A subscription turn costs nothing per token and stays out of today's spend (KBC-007 BR-2). */
@@ -185,7 +187,7 @@ export class ResearchMessage {
     if (!coverage || this.turn().phase === 'streaming') return null;
     return {
       line: coverageText(coverage),
-      target: targetText(coverage.target, coverage.phrases),
+      target: targetText(coverage.target, coverage.phrases, this.labels()),
       missing: leftText(coverage),
     };
   });

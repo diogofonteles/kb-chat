@@ -44,6 +44,10 @@ import { buildApp } from '../src/app.js';
 import { loadConfig, type AppConfig } from '../src/config.js';
 import { createHouseAi } from '../src/house-ai-factory.js';
 import { PeopleService, SessionService } from '../src/modules/auth/index.js';
+import {
+  AuthorDirectory,
+  AuthorsService,
+} from '../src/modules/authors/index.js';
 import { CatalogRegistry } from '../src/modules/catalog/index.js';
 import { createAiProviders } from '../src/providers/create-ai-providers.js';
 import { createResearchAgent } from '../src/research-agent-factory.js';
@@ -198,8 +202,20 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
   const ledger = new JsonlSpendLedger(
     join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
   );
-  const agent = createResearchAgent({ catalog, index, vault, ledger });
-  return { vault, index, catalog, ledger, agent, collections };
+  // The authors of each collection (KBC-049), as main builds them.
+  const authorDirectory = new AuthorDirectory(
+    new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'authors.json')),
+  );
+  await authorDirectory.load();
+  const authors = new AuthorsService({ directory: authorDirectory, catalog });
+  const agent = createResearchAgent({
+    catalog,
+    index,
+    vault,
+    ledger,
+    mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
+  });
+  return { vault, index, catalog, ledger, agent, collections, authorDirectory };
 }
 
 interface AiWiring {

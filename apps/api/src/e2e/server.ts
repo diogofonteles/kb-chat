@@ -14,6 +14,7 @@ import { JsonlUsageLog } from '../adapters/jsonl-usage-log.js';
 import { FsConversationStore } from '../adapters/fs-conversation-store.js';
 import { JsonSettingsStore } from '../adapters/json-settings-store.js';
 import { createAiProviders } from '../providers/create-ai-providers.js';
+import { AuthorDirectory, AuthorsService } from '../modules/authors/index.js';
 import { CatalogRegistry } from '../modules/catalog/index.js';
 import {
   CollectionRegistry,
@@ -102,12 +103,19 @@ const ledger = new JsonlSpendLedger(
 );
 const catalog = new CatalogRegistry(vault);
 await catalog.load();
+// The authors of each collection (KBC-049, ADR 0030), in the state dir like the registry.
+const authorDirectory = new AuthorDirectory(
+  new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'authors.json')),
+);
+await authorDirectory.load();
+const authors = new AuthorsService({ directory: authorDirectory, catalog });
 const agent = createResearchAgent({
   catalog,
   index,
   vault,
   ledger,
   budgets: budgetsFromConfig(config),
+  mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
 });
 // Providers answer through a fake HTTP layer: a key ending in "valid" is accepted, any other
 // gets 401 (KBC-007 AC-5). Nothing leaves this computer.
@@ -232,6 +240,7 @@ const app = await buildApp({
   conversations,
   house,
   collections,
+  authorDirectory,
 });
 identity.register(app);
 registerOutbox(app, outbox);
