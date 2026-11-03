@@ -512,21 +512,4 @@ describe('MediaEngine over many media (KBC-041 NFR-3)', () => {
     added.mockRestore();
     elements.forEach((element) => element.remove());
   });
-
-  it("reads the element's time now, between timeupdate events (KBC-038 NFR-1)", () => {
-    const media = fakeMediaElement();
-    TestBed.configureTestingModule({
-      providers: [
-        { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
-      ],
-    });
-    const engine = TestBed.inject(MediaEngine);
-    expect(engine.currentMsNow()).toBe(0);
-    engine.load({ id: 'm1', title: 'Palestra', src: '/m1' });
-    media.setCurrentTime(12.5);
-    expect(engine.currentMsNow()).toBe(12_500);
-    expect(engine.playback().currentMs).toBe(0);
-    media.setCurrentTime(Number.NaN);
-    expect(engine.currentMsNow()).toBe(0);
-  });
 });

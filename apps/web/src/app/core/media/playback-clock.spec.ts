@@ -89,6 +89,22 @@ describe('PlaybackClock (ADR 0025 §4, KBC-038 NFR-1)', () => {
     expect(frames.observed).toBe(true);
   });
 
+  it("follows a silence skip on the next frame, without counting it as the person's skip (KBC-044)", () => {
+    const { media, frames, clock, engine } = setup();
+    report(media, 10);
+    engine.play();
+    media.emit('playing');
+    TestBed.tick();
+    frames.next(1_000);
+    expect(clock.positionMs()).toBe(10_000);
+    const landed = engine.seeksLanded();
+    engine.skipSilence(18_000);
+    frames.next(1_016);
+    expect(clock.positionMs()).toBe(18_000);
+    media.emit('seeked');
+    expect(engine.seeksLanded()).toBe(landed);
+  });
+
   it('stops asking for frames once paused', () => {
     const { media, frames, clock, engine } = setup();
     engine.play();

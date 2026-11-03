@@ -90,7 +90,7 @@ export class PlaybackClock {
       scan(
         (last: Estimate, nowMs: number) =>
           interpolate(last.anchor, {
-            reportedMs: this.engine.currentMsNow(),
+            reportedMs: this.engine.positionNowMs(),
             nowMs,
             rate: this.engine.speed(),
           }),
