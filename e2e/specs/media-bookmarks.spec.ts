@@ -302,6 +302,13 @@ test('NFR-2: with 500 bookmarks, scrolling and a click answer within 200 ms (INP
   await expect(
     page.getByRole('button', { name: 'Pausar', exact: true }),
   ).toBeVisible();
+  // Entries arrive after the event: let a frame and a task pass before reading them.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => setTimeout(resolve, 0)),
+      ),
+  );
   // Only events of 16 ms or more are reported: none means every one was faster.
   const slowest = await page.evaluate(() =>
     Math.max(

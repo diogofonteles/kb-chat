@@ -1,7 +1,7 @@
 ---
 id: KBC-042
 title: "Marcadores com nota: marcar um trecho, anotar, listar e voltar a ele"
-status: ready
+status: done
 slice: phase-2-a
 outcome: quem estuda guarda os trechos importantes de uma palestra com a própria anotação e volta a eles em um clique
 depends_on: [KBC-041]
