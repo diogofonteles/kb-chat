@@ -11,6 +11,7 @@ import type { Feature, MediaItem } from '@kb-chat/contracts';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import {
   aMediaItem,
+  aTranscription,
   chatStoreOn,
   mediaId,
   sessionAs,
@@ -391,6 +392,36 @@ describe('MediaListPage (T14)', () => {
     const bar = container.querySelector<HTMLElement>('.position span');
     expect(bar?.style.width).toMatch(/^37\.2/);
     expect(second?.textContent).not.toContain('Continuar de');
+  });
+
+  it('says where each transcription is, with the low notice in words (KBC-036)', async () => {
+    const { answer } = await renderList();
+    await answer([
+      aMediaItem({
+        transcription: aTranscription({ status: 'waiting', transcriber: 'on' }),
+      }),
+      aMediaItem({
+        id: mediaId(2),
+        transcription: aTranscription({ status: 'done', confidence: 'low' }),
+      }),
+      aMediaItem({
+        id: mediaId(3),
+        transcription: aTranscription({
+          status: 'transcribing',
+          confidence: 'low',
+          version: 1,
+        }),
+      }),
+    ]);
+    const [waiting, low, again] = screen.getAllByRole('listitem');
+    expect(waiting?.textContent).toContain('Aguardando o transcritor');
+    expect(low?.textContent).toContain(
+      'Transcrição automática de baixa confiança',
+    );
+    expect(again?.textContent).toContain('Transcrevendo…');
+    expect(again?.textContent).toContain(
+      'Transcrição automática de baixa confiança',
+    );
   });
 
   it('brings an element that takes the focus fully into view (WCAG 2.4.11)', async () => {

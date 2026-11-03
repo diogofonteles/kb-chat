@@ -196,6 +196,17 @@ a.main:hover .title {
   color: var(--color-danger);
 }
 
+/* The transcription's state (KBC-036): words first; the low notice adds a sign, not red
+   (UP-19, UP-20). */
+.transcription.low {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.transcription.low::before {
+  content: '⚠ ' / '';
+}
+
 .actions {
   grid-area: actions;
   position: relative;

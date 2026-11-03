@@ -35,7 +35,15 @@
         <span i18n="@@media.sentOn"
           >enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
         >
+        @if (transcription(); as text) {
+          <span class="transcription">{{ text }}</span>
+        }
       </p>
+      @if (lowConfidence()) {
+        <p class="low-confidence" i18n="@@media.transcription.lowNotice">
+          Transcrição automática de baixa confiança: pode haver trechos errados.
+        </p>
+      }
     </header>
 
     @if (ready()) {

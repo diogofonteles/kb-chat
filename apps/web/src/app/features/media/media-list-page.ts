@@ -32,7 +32,13 @@ import {
   pairwise,
   switchMap,
 } from 'rxjs';
-import { isInFlight, statusTextOf } from './media-labels.js';
+import {
+  isInFlight,
+  isLowConfidence,
+  lowNoticeOf,
+  statusTextOf,
+  transcriptionTextOf,
+} from './media-labels.js';
 import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { RowMenu } from './row-menu.js';
@@ -119,6 +125,19 @@ export class MediaListPage {
   protected keepInView(event: FocusEvent): void {
     if (event.target instanceof HTMLElement)
       event.target.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  /** Where its transcription is (KBC-036 FR-1), next to the status. */
+  protected transcriptionOf(item: MediaItem): string {
+    return transcriptionTextOf(item);
+  }
+
+  protected isLow(item: MediaItem): boolean {
+    return isLowConfidence(item);
+  }
+
+  protected lowNoticeOf(item: MediaItem): string {
+    return lowNoticeOf(item);
   }
 
   protected statusOf(item: MediaItem): string {

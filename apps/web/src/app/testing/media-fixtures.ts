@@ -1,5 +1,9 @@
 import { signal } from '@angular/core';
-import type { Feature, MediaItem } from '@kb-chat/contracts';
+import type {
+  Feature,
+  MediaItem,
+  MediaTranscription,
+} from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { aTopic } from './fixtures.js';
@@ -24,6 +28,19 @@ export const aMediaItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   positionMs: 0,
   completedAt: null,
   positionUpdatedAt: null,
+  transcription: aTranscription(),
+  ...overrides,
+});
+
+/** A media item's transcription (KBC-036): not asked yet by default. */
+export const aTranscription = (
+  overrides: Partial<MediaTranscription> = {},
+): MediaTranscription => ({
+  status: 'none',
+  confidence: null,
+  version: null,
+  transcriber: 'none',
+  transcriberOffSince: null,
   ...overrides,
 });
 

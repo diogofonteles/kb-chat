@@ -95,9 +95,7 @@ describe('Transcribers: pairing (KBC-036 FR-5, BR-1)', () => {
       payload: { worker: 'mac', kinds: ['transcribe'] },
     });
     expect(lease.statusCode).toBe(401);
-    expect((await itemOf(media, item.id)).transcription.status).toBe(
-      'waiting',
-    );
+    expect((await itemOf(media, item.id)).transcription.status).toBe('waiting');
     const listed = await media.owner('GET', '/api/v1/media/transcribers');
     expect(listed.json().items).toEqual([]);
     const again = await media.owner(

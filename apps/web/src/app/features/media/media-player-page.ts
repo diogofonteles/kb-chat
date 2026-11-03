@@ -39,7 +39,12 @@ import {
   map,
   switchMap,
 } from 'rxjs';
-import { isInFlight, statusTextOf } from './media-labels.js';
+import {
+  isInFlight,
+  isLowConfidence,
+  statusTextOf,
+  transcriptionTextOf,
+} from './media-labels.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
@@ -82,6 +87,17 @@ export class MediaPlayerPage {
   protected readonly status = computed(() => {
     const media = this.media();
     return media ? statusTextOf(media) : '';
+  });
+  /** Where the transcription is (KBC-036); the low notice says it apart (BR-5). */
+  protected readonly transcription = computed(() => {
+    const media = this.media();
+    if (!media) return '';
+    const done = media.transcription.status === 'done';
+    return done && isLowConfidence(media) ? '' : transcriptionTextOf(media);
+  });
+  protected readonly lowConfidence = computed(() => {
+    const media = this.media();
+    return media !== null && media.status === 'ready' && isLowConfidence(media);
   });
   protected readonly duration = computed(() => {
     const ms = this.media()?.durationMs;
