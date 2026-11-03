@@ -10,3 +10,8 @@ docs
 CLAUDE.md
 test-results
 playwright-report
+
+# The transcriber's Python environment and caches (tools/transcriber, KBC-036)
+tools/transcriber/.venv
+tools/transcriber/.pytest_cache
+tools/transcriber/.ruff_cache
