@@ -59,6 +59,28 @@ jobs:
       - run: pnpm --filter @kb-chat/contracts build
       - run: pnpm exec nx run-many -t test -p ${{ matrix.projects }}
 
+  transcriber:
+    # The Mac transcriber (KBC-036, ADR 0023): Python, its own lint and tests, in parallel
+    # with the other jobs. Linux takes the CPU-only torch wheel (pyproject) and skips
+    # mlx-whisper (Apple silicon only); the tests use a fake model and the real Silero VAD.
+    name: Transcriber (ruff, pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tools/transcriber
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.6'
+          enable-cache: true
+          cache-dependency-glob: tools/transcriber/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pytest
+
   e2e:
     # Shards in parallel, split per project: a GitHub runner gives Playwright 2 workers, so
     # one job took ~18 min; Playwright cuts a run in order, so plain shards put every slow
