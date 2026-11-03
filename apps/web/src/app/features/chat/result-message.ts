@@ -85,9 +85,12 @@ export class ResultMessage {
     const kinds = this.response()?.kinds;
     return kinds && kinds.audio !== null ? kinds : null;
   });
-  protected readonly spokenCount = computed(() => {
-    const count = this.response()?.media.length ?? 0;
-    return count > 0 ? describeSpokenCount(count) : '';
+  /** "3 documentos" or "3 documentos · 2 trechos na fala" (one text: no stray spaces). */
+  protected readonly found = computed(() => {
+    const spoken = this.response()?.media.length ?? 0;
+    return spoken > 0
+      ? `${this.count()} · ${describeSpokenCount(spoken)}`
+      : this.count();
   });
   protected readonly modeName = computed(() => modeLabel(this.message().mode));
   protected readonly count = computed(() => {

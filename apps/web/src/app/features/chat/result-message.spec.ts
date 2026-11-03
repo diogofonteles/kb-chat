@@ -187,7 +187,9 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
     );
     expect(items[1]?.textContent).not.toContain('baixa confiança');
     expect(items[2]?.textContent).toContain('baixa confiança');
-    expect(screen.getByText(/2 trechos na fala/)).toBeTruthy();
+    expect(document.querySelector('.summary')?.textContent?.trim()).toMatch(
+      /^2 documentos · 2 trechos na fala · Tudo · 0,6 s$/,
+    );
   });
 
   it('opens a passage with its place among the results (FR-4)', async () => {
