@@ -68,6 +68,20 @@ for (const width of [1440, 390]) {
     .getByRole('combobox', { name: 'Acervo', exact: true })
     .selectOption({ value: slug });
   if (phone) await page.keyboard.press('Escape');
+  // "Editar acervo" with its "Autor principal" (the coordinator's gap 1).
+  await menu();
+  await page.getByRole('button', { name: 'Editar acervo' }).click();
+  const edit = page.getByRole('dialog', { name: 'Editar acervo' });
+  await edit
+    .getByRole('combobox', { name: 'Autor principal' })
+    .locator('option', { hasText: 'Ana Souza' })
+    .waitFor({ state: 'attached' });
+  await page.screenshot({
+    path: `${out}/edit-collection-main-author-${width}.png`,
+  });
+  report.push(`${width} edit dialog overflow ${await overflow(page)}`);
+  await edit.getByRole('button', { name: 'Cancelar' }).click();
+  if (phone) await page.keyboard.press('Escape');
   await menu();
   await page.getByRole('link', { name: 'Mídia' }).click();
   await page.getByRole('heading', { name: /Mídia — UDV/ }).waitFor();

@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -203,3 +203,82 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await owner.dispose();
   });
 }
+
+/** The sidebar, or the phone's menu holding it. */
+async function sidebar(page: Page): Promise<Locator> {
+  const drawer = page.getByRole('dialog', { name: 'Menu' });
+  if (!desktop(page) && !(await drawer.isVisible()))
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  return desktop(page)
+    ? page.getByRole('complementary', { name: 'Lateral' })
+    : drawer;
+}
+
+/** "Editar acervo" of `slug`, choosing its main author by name, checked with axe. */
+async function chooseMainAuthor(page: Page, slug: string, name: string) {
+  const panel = await sidebar(page);
+  await panel
+    .getByRole('combobox', { name: 'Acervo', exact: true })
+    .selectOption({ value: slug });
+  const again = await sidebar(page);
+  await again.getByRole('button', { name: 'Editar acervo' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Editar acervo' });
+  const select = dialog.getByRole('combobox', { name: 'Autor principal' });
+  await expect(select.locator('option', { hasText: name })).toHaveCount(1);
+  const serious = (
+    await new AxeBuilder({ page }).include('dialog').analyze()
+  ).violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''));
+  expect(serious).toEqual([]);
+  await select.selectOption({ label: name });
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+  await expect(dialog).toBeHidden();
+  if (!desktop(page)) await page.keyboard.press('Escape');
+}
+
+test('FR-2: the owner chooses the main author in "Editar acervo"; badges and the search "Autoria" follow', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const udv = await aUdv(owner);
+  for (const topic of [udv.slug, 'alquimia'])
+    await owner.post(authorsUrl(topic), {
+      headers: CSRF,
+      data: { name: 'Mestre Gabriel' },
+    });
+  const title = `Sessão ${uniqueTag()}`;
+  await owner.post(`/api/v1/topics/${encodeURIComponent(udv.slug)}/media`, {
+    headers: CSRF,
+    data: { title, author: 'mestre-gabriel', fileName: 'a.mp3', bytes: 10 },
+  });
+  await page.addInitScript(() =>
+    localStorage.setItem('kb-chat.view', 'search'),
+  );
+  await page.goto('/');
+  await expect(page.getByLabel('Sua pergunta')).toBeVisible();
+
+  await chooseMainAuthor(page, udv.slug, 'Mestre Gabriel');
+  await (await sidebar(page)).getByRole('link', { name: 'Mídia' }).click();
+  const row = page.getByRole('listitem').filter({ hasText: title });
+  await expect(row.locator('.authorship-badge')).toHaveText(
+    /✦\s*Mestre Gabriel/,
+  );
+
+  try {
+    await page.goto('/');
+    await chooseMainAuthor(page, 'alquimia', 'Mestre Gabriel');
+    await page.getByLabel('Sua pergunta').fill('pedra filosofal');
+    await page.getByRole('button', { name: 'Buscar' }).click();
+    const control = page.getByRole('radiogroup', { name: 'Autoria' });
+    await expect(
+      control.getByRole('radio', { name: /Mestre Gabriel/ }),
+    ).toBeVisible();
+    await expect(control.getByText(/Laércio/)).toHaveCount(0);
+  } finally {
+    // The fixture collection goes back as other specs know it.
+    await owner.patch('/api/v1/topics/alquimia', {
+      headers: CSRF,
+      data: { mainAuthor: null },
+    });
+    await owner.dispose();
+  }
+});
