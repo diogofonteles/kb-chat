@@ -16,17 +16,15 @@
       >
     </span>
     <span class="title">{{ hit().title }}</span>
-    <span class="snippet"
-      >“
+    <span class="snippet">
       @for (part of parts(); track $index) {
         @if (part.marked) {
           <mark>{{ part.text }}</mark>
         } @else {
-          {{ part.text }}
+          <span>{{ part.text }}</span>
         }
       }
-      ”</span
-    >
+    </span>
     <span class="meta">
       <app-authorship-badge [mediaAuthor]="hit().author" />
       @if (place(); as where) {

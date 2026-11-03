@@ -65,6 +65,15 @@
   overflow: hidden;
 }
 
+/* Text nodes between the parts would add spaces: the quotes come from CSS. */
+.snippet::before {
+  content: '“';
+}
+
+.snippet::after {
+  content: '”';
+}
+
 mark {
   background: var(--color-mark);
   color: inherit;

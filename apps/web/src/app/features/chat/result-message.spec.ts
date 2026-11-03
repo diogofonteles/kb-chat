@@ -182,6 +182,9 @@ describe('ResultMessage with spoken passages (KBC-039)', () => {
     ).toEqual(['text', 'audio', 'audio', 'text']);
     expect(items[1]?.textContent).toContain('Áudio · Na fala');
     expect(items[1]?.textContent).toContain('8:15');
+    expect(items[1]?.querySelector('.snippet')?.textContent?.trim()).toBe(
+      'Tiuaco é Mariri na história.',
+    );
     expect(items[1]?.textContent).not.toContain('baixa confiança');
     expect(items[2]?.textContent).toContain('baixa confiança');
     expect(screen.getByText(/2 trechos na fala/)).toBeTruthy();

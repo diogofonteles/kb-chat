@@ -74,6 +74,10 @@ describe('PassagePanel (KBC-039 FR-3, FR-6)', () => {
       (mark) => mark.textContent,
     );
     expect(marks).toEqual(['Tiuaco', 'Mariri']);
+    // No stray spaces between the marked words and the rest.
+    expect(document.querySelector('blockquote')?.textContent?.trim()).toBe(
+      'Tiuaco é Mariri na história.',
+    );
     expect(media.calls).toContain(`load:${ITEM_URL}/stream`);
     expect(media.calls).toContain('play');
     const engine = TestBed.inject(MediaEngine);
