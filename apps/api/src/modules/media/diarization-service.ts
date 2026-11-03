@@ -6,6 +6,7 @@ import type {
   DiarizeRequest,
   MediaSpeakers,
   SpeakerTurn,
+  TranscriptSpeakers,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type {
@@ -48,6 +49,13 @@ export interface DiarizationServiceDeps {
 
 /** A turn may end this far past the item's length (the decoder rounds the last frame). */
 const END_SLACK_MS = 2_000;
+
+/** A separation read on a transcript: the separation and the voice of each segment. */
+export interface TranscriptVoices {
+  readonly speakers: TranscriptSpeakers;
+  /** In the transcript's segment order; null where no voice was found. */
+  readonly segmentVoices: readonly (number | null)[];
+}
 
 const NO_TRANSCRIBER: Presence = { transcriber: 'none', offSince: null };
 
@@ -159,8 +167,7 @@ export class DiarizationService {
       transcriberOffSince: presence.offSince,
       canRequest:
         media.status === 'ready' && transcript !== undefined && !isPending(job),
-      diarization:
-        result && transcript ? this.toDiarization(result, transcript) : null,
+      diarization: transcript ? this.toDiarization(mediaId, transcript) : null,
     };
   }
 
@@ -218,12 +225,12 @@ export class DiarizationService {
       rawPath: files.diarizationPath(mediaId, id),
       derivationVersion: DERIVATION_VERSION,
       turns,
-      ...this.voicesOn(transcript.id, turns),
+      ...this.voicesOfTurns(transcript.id, turns),
     };
   }
 
   /** The voice of each segment and word of a transcript. */
-  private voicesOn(transcriptId: string, turns: readonly SpeakerTurn[]) {
+  private voicesOfTurns(transcriptId: string, turns: readonly SpeakerTurn[]) {
     const { transcripts } = this.deps;
     const segmentVoices = dominantVoices(
       transcripts.segments(transcriptId),
@@ -238,33 +245,49 @@ export class DiarizationService {
   }
 
   /**
-   * On the transcript it was made on, the stored voices; on a newer one (BR-3), the same
-   * turns placed on the new segments, flagged as made on an older transcript.
+   * The current separation on `transcript` (FR-4), null before the first: on the transcript
+   * it was made on, the stored voices; on a newer one (BR-3), the same turns placed on the
+   * new segments, flagged as made on an older transcript.
    */
-  private toDiarization(
-    result: DiarizationSummary,
+  voicesOn(
+    mediaId: string,
     transcript: TranscriptSummary,
-  ): Diarization {
+  ): TranscriptVoices | null {
     const { diarizations, transcripts } = this.deps;
+    const result = diarizations.latest(mediaId);
+    if (!result) return null;
     const turns = diarizations.turns(result.id);
-    const segments = transcripts.segments(transcript.id);
     const stale = result.transcriptId !== transcript.id;
-    const voices = stale
-      ? dominantVoices(segments, turns)
-      : diarizations.segmentVoices(result.id);
     return {
-      version: result.version,
-      createdAt: result.createdAt,
-      transcriptVersion: transcript.version,
-      staleTranscript: stale,
-      requestedVoices: result.requestedVoices,
-      voiceCount: result.voiceCount,
-      voices: speakingTimeOf(turns),
-      turns,
+      speakers: {
+        version: result.version,
+        createdAt: result.createdAt,
+        transcriptVersion: transcript.version,
+        staleTranscript: stale,
+        requestedVoices: result.requestedVoices,
+        voiceCount: result.voiceCount,
+        voices: speakingTimeOf(turns),
+        turns,
+      },
+      segmentVoices: stale
+        ? dominantVoices(transcripts.segments(transcript.id), turns)
+        : diarizations.segmentVoices(result.id),
+    };
+  }
+
+  private toDiarization(
+    mediaId: string,
+    transcript: TranscriptSummary,
+  ): Diarization | null {
+    const voices = this.voicesOn(mediaId, transcript);
+    if (!voices) return null;
+    const segments = this.deps.transcripts.segments(transcript.id);
+    return {
+      ...voices.speakers,
       segments: segments.map((segment, index) => ({
         startMs: segment.startMs,
         endMs: segment.endMs,
-        voice: voices[index] ?? null,
+        voice: voices.segmentVoices[index] ?? null,
       })),
     };
   }

@@ -4,6 +4,7 @@ import type {
   TranscriptStorePort,
   TranscriptSummary,
 } from '../../ports/transcript-store.js';
+import type { TranscriptVoices } from './diarization-service.js';
 import type { MediaActor } from './media-service.js';
 import {
   SUBTITLE_RULES_VERSION,
@@ -18,6 +19,11 @@ export interface TranscriptServiceDeps {
   >;
   /** Who sees which media: `get` throws the stream's 404 (KBC-038 FR-1). */
   readonly media: { get(actor: MediaActor, mediaId: string): unknown };
+  /** The current separation on a transcript (KBC-064 FR-4); null before the first. */
+  readonly voices?: (
+    mediaId: string,
+    transcript: TranscriptSummary,
+  ) => TranscriptVoices | null;
   /** WebVTT files kept in memory (the most recently used). */
   readonly cacheSize?: number;
 }
@@ -50,15 +56,33 @@ export class TranscriptService {
     this.cacheSize = deps.cacheSize ?? DEFAULT_CACHE_SIZE;
   }
 
-  current(actor: MediaActor, mediaId: string): MediaTranscript {
+  /** The transcript; with `withVoices` (`media-edit`, KBC-064 FR-4), its voices too. */
+  current(
+    actor: MediaActor,
+    mediaId: string,
+    options: { readonly withVoices: boolean } = { withVoices: false },
+  ): MediaTranscript {
     const summary = this.currentOf(actor, mediaId);
-    return {
+    const segments = this.deps.transcripts
+      .segments(summary.id)
+      .map(({ startMs, endMs, text }) => ({ startMs, endMs, text }));
+    const transcript = {
       mediaId,
       version: summary.version,
       confidence: summary.confidence,
-      segments: this.deps.transcripts
-        .segments(summary.id)
-        .map(({ startMs, endMs, text }) => ({ startMs, endMs, text })),
+      segments,
+    };
+    const voices = options.withVoices
+      ? (this.deps.voices?.(mediaId, summary) ?? null)
+      : null;
+    if (!voices) return transcript;
+    return {
+      ...transcript,
+      segments: segments.map((segment, index) => ({
+        ...segment,
+        voice: voices.segmentVoices[index] ?? null,
+      })),
+      speakers: voices.speakers,
     };
   }
 

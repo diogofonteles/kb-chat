@@ -58,6 +58,7 @@ export {
 export {
   DiarizationService,
   type DiarizationServiceDeps,
+  type TranscriptVoices,
 } from './diarization-service.js';
 export { speakerRoutes } from './speaker-routes.js';
 export {

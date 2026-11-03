@@ -137,26 +137,6 @@ export const mediaItemSchema = z.object({
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
-/* ---------- Transcript for reading and subtitles (KBC-038) ---------- */
-
-/** One segment of the current transcript, already filtered (ADR 0023 §5), times in ms. */
-export const transcriptSegmentSchema = z.object({
-  startMs: z.number().int().min(0),
-  endMs: z.number().int().min(0),
-  text: z.string(),
-});
-export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
-
-/** GET /api/v1/media/:id/transcript: the current version (the newest, KBC-036 BR-3). */
-export const mediaTranscriptSchema = z.object({
-  mediaId: mediaIdSchema,
-  version: z.number().int().min(1),
-  /** `low`: always shown with the notice (KBC-036 BR-5, KBC-038 BR-2). */
-  confidence: transcriptConfidenceSchema,
-  segments: z.array(transcriptSegmentSchema),
-});
-export type MediaTranscript = z.infer<typeof mediaTranscriptSchema>;
-
 export const mediaListSchema = z.object({ items: z.array(mediaItemSchema) });
 export type MediaList = z.infer<typeof mediaListSchema>;
 
@@ -759,6 +739,42 @@ export const mediaSpeakersSchema = z.object({
   diarization: diarizationSchema.nullable(),
 });
 export type MediaSpeakers = z.infer<typeof mediaSpeakersSchema>;
+
+/**
+ * The voices on GET …/transcript (KBC-064 FR-4): the current separation, its voice per
+ * segment carried by the transcript's own segments.
+ */
+export const transcriptSpeakersSchema = diarizationSchema.omit({
+  segments: true,
+});
+export type TranscriptSpeakers = z.infer<typeof transcriptSpeakersSchema>;
+
+/* ---------- Transcript for reading and subtitles (KBC-038) ---------- */
+
+/**
+ * One segment of the current transcript, already filtered (ADR 0023 §5), times in ms. For
+ * whoever edits recordings, the voice that speaks most of it once voices are separated
+ * (KBC-064 FR-3; null: none found); absent for everyone else.
+ */
+export const transcriptSegmentSchema = z.object({
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(0),
+  text: z.string(),
+  voice: voiceIndexSchema.nullable().optional(),
+});
+export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
+
+/** GET /api/v1/media/:id/transcript: the current version (the newest, KBC-036 BR-3). */
+export const mediaTranscriptSchema = z.object({
+  mediaId: mediaIdSchema,
+  version: z.number().int().min(1),
+  /** `low`: always shown with the notice (KBC-036 BR-5, KBC-038 BR-2). */
+  confidence: transcriptConfidenceSchema,
+  segments: z.array(transcriptSegmentSchema),
+  /** The current separation (KBC-064 FR-4): only for `media-edit`, once there is one. */
+  speakers: transcriptSpeakersSchema.optional(),
+});
+export type MediaTranscript = z.infer<typeof mediaTranscriptSchema>;
 
 /** PATCH /api/v1/media/transcribers/:id: what a paired transcriber may do (FR-6). */
 export const TRANSCRIBER_KINDS = ['transcribe', 'diarize'] as const;

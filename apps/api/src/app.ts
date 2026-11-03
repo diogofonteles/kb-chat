@@ -460,16 +460,22 @@ async function registerListening(
 ) {
   const { listening, bookmarks, transcripts } = wiring.deps;
   const { media, transcribers } = wiring;
+  const diarization = diarizationService({ media: wiring.deps, transcribers });
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
   );
   await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
   await app.register(
-    transcriptRoutes(new TranscriptService({ transcripts, media })),
+    transcriptRoutes(
+      new TranscriptService({
+        transcripts,
+        media,
+        voices: (mediaId, transcript) =>
+          diarization.voicesOn(mediaId, transcript),
+      }),
+    ),
   );
-  await app.register(
-    speakerRoutes(diarizationService({ media: wiring.deps, transcribers })),
-  );
+  await app.register(speakerRoutes(diarization));
 }
 
 /** Voice separations (KBC-064): asked by people, done by a transcriber that separates voices. */

@@ -590,3 +590,94 @@ describe('Review round 1 (KBC-064)', () => {
     ).toBe(403);
   });
 });
+
+describe('Voices on the transcript (KBC-064 FR-4, AC-2)', () => {
+  const transcriptOf = (mediaId: string) =>
+    `/api/v1/media/${mediaId}/transcript`;
+
+  it('gives an editor the voice of every segment and the separation', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await ready(media);
+    await separate(media, { token, mediaId });
+    const { call } = await member(media, {
+      email: 'editor@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-edit'],
+    });
+    const response = await call('GET', transcriptOf(mediaId));
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(
+      body.segments.map((one: { voice?: number | null }) => one.voice),
+    ).toEqual([1, 2, 1, 2, 3, 2]);
+    expect(body.speakers).toMatchObject({
+      version: 1,
+      transcriptVersion: 1,
+      staleTranscript: false,
+      voiceCount: 3,
+      voices: [
+        { voice: 1, speakingMs: 12_100 },
+        { voice: 2, speakingMs: 42_900 },
+        { voice: 3, speakingMs: 5_000 },
+      ],
+    });
+    expect(body.speakers.turns[0]).toEqual({
+      voice: 1,
+      startMs: 0,
+      endMs: 5_200,
+    });
+    expect(body.speakers).not.toHaveProperty('segments');
+  });
+
+  it('keeps the transcript unchanged for a person with only `media`', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await ready(media);
+    await separate(media, { token, mediaId });
+    const { call } = await member(media, {
+      email: 'ouvinte@example.com',
+      topics: ['hermetismo'],
+      features: ['media'],
+    });
+    const response = await call('GET', transcriptOf(mediaId));
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).not.toHaveProperty('speakers');
+    expect(body.segments).toHaveLength(6);
+    for (const segment of body.segments)
+      expect(segment).not.toHaveProperty('voice');
+  });
+
+  it('has no voices for an editor before any separation', async () => {
+    const media = await startMedia();
+    const { mediaId } = await ready(media);
+    const body = (await media.owner('GET', transcriptOf(mediaId))).json();
+    expect(body).not.toHaveProperty('speakers');
+    expect(body.segments[0]).not.toHaveProperty('voice');
+  });
+
+  it('places an older separation on the new segments, flagged as stale (AC-4)', async () => {
+    const media = await startMedia();
+    const { token, mediaId } = await ready(media);
+    await separate(media, { token, mediaId });
+    await media.owner('POST', `/api/v1/media/${mediaId}/transcription`);
+    const job = await lease(media, token);
+    const sent = await sendTranscript(media, {
+      token,
+      job: job.json(),
+      raw: conversationRaw([
+        [0, 15, 'Mestre, o senhor está lembrado? Eu lembro sim.'],
+        [40.5, 45, 'Uma pergunta da plateia.'],
+      ]),
+    });
+    expect(sent.statusCode).toBe(204);
+    const body = (await media.owner('GET', transcriptOf(mediaId))).json();
+    expect(body.version).toBe(2);
+    expect(body.speakers).toMatchObject({
+      transcriptVersion: 2,
+      staleTranscript: true,
+    });
+    expect(
+      body.segments.map((one: { voice?: number | null }) => one.voice),
+    ).toEqual([2, 3]);
+  });
+});
