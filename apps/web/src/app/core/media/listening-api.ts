@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
-  mediaPreferencesSchema,
   mediaProgressSchema,
+  playerPreferencesSchema,
   type MediaPreferences,
   type MediaProgress,
 } from '@kb-chat/contracts';
@@ -17,16 +17,18 @@ const progressUrl = (id: string): string => `${mediaUrl(id)}/progress`;
 export class ListeningApi {
   private readonly http = inject(HttpClient);
 
+  /** The player's choices; the library's (KBC-051) are read and saved by the library. */
   preferences(): Observable<MediaPreferences> {
     return this.http
       .get(PREFERENCES_URL)
-      .pipe(map((body) => mediaPreferencesSchema.parse(body)));
+      .pipe(map((body) => playerPreferencesSchema.parse(body)));
   }
 
+  /** Sends only the player's fields: the server keeps the library's as they are. */
   savePreferences(preferences: MediaPreferences): Observable<MediaPreferences> {
     return this.http
       .put(PREFERENCES_URL, preferences)
-      .pipe(map((body) => mediaPreferencesSchema.parse(body)));
+      .pipe(map((body) => playerPreferencesSchema.parse(body)));
   }
 
   /**

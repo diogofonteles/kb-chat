@@ -11,7 +11,14 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { MediaListPage } from './media-list-page.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MyBookmarksPage } from './my-bookmarks-page.js';
-import { MEDIA_ROUTES, mediaEnabled } from './media-routes.js';
+import { LibraryPage } from './library/library-page.js';
+import { MediaRedirect } from './library/media-redirect.js';
+import {
+  MEDIA_ROUTES,
+  libraryEnabled,
+  libraryOnly,
+  mediaEnabled,
+} from './media-routes.js';
 
 @Component({ template: 'media page' })
 class MediaStub {}
@@ -69,12 +76,94 @@ describe('mediaEnabled (every feature granted per person)', () => {
         route.loadComponent ? route.loadComponent() : null,
       ),
     );
-    expect(pages).toEqual([MediaListPage, MyBookmarksPage, MediaPlayerPage]);
-    // "marcadores" comes before ":id", or it would be taken for a media id.
+    expect(pages).toEqual([
+      LibraryPage,
+      MediaRedirect,
+      MediaListPage,
+      MyBookmarksPage,
+      MediaPlayerPage,
+    ]);
+    // The library's /midia comes before the list's; "marcadores" before ":id".
     expect(MEDIA_ROUTES.map((route) => route.path)).toEqual([
+      'biblioteca',
+      'midia',
       'midia',
       'midia/marcadores',
       'midia/:id',
     ]);
+  });
+});
+
+@Component({ template: 'library' })
+class LibraryStub {}
+
+/** Where /midia and /biblioteca land with the real media routes' guards. */
+async function libraryLanding(
+  url: string,
+  me: { media: boolean },
+  features: Feature[],
+) {
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([
+        {
+          path: 'biblioteca',
+          canMatch: [libraryEnabled],
+          component: LibraryStub,
+        },
+        { path: 'midia', canMatch: [libraryOnly], component: LibraryStub },
+        { path: 'midia', canMatch: [mediaEnabled], component: MediaStub },
+        { path: '', children: [] },
+      ]),
+      {
+        provide: SessionStore,
+        useValue: {
+          state: signal({ kind: 'signed-in' }),
+          me: signal(me),
+          can: (feature: Feature) => features.includes(feature),
+        },
+      },
+    ],
+  });
+  const harness = await RouterTestingHarness.create();
+  await harness.navigateByUrl(url);
+  const shown = harness.routeNativeElement?.textContent?.trim() ?? '';
+  return `${TestBed.inject(Router).url} ${shown}`.trim();
+}
+
+describe('libraryEnabled (KBC-051 BR-1, FR-7)', () => {
+  it('opens /biblioteca with "Ouvir mídia" and "Biblioteca de mídia" (AC-1)', async () => {
+    expect(
+      await libraryLanding('/biblioteca', { media: true }, [
+        'media',
+        'media-library',
+      ]),
+    ).toBe('/biblioteca library');
+  });
+
+  it('takes /midia to the library for who has it (AC-1)', async () => {
+    expect(
+      await libraryLanding('/midia', { media: true }, [
+        'media',
+        'media-library',
+      ]),
+    ).toBe('/midia library');
+  });
+
+  it('keeps the list for who has only "Ouvir mídia", and /biblioteca goes home (AC-2)', async () => {
+    expect(await libraryLanding('/midia', { media: true }, ['media'])).toBe(
+      '/midia media page',
+    );
+    TestBed.resetTestingModule();
+    expect(
+      await libraryLanding('/biblioteca', { media: true }, ['media']),
+    ).toBe('/');
+  });
+
+  it('needs "Ouvir mídia" too', async () => {
+    expect(
+      await libraryLanding('/biblioteca', { media: true }, ['media-library']),
+    ).toBe('/');
   });
 });

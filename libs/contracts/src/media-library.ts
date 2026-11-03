@@ -174,6 +174,9 @@ export const listeningPreferencesSchema = mediaPreferencesSchema.extend({
 });
 export type ListeningPreferences = z.infer<typeof listeningPreferencesSchema>;
 
+/** The player's part of the answer (the library's fields left aside). */
+export const playerPreferencesSchema = z.object(mediaPreferencesSchema.shape);
+
 /**
  * PUT /api/v1/media/preferences: only what changed. The player and the library each send
  * their own fields, so neither overwrites a newer choice of the other.

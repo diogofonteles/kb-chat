@@ -1,0 +1,411 @@
+<section class="library" aria-labelledby="library-title">
+  <header class="head">
+    <h2 id="library-title" #heading tabindex="-1" i18n="@@library.title">
+      Biblioteca
+    </h2>
+    <div class="head-actions">
+      <a
+        class="secondary"
+        routerLink="/midia/marcadores"
+        i18n="@@bookmarks.mine"
+        >Meus marcadores</a
+      >
+      @if (canUpload()) {
+        <button
+          type="button"
+          class="primary"
+          aria-haspopup="dialog"
+          (click)="openUpload()"
+          i18n="@@library.upload"
+        >
+          Enviar mídia
+        </button>
+      }
+    </div>
+  </header>
+
+  <div class="search">
+    <label class="label" for="library-search" i18n="@@library.search"
+      >Buscar na biblioteca</label
+    >
+    <div class="search-box">
+      <input
+        id="library-search"
+        type="search"
+        autocomplete="off"
+        maxlength="200"
+        [value]="query()"
+        (input)="search($event)"
+      />
+      @if (query()) {
+        <button
+          type="button"
+          class="clear-search"
+          aria-label="Limpar busca"
+          i18n-aria-label="@@library.clearSearch"
+          (click)="clearSearch()"
+        >
+          <span aria-hidden="true">✕</span>
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (actionError()) {
+    <p class="error" role="alert">
+      <span aria-hidden="true">⚠</span> {{ actionError() }}
+    </p>
+  }
+
+  @if (loadError()) {
+    <div class="notice" role="alert">
+      <p>{{ loadError() }}</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="reload()"
+        i18n="@@media.reload"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  }
+
+  @if (!home.hasValue() && !home.error()) {
+    <div class="skeleton-strip" aria-hidden="true">
+      @for (n of [1, 2, 3]; track n) {
+        <span class="skeleton-card"></span>
+      }
+    </div>
+  } @else if (continueItems().length > 0) {
+    <section class="continue" aria-labelledby="continue-title">
+      <div class="section-head">
+        <h3 id="continue-title" i18n="@@library.continue">Continuar ouvindo</h3>
+        <div class="strip-tools">
+          <button
+            type="button"
+            class="arrow"
+            aria-label="Rolar para trás"
+            i18n-aria-label="@@library.scrollBack"
+            (click)="scrollStrip(-1)"
+          >
+            <span aria-hidden="true">◂</span>
+          </button>
+          <button
+            type="button"
+            class="arrow"
+            aria-label="Rolar para frente"
+            i18n-aria-label="@@library.scrollForward"
+            (click)="scrollStrip(1)"
+          >
+            <span aria-hidden="true">▸</span>
+          </button>
+          <button
+            type="button"
+            class="link"
+            (click)="showInProgress()"
+            i18n="@@library.seeAll"
+          >
+            Ver tudo
+          </button>
+        </div>
+      </div>
+      <div class="strip" role="list" #strip>
+        @for (item of continueItems(); track item.id) {
+          <app-library-card
+            [item]="item"
+            [playing]="isPlaying(item)"
+            (played)="play(item)"
+          />
+        }
+      </div>
+    </section>
+  }
+
+  @if (home.hasValue() && (recentItems().length > 0 || recentsCleared())) {
+    <section class="recents" aria-labelledby="recents-title">
+      <div class="section-head">
+        <h3 id="recents-title">
+          <button
+            type="button"
+            class="disclosure"
+            [attr.aria-expanded]="recentsOpen()"
+            aria-controls="recents-list"
+            (click)="toggleRecents()"
+          >
+            <span aria-hidden="true">{{ recentsOpen() ? '▾' : '▸' }}</span>
+            <ng-container i18n="@@library.recents"
+              >Ouvidas recentemente</ng-container
+            >
+          </button>
+        </h3>
+        @if (recentItems().length > 0 && !confirmingClear()) {
+          <button
+            type="button"
+            class="link"
+            (click)="askClearRecents()"
+            i18n="@@library.clearRecents"
+          >
+            Limpar recentes
+          </button>
+        }
+      </div>
+      @if (confirmingClear()) {
+        <div class="confirm-inline" role="group" aria-labelledby="clear-text">
+          <p id="clear-text" i18n="@@library.clearRecentsQuestion">
+            Limpar as mídias ouvidas recentemente? Suas posições, favoritas e
+            marcadores continuam.
+          </p>
+          <button
+            type="button"
+            class="primary"
+            (click)="clearRecents()"
+            i18n="@@library.clearRecentsConfirm"
+          >
+            Limpar
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            (click)="cancelClearRecents()"
+            i18n="@@library.clearRecentsCancel"
+          >
+            Cancelar
+          </button>
+        </div>
+      }
+      <div id="recents-list" [hidden]="!recentsOpen()">
+        @if (recentItems().length === 0) {
+          <p class="quiet" i18n="@@library.recentsEmpty">
+            Nada ouvido desde que você limpou.
+          </p>
+        } @else {
+          <ol class="recent-list">
+            @for (item of recentItems(); track item.id) {
+              <li>
+                <a [routerLink]="['/midia', item.id]">{{ item.title }}</a>
+                <span class="quiet">{{ playedAgo(item) }}</span>
+              </li>
+            }
+          </ol>
+        }
+      </div>
+    </section>
+  }
+
+  <section class="all" aria-labelledby="all-title">
+    <div class="section-head">
+      <h3 id="all-title" i18n="@@library.all">Todas</h3>
+      <p class="count" aria-live="polite">{{ countText() }}</p>
+    </div>
+
+    @if (!choices() || (firstPage.isLoading() && items().length === 0)) {
+      <ul
+        class="rows skeleton"
+        aria-busy="true"
+        aria-label="Carregando…"
+        i18n-aria-label="@@app.loading"
+      >
+        @for (n of [1, 2, 3, 4, 5, 6, 7, 8]; track n) {
+          <li class="skeleton-row"><span class="bar"></span></li>
+        }
+      </ul>
+    } @else if (choices(); as current) {
+      @if (!libraryEmpty()) {
+        <app-library-controls
+          [facets]="facets()"
+          [filters]="current.filters"
+          [sort]="current.sort"
+          [view]="current.view"
+          [topics]="topics()"
+          (filtersChange)="changeFilters($event)"
+          (sortChange)="changeSort($event)"
+          (viewChange)="changeView($event)"
+        />
+      }
+
+      @if (libraryEmpty()) {
+        <div class="empty">
+          @if (canUpload()) {
+            <p i18n="@@library.emptyUploader">
+              Ainda não há mídias nos seus acervos.
+            </p>
+            <button
+              type="button"
+              class="secondary"
+              (click)="openUpload()"
+              i18n="@@library.upload"
+            >
+              Enviar mídia
+            </button>
+          } @else {
+            <p i18n="@@library.emptyReader">
+              Ainda não há mídias nos acervos liberados para você.
+            </p>
+          }
+        </div>
+      } @else if (lastPage() && items().length === 0) {
+        <div class="empty">
+          @if (query().trim()) {
+            <p i18n="@@library.searchEmpty">
+              Nenhuma mídia com '{{ query().trim() }}' no título ou no autor.
+            </p>
+            <button
+              type="button"
+              class="secondary"
+              (click)="clearSearch()"
+              i18n="@@library.clearSearch"
+            >
+              Limpar busca
+            </button>
+          } @else {
+            <p i18n="@@library.filtersEmpty">
+              Nenhuma mídia com estes filtros.
+            </p>
+          }
+          @if (filtered()) {
+            <button
+              type="button"
+              class="secondary"
+              (click)="clearFilters()"
+              i18n="@@library.clearFilters"
+            >
+              Limpar filtros
+            </button>
+          }
+        </div>
+      } @else if (current.view === 'grid') {
+        <div class="grid" role="list">
+          @for (item of items(); track item.id) {
+            <app-library-card
+              [item]="item"
+              [playing]="isPlaying(item)"
+              (played)="play(item)"
+            />
+          }
+        </div>
+      } @else {
+        @if (selectable().length > 0) {
+          <label class="select-all">
+            <input
+              type="checkbox"
+              [checked]="allSelected()"
+              (change)="toggleAll($event)"
+            />
+            {{ selectAllText() }}
+          </label>
+        }
+        <div class="rows" role="list">
+          @for (item of items(); track item.id) {
+            <app-library-row
+              [item]="item"
+              [topicTitle]="topicTitleOf(item)"
+              [selected]="selected().has(item.id)"
+              [playing]="isPlaying(item)"
+              [master]="isMaster()"
+              (played)="play(item)"
+              (selectedChange)="select(item, $event)"
+              (acted)="rowAction(item, $event)"
+              (retried)="retry(item)"
+            />
+          }
+        </div>
+      }
+
+      @if (hasMore() && items().length > 0) {
+        <button
+          type="button"
+          class="secondary more"
+          appNearEnd
+          [disabled]="loadingMore()"
+          (nearEnd)="loadMore()"
+          (click)="loadMore()"
+          i18n="@@library.more"
+        >
+          Mostrar mais
+        </button>
+      }
+    }
+  </section>
+
+  @if (selected().size > 0) {
+    <div
+      class="selection-bar"
+      role="region"
+      aria-label="Seleção"
+      i18n-aria-label="@@library.selection"
+    >
+      <span class="selection-count">{{ selectedText() }}</span>
+      <button
+        type="button"
+        class="primary"
+        (click)="markSelected(true)"
+        i18n="@@library.markPlayed"
+      >
+        Marcar como ouvida
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        (click)="markSelected(false)"
+        i18n="@@library.markUnplayed"
+      >
+        Marcar como não ouvida
+      </button>
+      <button
+        type="button"
+        class="link"
+        (click)="cancelSelection()"
+        i18n="@@library.cancelSelection"
+      >
+        Cancelar seleção
+      </button>
+    </div>
+  }
+
+  <p class="visually-hidden" role="status">{{ announcement() }}</p>
+</section>
+
+@if (uploading()) {
+  <app-upload-panel
+    [topic]="selectedTopic()"
+    [topics]="topics()"
+    (uploaded)="uploaded()"
+    (closed)="uploadClosed()"
+  />
+}
+
+@if (removing(); as item) {
+  <dialog
+    #removeDialog
+    class="confirm"
+    aria-labelledby="remove-title"
+    aria-describedby="remove-text"
+    (close)="removeClosed()"
+  >
+    <h2 id="remove-title" i18n="@@media.removeTitle">
+      Remover "{{ item.title }}"?
+    </h2>
+    <p id="remove-text" i18n="@@media.removeText">
+      O áudio e a transcrição serão apagados e não podem ser recuperados.
+    </p>
+    <div class="confirm-actions">
+      <button
+        type="button"
+        class="secondary"
+        (click)="cancelRemove()"
+        i18n="@@media.removeCancel"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="danger"
+        (click)="confirmRemove()"
+        i18n="@@media.removeConfirm"
+      >
+        Remover
+      </button>
+    </div>
+  </dialog>
+}

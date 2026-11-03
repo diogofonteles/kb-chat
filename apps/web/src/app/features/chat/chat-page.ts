@@ -45,7 +45,9 @@ import { MiniPlayer } from '@features/media/player/mini-player.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
-const isMediaUrl = (url: string): boolean => /^\/midia(\/|\?|#|$)/.test(url);
+/** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
+const isMediaUrl = (url: string): boolean =>
+  /^\/(midia|biblioteca)(\/|\?|#|$)/.test(url);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free

@@ -4,7 +4,13 @@
   aria-labelledby="media-item-title"
 >
   <div class="main">
-    <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
+    @if (backToLibrary()) {
+      <a class="back" routerLink="/biblioteca" i18n="@@library.back"
+        >← Biblioteca</a
+      >
+    } @else {
+      <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
+    }
 
     @if (loadError()) {
       <div class="notice" role="alert">

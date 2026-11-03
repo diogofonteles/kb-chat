@@ -1,0 +1,137 @@
+:host {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto auto;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 16rem;
+}
+
+.cover {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface));
+}
+
+.cover[data-tone='1'] {
+  background: color-mix(in srgb, var(--color-focus) 20%, var(--color-surface));
+}
+
+.cover[data-tone='2'] {
+  background: color-mix(in srgb, var(--color-text) 14%, var(--color-surface));
+}
+
+.cover[data-tone='3'] {
+  background: color-mix(in srgb, var(--color-mark) 70%, var(--color-surface));
+}
+
+/* ▶ sits on the cover's corner, above the title's link area. */
+.play {
+  position: absolute;
+  top: calc(var(--space-3) + var(--space-2));
+  right: calc(var(--space-3) + var(--space-2));
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: var(--target);
+  height: var(--target);
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+/* The whole card opens the player (MA-01). */
+a.title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+}
+
+a.title:hover {
+  text-decoration: underline;
+}
+
+a.title:focus-visible {
+  outline: none;
+}
+
+a.title:focus-visible::after {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  padding: 0 var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.state {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.resume {
+  color: var(--color-accent-strong);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.position {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.position span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+
+@media (forced-colors: active) {
+  .position span {
+    background: CanvasText;
+  }
+}
