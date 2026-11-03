@@ -40,19 +40,26 @@ const rawOf = (at: number, text: string) => ({
   ],
 });
 
-/** A real audio of 8:20 whose transcript says `text` at 08:15 (AC-1's talk). */
+/**
+ * A real audio whose transcript says `text` at `at` seconds: 8:20 long with the passage at
+ * 08:15 for AC-1's talk, a few seconds otherwise (each audio is converted by the one worker).
+ */
 async function talkSaying(
   owner: APIRequestContext,
-  input: { title: string; text: string },
+  input: { title: string; text: string; at?: number },
 ) {
-  const media = await uploadReady(owner, { title: input.title, seconds: 500 });
+  const at = input.at ?? 2;
+  const media = await uploadReady(owner, {
+    title: input.title,
+    seconds: at + 5,
+  });
   // The transcribe job is queued when the conversion ends.
   await expect
     .poll(
       async () =>
         (
           await owner.post(`/api/e2e/media/${media.id}/transcript`, {
-            data: { raw: rawOf(495, input.text) },
+            data: { raw: rawOf(at, input.text) },
             headers: CSRF,
           })
         ).status(),
@@ -87,6 +94,7 @@ test('AC-1, AC-10: "tiuaco mariri" finds the passage at 8:15 and plays it from 8
   const { title } = await talkSaying(owner, {
     title: `Palestra do Tiuaco ${tag}`,
     text: `Tiuaco é Mariri ${tag}`,
+    at: 495,
   });
   await owner.dispose();
   await page.goto('/');
@@ -104,9 +112,7 @@ test('AC-1, AC-10: "tiuaco mariri" finds the passage at 8:15 and plays it from 8
   await expect(panel.locator('blockquote')).toContainText(
     `Tiuaco é Mariri ${tag}`,
   );
-  await expect(
-    panel.getByRole('slider', { name: 'Posição' }),
-  ).toBeVisible();
+  await expect(panel.getByRole('slider', { name: 'Posição' })).toBeVisible();
   await expect
     .poll(async () => (await audioState(page)).currentTime, { timeout: 20_000 })
     .toBeGreaterThanOrEqual(493);
