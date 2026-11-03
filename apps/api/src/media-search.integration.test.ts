@@ -57,6 +57,10 @@ async function vaultWithUdv(): Promise<string> {
     join(root, 'udv', 'raw', 'historia.md'),
     DOC('História da Hoasca', 'A Hoasca era a conselheira do rei.'),
   );
+  await writeFile(
+    join(sub, 'raw', 'sessao.md'),
+    DOC('Sessão da Hoasca', 'Na sessão, a Hoasca.'),
+  );
   return root;
 }
 
@@ -426,7 +430,7 @@ describe('spoken passages in the search (KBC-039)', () => {
     expect(audioOnly.body.items).toEqual([]);
     expect(audioOnly.body.total).toBe(0);
     expect(titles(audioOnly.body.media)).toEqual(['Sobre a Hoasca']);
-    expect(audioOnly.body.kinds).toEqual({ text: 1, audio: 1 });
+    expect(audioOnly.body.kinds).toEqual({ text: 2, audio: 1 });
     expect(textOnly.body.media).toEqual([]);
     // Without audio chosen, the facet counts are the texts' only.
     expect(
@@ -434,12 +438,47 @@ describe('spoken passages in the search (KBC-039)', () => {
         (one) => one.value === 'mestre-laercio',
       ),
     ).toBeUndefined();
-    expect(textOnly.body.items.map((item) => item.title)).toEqual([
+    expect(textOnly.body.items.map((item) => item.title).sort()).toEqual([
       'História da Hoasca',
+      'Sessão da Hoasca',
     ]);
-    expect(both.body.items).toHaveLength(1);
+    expect(both.body.items).toHaveLength(2);
     expect(both.body.media).toHaveLength(1);
     expect(none.status).toBe(400);
+  });
+
+  it('BR-4: a remembered "Áudios" only searches the texts where there is no audio for the person', async () => {
+    const world = await startWorld();
+    await spokenAudio(world, {
+      title: 'No pai',
+      passages: [{ at: 1, text: 'Hoasca no pai.' }],
+    });
+    const reader = await member(world, 'bia@example.com', {
+      topics: ['udv'],
+      features: ['search'],
+    });
+    const audioOnly = { q: 'hoasca', kinds: ['audio'] };
+
+    const noListening = await searchAs(reader, audioOnly);
+    const noAudioHere = await searchAs(
+      world.owner,
+      audioOnly,
+      'udv/palavra-do-mestre',
+    );
+    const withAudio = await searchAs(world.owner, audioOnly);
+
+    expect(noListening.body.items.map((item) => item.title).sort()).toEqual([
+      'História da Hoasca',
+      'Sessão da Hoasca',
+    ]);
+    expect(noListening.body.kinds.audio).toBeNull();
+    expect(noAudioHere.body.items.map((item) => item.title)).toEqual([
+      'Sessão da Hoasca',
+    ]);
+    expect(noAudioHere.body.kinds).toEqual({ text: 1, audio: null });
+    // Where there is audio, the choice holds: passages only.
+    expect(withAudio.body.items).toEqual([]);
+    expect(titles(withAudio.body.media)).toEqual(['No pai']);
   });
 
   it('a collection without transcribed audio has no audio kind', async () => {
@@ -447,7 +486,7 @@ describe('spoken passages in the search (KBC-039)', () => {
 
     const { body } = await searchAs(world.owner, { q: 'hoasca' });
 
-    expect(body.kinds).toEqual({ text: 1, audio: null });
+    expect(body.kinds).toEqual({ text: 2, audio: null });
     expect(body.media).toEqual([]);
   });
 

@@ -349,7 +349,7 @@ async function registerSearch(
   // Spoken passages beside the texts (KBC-039, ADR 0024), when the media library is on.
   const combined = new SearchWithMedia({
     documents: deps.agent.search,
-    catalog,
+    scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
     media: deps.media?.search,
     authors: {
       mainOf: (topic) => authors.mainOf(topic)?.slug ?? null,

@@ -5,6 +5,7 @@ import {
   type Authorship,
   type KindCounts,
   type MediaHit,
+  type SearchKind,
   type SearchRequest,
   type SearchResponse,
 } from '@kb-chat/contracts';
@@ -13,7 +14,6 @@ import type {
   AuthorshipTally,
   MediaSearchPort,
 } from '../../ports/media-search.js';
-import type { CatalogRegistry } from '../catalog/index.js';
 import {
   authorRuleOf,
   hasDocumentOnlyFilters,
@@ -45,8 +45,9 @@ export interface MediaReport {
 }
 
 export interface SearchWithMediaDeps {
-  readonly documents: SearchService;
-  readonly catalog: CatalogRegistry;
+  readonly documents: Pick<SearchService, 'search'>;
+  /** The collection and its sub-collections, by the catalog's tree (ADR 0028). */
+  readonly scopeOf: (topic: string) => readonly string[];
   /** Absent when the media library is off (KB_CHAT_MEDIA=off). */
   readonly media?: MediaSearchPort;
   readonly authors: AuthorView;
@@ -70,6 +71,19 @@ const totalUnder = (rule: AuthorRule, tally: AuthorshipTally): number => {
   if (rule.kind === 'others') return tally.others;
   return Math.min(tally.main + tally.others, MEDIA_COUNT_CAP);
 };
+
+/**
+ * The kinds that really search (BR-4): the chosen ones this collection has for this
+ * person, and the texts when none of them is left (a remembered "Áudios" only, in a
+ * collection without audio or for someone who may not listen, never empties the search).
+ */
+export function effectiveKinds(
+  chosen: readonly SearchKind[],
+  available: KindCounts,
+): readonly SearchKind[] {
+  const reach = chosen.filter((kind) => available[kind] !== null);
+  return reach.length > 0 ? reach : ['text'];
+}
 
 /** The "Autoria" counts with the passages' added (the facet covers both kinds). */
 function withSpokenAuthorships(
@@ -110,7 +124,8 @@ export class SearchWithMedia {
     const spoken = this.spoken(topic, parsed, context);
     const documents = await pending;
     const kinds: KindCounts = { text: documents.total, audio: spoken.count };
-    const texts = parsed.kinds.includes('text')
+    const reach = effectiveKinds(parsed.kinds, kinds);
+    const texts = reach.includes('text')
       ? documents
       : {
           ...documents,
@@ -119,7 +134,7 @@ export class SearchWithMedia {
           nextOffset: null,
           hiddenOffTopic: 0,
         };
-    const audio = parsed.kinds.includes('audio');
+    const audio = reach.includes('audio');
     const media = audio && parsed.offset === 0 ? spoken.hits : [];
     const facets = audio
       ? withSpokenAuthorships(texts.facets, spoken.byAuthorship)
@@ -193,9 +208,6 @@ export class SearchWithMedia {
 
   /** The collection and its sub-collections the person sees (ADR 0028 §5). */
   private visibleScope(topic: string, viewer: SearchViewer): string[] {
-    return this.deps.catalog
-      .scope(topic)
-      .map((one) => one.topic.slug)
-      .filter((slug) => viewer.canSee(slug));
+    return this.deps.scopeOf(topic).filter((slug) => viewer.canSee(slug));
   }
 }

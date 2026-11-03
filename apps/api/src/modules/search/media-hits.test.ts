@@ -33,6 +33,10 @@ describe('termsOf', () => {
     expect(termsOf(many)).toHaveLength(MAX_TERMS);
   });
 
+  it('reads a decomposed accent (NFD, pasted text) as one word', () => {
+    expect(termsOf('ho\u0301asca')).toEqual(['hóasca']);
+  });
+
   it('has no words for punctuation only', () => {
     expect(termsOf('?!…')).toEqual([]);
   });

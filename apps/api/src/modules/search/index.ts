@@ -7,6 +7,7 @@ export {
 export { cleanSnippet } from './snippet.js';
 export {
   SearchWithMedia,
+  effectiveKinds,
   type MediaReport,
   type SearchContext,
   type SearchViewer,

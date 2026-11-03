@@ -64,7 +64,13 @@ const STOPWORDS = new Set([
  */
 export function termsOf(question: string): string[] {
   const words = [
-    ...new Set(question.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []),
+    // NFC first: a pasted "hóasca" with a combining accent is one word, not "ho" + "asca".
+    ...new Set(
+      question
+        .normalize('NFC')
+        .toLowerCase()
+        .match(/[\p{L}\p{N}]+/gu) ?? [],
+    ),
   ];
   const content = words.filter((word) => !STOPWORDS.has(word));
   return (content.length > 0 ? content : words).slice(0, MAX_TERMS);
