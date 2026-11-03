@@ -1,0 +1,200 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.search {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.search label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.count {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.ghost {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.ghost:hover {
+  background: var(--color-surface-muted);
+}
+
+.strong {
+  font-weight: 600;
+  color: var(--color-accent-strong);
+}
+
+.copy {
+  align-self: flex-start;
+}
+
+/* The list scrolls on its own: following the audio never scrolls the page (FR-3). */
+.list-box {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 12rem;
+}
+
+.segments {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  font-family: var(--font-reading);
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+
+.segment {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  cursor: pointer;
+  /* A change inside one segment never lays out the other ~1,500 (NFR-2). */
+  contain: layout style;
+}
+
+.segment:hover {
+  background: var(--color-surface-muted);
+}
+
+/* The segment heard now: background and a side bar, never colour alone (UP-20). */
+.segment.active {
+  border-left-color: var(--color-accent);
+  background: var(--color-surface-muted);
+}
+
+.time {
+  min-width: var(--target);
+  min-height: var(--target);
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-accent-strong);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.segment.active .time {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.text {
+  max-width: 70ch;
+  overflow-wrap: anywhere;
+}
+
+/* The current search occurrence's segment: an outline, in any browser and besides the
+   painted colours (UP-20). The occurrences themselves are painted in styles.css. */
+.segment.current-hit {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.back-to-current {
+  /* Below the list, not over it: it never covers a segment (WCAG 2.4.11). */
+  align-self: center;
+  margin-top: var(--space-2);
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (forced-colors: active) {
+  .segment.active {
+    border-left-color: Highlight;
+  }
+
+  .segment.current-hit {
+    outline-color: Highlight;
+  }
+}

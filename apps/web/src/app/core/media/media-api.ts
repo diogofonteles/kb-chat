@@ -24,6 +24,14 @@ export const mediaListUrl = (topic: string): string =>
 export const mediaUrl = (id: string): string =>
   `/api/v1/media/${encodeURIComponent(id)}`;
 export const mediaStreamUrl = (id: string): string => `${mediaUrl(id)}/stream`;
+/** The current transcript and its subtitles (KBC-038). */
+export const mediaTranscriptUrl = (id: string): string =>
+  `${mediaUrl(id)}/transcript`;
+export const mediaSubtitlesUrl = (id: string): string =>
+  `${mediaUrl(id)}/subtitles.vtt`;
+/** The player page of a media, as a link to share (with `?t=`, KBC-038 FR-5). */
+export const mediaPagePath = (id: string): string =>
+  `/midia/${encodeURIComponent(id)}`;
 
 /**
  * The backend uploads go through: XHR, since the app's fetch backend reports no upload

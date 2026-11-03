@@ -1,5 +1,6 @@
 import { createMedia } from '../media-factory.js';
 import { registerTranscriberClock } from './transcriber-clock-routes.js';
+import { registerTranscriptSeed } from './transcript-seed-routes.js';
 import { startMediaWorker } from './media-worker-runner.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -244,7 +245,10 @@ const app = await buildApp({
 });
 identity.register(app);
 registerOutbox(app, outbox);
-if (media) registerTranscriberClock(app, media.transcribers);
+if (media) {
+  registerTranscriberClock(app, media.transcribers);
+  registerTranscriptSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });
+}
 registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });
 const stopWorker = startMediaWorker({

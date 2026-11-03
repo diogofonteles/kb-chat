@@ -1,0 +1,130 @@
+<section class="panel" aria-labelledby="transcript-title">
+  <h3 id="transcript-title" class="title" i18n="@@transcript.title">
+    Transcrição
+  </h3>
+
+  @if (low()) {
+    <p
+      class="warning-notice low-confidence"
+      i18n="@@media.transcription.lowNotice"
+    >
+      Transcrição automática de baixa confiança: pode haver trechos errados.
+    </p>
+  }
+
+  @if (segments().length === 0) {
+    <p class="empty" i18n="@@transcript.empty">A transcrição está vazia.</p>
+  } @else {
+    <div class="search" role="search">
+      <label for="transcript-search" i18n="@@transcript.search.label"
+        >Buscar na transcrição</label
+      >
+      <div class="search-row">
+        <input
+          id="transcript-search"
+          type="search"
+          autocomplete="off"
+          enterkeyhint="search"
+          [value]="typed()"
+          (input)="search($event)"
+          (keydown)="searchKeys($event)"
+        />
+        <!-- Always present, so the first result is announced too. -->
+        <span class="count" role="status">{{ searchStatus() }}</span>
+      </div>
+      @if (hits().length > 0) {
+        <div class="search-actions">
+          <button
+            type="button"
+            class="ghost"
+            (click)="stepHit(-1)"
+            i18n="@@transcript.search.previous"
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            class="ghost"
+            (click)="stepHit(1)"
+            i18n="@@transcript.search.next"
+          >
+            Próxima
+          </button>
+          <button
+            type="button"
+            class="ghost strong"
+            (click)="playHit()"
+            i18n="@@transcript.search.play"
+          >
+            Tocar daqui
+          </button>
+        </div>
+      }
+    </div>
+
+    <p id="transcript-hint" class="visually-hidden" i18n="@@transcript.hint">
+      Use as setas para cima e para baixo para andar entre os trechos e Enter
+      para tocar.
+    </p>
+    <div class="list-box">
+      <ol
+        #list
+        class="segments"
+        aria-label="Trechos da transcrição"
+        i18n-aria-label="@@transcript.list"
+        aria-describedby="transcript-hint"
+      >
+        @for (segment of view(); track segment.index) {
+          <li
+            #item
+            class="segment"
+            [class.active]="segment.index === activeIndex()"
+            [class.current-hit]="segment.index === currentHitSegment()"
+            [attr.data-start-ms]="segment.startMs"
+            [attr.data-index]="segment.index"
+          >
+            <button
+              #time
+              type="button"
+              class="time"
+              [tabIndex]="segment.index === tabStop() ? 0 : -1"
+              [attr.aria-current]="
+                segment.index === activeIndex() ? 'true' : null
+              "
+              [attr.aria-label]="segment.label"
+              [attr.aria-describedby]="'transcript-text-' + segment.index"
+            >
+              {{ segment.clock }}
+            </button>
+            <span class="text" [id]="'transcript-text-' + segment.index">{{
+              segment.text
+            }}</span>
+          </li>
+        }
+      </ol>
+
+      @if (showBackToCurrent()) {
+        <button
+          type="button"
+          class="back-to-current"
+          (click)="backToCurrent()"
+          i18n="@@transcript.backToCurrent"
+        >
+          Voltar ao trecho atual
+        </button>
+      }
+    </div>
+
+    @if (selected()) {
+      <button
+        type="button"
+        class="ghost strong copy"
+        (mousedown)="$event.preventDefault()"
+        (click)="copySelection()"
+        i18n="@@transcript.copyWithLink"
+      >
+        Copiar com o link do minuto
+      </button>
+    }
+  }
+</section>

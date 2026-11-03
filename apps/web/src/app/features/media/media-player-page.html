@@ -1,82 +1,148 @@
-<article class="page" aria-labelledby="media-item-title">
-  <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
+<article
+  class="page"
+  [class.with-transcript]="showTranscript()"
+  aria-labelledby="media-item-title"
+>
+  <div class="main">
+    <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
 
-  @if (loadError()) {
-    <div class="notice" role="alert">
-      <p>{{ loadError() }}</p>
-      <div class="notice-actions">
-        <a
-          #backToList
-          class="secondary"
-          routerLink="/midia"
-          i18n="@@media.backToList"
-          >Voltar à Mídia</a
-        >
-        @if (!notFound()) {
+    @if (loadError()) {
+      <div class="notice" role="alert">
+        <p>{{ loadError() }}</p>
+        <div class="notice-actions">
+          <a
+            #backToList
+            class="secondary"
+            routerLink="/midia"
+            i18n="@@media.backToList"
+            >Voltar à Mídia</a
+          >
+          @if (!notFound()) {
+            <button
+              type="button"
+              class="secondary"
+              (click)="reload()"
+              i18n="@@media.reload"
+            >
+              Tentar de novo
+            </button>
+          }
+        </div>
+      </div>
+    } @else if (media(); as current) {
+      <header class="head">
+        <h2 id="media-item-title">{{ current.title }}</h2>
+        <p class="meta">
+          <app-authorship-badge [mediaAuthor]="current.author" />
+          @if (duration()) {
+            <span class="duration">{{ duration() }}</span>
+          }
+          <span i18n="@@media.sentOn"
+            >enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
+          >
+          @if (transcription(); as text) {
+            <span class="transcription">{{ text }}</span>
+          }
+        </p>
+        @if (lowConfidence()) {
+          <p
+            class="warning-notice low-confidence"
+            i18n="@@media.transcription.lowNotice"
+          >
+            Transcrição automática de baixa confiança: pode haver trechos
+            errados.
+          </p>
+        }
+      </header>
+
+      @if (ready()) {
+        @if (resumeAt() !== null) {
+          <div class="resume">
+            <button type="button" class="primary" (click)="resume()">
+              {{ resumeLabel() }}
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              (click)="startOver()"
+              i18n="@@player.startOver"
+            >
+              Começar do início
+            </button>
+          </div>
+        }
+        <app-media-player
+          [cues]="cues()"
+          [captionsAvailable]="hasTranscript()"
+          [lowConfidence]="lowCaptions()"
+        />
+        @if (hasTranscript()) {
           <button
             type="button"
-            class="secondary"
-            (click)="reload()"
-            i18n="@@media.reload"
+            class="secondary toggle-transcript"
+            [attr.aria-expanded]="!collapsed()"
+            [attr.aria-controls]="collapsed() ? null : 'transcript-column'"
+            (click)="toggleTranscript()"
           >
-            Tentar de novo
+            @if (collapsed()) {
+              <ng-container i18n="@@transcript.show"
+                >Mostrar transcrição</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@transcript.hide"
+                >Esconder transcrição</ng-container
+              >
+            }
           </button>
         }
-      </div>
-    </div>
-  } @else if (media(); as current) {
-    <header class="head">
-      <h2 id="media-item-title">{{ current.title }}</h2>
-      <p class="meta">
-        <app-authorship-badge [mediaAuthor]="current.author" />
-        @if (duration()) {
-          <span class="duration">{{ duration() }}</span>
-        }
-        <span i18n="@@media.sentOn"
-          >enviado em {{ current.createdAt | date: 'dd/MM/yyyy' }}</span
-        >
-        @if (transcription(); as text) {
-          <span class="transcription">{{ text }}</span>
-        }
-      </p>
-      @if (lowConfidence()) {
-        <p class="low-confidence" i18n="@@media.transcription.lowNotice">
-          Transcrição automática de baixa confiança: pode haver trechos errados.
+      } @else {
+        <p class="not-ready" role="status">
+          <span class="status">{{ status() }}</span>
+          <span i18n="@@media.notReady"
+            >Ela aparece aqui para ouvir assim que estiver pronta.</span
+          >
         </p>
       }
-    </header>
+    } @else {
+      <div class="skeleton" aria-busy="true">
+        <span class="bar title-bar"></span>
+        <span class="bar"></span>
+        <span class="player-box"></span>
+      </div>
+    }
+  </div>
 
-    @if (ready()) {
-      @if (resumeAt() !== null) {
-        <div class="resume">
-          <button type="button" class="primary" (click)="resume()">
-            {{ resumeLabel() }}
-          </button>
-          <button
-            type="button"
-            class="secondary"
-            (click)="startOver()"
-            i18n="@@player.startOver"
+  @if (showTranscript() && media(); as current) {
+    <aside id="transcript-column" class="side">
+      @if (transcript.hasValue()) {
+        <app-transcript-panel
+          [transcript]="transcript.value()"
+          [title]="current.title"
+        />
+      } @else if (transcriptError()) {
+        <div class="notice" role="alert">
+          <p>{{ transcriptError() }}</p>
+          <div class="notice-actions">
+            <button
+              type="button"
+              class="secondary"
+              (click)="reloadTranscript()"
+              i18n="@@transcript.reload"
+            >
+              Tentar de novo
+            </button>
+          </div>
+        </div>
+      } @else {
+        <div class="side-skeleton" aria-busy="true">
+          <span class="visually-hidden" i18n="@@transcript.loading"
+            >Carregando a transcrição…</span
           >
-            Começar do início
-          </button>
         </div>
       }
-      <app-media-player />
-      <app-bookmark-list />
-    } @else {
-      <p class="not-ready" role="status">
-        <span class="status">{{ status() }}</span>
-        <span i18n="@@media.notReady"
-          >Ela aparece aqui para ouvir assim que estiver pronta.</span
-        >
-      </p>
-    }
-  } @else {
-    <div class="skeleton" aria-busy="true">
-      <span class="bar title-bar"></span>
-      <span class="bar"></span>
-      <span class="player-box"></span>
-    </div>
+    </aside>
+  }
+  @if (ready()) {
+    <app-bookmark-list class="bookmarks" />
   }
 </article>

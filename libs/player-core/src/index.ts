@@ -7,3 +7,6 @@ export * from './speeds.js';
 export * from './sleep-timer.js';
 export * from './bookmarks.js';
 export * from './silence-skip.js';
+export * from './cues.js';
+export * from './transcript-search.js';
+export * from './minute-link.js';

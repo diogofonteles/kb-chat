@@ -1,5 +1,7 @@
 :host {
   display: block;
+  /* The transcript goes beside the player when the main area is wide enough (T15). */
+  container-type: inline-size;
   /* Its own row of the main area's grid (chat-page.css): it scrolls inside it, so the
      mini-player below never covers what has the focus (KBC-041 FR-11). */
   min-height: 0;
@@ -13,6 +15,70 @@
   max-width: var(--column);
   margin: 0 auto;
   padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.main {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.toggle-transcript {
+  justify-self: start;
+}
+
+.head .low-confidence {
+  margin-top: var(--space-2);
+}
+
+/* Below the player on narrow screens: the list scrolls on its own (FR-3). */
+.side {
+  display: flex;
+  flex-direction: column;
+  height: min(70dvh, 40rem);
+  min-width: 0;
+}
+
+.side-skeleton {
+  flex: 1;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+/* Beside the player, as tall as the screen, while the page scrolls (T15, desktop). */
+@container (min-width: 60rem) {
+  /* Tab order and phones: player, transcript, then bookmarks; on a wide screen the
+     bookmarks go under the player and the transcript spans both rows. */
+  .page.with-transcript {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 27rem);
+    grid-template-areas:
+      'main side'
+      'bookmarks side';
+    grid-template-rows: auto 1fr;
+    align-items: start;
+    max-width: calc(var(--column) + 28rem);
+    /* The column's own notice is in view: no second one with the subtitles. */
+    --low-confidence-badge: none;
+  }
+
+  .with-transcript .main {
+    grid-area: main;
+  }
+
+  .with-transcript .bookmarks {
+    grid-area: bookmarks;
+  }
+
+  .with-transcript .side {
+    grid-area: side;
+  }
+
+  .with-transcript .side {
+    position: sticky;
+    top: var(--space-4);
+    height: calc(100dvh - 7rem);
+  }
 }
 
 .back {
@@ -134,18 +200,4 @@
 .player-box {
   height: 9.5rem;
   border-radius: var(--radius-lg);
-}
-
-/* BR-5: a warning tone, never red (UP-19), with a sign besides the colour (UP-20). */
-.low-confidence {
-  margin: var(--space-2) 0 0;
-  padding: var(--space-2) var(--space-3);
-  border-left: 3px solid var(--color-accent);
-  background: var(--color-surface-muted);
-  color: var(--color-text);
-  font-size: var(--text-sm);
-}
-
-.low-confidence::before {
-  content: '⚠ ' / '';
 }

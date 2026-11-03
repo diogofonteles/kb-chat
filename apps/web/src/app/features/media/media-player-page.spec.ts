@@ -21,11 +21,14 @@ import { aMediaItem, aTranscription } from '../../testing/media-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
+import { ANIMATION_FRAMES } from '@core/media/playback-clock.js';
+import type { MediaTranscript } from '@kb-chat/contracts';
+import { EMPTY } from 'rxjs';
 
 const ITEM = aMediaItem();
 const ITEM_URL = `/api/v1/media/${ITEM.id}`;
 
-async function openPage(): Promise<{
+async function openPage(url = `/midia/${ITEM.id}`): Promise<{
   harness: RouterTestingHarness;
   http: HttpTestingController;
   media: FakeMedia;
@@ -43,9 +46,10 @@ async function openPage(): Promise<{
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
       { provide: MEDIA_POLL_MS, useValue: 20 },
       { provide: VOLUME_SUPPORT, useValue: Promise.resolve(false) },
+      { provide: ANIMATION_FRAMES, useValue: EMPTY },
     ],
   });
-  const harness = await RouterTestingHarness.create(`/midia/${ITEM.id}`);
+  const harness = await RouterTestingHarness.create(url);
   return { harness, http: TestBed.inject(HttpTestingController), media };
 }
 
@@ -334,5 +338,169 @@ describe('MediaPlayerPage opened from "Meus marcadores" (KBC-042 FR-5)', () => {
     http.expectOne(ITEM_URL).flush(ITEM);
     await harness.fixture.whenStable();
     expect(media.calls).not.toContain('play');
+  });
+});
+
+describe('MediaPlayerPage: link to a minute (KBC-038 FR-5, AC-5)', () => {
+  it('opens ?t=754 at 12:34, paused, with no "Continuar de" over the saved position', async () => {
+    localStorage.clear();
+    const { harness, http, media } = await openPage(`/midia/${ITEM.id}?t=754`);
+    http.expectOne(ITEM_URL).flush({ ...ITEM, positionMs: 120_000 });
+    await harness.fixture.whenStable();
+    media.setDuration(3_735);
+    media.emit('loadedmetadata');
+    await harness.fixture.whenStable();
+    expect(media.calls).toContain('seek:754');
+    expect(media.calls).not.toContain('seek:120');
+    expect(media.calls).not.toContain('play');
+    expect(screen.queryByRole('button', { name: /Continuar de/ })).toBeNull();
+  });
+
+  it('moves the media already playing in the mini-player to ?t=', async () => {
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    media.emit('playing');
+    await harness.navigateByUrl('/outra');
+    await harness.navigateByUrl(`/midia/${ITEM.id}?t=60`);
+    TestBed.tick();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    expect(media.calls.at(-1)).toBe('seek:60');
+  });
+
+  it('ignores a ?t= that is not a whole number of seconds', async () => {
+    localStorage.clear();
+    const { harness, http, media } = await openPage(
+      `/midia/${ITEM.id}?t=12:34`,
+    );
+    http.expectOne(ITEM_URL).flush({ ...ITEM, positionMs: 120_000 });
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Continuar de 2:00' }),
+    ).toBeTruthy();
+    expect(media.calls).not.toContain('seek:754');
+  });
+});
+
+/** Lets the page ask for what the answer needs (whenStable would wait for those requests). */
+async function settle(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve));
+  TestBed.tick();
+}
+
+describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
+  const TRANSCRIBED = aMediaItem({
+    transcription: aTranscription({
+      status: 'done',
+      confidence: 'low',
+      version: 2,
+    }),
+  });
+  const TRANSCRIPT: MediaTranscript = {
+    mediaId: ITEM.id,
+    version: 2,
+    confidence: 'low',
+    segments: [{ startMs: 0, endMs: 3_000, text: 'Existia um rei.' }],
+  };
+  const transcriptRequest = (r: { urlWithParams: string }) =>
+    r.urlWithParams === `${ITEM_URL}/transcript?v=2`;
+  const subtitlesRequest = (r: { urlWithParams: string }) =>
+    r.urlWithParams === `${ITEM_URL}/subtitles.vtt?v=2`;
+  const LOW =
+    'Transcrição automática de baixa confiança: pode haver trechos errados.';
+
+  it('shows the transcript beside the player, the low notice once, above the text (AC-6)', async () => {
+    localStorage.clear();
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush(TRANSCRIBED);
+    await settle();
+    http.expectOne(transcriptRequest).flush(TRANSCRIPT);
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('heading', { name: 'Transcrição' })).toBeTruthy();
+    expect(screen.getByText('Existia um rei.')).toBeTruthy();
+    expect(screen.getAllByText(LOW)).toHaveLength(1);
+    expect(
+      screen
+        .getByRole('button', { name: 'CC, legendas' })
+        .hasAttribute('disabled'),
+    ).toBe(false);
+    // With CC on, a short notice goes with the subtitles: on a phone the column's own
+    // notice is far below (CSS hides this one when the column sits beside the player).
+    fireEvent.click(screen.getByRole('button', { name: 'CC, legendas' }));
+    await settle();
+    expect(
+      screen.getByText(
+        'Legendas de baixa confiança: podem ter trechos errados.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('hides the column when asked, keeps it hidden for the next media, and the header says low (FR-9, AC-10)', async () => {
+    localStorage.clear();
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush(TRANSCRIBED);
+    await settle();
+    http.expectOne(transcriptRequest).flush(TRANSCRIPT);
+    await harness.fixture.whenStable();
+    const toggle = screen.getByRole('button', { name: 'Esconder transcrição' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-controls')).toBe('transcript-column');
+    fireEvent.click(toggle);
+    await harness.fixture.whenStable();
+    expect(screen.queryByRole('heading', { name: 'Transcrição' })).toBeNull();
+    expect(screen.getAllByText(LOW)).toHaveLength(1);
+    const shown = screen.getByRole('button', { name: 'Mostrar transcrição' });
+    expect(shown.getAttribute('aria-expanded')).toBe('false');
+    expect(shown.hasAttribute('aria-controls')).toBe(false);
+    expect(localStorage.getItem('kb-chat.player.transcript-collapsed')).toBe(
+      'on',
+    );
+  });
+
+  it('loads the subtitles of the current version when CC is on (FR-1, AC-4)', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.player.captions', 'on');
+    localStorage.setItem('kb-chat.player.transcript-collapsed', 'on');
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(TRANSCRIBED);
+    await settle();
+    http
+      .expectOne(subtitlesRequest)
+      .flush('WEBVTT\n\n00:00.000 --> 00:02.000\nExistia um rei.\n');
+    media.setDuration(3_735);
+    media.emit('loadedmetadata');
+    media.setCurrentTime(1);
+    media.emit('timeupdate');
+    await harness.fixture.whenStable();
+    expect(
+      screen
+        .getByRole('button', { name: 'CC, legendas' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(document.querySelector('.caption')?.textContent).toBe(
+      'Existia um rei.',
+    );
+  });
+
+  it('says when the transcript did not load, and tries again', async () => {
+    localStorage.clear();
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush(TRANSCRIBED);
+    await settle();
+    http
+      .expectOne(transcriptRequest)
+      .flush(null, { status: 500, statusText: 'Server Error' });
+    await harness.fixture.whenStable();
+    expect(screen.getAllByText(LOW)).toHaveLength(1);
+    fireEvent.click(
+      screen
+        .getAllByRole('button', { name: 'Tentar de novo' })
+        .at(-1) as HTMLElement,
+    );
+    await settle();
+    http.expectOne(transcriptRequest).flush(TRANSCRIPT);
+    await harness.fixture.whenStable();
+    expect(screen.getByText('Existia um rei.')).toBeTruthy();
   });
 });

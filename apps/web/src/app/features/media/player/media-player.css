@@ -3,6 +3,7 @@
 }
 
 .player {
+  container: player / inline-size;
   display: grid;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-6) var(--space-6);
@@ -165,6 +166,84 @@
 /* The trigger lays its content out as a grid: one item keeps ☾ beside its time. */
 .sleep-face {
   white-space: nowrap;
+}
+
+/* Subtitles over the media area (T15): dark translucent band, light text, two lines at
+   most; the same in every theme, so the contrast holds (>= 4.5:1). */
+.caption-area {
+  display: grid;
+  place-items: end center;
+  min-height: 3.6em;
+  font-size: var(--text-md);
+}
+
+.caption {
+  max-width: 100%;
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgb(20 18 16 / 88%);
+  color: #fffdf8;
+  line-height: 1.4;
+  text-align: center;
+  /* Never clipped: the cues already hold two lines of at most 42 characters. */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Narrow players (phones): the size follows the player's width so a 42-character line
+   stays one line (two lines at most on screen), never below 12 px. */
+@container player (max-width: 34rem) {
+  .caption {
+    padding-inline: var(--space-2);
+    font-size: clamp(0.75rem, 3.5cqi, var(--text-md));
+    letter-spacing: -0.01em;
+  }
+}
+
+/* The low-confidence notice beside the subtitles: shown only where the transcript's own
+   notice may be out of sight (the page hides it when the column is beside the player). */
+.low-badge {
+  display: var(--low-confidence-badge, block);
+  justify-self: center;
+}
+
+.cc {
+  display: grid;
+  place-items: center;
+  min-width: var(--target);
+  height: var(--target);
+  padding: 0 var(--space-2);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.cc span {
+  padding: 0 var(--space-1);
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  font-size: var(--text-sm);
+}
+
+/* On: filled, not only a colour change (UP-20). */
+.cc[aria-pressed='true'] span {
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
+.cc:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+}
+
+.cc:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
 }
 
 .volume {

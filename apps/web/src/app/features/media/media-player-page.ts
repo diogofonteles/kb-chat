@@ -22,15 +22,31 @@ import {
 } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { mediaItemSchema, type MediaItem } from '@kb-chat/contracts';
-import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
+import {
+  mediaItemSchema,
+  mediaTranscriptSchema,
+  type MediaItem,
+} from '@kb-chat/contracts';
+import {
+  formatClock,
+  formatDuration,
+  parseWebVtt,
+  resumeFrom,
+  startFromParam,
+} from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { MediaSessionAdapter } from '@core/media/media-session.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
-import { mediaStreamUrl, mediaUrl } from '@core/media/media-api.js';
+import {
+  mediaStreamUrl,
+  mediaSubtitlesUrl,
+  mediaTranscriptUrl,
+  mediaUrl,
+} from '@core/media/media-api.js';
+import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
   EMPTY,
@@ -50,6 +66,7 @@ import { MEDIA_POLL_MS } from './media-polling.js';
 import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
 import { PlayerShortcuts } from './player/player-shortcuts.js';
+import { TranscriptPanel } from './transcript/transcript-panel.js';
 
 /**
  * One media item (screens.md T15): its title, authorship and length, and the player once
@@ -59,22 +76,39 @@ import { PlayerShortcuts } from './player/player-shortcuts.js';
  */
 @Component({
   selector: 'app-media-player-page',
-  imports: [RouterLink, DatePipe, AuthorshipBadge, MediaPlayer, BookmarkList],
+  imports: [
+    RouterLink,
+    DatePipe,
+    AuthorshipBadge,
+    MediaPlayer,
+    BookmarkList,
+    TranscriptPanel,
+  ],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown)': 'shortcuts.handle($event)' },
+  host: {
+    '(document:keydown)':
+      'shortcuts.handle($event, "page", { captions: hasTranscript() })',
+  },
 })
 export class MediaPlayerPage {
   private readonly engine = inject(MediaEngine);
   private readonly saver = inject(ProgressSaver);
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly title = inject(Title);
+  private readonly route = inject(ActivatedRoute);
+  private readonly preferences = inject(TranscriptPreferences);
   private readonly id = toSignal(
-    inject(ActivatedRoute).paramMap.pipe(
-      map((params) => params.get('id') ?? ''),
-    ),
+    this.route.paramMap.pipe(map((params) => params.get('id') ?? '')),
     { initialValue: '' },
+  );
+  /** `?t=754`: where the person asked to start (KBC-038 FR-5); wins over the saved one. */
+  private readonly startAt = toSignal(
+    this.route.queryParamMap.pipe(
+      map((params) => startFromParam(params.get('t'))),
+    ),
+    { initialValue: null },
   );
 
   protected readonly item = httpResource(
@@ -98,9 +132,49 @@ export class MediaPlayerPage {
       ? ''
       : transcriptionTextOf(media, this.locale);
   });
+  /** The current transcript's version, once there is one (KBC-038). */
+  private readonly transcriptVersion = computed(() => {
+    const media = this.media();
+    return media?.status === 'ready' ? media.transcription.version : null;
+  });
+  protected readonly hasTranscript = computed(
+    () => this.transcriptVersion() !== null,
+  );
+  protected readonly collapsed = this.preferences.transcriptCollapsed;
+  protected readonly transcript = httpResource(
+    () => (this.collapsed() ? undefined : this.requestFor(mediaTranscriptUrl)),
+    { parse: (body) => mediaTranscriptSchema.parse(body) },
+  );
+  private readonly subtitles = httpResource.text(() =>
+    this.preferences.captionsOn()
+      ? this.requestFor(mediaSubtitlesUrl)
+      : undefined,
+  );
+  protected readonly cues = computed(() =>
+    this.subtitles.hasValue() ? parseWebVtt(this.subtitles.value()) : [],
+  );
+  /** The column shows: there is a transcript and the person did not hide it (FR-9). */
+  protected readonly showTranscript = computed(
+    () => this.hasTranscript() && !this.collapsed(),
+  );
+  protected readonly transcriptError = computed(() => {
+    const err = this.transcript.error();
+    return err ? errorMessage(toUiErrorCode(err)) : '';
+  });
+  /** The player's short notice with the subtitles: the column may be out of sight (BR-2). */
+  protected readonly lowCaptions = computed(() => {
+    const media = this.media();
+    return media !== null && isLowConfidence(media) && this.showTranscript();
+  });
+  /**
+   * The low-confidence notice in the header: when the transcript column does not show it
+   * (hidden, or not loaded), so it is in view wherever the text or subtitles are (BR-2).
+   */
   protected readonly lowConfidence = computed(() => {
     const media = this.media();
-    return media !== null && media.status === 'ready' && isLowConfidence(media);
+    const ready = media !== null && media.status === 'ready';
+    const inColumn = this.showTranscript() && this.transcript.hasValue();
+    return ready && isLowConfidence(media) && !inColumn;
   });
   protected readonly duration = computed(() => {
     const ms = this.media()?.durationMs;
@@ -167,6 +241,23 @@ export class MediaPlayerPage {
   protected resume(): void {
     this.answered.set(true);
     this.engine.play();
+  }
+
+  /** "Esconder transcrição" / "Mostrar transcrição", remembered for every media. */
+  protected toggleTranscript(): void {
+    this.preferences.setTranscriptCollapsed(!this.collapsed());
+  }
+
+  /** The version is in the query, so a new transcript is fetched, not taken from cache. */
+  private requestFor(url: (id: string) => string) {
+    const version = this.transcriptVersion();
+    return version === null
+      ? undefined
+      : { url: url(this.id()), params: { v: version } };
+  }
+
+  protected reloadTranscript(): void {
+    this.transcript.reload();
   }
 
   /** "Começar do início". */
@@ -244,8 +335,16 @@ export class MediaPlayerPage {
   private open(media: MediaItem): void {
     const playFrom = this.playFrom;
     this.playFrom = null;
+    const startAt = this.startAt();
     if (this.engine.source()?.id === media.id) {
       if (playFrom !== null) this.playAt(playFrom);
+      else if (startAt !== null) this.engine.seek(startAt);
+      return;
+    }
+    if (playFrom === null && startAt !== null) {
+      // A link to a minute: positioned there, paused (no autoplay), no "Continuar de".
+      this.saver.startFrom(media);
+      this.engine.load(this.sourceOf(media), startAt);
       return;
     }
     if (playFrom !== null) {

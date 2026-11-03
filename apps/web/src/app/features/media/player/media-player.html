@@ -13,6 +13,20 @@
     </div>
   }
 
+  @if (captionsOn() && lowConfidence()) {
+    <p class="warning-notice low-badge" i18n="@@player.captions.lowBadge">
+      Legendas de baixa confiança: podem ter trechos errados.
+    </p>
+  }
+  @if (captionsOn()) {
+    <!-- Hidden from screen readers: the transcript beside it is the accessible text. -->
+    <div class="caption-area" aria-hidden="true">
+      @if (caption()) {
+        <p class="caption">{{ caption() }}</p>
+      }
+    </div>
+  }
+
   <app-seek-slider
     [marks]="bookmarks.positions()"
     [currentMs]="playback().currentMs"
@@ -106,6 +120,19 @@
     >
       {{ speedShown() }}
     </app-menu-button>
+
+    <button
+      type="button"
+      class="cc"
+      aria-label="CC, legendas"
+      i18n-aria-label="@@player.captions"
+      aria-keyshortcuts="C"
+      [attr.aria-pressed]="captionsPressed()"
+      [disabled]="!captionsAvailable()"
+      (click)="toggleCaptions()"
+    >
+      <span aria-hidden="true">CC</span>
+    </button>
 
     @if (volumeSupported()) {
       <div class="volume">

@@ -12,6 +12,9 @@ import {
 } from '@core/media/media-engine.js';
 import { PREFERENCES_URL } from '@core/media/listening-api.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
+import { ANIMATION_FRAMES } from '@core/media/playback-clock.js';
+import { PlayerAnnouncer } from '@core/media/player-announcer.js';
+import { EMPTY, Subject, type Observable } from 'rxjs';
 import {
   fakeMediaElement,
   type FakeMedia,
@@ -22,16 +25,22 @@ const SOURCE = { id: 'm1', title: 'Palestra', src: '/api/v1/media/m1/stream' };
 
 async function renderPlayer(
   prepare: (media: FakeMedia, engine: MediaEngine) => void = () => undefined,
-  options: { volume?: boolean } = {},
+  options: {
+    volume?: boolean;
+    inputs?: Record<string, unknown>;
+    frames?: Observable<number>;
+  } = {},
 ) {
   localStorage.clear();
   const media = fakeMediaElement('audio');
   const view = await render(MediaPlayer, {
+    inputs: options.inputs ?? {},
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
+      { provide: ANIMATION_FRAMES, useValue: options.frames ?? EMPTY },
       {
         provide: VOLUME_SUPPORT,
         useValue: Promise.resolve(options.volume ?? true),
@@ -658,3 +667,127 @@ describe('MediaPlayer (KBC-042 bookmarks)', () => {
 function pressEnter(field: HTMLElement): void {
   fireEvent.keyDown(field, { key: 'Enter' });
 }
+
+describe('MediaPlayer subtitles and minute link (KBC-038)', () => {
+  const CUES = [
+    { startMs: 1_000, endMs: 3_000, text: 'Existia um rei\ndenominado Inca.' },
+    { startMs: 4_000, endMs: 5_000, text: 'Fim.' },
+  ];
+
+  it('keeps CC off and unusable while the media has no transcript', async () => {
+    await renderPlayer(loaded);
+    const cc = screen.getByRole('button', { name: 'CC, legendas' });
+    expect(cc.hasAttribute('disabled')).toBe(true);
+    expect(cc.getAttribute('aria-pressed')).toBe('false');
+    expect(cc.getAttribute('aria-keyshortcuts')).toBe('C');
+  });
+
+  it('shows the cue being heard once CC is on, and nothing in a gap (AC-1, AC-4)', async () => {
+    const { container, media, fixture } = await renderPlayer(loaded, {
+      inputs: { cues: CUES, captionsAvailable: true },
+    });
+    expect(container.querySelector('.caption-area')).toBeNull();
+    const cc = screen.getByRole('button', { name: 'CC, legendas' });
+    fireEvent.click(cc);
+    await fixture.whenStable();
+    expect(cc.getAttribute('aria-pressed')).toBe('true');
+    expect(localStorage.getItem('kb-chat.player.captions')).toBe('on');
+    // Visible text first in the name (WCAG 2.5.3).
+    expect(cc.textContent?.trim()).toBe('CC');
+    const area = container.querySelector('.caption-area');
+    expect(area?.getAttribute('aria-hidden')).toBe('true');
+    media.setCurrentTime(1.5);
+    media.emit('timeupdate');
+    await fixture.whenStable();
+    expect(container.querySelector('.caption')?.textContent).toBe(
+      'Existia um rei\ndenominado Inca.',
+    );
+    media.setCurrentTime(3.5);
+    media.emit('timeupdate');
+    await fixture.whenStable();
+    expect(container.querySelector('.caption')).toBeNull();
+    fireEvent.click(cc);
+    await fixture.whenStable();
+    expect(cc.getAttribute('aria-pressed')).toBe('false');
+    expect(container.querySelector('.caption-area')).toBeNull();
+  });
+
+  it('shows the short low-confidence notice with the subtitles only when asked', async () => {
+    const { container, fixture } = await renderPlayer(loaded, {
+      inputs: { cues: CUES, captionsAvailable: true, lowConfidence: true },
+    });
+    expect(container.querySelector('.low-badge')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'CC, legendas' }));
+    await fixture.whenStable();
+    expect(container.querySelector('.low-badge')?.textContent?.trim()).toBe(
+      'Legendas de baixa confiança: podem ter trechos errados.',
+    );
+  });
+
+  it('asks for animation frames only with subtitles on and cues to show', async () => {
+    const frames = new Subject<number>();
+    const { media, fixture } = await renderPlayer(loaded, {
+      inputs: { cues: [], captionsAvailable: true },
+      frames,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'CC, legendas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tocar' }));
+    media.emit('playing');
+    await fixture.whenStable();
+    expect(frames.observed).toBe(false);
+    fixture.componentRef.setInput('cues', CUES);
+    await fixture.whenStable();
+    expect(frames.observed).toBe(true);
+    fixture.destroy();
+    TestBed.tick();
+    expect(frames.observed).toBe(false);
+  });
+
+  it('copies the link of the second heard now from "Mais opções" (FR-5)', async () => {
+    const writes: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          writes.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+    const { media, fixture } = await renderPlayer(loaded);
+    media.setCurrentTime(754.9);
+    media.emit('timeupdate');
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Copiar link deste minuto' }),
+    );
+    await Promise.resolve();
+    expect(writes).toEqual([`${location.origin}/midia/m1?t=754`]);
+    expect(TestBed.inject(PlayerAnnouncer).message()).toBe(
+      'Link deste minuto copiado.',
+    );
+  });
+
+  it('says when the minute link could not be copied', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error('denied')) },
+    });
+    const { fixture } = await renderPlayer(loaded);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Copiar link deste minuto' }),
+    );
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(TestBed.inject(PlayerAnnouncer).message()).toBe(
+      'Não consegui copiar o link.',
+    );
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+  });
+});
