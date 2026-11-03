@@ -265,6 +265,38 @@ describe('cuesOf (KBC-038 FR-1, ADR 0023 §8)', () => {
     expectWithinRules(cues);
   });
 
+  it('spreads a long segment without words over its span, no cue longer than 6 s', () => {
+    const text = Array.from({ length: 24 }, (_, i) => `verso${i}`).join(' ');
+    const cues = cuesOf({ segments: [segmentAt(0, 40_000, text)], words: [] });
+    expect(cues.length).toBeGreaterThanOrEqual(6);
+    for (const cue of cues)
+      expect(cue.endMs - cue.startMs).toBeLessThanOrEqual(6_000);
+    expect(cues.at(-1)?.startMs).toBeGreaterThan(30_000);
+    expect(cues.map(flat).join(' ')).toBe(text);
+    expectWithinRules(cues);
+  });
+
+  it('keeps every word-less cue within 6 s, whatever the span and text (property)', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.stringMatching(/^[a-zã]{1,12}$/), {
+          minLength: 1,
+          maxLength: 60,
+        }),
+        fc.integer({ min: 0, max: 120_000 }),
+        (words, spanMs) => {
+          const cues = cuesOf({
+            segments: [segmentAt(1_000, 1_000 + spanMs, words.join(' '))],
+            words: [],
+          });
+          for (const cue of cues)
+            expect(cue.endMs - cue.startMs).toBeLessThanOrEqual(6_000);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
   it('shows a short segment without words once, not a word every few seconds', () => {
     const cues = cuesOf({
       segments: [segmentAt(0, 30_000, 'Olá mundo.')],

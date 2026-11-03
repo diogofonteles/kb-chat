@@ -452,7 +452,7 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
   await expect
     .poll(async () => (await audioState(page)).currentTime)
     .toBeGreaterThan(1);
-  const late = await page.evaluate(async () => {
+  const { misses, samples } = await page.evaluate(async () => {
     const audio = document.querySelector<HTMLMediaElement>(
       '[data-media-engine]',
     );
@@ -460,6 +460,7 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
       document.querySelectorAll<HTMLElement>('li[data-start-ms]'),
     ).map((item) => Number(item.dataset['startMs']));
     const misses: number[] = [];
+    let samples = 0;
     const until = performance.now() + 6_000;
     let previous = performance.now();
     while (performance.now() < until) {
@@ -470,6 +471,7 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
       const frozen = frameAt - previous > 100;
       previous = frameAt;
       if (frozen || !audio || audio.readyState < 3 || audio.paused) continue;
+      samples++;
       const now = audio.currentTime * 1000;
       const shown = Number(
         document.querySelector<HTMLElement>('li:has([aria-current="true"])')
@@ -480,9 +482,12 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
       // The marked segment must contain the audio's time, give or take 250 ms.
       if (shown > now + 250 || next < now - 250) misses.push(now);
     }
-    return misses;
+    return { misses, samples };
   });
-  expect(late).toEqual([]);
+  // Frames are skipped only when they say nothing; 6 s must still give real samples
+  // (about 360 at 60 fps), or the check would pass without measuring.
+  expect(samples).toBeGreaterThanOrEqual(120);
+  expect(misses).toEqual([]);
 });
 
 test('NFR-2: a 2 h transcript (~20 000 words) opens and answers clicks and keys with INP ≤ 200 ms', async ({

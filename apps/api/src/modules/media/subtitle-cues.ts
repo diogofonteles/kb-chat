@@ -141,16 +141,29 @@ function piecesOf(text: string, count: number): string[] {
   return pieces;
 }
 
+/** A word-less segment is split by its length only into cues of at least this many words. */
+const MIN_WORDS_PER_SPLIT = 3;
+
 /**
- * A segment without word times over its span: as few cues as the text needs, each timed by
- * its share of the characters and shown 6 s at most (two words in 30 s make one cue, not
+ * A segment without word times over its span: cues spread over it by text and by duration,
+ * each timed by its share of the characters and shown 6 s at most (two words in 30 s make one cue, not
  * one cue per word).
  */
 function spreadText(text: string, span: Span): SubtitleCue[] {
   const length = text.trim().length;
   if (length === 0) return [];
   const duration = Math.max(0, span.endMs - span.startMs);
-  const count = Math.max(1, Math.ceil(length / SUBTITLE_RULES.maxCueChars));
+  // Split by duration too (no cue over 6 s leaves the rest of a long segment bare), but
+  // never below three words per cue: a short text in a long segment shows once.
+  const byDuration = Math.min(
+    Math.ceil(duration / SUBTITLE_RULES.maxCueMs),
+    Math.floor(tokensOf(text).length / MIN_WORDS_PER_SPLIT),
+  );
+  const count = Math.max(
+    1,
+    Math.ceil(length / SUBTITLE_RULES.maxCueChars),
+    byDuration,
+  );
   const pieces = piecesOf(text.trim(), count);
   const total = pieces.reduce((sum, piece) => sum + piece.length, 0);
   let done = 0;
