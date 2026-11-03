@@ -321,10 +321,10 @@ export class BookmarksStore {
     if (!bookmark) return;
     this.clearUndo();
     this.deletedOne.set(null);
-    const out = this.outbox().get(bookmark.id);
     this.untrack(bookmark.id);
-    // Never reached the server and nothing on its way: nothing to delete there.
-    if (out && !out.created && out.failed) return;
+    // Always asked of the server: a creation whose answer was lost may be there (a 404 is
+    // done). As the page goes, the deletion cannot wait for a creation still on its way;
+    // that one stays, the rare price of a page closed within a second of marking.
     if (keepalive) this.sendDelete(bookmark, true).subscribe();
     else this.writes.next({ kind: 'delete', bookmark });
   }

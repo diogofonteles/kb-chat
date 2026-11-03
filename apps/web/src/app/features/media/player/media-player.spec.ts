@@ -327,6 +327,8 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     await fixture.whenStable();
     const dialog = screen.getByRole('dialog', { name: 'Atalhos de teclado' });
     expect(dialog.textContent).toContain('Voltar 15 segundos');
+    // KBC-042: B marks this point, and the list says so.
+    expect(dialog.textContent).toMatch(/B\s*Marcar este trecho/);
     const toggle = screen.getByRole('checkbox', {
       name: 'Usar atalhos de uma tecla',
     }) as HTMLInputElement;

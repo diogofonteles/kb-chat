@@ -159,6 +159,28 @@ describe('BookmarkList (KBC-042 FR-3, FR-4)', () => {
     expect(screen.getByText(/Nenhum marcador ainda/)).toBeTruthy();
     expect(screen.queryByRole('list')).toBeNull();
   });
+
+  it('moves the focus to the list heading when "Desfazer" goes after 8 s (NG-30)', async () => {
+    await renderList();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Apagar o marcador em 12:38' }),
+      );
+      TestBed.tick();
+      const undo = screen.getByRole('button', { name: 'Desfazer' });
+      undo.focus();
+      fireEvent.focus(undo);
+      vi.advanceTimersByTime(8_000);
+      TestBed.tick();
+      expect(screen.queryByRole('button', { name: 'Desfazer' })).toBeNull();
+      expect(document.activeElement).toBe(
+        screen.getByRole('heading', { name: /Marcadores/ }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 /** Enter in the field, as the person would. */

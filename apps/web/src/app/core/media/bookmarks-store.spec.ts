@@ -212,13 +212,14 @@ describe('BookmarksStore (KBC-042)', () => {
   });
 
   it('brings a bookmark back when its deletion fails, and deletes it again on "Tentar de novo"', () => {
+    vi.useFakeTimers();
     const { store, http } = setup([saved(A, 1_000)]);
     store.remove(A);
     store.remove('missing');
     store.undo();
     store.remove(A);
     expect(store.deleted()?.id).toBe(A);
-    store['commitDelete'](false);
+    vi.advanceTimersByTime(UNDO_MS);
     http
       .expectOne({ method: 'DELETE', url: `${URL}/${A}` })
       .flush(null, { status: 500, statusText: 'Error' });
@@ -233,9 +234,10 @@ describe('BookmarksStore (KBC-042)', () => {
   });
 
   it('takes a 404 on deletion as done (never saved, or deleted elsewhere)', () => {
+    vi.useFakeTimers();
     const { store, http } = setup([saved(A, 1_000)]);
     store.remove(A);
-    store['commitDelete'](false);
+    vi.advanceTimersByTime(UNDO_MS);
     http
       .expectOne({ method: 'DELETE', url: `${URL}/${A}` })
       .flush(null, { status: 404, statusText: 'Not Found' });
@@ -291,13 +293,14 @@ describe('BookmarksStore (KBC-042)', () => {
   });
 
   it('never brings back a bookmark deleted while its creation was on its way', () => {
+    vi.useFakeTimers();
     const { store, http, at } = setup();
     at(10);
     store.mark();
     const id = firstId(store);
     const post = http.expectOne({ method: 'POST', url: URL });
     store.remove(id);
-    store['commitDelete'](false);
+    vi.advanceTimersByTime(UNDO_MS);
     // The deletion waits for the creation: then it goes, and the bookmark stays gone.
     http.expectNone({ method: 'DELETE' });
     post.flush(saved(id, 8_000));
@@ -358,7 +361,8 @@ describe('BookmarksStore (KBC-042)', () => {
     expect(store.failed()).toBeNull();
   });
 
-  it('drops a bookmark that never reached the server when it is deleted', () => {
+  it('asks the server to delete one whose creation failed: its answer may have been lost', () => {
+    vi.useFakeTimers();
     const { store, http, at } = setup();
     at(10);
     store.mark();
@@ -367,8 +371,11 @@ describe('BookmarksStore (KBC-042)', () => {
       .expectOne({ method: 'POST', url: URL })
       .flush(null, { status: 503, statusText: 'Unavailable' });
     store.remove(id);
-    store['commitDelete'](false);
-    http.expectNone({ method: 'DELETE' });
+    vi.advanceTimersByTime(UNDO_MS);
+    http
+      .expectOne({ method: 'DELETE', url: `${URL}/${id}` })
+      .flush(null, { status: 404, statusText: 'Not Found' });
     expect(store.failed()).toBeNull();
+    expect(store.bookmarks()).toEqual([]);
   });
 });

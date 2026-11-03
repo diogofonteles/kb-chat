@@ -259,11 +259,7 @@ test('AC-9: marking, noting, playing from the list and undoing work with the key
   await expect(list(page).first()).toContainText('trecho importante');
 });
 
-test('NFR-2: 500 bookmarks list and respond fast', async ({
-  page,
-  browserName,
-}) => {
-  // Event Timing (INP) exists in Chromium only; WebKit still lists the 500.
+test('NFR-2: 500 bookmarks are all listed', async ({ page }) => {
   test.setTimeout(120_000);
   await seed(
     page,
@@ -271,7 +267,23 @@ test('NFR-2: 500 bookmarks list and respond fast', async ({
   );
   await openPlayer(page);
   await expect(list(page)).toHaveCount(500);
-  if (browserName !== 'chromium') return;
+});
+
+test('NFR-2: with 500 bookmarks, scrolling and a click answer within 200 ms (INP)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Event Timing (INP) is measured in Chromium only',
+  );
+  test.setTimeout(120_000);
+  await seed(
+    page,
+    Array.from({ length: 500 }, (_, i) => i * 200),
+  );
+  await openPlayer(page);
+  await expect(list(page)).toHaveCount(500);
   await page.evaluate(() => {
     const durations: number[] = [];
     new PerformanceObserver((entries) => {
@@ -282,23 +294,23 @@ test('NFR-2: 500 bookmarks list and respond fast', async ({
     } as PerformanceObserverInit);
     Object.assign(window, { interactionDurations: durations });
   });
-  const durations = () =>
-    page.evaluate(
-      () =>
-        (window as unknown as { interactionDurations: number[] })
-          .interactionDurations,
-    );
-  // Scrolling the whole list, then a click far down: each answers within 200 ms.
   await page.mouse.wheel(0, 20_000);
-  const target = list(page)
+  await list(page)
     .nth(450)
-    .getByRole('button', { name: /^Tocar de/ });
-  await target.click();
+    .getByRole('button', { name: /^Tocar de/ })
+    .click();
   await expect(
     page.getByRole('button', { name: 'Pausar', exact: true }),
   ).toBeVisible();
-  await expect.poll(async () => (await durations()).length).toBeGreaterThan(0);
-  expect(Math.max(...(await durations()))).toBeLessThanOrEqual(200);
+  // Only events of 16 ms or more are reported: none means every one was faster.
+  const slowest = await page.evaluate(() =>
+    Math.max(
+      0,
+      ...(window as unknown as { interactionDurations: number[] })
+        .interactionDurations,
+    ),
+  );
+  expect(slowest).toBeLessThanOrEqual(200);
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {
