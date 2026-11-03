@@ -259,3 +259,88 @@ describe('recentlyPlayed (BR-4)', () => {
     ]);
   });
 });
+
+describe('authors (KBC-049)', () => {
+  const ana = { slug: 'ana', name: 'Ana', main: false };
+  const bia = { slug: 'bia', name: 'Bia', main: false };
+  const items = [
+    anItem({ title: 'Sem autor', author: null }),
+    anItem({ title: 'Da Bia', author: bia }),
+    anItem({ title: 'Do Mestre', author: MESTRE }),
+    anItem({ title: 'Da Ana', author: ana }),
+  ];
+
+  it('orders by author name, "Outros autores" last', () => {
+    expect(titles(sortLibrary(items, 'author'))).toEqual([
+      'Da Ana',
+      'Da Bia',
+      'Do Mestre',
+      'Sem autor',
+    ]);
+  });
+
+  it('lists the main author first, then the others by name', () => {
+    expect(facetsOf(items).authors).toEqual([MESTRE, ana, bia]);
+  });
+
+  it('filters by an author or by "Outros autores" (no author)', () => {
+    expect(
+      titles(filterLibrary(items, { ...NO_FILTER, authors: ['bia', '-'] })),
+    ).toEqual(['Sem autor', 'Da Bia']);
+  });
+
+  it('finds media by the author’s name, and "outros autores" by none', () => {
+    expect(matchesQuery(items[1] as LibraryItem, 'bia')).toBe(true);
+    expect(matchesQuery(items[0] as LibraryItem, 'outros autores')).toBe(true);
+    expect(matchesQuery(items[3] as LibraryItem, 'outros')).toBe(false);
+  });
+});
+
+describe('ties and gaps', () => {
+  it('breaks equal lengths by title', () => {
+    const items = [
+      anItem({ title: 'Zeta', durationMs: 100 }),
+      anItem({ title: 'Alfa', durationMs: 100 }),
+    ];
+    expect(titles(sortLibrary(items, 'duration'))).toEqual(['Alfa', 'Zeta']);
+  });
+
+  it('continues by the last save when a position was never played here, newest added on a tie', () => {
+    const saved = '2026-11-01T00:00:00.000Z';
+    const older = anItem({
+      title: 'Antiga',
+      positionMs: 5,
+      positionUpdatedAt: saved,
+    });
+    const newer = anItem({
+      title: 'Nova',
+      positionMs: 5,
+      positionUpdatedAt: saved,
+    });
+    const marked = anItem({
+      title: 'Marcada antes',
+      positionMs: 5,
+      positionUpdatedAt: '2026-10-01T00:00:00.000Z',
+    });
+    expect(titles(continueListening([marked, older, newer]))).toEqual([
+      'Nova',
+      'Antiga',
+      'Marcada antes',
+    ]);
+  });
+
+  it('puts the newest added first among media played at the same time', () => {
+    const at = '2026-11-02T00:00:00.000Z';
+    const first = anItem({ title: 'Primeira', lastPlayedAt: at });
+    const second = anItem({ title: 'Segunda', lastPlayedAt: at });
+    const converting = anItem({
+      title: 'Convertendo',
+      status: 'processing',
+      lastPlayedAt: at,
+    });
+    expect(titles(recentlyPlayed([first, second, converting], null))).toEqual([
+      'Segunda',
+      'Primeira',
+    ]);
+  });
+});
