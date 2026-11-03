@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -90,6 +91,11 @@ export class MediaPlayer {
   readonly cues = input<readonly Cue[]>([]);
   /** The media has a transcript: CC can be used. */
   readonly captionsAvailable = input(false);
+  /**
+   * The transcript is of low confidence and its own notice may be out of sight (stacked
+   * layout): a short notice goes with the subtitles (KBC-036 BR-5).
+   */
+  readonly lowConfidence = input(false);
 
   protected readonly engine = inject(MediaEngine);
   private readonly transcriptPreferences = inject(TranscriptPreferences);
@@ -261,6 +267,11 @@ export class MediaPlayer {
   protected readonly volumeText = computed(() => `${this.volumePercent()}%`);
 
   constructor() {
+    // Frames only while subtitles show cues here (never for the mini-player).
+    this.clock.follow(
+      () => this.captionsOn() && this.cues().length > 0,
+      inject(DestroyRef),
+    );
     this.preferences.load();
     this.volumeMemory.restore();
     // "?" anywhere the shortcuts act opens the list; only new requests count.

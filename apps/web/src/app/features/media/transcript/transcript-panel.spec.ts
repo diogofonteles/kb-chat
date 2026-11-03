@@ -73,7 +73,8 @@ async function at(
   await view.fixture.whenStable();
 }
 
-const timeButtons = () => screen.getAllByRole('button', { name: /^Tocar de / });
+const timeButtons = () =>
+  screen.getAllByRole('button', { name: /^\d+:\d{2}, tocar de / });
 
 const focused = () => document.activeElement as HTMLElement;
 
@@ -145,11 +146,26 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     ).toBe(true);
   });
 
+  it('moves from the focused segment, not from the one playing (FR-7)', async () => {
+    const { media, view } = await renderPanel();
+    timeButtons()[1]?.focus();
+    // The audio moves on to the third segment while the focus stays on the second.
+    await at(media, 11, view);
+    fireEvent.keyDown(focused(), { key: 'ArrowDown' });
+    await view.fixture.whenStable();
+    expect(document.activeElement).toBe(timeButtons()[2]);
+    fireEvent.keyDown(focused(), { key: 'ArrowUp' });
+    await view.fixture.whenStable();
+    expect(document.activeElement).toBe(timeButtons()[1]);
+  });
+
   it('names each time button by the spoken time, the text as its description', async () => {
     await renderPanel();
+    // The name starts with the visible "20:00" (WCAG 2.5.3, voice control).
     const button = screen.getByRole('button', {
-      name: 'Tocar de 20 minutos',
+      name: '20:00, tocar de 20 minutos',
     });
+    expect(button.textContent?.trim()).toBe('20:00');
     expect(button.getAttribute('aria-describedby')).toBe('transcript-text-3');
     expect(document.getElementById('transcript-text-3')?.textContent).toContain(
       'o vegetal',
@@ -248,7 +264,8 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     expect(tab).toBe(true);
     fireEvent.keyDown(field, { key: 'Escape' });
     await view.fixture.whenStable();
-    expect(screen.queryByRole('status')).toBeNull();
+    // The live region stays, empty, so the next result is announced too.
+    expect(screen.getByRole('status').textContent).toBe('');
     expect((field as HTMLInputElement).value).toBe('');
   });
 
@@ -314,6 +331,36 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     expect(
       screen.queryByRole('button', { name: 'Copiar com o link do minuto' }),
     ).toBeNull();
+  });
+
+  it('takes the minute of the first segment a selection covers when it starts between segments', async () => {
+    const { view } = await renderPanel();
+    const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
+    const fourth = screen
+      .getByText('No minuto vinte, o vegetal.')
+      .closest('li') as HTMLElement;
+    const range = document.createRange();
+    range.setStart(list, Array.from(list.childNodes).indexOf(fourth));
+    range.setEnd(fourth.querySelector('.text span')?.firstChild as Text, 8);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+    await view.fixture.whenStable();
+    const writes: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          writes.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Copiar com o link do minuto' }),
+    );
+    expect(writes[0]).toMatch(/\?t=1200$/);
+    document.getSelection()?.removeAllRanges();
   });
 
   it('says when the clipboard refuses or is missing', async () => {

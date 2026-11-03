@@ -4,7 +4,10 @@
   </h3>
 
   @if (low()) {
-    <p class="low-confidence" i18n="@@media.transcription.lowNotice">
+    <p
+      class="warning-notice low-confidence"
+      i18n="@@media.transcription.lowNotice"
+    >
       Transcrição automática de baixa confiança: pode haver trechos errados.
     </p>
   }
@@ -26,9 +29,8 @@
           (input)="search($event)"
           (keydown)="searchKeys($event)"
         />
-        @if (searching()) {
-          <span class="count" role="status">{{ searchStatus() }}</span>
-        }
+        <!-- Always present, so the first result is announced too. -->
+        <span class="count" role="status">{{ searchStatus() }}</span>
       </div>
       @if (hits().length > 0) {
         <div class="search-actions">

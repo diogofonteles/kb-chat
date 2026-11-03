@@ -98,8 +98,12 @@ export interface ClockAnchor {
   readonly atMs: number;
 }
 
-/** No guess runs further than this past the last report (a stall, a slow tab). */
-export const MAX_EXTRAPOLATION_MS = 1_000;
+/**
+ * No guess runs further than this past the last report (a stall, a slow tab): twice the
+ * ~250 ms between `timeupdate` events, so a late report holds the mark back rather than
+ * letting it run ahead of the sound.
+ */
+export const MAX_EXTRAPOLATION_MS = 500;
 
 /**
  * The position between two `timeupdate` events (ADR 0025 §4: interpolated with

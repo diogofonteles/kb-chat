@@ -87,7 +87,10 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown)': 'shortcuts.handle($event)' },
+  host: {
+    '(document:keydown)':
+      'shortcuts.handle($event, "page", { captions: hasTranscript() })',
+  },
 })
 export class MediaPlayerPage {
   private readonly engine = inject(MediaEngine);
@@ -157,6 +160,11 @@ export class MediaPlayerPage {
   protected readonly transcriptError = computed(() => {
     const err = this.transcript.error();
     return err ? errorMessage(toUiErrorCode(err)) : '';
+  });
+  /** The player's short notice with the subtitles: the column may be out of sight (BR-2). */
+  protected readonly lowCaptions = computed(() => {
+    const media = this.media();
+    return media !== null && isLowConfidence(media) && this.showTranscript();
   });
   /**
    * The low-confidence notice in the header: when the transcript column does not show it

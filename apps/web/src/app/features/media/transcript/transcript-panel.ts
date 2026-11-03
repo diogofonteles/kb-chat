@@ -4,6 +4,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Renderer2,
   Injector,
   afterNextRender,
   afterRenderEffect,
@@ -84,11 +85,8 @@ const COMFORT = 0.15;
   // The list's own events, taken here: a click anywhere on a segment plays it, and the
   // keys move between the time buttons (the buttons are what is focusable).
   host: {
-    '(document:selectionchange)': 'readSelection()',
     '(click)': 'clickSegment($event)',
     '(keydown)': 'moveWithKeys($event)',
-    '(wheel)': 'scrolledIn($event)',
-    '(touchmove)': 'scrolledIn($event)',
     '(pointerdown)': 'pressList($event)',
   },
 })
@@ -155,7 +153,8 @@ export class TranscriptPanel {
       index,
       startMs: segment.startMs,
       clock: formatClock(segment.startMs),
-      label: $localize`:@@transcript.playFrom:Tocar de ${speak(segment.startMs)}:time:`,
+      // The name starts with the visible time, for voice control (WCAG 2.5.3).
+      label: $localize`:@@transcript.playFromClock:${formatClock(segment.startMs)}:clock:, tocar de ${speak(segment.startMs)}:time:`,
       text: segment.text,
       parts: null,
     })),
@@ -177,7 +176,9 @@ export class TranscriptPanel {
   protected readonly selected = signal<Selected | null>(null);
 
   constructor() {
-    this.clock.watch(inject(DestroyRef));
+    const destroyRef = inject(DestroyRef);
+    this.clock.follow(() => true, destroyRef);
+    this.listenPassively(destroyRef);
     // A skip or a jump in the player brings the list back to what is heard (FR-3).
     toObservable(this.engine.seeksLanded)
       .pipe(skip(1), takeUntilDestroyed())
@@ -192,6 +193,29 @@ export class TranscriptPanel {
     });
   }
 
+  /**
+   * Wheel and touch only read where the person scrolls: passive, so scrolling never waits
+   * for the page (no host binding offers that). The selection is read from the document.
+   */
+  private listenPassively(destroyRef: DestroyRef): void {
+    const renderer = inject(Renderer2);
+    const host = inject(ElementRef<HTMLElement>).nativeElement;
+    const passive = { passive: true };
+    const stops = [
+      renderer.listen(host, 'wheel', (e: Event) => this.scrolledIn(e), passive),
+      renderer.listen(
+        host,
+        'touchmove',
+        (e: Event) => this.scrolledIn(e),
+        passive,
+      ),
+      renderer.listen('document', 'selectionchange', () =>
+        this.readSelection(),
+      ),
+    ];
+    destroyRef.onDestroy(() => stops.forEach((stop) => stop()));
+  }
+
   /** Clicking a segment's time or text plays from it (FR-4); a selection is left alone. */
   protected clickSegment(event: MouseEvent): void {
     const index = this.segmentOf(event.target);
@@ -203,8 +227,10 @@ export class TranscriptPanel {
 
   /** ↑/↓, PageUp/PageDown, Home/End move the one Tab stop (FR-7); the list stops following. */
   protected moveWithKeys(event: KeyboardEvent): void {
-    if (this.segmentOf(event.target) === null) return;
-    const target = this.targetOf(event.key);
+    const from = this.segmentOf(event.target);
+    if (from === null) return;
+    // From the segment with the focus, not the one playing (it may have moved on).
+    const target = this.targetOf(event.key, from);
     if (target === null) return;
     event.preventDefault();
     this.tracking.set(false);
@@ -213,7 +239,7 @@ export class TranscriptPanel {
   }
 
   /** Wheel or touch over the list: the person reads elsewhere (FR-3). */
-  protected scrolledIn(event: Event): void {
+  private scrolledIn(event: Event): void {
     if (this.segmentOf(event.target) !== null || this.isList(event.target))
       this.stopFollowing();
   }
@@ -279,7 +305,7 @@ export class TranscriptPanel {
       this.selected.set(null);
       return;
     }
-    this.selected.set({ text, startMs: startOfNode(range.startContainer) });
+    this.selected.set({ text, startMs: startOfRange(range, list) });
   }
 
   protected copySelection(): void {
@@ -348,14 +374,14 @@ export class TranscriptPanel {
     this.moved.set(null);
   }
 
-  private targetOf(key: string): number | null {
+  private targetOf(key: string, from: number): number | null {
     const last = this.segments().length - 1;
     if (last < 0) return null;
     if (key === 'Home') return 0;
     if (key === 'End') return last;
     const step = STEPS[key];
     if (step === undefined) return null;
-    return Math.min(last, Math.max(0, this.tabStop() + step));
+    return Math.min(last, Math.max(0, from + step));
   }
 
   /**
@@ -405,9 +431,16 @@ function marksBySegment(
   return marks;
 }
 
-/** Where the segment holding `node` starts (its `data-start-ms`); 0 when outside one. */
-function startOfNode(node: Node): number {
-  const element = node instanceof Element ? node : node.parentElement;
-  const item = element?.closest<HTMLElement>('[data-start-ms]');
-  return Number(item?.dataset['startMs'] ?? 0);
+/**
+ * Where the selected passage starts: the segment holding its start, or (a selection that
+ * starts between segments) the first segment it covers.
+ */
+function startOfRange(range: Range, list: HTMLElement): number {
+  const start = range.startContainer;
+  const element = start instanceof Element ? start : start.parentElement;
+  const holding = element?.closest<HTMLElement>('[data-start-ms]');
+  const first = Array.from(
+    list.querySelectorAll<HTMLElement>('[data-start-ms]'),
+  ).find((item) => range.intersectsNode(item));
+  return Number((holding ?? first)?.dataset['startMs'] ?? 0);
 }

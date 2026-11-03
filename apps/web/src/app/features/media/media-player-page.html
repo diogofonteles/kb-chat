@@ -44,27 +44,11 @@
             <span class="transcription">{{ text }}</span>
           }
         </p>
-        @if (hasTranscript()) {
-          <button
-            type="button"
-            class="secondary toggle-transcript"
-            [attr.aria-expanded]="!collapsed()"
-            [attr.aria-controls]="collapsed() ? null : 'transcript-column'"
-            (click)="toggleTranscript()"
-          >
-            @if (collapsed()) {
-              <ng-container i18n="@@transcript.show"
-                >Mostrar transcrição</ng-container
-              >
-            } @else {
-              <ng-container i18n="@@transcript.hide"
-                >Esconder transcrição</ng-container
-              >
-            }
-          </button>
-        }
         @if (lowConfidence()) {
-          <p class="low-confidence" i18n="@@media.transcription.lowNotice">
+          <p
+            class="warning-notice low-confidence"
+            i18n="@@media.transcription.lowNotice"
+          >
             Transcrição automática de baixa confiança: pode haver trechos
             errados.
           </p>
@@ -90,8 +74,27 @@
         <app-media-player
           [cues]="cues()"
           [captionsAvailable]="hasTranscript()"
+          [lowConfidence]="lowCaptions()"
         />
-        <app-bookmark-list />
+        @if (hasTranscript()) {
+          <button
+            type="button"
+            class="secondary toggle-transcript"
+            [attr.aria-expanded]="!collapsed()"
+            [attr.aria-controls]="collapsed() ? null : 'transcript-column'"
+            (click)="toggleTranscript()"
+          >
+            @if (collapsed()) {
+              <ng-container i18n="@@transcript.show"
+                >Mostrar transcrição</ng-container
+              >
+            } @else {
+              <ng-container i18n="@@transcript.hide"
+                >Esconder transcrição</ng-container
+              >
+            }
+          </button>
+        }
       } @else {
         <p class="not-ready" role="status">
           <span class="status">{{ status() }}</span>
@@ -138,5 +141,8 @@
         </div>
       }
     </aside>
+  }
+  @if (ready()) {
+    <app-bookmark-list class="bookmarks" />
   }
 </article>

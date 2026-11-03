@@ -131,12 +131,13 @@ describe('interpolate (ADR 0025 §4)', () => {
     expect(next.positionMs).toBe(10_250);
   });
 
-  it('never guesses more than a second ahead, nor goes back in time', () => {
+  it('never guesses more than half a second ahead, nor goes back in time', () => {
     const first = interpolate(null, { reportedMs: 0, nowMs: 1_000, rate: 2 });
     expect(
       interpolate(first.anchor, { reportedMs: 0, nowMs: 9_000, rate: 2 })
         .positionMs,
     ).toBe(MAX_EXTRAPOLATION_MS * 2);
+    expect(MAX_EXTRAPOLATION_MS).toBe(500);
     expect(
       interpolate(first.anchor, { reportedMs: 0, nowMs: 900, rate: 1 })
         .positionMs,

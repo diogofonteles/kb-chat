@@ -421,8 +421,19 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     expect(screen.getByText('Existia um rei.')).toBeTruthy();
     expect(screen.getAllByText(LOW)).toHaveLength(1);
     expect(
-      screen.getByRole('button', { name: 'Legendas' }).hasAttribute('disabled'),
+      screen
+        .getByRole('button', { name: 'CC, legendas' })
+        .hasAttribute('disabled'),
     ).toBe(false);
+    // With CC on, a short notice goes with the subtitles: on a phone the column's own
+    // notice is far below (CSS hides this one when the column sits beside the player).
+    fireEvent.click(screen.getByRole('button', { name: 'CC, legendas' }));
+    await settle();
+    expect(
+      screen.getByText(
+        'Legendas de baixa confiança: podem ter trechos errados.',
+      ),
+    ).toBeTruthy();
   });
 
   it('hides the column when asked, keeps it hidden for the next media, and the header says low (FR-9, AC-10)', async () => {
@@ -464,7 +475,7 @@ describe('MediaPlayerPage: transcript and subtitles (KBC-038)', () => {
     await harness.fixture.whenStable();
     expect(
       screen
-        .getByRole('button', { name: 'Legendas' })
+        .getByRole('button', { name: 'CC, legendas' })
         .getAttribute('aria-pressed'),
     ).toBe('true');
     expect(document.querySelector('.caption')?.textContent).toBe(

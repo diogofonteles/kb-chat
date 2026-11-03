@@ -3,6 +3,7 @@
 }
 
 .player {
+  container: player / inline-size;
   display: grid;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-6) var(--space-6);
@@ -177,7 +178,7 @@
 }
 
 .caption {
-  max-width: 42ch;
+  max-width: 100%;
   margin: 0;
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
@@ -185,12 +186,24 @@
   color: #fffdf8;
   line-height: 1.4;
   text-align: center;
+  text-wrap: balance;
+  /* Never clipped: the cues already hold two lines of at most 42 characters. */
   white-space: pre-line;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Narrow players (phones): a smaller size keeps 42 characters on one line. */
+@container player (max-width: 26rem) {
+  .caption {
+    font-size: var(--text-sm);
+  }
+}
+
+/* The low-confidence notice beside the subtitles: shown only where the transcript's own
+   notice may be out of sight (the page hides it when the column is beside the player). */
+.low-badge {
+  display: var(--low-confidence-badge, block);
+  justify-self: center;
 }
 
 .cc {

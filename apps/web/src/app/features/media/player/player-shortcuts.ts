@@ -43,6 +43,11 @@ function storedEnabled(): boolean {
   }
 }
 
+/** What the page offers now that some keys depend on. */
+export interface ShortcutContext {
+  readonly captions?: boolean;
+}
+
 /** Where the keys come from: the player page, or the mini-player (no shortcuts list). */
 export type ShortcutScope = 'page' | 'mini-player';
 
@@ -91,7 +96,15 @@ export class PlayerShortcuts {
     }
   }
 
-  handle(event: KeyboardEvent, scope: ShortcutScope = 'page'): void {
+  /**
+   * `context.captions`: the media on the page has subtitles; without them C does nothing
+   * and says nothing (the CC button is off), so the choice for other media stays as it was.
+   */
+  handle(
+    event: KeyboardEvent,
+    scope: ShortcutScope = 'page',
+    context: ShortcutContext = {},
+  ): void {
     if (event.defaultPrevented || !this.engine.source()) return;
     const action = shortcutOf(
       {
@@ -107,6 +120,7 @@ export class PlayerShortcuts {
     // The shortcuts list, the bookmarks and the subtitles live on the player page: the
     // mini-player leaves "?", B and C alone.
     if (!action || (PAGE_ONLY.has(action.kind) && scope !== 'page')) return;
+    if (action.kind === 'captions' && !context.captions) return;
     event.preventDefault();
     if (event.repeat && ONCE.has(action.kind)) return;
     this.run(action);
