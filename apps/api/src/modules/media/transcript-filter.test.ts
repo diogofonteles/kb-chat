@@ -48,7 +48,11 @@ describe('deriveTranscript (KBC-036 FR-3, ADR 0023 §5)', () => {
   it('puts every chunk on the track clock, in milliseconds', () => {
     const raw: RawTranscript = {
       chunks: [
-        { offset: 0, end: 5, result: { segments: [segment('primeiro corte')] } },
+        {
+          offset: 0,
+          end: 5,
+          result: { segments: [segment('primeiro corte')] },
+        },
         {
           offset: 567.6,
           end: 590,
@@ -91,7 +95,8 @@ describe('deriveTranscript (KBC-036 FR-3, ADR 0023 §5)', () => {
   });
 
   it('collapses a loop of up to 12 words, not of 13', () => {
-    const twelve = 'um dois três quatro cinco seis sete oito nove dez onze doze';
+    const twelve =
+      'um dois três quatro cinco seis sete oito nove dez onze doze';
     const thirteen = `${twelve} treze`;
     const repeat = (text: string) => [text, text, text].join(' ');
     expect(textOf(rawOf(segment(repeat(twelve))))).toBe(twelve);

@@ -98,19 +98,18 @@ export class TranscriberService {
 
   /**
    * "On" when one was seen within the hour; otherwise "off" since the last time any was
-   * seen (or paired, when none ever was); "none" when none is paired.
+   * seen (or, when none ever was, since the newest was paired); "none" when none is paired.
    */
   presence(): Presence {
     const records = this.deps.store.list();
     if (records.length === 0) return { transcriber: 'none', offSince: null };
-    const latest = records
-      .map((record) => record.lastSeenAt ?? record.createdAt)
-      .sort()
-      .at(-1);
-    const seen = records.some((record) => this.isOnline(record));
-    return seen || latest === undefined
-      ? { transcriber: 'on', offSince: null }
-      : { transcriber: 'off', offSince: latest };
+    if (records.some((record) => this.isOnline(record)))
+      return { transcriber: 'on', offSince: null };
+    const seen = records.flatMap((record) =>
+      record.lastSeenAt ? [record.lastSeenAt] : [],
+    );
+    const times = seen.length > 0 ? seen : records.map((one) => one.createdAt);
+    return { transcriber: 'off', offSince: [...times].sort().at(-1) ?? null };
   }
 
   private seen(id: string): void {
