@@ -8,6 +8,7 @@ import type {
   SilencesJob,
   VmWorkerJob,
 } from '@kb-chat/contracts';
+import { DEFAULT_LIBRARY_PREFERENCES } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   LOCAL,
@@ -211,7 +212,7 @@ describe('Silence skipping preference (KBC-044 BR-2)', () => {
     };
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
-    ).toEqual({ ...base, skipSilences: false });
+    ).toEqual({ ...base, skipSilences: false, ...DEFAULT_LIBRARY_PREFERENCES });
     await media.owner('PUT', '/api/v1/media/preferences', {
       ...base,
       skipSilences: true,
@@ -220,10 +221,20 @@ describe('Silence skipping preference (KBC-044 BR-2)', () => {
       ...base,
       speed: 1.5,
     });
-    expect(older.json()).toEqual({ ...base, speed: 1.5, skipSilences: true });
+    expect(older.json()).toEqual({
+      ...base,
+      speed: 1.5,
+      skipSilences: true,
+      ...DEFAULT_LIBRARY_PREFERENCES,
+    });
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
-    ).toEqual({ ...base, speed: 1.5, skipSilences: true });
+    ).toEqual({
+      ...base,
+      speed: 1.5,
+      skipSilences: true,
+      ...DEFAULT_LIBRARY_PREFERENCES,
+    });
   });
 });
 
