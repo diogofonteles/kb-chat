@@ -409,6 +409,10 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     // segment, its transcript and its media (collection and author are read from there).
     // Only current versions are indexed: a new version replaces its media's rows in the
     // transaction that stores it (sqlite-transcript-store.ts).
+    // `segments` has a composite key, so its rowid is implicit: SQLite keeps it across
+    // VACUUM and VACUUM INTO (checked on Node 22.23's SQLite) but does not promise to. If
+    // that ever changes, a later migration rebuilds this index from `segments` (one
+    // INSERT … SELECT, as below) or keys it by an explicit column.
     // Version 12: 7 is KBC-051's, 9 KBC-067's, 10 KBC-044's, 11 KBC-064's (open in parallel).
     version: 12,
     name: 'transcript-segments-fts',

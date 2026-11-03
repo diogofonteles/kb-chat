@@ -84,6 +84,9 @@ export const searchRequestSchema = z.strictObject({
     .array(searchKindSchema)
     .min(1)
     .max(SEARCH_KINDS.length)
+    .refine((kinds) => new Set(kinds).size === kinds.length, {
+      error: 'Each kind at most once',
+    })
     .default(() => [...SEARCH_KINDS]),
 });
 export type SearchRequest = z.input<typeof searchRequestSchema>;

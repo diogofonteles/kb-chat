@@ -32,7 +32,9 @@ export function openMediaDatabase(
  * The transcripts' search index is FTS5 (ADR 0024): a Node whose SQLite lacks it (before
  * 22.21 was not checked) stops the API with the reason instead of a bare SQL error.
  */
-export function assertFullTextSearch(db: DatabaseSync): void {
+export function assertFullTextSearch(db: {
+  prepare(sql: string): { all(): readonly Record<string, unknown>[] };
+}): void {
   const options = db
     .prepare('PRAGMA compile_options')
     .all()

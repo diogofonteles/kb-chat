@@ -32,6 +32,10 @@ describe('searchRequestSchema', () => {
     expect(
       searchRequestSchema.safeParse({ q: 'x', kinds: ['video'] }).success,
     ).toBe(false);
+    expect(
+      searchRequestSchema.safeParse({ q: 'x', kinds: ['text', 'text'] })
+        .success,
+    ).toBe(false);
   });
 
   it('rejects a blank question', () => {
