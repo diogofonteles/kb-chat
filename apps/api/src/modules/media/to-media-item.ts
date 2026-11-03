@@ -1,4 +1,5 @@
 import type {
+  MediaAuthor,
   MediaFailure,
   MediaItem,
   MediaTranscription,
@@ -27,6 +28,8 @@ const isRetryable = (record: MediaRecord): boolean =>
 export interface ItemView {
   readonly progress?: SavedProgress;
   readonly presence?: Presence;
+  /** Its author as the collection's list names it now (KBC-049); null is "Outros autores". */
+  readonly author?: MediaAuthor;
 }
 
 const NO_TRANSCRIBER: Presence = { transcriber: 'none', offSince: null };
@@ -71,12 +74,12 @@ export function toMediaItem(
   isMaster: boolean,
   view: ItemView = {},
 ): MediaItem {
-  const { progress } = view;
+  const { progress, author = null } = view;
   return {
     id: record.id,
     topic: record.topic,
     title: record.title,
-    authorship: record.authorship,
+    author,
     status: record.status,
     progress: record.status === 'processing' ? record.progress : null,
     failure: record.failure,

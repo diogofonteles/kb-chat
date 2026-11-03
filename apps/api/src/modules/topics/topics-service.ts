@@ -22,8 +22,19 @@ export interface CollectionActor {
   readonly canSee: (slug: string) => boolean;
 }
 
+/** A collection's main author (KBC-049, ADR 0030), as the topic list shows it. */
+export type MainAuthorOf = (slug: string) => Topic['mainAuthor'];
+
+/** The authors' side of a collection that the topics change. */
+export interface TopicAuthors {
+  readonly mainOf: MainAuthorOf;
+  setMain(slug: string, author: string | null): Promise<void>;
+}
+
 export interface TopicsServiceDeps {
   readonly catalog: CatalogRegistry;
+  /** The main author of each collection (KBC-049); none when not given. */
+  readonly authors?: TopicAuthors;
   readonly registry: CollectionRegistry;
   /** Gives the creator access to the new collection (BR-5). */
   readonly grant: (personId: string, slug: string, by: string) => Promise<void>;
@@ -36,6 +47,8 @@ export interface TopicsView {
   readonly visible?: (slug: string) => boolean;
   /** Which ones the person may rename (KBC-048); default: none. */
   readonly renamable?: (slug: string) => boolean;
+  /** Each collection's main author (KBC-049); default: none. */
+  readonly mainAuthorOf?: MainAuthorOf;
 }
 
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
@@ -46,7 +59,7 @@ const byTitle = (a: TopicCatalog, b: TopicCatalog): number =>
 function toTopic(
   catalog: TopicCatalog,
   scope: readonly TopicCatalog[],
-  access: Pick<Topic, 'canOpen' | 'canRename'>,
+  access: Pick<Topic, 'canOpen' | 'canRename' | 'mainAuthor'>,
 ): Topic {
   const { slug, title, parent, description } = catalog.topic;
   const { canOpen } = access;
@@ -66,7 +79,7 @@ function toTopic(
 function branchOf(
   root: TopicCatalog,
   children: readonly TopicCatalog[],
-  view: Required<Pick<TopicsView, 'visible' | 'renamable'>>,
+  view: Required<Pick<TopicsView, 'visible' | 'renamable' | 'mainAuthorOf'>>,
 ): Topic[] {
   const canOpen = view.visible(root.topic.slug);
   if (!canOpen && children.length === 0) return [];
@@ -74,11 +87,13 @@ function branchOf(
     toTopic(root, [root, ...children], {
       canOpen,
       canRename: canOpen && view.renamable(root.topic.slug),
+      mainAuthor: view.mainAuthorOf(root.topic.slug),
     }),
     ...children.map((child) =>
       toTopic(child, [child], {
         canOpen: true,
         canRename: view.renamable(child.topic.slug),
+        mainAuthor: view.mainAuthorOf(child.topic.slug),
       }),
     ),
   ];
@@ -94,6 +109,7 @@ export function listTopics(
     preferredTopic,
     visible = () => true,
     renamable = () => false,
+    mainAuthorOf = () => null,
   }: TopicsView = {},
 ): TopicList {
   const all = catalog.topics();
@@ -101,17 +117,15 @@ export function listTopics(
   const roots = all
     .filter((one) => !one.topic.parent || !known.has(one.topic.parent))
     .sort(byTitle);
+  const childrenOf = (root: TopicCatalog) =>
+    all
+      .filter(
+        (one) =>
+          one.topic.parent === root.topic.slug && visible(one.topic.slug),
+      )
+      .sort(byTitle);
   const items = roots.flatMap((root) =>
-    branchOf(
-      root,
-      all
-        .filter(
-          (one) =>
-            one.topic.parent === root.topic.slug && visible(one.topic.slug),
-        )
-        .sort(byTitle),
-      { visible, renamable },
-    ),
+    branchOf(root, childrenOf(root), { visible, renamable, mainAuthorOf }),
   );
   const opens = items.some(
     (item) => item.slug === preferredTopic && item.canOpen,
@@ -162,30 +176,43 @@ export class TopicsService {
   }
 
   /**
-   * New name or description; the slug, links and permissions stay (BR-4). Masters rename any
-   * collection; others only the ones they created (a shared one is renamed for everyone).
+   * New name, description or main author; the slug, links and permissions stay (BR-4).
+   * Masters change any collection; others only the ones they created (a shared one changes
+   * for everyone). The main author is one of the collection's authors (KBC-049 FR-2).
    */
   async rename(
     actor: CollectionActor,
     slug: string,
     input: TopicUpdate,
   ): Promise<Topic> {
-    const names = topicUpdateSchema.parse(input);
+    const { mainAuthor, ...names } = topicUpdateSchema.parse(input);
     const current = this.require(slug).topic;
     await this.assertMayRename(actor, slug);
     if (names.title !== undefined)
       this.assertFreeName(names.title, current.parent ?? null, slug);
-    await this.deps.registry.rename(
-      {
-        slug,
-        title: current.title,
-        description: current.description ?? '',
-        parent: current.parent ?? null,
-      },
-      names,
-    );
-    await this.deps.catalog.refresh(slug);
+    if (mainAuthor !== undefined) await this.setMainAuthor(slug, mainAuthor);
+    if (names.title !== undefined || names.description !== undefined) {
+      await this.deps.registry.rename(
+        {
+          slug,
+          title: current.title,
+          description: current.description ?? '',
+          parent: current.parent ?? null,
+        },
+        names,
+      );
+      await this.deps.catalog.refresh(slug);
+    }
     return this.topicOf(slug);
+  }
+
+  private async setMainAuthor(
+    slug: string,
+    author: string | null,
+  ): Promise<void> {
+    if (!this.deps.authors)
+      throw new AppError('VALIDATION_FAILED', 'Authors are not available');
+    await this.deps.authors.setMain(slug, author);
   }
 
   /**
@@ -272,6 +299,7 @@ export class TopicsService {
     return toTopic(this.require(slug), this.deps.catalog.scope(slug), {
       canOpen: true,
       canRename: true,
+      mainAuthor: this.deps.authors?.mainOf(slug) ?? null,
     });
   }
 }

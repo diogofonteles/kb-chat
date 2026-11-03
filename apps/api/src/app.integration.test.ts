@@ -62,6 +62,7 @@ describe('GET /api/v1/topics', () => {
           description: '',
           canOpen: true,
           canRename: true,
+          mainAuthor: null,
         },
         {
           slug: 'hermetismo',
@@ -71,6 +72,8 @@ describe('GET /api/v1/topics', () => {
           description: '',
           canOpen: true,
           canRename: true,
+          // KBC-049 BR-4: the documents marked as the Mestre's make him the main author.
+          mainAuthor: { slug: 'mestre-laercio', name: 'Mestre Laércio' },
         },
       ],
       defaultSlug: null,

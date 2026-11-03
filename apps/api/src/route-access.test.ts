@@ -92,6 +92,14 @@ describe('route access (NFR-2, AC-6)', () => {
     expect(find('POST', '/api/v1/topics/:topic/research')).toMatchObject({
       feature: 'research',
     });
+    // KBC-049 BR-3: registering an author is part of sending content there.
+    expect(find('POST', '/api/v1/topics/:topic/authors')).toEqual({
+      feature: 'media-upload',
+      topicParam: 'topic',
+    });
+    expect(find('GET', '/api/v1/topics/:topic/authors')).toEqual({
+      topicParam: 'topic',
+    });
     expect(find('GET', '/api/v1/ai/providers')).toMatchObject({
       feature: 'own-ai-settings',
     });

@@ -257,4 +257,17 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         FROM media WHERE status = 'ready';
     `,
   },
+  {
+    // KBC-049 (ADR 0030): a media item names one of its collection's authors (null is
+    // "Outros autores"). Expand only: `authorship` stays, still written, so the previous
+    // image (the deploy's automatic rollback) reads the same rows.
+    version: 6,
+    name: 'media-author',
+    sql: `
+      ALTER TABLE media ADD COLUMN author TEXT
+        CHECK (author IS NULL OR author GLOB '[a-z0-9]*');
+      UPDATE media SET author = 'mestre-laercio' WHERE authorship = 'mestre-laercio';
+      CREATE INDEX media_by_author ON media (author) WHERE author IS NOT NULL;
+    `,
+  },
 ];

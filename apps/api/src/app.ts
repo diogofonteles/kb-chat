@@ -16,6 +16,13 @@ import type { ResearchProfile } from '@kb-chat/contracts';
 import type { AppConfig } from './config.js';
 import { registerErrorHandler } from './error-handler.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
+import {
+  AuthorDirectory,
+  AuthorsService,
+  authorRoutes,
+  seedLegacyAuthors,
+  LEGACY_MAIN_AUTHOR,
+} from './modules/authors/index.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
 import { DocumentsService, documentRoutes } from './modules/documents/index.js';
 import {
@@ -177,6 +184,11 @@ export interface AppDeps {
    * CollectionsVault (main builds the catalog before the app); in memory when not given.
    */
   readonly collections?: CollectionRegistry;
+  /**
+   * The authors of each collection (KBC-049, ADR 0030), loaded; in memory when not given.
+   * When `agent` is given it must have been built with the same directory's main authors.
+   */
+  readonly authorDirectory?: AuthorDirectory;
 }
 
 type FullDeps = AppDeps & {
@@ -190,6 +202,7 @@ type FullDeps = AppDeps & {
   usage: UsageLogPort;
   conversations: ConversationStorePort;
   collections: CollectionRegistry;
+  authors: AuthorsService;
 };
 
 /** The runner of a person's turn: a fixed model in tests, else the provider in Settings. */
@@ -272,6 +285,46 @@ async function spenders(deps: FullDeps) {
     }));
 }
 
+/** Creating and changing collections (KBC-048), their main author included (KBC-049). */
+function topicsService({ catalog, authors, auth, collections }: FullDeps) {
+  return new TopicsService({
+    catalog,
+    registry: collections,
+    grant: async (personId, slug, by) => {
+      await auth.people.grantTopic(personId, slug, by);
+    },
+    authors: {
+      mainOf: (slug) => authors.mainOf(slug),
+      setMain: (slug, author) => authors.setMain(slug, author),
+    },
+  });
+}
+
+/** The collections (KBC-048) and their authors (KBC-049). */
+async function registerCollections(
+  app: FastifyInstance,
+  deps: FullDeps,
+): Promise<void> {
+  const { config, catalog, authors } = deps;
+  const service = topicsService(deps);
+  await app.register(
+    authorRoutes({
+      service: authors,
+      hasTopic: (topic) => catalog.get(topic) !== undefined,
+    }),
+  );
+  await app.register(
+    topicRoutes({
+      catalog,
+      service,
+      mainAuthorOf: (slug) => authors.mainOf(slug),
+      preferredTopic: (principal) =>
+        deps.ai.settings.snapshot(principal)?.preferences.defaultTopic ??
+        config.KB_TOPIC,
+    }),
+  );
+}
+
 /** Health, topics (with the Settings default collection) and the free search. */
 async function registerSearch(
   app: FastifyInstance,
@@ -279,23 +332,7 @@ async function registerSearch(
 ): Promise<void> {
   const { config, index, catalog } = deps;
   await app.register(healthRoutes({ catalog, index }));
-  const people = deps.auth.people;
-  const service = new TopicsService({
-    catalog,
-    registry: deps.collections,
-    grant: async (personId, slug, by) => {
-      await people.grantTopic(personId, slug, by);
-    },
-  });
-  await app.register(
-    topicRoutes({
-      catalog,
-      service,
-      preferredTopic: (principal) =>
-        deps.ai.settings.snapshot(principal)?.preferences.defaultTopic ??
-        config.KB_TOPIC,
-    }),
-  );
+  await registerCollections(app, deps);
   await app.register(
     searchRoutes({
       service: deps.agent.search,
@@ -329,19 +366,22 @@ async function registerRoutes(
   await app.register(conversationRoutes(conversations));
   await registerSettings(app, deps.ai, deps.config.KB_CHAT_MCP_PEERS);
   await registerAuth(app, deps);
-  if (deps.media) await registerMedia(app, { media: deps.media, catalog });
+  if (deps.media) await registerMedia(app, { ...deps, media: deps.media });
+}
+
+interface MediaWiring {
+  readonly media: MediaDeps;
+  readonly catalog: CatalogRegistry;
+  readonly authors: AuthorsService;
 }
 
 /** A collection's media, with its sub-collections' (ADR 0028). */
 function mediaService({
   media,
   catalog,
+  authors,
   transcribers,
-}: {
-  media: MediaDeps;
-  catalog: CatalogRegistry;
-  transcribers: TranscriberService;
-}): MediaService {
+}: MediaWiring & { transcribers: TranscriberService }): MediaService {
   const { store, files, listening } = media;
   return new MediaService({
     store,
@@ -354,6 +394,7 @@ function mediaService({
         jobId: randomUUID(),
         now: new Date(),
       }),
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
     hasTopic: (topic) => catalog.get(topic) !== undefined,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
   });
@@ -375,10 +416,7 @@ async function registerWorker(
 }
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
-async function registerMedia(
-  app: FastifyInstance,
-  wiring: { media: MediaDeps; catalog: CatalogRegistry },
-) {
+async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const { store, listening, bookmarks, files, workerToken, createPerMinute } =
     wiring.media;
   const transcribers = new TranscriberService({
@@ -672,20 +710,52 @@ async function loadedCatalog(vault: VaultReaderPort): Promise<CatalogRegistry> {
   return catalog;
 }
 
+/**
+ * The authors of each collection (KBC-049), loaded and seeded once with the legacy main
+ * author where documents or media are his (BR-4); in memory when not given.
+ */
+async function loadedAuthors(
+  given: AppDeps,
+  catalog: CatalogRegistry,
+): Promise<AuthorsService> {
+  const directory =
+    given.authorDirectory ?? new AuthorDirectory(new MemoryDocumentStore());
+  await directory.load();
+  const authors = new AuthorsService({ directory, catalog });
+  const store = given.media?.store;
+  await seedLegacyAuthors({
+    directory,
+    authors,
+    catalog,
+    ...(store && {
+      mediaTopicsOfLegacyAuthor: () =>
+        store.topicsWithAuthor(LEGACY_MAIN_AUTHOR.slug),
+    }),
+  });
+  return authors;
+}
+
+/** The research agent over this catalog, naming each collection's main author. */
+const agentOf = (
+  deps: AppDeps,
+  built: Pick<FullDeps, 'catalog' | 'ledger' | 'authors'>,
+): ResearchAgent =>
+  createResearchAgent({
+    catalog: built.catalog,
+    index: deps.index,
+    vault: deps.vault,
+    ledger: built.ledger,
+    budgets: budgetsFromConfig(deps.config),
+    mainAuthorOf: (topic) => built.authors.mainOf(topic)?.name ?? null,
+  });
+
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
 async function completeDeps(given: AppDeps): Promise<FullDeps> {
   const deps = withCollections(given);
   const catalog = deps.catalog ?? (await loadedCatalog(deps.vault));
+  const authors = await loadedAuthors(deps, catalog);
   const ledger = deps.ledger ?? new MemorySpendLedger();
-  const agent =
-    deps.agent ??
-    createResearchAgent({
-      catalog,
-      index: deps.index,
-      vault: deps.vault,
-      ledger,
-      budgets: budgetsFromConfig(deps.config),
-    });
+  const agent = deps.agent ?? agentOf(deps, { catalog, ledger, authors });
   const auth = withActAs(deps.auth ?? inMemoryAuth(deps.config));
   const house = deps.house ?? (await inMemoryHouse(deps.config));
   return {
@@ -698,6 +768,7 @@ async function completeDeps(given: AppDeps): Promise<FullDeps> {
       (await inMemoryAi(deps.config, { agent, house, auth, ledger })),
     agent,
     catalog,
+    authors,
     ledger,
     usage: deps.usage ?? new MemoryUsageLog(),
     conversations: deps.conversations ?? new MemoryConversationStore(),

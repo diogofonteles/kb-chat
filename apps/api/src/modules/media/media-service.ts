@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import {
   hasAcceptedAudioExtension,
+  type Author,
   type CreateMediaRequest,
+  type MediaAuthor,
   type MediaItem,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -38,6 +40,8 @@ export interface MediaServiceDeps {
   readonly presence?: () => Presence;
   /** Queues a new transcription; false when one is already waiting or running. */
   readonly requestTranscription?: (mediaId: string) => boolean;
+  /** One author of the collection's list (KBC-049, a sub-collection uses its parent's). */
+  readonly authorOf: (topic: string, slug: string) => Author | null;
   readonly now?: () => Date;
 }
 
@@ -91,17 +95,19 @@ export class MediaService {
       throw new AppError('VALIDATION_FAILED', 'Not an accepted audio file', {
         details: { field: 'fileName' },
       });
+    const author = this.requireAuthor(topic, request.author);
     const record = this.deps.store.createMedia({
       id: randomUUID(),
       topic,
       title: request.title,
-      authorship: request.authorship,
+      author: author?.slug ?? null,
+      legacyAuthorship: author?.main ? 'mestre-laercio' : 'outros-autores',
       ownerPrincipal: actor.principal,
       fileName: request.fileName,
       uploadBytes: request.bytes,
       now: this.now(),
     });
-    return toMediaItem(record, actor.isMaster, this.view());
+    return this.itemOf(record, actor.isMaster, this.view());
   }
 
   /** The file of an item created by this person; it goes to the queue when complete. */
@@ -135,7 +141,7 @@ export class MediaService {
       this.receiving.delete(mediaId);
     }
     const queued = await this.queue(mediaId);
-    return toMediaItem(queued, actor.isMaster, this.view());
+    return this.itemOf(queued, actor.isMaster, this.view());
   }
 
   /** The file arrived: queue the conversion, unless the item was removed meanwhile. */
@@ -174,7 +180,7 @@ export class MediaService {
     );
     const presence = this.deps.presence?.();
     return records.map((record) =>
-      toMediaItem(record, actor.isMaster, {
+      this.itemOf(record, actor.isMaster, {
         progress: progress.get(record.id),
         presence,
       }),
@@ -186,7 +192,7 @@ export class MediaService {
     const progress = this.deps.listening
       .progressOf(actor.principal, [mediaId])
       .get(mediaId);
-    return toMediaItem(record, actor.isMaster, this.view(progress));
+    return this.itemOf(record, actor.isMaster, this.view(progress));
   }
 
   async playable(actor: MediaActor, mediaId: string): Promise<PlayableFile> {
@@ -249,15 +255,50 @@ export class MediaService {
   /** Masters only (route access): a failure that a new conversion may fix (FR-7). */
   retry(actor: MediaActor, mediaId: string): MediaItem {
     const media = this.visible(actor, mediaId);
-    if (!toMediaItem(media, true).canRetry)
+    if (!this.itemOf(media, true).canRetry)
       throw new AppError(
         'MEDIA_CONFLICT',
         'This media cannot be converted again',
       );
-    return toMediaItem(
+    return this.itemOf(
       this.deps.store.retryMedia({ mediaId, now: this.now() }),
       actor.isMaster,
       this.view(),
+    );
+  }
+
+  /** An upload names an author already in the collection's list (FR-1: registered first). */
+  private requireAuthor(topic: string, slug: string | null): Author | null {
+    if (slug === null) return null;
+    const author = this.deps.authorOf(topic, slug);
+    if (!author)
+      throw new AppError('VALIDATION_FAILED', 'Unknown author', {
+        details: { field: 'author' },
+      });
+    return author;
+  }
+
+  /** The contract view with the item's author as the collection names it (KBC-049). */
+  private itemOf(
+    record: MediaRecord,
+    isMaster: boolean,
+    view: ItemView = {},
+  ): MediaItem {
+    return toMediaItem(record, isMaster, {
+      ...view,
+      author: this.authorOf(record),
+    });
+  }
+
+  /** The stored author as the list now names it (still shown if no longer listed). */
+  private authorOf(record: MediaRecord): MediaAuthor {
+    if (record.author === null) return null;
+    return (
+      this.deps.authorOf(record.topic, record.author) ?? {
+        slug: record.author,
+        name: record.author,
+        main: false,
+      }
     );
   }
 

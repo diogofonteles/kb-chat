@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
-  mediaAuthorshipSchema,
   mediaFailureSchema,
   mediaJobKindSchema,
   mediaStatusSchema,
@@ -37,7 +36,7 @@ function toMediaRecord(row: Row): MediaRecord {
     id: text(row, 'id'),
     topic: text(row, 'topic'),
     title: text(row, 'title'),
-    authorship: mediaAuthorshipSchema.parse(row['authorship']),
+    author: row['author'] === null ? null : text(row, 'author'),
     ownerPrincipal: text(row, 'owner_principal'),
     fileName: text(row, 'file_name'),
     uploadBytes: Number(row['upload_bytes']),
@@ -78,7 +77,7 @@ function jobStatusOf(value: unknown): JobStatus {
 }
 
 /** The item, its newest transcribe job and its current transcript (KBC-036). */
-const MEDIA_COLUMNS = `id, topic, title, authorship, owner_principal, file_name, upload_bytes,
+const MEDIA_COLUMNS = `id, topic, title, author, owner_principal, file_name, upload_bytes,
   status, progress, failure, duration_ms, bytes, created_at, updated_at,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
@@ -95,15 +94,16 @@ export class SqliteMediaStore implements MediaStorePort {
     const at = media.now.toISOString();
     this.db
       .prepare(
-        `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
-           upload_bytes, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)`,
+        `INSERT INTO media (id, topic, title, author, authorship, owner_principal,
+           file_name, upload_bytes, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)`,
       )
       .run(
         media.id,
         media.topic,
         media.title,
-        media.authorship,
+        media.author,
+        media.legacyAuthorship,
         media.ownerPrincipal,
         media.fileName,
         media.uploadBytes,
@@ -128,6 +128,15 @@ export class SqliteMediaStore implements MediaStorePort {
       )
       .all(topic)
       .map(toMediaRecord);
+  }
+
+  topicsWithAuthor(author: string): string[] {
+    return this.db
+      .prepare(
+        'SELECT DISTINCT topic FROM media WHERE author = ? ORDER BY topic',
+      )
+      .all(author)
+      .map((row) => text(row, 'topic'));
   }
 
   markUploaded(input: {

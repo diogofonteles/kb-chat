@@ -66,7 +66,7 @@ async function uploadFile(env: Running, file: string): Promise<MediaItem> {
   const body = readFileSync(file);
   const created = await env.owner('POST', '/api/v1/topics/hermetismo/media', {
     title: 'Palestra de teste',
-    authorship: 'outros-autores',
+    author: null,
     fileName: 'palestra.mp3',
     bytes: body.length,
   });

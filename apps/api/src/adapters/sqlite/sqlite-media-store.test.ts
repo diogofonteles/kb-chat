@@ -21,7 +21,8 @@ const aMedia = (overrides: Partial<NewMedia> = {}): NewMedia => {
     id: `00000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`,
     topic: 'hermetismo',
     title: `Palestra ${sequence}`,
-    authorship: 'mestre-laercio',
+    author: 'mestre-laercio',
+    legacyAuthorship: 'mestre-laercio',
     ownerPrincipal: 'owner',
     fileName: 'palestra.mp3',
     uploadBytes: 3_000_000,
@@ -85,9 +86,23 @@ describe('SqliteMediaStore catalog', () => {
     expect(store.getMedia('11111111-1111-4111-8111-111111111111')).toBeNull();
   });
 
-  it('refuses an authorship the schema does not know', () => {
+  it('refuses a legacy authorship the schema does not know', () => {
     expect(() =>
-      store.createMedia(aMedia({ authorship: 'sintese' as never })),
+      store.createMedia(aMedia({ legacyAuthorship: 'sintese' as never })),
+    ).toThrow();
+  });
+
+  it('keeps the author and finds the collections with media by them (KBC-049)', () => {
+    store.createMedia(aMedia({ topic: 'udv', author: 'mestre-gabriel' }));
+    store.createMedia(aMedia({ topic: 'alquimia', author: null }));
+    expect(store.listMedia('udv')[0]?.author).toBe('mestre-gabriel');
+    expect(store.listMedia('alquimia')[0]?.author).toBeNull();
+    expect(store.topicsWithAuthor('mestre-gabriel')).toEqual(['udv']);
+  });
+
+  it('refuses an author id that is not one', () => {
+    expect(() =>
+      store.createMedia(aMedia({ author: 'Mestre Gabriel' })),
     ).toThrow();
   });
 

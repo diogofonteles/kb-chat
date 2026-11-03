@@ -79,6 +79,7 @@ describe('Collections created on the screen (KBC-048, ADR 0028)', () => {
       canOpen: true,
       canRename: true,
       documentCount: 0,
+      mainAuthor: null,
     });
     expect(await titles(member)).toEqual([['uniao-do-vegetal', null, true]]);
     const saved = JSON.parse(

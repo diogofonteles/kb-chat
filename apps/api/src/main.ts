@@ -30,6 +30,7 @@ import { JsonlUsageLog } from './adapters/jsonl-usage-log.js';
 import { FsConversationStore } from './adapters/fs-conversation-store.js';
 import { JsonSettingsStore } from './adapters/json-settings-store.js';
 import { createAiProviders } from './providers/create-ai-providers.js';
+import { AuthorDirectory, AuthorsService } from './modules/authors/index.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
 import {
   CollectionRegistry,
@@ -67,6 +68,12 @@ const ledger = new JsonlSpendLedger(
 );
 const catalog = new CatalogRegistry(vault);
 await catalog.load();
+// The authors of each collection (KBC-049, ADR 0030), in the state dir like the registry.
+const authorDirectory = new AuthorDirectory(
+  new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'authors.json')),
+);
+await authorDirectory.load();
+const authors = new AuthorsService({ directory: authorDirectory, catalog });
 // One set of research tools for the in-API loop and the subscription CLIs (ADR 0006/0007).
 const agent = createResearchAgent({
   catalog,
@@ -74,6 +81,7 @@ const agent = createResearchAgent({
   vault,
   ledger,
   budgets: budgetsFromConfig(config),
+  mainAuthorOf: (topic) => authors.mainOf(topic)?.name ?? null,
 });
 // Sign-in with Google and who may use what (KBC-010, ADR 0008).
 const people = new PeopleService({
@@ -154,6 +162,7 @@ const app = await buildApp({
   house,
   media,
   collections,
+  authorDirectory,
 });
 
 const shutdown = async (): Promise<void> => {

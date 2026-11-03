@@ -1,5 +1,4 @@
 import type {
-  MediaAuthorship,
   MediaFailure,
   MediaJobKind,
   MediaStatus,
@@ -18,12 +17,16 @@ export interface TranscriptionRecord {
   readonly confidence: TranscriptConfidence | null;
 }
 
+/** The authorship column the app had before KBC-049, still written for a rollback. */
+export type LegacyAuthorship = 'mestre-laercio' | 'outros-autores';
+
 /** A media item as stored (ADR 0022): the catalog row the module turns into the contract. */
 export interface MediaRecord {
   readonly id: string;
   readonly topic: string;
   readonly title: string;
-  readonly authorship: MediaAuthorship;
+  /** One of its collection's authors (KBC-049), or null for "Outros autores". */
+  readonly author: string | null;
   /** Who uploaded it: only they may send its file. */
   readonly ownerPrincipal: string;
   readonly fileName: string;
@@ -44,7 +47,9 @@ export interface NewMedia {
   readonly id: string;
   readonly topic: string;
   readonly title: string;
-  readonly authorship: MediaAuthorship;
+  readonly author: string | null;
+  /** The pre-KBC-049 column: `mestre-laercio` when the author is the main one. */
+  readonly legacyAuthorship: LegacyAuthorship;
   readonly ownerPrincipal: string;
   readonly fileName: string;
   readonly uploadBytes: number;
@@ -126,6 +131,8 @@ export interface MediaStorePort {
   createMedia(media: NewMedia): MediaRecord;
   getMedia(id: string): MediaRecord | null;
   listMedia(topic: string): MediaRecord[];
+  /** The collections holding media by this author (the legacy seed, KBC-049 BR-4). */
+  topicsWithAuthor(author: string): string[];
   /** The upload arrived: the item waits in the queue with a new `transcode` job. */
   markUploaded(input: {
     readonly mediaId: string;
