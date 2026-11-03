@@ -28,6 +28,8 @@ export type MainAuthorOf = (slug: string) => Topic['mainAuthor'];
 /** The authors' side of a collection that the topics change. */
 export interface TopicAuthors {
   readonly mainOf: MainAuthorOf;
+  /** Throws, writing nothing, when the collection cannot have that main author. */
+  assertMainChoice(slug: string, author: string | null): void;
   setMain(slug: string, author: string | null): Promise<void>;
 }
 
@@ -190,7 +192,9 @@ export class TopicsService {
     await this.assertMayRename(actor, slug);
     if (names.title !== undefined)
       this.assertFreeName(names.title, current.parent ?? null, slug);
-    if (mainAuthor !== undefined) await this.setMainAuthor(slug, mainAuthor);
+    // Everything is checked before the first write: a refused change changes nothing.
+    if (mainAuthor !== undefined)
+      this.authors().assertMainChoice(slug, mainAuthor);
     if (names.title !== undefined || names.description !== undefined) {
       await this.deps.registry.rename(
         {
@@ -203,16 +207,15 @@ export class TopicsService {
       );
       await this.deps.catalog.refresh(slug);
     }
+    if (mainAuthor !== undefined)
+      await this.authors().setMain(slug, mainAuthor);
     return this.topicOf(slug);
   }
 
-  private async setMainAuthor(
-    slug: string,
-    author: string | null,
-  ): Promise<void> {
+  private authors(): TopicAuthors {
     if (!this.deps.authors)
       throw new AppError('VALIDATION_FAILED', 'Authors are not available');
-    await this.deps.authors.setMain(slug, author);
+    return this.deps.authors;
   }
 
   /**

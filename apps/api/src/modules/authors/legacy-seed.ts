@@ -6,7 +6,9 @@ import type { AuthorsService } from './authors-service.js';
 export const LEGACY_MAIN_AUTHOR = {
   slug: 'mestre-laercio',
   name: 'Mestre Laércio',
-} as const;
+  fullName: 'José Laércio do Egito',
+  aliases: ['o Mestre', 'Laércio'],
+};
 
 export interface LegacySeedDeps {
   readonly directory: AuthorDirectory;

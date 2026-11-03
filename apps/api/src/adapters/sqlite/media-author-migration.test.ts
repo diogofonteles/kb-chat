@@ -4,7 +4,15 @@ import { applyMigrations } from './media-database.js';
 import { MEDIA_MIGRATIONS } from './media-migrations.js';
 import { SqliteMediaStore } from './sqlite-media-store.js';
 
-const BEFORE_AUTHORS = MEDIA_MIGRATIONS.filter((one) => one.version < 5);
+/** This item's migration, found by name: its number may change on a rebase (KBC-036). */
+const AUTHOR_MIGRATION = MEDIA_MIGRATIONS.find(
+  (one) => one.name === 'media-author',
+);
+if (!AUTHOR_MIGRATION) throw new Error('no media-author migration');
+const AUTHOR_VERSION = AUTHOR_MIGRATION.version;
+const BEFORE_AUTHORS = MEDIA_MIGRATIONS.filter(
+  (one) => one.version < AUTHOR_VERSION,
+);
 
 /** A media database as it was before KBC-049, with one item of each authorship. */
 function databaseOfToday(): DatabaseSync {
@@ -25,7 +33,7 @@ describe('the media-author migration (KBC-049 FR-5, AC-5)', () => {
   it("turns the Mestre's media into his author id and the others into no author, losing nothing", () => {
     const db = databaseOfToday();
 
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([5]);
+    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([AUTHOR_VERSION]);
 
     const rows = db
       .prepare('SELECT id, title, author, authorship FROM media ORDER BY id')
@@ -54,5 +62,34 @@ describe('the media-author migration (KBC-049 FR-5, AC-5)', () => {
     applyMigrations(db, MEDIA_MIGRATIONS);
 
     expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([]);
+  });
+
+  it('keeps the Mestre on a row an older image wrote after the migration (rollback, ADR 0030 §4)', () => {
+    const db = databaseOfToday();
+    applyMigrations(db, MEDIA_MIGRATIONS);
+    const at = '2026-11-04T12:00:00.000Z';
+    db.prepare(
+      `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
+         upload_bytes, status, created_at, updated_at)
+       VALUES ('c', 'hermetismo', 'Enviada no rollback', 'mestre-laercio', 'owner',
+         'c.mp3', 10, 'ready', ?, ?)`,
+    ).run(at, at);
+
+    const store = new SqliteMediaStore(db);
+
+    expect(store.getMedia('c')?.author).toBe('mestre-laercio');
+    expect(store.getMedia('b')?.author).toBeNull();
+  });
+
+  it('refuses to start when a version was applied under another name (a renumbering drift)', () => {
+    const db = new DatabaseSync(':memory:');
+    applyMigrations(db, MEDIA_MIGRATIONS);
+    const drifted = MEDIA_MIGRATIONS.map((one) =>
+      one.version === AUTHOR_VERSION ? { ...one, name: 'transcription' } : one,
+    );
+
+    expect(() => applyMigrations(db, drifted)).toThrow(
+      `Media migration ${AUTHOR_VERSION} was applied as "media-author", not "transcription"`,
+    );
   });
 });

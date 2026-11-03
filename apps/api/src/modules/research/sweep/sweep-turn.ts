@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import type {
   ResearchEvent,
   ResearchTurn,
@@ -48,7 +49,7 @@ export interface SweepTurnHost {
   readonly topic: string;
   readonly topicTitle: string;
   /** The collection's main author (KBC-049), or null. */
-  readonly mainAuthor: string | null;
+  readonly mainAuthor: MainAuthorIdentity | null;
   readonly question: string;
   readonly history: readonly ResearchTurn[];
   readonly book: SourceBook;

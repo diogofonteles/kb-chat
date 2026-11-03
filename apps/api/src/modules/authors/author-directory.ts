@@ -7,6 +7,10 @@ import { SerialDocument } from '../../serial-document.js';
 const storedAuthorSchema = z.strictObject({
   slug: authorSlugSchema,
   name: z.string().min(1),
+  /** How the AI's rule names the main author in full ("José Laércio do Egito"). */
+  fullName: z.string().min(1).optional(),
+  /** How readers call him ("o Mestre", "Laércio"): the rule's triggers. */
+  aliases: z.array(z.string().min(1)).optional(),
   /** Who registered it (the master when acting as a person, ADR 0027). */
   createdBy: z.string(),
   createdAt: z.string(),

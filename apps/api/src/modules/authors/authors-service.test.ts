@@ -127,6 +127,27 @@ describe('AuthorsService (KBC-049)', () => {
   });
 });
 
+describe('concurrent writes (KBC-049 review)', () => {
+  it('keeps both of two authors registered at once, and a main author set meanwhile', async () => {
+    const { authors, store } = await service(UDV);
+    await authors.add('udv', { name: 'Ana' }, 'a@x');
+
+    await Promise.all([
+      authors.add('udv', { name: 'Bia' }, 'a@x'),
+      authors.add('udv', { name: 'Caio' }, 'b@x'),
+      authors.setMain('udv', 'ana'),
+    ]);
+
+    const reread = await service(UDV, store);
+    expect(reread.authors.list('udv').map((one) => one.name)).toEqual([
+      'Ana',
+      'Bia',
+      'Caio',
+    ]);
+    expect(reread.authors.mainOf('udv')?.slug).toBe('ana');
+  });
+});
+
 describe('the legacy seed (KBC-049 BR-4, AC-5)', () => {
   const vault = [
     topic('hermetismo', undefined, ['mestre-laercio', 'outros-autores']),
@@ -145,6 +166,11 @@ describe('the legacy seed (KBC-049 BR-4, AC-5)', () => {
     });
 
     expect(seeded).toEqual(['hermetismo', 'udv']);
+    expect(authors.mainVoiceOf('hermetismo')).toEqual({
+      name: 'Mestre Laércio',
+      fullName: 'José Laércio do Egito',
+      aliases: ['o Mestre', 'Laércio'],
+    });
     expect(authors.mainOf('hermetismo')).toEqual({
       slug: 'mestre-laercio',
       name: 'Mestre Laércio',

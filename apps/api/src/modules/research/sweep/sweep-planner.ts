@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import type { SweepPlan } from '@kb-chat/contracts';
 import type { VaultReaderPort } from '../../../ports/vault-reader.js';
 import {
@@ -73,7 +74,7 @@ export interface SweepPlannerDeps {
   readonly vault: VaultReaderPort;
   readonly finder: TextFinder;
   /** The collection's main author (KBC-049): the label of its documents. */
-  readonly mainAuthorOf?: (topic: string) => string | null;
+  readonly mainAuthorOf?: (topic: string) => MainAuthorIdentity | null;
 }
 
 const filterOf = ({ target }: SweepPlan): DocFilter => ({

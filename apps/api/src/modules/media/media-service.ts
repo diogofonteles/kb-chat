@@ -53,6 +53,9 @@ export interface PlayableFile {
   readonly mime: string;
 }
 
+/** The author the pre-KBC-049 column means by `mestre-laercio` (ADR 0030 §4). */
+const LEGACY_AUTHOR_SLUG = 'mestre-laercio';
+
 const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
 
 function assertDeclaredSize(declared: number, expected: number): void {
@@ -101,7 +104,11 @@ export class MediaService {
       topic,
       title: request.title,
       author: author?.slug ?? null,
-      legacyAuthorship: author?.main ? 'mestre-laercio' : 'outros-autores',
+      // The old image reads only this column: never name the Mestre for another author.
+      legacyAuthorship:
+        author?.slug === LEGACY_AUTHOR_SLUG
+          ? 'mestre-laercio'
+          : 'outros-autores',
       ownerPrincipal: actor.principal,
       fileName: request.fileName,
       uploadBytes: request.bytes,

@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import type { ResearchTurn } from '@kb-chat/contracts';
 import type { AgentMessage } from '../../../ports/llm.js';
 import { OUTSIDE_MARK, SECURITY_LINE, authorshipLines } from '../prompt.js';
@@ -12,7 +13,7 @@ export const NOTHING_FOUND = 'NENHUM';
 /** A batch reader's rules (KBC-030, ADR 0021): extract, label, quote; nothing else. */
 export const batchSystemPrompt = (
   topicTitle: string,
-  mainAuthor: string | null,
+  mainAuthor: MainAuthorIdentity | null,
 ): string =>
   [
     `${BATCH_PROMPT_START} de um acervo pessoal sobre “${topicTitle}” e extrai deles, por completo, o que o pedido pede. Escreva em português do Brasil.`,
@@ -56,7 +57,7 @@ export const condenseSystemPrompt = (topicTitle: string): string =>
 /** The orchestrator's last call: the answer from the merged findings, no tools. */
 export const sweepAnswerSystemPrompt = (
   topicTitle: string,
-  mainAuthor: string | null,
+  mainAuthor: MainAuthorIdentity | null,
 ): string =>
   [
     `Você é um pesquisador que estuda com o leitor um acervo pessoal de textos sobre “${topicTitle}” e responde em português do Brasil.`,
@@ -98,7 +99,10 @@ export function sweepAnswerMessages(
   {
     topicTitle,
     mainAuthor,
-  }: { readonly topicTitle: string; readonly mainAuthor: string | null },
+  }: {
+    readonly topicTitle: string;
+    readonly mainAuthor: MainAuthorIdentity | null;
+  },
   request: AnswerRequest,
 ): AgentMessage[] {
   const history = request.history.flatMap((turn): AgentMessage[] => [

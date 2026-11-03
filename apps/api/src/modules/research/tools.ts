@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from './prompt.js';
 import type { ResearchStep, SearchHit } from '@kb-chat/contracts';
 import { MAX_RESULTS } from '@kb-chat/contracts';
 import type { z } from 'zod';
@@ -31,7 +32,6 @@ import {
   type ToolContext,
 } from './tool-context.js';
 import {
-  LEGACY_MAIN_LABEL,
   authorshipLabels,
   foldName,
   headerLines,
@@ -62,7 +62,7 @@ export interface ResearchToolsDeps {
   readonly catalog: CatalogRegistry;
   readonly vault: VaultReaderPort;
   /** The collection's main author's name (KBC-049); without it, the legacy "Mestre Laércio". */
-  readonly mainAuthorOf?: (topic: string) => string | null;
+  readonly mainAuthorOf?: (topic: string) => MainAuthorIdentity | null;
 }
 
 type Handler = (args: unknown, context: ToolContext) => PreparedCall;
@@ -177,10 +177,8 @@ export class ResearchTools {
   }
 
   /** The collection's main author (KBC-049 BR-2), or null when it has none. */
-  mainAuthor(topic: string): string | null {
-    return this.deps.mainAuthorOf
-      ? this.deps.mainAuthorOf(topic)
-      : LEGACY_MAIN_LABEL;
+  mainAuthor(topic: string): MainAuthorIdentity | null {
+    return this.deps.mainAuthorOf?.(topic) ?? null;
   }
 
   prepare(call: ToolCall, context: ToolContext): PreparedCall {

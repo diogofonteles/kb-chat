@@ -36,9 +36,11 @@ export const LEGACY_MAIN_LABEL = 'Mestre Laércio';
 export type AuthorshipLabels = Readonly<Record<Authorship, string>>;
 
 export const authorshipLabels = (
-  mainAuthor: string | null,
+  mainAuthor: { readonly name: string } | null,
 ): AuthorshipLabels => ({
-  'mestre-laercio': mainAuthor ?? LEGACY_MAIN_LABEL,
+  'mestre-laercio': mainAuthor
+    ? oneLine(mainAuthor.name, 80)
+    : LEGACY_MAIN_LABEL,
   'outros-autores': 'Outros autores',
   sintese: 'Síntese do acervo',
   'nao-classificado': 'Não classificado',

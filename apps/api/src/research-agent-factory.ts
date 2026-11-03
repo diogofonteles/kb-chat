@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from './modules/research/index.js';
 import type { SubscriptionPrompt } from './adapters/subscription-prompt.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
 import type { AppConfig } from './config.js';
@@ -25,7 +26,7 @@ export interface ResearchAgentDeps {
   /** Per-profile budgets (ADR 0013); default: the module's, without server settings. */
   readonly budgets?: ResearchBudgets;
   /** The collection's main author's name (KBC-049): the authorship rule names him. */
-  readonly mainAuthorOf?: (topic: string) => string | null;
+  readonly mainAuthorOf?: (topic: string) => MainAuthorIdentity | null;
 }
 
 /** The research budgets with the server's exhaustive-profile settings (KBC-017). */

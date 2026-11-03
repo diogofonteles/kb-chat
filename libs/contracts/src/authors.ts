@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { topicSlugOf } from './topics.js';
+import { SLUG_MAX, authorSlugSchema, slugOf } from './slugs.js';
+
+export { authorSlugSchema } from './slugs.js';
 
 /**
  * The authors of a collection (KBC-049, ADR 0030): free names kept per top-level
@@ -7,18 +9,29 @@ import { topicSlugOf } from './topics.js';
  * sub-collection uses its parent's list.
  */
 
-/** Longest author name. */
-export const AUTHOR_NAME_MAX = 120;
+/**
+ * Longest author name: no longer than its id may be, so two long names never become the
+ * same author by being cut.
+ */
+export const AUTHOR_NAME_MAX = SLUG_MAX;
 
-/** An author's id: the name without accents, lowercase, words joined by hyphens. */
-export const authorSlugSchema = z
+/**
+ * A name as kept: one line, no control or format characters and no quotes or guillemets
+ * (it goes into the AI's rules and into "Cadastrar «nome»"), inner spaces collapsed.
+ */
+export const authorNameSchema = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9-]*$/, { error: 'invalid author slug' })
-  .max(60);
-
+  .transform((name) => name.replace(/[ \t]+/g, ' ').trim())
+  .pipe(
+    z
+      .string()
+      .min(1)
+      .max(AUTHOR_NAME_MAX)
+      .regex(/^[^\p{Cc}\p{Cf}"«»]+$/u, { error: 'invalid author name' }),
+  );
 export const authorSchema = z.object({
   slug: authorSlugSchema,
-  name: z.string().min(1).max(AUTHOR_NAME_MAX),
+  name: z.string().min(1),
   /** The collection's main author: shown first and with ✦ (BR-2). */
   main: z.boolean(),
 });
@@ -29,10 +42,8 @@ export const authorListSchema = z.object({ items: z.array(authorSchema) });
 export type AuthorList = z.infer<typeof authorListSchema>;
 
 /** POST /api/v1/topics/:topic/authors: the id comes from the name (FR-1). */
-export const authorCreateSchema = z.strictObject({
-  name: z.string().trim().min(1).max(AUTHOR_NAME_MAX),
-});
+export const authorCreateSchema = z.strictObject({ name: authorNameSchema });
 export type AuthorCreate = z.infer<typeof authorCreateSchema>;
 
 /** The author id a name becomes (empty when it has no letter or digit). */
-export const authorSlugOf = (name: string): string => topicSlugOf(name);
+export const authorSlugOf = (name: string): string => slugOf(name);

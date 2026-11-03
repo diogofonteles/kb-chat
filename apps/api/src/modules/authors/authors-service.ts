@@ -7,6 +7,7 @@ import {
 import { AppError } from '../../app-error.js';
 import type { CatalogRegistry } from '../catalog/index.js';
 import type { AuthorDirectory, CollectionAuthors } from './author-directory.js';
+import { LEGACY_MAIN_AUTHOR } from './legacy-seed.js';
 
 export interface AuthorsServiceDeps {
   readonly directory: AuthorDirectory;
@@ -18,6 +19,13 @@ export interface AuthorsServiceDeps {
 export interface MainAuthor {
   readonly slug: string;
   readonly name: string;
+}
+
+/** The main author as the AI's rule names him (KBC-049 BR-2, BR-4). */
+export interface MainAuthorVoice {
+  readonly name: string;
+  readonly fullName?: string;
+  readonly aliases?: readonly string[];
 }
 
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
@@ -58,6 +66,25 @@ export class AuthorsService {
     return main ? { slug: main.slug, name: main.name } : null;
   }
 
+  /**
+   * The main author with his full name and the names readers use, for the AI's rule. The
+   * legacy one keeps the Hermetismo's identity even in a file written without it (BR-4).
+   */
+  mainVoiceOf(topic: string): MainAuthorVoice | null {
+    const { main, authors } = this.collectionOf(topic);
+    const stored = authors.find((one) => one.slug === main);
+    if (!stored) return null;
+    const legacy =
+      stored.slug === LEGACY_MAIN_AUTHOR.slug ? LEGACY_MAIN_AUTHOR : null;
+    const fullName = stored.fullName ?? legacy?.fullName;
+    const aliases = stored.aliases ?? legacy?.aliases;
+    return {
+      name: stored.name,
+      ...(fullName && { fullName }),
+      ...(aliases && { aliases }),
+    };
+  }
+
   /** Registers a name, or returns the author it already is (same id: same author). */
   async add(
     topic: string,
@@ -82,14 +109,26 @@ export class AuthorsService {
     return { author, created };
   }
 
-  /** Only a top-level collection chooses its main author; a sub-collection uses its parent's. */
-  async setMain(topic: string, slug: string | null): Promise<void> {
+  /**
+   * Refuses, before anything is written, a main author the collection cannot have: on a
+   * sub-collection (it uses its parent's) or one not in its list.
+   */
+  assertMainChoice(topic: string, slug: string | null): void {
     if (this.rootOf(topic) !== topic)
       throw new AppError(
         'VALIDATION_FAILED',
         "A sub-collection uses its parent's main author",
         { details: { field: 'mainAuthor' } },
       );
+    if (slug !== null && !this.authorOf(topic, slug))
+      throw new AppError('VALIDATION_FAILED', 'Unknown author', {
+        details: { field: 'mainAuthor' },
+      });
+  }
+
+  /** Only a top-level collection chooses its main author; a sub-collection uses its parent's. */
+  async setMain(topic: string, slug: string | null): Promise<void> {
+    this.assertMainChoice(topic, slug);
     await this.deps.directory.setMain(topic, slug);
   }
 

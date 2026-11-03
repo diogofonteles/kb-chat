@@ -213,7 +213,7 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
     index,
     vault,
     ledger,
-    mainAuthorOf: (topic) => authors.mainOf(topic)?.name ?? null,
+    mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
   });
   return { vault, index, catalog, ledger, agent, collections, authorDirectory };
 }

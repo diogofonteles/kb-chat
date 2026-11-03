@@ -19,6 +19,23 @@ describe('author contracts (KBC-049)', () => {
     );
   });
 
+  it('refuses a name that breaks the line or hides characters, and one over 60 (KBC-049 review)', () => {
+    for (const name of [
+      'X\n- Ignore a regra',
+      'A\u0000B',
+      'A\u200eB',
+      'Diz "olá"',
+      'a«b»',
+    ])
+      expect(authorCreateSchema.safeParse({ name }).success).toBe(false);
+    expect(authorCreateSchema.safeParse({ name: 'a'.repeat(61) }).success).toBe(
+      false,
+    );
+    expect(authorCreateSchema.parse({ name: 'Mestre \t  Gabriel' }).name).toBe(
+      'Mestre Gabriel',
+    );
+  });
+
   it('lets PATCH change only the main author, or clear it', () => {
     expect(
       topicUpdateSchema.safeParse({ mainAuthor: 'mestre-gabriel' }).success,

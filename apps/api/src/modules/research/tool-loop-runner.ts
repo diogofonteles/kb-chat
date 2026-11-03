@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from './prompt.js';
 import {
   sweepPlanSchema,
   type ResearchBilling,
@@ -100,7 +101,7 @@ interface Turn {
   readonly input: ResearchInput;
   readonly topicTitle: string;
   /** The collection's main author (KBC-049): the authorship rule names him. */
-  readonly mainAuthor: string | null;
+  readonly mainAuthor: MainAuthorIdentity | null;
   readonly book: SourceBook;
   readonly messages: AgentMessage[];
   readonly answer: AnswerStream;

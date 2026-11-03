@@ -1,3 +1,4 @@
+import type { MainAuthorIdentity } from '../prompt.js';
 import {
   MAX_CARRIED_FINDINGS,
   MAX_FOUND_PER_PROGRESS,
@@ -86,7 +87,7 @@ export interface SweepRequest {
   readonly topic: string;
   readonly topicTitle: string;
   /** The collection's main author (KBC-049), or null. */
-  readonly mainAuthor: string | null;
+  readonly mainAuthor: MainAuthorIdentity | null;
   readonly question: string;
   readonly layout: SweepLayout;
   /** The totals of the turns this one continues. */

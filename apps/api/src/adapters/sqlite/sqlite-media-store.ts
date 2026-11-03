@@ -76,8 +76,15 @@ function jobStatusOf(value: unknown): JobStatus {
   return status;
 }
 
+/**
+ * The author, or the Mestre for a row an older image wrote after the migration (it fills
+ * only `authorship`, ADR 0030 §4); this code writes a null author only with `outros-autores`.
+ */
+const AUTHOR_COLUMN = `COALESCE(author,
+  CASE WHEN authorship = 'mestre-laercio' THEN 'mestre-laercio' END)`;
+
 /** The item, its newest transcribe job and its current transcript (KBC-036). */
-const MEDIA_COLUMNS = `id, topic, title, author, owner_principal, file_name, upload_bytes,
+const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_principal, file_name, upload_bytes,
   status, progress, failure, duration_ms, bytes, created_at, updated_at,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
@@ -133,7 +140,7 @@ export class SqliteMediaStore implements MediaStorePort {
   topicsWithAuthor(author: string): string[] {
     return this.db
       .prepare(
-        'SELECT DISTINCT topic FROM media WHERE author = ? ORDER BY topic',
+        `SELECT DISTINCT topic FROM media WHERE ${AUTHOR_COLUMN} = ? ORDER BY topic`,
       )
       .all(author)
       .map((row) => text(row, 'topic'));

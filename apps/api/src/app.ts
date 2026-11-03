@@ -203,6 +203,8 @@ type FullDeps = AppDeps & {
   conversations: ConversationStorePort;
   collections: CollectionRegistry;
   authors: AuthorsService;
+  /** The collections the legacy seed wrote at this start (KBC-049 BR-4). */
+  legacySeeded: readonly string[];
 };
 
 /** The runner of a person's turn: a fixed model in tests, else the provider in Settings. */
@@ -295,6 +297,8 @@ function topicsService({ catalog, authors, auth, collections }: FullDeps) {
     },
     authors: {
       mainOf: (slug) => authors.mainOf(slug),
+      assertMainChoice: (slug, author) =>
+        authors.assertMainChoice(slug, author),
       setMain: (slug, author) => authors.setMain(slug, author),
     },
   });
@@ -717,13 +721,13 @@ async function loadedCatalog(vault: VaultReaderPort): Promise<CatalogRegistry> {
 async function loadedAuthors(
   given: AppDeps,
   catalog: CatalogRegistry,
-): Promise<AuthorsService> {
+): Promise<{ authors: AuthorsService; seeded: readonly string[] }> {
   const directory =
     given.authorDirectory ?? new AuthorDirectory(new MemoryDocumentStore());
   await directory.load();
   const authors = new AuthorsService({ directory, catalog });
   const store = given.media?.store;
-  await seedLegacyAuthors({
+  const seeded = await seedLegacyAuthors({
     directory,
     authors,
     catalog,
@@ -732,7 +736,20 @@ async function loadedAuthors(
         store.topicsWithAuthor(LEGACY_MAIN_AUTHOR.slug),
     }),
   });
-  return authors;
+  return { authors, seeded };
+}
+
+/**
+ * What the legacy seed did (ND-14): the collections it gave "Mestre Laércio", and a warning
+ * when the vault had no collection at all (the seed then has nothing to look at).
+ */
+function logLegacySeed(app: FastifyInstance, deps: FullDeps): void {
+  if (deps.legacySeeded.length > 0)
+    app.log.info({ seeded: deps.legacySeeded }, 'legacy main author seeded');
+  if (deps.catalog.topics().length === 0)
+    app.log.warn(
+      'the vault has no collection: the legacy author seed found none',
+    );
 }
 
 /** The research agent over this catalog, naming each collection's main author. */
@@ -746,14 +763,14 @@ const agentOf = (
     vault: deps.vault,
     ledger: built.ledger,
     budgets: budgetsFromConfig(deps.config),
-    mainAuthorOf: (topic) => built.authors.mainOf(topic)?.name ?? null,
+    mainAuthorOf: (topic) => built.authors.mainVoiceOf(topic),
   });
 
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
 async function completeDeps(given: AppDeps): Promise<FullDeps> {
   const deps = withCollections(given);
   const catalog = deps.catalog ?? (await loadedCatalog(deps.vault));
-  const authors = await loadedAuthors(deps, catalog);
+  const { authors, seeded } = await loadedAuthors(deps, catalog);
   const ledger = deps.ledger ?? new MemorySpendLedger();
   const agent = deps.agent ?? agentOf(deps, { catalog, ledger, authors });
   const auth = withActAs(deps.auth ?? inMemoryAuth(deps.config));
@@ -769,6 +786,7 @@ async function completeDeps(given: AppDeps): Promise<FullDeps> {
     agent,
     catalog,
     authors,
+    legacySeeded: seeded,
     ledger,
     usage: deps.usage ?? new MemoryUsageLog(),
     conversations: deps.conversations ?? new MemoryConversationStore(),
@@ -822,6 +840,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   await app.register(rateLimit, { global: false });
   await registerRoutes(app, full);
+  logLegacySeed(app, full);
 
   app.addHook('onClose', async () => deps.index.close());
   return app;

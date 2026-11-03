@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { authorSlugSchema, slugOf } from './slugs.js';
 
 export const topicSlugSchema = z
   .string()
@@ -26,7 +27,7 @@ export const topicSchema = z.object({
   canRename: z.boolean().default(false),
   /** Its main author (KBC-049 BR-2); a sub-collection shows its parent's. */
   mainAuthor: z
-    .object({ slug: z.string(), name: z.string() })
+    .object({ slug: authorSlugSchema, name: z.string() })
     .nullable()
     .default(null),
 });
@@ -58,11 +59,7 @@ export const topicUpdateSchema = z
   .strictObject({
     title: topicTitleSchema.optional(),
     description: topicDescriptionSchema.optional(),
-    mainAuthor: z
-      .string()
-      .regex(/^[a-z0-9][a-z0-9-]*$/)
-      .nullable()
-      .optional(),
+    mainAuthor: authorSlugSchema.nullable().optional(),
   })
   .refine(
     (body) =>
@@ -75,17 +72,5 @@ export const topicUpdateSchema = z
   );
 export type TopicUpdate = z.input<typeof topicUpdateSchema>;
 
-/**
- * The slug a name becomes: no accents, lowercase, words joined by hyphens (KBC-048 BR-4).
- * Empty when the name has no letter or digit.
- */
-export function topicSlugOf(title: string): string {
-  return title
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-    .replace(/-+$/, '');
-}
+/** The slug a collection's name becomes (KBC-048 BR-4); empty without a letter or digit. */
+export const topicSlugOf = (title: string): string => slugOf(title);

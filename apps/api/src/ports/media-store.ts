@@ -48,7 +48,7 @@ export interface NewMedia {
   readonly topic: string;
   readonly title: string;
   readonly author: string | null;
-  /** The pre-KBC-049 column: `mestre-laercio` when the author is the main one. */
+  /** The pre-KBC-049 column: `mestre-laercio` only for the author of that id (ADR 0030 §4). */
   readonly legacyAuthorship: LegacyAuthorship;
   readonly ownerPrincipal: string;
   readonly fileName: string;

@@ -115,7 +115,7 @@ const agent = createResearchAgent({
   vault,
   ledger,
   budgets: budgetsFromConfig(config),
-  mainAuthorOf: (topic) => authors.mainOf(topic)?.name ?? null,
+  mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
 });
 // Providers answer through a fake HTTP layer: a key ending in "valid" is accepted, any other
 // gets 401 (KBC-007 AC-5). Nothing leaves this computer.

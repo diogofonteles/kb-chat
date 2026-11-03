@@ -81,7 +81,7 @@ const agent = createResearchAgent({
   vault,
   ledger,
   budgets: budgetsFromConfig(config),
-  mainAuthorOf: (topic) => authors.mainOf(topic)?.name ?? null,
+  mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
 });
 // Sign-in with Google and who may use what (KBC-010, ADR 0008).
 const people = new PeopleService({

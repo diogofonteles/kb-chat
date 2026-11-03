@@ -93,8 +93,11 @@ describe('SqliteMediaStore catalog', () => {
   });
 
   it('keeps the author and finds the collections with media by them (KBC-049)', () => {
-    store.createMedia(aMedia({ topic: 'udv', author: 'mestre-gabriel' }));
-    store.createMedia(aMedia({ topic: 'alquimia', author: null }));
+    const others = { legacyAuthorship: 'outros-autores' } as const;
+    store.createMedia(
+      aMedia({ topic: 'udv', author: 'mestre-gabriel', ...others }),
+    );
+    store.createMedia(aMedia({ topic: 'alquimia', author: null, ...others }));
     expect(store.listMedia('udv')[0]?.author).toBe('mestre-gabriel');
     expect(store.listMedia('alquimia')[0]?.author).toBeNull();
     expect(store.topicsWithAuthor('mestre-gabriel')).toEqual(['udv']);

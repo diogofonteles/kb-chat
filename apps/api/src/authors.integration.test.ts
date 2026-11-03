@@ -1,4 +1,5 @@
 import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Topic } from '@kb-chat/contracts';
@@ -27,6 +28,9 @@ import {
 } from './modules/topics/index.js';
 import { MemoryDocumentStore } from './adapters/memory-document-store.js';
 import { createSearchIndex } from './search-index-factory.js';
+import { createResearchAgent } from './research-agent-factory.js';
+import { AuthorDirectory, AuthorsService } from './modules/authors/index.js';
+import { CatalogRegistry } from './modules/catalog/index.js';
 
 afterEach(closeApp);
 
@@ -209,6 +213,53 @@ describe('authors per collection (KBC-049)', () => {
     expect(cleared.json().mainAuthor).toBeNull();
   });
 
+  it("writes the old column's Mestre only for his own id, never for another main author (ADR 0030 §4)", async () => {
+    const { started, owner, ana } = await startUdv();
+    await ana('POST', '/api/v1/topics/udv/authors', { name: 'Mestre Gabriel' });
+    await owner('PATCH', '/api/v1/topics/udv', {
+      mainAuthor: 'mestre-gabriel',
+    });
+    const media = await ana(
+      'POST',
+      '/api/v1/topics/udv/media',
+      aRequest({ author: 'mestre-gabriel' }),
+    );
+
+    const db = new DatabaseSync(join(started.state, 'media', 'media.db'), {
+      readOnly: true,
+    });
+    const row = db
+      .prepare('SELECT author, authorship FROM media WHERE id = ?')
+      .get(media.json().id);
+    db.close();
+
+    expect({ ...row }).toEqual({
+      author: 'mestre-gabriel',
+      authorship: 'outros-autores',
+    });
+  });
+
+  it('PATCH changes nothing when one of its parts is refused (all or nothing)', async () => {
+    const { owner, ana } = await startUdv();
+    await ana('POST', '/api/v1/topics/udv/authors', { name: 'Mestre Gabriel' });
+
+    const unknown = await owner('PATCH', '/api/v1/topics/udv', {
+      title: 'Outro nome',
+      mainAuthor: 'ninguem',
+    });
+    const taken = await owner('PATCH', '/api/v1/topics/udv', {
+      title: 'Alquimia Prática',
+      mainAuthor: 'mestre-gabriel',
+    });
+
+    expect(unknown.statusCode).toBe(400);
+    expect(taken.statusCode).toBe(409);
+    expect(await topicOf(owner, 'udv')).toMatchObject({
+      title: 'UDV',
+      mainAuthor: null,
+    });
+  });
+
   it('AC-5, BR-4: the Hermetismo keeps "Mestre Laércio" as main author, in the file and after a restart', async () => {
     const started = await start({ media: true });
     const owner = caller(started.app, await signIn(started, OWNER_EMAIL));
@@ -269,13 +320,29 @@ describe('the research rule follows the main author (KBC-049 AC-2)', () => {
       log: createLogger('silent'),
     });
     const llm = new StubLlmAdapter();
+    // Composed as main does: the agent names each collection's main author (ADR 0030).
+    const catalog = new CatalogRegistry(vault);
+    await catalog.load();
+    const authorDirectory = new AuthorDirectory(new MemoryDocumentStore());
+    const authors = new AuthorsService({ directory: authorDirectory, catalog });
+    const ledger = new MemorySpendLedger();
+    const agent = createResearchAgent({
+      catalog,
+      index,
+      vault,
+      ledger,
+      mainAuthorOf: (topic) => authors.mainVoiceOf(topic),
+    });
     app = await signedInApp(HOST)({
       config,
       vault,
       collections,
+      catalog,
+      authorDirectory,
+      agent,
       index,
       llm,
-      ledger: new MemorySpendLedger(),
+      ledger,
       logger: createLogger('silent'),
     });
     const call = (method: 'POST' | 'PATCH', url: string, payload: object) =>
