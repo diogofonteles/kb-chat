@@ -117,6 +117,20 @@ describe('migration 11: jobs take the kind "diarize" after the silence maps (KBC
     expect(applyMigrations(db, THROUGH_ELEVEN)).toEqual([8, 9, 11]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
+
+  it('is applied on a database that already has the search index (12)', () => {
+    const db = freshDatabase(
+      MEDIA_MIGRATIONS.filter((one) => ![8, 11].includes(one.version)),
+    );
+    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([8, 11]);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(indexesOf(db)).toHaveLength(4);
+    expect(
+      db
+        .prepare(`SELECT name FROM sqlite_master WHERE name = 'segments_fts'`)
+        .all(),
+    ).toHaveLength(1);
+  });
 });
 
 describe('migration 8: the separation tables (KBC-064)', () => {
