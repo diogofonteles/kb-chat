@@ -91,10 +91,19 @@ export const FACET_TITLES: Record<FacetKey, string> = {
   depths: $localize`:@@facet.depths:Profundidade`,
   relevances: $localize`:@@facet.relevances:Ligação com o tema`,
   authorships: $localize`:@@facet.authorships:Autoria`,
+  topics: $localize`:@@facet.topics:Sub-acervo`,
 };
 
-/** Display label of one facet value; concepts are already human names. */
-export function facetValueLabel(key: FacetKey, value: string | number): string {
+/**
+ * Display label of one facet value; concepts are already human names, collections are named
+ * by `topicNames` (their slug otherwise).
+ */
+export function facetValueLabel(
+  key: FacetKey,
+  value: string | number,
+  topicNames: ReadonlyMap<string, string> = new Map(),
+): string {
+  if (key === 'topics') return topicNames.get(String(value)) ?? String(value);
   if (key === 'genres') return GENRE_LABELS[value as Genre] ?? String(value);
   if (key === 'depths')
     return DEPTH_LABELS[value as DepthLevel] ?? String(value);

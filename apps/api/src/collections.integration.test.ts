@@ -236,3 +236,135 @@ describe('Collections created on the screen (KBC-048, ADR 0028)', () => {
     expect(blank.statusCode).toBe(400);
   });
 });
+
+/** The fixture vault plus a folder that only groups topics: `harness/goclaw`. */
+async function vaultWithGroupingFolder(): Promise<string> {
+  const root = await vaultWithSubTopic();
+  await mkdir(join(root, 'harness', 'goclaw', 'raw'), { recursive: true });
+  await writeFile(
+    join(root, 'harness', 'goclaw', 'topic.yaml'),
+    'title: Goclaw\n',
+  );
+  await writeFile(
+    join(root, 'harness', 'goclaw', 'raw', 'nota.md'),
+    DOC('Nota', 'Uma nota sobre a burracheira.'),
+  );
+  return root;
+}
+
+describe('Collections: review and QA fixes (KBC-048)', () => {
+  it('a name over a vault folder that groups topics is taken, so it never becomes their parent', async () => {
+    const started = await start({ vault: await vaultWithGroupingFolder() });
+    const { member } = await people(started, {
+      features: ['search', 'collection-create'],
+      topics: [],
+    });
+    const taken = await member('POST', '/api/v1/topics', { title: 'Harness' });
+    expect(taken.statusCode).toBe(409);
+    expect(await titles(member)).toEqual([]);
+  });
+
+  it('two collections created at once both stay', async () => {
+    const started = await start();
+    const owner = caller(started.app, await signIn(started, OWNER_EMAIL));
+    const made = await Promise.all(
+      ['Primeiro', 'Segundo', 'Terceiro'].map((title) =>
+        owner('POST', '/api/v1/topics', { title }),
+      ),
+    );
+    expect(made.map((r) => r.statusCode)).toEqual([201, 201, 201]);
+    const slugs = (await titles(owner)).map(([slug]: string[]) => slug);
+    expect(slugs).toEqual(
+      expect.arrayContaining(['primeiro', 'segundo', 'terceiro']),
+    );
+  });
+
+  it('two collections side by side never share a name, created or renamed', async () => {
+    const started = await start();
+    const owner = caller(started.app, await signIn(started, OWNER_EMAIL));
+    await owner('POST', '/api/v1/topics', { title: 'Hinos' });
+    await owner('POST', '/api/v1/topics', { title: 'Outros' });
+    const renamed = await owner('PATCH', '/api/v1/topics/outros', {
+      title: 'hinos!',
+    });
+    expect(renamed.statusCode).toBe(409);
+    // The same name under another parent is fine.
+    const inside = await owner('POST', '/api/v1/topics', {
+      title: 'Hinos',
+      parent: 'outros',
+    });
+    expect(inside.statusCode).toBe(201);
+  });
+
+  it('S-1: a member renames only what they created; a master renames any', async () => {
+    const started = await start();
+    const { owner, member } = await people(started, {
+      features: ['search', 'collection-create'],
+      topics: ['hermetismo'],
+    });
+    await member('POST', '/api/v1/topics', { title: 'Meu' });
+    expect(
+      (await member('PATCH', '/api/v1/topics/meu', { title: 'Meu acervo' }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await member('PATCH', '/api/v1/topics/hermetismo', { title: 'X' }))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (await owner('PATCH', '/api/v1/topics/meu', { description: 'ok' }))
+        .statusCode,
+    ).toBe(200);
+  });
+
+  it('FR-4: the "Sub-acervo" filter restricts a parent to some of its collections, with counts', async () => {
+    const started = await start({ vault: await vaultWithSubTopic() });
+    const owner = caller(started.app, await signIn(started, OWNER_EMAIL));
+    const all = (
+      await owner('POST', '/api/v1/topics/udv/searches', { q: 'burracheira' })
+    ).json();
+    expect(all.facets.topics).toEqual(
+      expect.arrayContaining([
+        { value: 'udv', count: 1 },
+        { value: 'udv/palavra-do-mestre', count: 1 },
+      ]),
+    );
+    const own = await owner('POST', '/api/v1/topics/udv/searches', {
+      q: 'burracheira',
+      filters: { topics: ['udv'] },
+    });
+    expect(own.json().items.map((hit: { id: string }) => hit.id)).toEqual([
+      'raw/historia.md',
+    ]);
+    const facets = (await owner('GET', '/api/v1/topics/udv/facets')).json();
+    expect(facets.topics).toHaveLength(2);
+  });
+
+  it('a master acting as a person creates for the person, and the records name the master', async () => {
+    const started = await start();
+    const { owner, member, memberId } = await people(started, {
+      features: ['search', 'collection-create'],
+      topics: [],
+    });
+    await owner('POST', `/api/v1/people/${memberId}/act-as`, {
+      reason: 'criar o acervo dela',
+    });
+    const made = await owner('POST', '/api/v1/topics', { title: 'Dela' });
+    expect(made.statusCode).toBe(201);
+    await owner('DELETE', '/api/v1/act-as');
+    expect(await titles(member)).toEqual([['dela', null, true]]);
+    const saved = JSON.parse(
+      await readFile(join(started.state, 'collections.json'), 'utf8'),
+    );
+    expect(saved.collections[0].createdBy).toBe(OWNER_EMAIL);
+    const audit = (await owner('GET', '/api/v1/act-as/audit')).json().items;
+    expect(
+      audit.some(
+        (e: { kind: string; method?: string; route?: string }) =>
+          e.kind === 'write' &&
+          e.method === 'POST' &&
+          e.route === '/api/v1/topics',
+      ),
+    ).toBe(true);
+  });
+});

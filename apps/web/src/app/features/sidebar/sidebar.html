@@ -91,18 +91,14 @@
       [disabled]="chat.topicList().length === 0"
       (change)="changeTopic(topicSelect.value)"
     >
-      @for (topic of chat.topicList(); track topic.slug) {
-        @if (topic.canOpen) {
-          <option
-            [value]="topic.slug"
-            [selected]="topic.slug === chat.topicSlug()"
-          >
-            {{ treeTitle(topic) }} ({{ topic.documentCount | number }})
-          </option>
-        } @else {
-          <!-- A parent shown only as the title of its group (KBC-048 BR-3). -->
-          <option [value]="topic.slug" disabled>{{ topic.title }}</option>
-        }
+      @for (option of topicOptions(); track option.slug) {
+        <option
+          [value]="option.slug"
+          [selected]="option.slug === chat.topicSlug()"
+          [disabled]="!option.canOpen"
+        >
+          {{ option.label }}
+        </option>
       }
     </select>
   </label>

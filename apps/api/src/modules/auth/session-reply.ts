@@ -1,5 +1,6 @@
 import type { Me } from '@kb-chat/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { parentOfRequest } from './access.js';
 import { isSecureHost, sessionCookie } from './cookie.js';
 import type { PeopleService } from './people-service.js';
 import { toMe, type StoredPerson } from './person.js';
@@ -28,5 +29,6 @@ export async function openSession(
   return toMe(deps.people.viewerOf(person), {
     topics: deps.topics(),
     media: deps.mediaEnabled ?? false,
+    parentOf: parentOfRequest(http.request),
   });
 }

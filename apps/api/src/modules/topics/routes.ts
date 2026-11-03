@@ -19,6 +19,7 @@ import { z } from 'zod';
 import {
   SIGNED_IN,
   canSee,
+  isMaster,
   principalOf,
   viewerOf,
   type RouteAccess,
@@ -42,10 +43,13 @@ const CREATE: RouteAccess = { feature: 'collection-create' };
 const RENAME: RouteAccess = { ...CREATE, topicParam: 'topic' };
 
 const actorOf = (request: FastifyRequest): CollectionActor => {
-  const { person } = viewerOf(request);
+  const viewer = viewerOf(request);
   return {
-    personId: person.id,
-    email: person.email,
+    personId: viewer.person.id,
+    personEmail: viewer.person.email,
+    isMaster: isMaster(viewer.person),
+    // While acting, the records name the master who did it (ADR 0027).
+    email: (viewer.actor?.viewer ?? viewer).person.email,
     canSee: (slug) => canSee(request, slug),
   };
 };
@@ -97,7 +101,8 @@ function registerChanges(typed: Typed, { service }: TopicsDeps): void {
         response: { 200: topicSchema },
       },
     },
-    async (request) => service.rename(request.params.topic, request.body),
+    async (request) =>
+      service.rename(actorOf(request), request.params.topic, request.body),
   );
 }
 

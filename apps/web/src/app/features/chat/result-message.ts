@@ -6,7 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import type { SearchFilters, SearchMode } from '@kb-chat/contracts';
+import type { SearchFilters, SearchMode, Topic } from '@kb-chat/contracts';
 import { errorMessage } from '@core/api/api-error.js';
 import { modeLabel } from '@core/i18n/facet-labels.js';
 import { hasFilters, type ChatMessage } from './chat-message.js';
@@ -31,8 +31,8 @@ export class ResultMessage {
   readonly message = input.required<ChatMessage>();
   readonly topicTitle = input('');
   readonly activeId = input<string | null>(null);
-  /** Titles of the sub-collections searched with the chosen one (ADR 0028). */
-  readonly places = input<ReadonlyMap<string, string>>(new Map());
+  /** Every collection the person sees: names the message's sub-collections (ADR 0028). */
+  readonly topics = input<readonly Topic[]>([]);
   readonly opened = output<OpenedHit>();
   readonly retried = output();
   readonly modeSwitched = output<SearchMode>();
@@ -40,6 +40,21 @@ export class ResultMessage {
   readonly moreRequested = output();
 
   protected readonly response = computed(() => this.message().response);
+  /** The message's collection and its sub-collections, by name (the "Sub-acervo" filter). */
+  protected readonly topicNames = computed(() => {
+    const searched = this.message().topic;
+    return new Map(
+      this.topics()
+        .filter((one) => one.slug === searched || one.parent === searched)
+        .map((one) => [one.slug, one.title]),
+    );
+  });
+  /** Where a result is, when it is in one of the message's sub-collections. */
+  protected readonly places = computed(() => {
+    const names = new Map(this.topicNames());
+    names.delete(this.message().topic);
+    return names;
+  });
   protected readonly items = computed(() => this.response()?.items ?? []);
   protected readonly modeName = computed(() => modeLabel(this.message().mode));
   protected readonly count = computed(() => {
@@ -57,7 +72,11 @@ export class ResultMessage {
     hasFilters(this.message().filters),
   );
   protected readonly removable = computed(() =>
-    activeFilters(this.message().filters, this.message().filterOrder),
+    activeFilters(
+      this.message().filters,
+      this.message().filterOrder,
+      this.topicNames(),
+    ),
   );
   protected readonly canTrySemantic = computed(
     () => this.message().mode !== 'semantic',

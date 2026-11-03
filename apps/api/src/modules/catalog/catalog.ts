@@ -63,8 +63,10 @@ export class CatalogRegistry {
     const topic = (await this.vault.listTopics()).find(
       (one) => one.slug === slug,
     );
+    const loaded = topic ? await loadTopicCatalog(this.vault, topic) : null;
+    // Swapped after every await, so two refreshes at once never drop each other's topic.
     const next = new Map(this.catalogs);
-    if (topic) next.set(slug, await loadTopicCatalog(this.vault, topic));
+    if (loaded) next.set(slug, loaded);
     else next.delete(slug);
     this.catalogs = next;
   }

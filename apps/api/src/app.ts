@@ -703,6 +703,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
+  // The collection tree for every access check (ADR 0028): a parent's grant reaches its
+  // sub-collections, by the catalog, never by the slug's text.
+  app.decorate(
+    'topicParentOf',
+    (slug: string) => full.catalog.get(slug)?.topic.parent ?? null,
+  );
 
   // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
   app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));

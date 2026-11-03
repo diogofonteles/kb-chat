@@ -28,6 +28,11 @@ export const searchFiltersSchema = z.strictObject({
   relevances: z.array(relevanceSchema).default([]),
   /** KBC-020: none selected = every authorship ("Todos"). */
   authorships: z.array(authorshipSchema).max(4).default([]),
+  /**
+   * KBC-048 FR-4: searching a parent, only these of its collections (itself or its
+   * sub-collections); none selected = all of them.
+   */
+  topics: z.array(topicSlugSchema).max(50).default([]),
 });
 export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 export type SearchFiltersInput = z.input<typeof searchFiltersSchema>;
@@ -39,6 +44,7 @@ export const EMPTY_FILTERS: SearchFilters = {
   depths: [],
   relevances: [],
   authorships: [],
+  topics: [],
 };
 
 export const searchRequestSchema = z.strictObject({
@@ -53,6 +59,7 @@ export const searchRequestSchema = z.strictObject({
     depths: [],
     relevances: [],
     authorships: [],
+    topics: [],
   })),
 });
 export type SearchRequest = z.input<typeof searchRequestSchema>;
@@ -85,6 +92,8 @@ export const resultFacetsSchema = z.object({
   depths: facetCountSchema(depthLevelSchema),
   relevances: facetCountSchema(relevanceSchema),
   authorships: facetCountSchema(authorshipSchema),
+  /** Per collection searched: a parent and its sub-collections (KBC-048 FR-4). */
+  topics: facetCountSchema(topicSlugSchema),
 });
 export type ResultFacets = z.infer<typeof resultFacetsSchema>;
 

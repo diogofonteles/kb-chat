@@ -122,9 +122,12 @@ export class SearchService {
 
   /** Collection-wide counts per facet value (start-screen suggestions and "no acervo" counts). */
   topicFacets(topic: string): TopicFacets {
-    const entries = this.requireScope(topic).flatMap((catalog) => [
-      ...catalog.entries.values(),
-    ]);
+    const entries = this.requireScope(topic).flatMap((catalog) =>
+      [...catalog.entries.values()].map((entry) => ({
+        ...entry,
+        topic: catalog.topic.slug,
+      })),
+    );
     return countFacets(() => entries);
   }
 
@@ -133,9 +136,11 @@ export class SearchService {
     hits: readonly IndexHit[],
   ): Candidate[] {
     const known: Candidate[] = [];
+    const topic = catalog.topic.slug;
     for (const hit of hits) {
       const entry = catalog.entries.get(hit.id);
-      if (entry) known.push({ hit, entry });
+      // The collection rides along for the "Sub-acervo" filter (KBC-048 FR-4).
+      if (entry) known.push({ hit, entry: { ...entry, topic } });
     }
     return known;
   }

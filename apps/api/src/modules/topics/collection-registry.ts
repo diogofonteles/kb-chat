@@ -4,18 +4,27 @@ import { AppError } from '../../app-error.js';
 import type { DocumentStorePort } from '../../ports/document-store.js';
 import { SerialDocument } from '../../serial-document.js';
 
-const storedCollectionSchema = z.object({
-  slug: topicSlugSchema,
-  title: z.string(),
-  description: z.string(),
-  parent: topicSlugSchema.nullable(),
-  /** Who created it on the screen; absent for a vault topic renamed on the screen. */
-  createdBy: z.string().optional(),
-  createdAt: z.string().optional(),
-});
+const storedCollectionSchema = z
+  .strictObject({
+    slug: topicSlugSchema,
+    title: z.string(),
+    description: z.string(),
+    parent: topicSlugSchema.nullable(),
+    /** Who created it on the screen; absent for a vault topic renamed on the screen. */
+    createdBy: z.string().optional(),
+    createdAt: z.string().optional(),
+  })
+  // One level only (BR-2): a sub-collection's slug is its parent's plus one segment. A
+  // vault topic renamed here keeps the vault's slug, grouping folder included.
+  .refine((one) =>
+    one.parent === null
+      ? one.createdBy === undefined || !one.slug.includes('/')
+      : one.slug.startsWith(`${one.parent}/`) &&
+        !one.slug.slice(one.parent.length + 1).includes('/'),
+  );
 export type StoredCollection = z.infer<typeof storedCollectionSchema>;
 
-const registrySchema = z.object({
+const registrySchema = z.strictObject({
   version: z.literal(1),
   collections: z.array(storedCollectionSchema),
 });
@@ -76,6 +85,17 @@ export class CollectionRegistry {
         result: stored,
       };
     });
+  }
+
+  /** Undoes a creation whose next step failed (KBC-048 NFR-2: nothing half made). */
+  remove(slug: string): Promise<void> {
+    return this.doc.change((doc) => ({
+      doc: {
+        ...doc,
+        collections: doc.collections.filter((one) => one.slug !== slug),
+      },
+      result: undefined,
+    }));
   }
 
   /**

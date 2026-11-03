@@ -12,10 +12,10 @@ import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 
 const VISIBLE_CONCEPTS = 2;
 
-/** One search hit: title, snippet, facets in text and its near-identical copies (screens.md T2). */
 /** A result or one of its copies, with the collection it opens in (KBC-048). */
 export type OpenedHit = DocumentRef & { readonly topic: string };
 
+/** One search hit: title, snippet, facets in text and its near-identical copies (screens.md T2). */
 @Component({
   selector: 'app-result-card',
   imports: [AuthorshipBadge],
@@ -31,10 +31,6 @@ export class ResultCard {
   readonly opened = output<OpenedHit>();
 
   protected readonly copiesOpen = signal(false);
-
-  protected open(doc: DocumentRef): void {
-    this.opened.emit({ id: doc.id, title: doc.title, topic: this.hit().topic });
-  }
   protected readonly facets = computed(() => describeFacets(this.hit()));
   protected readonly concepts = computed(() =>
     this.hit().concepts.slice(0, VISIBLE_CONCEPTS).join(' · '),
@@ -43,6 +39,10 @@ export class ResultCard {
     Math.max(0, this.hit().concepts.length - VISIBLE_CONCEPTS),
   );
   protected readonly copiesId = computed(() => `copies-${this.hit().id}`);
+
+  protected open(doc: DocumentRef): void {
+    this.opened.emit({ id: doc.id, title: doc.title, topic: this.hit().topic });
+  }
 
   protected toggleCopies(): void {
     this.copiesOpen.update((open) => !open);

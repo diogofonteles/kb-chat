@@ -31,6 +31,7 @@
           [filters]="message().filters"
           [hiddenOffTopic]="current.hiddenOffTopic"
           [order]="message().filterOrder"
+          [topicNames]="topicNames()"
           (filtersChange)="filtersChanged.emit($event)"
         />
       }

@@ -46,100 +46,108 @@ const TOP_LEVEL = '';
           <ng-container i18n="@@collection.newTitle">Novo acervo</ng-container>
         }
       </h2>
-      <label class="field" for="collection-name">
-        <span i18n="@@collection.name">Nome</span>
-        <input
-          #nameInput
-          id="collection-name"
-          type="text"
-          autocomplete="off"
-          [attr.maxlength]="titleMax"
-          [value]="name()"
-          [attr.aria-invalid]="invalid() ? 'true' : null"
-          [attr.aria-describedby]="
-            invalid() ? 'collection-name-error' : 'collection-address'
-          "
-          (input)="typeName(nameInput.value)"
-        />
-      </label>
-      @if (invalid()) {
-        <p
-          id="collection-name-error"
-          class="error"
-          i18n="@@collection.nameRequired"
-        >
-          Escreva um nome com pelo menos uma letra ou número.
-        </p>
-      }
-      <p id="collection-address" class="hint">
-        @if (address(); as where) {
-          <ng-container i18n="@@collection.address"
-            >Endereço: <code>{{ where }}</code></ng-container
-          >
-        }
-      </p>
-      <label class="field" for="collection-description">
-        <span i18n="@@collection.description">Descrição (opcional)</span>
-        <textarea
-          #descriptionInput
-          id="collection-description"
-          rows="2"
-          [attr.maxlength]="descriptionMax"
-          [value]="description()"
-          (input)="description.set(descriptionInput.value)"
-        ></textarea>
-      </label>
-      @if (!editing()) {
-        <label class="field" for="collection-parent">
-          <span i18n="@@collection.parent">Dentro de</span>
-          <select
-            #parentSelect
-            id="collection-parent"
-            (change)="parent.set(parentSelect.value)"
-          >
-            <option
-              [value]="topLevel"
-              [selected]="parent() === topLevel"
-              i18n="@@collection.noParent"
-            >
-              Nenhum (acervo principal)
-            </option>
-            @for (option of parents(); track option.slug) {
-              <option
-                [value]="option.slug"
-                [selected]="parent() === option.slug"
-              >
-                {{ option.title }}
-              </option>
-            }
-          </select>
+      <!-- A form: Enter in the name creates (or saves), like any form. -->
+      <form (submit)="$event.preventDefault(); save()">
+        <label class="field" for="collection-name">
+          <span i18n="@@collection.name">Nome</span>
+          <input
+            #nameInput
+            id="collection-name"
+            type="text"
+            autocomplete="off"
+            [attr.maxlength]="titleMax"
+            [value]="name()"
+            [attr.aria-invalid]="invalid() ? 'true' : null"
+            [attr.aria-describedby]="
+              invalid() ? 'collection-name-error' : 'collection-address'
+            "
+            (input)="typeName(nameInput.value)"
+          />
         </label>
-      }
-      @if (failure(); as message) {
-        <p class="error" role="alert">{{ message }}</p>
-      }
-      <div class="actions">
-        <button
-          type="button"
-          class="secondary"
-          (click)="close()"
-          i18n="@@collection.cancel"
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          class="primary"
-          [disabled]="busy()"
-          (click)="save()"
-        >
-          @if (editing()) {
-            <ng-container i18n="@@collection.save">Salvar</ng-container>
-          } @else {
-            <ng-container i18n="@@collection.create">Criar acervo</ng-container>
+        @if (invalid()) {
+          <p
+            id="collection-name-error"
+            class="error"
+            i18n="@@collection.nameRequired"
+          >
+            Escreva um nome com pelo menos uma letra ou número.
+          </p>
+        }
+        <p id="collection-address" class="hint">
+          @if (address(); as where) {
+            <ng-container i18n="@@collection.address"
+              >Identificador (não muda depois):
+              <code>{{ where }}</code></ng-container
+            >
           }
-        </button>
-      </div>
+        </p>
+        <label class="field" for="collection-description">
+          <span i18n="@@collection.description">Descrição (opcional)</span>
+          <textarea
+            #descriptionInput
+            id="collection-description"
+            rows="2"
+            [attr.maxlength]="descriptionMax"
+            [value]="description()"
+            (input)="description.set(descriptionInput.value)"
+          ></textarea>
+        </label>
+        @if (!editing()) {
+          <label class="field" for="collection-parent">
+            <span i18n="@@collection.parent">Dentro de</span>
+            <select
+              #parentSelect
+              id="collection-parent"
+              (change)="parent.set(parentSelect.value)"
+            >
+              <option
+                [value]="topLevel"
+                [selected]="parent() === topLevel"
+                i18n="@@collection.noParent"
+              >
+                Nenhum (acervo principal)
+              </option>
+              @for (option of parents(); track option.slug) {
+                <option
+                  [value]="option.slug"
+                  [selected]="parent() === option.slug"
+                >
+                  {{ option.title }}
+                </option>
+              }
+            </select>
+          </label>
+        }
+        @if (failure(); as message) {
+          <p class="error" role="alert">{{ message }}</p>
+        }
+        <div class="actions">
+          <button
+            type="button"
+            class="secondary"
+            (click)="close()"
+            i18n="@@collection.cancel"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="primary"
+            [disabled]="busy()"
+            [attr.aria-busy]="busy()"
+          >
+            @if (busy()) {
+              <ng-container i18n="@@collection.saving">Salvando…</ng-container>
+            } @else if (editing()) {
+              <ng-container i18n="@@collection.save">Salvar</ng-container>
+            } @else {
+              <ng-container i18n="@@collection.create"
+                >Criar acervo</ng-container
+              >
+            }
+          </button>
+        </div>
+      </form>
     </dialog>
   `,
   styleUrl: './collection-dialog.css',
@@ -168,9 +176,15 @@ export class CollectionDialog {
   protected readonly busy = signal(false);
   protected readonly failure = signal<string | null>(null);
 
-  /** One level only (BR-2): a sub-collection is never offered as a parent. */
+  /**
+   * One level only (BR-2): a sub-collection is never offered as a parent, nor a vault topic
+   * that sits in a folder ("harness/goclaw", which the API refuses as a parent).
+   */
   protected readonly parents = computed(() =>
-    this.topics().filter((topic) => topic.parent === null && topic.canOpen),
+    this.topics().filter(
+      (topic) =>
+        topic.parent === null && topic.canOpen && !topic.slug.includes('/'),
+    ),
   );
 
   /** The address the collection gets (or keeps, when editing). */

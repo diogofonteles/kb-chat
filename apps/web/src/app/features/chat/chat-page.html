@@ -151,6 +151,13 @@
                   </p>
                 }
               } @else {
+                @if (emptyTopic()) {
+                  <!-- A collection created on the screen: its texts come from the vault later (ADR 0028). -->
+                  <p class="notice" i18n="@@page.emptyTopic">
+                    Este acervo ainda não tem textos para buscar. Eles aparecem
+                    aqui assim que forem adicionados.
+                  </p>
+                }
                 <p class="hint">
                   @if (researching()) {
                     <span i18n="@@page.hintResearch"
@@ -214,7 +221,7 @@
                 [message]="message"
                 [topicTitle]="topic()?.title ?? ''"
                 [activeId]="opened()?.id ?? null"
-                [places]="places()"
+                [topics]="topicList()"
                 (opened)="openHit($event, message)"
                 (retried)="retry(message)"
                 (modeSwitched)="askAgainIn(message, $event)"

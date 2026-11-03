@@ -573,7 +573,7 @@ describe('ChatPage side panel (KBC-005)', () => {
       'option',
     ) as HTMLOptionElement[];
     expect(options.map((option) => [option.text, option.disabled])).toEqual([
-      ['UDV', true],
+      ['UDV — só os sub-acervos abaixo', true],
       ['\u00a0\u00a0\u00a0\u00a0Palavra do Mestre (7)', false],
     ]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
@@ -610,6 +610,9 @@ describe('ChatPage side panel (KBC-005)', () => {
       'UDV (0)',
     ]);
     expect(select.value).toBe('udv');
+    expect(
+      screen.getByText(/Este acervo ainda não tem textos para buscar/),
+    ).toBeTruthy();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
       'UDV',
     );

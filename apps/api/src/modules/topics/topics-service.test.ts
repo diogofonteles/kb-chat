@@ -4,7 +4,12 @@ import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
 import { CatalogRegistry } from '../catalog/index.js';
 import { CollectionRegistry } from './collection-registry.js';
 import { CollectionsVault } from './collections-vault.js';
-import { listTopics } from './topics-service.js';
+import {
+  canSeeTopic,
+  type ParentOf,
+  type StoredPerson,
+} from '../auth/index.js';
+import { TopicsService, listTopics } from './topics-service.js';
 
 class FoldersOnly implements VaultReaderPort {
   constructor(private readonly folders: readonly TopicFolder[]) {}
@@ -78,5 +83,46 @@ describe('listTopics as a tree (KBC-048 FR-4)', () => {
         description: 'Palestras',
       }),
     ]);
+  });
+});
+
+describe('TopicsService.create (KBC-048 NFR-2)', () => {
+  it('undoes the collection when its creator cannot be given access', async () => {
+    const { catalog, registry } = await catalogOf([]);
+    const service = new TopicsService({
+      catalog,
+      registry,
+      grant: () => Promise.reject(new Error('people.json is busy')),
+    });
+    const actor = {
+      personId: 'p1',
+      personEmail: 'ana@example.com',
+      email: 'ana@example.com',
+      isMaster: false,
+      canSee: () => true,
+    };
+    await expect(service.create(actor, { title: 'Novo' })).rejects.toThrow(
+      'people.json is busy',
+    );
+    expect(await registry.list()).toEqual([]);
+    expect(catalog.get('novo')).toBeUndefined();
+  });
+});
+
+describe('canSeeTopic by the real tree (KBC-048 BR-3)', () => {
+  const ana = {
+    role: 'member',
+    topics: ['harness', 'udv'],
+  } as unknown as StoredPerson;
+  const tree: ParentOf = (slug) =>
+    slug === 'udv/palavra-do-mestre' ? 'udv' : null;
+
+  it('reaches a sub-collection through its parent in the tree', () => {
+    expect(canSeeTopic(ana, 'udv/palavra-do-mestre', tree)).toBe(true);
+  });
+
+  it('never through the slug text: a grouping folder or no tree grants nothing', () => {
+    expect(canSeeTopic(ana, 'harness/goclaw', tree)).toBe(false);
+    expect(canSeeTopic(ana, 'udv/palavra-do-mestre')).toBe(false);
   });
 });

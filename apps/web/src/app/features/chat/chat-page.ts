@@ -95,16 +95,11 @@ export class ChatPage {
   protected readonly desktop = signal(this.matchesDesktop());
 
   protected readonly topic = this.store.topic;
-  /** The chosen collection's sub-collections, named on their results (ADR 0028). */
-  protected readonly places = computed(() => {
-    const slug = this.store.topicSlug();
-    return new Map(
-      this.store
-        .topicList()
-        .filter((one) => one.parent !== null && one.parent === slug)
-        .map((one) => [one.slug, one.title]),
-    );
-  });
+  protected readonly topicList = this.store.topicList;
+  /** The chosen collection (with its sub-collections) has no text yet (KBC-048, ADR 0028). */
+  protected readonly emptyTopic = computed(
+    () => this.store.topic()?.documentCount === 0,
+  );
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
   protected readonly currentView = this.views.current;

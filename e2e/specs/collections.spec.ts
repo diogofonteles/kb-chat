@@ -15,7 +15,9 @@ import {
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
 async function sidebar(page: Page): Promise<Locator> {
-  if (!desktop(page)) await page.getByRole('button', { name: 'Menu' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Menu' });
+  if (!desktop(page) && !(await drawer.isVisible()))
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
   return desktop(page)
     ? page.getByRole('complementary', { name: 'Lateral' })
     : page.getByRole('dialog', { name: 'Menu' });
@@ -95,6 +97,27 @@ test('AC-1, AC-2, NFR-1: a member creates a collection and a sub-collection and 
   expect(at).toBeGreaterThanOrEqual(0);
   // Indented under its parent with no-break spaces, the only indent a <select> keeps.
   expect(texts[at + 1]).toMatch(/\u00a0{4}Palavra do Mestre \(0\)/);
+  await member.context().close();
+});
+
+test('AC-6: renaming keeps the address and the selection', async ({ page }) => {
+  const member = await aCreator(page);
+  const name = uniqueName('Antigo');
+  await create(member, name);
+  const panel = await sidebar(member);
+  await panel.getByRole('button', { name: 'Editar acervo' }).click();
+  const dialog = member.getByRole('dialog', { name: 'Editar acervo' });
+  await expect(dialog.getByText(slugOf(name), { exact: true })).toBeVisible();
+  const renamed = `${name} novo`;
+  await dialog.getByRole('textbox', { name: 'Nome' }).fill(renamed);
+  await member.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+  const select = (await sidebar(member)).getByRole('combobox', {
+    name: 'Acervo',
+    exact: true,
+  });
+  await expect(select).toHaveValue(slugOf(name));
+  await expect(select.locator('option:checked')).toContainText(renamed);
   await member.context().close();
 });
 

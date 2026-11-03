@@ -16,6 +16,8 @@ const PALAVRA = aTopic({
   parent: 'udv',
 });
 const CLOSED = aTopic({ slug: 'fechado', title: 'Fechado', canOpen: false });
+/** A vault topic inside a folder that only groups topics: never a parent. */
+const GROUPED = aTopic({ slug: 'harness/goclaw', title: 'Goclaw' });
 
 async function renderDialog() {
   const saved = vi.fn();
@@ -25,7 +27,7 @@ async function renderDialog() {
       provideHttpClient(),
       provideHttpClientTesting(),
     ],
-    inputs: { topics: [UDV, PALAVRA, CLOSED] },
+    inputs: { topics: [UDV, PALAVRA, CLOSED, GROUPED] },
     on: { saved },
   });
   const http = TestBed.inject(HttpTestingController);
@@ -124,5 +126,19 @@ describe('CollectionDialog (KBC-048 FR-6, FR-2)', () => {
       title: 'União do Vegetal',
       description: '',
     });
+  });
+
+  it('Enter in the name creates it, and the button says it is saving meanwhile', async () => {
+    const { dialog, fixture, http } = await renderDialog();
+    dialog.openNew();
+    await fixture.whenStable();
+    fireEvent.input(nameBox(), { target: { value: 'Hinos' } });
+    fireEvent.submit(nameBox().closest('form') as HTMLFormElement);
+    await fixture.whenStable();
+    const busy = screen.getByRole('button', { name: 'Salvando…' });
+    expect(busy.hasAttribute('disabled')).toBe(true);
+    http
+      .expectOne({ method: 'POST', url: '/api/v1/topics' })
+      .flush(aTopic({ slug: 'hinos', title: 'Hinos' }));
   });
 });

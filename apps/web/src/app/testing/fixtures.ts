@@ -40,6 +40,7 @@ export const aResponse = (
     depths: [{ value: 2, count: 1 }],
     relevances: [{ value: 'core', count: 1 }],
     authorships: [{ value: 'mestre-laercio', count: 1 }],
+    topics: [{ value: 'hermetismo', count: 1 }],
   },
   mode: 'all',
   tookMs: 640,

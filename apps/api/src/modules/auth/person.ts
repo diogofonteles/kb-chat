@@ -101,30 +101,41 @@ export const effectiveFeatures = (person: StoredPerson): Feature[] =>
 export const hasFeature = (person: StoredPerson, feature: Feature): boolean =>
   isMaster(person) || person.features.includes(feature);
 
-/** The collection a sub-collection sits in (`udv` of `udv/palavra-do-mestre`), or null. */
-export const parentSlugOf = (topic: string): string | null => {
-  const cut = topic.lastIndexOf('/');
-  return cut < 0 ? null : topic.slice(0, cut);
-};
+/**
+ * The collection a sub-collection sits in, from the real tree (the catalog, ADR 0028), never
+ * from the slug's text: a folder of the vault that only groups topics is no parent.
+ */
+export type ParentOf = (topic: string) => string | null;
+
+/** Without the tree, only exact grants count. */
+export const NO_PARENT: ParentOf = () => null;
 
 /**
  * The slug or the collection it sits in (access to a collection includes its
  * sub-collections, KBC-048 BR-3); a master sees every collection.
  */
-export function canSeeTopic(person: StoredPerson, topic: string): boolean {
+export function canSeeTopic(
+  person: StoredPerson,
+  topic: string,
+  parentOf: ParentOf = NO_PARENT,
+): boolean {
   if (isMaster(person) || person.topics.includes(topic)) return true;
-  const parent = parentSlugOf(topic);
+  const parent = parentOf(topic);
   return parent !== null && person.topics.includes(parent);
 }
 
 export const visibleTopics = (
   person: StoredPerson,
   allTopics: readonly string[],
-): string[] => allTopics.filter((topic) => canSeeTopic(person, topic));
+  parentOf: ParentOf = NO_PARENT,
+): string[] =>
+  allTopics.filter((topic) => canSeeTopic(person, topic, parentOf));
 
 /** What `toMe` needs from the server: every collection slug and whether media is on. */
 export interface MeScope {
   readonly topics: readonly string[];
+  /** The collection tree, for access given through a parent (KBC-048). */
+  readonly parentOf?: ParentOf;
   readonly media: boolean;
 }
 
@@ -136,7 +147,7 @@ export function toMe(viewer: Viewer, scope: MeScope): Me {
     picture: person.picture,
     role: person.role,
     features: effectiveFeatures(person),
-    topics: visibleTopics(person, scope.topics),
+    topics: visibleTopics(person, scope.topics, scope.parentOf),
     isOwner: viewer.isOwner,
     media: scope.media,
     canActAs: !viewer.actor && mayActAs(viewer),

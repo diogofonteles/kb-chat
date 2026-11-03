@@ -14,9 +14,9 @@ KBC-048 first said "create the topic in the vault, like `kb topic new`". In prod
 2. **Merge, vault first for content, registry first for names.** Documents come only from the vault; a registry collection with no vault folder has no documents until the owner creates the folder on the Mac (`kb topic new <slug> …`) and syncs; media can be uploaded to it at once. A title or description in the registry overrides the vault's `topic.yaml`, so renaming never touches the vault.
 3. **One level of sub-collections.** A sub-collection's slug is `<parent>/<name>`; the parent must be a top-level collection. The vault reader now also finds a topic folder inside a topic folder (`udv/palavra-do-mestre`), one level down.
 4. **Slug from the name, fixed forever.** Lowercase, no accents, hyphens; unique; renaming changes only the title, so links, permissions and media keep working.
-5. **Access follows the tree.** Access to a collection includes its sub-collections; access to a sub-collection alone shows the parent only as a group title and never opens it.
-6. **The parent's content includes its sub-collections** in the search, the facets and the suggestions, each result keeping (and opening in) its own collection. AI research stays on the chosen collection's own documents (a later item may widen it).
-7. **A new feature, "Criar acervos" (`collection-create`),** granted per person; masters hold it. Whoever creates a collection gets access to it.
+5. **Access follows the tree.** Access to a collection includes its sub-collections, by the catalog's tree and never by the slug's text (a vault folder that only groups topics grants nothing, and no new collection may take its name); access to a sub-collection alone shows the parent only as a group title and never opens it.
+6. **The parent's content includes its sub-collections** in the search, the facets, the suggestions and the media list, each result keeping (and opening in) its own collection; a "Sub-acervo" filter restricts it to some of them. AI research stays on the chosen collection's own documents (a later item may widen it).
+7. **A new feature, "Criar acervos" (`collection-create`),** granted per person; masters hold it. Whoever creates a collection gets access to it and may rename it; masters rename any.
 
 ## Options considered
 

@@ -1,10 +1,11 @@
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { DecimalPipe } from '@angular/common';
+import { formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
   inject,
+  LOCALE_ID,
   output,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -59,13 +60,7 @@ const KIND_LABELS: Record<ConversationKind, () => string> = {
  */
 @Component({
   selector: 'app-sidebar',
-  imports: [
-    DecimalPipe,
-    SettingsButton,
-    RouterLink,
-    RouterLinkActive,
-    CollectionDialog,
-  ],
+  imports: [SettingsButton, RouterLink, RouterLinkActive, CollectionDialog],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -204,7 +199,20 @@ export class Sidebar {
   protected readonly canCreateCollections = computed(() =>
     this.session.can('collection-create'),
   );
-  protected readonly treeTitle = treeTitle;
+  private readonly locale = inject(LOCALE_ID);
+  /**
+   * The selector as a tree (KBC-048 FR-4): sub-collections indented with their counts; a parent
+   * shown only as the title of its group is disabled and says so in words (BR-3).
+   */
+  protected readonly topicOptions = computed(() =>
+    this.chat.topicList().map((topic) => ({
+      slug: topic.slug,
+      canOpen: topic.canOpen,
+      label: topic.canOpen
+        ? `${treeTitle(topic)} (${formatNumber(topic.documentCount, this.locale)})`
+        : $localize`:@@sidebar.groupOnly:${topic.title}:title: — só os sub-acervos abaixo`,
+    })),
+  );
 
   /** A new collection opens at once (≤ 2 s, NFR-1); a renamed one keeps its place. */
   protected collectionSaved(topic: Topic): void {
