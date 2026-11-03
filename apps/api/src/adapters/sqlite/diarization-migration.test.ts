@@ -4,6 +4,8 @@ import { applyMigrations } from './media-database.js';
 import { MEDIA_MIGRATIONS } from './media-migrations.js';
 
 const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < 8);
+/** Up to this migration: later ones (KBC-067's track proposals) are not what it proves. */
+const THROUGH = MEDIA_MIGRATIONS.filter((one) => one.version <= 8);
 const MEDIA_ID = '33333333-3333-4333-8333-333333333333';
 
 function seed(db: DatabaseSync): void {
@@ -27,7 +29,7 @@ describe('migration 8: diarization (KBC-064)', () => {
     db.exec('PRAGMA foreign_keys = ON');
     applyMigrations(db, BEFORE);
     seed(db);
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([8]);
+    expect(applyMigrations(db, THROUGH)).toEqual([8]);
     expect(
       db
         .prepare(

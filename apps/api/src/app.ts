@@ -449,19 +449,26 @@ async function registerWorker(
   );
 }
 
-/** Each person's listening: position, bookmarks, the transcript and subtitles. */
+/** Each person's listening: position, bookmarks, the transcript, subtitles and voices. */
 async function registerListening(
   app: FastifyInstance,
-  wiring: { deps: MediaDeps; media: MediaService },
+  wiring: {
+    deps: MediaDeps;
+    media: MediaService;
+    transcribers: TranscriberService;
+  },
 ) {
   const { listening, bookmarks, transcripts } = wiring.deps;
-  const { media } = wiring;
+  const { media, transcribers } = wiring;
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
   );
   await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
   await app.register(
     transcriptRoutes(new TranscriptService({ transcripts, media })),
+  );
+  await app.register(
+    speakerRoutes(diarizationService({ media: wiring.deps, transcribers })),
   );
 }
 
@@ -491,10 +498,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   await app.register(mediaRoutes(media, createPerMinute));
   await app.register(transcriberRoutes({ transcribers, media }));
-  await app.register(
-    speakerRoutes(diarizationService({ media: wiring.media, transcribers })),
-  );
-  await registerListening(app, { deps: wiring.media, media });
+  await registerListening(app, { deps: wiring.media, media, transcribers });
   const silences = new SilenceService({
     store,
     silences: wiring.media.silences,

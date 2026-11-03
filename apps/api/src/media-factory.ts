@@ -1,3 +1,4 @@
+import type { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import type { AppConfig } from './config.js';
 import { FsMediaFiles } from './adapters/media/fs-media-files.js';
@@ -94,7 +95,7 @@ export async function createMedia(
   };
 }
 
-/** The stores that live in the media database. */
+/** The stores that live in the media database (ADR 0022). */
 type MediaStores = Pick<
   MediaDeps,
   | 'store'
@@ -112,23 +113,26 @@ type MediaStores = Pick<
 /** The queue, each person's listening and bookmarks share one database (ADR 0022). */
 function openStores(dir: string): MediaStores {
   try {
-    const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
-    return {
-      store: new SqliteMediaStore(db),
-      listening: new SqliteListeningStore(db),
-      bookmarks: new SqliteBookmarkStore(db),
-      transcripts: new SqliteTranscriptStore(db),
-      transcribers: new SqliteTranscriberStore(db),
-      trackProposals: new SqliteTrackProposalStore(db),
-      spend: new SqliteMediaSpendLedger(db),
-      silences: new SqliteSilenceStore(db),
-      search: new SqliteMediaSearch(db),
-      diarizations: new SqliteDiarizationStore(db),
-    };
+    return storesOf(openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS));
   } catch (err) {
     throw new Error(
       `The media library cannot start: the media database in ${dir} did not open or migrate`,
       { cause: err },
     );
   }
+}
+
+function storesOf(db: DatabaseSync): MediaStores {
+  return {
+    store: new SqliteMediaStore(db),
+    listening: new SqliteListeningStore(db),
+    bookmarks: new SqliteBookmarkStore(db),
+    transcripts: new SqliteTranscriptStore(db),
+    transcribers: new SqliteTranscriberStore(db),
+    trackProposals: new SqliteTrackProposalStore(db),
+    spend: new SqliteMediaSpendLedger(db),
+    silences: new SqliteSilenceStore(db),
+    search: new SqliteMediaSearch(db),
+    diarizations: new SqliteDiarizationStore(db),
+  };
 }
