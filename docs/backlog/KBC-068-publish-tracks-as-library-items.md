@@ -1,7 +1,7 @@
 ---
 id: KBC-068
 title: "Faixas como itens próprios da Biblioteca: cortadas sem recodificar, com a própria transcrição, e ao lado da gravação completa"
-status: draft
+status: ready
 slice: phase-2-editing
 outcome: cada pergunta e resposta pode ser favoritada, posta numa playlist, baixada e achada na busca como um item próprio, sem perder a gravação completa
 depends_on: [KBC-066, KBC-051]
@@ -13,11 +13,11 @@ depends_on: [KBC-066, KBC-051]
 Como quem estuda, quero que cada faixa de pergunta e resposta seja um item que eu possa favoritar, pôr numa playlist, baixar e achar na busca, para montar meu estudo por pergunta e não pela palestra inteira.
 
 ## Scope
-**In:** ao publicar uma edição (KBC-066), cada faixa vira um item de mídia derivado (ADR 0029, proposta): uma linha em `media` com a gravação de origem, o início e o fim, o título da faixa, o acervo e a autoria herdados, o respondente como autor quando for um autor do acervo; o arquivo da faixa cortado da versão AAC pelo worker da VM com cópia de fluxo (`-c copy`, sem recodificar); a transcrição da faixa recortada da transcrição atual da origem, com os tempos deslocados (sem transcrever de novo); índice da busca (ADR 0024) com a faixa; na Biblioteca (KBC-051), as faixas aparecem para quem tem `media-tracks`, agrupadas sob a gravação ("Gravação completa · 12 faixas"); favoritar, playlist, fila e download (KBC-052 a KBC-056) funcionam com a faixa como com qualquer item; republicar uma edição atualiza as faixas mantendo o identificador das que continuam.
+**In:** ao publicar uma edição (KBC-066), cada faixa vira um item de mídia derivado (ADR 0029): uma linha em `media` com a gravação de origem, o início e o fim, o título da faixa, o acervo e a autoria herdados, o respondente como autor quando for um autor do acervo; o arquivo da faixa cortado da versão AAC pelo worker da VM com cópia de fluxo (`-c copy`, sem recodificar); a transcrição da faixa recortada da transcrição atual da origem, com os tempos deslocados (sem transcrever de novo); índice da busca (ADR 0024) com a faixa; na Biblioteca (KBC-051), as faixas aparecem para quem tem `media-tracks`, agrupadas sob a gravação ("Gravação completa · 12 faixas"); favoritar, playlist, fila e download (KBC-052 a KBC-056) funcionam com a faixa como com qualquer item; republicar uma edição atualiza as faixas mantendo o identificador das que continuam.
 **Out:** vídeo (fica para quando o KBC-035 estiver feito: cortar vídeo pede recodificar ou cortar em quadro-chave); apagar a gravação completa (decisão em aberto abaixo); compilados de várias gravações (fase C).
 
 ## Business rules
-- BR-1: a gravação completa continua existindo e tocável ao lado das faixas (padrão; ver a pergunta em aberto).
+- BR-1: a gravação completa continua existindo e tocável ao lado das faixas (decisão do dono, 2026-11-03).
 - BR-2: uma faixa herda o acervo e as permissões da origem; mover a origem de acervo (KBC-050) move as faixas.
 - BR-3: a faixa é cortada sem recodificar; o começo e o fim reais podem diferir do pedido em até um quadro AAC (≈ 23 ms), e o tempo gravado é o real.
 - BR-4: a transcrição da faixa é sempre derivada da transcrição atual da origem; uma transcrição nova da origem atualiza as faixas.
@@ -59,10 +59,13 @@ Como quem estuda, quero que cada faixa de pergunta e resposta seja um item que e
 | NFR-1, NFR-2 | integração | worker com CPU limitada |
 
 ## References
-ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0022 (worker e versões), 0024 (busca), 0026 (offline) · KBC-051 a KBC-056 · Telas T15, T16
+ADR [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0022 (worker e versões), 0024 (busca), 0026 (offline) · KBC-051 a KBC-056 · Telas T15, T16
+
+## Decisão do dono (2026-11-03)
+- **As faixas substituem a gravação original ou ficam ao lado dela?** — aprovado o padrão recomendado: ficam ao lado (a gravação completa continua, agrupada com as faixas), porque cortar é reversível só enquanto a origem existe e os originais não são guardados (decisão de 2026-10-28); um "Ocultar a gravação completa da Biblioteca" por gravação pode vir depois, sem apagar o arquivo.
 
 ## Open questions
-- **As faixas substituem a gravação original ou ficam ao lado dela?** — dono. Recomendação: ficam ao lado (a gravação completa continua, agrupada com as faixas), porque cortar é reversível só enquanto a origem existe e os originais não são guardados (decisão de 2026-10-28); um "Ocultar a gravação completa da Biblioteca" por gravação pode vir depois, sem apagar o arquivo.
+Nenhuma.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated
@@ -70,5 +73,5 @@ ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.m
 - [x] NFRs measurable
 - [x] Test level chosen for every AC
 - [x] UI and architecture references linked
-- [ ] Dependencies scheduled; no open questions (falta a decisão "substituir ou ao lado" e a aceitação da ADR 0029)
+- [x] Dependencies scheduled; no open questions (ADR 0029 aceita)
 - [x] Fits one goal

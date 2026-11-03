@@ -14,7 +14,8 @@ Como quem edita, quero dividir uma gravação em faixas (cada pergunta junto com
 
 ## Scope
 **In:** tela nova "Editar em faixas" (T20, a desenhar com o `product-designer` na spec), aberta pela página do áudio para quem tem `media-edit`: a transcrição com os falantes (KBC-065) e uma linha do tempo; criar faixa selecionando trechos (do primeiro segmento da pergunta ao último da resposta), ajustar o começo e o fim por segmento, dividir e juntar faixas, título, tipo (`Pergunta e resposta` ou `Exposição`), quem pergunta e quem responde (falantes); rascunho salvo sozinho; "Publicar faixas" torna a edição visível; uma edição publicada pode ser reaberta, e a nova publicação substitui a anterior. Para quem ouve, permissão nova `media-tracks` ("Navegar por faixas"): lista "Faixas" ao lado da transcrição, marcas na barra do player, título da faixa atual no player e no mini-player, anterior/próxima faixa, link para uma faixa (`?track=`).
-**Out:** propor as faixas com IA (KBC-067); faixas como itens próprios da Biblioteca, playlists e download (KBC-068); assuntos (KBC-069); cortar ou recodificar o áudio (aqui as faixas são intervalos de tempo do mesmo arquivo).
+A mesma tela T20 é o fim da jornada que começa no envio: o KBC-072 acrescenta o modo preparação (etapas com progresso e a lista de faixas crescendo); este item já desenha a lista de faixas com título, intervalo, duração, quem pergunta e quem responde e status em cada linha, renomear na linha e ▶ Ouvir, para o KBC-072 só acrescentar o cabeçalho de etapas.
+**Out:** propor as faixas com IA (KBC-067); escolher as etapas no envio e o modo preparação (KBC-072); faixas como itens próprios da Biblioteca, playlists e download (KBC-068); assuntos (KBC-069); cortar ou recodificar o áudio (aqui as faixas são intervalos de tempo do mesmo arquivo).
 
 ## Business rules
 - BR-1: uma faixa é um intervalo `[início, fim)` da gravação, alinhado a começos e fins de segmentos da transcrição atual; as faixas de uma edição não se sobrepõem; pode haver trechos fora de faixas (aplausos, música, intervalo).
@@ -60,7 +61,7 @@ Como quem edita, quero dividir uma gravação em faixas (cada pergunta junto com
 | NFR-1 | E2E com trace | fixture de 2 h |
 
 ## References
-ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0025 (player em camadas: a navegação por faixas é um serviço novo sobre o motor) · Telas T15 e T20 (nova) · Pesquisa: KBC-063 · Benchmark do player (capítulos): `docs/research/2026-10-28-player-benchmark.md` item 17
+ADR [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0025 (player em camadas: a navegação por faixas é um serviço novo sobre o motor) · Telas T15 e T20 (nova; modo preparação no KBC-072) · Pesquisa: KBC-063 · Benchmark do player (capítulos): `docs/research/2026-10-28-player-benchmark.md` item 17
 
 ## Decisões assumidas (o dono pode mudar)
 - Trechos que não são pergunta e resposta (a exposição antes das perguntas) viram faixas do tipo `Exposição`, com título, para a gravação toda ficar navegável.

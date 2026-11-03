@@ -1,7 +1,7 @@
 ---
 id: KBC-067
 title: "Propor com IA as faixas de pergunta e resposta, os títulos e quem fala, para uma pessoa revisar antes de publicar"
-status: draft
+status: ready
 slice: phase-2-editing
 outcome: editar uma palestra de 1 h em faixas cai de ≈ 15 minutos (à mão) para ≤ 5 minutos de revisão, com ≥ 80 % das faixas propostas aceitas sem mudar os limites, a ≤ US$ 0,05 por hora de áudio
 depends_on: [KBC-063, KBC-066]
@@ -13,13 +13,13 @@ depends_on: [KBC-063, KBC-066]
 Como quem edita, quero que a IA leia a transcrição com as vozes e já proponha as faixas (cada pergunta com a sua resposta), um título para cada uma e quem está perguntando e respondendo, usando o que o sistema já sabe do acervo, para eu só revisar e publicar.
 
 ## Scope
-**In:** permissão nova `media-edit-ai` ("Propor faixas com IA"); botão "Propor faixas com IA" na tela "Editar em faixas" (KBC-066) com a estimativa de custo antes de rodar; a análise (abordagem, modelo e prompt escolhidos no KBC-063) lê os segmentos com tempos e vozes e devolve faixas (limites por segmento, tipo, título ≤ 80 caracteres, quem pergunta, quem responde, confiança e o motivo); sugestão de nomes das vozes pelo contexto, sem biometria: o autor do áudio, os autores e falantes do acervo (KBC-049, KBC-065), vocativos e apresentações na fala ("Mestre, …", "meu nome é …"), quem fala mais e responde; a proposta entra no rascunho marcada "Proposta pela IA" e nada é publicado sem uma pessoa; gasto no livro da mídia (ADR 0022 §7) com teto por análise.
+**In:** permissão nova `media-edit-ai` ("Propor faixas com IA"); botão "Propor faixas com IA" na tela "Editar em faixas" (KBC-066) com a estimativa de custo antes de rodar (no envio, a mesma escolha vem pelo KBC-072); cada janela analisada grava as suas faixas no rascunho assim que termina, para a lista da T20 crescer durante a análise; a análise (abordagem, modelo e prompt escolhidos no KBC-063) lê os segmentos com tempos e vozes e devolve faixas (limites por segmento, tipo, título ≤ 80 caracteres, quem pergunta, quem responde, confiança e o motivo); sugestão de nomes das vozes pelo contexto, sem biometria: o autor do áudio, os autores e falantes do acervo (KBC-049, KBC-065), vocativos e apresentações na fala ("Mestre, …", "meu nome é …"), quem fala mais e responde; a proposta entra no rascunho marcada "Proposta pela IA" e nada é publicado sem uma pessoa; gasto no livro da mídia (ADR 0022 §7) com teto por análise.
 **Out:** reconhecer pela voz (KBC-071); classificar por assunto (KBC-069); rodar sozinho no envio; publicar sem revisão.
 
 ## Business rules
 - BR-1: a IA só propõe; publicar é sempre uma ação de quem edita (KBC-066). Uma faixa proposta e não tocada pela pessoa fica marcada "Proposta pela IA" até ser aceita.
 - BR-2: a análise só roda a pedido de quem tem `media-edit-ai` e `media-edit` no acervo, nunca sozinha.
-- BR-3: cada análise mostra a estimativa antes e reserva o valor no livro mensal da mídia; se a reserva passar do teto mensal (padrão US$ 10, ADR 0022) ou do teto por análise (padrão US$ 0,25), a análise não roda e a tela diz por quê. Os padrões dependem da pergunta em aberto abaixo.
+- BR-3: cada análise mostra a estimativa antes e reserva o valor no livro mensal da mídia; se a reserva passar do teto mensal (padrão US$ 10, ADR 0022) ou do teto por análise (padrão US$ 0,25), a análise não roda e a tela diz por quê. Padrões aprovados pelo dono em 2026-11-03.
 - BR-4: os títulos seguem o estilo pedido: pt-BR, a pergunta resumida em forma de tema ou pergunta curta, sem inventar nome que não está na fala nem no acervo.
 - BR-5: um nome sugerido para uma voz vem sempre com o motivo ("é o autor do áudio e responde 9 de 10 perguntas", "é chamado de «Mestre» na faixa 3"); quem pergunta da plateia nunca recebe nome de pessoa pela IA (KBC-065 BR-3).
 - BR-6: rodar de novo substitui só as faixas ainda marcadas "Proposta pela IA"; faixas que a pessoa criou ou mudou ficam.
@@ -28,7 +28,7 @@ Como quem edita, quero que a IA leia a transcrição com as vozes e já proponha
 ## Functional requirements
 - FR-1: `POST /api/v1/media/{id}/edit/proposals` deve estimar (`dryRun`) e rodar a análise; a resposta da execução é um trabalho com status, consultado pela tela. (BR-2, BR-3)
 - FR-2: A análise deve enviar os segmentos em janelas com sobreposição quando a gravação passar do contexto do modelo, validar a saída por esquema (zod), corrigir limites para começos e fins de segmentos, descartar faixas inválidas ou sobrepostas e pedir de novo uma vez a janela que falhou. (BR-4)
-- FR-3: A proposta deve entrar no rascunho com as faixas e as sugestões de nomes das vozes (cada uma com motivo e botão "Aceitar"), sem tocar nas faixas da pessoa. (BR-1, BR-5, BR-6)
+- FR-3: A proposta deve entrar no rascunho janela a janela (cada janela grava as suas faixas ao terminar, sem duplicar na emenda), com as faixas e as sugestões de nomes das vozes (cada uma com motivo e botão "Aceitar"), sem tocar nas faixas da pessoa. (BR-1, BR-5, BR-6)
 - FR-4: A tela deve mostrar o custo real ao fim ("Custou US$ 0,02") e o saldo do mês da mídia para masters.
 - FR-5: Falha do provedor (erro, tempo esgotado, saída inválida duas vezes) deve terminar o trabalho como "Não foi possível propor", estornar a reserva não gasta e manter o rascunho intacto.
 
@@ -60,10 +60,13 @@ Como quem edita, quero que a IA leia a transcrição com as vozes e já proponha
 | NFR-1, NFR-2, NFR-3 | manual na validação local com o provedor real | gabarito do KBC-063 |
 
 ## References
-ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0016 (IA da aplicação), 0022 §7 (livro mensal da mídia) · Pesquisa: KBC-063 (abordagem, modelo, prompt e custo) · Tela T20
+ADR [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0016 (IA da aplicação), 0022 §7 (livro mensal da mídia) · Pesquisa: KBC-063 (abordagem, modelo, prompt e custo) · Tela T20
+
+## Decisão do dono (2026-11-03)
+- **Teto e fonte da IA para propor faixas e títulos** — aprovado o padrão recomendado: usar o provedor da IA da aplicação escolhido pelo master (modelo barato e pago, não gratuito, porque o gratuito errou cobertura no KBC-030), com o gasto no livro mensal da mídia (US$ 10, o mesmo do Groq), teto de US$ 0,25 por análise e estimativa mostrada antes; se o KBC-063 mostrar um modelo local no Mac com qualidade parecida, ele vira o padrão (custo zero) e a API fica de reserva.
 
 ## Open questions
-- **Teto e fonte da IA para propor faixas e títulos** — dono. Recomendação: usar o provedor da IA da aplicação escolhido pelo master (modelo barato e pago, não gratuito, porque o gratuito errou cobertura no KBC-030), com o gasto no livro mensal da mídia (US$ 10, o mesmo do Groq), teto de US$ 0,25 por análise e estimativa mostrada antes; se o KBC-063 mostrar um modelo local no Mac com qualidade parecida, ele vira o padrão (custo zero) e a API fica de reserva.
+Nenhuma.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated
@@ -71,5 +74,5 @@ ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.m
 - [x] NFRs measurable
 - [x] Test level chosen for every AC
 - [x] UI and architecture references linked
-- [ ] Dependencies scheduled; no open questions (falta a decisão do teto e da fonte da IA)
+- [x] Dependencies scheduled; no open questions
 - [x] Fits one goal

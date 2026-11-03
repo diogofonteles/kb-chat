@@ -1,7 +1,7 @@
 ---
 id: KBC-071
 title: "Perfis de voz com consentimento: reconhecer, ao editar, quem fala a partir de vozes cadastradas com autorização da pessoa"
-status: draft
+status: ready
 slice: phase-2-editing
 outcome: numa gravação nova de um falante cadastrado, a voz dele já vem sugerida com o nome certo em ≥ 90 % dos casos, sem nenhum perfil de voz de quem não autorizou
 depends_on: [KBC-065, KBC-063]
@@ -17,7 +17,7 @@ Como quem edita, quero que o sistema reconheça a voz de quem já foi cadastrado
 **Out:** perfil de quem pergunta da plateia; reconhecimento entre acervos diferentes; aplicar nomes sem confirmação; identificar pessoas fora das gravações do acervo.
 
 ## Business rules
-- BR-1: impressão de voz ligada a uma pessoa é dado biométrico, dado pessoal sensível na LGPD (art. 5º, II; tratamento pelo art. 11); só existe perfil com consentimento específico e destacado registrado antes, para a finalidade "sugerir o nome ao editar gravações do acervo". As regras para pessoas falecidas dependem da pergunta em aberto.
+- BR-1: impressão de voz ligada a uma pessoa é dado biométrico, dado pessoal sensível na LGPD (art. 5º, II; tratamento pelo art. 11); só existe perfil com consentimento específico e destacado registrado antes, para a finalidade "sugerir o nome ao editar gravações do acervo". Pessoas falecidas: só com autorização escrita de quem responde pela obra (decisão do dono, 2026-11-03).
 - BR-2: revogar o consentimento apaga o perfil, as impressões e as sugestões pendentes em até 1 minuto; os nomes já confirmados por uma pessoa nas gravações continuam (foram dados à mão).
 - BR-3: a sugestão por voz só aparece acima do limiar escolhido no KBC-063 (falso positivo ≤ 2 % no teste) e sempre como sugestão.
 - BR-4: o perfil vale só no acervo onde foi cadastrado (e nos sub-acervos dele).
@@ -53,10 +53,13 @@ Como quem edita, quero que o sistema reconheça a voz de quem já foi cadastrado
 | NFR-1 | manual na validação local | gabarito do KBC-063 |
 
 ## References
-LGPD (Lei 13.709/2018), art. 5º, II e art. 11 · ADR 0017 (segredos cifrados), [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Tela T11 (política de privacidade) · Pesquisa: KBC-063 (modelo de impressão de voz e limiar) · `docs/product/context.md` (Lei aplicável: LGPD)
+LGPD (Lei 13.709/2018), art. 5º, II e art. 11 · ADR 0017 (segredos cifrados), [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Tela T11 (política de privacidade) · Pesquisa: KBC-063 (modelo de impressão de voz e limiar) · `docs/product/context.md` (Lei aplicável: LGPD)
+
+## Decisão do dono (2026-11-03)
+- **Identificar pessoas reais pela voz (dado biométrico, LGPD): quem pode ter perfil e quem autoriza?** — aprovado o padrão recomendado: só pessoas vivas que assinarem um consentimento específico (texto pronto na tela, com finalidade, guarda e como revogar), cadastrado por um master; nunca quem pergunta da plateia; para mestres e autores falecidos, só com autorização escrita de quem responde pela obra (a instituição ou os herdeiros), registrada do mesmo jeito; sem consentimento, só o nome manual do KBC-065 e a sugestão por contexto do KBC-067, que não usam a voz. Isto é orientação prática, não parecer jurídico; o dono pode consultar um advogado antes de ligar a funcionalidade em produção.
 
 ## Open questions
-- **Identificar pessoas reais pela voz (dado biométrico, LGPD): quem pode ter perfil e quem autoriza?** — dono (com orientação jurídica, se quiser). Recomendação: só pessoas vivas que assinarem um consentimento específico (texto pronto na tela, com finalidade, guarda e como revogar), cadastrado por um master; nunca quem pergunta da plateia; para mestres e autores falecidos, só com autorização escrita de quem responde pela obra (a instituição ou os herdeiros), registrada do mesmo jeito; sem consentimento, só o nome manual do KBC-065 e a sugestão por contexto do KBC-067, que não usam a voz.
+Nenhuma.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated
@@ -64,5 +67,5 @@ LGPD (Lei 13.709/2018), art. 5º, II e art. 11 · ADR 0017 (segredos cifrados), 
 - [x] NFRs measurable
 - [x] Test level chosen for every AC
 - [x] UI and architecture references linked
-- [ ] Dependencies scheduled; no open questions (falta a decisão sobre biometria e consentimento)
+- [x] Dependencies scheduled; no open questions
 - [x] Fits one goal

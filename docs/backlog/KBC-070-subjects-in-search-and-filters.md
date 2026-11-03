@@ -1,7 +1,7 @@
 ---
 id: KBC-070
 title: "Assuntos na busca e nos filtros: achar faixas pelo conceito, ver os assuntos da faixa e as faixas no \"Veja também\" de cada conceito"
-status: draft
+status: ready
 slice: phase-2-editing
 outcome: quem pesquisa um conceito do acervo encontra as perguntas e respostas sobre ele na mesma busca dos documentos
 depends_on: [KBC-069, KBC-039]
@@ -50,10 +50,10 @@ Como quem pesquisa, quero filtrar pelo assunto e encontrar as faixas de pergunta
 | NFR-1 | carga com dados sintéticos | script da busca de mídia |
 
 ## References
-ADR 0024, 0003, [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · KBC-002, KBC-003, KBC-039, KBC-051 · Telas T2/T3 (busca e painel), T16
+ADR 0024, 0003, [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · KBC-002, KBC-003, KBC-039, KBC-051 · Telas T2/T3 (busca e painel), T16
 
 ## Open questions
-Nenhuma própria; fica em rascunho até o KBC-069 ficar pronto.
+Nenhuma.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated
@@ -61,5 +61,5 @@ Nenhuma própria; fica em rascunho até o KBC-069 ficar pronto.
 - [x] NFRs measurable
 - [x] Test level chosen for every AC
 - [x] UI and architecture references linked
-- [ ] Dependencies scheduled (KBC-069 em rascunho)
+- [x] Dependencies scheduled
 - [x] Fits one goal

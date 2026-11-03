@@ -17,8 +17,8 @@ Como quem edita as gravações, quero que o Mac do dono marque quando muda a voz
 **Out:** dar nome às vozes (KBC-065); reconhecer a mesma pessoa em outra gravação (KBC-071); mostrar vozes a quem só ouve (KBC-065, permissão `media-speakers`); separar vozes no servidor (proibido pela ADR 0022) ou no Groq.
 
 ## Business rules
-- BR-1: a separação de vozes vale para uma gravação só: as vozes são números dentro dela; nenhuma impressão de voz (embedding) é guardada depois do trabalho (ADR 0029, proposta). Exceção: perfis de voz com consentimento (KBC-071).
-- BR-2: a separação só começa a pedido de quem tem `media-edit` no acervo do áudio (ou de um master), nunca sozinha no envio.
+- BR-1: a separação de vozes vale para uma gravação só: as vozes são números dentro dela; nenhuma impressão de voz (embedding) é guardada depois do trabalho (ADR 0029). Exceção: perfis de voz com consentimento (KBC-071).
+- BR-2: a separação só começa a pedido de quem tem `media-edit` no acervo do áudio (ou de um master): marcada no envio ("Indicar quem está falando", KBC-072) ou pela página do áudio; nunca sem alguém pedir.
 - BR-3: a separação usa a transcrição atual; se a transcrição muda de versão, a separação antiga continua visível com o aviso "Feita sobre uma transcrição anterior" até ser refeita.
 - BR-4: o número de vozes é estimado pelo modelo, entre 1 e 10; quem pede pode informar "número de vozes" (1 a 10) para ajudar.
 - BR-5: separação e transcrição nunca rodam ao mesmo tempo no mesmo Mac (um trabalho por vez, ADR 0023).
@@ -58,7 +58,7 @@ Como quem edita as gravações, quero que o Mac do dono marque quando muda a voz
 | NFR-1, NFR-2 | manual na validação local | script do KBC-063 |
 
 ## References
-ADR 0022, 0023, [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Tela T15 (transcrição ao lado, KBC-038) · Pesquisa: KBC-063
+ADR 0022, 0023, [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Tela T15 (transcrição ao lado, KBC-038); o progresso desta etapa ("Vozes achadas: N") aparece na T20 em modo preparação (KBC-072) · Pesquisa: KBC-063
 
 ## Decisões assumidas (o dono pode mudar)
 - Separar vozes de uma gravação, sem guardar impressão de voz e sem ligar a voz a uma pessoa, é tratado como análise do áudio, não como identificação biométrica; a política de privacidade (T11) ganha uma frase dizendo isso.

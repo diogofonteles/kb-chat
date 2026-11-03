@@ -55,7 +55,7 @@ Como quem edita, quero dizer que a "Voz 1" é o Mestre e a "Voz 2" é uma pergun
 | AC-8 | E2E | axe |
 
 ## References
-ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · KBC-049 (autores por acervo) · Tela T15 (painel "Vozes" a desenhar com o `product-designer` na spec) · Pesquisa: KBC-063
+ADR [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · KBC-049 (autores por acervo) · Tela T15 (painel "Vozes" a desenhar com o `product-designer` na spec) · Pesquisa: KBC-063
 
 ## Decisões assumidas (o dono pode mudar)
 - Quem pergunta da plateia fica como "Pergunta da plateia", sem nome, porque é pessoa privada que não consentiu em ser identificada; o editor pode cadastrar o nome se a pessoa autorizou.

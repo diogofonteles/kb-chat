@@ -1,7 +1,7 @@
 ---
 id: KBC-069
 title: "Classificar faixas por assunto: ligar cada faixa aos conceitos do acervo e a assuntos livres, com sugestão da IA e confirmação de uma pessoa"
-status: draft
+status: ready
 slice: phase-2-editing
 outcome: toda faixa publicada fica ligada a 1 a 5 assuntos do acervo, com ≥ 80 % das sugestões da IA aceitas sem mudança, para a busca e os filtros a acharem pelo assunto
 depends_on: [KBC-068, KBC-067]
@@ -56,10 +56,13 @@ Como quem edita, quero que cada faixa passe pela mesma classificação do acervo
 | NFR-1, NFR-2 | manual na validação local | gabarito do KBC-063 |
 
 ## References
-ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0003 (facetas do catálogo), 0024 · Catálogo: `apps/api/src/modules/catalog/relations.ts` (conceitos) · Tela T20
+ADR [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), 0003 (facetas do catálogo), 0024 · Catálogo: `apps/api/src/modules/catalog/relations.ts` (conceitos) · Tela T20
+
+## Decisão do dono (2026-11-03)
+- **Teto e fonte da IA** — o mesmo padrão aprovado no KBC-067 (modelo barato e pago pela IA da aplicação, no limite mensal da mídia de US$ 10, teto de US$ 0,25 por análise, estimativa antes; modelo local no Mac como padrão se a pesquisa achar um bom o bastante).
 
 ## Open questions
-- **Teto e fonte da IA** — a mesma pergunta do KBC-067 (este item segue a decisão de lá).
+Nenhuma.
 
 ## Definition of ready
 - [x] Story, scope and outcome stated
@@ -67,5 +70,5 @@ ADR [0029 (proposta)](../adr/0029-recording-edits-speakers-tracks-and-subjects.m
 - [x] NFRs measurable
 - [x] Test level chosen for every AC
 - [x] UI and architecture references linked
-- [ ] Dependencies scheduled; no open questions (depende do KBC-067 e do KBC-068, ainda em rascunho)
+- [x] Dependencies scheduled; no open questions
 - [x] Fits one goal
