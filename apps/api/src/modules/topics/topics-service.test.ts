@@ -126,3 +126,39 @@ describe('canSeeTopic by the real tree (KBC-048 BR-3)', () => {
     expect(canSeeTopic(ana, 'udv/palavra-do-mestre')).toBe(false);
   });
 });
+
+describe('CollectionRegistry file (ADR 0028)', () => {
+  const base = {
+    title: 'X',
+    description: '',
+    createdBy: 'a@example.com',
+    createdAt: '2026-11-03T00:00:00.000Z',
+  };
+  const read = async (collections: object[]) => {
+    const store = new MemoryDocumentStore();
+    await store.write({ version: 1, collections });
+    return new CollectionRegistry(store).list();
+  };
+
+  it('reads one level of sub-collections and a renamed vault topic in a folder', async () => {
+    await expect(
+      read([
+        { ...base, slug: 'udv', parent: null },
+        { ...base, slug: 'udv/palavra', parent: 'udv' },
+        { slug: 'harness/goclaw', title: 'G', description: '', parent: null },
+      ]),
+    ).resolves.toHaveLength(3);
+  });
+
+  it.each([
+    ['a deeper sub-collection', { ...base, slug: 'a/b/c', parent: 'a/b' }],
+    ['a slug outside its parent', { ...base, slug: 'x/b', parent: 'a' }],
+    [
+      'a created nested slug without parent',
+      { ...base, slug: 'a/b', parent: null },
+    ],
+    ['an unknown field', { ...base, slug: 'a', parent: null, extra: 1 }],
+  ])('refuses %s as a corrupt file', async (_, bad) => {
+    await expect(read([bad])).rejects.toThrow('collections.json is invalid');
+  });
+});

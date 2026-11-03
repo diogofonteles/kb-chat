@@ -114,14 +114,16 @@
         + Novo acervo
       </button>
       @if (chat.topic(); as current) {
-        <button
-          type="button"
-          class="collection-action"
-          (click)="collectionDialog.openEdit(current)"
-          i18n="@@sidebar.editCollection"
-        >
-          Editar acervo
-        </button>
+        @if (current.canRename) {
+          <button
+            type="button"
+            class="collection-action"
+            (click)="collectionDialog.openEdit(current)"
+            i18n="@@sidebar.editCollection"
+          >
+            Editar acervo
+          </button>
+        }
       }
     </div>
   }

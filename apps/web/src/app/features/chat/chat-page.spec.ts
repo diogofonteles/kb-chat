@@ -581,6 +581,19 @@ describe('ChatPage side panel (KBC-005)', () => {
     );
   });
 
+  it('does not offer "Editar acervo" for a collection the person may not rename (KBC-048)', async () => {
+    await renderPage();
+    expect(screen.queryByRole('button', { name: 'Editar acervo' })).toBeNull();
+  });
+
+  it('offers "Editar acervo" for a collection the person may rename (KBC-048)', async () => {
+    await renderPage([], {
+      items: [aTopic({ slug: 'meu', title: 'Meu', canRename: true })],
+      defaultSlug: null,
+    });
+    expect(screen.getByRole('button', { name: 'Editar acervo' })).toBeTruthy();
+  });
+
   it('creates a collection from the sidebar and switches to it at once (KBC-048 AC-1)', async () => {
     const view = await renderPage();
     fireEvent.click(screen.getByRole('button', { name: '+ Novo acervo' }));

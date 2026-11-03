@@ -93,6 +93,7 @@ export const aTopic = (
   parent: null,
   description: '',
   canOpen: true,
+  canRename: false,
   ...topic,
 });
 

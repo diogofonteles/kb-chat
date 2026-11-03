@@ -77,6 +77,7 @@ describe('Collections created on the screen (KBC-048, ADR 0028)', () => {
       description: 'Palestras e documentos',
       parent: null,
       canOpen: true,
+      canRename: true,
       documentCount: 0,
     });
     expect(await titles(member)).toEqual([['uniao-do-vegetal', null, true]]);
@@ -315,6 +316,12 @@ describe('Collections: review and QA fixes (KBC-048)', () => {
       (await owner('PATCH', '/api/v1/topics/meu', { description: 'ok' }))
         .statusCode,
     ).toBe(200);
+    // The list says which ones the person may rename, so the screen offers only those.
+    const listed = (await member('GET', '/api/v1/topics')).json().items;
+    expect(listed.map((t: Topic) => [t.slug, t.canRename]).sort()).toEqual([
+      ['hermetismo', false],
+      ['meu', true],
+    ]);
   });
 
   it('FR-4: the "Sub-acervo" filter restricts a parent to some of its collections, with counts', async () => {
@@ -356,7 +363,15 @@ describe('Collections: review and QA fixes (KBC-048)', () => {
     const saved = JSON.parse(
       await readFile(join(started.state, 'collections.json'), 'utf8'),
     );
-    expect(saved.collections[0].createdBy).toBe(OWNER_EMAIL);
+    expect(saved.collections[0]).toMatchObject({
+      createdBy: OWNER_EMAIL,
+      createdFor: 'ana@example.com',
+    });
+    // Created for her, so she may rename it herself.
+    expect(
+      (await member('PATCH', '/api/v1/topics/dela', { title: 'Minha' }))
+        .statusCode,
+    ).toBe(200);
     const audit = (await owner('GET', '/api/v1/act-as/audit')).json().items;
     expect(
       audit.some(

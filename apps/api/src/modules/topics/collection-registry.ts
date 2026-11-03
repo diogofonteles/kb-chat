@@ -12,6 +12,8 @@ const storedCollectionSchema = z
     parent: topicSlugSchema.nullable(),
     /** Who created it on the screen; absent for a vault topic renamed on the screen. */
     createdBy: z.string().optional(),
+    /** Whose view it was created in: the person, when a master acted as them (ADR 0027). */
+    createdFor: z.string().optional(),
     createdAt: z.string().optional(),
   })
   // One level only (BR-2): a sub-collection's slug is its parent's plus one segment. A
@@ -19,7 +21,8 @@ const storedCollectionSchema = z
   .refine((one) =>
     one.parent === null
       ? one.createdBy === undefined || !one.slug.includes('/')
-      : one.slug.startsWith(`${one.parent}/`) &&
+      : !one.parent.includes('/') &&
+        one.slug.startsWith(`${one.parent}/`) &&
         !one.slug.slice(one.parent.length + 1).includes('/'),
   );
 export type StoredCollection = z.infer<typeof storedCollectionSchema>;
@@ -36,6 +39,7 @@ export interface NewCollection {
   readonly description: string;
   readonly parent: string | null;
   readonly createdBy: string;
+  readonly createdFor: string;
   readonly createdAt: string;
 }
 

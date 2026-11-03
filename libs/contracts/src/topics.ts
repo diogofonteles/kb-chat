@@ -22,6 +22,8 @@ export const topicSchema = z.object({
    * sub-collections, not the parent itself (KBC-048 BR-3).
    */
   canOpen: z.boolean().default(true),
+  /** The person may rename it: a master any, others what they created (KBC-048). */
+  canRename: z.boolean().default(false),
 });
 export type Topic = z.infer<typeof topicSchema>;
 

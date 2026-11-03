@@ -34,6 +34,8 @@ export interface TopicsView {
   readonly preferredTopic?: string;
   /** Which collections the person sees (KBC-010); default: all. */
   readonly visible?: (slug: string) => boolean;
+  /** Which ones the person may rename (KBC-048); default: none. */
+  readonly renamable?: (slug: string) => boolean;
 }
 
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
@@ -44,19 +46,42 @@ const byTitle = (a: TopicCatalog, b: TopicCatalog): number =>
 function toTopic(
   catalog: TopicCatalog,
   scope: readonly TopicCatalog[],
-  canOpen: boolean,
+  access: Pick<Topic, 'canOpen' | 'canRename'>,
 ): Topic {
   const { slug, title, parent, description } = catalog.topic;
+  const { canOpen } = access;
   return {
     slug,
     title,
     parent: parent ?? null,
     description: description ?? '',
-    canOpen,
+    ...access,
     documentCount: canOpen
       ? scope.reduce((sum, one) => sum + one.entries.size, 0)
       : 0,
   };
+}
+
+/** One parent and its visible sub-collections, as list rows (the parent first). */
+function branchOf(
+  root: TopicCatalog,
+  children: readonly TopicCatalog[],
+  view: Required<Pick<TopicsView, 'visible' | 'renamable'>>,
+): Topic[] {
+  const canOpen = view.visible(root.topic.slug);
+  if (!canOpen && children.length === 0) return [];
+  return [
+    toTopic(root, [root, ...children], {
+      canOpen,
+      canRename: canOpen && view.renamable(root.topic.slug),
+    }),
+    ...children.map((child) =>
+      toTopic(child, [child], {
+        canOpen: true,
+        canRename: view.renamable(child.topic.slug),
+      }),
+    ),
+  ];
 }
 
 /**
@@ -65,29 +90,33 @@ function toTopic(
  */
 export function listTopics(
   { catalog }: Pick<TopicsServiceDeps, 'catalog'>,
-  { preferredTopic, visible = () => true }: TopicsView = {},
+  {
+    preferredTopic,
+    visible = () => true,
+    renamable = () => false,
+  }: TopicsView = {},
 ): TopicList {
   const all = catalog.topics();
   const known = new Set(all.map((one) => one.topic.slug));
-  const childrenOf = (slug: string) =>
-    all.filter((one) => one.topic.parent === slug && visible(one.topic.slug));
-  const items: Topic[] = [];
-  const roots = all.filter(
-    (one) => !one.topic.parent || !known.has(one.topic.parent),
+  const roots = all
+    .filter((one) => !one.topic.parent || !known.has(one.topic.parent))
+    .sort(byTitle);
+  const items = roots.flatMap((root) =>
+    branchOf(
+      root,
+      all
+        .filter(
+          (one) =>
+            one.topic.parent === root.topic.slug && visible(one.topic.slug),
+        )
+        .sort(byTitle),
+      { visible, renamable },
+    ),
   );
-  for (const root of [...roots].sort(byTitle)) {
-    const children = childrenOf(root.topic.slug).sort(byTitle);
-    const canOpen = visible(root.topic.slug);
-    if (!canOpen && children.length === 0) continue;
-    items.push(toTopic(root, [root, ...children], canOpen));
-    for (const child of children) items.push(toTopic(child, [child], true));
-  }
-  const defaultSlug = items.some(
+  const opens = items.some(
     (item) => item.slug === preferredTopic && item.canOpen,
-  )
-    ? (preferredTopic ?? null)
-    : null;
-  return { items, defaultSlug };
+  );
+  return { items, defaultSlug: opens ? (preferredTopic ?? null) : null };
 }
 
 /** Creating and renaming collections on the screen (KBC-048, ADR 0028). */
@@ -110,6 +139,7 @@ export class TopicsService {
         description,
         parent,
         createdBy: actor.email,
+        createdFor: actor.personEmail,
         createdAt: (this.deps.now?.() ?? new Date()).toISOString(),
       },
       (taken) => this.isTaken(taken),
@@ -118,12 +148,17 @@ export class TopicsService {
     try {
       await this.deps.grant(actor.personId, slug, actor.email);
     } catch (err) {
-      // Nothing half made (NFR-2): a collection its creator cannot see is undone.
-      await registry.remove(slug);
-      await catalog.refresh(slug);
+      // Nothing half made (NFR-2): a collection its creator cannot see is undone; the
+      // original failure is the one reported, whatever the undo does.
+      await this.undo(slug).catch(() => undefined);
       throw err;
     }
     return this.topicOf(slug);
+  }
+
+  private async undo(slug: string): Promise<void> {
+    await this.deps.registry.remove(slug);
+    await this.deps.catalog.refresh(slug);
   }
 
   /**
@@ -187,17 +222,31 @@ export class TopicsService {
     actor: CollectionActor,
     slug: string,
   ): Promise<void> {
-    if (actor.isMaster) return;
-    const mine = (await this.deps.registry.list()).some(
-      (one) =>
-        one.slug === slug &&
-        (one.createdBy === actor.personEmail || one.createdBy === actor.email),
-    );
-    if (!mine)
+    if (!(await this.renamableBy(actor))(slug))
       throw new AppError(
         'FORBIDDEN',
         'Only its creator or a master renames it',
       );
+  }
+
+  /**
+   * Which collections this person may rename: a master any, others the ones created by them
+   * or for them (a master acting as them, ADR 0027). Shown as `canRename` in the list.
+   */
+  async renamableBy(
+    actor: CollectionActor,
+  ): Promise<(slug: string) => boolean> {
+    if (actor.isMaster) return () => true;
+    const own = new Set(
+      (await this.deps.registry.list())
+        .filter((one) =>
+          [one.createdBy, one.createdFor].some(
+            (who) => who === actor.personEmail || who === actor.email,
+          ),
+        )
+        .map((one) => one.slug),
+    );
+    return (slug) => own.has(slug);
   }
 
   /** One level only (BR-2), inside a collection the person sees. */
@@ -220,6 +269,9 @@ export class TopicsService {
   }
 
   private topicOf(slug: string): Topic {
-    return toTopic(this.require(slug), this.deps.catalog.scope(slug), true);
+    return toTopic(this.require(slug), this.deps.catalog.scope(slug), {
+      canOpen: true,
+      canRename: true,
+    });
   }
 }

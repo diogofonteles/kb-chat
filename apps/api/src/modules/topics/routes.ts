@@ -19,6 +19,7 @@ import { z } from 'zod';
 import {
   SIGNED_IN,
   canSee,
+  hasFeature,
   isMaster,
   principalOf,
   viewerOf,
@@ -74,6 +75,9 @@ function registerList(typed: Typed, deps: TopicsDeps): void {
       listTopics(deps, {
         preferredTopic: deps.preferredTopic?.(principalOf(request)),
         visible: (slug) => canSee(request, slug),
+        renamable: hasFeature(viewerOf(request).person, 'collection-create')
+          ? await deps.service.renamableBy(actorOf(request))
+          : undefined,
       }),
   );
 }

@@ -61,6 +61,7 @@ describe('GET /api/v1/topics', () => {
           parent: null,
           description: '',
           canOpen: true,
+          canRename: true,
         },
         {
           slug: 'hermetismo',
@@ -69,6 +70,7 @@ describe('GET /api/v1/topics', () => {
           parent: null,
           description: '',
           canOpen: true,
+          canRename: true,
         },
       ],
       defaultSlug: null,
