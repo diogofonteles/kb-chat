@@ -144,6 +144,19 @@ async function settledScrollTop(list: Locator): Promise<number> {
   });
 }
 
+/** The search occurrences the page painted (CSS Custom Highlight API), as their texts. */
+const painted = (page: Page) =>
+  page.evaluate(() => {
+    type Registry = { get(name: string): Iterable<Range> | undefined };
+    const registry = (CSS as unknown as { highlights: Registry }).highlights;
+    const texts = (name: string) =>
+      Array.from(registry.get(name) ?? [], (range) => range.toString());
+    return {
+      match: texts('transcript-match'),
+      current: texts('transcript-current'),
+    };
+  });
+
 /** Whether `inner` is fully inside `outer` on screen. */
 async function inside(inner: Locator, outer: Locator): Promise<boolean> {
   const [a, b] = await Promise.all([inner.boundingBox(), outer.boundingBox()]);
@@ -306,11 +319,22 @@ test('AC-9: "salomao" finds Salomão three times, Enter goes to the 2nd and "Toc
   await field.fill('salomao');
   const status = page.locator('app-transcript-panel [role="status"]');
   await expect(status).toHaveText('1 de 3');
-  await expect(segmentsList(page).locator('mark')).toHaveCount(3);
+  await expect
+    .poll(() => painted(page))
+    .toEqual({
+      match: ['Salomao', 'SALOMÃO'],
+      current: ['Salomão'],
+    });
   await field.press('Enter');
   await expect(status).toHaveText('2 de 3');
-  await expect(segmentsList(page).locator('mark.current')).toHaveText(
-    'Salomao',
+  await expect
+    .poll(() => painted(page))
+    .toEqual({
+      match: ['Salomão', 'SALOMÃO'],
+      current: ['Salomao'],
+    });
+  await expect(segmentsList(page).locator('li.current-hit')).toContainText(
+    'Salomao era sábio.',
   );
   await page.getByRole('button', { name: 'Tocar daqui' }).click();
   await expect
