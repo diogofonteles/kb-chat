@@ -1,4 +1,11 @@
-import { Injectable, InjectionToken, computed, inject } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  InjectionToken,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { interpolate, type ClockAnchor } from '@kb-chat/player-core';
 import {
@@ -11,6 +18,7 @@ import {
   type Observable,
 } from 'rxjs';
 import { MediaEngine } from './media-engine.js';
+import { TranscriptPreferences } from './transcript-preferences.js';
 
 /**
  * The display's frames, as `performance.now()` times. Tests give their own; a page
@@ -35,25 +43,37 @@ interface Estimate {
 /**
  * Where playback is now, smoother than `timeupdate` (every ~250 ms): while playing, the
  * last reported time moved on at the rate on every frame (ADR 0025 §4, KBC-038 NFR-1).
- * Frames are asked for only while playing; paused, it is the media element's time.
+ * Frames are asked for only while playing and something shows the time that finely (a
+ * transcript on screen, or the subtitles on); otherwise it is the media element's time.
  */
 @Injectable({ providedIn: 'root' })
 export class PlaybackClock {
   private readonly engine = inject(MediaEngine);
   private readonly frames = inject(ANIMATION_FRAMES);
+  private readonly captionsOn = inject(TranscriptPreferences).captionsOn;
+  private readonly watchers = signal(0);
+  private readonly animating = computed(
+    () => this.engine.playing() && (this.watchers() > 0 || this.captionsOn()),
+  );
   private readonly estimate = toSignal(
-    toObservable(this.engine.playing).pipe(
-      switchMap((playing) => (playing ? this.framesEstimates() : of(null))),
+    toObservable(this.animating).pipe(
+      switchMap((animating) => (animating ? this.framesEstimates() : of(null))),
     ),
     { initialValue: null },
   );
 
   readonly positionMs = computed(() => {
     const estimate = this.estimate();
-    return this.engine.playing() && estimate !== null
+    return this.animating() && estimate !== null
       ? estimate
       : this.engine.playback().currentMs;
   });
+
+  /** A view that follows the time closely (the transcript) asks for frames while it lives. */
+  watch(destroyRef: DestroyRef): void {
+    this.watchers.update((count) => count + 1);
+    destroyRef.onDestroy(() => this.watchers.update((count) => count - 1));
+  }
 
   private framesEstimates(): Observable<number> {
     const start: Estimate = { anchor: null, positionMs: 0 };

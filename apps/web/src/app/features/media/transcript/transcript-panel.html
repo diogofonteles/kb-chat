@@ -94,14 +94,18 @@
               {{ segment.clock }}
             </button>
             <span class="text" [id]="'transcript-text-' + segment.index">
-              @for (part of segment.parts; track $index) {
-                @if (part.kind === 'plain') {
-                  <span>{{ part.text }}</span>
-                } @else {
-                  <mark [class.current]="part.kind === 'current'">{{
-                    part.text
-                  }}</mark>
+              @if (segment.parts; as parts) {
+                @for (part of parts; track $index) {
+                  @if (part.kind === 'plain') {
+                    <span>{{ part.text }}</span>
+                  } @else {
+                    <mark [class.current]="part.kind === 'current'">{{
+                      part.text
+                    }}</mark>
+                  }
                 }
+              } @else {
+                <span>{{ segment.text }}</span>
               }
             </span>
           </li>

@@ -1,3 +1,4 @@
+import { DestroyRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import {
@@ -6,6 +7,7 @@ import {
 } from '../../testing/fake-media-element.js';
 import { MEDIA_ELEMENT_FACTORY, MediaEngine } from './media-engine.js';
 import { ANIMATION_FRAMES, PlaybackClock } from './playback-clock.js';
+import { TranscriptPreferences } from './transcript-preferences.js';
 
 function setup() {
   const media: FakeMedia = fakeMediaElement();
@@ -18,6 +20,8 @@ function setup() {
   });
   const engine = TestBed.inject(MediaEngine);
   const clock = TestBed.inject(PlaybackClock);
+  // A transcript on screen follows the clock.
+  clock.watch(TestBed.inject(DestroyRef));
   engine.load({ id: 'm1', title: 'Palestra', src: '/m1' });
   media.setDuration(600);
   media.emit('loadedmetadata');
@@ -58,6 +62,29 @@ describe('PlaybackClock (ADR 0025 §4, KBC-038 NFR-1)', () => {
     media.emit('ratechange');
     frames.next(1_310);
     expect(clock.positionMs()).toBe(10_450);
+  });
+
+  it('asks for no frames while playing with nothing that follows the time', () => {
+    const media: FakeMedia = fakeMediaElement();
+    const frames = new Subject<number>();
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
+        { provide: ANIMATION_FRAMES, useValue: frames },
+      ],
+    });
+    const engine = TestBed.inject(MediaEngine);
+    TestBed.inject(PlaybackClock);
+    engine.load({ id: 'm1', title: 'Palestra', src: '/m1' });
+    media.emit('canplay');
+    engine.play();
+    media.emit('playing');
+    TestBed.tick();
+    expect(frames.observed).toBe(false);
+    TestBed.inject(TranscriptPreferences).toggleCaptions();
+    TestBed.tick();
+    expect(frames.observed).toBe(true);
   });
 
   it('stops asking for frames once paused', () => {

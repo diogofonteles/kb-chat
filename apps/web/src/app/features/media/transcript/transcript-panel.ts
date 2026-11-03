@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -21,8 +22,9 @@ import {
   highlightParts,
   lastStartedAt,
   minuteLink,
+  prepareSearch,
   quoteWithLink,
-  searchSegments,
+  searchPrepared,
   type SearchHit,
   type TextPart,
 } from '@kb-chat/player-core';
@@ -39,7 +41,9 @@ interface SegmentView {
   readonly startMs: number;
   readonly clock: string;
   readonly label: string;
-  readonly parts: readonly TextPart[];
+  readonly text: string;
+  /** Only for a segment with occurrences of the search. */
+  readonly parts: readonly TextPart[] | null;
 }
 
 /** A passage the person selected in the list, and where its first segment starts. */
@@ -126,11 +130,12 @@ export class TranscriptPanel {
     () => this.moved() ?? Math.max(0, this.activeIndex()),
   );
 
+  /** The texts folded once per transcript: a keystroke only scans them (NFR-2). */
+  private readonly searchable = computed(() =>
+    prepareSearch(this.segments().map((segment) => segment.text)),
+  );
   protected readonly hits = computed(() =>
-    searchSegments(
-      this.segments().map((segment) => segment.text),
-      this.query(),
-    ),
+    searchPrepared(this.searchable(), this.query()),
   );
   protected readonly currentHit = linkedSignal({
     source: this.hits,
@@ -144,19 +149,35 @@ export class TranscriptPanel {
       ? $localize`:@@transcript.search.none:Nenhum trecho com '${query}:query:'.`
       : $localize`:@@transcript.search.count:${this.currentHit() + 1}:current: de ${count}:total:`;
   });
-  protected readonly view = computed<SegmentView[]>(() => {
-    const marks = marksBySegment(this.hits(), this.currentHit());
-    return this.segments().map((segment, index) => ({
+  /** The segments as listed, made once per transcript (labels and times). */
+  private readonly plainView = computed<SegmentView[]>(() =>
+    this.segments().map((segment, index) => ({
       index,
       startMs: segment.startMs,
       clock: formatClock(segment.startMs),
       label: $localize`:@@transcript.playFrom:Tocar de ${speak(segment.startMs)}:time:`,
-      parts: highlightParts(segment.text, marks.get(index) ?? []),
-    }));
+      text: segment.text,
+      parts: null,
+    })),
+  );
+  /** Segments with occurrences get their highlighted parts; the others stay the same. */
+  protected readonly view = computed<SegmentView[]>(() => {
+    const plain = this.plainView();
+    const marks = marksBySegment(this.hits(), this.currentHit());
+    if (marks.size === 0) return plain;
+    return plain.map((item) =>
+      marks.has(item.index)
+        ? {
+            ...item,
+            parts: highlightParts(item.text, marks.get(item.index) ?? []),
+          }
+        : item,
+    );
   });
   protected readonly selected = signal<Selected | null>(null);
 
   constructor() {
+    this.clock.watch(inject(DestroyRef));
     // A skip or a jump in the player brings the list back to what is heard (FR-3).
     toObservable(this.engine.seeksLanded)
       .pipe(skip(1), takeUntilDestroyed())

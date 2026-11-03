@@ -139,9 +139,6 @@
   border-left: 3px solid transparent;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   cursor: pointer;
-  /* ~1,500 segments in a 2 h lecture: off-screen ones skip layout and paint (NFR-2). */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 3.5rem;
 }
 
 .segment:hover {
