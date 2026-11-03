@@ -402,9 +402,9 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
     const audio = document.querySelector<HTMLMediaElement>(
       '[data-media-engine]',
     );
-    const starts = [
-      ...document.querySelectorAll<HTMLElement>('li[data-start-ms]'),
-    ].map((item) => Number(item.dataset['startMs']));
+    const starts = Array.from(
+      document.querySelectorAll<HTMLElement>('li[data-start-ms]'),
+    ).map((item) => Number(item.dataset['startMs']));
     const misses: number[] = [];
     const until = performance.now() + 6_000;
     while (performance.now() < until) {
@@ -449,11 +449,17 @@ test('NFR-2: a 2 h transcript (~20 000 words) opens and answers clicks and keys 
   await page.addInitScript(() => {
     const durations: number[] = [];
     Object.assign(window, { kbcInteractions: durations });
+    // Event Timing fields newer than this project's DOM typings.
+    type EventEntry = PerformanceEntry & { readonly interactionId?: number };
+    const options: PerformanceObserverInit & { durationThreshold: number } = {
+      type: 'event',
+      buffered: true,
+      durationThreshold: 16,
+    };
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries())
-        if ((entry as PerformanceEventTiming).interactionId)
-          durations.push(entry.duration);
-    }).observe({ type: 'event', buffered: true, durationThreshold: 16 });
+      for (const entry of list.getEntries() as EventEntry[])
+        if (entry.interactionId) durations.push(entry.duration);
+    }).observe(options);
   });
   await openPlayer(page, long);
   await expect(segmentsList(page).locator('li')).toHaveCount(1_500);
