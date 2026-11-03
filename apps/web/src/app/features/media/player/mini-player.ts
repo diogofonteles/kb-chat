@@ -70,6 +70,8 @@ export class MiniPlayer {
 
   /** On phones, above the question box (screens.md T15); else at the foot. */
   readonly aboveComposer = input(false);
+  /** A media the full player shows elsewhere on screen (the reading panel, KBC-039). */
+  readonly shownElsewhere = input<string | null>(null);
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
@@ -96,7 +98,7 @@ export class MiniPlayer {
   /** On its own page the full player shows it: no mini-player there. */
   protected readonly visible = computed(() => {
     const source = this.source();
-    if (!source) return false;
+    if (!source || source.id === this.shownElsewhere()) return false;
     const path = this.url().split(/[?#]/)[0];
     return path !== `/midia/${encodeURIComponent(source.id)}`;
   });
