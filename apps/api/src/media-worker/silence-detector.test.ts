@@ -53,6 +53,52 @@ describe('SilenceReport', () => {
   });
 });
 
+describe('SilenceReport with the numbers older ffmpeg prints (review R1)', () => {
+  it('reads scientific notation, as FFmpeg 5.1 prints a pause at the very start', () => {
+    const report = new SilenceReport();
+    report.read('[silencedetect @ 0x1] silence_start: 2.08333e-05');
+    report.read(
+      '[silencedetect @ 0x1] silence_end: 2.5 | silence_duration: 2.49998',
+    );
+    report.read('[silencedetect @ 0x1] silence_start: 1.23457E+04');
+    report.read(
+      '[silencedetect @ 0x1] silence_end: 12350 | silence_duration: 4.3',
+    );
+    expect(report.intervals(20_000_000)).toEqual([
+      { startMs: 0, endMs: 2_500 },
+      { startMs: 12_345_700, endMs: 12_350_000 },
+    ]);
+  });
+
+  it.each(['nan', 'inf', '-inf', '1.2.3', 'abc'])(
+    'drops a pause whose start reads %s',
+    (value) => {
+      const report = new SilenceReport();
+      report.read(`[silencedetect @ 0x1] silence_start: ${value}`);
+      report.read('[silencedetect @ 0x1] silence_end: 3 | silence_duration: 1');
+      expect(report.intervals(10_000)).toEqual([]);
+    },
+  );
+
+  it.each(['nan', 'inf', '1.2.3'])(
+    'drops a pause whose end reads %s, and the next pause still counts',
+    (value) => {
+      const report = new SilenceReport();
+      report.read('[silencedetect @ 0x1] silence_start: 1');
+      report.read(
+        `[silencedetect @ 0x1] silence_end: ${value} | silence_duration: 1`,
+      );
+      report.read('[silencedetect @ 0x1] silence_start: 5');
+      report.read(
+        '[silencedetect @ 0x1] silence_end: 6.5 | silence_duration: 1.5',
+      );
+      expect(report.intervals(10_000)).toEqual([
+        { startMs: 5_000, endMs: 6_500 },
+      ]);
+    },
+  );
+});
+
 describe(
   'detectSilences with real ffmpeg (KBC-044 FR-1)',
   { timeout: 30_000 },

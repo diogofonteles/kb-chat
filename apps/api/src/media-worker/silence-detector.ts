@@ -8,11 +8,20 @@ export interface SilenceDetectorInput {
   readonly minSilenceMs: number;
 }
 
-const START = /silence_start:\s*(-?[\d.]+)/;
-const END = /silence_end:\s*(-?[\d.]+)/;
+/**
+ * A number as ffmpeg prints it: FFmpeg 5.1 (Debian bookworm, the production image) uses
+ * `%.6g`, so a pause near the start reads `2.08333e-05`; newer ones use `%f`. Anything
+ * else (`nan`, `inf`, `1.2.3`) does not match and is ignored.
+ */
+const NUMBER = String.raw`(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)(?![\d.eE])`;
+const START = new RegExp(String.raw`silence_start:\s*${NUMBER}`);
+const END = new RegExp(String.raw`silence_end:\s*${NUMBER}`);
 
-const toMs = (seconds: string): number =>
-  Math.max(0, Math.round(Number(seconds) * 1000));
+/** Seconds to whole ms; null for a value that is not a finite number. */
+const toMs = (seconds: string): number | null => {
+  const value = Number(seconds);
+  return Number.isFinite(value) ? Math.max(0, Math.round(value * 1000)) : null;
+};
 
 /**
  * Reads ffmpeg's `silencedetect` report line by line: each `silence_start` opens a pause
@@ -24,14 +33,19 @@ export class SilenceReport {
   private readonly found: SilenceInterval[] = [];
 
   read(line: string): void {
-    const start = START.exec(line);
-    if (start?.[1] !== undefined) {
-      this.openAt = toMs(start[1]);
+    if (line.includes('silence_start:')) {
+      // An unreadable start drops the pause: its end has nothing to close.
+      const start = START.exec(line)?.[1];
+      this.openAt = start === undefined ? null : toMs(start);
       return;
     }
-    const end = END.exec(line);
-    if (end?.[1] === undefined || this.openAt === null) return;
-    this.close(toMs(end[1]));
+    const end = END.exec(line)?.[1];
+    const endMs = end === undefined ? null : toMs(end);
+    if (endMs === null || this.openAt === null) {
+      if (line.includes('silence_end:')) this.openAt = null;
+      return;
+    }
+    this.close(endMs);
   }
 
   intervals(durationMs: number | null): SilenceInterval[] {
