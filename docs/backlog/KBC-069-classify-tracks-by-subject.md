@@ -3,7 +3,7 @@ id: KBC-069
 title: "Classificar faixas por assunto: ligar cada faixa aos conceitos do acervo e a assuntos livres, com sugestão da IA e confirmação de uma pessoa"
 status: ready
 slice: phase-2-editing
-outcome: toda faixa publicada fica ligada a 1 a 5 assuntos do acervo, com ≥ 80 % das sugestões da IA aceitas sem mudança, para a busca e os filtros a acharem pelo assunto
+outcome: toda faixa aprovada fica ligada a 1 a 5 assuntos do acervo, com ≥ 80 % das sugestões da IA aceitas sem mudança, para a busca e os filtros a acharem pelo assunto
 depends_on: [KBC-068, KBC-067]
 ---
 
@@ -13,7 +13,7 @@ depends_on: [KBC-068, KBC-067]
 Como quem edita, quero que cada faixa passe pela mesma classificação do acervo (os conceitos que o `kb` já usa nos documentos) e ganhe links para os assuntos relacionados, para que quem pesquisa ache a pergunta e a resposta pelo assunto.
 
 ## Scope
-**In:** permissão nova `media-classify` ("Classificar mídia por assunto"); na tela "Editar em faixas", coluna "Assuntos" por faixa: escolher conceitos do acervo (lidos do catálogo do vault, só leitura, KBC-002/KBC-003) e assuntos livres do acervo (lista nova em `media.db`); "Sugerir assuntos com IA" para quem também tem `media-edit-ai` (uma chamada por edição, todas as faixas juntas, mesmo livro e teto do KBC-067); um resumo de 1 a 2 frases por faixa, sugerido junto e editável; as ligações guardadas em `media.db` (ADR 0029), nunca no vault (Q7); a página da faixa mostra os assuntos para quem edita (para quem ouve, no KBC-070).
+**In:** permissão nova `media-classify` ("Classificar mídia por assunto"); no passo 4, "Aprovar", do envio guiado "Preparar áudio" (T20, KBC-072), depois de "Aprovar faixas" (e ao reabrir uma edição), coluna "Assuntos" por faixa: escolher conceitos do acervo (lidos do catálogo do vault, só leitura, KBC-002/KBC-003) e assuntos livres do acervo (lista nova em `media.db`); "Sugerir assuntos com IA" para quem também tem `media-edit-ai` (uma chamada por edição, todas as faixas juntas, mesmo livro e teto do KBC-067); um resumo de 1 a 2 frases por faixa, sugerido junto e editável; as ligações guardadas em `media.db` (ADR 0029), nunca no vault (Q7); a página da faixa mostra os assuntos para quem edita (para quem ouve, no KBC-070).
 **Out:** criar conceito novo no vault (só o `kb` no Mac do dono cria); relevância e profundidade do `kb classify` para mídia; classificar documentos; filtros e busca por assunto (KBC-070).
 
 ## Business rules
@@ -26,7 +26,7 @@ Como quem edita, quero que cada faixa passe pela mesma classificação do acervo
 ## Functional requirements
 - FR-1: `GET /api/v1/topics/{slug}/subjects` deve devolver os conceitos do catálogo e os assuntos livres do acervo; `POST` cria um assunto livre (1 a 80 caracteres, sem repetir sem acento e sem maiúscula). (BR-1, BR-2)
 - FR-2: `PUT /api/v1/media/{id}/subjects` deve gravar os assuntos e o resumo de uma faixa. (BR-1, BR-3)
-- FR-3: `POST /api/v1/media/{id}/edit/subject-proposals` deve estimar e rodar a sugestão para todas as faixas da edição publicada, com saída validada por esquema e só com assuntos existentes ou marcados "novo". (BR-2, BR-5)
+- FR-3: `POST /api/v1/media/{id}/edit/subject-proposals` deve estimar e rodar a sugestão para todas as faixas da edição aprovada, com saída validada por esquema e só com assuntos existentes ou marcados "novo". (BR-2, BR-5)
 - FR-4: A tela deve mostrar as sugestões como chips "Sugerido" com "Aceitar" e "Recusar" por chip e "Aceitar todas as sugestões desta faixa".
 - FR-5: O catálogo relido depois de uma sincronização deve marcar as ligações a conceitos sumidos. (BR-4)
 
@@ -35,7 +35,7 @@ Como quem edita, quero que cada faixa passe pela mesma classificação do acervo
 - NFR-2: custo ≤ US$ 0,02 por hora de áudio, medido no livro da mídia.
 
 ## Acceptance criteria
-- **AC-1** (FR-3, FR-4, BR-2): Given 12 faixas publicadas no acervo "Hermetismo" e o provedor stub, When quem edita pede "Sugerir assuntos com IA", Then cada faixa recebe de 1 a 5 chips "Sugerido", todos conceitos do acervo ou "Novo assunto: …".
+- **AC-1** (FR-3, FR-4, BR-2): Given 12 faixas aprovadas no acervo "Hermetismo" e o provedor stub, When quem edita pede "Sugerir assuntos com IA", Then cada faixa recebe de 1 a 5 chips "Sugerido", todos conceitos do acervo ou "Novo assunto: …".
 - **AC-2** (BR-3, FR-2): Given sugestões não aceitas, When a faixa é consultada pela API de busca do KBC-070, Then elas não contam; When quem edita aceita, Then passam a contar.
 - **AC-3** (BR-1, limite): Given uma faixa com 5 assuntos, When quem edita tenta pôr o sexto, Then a tela recusa com "Até 5 assuntos por faixa".
 - **AC-4** (FR-1, negativo): Given o assunto livre "Burracheira", When alguém cria "burracheira", Then é recusado como repetido.

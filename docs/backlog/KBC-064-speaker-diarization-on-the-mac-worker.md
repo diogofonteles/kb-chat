@@ -58,7 +58,7 @@ Como quem edita as gravações, quero que o Mac do dono marque quando muda a voz
 | NFR-1, NFR-2 | manual na validação local | script do KBC-063 |
 
 ## References
-ADR 0022, 0023, [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Tela T15 (transcrição ao lado, KBC-038); o progresso desta etapa ("Vozes achadas: N") aparece na T20 em modo preparação (KBC-072) · Pesquisa: KBC-063
+ADR 0022, 0023, [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Tela T15 (transcrição ao lado, KBC-038); o progresso desta etapa ("Vozes achadas: N") aparece no passo 2, "Processar", do envio guiado (KBC-072) · Pesquisa: KBC-063
 
 ## Decisões assumidas (o dono pode mudar)
 - Separar vozes de uma gravação, sem guardar impressão de voz e sem ligar a voz a uma pessoa, é tratado como análise do áudio, não como identificação biométrica; a política de privacidade (T11) ganha uma frase dizendo isso.
