@@ -39,6 +39,8 @@ export const API_ERROR_CODES = [
   'PAYLOAD_TOO_LARGE',
   /** The media item is not waiting for its file (already sent, or abandoned). */
   'MEDIA_CONFLICT',
+  /** One person keeps at most 1 000 bookmarks per media (KBC-042). */
+  'BOOKMARK_LIMIT',
   'INTERNAL',
 ] as const;
 

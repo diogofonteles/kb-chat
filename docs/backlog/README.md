@@ -63,7 +63,7 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 | [KBC-041](KBC-041-full-player-controls-resume-and-mini-player.md) | Player completo: velocidade, volume, atalhos de teclado, controles do sistema, retomar de onde parou e mini-player | phase-2-a | done | KBC-034 |
 | [KBC-043](KBC-043-configurable-skip-intervals.md) | Intervalos de pulo configuráveis | phase-2-a | done | KBC-041 |
 | [KBC-046](KBC-046-sleep-timer.md) | Timer para dormir | phase-2-a | done | KBC-041 |
-| [KBC-042](KBC-042-bookmarks-with-notes.md) | Marcadores com nota | phase-2-a | ready | KBC-041 |
+| [KBC-042](KBC-042-bookmarks-with-notes.md) | Marcadores com nota | phase-2-a | done | KBC-041 |
 | [KBC-060](KBC-060-masters-act-as-a-person.md) | Ver como outra pessoa (master, com auditoria) | phase-2-a | ready | KBC-010 |
 | [KBC-048](KBC-048-collections-and-sub-collections.md) | Acervos e sub-acervos pela tela | phase-2-a | ready | KBC-034 |
 | [KBC-050](KBC-050-edit-media-details.md) | Editar as informações de um áudio: título, autoria e acervo | phase-2-a | ready | KBC-034 |

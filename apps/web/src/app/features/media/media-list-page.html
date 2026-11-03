@@ -11,17 +11,25 @@
         <p class="summary">{{ summary() }}</p>
       }
     </div>
-    @if (canUpload() && topic()) {
-      <button
-        type="button"
-        class="primary"
-        aria-haspopup="dialog"
-        (click)="openUpload()"
-        i18n="@@media.upload.open"
+    <div class="head-actions">
+      <a
+        class="secondary"
+        routerLink="/midia/marcadores"
+        i18n="@@bookmarks.mine"
+        >Meus marcadores</a
       >
-        Enviar áudio
-      </button>
-    }
+      @if (canUpload() && topic()) {
+        <button
+          type="button"
+          class="primary"
+          aria-haspopup="dialog"
+          (click)="openUpload()"
+          i18n="@@media.upload.open"
+        >
+          Enviar áudio
+        </button>
+      }
+    </div>
   </header>
 
   @if (showFilter()) {

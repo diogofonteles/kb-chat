@@ -38,6 +38,24 @@
   background: var(--color-accent);
 }
 
+.marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* A thin tick across the rail, readable over the played and the unplayed part. */
+.mark {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 0.85rem;
+  border-radius: 1px;
+  background: var(--color-text);
+  box-shadow: 0 0 0 1px var(--color-surface);
+  transform: translate(-50%, -50%);
+}
+
 .thumb {
   position: absolute;
   top: 50%;
@@ -76,6 +94,7 @@
 /* High contrast and forced colors: the rail and the thumb keep their shapes. */
 @media (forced-colors: active) {
   .played,
+  .mark,
   .thumb {
     background: CanvasText;
   }

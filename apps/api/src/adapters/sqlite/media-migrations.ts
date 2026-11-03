@@ -95,4 +95,23 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         CHECK (skip_forward_sec IN (10, 15, 30, 45, 60));
     `,
   },
+  {
+    version: 4,
+    name: 'media-bookmarks',
+    sql: `
+      CREATE TABLE media_bookmarks (
+        id TEXT PRIMARY KEY,
+        principal TEXT NOT NULL,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        position_ms INTEGER NOT NULL CHECK (position_ms >= 0),
+        note TEXT CHECK (note IS NULL OR length(note) BETWEEN 1 AND 2000),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX media_bookmarks_by_media
+        ON media_bookmarks (principal, media_id, position_ms);
+      CREATE INDEX media_bookmarks_by_time ON media_bookmarks (principal, created_at);
+      CREATE INDEX media_bookmarks_cascade ON media_bookmarks (media_id);
+    `,
+  },
 ];

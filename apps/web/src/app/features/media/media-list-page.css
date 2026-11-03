@@ -23,6 +23,29 @@
   gap: var(--space-3);
 }
 
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.head-actions .secondary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.head-actions .secondary:hover {
+  background: var(--color-surface-muted);
+}
+
 .head h2 {
   margin: 0;
   font-family: var(--font-display);

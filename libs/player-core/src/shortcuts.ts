@@ -11,7 +11,8 @@ export type ShortcutAction =
   | { readonly kind: 'speed'; readonly direction: 1 | -1 }
   | { readonly kind: 'mute' }
   | { readonly kind: 'seek-fraction'; readonly fraction: number }
-  | { readonly kind: 'help' };
+  | { readonly kind: 'help' }
+  | { readonly kind: 'bookmark' };
 
 /** Where the focus is, as the shortcuts care about it. */
 export type ShortcutTarget =
@@ -33,6 +34,7 @@ const LETTERS: Readonly<Record<string, ShortcutAction>> = {
   j: { kind: 'back' },
   l: { kind: 'forward' },
   m: { kind: 'mute' },
+  b: { kind: 'bookmark' },
   '?': { kind: 'help' },
   '<': { kind: 'speed', direction: -1 },
   '>': { kind: 'speed', direction: 1 },

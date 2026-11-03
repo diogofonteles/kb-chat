@@ -12,6 +12,7 @@ import {
   fakeMediaElement,
   type FakeMedia,
 } from '../../../testing/fake-media-element.js';
+import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { PlayerShortcuts, targetOf } from './player-shortcuts.js';
 
@@ -184,6 +185,29 @@ describe('PlayerShortcuts (FR-6)', () => {
     shortcuts.handle(asked, 'mini-player');
     expect(asked.defaultPrevented).toBe(false);
     expect(shortcuts.helpAsked()).toBe(0);
+  });
+
+  it('marks a bookmark with B on the player page, once per press (KBC-042 FR-2)', () => {
+    const { shortcuts, http } = setup();
+    TestBed.tick();
+    http
+      .expectOne({ method: 'GET', url: '/api/v1/media/m1/bookmarks' })
+      .flush({ items: [] });
+    const store = TestBed.inject(BookmarksStore);
+    const first = press('b');
+    shortcuts.handle(first);
+    expect(first.defaultPrevented).toBe(true);
+    shortcuts.handle(press('b', { repeat: true }));
+    expect(store.bookmarks()).toHaveLength(1);
+    expect(http.match({ method: 'POST' })).toHaveLength(1);
+  });
+
+  it('leaves B alone in the mini-player, which has no bookmark note', () => {
+    const { shortcuts } = setup();
+    const pressed = press('b');
+    shortcuts.handle(pressed, 'mini-player');
+    expect(pressed.defaultPrevented).toBe(false);
+    expect(TestBed.inject(BookmarksStore).bookmarks()).toEqual([]);
   });
 
   it('goes back and forward by the skips the person chose (KBC-043 AC-1)', () => {

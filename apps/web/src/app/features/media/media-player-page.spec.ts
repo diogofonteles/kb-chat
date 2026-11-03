@@ -6,7 +6,7 @@ import {
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, screen } from '@testing-library/angular';
 import {
@@ -269,5 +269,38 @@ describe('MediaPlayerPage (T15)', () => {
       new KeyboardEvent('keydown', { key: 'k', bubbles: true }),
     );
     expect(media.calls.at(-1)).toBe('play');
+  });
+});
+
+describe('MediaPlayerPage opened from "Meus marcadores" (KBC-042 FR-5)', () => {
+  it('plays from the bookmark, with no "Continuar de", even over a saved position', async () => {
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    await harness.navigateByUrl('/outra');
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(`/midia/${ITEM.id}`, {
+      state: { playFromMs: 758_000 },
+    });
+    TestBed.tick();
+    http.expectOne(ITEM_URL).flush(aMediaItem({ positionMs: 120_000 }));
+    await harness.fixture.whenStable();
+    expect(media.calls).toContain('seek:758');
+    expect(media.calls.at(-1)).toBe('play');
+    expect(screen.queryByRole('button', { name: /Continuar de/ })).toBeNull();
+  });
+
+  it('ignores a navigation state that is not a position', async () => {
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    await harness.navigateByUrl('/outra');
+    await TestBed.inject(Router).navigateByUrl(`/midia/${ITEM.id}`, {
+      state: { playFromMs: 'muito' },
+    });
+    TestBed.tick();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    expect(media.calls).not.toContain('play');
   });
 });

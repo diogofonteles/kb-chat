@@ -96,6 +96,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido. Envie um áudio de até 500 MB.`,
   MEDIA_CONFLICT: () =>
     $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
+  BOOKMARK_LIMIT: () =>
+    $localize`:@@error.bookmarkLimit:Você chegou ao limite de 1.000 marcadores nesta mídia. Apague algum para marcar outro.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

@@ -20,7 +20,7 @@ import {
   toSignal,
 } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { mediaItemSchema, type MediaItem } from '@kb-chat/contracts';
 import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
@@ -41,6 +41,7 @@ import {
 } from 'rxjs';
 import { isInFlight, statusTextOf } from './media-labels.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
+import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
 import { PlayerShortcuts } from './player/player-shortcuts.js';
 
@@ -52,7 +53,7 @@ import { PlayerShortcuts } from './player/player-shortcuts.js';
  */
 @Component({
   selector: 'app-media-player-page',
-  imports: [RouterLink, DatePipe, AuthorshipBadge, MediaPlayer],
+  imports: [RouterLink, DatePipe, AuthorshipBadge, MediaPlayer, BookmarkList],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -115,6 +116,10 @@ export class MediaPlayerPage {
   private readonly pollMs = inject(MEDIA_POLL_MS);
   private readonly injector = inject(Injector);
   private readonly document = inject(DOCUMENT);
+  /** Opened from "Meus marcadores": plays from that bookmark (KBC-042 FR-5). */
+  private playFrom = playFromOf(
+    inject(Router).currentNavigation()?.extras.state,
+  );
   private readonly backToList =
     viewChild<ElementRef<HTMLAnchorElement>>('backToList');
 
@@ -217,18 +222,43 @@ export class MediaPlayerPage {
    * device saved since, FR-3). Coming back from the mini-player keeps what plays.
    */
   private open(media: MediaItem): void {
-    if (this.engine.source()?.id === media.id) return;
+    const playFrom = this.playFrom;
+    this.playFrom = null;
+    if (this.engine.source()?.id === media.id) {
+      if (playFrom !== null) this.playAt(playFrom);
+      return;
+    }
+    if (playFrom !== null) {
+      // The person chose where to listen from: no "Continuar de".
+      this.saver.startFrom(media);
+      this.engine.load(this.sourceOf(media), playFrom);
+      this.playAt(playFrom);
+      return;
+    }
     const at = resumeFrom(this.saver.startFrom(media), media.durationMs);
     this.offer.set(at);
-    this.engine.load(
-      {
-        id: media.id,
-        title: media.title,
-        src: mediaStreamUrl(media.id),
-        durationMs: media.durationMs,
-        artist: AUTHORSHIP_LABELS[media.authorship],
-      },
-      at ?? 0,
-    );
+    this.engine.load(this.sourceOf(media), at ?? 0);
   }
+
+  private playAt(ms: number): void {
+    this.answered.set(true);
+    this.engine.seek(ms);
+    this.engine.play();
+  }
+
+  private sourceOf(media: MediaItem) {
+    return {
+      id: media.id,
+      title: media.title,
+      src: mediaStreamUrl(media.id),
+      durationMs: media.durationMs,
+      artist: AUTHORSHIP_LABELS[media.authorship],
+    };
+  }
+}
+
+/** A bookmark's position from the navigation state, when it is one. */
+function playFromOf(state: Record<string, unknown> | undefined): number | null {
+  const ms = state?.['playFromMs'];
+  return typeof ms === 'number' && Number.isFinite(ms) && ms >= 0 ? ms : null;
 }

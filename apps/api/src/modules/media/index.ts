@@ -15,6 +15,11 @@ export {
   type MediaActor,
   type MediaServiceDeps,
 } from './media-service.js';
+export { bookmarkRoutes } from './bookmark-routes.js';
+export {
+  BookmarkService,
+  type BookmarkServiceDeps,
+} from './bookmark-service.js';
 export { listeningRoutes } from './listening-routes.js';
 export {
   DEFAULT_PREFERENCES,
