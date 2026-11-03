@@ -125,4 +125,26 @@ describe('MediaJanitor', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(sweep).toHaveBeenCalledTimes(2);
   });
+
+  it('queues the next silence map on each sweep and says which (KBC-044 FR-2)', async () => {
+    const lines: string[] = [];
+    const log = createLogger('info', {
+      write: (line: string) => void lines.push(line),
+    });
+    const queued = ['media-a', null];
+    const janitor = new MediaJanitor({
+      store,
+      files,
+      log,
+      now: () => T0,
+      backfillSilences: () => queued.shift() ?? null,
+    });
+    await janitor.sweep();
+    await janitor.sweep();
+    expect(queued).toEqual([]);
+    expect(
+      lines.filter((line) => line.includes('silence map queued')),
+    ).toHaveLength(1);
+    expect(lines.join('')).toContain('media-a');
+  });
 });

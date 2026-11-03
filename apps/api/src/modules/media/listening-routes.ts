@@ -3,6 +3,7 @@ import {
   mediaPreferencesSchema,
   mediaProgressRequestSchema,
   mediaProgressSchema,
+  saveMediaPreferencesRequestSchema,
 } from '@kb-chat/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -23,7 +24,7 @@ const OPTIONS = {
   savePreferences: {
     config: { access: LISTEN },
     schema: {
-      body: mediaPreferencesSchema,
+      body: saveMediaPreferencesRequestSchema,
       response: { 200: mediaPreferencesSchema },
     },
   },

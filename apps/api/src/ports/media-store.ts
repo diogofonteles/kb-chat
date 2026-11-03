@@ -104,6 +104,8 @@ export interface TranscodeResult extends LeaseOwner {
   readonly durationMs: number;
   /** The item is ready: its transcription is queued with this job id (KBC-036 FR-1). */
   readonly transcribeJobId: string;
+  /** …and its silences are measured with this job id (KBC-044 FR-1). */
+  readonly silencesJobId: string;
   readonly now: Date;
 }
 
@@ -119,7 +121,7 @@ export interface JobFailure extends LeaseOwner {
 export interface ReapResult {
   readonly requeued: number;
   readonly failed: number;
-  /** Items whose transcription was given up: their FLAC serves nothing now. */
+  /** Items whose transcription was given up: their FLAC serves nothing now (not silences). */
   readonly transcriptionsGivenUp: readonly string[];
 }
 

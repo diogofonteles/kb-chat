@@ -294,6 +294,12 @@ export class SqliteMediaStore implements MediaStorePort {
         kind: 'transcribe',
         at,
       });
+      this.insertJob({
+        id: result.silencesJobId,
+        mediaId: result.rendition.mediaId,
+        kind: 'silences',
+        at,
+      });
       return true;
     });
   }
@@ -328,8 +334,8 @@ export class SqliteMediaStore implements MediaStorePort {
         error: failure.detail.slice(0, 2_000),
         at,
       });
-      // A failed transcription leaves the item playable as it is.
-      if (held.kind === 'transcribe') return true;
+      // A failed transcription or silence map leaves the item playable as it is.
+      if (held.kind !== 'transcode') return true;
       if (givenUp)
         this.failMedia({
           mediaId: this.requireMediaOfJob(failure.jobId),
@@ -365,7 +371,8 @@ export class SqliteMediaStore implements MediaStorePort {
         if (givenUp) failed++;
         if (row['kind'] === 'transcode')
           this.afterExpiry({ mediaId, givenUp, at });
-        else if (givenUp) transcriptionsGivenUp.push(mediaId);
+        else if (givenUp && row['kind'] === 'transcribe')
+          transcriptionsGivenUp.push(mediaId);
       }
       return {
         requeued: expired.length - failed,

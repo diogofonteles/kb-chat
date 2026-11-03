@@ -41,9 +41,15 @@ export interface TranscriberServiceDeps {
   readonly now?: () => Date;
 }
 
-/** Transcribers lease transcriptions only (ADR 0023 §2); the VM converts only. */
+/**
+ * Transcribers lease transcriptions only (ADR 0023 §2); the VM converts and measures
+ * silences (KBC-044).
+ */
 const TRANSCRIBER_KINDS: readonly MediaJobKind[] = ['transcribe'];
-const VM_WORKER: WorkerIdentity = { leaseName: null, kinds: ['transcode'] };
+const VM_WORKER: WorkerIdentity = {
+  leaseName: null,
+  kinds: ['transcode', 'silences'],
+};
 const TOKEN_PREFIX = 'nat_';
 /** At most one "seen" write per transcriber in this window. */
 const TOUCH_EVERY_MS = 10_000;

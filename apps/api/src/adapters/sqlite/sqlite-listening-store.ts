@@ -16,7 +16,7 @@ export class SqliteListeningStore implements ListeningStorePort {
   preferencesOf(principal: string): MediaPreferences | null {
     const row = this.db
       .prepare(
-        `SELECT speed, show_remaining, skip_back_sec, skip_forward_sec
+        `SELECT speed, show_remaining, skip_back_sec, skip_forward_sec, skip_silences
          FROM media_preferences WHERE principal = ?`,
       )
       .get(principal);
@@ -27,6 +27,7 @@ export class SqliteListeningStore implements ListeningStorePort {
           showRemaining: Number(row['show_remaining']) === 1,
           skipBackSec: Number(row['skip_back_sec']),
           skipForwardSec: Number(row['skip_forward_sec']),
+          skipSilences: Number(row['skip_silences']) === 1,
         })
       : null;
   }
@@ -39,11 +40,13 @@ export class SqliteListeningStore implements ListeningStorePort {
     this.db
       .prepare(
         `INSERT INTO media_preferences
-           (principal, speed, show_remaining, skip_back_sec, skip_forward_sec, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+           (principal, speed, show_remaining, skip_back_sec, skip_forward_sec, skip_silences,
+            updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (principal) DO UPDATE SET speed = excluded.speed,
            show_remaining = excluded.show_remaining, skip_back_sec = excluded.skip_back_sec,
-           skip_forward_sec = excluded.skip_forward_sec, updated_at = excluded.updated_at`,
+           skip_forward_sec = excluded.skip_forward_sec,
+           skip_silences = excluded.skip_silences, updated_at = excluded.updated_at`,
       )
       .run(
         input.principal,
@@ -51,6 +54,7 @@ export class SqliteListeningStore implements ListeningStorePort {
         input.preferences.showRemaining ? 1 : 0,
         input.preferences.skipBackSec,
         input.preferences.skipForwardSec,
+        input.preferences.skipSilences ? 1 : 0,
         input.now.toISOString(),
       );
   }

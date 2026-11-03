@@ -7,6 +7,8 @@ export interface MediaJanitorDeps {
   readonly store: MediaStorePort;
   readonly files: MediaFilesPort;
   readonly log: FastifyBaseLogger;
+  /** Queues the next silence map of an older item, one at a time (KBC-044 FR-2). */
+  readonly backfillSilences?: () => string | null;
   readonly now?: () => Date;
 }
 
@@ -18,7 +20,8 @@ export interface SweepResult {
 
 /**
  * The queue's janitor (ADR 0022 §2): jobs whose worker stopped beating go back to the
- * queue, or fail after the last attempt; uploads left unfinished for a day are dropped.
+ * queue, or fail after the last attempt; uploads left unfinished for a day are dropped;
+ * items without a silence map get one queued, one at a time (KBC-044 FR-2).
  */
 export class MediaJanitor {
   private timer: NodeJS.Timeout | null = null;
@@ -45,6 +48,9 @@ export class MediaJanitor {
     await files.remove(
       reaped.transcriptionsGivenUp.map((id) => files.flacPath(id)),
     );
+    const backfilled = this.deps.backfillSilences?.() ?? null;
+    if (backfilled)
+      this.deps.log.info({ mediaId: backfilled }, 'silence map queued');
     const result = {
       requeued: reaped.requeued,
       failed: reaped.failed,

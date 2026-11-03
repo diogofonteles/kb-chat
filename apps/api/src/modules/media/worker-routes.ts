@@ -1,5 +1,6 @@
 import {
   MAX_RAW_TRANSCRIPT_BYTES,
+  completeSilencesRequestSchema,
   completeTranscodeRequestSchema,
   completeTranscribeRequestSchema,
   failJobRequestSchema,
@@ -25,6 +26,7 @@ import type {
   TranscriberService,
   WorkerIdentity,
 } from './transcriber-service.js';
+import type { SilenceService } from './silence-service.js';
 import type { TranscriptionService } from './transcription-service.js';
 import type { WorkerService } from './worker-service.js';
 
@@ -42,6 +44,8 @@ export interface WorkerRoutesDeps {
   readonly service: WorkerService;
   readonly transcribers: TranscriberService;
   readonly transcription: TranscriptionService;
+  /** Silence maps (KBC-044). */
+  readonly silences: SilenceService;
 }
 
 /** The bearer token of a request, or ''. */
@@ -171,6 +175,7 @@ export const workerRoutes =
     registerBeat(app, deps.service);
     registerFail(app, deps.service);
     registerTranscode(app, deps.service);
+    registerSilences(app, deps);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
   };
@@ -241,6 +246,28 @@ function registerTranscode(app: FastifyInstance, service: WorkerService): void {
         ...request.body,
         ...ownerOf(request, request.body),
       });
+      return reply.code(204).send();
+    },
+  );
+}
+
+/** A silence map measured by the VM worker (KBC-044 FR-1). */
+function registerSilences(app: FastifyInstance, deps: WorkerRoutesDeps): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/media-worker/jobs/:id/silences',
+    route(completeSilencesRequestSchema),
+    async (request, reply) => {
+      const jobId = request.params.id;
+      assertJobKind(request, {
+        jobId,
+        service: deps.service,
+        only: 'silences',
+      });
+      deps.silences.complete(
+        { jobId, ...ownerOf(request, request.body) },
+        request.body,
+      );
       return reply.code(204).send();
     },
   );

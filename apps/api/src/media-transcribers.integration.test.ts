@@ -28,10 +28,10 @@ beforeEach(() => {
 afterEach(() => (clock = T0));
 
 describe('TranscriberService (KBC-036)', () => {
-  it('names the VM worker by its token, for conversions only', () => {
+  it('names the VM worker by its token, for conversions and silence maps only', () => {
     expect(service.identify(VM_TOKEN)).toEqual({
       leaseName: null,
-      kinds: ['transcode'],
+      kinds: ['transcode', 'silences'],
     });
     expect(service.identify('')).toBeNull();
     expect(service.identify('not-a-paired-token')).toBeNull();

@@ -3,17 +3,22 @@ import {
   type MediaItem,
   type MediaPreferences,
   type MediaProgress,
+  type SaveMediaPreferencesRequest,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { ListeningStorePort } from '../../ports/listening-store.js';
 import type { MediaActor, MediaService } from './media-service.js';
 
-/** Before any choice: normal speed, remaining time, back 15 s and forward 30 s (T15). */
+/**
+ * Before any choice: normal speed, remaining time, back 15 s and forward 30 s (T15),
+ * silences as recorded (KBC-044 BR-2).
+ */
 export const DEFAULT_PREFERENCES: MediaPreferences = {
   speed: 1,
   showRemaining: true,
   skipBackSec: 15,
   skipForwardSec: 30,
+  skipSilences: false,
 };
 
 export interface ListeningServiceDeps {
@@ -37,10 +42,16 @@ export class ListeningService {
     );
   }
 
+  /** A client that does not send `skipSilences` (older than KBC-044) keeps the stored one. */
   savePreferences(
     actor: MediaActor,
-    preferences: MediaPreferences,
+    request: SaveMediaPreferencesRequest,
   ): MediaPreferences {
+    const preferences: MediaPreferences = {
+      ...request,
+      skipSilences:
+        request.skipSilences ?? this.preferences(actor).skipSilences,
+    };
     this.deps.listening.savePreferences({
       principal: actor.principal,
       preferences,

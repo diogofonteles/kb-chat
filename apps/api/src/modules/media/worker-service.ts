@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type {
-  CompleteTranscodeRequest,
-  FailJobRequest,
-  HeartbeatRequest,
-  LeaseRequest,
-  LeasedWorkerJob,
-  MediaJobKind,
+import {
+  SILENCE_DETECTOR,
+  type CompleteTranscodeRequest,
+  type FailJobRequest,
+  type HeartbeatRequest,
+  type LeaseRequest,
+  type LeasedWorkerJob,
+  type MediaJobKind,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaFilesPort } from '../../ports/media-files.js';
@@ -22,6 +23,9 @@ const leaseOf = (done: CompleteTranscodeRequest) => ({
   worker: done.worker,
   leaseId: done.leaseId,
 });
+
+const audioRendition = (mediaId: string, path: string) =>
+  ({ mediaId, rendition: 'audio', path, mime: AUDIO_MIME }) as const;
 
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
@@ -52,6 +56,7 @@ export class WorkerService {
       leaseMs: JOB_LEASE_MS,
     });
     if (!job) return null;
+    if (job.kind === 'silences') return this.silencesJob(job);
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
       : {
@@ -65,6 +70,18 @@ export class WorkerService {
           ),
           leaseMs: JOB_LEASE_MS,
         };
+  }
+
+  /** Measuring the audio rendition on the shared disk (KBC-044 FR-1). */
+  private silencesJob(job: LeasedJob): LeasedWorkerJob {
+    const rendition = this.deps.store.getRendition(job.mediaId);
+    return {
+      ...job,
+      kind: 'silences',
+      leaseMs: JOB_LEASE_MS,
+      sourcePath: rendition?.path ?? this.deps.files.audioPath(job.mediaId),
+      detector: SILENCE_DETECTOR,
+    };
   }
 
   private transcribeJob(job: LeasedJob): LeasedWorkerJob {
@@ -110,14 +127,9 @@ export class WorkerService {
       ...done,
       jobId,
       transcribeJobId: randomUUID(),
+      silencesJobId: randomUUID(),
       now: this.now(),
-      rendition: {
-        mediaId,
-        rendition: 'audio',
-        path,
-        bytes: done.bytes,
-        mime: AUDIO_MIME,
-      },
+      rendition: { ...audioRendition(mediaId, path), bytes: done.bytes },
     });
     // The rendition is in place; if the lease is gone because the item was removed
     // meanwhile, the file must not stay behind (the removal already ran).
