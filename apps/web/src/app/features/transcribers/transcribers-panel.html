@@ -46,21 +46,20 @@
       >
     </p>
   }
+  <p class="status" role="status" [class.error]="failed() !== null">
+    @if (failed() === 'pair') {
+      <span aria-hidden="true">⚠</span>
+      <ng-container i18n="@@transcribers.pairFailed"
+        >Não consegui parear. Tente de novo.</ng-container
+      >
+    } @else if (failed() === 'revoke') {
+      <span aria-hidden="true">⚠</span>
+      <ng-container i18n="@@transcribers.revokeFailed"
+        >Não consegui revogar. Tente de novo.</ng-container
+      >
+    }
+  </p>
 </form>
-
-<p class="status" role="status" [class.error]="failed() !== null">
-  @if (failed() === 'pair') {
-    <span aria-hidden="true">⚠</span>
-    <ng-container i18n="@@transcribers.pairFailed"
-      >Não consegui parear. Tente de novo.</ng-container
-    >
-  } @else if (failed() === 'revoke') {
-    <span aria-hidden="true">⚠</span>
-    <ng-container i18n="@@transcribers.revokeFailed"
-      >Não consegui revogar. Tente de novo.</ng-container
-    >
-  }
-</p>
 
 @if (paired(); as current) {
   <section
