@@ -1,0 +1,96 @@
+/* Same frame as a document card (result-card.css), so both read as references (FR-6). */
+.frame {
+  display: grid;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+  transition:
+    border-color 150ms var(--ease),
+    box-shadow 150ms var(--ease);
+}
+
+.frame:hover {
+  border-color: var(--color-accent);
+}
+
+.frame.active {
+  border-color: var(--color-accent);
+  box-shadow: inset 4px 0 0 var(--color-accent);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: var(--target);
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kind {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent-strong);
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.snippet {
+  font-family: var(--font-reading);
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+mark {
+  background: var(--color-mark);
+  color: inherit;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.place {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* BR-3: a warning tone, never red (UP-19), with a sign besides the colour (UP-20). */
+.low {
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--color-text-muted);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.low::before {
+  content: '⚠ ' / '';
+}

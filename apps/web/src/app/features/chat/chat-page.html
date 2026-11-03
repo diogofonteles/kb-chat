@@ -32,10 +32,10 @@
       </div>
     </dialog>
   }
-  <div class="layout" [class.with-panel]="panel()">
+  <div class="layout" [class.with-panel]="panelOpen()">
     <main
       class="conversation"
-      [class.covered]="panel()"
+      [class.covered]="panelOpen()"
       [class.media]="onMedia()"
       [class.empty]="isEmpty() && !onMedia()"
       [attr.inert]="covered() ? '' : null"
@@ -221,8 +221,11 @@
                 [message]="message"
                 [topicTitle]="topic()?.title ?? ''"
                 [activeId]="opened()?.id ?? null"
+                [activePassage]="activePassage()"
                 [topics]="topicList()"
                 (opened)="openHit($event, message)"
+                (passageOpened)="openPassage($event, message)"
+                (kindsChanged)="chooseKinds(message, $event)"
                 (retried)="retry(message)"
                 (modeSwitched)="askAgainIn(message, $event)"
                 (filtersChanged)="refine(message, $event)"
@@ -248,7 +251,10 @@
           />
         </div>
       }
-      <app-mini-player [aboveComposer]="!onMedia()" />
+      <app-mini-player
+        [aboveComposer]="!onMedia()"
+        [shownElsewhere]="playerInPanel()"
+      />
     </main>
 
     @if (panel(); as doc) {
@@ -263,6 +269,12 @@
         (back)="store.back()"
         (navigated)="store.openWithin($event)"
         (conceptSelected)="filterByConcept($event)"
+      />
+    } @else if (passage(); as hit) {
+      <app-passage-panel
+        class="panel"
+        [passage]="hit"
+        (closed)="closeDocument()"
       />
     }
   </div>

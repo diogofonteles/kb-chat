@@ -1,7 +1,8 @@
-import { aHit } from '../../testing/fixtures.js';
+import { aHit, aMediaHit } from '../../testing/fixtures.js';
 import {
   describeForAnnouncement,
   describeResultCount,
+  describeSpokenCount,
 } from './result-count.js';
 
 const hits = (n: number) =>
@@ -28,10 +29,41 @@ describe('describeResultCount', () => {
 
   it('announces results briefly', () => {
     expect(
-      describeForAnnouncement({ items: [], total: 0, capped: false }),
+      describeForAnnouncement({
+        items: [],
+        total: 0,
+        capped: false,
+        media: [],
+      }),
     ).toBe('Nenhum documento encontrado.');
     expect(
-      describeForAnnouncement({ items: hits(2), total: 2, capped: false }),
+      describeForAnnouncement({
+        items: hits(2),
+        total: 2,
+        capped: false,
+        media: [],
+      }),
     ).toBe('2 documentos encontrados.');
+  });
+
+  it('KBC-039: counts the spoken passages too', () => {
+    expect(describeSpokenCount(1)).toBe('1 trecho na fala');
+    expect(describeSpokenCount(3)).toBe('3 trechos na fala');
+    expect(
+      describeForAnnouncement({
+        items: [],
+        total: 0,
+        capped: false,
+        media: [aMediaHit()],
+      }),
+    ).toBe('1 trecho na fala encontrado.');
+    expect(
+      describeForAnnouncement({
+        items: hits(2),
+        total: 2,
+        capped: false,
+        media: [aMediaHit(), aMediaHit({ startMs: 1 })],
+      }),
+    ).toBe('2 documentos e 2 trechos na fala encontrados.');
   });
 });

@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
-import { aHit, aResponse, aTopic } from '../../testing/fixtures.js';
+import { aHit, aMediaHit, aResponse, aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
 import { ResultMessage } from './result-message.js';
 
@@ -8,6 +8,7 @@ const base: ChatMessage = {
   id: 1,
   rev: 1,
   filters: NO_FILTERS,
+  kinds: ['text', 'audio'],
   loadingMore: false,
   moreFailed: false,
   filterOrder: [],
@@ -148,5 +149,110 @@ describe('ResultMessage in a parent collection (KBC-048 FR-4)', () => {
       },
     });
     expect(screen.queryByText(/^em /)).toBeNull();
+  });
+});
+
+describe('ResultMessage with spoken passages (KBC-039)', () => {
+  const withAudio = (overrides: Partial<ChatMessage> = {}): ChatMessage => ({
+    ...base,
+    mode: 'all',
+    response: aResponse(
+      [aHit({ id: 'a.md', score: 0.99 }), aHit({ id: 'b.md', score: 0.2 })],
+      {
+        media: [
+          aMediaHit({ score: 0.5 }),
+          aMediaHit({ startMs: 60_000, score: 0.4, confidence: 'low' }),
+        ],
+        kinds: { text: 2, audio: 7 },
+      },
+    ),
+    ...overrides,
+  });
+
+  it('mixes the passages among the documents by relevance, with the minute and the badge (FR-6, AC-1, AC-5)', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { message: withAudio() },
+    });
+    const items = screen.getAllByRole('listitem');
+    expect(
+      items.map((item) =>
+        item.querySelector('[data-media-id]') ? 'audio' : 'text',
+      ),
+    ).toEqual(['text', 'audio', 'audio', 'text']);
+    expect(items[1]?.textContent).toContain('Áudio · Na fala');
+    expect(items[1]?.textContent).toContain('8:15');
+    expect(items[1]?.textContent).not.toContain('baixa confiança');
+    expect(items[2]?.textContent).toContain('baixa confiança');
+    expect(screen.getByText(/2 trechos na fala/)).toBeTruthy();
+  });
+
+  it('opens a passage with its place among the results (FR-4)', async () => {
+    const passageOpened = vi.fn();
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { message: withAudio() },
+      on: { passageOpened },
+    });
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: /Palestra do Tiuaco/,
+      })[0] as HTMLElement,
+    );
+    expect(passageOpened).toHaveBeenCalledWith({
+      hit: expect.objectContaining({ startMs: 495_000 }),
+      position: 2,
+    });
+  });
+
+  it('offers "Buscar em" with the counts and asks again with the new choice (FR-5, AC-9)', async () => {
+    const kindsChanged = vi.fn();
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { message: withAudio() },
+      on: { kindsChanged },
+    });
+    const group = screen.getByRole('group', { name: 'Buscar em' });
+    expect(group.textContent).toMatch(/Textos\s*2/);
+    expect(group.textContent).toMatch(/Áudios\s*7/);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Textos/ }));
+    expect(kindsChanged).toHaveBeenCalledWith(['audio']);
+  });
+
+  it('keeps the last kind chosen: it cannot be unchecked (BR-4)', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { message: withAudio({ kinds: ['audio'] }) },
+    });
+    const audio = screen.getByRole('checkbox', { name: /Áudios/ });
+    expect((audio as HTMLInputElement).checked).toBe(true);
+    expect((audio as HTMLInputElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole('checkbox', { name: /Textos/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(false);
+  });
+
+  it('has no "Buscar em" where the collection has no audio for this person', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { message: { ...base, response: aResponse([aHit()]) } },
+    });
+    expect(screen.queryByRole('group', { name: 'Buscar em' })).toBeNull();
+    expect(document.querySelector('[data-media-id]')).toBeNull();
+  });
+
+  it('marks the passage open in the reading panel', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        message: withAudio(),
+        activePassage: `${aMediaHit().mediaId}@495000`,
+      },
+    });
+    const pressed = screen
+      .getAllByRole('button', { pressed: true })
+      .map((button) => button.getAttribute('data-media-id'));
+    expect(pressed).toEqual([aMediaHit().mediaId]);
   });
 });
