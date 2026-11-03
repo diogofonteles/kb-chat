@@ -96,9 +96,10 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     expect(await seriousViolations(page, 'app-voices-panel')).toEqual([]);
 
     await block.getByRole('button', { name: 'Separar vozes' }).click();
-    // No transcriber in the E2E run is marked to separate voices (AC-9).
+    // No transcriber in the E2E run is marked to separate voices (AC-9), unless a local
+    // check paired one: then it waits for it.
     await expect(block.getByRole('status')).toHaveText(
-      'Nenhum transcritor separa vozes; marque em Transcritores',
+      /^(Nenhum transcritor separa vozes; marque em Transcritores|Aguardando o transcritor.*)$/,
     );
     await expect(
       block.getByRole('button', { name: /Separar vozes/ }),
@@ -153,8 +154,8 @@ test('AC-6: "número de vozes" travels with the request and a wrong one is said 
   );
   await field.fill('2');
   await block.getByRole('button', { name: 'Separar vozes' }).click();
-  await expect(block.getByRole('status')).toContainText(
-    'Nenhum transcritor separa vozes',
+  await expect(block.getByRole('status')).toHaveText(
+    /Nenhum transcritor separa vozes|Aguardando o transcritor/,
   );
   const done = await owner.post(`/api/e2e/media/${media.id}/diarization`, {
     data: {

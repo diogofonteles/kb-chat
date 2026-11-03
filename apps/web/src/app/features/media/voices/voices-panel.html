@@ -40,13 +40,13 @@
     }
     @if (speakers.canRequest) {
       <form class="request" novalidate (submit)="request($event)">
-        <div class="field">
-          <label for="voices-count" class="label" i18n="@@voices.countLabel"
-            >Número de vozes (opcional)</label
-          >
-          <p id="voices-count-hint" class="hint" i18n="@@voices.countHint">
-            De 1 a 10. Em branco, o transcritor estima.
-          </p>
+        <label for="voices-count" class="label" i18n="@@voices.countLabel"
+          >Número de vozes (opcional)</label
+        >
+        <p id="voices-count-hint" class="hint" i18n="@@voices.countHint">
+          De 1 a 10. Em branco, o transcritor estima.
+        </p>
+        <div class="row">
           <input
             id="voices-count"
             class="input"
@@ -62,19 +62,24 @@
             "
             (input)="editVoices($event)"
           />
-          @if (invalid()) {
-            <p
-              id="voices-count-error"
-              class="field-error"
-              i18n="@@voices.countInvalid"
-            >
-              Informe um número de 1 a {{ maxVoices }}, ou deixe em branco.
-            </p>
-          }
+          <button
+            type="submit"
+            [class.primary]="!diarization()"
+            [class.secondary]="diarization() !== null"
+            [disabled]="busy()"
+          >
+            {{ actionLabel() }}
+          </button>
         </div>
-        <button type="submit" class="primary" [disabled]="busy()">
-          {{ actionLabel() }}
-        </button>
+        @if (invalid()) {
+          <p
+            id="voices-count-error"
+            class="field-error"
+            i18n="@@voices.countInvalid"
+          >
+            Informe um número de 1 a {{ maxVoices }}, ou deixe em branco.
+          </p>
+        }
       </form>
     } @else if (needsTranscript()) {
       <p class="hint" i18n="@@voices.needsTranscript">
