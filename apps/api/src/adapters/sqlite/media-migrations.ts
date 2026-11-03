@@ -271,6 +271,84 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
+    // KBC-064 (ADR 0029 §1): the voices of a recording, separated on the owner's Mac. Jobs
+    // gain the kind 'diarize' and its hint (`voices`); SQLite cannot change a CHECK, so
+    // the table is rebuilt as in version 5. No table holds a voice print (BR-1).
+    // Version 7 is KBC-051's (open in parallel); the two touch different tables.
+    version: 8,
+    name: 'diarization',
+    sql: `
+      CREATE TABLE jobs_v7 (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('transcode', 'transcribe', 'diarize')),
+        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        lease_id TEXT,
+        lease_until INTEGER,
+        heartbeat_at INTEGER,
+        worker TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        voices INTEGER CHECK (voices IS NULL OR voices BETWEEN 1 AND 10)
+      ) STRICT;
+      INSERT INTO jobs_v7 (id, media_id, kind, status, attempts, lease_id, lease_until,
+        heartbeat_at, worker, error, created_at, updated_at)
+        SELECT id, media_id, kind, status, attempts, lease_id, lease_until, heartbeat_at,
+          worker, error, created_at, updated_at FROM jobs;
+      DROP TABLE jobs;
+      ALTER TABLE jobs_v7 RENAME TO jobs;
+      CREATE INDEX jobs_queued ON jobs (kind, created_at) WHERE status = 'queued';
+      CREATE INDEX jobs_leased ON jobs (lease_until) WHERE status = 'leased';
+      CREATE INDEX jobs_by_media ON jobs (media_id, kind, created_at);
+      CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
+
+      -- One row per separation; the raw JSON file is the source of truth (re-derivable).
+      CREATE TABLE diarizations (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        transcript_id TEXT NOT NULL REFERENCES transcripts (id) ON DELETE CASCADE,
+        engine TEXT NOT NULL,
+        model TEXT NOT NULL,
+        parameters TEXT NOT NULL,
+        parameters_version TEXT NOT NULL,
+        requested_voices INTEGER CHECK (requested_voices IS NULL OR requested_voices BETWEEN 1 AND 10),
+        voice_count INTEGER NOT NULL CHECK (voice_count BETWEEN 0 AND 10),
+        elapsed_ms INTEGER NOT NULL,
+        raw_path TEXT NOT NULL,
+        derivation_version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (media_id, version)
+      ) STRICT;
+
+      -- Derived from the raw JSON: who speaks when, one voice per instant.
+      CREATE TABLE media_speaker_turns (
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        voice INTEGER NOT NULL CHECK (voice BETWEEN 1 AND 10),
+        start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+        end_ms INTEGER NOT NULL CHECK (end_ms > start_ms),
+        PRIMARY KEY (diarization_id, position)
+      ) STRICT;
+
+      -- The voice of each segment and word of the transcript the separation was made on.
+      CREATE TABLE media_segment_voices (
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        segment_position INTEGER NOT NULL,
+        voice INTEGER CHECK (voice IS NULL OR voice BETWEEN 1 AND 10),
+        PRIMARY KEY (diarization_id, segment_position)
+      ) STRICT;
+      CREATE TABLE media_word_voices (
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        word_position INTEGER NOT NULL,
+        voice INTEGER CHECK (voice IS NULL OR voice BETWEEN 1 AND 10),
+        PRIMARY KEY (diarization_id, word_position)
+      ) STRICT;
+    `,
+  },
+  {
     // KBC-067 (ADR 0029 §4 and §7, ADR 0022 §7): the media monthly spend ledger, the AI's
     // proposal runs and the draft tracks they write, invisible to listeners until approved.
     // Versions 7 and 8 are KBC-051's and KBC-064's (open in parallel); only new tables here.

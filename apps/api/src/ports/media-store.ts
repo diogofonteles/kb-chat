@@ -73,6 +73,8 @@ export interface LeasedJob {
   readonly kind: MediaJobKind;
   readonly mediaId: string;
   readonly attempt: number;
+  /** A diarize job's hint: how many voices the person announced (KBC-064 BR-4). */
+  readonly voices: number | null;
 }
 
 export interface LeaseOwner {

@@ -39,6 +39,11 @@ export interface TranscriberStorePort {
   byTokenHash(tokenHash: string): TranscriberRecord | null;
   /** It was just heard from. */
   touch(input: { readonly id: string; readonly now: Date }): void;
+  /** What it may lease from now on (FR-6); null when unknown or revoked. */
+  setKinds(input: {
+    readonly id: string;
+    readonly kinds: readonly MediaJobKind[];
+  }): TranscriberRecord | null;
   /** Revokes it and gives its leased jobs back to the queue; false when unknown. */
   revoke(input: { readonly id: string; readonly now: Date }): boolean;
 }

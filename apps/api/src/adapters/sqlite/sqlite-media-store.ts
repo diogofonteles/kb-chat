@@ -94,6 +94,15 @@ const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_princ
   (SELECT t.confidence FROM transcripts t WHERE t.media_id = media.id
      ORDER BY t.version DESC LIMIT 1) AS transcript_confidence`;
 
+/**
+ * A separation of voices waits for its item's transcript (KBC-064 BR-3): it is leased only
+ * when one exists and no transcription is queued or running for the item.
+ */
+const DIARIZE_READY = `(kind <> 'diarize' OR (
+    EXISTS (SELECT 1 FROM transcripts t WHERE t.media_id = jobs.media_id)
+    AND NOT EXISTS (SELECT 1 FROM jobs p WHERE p.media_id = jobs.media_id
+      AND p.kind = 'transcribe' AND p.status IN ('queued', 'leased'))))`;
+
 /** The media catalog and its queue in SQLite (ADR 0022); the API is the only writer. */
 export class SqliteMediaStore implements MediaStorePort {
   constructor(private readonly db: DatabaseSync) {}
@@ -336,7 +345,7 @@ export class SqliteMediaStore implements MediaStorePort {
         error: failure.detail.slice(0, 2_000),
         at,
       });
-      // A failed transcription or silence map leaves the item playable as it is.
+      // A failed transcription, silence map or separation leaves the item playable as it is.
       if (held.kind !== 'transcode') return true;
       if (givenUp)
         this.failMedia({
@@ -445,8 +454,9 @@ export class SqliteMediaStore implements MediaStorePort {
         `UPDATE jobs SET status = 'leased', attempts = attempts + 1, lease_id = ?,
            worker = ?, lease_until = ?, heartbeat_at = ?, updated_at = ?
          WHERE id = (SELECT id FROM jobs WHERE status = 'queued' AND kind IN (${kinds})
+                       AND ${DIARIZE_READY}
                      ORDER BY created_at, id LIMIT 1)
-         RETURNING id, lease_id, kind, media_id, attempts`,
+         RETURNING id, lease_id, kind, media_id, attempts, voices`,
       )
       .get(
         randomUUID(),
@@ -567,5 +577,6 @@ function toLeasedJob(row: Row): LeasedJob {
     kind: mediaJobKindSchema.parse(row['kind']),
     mediaId: text(row, 'media_id'),
     attempt: Number(row['attempts']),
+    voices: nullableNumber(row, 'voices'),
   };
 }

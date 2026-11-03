@@ -73,6 +73,10 @@ export class FsMediaFiles implements MediaFilesPort {
     return `${TRANSCRIPTS}/${mediaId}/${transcriptId}.json`;
   }
 
+  diarizationPath(mediaId: string, diarizationId: string): string {
+    return `${TRANSCRIPTS}/${mediaId}/diarization-${diarizationId}.json`;
+  }
+
   async writeFile(path: string, data: string): Promise<void> {
     const target = this.resolve(path);
     const temp = `${target}.${randomUUID()}.tmp`;

@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import { z } from 'zod';
-import { mediaJobKindSchema } from '@kb-chat/contracts';
+import { mediaJobKindSchema, type MediaJobKind } from '@kb-chat/contracts';
 import {
   TRANSCRIBER_LEASE_PREFIX,
   leaseNameOf,
@@ -85,6 +85,18 @@ export class SqliteTranscriberStore implements TranscriberStorePort {
     this.db
       .prepare('UPDATE transcribers SET last_seen_at = ? WHERE id = ?')
       .run(input.now.toISOString(), input.id);
+  }
+
+  setKinds(input: {
+    id: string;
+    kinds: readonly MediaJobKind[];
+  }): TranscriberRecord | null {
+    const changed = this.db
+      .prepare(
+        'UPDATE transcribers SET kinds = ? WHERE id = ? AND revoked_at IS NULL',
+      )
+      .run(JSON.stringify(input.kinds), input.id).changes;
+    return changed === 1 ? this.byId(input.id) : null;
   }
 
   revoke(input: { id: string; now: Date }): boolean {
