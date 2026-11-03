@@ -86,10 +86,8 @@ export async function createMedia(
   };
 }
 
-/** The queue, each person's listening and bookmarks share one database (ADR 0022). */
-function openStores(
-  dir: string,
-): Pick<
+/** The stores that live in the media database. */
+type MediaStores = Pick<
   MediaDeps,
   | 'store'
   | 'listening'
@@ -99,7 +97,10 @@ function openStores(
   | 'trackProposals'
   | 'spend'
   | 'silences'
-> {
+>;
+
+/** The queue, each person's listening and bookmarks share one database (ADR 0022). */
+function openStores(dir: string): MediaStores {
   try {
     const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
     return {
