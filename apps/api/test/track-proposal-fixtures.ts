@@ -131,8 +131,14 @@ export const itemOf = (mediaId: string, author: string | null): MediaItem => ({
  * `HANG` (no answer until the call is aborted).
  */
 export const HANG = Symbol('hang');
+
+/** A stream that writes `partial` and then breaks (a provider failing mid-answer). */
+export class BrokenStream {
+  constructor(readonly partial: string) {}
+}
+
 export type StubReply =
-  string | Error | typeof HANG | ((user: string) => string);
+  string | Error | typeof HANG | BrokenStream | ((user: string) => string);
 
 const untilAborted = (signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => signal.addEventListener('abort', () => resolve()));
@@ -169,6 +175,10 @@ export class StubLlm implements LlmPort {
     this.calls.push([...messages]);
     const reply = this.replies.shift() ?? new Error('no scripted reply');
     if (reply instanceof Error) throw reply;
+    if (reply instanceof BrokenStream) {
+      yield { type: 'token', text: reply.partial };
+      throw new Error('stream broke');
+    }
     if (reply === HANG) {
       await untilAborted(options.signal);
       options.signal.throwIfAborted();

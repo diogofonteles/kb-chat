@@ -96,23 +96,38 @@ export class ProposalService {
   async start(actor: MediaActor, mediaId: string): Promise<ProposalRun> {
     const prepared = await this.prepare(actor, mediaId);
     const spendId = this.reserve(actor, prepared.plan);
-    const run = this.deps.store.startRun({
-      id: randomUUID(),
-      mediaId,
-      transcriptId: prepared.plan.transcriptId,
-      principal: actor.principal,
-      model: prepared.plan.model,
-      spendId,
-      windowsTotal: prepared.plan.windows.length,
-      estimateUsd: prepared.plan.estimateUsd,
-      now: this.now(),
-    });
+    const run = this.startRun({ actor, prepared, spendId });
     if (!run) {
       this.closeSpend(spendId, { failure: 'interrupted', spentUsd: 0 });
       throw new AppError('MEDIA_CONFLICT', 'A proposal is already running');
     }
-    this.track(run.id, this.execute(run.id, prepared));
+    this.track(run.id, this.execute({ runId: run.id, spendId, prepared }));
     return run;
+  }
+
+  /** The run's row; a failure to write it gives the reservation back before throwing. */
+  private startRun(input: {
+    readonly actor: MediaActor;
+    readonly prepared: Prepared;
+    readonly spendId: string;
+  }): ProposalRun | null {
+    const { plan } = input.prepared;
+    try {
+      return this.deps.store.startRun({
+        id: randomUUID(),
+        mediaId: plan.mediaId,
+        transcriptId: plan.transcriptId,
+        principal: input.actor.principal,
+        model: plan.model,
+        spendId: input.spendId,
+        windowsTotal: plan.windows.length,
+        estimateUsd: plan.estimateUsd,
+        now: this.now(),
+      });
+    } catch (err) {
+      this.closeSpend(input.spendId, { failure: 'interrupted', spentUsd: 0 });
+      throw err;
+    }
   }
 
   getRun(actor: MediaActor, mediaId: string, runId: string): ProposalRun {
@@ -128,17 +143,14 @@ export class ProposalService {
     return this.deps.store.draft(mediaId);
   }
 
-  /** At start: runs a stopped API left running end as failed, their unspent part refunded. */
+  /**
+   * At start: runs a stopped API left running end as failed, with their reservations, and
+   * any reservation left open by a crash is refunded (it keeps what it recorded as spent).
+   */
   recover(): number {
     const runs = this.deps.store.interruptRunning(this.now());
-    for (const run of runs)
-      this.deps.ledger.close({
-        id: run.spendId,
-        spentUsd: run.spentUsd,
-        outcome: 'refunded',
-        now: this.now(),
-      });
-    return runs.length;
+    const orphans = this.deps.ledger.refundOpen(this.now());
+    return runs.length + orphans;
   }
 
   /** Stops the runs in flight (the API is closing) and waits until each is written down. */
@@ -160,25 +172,52 @@ export class ProposalService {
     this.running.add(guarded);
   }
 
-  private async execute(runId: string, prepared: Prepared): Promise<void> {
-    const outcome = await new WindowRunner({
-      runId,
-      plan: prepared.plan,
-      llm: prepared.llm,
-      store: this.deps.store,
-      runCapUsd: this.deps.caps.runUsd,
-      signal: this.closing.signal,
-    }).run();
-    if (outcome.error !== undefined)
-      this.deps.onRunError?.(outcome.error, runId);
-    this.deps.store.finishRun({
-      runId,
-      failure: outcome.failure,
-      spentUsd: outcome.spentUsd,
-      now: this.now(),
-    });
-    const spendId = this.deps.store.spendIdOf(runId);
-    if (spendId) this.closeSpend(spendId, outcome);
+  /**
+   * Runs the windows, then ends the run and its reservation together. The reservation is
+   * closed in every case, with what the run really spent: a crash writing the run down
+   * (the recording deleted meanwhile) still settles it (KBC-067 review).
+   */
+  private async execute(input: {
+    readonly runId: string;
+    readonly spendId: string;
+    readonly prepared: Prepared;
+  }): Promise<void> {
+    const { runId, spendId, prepared } = input;
+    let outcome: RunOutcome = { failure: 'provider', spentUsd: 0 };
+    try {
+      outcome = await new WindowRunner({
+        runId,
+        plan: prepared.plan,
+        llm: prepared.llm,
+        store: this.deps.store,
+        runCapUsd: this.deps.caps.runUsd,
+        signal: this.closing.signal,
+      }).run();
+      if (outcome.error !== undefined)
+        this.deps.onRunError?.(outcome.error, runId);
+    } finally {
+      this.finish({ runId, spendId, outcome });
+    }
+  }
+
+  private finish(input: {
+    readonly runId: string;
+    readonly spendId: string;
+    readonly outcome: RunOutcome;
+  }): void {
+    const { outcome } = input;
+    try {
+      this.deps.store.finishRun({
+        runId: input.runId,
+        spendId: input.spendId,
+        failure: outcome.failure,
+        spentUsd: outcome.spentUsd,
+        now: this.now(),
+      });
+    } finally {
+      // A no-op when finishRun closed it; the safety net when finishRun itself failed.
+      this.closeSpend(input.spendId, outcome);
+    }
   }
 
   /** A failed run gives back what it did not spend (FR-5); a done one counts what it spent. */

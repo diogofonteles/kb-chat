@@ -50,6 +50,15 @@ export class SqliteMediaSpendLedger implements MediaSpendLedgerPort {
     return Number(row?.['used'] ?? 0);
   }
 
+  refundOpen(now: Date): number {
+    const result = this.db
+      .prepare(
+        `UPDATE media_spend SET status = 'refunded', settled_at = ? WHERE status = 'reserved'`,
+      )
+      .run(now.toISOString());
+    return Number(result.changes);
+  }
+
   close(input: {
     id: string;
     spentUsd: number;

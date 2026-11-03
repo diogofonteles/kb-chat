@@ -60,8 +60,6 @@ export interface TrackProposalStorePort {
   /** Starts a run; null when the recording already has one running. */
   startRun(run: NewProposalRun): ProposalRun | null;
   getRun(runId: string): ProposalRun | null;
-  /** The ledger reservation of a run. */
-  spendIdOf(runId: string): string | null;
   /** One window's result, in one transaction: tracks, voice names, progress and spend. */
   saveWindow(input: {
     readonly runId: string;
@@ -71,11 +69,14 @@ export interface TrackProposalStorePort {
     readonly spentUsd: number;
   }): void;
   /**
-   * Ends a run. Done: the older untouched AI tracks of the recording go (BR-6). Failed: this
-   * run's tracks and names go, and the draft is what it was before (FR-5).
+   * Ends a run and its ledger reservation in one transaction. Done: the older untouched AI
+   * tracks of the recording go (BR-6) and the spend is settled. Failed: this run's tracks and
+   * names go, the draft is what it was before and the unspent part is refunded (FR-5). The
+   * reservation is closed even when the recording, and so the run, was deleted meanwhile.
    */
   finishRun(input: {
     readonly runId: string;
+    readonly spendId: string;
     readonly failure: ProposalFailure | null;
     readonly spentUsd: number;
     readonly now: Date;

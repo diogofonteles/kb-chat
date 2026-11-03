@@ -118,13 +118,6 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     return row ? toRun(row) : null;
   }
 
-  spendIdOf(runId: string): string | null {
-    const row = this.db
-      .prepare('SELECT spend_id FROM media_proposal_runs WHERE id = ?')
-      .get(runId);
-    return row ? text(row, 'spend_id') : null;
-  }
-
   saveWindow(input: {
     runId: string;
     extendLast: TrackExtension | null;
@@ -144,32 +137,72 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
            WHERE id = ?`,
         )
         .run(input.spentUsd, input.runId);
+      // The reservation shows what was really spent so far (the month counts the larger).
+      this.db
+        .prepare(
+          `UPDATE media_spend SET spent_usd = ? WHERE status = 'reserved'
+             AND id = (SELECT spend_id FROM media_proposal_runs WHERE id = ?)`,
+        )
+        .run(input.spentUsd, input.runId);
     });
   }
 
   finishRun(input: {
     runId: string;
+    spendId: string;
     failure: ProposalFailure | null;
     spentUsd: number;
     now: Date;
   }): void {
     inTransaction(this.db, () => {
-      const mediaId = this.mediaOf(input.runId);
-      if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
-      else this.dropRunOutput(input.runId);
-      this.db
-        .prepare(
-          `UPDATE media_proposal_runs SET status = ?, failure = ?, spent_usd = ?,
-             finished_at = ? WHERE id = ?`,
-        )
-        .run(
-          input.failure === null ? 'done' : 'failed',
-          input.failure,
-          input.spentUsd,
-          input.now.toISOString(),
-          input.runId,
-        );
+      this.closeRun(input);
+      this.closeSpend(input);
     });
+  }
+
+  /** The run's row and draft; nothing when the recording (and its run) was deleted. */
+  private closeRun(input: {
+    runId: string;
+    failure: ProposalFailure | null;
+    spentUsd: number;
+    now: Date;
+  }): void {
+    const mediaId = this.mediaOrNull(input.runId);
+    if (mediaId === null) return;
+    if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
+    else this.dropRunOutput(input.runId);
+    this.db
+      .prepare(
+        `UPDATE media_proposal_runs SET status = ?, failure = ?, spent_usd = ?,
+           finished_at = ? WHERE id = ?`,
+      )
+      .run(
+        input.failure === null ? 'done' : 'failed',
+        input.failure,
+        input.spentUsd,
+        input.now.toISOString(),
+        input.runId,
+      );
+  }
+
+  /** Done counts what was spent; failed gives back the rest of the reservation (FR-5). */
+  private closeSpend(input: {
+    spendId: string;
+    failure: ProposalFailure | null;
+    spentUsd: number;
+    now: Date;
+  }): void {
+    this.db
+      .prepare(
+        `UPDATE media_spend SET status = ?, spent_usd = ?, settled_at = ?
+         WHERE id = ? AND status = 'reserved'`,
+      )
+      .run(
+        input.failure === null ? 'settled' : 'refunded',
+        input.spentUsd,
+        input.now.toISOString(),
+        input.spendId,
+      );
   }
 
   keptRanges(mediaId: string): KeptRange[] {
@@ -224,6 +257,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     for (const run of runs)
       this.finishRun({
         runId: run.runId,
+        spendId: run.spendId,
         failure: 'interrupted',
         spentUsd: run.spentUsd,
         now,
@@ -232,11 +266,16 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   }
 
   private mediaOf(runId: string): string {
+    const mediaId = this.mediaOrNull(runId);
+    if (mediaId === null) throw new Error(`Unknown proposal run ${runId}`);
+    return mediaId;
+  }
+
+  private mediaOrNull(runId: string): string | null {
     const row = this.db
       .prepare('SELECT media_id FROM media_proposal_runs WHERE id = ?')
       .get(runId);
-    if (!row) throw new Error(`Unknown proposal run ${runId}`);
-    return text(row, 'media_id');
+    return row ? text(row, 'media_id') : null;
   }
 
   private extendLast(runId: string, extension: TrackExtension): void {
@@ -277,7 +316,10 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       );
   }
 
-  /** A later window may name a voice an earlier one left unnamed; a name is never undone. */
+  /**
+   * A later window may name a voice an earlier one left unnamed; a name is never undone and
+   * a voice once marked as the audience is never named (BR-5).
+   */
   private upsertVoice(runId: string, voice: VoiceSuggestion): void {
     this.db
       .prepare(
@@ -285,7 +327,8 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (run_id, voice) DO UPDATE SET
            name = excluded.name, audience = excluded.audience, reason = excluded.reason
-         WHERE media_voice_suggestions.name IS NULL AND excluded.name IS NOT NULL`,
+         WHERE media_voice_suggestions.audience = 0
+           AND media_voice_suggestions.name IS NULL AND excluded.name IS NOT NULL`,
       )
       .run(
         runId,

@@ -1,5 +1,10 @@
 import type { ProposalFailure } from '@kb-chat/contracts';
-import type { LlmMessage, LlmPort, LlmUsage } from '../../ports/llm.js';
+import type {
+  LlmChunk,
+  LlmMessage,
+  LlmPort,
+  LlmUsage,
+} from '../../ports/llm.js';
 import type { TrackProposalStorePort } from '../../ports/track-proposal-store.js';
 import { tokensOf } from '../spend/index.js';
 import type { PreviousTrack } from './prompt.js';
@@ -46,6 +51,13 @@ export interface RunOutcome {
   readonly failure: ProposalFailure | null;
   readonly spentUsd: number;
   readonly error?: unknown;
+}
+
+/** What a call's stream gave so far. */
+interface StreamRead {
+  answer: string;
+  usage: LlmUsage | null;
+  started: boolean;
 }
 
 const retryMessage = (answer: string, error: string): LlmMessage => ({
@@ -129,17 +141,31 @@ export class WindowRunner {
     const { llm, plan, runCapUsd, signal } = this.deps;
     if (this.spentUsd + callCeiling(messages, plan.price) > runCapUsd)
       throw new ProposalStop('run-cap');
-    let answer = '';
-    let usage: LlmUsage | null = null;
     const stream = llm.stream(messages, {
       maxTokens: MAX_OUTPUT_TOKENS,
       signal: AbortSignal.any([signal, AbortSignal.timeout(CALL_TIMEOUT_MS)]),
     });
-    for await (const chunk of stream)
-      if (chunk.type === 'token') answer += chunk.text;
-      else usage = chunk.usage;
-    this.spentUsd += this.costOf({ messages, answer, usage });
-    return answer;
+    const read: StreamRead = { answer: '', usage: null, started: false };
+    try {
+      await this.consume(stream, read);
+    } catch (err) {
+      // A stream that broke after it began may still be billed: count what was written.
+      if (read.started) this.spentUsd += this.costOf({ messages, ...read });
+      throw err;
+    }
+    this.spentUsd += this.costOf({ messages, ...read });
+    return read.answer;
+  }
+
+  private async consume(
+    stream: AsyncIterable<LlmChunk>,
+    read: StreamRead,
+  ): Promise<void> {
+    for await (const chunk of stream) {
+      read.started = true;
+      if (chunk.type === 'token') read.answer += chunk.text;
+      else read.usage = chunk.usage;
+    }
   }
 
   /** The provider's real cost; priced from the list when it reports none. */

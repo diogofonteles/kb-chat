@@ -25,6 +25,11 @@ export interface MediaSpendLedgerPort {
   }): boolean;
   /** Spent plus still reserved since `since` (the month's balance for masters, FR-4). */
   usedSince(since: Date): number;
+  /**
+   * At start, when no run is in flight: every reservation still open is an orphan (a crash
+   * between reserving and closing); each is refunded, keeping what it recorded as spent.
+   */
+  refundOpen(now: Date): number;
   /** Ends a reservation with what was really spent. */
   close(input: {
     readonly id: string;

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  BrokenStream,
   HANG,
   StubLlm,
   evenSegments,
@@ -29,11 +30,12 @@ interface Setup {
   readonly replies?: StubReply[];
   readonly caps?: { runUsd: number; monthlyUsd: number };
   readonly author?: string | null;
+  readonly price?: { input: number; output: number };
 }
 
 function setup(options: Setup = {}) {
   const db = proposalDb(options.segments ?? evenSegments(30));
-  const llm = new StubLlm(options.replies ?? []);
+  const llm = new StubLlm(options.replies ?? [], options.price);
   const errors: unknown[] = [];
   const service = new ProposalService({
     store: db.store,
@@ -114,19 +116,25 @@ describe('ProposalService: estimate (KBC-067 BR-3, FR-1)', () => {
   });
 
   it('says the monthly cap would be crossed and refuses to run (AC-3)', async () => {
-    const ctx = setup({ caps: { runUsd: 0.25, monthlyUsd: 10 } });
+    // AC-3 literally: US$ 9.99 spent this month and an estimate of US$ 0.02.
+    const ctx = setup({ price: { input: 0, output: 0.02 / 3_000 } });
     ctx.ledger.reserve({
       id: 'earlier',
       kind: 'track-proposal',
       mediaId: ctx.mediaId,
       principal: 'owner',
-      usd: 9.99999,
+      usd: 9.99,
       capUsd: 10,
       since: new Date(0),
       now: NOW,
     });
     const estimate = await ctx.service.estimate(OWNER, ctx.mediaId);
-    expect(estimate).toMatchObject({ allowed: false, refusal: 'monthly-cap' });
+    expect(estimate.estimateUsd).toBeCloseTo(0.02, 6);
+    expect(estimate).toMatchObject({
+      allowed: false,
+      refusal: 'monthly-cap',
+      month: { spentUsd: 9.99, capUsd: 10 },
+    });
     await expect(ctx.service.start(OWNER, ctx.mediaId)).rejects.toMatchObject({
       code: 'MEDIA_SPEND_CAP',
       details: { cap: 'monthly-cap' },
@@ -433,5 +441,80 @@ describe('ProposalService: windows and the draft (KBC-067 FR-3, BR-6)', () => {
       failure: 'interrupted',
     });
     expect(monthUsed(ctx)).toBe(0);
+  });
+});
+
+describe('ProposalService: round-1 review fixes (KBC-067)', () => {
+  const spendRows = (ctx: Ctx) =>
+    ctx.db
+      .prepare('SELECT status, spent_usd FROM media_spend ORDER BY created_at')
+      .all()
+      .map((row) => ({ ...row }));
+
+  it('never names a voice once marked as the audience, even if a later window names it (BR-5)', async () => {
+    const voices = (name: string | null, audience: boolean) => () =>
+      JSON.stringify({
+        faixas: [{ primeiro_id: 1, ultimo_id: 1, tipo: 'exposicao' }],
+        vozes: [{ voz: 'Voz 2', nome: name, plateia: audience, motivo: 'x' }],
+      });
+    const ctx = setup({
+      segments: evenSegments(130),
+      voices: Array.from({ length: 130 }, () => 2),
+      replies: [
+        voices(null, true),
+        voices('Mestre Gabriel', false),
+        voices('Mestre Gabriel', false),
+      ],
+    });
+    await runToEnd(ctx);
+    expect(ctx.service.draft(OWNER, ctx.mediaId).voices).toEqual([
+      { voice: 2, name: null, audience: true, reason: 'x' },
+    ]);
+  });
+
+  it('settles the reservation with the real spend when the recording is deleted mid-run', async () => {
+    const ctx = setup({ segments: evenSegments(130) });
+    ctx.llm.replies.push(wholeWindow(), (user) => {
+      ctx.db.prepare('DELETE FROM media WHERE id = ?').run(ctx.mediaId);
+      return wholeWindow()(user);
+    });
+    await ctx.service.start(OWNER, ctx.mediaId);
+    await ctx.service.idle();
+    expect(spendRows(ctx)).toEqual([{ status: 'refunded', spent_usd: 0.002 }]);
+    expect(monthUsed(ctx)).toBeCloseTo(0.002, 9);
+  });
+
+  it('refunds at start a reservation a crash left open, keeping its spend', async () => {
+    const ctx = setup();
+    ctx.ledger.reserve({
+      id: 'orphan',
+      kind: 'track-proposal',
+      mediaId: ctx.mediaId,
+      principal: 'owner',
+      usd: 0.2,
+      capUsd: 10,
+      since: new Date(0),
+      now: NOW,
+    });
+    ctx.db
+      .prepare("UPDATE media_spend SET spent_usd = 0.003 WHERE id = 'orphan'")
+      .run();
+    expect(monthUsed(ctx)).toBeCloseTo(0.2, 9);
+    expect(ctx.service.recover()).toBe(1);
+    expect(spendRows(ctx)).toEqual([{ status: 'refunded', spent_usd: 0.003 }]);
+    expect(monthUsed(ctx)).toBeCloseTo(0.003, 9);
+  });
+
+  it('counts a call that broke mid-answer at its list price', async () => {
+    const ctx = setup({ replies: [new BrokenStream('{"faixas": [')] });
+    const run = await runToEnd(ctx);
+    expect(run.failure).toBe('provider');
+    expect(run.spentUsd).toBeGreaterThan(0);
+    expect(monthUsed(ctx)).toBeCloseTo(run.spentUsd, 12);
+  });
+
+  it('does not count a call that failed before writing anything', async () => {
+    const ctx = setup({ replies: [new Error('HTTP 503')] });
+    expect((await runToEnd(ctx)).spentUsd).toBe(0);
   });
 });
