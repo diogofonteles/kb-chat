@@ -22,10 +22,17 @@
         @if (refreshing()) {
           <span i18n="@@message.refreshing">Atualizando…</span>
         } @else {
-          {{ count() }} · {{ modeName() }} · {{ seconds() | number: '1.1-1' }} s
+          {{ found() }} · {{ modeName() }} · {{ seconds() | number: '1.1-1' }} s
         }
       </p>
-      @if (current.items.length > 0 || filtered()) {
+      @if (kindCounts(); as counts) {
+        <app-kinds-choice
+          [kinds]="message().kinds"
+          [counts]="counts"
+          (changed)="kindsChanged.emit($event)"
+        />
+      }
+      @if (references().length > 0 || filtered()) {
         <app-filter-bar
           [facets]="current.facets"
           [filters]="message().filters"
@@ -35,16 +42,29 @@
           (filtersChange)="filtersChanged.emit($event)"
         />
       }
-      @if (items().length > 0) {
+      @if (references().length > 0) {
         <ol class="cards">
-          @for (hit of items(); track hit.id) {
+          @for (
+            reference of references();
+            track reference.key;
+            let i = $index
+          ) {
             <li>
-              <app-result-card
-                [hit]="hit"
-                [active]="hit.id === activeId()"
-                [place]="places().get(hit.topic) ?? null"
-                (opened)="opened.emit($event)"
-              />
+              @if (reference.kind === 'audio') {
+                <app-media-hit-card
+                  [hit]="reference.hit"
+                  [active]="passageKey(reference.hit) === activePassage()"
+                  [place]="places().get(reference.hit.topic) ?? null"
+                  (opened)="openPassage(reference.hit, i)"
+                />
+              } @else {
+                <app-result-card
+                  [hit]="reference.hit"
+                  [active]="reference.hit.id === activeId()"
+                  [place]="places().get(reference.hit.topic) ?? null"
+                  (opened)="opened.emit($event)"
+                />
+              }
             </li>
           }
         </ol>

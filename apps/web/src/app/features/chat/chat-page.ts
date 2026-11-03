@@ -14,6 +14,7 @@ import {
 import type {
   DocumentRef,
   SearchFilters,
+  SearchKind,
   SearchMode,
 } from '@kb-chat/contracts';
 import { httpResource } from '@angular/common/http';
@@ -33,7 +34,9 @@ import { provideResearchRestorer } from '@features/research/research-restorer.js
 import { Composer } from './composer.js';
 import type { OpenedHit } from './result-card.js';
 import { describeForAnnouncement } from './result-count.js';
-import { ResultMessage } from './result-message.js';
+import { ResultMessage, type OpenedPassage } from './result-message.js';
+import { passageKey } from './references.js';
+import { PassagePanel } from '@features/media/search-hit/passage-panel.js';
 import { ResearchStore } from '@features/research/research-store.js';
 import { ResearchThread } from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
@@ -56,6 +59,7 @@ const isMediaUrl = (url: string): boolean => /^\/midia(\/|\?|#|$)/.test(url);
     ResearchThread,
     ViewSwitch,
     DocumentPanel,
+    PassagePanel,
     Sidebar,
     DecimalPipe,
     RouterOutlet,
@@ -125,8 +129,23 @@ export class ChatPage {
   protected readonly panel = computed(() =>
     this.onMedia() ? null : this.opened(),
   );
+  /** A spoken passage in the reading panel instead of a document (KBC-039 FR-6). */
+  protected readonly passage = computed(() =>
+    this.onMedia() ? null : (this.store.openPassage()?.hit ?? null),
+  );
+  protected readonly activePassage = computed(() => {
+    const hit = this.passage();
+    return hit ? passageKey(hit) : null;
+  });
+  /** The panel's full player shows this media: no mini-player for it meanwhile. */
+  protected readonly playerInPanel = computed(
+    () => this.passage()?.mediaId ?? null,
+  );
+  protected readonly panelOpen = computed(
+    () => this.panel() !== null || this.passage() !== null,
+  );
   protected readonly covered = computed(
-    () => this.panel() !== null && !this.desktop(),
+    () => this.panelOpen() && !this.desktop(),
   );
   /** The largest subjects as one-click starting points (KBC-006 FR-1); hidden when unavailable. */
   private readonly suggestionList = httpResource(
@@ -294,6 +313,19 @@ export class ChatPage {
   /** A hit opens in its own collection: a sub-collection when searching the parent. */
   protected openHit(hit: OpenedHit, message: ChatMessage): void {
     this.store.open(hit.topic, { id: hit.id, title: hit.title }, message);
+  }
+
+  /** A spoken passage opens in the reading panel and plays (KBC-039 FR-6). */
+  protected openPassage(opened: OpenedPassage, message: ChatMessage): void {
+    this.store.openMedia(opened.hit, {
+      messageId: message.id,
+      position: opened.position,
+    });
+  }
+
+  /** "Buscar em" on a message: remembered, and the message runs again (BR-4). */
+  protected chooseKinds(message: ChatMessage, kinds: SearchKind[]): void {
+    this.store.chooseKinds(message, kinds);
   }
 
   /** A subject chip in the panel filters the message that opened it (KBC-003 FR-5). */

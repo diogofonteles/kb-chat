@@ -40,6 +40,7 @@ describe('weeklyUsage (KBC-006 BR-4, AC-6)', () => {
         searchesWithAi: 0.5,
         sessionsWithFilter: 0.5,
         spendUsd: 0.003,
+        mediaHitsOpened: 0,
       },
       {
         week: '2026-10-26',
@@ -49,6 +50,7 @@ describe('weeklyUsage (KBC-006 BR-4, AC-6)', () => {
         searchesWithAi: 0,
         sessionsWithFilter: 0,
         spendUsd: 0,
+        mediaHitsOpened: 0,
       },
     ]);
   });
@@ -64,6 +66,27 @@ describe('weeklyUsage (KBC-006 BR-4, AC-6)', () => {
       [],
     );
     expect(week?.sessionsWithFilter).toBe(0);
+  });
+
+  it('counts the spoken passages opened (KBC-039 FR-4)', () => {
+    const opened = {
+      type: 'media_hit_opened',
+      mediaId: '6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e',
+      startMs: 495_000,
+      position: 1,
+    } as const;
+    const [week] = weeklyUsage(
+      [
+        aSearch('2026-10-20T10:00:00Z', 'a'),
+        aRecord('2026-10-20T10:01:00Z', 'a', opened),
+        aRecord('2026-10-20T10:02:00Z', 'a', opened),
+      ],
+      [],
+    );
+    expect(week?.mediaHitsOpened).toBe(2);
+    const [header, line] = formatWeeklyUsage(week ? [week] : []).split('\n');
+    expect(header?.trim()).toMatch(/Trechos ouvidos$/);
+    expect(line?.trim()).toMatch(/\s2$/);
   });
 
   it('prints one aligned line per week', () => {

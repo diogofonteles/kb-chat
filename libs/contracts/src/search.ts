@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { topicSlugSchema } from './topics.js';
 import {
+  mediaAuthorSchema,
+  mediaIdSchema,
+  transcriptConfidenceSchema,
+} from './media.js';
+import {
   authorshipSchema,
   depthLevelSchema,
   documentFacetsSchema,
@@ -47,6 +52,19 @@ export const EMPTY_FILTERS: SearchFilters = {
   topics: [],
 };
 
+/**
+ * What a search looks in (KBC-039 FR-5, BR-4): the vault's texts and the transcripts of
+ * the collection's audio. Video joins with KBC-075.
+ */
+export const SEARCH_KINDS = ['text', 'audio'] as const;
+export const searchKindSchema = z.enum(SEARCH_KINDS);
+export type SearchKind = z.infer<typeof searchKindSchema>;
+
+/** Spoken passages returned with a search (KBC-039 FR-2). */
+export const MAX_MEDIA_HITS = 5;
+/** Matching passages are counted up to this many ("1000+" on the screen). */
+export const MEDIA_COUNT_CAP = 1000;
+
 export const searchRequestSchema = z.strictObject({
   q: z.string().trim().min(1).max(500),
   mode: searchModeSchema.default('all'),
@@ -61,6 +79,15 @@ export const searchRequestSchema = z.strictObject({
     authorships: [],
     topics: [],
   })),
+  /** Never empty: at least one kind stays chosen (BR-4); default every kind. */
+  kinds: z
+    .array(searchKindSchema)
+    .min(1)
+    .max(SEARCH_KINDS.length)
+    .refine((kinds) => new Set(kinds).size === kinds.length, {
+      error: 'Each kind at most once',
+    })
+    .default(() => [...SEARCH_KINDS]),
 });
 export type SearchRequest = z.input<typeof searchRequestSchema>;
 
@@ -97,8 +124,53 @@ export const resultFacetsSchema = z.object({
 });
 export type ResultFacets = z.infer<typeof resultFacetsSchema>;
 
+/** Characters of a passage's text that matched the question, end exclusive. */
+export const textRangeSchema = z.object({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+});
+export type TextRange = z.infer<typeof textRangeSchema>;
+
+/**
+ * One spoken passage that matched (KBC-039 FR-2, ADR 0024 §2): a segment of the current
+ * transcript of an audio the person may hear, opened at `startMs − 2 s`.
+ */
+export const mediaHitSchema = z.object({
+  mediaId: mediaIdSchema,
+  /** The collection the audio is in: a sub-collection when searching its parent. */
+  topic: topicSlugSchema,
+  title: z.string(),
+  /** The authorship group of the filter: the collection's main author or the others. */
+  authorship: authorshipSchema,
+  author: mediaAuthorSchema,
+  /** The segment's text. */
+  text: z.string(),
+  highlights: z.array(textRangeSchema),
+  startMs: z.number().int().nonnegative(),
+  endMs: z.number().int().nonnegative(),
+  /** The transcript's verdict (KBC-036): `low` shows the "baixa confiança" badge (BR-3). */
+  confidence: transcriptConfidenceSchema,
+  /** Relevance from 0 to 1, comparable with the documents' to mix them (FR-6). */
+  score: z.number().min(0).max(1),
+});
+export type MediaHit = z.infer<typeof mediaHitSchema>;
+
+/**
+ * Matches per kind, whatever kinds were chosen (like a facet); `audio` is null when the
+ * collection has no audio the person may hear (the choice is then disabled, FR-5).
+ */
+export const kindCountsSchema = z.object({
+  text: z.number().int().nonnegative(),
+  /** Up to MEDIA_COUNT_CAP. */
+  audio: z.number().int().nonnegative().max(MEDIA_COUNT_CAP).nullable(),
+});
+export type KindCounts = z.infer<typeof kindCountsSchema>;
+
 export const searchResponseSchema = z.object({
   items: z.array(searchHitSchema),
+  /** Spoken passages, best first (empty when audio is not chosen or not available). */
+  media: z.array(mediaHitSchema).max(MAX_MEDIA_HITS).default([]),
+  kinds: kindCountsSchema.default({ text: 0, audio: null }),
   /** Result cards (copy groups) matching the filters among the index candidates. */
   total: z.number().int().nonnegative(),
   /** True when the index returned its candidate cap, so there may be more. */

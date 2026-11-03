@@ -36,6 +36,13 @@ const SOURCE = {
 })
 class Shell {}
 
+/** The chat page while the reading panel's full player shows the media (KBC-039). */
+@Component({
+  template: `<main><app-mini-player [shownElsewhere]="'${ID}'" /></main>`,
+  imports: [MiniPlayer],
+})
+class ShellWithPanel {}
+
 async function setup(url = '/') {
   localStorage.clear();
   const media: FakeMedia = fakeMediaElement();
@@ -49,6 +56,7 @@ async function setup(url = '/') {
       provideRouter([
         { path: '', component: Shell },
         { path: 'midia/:id', component: Shell },
+        { path: 'painel', component: ShellWithPanel },
       ]),
     ],
   });
@@ -85,6 +93,13 @@ describe('MiniPlayer (KBC-041 FR-8)', () => {
 
   it('is not shown on the media’s own page', async () => {
     const { harness } = await setup(`/midia/${ID}`);
+    expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
+    await harness.navigateByUrl('/');
+    expect(screen.getByRole('region', { name: 'Mini-player' })).toBeTruthy();
+  });
+
+  it('KBC-039: is not shown while the reading panel plays the same media', async () => {
+    const { harness } = await setup('/painel');
     expect(screen.queryByRole('region', { name: 'Mini-player' })).toBeNull();
     await harness.navigateByUrl('/');
     expect(screen.getByRole('region', { name: 'Mini-player' })).toBeTruthy();

@@ -102,6 +102,40 @@ describe('POST /api/v1/events (KBC-006 FR-3)', () => {
     expect(Date.parse(records[0]?.ts ?? '')).not.toBeNaN();
   });
 
+  it('KBC-039 AC-7: logs a spoken passage opened with its media and minute', async () => {
+    const mediaId = '6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e';
+    const opened = await post({
+      sessionId: SESSION,
+      event: {
+        type: 'media_hit_opened',
+        mediaId,
+        startMs: 495_000,
+        position: 1,
+      },
+    });
+    const invalid = await post({
+      sessionId: SESSION,
+      event: {
+        type: 'media_hit_opened',
+        mediaId: 'x',
+        startMs: -1,
+        position: 0,
+      },
+    });
+
+    expect(opened.statusCode).toBe(202);
+    expect(invalid.statusCode).toBe(400);
+    const records = parseUsageLog(await readFile(file, 'utf8'));
+    expect(records.at(-1)).toMatchObject({
+      type: 'media_hit_opened',
+      mediaId,
+      startMs: 495_000,
+      position: 1,
+      principal: 'owner',
+      sessionId: SESSION,
+    });
+  });
+
   it('refuses an unknown event or a session that is not a UUID', async () => {
     expect(
       (await post({ sessionId: SESSION, event: { type: 'export' } }))

@@ -1,5 +1,6 @@
 import type {
   KbDocument,
+  MediaHit,
   SearchHit,
   SearchResponse,
   Topic,
@@ -42,8 +43,29 @@ export const aResponse = (
     authorships: [{ value: 'mestre-laercio', count: 1 }],
     topics: [{ value: 'hermetismo', count: 1 }],
   },
+  media: [],
+  kinds: { text: items.length, audio: null },
   mode: 'all',
   tookMs: 640,
+  ...overrides,
+});
+
+/** A spoken passage (KBC-039): "Tiuaco é Mariri" at 08:15. */
+export const aMediaHit = (overrides: Partial<MediaHit> = {}): MediaHit => ({
+  mediaId: '6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e',
+  topic: 'hermetismo',
+  title: 'Palestra do Tiuaco',
+  authorship: 'outros-autores',
+  author: null,
+  text: 'Tiuaco é Mariri na história.',
+  highlights: [
+    { start: 0, end: 6 },
+    { start: 9, end: 15 },
+  ],
+  startMs: 495_000,
+  endMs: 499_000,
+  confidence: 'normal',
+  score: 0.95,
   ...overrides,
 });
 

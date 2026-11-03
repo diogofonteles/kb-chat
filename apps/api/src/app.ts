@@ -33,7 +33,7 @@ import {
 } from './modules/research/index.js';
 import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
-import { searchRoutes } from './modules/search/index.js';
+import { SearchWithMedia, searchRoutes } from './modules/search/index.js';
 import {
   CollectionRegistry,
   CollectionsVault,
@@ -343,12 +343,23 @@ async function registerSearch(
   app: FastifyInstance,
   deps: FullDeps,
 ): Promise<void> {
-  const { config, index, catalog } = deps;
+  const { config, index, catalog, authors } = deps;
   await app.register(healthRoutes({ catalog, index }));
   await registerCollections(app, deps);
+  // Spoken passages beside the texts (KBC-039, ADR 0024), when the media library is on.
+  const combined = new SearchWithMedia({
+    documents: deps.agent.search,
+    scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
+    media: deps.media?.search,
+    authors: {
+      mainOf: (topic) => authors.mainOf(topic)?.slug ?? null,
+      authorOf: (topic, slug) => authors.authorOf(topic, slug),
+    },
+  });
   await app.register(
     searchRoutes({
       service: deps.agent.search,
+      combined,
       ratePerMinute: config.SEARCH_RATE_LIMIT,
     }),
   );

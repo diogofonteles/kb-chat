@@ -165,6 +165,27 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
     this.db.prepare(INSERT_TRANSCRIPT).run(...transcriptRow(transcript, at));
     this.insertSegments(transcript);
     this.insertWords(transcript);
+    this.reindex(transcript);
+  }
+
+  /**
+   * The search index holds only the current version (KBC-039 FR-1, AC-6): the media's
+   * previous rows go and the new segments come in, inside the caller's transaction.
+   */
+  private reindex(transcript: NewTranscript): void {
+    this.db
+      .prepare(
+        `DELETE FROM segments_fts WHERE rowid IN (
+           SELECT s.rowid FROM segments s JOIN transcripts t ON t.id = s.transcript_id
+           WHERE t.media_id = ? AND t.id <> ?)`,
+      )
+      .run(transcript.mediaId, transcript.id);
+    this.db
+      .prepare(
+        `INSERT INTO segments_fts (rowid, text)
+         SELECT rowid, text FROM segments WHERE transcript_id = ?`,
+      )
+      .run(transcript.id);
   }
 
   private insertSegments(transcript: NewTranscript): void {

@@ -131,6 +131,7 @@ describe('ChatPage', () => {
       q: 'lei do ritmo',
       mode: 'all',
       filters: NO_FILTERS,
+      kinds: ['text', 'audio'],
     });
     request.flush(aResponse());
     await view.fixture.whenStable();
@@ -225,6 +226,7 @@ describe('ChatPage', () => {
       q: 'xyzzy',
       mode: 'semantic',
       filters: NO_FILTERS,
+      kinds: ['text', 'audio'],
     });
   });
 
@@ -786,6 +788,7 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
       q: 'Cabala',
       mode: 'all',
       filters: { ...NO_FILTERS, concepts: ['Cabala'] },
+      kinds: ['text', 'audio'],
     });
   });
 
