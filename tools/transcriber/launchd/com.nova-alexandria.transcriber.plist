@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Nova Alexandria transcriber (KBC-036, ADR 0023). Template: replace REPO_DIR with the
+  absolute path of this repository's checkout and USER_HOME with your home directory, then
+  `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.nova-alexandria.transcriber.plist`.
+  The token stays in the Keychain; nothing secret goes in this file.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nova-alexandria.transcriber</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>--project</string>
+    <string>REPO_DIR/tools/transcriber</string>
+    <string>transcriber</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>REPO_DIR</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>ProcessType</key>
+  <string>Standard</string>
+  <key>ExitTimeOut</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>USER_HOME/Library/Logs/nova-alexandria-transcriber.log</string>
+  <key>StandardErrorPath</key>
+  <string>USER_HOME/Library/Logs/nova-alexandria-transcriber.log</string>
+</dict>
+</plist>
