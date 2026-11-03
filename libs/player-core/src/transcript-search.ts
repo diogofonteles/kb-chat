@@ -10,11 +10,14 @@ export interface FoldedText {
   readonly offsets: readonly number[];
 }
 
+/** ASCII needs no decomposition: the common case stays cheap on 20 000 words. */
 const foldChar = (char: string): string =>
-  char
-    .normalize('NFD')
-    .replace(/\p{M}+/gu, '')
-    .toLocaleLowerCase('pt-BR');
+  char < '\u0080'
+    ? char.toLowerCase()
+    : char
+        .normalize('NFD')
+        .replace(/\p{M}+/gu, '')
+        .toLocaleLowerCase('pt-BR');
 
 export function foldForSearch(text: string): FoldedText {
   let folded = '';
@@ -37,8 +40,17 @@ export interface SearchHit {
   readonly end: number;
 }
 
-function hitsIn(text: string, query: string, segment: number): SearchHit[] {
-  const { folded, offsets } = foldForSearch(text);
+/** Every segment's text folded once, so each keystroke only scans (KBC-038 NFR-2). */
+export function prepareSearch(texts: readonly string[]): FoldedText[] {
+  return texts.map(foldForSearch);
+}
+
+function hitsIn(
+  prepared: FoldedText,
+  query: string,
+  segment: number,
+): SearchHit[] {
+  const { folded, offsets } = prepared;
   const hits: SearchHit[] = [];
   for (
     let at = folded.indexOf(query);
@@ -48,20 +60,26 @@ function hitsIn(text: string, query: string, segment: number): SearchHit[] {
     hits.push({
       segment,
       start: offsets[at] ?? 0,
-      end: offsets[at + query.length] ?? text.length,
+      end: offsets[at + query.length] ?? offsets[offsets.length - 1] ?? 0,
     });
   return hits;
 }
 
-/** Every occurrence of `query` in the segments' texts, in reading order. */
-export function searchSegments(
-  texts: readonly string[],
+/** Every occurrence of `query` in texts prepared by `prepareSearch`, in reading order. */
+export function searchPrepared(
+  prepared: readonly FoldedText[],
   query: string,
 ): SearchHit[] {
   const wanted = foldForSearch(query.trim().replace(/\s+/g, ' ')).folded;
   if (!wanted) return [];
-  return texts.flatMap((text, segment) => hitsIn(text, wanted, segment));
+  return prepared.flatMap((one, segment) => hitsIn(one, wanted, segment));
 }
+
+/** Every occurrence of `query` in the segments' texts, in reading order. */
+export const searchSegments = (
+  texts: readonly string[],
+  query: string,
+): SearchHit[] => searchPrepared(prepareSearch(texts), query);
 
 export type TextPartKind = 'plain' | 'match' | 'current';
 
