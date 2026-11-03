@@ -1,5 +1,6 @@
 import { RESEARCH_WEIGHTS, type ResearchProfile } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import { startOfAppDay } from '../../app-calendar.js';
 import type { HouseUsagePort } from '../../ports/house-usage.js';
 
 /**
@@ -20,9 +21,6 @@ export interface Reservation {
   refund(): Promise<void>;
 }
 
-const startOfDay = (now: Date): Date =>
-  new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
 /** The per-person daily quota of house researches (BR-3), counted in house-usage.jsonl. */
 export class HouseQuota {
   private queue: Promise<unknown> = Promise.resolve();
@@ -38,7 +36,7 @@ export class HouseQuota {
   async remaining(principal: string, dailyLimit: number): Promise<number> {
     const used = await this.deps.ledger.unitsSince(
       principal,
-      startOfDay(this.now()),
+      startOfAppDay(this.now()),
     );
     return Math.max(0, dailyLimit - used);
   }

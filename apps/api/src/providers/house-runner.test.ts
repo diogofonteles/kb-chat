@@ -86,3 +86,79 @@ describe('HouseResearchRunner and the exhaustive sweep (KBC-030)', () => {
     expect(inner.seen?.requestBudget).toBeUndefined();
   });
 });
+
+/** An inner runner that plays a scripted turn. */
+class ScriptedRunner implements ResearchRunnerPort {
+  readonly model = 'fake/large:free';
+  readonly billing = 'per-token' as const;
+  constructor(private readonly events: readonly ResearchEvent[]) {}
+  configured(): boolean {
+    return true;
+  }
+  async *run(): AsyncIterable<ResearchEvent> {
+    yield* this.events;
+  }
+}
+
+function withLedger() {
+  const entries: { units: number }[] = [];
+  const ledgerQuota = new HouseQuota({
+    ledger: {
+      append: async (entry) => {
+        entries.push(entry);
+      },
+      unitsSince: async () => entries.reduce((sum, e) => sum + e.units, 0),
+    },
+  });
+  const runner = (inner: ResearchRunnerPort) =>
+    new HouseResearchRunner({
+      preview: inner,
+      quota: ledgerQuota,
+      principal: 'mariano',
+      dailyLimit: 5,
+      capacity: async () => ({ used: 0, limit: 1000, remaining: 1000 }),
+      startTurn: () => ({ inner, paidActive: false, finish: () => undefined }),
+    });
+  const used = () => entries.reduce((sum, e) => sum + e.units, 0);
+  return { runner, used };
+}
+
+describe('HouseResearchRunner gives the day back when no answer came (KBC-061)', () => {
+  it('refunds a sweep that failed after working, with no answer', async () => {
+    const { runner, used } = withLedger();
+    await drain(
+      runner(
+        new ScriptedRunner([
+          { type: 'step', step: { kind: 'sweep', text: 'lote 1' } },
+          { type: 'sources', sources: [] },
+          { type: 'error', code: 'PROVIDER_UNAVAILABLE' },
+        ]),
+      ).run(input('exhaustive')),
+    );
+    expect(used()).toBe(0);
+  });
+
+  it('keeps the units once part of the answer was written', async () => {
+    const { runner, used } = withLedger();
+    await drain(
+      runner(
+        new ScriptedRunner([
+          { type: 'token', text: 'O mentalismo', segment: 0 },
+          { type: 'error', code: 'PROVIDER_UNAVAILABLE' },
+        ]),
+      ).run(input('fast')),
+    );
+    expect(used()).toBe(1);
+  });
+
+  it('lets the next question through after a failed sweep (Mariano’s report)', async () => {
+    const { runner } = withLedger();
+    const failed = new ScriptedRunner([
+      { type: 'step', step: { kind: 'sweep', text: 'lote 1' } },
+      { type: 'error', code: 'PROVIDER_UNAVAILABLE' },
+    ]);
+    await drain(runner(failed).run(input('exhaustive')));
+    const next = await drain(runner(new RecordingRunner()).run(input('fast')));
+    expect(next.at(-1)?.type).toBe('done');
+  });
+});

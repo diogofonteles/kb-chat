@@ -1,3 +1,4 @@
+import { startOfAppMonth } from '../app-calendar.js';
 import {
   DEFAULT_PERSON_AI,
   LENT_SUBSCRIPTIONS,
@@ -98,9 +99,6 @@ const LENT_PLAN: Record<LentSubscription, AppPlan> = {
   'claude-subscription': 'app-subscription',
   'chatgpt-subscription': 'app-chatgpt-subscription',
 };
-
-const startOfMonth = (now: Date): Date =>
-  new Date(now.getFullYear(), now.getMonth(), 1);
 
 /** The house plan behind the registry: assignment, model chain, quota and spend (ADR 0016). */
 export class AppAiPlan implements AppAiPort {
@@ -286,7 +284,7 @@ export class AppAiPlan implements AppAiPort {
       const now = this.deps.now?.() ?? new Date();
       const spent = await this.deps.houseSpend.spentSince(
         principal,
-        startOfMonth(now),
+        startOfAppMonth(now),
       );
       return spent + pendingPlusEstimate <= monthlyCapUsd;
     };
