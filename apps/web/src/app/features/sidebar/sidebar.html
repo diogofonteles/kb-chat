@@ -91,16 +91,47 @@
       [disabled]="chat.topicList().length === 0"
       (change)="changeTopic(topicSelect.value)"
     >
-      @for (topic of chat.topicList(); track topic.slug) {
+      @for (option of topicOptions(); track option.slug) {
         <option
-          [value]="topic.slug"
-          [selected]="topic.slug === chat.topicSlug()"
+          [value]="option.slug"
+          [selected]="option.slug === chat.topicSlug()"
+          [disabled]="!option.canOpen"
         >
-          {{ topic.title }} ({{ topic.documentCount | number }})
+          {{ option.label }}
         </option>
       }
     </select>
   </label>
+
+  @if (canCreateCollections()) {
+    <div class="collection-actions">
+      <button
+        type="button"
+        class="collection-action"
+        (click)="collectionDialog.openNew()"
+        i18n="@@sidebar.newCollection"
+      >
+        + Novo acervo
+      </button>
+      @if (chat.topic(); as current) {
+        @if (current.canRename) {
+          <button
+            type="button"
+            class="collection-action"
+            (click)="collectionDialog.openEdit(current)"
+            i18n="@@sidebar.editCollection"
+          >
+            Editar acervo
+          </button>
+        }
+      }
+    </div>
+  }
+  <app-collection-dialog
+    #collectionDialog
+    [topics]="chat.topicList()"
+    (saved)="collectionSaved($event)"
+  />
 
   @if (mediaOn()) {
     <a

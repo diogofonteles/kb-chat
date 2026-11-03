@@ -80,8 +80,8 @@
     <label class="field">
       <span class="label" i18n="@@media.upload.topic">Acervo</span>
       <select formControlName="topic">
-        @for (option of topics(); track option.slug) {
-          <option [value]="option.slug">{{ option.title }}</option>
+        @for (option of choices(); track option.slug) {
+          <option [value]="option.slug">{{ treeTitle(option) }}</option>
         }
       </select>
     </label>

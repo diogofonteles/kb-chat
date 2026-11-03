@@ -16,12 +16,14 @@ import {
   type SearchFilters,
   type SearchMode,
   type SearchResponse,
+  type Topic,
   type TopicList,
 } from '@kb-chat/contracts';
 import { toUiErrorCode } from '@core/api/api-error.js';
 import { HistoryStore } from '@core/history/history-store.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import { KbApi, topicsUrl } from '@core/api/kb-api.js';
+import { withTopic } from '@core/topics/topic-tree.js';
 import {
   Subject,
   catchError,
@@ -72,9 +74,11 @@ function safeStorage(view: Window | null): Storage | undefined {
 function pickDefaultTopic(list: TopicList | null): string | null {
   if (!list) return null;
   if (list.defaultSlug) return list.defaultSlug;
+  // A parent shown only as a group title never opens (KBC-048 BR-3).
   return (
-    [...list.items].sort((a, b) => b.documentCount - a.documentCount)[0]
-      ?.slug ?? null
+    list.items
+      .filter((one) => one.canOpen)
+      .sort((a, b) => b.documentCount - a.documentCount)[0]?.slug ?? null
   );
 }
 
@@ -153,7 +157,17 @@ export class ChatStore {
     this.topics.hasValue() ? this.topics.value() : null,
   );
   readonly topicList = computed(() => this.topicData()?.items ?? []);
-  readonly topicSlug = linkedSignal(() => pickDefaultTopic(this.topicData()));
+  /** The chosen collection survives a reload of the list (a collection created, KBC-048). */
+  readonly topicSlug = linkedSignal<TopicList | null, string | null>({
+    source: this.topicData,
+    computation: (list, previous) => {
+      const kept = previous?.value;
+      const stillThere = list?.items.some(
+        (topic) => topic.slug === kept && topic.canOpen,
+      );
+      return stillThere && kept ? kept : pickDefaultTopic(list);
+    },
+  });
   readonly topic = computed(
     () => this.topicList().find((t) => t.slug === this.topicSlug()) ?? null,
   );
@@ -219,6 +233,16 @@ export class ChatStore {
     if (key === this.rememberedKey) return;
     this.rememberedKey = key;
     this.history.save(conversation);
+  }
+
+  /**
+   * A collection created or renamed on this screen joins the list as the API returned it,
+   * without asking for the whole list again (KBC-048 FR-3).
+   */
+  putTopic(topic: Topic): void {
+    this.topics.update(
+      (list) => list && { ...list, items: [...withTopic(list.items, topic)] },
+    );
   }
 
   /** "+ Nova conversa" (FR-1): an empty conversation in the same collection. */

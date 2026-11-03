@@ -16,6 +16,7 @@ describe('searchRequestSchema', () => {
         depths: [],
         relevances: [],
         authorships: [],
+        topics: [],
       },
     });
   });

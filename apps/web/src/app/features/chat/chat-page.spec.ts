@@ -17,7 +17,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import { aDocument, aHit, aResponse, TOPICS } from '../../testing/fixtures.js';
+import {
+  aDocument,
+  aHit,
+  aResponse,
+  aTopic,
+  TOPICS,
+} from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
 import { ResearchApi } from '@core/api/research-api.js';
@@ -548,6 +554,81 @@ describe('ChatPage side panel (KBC-005)', () => {
       view.http.expectOne('/api/v1/topics/alquimia/searches').request.body.q,
     ).toBe('pedra');
     expect(screen.queryByText('Nova conversa em Alquimia')).toBeNull();
+  });
+
+  it('lists collections as a tree, a closed parent only as its group title (KBC-048 FR-4, AC-5)', async () => {
+    await renderPage([], {
+      items: [
+        aTopic({ slug: 'udv', title: 'UDV', canOpen: false }),
+        aTopic({
+          slug: 'udv/palavra-do-mestre',
+          title: 'Palavra do Mestre',
+          parent: 'udv',
+          documentCount: 7,
+        }),
+      ],
+      defaultSlug: null,
+    });
+    const options = within(screen.getByLabelText('Acervo')).getAllByRole(
+      'option',
+    ) as HTMLOptionElement[];
+    expect(options.map((option) => [option.text, option.disabled])).toEqual([
+      ['UDV — só os sub-acervos abaixo', true],
+      ['\u00a0\u00a0\u00a0\u00a0Palavra do Mestre (7)', false],
+    ]);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
+      'Palavra do Mestre',
+    );
+  });
+
+  it('does not offer "Editar acervo" for a collection the person may not rename (KBC-048)', async () => {
+    await renderPage();
+    expect(screen.queryByRole('button', { name: 'Editar acervo' })).toBeNull();
+  });
+
+  it('offers "Editar acervo" for a collection the person may rename (KBC-048)', async () => {
+    await renderPage([], {
+      items: [aTopic({ slug: 'meu', title: 'Meu', canRename: true })],
+      defaultSlug: null,
+    });
+    expect(screen.getByRole('button', { name: 'Editar acervo' })).toBeTruthy();
+  });
+
+  it('creates a collection from the sidebar and switches to it at once (KBC-048 AC-1)', async () => {
+    const view = await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '+ Novo acervo' }));
+    await view.fixture.whenStable();
+    fireEvent.input(screen.getByRole('textbox', { name: 'Nome' }), {
+      target: { value: 'UDV' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Criar acervo' }));
+    const created = aTopic({ slug: 'udv', title: 'UDV' });
+    const post = view.http.expectOne({
+      method: 'POST',
+      url: '/api/v1/topics',
+    });
+    expect(post.request.body).toEqual({
+      title: 'UDV',
+      description: '',
+      parent: null,
+    });
+    post.flush(created);
+    await view.fixture.whenStable();
+    // It joins the list as the API answered: the list is not asked again.
+    view.http.expectNone('/api/v1/topics');
+    const select = screen.getByLabelText('Acervo') as HTMLSelectElement;
+    expect([...select.options].map((option) => option.text)).toEqual([
+      'Alquimia (1)',
+      'Hermetismo (4.235)',
+      'UDV (0)',
+    ]);
+    expect(select.value).toBe('udv');
+    expect(
+      screen.getByText(/Este acervo ainda não tem textos para buscar/),
+    ).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain(
+      'UDV',
+    );
   });
 
   it('shows today’s AI spend and applies the chosen theme (AC-8, FR-4)', async () => {

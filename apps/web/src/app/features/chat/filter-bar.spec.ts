@@ -23,6 +23,7 @@ const FACETS: ResultFacets = {
     { value: 'outros-autores', count: 3 },
     { value: 'sintese', count: 1 },
   ],
+  topics: [{ value: 'hermetismo', count: 10 }],
 };
 
 async function renderBar(filters = NO_FILTERS, hiddenOffTopic = 0) {
@@ -275,5 +276,42 @@ describe('FilterBar authorship control (KBC-020 AC-2)', () => {
       ...NO_FILTERS,
       authorships: ['nao-classificado'],
     });
+  });
+});
+
+describe('FilterBar "Sub-acervo" (KBC-048 FR-4)', () => {
+  const PARENT: ResultFacets = {
+    ...FACETS,
+    topics: [
+      { value: 'udv', count: 2 },
+      { value: 'udv/palavra-do-mestre', count: 5 },
+    ],
+  };
+  const names = new Map([
+    ['udv', 'UDV'],
+    ['udv/palavra-do-mestre', 'Palavra do Mestre'],
+  ]);
+
+  it('offers the parent and its sub-collections by name and restricts to one', async () => {
+    const filtersChange = vi.fn();
+    const view = await render(FilterBar, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { facets: PARENT, filters: NO_FILTERS, topicNames: names },
+      on: { filtersChange },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Sub-acervo/ }));
+    await view.fixture.whenStable();
+    const option = screen.getByRole('checkbox', { name: /Palavra do Mestre/ });
+    expect(option.closest('label')?.textContent).toContain('5');
+    fireEvent.click(option);
+    expect(filtersChange).toHaveBeenCalledWith({
+      ...NO_FILTERS,
+      topics: ['udv/palavra-do-mestre'],
+    });
+  });
+
+  it('is not offered when the search spans one collection only', async () => {
+    await renderBar();
+    expect(screen.queryByRole('button', { name: /^Sub-acervo/ })).toBeNull();
   });
 });

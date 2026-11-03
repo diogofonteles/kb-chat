@@ -1,6 +1,9 @@
 export interface TopicFolder {
   readonly slug: string;
   readonly title: string;
+  /** The collection this one sits in (one level only, ADR 0028). */
+  readonly parent?: string;
+  readonly description?: string;
 }
 
 /** Read-only access to a kb vault; every path is confined to its topic folder. */

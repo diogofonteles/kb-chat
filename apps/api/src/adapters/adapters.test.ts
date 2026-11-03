@@ -102,6 +102,24 @@ describe('FsVaultAdapter', () => {
       { slug: 'harness/goclaw', title: 'harness/goclaw' },
     ]);
   });
+
+  it('finds a sub-topic inside a topic, one level down, with its parent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'kbchat-'));
+    const fs = await import('node:fs/promises');
+    const sub = join(root, 'udv', 'palavra-do-mestre');
+    await fs.mkdir(join(sub, 'raw', 'deeper'), { recursive: true });
+    await writeFile(join(root, 'udv', 'topic.yaml'), 'title: UDV\n');
+    await writeFile(join(sub, 'topic.yaml'), 'title: Palavra do Mestre\n');
+    await writeFile(join(sub, 'raw', 'deeper', 'topic.yaml'), 'title: No\n');
+    expect(await new FsVaultAdapter(root).listTopics()).toEqual([
+      { slug: 'udv', title: 'UDV' },
+      {
+        slug: 'udv/palavra-do-mestre',
+        title: 'Palavra do Mestre',
+        parent: 'udv',
+      },
+    ]);
+  });
 });
 
 describe('FixtureSearchAdapter', () => {

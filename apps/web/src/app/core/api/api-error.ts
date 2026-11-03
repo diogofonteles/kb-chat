@@ -102,6 +102,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.viewChanged:Esta aba estava em outra visão. Recarregando…`,
   NOT_WHILE_ACTING: () =>
     $localize`:@@error.notWhileActing:Isto só a própria pessoa pode fazer.`,
+  TOPIC_EXISTS: () =>
+    $localize`:@@error.topicExists:Já existe um acervo com esse nome.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

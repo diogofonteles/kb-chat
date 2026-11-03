@@ -54,3 +54,37 @@ describe('ResultCard', () => {
     expect(screen.queryByText('✦')).toBeNull();
   });
 });
+
+describe('ResultCard in a parent collection (KBC-048)', () => {
+  it('names the sub-collection and opens the hit and its copies there', async () => {
+    const opened = vi.fn();
+    const hit = aHit({
+      topic: 'udv/palavra-do-mestre',
+      copies: [{ id: 'raw/copia.md', title: 'Cópia' }],
+    });
+    await render(ResultCard, {
+      providers,
+      inputs: { hit, place: 'Palavra do Mestre' },
+      on: { opened },
+    });
+    expect(screen.getByText('em Palavra do Mestre')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /A Lei do Ritmo/ }));
+    expect(opened).toHaveBeenLastCalledWith({
+      id: hit.id,
+      title: hit.title,
+      topic: 'udv/palavra-do-mestre',
+    });
+    fireEvent.click(screen.getByRole('button', { name: /1 cópia/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Cópia raw\/copia/ }));
+    expect(opened).toHaveBeenLastCalledWith({
+      id: 'raw/copia.md',
+      title: 'Cópia',
+      topic: 'udv/palavra-do-mestre',
+    });
+  });
+
+  it('says nothing about the place for a hit of the chosen collection itself', async () => {
+    await render(ResultCard, { providers, inputs: { hit: aHit() } });
+    expect(screen.queryByText(/^em /)).toBeNull();
+  });
+});

@@ -21,6 +21,7 @@ import {
   type PersonUpdate,
   type Topic,
 } from '@kb-chat/contracts';
+import { collectionChoices } from '@core/topics/topic-tree.js';
 import { FEATURE_LABELS } from './feature-labels.js';
 import { NO_LENDING, type Lending } from './lending.js';
 import { PersonAiEditor } from './person-ai-editor.js';
@@ -95,11 +96,9 @@ export class PersonEditor {
       checked: this.isMaster() || this.person().features.includes(id),
     })),
   );
+  /** The collections as a tree; a sub-collection comes with its parent (KBC-048 BR-3). */
   protected readonly collections = computed(() =>
-    this.topics().map((topic) => ({
-      ...topic,
-      checked: this.isMaster() || this.person().topics.includes(topic.slug),
-    })),
+    collectionChoices(this.topics(), this.person().topics, this.isMaster()),
   );
 
   protected toggleTopic(slug: string, on: boolean): void {

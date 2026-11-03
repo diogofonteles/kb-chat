@@ -17,14 +17,22 @@
 <fieldset class="group" [disabled]="busy() || isMaster()">
   <legend class="legend" i18n="@@preset.collections">Acervos</legend>
   @for (topic of collections(); track topic.slug) {
-    <label class="check">
+    <label class="check" [class.child]="topic.parent !== null">
       <input
         #box
         type="checkbox"
         [checked]="topic.checked"
+        [disabled]="topic.inherited"
         (change)="toggleTopic(topic.slug, box.checked)"
       />
-      <span>{{ topic.title }}</span>
+      <span
+        >{{ topic.title }}
+        @if (topic.inherited) {
+          <span class="inherited" i18n="@@people.inheritedCollection"
+            >(incluído em {{ topic.parentTitle }})</span
+          >
+        }
+      </span>
     </label>
   } @empty {
     <p class="note" i18n="@@people.noCollections">Nenhum acervo no vault.</p>
@@ -226,7 +234,7 @@
             [value]="topic.slug"
             [selected]="topic.slug === current.preferences.defaultTopic"
           >
-            {{ topic.title }}
+            {{ treeTitle(topic) }}
           </option>
         }
       </select>

@@ -10,4 +10,6 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
     $localize`:@@feature.ownAiSettings:Configurações de IA próprias`,
   media: () => $localize`:@@feature.media:Ouvir mídia`,
   'media-upload': () => $localize`:@@feature.mediaUpload:Enviar áudios`,
+  'collection-create': () =>
+    $localize`:@@feature.collectionCreate:Criar acervos`,
 };

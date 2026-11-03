@@ -30,6 +30,11 @@ import {
 } from './identity-factories.js';
 import { FsSessionStore } from '../src/adapters/fs-session-store.js';
 import { FsVaultAdapter } from '../src/adapters/fs-vault-adapter.js';
+import { JsonDocumentStore } from '../src/adapters/json-document-store.js';
+import {
+  CollectionRegistry,
+  CollectionsVault,
+} from '../src/modules/topics/index.js';
 import { JsonPeopleStore } from '../src/adapters/json-people-store.js';
 import { JsonSettingsStore } from '../src/adapters/json-settings-store.js';
 import { JsonlSpendLedger } from '../src/adapters/jsonl-spend-ledger.js';
@@ -97,6 +102,8 @@ export interface StartOptions {
   readonly state?: string;
   /** The media library on (KBC-034), under `<state>/media`, with MEDIA_WORKER_TOKEN. */
   readonly media?: boolean;
+  /** Another vault than the fixture one (a copy with sub-collections, KBC-048). */
+  readonly vault?: string;
 }
 
 /** The media worker token of `start({ media: true })`. */
@@ -117,7 +124,7 @@ async function testConfig(state: string, options: StartOptions) {
     ...codex,
     // The Codex sandbox's address in production (ADR 0020): MCP only, by token.
     KB_CHAT_MCP_PEERS: '172.30.0.10',
-    KB_VAULT: FIXTURE_VAULT,
+    KB_VAULT: options.vault ?? FIXTURE_VAULT,
     KB_CHAT_SEARCH: 'fixture',
     KB_CHAT_STATE_DIR: state,
     GOOGLE_CLIENT_ID: TEST_CLIENT_ID,
@@ -178,7 +185,13 @@ function testAuth(state: string, keys: TestKeys) {
 
 /** The vault, its index and catalog, the spend ledger and the research agent. */
 async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
-  const vault = new FsVaultAdapter(config.KB_VAULT);
+  const collections = new CollectionRegistry(
+    new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
+  );
+  const vault = new CollectionsVault(
+    new FsVaultAdapter(config.KB_VAULT),
+    collections,
+  );
   const index = await createSearchIndex({ config, vault, log: logger });
   const catalog = new CatalogRegistry(vault);
   await catalog.load();
@@ -186,7 +199,7 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
     join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
   );
   const agent = createResearchAgent({ catalog, index, vault, ledger });
-  return { vault, index, catalog, ledger, agent };
+  return { vault, index, catalog, ledger, agent, collections };
 }
 
 interface AiWiring {

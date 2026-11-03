@@ -3,10 +3,14 @@ import { Injectable, inject } from '@angular/core';
 import {
   relationPageSchema,
   searchResponseSchema,
+  topicSchema,
   type RelationPage,
   type SearchRequest,
   type SearchResponse,
   type SeeAlsoGroupName,
+  type Topic,
+  type TopicCreate,
+  type TopicUpdate,
 } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
 
@@ -32,6 +36,20 @@ export class KbApi {
     return this.http
       .post(searchesUrl(topic), request)
       .pipe(map((body) => searchResponseSchema.parse(body)));
+  }
+
+  /** A new collection or sub-collection (KBC-048 FR-1). */
+  createTopic(body: TopicCreate): Observable<Topic> {
+    return this.http
+      .post(topicsUrl(), body)
+      .pipe(map((reply) => topicSchema.parse(reply)));
+  }
+
+  /** New name or description; the slug stays (KBC-048 FR-2). */
+  renameTopic(slug: string, body: TopicUpdate): Observable<Topic> {
+    return this.http
+      .patch(topicPath(slug), body)
+      .pipe(map((reply) => topicSchema.parse(reply)));
   }
 
   relations(

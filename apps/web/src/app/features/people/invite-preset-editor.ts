@@ -31,6 +31,7 @@ import { assignmentLabel } from '@features/house-ai/app-ai-labels.js';
 import { parseCap, parseDaily } from '@features/house-ai/number-fields.js';
 import { PROFILE_COPY } from '@features/research/profile-copy.js';
 import { THEME_COPY, VIEW_COPY } from '@features/settings/provider-copy.js';
+import { collectionChoices, treeTitle } from '@core/topics/topic-tree.js';
 import { FEATURE_LABELS } from './feature-labels.js';
 import {
   LEND_COPY,
@@ -90,11 +91,9 @@ export class InvitePresetEditor {
 
   protected readonly uid = `preset-${nextId++}`;
   protected readonly isMaster = computed(() => this.preset().role === 'master');
+  /** The collections as a tree; a sub-collection comes with its parent (KBC-048 BR-3). */
   protected readonly collections = computed(() =>
-    this.topics().map((topic) => ({
-      ...topic,
-      checked: this.isMaster() || this.preset().topics.includes(topic.slug),
-    })),
+    collectionChoices(this.topics(), this.preset().topics, this.isMaster()),
   );
   protected readonly features = computed(() =>
     FEATURES.map((id) => ({
@@ -146,6 +145,7 @@ export class InvitePresetEditor {
       : null;
   });
   /** The default collection is one of those granted (BR-4); a master sees them all. */
+  protected readonly treeTitle = treeTitle;
   protected readonly defaultTopics = computed(() =>
     this.collections().filter((topic) => topic.checked),
   );

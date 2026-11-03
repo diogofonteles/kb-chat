@@ -8,6 +8,7 @@ import { AppError } from '../app-error.js';
 import { OWN_VIEW, VIEW_HEADER } from '@kb-chat/contracts';
 import {
   denialOf,
+  parentOfRequest,
   resolveViewer,
   type Viewer,
   type ViewerSources,
@@ -41,7 +42,10 @@ const authGuard: FastifyPluginAsync<ViewerSources> = async (app, sources) => {
     if (!resolved) throw new AppError('UNAUTHENTICATED', 'Sign in first');
     request.viewer = resolved.viewer;
     request.session = resolved.session;
-    const denial = denialOf(access, resolved.viewer, request.params);
+    const denial = denialOf(access, resolved.viewer, {
+      params: request.params,
+      parentOf: parentOfRequest(request),
+    });
     if (denial) throw denial;
     assertSameView(request, resolved.viewer);
   });

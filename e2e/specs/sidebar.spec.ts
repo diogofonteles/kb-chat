@@ -164,7 +164,7 @@ test('AC-5: another collection starts a new conversation and updates the count',
   await ask(page, 'ritmo');
   const before = await page.getByRole('heading', { level: 1 }).textContent();
   const panel = await sidebar(page);
-  const select = panel.getByLabel('Acervo');
+  const select = panel.getByRole('combobox', { name: 'Acervo', exact: true });
   const other = await select
     .locator('option:not(:checked)')
     .first()

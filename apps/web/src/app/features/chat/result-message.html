@@ -31,6 +31,7 @@
           [filters]="message().filters"
           [hiddenOffTopic]="current.hiddenOffTopic"
           [order]="message().filterOrder"
+          [topicNames]="topicNames()"
           (filtersChange)="filtersChanged.emit($event)"
         />
       }
@@ -41,6 +42,7 @@
               <app-result-card
                 [hit]="hit"
                 [active]="hit.id === activeId()"
+                [place]="places().get(hit.topic) ?? null"
                 (opened)="opened.emit($event)"
               />
             </li>

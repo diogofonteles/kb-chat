@@ -312,3 +312,29 @@ select {
   box-shadow: inset 3px 0 0 var(--color-accent);
   font-weight: 600;
 }
+
+/* "Novo acervo" and "Editar acervo" (KBC-048 FR-6): quiet text actions under the selector. */
+.collection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.collection-action {
+  min-height: var(--target);
+  padding: 0 var(--space-1);
+  border: none;
+  background: transparent;
+  color: var(--color-accent-strong);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.collection-action:hover {
+  text-decoration-thickness: 2px;
+}

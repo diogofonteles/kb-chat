@@ -32,10 +32,11 @@ function registerSuggestions(app: FastifyInstance, { catalog }: UsageDeps) {
       schema: suggestionsSchema,
     },
     async ({ params }) => {
-      const topic = catalog.get(params.topic);
-      if (!topic)
+      // A parent suggests from its sub-collections too (ADR 0028).
+      const scope = catalog.scope(params.topic);
+      if (scope.length === 0)
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${params.topic}`);
-      return topSuggestions(topic.entries.values());
+      return topSuggestions(scope.flatMap((one) => [...one.entries.values()]));
     },
   );
 }

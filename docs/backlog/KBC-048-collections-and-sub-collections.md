@@ -1,7 +1,7 @@
 ---
 id: KBC-048
 title: "Acervos e sub-acervos pela tela: criar, renomear e organizar acervos dentro de acervos"
-status: ready
+status: done
 slice: phase-2-a
 outcome: quem tem permissão cria um acervo novo (ou um sub-acervo dentro de outro) pela tela, em menos de 1 minuto, sem terminal e sem reiniciar o servidor
 depends_on: [KBC-034]

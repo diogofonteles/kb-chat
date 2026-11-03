@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
-import { aHit, aResponse } from '../../testing/fixtures.js';
+import { aHit, aResponse, aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
 import { ResultMessage } from './result-message.js';
 
@@ -96,5 +96,57 @@ describe('ResultMessage', () => {
       /Não consegui carregar mais/,
     );
     expect(screen.getByRole('button', { name: 'Mostrar mais' })).toBeTruthy();
+  });
+});
+
+describe('ResultMessage in a parent collection (KBC-048 FR-4)', () => {
+  const topics = [
+    aTopic({ slug: 'udv', title: 'UDV' }),
+    aTopic({
+      slug: 'udv/palavra-do-mestre',
+      title: 'Palavra do Mestre',
+      parent: 'udv',
+    }),
+    aTopic({ slug: 'hermetismo', title: 'Hermetismo' }),
+  ];
+  const fromChild = aHit({ topic: 'udv/palavra-do-mestre' });
+  const parentMessage: ChatMessage = {
+    ...base,
+    topic: 'udv',
+    filters: { ...NO_FILTERS, topics: ['udv/palavra-do-mestre'] },
+    response: {
+      ...aResponse([fromChild]),
+      facets: {
+        ...aResponse([fromChild]).facets,
+        topics: [
+          { value: 'udv', count: 1 },
+          { value: 'udv/palavra-do-mestre', count: 1 },
+        ],
+      },
+    },
+  };
+
+  it('names the sub-collection of each result and of the active filter, by the message’s collection', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { message: parentMessage, topics },
+    });
+    expect(screen.getByText('em Palavra do Mestre')).toBeTruthy();
+    expect(
+      screen.getByRole('button', {
+        name: 'Remover Sub-acervo: Palavra do Mestre',
+      }),
+    ).toBeTruthy();
+  });
+
+  it('says nothing about places for a message of a collection without sub-collections', async () => {
+    await render(ResultMessage, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        message: { ...base, response: aResponse([aHit()]) },
+        topics,
+      },
+    });
+    expect(screen.queryByText(/^em /)).toBeNull();
   });
 });

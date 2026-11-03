@@ -26,6 +26,8 @@ export interface MediaServiceDeps {
   readonly files: MediaFilesPort;
   /** The collection exists in the vault (a master "sees" any slug, even a wrong one). */
   readonly hasTopic: (topic: string) => boolean;
+  /** The collection and its sub-collections, listed like a folder (ADR 0028); default: itself. */
+  readonly scopeOf?: (topic: string) => readonly string[];
   /** Each person's position in each media (KBC-041). */
   readonly listening: ListeningStorePort;
   readonly now?: () => Date;
@@ -151,7 +153,13 @@ export class MediaService {
 
   list(actor: MediaActor, topic: string): MediaItem[] {
     this.assertTopic(topic);
-    const records = this.deps.store.listMedia(topic);
+    const scope = this.deps.scopeOf?.(topic) ?? [topic];
+    const records = scope
+      .flatMap((slug) => this.deps.store.listMedia(slug))
+      .sort(
+        (a, b) =>
+          b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id),
+      );
     const progress = this.deps.listening.progressOf(
       actor.principal,
       records.map((record) => record.id),

@@ -10,6 +10,13 @@ const MAX_NESTING = 2;
 
 const topicYamlSchema = z.looseObject({ title: z.string().optional() });
 
+/** Where the topic walk is: the folder, how deep, and the topic it sits in (if any). */
+interface Walk {
+  readonly prefix: string;
+  readonly depth: number;
+  readonly parent?: string;
+}
+
 const isMarkdown = (path: string): boolean => path.endsWith('.md');
 
 async function exists(path: string): Promise<boolean> {
@@ -49,7 +56,7 @@ export class FsVaultAdapter implements VaultReaderPort {
 
   async listTopics(): Promise<readonly TopicFolder[]> {
     const topics: TopicFolder[] = [];
-    await this.collectTopics('', 1, topics);
+    await this.collectTopics({ prefix: '', depth: 1 }, topics);
     return topics.sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
@@ -79,12 +86,8 @@ export class FsVaultAdapter implements VaultReaderPort {
     }
   }
 
-  private async collectTopics(
-    prefix: string,
-    depth: number,
-    out: TopicFolder[],
-  ): Promise<void> {
-    const dir = join(this.root, prefix);
+  private async collectTopics(at: Walk, out: TopicFolder[]): Promise<void> {
+    const dir = join(this.root, at.prefix);
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (
@@ -93,21 +96,36 @@ export class FsVaultAdapter implements VaultReaderPort {
         entry.name.startsWith('_')
       )
         continue;
-      const slug = prefix ? `${prefix}/${entry.name}` : entry.name;
-      await this.visitCandidate(slug, depth, out);
+      const slug = at.prefix ? `${at.prefix}/${entry.name}` : entry.name;
+      await this.visitCandidate(slug, at, out);
     }
   }
 
+  /**
+   * A folder with topic.yaml is a topic; one level down it may hold sub-topics
+   * (`udv/palavra-do-mestre`, ADR 0028). A folder without it may only group topics.
+   */
   private async visitCandidate(
     slug: string,
-    depth: number,
+    at: Walk,
     out: TopicFolder[],
   ): Promise<void> {
     const dir = join(this.root, slug);
-    if (await exists(join(dir, 'topic.yaml'))) {
-      out.push({ slug, title: await readTopicTitle(dir, slug) });
-      return;
+    const isTopic = await exists(join(dir, 'topic.yaml'));
+    if (isTopic) {
+      const title = await readTopicTitle(dir, slug);
+      out.push(
+        at.parent ? { slug, title, parent: at.parent } : { slug, title },
+      );
     }
-    if (depth < MAX_NESTING) await this.collectTopics(slug, depth + 1, out);
+    if (at.depth < MAX_NESTING)
+      await this.collectTopics(
+        {
+          prefix: slug,
+          depth: at.depth + 1,
+          parent: isTopic ? slug : undefined,
+        },
+        out,
+      );
   }
 }

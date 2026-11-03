@@ -5,6 +5,7 @@ export {
   assertNotActing,
   canSee,
   denialOf,
+  parentOfRequest,
   principalOf,
   sessionOf,
   viewerOf,
@@ -48,10 +49,13 @@ export {
   type PeopleServiceDeps,
 } from './people-service.js';
 export {
+  NO_PARENT,
   OWNER_PRINCIPAL,
+  canSeeTopic,
   hasFeature,
   isMaster,
   toPerson,
+  type ParentOf,
   type StoredPerson,
   type Viewer,
 } from './person.js';

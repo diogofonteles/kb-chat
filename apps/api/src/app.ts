@@ -27,7 +27,12 @@ import {
 import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
 import { searchRoutes } from './modules/search/index.js';
-import { topicRoutes } from './modules/topics/index.js';
+import {
+  CollectionRegistry,
+  CollectionsVault,
+  TopicsService,
+  topicRoutes,
+} from './modules/topics/index.js';
 import authGuard from './plugins/auth-guard.js';
 import csrfGuard from './plugins/csrf-guard.js';
 import hostGuard from './plugins/host-guard.js';
@@ -164,6 +169,11 @@ export interface AppDeps {
   readonly house?: HouseAi;
   /** The media library (ADR 0022); without it no media route exists (KB_CHAT_MEDIA=off). */
   readonly media?: MediaDeps;
+  /**
+   * Collections created on the screen (ADR 0028). When given, `vault` must already be its
+   * CollectionsVault (main builds the catalog before the app); in memory when not given.
+   */
+  readonly collections?: CollectionRegistry;
 }
 
 type FullDeps = AppDeps & {
@@ -176,6 +186,7 @@ type FullDeps = AppDeps & {
   ledger: SpendLedgerPort;
   usage: UsageLogPort;
   conversations: ConversationStorePort;
+  collections: CollectionRegistry;
 };
 
 /** The runner of a person's turn: a fixed model in tests, else the provider in Settings. */
@@ -265,9 +276,18 @@ async function registerSearch(
 ): Promise<void> {
   const { config, index, catalog } = deps;
   await app.register(healthRoutes({ catalog, index }));
+  const people = deps.auth.people;
+  const service = new TopicsService({
+    catalog,
+    registry: deps.collections,
+    grant: async (personId, slug, by) => {
+      await people.grantTopic(personId, slug, by);
+    },
+  });
   await app.register(
     topicRoutes({
       catalog,
+      service,
       preferredTopic: (principal) =>
         deps.ai.settings.snapshot(principal)?.preferences.defaultTopic ??
         config.KB_TOPIC,
@@ -309,6 +329,24 @@ async function registerRoutes(
   if (deps.media) await registerMedia(app, { media: deps.media, catalog });
 }
 
+/** A collection's media, with its sub-collections' (ADR 0028). */
+function mediaService({
+  media,
+  catalog,
+}: {
+  media: MediaDeps;
+  catalog: CatalogRegistry;
+}): MediaService {
+  const { store, files, listening } = media;
+  return new MediaService({
+    store,
+    files,
+    listening,
+    hasTopic: (topic) => catalog.get(topic) !== undefined,
+    scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
+  });
+}
+
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(
   app: FastifyInstance,
@@ -316,8 +354,7 @@ async function registerMedia(
 ) {
   const { store, listening, bookmarks, files, workerToken, createPerMinute } =
     wiring.media;
-  const hasTopic = (topic: string) => wiring.catalog.get(topic) !== undefined;
-  const media = new MediaService({ store, files, hasTopic, listening });
+  const media = mediaService(wiring);
   await app.register(mediaRoutes(media, createPerMinute));
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
@@ -591,10 +628,26 @@ const inMemoryAccess = (): AccessDeps => ({
   delivery: { email: new MemoryOutbox(), sms: null },
 });
 
+/** The registry and the vault seen through it (ADR 0028); in memory when not given. */
+function withCollections(
+  given: AppDeps,
+): AppDeps & { collections: CollectionRegistry } {
+  if (given.collections) return { ...given, collections: given.collections };
+  const collections = new CollectionRegistry(new MemoryDocumentStore());
+  const vault = new CollectionsVault(given.vault, collections);
+  return { ...given, vault, collections };
+}
+
+async function loadedCatalog(vault: VaultReaderPort): Promise<CatalogRegistry> {
+  const catalog = new CatalogRegistry(vault);
+  await catalog.load();
+  return catalog;
+}
+
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
-async function completeDeps(deps: AppDeps): Promise<FullDeps> {
-  const catalog = deps.catalog ?? new CatalogRegistry(deps.vault);
-  if (!deps.catalog) await catalog.load();
+async function completeDeps(given: AppDeps): Promise<FullDeps> {
+  const deps = withCollections(given);
+  const catalog = deps.catalog ?? (await loadedCatalog(deps.vault));
   const ledger = deps.ledger ?? new MemorySpendLedger();
   const agent =
     deps.agent ??
@@ -650,6 +703,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandler(app);
+  // The collection tree for every access check (ADR 0028): a parent's grant reaches its
+  // sub-collections, by the catalog, never by the slug's text.
+  app.decorate(
+    'topicParentOf',
+    (slug: string) => full.catalog.get(slug)?.topic.parent ?? null,
+  );
 
   // The Codex sandbox reaches only the MCP routes (KBC-027, ADR 0020).
   app.addHook('onRequest', peerOnlyMcp(deps.config.KB_CHAT_MCP_PEERS));

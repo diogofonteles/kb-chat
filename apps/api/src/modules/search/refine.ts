@@ -14,16 +14,20 @@ export { copyKey };
 
 export interface Candidate {
   readonly hit: IndexHit;
-  readonly entry: CatalogEntry;
+  /** With its collection when the search spans a parent's sub-collections (KBC-048). */
+  readonly entry: CatalogEntry & { readonly topic?: string };
 }
 
 /** One result card: the best-ranked document and its near-identical copies. */
 export interface CopyGroup {
   readonly lead: Candidate;
-  readonly copies: readonly CatalogEntry[];
+  readonly copies: readonly Candidate['entry'][];
 }
 
 type FacetKey = keyof SearchFilters;
+
+/** A document's facets, with the collection it is in when searching a parent (KBC-048). */
+export type Faceted = DocumentFacets & { readonly topic?: string };
 
 export interface RefineOptions {
   readonly filters: SearchFilters;
@@ -42,7 +46,10 @@ export interface RefinedPage {
 
 /** Groups candidates by normalized title, keeping the index order of the best member. */
 export function groupCopies(candidates: readonly Candidate[]): CopyGroup[] {
-  const groups = new Map<string, { lead: Candidate; copies: CatalogEntry[] }>();
+  const groups = new Map<
+    string,
+    { lead: Candidate; copies: Candidate['entry'][] }
+  >();
   for (const candidate of candidates) {
     const key = copyKey(candidate.entry.title);
     const group = groups.get(key);
@@ -54,7 +61,7 @@ export function groupCopies(candidates: readonly Candidate[]): CopyGroup[] {
 
 const FACET_TESTS: Record<
   FacetKey,
-  (facets: DocumentFacets, filters: SearchFilters) => boolean
+  (facets: Faceted, filters: SearchFilters) => boolean
 > = {
   concepts: (f, s) =>
     s.concepts.length === 0 || f.concepts.some((c) => s.concepts.includes(c)),
@@ -73,11 +80,14 @@ const FACET_TESTS: Record<
   },
   authorships: (f, s) =>
     s.authorships.length === 0 || s.authorships.includes(f.authorship),
+  topics: (f, s) =>
+    s.topics.length === 0 ||
+    (f.topic !== undefined && s.topics.includes(f.topic)),
 };
 const FACET_KEYS = Object.keys(FACET_TESTS) as FacetKey[];
 
 function matchesExcept(
-  facets: DocumentFacets,
+  facets: Faceted,
   filters: SearchFilters,
   except?: FacetKey,
 ): boolean {
@@ -108,9 +118,13 @@ function countBy<T>(
 
 const nonNull = <T>(value: T | null): value is T => value !== null;
 
+/** The collection of each document that carries one (a parent's search, KBC-048). */
+const collectionsOf = (facets: readonly Faceted[]): string[] =>
+  facets.map((f) => f.topic ?? null).filter(nonNull);
+
 /** Facet counts over any list of documents (each facet ignores its own selection when filtered). */
 export function countFacets(
-  pick: (key: FacetKey) => readonly DocumentFacets[],
+  pick: (key: FacetKey) => readonly Faceted[],
 ): ResultFacets {
   return {
     concepts: countBy(pick('concepts').flatMap((f) => f.concepts)),
@@ -136,6 +150,7 @@ export function countFacets(
       pick('authorships').map((f) => f.authorship),
       AUTHORSHIPS,
     ),
+    topics: countBy(collectionsOf(pick('topics'))),
   };
 }
 

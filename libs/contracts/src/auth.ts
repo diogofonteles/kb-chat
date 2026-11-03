@@ -11,7 +11,8 @@ import { topicSlugSchema } from './topics.js';
 /**
  * What a person may use (KBC-010): search the documents, research with AI, build or extend
  * a collection (KBC-009), keep their own AI settings and keys, listen to the media of the
- * collections they see and upload audio to them (KBC-034). Every feature is granted per
+ * collections they see and upload audio to them (KBC-034), create collections and
+ * sub-collections (KBC-048). Every feature is granted per
  * person (owner's rule, 2026-10-28): a new feature never comes on for everyone by itself.
  */
 export const FEATURES = [
@@ -21,6 +22,7 @@ export const FEATURES = [
   'own-ai-settings',
   'media',
   'media-upload',
+  'collection-create',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;

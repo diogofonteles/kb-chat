@@ -11,6 +11,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { MEDIA_UPLOAD_BACKEND } from '@core/media/media-api.js';
+import { aTopic } from '../../testing/fixtures.js';
 import { aMediaItem } from '../../testing/media-fixtures.js';
 import { UploadPanel } from './upload-panel.js';
 
@@ -36,8 +37,8 @@ async function renderPanel() {
     inputs: {
       topic: 'hermetismo',
       topics: [
-        { slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 },
-        { slug: 'alquimia', title: 'Alquimia', documentCount: 5 },
+        aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 }),
+        aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 5 }),
       ],
     },
     on: { uploaded, closed },

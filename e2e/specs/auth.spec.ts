@@ -109,7 +109,7 @@ test('AC-3: a guest with collection A and search sees only A, without the resear
     guest.getByRole('radio', { name: /Pesquisa com IA/ }),
   ).toHaveCount(0);
   const side = await sidebar(guest);
-  const topics = side.getByLabel('Acervo');
+  const topics = side.getByRole('combobox', { name: 'Acervo', exact: true });
   await expect(topics.locator('option')).toHaveCount(1);
   await expect(topics.locator('option')).toContainText('Hermetismo');
   await expect(

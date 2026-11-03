@@ -31,6 +31,7 @@ import { ChatStore } from './chat-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { provideResearchRestorer } from '@features/research/research-restorer.js';
 import { Composer } from './composer.js';
+import type { OpenedHit } from './result-card.js';
 import { describeForAnnouncement } from './result-count.js';
 import { ResultMessage } from './result-message.js';
 import { ResearchStore } from '@features/research/research-store.js';
@@ -94,6 +95,11 @@ export class ChatPage {
   protected readonly desktop = signal(this.matchesDesktop());
 
   protected readonly topic = this.store.topic;
+  protected readonly topicList = this.store.topicList;
+  /** The chosen collection (with its sub-collections) has no text yet (KBC-048, ADR 0028). */
+  protected readonly emptyTopic = computed(
+    () => this.store.topic()?.documentCount === 0,
+  );
   protected readonly messages = this.store.messages;
   protected readonly opened = this.store.openDocument;
   protected readonly currentView = this.views.current;
@@ -285,8 +291,9 @@ export class ChatPage {
     });
   }
 
-  protected openHit(doc: DocumentRef, message: ChatMessage): void {
-    this.store.open(message.topic, doc, message);
+  /** A hit opens in its own collection: a sub-collection when searching the parent. */
+  protected openHit(hit: OpenedHit, message: ChatMessage): void {
+    this.store.open(hit.topic, { id: hit.id, title: hit.title }, message);
   }
 
   /** A subject chip in the panel filters the message that opened it (KBC-003 FR-5). */

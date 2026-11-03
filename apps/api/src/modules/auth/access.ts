@@ -2,7 +2,14 @@ import type { StoredSession } from '../../ports/session-store.js';
 import type { Feature } from '@kb-chat/contracts';
 import type { FastifyRequest } from 'fastify';
 import { AppError } from '../../app-error.js';
-import { canSeeTopic, hasFeature, isMaster, type Viewer } from './person.js';
+import {
+  NO_PARENT,
+  canSeeTopic,
+  hasFeature,
+  isMaster,
+  type ParentOf,
+  type Viewer,
+} from './person.js';
 
 /**
  * What a route requires (ADR 0008), declared in its `config.access`; the auth guard is the
@@ -23,6 +30,10 @@ export type RouteAccess =
 declare module 'fastify' {
   interface FastifyContextConfig {
     access?: RouteAccess;
+  }
+  interface FastifyInstance {
+    /** The collection tree (ADR 0028): access to a parent reaches its sub-collections. */
+    topicParentOf?: ParentOf;
   }
   interface FastifyRequest {
     /** The signed-in person, set by the auth guard; null on public routes. */
@@ -45,17 +56,26 @@ const topicOf = (params: unknown, name: string): unknown =>
  * Why the viewer may not use the route, or null: an unseen collection is 404 (it is not
  * even confirmed to exist), then a missing feature or role is 403.
  */
+/** What the route was asked about: its params, and the collection tree (ADR 0028). */
+export interface AccessTarget {
+  readonly params: unknown;
+  readonly parentOf?: ParentOf;
+}
+
 export function denialOf(
   access: RouteAccess,
   viewer: Viewer,
-  params: unknown,
+  { params, parentOf = NO_PARENT }: AccessTarget,
 ): AppError | null {
   if (access.public) return null;
   if (access.notWhileActing && viewer.actor)
     return new AppError('NOT_WHILE_ACTING', 'Only the person may do this');
   if (access.topicParam) {
     const topic = topicOf(params, access.topicParam);
-    if (typeof topic !== 'string' || !canSeeTopic(viewer.person, topic))
+    if (
+      typeof topic !== 'string' ||
+      !canSeeTopic(viewer.person, topic, parentOf)
+    )
       return new AppError('TOPIC_NOT_FOUND', 'Unknown topic');
   }
   if (access.master && !isMaster(viewer.person))
@@ -93,4 +113,8 @@ export function assertFeature(request: FastifyRequest, feature: Feature): void {
 }
 
 export const canSee = (request: FastifyRequest, topic: string): boolean =>
-  canSeeTopic(viewerOf(request).person, topic);
+  canSeeTopic(viewerOf(request).person, topic, parentOfRequest(request));
+
+/** The tree the app registered, or none (exact grants only). */
+export const parentOfRequest = (request: FastifyRequest): ParentOf =>
+  request.server.topicParentOf ?? NO_PARENT;
