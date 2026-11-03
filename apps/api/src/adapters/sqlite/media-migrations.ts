@@ -114,4 +114,143 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX media_bookmarks_cascade ON media_bookmarks (media_id);
     `,
   },
+  {
+    version: 5,
+    name: 'transcription',
+    sql: `
+      -- Jobs gain the kind 'transcribe' (ADR 0023): SQLite cannot change a CHECK, so the
+      -- table is rebuilt; nothing references jobs.
+      CREATE TABLE jobs_v5 (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('transcode', 'transcribe')),
+        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        lease_id TEXT,
+        lease_until INTEGER,
+        heartbeat_at INTEGER,
+        worker TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      INSERT INTO jobs_v5 SELECT id, media_id, kind, status, attempts, lease_id, lease_until,
+        heartbeat_at, worker, error, created_at, updated_at FROM jobs;
+      DROP TABLE jobs;
+      ALTER TABLE jobs_v5 RENAME TO jobs;
+      CREATE INDEX jobs_queued ON jobs (kind, created_at) WHERE status = 'queued';
+      CREATE INDEX jobs_leased ON jobs (lease_until) WHERE status = 'leased';
+      CREATE INDEX jobs_by_media ON jobs (media_id, kind, created_at);
+      CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
+
+      -- Paired workers (the owner's Mac): only a keyed hash of the token is kept.
+      CREATE TABLE transcribers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+        kinds TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_seen_at TEXT,
+        revoked_at TEXT
+      ) STRICT;
+
+      -- The term list put in every chunk's prompt, by version (KBC-040 edits it later).
+      CREATE TABLE terms (
+        version INTEGER NOT NULL CHECK (version >= 1),
+        position INTEGER NOT NULL CHECK (position >= 1),
+        term TEXT NOT NULL CHECK (length(term) BETWEEN 1 AND 100),
+        PRIMARY KEY (version, position)
+      ) STRICT;
+      INSERT INTO terms (version, position, term) VALUES
+        (1, 1, 'Mestre Gabriel'),
+        (1, 2, 'UDV'),
+        (1, 3, 'União do Vegetal'),
+        (1, 4, 'Vegetal'),
+        (1, 5, 'Hoasca'),
+        (1, 6, 'Burracheira'),
+        (1, 7, 'Caiano'),
+        (1, 8, 'Minguarana'),
+        (1, 9, 'Lupunamanta'),
+        (1, 10, 'Supairunam'),
+        (1, 11, 'Perambulando'),
+        (1, 12, 'Caminho Firme'),
+        (1, 13, 'Jardim das Flores'),
+        (1, 14, 'Luz do Universo'),
+        (1, 15, 'Conselheira do Rei'),
+        (1, 16, 'Mestre Florêncio'),
+        (1, 17, 'Mestre Paixão'),
+        (1, 18, 'Mestre Bartolomeu'),
+        (1, 19, 'Mestre Monteiro'),
+        (1, 20, 'Mestre José Luiz'),
+        (1, 21, 'Mestre Nonato'),
+        (1, 22, 'Mestre Modesto'),
+        (1, 23, 'chamada'),
+        (1, 24, 'sessão'),
+        (1, 25, 'estatutos'),
+        (1, 26, 'Tiuaco'),
+        (1, 27, 'Mariri'),
+        (1, 28, 'Chacrona'),
+        (1, 29, 'Rei Zinca'),
+        (1, 30, 'Rei Salomão'),
+        (1, 31, 'Associação Beneficente União do Vegetal'),
+        (1, 32, 'diretoria');
+
+      -- One row per transcription; the raw JSON file is the source of truth (BR-3).
+      CREATE TABLE transcripts (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        parameters TEXT NOT NULL,
+        parameters_version TEXT NOT NULL,
+        terms_version INTEGER NOT NULL,
+        vad TEXT NOT NULL CHECK (vad IN ('applied', 'skipped')),
+        speech_ratio REAL NOT NULL,
+        elapsed_ms INTEGER NOT NULL,
+        raw_path TEXT NOT NULL,
+        filter_version INTEGER NOT NULL,
+        confidence TEXT NOT NULL CHECK (confidence IN ('normal', 'low')),
+        word_count INTEGER NOT NULL,
+        removed_words INTEGER NOT NULL,
+        low_words INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (media_id, version)
+      ) STRICT;
+
+      -- Derived from the raw JSON; rebuilt when the filter changes.
+      CREATE TABLE segments (
+        transcript_id TEXT NOT NULL REFERENCES transcripts (id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        avg_logprob REAL,
+        compression_ratio REAL,
+        no_speech_prob REAL,
+        PRIMARY KEY (transcript_id, position)
+      ) STRICT;
+
+      CREATE TABLE words (
+        transcript_id TEXT NOT NULL REFERENCES transcripts (id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        segment_position INTEGER NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        probability REAL,
+        PRIMARY KEY (transcript_id, position)
+      ) STRICT;
+
+      -- Media already playable get transcribed too (FR-1).
+      INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at)
+        SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' ||
+                 substr(hex(randomblob(2)), 2) || '-' ||
+                 substr('89ab', 1 + (abs(random()) % 4), 1) ||
+                 substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))),
+               id, 'transcribe', 'queued', updated_at, updated_at
+        FROM media WHERE status = 'ready';
+    `,
+  },
 ];

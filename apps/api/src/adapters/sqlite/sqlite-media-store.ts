@@ -5,9 +5,12 @@ import {
   mediaFailureSchema,
   mediaJobKindSchema,
   mediaStatusSchema,
+  transcriptConfidenceSchema,
+  type MediaJobKind,
 } from '@kb-chat/contracts';
 import type {
   Heartbeat,
+  JobStatus,
   JobFailure,
   LeaseOwner,
   LeaseRequest,
@@ -20,6 +23,7 @@ import type {
   TranscodeResult,
 } from '../../ports/media-store.js';
 import { inTransaction } from './media-database.js';
+import { closeLease } from './sqlite-leases.js';
 
 type Row = Record<string, SQLOutputValue>;
 
@@ -45,11 +49,43 @@ function toMediaRecord(row: Row): MediaRecord {
     bytes: nullableNumber(row, 'bytes'),
     createdAt: text(row, 'created_at'),
     updatedAt: text(row, 'updated_at'),
+    transcription: {
+      jobStatus:
+        row['transcribe_job'] === null
+          ? null
+          : jobStatusOf(row['transcribe_job']),
+      version: nullableNumber(row, 'transcript_version'),
+      confidence:
+        row['transcript_confidence'] === null
+          ? null
+          : transcriptConfidenceSchema.parse(row['transcript_confidence']),
+    },
   };
 }
 
+const JOB_STATUSES: readonly JobStatus[] = [
+  'queued',
+  'leased',
+  'done',
+  'failed',
+  'dead',
+];
+
+function jobStatusOf(value: unknown): JobStatus {
+  const status = JOB_STATUSES.find((one) => one === value);
+  if (!status) throw new Error(`unknown job status ${String(value)}`);
+  return status;
+}
+
+/** The item, its newest transcribe job and its current transcript (KBC-036). */
 const MEDIA_COLUMNS = `id, topic, title, authorship, owner_principal, file_name, upload_bytes,
-  status, progress, failure, duration_ms, bytes, created_at, updated_at`;
+  status, progress, failure, duration_ms, bytes, created_at, updated_at,
+  (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
+     ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
+  (SELECT t.version FROM transcripts t WHERE t.media_id = media.id
+     ORDER BY t.version DESC LIMIT 1) AS transcript_version,
+  (SELECT t.confidence FROM transcripts t WHERE t.media_id = media.id
+     ORDER BY t.version DESC LIMIT 1) AS transcript_confidence`;
 
 /** The media catalog and its queue in SQLite (ADR 0022); the API is the only writer. */
 export class SqliteMediaStore implements MediaStorePort {
@@ -109,7 +145,12 @@ export class SqliteMediaStore implements MediaStorePort {
         .run(at, input.mediaId).changes;
       if (changed !== 1)
         throw new Error(`media ${input.mediaId} is not uploading`);
-      this.insertJob({ id: input.jobId, mediaId: input.mediaId, at });
+      this.insertJob({
+        id: input.jobId,
+        mediaId: input.mediaId,
+        kind: 'transcode',
+        at,
+      });
       return this.requireMedia(input.mediaId);
     });
   }
@@ -147,7 +188,12 @@ export class SqliteMediaStore implements MediaStorePort {
              updated_at = ? WHERE id = ?`,
         )
         .run(at, input.mediaId);
-      this.insertJob({ id: randomUUID(), mediaId: input.mediaId, at });
+      this.insertJob({
+        id: randomUUID(),
+        mediaId: input.mediaId,
+        kind: 'transcode',
+        at,
+      });
       return this.requireMedia(input.mediaId);
     });
   }
@@ -158,12 +204,14 @@ export class SqliteMediaStore implements MediaStorePort {
       const row = this.takeOldestQueued(request);
       if (!row) return null;
       const job = toLeasedJob(row);
-      this.setMediaProgress({
-        mediaId: job.mediaId,
-        status: 'processing',
-        progress: 0,
-        at: request.now.toISOString(),
-      });
+      // A transcription never changes the item's own status: it stays playable.
+      if (job.kind === 'transcode')
+        this.setMediaProgress({
+          mediaId: job.mediaId,
+          status: 'processing',
+          progress: 0,
+          at: request.now.toISOString(),
+        });
       return job;
     });
   }
@@ -184,10 +232,13 @@ export class SqliteMediaStore implements MediaStorePort {
           beat.worker,
         ).changes;
       if (changed !== 1) return false;
-      const mediaId = this.mediaOfJob(beat.jobId);
-      if (mediaId && beat.progress !== null)
+      const job = this.db
+        .prepare('SELECT media_id, kind FROM jobs WHERE id = ?')
+        .get(beat.jobId);
+      // Only a conversion's progress is the item's (a transcription has its own status).
+      if (job?.['kind'] === 'transcode' && beat.progress !== null)
         this.setMediaProgress({
-          mediaId,
+          mediaId: text(job, 'media_id'),
           status: 'processing',
           progress: beat.progress,
           at: beat.now.toISOString(),
@@ -201,41 +252,49 @@ export class SqliteMediaStore implements MediaStorePort {
     return inTransaction(this.db, () => {
       if (!this.closeLease(result, { status: 'done', error: null, at }))
         return false;
-      const { rendition } = result;
-      this.db
-        .prepare(
-          `INSERT OR REPLACE INTO media_files (media_id, rendition, path, bytes, mime)
-           VALUES (?, 'audio', ?, ?, ?)`,
-        )
-        .run(
-          rendition.mediaId,
-          rendition.path,
-          rendition.bytes,
-          rendition.mime,
-        );
-      this.db
-        .prepare(
-          `UPDATE media SET status = 'ready', progress = NULL, failure = NULL,
-             duration_ms = ?, bytes = ?, updated_at = ? WHERE id = ?`,
-        )
-        .run(result.durationMs, rendition.bytes, at, rendition.mediaId);
+      this.saveRendition(result, at);
+      this.insertJob({
+        id: result.transcribeJobId,
+        mediaId: result.rendition.mediaId,
+        kind: 'transcribe',
+        at,
+      });
       return true;
     });
+  }
+
+  /** The rendition is the item's playable file; the item is ready. */
+  private saveRendition(result: TranscodeResult, at: string): void {
+    const { rendition } = result;
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO media_files (media_id, rendition, path, bytes, mime)
+         VALUES (?, 'audio', ?, ?, ?)`,
+      )
+      .run(rendition.mediaId, rendition.path, rendition.bytes, rendition.mime);
+    this.db
+      .prepare(
+        `UPDATE media SET status = 'ready', progress = NULL, failure = NULL,
+           duration_ms = ?, bytes = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(result.durationMs, rendition.bytes, at, rendition.mediaId);
   }
 
   failJob(failure: JobFailure): boolean {
     const at = failure.now.toISOString();
     return inTransaction(this.db, () => {
-      const attempts = this.attemptsOf(failure);
-      if (attempts === null) return false;
+      const held = this.heldBy(failure);
+      if (held === null) return false;
       const permanent = failure.failure === 'invalid-audio';
-      const givenUp = permanent || attempts >= failure.maxAttempts;
+      const givenUp = permanent || held.attempts >= failure.maxAttempts;
       const status = givenUp ? (permanent ? 'failed' : 'dead') : 'queued';
       this.closeLease(failure, {
         status,
         error: failure.detail.slice(0, 2_000),
         at,
       });
+      // A failed transcription leaves the item playable as it is.
+      if (held.kind === 'transcribe') return true;
       if (givenUp)
         this.failMedia({
           mediaId: this.requireMediaOfJob(failure.jobId),
@@ -258,7 +317,7 @@ export class SqliteMediaStore implements MediaStorePort {
     return inTransaction(this.db, () => {
       const expired = this.db
         .prepare(
-          `SELECT id, media_id, attempts FROM jobs
+          `SELECT id, media_id, kind, attempts FROM jobs
            WHERE status = 'leased' AND lease_until < ?`,
         )
         .all(input.now.getTime());
@@ -267,7 +326,8 @@ export class SqliteMediaStore implements MediaStorePort {
         const givenUp = Number(row['attempts']) >= input.maxAttempts;
         this.releaseExpired({ jobId: text(row, 'id'), givenUp, at });
         if (givenUp) failed++;
-        this.afterExpiry({ mediaId: text(row, 'media_id'), givenUp, at });
+        if (row['kind'] === 'transcode')
+          this.afterExpiry({ mediaId: text(row, 'media_id'), givenUp, at });
       }
       return { requeued: expired.length - failed, failed };
     });
@@ -301,13 +361,18 @@ export class SqliteMediaStore implements MediaStorePort {
     return media;
   }
 
-  private insertJob(job: { id: string; mediaId: string; at: string }): void {
+  private insertJob(job: {
+    id: string;
+    mediaId: string;
+    kind: MediaJobKind;
+    at: string;
+  }): void {
     this.db
       .prepare(
         `INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at)
-         VALUES (?, ?, 'transcode', 'queued', ?, ?)`,
+         VALUES (?, ?, ?, 'queued', ?, ?)`,
       )
-      .run(job.id, job.mediaId, job.at, job.at);
+      .run(job.id, job.mediaId, job.kind, job.at, job.at);
   }
 
   /** The oldest queued job of the asked kinds, leased in the same statement. */
@@ -336,32 +401,24 @@ export class SqliteMediaStore implements MediaStorePort {
     owner: LeaseOwner,
     outcome: { status: string; error: string | null; at: string },
   ): boolean {
-    return (
-      this.db
-        .prepare(
-          `UPDATE jobs SET status = ?, error = ?, lease_id = NULL, lease_until = NULL,
-             updated_at = ?
-           WHERE id = ? AND lease_id = ? AND worker = ? AND status = 'leased'`,
-        )
-        .run(
-          outcome.status,
-          outcome.error,
-          outcome.at,
-          owner.jobId,
-          owner.leaseId,
-          owner.worker,
-        ).changes === 1
-    );
+    return closeLease(this.db, owner, outcome);
   }
 
-  private attemptsOf(owner: LeaseOwner): number | null {
+  private heldBy(
+    owner: LeaseOwner,
+  ): { attempts: number; kind: MediaJobKind } | null {
     const row = this.db
       .prepare(
-        `SELECT attempts FROM jobs
+        `SELECT attempts, kind FROM jobs
          WHERE id = ? AND lease_id = ? AND worker = ? AND status = 'leased'`,
       )
       .get(owner.jobId, owner.leaseId, owner.worker);
-    return row ? Number(row['attempts']) : null;
+    return row
+      ? {
+          attempts: Number(row['attempts']),
+          kind: mediaJobKindSchema.parse(row['kind']),
+        }
+      : null;
   }
 
   private releaseExpired(input: {

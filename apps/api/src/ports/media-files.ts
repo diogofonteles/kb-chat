@@ -30,6 +30,16 @@ export interface MediaFilesPort {
    * lease cannot overwrite (or, cleaning up, delete) another worker's result.
    */
   workPath(mediaId: string, leaseId: string): string;
+  /** Where the 16 kHz mono FLAC for the transcriber waits (ADR 0022 §4). */
+  flacPath(mediaId: string): string;
+  /** Where one lease of the conversion writes that FLAC. */
+  flacWorkPath(mediaId: string, leaseId: string): string;
+  /** Where one transcript's raw JSON is kept (ADR 0023 §4: next to the database). */
+  transcriptPath(mediaId: string, transcriptId: string): string;
+  /** Writes a whole file atomically (temp file and rename), creating its folder. */
+  writeFile(path: string, data: string): Promise<void>;
+  /** Removes every raw transcript of an item (the item is being removed). */
+  removeTranscripts(mediaId: string): Promise<void>;
   /** Moves a finished work file to its final path (atomic rename). */
   promote(from: string, to: string): Promise<void>;
   /**

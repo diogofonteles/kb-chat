@@ -107,6 +107,7 @@ describe('SqliteMediaStore catalog', () => {
     const media = queued();
     const job = leased();
     store.completeTranscode({
+      transcribeJobId: crypto.randomUUID(),
       ...owner(job),
       durationMs: 1_000,
       now: at(5),
@@ -205,6 +206,7 @@ describe('SqliteMediaStore queue', () => {
     expect(store.heartbeat({ ...owner(job, 'other'), ...beat })).toBe(false);
     expect(
       store.completeTranscode({
+        transcribeJobId: crypto.randomUUID(),
         ...stranger,
         durationMs: 1,
         now: at(1),
@@ -227,6 +229,7 @@ describe('SqliteMediaStore queue', () => {
     const job = leased();
     expect(
       store.completeTranscode({
+        transcribeJobId: crypto.randomUUID(),
         ...owner(job),
         durationMs: 180_000,
         now: at(30),
@@ -325,6 +328,7 @@ describe('SqliteMediaStore queue', () => {
     const fresh = leased(62);
     expect(
       store.completeTranscode({
+        transcribeJobId: crypto.randomUUID(),
         ...owner(stale),
         durationMs: 1,
         now: at(63),

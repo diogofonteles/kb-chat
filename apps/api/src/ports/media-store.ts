@@ -3,7 +3,20 @@ import type {
   MediaFailure,
   MediaJobKind,
   MediaStatus,
+  TranscriptConfidence,
 } from '@kb-chat/contracts';
+
+/** Where a job is in the queue (ADR 0022 §2). */
+export type JobStatus = 'queued' | 'leased' | 'done' | 'failed' | 'dead';
+
+/** An item's transcription as stored: its newest transcribe job and current transcript. */
+export interface TranscriptionRecord {
+  /** The newest transcribe job's status; null when none was ever made. */
+  readonly jobStatus: JobStatus | null;
+  /** The current (newest) transcript's version and confidence; null before the first. */
+  readonly version: number | null;
+  readonly confidence: TranscriptConfidence | null;
+}
 
 /** A media item as stored (ADR 0022): the catalog row the module turns into the contract. */
 export interface MediaRecord {
@@ -24,6 +37,7 @@ export interface MediaRecord {
   readonly bytes: number | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly transcription: TranscriptionRecord;
 }
 
 export interface NewMedia {
@@ -78,6 +92,8 @@ export interface Heartbeat extends LeaseOwner {
 export interface TranscodeResult extends LeaseOwner {
   readonly rendition: MediaRendition;
   readonly durationMs: number;
+  /** The item is ready: its transcription is queued with this job id (KBC-036 FR-1). */
+  readonly transcribeJobId: string;
   readonly now: Date;
 }
 
@@ -123,6 +139,7 @@ export interface MediaStorePort {
   mediaOfJob(jobId: string): string | null;
   /** False when the lease is no longer this worker's (expired, re-leased, removed). */
   heartbeat(beat: Heartbeat): boolean;
+  /** The rendition is in place: the item is ready and its transcription is queued. */
   completeTranscode(result: TranscodeResult): boolean;
   failJob(failure: JobFailure): boolean;
   /** Expired leases go back to the queue, or fail after `maxAttempts`. */
