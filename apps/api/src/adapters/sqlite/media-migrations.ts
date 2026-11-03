@@ -271,6 +271,33 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
+    // KBC-051 (the media library). Expand only: the previous image reads the same rows.
+    version: 7,
+    name: 'media-library',
+    sql: `
+      -- When the person's player last saved a position (BR-3, BR-4); marking as heard
+      -- does not play a media. Older rows were all saved by a player.
+      ALTER TABLE media_progress ADD COLUMN played_at TEXT;
+      UPDATE media_progress SET played_at = updated_at;
+      CREATE INDEX media_progress_by_play ON media_progress (principal, played_at DESC);
+      CREATE INDEX media_by_topic_status ON media (topic, status, created_at DESC);
+
+      -- The library's choices (BR-7); null is the default.
+      ALTER TABLE media_preferences ADD COLUMN library_sort TEXT CHECK (library_sort IN
+        ('recently-played', 'recently-added', 'title', 'duration', 'author'));
+      ALTER TABLE media_preferences ADD COLUMN library_view TEXT
+        CHECK (library_view IN ('list', 'grid'));
+      ALTER TABLE media_preferences ADD COLUMN library_filters TEXT
+        CHECK (library_filters IS NULL OR json_valid(library_filters));
+
+      -- "Limpar recentes" (BR-4): plays before this instant leave "Ouvidas recentemente".
+      CREATE TABLE media_library_state (
+        principal TEXT PRIMARY KEY,
+        recents_cleared_at TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
+  {
     // KBC-064 (ADR 0029 §1): the voices of a recording, separated on the owner's Mac: its
     // own tables only. No table holds a voice print (BR-1). The `jobs` kind 'diarize' and
     // its hint come in version 11, after KBC-044's rebuild of `jobs` (10). Version 7 is

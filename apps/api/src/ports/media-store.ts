@@ -1,6 +1,7 @@
 import type {
   MediaFailure,
   MediaJobKind,
+  MediaKind,
   MediaStatus,
   TranscriptConfidence,
 } from '@kb-chat/contracts';
@@ -41,6 +42,11 @@ export interface MediaRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly transcription: TranscriptionRecord;
+}
+
+/** A media item with its kind, for the library (KBC-051). */
+export interface LibraryRecord extends MediaRecord {
+  readonly kind: MediaKind;
 }
 
 export interface NewMedia {
@@ -137,6 +143,8 @@ export interface MediaStorePort {
   listMedia(topic: string): MediaRecord[];
   /** The collections holding media by this author (the legacy seed, KBC-049 BR-4). */
   topicsWithAuthor(author: string): string[];
+  /** Every media item, any collection (the library filters what the person sees). */
+  listLibrary(): LibraryRecord[];
   /** The upload arrived: the item waits in the queue with a new `transcode` job. */
   markUploaded(input: {
     readonly mediaId: string;

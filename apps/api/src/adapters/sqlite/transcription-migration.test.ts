@@ -6,7 +6,7 @@ import { MEDIA_MIGRATIONS } from './media-migrations.js';
 import { SqliteTranscriptStore } from './sqlite-transcript-store.js';
 
 const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < 5);
-/** Up to this migration: later ones (KBC-049's media-author) are not what it proves. */
+/** Up to this migration: later ones (KBC-049's media-author, KBC-051's library) are tested on their own. */
 const THROUGH = MEDIA_MIGRATIONS.filter((one) => one.version <= 5);
 
 function insertMedia(db: DatabaseSync, id: string, status: string): void {

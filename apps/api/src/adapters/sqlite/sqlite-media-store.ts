@@ -4,11 +4,13 @@ import {
   SILENCE_DETECTOR,
   mediaFailureSchema,
   mediaJobKindSchema,
+  mediaKindSchema,
   mediaStatusSchema,
   transcriptConfidenceSchema,
   type MediaJobKind,
 } from '@kb-chat/contracts';
 import type {
+  LibraryRecord,
   Heartbeat,
   JobStatus,
   JobFailure,
@@ -154,6 +156,16 @@ export class SqliteMediaStore implements MediaStorePort {
       )
       .all(author)
       .map((row) => text(row, 'topic'));
+  }
+
+  listLibrary(): LibraryRecord[] {
+    return this.db
+      .prepare(`SELECT ${MEDIA_COLUMNS}, kind FROM media`)
+      .all()
+      .map((row) => ({
+        ...toMediaRecord(row),
+        kind: mediaKindSchema.parse(row['kind']),
+      }));
   }
 
   markUploaded(input: {

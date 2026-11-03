@@ -97,6 +97,8 @@ import {
   SilenceService,
   WorkerService,
   listeningRoutes,
+  libraryRoutes,
+  LibraryService,
   bookmarkRoutes,
   BookmarkService,
   ListeningService,
@@ -493,6 +495,26 @@ function diarizationService(wiring: {
   });
 }
 
+/** The media library home of each person (KBC-051): all their collections at once. */
+async function registerLibrary(
+  app: FastifyInstance,
+  wiring: {
+    media: MediaDeps;
+    catalog: CatalogRegistry;
+    transcribers: TranscriberService;
+  },
+) {
+  const { store, listening } = wiring.media;
+  const service = new LibraryService({
+    store,
+    listening,
+    presence: () => wiring.transcribers.presence(),
+    scopeOf: (topic) =>
+      wiring.catalog.scope(topic).map((one) => one.topic.slug),
+  });
+  await app.register(libraryRoutes(service));
+}
+
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const { store, workerToken, createPerMinute } = wiring.media;
@@ -511,6 +533,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     media,
   });
   await app.register(silenceRoutes(silences));
+  await registerLibrary(app, { ...wiring, transcribers });
   await registerWorker(app, { media: wiring.media, transcribers, silences });
   const proposals = await registerProposals(app, {
     ...wiring,

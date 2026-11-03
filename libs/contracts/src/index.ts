@@ -19,3 +19,4 @@ export * from './invite-profiles.js';
 export * from './media.js';
 export * from './authors.js';
 export * from './track-proposals.js';
+export * from './media-library.js';

@@ -21,7 +21,8 @@ export type RouteAccess =
       readonly public?: never;
       /** The route param naming a collection: one the person cannot see is 404. */
       readonly topicParam?: 'topic';
-      readonly feature?: Feature;
+      /** A feature, or several that are all needed (KBC-051: the library needs `media` too). */
+      readonly feature?: Feature | readonly Feature[];
       readonly master?: true;
       /** Only the person may do this, never a master acting as them (KBC-060 BR-4). */
       readonly notWhileActing?: true;
@@ -80,9 +81,20 @@ export function denialOf(
   }
   if (access.master && !isMaster(viewer.person))
     return new AppError('FORBIDDEN', 'Only a master may do this');
-  if (access.feature && !hasFeature(viewer.person, access.feature))
+  if (!hasFeatures(viewer.person, access.feature))
     return new AppError('FORBIDDEN', 'This feature is not enabled');
   return null;
+}
+
+/** True when the person has every feature the route names (none named: true). */
+function hasFeatures(
+  person: Viewer['person'],
+  feature: Feature | readonly Feature[] | undefined,
+): boolean {
+  if (feature === undefined) return true;
+  const needed: readonly Feature[] =
+    typeof feature === 'string' ? [feature] : feature;
+  return needed.every((one) => hasFeature(person, one));
 }
 
 /** The signed-in person of a request behind the guard. */
