@@ -105,6 +105,8 @@ import {
   transcriberRoutes,
   TranscriberService,
   TranscriptionService,
+  TranscriptService,
+  transcriptRoutes,
   workerRoutes,
 } from './modules/media/index.js';
 import type { MediaDeps } from './media-factory.js';
@@ -433,10 +435,25 @@ async function registerWorker(
   );
 }
 
+/** Each person's listening: position, bookmarks, the transcript and subtitles. */
+async function registerListening(
+  app: FastifyInstance,
+  wiring: { deps: MediaDeps; media: MediaService },
+) {
+  const { listening, bookmarks, transcripts } = wiring.deps;
+  const { media } = wiring;
+  await app.register(
+    listeningRoutes(new ListeningService({ listening, media })),
+  );
+  await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
+  await app.register(
+    transcriptRoutes(new TranscriptService({ transcripts, media })),
+  );
+}
+
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
-  const { store, listening, bookmarks, workerToken, createPerMinute } =
-    wiring.media;
+  const { store, workerToken, createPerMinute } = wiring.media;
   const transcribers = new TranscriberService({
     store: wiring.media.transcribers,
     tokenKey: wiring.media.tokenKey,
@@ -445,10 +462,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   await app.register(mediaRoutes(media, createPerMinute));
   await app.register(transcriberRoutes({ transcribers, media }));
-  await app.register(
-    listeningRoutes(new ListeningService({ listening, media })),
-  );
-  await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
+  await registerListening(app, { deps: wiring.media, media });
   const silences = new SilenceService({
     store,
     silences: wiring.media.silences,

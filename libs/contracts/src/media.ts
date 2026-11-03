@@ -137,6 +137,26 @@ export const mediaItemSchema = z.object({
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
+/* ---------- Transcript for reading and subtitles (KBC-038) ---------- */
+
+/** One segment of the current transcript, already filtered (ADR 0023 §5), times in ms. */
+export const transcriptSegmentSchema = z.object({
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(0),
+  text: z.string(),
+});
+export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
+
+/** GET /api/v1/media/:id/transcript: the current version (the newest, KBC-036 BR-3). */
+export const mediaTranscriptSchema = z.object({
+  mediaId: mediaIdSchema,
+  version: z.number().int().min(1),
+  /** `low`: always shown with the notice (KBC-036 BR-5, KBC-038 BR-2). */
+  confidence: transcriptConfidenceSchema,
+  segments: z.array(transcriptSegmentSchema),
+});
+export type MediaTranscript = z.infer<typeof mediaTranscriptSchema>;
+
 export const mediaListSchema = z.object({ items: z.array(mediaItemSchema) });
 export type MediaList = z.infer<typeof mediaListSchema>;
 

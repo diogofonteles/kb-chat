@@ -43,6 +43,19 @@ export {
 } from './transcription-service.js';
 export { transcriberRoutes } from './transcriber-routes.js';
 export {
+  TranscriptService,
+  type Subtitles,
+  type TranscriptServiceDeps,
+} from './transcript-service.js';
+export { transcriptRoutes } from './transcript-routes.js';
+export {
+  SUBTITLE_RULES,
+  SUBTITLE_RULES_VERSION,
+  cuesOf,
+  formatWebVtt,
+  type SubtitleCue,
+} from './subtitle-cues.js';
+export {
   FILTER_VERSION,
   deriveTranscript,
   type DerivedTranscript,
