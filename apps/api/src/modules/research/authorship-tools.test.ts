@@ -241,7 +241,7 @@ describe('authorship in the research tools (KBC-020 AC-4, AC-5)', () => {
       'Autoria: Mestre Laércio (autor: José Laércio do Egito)',
     );
     expect(output).toContain(
-      'Autoria: Outros autores (não é do Mestre Laércio; diga o autor ou o livro ao citar)',
+      'Autoria: Outros autores (não é de Mestre Laércio; diga o autor ou o livro ao citar)',
     );
     expect(ctx.book.list()).toEqual([
       {

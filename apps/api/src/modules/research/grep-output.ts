@@ -1,7 +1,12 @@
 import type { CatalogEntry } from '../catalog/index.js';
 import { originFolder } from './doc-filter.js';
 import type { DocMatch, Occurrence } from './text-finder.js';
-import { authorshipPart, oneLine, quote } from './tool-output.js';
+import {
+  authorshipPart,
+  oneLine,
+  quote,
+  type AuthorshipLabels,
+} from './tool-output.js';
 
 /**
  * Characters a page may take (NFR-3: every output stays under 60,000, below Claude Code's
@@ -69,12 +74,15 @@ const titlePart = (n: number, entry: CatalogEntry): string =>
 export function fileLine(
   n: number,
   match: DocMatch,
-  passage: string | null,
+  {
+    passage,
+    labels,
+  }: { readonly passage: string | null; readonly labels?: AuthorshipLabels },
 ): string {
   const parts = [titlePart(n, match.entry)];
   if (match.occurrences > 0) parts.push(occurrencesPart(match));
   parts.push(`origem: ${oneLine(originFolder(match.entry), 120)}`);
-  const line = `${parts.join(' · ')}${authorshipPart(match.entry.authorship)}`;
+  const line = `${parts.join(' · ')}${authorshipPart(match.entry.authorship, labels)}`;
   return passage
     ? `${line} — Trecho: ${oneLine(passage, PASSAGE_CHARS)}`
     : line;
@@ -84,29 +92,41 @@ export function fileLine(
 export function listedLine(
   n: number,
   match: DocMatch,
-  withSummary: boolean,
+  {
+    withSummary,
+    labels,
+  }: { readonly withSummary: boolean; readonly labels?: AuthorshipLabels },
 ): string {
-  const line = fileLine(n, match, null);
+  const line = fileLine(n, match, { passage: null, labels });
   const summary = match.entry.summary;
   return withSummary && summary
     ? `${line} — Resumo: ${oneLine(summary, PASSAGE_CHARS)}`
     : line;
 }
 
-export const countLine = (n: number, match: DocMatch): string =>
-  `${titlePart(n, match.entry)} · ${match.occurrences}${authorshipPart(match.entry.authorship)}`;
+export const countLine = (
+  n: number,
+  match: DocMatch,
+  labels?: AuthorshipLabels,
+): string =>
+  `${titlePart(n, match.entry)} · ${match.occurrences}${authorshipPart(match.entry.authorship, labels)}`;
 
 /** "[3] Título: ocorrências 21–25 de 25", the head of a document's occurrences on a page. */
 export function groupLine(
   n: number,
   entry: CatalogEntry,
-  span: { readonly from: number; readonly to: number; readonly of: number },
+  span: {
+    readonly from: number;
+    readonly to: number;
+    readonly of: number;
+    readonly labels?: AuthorshipLabels;
+  },
 ): string {
   const range =
     span.from === span.to
       ? `ocorrência ${span.from}`
       : `ocorrências ${span.from}–${span.to}`;
-  return `${titlePart(n, entry)}: ${range} de ${span.of}${authorshipPart(entry.authorship)}`;
+  return `${titlePart(n, entry)}: ${range} de ${span.of}${authorshipPart(entry.authorship, span.labels)}`;
 }
 
 /** One occurrence: its body offset (for read_document) and the text around it. */

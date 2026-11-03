@@ -1,6 +1,6 @@
 import type { ResearchTurn } from '@kb-chat/contracts';
 import type { AgentMessage } from '../../../ports/llm.js';
-import { AUTHORSHIP_LINES, OUTSIDE_MARK, SECURITY_LINE } from '../prompt.js';
+import { OUTSIDE_MARK, SECURITY_LINE, authorshipLines } from '../prompt.js';
 
 /** How a batch reader's system prompt starts (the stub model recognizes it in E2E). */
 export const BATCH_PROMPT_START = 'Você lê um lote de documentos';
@@ -10,7 +10,10 @@ export const CONDENSE_PROMPT_START = 'Você junta achados';
 export const NOTHING_FOUND = 'NENHUM';
 
 /** A batch reader's rules (KBC-030, ADR 0021): extract, label, quote; nothing else. */
-export const batchSystemPrompt = (topicTitle: string): string =>
+export const batchSystemPrompt = (
+  topicTitle: string,
+  mainAuthor: string | null,
+): string =>
   [
     `${BATCH_PROMPT_START} de um acervo pessoal sobre “${topicTitle}” e extrai deles, por completo, o que o pedido pede. Escreva em português do Brasil.`,
     '',
@@ -22,7 +25,7 @@ export const batchSystemPrompt = (topicTitle: string): string =>
     '- Nada além das linhas: sem introdução, sem conclusão, sem contagens.',
     '- Diga a autoria quando o achado for de outro autor citado no texto.',
     '',
-    ...AUTHORSHIP_LINES,
+    ...authorshipLines(mainAuthor),
     '',
     SECURITY_LINE,
   ].join('\n');
@@ -51,7 +54,10 @@ export const condenseSystemPrompt = (topicTitle: string): string =>
   ].join('\n');
 
 /** The orchestrator's last call: the answer from the merged findings, no tools. */
-export const sweepAnswerSystemPrompt = (topicTitle: string): string =>
+export const sweepAnswerSystemPrompt = (
+  topicTitle: string,
+  mainAuthor: string | null,
+): string =>
   [
     `Você é um pesquisador que estuda com o leitor um acervo pessoal de textos sobre “${topicTitle}” e responde em português do Brasil.`,
     '',
@@ -62,7 +68,7 @@ export const sweepAnswerSystemPrompt = (topicTitle: string): string =>
     '- Nunca escreva linha nem números de cobertura ("Cobertura: …", "varri N documentos"): o aplicativo mede a cobertura e a mostra ao leitor. Se a varredura não terminou, diga só que a lista é parcial.',
     '- A primeira frase já é conteúdo da resposta; não fale do seu trabalho nem da varredura.',
     '',
-    ...AUTHORSHIP_LINES,
+    ...authorshipLines(mainAuthor),
     '',
     SECURITY_LINE,
   ].join('\n');
@@ -89,7 +95,10 @@ function findingsBlock({ findings, partial, cut }: AnswerRequest): string {
 
 /** The final call's conversation: the rules, the previous turns, the question with the findings. */
 export function sweepAnswerMessages(
-  topicTitle: string,
+  {
+    topicTitle,
+    mainAuthor,
+  }: { readonly topicTitle: string; readonly mainAuthor: string | null },
   request: AnswerRequest,
 ): AgentMessage[] {
   const history = request.history.flatMap((turn): AgentMessage[] => [
@@ -97,7 +106,10 @@ export function sweepAnswerMessages(
     { role: 'assistant', content: turn.answer, toolCalls: [] },
   ]);
   return [
-    { role: 'system', content: sweepAnswerSystemPrompt(topicTitle) },
+    {
+      role: 'system',
+      content: sweepAnswerSystemPrompt(topicTitle, mainAuthor),
+    },
     ...history,
     {
       role: 'user',

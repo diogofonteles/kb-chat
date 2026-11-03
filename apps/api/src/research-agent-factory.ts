@@ -24,6 +24,8 @@ export interface ResearchAgentDeps {
   readonly ledger: SpendLedgerPort;
   /** Per-profile budgets (ADR 0013); default: the module's, without server settings. */
   readonly budgets?: ResearchBudgets;
+  /** The collection's main author's name (KBC-049): the authorship rule names him. */
+  readonly mainAuthorOf?: (topic: string) => string | null;
 }
 
 /** The research budgets with the server's exhaustive-profile settings (KBC-017). */
@@ -88,9 +90,14 @@ const perTokenRunnerOf =
     });
 
 export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
-  const { catalog, index, vault, ledger, budgets } = deps;
+  const { catalog, index, vault, ledger, budgets, mainAuthorOf } = deps;
   const search = new SearchService({ catalog, index, vault });
-  const tools = new ResearchTools({ search, catalog, vault });
+  const tools = new ResearchTools({
+    search,
+    catalog,
+    vault,
+    ...(mainAuthorOf && { mainAuthorOf }),
+  });
   return {
     search,
     tools,
@@ -98,7 +105,10 @@ export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgent {
     perTokenRunner: perTokenRunnerOf({ tools, ledger, budgets }),
     systemPrompt: (topic, profile, canDeepen) =>
       researchSystemPrompt(
-        tools.topicTitle(topic) ?? topic,
+        {
+          title: tools.topicTitle(topic) ?? topic,
+          mainAuthor: tools.mainAuthor(topic),
+        },
         profile,
         canDeepen,
       ),

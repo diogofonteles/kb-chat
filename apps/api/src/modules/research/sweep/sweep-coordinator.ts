@@ -85,6 +85,8 @@ export interface SweepDeps {
 export interface SweepRequest {
   readonly topic: string;
   readonly topicTitle: string;
+  /** The collection's main author (KBC-049), or null. */
+  readonly mainAuthor: string | null;
   readonly question: string;
   readonly layout: SweepLayout;
   /** The totals of the turns this one continues. */
@@ -192,7 +194,7 @@ class SweepRun {
     );
     const extract = request.layout.plan.extract;
     const output = await this.call(
-      batchSystemPrompt(request.topicTitle),
+      batchSystemPrompt(request.topicTitle, request.mainAuthor),
       batchUserPrompt({ ...request, extract, text }),
     );
     // A call cut short by "Parar" may return part of its text: it never counts.

@@ -19,7 +19,6 @@ import {
   type DocFilter,
 } from './doc-filter.js';
 import { GrepTool } from './grep-tool.js';
-import type { SourceBook } from './source-book.js';
 import { SourcesTool } from './sources-tool.js';
 import { SweepPlanner } from './sweep/sweep-planner.js';
 import { TextFinder } from './text-finder.js';
@@ -32,12 +31,15 @@ import {
   type ToolContext,
 } from './tool-context.js';
 import {
+  LEGACY_MAIN_LABEL,
+  authorshipLabels,
   foldName,
   headerLines,
   hitLine,
   quote,
   refLine,
   windowLines,
+  type AuthorshipLabels,
 } from './tool-output.js';
 import {
   BATCH_WINDOW_CHARS,
@@ -59,6 +61,8 @@ export interface ResearchToolsDeps {
   readonly search: SearchService;
   readonly catalog: CatalogRegistry;
   readonly vault: VaultReaderPort;
+  /** The collection's main author's name (KBC-049); without it, the legacy "Mestre Laércio". */
+  readonly mainAuthorOf?: (topic: string) => string | null;
 }
 
 type Handler = (args: unknown, context: ToolContext) => PreparedCall;
@@ -68,13 +72,20 @@ type SearchArgs = z.output<typeof searchArgsSchema>;
 /** "“ritmo” (modo all; assuntos: X; entidade contém “y”)" for the search's first line. */
 function searchScope(
   args: SearchArgs,
-  concepts: readonly string[],
-  filter: DocFilter,
+  {
+    concepts,
+    filter,
+    labels,
+  }: {
+    readonly concepts: readonly string[];
+    readonly filter: DocFilter;
+    readonly labels?: AuthorshipLabels | undefined;
+  },
 ): string {
   const parts = [
     `modo ${args.mode}`,
     concepts.length > 0 && `assuntos: ${concepts.join(', ')}`,
-    describeFilter(filter),
+    describeFilter(filter, labels),
   ].filter(Boolean);
   return `${quote(args.query)} (${parts.join('; ')})`;
 }
@@ -165,10 +176,21 @@ export class ResearchTools {
     return this.deps.catalog.get(topic)?.topic.title ?? null;
   }
 
+  /** The collection's main author (KBC-049 BR-2), or null when it has none. */
+  mainAuthor(topic: string): string | null {
+    return this.deps.mainAuthorOf
+      ? this.deps.mainAuthorOf(topic)
+      : LEGACY_MAIN_LABEL;
+  }
+
   prepare(call: ToolCall, context: ToolContext): PreparedCall {
     const handler = this.handlers[call.name as ToolName] as Handler | undefined;
     if (!handler) return failed(`Ferramenta desconhecida: ${call.name}.`);
-    const prepared = handler(parseArguments(call.arguments), context);
+    const labels = authorshipLabels(this.mainAuthor(context.topic));
+    const prepared = handler(parseArguments(call.arguments), {
+      ...context,
+      labels,
+    });
     return {
       steps: prepared.steps,
       run: () => prepared.run().catch(describeFailure),
@@ -197,17 +219,20 @@ export class ResearchTools {
       context,
     );
     const found = await this.filteredSearch(args, { topic, concepts, filter });
-    const scope = searchScope(args, concepts, filter);
+    const scope = searchScope(args, {
+      concepts,
+      filter,
+      labels: context.labels,
+    });
     if (found.shown.length === 0) return noHits(scope, args.offset);
     const range = searchRange(args, { ...found, shown: found.shown.length });
     return [
       `Busca ${scope}: ${range}`,
       ...found.shown.map((hit) =>
-        hitLine(
-          book.number(hit),
-          hit,
-          this.entry(topic, hit.id)?.summary ?? null,
-        ),
+        hitLine(book.number(hit), hit, {
+          summary: this.entry(topic, hit.id)?.summary ?? null,
+          labels: context.labels,
+        }),
       ),
     ].join('\n');
   }
@@ -334,7 +359,7 @@ export class ResearchTools {
   private async read(
     entry: CatalogEntry,
     args: WindowRequest,
-    { topic, book }: ToolContext,
+    { topic, book, labels }: ToolContext,
   ): Promise<string> {
     const n = book.number(entry);
     const text = await this.deps.vault.readDocument(topic, entry.id);
@@ -342,7 +367,7 @@ export class ResearchTools {
     const body = splitFrontmatter(text).body.normalize('NFC');
     const window = windowOf(body, args);
     return [
-      ...headerLines(n, entry),
+      ...headerLines(n, entry, labels),
       ...windowLines(n, window, args.around),
     ].join('\n');
   }
@@ -363,7 +388,10 @@ export class ResearchTools {
     };
   }
 
-  private related(entry: CatalogEntry, { topic, book }: ToolContext): string {
+  private related(
+    entry: CatalogEntry,
+    { topic, book, labels }: ToolContext,
+  ): string {
     const catalog = this.deps.catalog.get(topic);
     const n = book.number(entry);
     if (!catalog) return `O documento [${n}] não tem ligações.`;
@@ -373,7 +401,7 @@ export class ResearchTools {
         const label = RELATION_LABELS[group as keyof typeof RELATION_LABELS];
         const lines = refs
           .slice(0, MAX_REFS_PER_GROUP)
-          .map((ref) => this.relatedLine(topic, ref, book));
+          .map((ref) => this.relatedLine(topic, ref, { book, labels }));
         return [`${label} (${refs.length}):`, ...lines].join('\n');
       });
     if (groups.length === 0)
@@ -384,12 +412,12 @@ export class ResearchTools {
   private relatedLine(
     topic: string,
     ref: { id: string; title: string },
-    book: SourceBook,
+    { book, labels }: Pick<ToolContext, 'book' | 'labels'>,
   ): string {
     const entry = this.entry(topic, ref.id);
     // The catalog entry carries the authorship the source keeps (KBC-020).
     const n = book.number(entry ?? ref);
-    return entry ? refLine(n, entry) : `[${n}] ${ref.title}`;
+    return entry ? refLine(n, entry, labels) : `[${n}] ${ref.title}`;
   }
 
   private resolve(

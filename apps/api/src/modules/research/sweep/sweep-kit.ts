@@ -6,4 +6,6 @@ export interface SweepKit {
   readonly sweeps: SweepPlanner;
   readonly book: SourceBook;
   readonly topicTitle: string;
+  /** The collection's main author (KBC-049), or null. */
+  readonly mainAuthor: string | null;
 }

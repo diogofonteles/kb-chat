@@ -1,7 +1,12 @@
 import type { Authorship } from '@kb-chat/contracts';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
 import { refNumber, resolveEntry, type ToolContext } from './tool-context.js';
-import { AUTHORSHIP_LABELS, foldName, quote } from './tool-output.js';
+import {
+  AUTHORSHIP_LABELS,
+  foldName,
+  quote,
+  type AuthorshipLabels,
+} from './tool-output.js';
 
 /** Which documents a find_text or search_collection call looks at (KBC-017, ADR 0013). */
 export interface DocFilter {
@@ -73,11 +78,14 @@ export const isFiltering = (filter: DocFilter): boolean =>
   (filter.subjects?.length ?? 0) > 0;
 
 /** The filter in words, for the first line of a tool output; empty without one. */
-export function describeFilter(filter: DocFilter): string {
+export function describeFilter(
+  filter: DocFilter,
+  labels: AuthorshipLabels = AUTHORSHIP_LABELS,
+): string {
   const excluded =
     (filter.excludeIds?.size ?? 0) + (filter.excludeTexts?.length ?? 0);
   return [
-    filter.authorship && `autoria: ${AUTHORSHIP_LABELS[filter.authorship]}`,
+    filter.authorship && `autoria: ${labels[filter.authorship]}`,
     filter.entity && `entidade contém ${quote(filter.entity)}`,
     filter.source && `origem contém ${quote(filter.source)}`,
     filter.subjects?.length && `assuntos: ${filter.subjects.join(', ')}`,
