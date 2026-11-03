@@ -3,6 +3,7 @@ import type { LibraryFilters } from '@kb-chat/contracts';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { aTopic } from '../../../testing/fixtures.js';
 import { LibraryControls } from './library-controls.js';
+import type { FilterChange } from './library-labels.js';
 
 const NONE: LibraryFilters = {
   states: [],
@@ -11,7 +12,7 @@ const NONE: LibraryFilters = {
 };
 
 async function renderControls(filters: LibraryFilters = NONE) {
-  const changes: LibraryFilters[] = [];
+  const changes: FilterChange[] = [];
   const sorts: string[] = [];
   const views: string[] = [];
   const view = await render(LibraryControls, {
@@ -37,7 +38,7 @@ async function renderControls(filters: LibraryFilters = NONE) {
       ],
     },
     on: {
-      filtersChange: (value: LibraryFilters) => changes.push(value),
+      filtersChange: (value: FilterChange) => changes.push(value),
       sortChange: (value: string) => sorts.push(value),
       viewChange: (value: string) => views.push(value),
     },
@@ -57,7 +58,7 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
   it('presses a chip into the filters', async () => {
     const { changes } = await renderControls();
     fireEvent.click(screen.getByRole('button', { name: 'Não ouvidas' }));
-    expect(changes).toEqual([{ ...NONE, states: ['unheard'] }]);
+    expect(changes).toEqual([{ kind: 'toggle-state', state: 'unheard' }]);
   });
 
   it('marks a pressed chip with aria-pressed and offers to clear', async () => {
@@ -68,7 +69,7 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     const heard = screen.getByRole('button', { name: 'Ouvidas' });
     expect(heard.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }));
-    expect(changes).toEqual([NONE]);
+    expect(changes).toEqual([{ kind: 'clear' }]);
   });
 
   it('chooses an authorship and a collection, the parent of a sub-collection included (AC-5)', async () => {
@@ -85,8 +86,8 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
       target: { value: 'mestre-laercio' },
     });
     expect(changes).toEqual([
-      { ...NONE, topic: 'udv' },
-      { ...NONE, authorships: ['mestre-laercio'] },
+      { kind: 'topic', topic: 'udv' },
+      { kind: 'authorship', authorship: 'mestre-laercio' },
     ]);
   });
 

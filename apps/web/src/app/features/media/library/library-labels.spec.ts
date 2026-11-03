@@ -2,6 +2,8 @@ import type { LibraryItem } from '@kb-chat/contracts';
 import { aMediaItem } from '../../../testing/media-fixtures.js';
 import {
   activeFiltersOf,
+  applyFilterChange,
+  NO_FILTERS,
   countTextOf,
   coverToneOf,
   initialsOf,
@@ -87,5 +89,29 @@ describe('library labels (T16)', () => {
     ).toBe(3);
     expect(toggled(['a', 'b'], 'a')).toEqual(['b']);
     expect(toggled(['b'], 'a')).toEqual(['b', 'a']);
+  });
+
+  it('applies each change to the filters held now, so two quick changes keep both', () => {
+    const pressed = applyFilterChange(NO_FILTERS, {
+      kind: 'toggle-state',
+      state: 'in-progress',
+    });
+    const both = applyFilterChange(pressed, {
+      kind: 'authorship',
+      authorship: 'outros-autores',
+    });
+    expect(both).toEqual({
+      states: ['in-progress'],
+      authorships: ['outros-autores'],
+      topic: null,
+    });
+    expect(applyFilterChange(both, { kind: 'topic', topic: 'udv' }).topic).toBe(
+      'udv',
+    );
+    expect(
+      applyFilterChange(both, { kind: 'authorship', authorship: null })
+        .authorships,
+    ).toEqual([]);
+    expect(applyFilterChange(both, { kind: 'clear' })).toEqual(NO_FILTERS);
   });
 });

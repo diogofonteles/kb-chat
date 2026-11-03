@@ -75,6 +75,11 @@ a.secondary {
   font: inherit;
 }
 
+/* Our ✕ is the one (SL-06): the browser's own clear button would make two. */
+.search-box input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
 .clear-search {
   position: absolute;
   top: 0;

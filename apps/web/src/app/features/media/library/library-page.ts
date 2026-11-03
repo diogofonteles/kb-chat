@@ -48,7 +48,14 @@ import { EMPTY, Subject, catchError, concatMap, debounceTime } from 'rxjs';
 import { UploadPanel } from '../upload-panel.js';
 import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
-import { activeFiltersOf, countTextOf, playedAgoOf } from './library-labels.js';
+import {
+  NO_FILTERS,
+  activeFiltersOf,
+  applyFilterChange,
+  countTextOf,
+  playedAgoOf,
+  type FilterChange,
+} from './library-labels.js';
 import { LibraryRow, type RowAction } from './library-row.js';
 import { NearEnd } from './near-end.js';
 import { PlayNow } from './play-now.js';
@@ -309,12 +316,18 @@ export class LibraryPage {
     this.query.set('');
   }
 
-  protected changeFilters(filters: LibraryFilters): void {
+  /** A control's change, applied to the filters held now (BR-7). */
+  protected changeFilter(change: FilterChange): void {
+    const current = this.choices();
+    if (current) this.changeFilters(applyFilterChange(current.filters, change));
+  }
+
+  private changeFilters(filters: LibraryFilters): void {
     this.choose({ filters }, { libraryFilters: filters });
   }
 
   protected clearFilters(): void {
-    this.changeFilters({ states: [], authorships: [], topic: null });
+    this.changeFilters(NO_FILTERS);
   }
 
   /** "Ver tudo" of "Continuar ouvindo": "Todas" with only what is in progress. */

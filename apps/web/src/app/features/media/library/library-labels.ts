@@ -4,6 +4,7 @@ import {
   type LibraryItem,
   type LibrarySort,
   type ListeningState,
+  type MediaAuthorship,
 } from '@kb-chat/contracts';
 import { formatClock, resumeFrom } from '@kb-chat/player-core';
 
@@ -123,4 +124,49 @@ export function toggled<T>(values: readonly T[], value: T): T[] {
   return values.includes(value)
     ? values.filter((one) => one !== value)
     : [...values, value];
+}
+
+/**
+ * What a control changed, applied by the page to the filters it holds now: two quick
+ * changes in a row never lose the first (the control's copy may not be updated yet).
+ */
+export type FilterChange =
+  | { readonly kind: 'toggle-state'; readonly state: ListeningState }
+  | { readonly kind: 'authorship'; readonly authorship: MediaAuthorship | null }
+  | { readonly kind: 'topic'; readonly topic: string | null }
+  | { readonly kind: 'clear' };
+
+export const NO_FILTERS: LibraryFilters = {
+  states: [],
+  authorships: [],
+  topic: null,
+};
+
+const FILTER_CHANGES: {
+  [K in FilterChange['kind']]: (
+    filters: LibraryFilters,
+    change: Extract<FilterChange, { kind: K }>,
+  ) => LibraryFilters;
+} = {
+  'toggle-state': (filters, change) => ({
+    ...filters,
+    states: toggled(filters.states, change.state),
+  }),
+  authorship: (filters, change) => ({
+    ...filters,
+    authorships: change.authorship ? [change.authorship] : [],
+  }),
+  topic: (filters, change) => ({ ...filters, topic: change.topic }),
+  clear: () => NO_FILTERS,
+};
+
+export function applyFilterChange(
+  filters: LibraryFilters,
+  change: FilterChange,
+): LibraryFilters {
+  const apply = FILTER_CHANGES[change.kind] as (
+    filters: LibraryFilters,
+    change: FilterChange,
+  ) => LibraryFilters;
+  return apply(filters, change);
 }

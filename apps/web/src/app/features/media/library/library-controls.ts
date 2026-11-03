@@ -23,7 +23,7 @@ import {
   SORT_LABELS,
   STATE_CHIP_LABELS,
   activeFiltersOf,
-  toggled,
+  type FilterChange,
 } from './library-labels.js';
 
 /** A chip: its value, its words and whether it is on. */
@@ -52,7 +52,7 @@ export class LibraryControls {
   readonly view = input.required<LibraryView>();
   /** The collections the person sees (the sidebar's list). */
   readonly topics = input<readonly Topic[]>([]);
-  readonly filtersChange = output<LibraryFilters>();
+  readonly filtersChange = output<FilterChange>();
   readonly sortChange = output<LibrarySort>();
   readonly viewChange = output<LibraryView>();
 
@@ -107,35 +107,24 @@ export class LibraryControls {
   );
 
   protected toggleState(value: (typeof LISTENING_STATES)[number]): void {
-    const filters = this.filters();
-    this.filtersChange.emit({
-      ...filters,
-      states: toggled(filters.states, value),
-    });
+    this.filtersChange.emit({ kind: 'toggle-state', state: value });
   }
 
   protected chooseAuthorship(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) return;
     const value = MEDIA_AUTHORSHIPS.find((one) => one === target.value);
-    this.filtersChange.emit({
-      ...this.filters(),
-      authorships: value ? [value] : [],
-    });
+    this.filtersChange.emit({ kind: 'authorship', authorship: value ?? null });
   }
 
   protected chooseTopic(event: Event): void {
     if (!(event.target instanceof HTMLSelectElement)) return;
     const { value } = event.target;
-    this.filtersChange.emit({ ...this.filters(), topic: value || null });
+    this.filtersChange.emit({ kind: 'topic', topic: value || null });
   }
 
   protected clear(): void {
-    this.filtersChange.emit({
-      states: [],
-      authorships: [],
-      topic: null,
-    });
+    this.filtersChange.emit({ kind: 'clear' });
   }
 
   protected chooseSort(id: string): void {
