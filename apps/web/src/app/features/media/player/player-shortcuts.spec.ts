@@ -14,6 +14,8 @@ import {
 } from '../../../testing/fake-media-element.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
+import { PlayerAnnouncer } from '@core/media/player-announcer.js';
+import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { PlayerShortcuts, targetOf } from './player-shortcuts.js';
 
 function setup() {
@@ -208,6 +210,32 @@ describe('PlayerShortcuts (FR-6)', () => {
     shortcuts.handle(pressed, 'mini-player');
     expect(pressed.defaultPrevented).toBe(false);
     expect(TestBed.inject(BookmarksStore).bookmarks()).toEqual([]);
+  });
+
+  it('turns the subtitles on and off with C, once per press, and remembers it (KBC-038 AC-4)', () => {
+    const { shortcuts } = setup();
+    const transcript = TestBed.inject(TranscriptPreferences);
+    expect(transcript.captionsOn()).toBe(false);
+    const on = press('c');
+    shortcuts.handle(on);
+    expect(on.defaultPrevented).toBe(true);
+    shortcuts.handle(press('c', { repeat: true }));
+    expect(transcript.captionsOn()).toBe(true);
+    expect(localStorage.getItem('kb-chat.player.captions')).toBe('on');
+    expect(TestBed.inject(PlayerAnnouncer).message()).toBe('Legendas ligadas');
+    shortcuts.handle(press('C', { shift: true }));
+    expect(transcript.captionsOn()).toBe(false);
+    expect(TestBed.inject(PlayerAnnouncer).message()).toBe(
+      'Legendas desligadas',
+    );
+  });
+
+  it('leaves C alone in the mini-player, which shows no subtitles', () => {
+    const { shortcuts } = setup();
+    const pressed = press('c');
+    shortcuts.handle(pressed, 'mini-player');
+    expect(pressed.defaultPrevented).toBe(false);
+    expect(TestBed.inject(TranscriptPreferences).captionsOn()).toBe(false);
   });
 
   it('goes back and forward by the skips the person chose (KBC-043 AC-1)', () => {

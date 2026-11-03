@@ -1,5 +1,7 @@
 :host {
   display: block;
+  /* The transcript goes beside the player when the main area is wide enough (T15). */
+  container-type: inline-size;
   /* Its own row of the main area's grid (chat-page.css): it scrolls inside it, so the
      mini-player below never covers what has the focus (KBC-041 FR-11). */
   min-height: 0;
@@ -13,6 +15,46 @@
   max-width: var(--column);
   margin: 0 auto;
   padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.main {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.toggle-transcript {
+  margin-top: var(--space-3);
+}
+
+/* Below the player on narrow screens: the list scrolls on its own (FR-3). */
+.side {
+  display: flex;
+  flex-direction: column;
+  height: min(70dvh, 40rem);
+  min-width: 0;
+}
+
+.side-skeleton {
+  flex: 1;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+/* Beside the player, as tall as the screen, while the page scrolls (T15, desktop). */
+@container (min-width: 60rem) {
+  .page.with-transcript {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 27rem);
+    align-items: start;
+    max-width: calc(var(--column) + 28rem);
+  }
+
+  .with-transcript .side {
+    position: sticky;
+    top: var(--space-4);
+    height: calc(100dvh - 7rem);
+  }
 }
 
 .back {

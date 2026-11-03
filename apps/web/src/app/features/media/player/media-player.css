@@ -167,6 +167,70 @@
   white-space: nowrap;
 }
 
+/* Subtitles over the media area (T15): dark translucent band, light text, two lines at
+   most; the same in every theme, so the contrast holds (>= 4.5:1). */
+.caption-area {
+  display: grid;
+  place-items: end center;
+  min-height: 3.6em;
+  font-size: var(--text-md);
+}
+
+.caption {
+  max-width: 42ch;
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgb(20 18 16 / 88%);
+  color: #fffdf8;
+  line-height: 1.4;
+  text-align: center;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.cc {
+  display: grid;
+  place-items: center;
+  min-width: var(--target);
+  height: var(--target);
+  padding: 0 var(--space-2);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.cc span {
+  padding: 0 var(--space-1);
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  font-size: var(--text-sm);
+}
+
+/* On: filled, not only a colour change (UP-20). */
+.cc[aria-pressed='true'] span {
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
+.cc:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+}
+
+.cc:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
 .volume {
   display: flex;
   align-items: center;

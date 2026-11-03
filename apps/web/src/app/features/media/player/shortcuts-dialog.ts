@@ -102,6 +102,10 @@ export class ShortcutsDialog {
     },
     { keys: ['M'], does: $localize`:@@player.shortcut.mute:Silenciar` },
     {
+      keys: ['C'],
+      does: $localize`:@@player.shortcut.captions:Ligar ou desligar as legendas`,
+    },
+    {
       keys: ['B'],
       does: $localize`:@@player.shortcut.bookmark:Marcar este trecho`,
     },

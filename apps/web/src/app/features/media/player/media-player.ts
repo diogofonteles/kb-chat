@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -7,17 +8,21 @@ import {
   computed,
   effect,
   inject,
+  input,
   untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
   SPEEDS,
+  cueAt,
   formatClock,
+  minuteLink,
   formatDuration,
   formatRemaining,
   isSpeed,
   positionToSecond,
+  type Cue,
   type PlaybackErrorKind,
 } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
@@ -25,6 +30,10 @@ import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { mediaPagePath } from '@core/media/media-api.js';
+import { PlaybackClock } from '@core/media/playback-clock.js';
+import { PlayerAnnouncer } from '@core/media/player-announcer.js';
+import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { VOLUME_SUPPORT } from '@core/media/volume-support.js';
 import { from } from 'rxjs';
 import { MenuButton, type MenuOption } from '../menu-button.js';
@@ -48,6 +57,9 @@ const ERROR_MESSAGES: Record<PlaybackErrorKind, () => string> = {
   aborted: () =>
     $localize`:@@player.error.aborted:O carregamento do áudio foi interrompido.`,
 };
+
+const LINK_NOT_COPIED = () =>
+  $localize`:@@player.minuteLinkFailed:Não consegui copiar o link.`;
 
 const DECIMAL = new Intl.NumberFormat('pt-BR');
 const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
@@ -74,7 +86,16 @@ const speedText = (speed: number): string => `${DECIMAL.format(speed)}×`;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MediaPlayer {
+  /** The subtitles of the current transcript (KBC-038); empty while none is loaded. */
+  readonly cues = input<readonly Cue[]>([]);
+  /** The media has a transcript: CC can be used. */
+  readonly captionsAvailable = input(false);
+
   protected readonly engine = inject(MediaEngine);
+  private readonly transcriptPreferences = inject(TranscriptPreferences);
+  private readonly clock = inject(PlaybackClock);
+  private readonly announcer = inject(PlayerAnnouncer);
+  private readonly document = inject(DOCUMENT);
   private readonly preferences = inject(ListeningPreferences);
   private readonly shortcuts = inject(PlayerShortcuts);
   private readonly volumeMemory = inject(PlayerVolume);
@@ -157,7 +178,22 @@ export class MediaPlayer {
       checked: speed === this.speed(),
     })),
   );
+  /** CC (FR-6): on for every media until turned off; shown only with a transcript. */
+  protected readonly captionsOn = computed(
+    () => this.captionsAvailable() && this.transcriptPreferences.captionsOn(),
+  );
+  protected readonly captionsPressed = this.transcriptPreferences.captionsOn;
+  /** The cue on screen now (two lines at most), following the smoothed clock. */
+  protected readonly caption = computed(() =>
+    this.captionsOn()
+      ? (cueAt(this.cues(), this.clock.positionMs())?.text ?? '')
+      : '',
+  );
   protected readonly moreOptions = computed<readonly MenuOption[]>(() => [
+    {
+      id: 'link',
+      label: $localize`:@@player.copyMinuteLink:Copiar link deste minuto`,
+    },
     { id: 'skips', label: $localize`:@@player.skips.open:Pulos` },
     {
       id: 'silences',
@@ -273,7 +309,12 @@ export class MediaPlayer {
     if (isSpeed(speed)) this.preferences.setSpeed(speed);
   }
 
+  protected toggleCaptions(): void {
+    this.transcriptPreferences.toggleCaptions();
+  }
+
   protected chooseMore(id: string): void {
+    if (id === 'link') this.copyMinuteLink();
     if (id === 'shortcuts') this.shortcutsDialog().open();
     if (id === 'skips') this.skipsDialog().open();
     if (id === 'sleep') this.sleepDialog().open();
@@ -286,6 +327,26 @@ export class MediaPlayer {
     this.sleepTimer.off();
     // The ☾ button had the focus and goes away: "Mais opções" takes it (WCAG 2.4.3).
     afterNextRender(() => this.more().focus(), { injector: this.injector });
+  }
+
+  /** "Copiar link deste minuto" (FR-5): the page with `?t=` of the second heard now. */
+  private copyMinuteLink(): void {
+    const source = this.engine.source();
+    const clipboard = this.document.defaultView?.navigator.clipboard;
+    if (!source || !clipboard) {
+      this.announcer.say(LINK_NOT_COPIED());
+      return;
+    }
+    const page = this.document.location.origin + mediaPagePath(source.id);
+    const link = minuteLink(page, this.playback().currentMs);
+    // The browser's clipboard is a Promise API; both outcomes are said (TS-14).
+    void clipboard.writeText(link).then(
+      () =>
+        this.announcer.say(
+          $localize`:@@player.minuteLinkCopied:Link deste minuto copiado.`,
+        ),
+      () => this.announcer.say(LINK_NOT_COPIED()),
+    );
   }
 
   protected mark(): void {
