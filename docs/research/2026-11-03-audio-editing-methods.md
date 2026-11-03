@@ -238,12 +238,21 @@ Rodrigo Branas: nenhum vídeo sobre áudio, transcrição ou diarização achado
 
 Mede o que decide (FR-5, AC-5): DER, tempo de máquina e acerto das faixas por abordagem. Nada roda antes do material do dono.
 
-### 10.1 O que o dono precisa fornecer (≈ 40 min dele)
+### 10.1 O que o dono precisa fornecer
 
-1. **Duas gravações já no acervo** (id de cada): (a) uma **palestra com perguntas da plateia**; (b) uma **conversa a dois**.
-2. **Marcação de 10 minutos de cada uma** (o mesmo trecho que ele escolher, de preferência com pelo menos 3 perguntas na palestra), numa planilha com uma linha por turno de fala: `início (mm:ss)`, `fim (mm:ss)`, `quem fala` (A, B, Plateia 1, Plateia 2…). Na palestra, marcar também **onde começa cada pergunta e onde termina cada resposta** (o gabarito de faixas: `início`, `fim`, `título que ele daria`).
-3. **Autorização por escrito de quais transcrições podem ir para a API** (só texto; o áudio nunca sai do Mac, BR-5). Sem autorização, a abordagem B fica sem medir e o relatório diz isso.
-4. Para o KBC-071 (pode ficar para depois): até 3 pessoas que **consentirem** ter um perfil de voz (por exemplo, o próprio dono), com 1–2 min de fala de cada em outra gravação.
+Ajuste do dono (2026-11-03): no começo quem diz quem fala é a pessoa (ainda não há cadastro de oradores, KBC-065); o reconhecimento automático é medido com **dois áudios do mesmo orador**.
+
+1. **Áudio A e áudio B, do mesmo orador**, enviados ao acervo local (o áudio nunca sai do Mac, BR-5), de preferência com perguntas da plateia em pelo menos um deles.
+2. **No áudio A**, o dono indica quem fala (o orador e "Plateia") em 10 minutos, numa lista com uma linha por turno: `início (mm:ss)`, `fim (mm:ss)`, `quem fala`; e, se houver perguntas, onde começa cada pergunta e termina cada resposta, com o título que ele daria (o gabarito de faixas).
+3. **No áudio B**, o dono marca 10 minutos do mesmo jeito, **mas essa marcação fica escondida do sistema**: serve só de gabarito para ver se o orador é reconhecido sozinho.
+4. **Autorização por escrito de quais transcrições podem ir para a API** (só texto). Sem ela, a abordagem B das faixas fica sem medir e o relatório diz isso.
+
+O que o teste mede com esse material:
+
+- **Separação de vozes**: DER de cada candidato (pyannote `community-1`, Senko, Nemotron 3) nos 10 minutos marcados de A e de B.
+- **Reconhecimento do orador (KBC-071)**: a voz do orador marcada em A vira um perfil **só para o teste**; em B, para cada voz separada, a semelhança com o perfil decide "é o orador" ou "não sei". Mede-se acerto, falso positivo (a plateia confundida com o orador, meta ≤ 2 %) e o limiar escolhido. O perfil é apagado ao fim do teste; manter perfis no produto segue a regra de consentimento aprovada (ADR 0029, KBC-071).
+- **Faixas de pergunta e resposta**: as propostas das 2 abordagens (modelo local e API barata) contra o gabarito do dono.
+- **Tempo de máquina** de cada passo por hora de áudio.
 
 ### 10.2 Plano dos scripts em `docs/research/scripts/` (desenho; não rodados)
 
