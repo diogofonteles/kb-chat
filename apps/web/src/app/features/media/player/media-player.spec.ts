@@ -405,9 +405,12 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     });
     expect(document.activeElement).toBe(option);
     expect(option.getAttribute('aria-describedby')).toBe('silences-hint');
-    expect(within(dialog).getByRole('status').textContent).toContain(
+    // Shown, but not a live region: a skip with the dialog open is not announced.
+    const saved = within(dialog).getByText(
       'Tempo economizado nesta mídia: 0:00',
     );
+    expect(saved.closest('[role="status"], [aria-live]')).toBeNull();
+    expect(within(dialog).queryByRole('status')).toBeNull();
     fireEvent.click(option);
     await fixture.whenStable();
     expect(
@@ -440,6 +443,26 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     const dialog = screen.getByRole('dialog', { name: 'Encurtar silêncios' });
     expect(within(dialog).getByRole('status').textContent).toContain(
       'Os silêncios desta mídia ainda estão sendo medidos.',
+    );
+  });
+
+  it('says the silences could not be measured when the worker gave up (KBC-044, review R1)', async () => {
+    const { fixture, http } = await renderPlayer(loaded);
+    http.expectOne('/api/v1/media/m1/silences').flush({
+      status: 'failed',
+      version: null,
+      minSilenceMs: 1_000,
+      intervals: [],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mais opções' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Encurtar silêncios' }),
+    );
+    await fixture.whenStable();
+    const dialog = screen.getByRole('dialog', { name: 'Encurtar silêncios' });
+    expect(within(dialog).getByRole('status').textContent).toContain(
+      'Não foi possível medir os silêncios desta mídia.',
     );
   });
 

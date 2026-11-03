@@ -141,7 +141,7 @@ test('AC-2 and NFR-2: on, the 3 s pause is jumped 0.15 s in, to 0.15 s before it
   });
   await page.getByRole('button', { name: 'Pausar' }).click();
   const dialog = await openSilences(page);
-  await expect(dialog.getByRole('status')).toContainText(
+  await expect(dialog.getByText(/Tempo economizado nesta mídia/)).toContainText(
     /Tempo economizado nesta mídia: 0:0[3-6]/,
   );
 });
@@ -219,9 +219,9 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await useTheme(page, theme);
     await openPlayer(page);
     const dialog = await openSilences(page);
-    await expect(dialog.getByRole('status')).toContainText(
-      'Tempo economizado nesta mídia: 0:00',
-    );
+    await expect(
+      dialog.getByText(/Tempo economizado nesta mídia/),
+    ).toContainText('Tempo economizado nesta mídia: 0:00');
     const violations = (
       await new AxeBuilder({ page }).analyze()
     ).violations.filter((violation) =>

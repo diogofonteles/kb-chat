@@ -20,6 +20,8 @@ const measuring = () =>
 const MAP_NOTES: Record<Exclude<SilenceMapState, 'ready'>, () => string> = {
   loading: measuring,
   pending: measuring,
+  failed: () =>
+    $localize`:@@silences.failed:Não foi possível medir os silêncios desta mídia.`,
   none: () => $localize`:@@silences.none:Esta mídia não tem pausas longas.`,
   unavailable: () =>
     $localize`:@@silences.unavailable:Não consegui ler os silêncios desta mídia agora.`,
@@ -54,7 +56,12 @@ const MAP_NOTES: Record<Exclude<SilenceMapState, 'ready'>, () => string> = {
         Pausas de 1 segundo ou mais passam a durar 0,3 segundo. A barra e os
         tempos continuam no tempo original da mídia.
       </p>
-      <p class="saved" role="status">{{ note() }}</p>
+      <!-- The time saved is not a live region: every skip would be announced (T15). -->
+      @if (skipper.mapState() === 'ready') {
+        <p class="saved">{{ note() }}</p>
+      } @else {
+        <p class="saved" role="status">{{ note() }}</p>
+      }
       <button
         type="button"
         class="close"

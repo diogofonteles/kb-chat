@@ -141,10 +141,7 @@ for (const width of [1440, 390]) {
     await page.getByRole('button', { name: 'Pausar' }).click();
     await shot('03-player-after-skip');
     dialog = await openDialog();
-    await dialog
-      .getByRole('status')
-      .getByText(/Tempo economizado/)
-      .waitFor();
+    await dialog.getByText(/Tempo economizado/).waitFor();
     await shot('04-dialog-on-saved');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Mais opções' }).click();
