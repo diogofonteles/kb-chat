@@ -4,8 +4,11 @@ import {
   mediaItemSchema,
   mediaListSchema,
   topicSlugSchema,
+  trackPatchSchema,
+  updateMediaBodySchema,
   updateMediaRequestSchema,
   type MediaItem,
+  type TrackPatch,
 } from '@kb-chat/contracts';
 import type {
   FastifyBaseLogger,
@@ -21,6 +24,7 @@ import { Readable } from 'node:stream';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import {
+  assertFeature,
   canSee,
   hasFeature,
   isMaster,
@@ -46,6 +50,9 @@ const topicParams = z.object({ topic: topicSlugSchema });
 const mediaParams = z.object({ id: mediaIdSchema });
 /** "Remover" with the recording's tracks listed and confirmed (KBC-073 FR-8). */
 const removeQuery = z.object({ cascade: z.literal('true').optional() });
+
+/** The cut the player started on (KBC-073 BR-3). */
+const streamQuery = z.object({ v: z.coerce.number().int().min(1).optional() });
 
 /** The upload body: a stream only with `Content-Type: application/octet-stream`. */
 function uploadBodyOf(body: unknown): Readable {
@@ -78,6 +85,7 @@ export function actorOf(request: FastifyRequest): MediaActor {
     quotaBytes: mediaQuotaOf(viewer),
     seesTracks: hasFeature(viewer.person, 'media-tracks'),
     seesSubjects: hasFeature(viewer.person, 'media-subjects'),
+    displayName: viewer.person.name,
     canSee: (topic) => canSee(request, topic),
   };
 }
@@ -90,6 +98,29 @@ export function planActorOf(request: FastifyRequest): PlanActor {
     canEdit: hasFeature(person, 'media-edit'),
     canPropose: hasFeature(person, 'media-edit-ai'),
   };
+}
+
+const ETAG = /^"(\d+)"$/;
+
+/** The version a write says it read (KBC-066 FR-1): without one it is refused (428). */
+export function versionOf(request: FastifyRequest): number {
+  const match = ETAG.exec(request.headers['if-match'] ?? '');
+  if (!match?.[1])
+    throw new AppError('EDIT_VERSION_REQUIRED', 'If-Match is required');
+  return Number(match[1]);
+}
+
+/** Who writes to a track, from which version. */
+export interface TrackCall {
+  readonly actor: MediaActor;
+  readonly mediaId: string;
+  readonly expectedVersion: number;
+}
+
+/** The writes on a track that arrive by the item's own routes (KBC-073 FR-1, FR-3). */
+export interface TrackWrites {
+  patch(call: TrackCall, patch: TrackPatch): void;
+  archive(actor: MediaActor, mediaId: string): void;
 }
 
 const itemResponse = { 200: mediaItemSchema };
@@ -121,11 +152,14 @@ const OPTIONS = {
     config: { access: LISTEN },
     schema: {
       params: mediaParams,
-      body: updateMediaRequestSchema,
+      body: updateMediaBodySchema,
       response: itemResponse,
     },
   },
-  stream: { config: { access: LISTEN }, schema: { params: mediaParams } },
+  stream: {
+    config: { access: LISTEN },
+    schema: { params: mediaParams, querystring: streamQuery },
+  },
   retry: {
     config: { access: MASTER },
     schema: { params: mediaParams, response: itemResponse },
@@ -160,6 +194,8 @@ export const mediaRoutes =
       readonly createPerMinute: number;
       /** The guided flow's plans (KBC-072). */
       readonly plans: UploadPlans;
+      /** A track reached through the same routes as a recording (KBC-073). */
+      readonly tracks: TrackWrites;
     },
   ): FastifyPluginAsync =>
   async (app) => {
@@ -174,8 +210,8 @@ export const mediaRoutes =
     }));
     registerCreate(typed, { service, ...options });
     registerUploadRoutes(app, service, actorOf);
-    registerItemRoutes(typed, service);
-    registerEditRoute(typed, service, editor);
+    registerItemRoutes(typed, service, options.tracks);
+    registerEditRoute(typed, { service, editor, tracks: options.tracks });
   };
 
 /** An item with its plan: a refused option creates nothing (KBC-072 AC-13). */
@@ -221,20 +257,55 @@ function registerCreate(
   );
 }
 
-/** "Editar informações" (KBC-050 FR-1): the answer is the item as the person now sees it. */
-function registerEditRoute(
-  typed: TypedApp,
-  service: MediaService,
-  editor: MediaEditService,
-): void {
-  typed.patch('/api/v1/media/:id', OPTIONS.edit, async (request) => {
-    const actor = actorOf(request);
-    editor.edit(actor, request.params.id, request.body);
-    return service.get(actor, request.params.id);
+function refused(field: string): AppError {
+  return new AppError('VALIDATION_FAILED', `${field} is not for this item`, {
+    details: { field },
   });
 }
 
-function registerItemRoutes(typed: TypedApp, service: MediaService): void {
+/** What an edit of a recording may carry: the track's fields are not for it. */
+function recordingEdit(body: z.output<typeof updateMediaBodySchema>) {
+  const details = updateMediaRequestSchema.safeParse(body);
+  if (!details.success) throw refused('track');
+  return details.data;
+}
+
+/** What a track's edit may carry: its title is shorter, and it has no author or collection. */
+function trackEdit(body: z.output<typeof updateMediaBodySchema>) {
+  const patch = trackPatchSchema.safeParse(body);
+  if (!patch.success) throw refused('recording');
+  return patch.data;
+}
+
+/** "Editar informações" (KBC-050 FR-1): the answer is the item as the person now sees it. */
+function registerEditRoute(
+  typed: TypedApp,
+  deps: {
+    readonly service: MediaService;
+    readonly editor: MediaEditService;
+    readonly tracks: TrackWrites;
+  },
+): void {
+  const { service, editor, tracks } = deps;
+  typed.patch('/api/v1/media/:id', OPTIONS.edit, async (request) => {
+    const actor = actorOf(request);
+    const { id } = request.params;
+    if (service.isTrack(actor, id)) {
+      assertFeature(request, 'media-edit');
+      tracks.patch(
+        { actor, mediaId: id, expectedVersion: versionOf(request) },
+        trackEdit(request.body),
+      );
+    } else editor.edit(actor, id, recordingEdit(request.body));
+    return service.get(actor, id);
+  });
+}
+
+function registerItemRoutes(
+  typed: TypedApp,
+  service: MediaService,
+  tracks: TrackWrites,
+): void {
   typed.put('/api/v1/media/:id/file', OPTIONS.upload, async (request) =>
     service.receiveFile(actorOf(request), request.params.id, {
       body: uploadBodyOf(request.body),
@@ -248,7 +319,11 @@ function registerItemRoutes(typed: TypedApp, service: MediaService): void {
     '/api/v1/media/:id/stream',
     OPTIONS.stream,
     async (request, reply) => {
-      const file = await service.playable(actorOf(request), request.params.id);
+      const file = await service.playable(
+        actorOf(request),
+        request.params.id,
+        request.query.v,
+      );
       return serveMedia({
         id: request.params.id,
         file,
@@ -258,18 +333,28 @@ function registerItemRoutes(typed: TypedApp, service: MediaService): void {
       });
     },
   );
-  registerMasterRoutes(typed, service);
+  registerMasterRoutes(typed, service, tracks);
 }
 
 /** Masters only: "Tentar de novo" and "Remover" (FR-7, FR-8). */
-function registerMasterRoutes(typed: TypedApp, service: MediaService): void {
+function registerMasterRoutes(
+  typed: TypedApp,
+  service: MediaService,
+  tracks: TrackWrites,
+): void {
   typed.post('/api/v1/media/:id/retry', OPTIONS.retry, async (request) =>
     service.retry(actorOf(request), request.params.id),
   );
   typed.delete('/api/v1/media/:id', OPTIONS.remove, async (request, reply) => {
-    await service.remove(actorOf(request), request.params.id, {
-      cascade: request.query.cascade === 'true',
-    });
+    const actor = actorOf(request);
+    const { id } = request.params;
+    if (service.isTrack(actor, id)) {
+      assertFeature(request, 'media-edit');
+      tracks.archive(actor, id);
+    } else
+      await service.remove(actor, id, {
+        cascade: request.query.cascade === 'true',
+      });
     return reply.code(204).send();
   });
 }

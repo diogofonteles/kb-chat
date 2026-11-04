@@ -455,7 +455,7 @@ describe('Approving again (KBC-068 BR-5)', () => {
     expect(await preparationOf(media, recording.id)).toBeNull();
   });
 
-  it('removes the replaced file once the new cut is published', async () => {
+  it('keeps the replaced file for who is on it (KBC-073 BR-3)', async () => {
     const world = await startWorld();
     const { media } = world;
     const { recording, tracks } = await published(world);
@@ -472,8 +472,8 @@ describe('Approving again (KBC-068 BR-5)', () => {
     const after = readdirSync(join(media.mediaDir, 'audio')).filter((name) =>
       name.startsWith(id),
     );
-    expect(after).toHaveLength(1);
-    expect(after).not.toEqual(before);
+    expect(after).toHaveLength(2);
+    expect(after).toEqual(expect.arrayContaining(before));
   });
 });
 

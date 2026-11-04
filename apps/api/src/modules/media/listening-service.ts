@@ -79,15 +79,20 @@ export class ListeningService {
   saveProgress(
     actor: MediaActor,
     mediaId: string,
-    save: { readonly positionMs: number; readonly basedOn: string | null },
+    save: {
+      readonly positionMs: number;
+      readonly basedOn: string | null;
+      readonly fileVersion?: number;
+    },
   ): MediaProgress {
     const item = this.deps.media.get(actor, mediaId);
-    const durationMs = this.assertSavable(item, save);
+    const positionMs = this.deps.media.currentPosition(item, save);
+    const durationMs = this.assertSavable(item, { ...save, positionMs });
     const now = nextSaveTime(item.positionUpdatedAt, this.now());
-    const heard = save.positionMs >= durationMs * MEDIA_COMPLETION_RATIO;
+    const heard = positionMs >= durationMs * MEDIA_COMPLETION_RATIO;
     const progress = heard
       ? { positionMs: 0, completedAt: now.toISOString() }
-      : { positionMs: save.positionMs, completedAt: item.completedAt };
+      : { positionMs, completedAt: item.completedAt };
     this.deps.listening.saveProgress({
       principal: actor.principal,
       mediaId,

@@ -1083,6 +1083,69 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
+    // KBC-073: a track changes after its approval. `track_version` guards a person's write
+    // (BR-10) and `file_version` names the cut: the old file stays a day for who is on it
+    // (BR-3). `jobs` stays. Version 16 is reserved by an open item: `media_spend` is rebuilt
+    // from what it is.
+    version: 22,
+    name: 'track-revisions',
+    sql: (db) => `
+      ${rebuildAccepting(db, { table: 'media_spend', kind: 'track-suggestion' })}
+
+      ALTER TABLE media ADD COLUMN track_version INTEGER NOT NULL DEFAULT 0
+        CHECK (track_version >= 0);
+      ALTER TABLE media ADD COLUMN file_version INTEGER NOT NULL DEFAULT 1
+        CHECK (file_version >= 1);
+
+      CREATE TABLE media_track_changes (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        at TEXT NOT NULL,
+        principal TEXT NOT NULL,
+        person_name TEXT NOT NULL,
+        field TEXT NOT NULL CHECK (field IN ('title', 'summary', 'asker', 'answerer', 'bounds',
+          'subjects', 'archived', 'restored')),
+        before_value TEXT,
+        after_value TEXT
+      ) STRICT;
+      CREATE INDEX media_track_changes_by_media ON media_track_changes (media_id, at);
+
+      -- What leaves media_tracks with a deleted track, to bring it back as it was (BR-7).
+      CREATE TABLE media_track_archive (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        track_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('qa', 'talk')),
+        source TEXT NOT NULL CHECK (source IN ('ai', 'manual')),
+        asker_voice INTEGER,
+        answerer_voice INTEGER,
+        asker_speaker_id TEXT REFERENCES media_speakers (id) ON DELETE SET NULL,
+        answerer_speaker_id TEXT REFERENCES media_speakers (id) ON DELETE SET NULL
+      ) STRICT;
+
+      -- A cut replaced: who was listening goes on with it; the janitor removes it (BR-3).
+      CREATE TABLE media_track_old_files (
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        file_version INTEGER NOT NULL,
+        path TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        start_ms INTEGER NOT NULL,
+        replaced_at TEXT NOT NULL,
+        PRIMARY KEY (media_id, file_version)
+      ) STRICT;
+
+      -- A bookmark that left a track for the recording, until its owner has read that (BR-4).
+      CREATE TABLE media_moved_bookmarks (
+        bookmark_id TEXT PRIMARY KEY REFERENCES media_bookmarks (id) ON DELETE CASCADE,
+        principal TEXT NOT NULL,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        recording_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        moved_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX media_moved_bookmarks_of ON media_moved_bookmarks (principal);
+    `,
+  },
+  {
     // KBC-070 BR-2: a track's title and summary, read word by word as its speech is, so a
     // subject with text stays inside p95 150 ms over 20,000 links. Kept by triggers: a later
     // rebuild of `media` or `media_track_subjects` must recreate them. Numbered 23 because 22

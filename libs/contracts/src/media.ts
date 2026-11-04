@@ -137,6 +137,10 @@ export const trackParentSchema = z.object({
   /** 1-based, among the recording's approved tracks; null once it left the edit. */
   ordinal: z.number().int().min(1).nullable(),
   total: z.number().int().min(0),
+  /** `If-Match` of a write to the track (KBC-073 BR-10). */
+  version: z.number().int().min(0).default(0),
+  /** Which cut plays: the stream of an older one stays a while for who is on it (BR-3). */
+  fileVersion: z.number().int().min(1).default(1),
 });
 export type TrackParent = z.infer<typeof trackParentSchema>;
 
@@ -325,6 +329,8 @@ export const mediaProgressRequestSchema = z.strictObject({
    * null when it saw none). A newer save from another device makes it a 409 (FR-3).
    */
   basedOn: z.iso.datetime().nullable(),
+  /** The cut the player is on: an older one is translated (KBC-073 BR-3). */
+  fileVersion: z.number().int().min(1).optional(),
 });
 export type MediaProgressRequest = z.infer<typeof mediaProgressRequestSchema>;
 
@@ -376,6 +382,8 @@ export const createMediaBookmarkRequestSchema = z.strictObject({
   id: mediaBookmarkIdSchema,
   positionMs: z.number().int().min(0),
   note: bookmarkNoteSchema.optional(),
+  /** The cut the player is on: an older one is translated (KBC-073 BR-3). */
+  fileVersion: z.number().int().min(1).optional(),
 });
 export type CreateMediaBookmarkRequest = z.infer<
   typeof createMediaBookmarkRequestSchema

@@ -77,12 +77,13 @@ export class BookmarkService {
         throw unknownBookmark();
       return { bookmark: asBookmark(existing), created: false };
     }
-    this.assertCreatable(actor, item, request.positionMs);
+    const positionMs = this.deps.media.currentPosition(item, request);
+    this.assertCreatable(actor, item, positionMs);
     const now = this.now().toISOString();
     const bookmark: MediaBookmark = {
       id: request.id,
       mediaId,
-      positionMs: request.positionMs,
+      positionMs,
       note: request.note ?? null,
       createdAt: now,
       updatedAt: now,

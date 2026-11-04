@@ -46,6 +46,8 @@ function trackLinkOf(row: Row): TrackLink | null {
     startMs: Number(row['parent_start_ms'] ?? 0),
     endMs: Number(row['parent_end_ms'] ?? 0),
     ordinal: nullableNumber(row, 'track_ordinal'),
+    version: Number(row['track_version'] ?? 0),
+    fileVersion: Number(row['file_version'] ?? 1),
   };
 }
 
@@ -113,6 +115,7 @@ const AUTHOR_COLUMN = `COALESCE(author,
 const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_principal, file_name, upload_bytes, source_sha256,
   status, progress, failure, duration_ms, bytes, created_at, updated_at,
   parent_media_id, parent_start_ms, parent_end_ms, track_ordinal, archived_at,
+  track_version, file_version,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
   (SELECT t.version FROM transcripts t WHERE t.media_id = media.id

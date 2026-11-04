@@ -237,6 +237,7 @@ function parentOf(
 ): TrackParent | null {
   if (!record.track) return null;
   const { parentId: id, startMs, endMs, ordinal } = record.track;
+  const { version, fileVersion } = record.track;
   const title = known.titles.get(id) ?? record.title;
   return {
     id,
@@ -245,6 +246,8 @@ function parentOf(
     endMs,
     ordinal,
     total: known.totals.get(id) ?? 0,
+    version,
+    fileVersion,
   };
 }
 

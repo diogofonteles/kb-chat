@@ -153,6 +153,10 @@ import {
   createTrackSubjects,
 } from './track-subjects-factory.js';
 import {
+  createTrackRevisions,
+  trackVoiceNames,
+} from './track-revisions-factory.js';
+import {
   type ProposalService,
   trackProposalRoutes,
 } from './modules/track-proposals/index.js';
@@ -164,6 +168,8 @@ import {
   TrackEditService,
   TrackPublisher,
   mediaEditRoutes,
+  trackRevisionRoutes,
+  type TrackRevisionService,
 } from './modules/media-edit/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
@@ -473,6 +479,7 @@ function mediaService({
     files,
     listening,
     tracks: media.trackItems,
+    oldCuts: media.trackRevisions,
     presence: () => transcribers.presence(),
     requestTranscription: (mediaId) =>
       media.transcripts.requestTranscription({
@@ -656,6 +663,9 @@ async function registerListening(
         recording: wiring.media.store,
         voices: (mediaId, transcript) =>
           diarization.voicesOn(mediaId, transcript),
+        trackVoices: trackVoiceNames(wiring.media, (topic, slug) =>
+          wiring.authors.authorOf(topic, slug),
+        ),
       }),
     ),
   );
@@ -799,7 +809,14 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   });
   const plans = edited.preparation;
   const editor = mediaEditor({ ...wiring, publisher });
-  await app.register(mediaRoutes(media, editor, { createPerMinute, plans }));
+  const { revisions } = edited;
+  await app.register(
+    mediaRoutes(media, editor, {
+      createPerMinute,
+      plans,
+      tracks: revisions,
+    }),
+  );
   startJanitor(app, { ...measures, ...edited, media: wiring.media });
 }
 
@@ -815,6 +832,8 @@ async function registerEditing(
   const diarization = diarizationService(wiring);
   const proposals = await registerProposals(app, { ...wiring, diarization });
   await registerEdit(app, wiring);
+  const revisions = createTrackRevisions({ ...wiring, diarization });
+  await app.register(trackRevisionRoutes(revisions));
   const subjects = await registerSubjects(app, wiring);
   const preparation = preparationService(app, {
     ...wiring,
@@ -822,7 +841,7 @@ async function registerEditing(
     proposals,
   });
   await app.register(preparationRoutes(preparation));
-  return { proposals, preparation, subjects };
+  return { proposals, preparation, subjects, revisions };
 }
 
 /** The person who asked for a plan, as they stand now (KBC-072 BR-4). */
@@ -931,6 +950,7 @@ function startJanitor(
     proposals: ProposalService;
     preparation: PreparationService;
     subjects: SubjectProposalService;
+    revisions: TrackRevisionService;
   },
 ): void {
   const { store, files } = wiring.media;
@@ -942,6 +962,7 @@ function startJanitor(
     backfillSilences: () => wiring.silences.backfill(),
     backfillWaveforms: () => wiring.waveforms.backfill(),
     advancePreparations: () => wiring.preparation.advanceAll(),
+    purgeTrackFiles: () => wiring.revisions.purge(),
   });
   janitor.start(JANITOR_INTERVAL_MS);
   app.addHook('onClose', async () => {

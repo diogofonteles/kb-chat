@@ -32,6 +32,15 @@ export interface TranscriptServiceDeps {
     mediaId: string,
     transcript: TranscriptSummary,
   ) => TranscriptVoices | null;
+  /** Who a track names in its voices, over the recording's names (KBC-073 FR-1). */
+  readonly trackVoices?: (
+    mediaId: string,
+    topic: string,
+  ) => readonly {
+    readonly voice: number;
+    readonly speakerId: string;
+    readonly name: string;
+  }[];
   /** WebVTT files kept in memory (the most recently used). */
   readonly cacheSize?: number;
 }
@@ -167,7 +176,8 @@ export class TranscriptService {
     summary: TranscriptSummary,
   ): TranscriptVoices | null {
     const { voices, recording } = this.deps;
-    const track = recording?.getMedia(transcript.mediaId)?.track;
+    const record = recording?.getMedia(transcript.mediaId);
+    const track = record?.track;
     if (!track) return voices?.(transcript.mediaId, summary) ?? null;
     const [current] = this.deps.transcripts.transcripts(track.parentId);
     const whole = current ? voices?.(track.parentId, current) : null;
@@ -179,8 +189,23 @@ export class TranscriptService {
       );
       return whole.segmentVoices[index] ?? null;
     };
+    const own = this.deps.trackVoices?.(record.id, record.topic) ?? [];
     return {
       ...whole,
+      speakers: {
+        ...whole.speakers,
+        labels: whole.speakers.labels.map((label) => {
+          const named = own.find((one) => one.voice === label.voice);
+          return named
+            ? {
+                ...label,
+                kind: 'person' as const,
+                speakerId: named.speakerId,
+                name: named.name,
+              }
+            : label;
+        }),
+      },
       segmentVoices: transcript.segments.map((segment) =>
         voiceAt(track.startMs + (segment.startMs + segment.endMs) / 2),
       ),

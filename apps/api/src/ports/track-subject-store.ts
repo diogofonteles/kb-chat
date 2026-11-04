@@ -113,6 +113,13 @@ export interface TrackSubjectStorePort {
       readonly summary: 'accept' | 'refuse' | null;
     },
   ): number | null;
+  /** The summary of "Editar faixa" (KBC-073 FR-1): its own version guards it, not this one. */
+  writeSummary(input: {
+    readonly mediaId: string;
+    readonly summary: string | null;
+    readonly principal: string;
+    readonly now: Date;
+  }): void;
   /** Tracks with this accepted subject (`concept:<key>` or `free:<id>`): KBC-070 reads this. */
   acceptedLinks(subjectKey: string): string[];
   /** Starts a run; null when the recording already has one running. */

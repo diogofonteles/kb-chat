@@ -82,21 +82,21 @@ export interface TrackItemStorePort {
   cutOrder(mediaId: string): CutOrder | null;
   /**
    * Closes the lease and keeps the candidate; the last one publishes, in the same transaction,
-   * so no crash leaves a finished approval unpublished. Null when the lease was lost.
+   * so no crash leaves a finished approval unpublished. False when the lease was lost.
    */
   recordCut(
     cut: RecordedCut,
     detailsFor: (parentId: string) => DetailsOf,
-  ): { readonly replaced: readonly string[] } | null;
+  ): boolean;
   /**
    * Everything at once (FR-1, FR-6): files, real times, titles, authors, transcripts, positions,
-   * bookmarks; items that left are archived. Returns the files replaced.
+   * bookmarks; items that left are archived. A replaced file stays a day (KBC-073 BR-3).
    */
   publish(input: {
     readonly parentId: string;
     readonly detailsOf: DetailsOf;
     readonly now: Date;
-  }): readonly string[];
+  }): void;
   /** The tracks approved now, for what follows them: publishing, a move of the recording. */
   tracksOf(parentId: string): readonly TrackItemRow[];
   /** A new author for the tracks of a recording (BR-2). */
