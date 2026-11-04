@@ -51,6 +51,7 @@ import { MediaEngine } from '@core/media/media-engine.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { EMPTY, Subject, catchError, concatMap, debounceTime, of } from 'rxjs';
+import { keepFocusedInView } from '../keep-in-view.js';
 import { UploadPanel } from '../upload-panel.js';
 import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
@@ -412,13 +413,8 @@ export class LibraryPage {
       .subscribe();
   }
 
-  /**
-   * The page scrolls in its own row: what takes the focus comes fully into view. Not what is
-   * being pressed: the page would move before the release, and the click would be lost.
-   */
   protected keepInView(event: FocusEvent): void {
-    if (event.target instanceof HTMLElement && !event.target.matches(':active'))
-      event.target.scrollIntoView?.({ block: 'nearest' });
+    keepFocusedInView(event);
   }
 
   protected topicTitleOf(item: LibraryItem): string {

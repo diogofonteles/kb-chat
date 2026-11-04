@@ -467,12 +467,20 @@ describe('MediaListPage (T14)', () => {
     );
   });
 
-  it('brings an element that takes the focus fully into view (WCAG 2.4.11)', async () => {
+  it('brings what takes the focus fully into view, but never moves the page under a press (WCAG 2.4.11)', async () => {
     const { answer } = await renderList();
     await answer([aMediaItem()]);
     const link = screen.getByRole('link', { name: /Palestra de 1998/ });
     const scroll = vi.fn();
     link.scrollIntoView = scroll;
+    const pressed = vi.spyOn(link, 'matches');
+
+    pressed.mockReturnValue(true);
+    fireEvent.focusIn(link);
+    expect(pressed).toHaveBeenCalledWith(':active');
+    expect(scroll).not.toHaveBeenCalled();
+
+    pressed.mockReturnValue(false);
     fireEvent.focusIn(link);
     expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
   });
