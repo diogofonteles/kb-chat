@@ -32,6 +32,15 @@ from .secret import TokenError
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
 from .vad import SpeechFinder
+from .voiceprint import (
+    Embedder,
+    Profile,
+    match_voices,
+    mean_print,
+    spans_of,
+    window_vectors,
+    wipe,
+)
 
 REVOKED = "Token revogado; pareie de novo."
 log = logging.getLogger("transcriber")
@@ -62,10 +71,13 @@ class Worker:
     count_tokens: TokenCounter = estimate_tokens
     # Voice separation (KBC-064): without an engine, the worker never asks for it.
     diarizer: Diarizer | None = None
+    # Voice prints (KBC-071): without a speaker model, none is ever fetched or made.
+    embedder: Embedder | None = None
 
     @property
     def kinds(self) -> tuple[str, ...]:
-        return ("transcribe", "diarize") if self.diarizer else ("transcribe",)
+        kinds = ("transcribe", "diarize") if self.diarizer else ("transcribe",)
+        return (*kinds, "voice-profile") if self.embedder else kinds
 
     def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
         """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
@@ -133,10 +145,11 @@ class Worker:
         beats.start()
         try:
             with tempfile.TemporaryDirectory(prefix="transcriber-") as work:
-                if job["kind"] == "diarize":
-                    self._diarize(job, Path(work), progress, stop)
-                else:
-                    self._transcribe(job, Path(work), progress, stop)
+                handler = {
+                    "diarize": self._diarize,
+                    "voice-profile": self._voice_profile,
+                }.get(job["kind"], self._transcribe)
+                handler(job, Path(work), progress, stop)
         finally:
             done.set()
             beats.join(timeout=5)
@@ -195,15 +208,85 @@ class Worker:
             "elapsedMs": int((time.monotonic() - started) * 1000),
             "raw": {"turns": turns},
         }
+        matches = self._matches(job, pcm, turns)
+        if matches:
+            body["voiceMatches"] = matches
+        if stop.is_set():
+            log.warning("job %s stopped before the upload: nothing uploaded", job["id"])
+            return
         if self.api.upload_diarization(job, body):
             voices = len({turn["voice"] for turn in turns})
             log.info("job %s: %d voices, %d turns", job["id"], voices, len(turns))
         else:
             log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
 
-    def _audio_of(self, job: dict, work: Path) -> np.ndarray | None:
+    def _matches(self, job: dict, pcm: np.ndarray, turns: list[dict]) -> list[dict]:
+        """The closest profile per voice; a failure here never costs the separation."""
+        if self.embedder is None:
+            return []
+        try:
+            profiles = self._profiles_of(job)
+            if not profiles:
+                return []
+            try:
+                return match_voices(pcm, turns, profiles, self.embedder)
+            finally:
+                wipe(one.embedding for one in profiles)
+        except ApiError as err:
+            log.warning("job %s: no voice comparison: %s", job["id"], err)
+        except Exception as err:
+            # The type only: no message of a numeric library near a print goes to a log.
+            log.warning("job %s: no voice comparison: %s", job["id"], type(err).__name__)
+        return []
+
+    def _profiles_of(self, job: dict) -> list[Profile]:
+        """The prints of the job's collection on this model; they live in memory only."""
+        model = self.embedder.model if self.embedder else None
+        return [
+            Profile(one["id"], np.asarray(one["embedding"], dtype=np.float64))
+            for one in self.api.voice_profiles(job)
+            if one["model"] == model
+        ]
+
+    def _voice_profile(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Calculates the print of a voice a person named, and uploads only that (FR-2)."""
+        if self.embedder is None:
+            raise RuntimeError("leased a voice profile without a speaker model")
+        vectors: list[np.ndarray] = []
+        try:
+            for index, source in enumerate(job["sources"]):
+                pcm = self._audio_of(job, work, source["audioPath"])
+                if pcm is None:
+                    return
+                spans = spans_of(source["spans"])
+                vectors.append(window_vectors(pcm, spans, self.embedder))
+                progress["percent"] = int((index + 1) * 90 / len(job["sources"]))
+                if stop.is_set():
+                    log.warning("job %s stopped: nothing uploaded", job["id"])
+                    return
+            self._upload_print(job, vectors)
+        except ValueError as err:
+            self.api.fail(job, "conversion-failed", str(err))
+        finally:
+            wipe(vectors)
+
+    def _upload_print(self, job: dict, vectors: list[np.ndarray]) -> None:
+        if self.embedder is None:
+            raise RuntimeError("leased a voice profile without a speaker model")
+        voice_print = mean_print(vectors)
+        body = {
+            "model": self.embedder.model,
+            "embedding": [round(float(value), 7) for value in voice_print],
+        }
+        wipe([voice_print])
+        if self.api.upload_print(job, body):
+            log.info("job %s: voice print stored", job["id"])
+        else:
+            log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
+
+    def _audio_of(self, job: dict, work: Path, path: str | None = None) -> np.ndarray | None:
         """The job's audio as 16 kHz PCM; None when it is not ours or cannot be decoded."""
-        audio = self.api.download(job, work)
+        audio = self.api.download(job, work, path)
         if audio is None:
             log.warning("job %s: its audio is not ours (404): dropped", job["id"])
             return None

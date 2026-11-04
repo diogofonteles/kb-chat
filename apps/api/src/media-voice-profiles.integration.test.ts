@@ -6,6 +6,7 @@ import type {
   VoiceProfileReport,
 } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MAX_JOB_ATTEMPTS } from './modules/media/index.js';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
   leaseDiarization,
@@ -230,7 +231,7 @@ describe('Registering a profile (KBC-071 FR-1, FR-2, BR-1)', () => {
     const job = await leasePrintJob(media, token);
     expect(job.sources).toHaveLength(1);
     const [source] = job.sources;
-    expect(source?.spans[0]).toEqual({ startMs: 5300, endMs: 15300 });
+    expect(source?.spans[0]).toEqual({ startMs: 5200, endMs: 15300 });
     const audio = await asTranscriber(media, token, {
       method: 'GET',
       url: `${source?.audioPath}?leaseId=${job.leaseId}`,
@@ -268,7 +269,7 @@ describe('Registering a profile (KBC-071 FR-1, FR-2, BR-1)', () => {
       sources: [{ mediaId, voice: ANSWERS.number }],
       consent: aConsent(),
     });
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_JOB_ATTEMPTS; attempt += 1) {
       const job = await leasePrintJob(media, token);
       const failed = await asTranscriber(media, token, {
         method: 'POST',

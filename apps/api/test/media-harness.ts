@@ -90,7 +90,7 @@ export async function queuedItem(
   const created = await media.owner(
     'POST',
     `/api/v1/topics/${topic}/media`,
-    aRequest(),
+    aRequest(topic === 'hermetismo' ? {} : { author: null }),
   );
   expect(created.statusCode).toBe(201);
   const sent = await upload(media, { id: created.json().id, body: AUDIO });

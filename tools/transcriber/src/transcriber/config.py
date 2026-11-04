@@ -60,3 +60,15 @@ DIARIZE_PARAMETERS: Final[dict] = {
     # Under 20 min Senko clusters spectrally and takes the announced number directly.
     "announced_voices": "spectral oracle + centroid join",
 }
+
+# Voice profiles (KBC-071, ADR 0032). The recipe measured in KBC-063, not calibrated: 2
+# speakers and 3 decisions cannot show a false-positive rate. The threshold itself is the API's.
+VOICE_PARAMETERS: Final[dict] = {
+    "model": "speechbrain/spkrec-ecapa-voxceleb",
+    "window_s": 1.5,
+    "hop_s": 0.75,
+    # A voice needs this much speech to be compared at all.
+    "min_speech_s": 10.0,
+    # The closest profile must beat the next by this much (it kept out a false positive).
+    "margin": 0.1,
+}

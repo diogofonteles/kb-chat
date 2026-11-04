@@ -28,7 +28,7 @@ export const voiceProfileSuggestionSchema = z.object({
   name: z.string().min(1),
   level: z.enum(VOICE_SIMILARITY_LEVELS),
 });
-export type VoiceSuggestion = z.infer<typeof voiceProfileSuggestionSchema>;
+export type VoiceProfileSuggestion = z.infer<typeof voiceProfileSuggestionSchema>;
 
 /* ---------- Between the API and a transcriber marked for voice profiles ---------- */
 
