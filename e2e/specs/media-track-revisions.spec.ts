@@ -17,6 +17,7 @@ import { approve, audioWithTracks } from './tracks-helpers.js';
 interface View {
   readonly version: number;
   readonly cut: string;
+  readonly topic: string;
 }
 
 async function publishedIn(owner: APIRequestContext, mediaId: string) {
@@ -186,6 +187,116 @@ test('AC-4, AC-5, AC-6: the bounds move, with the track in the bar limited by it
   await owner.dispose();
 });
 
+test("BR-3, BR-4: a position saved on the old cut is translated by the browser's own save", async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  await page.goto(trackPage(first.id));
+  await page.getByRole('button', { name: 'Tocar', exact: true }).click();
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(4);
+
+  const { version } = await viewOf(owner, first.id);
+  const moved = await owner.put(`/api/v1/media/${first.id}/bounds`, {
+    headers: { ...CSRF, 'if-match': `"${version}"` },
+    data: { startMs: 3_000, endMs: 13_000 },
+  });
+  expect(moved.status()).toBe(202);
+  await waitForCut(owner, first.id);
+
+  const saved = page.waitForRequest(
+    (request) =>
+      request.method() === 'PUT' && request.url().endsWith('/progress'),
+  );
+  await page.getByRole('button', { name: 'Pausar', exact: true }).click();
+  const sent = (await saved).postDataJSON() as {
+    readonly positionMs: number;
+    readonly fileVersion: number;
+  };
+
+  expect(sent.fileVersion).toBe(1);
+  await expect
+    .poll(async () => {
+      const item = await owner.get(`/api/v1/media/${first.id}`);
+      return ((await item.json()) as { positionMs: number }).positionMs;
+    })
+    .toBe(sent.positionMs - 3_000);
+  await owner.dispose();
+});
+
+test("BR-10: the editor of bounds keeps the adjustment against another person's change", async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  await page.goto(`${trackPage(first.id)}/limites`);
+  const times = page.getByRole('paragraph').filter({ hasText: /^Início/ });
+  const before = await times.textContent();
+  await page.getByRole('button', { name: 'Mais 0,5 segundo' }).click();
+  await expect(times).toContainText('0:00,5');
+  const adjusted = await times.textContent();
+  expect(adjusted).not.toBe(before);
+
+  const { version } = await viewOf(owner, first.id);
+  const other = await owner.patch(`/api/v1/media/${first.id}`, {
+    headers: { ...CSRF, 'if-match': `"${version}"` },
+    data: { title: 'O título dela' },
+  });
+  expect(other.status()).toBe(200);
+  await page.getByRole('button', { name: 'Salvar limites' }).click();
+
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Outra pessoa mudou esta faixa');
+  await expect(alert).toContainText('Título dela: O título dela');
+  await expect(times).toHaveText(adjusted ?? '');
+  await page.getByRole('button', { name: 'Salvar o meu por cima' }).click();
+
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Pronto' }),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(alert).toHaveCount(0);
+  await expect(times).toHaveText(adjusted ?? '');
+  await owner.dispose();
+});
+
+test('FR-6: a cut that failed says so on the editor of bounds, and tries again', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  let failed = true;
+  // A real failure needs the worker's disk: the state on screen is what this asks of it.
+  await page.route(`**/api/v1/media/${first.id}/track-edit`, async (route) => {
+    const read = await route.fetch();
+    const body = (await read.json()) as View;
+    await route.fulfill({
+      response: read,
+      json: failed ? { ...body, cut: 'failed' } : body,
+    });
+  });
+  await page.route(
+    `**/api/v1/media/${first.id}/bounds/retry`,
+    async (route) => {
+      failed = false;
+      const read = await owner.get(`/api/v1/media/${first.id}/track-edit`);
+      await route.fulfill({ status: 202, json: await read.json() });
+    },
+  );
+  await page.goto(`${trackPage(first.id)}/limites`);
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Não foi possível recortar.');
+
+  await alert.getByRole('button', { name: 'Tentar de novo' }).click();
+
+  await expect(alert).toHaveCount(0);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Pronto' }),
+  ).toBeVisible();
+  await owner.dispose();
+});
+
 test('FR-6, AC-6: the editor of one track saves with the keyboard and stops at the neighbour', async ({
   page,
 }) => {
@@ -242,6 +353,16 @@ test('AC-11: the suggestion shows its cost, and nothing changes until "Usar" and
 }) => {
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
+  const { topic } = await viewOf(owner, first.id);
+  const speaker = await owner.post(`/api/v1/topics/${topic}/speakers`, {
+    headers: CSRF,
+    data: { name: `Quem perguntou ${Date.now()}` },
+  });
+  expect(speaker.status(), await speaker.text()).toBe(201);
+  const asker = (await speaker.json()) as {
+    readonly id: string;
+    readonly name: string;
+  };
   // The E2E server cannot script its fake model: the route answers here (as KBC-069's spec).
   await page.route(`**/api/v1/media/${first.id}/suggestions`, async (route) => {
     const { dryRun } = route.request().postDataJSON() as { dryRun: boolean };
@@ -264,7 +385,7 @@ test('AC-11: the suggestion shows its cost, and nothing changes until "Usar" and
             json: {
               title: 'Título da IA',
               summary: null,
-              askerSpeakerId: null,
+              askerSpeakerId: asker.id,
               answererSpeakerId: null,
               subjects: [],
               spentUsd: 0.001,
@@ -290,6 +411,14 @@ test('AC-11: the suggestion shows its cost, and nothing changes until "Usar" and
   await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(
     'Título da IA',
   );
+  await dialog
+    .getByRole('button', {
+      name: `Usar a sugestão Quem pergunta: ${asker.name}`,
+    })
+    .click();
+  await expect(
+    dialog.getByRole('combobox', { name: 'Quem pergunta' }),
+  ).toHaveValue(asker.name);
   await dialog.getByRole('button', { name: 'Cancelar' }).click();
   await expect(page.getByRole('heading', { name: first.title })).toBeVisible();
   await owner.dispose();

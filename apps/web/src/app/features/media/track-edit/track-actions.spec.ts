@@ -13,7 +13,7 @@ import {
 } from '@angular/router';
 import type { MediaItem, TrackEditView } from '@kb-chat/contracts';
 import { BehaviorSubject } from 'rxjs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { aMediaItem, sessionAs } from '../../../testing/media-fixtures.js';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import { TrackActions } from './track-actions.js';
