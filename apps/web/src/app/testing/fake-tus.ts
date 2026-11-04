@@ -3,7 +3,8 @@ import type { TusFactory, TusSession } from '@core/media/tus-upload.js';
 
 /** One upload over the fake tus client: the test plays the server's part. */
 export class FakeTusSession implements TusSession {
-  started = false;
+  /** How many times it was started: a resume starts it again. */
+  starts = 0;
   aborted = false;
 
   constructor(
@@ -11,8 +12,12 @@ export class FakeTusSession implements TusSession {
     readonly options: UploadOptions,
   ) {}
 
+  get started(): boolean {
+    return this.starts > 0;
+  }
+
   start(): void {
-    this.started = true;
+    this.starts += 1;
   }
 
   abort(): Promise<void> {

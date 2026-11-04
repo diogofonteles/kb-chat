@@ -162,6 +162,69 @@ describe('MediaApi', () => {
     expect(failed.mock.calls[0]?.[0]).toMatchObject({ status: 0 });
   });
 
+  describe('when the browser knows the network is gone (AC-1)', () => {
+    const offline = () =>
+      vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    const networkBack = (cut: ReturnType<typeof offline>) => {
+      cut.mockReturnValue(true);
+      window.dispatchEvent(new Event('online'));
+    };
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('waits for the connection and goes on by itself, however long it takes', () => {
+      const { api, http, tus } = setup();
+      const cut = offline();
+      const events: unknown[] = [];
+      const failed = vi.fn();
+      api
+        .upload(ITEM.id, new Blob(['a']))
+        .subscribe({ next: (event) => events.push(event), error: failed });
+      expect(tus.last.starts).toBe(1);
+
+      tus.last.fail();
+      expect(failed).not.toHaveBeenCalled();
+      expect(events).toEqual([{ kind: 'offline' }]);
+      expect(tus.last.starts).toBe(1);
+
+      networkBack(cut);
+      expect(tus.last.starts).toBe(2);
+      tus.last.succeed();
+      http.expectOne(mediaUrl(ITEM.id)).flush(ITEM);
+      expect(events.at(-1)).toEqual({ kind: 'done', item: ITEM });
+    });
+
+    it('resumes once for each cut', () => {
+      const { api, tus } = setup();
+      const cut = offline();
+      api.upload(ITEM.id, new Blob(['a'])).subscribe();
+      tus.last.fail();
+      networkBack(cut);
+      window.dispatchEvent(new Event('online'));
+      expect(tus.last.starts).toBe(2);
+    });
+
+    it('stops waiting when unsubscribed', () => {
+      const { api, tus } = setup();
+      const cut = offline();
+      const sending = api.upload(ITEM.id, new Blob(['a'])).subscribe();
+      tus.last.fail();
+      sending.unsubscribe();
+      networkBack(cut);
+      expect(tus.last.starts).toBe(1);
+      expect(tus.last.aborted).toBe(true);
+    });
+
+    it('still passes on an answer from the server', () => {
+      const { api, tus } = setup();
+      offline();
+      const failed = vi.fn();
+      api.upload(ITEM.id, new Blob(['a'])).subscribe({ error: failed });
+      tus.last.fail(403);
+      expect(failed.mock.calls[0]?.[0]).toMatchObject({ status: 403 });
+    });
+  });
+
   it('retries and removes', () => {
     const { api, http } = setup();
     api.retry(ITEM.id).subscribe();

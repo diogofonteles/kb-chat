@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
@@ -12,7 +13,16 @@ import {
 } from '@kb-chat/contracts';
 import { CSRF } from '@core/auth/auth-interceptor.js';
 import { SessionEvents } from '@core/auth/session-events.js';
-import { Observable, catchError, concat, map, throwError } from 'rxjs';
+import {
+  Observable,
+  Subscription,
+  catchError,
+  concat,
+  fromEvent,
+  map,
+  take,
+  throwError,
+} from 'rxjs';
 import { TUS_UPLOAD, toHttpError } from './tus-upload.js';
 
 /** API URLs of the media library (ADR 0022); slugs and ids are always encoded. */
@@ -30,18 +40,23 @@ export const mediaSubtitlesUrl = (id: string): string =>
 export const mediaPagePath = (id: string): string =>
   `/midia/${encodeURIComponent(id)}`;
 
-/** How many times tus tries again after a failure, and when: about two minutes offline. */
+/**
+ * How many times tus tries again after a failure, and when: about two minutes of a server
+ * that does not answer. It never tries while the browser says it is offline; `sendParts`
+ * waits for the connection then, for as long as it takes.
+ */
 const RETRY_DELAYS_MS = [
   0, 1_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000,
 ];
 
-/** Where an upload is: bytes sent so far, or the item once the server has it. */
+/** Where an upload is: bytes sent so far, waiting for the network, or the item once it arrived. */
 export type UploadEvent =
   | {
       readonly kind: 'progress';
       readonly loaded: number;
       readonly total: number;
     }
+  | { readonly kind: 'offline' }
   | { readonly kind: 'done'; readonly item: MediaItem };
 
 /** Writes to the media library; lists and items are read with httpResource and the URLs. */
@@ -50,6 +65,7 @@ export class MediaApi {
   private readonly http = inject(HttpClient);
   private readonly tus = inject(TUS_UPLOAD);
   private readonly session = inject(SessionEvents);
+  private readonly view = inject(DOCUMENT).defaultView;
 
   create(topic: string, request: CreateMediaRequest): Observable<MediaItem> {
     return this.http
@@ -66,7 +82,8 @@ export class MediaApi {
 
   /**
    * Sends the file over tus from wherever the server stopped (KBC-035 FR-2), and answers
-   * the item once it has every byte. Unsubscribing stops; what arrived stays on the server.
+   * the item once it has every byte. A network that goes away only pauses it. Unsubscribing
+   * stops; what arrived stays on the server.
    */
   upload(id: string, file: Blob): Observable<UploadEvent> {
     const done = this.http.get(mediaUrl(id)).pipe(
@@ -85,6 +102,7 @@ export class MediaApi {
 
   private sendParts(id: string, file: Blob): Observable<UploadEvent> {
     return new Observable<UploadEvent>((subscriber) => {
+      let waiting = Subscription.EMPTY;
       const session = this.tus(file, {
         uploadUrl: `${mediaUrl(id)}/upload`,
         chunkSize: MEDIA_UPLOAD_PART_BYTES,
@@ -94,11 +112,27 @@ export class MediaApi {
         onProgress: (loaded, total) =>
           subscriber.next({ kind: 'progress', loaded, total }),
         onSuccess: () => subscriber.complete(),
-        onError: (err) => subscriber.error(toHttpError(err)),
+        onError: (err) => {
+          const failure = toHttpError(err);
+          const back = failure.status === 0 ? this.backOnline() : null;
+          if (!back) return subscriber.error(failure);
+          subscriber.next({ kind: 'offline' });
+          waiting = back.subscribe(() => session.start());
+        },
       });
       session.start();
-      return () => void session.abort();
+      return () => {
+        waiting.unsubscribe();
+        void session.abort();
+      };
     });
+  }
+
+  /** The moment the network returns; null when the browser does not call itself offline. */
+  private backOnline(): Observable<unknown> | null {
+    const { view } = this;
+    if (!view || view.navigator.onLine) return null;
+    return fromEvent(view, 'online').pipe(take(1));
   }
 
   /** Changes its title, author or collection (KBC-050); what is left out stays. */

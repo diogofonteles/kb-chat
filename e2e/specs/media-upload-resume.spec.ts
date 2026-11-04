@@ -81,6 +81,42 @@ test('AC-1, NFR-1: a part that fails continues where it stopped and creates one 
   expect(parts).toBe(Math.ceil(size / PART_BYTES) + 1);
 });
 
+test('AC-1: the network goes down and comes back: it continues alone, one item', async ({
+  browser,
+}) => {
+  const page = await uploaderPage(browser);
+  const file = largeMp3(3);
+  const held = deferred();
+  const offline = deferred();
+  const context = page.context();
+  let patches = 0;
+  await page.route(UPLOAD_URL, async (route: Route) => {
+    if (route.request().method() !== 'PATCH') return route.continue();
+    patches += 1;
+    if (patches !== 2) return route.continue();
+    held.finish();
+    await offline.done;
+    return route.abort('internetdisconnected');
+  });
+  const dialog = await openPanel(page);
+  await dialog.locator('input[type="file"]').setInputFiles(file);
+  await sendButton(dialog).click();
+  await held.done;
+  await context.setOffline(true);
+  offline.finish();
+  await expect(
+    dialog
+      .getByText('Sem conexão. O envio continua sozinho quando a rede voltar.')
+      .first(),
+  ).toBeVisible();
+  await expect(dialog.getByRole('progressbar')).toBeVisible();
+  await context.setOffline(false);
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  await expect(
+    page.getByRole('listitem').filter({ hasText: rowTitleOf(file) }),
+  ).toHaveCount(1);
+});
+
 test('FR-2: a reload loses nothing: choosing the file again continues it', async ({
   browser,
 }) => {
@@ -194,6 +230,13 @@ test('AC-8: three files at once, each with its bar, pass axe at this width', asy
   release();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
 });
+
+/** A promise the test ends by hand, to hold a request where it wants it. */
+function deferred(): { done: Promise<void>; finish: () => void } {
+  let finish: () => void = () => undefined;
+  const done = new Promise<void>((resolve) => (finish = resolve));
+  return { done, finish };
+}
 
 /** The title the panel suggests for a file. */
 function rowTitleOf(path: string): string {

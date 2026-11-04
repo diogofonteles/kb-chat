@@ -45,6 +45,8 @@ export type EntryState =
       readonly kind: 'sending';
       readonly loaded: number;
       readonly total: number;
+      /** The network went away: the upload goes on by itself when it returns (AC-1). */
+      readonly offline?: boolean;
     }
   | { readonly kind: 'stopped'; readonly problem: string }
   | { readonly kind: 'done' };
@@ -160,6 +162,12 @@ export class UploadEntries {
 
   set(key: number, state: EntryState): void {
     this.update(key, { state });
+  }
+
+  /** A file on its way waits for the network, where it stopped. */
+  markOffline(key: number): void {
+    const state = this.entry(key)?.state;
+    if (state?.kind === 'sending') this.set(key, { ...state, offline: true });
   }
 
   /** After a cancel: what was on its way, or stopped, can go again as new. */

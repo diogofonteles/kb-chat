@@ -31,6 +31,7 @@ export class UploadFileRow {
 
   protected readonly mediaPagePath = mediaPagePath;
   protected readonly overQuota = overQuota;
+  protected readonly offlineNotice = $localize`:@@media.upload.offline:Sem conexão. O envio continua sozinho quando a rede voltar.`;
   protected readonly name = computed(() => this.entry().file.name);
   protected readonly removeLabel = computed(
     () =>
@@ -78,6 +79,7 @@ export class UploadFileRow {
     if (state.kind === 'done')
       return $localize`:@@media.upload.spokenDone:${name}:name: enviado.`;
     if (state.kind !== 'sending') return '';
+    if (state.offline) return this.offlineNotice;
     const step = Math.floor(this.percent() / SPOKEN_STEP) * SPOKEN_STEP;
     return $localize`:@@media.upload.spokenProgress:${name}:name:: ${step}:percent:% enviado.`;
   });

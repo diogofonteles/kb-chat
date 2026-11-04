@@ -32,7 +32,7 @@ import {
   toUiErrorCode,
 } from '@core/api/api-error.js';
 import { AuthorsApi } from '@core/media/authors-api.js';
-import { MediaApi } from '@core/media/media-api.js';
+import { MediaApi, type UploadEvent } from '@core/media/media-api.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import {
   EMPTY,
@@ -67,8 +67,9 @@ const FILES_AT_ONCE = 3;
  * "Enviar áudio" (screens.md T14, KBC-034, KBC-035): choose files (button or drop), each
  * with its title and its check, the author and collection of them all (KBC-049: one of the
  * collection's or a new one, blank for "Outros autores"), then the progress of each with
- * "Cancelar envio". A broken connection keeps everything (MA-26), and sending again goes on
- * from the last byte the server has. Leaving does not lose an upload: choosing the same file
+ * "Cancelar envio". A network that goes away is waited for, and the upload goes on alone
+ * when it returns; any other broken connection keeps everything (MA-26), and sending again
+ * goes on from the last byte the server has. Leaving does not lose an upload: choosing the same file
  * within 24 h continues it. Only "Cancelar" removes what was half sent.
  */
 @Component({
@@ -247,13 +248,7 @@ export class UploadPanel implements OnInit {
     return this.itemFor(entry, author).pipe(
       concatMap((id) => this.api.upload(id, file)),
       concatMap((event) => {
-        if (event.kind === 'done') this.finishOne(key, event.item);
-        else
-          this.uploads.set(key, {
-            kind: 'sending',
-            loaded: event.loaded,
-            total: event.total,
-          });
+        this.follow(key, event);
         return EMPTY;
       }),
       catchError((err: unknown) => {
@@ -261,6 +256,13 @@ export class UploadPanel implements OnInit {
         return EMPTY;
       }),
     );
+  }
+
+  private follow(key: number, event: UploadEvent): void {
+    if (event.kind === 'done') return this.finishOne(key, event.item);
+    if (event.kind === 'offline') return this.uploads.markOffline(key);
+    const { loaded, total } = event;
+    this.uploads.set(key, { kind: 'sending', loaded, total });
   }
 
   /**

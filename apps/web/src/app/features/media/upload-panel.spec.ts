@@ -500,6 +500,32 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     expect(uploaded).toHaveBeenCalledTimes(1);
   });
 
+  it('says it waits for the connection and goes back to the bar by itself (AC-1)', async () => {
+    const panel = await renderPanel();
+    const { fixture, tus } = panel;
+    await startSending(panel);
+    tus.last.progress(1);
+    const cut = vi
+      .spyOn(window.navigator, 'onLine', 'get')
+      .mockReturnValue(false);
+    tus.last.fail();
+    await fixture.whenStable();
+    const notice =
+      'Sem conexão. O envio continua sozinho quando a rede voltar.';
+    expect(screen.getAllByText(notice).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('progressbar')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancelar envio' })).toBeTruthy();
+
+    cut.mockReturnValue(true);
+    window.dispatchEvent(new Event('online'));
+    tus.last.progress(2);
+    await fixture.whenStable();
+    expect(screen.queryByText(notice)).toBeNull();
+    expect(tus.last.starts).toBe(2);
+    cut.mockRestore();
+  });
+
   it('says when the bytes came out different and the upload starts over', async () => {
     const panel = await renderPanel();
     await startSending(panel);

@@ -79,9 +79,13 @@
           [value]="percent()"
           [attr.aria-label]="progressLabel()"
         ></progress>
-        <p i18n="@@media.upload.sending">
-          Enviando… {{ sentText() }} · {{ percent() }}%
-        </p>
+        @if (state.offline) {
+          <p>{{ offlineNotice }}</p>
+        } @else {
+          <p i18n="@@media.upload.sending">
+            Enviando… {{ sentText() }} · {{ percent() }}%
+          </p>
+        }
       </div>
     }
     @case ('stopped') {
