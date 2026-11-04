@@ -457,7 +457,8 @@ async function saveEvidence(page: Page, name: string): Promise<void> {
   const dir = process.env['KBC_EVIDENCE_DIR'];
   if (!dir) return;
   mkdirSync(dir, { recursive: true });
-  await page.locator('app-transcript-panel').screenshot({
-    path: join(dir, `${name}.png`),
+  await page.screenshot({ path: join(dir, `${name}.png`) });
+  await page.locator('.segment.active').screenshot({
+    path: join(dir, `${name}-segment.png`),
   });
 }
