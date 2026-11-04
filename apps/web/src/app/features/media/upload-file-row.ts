@@ -47,8 +47,9 @@ export class UploadFileRow {
       !['refused', 'duplicate', 'over-quota'].includes(this.entry().state.kind),
   );
   protected readonly titleLocked = computed(() => {
-    const { kind } = this.entry().state;
-    return this.locked() || kind === 'resume' || kind === 'done';
+    const { resumes, state } = this.entry();
+    // A new title would replace the item, and the plan it was created with goes with it.
+    return this.locked() || resumes || state.kind === 'done';
   });
   protected readonly titleMissing = computed(
     () =>

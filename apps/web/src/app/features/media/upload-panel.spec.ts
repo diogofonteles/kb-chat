@@ -1242,6 +1242,19 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       ).toBeTruthy();
     });
 
+    it('keeps a resumed title locked when the file stops again (T14, Q188)', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel, audio(), RESUME);
+      clickSend();
+      await panel.fixture.whenStable();
+      panel.tus.last.fail(500);
+      await panel.fixture.whenStable();
+      const title = screen.getByRole<HTMLInputElement>('textbox', {
+        name: 'Título',
+      });
+      expect(title.disabled).toBe(true);
+    });
+
     it('takes the choices away while sending and brings them back after a stop', async () => {
       const panel = await renderPanel({ features: EDITOR });
       await chooseChecked(panel);
