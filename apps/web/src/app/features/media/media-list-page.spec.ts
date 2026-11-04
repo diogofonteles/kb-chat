@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
 import {
   HttpTestingController,
@@ -16,6 +16,7 @@ import {
   mediaId,
   sessionAs,
 } from '../../testing/media-fixtures.js';
+import { answeringOptions } from '../../testing/preparation-fixtures.js';
 import { MediaListPage } from './media-list-page.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
@@ -41,7 +42,7 @@ async function renderList(
   const view = await render(MediaListPage, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([answeringOptions()])),
       provideHttpClientTesting(),
       provideRouter([{ path: 'midia', children: [] }]),
       chatStoreOn(),
@@ -377,6 +378,58 @@ describe('MediaListPage (T14)', () => {
       ).toBe(created.id),
     );
     http.expectNone({ method: 'GET', url: LIST_URL });
+  });
+
+  it('shows where each preparation stopped after several files went (KBC-072 FR-6)', async () => {
+    const OPEN_URL = '/api/v1/media/preparations';
+    const { answer, http, fixture, container, tus } = await renderList({
+      features: ['media-upload', 'media-edit'],
+    });
+    TestBed.tick();
+    http.expectOne(OPEN_URL).flush({ items: [] });
+    await answer([]);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
+    );
+    await fixture.whenStable();
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+    const files = ['Uma.mp3', 'Outra.mp3'].map(
+      (name, i) =>
+        new File([new Uint8Array(3 + i)], name, { type: 'audio/mpeg' }),
+    );
+    Object.defineProperty(input, 'files', { value: files, configurable: true });
+    fireEvent.change(input as HTMLInputElement);
+    await answerCheck(http, LIST_URL);
+    await answerCheck(http, LIST_URL);
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    const items = [9, 8].map((n) =>
+      aMediaItem({ id: mediaId(n), title: `Nova ${n}`, status: 'uploading' }),
+    );
+    const creates = http.match({ method: 'POST', url: LIST_URL });
+    creates.forEach((call, i) => call.flush(items[i] as MediaItem));
+    await fixture.whenStable();
+    items.forEach((item, i) => {
+      tus.sessions[i]?.succeed();
+      http
+        .expectOne(`/api/v1/media/${item.id}`)
+        .flush({ ...item, status: 'queued' });
+    });
+    TestBed.tick();
+    http
+      .match({ method: 'GET', url: LIST_URL })
+      .filter((call) => !call.cancelled)
+      .forEach((call) => call.flush({ items }));
+    http
+      .match(OPEN_URL)
+      .filter((call) => !call.cancelled)
+      .forEach((call) =>
+        call.flush({ items: [{ mediaId: mediaId(9), step: 2 }] }),
+      );
+    await fixture.whenStable();
+    expect(screen.getByText('Preparação parada no passo 2')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Continuar' })).toBeTruthy();
   });
 
   it('says where an upload sent to another collection went, without moving the focus', async () => {

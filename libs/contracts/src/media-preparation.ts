@@ -75,10 +75,18 @@ export const preparationOptionsSchema = z.object({
 });
 export type PreparationOptions = z.infer<typeof preparationOptionsSchema>;
 
+/** The longest length an estimate is asked for: past it, nothing is estimated. */
+export const PREPARATION_MAX_DURATION_MS = 86_400_000;
+
 export const preparationOptionsQuerySchema = z.object({
   topic: z.string().min(1).max(200).optional(),
   mediaId: mediaIdSchema.optional(),
-  durationMs: z.coerce.number().int().positive().max(86_400_000).optional(),
+  durationMs: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(PREPARATION_MAX_DURATION_MS)
+    .optional(),
 });
 export type PreparationOptionsQuery = z.infer<
   typeof preparationOptionsQuerySchema

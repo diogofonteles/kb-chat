@@ -1,19 +1,23 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import type { UploadCheck } from '@kb-chat/contracts';
+import type { Feature, UploadCheck } from '@kb-chat/contracts';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
 import { of } from 'rxjs';
 import { aTopic } from '../../testing/fixtures.js';
 import { FakeTus } from '../../testing/fake-tus.js';
-import { aMediaItem } from '../../testing/media-fixtures.js';
-import { AUDIO_LENGTH_READER } from './audio-length.js';
+import { aMediaItem, sessionAs } from '../../testing/media-fixtures.js';
+import {
+  aPreparation,
+  answeringOptions,
+} from '../../testing/preparation-fixtures.js';
+import { AUDIO_LENGTH_READER, type AudioLengthReader } from './audio-length.js';
 import { UploadPanel } from './upload-panel.js';
 
 const CREATED = aMediaItem({
@@ -24,18 +28,28 @@ const CREATED = aMediaItem({
 const OTHER_ID = '22222222-2222-4222-8222-222222222222';
 const TOPIC = '/api/v1/topics/hermetismo/media';
 
-async function renderPanel() {
+async function renderPanel(
+  options: {
+    readonly features?: Feature[];
+    readonly length?: AudioLengthReader;
+  } = {},
+) {
   const uploaded = vi.fn();
   const closed = vi.fn();
   const tus = new FakeTus();
+  const asked: string[] = [];
   const view = await render(UploadPanel, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(),
+      provideHttpClient(withInterceptors([answeringOptions(undefined, asked)])),
       provideHttpClientTesting(),
-      provideRouter([]),
+      provideRouter([{ path: 'midia/:id/preparar', children: [] }]),
+      sessionAs({ features: options.features ?? ['media', 'media-upload'] }),
       { provide: TUS_UPLOAD, useValue: tus.factory },
-      { provide: AUDIO_LENGTH_READER, useValue: () => of(60_000) },
+      {
+        provide: AUDIO_LENGTH_READER,
+        useValue: options.length ?? (() => of(60_000)),
+      },
     ],
     inputs: {
       topic: 'hermetismo',
@@ -48,7 +62,7 @@ async function renderPanel() {
   });
   await view.fixture.whenStable();
   const http = TestBed.inject(HttpTestingController);
-  return { ...view, uploaded, closed, http, tus };
+  return { ...view, uploaded, closed, http, tus, asked };
 }
 
 type Panel = Awaited<ReturnType<typeof renderPanel>>;
@@ -895,5 +909,383 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     clickSend();
     panel.http.expectOne(alquimia).flush(CREATED);
     expect(panel.tus.sessions).toHaveLength(1);
+  });
+
+  describe('the choices of step 1, on each file (KBC-072)', () => {
+    const EDITOR: Feature[] = ['media', 'media-upload', 'media-edit'];
+    const PAID: Feature[] = [...EDITOR, 'media-edit-ai'];
+    const SECOND_ID = '33333333-3333-4333-8333-333333333333';
+    const TRANSCRIBE_ONLY = {
+      transcribe: true,
+      speakers: false,
+      tracks: 'none',
+    };
+
+    beforeEach(() => localStorage.clear());
+
+    const lengthsAsked = ({ asked }: Panel) =>
+      asked.map((url) =>
+        new URL(url, 'http://x').searchParams.get('durationMs'),
+      );
+
+    /** The file's last byte and the item as the API then has it. */
+    async function finish(
+      { fixture, http, tus }: Panel,
+      id = CREATED.id,
+      i = 0,
+    ) {
+      tus.sessions[i]?.succeed();
+      http
+        .expectOne(`/api/v1/media/${id}`)
+        .flush({ ...CREATED, id, status: 'queued' });
+      await fixture.whenStable();
+    }
+
+    async function chooseAi({ fixture }: Panel) {
+      fireEvent.click(
+        screen.getByRole('radio', { name: 'Propor as faixas com IA' }),
+      );
+      await fixture.whenStable();
+    }
+
+    const planOf = (body: unknown) => (body as { plan?: object }).plan;
+
+    it('shows step 1 of 4 to who edits, and no flow to who only sends (AC-15)', async () => {
+      await renderPanel({ features: EDITOR });
+      expect(screen.getByTestId('step-text').textContent).toContain(
+        'Passo 1 de 4',
+      );
+      expect(
+        screen.getByRole('group', { name: 'O que fazer com este áudio' }),
+      ).toBeTruthy();
+    });
+
+    it('hides the steps from who may only send (AC-15)', async () => {
+      await renderPanel();
+      expect(screen.queryByTestId('step-text')).toBeNull();
+    });
+
+    it('asks for the estimates with the length of the file (BR-4)', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel);
+      expect(lengthsAsked(panel).at(-1)).toBe('60000');
+    });
+
+    it('asks for the sum of the files and calls the choices theirs', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel);
+      expect(lengthsAsked(panel).at(-1)).toBe('120000');
+      expect(
+        screen.getByRole('group', { name: 'O que fazer com estes áudios' }),
+      ).toBeTruthy();
+    });
+
+    it('leaves a repeated file out of the sum', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel, {
+        verdict: 'duplicate',
+        media: { id: OTHER_ID, title: 'Já enviado' },
+      });
+      expect(lengthsAsked(panel).at(-1)).toBe('60000');
+    });
+
+    it('estimates nothing while one of the lengths is unknown (BR-4)', async () => {
+      const panel = await renderPanel({
+        features: PAID,
+        length: (file) => of(file.size === 3 ? 60_000 : null),
+      });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel);
+      expect(lengthsAsked(panel).at(-1)).toBeNull();
+    });
+
+    it('estimates nothing past the longest length the API takes', async () => {
+      const panel = await renderPanel({
+        features: EDITOR,
+        length: () => of(50_000_000),
+      });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel);
+      expect(lengthsAsked(panel).at(-1)).toBeNull();
+    });
+
+    it('goes to step 2 after one file with more than the transcription', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel);
+      clickSend();
+      const create = panel.http.expectOne(TOPIC);
+      expect(planOf(create.request.body)).toMatchObject({
+        transcribe: true,
+        speakers: true,
+        tracks: 'none',
+        acceptedUsd: null,
+      });
+      create.flush(CREATED);
+      await panel.fixture.whenStable();
+      await finish(panel);
+      expect(panel.uploaded).toHaveBeenCalledTimes(1);
+      expect(TestBed.inject(Router).url).toBe(`/midia/${CREATED.id}/preparar`);
+    });
+
+    it('with only "Transcrever", goes back to the list as ever (AC-15)', async () => {
+      const panel = await renderPanel();
+      await chooseChecked(panel);
+      clickSend();
+      const create = panel.http.expectOne(TOPIC);
+      expect(planOf(create.request.body)).toMatchObject(TRANSCRIBE_ONLY);
+      create.flush(CREATED);
+      await panel.fixture.whenStable();
+      await finish(panel);
+      expect(panel.uploaded).toHaveBeenCalledTimes(1);
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('sends the plan with every file and stays on the list after several (Q177)', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      const { container, fixture, http, uploaded } = panel;
+      choose(container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel);
+      clickSend();
+      const [first, second] = http.match(TOPIC);
+      expect(planOf(first?.request.body)).toMatchObject({ speakers: true });
+      expect(planOf(second?.request.body)).toMatchObject({ speakers: true });
+      first?.flush(CREATED);
+      second?.flush({ ...CREATED, id: SECOND_ID });
+      await fixture.whenStable();
+      await finish(panel, CREATED.id, 0);
+      await finish(panel, SECOND_ID, 1);
+      expect(uploaded).toHaveBeenCalledTimes(2);
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('gives each file its share of the value seen, by length (BR-4)', async () => {
+      const panel = await renderPanel({
+        features: PAID,
+        length: (file) => of(file.size === 3 ? 60_000 : 180_000),
+      });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel);
+      await chooseAi(panel);
+      clickSend();
+      const [first, second] = panel.http.match(TOPIC);
+      const usd = (call: typeof first) =>
+        (planOf(call?.request.body) as { acceptedUsd: number }).acceptedUsd;
+      expect(usd(first)).toBeCloseTo(0.005, 5);
+      expect(usd(second)).toBeCloseTo(0.015, 5);
+      first?.flush({}, { status: 500, statusText: 'x' });
+      second?.flush({}, { status: 500, statusText: 'x' });
+    });
+
+    it('sends the whole value seen with a single file (AC-3)', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel);
+      await chooseAi(panel);
+      clickSend();
+      const create = panel.http.expectOne(TOPIC);
+      expect(planOf(create.request.body)).toMatchObject({
+        tracks: 'ai',
+        acceptedUsd: 0.02,
+      });
+      create.flush({}, { status: 500, statusText: 'x' });
+    });
+
+    it('goes to step 2 when one file went and the others were repeated (Q177)', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel, {
+        verdict: 'duplicate',
+        media: { id: OTHER_ID, title: 'Já enviado' },
+      });
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(CREATED);
+      await panel.fixture.whenStable();
+      await finish(panel);
+      expect(TestBed.inject(Router).url).toBe(`/midia/${CREATED.id}/preparar`);
+    });
+
+    it('keeps the item of a file that stopped when another joins and the value moves', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel);
+      await chooseAi(panel);
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(CREATED);
+      await panel.fixture.whenStable();
+      panel.tus.last.fail(500);
+      await panel.fixture.whenStable();
+      choose(panel.container, audio('b.mp3', 4));
+      await answerCheck(panel);
+      clickSend();
+      await panel.fixture.whenStable();
+      panel.http.expectNone({ method: 'DELETE' });
+      expect(panel.http.match(TOPIC)).toHaveLength(1);
+      expect(panel.tus.sessions[1]?.options.uploadUrl).toBe(
+        `/api/v1/media/${CREATED.id}/upload`,
+      );
+    });
+
+    it('starts a new item when the person changes the choices after a stop', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel);
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(CREATED);
+      await panel.fixture.whenStable();
+      panel.tus.last.fail(500);
+      await panel.fixture.whenStable();
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: 'Indicar quem está falando' }),
+      );
+      await panel.fixture.whenStable();
+      clickSend();
+      panel.http
+        .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+        .flush(null);
+      await panel.fixture.whenStable();
+      const create = panel.http.expectOne(TOPIC);
+      expect(planOf(create.request.body)).toMatchObject({ speakers: false });
+      create.flush(CREATED);
+    });
+
+    const RESUME: UploadCheck = {
+      verdict: 'resume',
+      media: { id: CREATED.id, title: 'Primeiro envio' },
+      offset: 1,
+    };
+
+    it('resumes with the plan on the server, without asking again, up to step 2', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel, audio(), RESUME);
+      expect(
+        screen.queryByRole('group', { name: 'O que fazer com este áudio' }),
+      ).toBeNull();
+      expect(screen.getByText(/mantém as escolhas daquele envio/)).toBeTruthy();
+      clickSend();
+      panel.http.expectNone({ method: 'POST' });
+      await panel.fixture.whenStable();
+      await finish(panel);
+      panel.http
+        .expectOne(`/api/v1/media/${CREATED.id}/preparation`)
+        .flush(aPreparation({ mediaId: CREATED.id }));
+      await panel.fixture.whenStable();
+      expect(TestBed.inject(Router).url).toBe(`/midia/${CREATED.id}/preparar`);
+    });
+
+    it('stays on the list when what was resumed has no open plan', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel, audio(), RESUME);
+      clickSend();
+      await panel.fixture.whenStable();
+      await finish(panel);
+      panel.http
+        .expectOne(`/api/v1/media/${CREATED.id}/preparation`)
+        .flush(aPreparation({ mediaId: CREATED.id, plan: null }));
+      await panel.fixture.whenStable();
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('stays on the list when the plan of what was resumed cannot be read', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel, audio(), RESUME);
+      clickSend();
+      await panel.fixture.whenStable();
+      await finish(panel);
+      panel.http
+        .expectOne(`/api/v1/media/${CREATED.id}/preparation`)
+        .flush({}, { status: 500, statusText: 'x' });
+      await panel.fixture.whenStable();
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('does not ask for a plan who may only send', async () => {
+      const panel = await renderPanel();
+      await chooseChecked(panel, audio(), RESUME);
+      clickSend();
+      await panel.fixture.whenStable();
+      await finish(panel);
+      panel.http.expectNone(`/api/v1/media/${CREATED.id}/preparation`);
+    });
+
+    it('applies the choices only to the new file when one resumes beside it', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel, RESUME);
+      await answerCheck(panel);
+      expect(lengthsAsked(panel).at(-1)).toBe('60000');
+      expect(screen.getByText(/mantém as escolhas daquele envio/)).toBeTruthy();
+      clickSend();
+      const creates = panel.http.match(TOPIC);
+      expect(creates).toHaveLength(1);
+      expect(creates[0]?.request.body).toMatchObject({ fileName: 'b.mp3' });
+      creates[0]?.flush({ ...CREATED, id: SECOND_ID });
+    });
+
+    it('offers the choices again when a resumed upload is cancelled', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel, audio(), RESUME);
+      clickSend();
+      await panel.fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar envio' }));
+      panel.http
+        .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+        .flush(null);
+      await panel.fixture.whenStable();
+      expect(
+        screen.getByRole('group', { name: 'O que fazer com este áudio' }),
+      ).toBeTruthy();
+    });
+
+    it('sends nothing for a repeated file, whatever the plan (AC-2)', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel, audio(), {
+        verdict: 'duplicate',
+        media: { id: OTHER_ID, title: 'Já enviado' },
+      });
+      clickSend();
+      await panel.fixture.whenStable();
+      panel.http.expectNone({ method: 'POST' });
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('keeps the panel and goes nowhere when the API calls the file repeated', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel);
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(
+        {
+          error: {
+            code: 'MEDIA_DUPLICATE',
+            message: 'x',
+            details: { media: { id: OTHER_ID, title: 'Já enviado' } },
+          },
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await panel.fixture.whenStable();
+      expect(screen.getByRole('dialog', { name: 'Enviar áudio' })).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Já enviado' })).toBeTruthy();
+      expect(panel.uploaded).not.toHaveBeenCalled();
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('remembers the free choices once everything went, not what costs money (AC-4)', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel);
+      await chooseAi(panel);
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(CREATED);
+      await panel.fixture.whenStable();
+      await finish(panel);
+      expect(localStorage.getItem('kb-chat.preparation-choices')).toContain(
+        '"tracks":"none"',
+      );
+    });
   });
 });

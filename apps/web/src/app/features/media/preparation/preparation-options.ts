@@ -31,6 +31,8 @@ export class PreparationOptions {
   protected readonly form = inject(PlanForm);
   /** Disabled while the file is being sent. */
   readonly locked = input(false);
+  /** The choices are for several files at once: the estimates add them up. */
+  readonly several = input(false);
 
   protected readonly choices = this.form.choices;
   protected readonly offer = this.form.offer;

@@ -2,8 +2,10 @@ import {
   defaultChoices,
   isGuided,
   planOf,
+  planShare,
   recalledChoices,
   rememberChoices,
+  sameChoices,
   withSpeakers,
   withTracks,
   withTranscribe,
@@ -135,5 +137,34 @@ describe('the choices of step 1 (KBC-072)', () => {
     expect(recalledChoices(true)).toEqual(defaultChoices(true));
     localStorage.setItem('kb-chat.preparation-choices', 'null');
     expect(recalledChoices(true)).toEqual(defaultChoices(true));
+  });
+});
+
+describe('a plan sent for several files (KBC-035 × KBC-072)', () => {
+  const paid = {
+    transcribe: true,
+    speakers: true,
+    tracks: 'ai',
+    subjects: false,
+    acceptedUsd: 0.04,
+  } as const;
+
+  it('keeps the whole value on a single file', () => {
+    expect(planShare(paid, { lengthMs: 5, allMs: 5 })).toBe(paid);
+  });
+
+  it('gives a file its share by length, rounded up', () => {
+    const { acceptedUsd } = planShare(paid, { lengthMs: 1, allMs: 3 });
+    expect(acceptedUsd).toBe(0.013334);
+  });
+
+  it('leaves a plan with nothing paid as it is', () => {
+    const free = { ...paid, tracks: 'none', acceptedUsd: null } as const;
+    expect(planShare(free, { lengthMs: 1, allMs: 3 })).toBe(free);
+  });
+
+  it('calls two plans the same whatever their value', () => {
+    expect(sameChoices(paid, { ...paid, acceptedUsd: 0.01 })).toBe(true);
+    expect(sameChoices(paid, { ...paid, speakers: false })).toBe(false);
   });
 });

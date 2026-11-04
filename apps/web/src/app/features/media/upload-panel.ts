@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -19,10 +20,12 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
+import { Router } from '@angular/router';
 import {
   duplicateDetailsSchema,
   quotaDetailsSchema,
   type MediaItem,
+  type PreparationPlanRequest,
   type Topic,
 } from '@kb-chat/contracts';
 import {
@@ -31,8 +34,13 @@ import {
   refusedFieldOf,
   toUiErrorCode,
 } from '@core/api/api-error.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { AuthorsApi } from '@core/media/authors-api.js';
 import { MediaApi, type UploadEvent } from '@core/media/media-api.js';
+import {
+  PreparationApi,
+  preparationPagePath,
+} from '@core/media/preparation-api.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import {
   EMPTY,
@@ -54,6 +62,10 @@ import {
   isInvalidAuthorName,
 } from './author-suggestions.js';
 import { AuthorCombobox } from './author-combobox.js';
+import { planShare, sameChoices } from './preparation/plan-choices.js';
+import { PlanForm } from './preparation/plan-form.js';
+import { PreparationOptions } from './preparation/preparation-options.js';
+import { PreparationSteps } from './preparation/preparation-steps.js';
 import { UploadEntries, type UploadEntry } from './upload-entries.js';
 import { UploadFileRow } from './upload-file-row.js';
 import { uploadRule } from './upload-rules.js';
@@ -74,8 +86,14 @@ const FILES_AT_ONCE = 3;
  */
 @Component({
   selector: 'app-upload-panel',
-  imports: [ReactiveFormsModule, AuthorCombobox, UploadFileRow],
-  providers: [UploadEntries],
+  imports: [
+    ReactiveFormsModule,
+    AuthorCombobox,
+    PreparationOptions,
+    PreparationSteps,
+    UploadFileRow,
+  ],
+  providers: [UploadEntries, PlanForm],
   templateUrl: './upload-panel.html',
   styleUrl: './upload-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -84,6 +102,12 @@ const FILES_AT_ONCE = 3;
 export class UploadPanel implements OnInit {
   private readonly api = inject(MediaApi);
   private readonly authorsApi = inject(AuthorsApi);
+  private readonly preparations = inject(PreparationApi);
+  private readonly session = inject(SessionStore);
+  private readonly router = inject(Router);
+  protected readonly plan = inject(PlanForm);
+  /** Who may only send sees no flow of four steps: the upload is all there is (AC-15). */
+  protected readonly showSteps = computed(() => this.session.can('media-edit'));
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly fileInput =
@@ -130,6 +154,14 @@ export class UploadPanel implements OnInit {
     afterNextRender(() => this.dialog().nativeElement.showModal());
     // Leaving the page or the route mid-upload: stop. The same file continues later (FR-2).
     inject(DestroyRef).onDestroy(() => this.halt());
+    // The estimates go by the files' length, read before anything is sent (KBC-072 BR-4).
+    toObservable(this.uploads.plannedMs)
+      .pipe(takeUntilDestroyed())
+      .subscribe((durationMs) =>
+        durationMs === null
+          ? this.plan.lengthUnknown()
+          : this.plan.aim({ durationMs }),
+      );
   }
 
   ngOnInit(): void {
@@ -231,14 +263,25 @@ export class UploadPanel implements OnInit {
       : $localize`:@@media.upload.nothingToSend:Nada a enviar: estes arquivos não podem ser enviados.`;
   }
 
-  private draftOf({ file, title }: UploadEntry): Draft {
+  private draftOf(entry: UploadEntry): Draft {
+    const { file, title } = entry;
     const { topic } = this.form.getRawValue();
     return {
       file,
       title: title.trim(),
       topic,
       author: this.authorName().trim(),
+      plan: this.planOf(entry),
     };
+  }
+
+  /** None for a file that goes on: its item keeps the plan it was created with. */
+  private planOf(entry: UploadEntry): PreparationPlanRequest | null {
+    if (entry.resumes) return null;
+    const plan = this.plan.plan();
+    const allMs = this.uploads.plannedMs();
+    if (allMs === null || entry.durationMs === null) return plan;
+    return planShare(plan, { lengthMs: entry.durationMs, allMs });
   }
 
   /** One file, from its item to its last byte; a failure stays on its own line. */
@@ -299,6 +342,7 @@ export class UploadPanel implements OnInit {
           bytes: file.size,
           sha256,
           durationMs,
+          ...(draft.plan ? { plan: draft.plan } : {}),
         }),
       ),
       tap(({ id }) => this.created.set(key, { id, draft })),
@@ -332,7 +376,40 @@ export class UploadPanel implements OnInit {
     const pending = this.interrupted || this.uploads.sendable().length > 0;
     this.reportSent();
     this.enter(pending ? 'stopped' : 'choosing');
-    if (!pending) this.dialog().nativeElement.close();
+    if (pending) return;
+    this.plan.remember();
+    const guided = this.plan.guided();
+    this.dialog().nativeElement.close();
+    this.continuePreparation(guided);
+  }
+
+  /**
+   * One file goes on to step 2; several stay on the list, where each says where its own
+   * preparation stopped (KBC-072 FR-6). Only "Transcrever" ends here too, as ever (AC-15).
+   */
+  private continuePreparation(guided: boolean): void {
+    const [only, ...others] = this.sent.entries();
+    if (!only || others.length > 0) return;
+    const [key, item] = only;
+    if (this.uploads.entries().find((e) => e.key === key)?.resumes)
+      return this.continueResumed(item.id);
+    if (guided) this.openPreparation(item.id);
+  }
+
+  /** What was resumed goes by the plan on the server: the form may say something else. */
+  private continueResumed(id: string): void {
+    if (!this.session.can('media-edit')) return;
+    this.preparations.read(id).subscribe({
+      next: ({ plan, finished }) => {
+        if (plan && !finished) this.openPreparation(id);
+      },
+      // The list shows the way back all the same.
+      error: () => undefined,
+    });
+  }
+
+  private openPreparation(id: string): void {
+    void this.router.navigateByUrl(preparationPagePath(id));
   }
 
   /** The list learns of each new item once; the last one ends up focused (UP-01). */
@@ -437,10 +514,16 @@ interface Draft {
   readonly topic: string;
   /** The author's name; blank is none. */
   readonly author: string;
+  /** What the person asked for this audio (KBC-072); none for an item that goes on. */
+  readonly plan: PreparationPlanRequest | null;
 }
+
+const samePlan = (a: Draft['plan'], b: Draft['plan']): boolean =>
+  a === null || b === null ? a === b : sameChoices(a, b);
 
 const sameDraft = (a: Draft, b: Draft): boolean =>
   a.file === b.file &&
   a.title === b.title &&
   a.topic === b.topic &&
-  a.author === b.author;
+  a.author === b.author &&
+  samePlan(a.plan, b.plan);

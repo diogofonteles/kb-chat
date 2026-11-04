@@ -6,7 +6,10 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { UploadCheck } from '@kb-chat/contracts';
+import {
+  PREPARATION_MAX_DURATION_MS,
+  type UploadCheck,
+} from '@kb-chat/contracts';
 import { MediaApi } from '@core/media/media-api.js';
 import {
   EMPTY,
@@ -62,6 +65,8 @@ export interface UploadEntry {
   readonly title: string;
   readonly sha256: string | null;
   readonly durationMs: number | null;
+  /** Continues an item of an earlier upload, which keeps the plan it was created with. */
+  readonly resumes: boolean;
   readonly state: EntryState;
 }
 
@@ -71,6 +76,13 @@ const SENDABLE: readonly EntryState['kind'][] = [
   'resume',
   'expired',
   'stopped',
+];
+
+/** What will not become an item with the panel's plan. */
+const OUTSIDE_THE_PLAN: readonly EntryState['kind'][] = [
+  'refused',
+  'duplicate',
+  'over-quota',
 ];
 
 /** What a change of collection does not ask about again. */
@@ -117,6 +129,34 @@ export class UploadEntries {
   readonly sendable = computed(() =>
     this.list().filter(({ state }) => SENDABLE.includes(state.kind)),
   );
+  /** The files the panel's plan is for. */
+  private readonly planned = computed(() =>
+    this.list().filter(
+      ({ resumes, state }) =>
+        !resumes && !OUTSIDE_THE_PLAN.includes(state.kind),
+    ),
+  );
+  /** Every file on the list goes on with the plan it already has. */
+  readonly onlyResuming = computed(
+    () => this.list().length > 0 && this.list().every(({ resumes }) => resumes),
+  );
+  readonly anyResuming = computed(() =>
+    this.list().some(({ resumes }) => resumes),
+  );
+  /**
+   * The length the plan's estimates go by: all of its files, or null while one is not known,
+   * cannot be read or the sum is past what the API estimates (KBC-072 BR-4).
+   */
+  readonly plannedMs = computed<number | null>(() => {
+    const planned = this.planned();
+    if (planned.length === 0) return null;
+    let allMs = 0;
+    for (const { durationMs } of planned) {
+      if (durationMs === null) return null;
+      allMs += durationMs;
+    }
+    return allMs > 0 && allMs <= PREPARATION_MAX_DURATION_MS ? allMs : null;
+  });
 
   constructor() {
     this.toCheck
@@ -154,6 +194,7 @@ export class UploadEntries {
         title: titleFromFileName(file.name),
         sha256: null,
         durationMs: null,
+        resumes: false,
         state: problem
           ? { kind: 'refused', problem }
           : { kind: 'checking', percent: 0 },
@@ -172,7 +213,11 @@ export class UploadEntries {
   }
 
   set(key: number, state: EntryState): void {
-    this.update(key, { state });
+    // Past the 24 h the old item is gone: the next one takes the panel's plan.
+    this.update(
+      key,
+      state.kind === 'expired' ? { state, resumes: false } : { state },
+    );
   }
 
   /** A file on its way waits for the network, where it stopped. */
@@ -186,7 +231,7 @@ export class UploadEntries {
     this.list.update((list) =>
       list.map((entry) =>
         ['sending', 'stopped'].includes(entry.state.kind)
-          ? { ...entry, state: { kind: 'ready' } }
+          ? { ...entry, resumes: false, state: { kind: 'ready' } }
           : entry,
       ),
     );
@@ -269,6 +314,7 @@ export class UploadEntries {
       tap((check) => {
         // A resumed upload keeps the title it was started with.
         if (check.verdict === 'resume') this.rename(key, check.media.title);
+        this.update(key, { resumes: check.verdict === 'resume' });
         this.set(key, stateOf(check));
       }),
       ignoreElements(),
