@@ -118,13 +118,35 @@ export class TrackSubjectService {
 
   read(actor: MediaActor, trackId: string): TrackSubjects {
     const track = this.track(actor, trackId);
-    return this.shown(track.topic, [
-      {
+    return this.shownOne(track.topic, this.rowOf(track));
+  }
+
+  /**
+   * The approved row: a track being cut has no place yet on its `media` row, and a new title
+   * reaches that row only when published. One that left the approved tracks has neither.
+   */
+  private rowOf(track: {
+    readonly id: string;
+    readonly title: string;
+    readonly ordinal: number | null;
+    readonly parentId: string;
+  }): TrackRow {
+    const approved = this.deps.items
+      .tracksOf(track.parentId)
+      .find((one) => one.mediaId === track.id);
+    return (
+      approved ?? {
         mediaId: track.id,
         title: track.title,
         ordinal: track.ordinal,
-      },
-    ])[0] as TrackSubjects;
+      }
+    );
+  }
+
+  private shownOne(topic: string, row: TrackRow): TrackSubjects {
+    const [track] = this.shown(topic, [row]);
+    if (!track) throw notFound();
+    return track;
   }
 
   /** The approved tracks of a recording, as step 4 lists them. */
@@ -272,7 +294,11 @@ export class TrackSubjectService {
         details: { reason: 'not-a-track' },
       });
     this.deps.findMedia(actor, record.track.parentId);
-    return { ...record, ordinal: record.track.ordinal };
+    return {
+      ...record,
+      ordinal: record.track.ordinal,
+      parentId: record.track.parentId,
+    };
   }
 
   private writable(call: SubjectCall) {

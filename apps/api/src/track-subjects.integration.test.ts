@@ -129,6 +129,10 @@ describe('The subjects of a track through the routes (FR-2)', () => {
       summary: 'Sobre a Cabala.',
     });
     expect(saved.statusCode, saved.body).toBe(200);
+    expect(saved.json()).toMatchObject({
+      ordinal: 1,
+      title: 'Primeira pergunta',
+    });
     await finishCuts(media);
     const read = await media.owner(
       'GET',
@@ -184,9 +188,15 @@ describe('The subjects of a track through the routes (FR-2)', () => {
       summary: null,
     });
     await approve(media, recording.id, [
-      { ...TRACKS[0], startMs: 0, endMs: 58_000 },
+      { title: 'Primeira, renomeada', startMs: 0, endMs: 58_000 },
       TRACKS[1] as (typeof TRACKS)[number],
     ]);
+    const [renamed] = (await stepOf(media, recording.id)).tracks;
+    const answered = await media.owner(
+      'GET',
+      `/api/v1/media/${first.mediaId}/subjects`,
+    );
+    expect(answered.json<TrackSubjects>().title).toBe(renamed?.title);
     await finishCuts(media);
     const [kept] = (await stepOf(media, recording.id)).tracks;
     expect(kept?.mediaId).toBe(first.mediaId);
