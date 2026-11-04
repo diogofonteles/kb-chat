@@ -57,6 +57,33 @@ export function makeMp3(
   return path;
 }
 
+/**
+ * `makeMp3` for hours of audio: one minute encoded and repeated without encoding again.
+ * Encoding it all takes most of a test's time limit on a CI runner.
+ */
+export function makeLongMp3(
+  name: string,
+  minutes: number,
+  options: { readonly bitrate: string },
+): string {
+  const minute = makeMp3(`${name} minuto`, 60, options);
+  const path = join(dir, `${name}.mp3`);
+  execFileSync(ffmpeg(), [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-stream_loop',
+    `${minutes - 1}`,
+    '-i',
+    minute,
+    '-c',
+    'copy',
+    path,
+  ]);
+  return path;
+}
+
 /** A tag no other parallel test shares (time plus randomness), for titles. */
 export const uniqueTag = (): string =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

@@ -11,7 +11,7 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { makeMp3, uniqueTag, useTheme } from './media-helpers.js';
+import { makeLongMp3, makeMp3, uniqueTag, useTheme } from './media-helpers.js';
 
 /** KBC-035: resumable upload, quota and repeated files, in the real panel. */
 
@@ -188,7 +188,7 @@ test('AC-3: a send over the quota says so and sends nothing', async ({
     mediaQuotaBytes: Math.round(0.1 * 1024 ** 3),
   });
   // Four hours at 8 kbit/s: a small file that converts to about 120 MB.
-  const file = makeMp3(`Longo ${uniqueTag()}`, 4 * 3600, { bitrate: '8k' });
+  const file = makeLongMp3(`Longo ${uniqueTag()}`, 240, { bitrate: '8k' });
   const dialog = await openPanel(page);
   await dialog.locator('input[type="file"]').setInputFiles(file);
   await expect(dialog.getByRole('alert')).toContainText(
