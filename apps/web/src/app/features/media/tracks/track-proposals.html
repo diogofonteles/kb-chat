@@ -17,7 +17,7 @@
         <button
           type="button"
           class="secondary"
-          [disabled]="busy()"
+          [disabled]="busy() || blocked()"
           (click)="confirm()"
           i18n="@@tracks.ai.confirm"
         >
@@ -37,7 +37,7 @@
     <button
       type="button"
       class="secondary"
-      [disabled]="busy()"
+      [disabled]="busy() || blocked()"
       (click)="askEstimate()"
       i18n="@@tracks.ai.propose"
     >
@@ -59,7 +59,8 @@
     @for (suggestion of pending(); track suggestion.voice) {
       <li>
         <span>
-          <strong i18n="@@tracks.ai.voice">Voz {{ suggestion.voice }}:</strong>
+          <strong i18n="@@tracks.ai.voice">Voz {{ suggestion.voice }}:</strong
+          >&ngsp;
           @if (suggestion.audience) {
             <ng-container i18n="@@tracks.ai.audience"
               >Pergunta da plateia</ng-container
@@ -67,7 +68,7 @@
           } @else {
             {{ suggestion.name }}
           }
-          <span class="hint">({{ suggestion.reason }})</span>
+          &ngsp;<span class="hint">({{ suggestion.reason }})</span>
         </span>
         <button
           type="button"

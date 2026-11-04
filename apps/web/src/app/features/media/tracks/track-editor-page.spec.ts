@@ -5,10 +5,10 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, screen } from '@testing-library/angular';
-import type { DraftTrack, MediaEdit } from '@kb-chat/contracts';
+import type { DraftTrack, MediaEdit, ProposalRun } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ELEMENT_FACTORY } from '@core/media/media-engine.js';
 import { fakeMediaElement } from '../../../testing/fake-media-element.js';
@@ -17,6 +17,7 @@ import {
   aTranscription,
   sessionAs,
 } from '../../../testing/media-fixtures.js';
+import { MEDIA_POLL_MS } from '../media-polling.js';
 import { TrackEditorPage } from './track-editor-page.js';
 import { SAVE_DELAY_MS } from './track-draft.js';
 
@@ -55,6 +56,7 @@ const anEdit = (overrides: Partial<MediaEdit> = {}): MediaEdit => ({
   step: 3,
   tracks: [aTrack(1, 0, 20_000), aTrack(2, 20_000, 40_000)],
   run: null,
+  lastFailure: null,
   voices: [],
   approvedTracks: 0,
   transcriptChanged: false,
@@ -79,6 +81,7 @@ async function openPage(
         { path: 'midia/:id', children: [] },
       ]),
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
+      { provide: MEDIA_POLL_MS, useValue: 5 },
       sessionAs({ features }),
     ],
   });
@@ -97,7 +100,7 @@ async function openPage(
     await Promise.resolve();
     TestBed.tick();
     http
-      .match(() => pass > 0)
+      .match((request) => pass > 0 && request.method === 'GET')
       .forEach((one) => one.flush({}, { status: 404, statusText: 'None' }));
   }
   await harness.fixture.whenStable();
@@ -106,7 +109,38 @@ async function openPage(
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
+  localStorage.clear();
 });
+
+/** Lets the save delay pass, for real: the page runs on real timers here. */
+const saveDelay = () =>
+  new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MS + 20));
+
+const RUN: ProposalRun = {
+  id: '22222222-2222-4222-8222-222222222222',
+  mediaId: ITEM.id,
+  status: 'running',
+  model: 'stub',
+  windowsTotal: 2,
+  windowsDone: 1,
+  tracks: 2,
+  estimateUsd: 0.01,
+  spentUsd: 0,
+  failure: null,
+  createdAt: '2026-11-04T00:00:00.000Z',
+  finishedAt: null,
+};
+
+const button = (name: string) =>
+  screen.getByRole<HTMLButtonElement>('button', { name });
+
+/** Deletes the selected track: the change every test here makes. */
+async function deleteTrack(harness: RouterTestingHarness) {
+  fireEvent.click(button('Mais ações da faixa'));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Apagar' }));
+  await harness.fixture.whenStable();
+}
 
 describe('TrackEditorPage (T20, KBC-066)', () => {
   it('explains a refusal instead of showing an empty editor', async () => {
@@ -122,7 +156,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     await openPage();
     expect(screen.getAllByText(/Passo 3 de 4/).length).toBeGreaterThan(0);
     expect(screen.getByText(/histórico de desfazer recomeçou/)).toBeTruthy();
-    expect(screen.getByRole('tab', { name: '2 faixas' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '2 faixas' })).toBeTruthy();
     expect(
       screen.queryByRole('button', { name: 'Propor faixas com IA' }),
     ).toBeNull();
@@ -142,7 +176,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     expect(screen.getByText(/Nenhuma faixa ainda/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Nova faixa aqui' }));
     await harness.fixture.whenStable();
-    expect(screen.getByRole('tab', { name: '1 faixa' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '1 faixa' })).toBeTruthy();
     expect(screen.queryByText(/Nenhuma faixa ainda/)).toBeNull();
   });
 
@@ -202,12 +236,12 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Apagar' }));
     await harness.fixture.whenStable();
     expect(screen.getByText('Faixa 1 apagada')).toBeTruthy();
-    expect(screen.getByRole('tab', { name: '1 faixa' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '1 faixa' })).toBeTruthy();
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Desfazer' })[0] as HTMLElement,
     );
     await harness.fixture.whenStable();
-    expect(screen.getByRole('tab', { name: '2 faixas' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '2 faixas' })).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MS + 20));
     http.expectOne(`${BASE}/edit`).flush({ version: 3 });
   });
@@ -222,47 +256,308 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     const field = screen.getByRole('textbox', { name: 'Título' });
     fireEvent.keyDown(field, { key: 'z', ctrlKey: true });
     await harness.fixture.whenStable();
-    expect(screen.getByRole('tab', { name: '1 faixa' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '1 faixa' })).toBeTruthy();
     fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
     await harness.fixture.whenStable();
-    expect(screen.getByRole('tab', { name: '2 faixas' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '2 faixas' })).toBeTruthy();
     fireEvent.keyDown(document.body, {
       key: 'z',
       ctrlKey: true,
       shiftKey: true,
     });
     await harness.fixture.whenStable();
-    expect(screen.getByRole('tab', { name: '1 faixa' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '1 faixa' })).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MS + 20));
     http.expectOne(`${BASE}/edit`).flush({ version: 3 });
   });
 
   it('watches a running proposal without handles or approval (KBC-067 FR-3)', async () => {
-    await openPage(
-      anEdit({
-        run: {
-          id: '22222222-2222-4222-8222-222222222222',
-          mediaId: ITEM.id,
-          status: 'running',
-          model: 'stub',
-          windowsTotal: 2,
-          windowsDone: 1,
-          tracks: 2,
-          estimateUsd: 0.01,
-          spentUsd: 0,
-          failure: null,
-          createdAt: '2026-11-04T00:00:00.000Z',
-          finishedAt: null,
-        },
-      }),
-    );
+    const { http } = await openPage(anEdit({ run: RUN }));
     expect(screen.queryByRole('slider')).toBeNull();
-    expect(
-      (
-        screen.getByRole('button', {
-          name: 'Aprovar faixas',
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
+    expect(button('Aprovar faixas').disabled).toBe(true);
+    http.match(`${BASE}/edit`);
+  });
+
+  it('says why it is read-only, and comes back, without `media-edit-ai` (R-5)', async () => {
+    const { harness, http } = await openPage(anEdit({ run: RUN }));
+    expect(screen.getByText(/Uma análise com IA está propondo/)).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    http.match(`${BASE}/edit`).at(-1)?.error(new ProgressEvent('error'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    http
+      .match(`${BASE}/edit`)
+      .at(-1)
+      ?.flush(anEdit({ version: 3 }));
+    await harness.fixture.whenStable();
+    expect(screen.queryByText(/Uma análise com IA está propondo/)).toBeNull();
+    expect(screen.getAllByRole('slider').length).toBeGreaterThan(0);
+  });
+
+  it('does not repeat why to who sees the panel', async () => {
+    const { http } = await openPage(anEdit({ run: RUN }), [
+      'media',
+      'media-edit',
+      'media-edit-ai',
+    ]);
+    expect(screen.getByText(/Propondo… janela 1 de 2/)).toBeTruthy();
+    expect(screen.queryByText(/Uma análise com IA está propondo/)).toBeNull();
+    http.match(`${BASE}/edit`);
+  });
+
+  it('shows a failed run after a reload (KBC-067 FR-5)', async () => {
+    await openPage(anEdit({ lastFailure: 'provider' }), [
+      'media',
+      'media-edit',
+      'media-edit-ai',
+    ]);
+    expect(screen.getByText('Não foi possível propor.')).toBeTruthy();
+  });
+
+  it('takes away the undo of a delete with the next change (I-6)', async () => {
+    const { harness, http } = await openPage();
+    await deleteTrack(harness);
+    expect(screen.getByText('Faixa 1 apagada')).toBeTruthy();
+    fireEvent.click(button('Nova faixa aqui'));
+    await harness.fixture.whenStable();
+    expect(screen.queryByText('Faixa 1 apagada')).toBeNull();
+    await saveDelay();
+    http.expectOne(`${BASE}/edit`).flush({ version: 3 });
+  });
+
+  it('divides at the cursor; the second part is new and untitled', async () => {
+    const { harness, http } = await openPage();
+    fireEvent.click(button('Mais ações da faixa'));
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Dividir aqui' }),
+    );
+    await harness.fixture.whenStable();
+    await saveDelay();
+    const save = http.expectOne(`${BASE}/edit`);
+    expect(save.request.body.tracks).toHaveLength(3);
+    expect(save.request.body.tracks[2]).toMatchObject({
+      source: 'manual',
+      title: null,
+      startMs: 5_000,
+    });
+    save.flush({ version: 3 });
+  });
+
+  describe('when a save does not go through', () => {
+    const refuse = async (
+      http: HttpTestingController,
+      harness: RouterTestingHarness,
+      answer: { status: number; details?: object },
+    ) => {
+      await saveDelay();
+      const body = {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'no',
+          details: answer.details,
+        },
+      };
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush(body, { status: answer.status, statusText: 'No' });
+      await harness.fixture.whenStable();
+    };
+    const copy = () =>
+      screen.getByRole<HTMLTextAreaElement>('textbox', {
+        name: 'Suas faixas, para copiar',
+      });
+    const conflictPage = async () => {
+      const opened = await openPage();
+      await deleteTrack(opened.harness);
+      await refuse(opened.http, opened.harness, { status: 412 });
+      opened.http
+        .expectOne({ method: 'GET', url: `${BASE}/edit` })
+        .flush(anEdit({ version: 5, tracks: [aTrack(3, 0, 10_000)] }));
+      await opened.harness.fixture.whenStable();
+      return opened;
+    };
+
+    it('keeps everything a person can change to copy (FR-10, I-8)', async () => {
+      const edited: DraftTrack = {
+        ...aTrack(2, 20_000, 40_000),
+        kind: 'talk',
+        askerVoice: 2,
+        answererSpeakerId: '33333333-3333-4333-8333-333333333333',
+      };
+      const { harness, http } = await openPage(
+        anEdit({ tracks: [aTrack(1, 0, 20_000), edited] }),
+      );
+      fireEvent.click(button('Mais ações da faixa'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Apagar' }));
+      await harness.fixture.whenStable();
+      await refuse(http, harness, { status: 412 });
+      http
+        .expectOne({ method: 'GET', url: `${BASE}/edit` })
+        .flush(anEdit({ version: 5, tracks: [] }));
+      await harness.fixture.whenStable();
+      expect(copy().value).toContain('1. 0:20,0 – 0:40,0 Faixa 2');
+      expect(copy().value).toContain('Exposição');
+      expect(copy().value).toContain('Quem pergunta: 2');
+      expect(copy().value).toContain('Quem responde: ');
+    });
+
+    it('says a 409 of a proposal, with the copy, and no reload of the page (R-6)', async () => {
+      const { harness, http } = await openPage();
+      await deleteTrack(harness);
+      await refuse(http, harness, {
+        status: 409,
+        details: { reason: 'proposal-running' },
+      });
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Uma análise com IA começou nesta gravação',
+      );
+      expect(copy().value).toContain('Faixa 2');
+      expect(button('Recarregar')).toBeTruthy();
+    });
+
+    it('says a 409 of an approval with the copy (BUG-3)', async () => {
+      const { harness, http } = await openPage();
+      await deleteTrack(harness);
+      await refuse(http, harness, {
+        status: 409,
+        details: { reason: 'approved' },
+      });
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Esta edição foi aprovada; recarregue para ver.',
+      );
+      expect(copy()).toBeTruthy();
+    });
+
+    it('offers to try again after a 500, not to reload (R-6)', async () => {
+      const { harness, http } = await openPage();
+      await deleteTrack(harness);
+      await refuse(http, harness, { status: 500 });
+      expect(screen.getByRole('alert').textContent).not.toMatch(/Recarregue/);
+      expect(copy().value).toContain('Faixa 2');
+      fireEvent.click(button('Tentar de novo'));
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush({ version: 3 });
+      await harness.fixture.whenStable();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getAllByText('Rascunho salvo').length).toBeGreaterThan(0);
+    });
+
+    it('approves nothing on a 500, and says so (BUG-2)', async () => {
+      const { harness, http } = await openPage();
+      await deleteTrack(harness);
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush({}, { status: 500, statusText: 'No' });
+      await harness.fixture.whenStable();
+      http.expectNone(`${BASE}/edit/approve`);
+      expect(
+        screen.getByText(
+          'Nada foi feito: não consegui salvar a última mudança.',
+        ),
+      ).toBeTruthy();
+      expect(button('Aprovar faixas').disabled).toBe(false);
+    });
+
+    it('answers Aprovar in a conflict, and the button comes back (BUG-1)', async () => {
+      const { harness, http } = await conflictPage();
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      http.expectNone(`${BASE}/edit/approve`);
+      expect(screen.getByText(/Nada foi feito: esta edição tem/)).toBeTruthy();
+      expect(button('Aprovar faixas').disabled).toBe(false);
+    });
+
+    it('turns off the AI in a conflict (R-3)', async () => {
+      const { harness, http } = await openPage(anEdit(), [
+        'media',
+        'media-edit',
+        'media-edit-ai',
+      ]);
+      await deleteTrack(harness);
+      await refuse(http, harness, { status: 409 });
+      expect(button('Propor faixas com IA').disabled).toBe(true);
+    });
+
+    it('has no handles in a conflict, and Recarregar brings the other draft', async () => {
+      const { harness, http } = await conflictPage();
+      expect(screen.queryByRole('slider')).toBeNull();
+      fireEvent.click(button('Recarregar'));
+      http
+        .expectOne({ method: 'GET', url: `${BASE}/edit` })
+        .flush(anEdit({ version: 5, tracks: [aTrack(3, 0, 10_000)] }));
+      await harness.fixture.whenStable();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getAllByRole('slider').length).toBeGreaterThan(0);
+      expect(button('1 faixa')).toBeTruthy();
+    });
+
+    it('keeps the copy when Recarregar fails', async () => {
+      const { harness, http } = await conflictPage();
+      fireEvent.click(button('Recarregar'));
+      http
+        .expectOne({ method: 'GET', url: `${BASE}/edit` })
+        .flush({}, { status: 500, statusText: 'No' });
+      await harness.fixture.whenStable();
+      expect(copy().value).toContain('Faixa 2');
+    });
+
+    it('leaves in a conflict: this browser holds the tracks (UP-04)', async () => {
+      const { harness } = await conflictPage();
+      fireEvent.click(button('Sair e continuar depois'));
+      await harness.fixture.whenStable();
+      expect(TestBed.inject(Router).url).toBe(`/midia/${ITEM.id}`);
+    });
+
+    it('stays and says why when this browser cannot hold them (R-1)', async () => {
+      const { harness, http } = await openPage();
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('blocked');
+      });
+      await deleteTrack(harness);
+      fireEvent.click(button('Sair e continuar depois'));
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush({}, { status: 500, statusText: 'No' });
+      await harness.fixture.whenStable();
+      expect(TestBed.inject(Router).url).toContain('/faixas');
+      expect(screen.getByText(/Copie suas faixas antes de sair/)).toBeTruthy();
+    });
+
+    it('tells the truth without a network, kept or not (R-2)', async () => {
+      const { harness, http } = await openPage();
+      await deleteTrack(harness);
+      await saveDelay();
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .error(new ProgressEvent('error'));
+      await harness.fixture.whenStable();
+      expect(screen.getByText(/ficam neste aparelho/)).toBeTruthy();
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('blocked');
+      });
+      fireEvent.click(button('Mais ações da faixa'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Apagar' }));
+      window.dispatchEvent(new Event('online'));
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .error(new ProgressEvent('error'));
+      await harness.fixture.whenStable();
+      expect(screen.getByText(/não feche esta página/)).toBeTruthy();
+    });
+
+    it('brings back what was not saved when opened again (BR-6)', async () => {
+      localStorage.setItem(
+        `kb-chat.track-draft..${ITEM.id}`,
+        JSON.stringify({ version: 2, tracks: [aTrack(1, 0, 20_000)] }),
+      );
+      const { http } = await openPage();
+      expect(screen.getByText(/Recuperei mudanças/)).toBeTruthy();
+      expect(button('1 faixa')).toBeTruthy();
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush({ version: 3 });
+    });
   });
 });

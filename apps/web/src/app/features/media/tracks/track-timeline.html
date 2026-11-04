@@ -16,7 +16,9 @@
       [style.width.%]="block.width"
       (click)="chooseBlock(block.id)"
     >
-      <span class="number">{{ block.ordinal }}</span>
+      @if (block.numbered) {
+        <span class="number">{{ block.ordinal }}</span>
+      }
     </button>
   }
   <span

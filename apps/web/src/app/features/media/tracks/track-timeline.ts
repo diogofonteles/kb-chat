@@ -46,6 +46,8 @@ const CHAR_PX = 8;
 const WORD_GAP_PX = 6;
 /** A press that moved less than this is a tap, however a finger trembles (R-4). */
 const TAP_SLOP_PX = 6;
+/** Narrower than this, a block's number cannot be read. */
+const MIN_NUMBERED_PX = 18;
 
 export interface NumberedTrack {
   readonly track: DraftTrack;
@@ -152,6 +154,7 @@ export class TrackTimeline {
       width: ((track.endMs - track.startMs) / total) * 100,
       proposed: isProposal(track),
       active: track.id === this.selected()?.track.id,
+      numbered: this.fitsNumber((track.endMs - track.startMs) / total),
     }));
   });
   protected readonly overviewWindow = computed(() => {
@@ -463,6 +466,12 @@ export class TrackTimeline {
       const center = now.startMs + now.spanMs / 2;
       return { startMs: this.clampStart(center - spanMs / 2, spanMs), spanMs };
     });
+  }
+
+  /** Without a measure yet (or a layout, in a test) every block keeps its number. */
+  private fitsNumber(share: number): boolean {
+    const width = this.width();
+    return width === 0 || share * width >= MIN_NUMBERED_PX;
   }
 
   private clampStart(startMs: number, spanMs: number): number {

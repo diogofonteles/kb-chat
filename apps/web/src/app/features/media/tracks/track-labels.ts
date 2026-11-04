@@ -2,6 +2,7 @@ import type { TrackKind } from '@kb-chat/contracts';
 import type { HandleStop, TrackEdge } from '@kb-chat/player-core';
 import { formatClock } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
+import type { ConflictReason, SaveResult } from './track-draft-state.js';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -40,6 +41,29 @@ export function stopText(stop: HandleStop | null): string {
     ? $localize`:@@tracks.stop.minimum:Mínimo de 5 s`
     : $localize`:@@tracks.stop.neighbour:Encostou na faixa ${stop.ordinal}:ordinal:`;
 }
+
+/** What stands in the way, in the banner that keeps the tracks to copy (FR-10). */
+export const CONFLICT_TEXT: Record<ConflictReason, () => string> = {
+  stale: () =>
+    $localize`:@@tracks.conflict:Outra pessoa mudou esta edição; recarregue para ver.`,
+  approved: () =>
+    $localize`:@@tracks.conflictApproved:Esta edição foi aprovada; recarregue para ver.`,
+  'proposal-running': () =>
+    $localize`:@@tracks.conflictRunning:Uma análise com IA começou nesta gravação; recarregue para acompanhar.`,
+};
+
+const NOT_DONE: Record<Exclude<SaveResult, 'saved'>, () => string> = {
+  conflict: () =>
+    $localize`:@@tracks.notDone.conflict:Nada foi feito: esta edição tem um conflito. Veja o aviso acima.`,
+  failed: () =>
+    $localize`:@@tracks.notDone.failed:Nada foi feito: não consegui salvar a última mudança.`,
+  offline: () =>
+    $localize`:@@tracks.notDone.offline:Nada foi feito: estou sem conexão.`,
+};
+
+/** Why a press stopped: only a save that came back fine lets it go on (BR-1). */
+export const notDoneText = (result: SaveResult): string =>
+  result === 'saved' ? '' : NOT_DONE[result]();
 
 export const KIND_LABELS: Record<TrackKind, () => string> = {
   qa: () => $localize`:@@tracks.kind.qa:Pergunta e resposta`,

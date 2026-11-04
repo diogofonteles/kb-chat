@@ -6,22 +6,19 @@ import {
   DestroyRef,
   ElementRef,
   afterNextRender,
+  afterRenderEffect,
   computed,
   Injector,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
-import {
-  takeUntilDestroyed,
-  toObservable,
-  toSignal,
-} from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
+  approvalProblems,
   collectionSpeakerListSchema,
   editWordsSchema,
-  mediaEditSchema,
   mediaItemSchema,
   mediaSilencesSchema,
   mediaTranscriptSchema,
@@ -32,24 +29,18 @@ import {
   type VoiceLabel,
 } from '@kb-chat/contracts';
 import {
-  canSplit,
   joinTracks,
   newTrackSpan,
   selectedSpan,
   snapPointsOf,
-  splitPointNear,
+  splitTrack,
   withHandle,
   NUDGE_MS,
   type TrackEdge,
 } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
-import {
-  MediaEditApi,
-  editWordsUrl,
-  mediaEditUrl,
-  mediaWaveformUrl,
-} from '@core/media/media-edit-api.js';
+import { editWordsUrl, mediaWaveformUrl } from '@core/media/media-edit-api.js';
 import {
   mediaPagePath,
   mediaTranscriptUrl,
@@ -57,14 +48,21 @@ import {
 } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { collectionSpeakersUrl } from '@core/media/speakers-api.js';
-import { filter, map } from 'rxjs';
+import { distinctUntilChanged, map } from 'rxjs';
 import { audienceLabel } from '../voices/speaker-names.js';
 import { TrackAudition, endRange, startRange } from './track-audition.js';
-import { TrackDraft, numbered, problemsOf } from './track-draft.js';
-import { formatBoundary } from './track-labels.js';
+import { TrackDraft } from './track-draft.js';
+import type { ApproveResult } from './track-draft-state.js';
+import {
+  CONFLICT_TEXT,
+  KIND_LABELS,
+  formatBoundary,
+  notDoneText,
+} from './track-labels.js';
 import { TrackProposals } from './track-proposals.js';
 import {
   TrackRowList,
+  personValue,
   problemLabel,
   type PersonChange,
   type PersonChoice,
@@ -77,6 +75,8 @@ const UNDO_NOTICE_MS = 10_000;
 
 interface DeletedNotice {
   readonly ordinal: number;
+  /** The draft right after deleting: any other change takes the offer away (I-6). */
+  readonly revision: number;
 }
 
 const decodePeaks = (base64: string): Uint8Array =>
@@ -98,13 +98,39 @@ const tracksText = (count: number): string =>
 
 const touched = (track: DraftTrack): DraftTrack => ({ ...track, edited: true });
 
-const copyableText = (tracks: readonly DraftTrack[]): string =>
-  numbered(tracks)
-    .map(
-      ({ track, ordinal }) =>
-        `${ordinal}. ${formatBoundary(track.startMs)} – ${formatBoundary(track.endMs)} ${track.title ?? ''}`,
-    )
-    .join('\n');
+/** The name of who asks or answers; a voice without one, by its number. */
+function personText(
+  people: readonly PersonChoice[],
+  person: { readonly voice: number | null; readonly speakerId: string | null },
+): string {
+  const value = personValue(person.voice, person.speakerId);
+  if (value === '') return '';
+  return people.find((one) => one.value === value)?.label ?? value.slice(1);
+}
+
+/** All a person can change on a track: a conflict loses none of it (FR-10, I-8). */
+function copyableLine(
+  { track, ordinal }: { track: DraftTrack; ordinal: number },
+  people: readonly PersonChoice[],
+): string {
+  const asker = personText(people, {
+    voice: track.askerVoice,
+    speakerId: track.askerSpeakerId,
+  });
+  const answerer = personText(people, {
+    voice: track.answererVoice,
+    speakerId: track.answererSpeakerId,
+  });
+  return [
+    `${ordinal}. ${formatBoundary(track.startMs)} – ${formatBoundary(track.endMs)} ${track.title ?? ''}`,
+    KIND_LABELS[track.kind](),
+    asker && $localize`:@@tracks.copy.asker:Quem pergunta: ${asker}:name:`,
+    answerer &&
+      $localize`:@@tracks.copy.answerer:Quem responde: ${answerer}:name:`,
+  ]
+    .filter((part) => part !== '')
+    .join(' · ');
+}
 
 /**
  * "Preparar áudio", steps 3 and 4 (T20, KBC-066): the person checks each track against the
@@ -129,7 +155,6 @@ const copyableText = (tracks: readonly DraftTrack[]): string =>
 export class TrackEditorPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly api = inject(MediaEditApi);
   private readonly session = inject(SessionStore);
   private readonly engine = inject(MediaEngine);
   private readonly injector = inject(Injector);
@@ -151,9 +176,6 @@ export class TrackEditorPage {
   );
   private readonly item = httpResource(() => mediaUrl(this.id()), {
     parse: (body) => mediaItemSchema.parse(body),
-  });
-  private readonly edit = httpResource(() => mediaEditUrl(this.id()), {
-    parse: (body) => mediaEditSchema.parse(body),
   });
   private readonly media = computed(() =>
     this.item.hasValue() ? this.item.value() : null,
@@ -193,13 +215,9 @@ export class TrackEditorPage {
   private readonly chosenId = signal<string | null>(null);
   protected readonly edge = signal<TrackEdge>('start');
   private readonly cursor = signal(0);
-  protected readonly loaded = signal(false);
-  /** A draft came back from the server: undo starts over, and the screen says so (BR-6). */
-  protected readonly restored = signal(false);
   protected readonly showProblems = signal(false);
-  protected readonly approving = signal(false);
   protected readonly notice = signal('');
-  protected readonly deleted = signal<DeletedNotice | null>(null);
+  private readonly deletedNotice = signal<DeletedNotice | null>(null);
   protected readonly tab = signal<'tracks' | 'text'>('tracks');
   private readonly textSpan = signal<TextSpan | null>(null);
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -214,28 +232,54 @@ export class TrackEditorPage {
   protected readonly canPropose = computed(() =>
     this.session.can('media-edit-ai'),
   );
-  private readonly editValue = computed(() =>
-    this.edit.hasValue() ? this.edit.value() : null,
+  protected readonly ready = computed(
+    () => this.draft.loaded() && this.media() !== null,
   );
   protected readonly step = computed(() =>
-    this.editValue()?.status === 'approved' ? 4 : 3,
+    this.draft.edit()?.status === 'approved' ? 4 : 3,
   );
-  protected readonly run = computed(() => this.editValue()?.run ?? null);
+  protected readonly run = computed(() => this.draft.edit()?.run ?? null);
+  protected readonly lastFailure = computed(
+    () => this.draft.edit()?.lastFailure ?? null,
+  );
   protected readonly voiceSuggestions = computed(
-    () => this.editValue()?.voices ?? [],
+    () => this.draft.edit()?.voices ?? [],
   );
-  /** A proposal is writing the draft: it can be watched, not changed (KBC-067 FR-3). */
-  protected readonly readOnly = computed(
-    () => this.run()?.status === 'running',
+  /** Nothing can change now: a run writes the draft, or a press runs, or a conflict (R-5). */
+  protected readonly readOnly = computed(() => !this.draft.canEdit());
+  protected readonly watching = computed(
+    () => this.draft.running() && !this.canPropose(),
   );
+  protected readonly deleted = computed(() => {
+    const notice = this.deletedNotice();
+    return notice?.revision === this.draft.revision() ? notice : null;
+  });
+  protected readonly canApprove = computed(
+    () => this.count() > 0 && !this.draft.busy() && !this.draft.running(),
+  );
+  protected readonly conflicted = computed(() => {
+    const phase = this.draft.phase();
+    return phase.kind === 'conflict' ? phase : null;
+  });
+  protected readonly unsavedText = computed(() => {
+    const phase = this.draft.phase();
+    if (phase.kind === 'conflict') return CONFLICT_TEXT[phase.reason]();
+    return phase.kind === 'failed'
+      ? $localize`:@@tracks.saveFailed:Não consegui salvar a última mudança. Ela continua aqui; tente de novo.`
+      : '';
+  });
+  protected readonly offlineKept = computed(() => {
+    const phase = this.draft.phase();
+    return phase.kind === 'offline' ? phase.kept : null;
+  });
   protected readonly hasProposals = computed(() =>
     this.draft.tracks().some((track) => track.source === 'ai' && !track.edited),
   );
   protected readonly transcriptChanged = computed(
-    () => this.editValue()?.transcriptChanged === true,
+    () => this.draft.edit()?.transcriptChanged === true,
   );
   protected readonly approvedCount = computed(
-    () => this.editValue()?.approvedTracks ?? 0,
+    () => this.draft.edit()?.approvedTracks ?? 0,
   );
   protected readonly speakerList = computed(() =>
     this.speakers.hasValue() ? this.speakers.value().items : [],
@@ -277,8 +321,11 @@ export class TrackEditorPage {
   protected readonly peaksPerSecond = computed(() =>
     this.waveform.hasValue() ? this.waveform.value().peaksPerSecond : 10,
   );
+  protected readonly waveformFailed = computed(
+    () => this.waveform.hasValue() && this.waveform.value().status === 'failed',
+  );
   protected readonly waveformPending = computed(
-    () => this.peaks() === null && this.loaded(),
+    () => this.peaks() === null && this.ready() && !this.waveformFailed(),
   );
   protected readonly selected = computed(() => {
     const all = this.draft.numbered();
@@ -286,6 +333,9 @@ export class TrackEditorPage {
       all.find(({ track }) => track.id === this.chosenId()) ?? all[0] ?? null
     );
   });
+  protected readonly selectedId = computed(
+    () => this.selected()?.track.id ?? null,
+  );
   protected readonly selectedSpanMs = computed<TextSpan | null>(
     () => this.selected()?.track ?? null,
   );
@@ -298,11 +348,17 @@ export class TrackEditorPage {
       ? $localize`:@@tracks.appliedOne:1 faixa aplicada.`
       : $localize`:@@tracks.applied:${count}:count: faixas aplicadas.`;
   });
+  private readonly problems = computed(() =>
+    approvalProblems(this.draft.tracks(), this.media()?.durationMs ?? null),
+  );
+  protected readonly shownProblems = computed(() =>
+    this.showProblems() ? this.problems() : [],
+  );
   protected readonly warningCount = computed(
-    () => new Set(this.draft.problems().map((one) => one.trackId)).size,
+    () => new Set(this.problems().map((one) => one.trackId)).size,
   );
   protected readonly problemRows = computed(() =>
-    this.draft.problems().map((one) => ({
+    this.problems().map((one) => ({
       key: `${one.trackId}-${one.problem}`,
       problem: one,
       text: $localize`:@@tracks.problem.row:Faixa ${one.ordinal}:ordinal:: ${problemLabel(one.problem)}:problem:`,
@@ -313,58 +369,49 @@ export class TrackEditorPage {
   );
   protected readonly selectionFits = computed(() => {
     const span = this.textSpan();
-    return span !== null && this.spanFromText(span) !== null;
+    return (
+      !this.readOnly() && span !== null && this.spanFromText(span) !== null
+    );
   });
   protected readonly copyable = computed(() =>
-    copyableText(this.draft.tracks()),
+    this.draft
+      .numbered()
+      .map((row) => copyableLine(row, this.people()))
+      .join('\n'),
   );
   protected readonly loadError = computed(() => {
-    const err = this.edit.error() ?? this.item.error();
+    const err = this.draft.readError() ?? this.item.error();
     return err ? errorMessage(toUiErrorCode(err)) : '';
   });
   protected readonly forbidden = computed(() => {
-    const err = this.edit.error();
-    return err !== undefined && toUiErrorCode(err) === 'FORBIDDEN';
+    const err = this.draft.readError();
+    return err !== null && toUiErrorCode(err) === 'FORBIDDEN';
   });
 
   constructor() {
     this.stopOtherPlayback();
-    toObservable(computed(() => this.readyEdit()))
+    this.route.paramMap
       .pipe(
-        filter((edit) => edit !== null),
+        map((params) => params.get('id') ?? ''),
+        distinctUntilChanged(),
         takeUntilDestroyed(),
       )
-      .subscribe((edit) => this.receive(edit));
-    this.destroyRef.onDestroy(() => this.audition.stop());
-  }
-
-  /** The audio element arrives with the content: `attach` runs once. */
-  protected audioReady(): void {
-    const element = this.audio()?.nativeElement;
-    if (element) this.audition.attach(element);
-  }
-
-  private readyEdit() {
-    const edit = this.editValue();
-    return edit && this.media() ? edit : null;
+      .subscribe((id) => this.draft.open(id));
+    // The audio element arrives with the content, once.
+    afterRenderEffect(() => {
+      const element = this.audio()?.nativeElement;
+      if (element) this.audition.attach(element);
+    });
+    this.destroyRef.onDestroy(() => {
+      this.audition.stop();
+      if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    });
   }
 
   /** What plays elsewhere stops: one sound at a time, and these keys are this page's. */
   private stopOtherPlayback(): void {
     this.engine.pause();
     this.engine.unload();
-  }
-
-  private receive(edit: NonNullable<ReturnType<TrackEditorPage['readyEdit']>>) {
-    if (this.loaded()) {
-      this.draft.refresh(edit);
-      this.keepFocus();
-      return;
-    }
-    this.draft.load(edit, this.media()?.durationMs ?? null);
-    this.restored.set(edit.started && edit.tracks.length > 0);
-    this.loaded.set(true);
-    afterNextRender(() => this.audioReady(), { injector: this.injector });
   }
 
   /** The button that had the focus is gone with the step: it moves on (WCAG 2.4.3). */
@@ -502,27 +549,25 @@ export class TrackEditorPage {
 
   /** At the cursor, or the nearest point that keeps 5 s on each side (BR-4). */
   protected split(id: string): void {
-    const tracks = this.draft.tracks();
-    const track = tracks.find((one) => one.id === id);
-    if (!track || !canSplit(track)) return;
-    const ms = splitPointNear(track, this.cursor());
-    const second: DraftTrack = {
-      ...track,
-      id: crypto.randomUUID(),
-      runId: null,
-      source: 'manual',
-      edited: false,
-      firstSegment: null,
-      lastSegment: null,
-      startMs: ms,
-      title: null,
-    };
-    this.draft.apply([
-      ...tracks.map((one) =>
-        one.id === id ? touched({ ...one, endMs: ms }) : one,
-      ),
-      second,
-    ]);
+    const parts = splitTrack(this.draft.tracks(), {
+      trackId: id,
+      atMs: this.cursor(),
+      second: (track, startMs): DraftTrack => ({
+        ...track,
+        id: crypto.randomUUID(),
+        runId: null,
+        source: 'manual',
+        edited: false,
+        firstSegment: null,
+        lastSegment: null,
+        startMs,
+        title: null,
+      }),
+    });
+    if (parts)
+      this.draft.apply(
+        parts.map((one) => (one.id === id ? touched(one) : one)),
+      );
   }
 
   protected join(id: string): void {
@@ -537,15 +582,20 @@ export class TrackEditorPage {
     const row = this.draft.numbered().find(({ track }) => track.id === id);
     if (!row) return;
     this.draft.apply(this.draft.tracks().filter((one) => one.id !== id));
-    this.deleted.set({ ordinal: row.ordinal });
+    this.deletedNotice.set({
+      ordinal: row.ordinal,
+      revision: this.draft.revision(),
+    });
     if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
-    this.noticeTimer = setTimeout(() => this.deleted.set(null), UNDO_NOTICE_MS);
+    this.noticeTimer = setTimeout(
+      () => this.deletedNotice.set(null),
+      UNDO_NOTICE_MS,
+    );
     this.list()?.focusRow();
   }
 
   protected undo(): void {
     this.draft.undo();
-    this.deleted.set(null);
   }
 
   protected redo(): void {
@@ -582,38 +632,26 @@ export class TrackEditorPage {
     if (event.key === '-') this.zoomOut();
   }
 
-  /** The only way to apply (BR-1): problems first, then the save, then the approval. */
+  /** The press on "Aprovar faixas" (BR-1): problems first, then the draft saves and applies. */
   protected approve(): void {
-    if (this.draft.problems().length > 0) {
-      this.showProblem(this.draft.problems());
+    this.notice.set('');
+    if (this.problems().length > 0) {
+      this.showProblem(this.problems());
       return;
     }
-    this.approving.set(true);
-    this.draft.flush(() => this.sendApproval());
+    this.draft
+      .approve()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((result) => this.answered(result));
   }
 
-  private sendApproval(): void {
-    if (this.draft.save() === 'conflict') {
-      this.approving.set(false);
-      return;
-    }
-    this.api
-      .approve(this.id(), this.draft.currentVersion)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: ({ version }) => {
-          this.draft.setVersion(version);
-          this.approving.set(false);
-          this.showProblems.set(false);
-          this.edit.reload();
-        },
-        error: (err: unknown) => {
-          this.approving.set(false);
-          const problems = problemsOf(err);
-          if (problems.length > 0) this.showProblem(problems);
-          else this.say(errorMessage(toUiErrorCode(err)));
-        },
-      });
+  private answered(result: ApproveResult): void {
+    if (result.kind === 'approved') {
+      this.showProblems.set(false);
+      this.keepFocus();
+    } else if (result.kind === 'invalid') this.showProblem(result.problems);
+    else if (result.kind === 'stopped') this.say(notDoneText(result.result));
+    else this.say(errorMessage(toUiErrorCode(result.error)));
   }
 
   /** The list on top, and the focus where the first problem is fixed (FR-8, AC-11). */
@@ -628,38 +666,49 @@ export class TrackEditorPage {
   }
 
   protected reopen(): void {
-    this.api
-      .reopen(this.id(), this.draft.currentVersion)
+    this.draft
+      .reopen()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: ({ version }) => {
-          this.draft.setVersion(version);
-          this.edit.reload();
-        },
+        next: () => this.keepFocus(),
         error: (err: unknown) => this.say(errorMessage(toUiErrorCode(err))),
       });
   }
 
-  /** "Sair e continuar depois" (UP-04): the draft stays and the audio's page says where. */
+  /**
+   * "Sair e continuar depois" (UP-04): the draft stays and the audio's page says where. What
+   * did not reach the server stays in this browser and comes back here; where it cannot,
+   * leaving would lose it, so the person stays and hears why.
+   */
   protected leave(): void {
     this.audition.stop();
-    if (this.draft.currentVersion === 0) this.draft.touch();
-    this.draft.flush(() => void this.router.navigateByUrl(this.mediaLink()));
+    this.notice.set('');
+    if (this.draft.edit()?.started === false) this.draft.touch();
+    this.draft
+      .flush()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((result) => {
+        if (result === 'saved' || this.draft.keptHere())
+          void this.router.navigateByUrl(this.mediaLink());
+        else
+          this.say(
+            $localize`:@@tracks.notLeft:Não consegui salvar e este navegador não guarda as mudanças. Copie suas faixas antes de sair.`,
+          );
+      });
   }
 
-  /** After a conflict: what the other person saved replaces this screen (FR-10). */
+  /** The way out of a conflict (FR-10): failing, the tracks to copy stay on screen. */
   protected reloadDraft(): void {
-    this.loaded.set(false);
-    this.edit.reload();
+    this.notice.set('');
+    this.draft
+      .reload()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        error: (err: unknown) => this.say(errorMessage(toUiErrorCode(err))),
+      });
   }
 
-  /** A proposal writes the draft: what is on screen reaches the server before it starts. */
-  protected readonly saveFirst = (done: () => void): void =>
-    this.draft.flush(done);
-
-  protected reloadProposals(): void {
-    this.edit.reload();
-  }
+  protected readonly startProposal = () => this.draft.propose();
 
   protected reloadVoices(): void {
     this.transcript.reload();

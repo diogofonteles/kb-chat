@@ -3,10 +3,12 @@ import { Injectable, inject } from '@angular/core';
 import {
   editApprovedSchema,
   editSavedSchema,
+  mediaEditSchema,
   proposalEstimateSchema,
   proposalRunSchema,
   type EditApproved,
   type EditSaved,
+  type MediaEdit,
   type ProposalEstimate,
   type ProposalRun,
   type SaveEditRequest,
@@ -33,12 +35,26 @@ const versioned = (version: number) => ({
 export class MediaEditApi {
   private readonly http = inject(HttpClient);
 
+  read(mediaId: string): Observable<MediaEdit> {
+    return this.http
+      .get(mediaEditUrl(mediaId))
+      .pipe(map((answer) => mediaEditSchema.parse(answer)));
+  }
+
+  /** `keepalive`: the request outlives the page (a reload, a closed tab). */
   save(
     mediaId: string,
-    input: { readonly body: SaveEditRequest; readonly version: number },
+    input: {
+      readonly body: SaveEditRequest;
+      readonly version: number;
+      readonly keepalive?: boolean;
+    },
   ): Observable<EditSaved> {
     return this.http
-      .put(mediaEditUrl(mediaId), input.body, versioned(input.version))
+      .put(mediaEditUrl(mediaId), input.body, {
+        ...versioned(input.version),
+        keepalive: input.keepalive,
+      })
       .pipe(map((answer) => editSavedSchema.parse(answer)));
   }
 
@@ -64,12 +80,6 @@ export class MediaEditApi {
   propose(mediaId: string): Observable<ProposalRun> {
     return this.http
       .post(`${mediaEditUrl(mediaId)}/proposals`, { dryRun: false })
-      .pipe(map((answer) => proposalRunSchema.parse(answer)));
-  }
-
-  run(mediaId: string, runId: string): Observable<ProposalRun> {
-    return this.http
-      .get(`${mediaEditUrl(mediaId)}/proposals/${runId}`)
       .pipe(map((answer) => proposalRunSchema.parse(answer)));
   }
 }

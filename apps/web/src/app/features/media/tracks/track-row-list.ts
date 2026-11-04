@@ -48,7 +48,10 @@ const PROBLEM_LABELS: Record<TrackProblem['problem'], () => string> = {
 export const problemLabel = (problem: TrackProblem['problem']): string =>
   PROBLEM_LABELS[problem]();
 
-const personValue = (voice: number | null, speakerId: string | null) => {
+export const personValue = (
+  voice: number | null,
+  speakerId: string | null,
+): string => {
   if (speakerId) return `s${speakerId}`;
   return voice === null ? '' : `v${voice}`;
 };

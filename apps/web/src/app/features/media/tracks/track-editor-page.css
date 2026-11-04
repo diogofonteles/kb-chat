@@ -172,7 +172,7 @@
   cursor: pointer;
 }
 
-.tabs [aria-selected='true'] {
+.tabs [aria-pressed='true'] {
   border-bottom-color: var(--color-accent);
   font-weight: 700;
 }

@@ -14,7 +14,7 @@
       >Voltar ao áudio</a
     >
   </div>
-} @else if (!loaded()) {
+} @else if (!ready()) {
   <div class="page" aria-busy="true">
     <span class="visually-hidden" i18n="@@tracks.loading"
       >Carregando as faixas…</span
@@ -65,6 +65,7 @@
         <button
           type="button"
           class="secondary leave"
+          [disabled]="draft.busy()"
           (click)="leave()"
           i18n="@@tracks.leave"
         >
@@ -83,6 +84,44 @@
       <p class="banner" role="alert" i18n="@@tracks.listenFailed">
         Não consegui tocar este trecho. Tente de novo.
       </p>
+    }
+    @if (unsavedText(); as text) {
+      <section class="banner" role="alert">
+        <p>{{ text }}</p>
+        <label class="copy">
+          <span i18n="@@tracks.yourChange">Suas faixas, para copiar</span>
+          <textarea readonly rows="4" [value]="copyable()"></textarea>
+        </label>
+        <div class="summary-actions">
+          <button
+            type="button"
+            class="secondary"
+            (click)="copyTracks()"
+            i18n="@@tracks.copy"
+          >
+            Copiar
+          </button>
+          @if (conflicted()) {
+            <button
+              type="button"
+              class="secondary"
+              (click)="reloadDraft()"
+              i18n="@@tracks.reload"
+            >
+              Recarregar
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="secondary"
+              (click)="draft.retry()"
+              i18n="@@tracks.retrySave"
+            >
+              Tentar de novo
+            </button>
+          }
+        </div>
+      </section>
     }
 
     @if (step() === 4) {
@@ -107,43 +146,26 @@
         </div>
       </section>
     } @else {
-      @if (draft.save() === 'conflict') {
-        <section class="banner" role="alert">
-          <p i18n="@@tracks.conflict">
-            Outra pessoa mudou esta edição; recarregue para ver.
-          </p>
-          <label class="copy">
-            <span i18n="@@tracks.yourChange">Suas faixas, para copiar</span>
-            <textarea readonly rows="4" [value]="copyable()"></textarea>
-          </label>
-          <div class="summary-actions">
-            <button
-              type="button"
-              class="secondary"
-              (click)="copyTracks()"
-              i18n="@@tracks.copy"
-            >
-              Copiar
-            </button>
-            <button
-              type="button"
-              class="secondary"
-              (click)="reloadDraft()"
-              i18n="@@tracks.reload"
-            >
-              Recarregar
-            </button>
-          </div>
-        </section>
-      }
-      @if (draft.save() === 'offline') {
+      @if (offlineKept() === true) {
         <p class="banner" role="status" i18n="@@tracks.offline">
-          Sem conexão: suas mudanças serão salvas quando a rede voltar.
+          Sem conexão: suas mudanças ficam neste aparelho e serão salvas quando
+          a rede voltar.
+        </p>
+      } @else if (offlineKept() === false) {
+        <p class="banner" role="status" i18n="@@tracks.offlineNotKept">
+          Sem conexão: não feche esta página. Suas mudanças serão salvas quando
+          a rede voltar.
         </p>
       }
-      @if (draft.save() === 'failed') {
-        <p class="banner" role="alert" i18n="@@tracks.saveFailed">
-          Não consegui salvar a última mudança. Recarregue a página.
+      @if (watching()) {
+        <p class="banner" role="status" i18n="@@tracks.watching">
+          Uma análise com IA está propondo faixas. A edição volta quando ela
+          terminar.
+        </p>
+      }
+      @if (draft.recovered()) {
+        <p class="banner" role="status" i18n="@@tracks.recovered">
+          Recuperei mudanças que ainda não tinham sido salvas.
         </p>
       }
       @if (transcriptChanged()) {
@@ -151,7 +173,7 @@
           Revise os limites: a transcrição mudou.
         </p>
       }
-      @if (restored()) {
+      @if (draft.restored()) {
         <p class="hint" i18n="@@tracks.historyRestarted">
           Rascunho recuperado. O histórico de desfazer recomeçou.
         </p>
@@ -162,7 +184,7 @@
         </p>
       }
       @if (showProblems() && problemRows().length) {
-        <section #problems class="banner" role="alert">
+        <section class="banner" role="alert">
           <p i18n="@@tracks.problems">Corrija antes de aprovar:</p>
           <ul>
             @for (row of problemRows(); track row.key) {
@@ -206,6 +228,10 @@
       @if (waveformPending()) {
         <p class="hint" i18n="@@tracks.waveformPending">
           A onda do áudio ainda está sendo preparada; dá para validar sem ela.
+        </p>
+      } @else if (waveformFailed()) {
+        <p class="hint" i18n="@@tracks.waveformFailed">
+          Não consegui preparar a onda deste áudio; dá para validar sem ela.
         </p>
       }
 
@@ -313,33 +339,32 @@
           [mediaId]="id()"
           [topic]="topic()"
           [latestRun]="run()"
+          [lastFailure]="lastFailure()"
           [suggestions]="voiceSuggestions()"
           [speakers]="speakerList()"
           [separation]="separation()"
-          [saveFirst]="saveFirst"
-          (changed)="reloadProposals()"
+          [start]="startProposal"
+          [blocked]="conflicted() !== null"
           (named)="reloadVoices()"
         />
       }
 
       <div
         class="tabs"
-        role="tablist"
+        role="group"
         aria-label="Faixas e transcrição"
         i18n-aria-label="@@tracks.tabs"
       >
         <button
           type="button"
-          role="tab"
-          [attr.aria-selected]="tab() === 'tracks'"
+          [attr.aria-pressed]="tab() === 'tracks'"
           (click)="tab.set('tracks')"
         >
           {{ countText() }}
         </button>
         <button
           type="button"
-          role="tab"
-          [attr.aria-selected]="tab() === 'text'"
+          [attr.aria-pressed]="tab() === 'text'"
           (click)="tab.set('text')"
           i18n="@@tracks.tabText"
         >
@@ -367,8 +392,8 @@
           } @else {
             <app-track-row-list
               [tracks]="draft.numbered()"
-              [selectedId]="selected()?.track?.id ?? null"
-              [problems]="showProblems() ? draft.problems() : []"
+              [selectedId]="selectedId()"
+              [problems]="shownProblems()"
               [people]="people()"
               [readOnly]="readOnly()"
               (selectTrack)="choose($event)"
@@ -407,7 +432,7 @@
               >{{ warningCount() }} com aviso</span
             >
           }
-          @if (draft.save() === 'saved') {
+          @if (draft.saved()) {
             ·
             <span class="saved" i18n="@@tracks.savedShown">Rascunho salvo</span>
           }
@@ -415,10 +440,10 @@
         <button
           type="button"
           class="primary"
-          [disabled]="count() === 0 || approving() || readOnly()"
+          [disabled]="!canApprove()"
           (click)="approve()"
         >
-          @if (approving()) {
+          @if (draft.approving()) {
             <ng-container i18n="@@tracks.applying"
               >Aplicando as faixas…</ng-container
             >
