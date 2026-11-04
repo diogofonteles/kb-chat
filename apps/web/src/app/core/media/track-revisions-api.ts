@@ -75,8 +75,8 @@ export class TrackRevisionsApi {
       .pipe(map((answer) => trackEditViewSchema.parse(answer)));
   }
 
-  remove(id: string): Observable<void> {
-    return this.http.delete<void>(mediaUrl(id));
+  remove(id: string): Observable<unknown> {
+    return this.http.delete(mediaUrl(id));
   }
 
   restore(id: string): Observable<MediaItem> {
@@ -98,7 +98,7 @@ export class TrackRevisionsApi {
       .pipe(map((answer) => trackSuggestionSchema.parse(answer)));
   }
 
-  acknowledgeMoved(): Observable<void> {
-    return this.http.post<void>(`${MOVED_BOOKMARKS_URL}/seen`, null);
+  acknowledgeMoved(): Observable<unknown> {
+    return this.http.post(`${MOVED_BOOKMARKS_URL}/seen`, null);
   }
 }

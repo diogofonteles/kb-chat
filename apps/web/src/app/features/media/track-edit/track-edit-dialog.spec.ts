@@ -52,10 +52,8 @@ describe('TrackEditDialog (KBC-073)', () => {
   async function open(track = view()) {
     const fixture = TestBed.createComponent(TrackEditDialog);
     fixture.componentRef.setInput('track', track);
-    await fixture.whenStable();
-    http
-      .expectOne('/api/v1/topics/hermetismo/speakers')
-      .flush({ items: [] });
+    TestBed.tick();
+    http.expectOne('/api/v1/topics/hermetismo/speakers').flush({ items: [] });
     await fixture.whenStable();
     const root = fixture.nativeElement as HTMLElement;
     const field = (label: string) => {

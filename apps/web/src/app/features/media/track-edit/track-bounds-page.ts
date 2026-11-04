@@ -25,11 +25,7 @@ import {
   type DraftTrack,
   type TrackNeighbour,
 } from '@kb-chat/contracts';
-import {
-  NUDGE_MS,
-  snapPointsOf,
-  type TrackEdge,
-} from '@kb-chat/player-core';
+import { NUDGE_MS, snapPointsOf, type TrackEdge } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { mediaStreamUrl, mediaUrl } from '@core/media/media-api.js';
 import { editWordsUrl, mediaWaveformUrl } from '@core/media/media-edit-api.js';

@@ -85,7 +85,6 @@ interface DeletedNotice {
   readonly revision: number;
 }
 
-
 const voiceChoice = (label: VoiceLabel): PersonChoice => {
   const number = $localize`:@@voices.voice:Voz ${label.voice}:number:`;
   const name = label.kind === 'audience' ? audienceLabel() : label.name;

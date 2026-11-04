@@ -411,6 +411,10 @@ describe('MediaPlayerPage: link to a minute (KBC-038 FR-5, AC-5)', () => {
 });
 
 /** Lets the page ask for what the answer needs (whenStable would wait for those requests). */
+/** "Faixas apagadas" reads its list on a recording, for who edits (KBC-073). */
+const answerArchivedTracks = (http: HttpTestingController): void =>
+  http.expectOne(`${ITEM_URL}/archived-tracks`).flush({ tracks: [] });
+
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve));
   TestBed.tick();
@@ -541,6 +545,7 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     // The item renders, then the block asks for the voices (a pending read keeps it unstable).
     await Promise.resolve();
     TestBed.tick();
+    answerArchivedTracks(http);
     http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
     http.expectOne(`${ITEM_URL}/speakers`).flush({
       mediaId: ITEM.id,
@@ -610,6 +615,7 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     });
     await Promise.resolve();
     TestBed.tick();
+    http.expectOne('/api/v1/media/bookmarks/moved').flush({ moved: [] });
     await harness.fixture.whenStable();
     expect(screen.getByText('Faixa removida da edição')).toBeTruthy();
     expect(screen.queryByText(/faixa \d+ de/)).toBeNull();
@@ -626,6 +632,7 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     http.expectOne(ITEM_URL).flush(ITEM);
     await Promise.resolve();
     TestBed.tick();
+    answerArchivedTracks(http);
     http
       .expectOne(`${ITEM_URL}/edit`)
       .flush({ ...NOT_STARTED, started: true, version: 2 });
@@ -752,6 +759,7 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
     });
     http.expectOne(ITEM_URL).flush(VOICED_ITEM);
     await settle();
+    answerArchivedTracks(http);
     http.expectOne(transcriptRequest).flush(TWO_SEGMENTS);
     http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
     http.expectOne(`${ITEM_URL}/speakers`).flush({

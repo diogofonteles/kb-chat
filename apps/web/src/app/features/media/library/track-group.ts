@@ -31,7 +31,9 @@ export class TrackGroup {
   private readonly router = inject(Router);
 
   /** The ⋯ of a track (KBC-073 scope): it opens the track's page on what was chosen. */
-  protected readonly canEdit = computed(() => this.session.can('media-edit'));
+  protected readonly canEdit = computed(
+    () => this.session.me() !== null && this.session.can('media-edit'),
+  );
   protected readonly trackOptions: readonly MenuOption[] = [
     { id: 'editar', label: $localize`:@@trackEdit.edit:Editar` },
     {
