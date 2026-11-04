@@ -16,7 +16,7 @@ import type { SqliteTranscriptStore } from './sqlite-transcript-store.js';
 type Row = Record<string, SQLOutputValue>;
 
 const TRACK_ROW = `SELECT t.id, t.ordinal, t.title, t.start_ms, t.end_ms, t.answerer_voice,
-    t.answerer_speaker_id, t.derived_media_id, t.cut_status, t.cut_start_ms, t.cut_duration_ms,
+    t.answerer_speaker_id, t.derived_media_id, t.cut_status, t.cut_duration_ms,
     m.parent_start_ms, m.parent_end_ms
   FROM media_tracks t JOIN media m ON m.id = t.derived_media_id`;
 
@@ -28,7 +28,7 @@ const nullableNumber = (value: SQLOutputValue | undefined): number | null =>
 function toTrackRow(row: Row): TrackItemRow {
   const cut = row['cut_status'] === 'cut';
   const realStartMs = Number(
-    cut ? row['cut_start_ms'] : (row['parent_start_ms'] ?? row['start_ms']),
+    cut ? row['start_ms'] : (row['parent_start_ms'] ?? row['start_ms']),
   );
   return {
     trackId: String(row['id']),
@@ -153,7 +153,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
       this.db
         .prepare(
           `UPDATE media_tracks SET cut_status = 'none', cut_path = NULL, cut_bytes = NULL,
-             cut_start_ms = NULL, cut_duration_ms = NULL
+             cut_duration_ms = NULL
            WHERE media_id = ? AND cut_status IN ('pending', 'cut')`,
         )
         .run(parentId);
@@ -191,13 +191,12 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
       const row = this.db
         .prepare(
           `UPDATE media_tracks SET cut_status = 'cut', cut_path = ?, cut_bytes = ?,
-             cut_start_ms = ?, cut_duration_ms = ?
+             cut_duration_ms = ?
            WHERE derived_media_id = ? RETURNING media_id`,
         )
         .get(
           cut.path,
           cut.bytes,
-          cut.actualStartMs,
           cut.durationMs,
           cut.mediaId,
         );
@@ -376,7 +375,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     this.db
       .prepare(
         `UPDATE media_tracks SET cut_status = 'published', cut_path = NULL, cut_bytes = NULL,
-           cut_start_ms = NULL, cut_duration_ms = NULL WHERE id = ?`,
+           cut_duration_ms = NULL WHERE id = ?`,
       )
       .run(track.trackId);
   }

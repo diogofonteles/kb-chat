@@ -525,12 +525,11 @@ export type CompleteSilencesRequest = z.infer<
 >;
 
 /**
- * POST /api/v1/media-worker/jobs/:id/cut: the file written and where it really starts and how
- * long it really is: stream copy cuts on AAC packets (BR-3).
+ * POST /api/v1/media-worker/jobs/:id/cut: the file written and how long it really is: stream
+ * copy ends on an AAC packet (BR-3).
  */
 export const completeCutRequestSchema = leaseOwnerSchema.extend({
   bytes: z.number().int().min(1),
-  actualStartMs: z.number().int().min(0),
   durationMs: z.number().int().min(1),
 });
 export type CompleteCutRequest = z.infer<typeof completeCutRequestSchema>;

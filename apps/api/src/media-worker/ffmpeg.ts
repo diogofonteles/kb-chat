@@ -207,7 +207,11 @@ export const cutArgs = (cut: {
   cut.target,
 ];
 
-/** Cuts `startMs..endMs` of an AAC rendition without re-encoding (KBC-068 FR-2). */
+/**
+ * Cuts `startMs..endMs` of an AAC rendition without re-encoding (KBC-068 FR-2). ffmpeg keeps the
+ * packet just before the start as pre-roll, with an edit list, so time 0 of the file is the
+ * asked start; only the end falls on a packet, and the probed duration says where.
+ */
 export async function cutAudio(input: {
   readonly bins: FfmpegBins;
   readonly source: string;
@@ -221,47 +225,4 @@ export async function cutAudio(input: {
     signal: input.signal,
   });
   assertFinished(result, CUT_TIMEOUT_MS);
-}
-
-/** How far around the asked start the packets are read: one AAC packet is ~23 ms. */
-const PACKET_WINDOW_S = 1;
-
-/**
- * Where a stream copy from `startMs` really starts: the last packet at or before it (BR-3),
- * read from the file's index, without decoding.
- */
-export async function packetStartMs(input: {
-  readonly bins: FfmpegBins;
-  readonly source: string;
-  readonly startMs: number;
-  readonly signal?: AbortSignal;
-}): Promise<number> {
-  const seconds = input.startMs / 1000;
-  const from = Math.max(0, seconds - PACKET_WINDOW_S);
-  const result = await runProcess(
-    input.bins.ffprobe,
-    [
-      '-v',
-      'error',
-      '-select_streams',
-      'a:0',
-      '-read_intervals',
-      `${from.toFixed(3)}%+${(2 * PACKET_WINDOW_S).toFixed(3)}`,
-      '-show_entries',
-      'packet=pts_time',
-      '-of',
-      'csv=p=0',
-      input.source,
-    ],
-    { timeoutMs: PROBE_TIMEOUT_MS, signal: input.signal },
-  );
-  assertFinished(result, PROBE_TIMEOUT_MS);
-  const times = result.stdout
-    .split('\n')
-    .map((line) => Number.parseFloat(line))
-    .filter(Number.isFinite);
-  const before = times.filter((time) => time <= seconds + 0.0005);
-  return before.length > 0
-    ? Math.round(Math.max(...before) * 1000)
-    : input.startMs;
 }

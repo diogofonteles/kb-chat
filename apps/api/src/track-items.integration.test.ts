@@ -95,8 +95,8 @@ describe('Approved tracks become items (KBC-068)', () => {
     await finishCuts(media, 23);
     const entry = await libraryEntry(media.owner, recording.id);
     expect(entry?.tracks[1]?.parent).toMatchObject({
-      startMs: 59_977,
-      endMs: 240_000,
+      startMs: 60_000,
+      endMs: 240_023,
     });
   });
 

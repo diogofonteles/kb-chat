@@ -118,7 +118,7 @@ export class TrackPublisher {
   /** A cut landed: the candidate is kept apart, and the last one publishes them all. */
   async completeCut(
     owner: LeaseOwner,
-    done: Pick<CompleteCutRequest, 'bytes' | 'actualStartMs' | 'durationMs'>,
+    done: Pick<CompleteCutRequest, 'bytes' | 'durationMs'>,
   ): Promise<void> {
     const { files, items, transcripts } = this.deps;
     const job = transcripts.heldJob(owner);

@@ -12,7 +12,6 @@ import type { MediaJobsApi } from './api-client.js';
 import {
   InvalidMediaError,
   cutAudio,
-  packetStartMs,
   probe,
   transcodeAudio,
   type FfmpegBins,
@@ -211,19 +210,9 @@ export class MediaWorker {
     const source = this.resolve(job.sourcePath);
     const { startMs, endMs } = job;
     await cutAudio({ bins, source, target, startMs, endMs, signal });
-    const actualStartMs = await packetStartMs({
-      bins,
-      source,
-      startMs,
-      signal,
-    });
     const { durationMs } = await probe(bins, target, signal);
     const { size } = await stat(target);
-    const done = await api.completeCut(job, {
-      bytes: size,
-      actualStartMs,
-      durationMs,
-    });
+    const done = await api.completeCut(job, { bytes: size, durationMs });
     if (!done) throw new LeaseLostError();
     log.info({ job: job.id, bytes: size, durationMs }, 'track cut');
   }

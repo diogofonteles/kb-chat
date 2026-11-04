@@ -72,10 +72,7 @@ export interface WorkerRoutesDeps {
 export interface CutReceiver {
   completeCut(
     owner: LeaseOwner,
-    done: Pick<
-      CompleteCutRequest,
-      'bytes' | 'actualStartMs' | 'durationMs'
-    >,
+    done: Pick<CompleteCutRequest, 'bytes' | 'durationMs'>,
   ): Promise<void>;
 }
 

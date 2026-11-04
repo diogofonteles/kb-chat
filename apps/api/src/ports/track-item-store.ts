@@ -43,7 +43,6 @@ export interface RecordedCut {
   readonly mediaId: string;
   readonly path: string;
   readonly bytes: number;
-  readonly actualStartMs: number;
   readonly durationMs: number;
   readonly now: Date;
 }

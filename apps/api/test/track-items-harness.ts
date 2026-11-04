@@ -221,32 +221,31 @@ export async function leaseCut(media: Media): Promise<CutJob | null> {
   return leased.statusCode === 204 ? null : leased.json<CutJob>();
 }
 
-/** One cut done: 20 bytes on disk, starting `earlyMs` before the asked time. */
+/** One cut done: 20 bytes on disk, ending `lateMs` past the asked time. */
 export async function finishCut(
   media: Media,
   job: CutJob,
-  earlyMs = 0,
+  lateMs = 0,
 ): Promise<void> {
   writeFileSync(join(media.mediaDir, job.targetPath), CONVERTED);
   const done = await worker(media, `/api/v1/media-worker/jobs/${job.id}/cut`, {
     worker: 'vm',
     leaseId: job.leaseId,
     bytes: CONVERTED.length,
-    actualStartMs: Math.max(0, job.startMs - earlyMs),
-    durationMs: job.endMs - job.startMs + earlyMs,
+    durationMs: job.endMs - job.startMs + lateMs,
   });
   expect(done.statusCode, done.body).toBe(204);
 }
 
 /** Every cut in the queue, done. */
-export async function finishCuts(media: Media, earlyMs = 0): Promise<number> {
+export async function finishCuts(media: Media, lateMs = 0): Promise<number> {
   let count = 0;
   for (
     let job = await leaseCut(media);
     job !== null;
     job = await leaseCut(media)
   ) {
-    await finishCut(media, job, earlyMs);
+    await finishCut(media, job, lateMs);
     count++;
   }
   return count;

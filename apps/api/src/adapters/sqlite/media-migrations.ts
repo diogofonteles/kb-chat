@@ -889,7 +889,6 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         CHECK (cut_status IN ('none', 'pending', 'cut', 'published'));
       ALTER TABLE media_tracks ADD COLUMN cut_path TEXT;
       ALTER TABLE media_tracks ADD COLUMN cut_bytes INTEGER CHECK (cut_bytes > 0);
-      ALTER TABLE media_tracks ADD COLUMN cut_start_ms INTEGER CHECK (cut_start_ms >= 0);
       ALTER TABLE media_tracks ADD COLUMN cut_duration_ms INTEGER CHECK (cut_duration_ms > 0);
       CREATE INDEX media_tracks_by_derived ON media_tracks (derived_media_id)
         WHERE derived_media_id IS NOT NULL;
