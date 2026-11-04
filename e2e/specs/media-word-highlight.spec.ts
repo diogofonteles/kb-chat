@@ -199,6 +199,21 @@ test('AC-3: with the option off only the segment is marked, and the account keep
   ).toBeVisible();
 });
 
+test('the ⋯ menu stays inside a narrow phone with its long option', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await openPlayer(page, lecture);
+  await page.getByRole('button', { name: 'Mais opções' }).click();
+  const option = page.getByRole('menuitem', { name: /^Destacar palavra/ });
+  await expect(option).toBeVisible();
+  // A long menu may need a scroll down; past the left edge it could never be reached.
+  for (const item of await page.getByRole('menuitem').all()) {
+    await item.scrollIntoViewIfNeeded();
+    await expect(item).toBeInViewport({ ratio: 1 });
+  }
+});
+
 test('AC-4: a segment without word times is marked whole, with no error', async ({
   page,
 }) => {
