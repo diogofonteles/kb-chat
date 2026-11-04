@@ -951,6 +951,17 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
+    // KBC-045: "Destacar palavra a palavra", on until the person turns it off. The panel reads
+    // a page of words through 18's `words_by_segment_position`; 16 needs no index of its own.
+    // Landed after 17 to 21: a database past them gets it as a missing lower version.
+    version: 16,
+    name: 'word-highlight',
+    sql: `
+      ALTER TABLE media_preferences ADD COLUMN word_highlight INTEGER NOT NULL DEFAULT 1
+        CHECK (word_highlight IN (0, 1));
+    `,
+  },
+  {
     // KBC-072: the guided flow's plan per recording. Stage states are read from the jobs and
     // runs, so only what they cannot say is here. The cuts have their own table: migration 15
     // (KBC-071) rebuilds `jobs`, and a column added here would not survive it.
@@ -1022,8 +1033,7 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX media_tracks_by_derived ON media_tracks (derived_media_id)
         WHERE derived_media_id IS NOT NULL;
       -- Search asks, per matched segment, whether any of its words is outside the tracks (BR-6).
-      -- KBC-045's migration 16 creates \`words_by_segment\` with these columns and may run before
-      -- or after this one, so the name differs; with \`position\`, this index can replace that one.
+      -- The transcript panel reads a page of words through it too (KBC-045).
       CREATE INDEX words_by_segment_position
         ON words (transcript_id, segment_position, position);
     `,

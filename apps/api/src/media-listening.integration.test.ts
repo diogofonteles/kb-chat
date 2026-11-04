@@ -27,6 +27,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     const saved = await media.owner('PUT', '/api/v1/media/preferences', {
       speed: 1.5,
@@ -34,6 +35,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 10,
       skipForwardSec: 45,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toEqual({
@@ -43,6 +45,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 10,
       skipForwardSec: 45,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
@@ -53,6 +56,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 10,
       skipForwardSec: 45,
       skipSilences: false,
+      wordHighlight: true,
     });
   });
 
@@ -64,6 +68,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().error.code).toBe('VALIDATION_FAILED');
@@ -76,6 +81,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
   });
 
@@ -92,6 +98,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(
       (await listener.call('GET', '/api/v1/media/preferences')).json(),
@@ -102,6 +109,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
   });
 
@@ -123,6 +131,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
           skipBackSec: 15,
           skipForwardSec: 30,
           skipSilences: false,
+          wordHighlight: true,
         })
       ).statusCode,
     ).toBe(403);
@@ -147,6 +156,7 @@ describe('Media listening: skip lengths (KBC-043)', () => {
       skipBackSec: 7,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().error.code).toBe('VALIDATION_FAILED');
@@ -336,5 +346,22 @@ describe('Media listening: position (KBC-041 FR-2, BR-2)', () => {
         })
       ).statusCode,
     ).toBe(404);
+  });
+
+  it('keeps "Destacar palavra a palavra" off through a save of other choices (KBC-045)', async () => {
+    const media = await startMedia();
+    const off = await media.owner('PUT', '/api/v1/media/preferences', {
+      wordHighlight: false,
+    });
+    expect(off.statusCode).toBe(200);
+    const other = await media.owner('PUT', '/api/v1/media/preferences', {
+      libraryView: 'grid',
+    });
+    expect(other.json()).toMatchObject({ wordHighlight: false });
+    const read = await media.owner('GET', '/api/v1/media/preferences');
+    expect(read.json()).toMatchObject({
+      wordHighlight: false,
+      libraryView: 'grid',
+    });
   });
 });

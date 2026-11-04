@@ -29,12 +29,12 @@ function toSavedProgress(row: Row): SavedProgress {
 /** The player's (KBC-041, KBC-043, KBC-044) and the library's (KBC-051) choices. */
 const SAVE_PREFERENCES = `INSERT INTO media_preferences
     (principal, speed, show_remaining, skip_back_sec, skip_forward_sec, skip_silences,
-     library_sort, library_view, library_filters, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     word_highlight, library_sort, library_view, library_filters, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT (principal) DO UPDATE SET speed = excluded.speed,
     show_remaining = excluded.show_remaining, skip_back_sec = excluded.skip_back_sec,
     skip_forward_sec = excluded.skip_forward_sec, skip_silences = excluded.skip_silences,
-    library_sort = excluded.library_sort, library_view = excluded.library_view,
+    word_highlight = excluded.word_highlight, library_sort = excluded.library_sort, library_view = excluded.library_view,
     library_filters = excluded.library_filters, updated_at = excluded.updated_at`;
 
 const PROGRESS_COLUMNS =
@@ -51,7 +51,7 @@ export class SqliteListeningStore implements ListeningStorePort {
     const row = this.db
       .prepare(
         `SELECT speed, show_remaining, skip_back_sec, skip_forward_sec, skip_silences,
-           library_sort, library_view, library_filters
+           word_highlight, library_sort, library_view, library_filters
          FROM media_preferences WHERE principal = ?`,
       )
       .get(principal);
@@ -63,6 +63,7 @@ export class SqliteListeningStore implements ListeningStorePort {
           skipBackSec: Number(row['skip_back_sec']),
           skipForwardSec: Number(row['skip_forward_sec']),
           skipSilences: Number(row['skip_silences']) === 1,
+          wordHighlight: Number(row['word_highlight']) === 1,
           ...libraryChoicesOf(row),
         })
       : null;
@@ -83,6 +84,7 @@ export class SqliteListeningStore implements ListeningStorePort {
         preferences.skipBackSec,
         preferences.skipForwardSec,
         preferences.skipSilences ? 1 : 0,
+        preferences.wordHighlight ? 1 : 0,
         preferences.librarySort,
         preferences.libraryView,
         JSON.stringify(preferences.libraryFilters),

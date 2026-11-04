@@ -1,4 +1,8 @@
-import type { MediaItem, MediaTranscript } from '@kb-chat/contracts';
+import type {
+  MediaItem,
+  MediaTranscript,
+  MediaTranscriptWords,
+} from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
 import { member, startMedia, type Media } from '../test/media-harness.js';
@@ -31,6 +35,8 @@ async function transcribed(
 
 const transcriptUrl = (id: string) => `/api/v1/media/${id}/transcript`;
 const subtitlesUrl = (id: string) => `/api/v1/media/${id}/subtitles.vtt`;
+const wordsUrl = (id: string, from = 0, count = 10) =>
+  `/api/v1/media/${id}/transcript/words?from=${from}&count=${count}`;
 
 describe('GET /api/v1/media/:id/transcript (KBC-038 FR-2)', () => {
   it('returns the current version with its segments in ms and the confidence', async () => {
@@ -154,6 +160,78 @@ describe('GET /api/v1/media/:id/subtitles.vtt (KBC-038 FR-1)', () => {
     expect(after.body).not.toBe(before.body);
     const transcript = await media.owner('GET', transcriptUrl(item.id));
     expect(transcript.json<MediaTranscript>().version).toBe(2);
+  });
+});
+
+describe('GET /api/v1/media/:id/transcript/words (KBC-045 FR-1)', () => {
+  it('returns the kept words of the asked segments, each with its times in ms', async () => {
+    const media = await startMedia();
+    const item = await transcribed(media);
+    const transcript = (
+      await media.owner('GET', transcriptUrl(item.id))
+    ).json<MediaTranscript>();
+    const answer = await media.owner('GET', wordsUrl(item.id, 1, 2));
+    expect(answer.statusCode).toBe(200);
+    const { mediaId, version, words } = answer.json<MediaTranscriptWords>();
+    expect({ mediaId, version }).toEqual({ mediaId: item.id, version: 1 });
+    expect(new Set(words.map((word) => word.segment))).toEqual(new Set([1, 2]));
+    const second = transcript.segments[1];
+    const spoken = words.filter((word) => word.segment === 1);
+    expect(spoken.map((word) => word.text).join(' ')).toBe(second?.text);
+    for (const word of spoken) {
+      expect(Number.isInteger(word.startMs)).toBe(true);
+      expect(word.endMs).toBeGreaterThanOrEqual(word.startMs);
+    }
+  });
+
+  it('gives no words past the end of the transcript', async () => {
+    const media = await startMedia();
+    const item = await transcribed(media);
+    const answer = await media.owner('GET', wordsUrl(item.id, 90_000, 10));
+    expect(answer.statusCode).toBe(200);
+    expect(answer.json<MediaTranscriptWords>().words).toEqual([]);
+  });
+
+  it.each([
+    ['a negative start', -1, 10],
+    ['no segments', 0, 0],
+    ['more segments than a page may ask', 0, 201],
+  ])('refuses %s (400)', async (_name, from, count) => {
+    const media = await startMedia();
+    const item = await transcribed(media);
+    const answer = await media.owner('GET', wordsUrl(item.id, from, count));
+    expect(answer.statusCode).toBe(400);
+  });
+
+  it('keeps the words out of the transcript itself (no scan of every word)', async () => {
+    const media = await startMedia();
+    const item = await transcribed(media);
+    const answer = await media.owner('GET', transcriptUrl(item.id));
+    expect(answer.body).not.toContain('"words"');
+  });
+
+  it('answers as the transcript to who may not read it (404, 403, 401)', async () => {
+    const media = await startMedia();
+    const item = await transcribed(media);
+    const stranger = await member(media, {
+      email: 'outro@example.com',
+      topics: ['alquimia'],
+      features: ['media'],
+    });
+    expect((await stranger.call('GET', wordsUrl(item.id))).statusCode).toBe(
+      404,
+    );
+    const noMedia = await member(media, {
+      email: 'sem-midia@example.com',
+      topics: ['hermetismo'],
+      features: ['search'],
+    });
+    expect((await noMedia.call('GET', wordsUrl(item.id))).statusCode).toBe(403);
+    const anonymous = await media.started.app.inject({
+      method: 'GET',
+      url: wordsUrl(item.id),
+    });
+    expect(anonymous.statusCode).toBe(401);
   });
 });
 

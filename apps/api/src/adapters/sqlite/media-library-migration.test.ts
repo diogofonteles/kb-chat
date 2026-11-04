@@ -46,6 +46,7 @@ describe('migration 7: the media library (KBC-051)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
       librarySort: 'recently-played',
       libraryView: 'list',
       libraryFilters: { states: [], authors: [], topic: null },
@@ -82,6 +83,7 @@ describe('migration 7: the media library (KBC-051)', () => {
     expect(store.preferencesOf('p')).toMatchObject({
       speed: 1.5,
       skipSilences: true,
+      wordHighlight: true,
       librarySort: 'recently-played',
       libraryView: 'list',
       libraryFilters: { states: [], authors: [], topic: null },

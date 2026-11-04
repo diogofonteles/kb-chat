@@ -1,4 +1,9 @@
-import type { MediaTranscript, TranscriptSpeakers } from '@kb-chat/contracts';
+import type {
+  MediaTranscript,
+  MediaTranscriptWords,
+  TranscriptSpeakers,
+  TranscriptWordsQuery,
+} from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaStorePort } from '../../ports/media-store.js';
 import type {
@@ -16,7 +21,7 @@ import {
 export interface TranscriptServiceDeps {
   readonly transcripts: Pick<
     TranscriptStorePort,
-    'transcripts' | 'segments' | 'words' | 'termVersion'
+    'transcripts' | 'segments' | 'words' | 'wordsOfSegments' | 'termVersion'
   >;
   /** Who sees which media: `get` throws the stream's 404 (KBC-038 FR-1). */
   readonly media: { get(actor: MediaActor, mediaId: string): unknown };
@@ -109,6 +114,27 @@ export class TranscriptService {
     return list
       ? { termList: { version: list.version, createdAt: list.createdAt } }
       : {};
+  }
+
+  /** A page of the current transcript's words: apart, so `current` never scans them all. */
+  words(
+    actor: MediaActor,
+    mediaId: string,
+    range: TranscriptWordsQuery,
+  ): MediaTranscriptWords {
+    const summary = this.currentOf(actor, mediaId);
+    return {
+      mediaId,
+      version: summary.version,
+      words: this.deps.transcripts
+        .wordsOfSegments(summary.id, range)
+        .map(({ segment, startMs, endMs, text }) => ({
+          segment,
+          startMs,
+          endMs,
+          text,
+        })),
+    };
   }
 
   /** The transcript with what `audience` may read of the current separation, if any. */

@@ -1,4 +1,9 @@
-import { mediaIdSchema, mediaTranscriptSchema } from '@kb-chat/contracts';
+import {
+  mediaIdSchema,
+  mediaTranscriptSchema,
+  mediaTranscriptWordsSchema,
+  transcriptWordsQuerySchema,
+} from '@kb-chat/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -24,10 +29,18 @@ const OPTIONS = {
     config: { access: LISTEN },
     schema: { params: mediaParams, response: { 200: mediaTranscriptSchema } },
   },
+  words: {
+    config: { access: LISTEN },
+    schema: {
+      params: mediaParams,
+      querystring: transcriptWordsQuerySchema,
+      response: { 200: mediaTranscriptWordsSchema },
+    },
+  },
   subtitles: { config: { access: LISTEN }, schema: { params: mediaParams } },
 } as const;
 
-/** The current transcript and its WebVTT subtitles (KBC-038 FR-1, FR-2). */
+/** The current transcript, its words by page (KBC-045) and its WebVTT subtitles (KBC-038). */
 export const transcriptRoutes =
   (service: TranscriptService): FastifyPluginAsync =>
   async (app) => {
@@ -41,6 +54,11 @@ export const transcriptRoutes =
           withVoices: hasFeature(viewerOf(request).person, 'media-edit'),
           withNames: hasFeature(viewerOf(request).person, 'media-speakers'),
         }),
+      ),
+    );
+    typed.get('/api/v1/media/:id/transcript/words', OPTIONS.words, (request) =>
+      Promise.resolve(
+        service.words(actorOf(request), request.params.id, request.query),
       ),
     );
     typed.get(
