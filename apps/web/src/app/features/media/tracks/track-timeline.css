@@ -163,7 +163,7 @@
 .handle::after {
   position: absolute;
   top: 50%;
-  left: var(--line);
+  left: clamp(9px, var(--line), 39px);
   width: 14px;
   height: 28px;
   border: 2px solid var(--color-on-accent);

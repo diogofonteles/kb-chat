@@ -181,9 +181,9 @@ test('AC-10: dividing makes two touching tracks, joining keeps the first title',
     { startMs: 0, endMs: 30_000, title: 'Duas perguntas' },
   ]);
   await open(page, media.id);
-  if (isMobile) await page.getByRole('tab', { name: 'Transcrição' }).click();
+  if (isMobile) await page.getByRole('button', { name: 'Transcrição' }).click();
   await page.getByRole('button', { name: '0:15', exact: true }).click();
-  if (isMobile) await page.getByRole('tab', { name: '1 faixa' }).click();
+  if (isMobile) await page.getByRole('button', { name: '1 faixa' }).click();
   await page.getByRole('button', { name: 'Mais ações da faixa' }).click();
   await page.getByRole('menuitem', { name: 'Dividir aqui' }).click();
   await expectSaved(owner, media.id, (tracks) => tracks.length === 2);
@@ -247,6 +247,9 @@ test('AC-14: on a phone, a finger moves the handle and "+0,5 s" too, and the tar
   const box = await start.boundingBox();
   expect(box?.width).toBeGreaterThanOrEqual(48);
   expect(box?.height).toBeGreaterThanOrEqual(48);
+  // Track 1 starts at 0:00: the whole target stays inside the bar, none of it clipped.
+  const bar = await page.getByTestId('track-detail').boundingBox();
+  expect(box?.x).toBeGreaterThanOrEqual(bar?.x ?? Infinity);
 
   const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
   const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;

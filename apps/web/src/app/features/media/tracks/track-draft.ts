@@ -141,14 +141,21 @@ export class TrackDraft {
   });
 
   constructor() {
-    const view = inject(DOCUMENT).defaultView;
+    const page = inject(DOCUMENT);
+    const view = page.defaultView;
     const online = () => this.retryOffline();
     const leaving = () => this.sendBeforeLeaving();
+    const hidden = () => {
+      if (page.visibilityState === 'hidden') leaving();
+    };
     view?.addEventListener('online', online);
     view?.addEventListener('pagehide', leaving);
+    // A phone may kill a page in the background without a `pagehide`.
+    page.addEventListener('visibilitychange', hidden);
     this.destroyRef.onDestroy(() => {
       view?.removeEventListener('online', online);
       view?.removeEventListener('pagehide', leaving);
+      page.removeEventListener('visibilitychange', hidden);
       this.closed();
     });
     this.followRuns();

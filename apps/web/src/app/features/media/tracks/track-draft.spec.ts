@@ -708,6 +708,16 @@ describe('TrackDraft (KBC-066)', () => {
       save.flush({ version: 5 });
     });
 
+    it('sends at once when the page goes to the background', () => {
+      open();
+      draft.apply([one]);
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      const save = saves();
+      expect(save.request.keepalive).toBe(true);
+      save.flush({ version: 5 });
+    });
+
     it('sends at once when the screen goes, within the delay', () => {
       open();
       draft.apply([one]);
