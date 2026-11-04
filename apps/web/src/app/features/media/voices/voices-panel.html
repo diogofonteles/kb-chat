@@ -45,7 +45,11 @@
         </div>
       }
       @if (voices().length > 0) {
-        <ul class="voice-list">
+        <ul
+          class="voice-list"
+          aria-label="Vozes encontradas"
+          i18n-aria-label="@@voices.listOfVoices"
+        >
           @for (one of voices(); track one.voice) {
             <li class="voice">
               <div class="voice-head">

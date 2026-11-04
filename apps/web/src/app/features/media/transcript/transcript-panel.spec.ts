@@ -490,6 +490,20 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
         ...segment,
         voice: voices[index] ?? null,
       })),
+      // Whoever receives the separation edits recordings: unnamed reads "Voz N" (BR-6).
+      speakers: {
+        version: 1,
+        createdAt: '2026-11-03T12:00:00.000Z',
+        transcriptVersion: 1,
+        staleTranscript: false,
+        requestedVoices: null,
+        voiceCount: 0,
+        voices: [],
+        turns: [],
+        labels: [],
+        merged: [],
+        namesPending: false,
+      },
     });
   };
   const labels = () =>
@@ -529,5 +543,48 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
       view,
     );
     expect(painted.get('transcript-current')).toEqual(['conselheira']);
+  });
+
+  it('names who speaks, with ✦ for the main author, to a listener (KBC-065 AC-1)', async () => {
+    const base = transcriptOf();
+    const { speakers: _, ...listened } = voiced([1, 2]);
+    await renderPanel({
+      ...listened,
+      segments: base.segments.map((segment, index) => ({
+        ...segment,
+        voice: index === 0 ? 1 : 2,
+      })),
+      voiceNames: [
+        {
+          voice: 1,
+          kind: 'person',
+          speakerId: '11111111-1111-4111-8111-111111111111',
+          name: 'Mestre Gabriel',
+          main: true,
+        },
+        {
+          voice: 2,
+          kind: 'audience',
+          speakerId: null,
+          name: null,
+          main: false,
+        },
+      ],
+    });
+    expect(screen.getByText('✦').getAttribute('aria-hidden')).toBe('true');
+    expect(screen.getByText('Mestre Gabriel')).toBeTruthy();
+    expect(screen.getByText('Pergunta da plateia')).toBeTruthy();
+    expect(labels()).toEqual([]);
+  });
+
+  it('says "Falante não identificado" to a listener for a voice with no name (AC-5)', async () => {
+    const { speakers: _, ...listened } = voiced([1]);
+    await renderPanel({
+      ...listened,
+      voiceNames: [
+        { voice: 1, kind: 'unnamed', speakerId: null, name: null, main: false },
+      ],
+    });
+    expect(screen.getByText('Falante não identificado')).toBeTruthy();
   });
 });

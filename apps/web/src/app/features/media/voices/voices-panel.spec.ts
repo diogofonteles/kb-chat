@@ -95,16 +95,29 @@ async function renderPanel(first: MediaSpeakers) {
   });
   const http = TestBed.inject(HttpTestingController);
   http.expectOne(URL).flush(first);
-  await result.fixture.whenStable();
-  if (first.diarization) flushLists(http);
+  if (first.diarization) {
+    await settle();
+    flushLists(http);
+  }
   await result.fixture.whenStable();
   return { ...result, http };
+}
+
+/** Lets a resource take a flushed answer and ask what depends on it. */
+async function settle(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve));
+  TestBed.tick();
 }
 
 const flushLists = (http: HttpTestingController) => {
   http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
   http.expectOne(TOPIC_AUTHORS).flush({ items: [MASTER] });
 };
+
+const voiceItems = () =>
+  within(screen.getByRole('list', { name: 'Vozes encontradas' })).getAllByRole(
+    'listitem',
+  );
 
 const status = () => screen.getByRole('status').textContent?.trim();
 
@@ -189,14 +202,13 @@ describe('VoicesPanel (KBC-064 FR-1, FR-4)', () => {
       speakers({ status: 'done', diarization: aDiarization() }),
     );
     expect(status()).toBe('Vozes separadas: 3');
-    const voices = screen
-      .getAllByRole('listitem')
+    const voices = voiceItems()
       .map((item) => item.querySelector('.voice-head')?.textContent)
       .map((text) => text?.replace(/\s+/g, ' ').trim());
     expect(voices).toEqual([
-      'Voz 1 0:12 de fala Ouvir amostra da Voz 1',
-      'Voz 2 10:42 de fala Ouvir amostra da Voz 2',
-      'Voz 3 0:05 de fala Ouvir amostra da Voz 3',
+      'Voz 1 0:12 de falaOuvir amostra da Voz 1',
+      'Voz 2 10:42 de falaOuvir amostra da Voz 2',
+      'Voz 3 0:05 de falaOuvir amostra da Voz 3',
     ]);
     expect(
       screen.getByRole('button', { name: 'Separar vozes de novo' }),
@@ -214,7 +226,7 @@ describe('VoicesPanel (KBC-064 FR-1, FR-4)', () => {
       }),
     );
     expect(status()).toBe('Vozes separadas: 1');
-    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(voiceItems()).toHaveLength(1);
   });
 
   it('warns that the voices were made on an older transcript and offers to redo (AC-4)', async () => {
@@ -246,7 +258,7 @@ describe('VoicesPanel (KBC-064 FR-1, FR-4)', () => {
       speakers({ status: 'failed', diarization: aDiarization() }),
     );
     expect(status()).toBe('A separação de vozes falhou');
-    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(voiceItems()).toHaveLength(3);
     expect(
       screen.getByRole('button', { name: 'Separar vozes de novo' }),
     ).toBeTruthy();
@@ -386,8 +398,8 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
       authorSlug: 'mestre-gabriel',
     });
     created.flush({ ...ANA, name: 'Mestre Gabriel', main: true });
-    await fixture.whenStable();
     http.expectOne({ method: 'PUT', url: `${VOICES}/1` }).flush(done());
+    await settle();
     http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
     await fixture.whenStable();
   });
@@ -399,8 +411,8 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
     const created = http.expectOne({ method: 'POST', url: TOPIC_SPEAKERS });
     expect(created.request.body).toEqual({ name: 'Maria' });
     created.flush({ ...ANA, name: 'Maria' });
-    await fixture.whenStable();
     http.expectOne({ method: 'PUT', url: `${VOICES}/3` }).flush(done());
+    await settle();
     http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
     await fixture.whenStable();
   });
@@ -523,6 +535,8 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
 
   it('renames a speaker of the collection and reads the names again', async () => {
     const { fixture, http } = await renderPanel(done());
+    fireEvent.click(screen.getByText('Falantes do acervo (1)'));
+    await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: /^Editar\s+Ana$/ }));
     await fixture.whenStable();
     const name = screen.getByLabelText('Nome');
@@ -546,6 +560,8 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
 
   it('says a speaker name is taken or invalid at the form', async () => {
     const { fixture, http } = await renderPanel(done());
+    fireEvent.click(screen.getByText('Falantes do acervo (1)'));
+    await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: /^Editar\s+Ana$/ }));
     await fixture.whenStable();
     fireEvent.input(screen.getByLabelText('Nome'), {

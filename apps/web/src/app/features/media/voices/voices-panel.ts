@@ -160,14 +160,15 @@ export class VoicesPanel {
   protected readonly diarization = computed(
     () => this.current()?.diarization ?? null,
   );
+  /** A boolean, so a new state of the voices does not read the lists again. */
+  private readonly hasVoices = computed(() => this.diarization() !== null);
   /** The lists the voices' fields offer, read once there are voices to name. */
   protected readonly speakerList = httpResource(
-    () =>
-      this.diarization() ? collectionSpeakersUrl(this.topic()) : undefined,
+    () => (this.hasVoices() ? collectionSpeakersUrl(this.topic()) : undefined),
     { parse: (body) => collectionSpeakerListSchema.parse(body) },
   );
   private readonly authorList = httpResource(
-    () => (this.diarization() ? authorsUrl(this.topic()) : undefined),
+    () => (this.hasVoices() ? authorsUrl(this.topic()) : undefined),
     { parse: (body) => authorListSchema.parse(body) },
   );
   protected readonly collectionSpeakers = computed(() =>
