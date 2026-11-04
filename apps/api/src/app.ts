@@ -435,7 +435,7 @@ function mediaService({
 }
 
 /** Changing an item's details (KBC-050): the author and speaker lists follow a move. */
-function mediaEditService({
+function mediaEditor({
   media,
   catalog,
   authors,
@@ -576,9 +576,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     vmToken: workerToken,
   });
   const media = mediaService({ ...wiring, transcribers });
-  await app.register(
-    mediaRoutes(media, mediaEditService(wiring), createPerMinute),
-  );
+  await app.register(mediaRoutes(media, mediaEditor(wiring), createPerMinute));
   await app.register(transcriberRoutes({ transcribers, media }));
   await registerListening(app, wiring, { media, transcribers });
   const silences = new SilenceService({

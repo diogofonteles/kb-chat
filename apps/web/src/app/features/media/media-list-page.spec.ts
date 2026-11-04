@@ -583,8 +583,7 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
       screen.getByRole('heading', { name: /Mídia/ }),
     );
     fireEvent.click(link);
-    const chat = TestBed.inject(ChatStore);
-    expect(chat.selectTopic).toHaveBeenCalledWith('alquimia');
+    expect(TestBed.inject(ChatStore).topicSlug()).toBe('alquimia');
   });
 
   it('a filter that no longer shows it takes the focus to the page', async () => {
