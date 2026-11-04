@@ -43,8 +43,8 @@ async function approvedAudio(owner: APIRequestContext) {
 const openTracks = async (page: Page, title: string) => {
   await page.goto('/biblioteca');
   await page.getByRole('searchbox').fill(title);
-  // Only this recording left: the search is debounced, other specs' recordings show first.
-  await expect(page.getByRole('link', { name: /^Entrevista / })).toHaveCount(1);
+  // Only this recording left: the search is debounced, and "Continuar ouvindo" stays above.
+  await expect(page.getByText(/^1 mídia/)).toBeVisible();
 };
 
 test('AC-3, AC-2: the library shows the tracks; a track says where it comes from and plays its part', async ({
