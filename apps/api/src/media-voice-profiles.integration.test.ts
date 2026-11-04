@@ -11,6 +11,7 @@ import {
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
+  DiarizeJob,
   Me,
   VoiceProfileList,
   VoiceProfileReport,
@@ -597,6 +598,96 @@ describe('Revoking (KBC-071 FR-4, BR-2)', () => {
       matches: [match(profile.id, 0.9)],
     });
     expect(await suggestionsOf(media, mediaId)).toEqual([]);
+  });
+});
+
+describe('Revoking while the Mac compares (KBC-071 BR-2, question 87)', () => {
+  const beat = (
+    media: Media,
+    input: { token: string; job: DiarizeJob; held?: readonly string[] },
+  ) =>
+    asTranscriber(media, input.token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${input.job.id}/heartbeat`,
+      payload: {
+        worker: 'mac',
+        leaseId: input.job.leaseId,
+        progress: 10,
+        ...(input.held && { voiceProfiles: input.held }),
+      },
+    });
+
+  async function comparing() {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const mediaId = await transcribedIn(media, { token });
+    expect((await requestVoices(media, mediaId)).statusCode).toBe(202);
+    const job = await leaseDiarization(media, token);
+    return { media, token, profile, job };
+  }
+
+  it('a heartbeat says nothing while the prints it holds are valid', async () => {
+    const { media, token, profile, job } = await comparing();
+    const held = [profile.id];
+    const answer = await beat(media, { token, job, held });
+    expect(answer.statusCode).toBe(204);
+    expect(answer.body).toBe('');
+  });
+
+  it('the next heartbeat names the print revoked, and the job goes on', async () => {
+    const { media, token, profile, job } = await comparing();
+    await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+    const answer = await beat(media, { token, job, held: [profile.id] });
+    expect(answer.statusCode).toBe(200);
+    expect(answer.json()).toEqual({ revokedVoiceProfiles: [profile.id] });
+    expect((await beat(media, { token, job })).statusCode).toBe(204);
+  });
+
+  it('a profile gone in any other way is dropped too', async () => {
+    const { media, token, job } = await comparing();
+    const unknown = randomUUID();
+    const answer = await beat(media, { token, job, held: [unknown] });
+    expect(answer.json()).toEqual({ revokedVoiceProfiles: [unknown] });
+  });
+
+  it('an unmarked token learns nothing from a heartbeat', async () => {
+    const { media, profile } = await granted().then(async (setup) => ({
+      ...setup,
+      ...(await readyProfile(setup.media, {
+        token: setup.token,
+        name: 'Gabriel',
+      })),
+    }));
+    const { token: plain } = await pairVoicePrinter(media, [
+      'transcribe',
+      'diarize',
+    ]);
+    const mediaId = await transcribedIn(media, { token: plain });
+    expect((await requestVoices(media, mediaId)).statusCode).toBe(202);
+    const job = await leaseDiarization(media, plain);
+    await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+    const answer = await beat(media, {
+      token: plain,
+      job,
+      held: [profile.id],
+    });
+    expect(answer.statusCode).toBe(204);
+  });
+
+  it('a lost lease is still 409, whatever the heartbeat holds', async () => {
+    const { media, token, profile, job } = await comparing();
+    const answer = await beat(media, {
+      token,
+      job: { ...job, leaseId: randomUUID() },
+      held: [profile.id],
+    });
+    expect(answer.statusCode).toBe(409);
+  });
+
+  it('refuses a heartbeat with something other than ids', async () => {
+    const { media, token, job } = await comparing();
+    const held = ['not-an-id'];
+    expect((await beat(media, { token, job, held })).statusCode).toBe(400);
   });
 });
 

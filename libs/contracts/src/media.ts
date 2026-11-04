@@ -349,10 +349,21 @@ const leaseOwnerSchema = z.strictObject({
   leaseId: z.uuid(),
 });
 
+/** More than a collection's speakers; the bound only keeps a heartbeat small. */
+export const MAX_HELD_VOICE_PROFILES = 1_000;
+
 export const heartbeatRequestSchema = leaseOwnerSchema.extend({
   progress: z.number().int().min(0).max(100).nullable(),
+  /** The profiles whose prints this job holds in memory (KBC-071 BR-2). */
+  voiceProfiles: z.array(z.uuid()).max(MAX_HELD_VOICE_PROFILES).optional(),
 });
 export type HeartbeatRequest = z.infer<typeof heartbeatRequestSchema>;
+
+/** A heartbeat with nothing to say is 204; this one says which prints to drop now. */
+export const heartbeatResponseSchema = z.strictObject({
+  revokedVoiceProfiles: z.array(z.uuid()),
+});
+export type HeartbeatResponse = z.infer<typeof heartbeatResponseSchema>;
 
 export const completeTranscodeRequestSchema = leaseOwnerSchema.extend({
   durationMs: z.number().int().min(0),

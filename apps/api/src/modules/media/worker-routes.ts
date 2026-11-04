@@ -9,6 +9,7 @@ import {
   completeVoicePrintRequestSchema,
   failJobRequestSchema,
   heartbeatRequestSchema,
+  heartbeatResponseSchema,
   leaseRequestSchema,
   leasedJobSchema,
   type MediaJobKind,
@@ -180,6 +181,14 @@ const OPTIONS = {
       querystring: audioQuery,
     },
   },
+  heartbeat: {
+    config: { access: PUBLIC },
+    schema: {
+      params: jobParams,
+      body: heartbeatRequestSchema,
+      response: { 200: heartbeatResponseSchema, 204: z.undefined() },
+    },
+  },
   voiceProfiles: {
     config: { access: PUBLIC },
     schema: {
@@ -218,7 +227,7 @@ export const workerRoutes =
     app.decorateRequest('workerIdentity', null);
     app.addHook('onRequest', identifyWorker(deps.transcribers));
     registerLease(app, deps.service);
-    registerBeat(app, deps.service);
+    registerBeat(app, deps);
     registerFail(app, deps.service);
     registerTranscode(app, deps.service);
     registerSilences(app, deps);
@@ -249,11 +258,15 @@ function registerLease(app: FastifyInstance, service: WorkerService): void {
   );
 }
 
-function registerBeat(app: FastifyInstance, service: WorkerService): void {
+/** The heartbeat also tells the Mac which prints it holds were revoked (KBC-071 BR-2). */
+function registerBeat(
+  app: FastifyInstance,
+  { service, voicePrints }: WorkerRoutesDeps,
+): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     '/api/v1/media-worker/jobs/:id/heartbeat',
-    route(heartbeatRequestSchema),
+    OPTIONS.heartbeat,
     async (request, reply) => {
       const { body } = request;
       assertJobKind(request, { jobId: request.params.id, service });
@@ -261,7 +274,13 @@ function registerBeat(app: FastifyInstance, service: WorkerService): void {
         ...ownerOf(request, body),
         progress: body.progress,
       });
-      return reply.code(204).send();
+      const marked = identityOf(request).kinds.includes('voice-profile');
+      const revokedVoiceProfiles = marked
+        ? await voicePrints.revokedAmong(body.voiceProfiles ?? [])
+        : [];
+      return revokedVoiceProfiles.length > 0
+        ? reply.code(200).send({ revokedVoiceProfiles })
+        : reply.code(204).send();
     },
   );
 }

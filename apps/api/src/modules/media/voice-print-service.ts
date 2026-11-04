@@ -135,6 +135,15 @@ export class VoicePrintService {
     return { profiles: read.flat() };
   }
 
+  /** Of the prints a job holds, those with no consent behind them any more (BR-2). */
+  async revokedAmong(held: readonly string[]): Promise<string[]> {
+    if (held.length === 0) return [];
+    const { ids } = await this.deps.revocations.read();
+    return held.filter(
+      (id) => ids.includes(id) || this.deps.profiles.get(id) === null,
+    );
+  }
+
   /**
    * What the Mac found, kept above the threshold only (BR-3) and only for a profile of this
    * recording's collection (BR-4): anything else is dropped, whatever the worker sent.
