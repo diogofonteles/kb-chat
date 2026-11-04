@@ -321,6 +321,11 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
       name: `Quem é a Voz ${voice}?`,
     });
 
+  const openSpeakers = () => {
+    const summary = screen.getByText('Falantes do acervo (1)');
+    summary.closest('details')?.setAttribute('open', '');
+  };
+
   async function choose(
     fixture: { whenStable(): Promise<unknown> },
     voice: number,
@@ -535,8 +540,7 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
 
   it('renames a speaker of the collection and reads the names again', async () => {
     const { fixture, http } = await renderPanel(done());
-    fireEvent.click(screen.getByText('Falantes do acervo (1)'));
-    await fixture.whenStable();
+    openSpeakers();
     fireEvent.click(screen.getByRole('button', { name: /^Editar\s+Ana$/ }));
     await fixture.whenStable();
     const name = screen.getByLabelText('Nome');
@@ -560,8 +564,7 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
 
   it('says a speaker name is taken or invalid at the form', async () => {
     const { fixture, http } = await renderPanel(done());
-    fireEvent.click(screen.getByText('Falantes do acervo (1)'));
-    await fixture.whenStable();
+    openSpeakers();
     fireEvent.click(screen.getByRole('button', { name: /^Editar\s+Ana$/ }));
     await fixture.whenStable();
     fireEvent.input(screen.getByLabelText('Nome'), {
