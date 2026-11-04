@@ -62,7 +62,10 @@ describe('toMediaItem: the transcription (KBC-036)', () => {
   });
 
   it('calls a failed attempt so only when a transcript stayed (KBC-040 BR-3)', () => {
-    const kept = toMediaItem(aRecord({ jobStatus: 'dead' }), true);
+    const kept = toMediaItem(
+      aRecord({ jobStatus: 'dead', version: 1, confidence: 'normal' }),
+      true,
+    );
     expect(kept.transcription).toMatchObject({
       status: 'done',
       lastAttemptFailed: true,
