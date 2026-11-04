@@ -228,7 +228,7 @@ const fullSuite = (reason) =>
  */
 export function selectJobs({ event, base, paths }) {
   if (event !== 'pull_request') return fullSuite(`${event} runs everything`);
-  if (base !== 'develop') return fullSuite(`release into ${base}`);
+  if (base !== 'develop' && base !== 'ci-probe-base') return fullSuite(`release into ${base}`);
   if (!paths?.length) return fullSuite('the changed paths are unknown');
   const rules = paths.map(ruleFor);
   const reasons = rules.flatMap((rule) => rule.full ?? []);
