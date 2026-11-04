@@ -213,6 +213,35 @@ describe('Assuntos, step 4 (KBC-069)', () => {
     root.remove();
   });
 
+  it('keeps the list closed when the focus comes back after a decision', async () => {
+    const { fixture, root, button, http, stable } = await setup({
+      tracks: [
+        aTrack({
+          suggestions: [{ id: SUGGESTION, kind: 'concept', name: 'Cabala' }],
+        }),
+      ],
+    });
+    document.body.append(root);
+    const accept = button('Aceitar sugestão Cabala');
+    accept?.focus();
+    accept?.click();
+    accept?.blur();
+    await stable();
+    http
+      .expectOne(`${WRITE}/decisions`)
+      .flush(aTrack({ version: 3, subjects: [concept('Cabala')] }));
+    await stable();
+    const field = fieldOf(root);
+    expect(document.activeElement).toBe(field);
+    expect(field.getAttribute('aria-expanded')).toBe('false');
+
+    field.click();
+    await stable();
+    expect(field.getAttribute('aria-expanded')).toBe('true');
+    fixture.destroy();
+    root.remove();
+  });
+
   it('does not offer what the track has, nor to create what exists without accent', async () => {
     const { root, stable } = await setup({
       tracks: [aTrack({ subjects: [concept('Cabala')] })],

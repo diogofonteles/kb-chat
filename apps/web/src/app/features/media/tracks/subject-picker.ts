@@ -55,6 +55,8 @@ export class SubjectPicker {
   protected readonly listId = `${this.id}-list`;
   protected readonly nameMax = SUBJECT_NAME_MAX;
 
+  private returning = false;
+
   protected readonly text = signal('');
   protected readonly open = signal(false);
   protected readonly active = signal(-1);
@@ -106,7 +108,14 @@ export class SubjectPicker {
 
   /** The way back after a chip that had the focus is gone (WCAG 2.4.3). */
   focus(): void {
+    this.returning = true;
     this.field()?.nativeElement.focus();
+    this.returning = false;
+  }
+
+  /** Reaching the field opens the list; being sent back to it does not. */
+  protected focused(): void {
+    if (!this.returning) this.open.set(true);
   }
 
   protected typed(event: Event): void {

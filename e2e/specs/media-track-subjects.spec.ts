@@ -166,6 +166,31 @@ test('FR-4, AC-1: a person adds a subject, creates one, and asks for chips price
   await owner.dispose();
 });
 
+test('NG-30: adding by keyboard keeps the focus in the field, and a decision does not open the list over the summary', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const media = await approvedAudio(owner);
+  await page.goto(`/midia/${media.id}/faixas`);
+  const first = track(page, 1);
+  const field = first.getByRole('combobox', {
+    name: 'Adicionar assunto à faixa 1',
+  });
+  await field.focus();
+  await page.keyboard.type('ritm');
+  await page.keyboard.press('Enter');
+  const remove = first.getByRole('button', { name: 'Remover assunto Ritmo' });
+  await expect(remove).toBeVisible();
+  await expect(field).toBeFocused();
+
+  await remove.click();
+  await expect(remove).toHaveCount(0);
+  await expect(field).toBeFocused();
+  await expect(field).toHaveAttribute('aria-expanded', 'false');
+  await expect(first.getByRole('listbox')).toBeHidden();
+  await owner.dispose();
+});
+
 test('AC-3: a sixth subject is refused on the screen', async ({ page }) => {
   const owner = await ownerApi();
   const media = await approvedAudio(owner);
