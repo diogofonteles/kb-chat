@@ -5,7 +5,7 @@
 #   tools/heavy.sh <command> [args...]
 #
 #   KBC_HEAVY_SKIP=1        run right away (CI skips by itself: it has a machine per job)
-#   KBC_HEAVY_MAX_LOAD=<n>  the 1-minute load to wait for (default: the number of CPUs)
+#   KBC_HEAVY_MAX_LOAD=<n>  the whole 1-minute load to stay under (default: the number of CPUs)
 #   KBC_HEAVY_LOAD_WAIT=<s> the longest wait for the load, then it runs anyway (default 300)
 #   KBC_HEAVY_LOCK=<dir>    the lock (default ~/.cache/kb-chat/heavy.lock)
 #
@@ -49,6 +49,14 @@ load_now() {
   fi
 }
 
+# Whole numbers are enough for a limit, and the shell compares nothing else.
+load_whole() {
+  local load
+  load=$(load_now)
+  load=${load%%[.,]*}
+  echo "${load:-0}"
+}
+
 cpus() {
   getconf _NPROCESSORS_ONLN
 }
@@ -86,7 +94,7 @@ trap stop INT TERM HUP
 locked=$(date +%s)
 max_load=${KBC_HEAVY_MAX_LOAD:-$(cpus)}
 load_wait=${KBC_HEAVY_LOAD_WAIT:-300}
-while awk -v load="$(load_now)" -v max="$max_load" 'BEGIN { exit !(load + 0 >= max + 0) }'; do
+while [ "$(load_whole)" -ge "$max_load" ]; do
   now=$(date +%s)
   if [ $((now - locked)) -ge "$load_wait" ]; then
     echo "heavy: the load stayed above $max_load for $load_wait s; going ahead"
