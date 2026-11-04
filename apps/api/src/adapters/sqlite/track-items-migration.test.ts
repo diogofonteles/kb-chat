@@ -82,6 +82,7 @@ describe('migration track-items (KBC-068)', () => {
     );
     expect(indexesOfJobs(db)).toEqual([
       'jobs_by_media',
+      'jobs_by_voice_profile',
       'jobs_by_worker',
       'jobs_leased',
       'jobs_queued',
