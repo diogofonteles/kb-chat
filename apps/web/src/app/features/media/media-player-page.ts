@@ -172,6 +172,13 @@ export class MediaPlayerPage {
       return { state: 'approved' as const, step, tracks: approvedTracks };
     return { state: started ? ('paused' as const) : ('new' as const), step };
   });
+  protected readonly appliedText = computed(() => {
+    const entry = this.editEntry();
+    const count = entry?.state === 'approved' ? entry.tracks : 0;
+    return count === 1
+      ? $localize`:@@tracks.entry.appliedOne:1 faixa aplicada`
+      : $localize`:@@tracks.entry.applied:${count}:count: faixas aplicadas`;
+  });
   /** Who speaks is for `media-speakers`, and for whoever names the voices (KBC-065 BR-4). */
   protected readonly canSeeSpeakers = computed(
     () =>

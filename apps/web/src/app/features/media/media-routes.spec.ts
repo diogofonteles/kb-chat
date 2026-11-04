@@ -10,6 +10,7 @@ import type { Feature } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaListPage } from './media-list-page.js';
 import { MediaPlayerPage } from './media-player-page.js';
+import { TrackEditorPage } from './tracks/track-editor-page.js';
 import { MyBookmarksPage } from './my-bookmarks-page.js';
 import { LibraryPage } from './library/library-page.js';
 import { MediaRedirect } from './library/media-redirect.js';
@@ -81,6 +82,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
       MediaRedirect,
       MediaListPage,
       MyBookmarksPage,
+      TrackEditorPage,
       MediaPlayerPage,
     ]);
     // The library's /midia comes before the list's; "marcadores" before ":id".
@@ -89,6 +91,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
       'midia',
       'midia',
       'midia/marcadores',
+      'midia/:id/faixas',
       'midia/:id',
     ]);
   });

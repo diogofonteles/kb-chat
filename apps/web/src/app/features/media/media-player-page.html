@@ -116,9 +116,7 @@
                 >
               }
               @case ('approved') {
-                <span i18n="@@tracks.entry.approved"
-                  >{{ entry.tracks }} faixas aplicadas</span
-                >
+                <span>{{ appliedText() }}</span>
                 ·
                 <a [routerLink]="editLink()" i18n="@@tracks.entry.see"
                   >Ver edição</a

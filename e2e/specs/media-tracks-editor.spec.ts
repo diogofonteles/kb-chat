@@ -173,13 +173,16 @@ test('AC-9: Ctrl+Z brings back a moved start and a deleted track; Ctrl+Shift+Z r
 
 test('AC-10: dividing makes two touching tracks, joining keeps the first title', async ({
   page,
+  isMobile,
 }) => {
   const owner = await ownerApi();
   const media = await audioWithTracks(owner, [
     { startMs: 0, endMs: 30_000, title: 'Duas perguntas' },
   ]);
   await open(page, media.id);
+  if (isMobile) await page.getByRole('tab', { name: 'Transcrição' }).click();
   await page.getByRole('button', { name: '0:15', exact: true }).click();
+  if (isMobile) await page.getByRole('tab', { name: '1 faixa' }).click();
   await page.getByRole('button', { name: 'Mais ações da faixa' }).click();
   await page.getByRole('menuitem', { name: 'Dividir aqui' }).click();
   await expectSaved(owner, media.id, (tracks) => tracks.length === 2);
@@ -244,9 +247,26 @@ test('AC-14: on a phone, a finger moves the handle and "+0,5 s" too, and the tar
   expect(box?.width).toBeGreaterThanOrEqual(48);
   expect(box?.height).toBeGreaterThanOrEqual(48);
 
+  const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type: string, atX: number) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: type === 'touchEnd' ? [] : [{ x: atX, y }],
+    });
+  await touch('touchStart', x);
+  for (const step of [10, 20, 30, 40]) await touch('touchMove', x + step);
+  await touch('touchEnd', x + 40);
+  await expectSaved(owner, media.id, (tracks) => (tracks[0]?.startMs ?? 0) > 0);
+
+  const dragged = (await draftTracks(owner, media.id))[0]?.startMs ?? 0;
   await page.getByRole('button', { name: 'Mais 0,5 segundo' }).click();
-  await expect(start).toHaveAttribute('aria-valuenow', '0.5');
-  await expectSaved(owner, media.id, (tracks) => tracks[0]?.startMs === 500);
+  await expectSaved(
+    owner,
+    media.id,
+    (tracks) => tracks[0]?.startMs === dragged + 500,
+  );
   await page.context().close();
   await owner.dispose();
 });
@@ -314,7 +334,7 @@ test('AC-18: the whole step by keyboard, from an empty draft to the approval', a
   await page.getByRole('button', { name: 'Aprovar faixas' }).focus();
   await page.keyboard.press('Enter');
   await expect(
-    page.getByRole('heading', { name: '1 faixas aplicadas.' }),
+    page.getByRole('heading', { name: '1 faixa aplicada.' }),
   ).toBeVisible();
   await owner.dispose();
 });
@@ -370,4 +390,105 @@ test('an editor without the permission reads why', async ({
   ).toBeVisible();
   await page.context().close();
   await owner.dispose();
+});
+
+/** 2 h, 200 tracks and the wave: the extreme case, served by the routes' own shapes. */
+async function twoHours(page: Page, mediaId: string) {
+  const durationMs = 7_200_000;
+  const tracks = Array.from({ length: 200 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    runId: null,
+    source: 'manual',
+    edited: false,
+    firstSegment: null,
+    lastSegment: null,
+    startMs: index * 36_000,
+    endMs: (index + 1) * 36_000,
+    kind: 'qa',
+    title: `Faixa de teste ${index + 1}`,
+    askerVoice: null,
+    answererVoice: null,
+    askerSpeakerId: null,
+    answererSpeakerId: null,
+  }));
+  const words = Array.from({ length: 15_000 }, (_, index) => [
+    index * 480,
+    index * 480 + 400,
+    `palavra${index}`,
+  ]);
+  const peaks = Buffer.alloc(72_000, 90).toString('base64');
+  const answer = async (url: RegExp, patch: (body: object) => object) =>
+    page.route(url, async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: patch(await response.json()) });
+    });
+  await answer(new RegExp(`/api/v1/media/${mediaId}$`), (body) => ({
+    ...body,
+    durationMs,
+  }));
+  await answer(new RegExp(`/api/v1/media/${mediaId}/edit$`), (body) => ({
+    ...body,
+    tracks,
+  }));
+  await answer(new RegExp(`/api/v1/media/${mediaId}/edit/words$`), (body) => ({
+    ...body,
+    words,
+  }));
+  await answer(new RegExp(`/api/v1/media/${mediaId}/waveform$`), (body) => ({
+    ...body,
+    status: 'ready',
+    peaks,
+  }));
+}
+
+test('NFR-1: 2 h and 200 tracks open fast, and a handle follows on a slow phone', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'CPU throttling is a Chrome tool');
+  const owner = await ownerApi();
+  const media = await audioWithTracks(owner);
+  await owner.dispose();
+  await twoHours(page, media.id);
+  await page.goto(`/midia/${media.id}`);
+  const entry = page.getByRole('link', { name: 'Continuar' });
+  await expect(entry).toBeVisible();
+  const started = Date.now();
+  await entry.click();
+  await expect(handle(page, 'Início da faixa 1')).toBeVisible();
+  const openMs = Date.now() - started;
+
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  await page.evaluate(() => {
+    const frames: number[] = [];
+    let last = performance.now();
+    const tick = (now: number) => {
+      frames.push(now - last);
+      last = now;
+      if (frames.length < 120) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    Object.assign(window, { trackFrames: frames });
+  });
+  const box = await handle(page, 'Fim da faixa 1').boundingBox();
+  if (!box) throw new Error('no handle');
+  const y = box.y + 30;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 60; step += 1)
+    await page.mouse.move(box.x + box.width / 2 - step * 2, y);
+  await page.mouse.up();
+  const frames = await page.evaluate(
+    () => (window as unknown as { trackFrames: number[] }).trackFrames,
+  );
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  const sorted = [...frames].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  console.log(`NFR-1: open ${openMs} ms, frame median ${median.toFixed(1)} ms`);
+  // A shared CI runner measures itself, not the page (see item 53 of the owner's list).
+  if (!process.env['CI']) {
+    expect(openMs).toBeLessThanOrEqual(1_500);
+    expect(median).toBeLessThanOrEqual(20);
+  }
 });

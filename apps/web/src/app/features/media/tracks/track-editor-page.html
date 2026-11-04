@@ -82,7 +82,7 @@
 
     @if (step() === 4) {
       <section class="summary">
-        <h3 i18n="@@tracks.applied">{{ approvedCount() }} faixas aplicadas.</h3>
+        <h3>{{ appliedText() }}</h3>
         <p i18n="@@tracks.appliedLead">Quem ouve já vê as faixas no player.</p>
         <div class="summary-actions">
           <a
@@ -327,9 +327,8 @@
           role="tab"
           [attr.aria-selected]="tab() === 'tracks'"
           (click)="tab.set('tracks')"
-          i18n="@@tracks.tabTracks"
         >
-          {{ count() }} faixas
+          {{ countText() }}
         </button>
         <button
           type="button"
@@ -394,7 +393,7 @@
 
       <footer class="foot">
         <p class="foot-summary">
-          <span i18n="@@tracks.footCount">{{ count() }} faixas</span>
+          <span>{{ countText() }}</span>
           @if (warningCount()) {
             ·
             <span i18n="@@tracks.footWarnings"

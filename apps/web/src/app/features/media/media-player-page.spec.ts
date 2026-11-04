@@ -32,6 +32,19 @@ import { EMPTY } from 'rxjs';
 
 const ITEM = aMediaItem();
 const ITEM_URL = `/api/v1/media/${ITEM.id}`;
+/** A recording nobody began to divide (KBC-066): what whoever edits reads on the page. */
+const NOT_STARTED = {
+  mediaId: ITEM.id,
+  version: 0,
+  started: false,
+  status: 'draft',
+  step: 3,
+  tracks: [],
+  run: null,
+  voices: [],
+  approvedTracks: 0,
+  transcriptChanged: false,
+};
 
 async function openPage(
   url = `/midia/${ITEM.id}`,
@@ -524,6 +537,7 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     // The item renders, then the block asks for the voices (a pending read keeps it unstable).
     await Promise.resolve();
     TestBed.tick();
+    http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
     http.expectOne(`${ITEM_URL}/speakers`).flush({
       mediaId: ITEM.id,
       status: 'none',
@@ -535,6 +549,34 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     await harness.fixture.whenStable();
     expect(screen.getByRole('heading', { name: 'Vozes' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Separar vozes' })).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Dividir em faixas' }),
+    ).toBeTruthy();
+  });
+
+  it('says where a preparation stopped, with the way back (KBC-066 AC-17)', async () => {
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-edit'],
+    });
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await Promise.resolve();
+    TestBed.tick();
+    http
+      .expectOne(`${ITEM_URL}/edit`)
+      .flush({ ...NOT_STARTED, started: true, version: 2 });
+    http.match(`${ITEM_URL}/speakers`).forEach((one) =>
+      one.flush({
+        mediaId: ITEM.id,
+        status: 'none',
+        transcriber: 'on',
+        transcriberOffSince: null,
+        canRequest: true,
+        diarization: null,
+      }),
+    );
+    await harness.fixture.whenStable();
+    expect(screen.getByText('Preparação parada no passo 3')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Continuar' })).toBeTruthy();
   });
 
   it('shows nothing of voices to a person who only listens, and asks for none', async () => {
@@ -646,6 +688,7 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
     http.expectOne(ITEM_URL).flush(VOICED_ITEM);
     await settle();
     http.expectOne(transcriptRequest).flush(TWO_SEGMENTS);
+    http.expectOne(`${ITEM_URL}/edit`).flush(NOT_STARTED);
     http.expectOne(`${ITEM_URL}/speakers`).flush({
       mediaId: ITEM.id,
       status: 'done',
@@ -716,5 +759,68 @@ describe('MediaPlayerPage: "Editar informações" (KBC-050 FR-2)', () => {
     expect(TestBed.inject(MediaEngine).source()?.title).toBe(
       'A conselheira do rei',
     );
+  });
+});
+
+describe('MediaPlayerPage: listening by track (KBC-066 FR-9)', () => {
+  const TRACKS = {
+    tracks: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        ordinal: 1,
+        startMs: 0,
+        endMs: 600_000,
+        kind: 'qa',
+        title: 'Primeira',
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        ordinal: 2,
+        startMs: 600_000,
+        endMs: 900_000,
+        kind: 'talk',
+        title: 'Segunda',
+      },
+    ],
+  };
+
+  it('asks for no tracks without `media-tracks` (AC-13)', async () => {
+    const { harness, http } = await openPage(undefined, {
+      features: ['media'],
+    });
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    http.expectNone(`${ITEM_URL}/tracks`);
+    expect(screen.queryByRole('heading', { name: 'Faixas' })).toBeNull();
+  });
+
+  it('lists the tracks; a row goes to its start', async () => {
+    const { harness, http, media } = await openPage(undefined, {
+      features: ['media', 'media-tracks'],
+    });
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await Promise.resolve();
+    TestBed.tick();
+    http.expectOne(`${ITEM_URL}/tracks`).flush(TRACKS);
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('heading', { name: 'Faixas' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Segunda/ }));
+    expect(media.element.currentTime).toBe(600);
+  });
+
+  it('opens `?track=2` at that track, before anything else (AC-12)', async () => {
+    const { harness, http, media } = await openPage(
+      `/midia/${ITEM.id}?track=2`,
+      { features: ['media', 'media-tracks'] },
+    );
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await Promise.resolve();
+    TestBed.tick();
+    http.expectOne(`${ITEM_URL}/tracks`).flush(TRACKS);
+    await harness.fixture.whenStable();
+    media.setDuration(3_735);
+    media.emit('loadedmetadata');
+    await harness.fixture.whenStable();
+    expect(media.element.currentTime).toBe(600);
   });
 });

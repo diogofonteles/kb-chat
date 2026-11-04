@@ -91,6 +91,11 @@ const voiceChoice = (label: VoiceLabel): PersonChoice => {
   };
 };
 
+const tracksText = (count: number): string =>
+  count === 1
+    ? $localize`:@@tracks.one:1 faixa`
+    : $localize`:@@tracks.many:${count}:count: faixas`;
+
 const touched = (track: DraftTrack): DraftTrack => ({ ...track, edited: true });
 
 const copyableText = (tracks: readonly DraftTrack[]): string =>
@@ -284,6 +289,13 @@ export class TrackEditorPage {
   );
   protected readonly cursorMs = this.cursor.asReadonly();
   protected readonly count = computed(() => this.draft.tracks().length);
+  protected readonly countText = computed(() => tracksText(this.count()));
+  protected readonly appliedText = computed(() => {
+    const count = this.approvedCount();
+    return count === 1
+      ? $localize`:@@tracks.appliedOne:1 faixa aplicada.`
+      : $localize`:@@tracks.applied:${count}:count: faixas aplicadas.`;
+  });
   protected readonly warningCount = computed(
     () => new Set(this.draft.problems().map((one) => one.trackId)).size,
   );
