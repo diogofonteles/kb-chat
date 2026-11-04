@@ -1,4 +1,7 @@
 :host {
+  /* Above the card's stretched link (library-card.css), as the card's ▶ is. */
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: var(--space-1);
   min-width: 0;

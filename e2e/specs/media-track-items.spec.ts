@@ -74,6 +74,47 @@ test('AC-3, AC-2: the library shows the tracks; a track says where it comes from
   await owner.dispose();
 });
 
+test('AC-3, FR-5: in the grid, the tracks answer to the pointer', async ({
+  browser,
+  viewport,
+}) => {
+  const owner = await ownerApi();
+  const media = await approvedAudio(owner);
+  // The view follows the account: a person of its own keeps the owner's list.
+  const email = uniqueEmail('grade');
+  await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['media', 'media-library', 'media-tracks'],
+  });
+  await owner.dispose();
+  const page = await pageAs(browser, email, viewport);
+  await openTracks(page, media.title);
+  await page.getByRole('button', { name: 'Ver em grade' }).click();
+
+  // A search opens the group: the pointer closes it, then opens it again.
+  const toggle = page.getByRole('button', { name: '3 faixas' });
+  const list = page.getByRole('list', { name: `Faixas de ${media.title}` });
+  await expect(list).toBeVisible();
+  await toggle.click();
+  await expect(list).toBeHidden();
+  await toggle.click();
+  await expect(list).toBeVisible();
+  await expect(page).toHaveURL(/\/biblioteca/);
+
+  const title = list.getByRole('link', { name: 'Segunda pergunta' });
+
+  await page.getByRole('button', { name: 'Ouvir Segunda pergunta' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Pausar Segunda pergunta' }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/biblioteca/);
+
+  await title.click();
+  await expect(
+    page.getByRole('heading', { name: 'Segunda pergunta' }),
+  ).toBeVisible();
+});
+
 test('AC-3: without media-tracks the recording stands alone', async ({
   browser,
   viewport,
