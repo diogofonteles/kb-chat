@@ -3,11 +3,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -31,6 +35,8 @@ import { SpeakersApi } from '@core/media/speakers-api.js';
 export class CollectionSpeakers {
   private readonly api = inject(SpeakersApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  private readonly summary = viewChild<ElementRef<HTMLElement>>('summary');
   readonly topic = input.required<string>();
   readonly speakers = input<readonly CollectionSpeaker[]>([]);
   readonly authors = input<readonly Author[]>([]);
@@ -43,7 +49,7 @@ export class CollectionSpeakers {
   protected readonly name = signal('');
   protected readonly author = signal('');
   protected readonly error = signal('');
-  protected readonly busy = signal(false);
+  private readonly busy = signal(false);
   protected readonly count = computed(() => this.speakers().length);
   /** Each author at most once: the ones free, plus the one the edited speaker is. */
   protected readonly authorChoices = computed(() => {
@@ -65,6 +71,7 @@ export class CollectionSpeakers {
 
   protected cancel(): void {
     this.editing.set(null);
+    this.keepFocus();
   }
 
   protected typeName(event: Event): void {
@@ -76,10 +83,18 @@ export class CollectionSpeakers {
     this.author.set((event.target as HTMLSelectElement).value);
   }
 
+  /** The form goes with what had the focus: the list's title takes it (NG-30). */
+  private keepFocus(): void {
+    afterNextRender(() => this.summary()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
+  }
+
   protected save(event: Event, id: string): void {
     event.preventDefault();
     const parsed = speakerNameSchema.safeParse(this.name());
     if (!parsed.success) return this.error.set(invalidName(this.nameMax));
+    if (this.busy()) return;
     this.busy.set(true);
     this.api
       .updateSpeaker(this.topic(), id, {
@@ -91,6 +106,7 @@ export class CollectionSpeakers {
         next: () => {
           this.busy.set(false);
           this.editing.set(null);
+          this.keepFocus();
           this.changed.emit();
         },
         error: (err: unknown) => {

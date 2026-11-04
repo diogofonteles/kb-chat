@@ -1,15 +1,19 @@
-import { formatDate } from '@angular/common';
+import { DOCUMENT, formatDate } from '@angular/common';
 import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
   LOCALE_ID,
+  afterNextRender,
   computed,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   outputFromObservable,
@@ -37,12 +41,16 @@ import {
 } from '@core/media/speakers-api.js';
 import {
   EMPTY,
+  Subject,
+  catchError,
+  concatMap,
   distinctUntilChanged,
   filter,
   interval,
   map,
   of,
   switchMap,
+  tap,
   type Observable,
 } from 'rxjs';
 import { MEDIA_POLL_MS } from '../media-polling.js';
@@ -132,6 +140,14 @@ export class VoicesPanel {
   private readonly destroyRef = inject(DestroyRef);
   private readonly locale = inject(LOCALE_ID);
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  private readonly document = inject(DOCUMENT);
+  private readonly injector = inject(Injector);
+  private readonly savedNote =
+    viewChild<ElementRef<HTMLParagraphElement>>('savedNote');
+  private readonly changes = new Subject<{
+    readonly change: Observable<MediaSpeakers>;
+    readonly done: string;
+  }>();
   protected readonly sample = inject(VoiceSample);
   readonly mediaId = input.required<string>();
   /** The audio's collection: its speakers and authors (a sub-collection's are its parent's). */
@@ -220,6 +236,7 @@ export class VoicesPanel {
 
   constructor() {
     this.pollWhileWorking();
+    this.applyInOrder();
   }
 
   protected editVoices(event: Event): void {
@@ -352,25 +369,53 @@ export class VoicesPanel {
     }
   }
 
-  /** Sends a change: the answer is the new state of the voices. */
+  /**
+   * Sends a change, after the ones before it: each answer is the whole state of the voices,
+   * so they must arrive in order. Nothing is disabled meanwhile: that would drop the focus.
+   */
   private apply(change: Observable<MediaSpeakers>, done: string): void {
-    this.busy.set(true);
     this.failure.set('');
     this.saved.set('');
-    change.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (speakers) => {
-        this.busy.set(false);
-        this.speakers.set(speakers);
-        this.saved.set(done);
-        this.renamed.emit();
+    this.changes.next({ change, done });
+  }
+
+  private applyInOrder(): void {
+    this.changes
+      .pipe(
+        concatMap(({ change, done }) =>
+          change.pipe(
+            tap((speakers) => this.settleChange(speakers, done)),
+            catchError((err: unknown) => {
+              this.changeFailed(err);
+              return EMPTY;
+            }),
+          ),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe();
+  }
+
+  private settleChange(speakers: MediaSpeakers, done: string): void {
+    this.speakers.set(speakers);
+    this.saved.set(done);
+    this.renamed.emit();
+    this.keepFocus();
+  }
+
+  /** The button pressed may be gone ("Confirmar nomes"): the note takes the focus (NG-30). */
+  private keepFocus(): void {
+    afterNextRender(
+      () => {
+        if (this.document.activeElement === this.document.body)
+          this.savedNote()?.nativeElement.focus();
       },
-      error: (err: unknown) => this.changeFailed(err),
-    });
+      { injector: this.injector },
+    );
   }
 
   /** 409: the voices changed under the screen; it reads them again and says so. */
   private changeFailed(err: unknown): void {
-    this.busy.set(false);
     if (err instanceof HttpErrorResponse && err.status === 409) {
       this.speakers.reload();
       this.failure.set(

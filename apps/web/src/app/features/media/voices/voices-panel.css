@@ -85,7 +85,7 @@
   font-weight: 600;
 }
 
-.saved:empty {
+.saved:not(:focus):empty {
   display: none;
 }
 

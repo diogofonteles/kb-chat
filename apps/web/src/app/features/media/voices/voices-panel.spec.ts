@@ -439,6 +439,28 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
     );
   });
 
+  it('keeps a voice field usable while saving and sends changes in order', async () => {
+    const { fixture, http } = await renderPanel(done());
+    await choose(fixture, 1, 'Ana');
+    expect(field(2).disabled).toBe(false);
+    await choose(fixture, 2, 'Pergunta da plateia');
+    http.expectNone({ method: 'PUT', url: `${VOICES}/2` });
+    http.expectOne({ method: 'PUT', url: `${VOICES}/1` }).flush(done());
+    http.expectOne({ method: 'PUT', url: `${VOICES}/2` }).flush(done());
+    await fixture.whenStable();
+    expect(renames.count).toBe(2);
+  });
+
+  it('gives the focus to the note when the button pressed goes away', async () => {
+    const { fixture, http } = await renderPanel(done({ namesPending: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar nomes' }));
+    http.expectOne({ method: 'POST', url: `${VOICES}/confirm` }).flush(done());
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent?.trim()).toBe(
+      'Nomes confirmados.',
+    );
+  });
+
   it('says a failure to save', async () => {
     const { fixture, http } = await renderPanel(done());
     await choose(fixture, 1, 'Ana');

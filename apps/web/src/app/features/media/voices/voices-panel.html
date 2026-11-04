@@ -36,7 +36,6 @@
           <button
             type="button"
             class="primary"
-            [disabled]="busy()"
             (click)="confirmNames()"
             i18n="@@voices.confirm"
           >
@@ -79,7 +78,6 @@
                 [current]="one.current"
                 [speakers]="collectionSpeakers()"
                 [authors]="authors()"
-                [disabled]="busy()"
                 (chosen)="nameVoice(one.voice, $event)"
               />
             </li>
@@ -90,7 +88,9 @@
             Não consegui tocar a amostra.
           </p>
         }
-        <p class="saved" aria-live="polite">{{ saved() }}</p>
+        <p #savedNote class="saved" tabindex="-1" aria-live="polite">
+          {{ saved() }}
+        </p>
       }
       @for (one of result.merged; track one.voice) {
         <p class="merged">
@@ -100,7 +100,6 @@
           <button
             type="button"
             class="secondary"
-            [disabled]="busy()"
             (click)="split(one.voice)"
             i18n="@@voices.split"
           >
@@ -145,12 +144,7 @@
                 }
               </select>
             </label>
-            <button
-              type="submit"
-              class="secondary"
-              [disabled]="busy()"
-              i18n="@@voices.mergeAction"
-            >
+            <button type="submit" class="secondary" i18n="@@voices.mergeAction">
               Juntar
             </button>
           </div>

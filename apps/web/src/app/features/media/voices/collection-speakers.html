@@ -1,5 +1,7 @@
 <details class="speakers">
-  <summary i18n="@@voices.speakers">Falantes do acervo ({{ count() }})</summary>
+  <summary #summary i18n="@@voices.speakers">
+    Falantes do acervo ({{ count() }})
+  </summary>
   @if (count() === 0) {
     <p class="hint" i18n="@@voices.speakersEmpty">
       Nenhum falante ainda. Digite um nome no campo de uma voz para cadastrar.
@@ -49,12 +51,7 @@
                 <p class="error" role="alert">{{ error() }}</p>
               }
               <div class="actions">
-                <button
-                  type="submit"
-                  class="primary"
-                  [disabled]="busy()"
-                  i18n="@@voices.save"
-                >
+                <button type="submit" class="primary" i18n="@@voices.save">
                   Salvar
                 </button>
                 <button
