@@ -98,7 +98,9 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
          VALUES (?, ?, 'draft', ?, ?, ?, ?)
          ON CONFLICT (media_id) DO UPDATE SET version = excluded.version,
            step = excluded.step, updated_by = excluded.updated_by,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at,
+           transcript_version = coalesce(media_edits.transcript_version,
+             excluded.transcript_version)`,
       )
       .run(
         input.mediaId,
@@ -122,12 +124,29 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
     const kept = new Set(tracks.map((track) => track.id));
     for (const id of rows.keys())
       if (!kept.has(id))
-        this.db.prepare('DELETE FROM media_draft_tracks WHERE id = ?').run(id);
+        this.db
+          .prepare(
+            'DELETE FROM media_draft_tracks WHERE id = ? AND media_id = ?',
+          )
+          .run(id, mediaId);
     for (const track of tracks) {
       const row = rows.get(track.id);
       if (!row) this.insertDraft({ mediaId, track, now });
-      else if (!sameTrack(row, track)) this.updateDraft(track);
+      else if (!sameTrack(row, track)) this.updateDraft(mediaId, track);
     }
+  }
+
+  foreignIds(mediaId: string, ids: readonly string[]): string[] {
+    const list = JSON.stringify(ids);
+    return this.db
+      .prepare(
+        `SELECT id FROM media_draft_tracks
+           WHERE media_id <> ? AND id IN (SELECT value FROM json_each(?))
+         UNION SELECT id FROM media_tracks
+           WHERE media_id <> ? AND id IN (SELECT value FROM json_each(?))`,
+      )
+      .all(mediaId, list, mediaId, list)
+      .map((row) => String(row['id']));
   }
 
   private draftRows(mediaId: string): Row[] {
@@ -160,15 +179,15 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
       );
   }
 
-  private updateDraft(track: EditTrack): void {
+  private updateDraft(mediaId: string, track: EditTrack): void {
     this.db
       .prepare(
         `UPDATE media_draft_tracks SET start_ms = ?, end_ms = ?, kind = ?, title = ?,
            asker_voice = ?, answerer_voice = ?, asker_speaker_id = ?, answerer_speaker_id = ?,
            edited = 1
-         WHERE id = ?`,
+         WHERE id = ? AND media_id = ?`,
       )
-      .run(...trackValues(track), track.id);
+      .run(...trackValues(track), track.id, mediaId);
   }
 
   approve(

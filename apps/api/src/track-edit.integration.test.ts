@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
-import { member, startMedia, type Media } from '../test/media-harness.js';
+import {
+  member,
+  readyItem,
+  startMedia,
+  type Media,
+} from '../test/media-harness.js';
 import {
   leaseTranscription,
   pair,
@@ -181,6 +186,72 @@ describe('The draft (KBC-066 FR-1)', () => {
   });
 });
 
+describe('A track id belongs to one recording (FR-1)', () => {
+  it('refuses a repeated id with 400 and keeps the draft', async () => {
+    const media = await startMedia();
+    const { item } = await transcribed(media);
+    const one = track(0, 6_000);
+    await put(ownerOf(media), item.id, { version: 0, tracks: [one] });
+    const twice = await put(ownerOf(media), item.id, {
+      version: 1,
+      tracks: [one, { ...track(6_000, 12_000), id: one.id }],
+    });
+    expect(twice.statusCode).toBe(400);
+    const read = await media.owner('GET', `/api/v1/media/${item.id}/edit`);
+    expect(read.json().version).toBe(1);
+    expect(read.json().tracks).toHaveLength(1);
+  });
+
+  it('refuses an id of another recording`s draft and leaves that draft alone', async () => {
+    const media = await startMedia();
+    const { item } = await transcribed(media);
+    const other = await readyItem(media);
+    const theirs = track(0, 6_000, 'Da outra gravação');
+    await put(ownerOf(media), other.id, { version: 0, tracks: [theirs] });
+    const refused = await put(ownerOf(media), item.id, {
+      version: 0,
+      tracks: [{ ...theirs, title: 'Tomada' }],
+    });
+    expect(refused.statusCode).toBe(400);
+    const read = await media.owner('GET', `/api/v1/media/${other.id}/edit`);
+    expect(read.json().tracks[0].title).toBe('Da outra gravação');
+  });
+
+  it('refuses an id another recording approved, even gone from its draft', async () => {
+    const media = await startMedia();
+    const { item } = await transcribed(media);
+    const other = await readyItem(media);
+    const theirs = track(0, 6_000, 'Aprovada');
+    const writer = ownerOf(media);
+    await put(writer, other.id, { version: 0, tracks: [theirs] });
+    await post(writer, { id: other.id, action: 'approve', version: 1 });
+    await post(writer, { id: other.id, action: 'reopen', version: 2 });
+    const emptied = await put(writer, other.id, {
+      version: 3,
+      tracks: [track(10_000, 16_000)],
+    });
+    expect(emptied.statusCode, emptied.body).toBe(200);
+    const refused = await put(writer, item.id, {
+      version: 0,
+      tracks: [theirs],
+    });
+    expect(refused.statusCode).toBe(400);
+  });
+
+  it('takes back a track of its own recording after an approval dropped it', async () => {
+    const media = await startMedia();
+    const { item } = await transcribed(media);
+    const one = track(0, 6_000);
+    const writer = ownerOf(media);
+    await put(writer, item.id, { version: 0, tracks: [one] });
+    await post(writer, { id: item.id, action: 'approve', version: 1 });
+    await post(writer, { id: item.id, action: 'reopen', version: 2 });
+    await put(writer, item.id, { version: 3, tracks: [] });
+    const back = await put(writer, item.id, { version: 4, tracks: [one] });
+    expect(back.statusCode, back.body).toBe(200);
+  });
+});
+
 describe('Approving (KBC-066 FR-2, BR-1)', () => {
   it('shows listeners nothing until a person approves, then only what was approved (AC-1, AC-12)', async () => {
     const media = await startMedia();
@@ -253,6 +324,35 @@ describe('Approving (KBC-066 FR-2, BR-1)', () => {
     ]);
     const read = await media.owner('GET', `/api/v1/media/${item.id}/edit`);
     expect(read.json()).toMatchObject({ status: 'draft', approvedTracks: 0 });
+  });
+
+  it('tells who is late after an approval with 412, not 409 (FR-10, AC-15)', async () => {
+    const media = await startMedia();
+    const { item } = await transcribed(media);
+    const one = track(0, 10_000);
+    const writer = ownerOf(media);
+    await put(writer, item.id, { version: 0, tracks: [one] });
+    await post(writer, { id: item.id, action: 'approve', version: 1 });
+    const late = await put(writer, item.id, { version: 1, tracks: [one] });
+    expect(late.statusCode).toBe(412);
+    const lateApproval = await post(writer, {
+      id: item.id,
+      action: 'approve',
+      version: 1,
+    });
+    expect(lateApproval.statusCode).toBe(412);
+  });
+
+  it('answers 409 with the reason to who holds the version of an approved edit', async () => {
+    const media = await startMedia();
+    const { item } = await transcribed(media);
+    const one = track(0, 10_000);
+    const writer = ownerOf(media);
+    await put(writer, item.id, { version: 0, tracks: [one] });
+    await post(writer, { id: item.id, action: 'approve', version: 1 });
+    const refused = await put(writer, item.id, { version: 2, tracks: [one] });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.details.reason).toBe('approved');
   });
 
   it('refuses an approval of no tracks', async () => {

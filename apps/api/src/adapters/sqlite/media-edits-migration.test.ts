@@ -49,6 +49,30 @@ describe('migration media-edits (KBC-066)', () => {
     ).toMatchObject({ title: 'Tema', first_segment: 1 });
   });
 
+  it('gives a draft that existed before it an edit, on its transcript (BR-10)', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA foreign_keys = ON');
+    applyMigrations(db, BEFORE);
+    seed(db);
+    db.prepare(
+      `INSERT INTO transcripts (id, media_id, version, provider, model, parameters,
+         parameters_version, terms_version, vad, speech_ratio, elapsed_ms, raw_path,
+         filter_version, confidence_version, confidence, word_count, removed_words,
+         low_words, created_at)
+       VALUES ('tr1', ?, 2, 'p', 'm', '{}', '1', 1, 'applied', 0.9, 1, 'r', 1, 1, 'normal',
+         1, 0, 0, ?)`,
+    ).run(MEDIA_ID, AT);
+    applyMigrations(db, MEDIA_MIGRATIONS);
+    expect(
+      db.prepare('SELECT * FROM media_edits WHERE media_id = ?').get(MEDIA_ID),
+    ).toMatchObject({
+      version: 1,
+      status: 'draft',
+      step: 3,
+      transcript_version: 2,
+    });
+  });
+
   it('takes waveform jobs, titles of 120 and a person`s track without segments', () => {
     const db = migrated();
     db.prepare(

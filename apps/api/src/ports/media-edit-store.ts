@@ -44,4 +44,6 @@ export interface MediaEditStorePort {
   /** Back to the draft and step 3; listeners keep the approved tracks (BR-9). */
   reopen(write: EditWrite): number | null;
   approved(mediaId: string): ApprovedTrack[];
+  /** Which of `ids` are tracks of another recording, in its draft or approved (FR-1). */
+  foreignIds(mediaId: string, ids: readonly string[]): string[];
 }

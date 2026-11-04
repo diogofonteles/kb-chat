@@ -5,6 +5,7 @@ import {
   TRACK_TITLE_MAX,
   draftTrackSchema,
   draftTrackSourceSchema,
+  proposalFailureSchema,
   proposalRunSchema,
   trackKindSchema,
   voiceSchema,
@@ -43,6 +44,8 @@ export const mediaEditSchema = z.object({
   tracks: z.array(draftTrackSchema),
   /** The newest proposal run that did not fail (KBC-067). */
   run: proposalRunSchema.nullable(),
+  /** Why the newest run failed: it stays said until a later run (KBC-067 FR-5). */
+  lastFailure: proposalFailureSchema.nullable(),
   voices: z.array(voiceSuggestionSchema),
   /** How many tracks listeners see now. */
   approvedTracks: z.number().int().nonnegative(),
@@ -71,9 +74,15 @@ export const editTrackSchema = z.strictObject({
 });
 export type EditTrack = z.output<typeof editTrackSchema>;
 
-/** PUT /api/v1/media/:id/edit, with `If-Match` (FR-1). */
+/** PUT /api/v1/media/:id/edit, with `If-Match` (FR-1). An id appears once. */
 export const saveEditRequestSchema = z.strictObject({
-  tracks: z.array(editTrackSchema).max(MAX_DRAFT_TRACKS),
+  tracks: z
+    .array(editTrackSchema)
+    .max(MAX_DRAFT_TRACKS)
+    .refine(
+      (tracks) => new Set(tracks.map(({ id }) => id)).size === tracks.length,
+      { error: 'A track id appears twice' },
+    ),
   step: editStepSchema,
 });
 export type SaveEditRequest = z.input<typeof saveEditRequestSchema>;

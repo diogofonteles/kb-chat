@@ -125,6 +125,8 @@ export type ProposalEstimate = z.infer<typeof proposalEstimateSchema>;
 export const draftTracksSchema = z.object({
   /** The run whose proposals are shown (the newest that did not fail); null before one. */
   run: proposalRunSchema.nullable(),
+  /** Why the newest run failed; null once a later one runs or ends well (FR-5). */
+  lastFailure: proposalFailureSchema.nullable(),
   tracks: z.array(draftTrackSchema),
   voices: z.array(voiceSuggestionSchema),
 });

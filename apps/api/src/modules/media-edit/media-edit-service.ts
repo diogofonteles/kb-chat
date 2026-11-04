@@ -94,7 +94,8 @@ export class MediaEditService {
 
   save(call: EditCall, request: SaveEdit): EditSaved {
     const item = this.ready(call.actor, call.mediaId);
-    this.assertEditable(call);
+    this.assertWritable(call);
+    this.assertOwnTracks(call.mediaId, request.tracks);
     this.assertOwnSpeakers(item, request.tracks);
     const problems = timingProblems(request.tracks, item.durationMs);
     if (problems.length > 0) throw invalid(problems);
@@ -111,7 +112,7 @@ export class MediaEditService {
   /** The last check and the only way to listeners (BR-1). */
   approve(call: EditCall): EditApproved {
     const item = this.ready(call.actor, call.mediaId);
-    this.assertEditable(call);
+    this.assertWritable(call);
     const { tracks } = this.deps.drafts.draft(call.mediaId);
     if (tracks.length === 0)
       throw new AppError('TRACKS_INVALID', 'There are no tracks to approve', {
@@ -164,16 +165,31 @@ export class MediaEditService {
     return item;
   }
 
-  /** A proposal is writing the draft, or an approval stands: no draft to change. */
-  private assertEditable(call: EditCall): void {
+  /**
+   * The version first: who is late hears "someone changed this" whatever happened since, and
+   * keeps their change to copy (FR-10). Then a proposal writing the draft, or an approval
+   * standing, leaves no draft to change.
+   */
+  private assertWritable(call: EditCall): void {
     const { edits, drafts } = this.deps;
-    if (edits.edit(call.mediaId)?.status === 'approved')
+    const edit = edits.edit(call.mediaId);
+    if ((edit?.version ?? 0) !== call.expectedVersion) throw stale();
+    if (edit?.status === 'approved')
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
       });
     if (drafts.draft(call.mediaId).run?.status === 'running')
       throw new AppError('MEDIA_CONFLICT', 'A proposal is running', {
         details: { reason: 'proposal-running' },
+      });
+  }
+
+  /** `media_tracks.id` is global: an id of another recording would fail on approval (FR-1). */
+  private assertOwnTracks(mediaId: string, tracks: readonly EditTrack[]): void {
+    const ids = tracks.map((track) => track.id);
+    if (this.deps.edits.foreignIds(mediaId, ids).length > 0)
+      throw new AppError('VALIDATION_FAILED', 'Unknown track', {
+        details: { field: 'track' },
       });
   }
 

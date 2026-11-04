@@ -693,6 +693,13 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         approved_at TEXT NOT NULL,
         UNIQUE (media_id, ordinal)
       ) STRICT;
+
+      -- A draft older than this table: without an edit it would read as version 0.
+      INSERT INTO media_edits (media_id, version, status, step, transcript_version, updated_at)
+        SELECT d.media_id, 1, 'draft', 3,
+          (SELECT max(t.version) FROM transcripts t WHERE t.media_id = d.media_id),
+          max(d.created_at)
+        FROM media_draft_tracks d GROUP BY d.media_id;
     `,
   },
 ];
