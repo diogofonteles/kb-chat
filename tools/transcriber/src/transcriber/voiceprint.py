@@ -79,9 +79,10 @@ class PrintHold:
                 self._arrays.extend(arrays)
         self.check()
 
-    def compare(self, profiles: Sequence["Profile"]) -> None:
-        """The prints the API sent: from now on each heartbeat names them."""
-        self.acknowledge()
+    def compare(self, profiles: Sequence["Profile"], asked_at: float) -> None:
+        """The prints the API sent when asked at `asked_at`: from now on each heartbeat names
+        them."""
+        self.acknowledge(asked_at)
         with self._lock:
             self._ids = [one.id for one in profiles]
         self.keep(*(one.embedding for one in profiles))
@@ -98,9 +99,11 @@ class PrintHold:
             self._arrays.clear()
             self._ids.clear()
 
-    def acknowledge(self) -> None:
-        """The API answered: until now, it knew of no revocation."""
-        self._acknowledged_at = time.time()
+    def acknowledge(self, sent_at: float) -> None:
+        """The API answered a request sent at `sent_at`: all it says is that no revocation had
+        reached it by then. The time of the answer would let late answers stretch the bound."""
+        with self._lock:
+            self._acknowledged_at = max(self._acknowledged_at, sent_at)
 
     def profile_ids(self) -> list[str]:
         with self._lock:
@@ -111,7 +114,8 @@ class PrintHold:
         slept counts it. Nothing held, nothing to answer for."""
         with self._lock:
             held = bool(self._arrays)
-        return time.time() - self._acknowledged_at if held else 0.0
+            acknowledged_at = self._acknowledged_at
+        return time.time() - acknowledged_at if held else 0.0
 
 
 def spans_of(raw: Iterable[Mapping]) -> list[Span]:

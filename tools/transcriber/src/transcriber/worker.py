@@ -239,10 +239,11 @@ class Worker:
         if self.embedder is None:
             return []
         try:
+            asked_at = time.time()
             profiles = self._profiles_of(job)
             if not profiles:
                 return []
-            hold.compare(profiles)
+            hold.compare(profiles, asked_at)
             return match_voices(pcm, turns, profiles, self.embedder, hold)
         except Stopped:
             log.warning("job %s: the prints were dropped: no voice comparison", job["id"])
@@ -342,6 +343,7 @@ class Worker:
 
     def _beat(self, job: dict, progress: dict, stop: _JobStop, done: threading.Event) -> None:
         while not done.wait(self.heartbeat_s):
+            sent_at = time.time()
             try:
                 revoked = self.api.heartbeat(job, progress["percent"], stop.prints.profile_ids())
             except Unauthorized:
@@ -355,7 +357,7 @@ class Worker:
                 stop.lease_lost.set()
                 stop.prints.drop()
                 return
-            stop.prints.acknowledge()
+            stop.prints.acknowledge(sent_at)
             if revoked:
                 log.warning("job %s: a voice profile was revoked: prints dropped", job["id"])
                 stop.prints.drop()

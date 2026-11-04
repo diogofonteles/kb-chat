@@ -9,7 +9,7 @@ import numpy as np
 
 from transcriber.config import SAMPLE_RATE, VOICE_PARAMETERS
 from transcriber.diarize import Separation, Turn
-from transcriber.voiceprint import EcapaEmbedder, Profile
+from transcriber.voiceprint import EcapaEmbedder, PrintHold, Profile
 
 from .conftest import JOB
 from .test_diarize import FakeDiarizer
@@ -129,6 +129,58 @@ def test_without_an_answer_from_the_api_the_prints_go_all_the_same(fake_api):
     long_voice(w, 3600.0)
     assert w.step() == "job"
     assert embedder.batches < A_FEW_BATCHES
+    assert "voiceMatches" not in fake_api.bodies("diarization")[0]
+
+
+def clock_at(monkeypatch, moment: float) -> dict:
+    now = {"t": moment}
+    monkeypatch.setattr("transcriber.voiceprint.time.time", lambda: now["t"])
+    return now
+
+
+def test_the_wait_counts_from_when_the_heartbeat_was_sent_not_answered(monkeypatch):
+    now = clock_at(monkeypatch, 1000.0)
+    hold = PrintHold()
+    hold.keep(np.ones(3))
+    now["t"] = 1030.0
+    hold.acknowledge(sent_at=1010.0)
+    assert hold.unanswered_s() == 20.0
+
+
+def test_an_older_answer_never_shortens_the_wait(monkeypatch):
+    now = clock_at(monkeypatch, 1000.0)
+    hold = PrintHold()
+    hold.keep(np.ones(3))
+    now["t"] = 1030.0
+    hold.acknowledge(sent_at=1020.0)
+    hold.acknowledge(sent_at=1010.0)
+    assert hold.unanswered_s() == 10.0
+
+
+def test_the_prints_received_count_from_when_they_were_asked_for(monkeypatch):
+    now = clock_at(monkeypatch, 1000.0)
+    hold = PrintHold()
+    now["t"] = 1030.0
+    hold.compare([Profile(PROFILE_ID, np.ones(3))], asked_at=1010.0)
+    assert hold.unanswered_s() == 20.0
+
+
+def test_answers_that_keep_arriving_late_do_not_stretch_the_bound(fake_api):
+    """Each answer is good news about the moment it was asked, not the moment it came."""
+    comparing(fake_api)
+    embedder = SlowEmbedder()
+    w = beating(fake_api, embedder, pcm_seconds=3600.0, print_ack_s=0.3)
+    long_voice(w, 3600.0)
+    real_heartbeat = w.api.heartbeat
+
+    def late(*args):
+        answer = real_heartbeat(*args)
+        time.sleep(0.2)
+        return answer
+
+    w.api.heartbeat = late
+    assert w.step() == "job"
+    assert embedder.batches < 2 * A_FEW_BATCHES
     assert "voiceMatches" not in fake_api.bodies("diarization")[0]
 
 

@@ -35,9 +35,9 @@ PARAMETERS: Final[dict] = {
 }
 
 HEARTBEAT_S: Final = 15.0
-# With no answer to a heartbeat for this long, a job drops what it holds of a voice print: it
-# cannot know of a revocation (KBC-071 BR-2). It allows one missed heartbeat, and with a
-# heartbeat every 15 s it keeps the 1 minute of the consent even with the API out of reach.
+# This long after the last answered heartbeat was sent, a job drops what it holds of a voice
+# print: it cannot know of a revocation (KBC-071 BR-2). It allows one missed heartbeat, and it
+# keeps the 1 minute of the consent with the API out of reach or answering late.
 PRINT_ACK_S: Final = 40.0
 POLL_S: Final = 30.0
 UNAUTHORIZED_BACKOFF_S: Final = 600.0
