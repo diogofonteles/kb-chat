@@ -13,6 +13,7 @@ import type {
   PreparationOptions,
   PreparationOptionsQuery,
   PreparationPlan,
+  PreparationStage,
   PreparationStep,
   PreparationTrack,
   PreparationVoice,
@@ -39,7 +40,12 @@ import type {
 import type { PlanActor, Presence } from '../media/index.js';
 import type { DurationEstimate } from '../track-proposals/index.js';
 import { isGuided, planRefusals, type PlanContext } from './plan-rules.js';
-import { nextActionOf, stagesOf } from './preparation-stages.js';
+import {
+  nextActionOf,
+  stagesOf,
+  type PaidStageNow,
+  type StageFacts,
+} from './preparation-stages.js';
 
 /** The AI's side of the plan: the proposals of KBC-067, whose rules stay theirs. */
 export interface PlanProposals {
@@ -472,7 +478,9 @@ export class PreparationService {
     const record = this.deps.plans.get(mediaId);
     const draft = this.deps.drafts.draft(mediaId);
     const speakers = this.speakersOf(mediaId);
-    const stages = record ? this.stagesFor(actor, { record, item, draft }) : [];
+    const stages = record
+      ? await this.stagesFor(actor, { record, item, draft })
+      : [];
     const open = record !== null && record.finishedAt === null;
     return {
       mediaId,
@@ -500,18 +508,43 @@ export class PreparationService {
       : null;
   }
 
-  private stagesFor(
+  /** A paid stage that failed is read again: what a click would pay changes with the world. */
+  private async stagesFor(
     actor: PlanActor,
-    input: {
-      readonly record: PreparationRecord;
-      readonly item: MediaItem;
-      readonly draft: DraftTracks;
-    },
-  ) {
+    input: StageInput,
+  ): Promise<PreparationStage[]> {
+    const facts = this.factsOf(actor, input);
+    const stages = stagesOf(facts);
+    const paidFailed = stages.some(
+      ({ stage, state }) => stage === 'tracks' && state === 'failed',
+    );
+    if (!paidFailed || !facts.canPropose) return stages;
+    const paidNow = await this.paidStageNow(actor, input.item.id);
+    return stagesOf({ ...facts, paidNow });
+  }
+
+  private async paidStageNow(
+    actor: PlanActor,
+    mediaId: string,
+  ): Promise<PaidStageNow | null> {
+    try {
+      const { estimateUsd, refusal } = await this.deps.proposals.estimate(
+        actor,
+        mediaId,
+      );
+      return { estimateUsd, allowed: refusal === null };
+    } catch (err) {
+      // No estimate now (the AI off, its price out of reach): the failure as it was stands.
+      if (!(err instanceof AppError)) this.deps.onError?.(err, mediaId);
+      return null;
+    }
+  }
+
+  private factsOf(actor: PlanActor, input: StageInput): StageFacts {
     const { record, item, draft } = input;
     const { plans, separation } = this.deps;
     const { mediaId, proposalClaimedAt } = record;
-    return stagesOf({
+    return {
       plan: record.plan,
       item,
       separation: separation.status(mediaId),
@@ -528,7 +561,8 @@ export class PreparationService {
         speakers: plans.jobsAhead(mediaId, 'diarize'),
       },
       canPropose: actor.canEdit && actor.canPropose,
-    });
+      paidNow: null,
+    };
   }
 
   /** Server state, so reloading or another device lands on the same step (BR-8). */
@@ -584,6 +618,13 @@ export class PreparationService {
       now: this.now(),
     });
   }
+}
+
+/** What a plan's stages are read from. */
+interface StageInput {
+  readonly record: PreparationRecord;
+  readonly item: MediaItem;
+  readonly draft: DraftTracks;
 }
 
 const detailsOf = ({ title, topic, author }: MediaItem) => ({

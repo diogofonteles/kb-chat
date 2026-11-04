@@ -10,10 +10,13 @@ import { startOfAppMonth } from '../../app-calendar.js';
 import { AppError } from '../../app-error.js';
 import type { LlmPort } from '../../ports/llm.js';
 import type { MediaSpendLedgerPort } from '../../ports/media-spend-ledger.js';
-import type { TrackProposalStorePort } from '../../ports/track-proposal-store.js';
+import type {
+  ResumableRun,
+  TrackProposalStorePort,
+} from '../../ports/track-proposal-store.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
 import type { MediaActor } from '../media/index.js';
-import { buildPlan, type ProposalPlan } from './proposal-plan.js';
+import { buildPlan, planFrom, type ProposalPlan } from './proposal-plan.js';
 import { WindowRunner, type RunOutcome } from './window-runner.js';
 import { toPromptSegments, type PromptSegment } from './windows.js';
 
@@ -75,6 +78,8 @@ function spokenSegments(durationMs: number): PromptSegment[] {
 interface Prepared {
   readonly plan: ProposalPlan;
   readonly llm: LlmPort;
+  /** The failed run this one goes on from, when there is one. */
+  readonly resumes: ResumableRun | null;
 }
 
 const capError = (cap: SpendCap) =>
@@ -85,7 +90,9 @@ const capError = (cap: SpendCap) =>
 /**
  * The AI's track proposals (KBC-067): an estimate first, then a run reserved against the
  * media monthly budget that writes draft tracks window by window. Nothing is applied: the
- * draft waits for a person (BR-1, KBC-066).
+ * draft waits for a person (BR-1, KBC-066). What a failed run finished stays and is not paid
+ * twice: the next run asks only the windows missing (KBC-072 BR-6). It takes a person asking,
+ * here or by "Tentar de novo"; nothing resumes by itself, a restart included.
  */
 export class ProposalService {
   private readonly now: () => Date;
@@ -106,7 +113,7 @@ export class ProposalService {
     return {
       estimateUsd: plan.estimateUsd,
       runCapUsd: this.deps.caps.runUsd,
-      windows: plan.windows.length,
+      windows: plan.windows.length - plan.fromWindow,
       model: plan.model,
       allowed: refusal === null,
       refusal,
@@ -173,7 +180,7 @@ export class ProposalService {
     readonly prepared: Prepared;
     readonly spendId: string;
   }): ProposalRun | null {
-    const { plan } = input.prepared;
+    const { plan, resumes } = input.prepared;
     try {
       return this.deps.store.startRun({
         id: randomUUID(),
@@ -185,6 +192,7 @@ export class ProposalService {
         windowsTotal: plan.windows.length,
         estimateUsd: plan.estimateUsd,
         now: this.now(),
+        resumes,
       });
     } catch (err) {
       this.closeSpend(input.spendId, { failure: 'interrupted', spentUsd: 0 });
@@ -208,6 +216,7 @@ export class ProposalService {
   /**
    * At start: runs a stopped API left running end as failed, with their reservations, and
    * any reservation left open by a crash is refunded (it keeps what it recorded as spent).
+   * Their finished windows stay; going on takes a person's click, with the value in sight.
    */
   recover(): number {
     const runs = this.deps.store.interruptRunning(this.now());
@@ -253,6 +262,7 @@ export class ProposalService {
         llm: prepared.llm,
         store: this.deps.store,
         runCapUsd: this.deps.caps.runUsd,
+        carriedUsd: prepared.resumes?.spentUsd ?? 0,
         signal: this.closing.signal,
       }).run();
       if (outcome.error !== undefined)
@@ -342,7 +352,10 @@ export class ProposalService {
       context: this.contextOf(item),
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
-    return { plan, llm };
+    const resumes = this.deps.store.resumable(mediaId, transcript.id);
+    return resumes?.windowsTotal === plan.windows.length
+      ? { plan: planFrom(plan, resumes.windowsDone), llm, resumes }
+      : { plan, llm, resumes: null };
   }
 
   private contextOf(item: MediaItem) {

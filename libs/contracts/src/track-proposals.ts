@@ -123,7 +123,10 @@ export type ProposalEstimate = z.infer<typeof proposalEstimateSchema>;
 
 /** GET /api/v1/media/{id}/edit/draft-tracks: the draft as it is now. */
 export const draftTracksSchema = z.object({
-  /** The run whose proposals are shown (the newest that did not fail); null before one. */
+  /**
+   * The run whose proposals are shown: the newest that did not fail or, with none, the newest
+   * failed one that finished windows (KBC-072 BR-6); null before one.
+   */
   run: proposalRunSchema.nullable(),
   /** Why the newest run failed; null once a later one runs or ends well (FR-5). */
   lastFailure: proposalFailureSchema.nullable(),

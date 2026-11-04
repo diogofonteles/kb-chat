@@ -904,6 +904,11 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         total INTEGER NOT NULL CHECK (total >= 1 AND total >= done),
         updated_at TEXT NOT NULL
       ) STRICT;
+
+      -- What the runs before this one spent, when it goes on from a failed one (BR-6): each
+      -- reservation pays its own part, and the run's spent_usd is the analysis as a whole.
+      ALTER TABLE media_proposal_runs
+        ADD COLUMN carried_usd REAL NOT NULL DEFAULT 0 CHECK (carried_usd >= 0);
     `,
   },
   {

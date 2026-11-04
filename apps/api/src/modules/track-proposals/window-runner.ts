@@ -42,6 +42,8 @@ export interface WindowRunnerDeps {
   readonly llm: LlmPort;
   readonly store: TrackProposalStorePort;
   readonly runCapUsd: number;
+  /** What the failed runs before this one spent: the cap holds over the whole analysis. */
+  readonly carriedUsd: number;
   /** Aborted when the API stops. */
   readonly signal: AbortSignal;
 }
@@ -67,7 +69,8 @@ const retryMessage = (answer: string, error: string): LlmMessage => ({
 
 /**
  * Runs a proposal window by window (KBC-067 FR-2, FR-3): each window is asked, read,
- * checked and written before the next, with the tracks of the window before as context.
+ * checked and written before the next, with the tracks of the window before as context. A
+ * run that goes on from a failed one starts where it stopped, from what it left (KBC-072).
  */
 export class WindowRunner {
   private spentUsd = 0;
@@ -78,13 +81,37 @@ export class WindowRunner {
 
   async run(): Promise<RunOutcome> {
     try {
-      for (const index of this.deps.plan.windows.keys())
+      const { windows, fromWindow } = this.deps.plan;
+      this.restore(fromWindow);
+      for (let index = fromWindow; index < windows.length; index++)
         await this.runWindow(index);
       return { failure: null, spentUsd: this.spentUsd };
     } catch (error) {
       const failure = this.failureOf(error);
       return { failure, spentUsd: this.spentUsd, error };
     }
+  }
+
+  /** What the run carried stands for the windows it did not ask. */
+  private restore(fromWindow: number): void {
+    if (fromWindow === 0) return;
+    const tracks = this.deps.store.runTracks(this.deps.runId);
+    const window = this.deps.plan.windows[fromWindow - 1] ?? [];
+    const firstId = window[0]?.id ?? 0;
+    const lastId = window.at(-1)?.id ?? 0;
+    this.previous = tracks.flatMap(
+      ({ firstSegment, lastSegment, kind, title }) =>
+        firstSegment !== null &&
+        lastSegment !== null &&
+        firstSegment >= firstId &&
+        firstSegment <= lastId
+          ? [{ firstSegment, lastSegment, kind, title }]
+          : [],
+    );
+    const newest = tracks.at(-1);
+    // A person's change stays theirs: a new window does not stretch it.
+    if (newest && !newest.edited && newest.lastSegment !== null)
+      this.last = { lastSegment: newest.lastSegment, startMs: newest.startMs };
   }
 
   private failureOf(error: unknown): ProposalFailure {
@@ -138,8 +165,9 @@ export class WindowRunner {
 
   /** One call, refused before it starts when it could cross the run's cap (BR-3). */
   private async call(messages: readonly LlmMessage[]): Promise<string> {
-    const { llm, plan, runCapUsd, signal } = this.deps;
-    if (this.spentUsd + callCeiling(messages, plan.price) > runCapUsd)
+    const { llm, plan, runCapUsd, carriedUsd, signal } = this.deps;
+    const ceiling = callCeiling(messages, plan.price);
+    if (carriedUsd + this.spentUsd + ceiling > runCapUsd)
       throw new ProposalStop('run-cap');
     const stream = llm.stream(messages, {
       maxTokens: MAX_OUTPUT_TOKENS,

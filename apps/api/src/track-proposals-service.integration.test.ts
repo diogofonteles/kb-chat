@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BrokenStream,
   HANG,
@@ -517,5 +517,239 @@ describe('ProposalService: round-1 review fixes (KBC-067)', () => {
   it('does not count a call that failed before writing anything', async () => {
     const ctx = setup({ replies: [new Error('HTTP 503')] });
     expect((await runToEnd(ctx)).spentUsd).toBe(0);
+  });
+});
+
+describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', () => {
+  const THREE_WINDOWS = evenSegments(130);
+  const spendRows = (ctx: Ctx) =>
+    ctx.db
+      .prepare('SELECT status, spent_usd FROM media_spend ORDER BY rowid')
+      .all()
+      .map((row) => ({ ...row }));
+  const titles = (ctx: Ctx) =>
+    ctx.service.draft(OWNER, ctx.mediaId).tracks.map(({ title }) => title);
+  const failedInTheMiddle = () =>
+    setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow(), new Error('HTTP 503')],
+    });
+  /** A run the API left running, one window written. */
+  function leftRunning(ctx: Ctx, windowsDone: number) {
+    const runId = randomUUID();
+    ctx.ledger.reserve({
+      id: 'spend-1',
+      kind: 'track-proposal',
+      mediaId: ctx.mediaId,
+      principal: 'owner',
+      usd: 0.01,
+      capUsd: 10,
+      since: new Date(0),
+      now: NOW,
+    });
+    ctx.store.startRun({
+      id: runId,
+      mediaId: ctx.mediaId,
+      transcriptId: ctx.transcriptId,
+      principal: 'owner',
+      model: 'stub/model',
+      spendId: 'spend-1',
+      windowsTotal: 3,
+      estimateUsd: 0.01,
+      now: NOW,
+    });
+    for (let window = 0; window < windowsDone; window++)
+      ctx.store.saveWindow({
+        runId,
+        extendLast: null,
+        tracks: [
+          {
+            firstSegment: window * 60 + 1,
+            lastSegment: window * 60 + 60,
+            startMs: window * 600_000,
+            endMs: (window + 1) * 600_000,
+            kind: 'talk',
+            title: `Salva ${window + 1}`,
+            askerVoice: null,
+            answererVoice: null,
+          },
+        ],
+        voices: [],
+        spentUsd: 0.001 * (window + 1),
+      });
+    return runId;
+  }
+
+  it('keeps the windows that finished when a later one fails', async () => {
+    const ctx = failedInTheMiddle();
+    const failed = await runToEnd(ctx);
+    expect(failed).toMatchObject({
+      status: 'failed',
+      failure: 'provider',
+      windowsDone: 1,
+      tracks: 1,
+      spentUsd: 0.001,
+    });
+    expect(ctx.service.draft(OWNER, ctx.mediaId)).toMatchObject({
+      run: { id: failed.id },
+      lastFailure: 'provider',
+      tracks: [{ title: 'Janela 1', source: 'ai' }],
+    });
+    expect(spendRows(ctx)).toEqual([{ status: 'refunded', spent_usd: 0.001 }]);
+  });
+
+  it('asks and charges only the missing windows on the next start', async () => {
+    const ctx = failedInTheMiddle();
+    await runToEnd(ctx);
+    const whole = ctx.llm.calls.length;
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    const done = await runToEnd(ctx);
+    expect(ctx.llm.calls).toHaveLength(whole + 2);
+    const asked = ctx.llm.calls
+      .slice(whole)
+      .map((call) => windowIds(String(call.at(-1)?.content)).first);
+    expect(asked[0]).toBeGreaterThan(1);
+    expect(done).toMatchObject({
+      status: 'done',
+      windowsDone: 3,
+      windowsTotal: 3,
+      tracks: 3,
+    });
+    expect(done.spentUsd).toBeCloseTo(0.003, 9);
+    expect(titles(ctx)).toHaveLength(3);
+    expect(titles(ctx)[0]).toBe('Janela 1');
+    expect(ctx.service.draft(OWNER, ctx.mediaId).lastFailure).toBeNull();
+    expect(monthUsed(ctx)).toBeCloseTo(0.003, 9);
+    expect(spendRows(ctx)).toEqual([
+      { status: 'refunded', spent_usd: 0.001 },
+      { status: 'settled', spent_usd: 0.002 },
+    ]);
+  });
+
+  it('estimates only what is missing', async () => {
+    const ctx = failedInTheMiddle();
+    const first = await ctx.service.estimate(OWNER, ctx.mediaId);
+    await runToEnd(ctx);
+    const rest = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(rest.estimateUsd).toBeLessThan(first.estimateUsd);
+    expect(rest.estimateUsd).toBeGreaterThan(0);
+    expect(rest.windows).toBe(2);
+    ctx.llm.replies.push(new Error('HTTP 503'));
+    const again = await runToEnd(ctx);
+    expect(again.estimateUsd).toBe(rest.estimateUsd);
+  });
+
+  it('gives a resumed window what the windows before it left', async () => {
+    const ctx = failedInTheMiddle();
+    await runToEnd(ctx);
+    ctx.llm.replies.push(wholeWindow({ continues: true }), wholeWindow());
+    const done = await runToEnd(ctx);
+    expect(String(ctx.llm.calls.at(-2)?.at(-1)?.content)).toContain('Janela 1');
+    expect(done.tracks).toBe(2);
+    const [first] = ctx.service.draft(OWNER, ctx.mediaId).tracks;
+    expect(first?.lastSegment).toBeGreaterThan(60);
+  });
+
+  it('keeps going over more than one failure, each paying its part', async () => {
+    const ctx = failedInTheMiddle();
+    await runToEnd(ctx);
+    ctx.llm.replies.push(wholeWindow(), new Error('HTTP 503'));
+    const second = await runToEnd(ctx);
+    expect(second).toMatchObject({ windowsDone: 2, tracks: 2 });
+    expect(second.spentUsd).toBeCloseTo(0.002, 9);
+    ctx.llm.replies.push(wholeWindow());
+    const done = await runToEnd(ctx);
+    expect(done).toMatchObject({ status: 'done', windowsDone: 3, tracks: 3 });
+    expect(done.spentUsd).toBeCloseTo(0.003, 9);
+    expect(ctx.llm.calls.length).toBe(5);
+  });
+
+  it('holds the run cap over the whole analysis, not each attempt', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow(), new Error('HTTP 503')],
+    });
+    ctx.llm.costPerCall = 0.2;
+    await runToEnd(ctx);
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    const second = await runToEnd(ctx);
+    expect(second).toMatchObject({
+      status: 'failed',
+      failure: 'run-cap',
+      windowsDone: 2,
+    });
+    expect(second.spentUsd).toBeCloseTo(0.4, 9);
+  });
+
+  it('starts over when the transcript changed since the failure', async () => {
+    const ctx = failedInTheMiddle();
+    await runToEnd(ctx);
+    expect(ctx.store.resumable(ctx.mediaId, randomUUID())).toBeNull();
+    expect(ctx.store.resumable(ctx.mediaId, ctx.transcriptId)).not.toBeNull();
+  });
+
+  it('leaves a finished proposal in place when a new run fails part way (KBC-067 AC-6)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Nova' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    const done = await runToEnd(ctx);
+    await runToEnd(ctx);
+    expect(ctx.service.draft(OWNER, ctx.mediaId)).toMatchObject({
+      run: { id: done.id },
+      lastFailure: 'provider',
+    });
+    expect(titles(ctx)).toEqual(['Antiga', 'Antiga', 'Antiga']);
+    ctx.llm.replies.push(wholeWindow({ title: 'Nova' }));
+    ctx.llm.replies.push(wholeWindow({ title: 'Nova' }));
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Nova', 'Nova', 'Nova']);
+    expect(ctx.llm.calls).toHaveLength(7);
+  });
+
+  it('a restart keeps the windows done and runs nothing until someone asks', async () => {
+    const ctx = setup({ segments: THREE_WINDOWS });
+    leftRunning(ctx, 1);
+    expect(ctx.service.recover()).toBe(1);
+    expect(ctx.llm.calls).toHaveLength(0);
+    expect(titles(ctx)).toEqual(['Salva 1']);
+    expect(ctx.service.draft(OWNER, ctx.mediaId).lastFailure).toBe(
+      'interrupted',
+    );
+    expect(monthUsed(ctx)).toBeCloseTo(0.001, 9);
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    const done = await runToEnd(ctx);
+    expect(ctx.llm.calls).toHaveLength(2);
+    expect(done).toMatchObject({ status: 'done', tracks: 3 });
+    expect(monthUsed(ctx)).toBeCloseTo(0.003, 9);
+  });
+
+  it('a restart after the last window ends the run as done', async () => {
+    const ctx = setup({ segments: THREE_WINDOWS });
+    const runId = leftRunning(ctx, 3);
+    ctx.service.recover();
+    expect(ctx.store.getRun(runId)).toMatchObject({
+      status: 'done',
+      failure: null,
+    });
+    expect(ctx.service.draft(OWNER, ctx.mediaId).lastFailure).toBeNull();
+    expect(spendRows(ctx)).toEqual([{ status: 'settled', spent_usd: 0.003 }]);
+  });
+
+  it('an API closing mid-run keeps the windows done', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow(), HANG],
+    });
+    await ctx.service.start(OWNER, ctx.mediaId);
+    await vi.waitFor(() => expect(ctx.llm.calls).toHaveLength(2));
+    await ctx.service.stop();
+    expect(titles(ctx)).toEqual(['Janela 1']);
   });
 });

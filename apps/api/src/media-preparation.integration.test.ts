@@ -4,6 +4,7 @@ import type {
   OpenPreparations,
   PreparationOptions,
   PreparationPlanRequest,
+  RawTranscript,
 } from '@kb-chat/contracts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -108,11 +109,16 @@ async function connected() {
   return { media, token };
 }
 
+interface Upload {
+  readonly call?: Call;
+  readonly durationMs?: number;
+}
+
 /** Sends a file with this plan and converts it. */
 async function uploaded(
   media: Media,
   plan: PreparationPlanRequest,
-  call: Call = media.owner,
+  { call = media.owner, durationMs }: Upload = {},
 ): Promise<MediaItem> {
   const created = await call(
     'POST',
@@ -124,20 +130,37 @@ async function uploaded(
   expect((await upload(media, { id: item.id, body: AUDIO })).statusCode).toBe(
     200,
   );
-  expect((await convertWithFlac(media, await leaseJob(media))).statusCode).toBe(
-    204,
+  const converted = await convertWithFlac(
+    media,
+    await leaseJob(media),
+    durationMs,
   );
+  expect(converted.statusCode).toBe(204);
   return item;
 }
 
-async function transcribe(media: Media, token: string): Promise<void> {
+const LONG_TALK_MS = 1_500_000;
+
+/** 25 minutes of speech: three of the proposal's ten-minute windows. */
+function longTalk(): RawTranscript {
+  const { chunks } = conversationRaw(
+    Array.from({ length: 50 }, (_, index) => [
+      index * 30,
+      index * 30 + 29,
+      `Fala numero ${index + 1}`,
+    ]),
+  );
+  return { chunks: chunks.map((chunk) => ({ ...chunk, end: 1_500 })) };
+}
+
+async function transcribe(
+  media: Media,
+  token: string,
+  raw: RawTranscript = conversationRaw(),
+): Promise<void> {
   const job = await leaseTranscription(media, token);
-  const sent = await sendTranscript(media, {
-    token,
-    job,
-    raw: conversationRaw(),
-  });
-  expect(sent.statusCode).toBe(204);
+  const sent = await sendTranscript(media, { token, job, raw });
+  expect(sent.statusCode, sent.body).toBe(204);
 }
 
 async function separate(media: Media, token: string): Promise<void> {
@@ -153,9 +176,24 @@ async function upToProposal(
 ): Promise<string> {
   const item = await uploaded(media, plan);
   await transcribe(media, token);
-  await read(media, item.id); // Asks for the voices.
+  return separated(media, token, item.id);
+}
+
+/** The same, over a recording of three windows. */
+async function upToLongProposal(media: Media, token: string): Promise<string> {
+  const item = await uploaded(media, AI_PLAN, { durationMs: LONG_TALK_MS });
+  await transcribe(media, token, longTalk());
+  return separated(media, token, item.id);
+}
+
+async function separated(
+  media: Media,
+  token: string,
+  id: string,
+): Promise<string> {
+  await read(media, id); // Asks for the voices.
   await separate(media, token);
-  return item.id;
+  return id;
 }
 
 async function settled(media: Media, id: string): Promise<MediaPreparation> {
@@ -546,6 +584,65 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
     await read(media, id);
     await read(media, id);
     expect(media.started.fake.chatBodies).toHaveLength(calls);
+  });
+
+  it('keeps the windows done and "Tentar de novo" pays only for the rest (AC-11)', async () => {
+    const { media, token } = await connected();
+    media.started.fake.scripted.push(oneTrack('Primeira'), { status: 503 });
+    const id = await upToLongProposal(media, token);
+    const failed = await settled(media, id);
+    expect(stage(failed, 'tracks')).toMatchObject({
+      state: 'failed',
+      failure: 'provider',
+      canRetry: true,
+      windows: { done: 1, total: 3 },
+    });
+    expect(failed.tracks.map(({ title }) => title)).toEqual(['Primeira']);
+    expect(failed.tracks[0]?.status).toBe('proposed');
+    const paid = stage(failed, 'tracks')?.spentUsd ?? 0;
+    expect(paid).toBeCloseTo(0.0012, 9);
+    const rest = stage(failed, 'tracks')?.estimateUsd ?? 0;
+    expect(rest).toBeLessThan(AI_PLAN.acceptedUsd ?? 0);
+
+    const heard = await media.owner('GET', `/api/v1/media/${id}/tracks`);
+    expect(heard.json().tracks).toEqual([]);
+    const calls = media.started.fake.chatBodies.length;
+    media.started.fake.scripted.push(oneTrack('Segunda'), oneTrack('Terceira'));
+    const pressed = await media.owner(
+      'POST',
+      `${preparation(id)}/steps/tracks/retry`,
+      {},
+    );
+    expect(pressed.statusCode).toBe(200);
+    const done = await settled(media, id);
+    expect(media.started.fake.chatBodies).toHaveLength(calls + 2);
+    expect(done.tracks.map(({ title }) => title)).toEqual([
+      'Primeira',
+      'Segunda',
+      'Terceira',
+    ]);
+    expect(stage(done, 'tracks')).toMatchObject({
+      state: 'done',
+      windows: { done: 3, total: 3 },
+    });
+    expect(stage(done, 'tracks')?.spentUsd).toBeCloseTo(0.0036, 9);
+    expect(done.next).toBe('validate');
+    const after = await media.owner('GET', `/api/v1/media/${id}/tracks`);
+    expect(after.json().tracks).toEqual([]);
+  });
+
+  it('a person takes the windows done to step 3 by hand, as proposals (AC-11)', async () => {
+    const { media, token } = await connected();
+    media.started.fake.scripted.push(oneTrack('Primeira'), { status: 503 });
+    const id = await upToLongProposal(media, token);
+    await settled(media, id);
+    await media.owner('PATCH', preparation(id), { tracks: 'manual' });
+    await media.owner('POST', `${preparation(id)}/advance`, {});
+    const edit = await media.owner('GET', `/api/v1/media/${id}/edit`);
+    expect(edit.json().tracks).toEqual([
+      expect.objectContaining({ title: 'Primeira', source: 'ai' }),
+    ]);
+    expect(edit.json().status).toBe('draft');
   });
 
   it('"Marcar as faixas eu mesmo" leaves the AI and opens step 3 (AC-11)', async () => {

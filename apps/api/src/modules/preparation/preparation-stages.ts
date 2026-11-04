@@ -34,6 +34,15 @@ export interface StageFacts {
   readonly cuts: JobCuts | null;
   readonly ahead: { readonly transcribe: number; readonly speakers: number };
   readonly canPropose: boolean;
+  /** What pressing "Tentar de novo" on the paid stage meets now; null when unknown. */
+  readonly paidNow: PaidStageNow | null;
+}
+
+/** The paid stage read again, as it stands now. */
+export interface PaidStageNow {
+  /** What is left to pay for: the windows a failed run did not finish. */
+  readonly estimateUsd: number;
+  readonly allowed: boolean;
 }
 
 const BLANK = {
@@ -139,15 +148,26 @@ const FINAL_FAILURES: ReadonlySet<StageFailure> = new Set([
   'not-connected',
 ]);
 
+/** What a failed run left: its windows stay, and so does what they cost (BR-6). */
+function leftByFailedRun({ run }: StageFacts): Partial<PreparationStage> {
+  return run?.status === 'failed'
+    ? {
+        windows: { done: run.windowsDone, total: run.windowsTotal },
+        spentUsd: run.spentUsd,
+      }
+    : {};
+}
+
 function failedTracks(
   facts: StageFacts,
   failure: StageFailure,
 ): PreparationStage {
-  const { plan, stopUsd } = facts;
+  const { plan, stopUsd, paidNow } = facts;
   return stageOf('tracks', 'failed', {
+    ...leftByFailedRun(facts),
     failure,
     canRetry: facts.canPropose && !FINAL_FAILURES.has(failure),
-    estimateUsd: stopUsd ?? plan.acceptedUsd,
+    estimateUsd: paidNow?.estimateUsd ?? stopUsd ?? plan.acceptedUsd,
   });
 }
 

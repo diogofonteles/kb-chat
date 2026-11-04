@@ -16,6 +16,7 @@ import type {
   KeptRange,
   NewProposalRun,
   ProposedTrack,
+  ResumableRun,
   TrackExtension,
   TrackProposalStorePort,
 } from '../../ports/track-proposal-store.js';
@@ -91,11 +92,21 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       )
       .get(run.mediaId);
     if (running) return null;
+    inTransaction(this.db, () => {
+      this.insertRun(run);
+      if (run.resumes) this.carryOutput(run.resumes.runId, run.id);
+    });
+    return this.getRun(run.id);
+  }
+
+  private insertRun(run: NewProposalRun): void {
+    const carriedUsd = run.resumes?.spentUsd ?? 0;
     this.db
       .prepare(
         `INSERT INTO media_proposal_runs (id, media_id, transcript_id, principal, model,
-           spend_id, status, windows_total, estimate_usd, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)`,
+           spend_id, status, windows_total, windows_done, estimate_usd, spent_usd, carried_usd,
+           created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         run.id,
@@ -105,10 +116,20 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         run.model,
         run.spendId,
         run.windowsTotal,
+        run.resumes?.windowsDone ?? 0,
         run.estimateUsd,
+        carriedUsd,
+        carriedUsd,
         run.now.toISOString(),
       );
-    return this.getRun(run.id);
+  }
+
+  /** The failed run's tracks and names become the new run's: nothing leaves the draft. */
+  private carryOutput(fromRunId: string, toRunId: string): void {
+    for (const table of ['media_draft_tracks', 'media_voice_suggestions'])
+      this.db
+        .prepare(`UPDATE ${table} SET run_id = ? WHERE run_id = ?`)
+        .run(toRunId, fromRunId);
   }
 
   getRun(runId: string): ProposalRun | null {
@@ -118,6 +139,36 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       )
       .get(runId);
     return row ? toRun(row) : null;
+  }
+
+  resumable(mediaId: string, transcriptId: string): ResumableRun | null {
+    const row = this.db
+      .prepare(
+        `SELECT r.id, r.status, r.transcript_id, r.windows_done, r.windows_total, r.spent_usd
+         FROM media_proposal_runs r WHERE r.media_id = ?
+         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1`,
+      )
+      .get(mediaId);
+    if (row?.['status'] !== 'failed' || row['transcript_id'] !== transcriptId)
+      return null;
+    const windowsDone = Number(row['windows_done']);
+    const windowsTotal = Number(row['windows_total']);
+    if (windowsDone === 0 || windowsDone >= windowsTotal) return null;
+    return {
+      runId: text(row, 'id'),
+      windowsDone,
+      windowsTotal,
+      spentUsd: Number(row['spent_usd']),
+    };
+  }
+
+  runTracks(runId: string): DraftTrack[] {
+    return this.db
+      .prepare(
+        'SELECT * FROM media_draft_tracks WHERE run_id = ? ORDER BY start_ms',
+      )
+      .all(runId)
+      .map(toTrack);
   }
 
   saveWindow(input: {
@@ -136,8 +187,8 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       this.bumpEdit(mediaId, input.runId);
       this.db
         .prepare(
-          `UPDATE media_proposal_runs SET windows_done = windows_done + 1, spent_usd = ?
-           WHERE id = ?`,
+          `UPDATE media_proposal_runs SET windows_done = windows_done + 1,
+             spent_usd = carried_usd + ? WHERE id = ?`,
         )
         .run(input.spentUsd, input.runId);
       // The reservation shows what was really spent so far (the month counts the larger).
@@ -173,12 +224,11 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     const mediaId = this.mediaOrNull(input.runId);
     if (mediaId === null) return;
     if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
-    else this.dropRunOutput(input.runId);
     this.bumpEdit(mediaId, input.runId);
     this.db
       .prepare(
-        `UPDATE media_proposal_runs SET status = ?, failure = ?, spent_usd = ?,
-           finished_at = ? WHERE id = ?`,
+        `UPDATE media_proposal_runs SET status = ?, failure = ?,
+           spent_usd = carried_usd + ?, finished_at = ? WHERE id = ?`,
       )
       .run(
         input.failure === null ? 'done' : 'failed',
@@ -226,8 +276,8 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     const runRow = this.db
       .prepare(
         `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r
-         WHERE r.media_id = ? AND r.status <> 'failed'
-         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1`,
+         WHERE r.media_id = ? AND (r.status <> 'failed' OR r.windows_done > 0)
+         ORDER BY r.status <> 'failed' DESC, r.created_at DESC, r.rowid DESC LIMIT 1`,
       )
       .get(mediaId);
     const run = runRow ? toRun(runRow) : null;
@@ -270,23 +320,21 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   interruptRunning(now: Date): InterruptedRun[] {
     const rows = this.db
       .prepare(
-        `SELECT id, spend_id, spent_usd FROM media_proposal_runs WHERE status = 'running'`,
+        `SELECT id, spend_id, spent_usd - carried_usd AS own_usd, windows_done, windows_total
+         FROM media_proposal_runs WHERE status = 'running'`,
       )
       .all();
-    const runs = rows.map((row) => ({
-      runId: text(row, 'id'),
-      spendId: text(row, 'spend_id'),
-      spentUsd: Number(row['spent_usd']),
-    }));
-    for (const run of runs)
-      this.finishRun({
-        runId: run.runId,
-        spendId: run.spendId,
-        failure: 'interrupted',
-        spentUsd: run.spentUsd,
-        now,
-      });
-    return runs;
+    return rows.map((row) => {
+      const run = {
+        runId: text(row, 'id'),
+        spendId: text(row, 'spend_id'),
+        spentUsd: Math.max(0, Number(row['own_usd'])),
+      };
+      const finished =
+        Number(row['windows_done']) >= Number(row['windows_total']);
+      this.finishRun({ ...run, failure: finished ? null : 'interrupted', now });
+      return run;
+    });
   }
 
   /**
@@ -389,16 +437,5 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
          WHERE media_id = ? AND source = 'ai' AND edited = 0 AND run_id <> ?`,
       )
       .run(mediaId, runId);
-  }
-
-  private dropRunOutput(runId: string): void {
-    this.db
-      .prepare(
-        `DELETE FROM media_draft_tracks WHERE run_id = ? AND source = 'ai' AND edited = 0`,
-      )
-      .run(runId);
-    this.db
-      .prepare('DELETE FROM media_voice_suggestions WHERE run_id = ?')
-      .run(runId);
   }
 }

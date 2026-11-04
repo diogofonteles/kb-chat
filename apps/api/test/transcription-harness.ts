@@ -87,14 +87,18 @@ export const sendTranscript = (
   });
 
 /** The VM worker converts with the transcriber's FLAC alongside (ADR 0022 §4). */
-export async function convertWithFlac(media: Media, job: WorkerJob) {
+export async function convertWithFlac(
+  media: Media,
+  job: WorkerJob,
+  durationMs = 180_000,
+) {
   writeFileSync(join(media.mediaDir, job.targetPath), CONVERTED);
   if (!job.flacTargetPath) throw new Error('the job names no FLAC path');
   writeFileSync(join(media.mediaDir, job.flacTargetPath), FLAC);
   return worker(media, `/api/v1/media-worker/jobs/${job.id}/complete`, {
     worker: 'vm',
     leaseId: job.leaseId,
-    durationMs: 180_000,
+    durationMs,
     bytes: CONVERTED.length,
     flacBytes: FLAC.length,
   });

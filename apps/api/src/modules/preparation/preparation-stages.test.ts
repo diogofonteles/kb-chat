@@ -44,6 +44,7 @@ const facts = (over: Partial<StageFacts> = {}): StageFacts => ({
   cuts: null,
   ahead: { transcribe: 0, speakers: 0 },
   canPropose: true,
+  paidNow: null,
   ...over,
 });
 
