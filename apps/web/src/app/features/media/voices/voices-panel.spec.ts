@@ -80,7 +80,10 @@ const fakeSample = () => {
   return element;
 };
 
-async function renderPanel(first: MediaSpeakers) {
+async function renderPanel(
+  first: MediaSpeakers,
+  { lists = true }: { lists?: boolean } = {},
+) {
   renames.count = 0;
   const result = await render(VoicesPanel, {
     inputs: { mediaId: MEDIA_ID, topic: 'udv' },
@@ -97,6 +100,7 @@ async function renderPanel(first: MediaSpeakers) {
   http.expectOne(URL).flush(first);
   if (first.diarization) {
     await settle();
+    if (!lists) return { ...result, http };
     flushLists(http);
   }
   await result.fixture.whenStable();
@@ -376,6 +380,32 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
     expect(renames.count).toBe(1);
   });
 
+  it('BUG-6: says the list is on its way, and stops when it arrives', async () => {
+    const { fixture, http } = await renderPanel(done(), { lists: false });
+    fireEvent.click(field(1));
+    await settle();
+    const list = within(
+      field(1).closest('app-speaker-combobox') as HTMLElement,
+    );
+    expect(list.getByRole('option', { name: 'Carregando…' })).toBeTruthy();
+    flushLists(http);
+    await fixture.whenStable();
+    expect(list.queryByRole('option', { name: 'Carregando…' })).toBeNull();
+    expect(list.getByRole('option', { name: 'Ana' })).toBeTruthy();
+  });
+
+  it('does not hold the field on "Carregando…" when a list fails', async () => {
+    const { fixture, http } = await renderPanel(done(), { lists: false });
+    http
+      .expectOne(TOPIC_SPEAKERS)
+      .flush(null, { status: 500, statusText: 'Server Error' });
+    http.expectOne(TOPIC_AUTHORS).flush({ items: [] });
+    await fixture.whenStable();
+    fireEvent.click(field(1));
+    await fixture.whenStable();
+    expect(screen.queryByRole('option', { name: 'Carregando…' })).toBeNull();
+  });
+
   it('AC-1: marks a voice as the audience', async () => {
     const { fixture, http } = await renderPanel(done());
     await choose(fixture, 2, 'Pergunta da plateia');
@@ -589,6 +619,88 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
     http.expectOne(URL).flush(done());
     await fixture.whenStable();
     expect(renames.count).toBe(1);
+  });
+
+  describe('a speaker linked to an author (BUG-7, BR-2)', () => {
+    const linked = { ...ANA, name: 'Mestre Gabriel', authorSlug: MASTER.slug };
+
+    async function editLinked() {
+      const result = await renderPanel(done(), { lists: false });
+      result.http.expectOne(TOPIC_SPEAKERS).flush({ items: [linked] });
+      result.http.expectOne(TOPIC_AUTHORS).flush({ items: [MASTER] });
+      await result.fixture.whenStable();
+      screen
+        .getByText('Falantes do acervo (1)')
+        .closest('details')
+        ?.setAttribute('open', '');
+      fireEvent.click(
+        screen.getByRole('button', { name: /^Editar\s+Mestre Gabriel$/ }),
+      );
+      await result.fixture.whenStable();
+      return result;
+    }
+
+    it("shows the author's name, not to be typed over, and says why", async () => {
+      await editLinked();
+      const name = screen.getByLabelText<HTMLInputElement>('Nome');
+      expect(name.value).toBe('Mestre Gabriel');
+      expect(name.readOnly).toBe(true);
+      expect(name.getAttribute('aria-describedby')).toBeTruthy();
+      expect(document.body.textContent).toContain('O nome vem do autor.');
+    });
+
+    it('lets the name be typed once it is no author', async () => {
+      const { fixture, http } = await editLinked();
+      fireEvent.change(screen.getByLabelText('Autor do acervo'), {
+        target: { value: '' },
+      });
+      await fixture.whenStable();
+      const name = screen.getByLabelText<HTMLInputElement>('Nome');
+      expect(name.readOnly).toBe(false);
+      fireEvent.input(name, { target: { value: 'Gabriel' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+      const patched = http.expectOne({
+        method: 'PATCH',
+        url: `${TOPIC_SPEAKERS}/${ANA.id}`,
+      });
+      expect(patched.request.body).toEqual({
+        name: 'Gabriel',
+        authorSlug: null,
+      });
+      patched.flush(ANA);
+      TestBed.tick();
+      http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
+      http.expectOne(URL).flush(done());
+      await fixture.whenStable();
+    });
+
+    it('takes the name of an author chosen in the form', async () => {
+      const { fixture, http } = await renderPanel(done());
+      openSpeakers();
+      fireEvent.click(screen.getByRole('button', { name: /^Editar\s+Ana$/ }));
+      await fixture.whenStable();
+      fireEvent.change(screen.getByLabelText('Autor do acervo'), {
+        target: { value: MASTER.slug },
+      });
+      await fixture.whenStable();
+      expect(screen.getByLabelText<HTMLInputElement>('Nome').value).toBe(
+        MASTER.name,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+      const patched = http.expectOne({
+        method: 'PATCH',
+        url: `${TOPIC_SPEAKERS}/${ANA.id}`,
+      });
+      expect(patched.request.body).toEqual({
+        name: MASTER.name,
+        authorSlug: MASTER.slug,
+      });
+      patched.flush({ ...ANA, name: MASTER.name, authorSlug: MASTER.slug });
+      TestBed.tick();
+      http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
+      http.expectOne(URL).flush(done());
+      await fixture.whenStable();
+    });
   });
 
   it('says a speaker name is taken or invalid at the form', async () => {

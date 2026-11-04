@@ -51,6 +51,12 @@ export class CollectionSpeakers {
   protected readonly error = signal('');
   private readonly busy = signal(false);
   protected readonly count = computed(() => this.speakers().length);
+  /** A speaker that is an author shows the author's name (BR-2): typing would change nothing. */
+  protected readonly authorName = computed(
+    () =>
+      this.authors().find((author) => author.slug === this.author())?.name ??
+      null,
+  );
   /** Each author at most once: the ones free, plus the one the edited speaker is. */
   protected readonly authorChoices = computed(() => {
     const editing = this.editing();
@@ -92,7 +98,9 @@ export class CollectionSpeakers {
 
   protected save(event: Event, id: string): void {
     event.preventDefault();
-    const parsed = speakerNameSchema.safeParse(this.name());
+    const parsed = speakerNameSchema.safeParse(
+      this.authorName() ?? this.name(),
+    );
     if (!parsed.success) return this.error.set(invalidName(this.nameMax));
     if (this.busy()) return;
     this.busy.set(true);

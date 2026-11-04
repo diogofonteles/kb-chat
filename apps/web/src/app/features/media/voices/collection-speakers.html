@@ -21,10 +21,25 @@
                 type="text"
                 autocomplete="off"
                 [id]="'speaker-name-' + speaker.id"
-                [value]="name()"
+                [value]="authorName() ?? name()"
+                [readOnly]="authorName() !== null"
                 [attr.aria-invalid]="error() ? 'true' : null"
+                [attr.aria-describedby]="
+                  authorName() !== null
+                    ? 'speaker-name-hint-' + speaker.id
+                    : null
+                "
                 (input)="typeName($event)"
               />
+              @if (authorName() !== null) {
+                <p
+                  class="hint"
+                  [id]="'speaker-name-hint-' + speaker.id"
+                  i18n="@@voices.nameFromAuthor"
+                >
+                  O nome vem do autor.
+                </p>
+              }
               <label
                 [for]="'speaker-author-' + speaker.id"
                 i18n="@@voices.isAuthor"
