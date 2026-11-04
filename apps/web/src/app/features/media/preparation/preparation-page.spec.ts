@@ -236,6 +236,23 @@ describe('PreparationPage (T20, step 2)', () => {
     expect(http.match(URL)).toHaveLength(0);
   });
 
+  it('keeps reading on step 3 while a stage still moves ("Vozes: Na fila")', async () => {
+    const queued = aPreparation({
+      step: 3,
+      stages: [aStage('speakers', 'queued')],
+    });
+    const { harness, http } = await open(queued);
+    expect(harness.routeNativeElement?.textContent).toContain('Na fila');
+
+    await nextRead(harness, http, {
+      ...queued,
+      stages: [aStage('speakers', 'done')],
+    });
+
+    expect(harness.routeNativeElement?.textContent).toContain('Feito');
+    expect(harness.routeNativeElement?.textContent).not.toContain('Na fila');
+  });
+
   it('says it is offline and keeps going (T20)', async () => {
     const { harness, http } = await open(RUNNING);
     for (let tick = 0; tick < 40; tick++) {

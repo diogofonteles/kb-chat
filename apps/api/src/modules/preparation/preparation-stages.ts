@@ -27,6 +27,8 @@ export interface StageFacts {
     'status' | 'progress' | 'failure' | 'canRetry' | 'transcription'
   >;
   readonly separation: DiarizationStatus;
+  /** This plan already asked for the voices. */
+  readonly speakersAsked: boolean;
   readonly hasVoices: boolean;
   /** The paid stage was taken by a person's plan or click. */
   readonly claimed: boolean;
@@ -149,6 +151,9 @@ function speakersStage(facts: StageFacts, before: Upstream): PreparationStage {
     return stageOf('speakers', 'failed', { failure: 'work', canRetry: true });
   if (facts.separation === 'diarizing') return stageOf('speakers', 'running');
   if (facts.separation === 'done') return stageOf('speakers', 'done');
+  // Asked, with no job and no result standing: nothing will ever move it from the queue.
+  if (facts.separation === 'none' && facts.speakersAsked)
+    return stageOf('speakers', 'failed', { failure: 'work', canRetry: true });
   return stageOf('speakers', 'queued', { ahead: facts.ahead.speakers });
 }
 

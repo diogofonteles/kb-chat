@@ -573,6 +573,7 @@ export class PreparationService {
       plan: record.plan,
       item,
       separation: separation.status(mediaId),
+      speakersAsked: record.speakersAskedAt !== null,
       hasVoices: this.hasVoices(mediaId),
       claimed: proposalClaimedAt !== null,
       starting: this.starting.has(mediaId),
