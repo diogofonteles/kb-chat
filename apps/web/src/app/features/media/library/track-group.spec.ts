@@ -30,10 +30,10 @@ const recording: LibraryItem = {
   tracks: [aTrack(1), aTrack(2)],
 };
 
-function setup(openByDefault = false) {
+function setup(openByDefault = false, item = recording) {
   TestBed.configureTestingModule({ providers: [provideRouter([])] });
   const fixture = TestBed.createComponent(TrackGroup);
-  fixture.componentRef.setInput('item', recording);
+  fixture.componentRef.setInput('item', item);
   fixture.componentRef.setInput('openByDefault', openByDefault);
   return fixture;
 }
@@ -61,6 +61,17 @@ describe('TrackGroup (KBC-068 FR-5)', () => {
     const fixture = setup(true);
     await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('ol')).not.toBeNull();
+  });
+
+  it('shows where the person is in each track: heard, or where to continue', async () => {
+    const heard = { ...aTrack(1), completedAt: '2026-11-01T00:00:00.000Z' };
+    const begun = { ...aTrack(2), positionMs: 20_000 };
+    const fixture = setup(true, { ...recording, tracks: [heard, begun] });
+    await fixture.whenStable();
+    const [first, second] = fixture.nativeElement.querySelectorAll('li');
+    expect(first.textContent).toContain('✓ Ouvida');
+    expect(second.textContent).toContain('Continuar de 0:20');
+    expect(second.textContent).not.toContain('Em andamento');
   });
 
   it('plays a track at once', async () => {

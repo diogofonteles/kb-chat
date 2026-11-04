@@ -35,6 +35,8 @@
           <span>{{ durationOf(track) }}</span>
           @if (resumeOf(track)) {
             <span>{{ resumeOf(track) }}</span>
+          } @else if (stateOf(track)) {
+            <span class="state">{{ stateOf(track) }}</span>
           }
         </span>
       </li>

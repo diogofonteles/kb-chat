@@ -5,6 +5,7 @@
   display: grid;
   gap: var(--space-1);
   min-width: 0;
+  container-type: inline-size;
 }
 
 .toggle {
@@ -82,6 +83,7 @@
 
 .title {
   grid-area: title;
+  min-height: 1.5rem;
   overflow: hidden;
   color: inherit;
   font-weight: 600;
@@ -100,4 +102,23 @@
   flex-wrap: wrap;
   gap: 0 var(--space-2);
   font-size: var(--text-sm);
+}
+
+.state {
+  font-weight: 600;
+}
+
+/* A card of the grid: beside ▶ the title would keep three letters. */
+@container (max-width: 18rem) {
+  .track {
+    grid-template-areas:
+      'ordinal play meta'
+      'title title title';
+    padding-inline: var(--space-1) 0;
+  }
+
+  .title {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
 }

@@ -74,7 +74,7 @@ test('AC-3, AC-2: the library shows the tracks; a track says where it comes from
   await owner.dispose();
 });
 
-test('AC-3, FR-5: in the grid, the tracks answer to the pointer', async ({
+test('AC-3, FR-5: in the grid, the tracks answer to the pointer and show their titles', async ({
   browser,
   viewport,
 }) => {
@@ -102,6 +102,10 @@ test('AC-3, FR-5: in the grid, the tracks answer to the pointer', async ({
   await expect(page).toHaveURL(/\/biblioteca/);
 
   const title = list.getByRole('link', { name: 'Segunda pergunta' });
+  const isCut = await title.evaluate(
+    (link) => link.scrollWidth > link.clientWidth,
+  );
+  expect(isCut).toBe(false);
 
   await page.getByRole('button', { name: 'Ouvir Segunda pergunta' }).click();
   await expect(

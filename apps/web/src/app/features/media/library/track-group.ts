@@ -10,7 +10,7 @@ import { RouterLink } from '@angular/router';
 import type { LibraryItem, LibraryTrack } from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
-import { percentOf, resumeTextOf } from './library-labels.js';
+import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 
 /**
  * A recording's tracks in the library (KBC-068 FR-5): "12 faixas" opens them under it. The full
@@ -48,6 +48,10 @@ export class TrackGroup {
 
   protected resumeOf(track: LibraryTrack): string {
     return resumeTextOf(track);
+  }
+
+  protected stateOf(track: LibraryTrack): string {
+    return stateTextOf(track);
   }
 
   protected percentOf(track: LibraryTrack): number {
