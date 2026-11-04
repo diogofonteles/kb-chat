@@ -135,18 +135,22 @@ export class TranscriptionService {
     });
     if (this.wouldEraseText(transcript)) return this.dropEmpty(owner);
     await files.writeFile(rawPath, rawFileOf(done));
-    const stored = transcripts.completeTranscribe({
-      owner,
-      transcript,
-      now: this.now(),
-      alongside: () => this.deps.onTranscript?.(job.mediaId),
-    });
-    if (!stored) {
+    if (!this.store(owner, transcript)) {
       await files.remove([rawPath]);
       throw leaseLost();
     }
     // ADR 0022 §4: the FLAC is made for the transcription and goes once it is stored.
     await files.remove([files.flacPath(job.mediaId)]);
+  }
+
+  /** Tracks follow in the same transaction (KBC-068). */
+  private store(owner: LeaseOwner, transcript: NewTranscript): boolean {
+    return this.deps.transcripts.completeTranscribe({
+      owner,
+      transcript,
+      now: this.now(),
+      alongside: () => this.deps.onTranscript?.(transcript.mediaId),
+    });
   }
 
   /** An empty result would take the text, the subtitles and the search hits with it. */

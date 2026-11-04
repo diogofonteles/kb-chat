@@ -101,6 +101,12 @@ const canAskAgain = (record: MediaRecord): boolean =>
   record.transcription.jobStatus !== 'queued' &&
   record.transcription.jobStatus !== 'leased';
 
+const progressOf = (progress: ItemView['progress']) => ({
+  positionMs: progress?.positionMs ?? 0,
+  completedAt: progress?.completedAt ?? null,
+  positionUpdatedAt: progress?.updatedAt ?? null,
+});
+
 /**
  * The contract view of a stored item for one person: only masters may retry (KBC-034
  * FR-7), the position is theirs (KBC-041 FR-2), and its transcription (KBC-036).
@@ -110,7 +116,7 @@ export function toMediaItem(
   isMaster: boolean,
   view: ItemView = {},
 ): MediaItem {
-  const { progress, author = null } = view;
+  const { author = null } = view;
   return {
     id: record.id,
     topic: record.topic,
@@ -125,9 +131,7 @@ export function toMediaItem(
     canRetry: isMaster && isRetryable(record),
     canEdit: view.canEdit ?? false,
     canTranscribeAgain: isMaster && canAskAgain(record),
-    positionMs: progress?.positionMs ?? 0,
-    completedAt: progress?.completedAt ?? null,
-    positionUpdatedAt: progress?.updatedAt ?? null,
+    ...progressOf(view.progress),
     transcription: toTranscription(
       record.transcription,
       view.presence ?? NO_TRANSCRIBER,
