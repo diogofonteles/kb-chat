@@ -50,6 +50,8 @@ export const CONFLICT_TEXT: Record<ConflictReason, () => string> = {
     $localize`:@@tracks.conflictApproved:Esta edição foi aprovada; recarregue para ver.`,
   'proposal-running': () =>
     $localize`:@@tracks.conflictRunning:Uma análise com IA começou nesta gravação; recarregue para acompanhar.`,
+  preparation: () =>
+    $localize`:@@tracks.conflictPreparation:Esta gravação ainda está em processamento; recarregue para acompanhar.`,
 };
 
 const NOT_DONE: Record<Exclude<SaveResult, 'saved'>, () => string> = {

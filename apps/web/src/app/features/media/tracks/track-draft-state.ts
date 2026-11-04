@@ -15,7 +15,8 @@ type Timer = ReturnType<typeof setTimeout>;
 export type SaveResult = 'saved' | 'conflict' | 'failed' | 'offline';
 
 /** Why this draft cannot be written until it is read again (FR-10). */
-export type ConflictReason = 'stale' | 'approved' | 'proposal-running';
+export type ConflictReason =
+  'stale' | 'approved' | 'proposal-running' | 'preparation';
 
 /** What a person pressed, while it runs; it is never stored for later. */
 export type DraftAction = 'approve' | 'propose';
@@ -116,12 +117,13 @@ export function problemsOf(err: unknown): readonly TrackProblem[] {
 /** A 409 says what stands in the way (`details.reason`). */
 export function conflictOf(err: unknown): ConflictReason {
   const details = detailsOf(err);
-  const running =
-    typeof details === 'object' &&
-    details !== null &&
-    'reason' in details &&
-    details.reason === 'proposal-running';
-  return running ? 'proposal-running' : 'approved';
+  const reason =
+    typeof details === 'object' && details !== null && 'reason' in details
+      ? details.reason
+      : null;
+  return reason === 'proposal-running' || reason === 'preparation'
+    ? reason
+    : 'approved';
 }
 
 /** What keeps a draft read from the server from taking changes now. */
