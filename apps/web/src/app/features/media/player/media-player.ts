@@ -215,6 +215,7 @@ export class MediaPlayer {
         ? $localize`:@@player.silences.openOn:Encurtar silêncios: ligado`
         : $localize`:@@player.silences.open:Encurtar silêncios`,
     },
+    ...this.wordHighlightOption(),
     {
       id: 'sleep',
       label: $localize`:@@player.sleep.open:Timer para dormir`,
@@ -342,8 +343,28 @@ export class MediaPlayer {
     return [{ id: 'speakers', label }];
   }
 
+  /** "Destacar palavra a palavra" (KBC-045), with a transcript to highlight. */
+  private wordHighlightOption(): readonly MenuOption[] {
+    if (!this.captionsAvailable()) return [];
+    const label = this.preferences.value().wordHighlight
+      ? $localize`:@@player.wordHighlight.on:Destacar palavra a palavra: ligado`
+      : $localize`:@@player.wordHighlight.off:Destacar palavra a palavra: desligado`;
+    return [{ id: 'word-highlight', label }];
+  }
+
+  private toggleWordHighlight(): void {
+    const on = !this.preferences.value().wordHighlight;
+    this.preferences.setWordHighlight(on);
+    this.announcer.say(
+      on
+        ? $localize`:@@player.announce.wordHighlightOn:Destaque palavra a palavra ligado`
+        : $localize`:@@player.announce.wordHighlightOff:Destaque palavra a palavra desligado`,
+    );
+  }
+
   protected chooseMore(id: string): void {
     if (id === 'link') this.copyMinuteLink();
+    if (id === 'word-highlight') this.toggleWordHighlight();
     if (id === 'speakers') this.transcriptPreferences.toggleSpeakers();
     if (id === 'shortcuts') this.shortcutsDialog().open();
     if (id === 'skips') this.skipsDialog().open();

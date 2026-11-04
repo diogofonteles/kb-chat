@@ -1,3 +1,8 @@
+import { provideHttpClient } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { MediaTranscript } from '@kb-chat/contracts';
@@ -15,6 +20,7 @@ import {
 } from '../../../testing/fake-media-element.js';
 import type { PassageFocus } from '../search-hit/passage-focus.js';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
+import { CARET_AT_POINT } from './text-caret.js';
 import {
   TRANSCRIPT_SEARCH_DEBOUNCE_MS,
   TranscriptPanel,
@@ -44,30 +50,52 @@ const transcriptOf = (
 
 /** What the search painted last, per highlight, as the texts of its ranges. */
 const painted = new Map<string, string[]>();
+/** Every paint of the spoken word, to count the writes. */
+const wordPaints: string[][] = [];
+/** Where a click lands, as the browser's caret would say (there is no layout here). */
+let caretText = '';
+let caretOffset = 0;
+
+function clickWord(text: string, offset: number): void {
+  caretText = text;
+  caretOffset = offset;
+  fireEvent.click(screen.getByText(text), { detail: 1 });
+}
 
 async function renderPanel(
   transcript = transcriptOf(),
   debounceMs = 0,
   passage: PassageFocus | null = null,
+  wordByWord = false,
 ) {
   localStorage.clear();
   painted.clear();
+  wordPaints.length = 0;
   const media: FakeMedia = fakeMediaElement();
   const view = await render(TranscriptPanel, {
-    inputs: { transcript, title: 'Palestra de 1998', passage },
+    inputs: { transcript, title: 'Palestra de 1998', passage, wordByWord },
     providers: [
       provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      {
+        provide: CARET_AT_POINT,
+        useValue: () => {
+          const node = screen.queryByText(caretText)?.firstChild;
+          return node ? { node, offset: caretOffset } : null;
+        },
+      },
       { provide: MEDIA_ELEMENT_FACTORY, useValue: () => media.element },
       { provide: ANIMATION_FRAMES, useValue: EMPTY },
       { provide: TRANSCRIPT_SEARCH_DEBOUNCE_MS, useValue: debounceMs },
       {
         provide: SEARCH_HIGHLIGHTS,
         useValue: {
-          show: (name: string, ranges: readonly Range[]) =>
-            painted.set(
-              name,
-              ranges.map((range) => range.toString()),
-            ),
+          show: (name: string, ranges: readonly Range[]) => {
+            const texts = ranges.map((range) => range.toString());
+            painted.set(name, texts);
+            if (name === 'transcript-word') wordPaints.push(texts);
+          },
           clear: (name: string) => painted.delete(name),
         },
       },
@@ -597,5 +625,211 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
       ],
     });
     expect(screen.getByText('Falante não identificado')).toBeTruthy();
+  });
+});
+
+describe('TranscriptPanel: word by word (KBC-045)', () => {
+  const LINE = 'o que está em cima';
+  const spoken = (at: number, text = LINE, segment = 0) =>
+    text.split(' ').map((word, index) => ({
+      segment,
+      startMs: at + index * 300,
+      endMs: at + index * 300 + 200,
+      text: word,
+    }));
+  const lecture = (): MediaTranscript =>
+    transcriptOf({
+      segments: [
+        { startMs: 1_000, endMs: 2_500, text: LINE },
+        { startMs: 3_000, endMs: 4_000, text: 'sem tempos aqui' },
+        { startMs: 1_000_000, endMs: 1_002_000, text: 'muito mais adiante' },
+      ],
+    });
+  /** Answers the panel's request for one page, with the transcript's version. */
+  function answerWords(
+    view: Awaited<ReturnType<typeof renderPanel>>['view'],
+    from: number,
+    words: readonly object[],
+    version = 1,
+  ) {
+    TestBed.inject(HttpTestingController)
+      .expectOne(
+        `/api/v1/media/${MEDIA}/transcript/words?from=${from}&count=100`,
+      )
+      .flush({ mediaId: MEDIA, version, words });
+    return view.fixture.whenStable();
+  }
+  const spokenWord = () => painted.get('transcript-word') ?? [];
+  const http = () => TestBed.inject(HttpTestingController);
+
+  it('marks "está" between its start and that of "em" (AC-1, BR-1)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    await at(media, 1.7, view);
+    expect(spokenWord()).toEqual(['está']);
+    await at(media, 1.899, view);
+    expect(spokenWord()).toEqual(['está']);
+    await at(media, 1.9, view);
+    expect(spokenWord()).toEqual(['em']);
+  });
+
+  it('keeps the previous word through a silence, and none before the first (BR-1)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, [
+      { segment: 0, startMs: 1_200, endMs: 1_300, text: 'o' },
+      { segment: 0, startMs: 2_000, endMs: 2_100, text: 'que' },
+    ]);
+    await at(media, 1.1, view);
+    expect(spokenWord()).toEqual([]);
+    await at(media, 1.9, view);
+    expect(spokenWord()).toEqual(['o']);
+  });
+
+  it('writes once per change of word, not per time reported (FR-2)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    await at(media, 1.0, view);
+    wordPaints.length = 0;
+    for (const second of [1.05, 1.1, 1.15, 1.2, 1.25]) {
+      await at(media, second, view);
+    }
+    expect(wordPaints).toEqual([]);
+    await at(media, 1.3, view);
+    expect(wordPaints).toEqual([['que']]);
+  });
+
+  it('leaves only the segment highlighted with the option off (AC-3)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, false);
+    http().expectNone((request) => request.url.endsWith('/transcript/words'));
+    await at(media, 1.7, view);
+    expect(spokenWord()).toEqual([]);
+    expect(current()?.textContent).toContain(LINE);
+  });
+
+  it('stops painting the word when the option is turned off (AC-3)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    await at(media, 1.7, view);
+    view.fixture.componentRef.setInput('wordByWord', false);
+    await view.fixture.whenStable();
+    expect(spokenWord()).toEqual([]);
+  });
+
+  it('highlights the whole segment when it has no word times, with no error (AC-4)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    await at(media, 3.5, view);
+    expect(spokenWord()).toEqual([]);
+    expect(current()?.textContent).toContain('sem tempos aqui');
+  });
+
+  it('falls back to the segment when the words fail to load', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    http()
+      .expectOne((request) => request.url.endsWith('/transcript/words'))
+      .flush(null, { status: 503, statusText: 'Down' });
+    await at(media, 1.7, view);
+    expect(spokenWord()).toEqual([]);
+    expect(current()?.textContent).toContain(LINE);
+  });
+
+  it('ignores words of another version of the transcript', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000), 2);
+    await at(media, 1.7, view);
+    expect(spokenWord()).toEqual([]);
+  });
+
+  it('plays from the clicked word when its words are loaded (AC-2)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    clickWord(LINE, 16);
+    expect(media.calls).toContain('seek:2.2');
+    expect(media.calls).not.toContain('seek:1');
+    expect(media.calls.at(-1)).toBe('play');
+  });
+
+  it('plays at once from the segment, then lands on the word, while its page loads (AC-2)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    clickWord('muito mais adiante', 6);
+    // Inside the gesture: Safari refuses a play() that comes after a request.
+    expect(media.calls).toContain('seek:1000');
+    expect(media.calls.at(-1)).toBe('play');
+    await answerWords(view, 0, spoken(1_000_000, 'muito mais adiante', 2));
+    expect(media.calls.at(-1)).toBe('seek:1000.3');
+  });
+
+  it('drops a pending word when the person plays something else', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    clickWord('muito mais adiante', 6);
+    const [time] = timeButtons();
+    if (time) fireEvent.click(time, { detail: 0 });
+    await answerWords(view, 0, spoken(1_000_000, 'muito mais adiante', 2));
+    expect(media.calls).not.toContain('seek:1000.3');
+  });
+
+  it('keeps the segment start when the words of a clicked segment fail', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, false);
+    clickWord('muito mais adiante', 6);
+    http()
+      .expectOne((request) => request.url.endsWith('/transcript/words'))
+      .flush(null, { status: 503, statusText: 'Down' });
+    await view.fixture.whenStable();
+    expect(media.calls.filter((call) => call.startsWith('seek:'))).toEqual([
+      'seek:1000',
+    ]);
+  });
+
+  it('still plays the clicked word with the option off (FR-3)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, false);
+    clickWord('muito mais adiante', 6);
+    await answerWords(view, 0, spoken(1_000_000, 'muito mais adiante', 2));
+    expect(media.calls).toContain('seek:1000.3');
+  });
+
+  it('goes to the start of the segment with Enter on its time (FR-3)', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    const [time] = timeButtons();
+    if (time) fireEvent.click(time, { detail: 0 });
+    expect(media.calls).toContain('seek:1');
+  });
+
+  it('goes to the start of the segment on a click on its time', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    const [time] = timeButtons();
+    caretText = LINE;
+    caretOffset = 16;
+    if (time) fireEvent.click(time, { detail: 1 });
+    expect(media.calls).toContain('seek:1');
+    expect(media.calls).not.toContain('seek:2.2');
+  });
+
+  it('adds no focusable element for the words (AC-6)', async () => {
+    const { view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    const list = document.querySelector('ol');
+    expect(list?.querySelectorAll('button')).toHaveLength(3);
+    expect(document.querySelectorAll('.text *')).toHaveLength(0);
+  });
+
+  it('asks for the next page near the end of this one, and only then', async () => {
+    const segments = Array.from({ length: 150 }, (_, i) => ({
+      startMs: i * 1_000,
+      endMs: i * 1_000 + 900,
+      text: `trecho ${i}`,
+    }));
+    const { media, view } = await renderPanel(
+      transcriptOf({ segments }),
+      0,
+      null,
+      true,
+    );
+    await answerWords(view, 0, []);
+    await at(media, 94.5, view);
+    http().expectNone((request) => request.url.endsWith('/transcript/words'));
+    await at(media, 95.5, view);
+    await answerWords(view, 100, []);
   });
 });

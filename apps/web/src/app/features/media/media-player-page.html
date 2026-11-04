@@ -187,6 +187,7 @@
           [transcript]="transcript.value()"
           [title]="current.title"
           [showSpeakers]="speakersOn()"
+          [wordByWord]="wordHighlight()"
         />
       } @else if (transcriptError()) {
         <div class="notice" role="alert">

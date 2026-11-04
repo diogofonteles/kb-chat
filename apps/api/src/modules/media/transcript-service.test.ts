@@ -51,7 +51,7 @@ function fakeStore(ids: readonly string[]) {
   };
   const store: Pick<
     TranscriptStorePort,
-    'transcripts' | 'segments' | 'words' | 'termVersion'
+    'transcripts' | 'segments' | 'words' | 'wordsOfSegments' | 'termVersion'
   > = {
     transcripts: (mediaId) =>
       ids.includes(mediaId) ? [summaryOf(mediaId, 1)] : [],
@@ -61,6 +61,7 @@ function fakeStore(ids: readonly string[]) {
       reads.words++;
       return [word];
     },
+    wordsOfSegments: () => [word],
   };
   return { store, reads };
 }

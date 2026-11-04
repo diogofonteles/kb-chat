@@ -8,6 +8,7 @@ export * from './sleep-timer.js';
 export * from './bookmarks.js';
 export * from './silence-skip.js';
 export * from './cues.js';
+export * from './spoken-words.js';
 export * from './transcript-search.js';
 export * from './minute-link.js';
 export * from './track-editing.js';

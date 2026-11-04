@@ -20,6 +20,7 @@ const DEFAULTS: MediaPreferences = {
   skipBackSec: 15,
   skipForwardSec: 30,
   skipSilences: false,
+  wordHighlight: true,
 };
 
 export type SkipBackSeconds = (typeof MEDIA_SKIP_BACK_SECONDS)[number];
@@ -91,6 +92,11 @@ export class ListeningPreferences {
   /** "Encurtar silêncios" (KBC-044), for every media and device (BR-2: off by default). */
   setSkipSilences(skipSilences: boolean): void {
     this.save({ ...this.current(), skipSilences });
+  }
+
+  /** "Destacar palavra a palavra" (KBC-045), for every media and device: starts on. */
+  setWordHighlight(wordHighlight: boolean): void {
+    this.save({ ...this.current(), wordHighlight });
   }
 
   toggleShowRemaining(): void {

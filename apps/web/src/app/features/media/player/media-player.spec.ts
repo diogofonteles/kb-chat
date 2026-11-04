@@ -56,6 +56,7 @@ async function renderPlayer(
     skipBackSec: 15,
     skipForwardSec: 30,
     skipSilences: false,
+    wordHighlight: true,
   });
   prepare(media, engine);
   await view.fixture.whenStable();
@@ -267,6 +268,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(
       screen.getByRole('button', { name: 'Velocidade: 1,5 vezes' }).textContent,
@@ -285,6 +287,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(screen.getByRole('button', { name: /Duração total/ })).toBeTruthy();
   });

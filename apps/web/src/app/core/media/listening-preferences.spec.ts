@@ -47,6 +47,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(preferences.value()).toEqual({
       speed: 1.25,
@@ -54,6 +55,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(engine.speed()).toBe(1.25);
   });
@@ -69,6 +71,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     put.flush({
       speed: 1.5,
@@ -76,6 +79,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
   });
 
@@ -101,6 +105,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
   });
 
@@ -133,6 +138,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     expect(preferences.value().speed).toBe(2);
     expect(engine.speed()).toBe(2);
@@ -150,6 +156,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     const second = http.expectOne({ method: 'PUT', url: PREFERENCES_URL });
     expect(second.request.body).toEqual({
@@ -158,6 +165,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 15,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
   });
 
@@ -172,6 +180,7 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
       skipBackSec: 5,
       skipForwardSec: 30,
       skipSilences: false,
+      wordHighlight: true,
     });
     put.flush(put.request.body);
     preferences.setSkipForward(45);
