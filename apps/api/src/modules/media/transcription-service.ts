@@ -98,7 +98,8 @@ export class TranscriptionService {
   private async audioOf(mediaId: string): Promise<PlayableFile> {
     const { files, store } = this.deps;
     const flac = await files.stat(files.flacPath(mediaId));
-    if (flac) return { path: files.flacPath(mediaId), mime: FLAC_MIME, ...flac };
+    if (flac)
+      return { path: files.flacPath(mediaId), mime: FLAC_MIME, ...flac };
     const rendition = store.getRendition(mediaId);
     const file = rendition ? await files.stat(rendition.path) : null;
     if (!rendition || !file) throw notYours();

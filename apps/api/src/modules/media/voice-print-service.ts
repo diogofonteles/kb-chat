@@ -3,7 +3,7 @@ import {
   similarityLevelOf,
   type CompleteVoicePrintRequest,
   type VoiceProfileJob,
-  type VoiceSuggestion,
+  type VoiceProfileSuggestion,
   type WorkerVoiceProfiles,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -161,7 +161,7 @@ export class VoicePrintService {
     readonly media: MediaRecord;
     readonly diarizationId: string;
     readonly voices: readonly number[];
-  }): VoiceSuggestion[] {
+  }): VoiceProfileSuggestion[] {
     const collection = this.deps.rootOf(input.media.topic);
     return this.deps.profiles
       .pendingSuggestions(input.diarizationId)
