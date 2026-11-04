@@ -34,7 +34,10 @@ interface TermRow {
   readonly text: string;
 }
 
-type Notice = { readonly kind: 'ok' | 'error'; readonly text: string };
+interface Notice {
+  readonly kind: 'ok' | 'error';
+  readonly text: string;
+}
 
 const MEASURE_DEBOUNCE_MS = 300;
 

@@ -671,6 +671,22 @@ async function registerLibrary(
   await app.register(libraryRoutes(service));
 }
 
+/** "Transcritores" and "Termos da transcrição": what masters set up for the Mac. */
+async function registerTranscribers(
+  app: FastifyInstance,
+  input: {
+    transcribers: TranscriberService;
+    media: MediaService;
+    wiring: MediaWiring;
+  },
+) {
+  const { transcribers, media, wiring } = input;
+  await app.register(transcriberRoutes({ transcribers, media }));
+  await app.register(
+    termRoutes(new TermListService({ transcripts: wiring.media.transcripts })),
+  );
+}
+
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const { workerToken, createPerMinute } = wiring.media;
@@ -681,10 +697,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   });
   const media = mediaService({ ...wiring, transcribers });
   await app.register(mediaRoutes(media, mediaEditor(wiring), createPerMinute));
-  await app.register(transcriberRoutes({ transcribers, media }));
-  await app.register(
-    termRoutes(new TermListService({ transcripts: wiring.media.transcripts })),
-  );
+  await registerTranscribers(app, { transcribers, media, wiring });
   await registerListening(app, wiring, { media, transcribers });
   const { silences, waveforms } = await registerMeasures(app, {
     deps: wiring.media,
