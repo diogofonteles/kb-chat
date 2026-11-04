@@ -55,9 +55,8 @@
       @for (paragraph of paragraphs(); track paragraph; let first = $first) {
         <p [class.consent-lead]="first">{{ paragraph }}</p>
       }
-      <p class="consent-note" i18n="@@voiceConsent.legalNote">
-        Texto padrão, ainda sem revisão jurídica. Colha a assinatura neste
-        texto, com o nome da pessoa, a data e o local.
+      <p class="consent-note" i18n="@@voiceConsent.signatureNote">
+        Colha a assinatura neste texto, com o nome da pessoa, a data e o local.
       </p>
       <button type="button" class="secondary" (click)="copyText()">
         @if (copied()) {

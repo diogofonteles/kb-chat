@@ -47,7 +47,7 @@ function recalculateErrorOf(err: unknown): string {
 }
 
 /**
- * "Perfis de voz" (KBC-071, ADR 0032): for a master granted it by name. The profiles of a
+ * "Perfis de voz" (KBC-071, ADR 0032): for a master. The profiles of a
  * top-level collection, the form that asks for the consent first, revoking, and the owner's
  * report. Nothing on this screen ever holds a voice print (BR-5).
  */

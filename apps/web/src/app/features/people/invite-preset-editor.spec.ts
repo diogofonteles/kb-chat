@@ -180,6 +180,22 @@ const last = (changed: ReturnType<typeof vi.fn>): InvitationPreset =>
   changed.mock.lastCall?.[0] as InvitationPreset;
 
 describe('InvitePresetEditor (KBC-028 AC-2)', () => {
+  it('offers voice profiles to no member (ADR 0032)', async () => {
+    await renderEditor();
+    expect(
+      screen.queryByRole('checkbox', { name: 'Cadastrar perfis de voz' }),
+    ).toBeNull();
+  });
+
+  it('shows voice profiles on a master preset, with the role (ADR 0032)', async () => {
+    await renderEditor({ ...plainPreset(), role: 'master' });
+    const box = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: 'Cadastrar perfis de voz',
+    });
+    expect(box.checked).toBe(true);
+    expect(box.matches(':disabled')).toBe(true);
+  });
+
   it('starts as the plain invitation and sends the whole preset up', async () => {
     const { changed } = await renderEditor();
     const collections = screen.getByRole('group', { name: 'Acervos' });

@@ -1,8 +1,8 @@
 import type { Feature, InvitationPreset } from '@kb-chat/contracts';
 import {
   DEFAULT_INVITE_FEATURES,
-  MASTER_FEATURES,
-  MASTER_GRANT_ONLY_FEATURES,
+  GRANTABLE_FEATURES,
+  MASTER_ONLY_FEATURES,
   type Invitation,
   type PersonUpdate,
 } from '@kb-chat/contracts';
@@ -51,7 +51,7 @@ export function ensureOwner(
     picture: null,
     role: 'master',
     topics: [],
-    features: [...MASTER_FEATURES],
+    features: [...GRANTABLE_FEATURES],
     invitedBy: 'KB_CHAT_OWNER_EMAIL',
     createdAt: now,
     lastLoginAt: null,
@@ -203,7 +203,6 @@ export function update(
     role,
     topics: patch.topics ? unique(patch.topics) : target.topics,
     features: heldFeatures(
-      role,
       patch.features ? unique(patch.features) : target.features,
     ),
     ...(patch.ai && {
@@ -220,16 +219,9 @@ export function update(
 const quotaChangeOf = ({ mediaQuotaBytes }: PersonUpdate) =>
   mediaQuotaBytes === undefined ? {} : { mediaQuotaBytes };
 
-/** A grant by name holds for a master only: kept off a member, it cannot wake on a promotion. */
-const heldFeatures = (
-  role: StoredPerson['role'],
-  features: readonly Feature[],
-): Feature[] =>
-  role === 'master' ? [...features] : features.filter(notGrantedByName);
-
-/** A preset never gives what must be granted to one master by name (ADR 0032). */
-const notGrantedByName = (feature: Feature): boolean =>
-  !MASTER_GRANT_ONLY_FEATURES.includes(feature);
+/** A master's own features come with the role, so no list keeps them (ADR 0032). */
+const heldFeatures = (features: readonly Feature[]): Feature[] =>
+  features.filter((feature) => !MASTER_ONLY_FEATURES.includes(feature));
 
 /** What applying a preset changes (KBC-028): access and AI, and maybe the first preferences. */
 export interface PresetChange {
@@ -254,7 +246,7 @@ export function applyPreset(
       patch: {
         role: preset.role,
         topics: preset.topics,
-        features: preset.features.filter(notGrantedByName),
+        features: preset.features,
         ai: preset.ai,
       },
       context: change.context,

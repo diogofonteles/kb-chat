@@ -547,20 +547,21 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
   });
 });
 
-describe('PeoplePanel: voice profiles need a grant by name (ADR 0032)', () => {
+describe('PeoplePanel: voice profiles come with the master role (ADR 0032)', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   const VOICE = 'Cadastrar perfis de voz';
 
-  it('never comes on with the master role: the box starts off and can be changed', async () => {
+  it('shows a master with it, like the other features, and nothing to grant', async () => {
     const { fixture } = await renderPanel([
       aPerson({ role: 'master', features: [] }),
     ]);
     fireEvent.click(row(/Guest/));
     await fixture.whenStable();
     const box = screen.getByRole<HTMLInputElement>('checkbox', { name: VOICE });
-    expect(box.checked).toBe(false);
-    expect(box.disabled).toBe(false);
+    expect(box.checked).toBe(true);
+    expect(box.matches(':disabled')).toBe(true);
+    expect(screen.queryByText('Só com autorização individual')).toBeNull();
   });
 
   it('is not offered to a member', async () => {
