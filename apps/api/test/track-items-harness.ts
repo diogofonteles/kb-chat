@@ -45,6 +45,7 @@ export interface Bounds {
   readonly endMs: number;
   readonly title?: string;
   readonly answererSpeakerId?: string | null;
+  readonly answererVoice?: number | null;
 }
 
 const TEN_MINUTES_MS = 600_000;
@@ -180,7 +181,7 @@ const draftOf = (tracks: readonly Bounds[]) =>
     startMs: track.startMs,
     endMs: track.endMs,
     askerVoice: null,
-    answererVoice: null,
+    answererVoice: track.answererVoice ?? null,
     askerSpeakerId: null,
     answererSpeakerId: track.answererSpeakerId ?? null,
   }));

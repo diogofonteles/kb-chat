@@ -634,6 +634,42 @@ describe('A track follows its recording (KBC-068)', () => {
     );
   });
 
+  it('AC-1: a voice no separation names leaves the track by the recording', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await transcribed(world, SPEECH);
+    await approve(media, recording.id, [
+      { startMs: 0, endMs: 60_000, answererVoice: 2 },
+    ]);
+    await finishCuts(media);
+    const entry = await libraryEntry(media.owner, recording.id);
+    expect(entry?.tracks[0]?.author?.slug).toBe(
+      (await media.owner('GET', urlOf(recording.id))).json().author?.slug,
+    );
+  });
+
+  it('BR-2: a recording moved while its first cuts are on their way publishes them by the new author', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await transcribed(world, SPEECH);
+    await approve(media, recording.id, THREE);
+    await media.owner('POST', '/api/v1/topics/udv/authors', {
+      name: 'Autor Novo',
+    });
+    const moved = await media.owner('PATCH', urlOf(recording.id), {
+      topic: 'udv',
+      author: 'autor-novo',
+    });
+    expect(moved.statusCode, moved.body).toBe(200);
+    expect(await finishCuts(media)).toBe(3);
+    const entry = await libraryEntry(media.owner, recording.id);
+    expect(entry?.tracks.map((one) => one.author?.slug)).toEqual([
+      'autor-novo',
+      'autor-novo',
+      'autor-novo',
+    ]);
+  });
+
   it('refuses on a track what only a recording does', async () => {
     const world = await startWorld();
     const { media } = world;
