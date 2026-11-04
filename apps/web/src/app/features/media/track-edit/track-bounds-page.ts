@@ -28,7 +28,11 @@ import {
   type TrackNeighbour,
 } from '@kb-chat/contracts';
 import { NUDGE_MS, snapPointsOf, type TrackEdge } from '@kb-chat/player-core';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import {
+  errorDetailsOf,
+  errorMessage,
+  toUiErrorCode,
+} from '@core/api/api-error.js';
 import { mediaStreamUrl, mediaUrl } from '@core/media/media-api.js';
 import { editWordsUrl, mediaWaveformUrl } from '@core/media/media-edit-api.js';
 import {
@@ -38,11 +42,13 @@ import {
 import {
   EMPTY,
   distinctUntilChanged,
+  filter,
   interval,
   map,
   switchMap,
   type Observable,
 } from 'rxjs';
+import { z } from 'zod';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import {
   TrackAudition,
@@ -56,6 +62,19 @@ import {
 } from '../tracks/track-timeline.js';
 import { formatBoundary } from '../tracks/track-labels.js';
 import { decodePeaks } from '../tracks/waveform-canvas.js';
+
+/** Bounds the person moved, and the version they moved them from (BR-10). */
+interface Adjustment {
+  readonly bounds: TrackBoundsRequest;
+  readonly version: number;
+}
+
+const cutRunningSchema = z.object({ reason: z.literal('cut-running') });
+
+/** Refused because the version on screen is old, or a cut on the way changed it already. */
+const isConflict = (err: unknown): boolean =>
+  (err instanceof HttpErrorResponse && err.status === 412) ||
+  cutRunningSchema.safeParse(errorDetailsOf(err)).success;
 
 /** The neighbours are blocks of the bar: `DraftTrack` is the shape it draws. */
 const toDraft = (track: TrackNeighbour): DraftTrack => ({
@@ -153,13 +172,18 @@ export class TrackBoundsPage {
   protected readonly peaksPerSecond = computed(() =>
     this.waveform.hasValue() ? this.waveform.value().peaksPerSecond : 10,
   );
-  /** What the person moved: nothing read from the server takes it back (BR-10). */
-  private readonly adjusted = signal<TrackBoundsRequest | null>(null);
+  /**
+   * What the person moved: nothing read from the server takes it back, and a save names the
+   * version it came from, so a reload can never turn it into a save over someone else's (BR-10).
+   */
+  private readonly adjusted = signal<Adjustment | null>(null);
   /** The bounds on screen, from the track's until a handle moves them. */
   protected readonly bounds = computed((): TrackBoundsRequest | null => {
     const track = this.current();
     if (!track) return null;
-    return this.adjusted() ?? { startMs: track.startMs, endMs: track.endMs };
+    return (
+      this.adjusted()?.bounds ?? { startMs: track.startMs, endMs: track.endMs }
+    );
   });
   protected readonly numbered = computed(() => {
     const track = this.current();
@@ -185,6 +209,10 @@ export class TrackBoundsPage {
     const theirs = this.conflict();
     return theirs ? timesOf(theirs) : '';
   });
+  /** Nothing can go over a cut on its way: the choice opens when it lands. */
+  protected readonly theirCutRunning = computed(
+    () => this.conflict()?.cut === 'running',
+  );
   protected readonly cutting = computed(
     () => this.current()?.cut === 'running' || this.sending(),
   );
@@ -215,13 +243,17 @@ export class TrackBoundsPage {
       if (element) this.audition.attach(element);
       onCleanup(() => this.audition.stop());
     });
-    toObservable(computed(() => this.current()?.cut === 'running'))
+    toObservable(
+      computed(
+        () => this.current()?.cut === 'running' || this.theirCutRunning(),
+      ),
+    )
       .pipe(
         distinctUntilChanged(),
         switchMap((on) => (on ? interval(this.pollMs) : EMPTY)),
         takeUntilDestroyed(),
       )
-      .subscribe(() => this.view.reload());
+      .subscribe(() => this.refresh());
   }
 
   /** Only this track's handles exist here: a neighbour is a limit, not a choice. */
@@ -230,13 +262,14 @@ export class TrackBoundsPage {
   }
 
   protected moveHandle({ edge, ms }: HandleMoved): void {
+    const track = this.current();
     const bounds = this.bounds();
-    if (!bounds) return;
+    if (!track || !bounds) return;
     this.saved.set(false);
-    this.adjusted.set({
-      ...bounds,
-      [edge === 'start' ? 'startMs' : 'endMs']: ms,
-    });
+    this.adjusted.update((mine) => ({
+      version: mine?.version ?? track.version,
+      bounds: { ...bounds, [edge === 'start' ? 'startMs' : 'endMs']: ms },
+    }));
   }
 
   protected nudge(direction: 1 | -1): void {
@@ -262,7 +295,8 @@ export class TrackBoundsPage {
     const track = this.current();
     const bounds = this.bounds();
     if (!track || !bounds) return;
-    this.send(this.api.moveBounds(track, bounds));
+    const version = this.adjusted()?.version ?? track.version;
+    this.send(this.api.moveBounds({ mediaId: track.mediaId, version }, bounds));
   }
 
   protected retryCut(): void {
@@ -277,6 +311,9 @@ export class TrackBoundsPage {
 
   protected saveOver(theirs: TrackEditView): void {
     this.adopt(theirs);
+    this.adjusted.update(
+      (mine) => mine && { ...mine, version: theirs.version },
+    );
     this.save();
   }
 
@@ -301,18 +338,33 @@ export class TrackBoundsPage {
 
   private refused(err: unknown): void {
     this.sending.set(false);
-    if (err instanceof HttpErrorResponse && err.status === 412) {
-      this.api
-        .view(this.id())
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: (theirs) => this.conflict.set(theirs),
-          error: (read: unknown) => this.fail(read),
-        });
+    if (isConflict(err)) {
+      this.readTheirs().subscribe({
+        next: (theirs) => this.conflict.set(theirs),
+        error: (read: unknown) => this.fail(read),
+      });
       return;
     }
     this.fail(err);
     this.view.reload();
+  }
+
+  private readTheirs(): Observable<TrackEditView> {
+    return this.api.view(this.id()).pipe(takeUntilDestroyed(this.destroyRef));
+  }
+
+  /** The screen follows a cut; during a conflict that cut is hers, and the panel follows it. */
+  private refresh(): void {
+    if (!this.conflict()) {
+      this.view.reload();
+      return;
+    }
+    this.readTheirs()
+      .pipe(filter(() => this.conflict() !== null))
+      .subscribe({
+        next: (theirs) => this.conflict.set(theirs),
+        error: (read: unknown) => this.fail(read),
+      });
   }
 
   private fail(err: unknown): void {

@@ -17,6 +17,7 @@ import { approve, audioWithTracks } from './tracks-helpers.js';
 interface View {
   readonly version: number;
   readonly cut: string;
+  readonly endMs: number;
   readonly topic: string;
 }
 
@@ -257,6 +258,65 @@ test("BR-10: the editor of bounds keeps the adjustment against another person's 
     page.getByRole('status').filter({ hasText: 'Pronto' }),
   ).toBeVisible({ timeout: 30_000 });
   await expect(alert).toHaveCount(0);
+  await expect(times).toHaveText(adjusted ?? '');
+  await owner.dispose();
+});
+
+test('BR-10: while her cut runs the editor shows her bounds, and the choice opens when it lands', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  const editor = `**/api/v1/media/${first.id}/track-edit`;
+  await page.goto(`${trackPage(first.id)}/limites`);
+  const times = page.getByRole('paragraph').filter({ hasText: /^Início/ });
+  await page.getByRole('button', { name: 'Mais 0,5 segundo' }).click();
+  await expect(times).toContainText('0:00,5');
+  const adjusted = await times.textContent();
+
+  const { version, endMs } = await viewOf(owner, first.id);
+  const hers = await owner.put(`/api/v1/media/${first.id}/bounds`, {
+    headers: { ...CSRF, 'if-match': `"${version}"` },
+    data: { startMs: 2_000, endMs },
+  });
+  expect(hers.status()).toBe(202);
+  // The worker cuts faster than a person clicks: the window is held open at the route.
+  await page.route(`**/api/v1/media/${first.id}/bounds`, (route) =>
+    route.fulfill({
+      status: 409,
+      json: {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'A cut of this track is on its way',
+          details: { reason: 'cut-running' },
+        },
+      },
+    }),
+  );
+  await page.route(editor, async (route) => {
+    const answer = await route.fetch();
+    await route.fulfill({
+      response: answer,
+      json: { ...(await answer.json()), cut: 'running' },
+    });
+  });
+  await page.getByRole('button', { name: 'Salvar limites' }).click();
+
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Outra pessoa mudou esta faixa');
+  await expect(alert).toContainText('Limites dela: Início 0:02,0');
+  await expect(times).toHaveText(adjusted ?? '');
+  const saveMine = page.getByRole('button', { name: 'Salvar o meu por cima' });
+  await expect(saveMine).toBeDisabled();
+
+  await waitForCut(owner, first.id);
+  await page.unrouteAll({ behavior: 'wait' });
+
+  await expect(saveMine).toBeEnabled({ timeout: 10_000 });
+  await saveMine.click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Pronto' }),
+  ).toBeVisible({ timeout: 30_000 });
   await expect(times).toHaveText(adjusted ?? '');
   await owner.dispose();
 });

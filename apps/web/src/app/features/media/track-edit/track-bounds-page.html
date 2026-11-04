@@ -111,6 +111,12 @@
         <p class="note" i18n="@@trackEdit.conflict.yourBounds">
           O seu ajuste continua na barra.
         </p>
+        @if (theirCutRunning()) {
+          <p class="note" i18n="@@trackEdit.conflict.theirCut">
+            O recorte dela ainda está em andamento. Salvar o seu por cima fica
+            possível quando ele terminar.
+          </p>
+        }
         <div class="line-actions">
           <button
             type="button"
@@ -123,6 +129,7 @@
           <button
             type="button"
             class="primary"
+            [disabled]="theirCutRunning()"
             (click)="saveOver(theirs)"
             i18n="@@trackEdit.conflict.saveMine"
           >
