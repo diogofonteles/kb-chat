@@ -1,12 +1,24 @@
 import type {
   MediaPreparation,
   PreparationStage,
+  PreparationStep,
   StageState,
 } from '@kb-chat/contracts';
 import { STAGE_NAMES, failureText } from './preparation-labels.js';
+import { stepTitle } from './preparation-steps.js';
 
 /** At most one sentence of new tracks in this long (BR-9). */
 export const TRACKS_ANNOUNCE_MS = 15_000;
+
+const MOVING: ReadonlySet<StageState> = new Set([
+  'waiting',
+  'queued',
+  'running',
+]);
+
+/** Something is still to come: another read follows this one. */
+export const hasMovingStage = (stages: readonly PreparationStage[]): boolean =>
+  stages.some(({ state }) => MOVING.has(state));
 
 const stageSentence = (stage: PreparationStage): string | null => {
   const name = STAGE_NAMES[stage.stage]();
@@ -25,12 +37,14 @@ const tracksSentence = (fresh: number, total: number): string =>
     : $localize`:@@prep.say.tracks:${fresh}:fresh: faixas novas; ${total}:total: até agora.`;
 
 /**
- * What the screen reader hears on step 2 (BR-9): a sentence when a stage starts, ends or
- * fails, and at most one about new tracks each 15 s; never the percentages. The first read
- * only sets where things stand.
+ * What the screen reader hears on step 2 (BR-9): a sentence when the step changes or a stage
+ * starts, ends or fails, and at most one about new tracks each 15 s; never the percentages.
+ * The first read only sets where things stand, and the last says the tracks still unsaid,
+ * since no read comes after it.
  */
 export class PreparationAnnouncer {
   private states: ReadonlyMap<string, StageState> | null = null;
+  private step: PreparationStep | null = null;
   private tracks = 0;
   private tracksSaidAt = Number.NEGATIVE_INFINITY;
 
@@ -38,26 +52,30 @@ export class PreparationAnnouncer {
 
   /** The sentence this new reading deserves; empty when it deserves none. */
   observe(preparation: MediaPreparation): string {
-    const { stages, tracks } = preparation;
+    const { stages, tracks, step } = preparation;
     const before = this.states;
+    const stepBefore = this.step;
     this.states = new Map(stages.map((one) => [one.stage, one.state]));
-    if (!before) {
+    this.step = step;
+    if (!before || step !== stepBefore) {
       this.tracks = tracks.length;
-      return '';
+      return before ? stepTitle(step) : '';
     }
     const changes = stages
       .filter((one) => before.get(one.stage) !== one.state)
       .map(stageSentence)
       .filter((sentence) => sentence !== null);
-    return [...changes, this.newTracks(tracks.length)]
+    const last = !hasMovingStage(stages);
+    return [...changes, this.newTracks(tracks.length, last)]
       .filter((sentence) => sentence !== '')
       .join(' ');
   }
 
-  private newTracks(total: number): string {
+  private newTracks(total: number, last: boolean): string {
     const fresh = total - this.tracks;
     const now = this.clock();
-    if (fresh <= 0 || now - this.tracksSaidAt < TRACKS_ANNOUNCE_MS) return '';
+    const tooSoon = now - this.tracksSaidAt < TRACKS_ANNOUNCE_MS;
+    if (fresh <= 0 || (tooSoon && !last)) return '';
     this.tracks = total;
     this.tracksSaidAt = now;
     return tracksSentence(fresh, total);

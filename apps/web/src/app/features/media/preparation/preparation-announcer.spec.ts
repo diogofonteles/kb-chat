@@ -89,4 +89,32 @@ describe('PreparationAnnouncer (BR-9)', () => {
     now = 60_000;
     expect(announcer.observe(reading(running, 12))).toContain('12 até agora');
   });
+
+  it('says the last tracks when nothing is left to read, inside the 15 s too', () => {
+    let now = 0;
+    const announcer = new PreparationAnnouncer(() => now);
+    announcer.observe(reading([stage('tracks', 'running')], 0));
+    now = 3_000;
+    expect(announcer.observe(reading([stage('tracks', 'running')], 2))).toBe(
+      '2 faixas novas; 2 até agora.',
+    );
+    now = 6_000;
+    expect(announcer.observe(reading([stage('tracks', 'running')], 3))).toBe(
+      '',
+    );
+    now = 9_000;
+    expect(announcer.observe(reading([stage('tracks', 'done')], 4))).toBe(
+      'Faixas com IA terminou. 2 faixas novas; 4 até agora.',
+    );
+  });
+
+  it('says the step when it changes, and not the stages that came with it', () => {
+    const announcer = new PreparationAnnouncer(() => 0);
+    announcer.observe({ ...reading([], 0), step: 1 });
+    const started = announcer.observe({
+      ...reading([stage('upload', 'done'), stage('transcribe', 'running')], 0),
+      step: 2,
+    });
+    expect(started).toBe('Passo 2 de 4: Processar');
+  });
 });
