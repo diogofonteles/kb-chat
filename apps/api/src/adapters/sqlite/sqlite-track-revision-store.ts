@@ -287,10 +287,10 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
     return [
       kept ? String(kept['track_id']) : trackId,
       String(row['parent_media_id']),
-      row['parent_start_ms'] ?? 0,
-      row['parent_end_ms'] ?? 0,
+      Number(row['parent_start_ms']),
+      Number(row['parent_end_ms']),
       kept?.['kind'] ?? 'qa',
-      row['title'] ?? '',
+      String(row['title']),
       kept?.['source'] ?? 'manual',
       kept?.['asker_voice'] ?? null,
       kept?.['answerer_voice'] ?? null,
@@ -328,17 +328,16 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
   }
 
   impact(mediaId: string): TrackImpact {
-    const row = this.db
+    const listeners = this.db
       .prepare(
-        `SELECT (SELECT count(*) FROM media_progress
-             WHERE media_id = ? AND (position_ms > 0 OR completed_at IS NOT NULL)) AS listeners,
-           (SELECT count(*) FROM media_bookmarks WHERE media_id = ?) AS bookmarks`,
+        `SELECT 1 FROM media_progress
+         WHERE media_id = ? AND (position_ms > 0 OR completed_at IS NOT NULL)`,
       )
-      .get(mediaId, mediaId);
-    return {
-      listeners: Number(row?.['listeners'] ?? 0),
-      bookmarks: Number(row?.['bookmarks'] ?? 0),
-    };
+      .all(mediaId);
+    const bookmarks = this.db
+      .prepare('SELECT 1 FROM media_bookmarks WHERE media_id = ?')
+      .all(mediaId);
+    return { listeners: listeners.length, bookmarks: bookmarks.length };
   }
 
   record(

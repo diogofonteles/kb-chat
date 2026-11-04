@@ -469,6 +469,32 @@ describe('Deleting and restoring a track (FR-3, FR-4)', () => {
     expect(edit.body).toContain(first.title);
   });
 
+  it('a track that left by a new approval comes back too, on its own bounds', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, first, second } = await published(world);
+    await approve(media, recording.id, [TRACKS[1] as (typeof TRACKS)[number]]);
+    await finishCuts(media);
+    const page = await media.owner('GET', urlOf(first.id));
+    expect(page.json<MediaItem>().archived).toBe(true);
+
+    const back = await send(media, {
+      method: 'POST',
+      url: `${urlOf(first.id)}/restore`,
+    });
+
+    expect(back.statusCode, back.body).toBe(200);
+    const view = await viewOf(media, first.id);
+    expect(view).toMatchObject({
+      title: first.title,
+      startMs: 60_000,
+      endMs: 240_000,
+      ordinal: 1,
+    });
+    expect(view.answerer.voice).toBeNull();
+    expect((await viewOf(media, second.id)).ordinal).toBe(2);
+  });
+
   it('restoring over a neighbour that grew is refused', async () => {
     const world = await startWorld();
     const { media } = world;
@@ -581,6 +607,22 @@ describe('Who speaks (FR-1)', () => {
     expect(
       history.json<TrackHistory>().changes.map((one) => one.after),
     ).toEqual(['Maria', 'José']);
+  });
+
+  it('BR-7: a deleted track comes back with its voice and its own name', async () => {
+    const { media, first } = await voiced();
+    const maria = await speaker(media, 'Maria');
+    await patch(media, first.id, { answererSpeakerId: maria });
+    await send(media, { method: 'DELETE', url: urlOf(first.id) });
+
+    const back = await send(media, {
+      method: 'POST',
+      url: `${urlOf(first.id)}/restore`,
+    });
+
+    expect(back.statusCode, back.body).toBe(200);
+    const { answerer } = await viewOf(media, first.id);
+    expect(answerer).toMatchObject({ voice: 1, name: 'Maria' });
   });
 
   it('a track with no voice cannot name one across the recording', async () => {
