@@ -65,9 +65,18 @@ export class VoiceProfilesPanel {
       ? this.topicList.value().items.filter((topic) => topic.parent === null)
       : [],
   );
-  protected readonly topic = linkedSignal(
-    () => this.collections()[0]?.slug ?? '',
-  );
+  /** Starts on the app's default collection, as the sidebar does. */
+  protected readonly topic = linkedSignal(() => {
+    const preferred = this.topicList.hasValue()
+      ? this.topicList.value().defaultSlug
+      : null;
+    const collections = this.collections();
+    return (
+      collections.find(({ slug }) => slug === preferred)?.slug ??
+      collections[0]?.slug ??
+      ''
+    );
+  });
   protected readonly list = httpResource(
     () => (this.topic() ? voiceProfilesUrl(this.topic()) : undefined),
     { parse: (body) => voiceProfileListSchema.parse(body) },

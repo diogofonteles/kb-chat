@@ -8,15 +8,24 @@
     <h4 class="block-title" i18n="@@voiceProfiles.newTitle">
       Novo perfil de voz
     </h4>
-    <label class="field">
-      <span class="label" i18n="@@voiceConsent.speaker">Pessoa</span>
-      <select class="input" formControlName="speakerId">
+    <div class="field">
+      <label
+        for="voice-consent-speaker"
+        class="label"
+        i18n="@@voiceConsent.speaker"
+        >Pessoa</label
+      >
+      <select
+        id="voice-consent-speaker"
+        class="input"
+        formControlName="speakerId"
+      >
         <option value=""></option>
         @for (speaker of speakers(); track speaker.id) {
           <option [value]="speaker.id">{{ speaker.name }}</option>
         }
       </select>
-    </label>
+    </div>
     @if (speakerList.hasValue() && speakers().length === 0) {
       <p class="hint" i18n="@@voiceConsent.noSpeakers">
         Ninguém para cadastrar. Dê nome às vozes em uma gravação primeiro.
@@ -107,14 +116,16 @@
         [attr.aria-invalid]="invalid('grantedOn') ? 'true' : null"
       />
     </label>
-    <label class="field">
-      <span class="label" i18n="@@voiceConsent.how">Por qual meio</span>
-      <select class="input" formControlName="method">
+    <div class="field">
+      <label for="voice-consent-method" class="label" i18n="@@voiceConsent.how"
+        >Por qual meio</label
+      >
+      <select id="voice-consent-method" class="input" formControlName="method">
         @for (method of methods; track method.id) {
           <option [value]="method.id">{{ method.label }}</option>
         }
       </select>
-    </label>
+    </div>
 
     <fieldset class="group">
       <legend class="label" i18n="@@voiceConsent.proof">Prova do aceite</legend>

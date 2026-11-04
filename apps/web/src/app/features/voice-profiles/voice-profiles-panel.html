@@ -3,16 +3,25 @@
     Com o consentimento da pessoa, a voz dela vira uma sugestão de nome ao
     editar gravações deste acervo. Quem edita sempre confirma.
   </p>
-  <label class="field">
-    <span class="label" i18n="@@voiceProfiles.collection">Acervo</span>
-    <select class="input" (change)="chooseTopic($event)">
+  <div class="field">
+    <label
+      for="voice-profiles-collection"
+      class="label"
+      i18n="@@voiceProfiles.collection"
+      >Acervo</label
+    >
+    <select
+      id="voice-profiles-collection"
+      class="input"
+      (change)="chooseTopic($event)"
+    >
       @for (one of collections(); track one.slug) {
         <option [value]="one.slug" [selected]="one.slug === topic()">
           {{ one.title }}
         </option>
       }
     </select>
-  </label>
+  </div>
 
   @if (notice(); as said) {
     <p

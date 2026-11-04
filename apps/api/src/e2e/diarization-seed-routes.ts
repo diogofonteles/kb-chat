@@ -2,19 +2,34 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
-import { mediaIdSchema, rawSpeakerTurnSchema } from '@kb-chat/contracts';
+import {
+  mediaIdSchema,
+  rawSpeakerTurnSchema,
+  voiceMatchSchema,
+} from '@kb-chat/contracts';
 import { z } from 'zod';
 import { openMediaDatabase } from '../adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from '../adapters/sqlite/media-migrations.js';
 import type { MediaDeps } from '../media-factory.js';
 import type { LeaseOwner } from '../ports/media-store.js';
 import { PUBLIC } from '../modules/auth/index.js';
-import { DiarizationService } from '../modules/media/index.js';
+import {
+  DiarizationService,
+  VoicePrintService,
+} from '../modules/media/index.js';
 
 const params = z.object({ id: mediaIdSchema });
-const body = z.object({ turns: z.array(rawSpeakerTurnSchema) });
+const body = z.object({
+  turns: z.array(rawSpeakerTurnSchema),
+  voiceMatches: z.array(voiceMatchSchema).optional(),
+});
+const printParams = z.object({ id: z.uuid() });
 const WORKER = 'e2e-diarizer';
 const LEASE_MS = 10 * 60 * 1000;
+/** A made-up print: the E2E server never sees a voice (KBC-071 BR-1). */
+const SYNTHETIC_PRINT = Array.from({ length: 192 }, (_, index) =>
+  index === 0 ? 1 : 0,
+);
 
 /** Leases the media's queued diarize job to the E2E "transcriber"; null when none. */
 function leaseQueued(db: DatabaseSync, mediaId: string): Held | null {
@@ -65,8 +80,10 @@ export function registerDiarizationSeed(
       return reply.code(204).send();
     },
   );
+  const voicePrints = voicePrintsOf(input.media);
+  registerSyntheticPrint(app, { db, voicePrints });
   registerCompletion(app, {
-    diarization: new DiarizationService(input.media),
+    diarization: new DiarizationService({ ...input.media, voicePrints }),
     take: (id) => {
       const owner = held.get(id) ?? leaseQueued(db, id);
       held.delete(id);
@@ -76,6 +93,51 @@ export function registerDiarizationSeed(
 }
 
 type Held = LeaseOwner & { voices: number | null };
+
+/** Top-level collections only in the fixture vault, and speakers without an author. */
+const voicePrintsOf = (media: MediaDeps): VoicePrintService =>
+  new VoicePrintService({
+    ...media,
+    profiles: media.voiceProfiles,
+    prints: media.voicePrintVault,
+    rootOf: (topic) => topic,
+    authorOf: () => null,
+  });
+
+/** Plays the Mac for a `voice-profile` job (KBC-071), with a vector no voice produced. */
+function registerSyntheticPrint(
+  app: FastifyInstance,
+  input: { db: DatabaseSync; voicePrints: VoicePrintService },
+): void {
+  app.post(
+    '/api/e2e/voice-profiles/:id/print',
+    { config: { access: PUBLIC } },
+    async (request, reply) => {
+      const { id } = printParams.parse(request.params);
+      const owner = { jobId: '', leaseId: randomUUID(), worker: WORKER };
+      const job = input.db
+        .prepare(
+          `SELECT id FROM jobs WHERE voice_profile_id = ? AND status = 'queued'`,
+        )
+        .get(id);
+      if (!job) return reply.code(409).send({ error: 'no queued job' });
+      owner.jobId = String(job['id']);
+      input.db
+        .prepare(
+          `UPDATE jobs SET status = 'leased', lease_id = ?, worker = ?, lease_until = ?,
+             attempts = attempts + 1 WHERE id = ?`,
+        )
+        .run(owner.leaseId, WORKER, Date.now() + LEASE_MS, owner.jobId);
+      await input.voicePrints.complete(owner, {
+        worker: WORKER,
+        leaseId: owner.leaseId,
+        model: 'synthetic',
+        embedding: SYNTHETIC_PRINT,
+      });
+      return reply.code(204).send();
+    },
+  );
+}
 
 /** Completes the media's separation (leased before, or leased now) with `turns`. */
 function registerCompletion(
@@ -87,7 +149,7 @@ function registerCompletion(
     { config: { access: PUBLIC } },
     async (request, reply) => {
       const { id } = params.parse(request.params);
-      const { turns } = body.parse(request.body);
+      const { turns, voiceMatches } = body.parse(request.body);
       const owner = input.take(id);
       if (!owner) return reply.code(409).send({ error: 'no queued job' });
       await input.diarization.complete(owner, {
@@ -100,6 +162,7 @@ function registerCompletion(
         requestedVoices: owner.voices,
         elapsedMs: 0,
         raw: { turns },
+        voiceMatches,
       });
       return reply.code(204).send();
     },

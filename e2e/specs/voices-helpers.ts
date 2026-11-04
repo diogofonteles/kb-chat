@@ -5,6 +5,13 @@ import { uniqueTag, uploadReady } from './media-helpers.js';
 // The E2E server stores the transcript and the turns through the real paths (E2E-only
 // routes), as a transcriber would (KBC-064, KBC-065).
 
+/** What the Mac sends for a voice close to a profile (KBC-071): never a print. */
+export interface VoiceMatch {
+  readonly voice: string;
+  readonly profileId: string;
+  readonly similarity: number;
+}
+
 type Line = readonly [start: number, end: number, text: string];
 
 /** A minute of interview: A asks, B answers, A asks, B answers, C (audience) asks, B. */
@@ -70,6 +77,7 @@ export async function separateVoices(
   owner: APIRequestContext,
   mediaId: string,
   turns: typeof TURNS = TURNS,
+  voiceMatches: readonly VoiceMatch[] = [],
 ): Promise<void> {
   const asked = await owner.post(`/api/v1/media/${mediaId}/diarize`, {
     data: {},
@@ -77,7 +85,7 @@ export async function separateVoices(
   });
   expect(asked.status(), await asked.text()).toBe(202);
   const done = await owner.post(`/api/e2e/media/${mediaId}/diarization`, {
-    data: { turns },
+    data: { turns, voiceMatches },
     headers: CSRF,
   });
   expect(done.status(), await done.text()).toBe(204);
