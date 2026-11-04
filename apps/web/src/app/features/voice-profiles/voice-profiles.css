@@ -47,6 +47,11 @@
   border: 0;
 }
 
+/* A legend's default padding would set it apart from the other labels. */
+.group legend {
+  padding: 0;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;
