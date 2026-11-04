@@ -73,7 +73,7 @@
       }
     </header>
 
-    <audio #audition hidden preload="none" [src]="streamUrl()"></audio>
+    <audio #auditionElement hidden preload="none" [src]="streamUrl()"></audio>
     <p class="visually-hidden" aria-live="polite">{{ draft.announcement() }}</p>
 
     @if (notice()) {
@@ -248,6 +248,17 @@
         </button>
         @if (hasEdges()) {
           <span class="nudges">
+            <span class="hint">
+              @if (edge() === 'start') {
+                <ng-container i18n="@@tracks.adjustStart"
+                  >Ajustar o início:</ng-container
+                >
+              } @else {
+                <ng-container i18n="@@tracks.adjustEnd"
+                  >Ajustar o fim:</ng-container
+                >
+              }
+            </span>
             <button
               type="button"
               class="secondary"

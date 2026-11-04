@@ -94,6 +94,7 @@
     @for (word of visibleWords() ?? []; track word.key) {
       <span
         class="word"
+        [class.lower]="word.row === 1"
         [style.left.%]="word.left"
         (click)="placeAtWord($event, word.from)"
         >{{ word.text }}</span

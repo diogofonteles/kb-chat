@@ -135,7 +135,8 @@ export class TrackEditorPage {
 
   private readonly timeline = viewChild(TrackTimeline);
   private readonly list = viewChild(TrackRowList);
-  private readonly audio = viewChild<ElementRef<HTMLAudioElement>>('audition');
+  private readonly audio =
+    viewChild<ElementRef<HTMLAudioElement>>('auditionElement');
 
   protected readonly id = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('id') ?? '')),
@@ -436,7 +437,10 @@ export class TrackEditorPage {
     };
     this.draft.apply([...this.draft.tracks(), track]);
     this.chosenId.set(track.id);
-    this.list()?.focusTitle();
+    // The first track brings the list itself into the page.
+    afterNextRender(() => this.list()?.focusTitle(), {
+      injector: this.injector,
+    });
   }
 
   protected rename(change: { id: string; title: string }): void {

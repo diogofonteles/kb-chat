@@ -35,8 +35,13 @@ import {
 const MARGIN_MS = 30_000;
 const MIN_SPAN_MS = 5_000;
 const ZOOM_STEP = 1.5;
-/** Words show from this density: 90 px per word on average is readable. */
+/** Past this many words in view the row says to zoom in: they would be unreadable. */
 const MAX_WORDS_SHOWN = 150;
+/** Two rows of words; a word that fits neither waits for more zoom. */
+const WORD_ROWS = 2;
+/** A character of the words' row, on average, with room between words. */
+const CHAR_PX = 8;
+const WORD_GAP_PX = 6;
 
 export interface NumberedTrack {
   readonly track: DraftTrack;
@@ -65,6 +70,19 @@ interface Drag {
 
 const isProposal = (track: DraftTrack) =>
   track.source === 'ai' && !track.edited;
+
+/** The words that fit without touching, each on the first row with room for it. */
+function placeWords<T extends { readonly px: number; readonly text: string }>(
+  words: readonly T[],
+): (T & { readonly row: number })[] {
+  const freeFrom: number[] = Array.from({ length: WORD_ROWS }, () => -Infinity);
+  return words.flatMap((word) => {
+    const row = freeFrom.findIndex((free) => free <= word.px);
+    if (row < 0) return [];
+    freeFrom[row] = word.px + word.text.length * CHAR_PX + WORD_GAP_PX;
+    return [{ ...word, row }];
+  });
+}
 
 /**
  * The bar (screen spec T20): the whole recording in numbered blocks and the selected track's
@@ -105,6 +123,12 @@ export class TrackTimeline {
     computation: () => this.windowAround(),
   });
   private readonly drag = signal<Drag | null>(null);
+  private readonly width = signal(0);
+  /**
+   * The track as moved so far: a held key lands again before the input comes back from the
+   * parent, and must not start from where the handle was (FR-4).
+   */
+  private readonly moving = linkedSignal(() => this.selected()?.track ?? null);
   private readonly pinch = new Map<number, number>();
   private pinchSpan: number | null = null;
   /** Why the last move stopped, beside the handle (FR-3). */
@@ -169,17 +193,20 @@ export class TrackTimeline {
   );
   protected readonly visibleWords = computed(() => {
     const { startMs, spanMs } = this.view();
+    const width = this.width();
     const shown = this.words().filter(
       ([from, to]) => to > startMs && from < startMs + spanMs,
     );
-    return shown.length > MAX_WORDS_SHOWN
-      ? null
-      : shown.map(([from, , text], index) => ({
-          key: `${index}-${from}`,
-          from,
-          text,
-          left: this.percent(from),
-        }));
+    if (shown.length > MAX_WORDS_SHOWN) return null;
+    return placeWords(
+      shown.map(([from, , text], index) => ({
+        key: `${index}-${from}`,
+        from,
+        text,
+        left: this.percent(from),
+        px: (this.percent(from) / 100) * width,
+      })),
+    );
   });
   protected readonly ticks = computed(() => {
     const drag = this.drag();
@@ -197,6 +224,15 @@ export class TrackTimeline {
   protected readonly cursor = computed(() => this.percent(this.cursorMs()));
 
   constructor() {
+    afterRenderEffect((onCleanup) => {
+      const element = this.detail()?.nativeElement;
+      if (!element || typeof ResizeObserver === 'undefined') return;
+      const observer = new ResizeObserver(() =>
+        this.width.set(element.clientWidth),
+      );
+      observer.observe(element);
+      onCleanup(() => observer.disconnect());
+    });
     afterRenderEffect(() => {
       const canvas = this.canvas()?.nativeElement;
       const { startMs, spanMs } = this.view();
@@ -288,6 +324,13 @@ export class TrackTimeline {
     const trackId = this.selected()?.track.id;
     if (!trackId) return;
     this.stop.set(stopText(landing.stop));
+    this.moving.update(
+      (track) =>
+        track && {
+          ...track,
+          [edge === 'start' ? 'startMs' : 'endMs']: landing.ms,
+        },
+    );
     this.moved.emit({ trackId, edge, ms: landing.ms });
     if (!this.inView(landing.ms, landing.ms)) this.showAt(landing.ms);
   }
@@ -411,7 +454,7 @@ export class TrackTimeline {
   }
 
   private edgeOf(edge: TrackEdge): number {
-    const track = this.selected()?.track;
+    const track = this.moving();
     if (!track) return 0;
     return edge === 'start' ? track.startMs : track.endMs;
   }

@@ -199,7 +199,7 @@
   cursor: pointer;
 }
 
-.word:nth-child(even) {
+.word.lower {
   top: 24px;
 }
 

@@ -15,6 +15,10 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+}
+
+/* Light with 200 rows; the selected one holds a menu that must not be clipped. */
+.row:not(.selected) {
   contain: content;
 }
 
