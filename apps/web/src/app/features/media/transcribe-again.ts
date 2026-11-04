@@ -56,6 +56,7 @@ export class TranscribeAgain {
   }
 
   protected confirm(): void {
+    if (this.busy()) return;
     this.busy.set(true);
     this.api
       .transcribeAgain(this.media().id)

@@ -82,6 +82,20 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
     expect(text()).toContain('Esta mídia mudou');
   });
 
+  it('sends one request for a double click on the confirmation', async () => {
+    await show();
+    await press('Transcrever de novo');
+    const confirm = buttons()[0];
+    confirm?.click();
+    confirm?.click();
+    await fixture.whenStable();
+    http
+      .expectOne(`/api/v1/media/${item.id}/transcription`)
+      .flush({ ...item, canTranscribeAgain: false });
+    await fixture.whenStable();
+    expect(text()).not.toContain('Esta mídia mudou');
+  });
+
   it('says a failed attempt kept the text', async () => {
     await show({
       ...item,
