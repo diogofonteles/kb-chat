@@ -13,7 +13,7 @@ const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < VERSION);
 
 /** What KBC-071's unmerged migration does to `jobs`: a kind, a column and a check. */
 const SIBLING_REBUILD: Migration = {
-  version: VERSION - 1,
+  version: 16,
   name: 'sibling-rebuild',
   sql: `
     CREATE TABLE jobs_sibling (
