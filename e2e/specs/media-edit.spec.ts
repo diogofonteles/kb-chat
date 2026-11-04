@@ -50,12 +50,21 @@ async function withAudio(browser: Browser) {
 const menuOf = (page: Page, title: string) =>
   page.getByRole('button', { name: `Mais ações para ${title}` });
 
+const editor = (page: Page) =>
+  page.getByRole('dialog', { name: 'Editar informações' });
+
+const titleField = (page: Page) => editor(page).getByLabel('Título');
+
+const topicField = (page: Page) =>
+  editor(page).getByLabel('Acervo', { exact: true });
+
+const saveButton = (page: Page) =>
+  editor(page).getByRole('button', { name: 'Salvar' });
+
 async function openDialog(page: Page, title: string) {
   await menuOf(page, title).click();
   await page.getByRole('menuitem', { name: 'Editar informações' }).click();
-  await expect(
-    page.getByRole('dialog', { name: 'Editar informações' }),
-  ).toBeVisible();
+  await expect(editor(page)).toBeVisible();
 }
 
 const seriousViolations = async (page: Page) =>
@@ -68,12 +77,11 @@ test('AC-1: who sent it renames it; the list and the page show it, and it plays'
 }) => {
   const { page, id, title } = await withAudio(browser);
   await openDialog(page, title);
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByLabel('Título')).toHaveValue(title);
+  await expect(titleField(page)).toHaveValue(title);
   const renamed = `A conselheira do rei ${uniqueTag()}`;
-  await dialog.getByLabel('Título').fill(renamed);
-  await dialog.getByRole('button', { name: 'Salvar' }).click();
-  await expect(dialog).toBeHidden();
+  await titleField(page).fill(renamed);
+  await saveButton(page).click();
+  await expect(editor(page)).toBeHidden();
   await expect(page.getByRole('link', { name: renamed })).toBeVisible();
   await expect(page.getByRole('link', { name: title })).toBeHidden();
   await expect(page.getByText('Informações salvas')).toBeAttached();
@@ -92,8 +100,8 @@ test('T15: the page edits too, and the mini-player follows the title while it pl
   await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
   await page.getByRole('button', { name: 'Editar informações' }).click();
   const renamed = `Novo ${uniqueTag()}`;
-  await page.getByLabel('Título').fill(renamed);
-  await page.getByRole('button', { name: 'Salvar' }).click();
+  await titleField(page).fill(renamed);
+  await saveButton(page).click();
   await expect(page.getByRole('heading', { name: renamed })).toBeVisible();
   await expect(page).toHaveTitle(new RegExp(renamed));
   await expect(page.getByRole('button', { name: 'Pausar' })).toBeVisible();
@@ -112,16 +120,18 @@ test('AC-2: moved, it leaves the list with the notice and the link, and keeps th
   });
   expect(saved.status()).toBe(200);
   await openDialog(page, title);
-  await page.getByLabel('Acervo').selectOption('alquimia');
+  await topicField(page).selectOption('alquimia');
   await expect(page.getByText(/Quem não vê este acervo/)).toBeVisible();
-  await page.getByRole('button', { name: 'Salvar' }).click();
+  await saveButton(page).click();
   await expect(
-    page.getByText(`${title} foi movido para o acervo Alquimia.`).first(),
+    page
+      .getByText(`${title} foi movido para o acervo Alquimia Prática.`)
+      .first(),
   ).toBeVisible();
   await expect(page.getByRole('link', { name: title })).toBeHidden();
   await page.getByRole('link', { name: 'Ver o acervo' }).click();
   await expect(
-    page.getByRole('heading', { name: /Mídia — Alquimia/ }),
+    page.getByRole('heading', { name: /Mídia — Alquimia Prática/ }),
   ).toBeVisible();
   await expect(page.getByRole('link', { name: title })).toBeVisible();
   const read = await page.request.get(`/api/v1/media/${id}`);
@@ -152,9 +162,9 @@ test('AC-5, FR-4: a blank title is said at the field; a server error keeps what 
 }) => {
   const { page, title } = await withAudio(browser);
   await openDialog(page, title);
-  const field = page.getByLabel('Título');
+  const field = titleField(page);
   await field.fill('   ');
-  await page.getByRole('button', { name: 'Salvar' }).click();
+  await saveButton(page).click();
   await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
   await expect(field).toHaveAttribute('aria-invalid', 'true');
   await field.fill('Título que fica');
@@ -166,7 +176,7 @@ test('AC-5, FR-4: a blank title is said at the field; a server error keeps what 
         })
       : route.fallback(),
   );
-  await page.getByRole('button', { name: 'Salvar' }).click();
+  await saveButton(page).click();
   await expect(page.getByRole('alert')).toContainText('permissão');
   await expect(field).toHaveValue('Título que fica');
 });
@@ -182,10 +192,9 @@ test('AC-7: works by keyboard, and Escape gives the focus back to the menu', asy
     page.getByRole('menuitem', { name: 'Editar informações' }),
   ).toBeFocused();
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: 'Editar informações' });
-  await expect(dialog.getByLabel('Título')).toBeFocused();
+  await expect(titleField(page)).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
+  await expect(editor(page)).toBeHidden();
   await expect(trigger).toBeFocused();
 });
 
@@ -199,9 +208,9 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await uploadReady(page.request, { title, seconds: 1 });
     await openMedia(page);
     await openDialog(page, title);
-    await page.getByLabel('Acervo').selectOption('alquimia');
-    await page.getByLabel('Título').fill('');
-    await page.getByRole('button', { name: 'Salvar' }).click();
+    await topicField(page).selectOption('alquimia');
+    await titleField(page).fill('');
+    await saveButton(page).click();
     await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
   });
@@ -216,15 +225,17 @@ test('T16: the library edits in its rows; the row keeps its place', async ({
   await page.goto('/biblioteca');
   await openDialog(page, title);
   const renamed = `Na biblioteca ${uniqueTag()}`;
-  await page.getByLabel('Título').fill(renamed);
-  await page.getByRole('button', { name: 'Salvar' }).click();
+  await titleField(page).fill(renamed);
+  await saveButton(page).click();
   await expect(page.getByRole('link', { name: renamed })).toBeVisible();
   await expect(menuOf(page, renamed)).toBeVisible();
   await openDialog(page, renamed);
-  await page.getByLabel('Acervo').selectOption('alquimia');
-  await page.getByRole('button', { name: 'Salvar' }).click();
+  await topicField(page).selectOption('alquimia');
+  await saveButton(page).click();
   await expect(
-    page.getByText(`${renamed} foi movido para o acervo Alquimia.`).first(),
+    page
+      .getByText(`${renamed} foi movido para o acervo Alquimia Prática.`)
+      .first(),
   ).toBeVisible();
   await page.getByRole('link', { name: 'Ver o acervo' }).click();
   await expect(page).toHaveURL(/acervo=alquimia/);
