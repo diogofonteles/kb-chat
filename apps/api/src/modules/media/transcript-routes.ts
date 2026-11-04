@@ -4,7 +4,7 @@ import {
   mediaTranscriptWordsSchema,
   transcriptWordsQuerySchema,
 } from '@kb-chat/contracts';
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { hasFeature, viewerOf, type RouteAccess } from '../auth/index.js';
