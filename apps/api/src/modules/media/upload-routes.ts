@@ -25,6 +25,7 @@ const options = {
   },
 };
 
+const CHECK_URL = '/api/v1/topics/:topic/media/check';
 const checkOptions = {
   config: { access: { ...UPLOAD, topicParam: 'topic' } },
   schema: {
@@ -76,11 +77,8 @@ export function registerUploadRoutes(
     done(null, payload),
   );
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  typed.post(
-    '/api/v1/topics/:topic/media/check',
-    checkOptions,
-    async (request) =>
-      service.check(actorOf(request), request.params.topic, request.body),
+  typed.post(CHECK_URL, checkOptions, async (request) =>
+    service.check(actorOf(request), request.params.topic, request.body),
   );
   typed.head('/api/v1/media/:id/upload', options, async (request, reply) => {
     const { id } = request.params;
