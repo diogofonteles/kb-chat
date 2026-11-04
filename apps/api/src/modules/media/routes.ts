@@ -154,11 +154,7 @@ export const mediaRoutes =
       },
     );
     registerItemRoutes(typed, service);
-    typed.patch('/api/v1/media/:id', OPTIONS.edit, async (request) => {
-      const actor = actorOf(request);
-      editor.edit(actor, request.params.id, request.body);
-      return service.get(actor, request.params.id);
-    });
+    registerEditRoute(typed, service, editor);
   };
 
 type TypedApp = FastifyInstance<
@@ -168,6 +164,19 @@ type TypedApp = FastifyInstance<
   FastifyBaseLogger,
   ZodTypeProvider
 >;
+
+/** "Editar informações" (KBC-050 FR-1): the answer is the item as the person now sees it. */
+function registerEditRoute(
+  typed: TypedApp,
+  service: MediaService,
+  editor: MediaEditService,
+): void {
+  typed.patch('/api/v1/media/:id', OPTIONS.edit, async (request) => {
+    const actor = actorOf(request);
+    editor.edit(actor, request.params.id, request.body);
+    return service.get(actor, request.params.id);
+  });
+}
 
 function registerItemRoutes(typed: TypedApp, service: MediaService): void {
   typed.put('/api/v1/media/:id/file', OPTIONS.upload, async (request) =>
