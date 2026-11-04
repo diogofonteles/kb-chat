@@ -66,7 +66,11 @@ import { planShare, sameChoices } from './preparation/plan-choices.js';
 import { PlanForm } from './preparation/plan-form.js';
 import { PreparationOptions } from './preparation/preparation-options.js';
 import { PreparationSteps } from './preparation/preparation-steps.js';
-import { UploadEntries, type UploadEntry } from './upload-entries.js';
+import {
+  UploadEntries,
+  type PlannedLength,
+  type UploadEntry,
+} from './upload-entries.js';
 import { UploadFileRow } from './upload-file-row.js';
 import { uploadRule } from './upload-rules.js';
 
@@ -155,13 +159,9 @@ export class UploadPanel implements OnInit {
     // Leaving the page or the route mid-upload: stop. The same file continues later (FR-2).
     inject(DestroyRef).onDestroy(() => this.halt());
     // The estimates go by the files' length, read before anything is sent (KBC-072 BR-4).
-    toObservable(this.uploads.plannedMs)
+    toObservable(this.uploads.plannedLength)
       .pipe(takeUntilDestroyed())
-      .subscribe((durationMs) =>
-        durationMs === null
-          ? this.plan.lengthUnknown()
-          : this.plan.aim({ durationMs }),
-      );
+      .subscribe((length) => this.aimPlan(length));
   }
 
   ngOnInit(): void {
@@ -264,6 +264,12 @@ export class UploadPanel implements OnInit {
   private takeFiles(files: FileList | null): void {
     this.fileProblem.set(null);
     this.uploads.add(Array.from(files ?? []));
+  }
+
+  private aimPlan(length: PlannedLength): void {
+    if (length === 'unknown') return this.plan.lengthUnknown();
+    if (length === 'past-limit') return this.plan.lengthPastLimit();
+    this.plan.aim({ durationMs: length });
   }
 
   private nothingToSend(targets: readonly UploadEntry[]): string | null {

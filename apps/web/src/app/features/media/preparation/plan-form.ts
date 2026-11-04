@@ -2,7 +2,6 @@ import { httpResource } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import {
   preparationOptionsSchema,
-  type OptionRefusal,
   type PreparationOption,
   type PreparationOptionId,
   type PreparationPlanRequest,
@@ -21,6 +20,7 @@ import {
   type DroppedBy,
   type PlanChoices,
 } from './plan-choices.js';
+import type { PlanRefusal } from './preparation-labels.js';
 
 /** What decides the estimates: the recording, or the file's length read in the browser. */
 export interface PlanTarget {
@@ -48,6 +48,8 @@ export class PlanForm {
     recalledChoices(this.session.can('media-edit')),
   );
   private readonly droppedBy = signal<DroppedBy>(null);
+  /** The files add up to more than the API estimates: not the same as an unread file. */
+  private readonly pastLimit = signal(false);
 
   private readonly resource = httpResource(
     () => {
@@ -92,11 +94,19 @@ export class PlanForm {
   });
 
   aim(target: PlanTarget): void {
+    this.pastLimit.set(false);
     this.target.set(target);
   }
 
   /** The browser could not read this file's length: no value, so no paid option (BR-4). */
   lengthUnknown(): void {
+    this.pastLimit.set(false);
+    this.target.set({});
+  }
+
+  /** Past the longest length the API estimates: no value either (BR-4). */
+  lengthPastLimit(): void {
+    this.pastLimit.set(true);
     this.target.set({});
   }
 
@@ -113,9 +123,7 @@ export class PlanForm {
   }
 
   /** Why an option cannot be ticked now (BR-3): the server's reason, then the dependency. */
-  refusalOf(
-    id: 'speakers' | 'manual' | 'ai' | 'subjects',
-  ): OptionRefusal | null {
+  refusalOf(id: 'speakers' | 'manual' | 'ai' | 'subjects'): PlanRefusal | null {
     const server = this.option(id).refusal;
     if (server) return server;
     const hasWords = this.ticked().transcribe || this.option('transcribe').done;
@@ -125,7 +133,7 @@ export class PlanForm {
     if (id === 'subjects' && this.ticked().tracks === 'none')
       return 'dependency';
     if (id === 'ai' && (this.offer()?.aiEstimateUsd ?? null) === null)
-      return 'no-estimate';
+      return this.pastLimit() ? 'past-limit' : 'no-estimate';
     return null;
   }
 

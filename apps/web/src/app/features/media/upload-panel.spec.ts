@@ -7,7 +7,11 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import type { Feature, UploadCheck } from '@kb-chat/contracts';
+import type {
+  Feature,
+  PreparationOptions,
+  UploadCheck,
+} from '@kb-chat/contracts';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
 import { of } from 'rxjs';
 import { aTopic } from '../../testing/fixtures.js';
@@ -15,6 +19,7 @@ import { FakeTus } from '../../testing/fake-tus.js';
 import { aMediaItem, sessionAs } from '../../testing/media-fixtures.js';
 import {
   aPreparation,
+  anOffer,
   answeringOptions,
 } from '../../testing/preparation-fixtures.js';
 import { AUDIO_LENGTH_READER, type AudioLengthReader } from './audio-length.js';
@@ -32,6 +37,7 @@ async function renderPanel(
   options: {
     readonly features?: Feature[];
     readonly length?: AudioLengthReader;
+    readonly offer?: PreparationOptions;
   } = {},
 ) {
   const uploaded = vi.fn();
@@ -41,7 +47,9 @@ async function renderPanel(
   const view = await render(UploadPanel, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(withInterceptors([answeringOptions(undefined, asked)])),
+      provideHttpClient(
+        withInterceptors([answeringOptions(options.offer, asked)]),
+      ),
       provideHttpClientTesting(),
       provideRouter([{ path: 'midia/:id/preparar', children: [] }]),
       sessionAs({ features: options.features ?? ['media', 'media-upload'] }),
@@ -1309,6 +1317,34 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
         .forEach((call) => call.flush({}, { status: 500, statusText: 'x' }));
       await panel.fixture.whenStable();
       expect(screen.queryByText(/Espere o envio terminar/)).toBeNull();
+    });
+
+    const NO_ESTIMATE = anOffer({ aiEstimateUsd: null });
+    const aiReason = () =>
+      screen.getByRole('radio', { name: 'Propor as faixas com IA' })
+        .parentElement?.parentElement?.textContent ?? '';
+
+    it('says the 24 h limit past it, not that a file cannot be read (UP-11)', async () => {
+      const panel = await renderPanel({
+        features: PAID,
+        offer: NO_ESTIMATE,
+        length: () => of(50_000_000),
+      });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel);
+      expect(aiReason()).toContain('passa de 24 h');
+      expect(aiReason()).not.toContain('consiga ler');
+    });
+
+    it('asks for a readable file when a length is unknown (BR-4)', async () => {
+      const panel = await renderPanel({
+        features: PAID,
+        offer: NO_ESTIMATE,
+        length: () => of(null),
+      });
+      await chooseChecked(panel);
+      expect(aiReason()).toContain('consiga ler');
     });
 
     it('takes the choices away while sending and brings them back after a stop', async () => {

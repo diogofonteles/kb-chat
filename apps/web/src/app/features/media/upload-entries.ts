@@ -70,6 +70,9 @@ export interface UploadEntry {
   readonly state: EntryState;
 }
 
+/** The length the plan's estimates go by, or why there is none. */
+export type PlannedLength = number | 'unknown' | 'past-limit';
+
 /** What "Enviar" takes; the others say why not on their own line. */
 const SENDABLE: readonly EntryState['kind'][] = [
   'ready',
@@ -144,18 +147,23 @@ export class UploadEntries {
     this.list().some(({ resumes }) => resumes),
   );
   /**
-   * The length the plan's estimates go by: all of its files, or null while one is not known,
-   * cannot be read or the sum is past what the API estimates (KBC-072 BR-4).
+   * The length the plan's estimates go by: all of its files, unless one is not known or
+   * cannot be read, or the sum is past what the API estimates (KBC-072 BR-4).
    */
-  readonly plannedMs = computed<number | null>(() => {
+  readonly plannedLength = computed<PlannedLength>(() => {
     const planned = this.planned();
-    if (planned.length === 0) return null;
+    if (planned.length === 0) return 'unknown';
     let allMs = 0;
     for (const { durationMs } of planned) {
-      if (durationMs === null) return null;
+      if (durationMs === null) return 'unknown';
       allMs += durationMs;
     }
-    return allMs > 0 && allMs <= PREPARATION_MAX_DURATION_MS ? allMs : null;
+    if (allMs > PREPARATION_MAX_DURATION_MS) return 'past-limit';
+    return allMs > 0 ? allMs : 'unknown';
+  });
+  readonly plannedMs = computed<number | null>(() => {
+    const length = this.plannedLength();
+    return typeof length === 'number' ? length : null;
   });
 
   constructor() {
