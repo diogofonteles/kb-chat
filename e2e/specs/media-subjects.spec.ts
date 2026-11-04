@@ -159,8 +159,7 @@ test('AC-4: the subject filter says documents and tracks apart', async ({
   await seeded();
   const page = await reader(browser, viewport);
   await page.goto('/');
-  await page.getByLabel('Sua pergunta').fill('Cabala');
-  await page.getByLabel('Sua pergunta').press('Enter');
+  await page.getByRole('button', { name: 'Cabala', exact: true }).click();
   await page
     .getByRole('button', { name: /^Assuntos/ })
     .first()
@@ -180,9 +179,18 @@ test('AC-5: the concept panel lists the tracks, each opening at the start', asyn
   const seed = await seeded();
   const page = await reader(browser, viewport);
   await page.goto('/');
-  await page.getByLabel('Sua pergunta').fill('Cabala');
+  await page.getByLabel('Sua pergunta').fill('sephiroth');
   await page.getByLabel('Sua pergunta').press('Enter');
-  await page.getByRole('button', { name: 'Cabala', exact: true }).click();
+  await page
+    .getByRole('button', { name: /A Árvore da Vida/ })
+    .first()
+    .click();
+  const panel = page.getByRole('dialog');
+  await panel
+    .getByRole('button', { name: 'Cabala', exact: true })
+    .last()
+    .click();
+  await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Cabala');
   await expect(
     page.getByRole('heading', {
       name: 'Perguntas e respostas sobre este assunto',
