@@ -107,7 +107,9 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
 
   touch(mediaId: string): void {
     this.db
-      .prepare('UPDATE media SET track_version = track_version + 1 WHERE id = ?')
+      .prepare(
+        'UPDATE media SET track_version = track_version + 1 WHERE id = ?',
+      )
       .run(mediaId);
   }
 
@@ -280,7 +282,9 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
       )
       .run(...values, at);
     this.db
-      .prepare('UPDATE media SET archived_at = NULL, updated_at = ? WHERE id = ?')
+      .prepare(
+        'UPDATE media SET archived_at = NULL, updated_at = ? WHERE id = ?',
+      )
       .run(at, mediaId);
     this.db
       .prepare('DELETE FROM media_track_archive WHERE media_id = ?')

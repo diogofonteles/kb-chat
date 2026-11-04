@@ -7,6 +7,8 @@ import {
   mediaIdSchema,
   saveTrackSubjectsRequestSchema,
   subjectEstimateSchema,
+  trackSuggestionRequestSchema,
+  trackSuggestionSchema,
   subjectProposalRequestSchema,
   subjectRunSchema,
   topicSlugSchema,
@@ -25,9 +27,15 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
-import { assertFeature, type RouteAccess } from '../auth/index.js';
+import {
+  assertFeature,
+  hasFeature,
+  viewerOf,
+  type RouteAccess,
+} from '../auth/index.js';
 import { actorOf } from '../media/index.js';
 import type { SubjectProposalService } from './subject-proposal-service.js';
+import type { TrackSuggestionService } from './track-suggestion-service.js';
 import type {
   SubjectCall,
   TrackSubjectService,
@@ -62,6 +70,7 @@ type Typed = FastifyInstance<
 export interface SubjectRoutesDeps {
   readonly subjects: TrackSubjectService;
   readonly proposals: SubjectProposalService;
+  readonly suggestions: TrackSuggestionService;
   readonly hasTopic: (topic: string) => boolean;
 }
 
@@ -174,6 +183,36 @@ const PROPOSE_ROUTE = {
   },
 };
 
+const SUGGESTION_ROUTE = {
+  config: {
+    access: SUGGEST,
+    rateLimit: { max: RUNS_PER_MINUTE, timeWindow: '1 minute' },
+  },
+  schema: {
+    params: mediaParams,
+    body: trackSuggestionRequestSchema,
+    response: { 200: subjectEstimateSchema, 201: trackSuggestionSchema },
+  },
+};
+
+/** "Sugerir de novo com IA" (KBC-073 FR-7): subjects only for who classifies. */
+function registerSuggestions(typed: Typed, deps: SubjectRoutesDeps): void {
+  typed.post(
+    '/api/v1/media/:id/suggestions',
+    SUGGESTION_ROUTE,
+    async (request, reply) => {
+      assertFeature(request, 'media-edit');
+      const call = {
+        actor: actorOf(request),
+        mediaId: request.params.id,
+        classify: hasFeature(viewerOf(request).person, 'media-classify'),
+      };
+      if (request.body.dryRun) return deps.suggestions.estimate(call);
+      return reply.code(201).send(await deps.suggestions.suggest(call));
+    },
+  );
+}
+
 function registerEdit(typed: Typed, deps: SubjectRoutesDeps): void {
   const { proposals } = deps;
   typed.get('/api/v1/media/:id/edit/subjects', STEP_ROUTE, async (request) =>
@@ -204,4 +243,5 @@ export const trackSubjectRoutes =
     registerAbout(typed, deps);
     registerTrack(typed, deps);
     registerEdit(typed, deps);
+    registerSuggestions(typed, deps);
   };

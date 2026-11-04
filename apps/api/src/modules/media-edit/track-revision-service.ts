@@ -141,7 +141,8 @@ export class TrackRevisionService {
         ...this.summarized(call, patch),
       ];
       revisions.record(call.mediaId, changes, author);
-      for (const role of ROLES) this.applySpeaker({ call, track, role, patch, scope, author });
+      for (const role of ROLES)
+        this.applySpeaker({ call, track, role, patch, scope, author });
       publisher.afterRecordingEdit(track.parentId);
     });
   }
@@ -324,7 +325,10 @@ export class TrackRevisionService {
   retryCut(call: TrackCall): TrackEditView {
     const { record, track } = this.writable(call.actor, call.mediaId);
     if (record.track?.version !== call.expectedVersion) throw stale();
-    if (track.cut !== 'failed' || !this.deps.publisher.retryCuts(track.parentId))
+    if (
+      track.cut !== 'failed' ||
+      !this.deps.publisher.retryCuts(track.parentId)
+    )
       throw conflict('no-failed-cuts', 'No cut failed');
     return this.read(call.actor, call.mediaId);
   }
@@ -381,7 +385,11 @@ export class TrackRevisionService {
     return this.now().getTime() - Date.parse(archivedAt) > TRACK_RESTORE_MS;
   }
 
-  private assertFree(link: { parentId: string; startMs: number; endMs: number }) {
+  private assertFree(link: {
+    parentId: string;
+    startMs: number;
+    endMs: number;
+  }) {
     const taken = this.deps.revisions
       .tracks(link.parentId)
       .find((one) => one.startMs < link.endMs && one.endMs > link.startMs);
@@ -395,15 +403,13 @@ export class TrackRevisionService {
     this.deps.findMedia(actor, recordingId);
     const since = new Date(this.now().getTime() - TRACK_RESTORE_MS);
     return {
-      tracks: this.deps.revisions
-        .archived(recordingId, since)
-        .map((one) => ({
-          ...one,
-          restorable: true,
-          restorableUntil: new Date(
-            Date.parse(one.archivedAt) + TRACK_RESTORE_MS,
-          ).toISOString(),
-        })),
+      tracks: this.deps.revisions.archived(recordingId, since).map((one) => ({
+        ...one,
+        restorable: true,
+        restorableUntil: new Date(
+          Date.parse(one.archivedAt) + TRACK_RESTORE_MS,
+        ).toISOString(),
+      })),
     };
   }
 
@@ -445,7 +451,8 @@ export class TrackRevisionService {
     const voice = voiceOf(track, role);
     const own = speakerIdOf(track, role);
     const speakerId =
-      own ?? (voice === null ? null : (this.labelsOf(parent.id).get(voice) ?? null));
+      own ??
+      (voice === null ? null : (this.labelsOf(parent.id).get(voice) ?? null));
     return { voice, speakerId, name: this.nameOf(speakerId, parent.topic) };
   }
 

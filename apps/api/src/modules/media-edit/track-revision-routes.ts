@@ -70,8 +70,10 @@ export const trackRevisionRoutes =
     typed.get('/api/v1/media/:id/track-edit', OPTIONS.view, async (request) =>
       service.read(actorOf(request), request.params.id),
     );
-    typed.get('/api/v1/media/:id/track-impact', OPTIONS.impact, async (request) =>
-      service.impact(actorOf(request), request.params.id),
+    typed.get(
+      '/api/v1/media/:id/track-impact',
+      OPTIONS.impact,
+      async (request) => service.impact(actorOf(request), request.params.id),
     );
     typed.get('/api/v1/media/:id/history', OPTIONS.history, async (request) =>
       service.history(actorOf(request), request.params.id),

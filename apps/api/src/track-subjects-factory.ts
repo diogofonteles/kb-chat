@@ -8,6 +8,7 @@ import {
   SubjectDirectory,
   SubjectProposalService,
   TrackSubjectService,
+  TrackSuggestionService,
 } from './modules/track-subjects/index.js';
 import { mediaLlm } from './track-proposals-factory.js';
 
@@ -43,6 +44,7 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     rootOf: (topic) => authors.rootOf(topic),
     conceptsOf: (root) => catalog.get(root)?.relations.conceptNames() ?? [],
     directory: createSubjectDirectory(wiring),
+    history: media.trackRevisions,
   });
   const proposals = new SubjectProposalService({
     store: media.trackSubjects,
@@ -58,5 +60,18 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     onRunError: (err, runId) =>
       wiring.log.warn({ err, runId }, 'subject run failed'),
   });
-  return { subjects, proposals };
+  const suggestions = new TrackSuggestionService({
+    ledger: media.spend,
+    subjects,
+    store: media.store,
+    speakers: media.speakers,
+    transcripts: media.transcripts,
+    findMedia: (actor, mediaId) => service.get(actor, mediaId),
+    rootOf: (topic) => authors.rootOf(topic),
+    llm: mediaLlm(wiring),
+    caps: { runUsd: media.ai.runCapUsd, monthlyUsd: media.ai.monthlyCapUsd },
+    onError: (err, mediaId) =>
+      wiring.log.warn({ err, mediaId }, 'track suggestion failed'),
+  });
+  return { subjects, proposals, suggestions };
 }

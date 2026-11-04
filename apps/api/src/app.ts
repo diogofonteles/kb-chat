@@ -999,7 +999,7 @@ async function registerSubjects(
   app: FastifyInstance,
   wiring: MediaWiring & { readonly service: MediaService },
 ): Promise<SubjectProposalService> {
-  const { subjects, proposals } = createTrackSubjects({
+  const { subjects, proposals, suggestions } = createTrackSubjects({
     ...wiring,
     log: app.log,
   });
@@ -1010,6 +1010,7 @@ async function registerSubjects(
     trackSubjectRoutes({
       subjects,
       proposals,
+      suggestions,
       hasTopic: (topic) => wiring.catalog.get(topic) !== undefined,
     }),
   );

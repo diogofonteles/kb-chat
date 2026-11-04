@@ -1,16 +1,29 @@
 import { randomUUID } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type {
   ArchivedTracks,
   MediaItem,
+  MediaTranscript,
   MovedBookmarks,
+  ProposalEstimate,
   TrackEditView,
   TrackHistory,
   TrackImpact,
+  TrackSuggestion,
 } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
-import { closeApp } from '../test/ai-app-harness.js';
+import { FAKE_FREE_MODELS } from './testing/fake-openrouter.js';
+import { SqliteTrackRevisionStore } from './adapters/sqlite/sqlite-track-revision-store.js';
+import { closeApp, connectHouse } from '../test/ai-app-harness.js';
+import {
+  leaseDiarization,
+  pairDiarizer,
+  requestVoices,
+  sendTurns,
+  transcribedItem,
+} from '../test/diarization-harness.js';
 import { member, type Media } from '../test/media-harness.js';
 import {
   approve,
@@ -253,7 +266,9 @@ describe('Bounds of an approved track (FR-2)', () => {
     expect(after.id).toBe(first.id);
     expect(after.parent?.startMs).toBe(90_000);
     expect(after.parent?.endMs).toBe(210_000);
-    expect(after.parent?.fileVersion).toBe((first.parent?.fileVersion ?? 0) + 1);
+    expect(after.parent?.fileVersion).toBe(
+      (first.parent?.fileVersion ?? 0) + 1,
+    );
     expect(after.positionMs).toBe(60_000);
     const onRecording = await media.owner(
       'GET',
@@ -456,6 +471,268 @@ describe('Deleting and restoring a track (FR-3, FR-4)', () => {
 
     expect(removed.statusCode, removed.body).toBe(204);
     expect(cutsOf()).toEqual([]);
+  });
+});
+
+describe('Who speaks (FR-1)', () => {
+  const VOICED = [
+    { startMs: 0, endMs: 20_000, title: 'Faixa um', answererVoice: 1 },
+    { startMs: 20_000, endMs: 40_000, title: 'Faixa dois', answererVoice: 1 },
+  ];
+
+  async function voiced() {
+    const world = await startWorld();
+    const { media } = world;
+    const { token } = await pairDiarizer(media);
+    const id = await transcribedItem(media, token);
+    expect((await requestVoices(media, id)).statusCode).toBe(202);
+    const job = await leaseDiarization(media, token);
+    expect((await sendTurns(media, { token, job })).statusCode).toBe(204);
+    await approve(media, id, VOICED);
+    await finishCuts(media);
+    const entry = await libraryEntry(media.owner, id);
+    const [first, second] = entry?.tracks ?? [];
+    if (!first || !second) throw new Error('no tracks');
+    return { media, id, first, second };
+  }
+
+  const speaker = async (media: Media, name: string) => {
+    const added = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/speakers',
+      { name },
+    );
+    expect(added.statusCode, added.body).toBeLessThan(300);
+    return added.json<{ id: string }>().id;
+  };
+
+  it('AC-2: across the recording every track of the voice changes; on one, only it', async () => {
+    const { media, first, second } = await voiced();
+    const jose = await speaker(media, 'José');
+    const maria = await speaker(media, 'Maria');
+
+    const everywhere = await patch(media, first.id, {
+      answererSpeakerId: jose,
+      scope: 'recording',
+    });
+
+    expect(everywhere.statusCode, everywhere.body).toBe(200);
+    expect((await viewOf(media, first.id)).answerer.name).toBe('José');
+    expect((await viewOf(media, second.id)).answerer.name).toBe('José');
+
+    await patch(media, second.id, {
+      answererSpeakerId: maria,
+      scope: 'track',
+    });
+
+    expect((await viewOf(media, first.id)).answerer.name).toBe('José');
+    expect((await viewOf(media, second.id)).answerer.name).toBe('Maria');
+    const onThis = await media.owner('GET', `${urlOf(second.id)}/transcript`);
+    expect(onThis.json<MediaTranscript>().voiceNames?.[0]?.name).toBe('Maria');
+    const onOther = await media.owner('GET', `${urlOf(first.id)}/transcript`);
+    expect(onOther.json<MediaTranscript>().voiceNames?.[0]?.name).toBe('José');
+    const history = await media.owner('GET', `${urlOf(second.id)}/history`);
+    expect(
+      history.json<TrackHistory>().changes.map((one) => one.after),
+    ).toEqual(['Maria', 'José']);
+  });
+
+  it('a track with no voice cannot name one across the recording', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    const jose = await speaker(media, 'José');
+
+    const refused = await patch(media, first.id, {
+      answererSpeakerId: jose,
+      scope: 'recording',
+    });
+
+    expect(refused.statusCode).toBe(409);
+    expect(refused.body).toContain('no-voice');
+  });
+
+  it('a speaker of another collection is refused', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+
+    const refused = await patch(media, first.id, {
+      answererSpeakerId: randomUUID(),
+    });
+
+    expect(refused.statusCode).toBe(400);
+  });
+
+  it('AC-3: an answerer who is an author of the collection becomes the author', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    await media.owner('POST', '/api/v1/topics/hermetismo/authors', {
+      name: 'Quem Responde',
+    });
+    const author = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/speakers',
+      { name: 'Quem Responde', authorSlug: 'quem-responde' },
+    );
+
+    const changed = await patch(media, first.id, {
+      answererSpeakerId: author.json<{ id: string }>().id,
+    });
+
+    expect(changed.json<MediaItem>().author?.slug).toBe('quem-responde');
+  });
+});
+
+describe('The window to restore (AC-9)', () => {
+  it('past 30 days the API refuses and the track stays out', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, first } = await published(world);
+    await send(media, { method: 'DELETE', url: urlOf(first.id) });
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('UPDATE media SET archived_at = ? WHERE id = ?').run(
+      old,
+      first.id,
+    );
+    db.close();
+
+    const back = await send(media, {
+      method: 'POST',
+      url: `${urlOf(first.id)}/restore`,
+    });
+
+    expect(back.statusCode).toBe(409);
+    expect(back.body).toContain('restore-expired');
+    const list = await media.owner(
+      'GET',
+      `${urlOf(recording.id)}/archived-tracks`,
+    );
+    expect(list.json<ArchivedTracks>().tracks).toEqual([]);
+    const page = await media.owner('GET', urlOf(first.id));
+    expect(page.json<MediaItem>().archived).toBe(true);
+  });
+});
+
+const MEDIA_MODEL = {
+  id: 'deepseek/deepseek-v4-flash',
+  name: 'DeepSeek',
+  context_length: 100_000,
+  pricing: { prompt: '0.0000001', completion: '0.0000002' },
+};
+
+describe('"Sugerir de novo com IA" (FR-7)', () => {
+  const REPLY = JSON.stringify({
+    titulo: 'Título sugerido',
+    resumo: 'Resumo sugerido.',
+    pergunta: null,
+    resposta: 'Ninguém conhecido',
+    assuntos: ['inventado'],
+    novos: ['Tema inédito'],
+  });
+
+  async function connected() {
+    const world = await startWorld();
+    const { media } = world;
+    const made = await published(world);
+    media.started.fake.models = [...FAKE_FREE_MODELS, MEDIA_MODEL];
+    await connectHouse(media.started, media.owner);
+    media.started.fake.scripted.push(() => ({ content: REPLY, cost: 0.0012 }));
+    return { media, ...made };
+  }
+
+  it('AC-11: estimates, answers, and only the spend remains', async () => {
+    const { media, first } = await connected();
+    const url = `${urlOf(first.id)}/suggestions`;
+
+    const estimate = await send(media, {
+      method: 'POST',
+      url,
+      payload: { dryRun: true },
+    });
+    const run = await send(media, {
+      method: 'POST',
+      url,
+      payload: { dryRun: false },
+    });
+
+    expect(estimate.statusCode, estimate.body).toBe(200);
+    expect(estimate.json<ProposalEstimate>().allowed).toBe(true);
+    expect(run.statusCode, run.body).toBe(201);
+    const suggestion = run.json<TrackSuggestion>();
+    expect(suggestion.title).toBe('Título sugerido');
+    expect(suggestion.answererSpeakerId).toBeNull();
+    expect(suggestion.subjects).toEqual([
+      { kind: 'new', name: 'Tema inédito', id: null },
+    ]);
+    expect((await viewOf(media, first.id)).title).toBe(first.title);
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    const row = db
+      .prepare(`SELECT status FROM media_spend WHERE kind = 'track-suggestion'`)
+      .get();
+    db.close();
+    expect(row?.['status']).toBe('settled');
+  });
+
+  it('an unreadable answer gives the reservation back', async () => {
+    const { media, first } = await connected();
+    media.started.fake.scripted.length = 0;
+    media.started.fake.scripted.push(() => ({ content: 'isto não é JSON' }));
+
+    const run = await send(media, {
+      method: 'POST',
+      url: `${urlOf(first.id)}/suggestions`,
+      payload: { dryRun: false },
+    });
+
+    expect(run.statusCode).toBeGreaterThanOrEqual(500);
+  });
+
+  it('needs the AI grant', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    const { call } = await member(media, {
+      email: 'editora@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-tracks', 'media-edit'],
+    });
+
+    const refused = await call('POST', `${urlOf(first.id)}/suggestions`, {
+      dryRun: true,
+    });
+
+    expect(refused.statusCode).toBe(403);
+  });
+});
+
+describe('The janitor (BR-3, BR-7)', () => {
+  it('takes replaced cuts after a day and deleted tracks after 30 days', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first, second } = await published(world);
+    await moveBounds(media, first.id, { startMs: 90_000, endMs: 210_000 });
+    await finishCuts(media);
+    await send(media, { method: 'DELETE', url: urlOf(second.id) });
+    const files = () =>
+      readdirSync(join(media.mediaDir, 'audio')).filter(
+        (name) => name.startsWith(first.id) || name.startsWith(second.id),
+      );
+    expect(files().length).toBe(3);
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    const store = new SqliteTrackRevisionStore(db);
+    const day = 24 * 60 * 60 * 1000;
+
+    const old = store.takeOldFiles(new Date(Date.now() + 2 * day));
+    const archived = store.takeArchivedFiles(new Date(Date.now() + 31 * day));
+    const early = store.takeOldFiles(new Date(0));
+    db.close();
+
+    expect(old).toHaveLength(1);
+    expect(archived).toHaveLength(1);
+    expect(early).toEqual([]);
   });
 });
 
