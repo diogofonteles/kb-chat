@@ -91,4 +91,30 @@ describe('TrackPreparationStatus (KBC-068 FR-1)', () => {
     await settle();
     expect(textOf(fixture)).toBe('Preparando faixas: 10 de 12');
   });
+
+  it('says so when asking to try again fails, and clears it on the next try', async () => {
+    const { fixture, http } = setup();
+    await settle();
+    http.expectOne(URL).flush(anEdit({ total: 12, done: 10, failed: 2 }));
+    await settle();
+    const button: HTMLButtonElement =
+      fixture.nativeElement.querySelector('button');
+    button.click();
+    http
+      .expectOne(`${URL}/retry-cuts`)
+      .flush(null, { status: 503, statusText: 'Unavailable' });
+    await settle();
+    http.expectOne(URL).flush(anEdit({ total: 12, done: 10, failed: 2 }));
+    await settle();
+    expect(textOf(fixture)).toContain('Não foi possível tentar de novo agora');
+    button.click();
+    await settle();
+    expect(textOf(fixture)).not.toContain(
+      'Não foi possível tentar de novo agora',
+    );
+    http.expectOne(`${URL}/retry-cuts`).flush({ version: 4 });
+    await settle();
+    http.expectOne(URL).flush(anEdit({ total: 12, done: 10, failed: 0 }));
+    await settle();
+  });
 });

@@ -34,6 +34,11 @@ import { MEDIA_POLL_MS } from '../media-polling.js';
           >
             Tentar de novo
           </button>
+          @if (retryRefused()) {
+            <span i18n="@@tracks.preparing.retryFailed"
+              >Não foi possível tentar de novo agora.</span
+            >
+          }
         } @else {
           <span>{{ progressText() }}</span>
         }
@@ -91,6 +96,7 @@ export class TrackPreparationStatus {
     () => this.total() > 0 && this.preparation() === null,
   );
   protected readonly retrying = signal(false);
+  protected readonly retryRefused = signal(false);
 
   protected readonly progressText = computed(() => {
     const now = this.preparation();
@@ -125,6 +131,7 @@ export class TrackPreparationStatus {
     const edit = this.known();
     if (!edit) return;
     this.retrying.set(true);
+    this.retryRefused.set(false);
     this.api
       .retryCuts(edit.mediaId, edit.version)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -135,6 +142,7 @@ export class TrackPreparationStatus {
         },
         error: () => {
           this.retrying.set(false);
+          this.retryRefused.set(true);
           this.edit.reload();
         },
       });
