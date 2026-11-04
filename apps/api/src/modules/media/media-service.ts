@@ -15,6 +15,7 @@ import { AppError } from '../../app-error.js';
 import {
   UploadRefusedError,
   type MediaFilesPort,
+  type UploadProblem,
 } from '../../ports/media-files.js';
 import type {
   ListeningStorePort,
@@ -109,6 +110,22 @@ function assertDeclaredSize(declared: number, expected: number): void {
       },
     );
 }
+
+/** What a whole file sent in one go was refused for. */
+const SAVE_REFUSALS: Record<UploadProblem, () => AppError> = {
+  'too-large': () =>
+    new AppError('PAYLOAD_TOO_LARGE', 'The file is larger than announced'),
+  incomplete: () =>
+    new AppError(
+      'VALIDATION_FAILED',
+      'The file ended before the announced size',
+      { details: { field: 'file' } },
+    ),
+  different: () =>
+    new AppError('VALIDATION_FAILED', 'The file came out different', {
+      details: { field: 'sha256' },
+    }),
+};
 
 /**
  * The media library for people (KBC-034): upload in two steps, list a collection, play,
@@ -573,18 +590,11 @@ export class MediaService {
         mediaId: media.id,
         body,
         expectedBytes: media.uploadBytes,
+        sha256: media.sourceSha256,
       });
     } catch (err) {
       if (!(err instanceof UploadRefusedError)) throw err;
-      throw err.problem === 'too-large'
-        ? new AppError('PAYLOAD_TOO_LARGE', 'The file is larger than announced')
-        : new AppError(
-            'VALIDATION_FAILED',
-            'The file ended before the announced size',
-            {
-              details: { field: 'file' },
-            },
-          );
+      throw SAVE_REFUSALS[err.problem]();
     }
   }
 }

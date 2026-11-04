@@ -1,7 +1,7 @@
 import type { Readable } from 'node:stream';
 
 /** Why an upload was refused while it streamed in. */
-export type UploadProblem = 'too-large' | 'incomplete';
+export type UploadProblem = 'too-large' | 'incomplete' | 'different';
 
 export class UploadRefusedError extends Error {
   constructor(readonly problem: UploadProblem) {
@@ -47,13 +47,15 @@ export interface MediaFilesPort {
   /** Moves a finished work file to its final path (atomic rename). */
   promote(from: string, to: string): Promise<void>;
   /**
-   * Writes the upload, refusing more or fewer bytes than announced (the partial file is
-   * removed); it appears under `uploadPath` only when complete.
+   * Writes the upload, refusing more or fewer bytes than announced, or other bytes than the
+   * `sha256` announced (the partial file is removed); it appears under `uploadPath` only
+   * when complete.
    */
   saveUpload(input: {
     readonly mediaId: string;
     readonly body: Readable;
     readonly expectedBytes: number;
+    readonly sha256?: string | null;
   }): Promise<void>;
   /** How many bytes of a resumable upload are kept; 0 before the first part (KBC-035). */
   uploadOffset(mediaId: string): Promise<number>;

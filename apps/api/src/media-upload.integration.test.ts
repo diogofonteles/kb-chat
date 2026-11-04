@@ -18,6 +18,7 @@ import {
   leaseJob,
   member,
   startMedia,
+  upload,
   type Media,
 } from '../test/media-harness.js';
 
@@ -171,17 +172,14 @@ describe('Resumable upload (KBC-035, tus core on the item)', () => {
     const media = await startMedia();
     const id = await created(media);
     keepPart(media, id, AUDIO);
-    const heads = await Promise.all([
-      offsetOf(media, id),
-      offsetOf(media, id),
-    ]);
+    const heads = await Promise.all([offsetOf(media, id), offsetOf(media, id)]);
     for (const head of heads) {
       expect(head.statusCode).toBe(204);
       expect(head.headers['upload-offset']).toBe(String(AUDIO.length));
     }
-    expect((await media.owner('GET', `/api/v1/media/${id}`)).json().status).toBe(
-      'queued',
-    );
+    expect(
+      (await media.owner('GET', `/api/v1/media/${id}`)).json().status,
+    ).toBe('queued');
     expect(existsSync(partPath(media, id))).toBe(false);
     expect((await leaseJob(media)).mediaId).toBe(id);
   });
@@ -194,9 +192,9 @@ describe('Resumable upload (KBC-035, tus core on the item)', () => {
     expect(head.statusCode).toBe(204);
     expect(head.headers['upload-offset']).toBe('0');
     expect(existsSync(partPath(media, id))).toBe(false);
-    expect((await media.owner('GET', `/api/v1/media/${id}`)).json().status).toBe(
-      'uploading',
-    );
+    expect(
+      (await media.owner('GET', `/api/v1/media/${id}`)).json().status,
+    ).toBe('uploading');
   });
 
   it('refuses a part at the wrong offset, without changing what it has (a retry reads HEAD)', async () => {
@@ -251,6 +249,21 @@ describe('Resumable upload (KBC-035, tus core on the item)', () => {
     expect(sent.json().error.details).toEqual({ field: 'sha256' });
     expect((await offsetOf(media, id)).headers['upload-offset']).toBe('0');
     expect(existsSync(partPath(media, id))).toBe(false);
+  });
+
+  it('checks a whole file sent to an item created with a hash (ADR 0033 §5)', async () => {
+    const media = await startMedia();
+    const id = await created(media);
+    const other = Buffer.alloc(AUDIO.length, 7);
+    const refused = await upload(media, { id, body: other });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.details).toEqual({ field: 'sha256' });
+    expect(
+      (await media.owner('GET', `/api/v1/media/${id}`)).json().status,
+    ).toBe('uploading');
+    const sent = await upload(media, { id, body: AUDIO });
+    expect(sent.statusCode).toBe(200);
+    expect(sent.json().status).toBe('queued');
   });
 
   it('is only for who started it, and 404 for who cannot see it', async () => {

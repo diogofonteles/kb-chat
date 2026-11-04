@@ -12,7 +12,7 @@
 4. **The hash is computed in JavaScript (`@noble/hashes`), 1 MiB at a time.** Web Crypto has no streaming, and WebAssembly would loosen the CSP. It is slower than WebAssembly, and a 4 GB file takes tens of seconds; the line shows its progress.
 5. **The last byte verifies the announced SHA-256.** Bytes that do not match are thrown away and the upload starts over: a wrong hash would otherwise hide or fake a duplicate.
 6. **Expiry counts from the last part**, not from creation: a slow upload is not a stopped one. The janitor of ADR 0022 does the deleting.
-7. **`PUT …/file` stays** for tools and tests that send a whole file. It has no hash, so what it sends is never recognized as repeated.
+7. **`PUT …/file` stays** for tools and tests that send a whole file. It sends no hash of its own, so a file sent to an item created without one is never recognized as repeated; on an item created with one, the whole file must match it (§5).
 
 ## Options considered
 

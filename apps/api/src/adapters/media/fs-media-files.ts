@@ -110,6 +110,7 @@ export class FsMediaFiles implements MediaFilesPort {
     mediaId: string;
     body: Readable;
     expectedBytes: number;
+    sha256?: string | null;
   }): Promise<void> {
     const target = this.resolve(this.uploadPath(input.mediaId));
     const partial = `${target}.part`;
@@ -119,6 +120,11 @@ export class FsMediaFiles implements MediaFilesPort {
       await this.writeLimited(input.body, { limit, path: partial, flags: 'w' });
       if (limit.bytes !== input.expectedBytes)
         throw new UploadRefusedError('incomplete');
+      if (
+        input.sha256 &&
+        (await this.hashUpload(input.mediaId)) !== input.sha256
+      )
+        throw new UploadRefusedError('different');
       await rename(partial, target);
     } catch (err) {
       await rm(partial, { force: true });

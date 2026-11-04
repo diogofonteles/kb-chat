@@ -121,6 +121,17 @@ describe('FsMediaFiles', () => {
     expect(readdirSync(join(root, 'uploads'))).toEqual([]);
   });
 
+  it('refuses and removes an upload that is not the file announced', async () => {
+    const saving = files.saveUpload({
+      mediaId: ID,
+      body: chunks('abc'),
+      expectedBytes: 3,
+      sha256: '0'.repeat(64),
+    });
+    await expect(saving).rejects.toEqual(new UploadRefusedError('different'));
+    expect(readdirSync(join(root, 'uploads'))).toEqual([]);
+  });
+
   it('removes the partial file when the connection breaks', async () => {
     const body = new Readable({
       read() {
