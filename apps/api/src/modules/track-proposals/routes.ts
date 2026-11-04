@@ -46,6 +46,10 @@ function proposer(request: FastifyRequest): MediaActor {
   return actorOf(request);
 }
 
+const needsMedia = async (request: FastifyRequest): Promise<void> => {
+  assertFeature(request, 'media');
+};
+
 const OPTIONS = {
   propose: {
     config: {
@@ -72,9 +76,7 @@ const OPTIONS = {
 export const trackProposalRoutes =
   (service: ProposalService): FastifyPluginAsync =>
   async (app) => {
-    app.addHook('preHandler', async (request) => {
-      assertFeature(request, 'media');
-    });
+    app.addHook('preHandler', needsMedia);
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.post(
       '/api/v1/media/:id/edit/proposals',
