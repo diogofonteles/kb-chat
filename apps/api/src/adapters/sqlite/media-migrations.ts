@@ -705,9 +705,9 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
   {
     // KBC-071 (ADR 0032): consents, profiles without their print (a print is a sealed file
     // outside this database and its backup), their sources and the suggestions. `jobs` takes
-    // the kind 'voice-profile' and the profile it calculates; 'waveform' is KBC-066's
-    // (version 14, not merged yet) and is listed so that either order keeps it. A rebuild of
-    // `jobs` that lands after this one must keep this kind and column.
+    // the kind 'voice-profile' and the profile it calculates, and keeps KBC-066's
+    // 'waveform' from version 14. A rebuild of `jobs` that lands after this one must keep this
+    // kind and column.
     version: 15,
     name: 'voice-profiles',
     sql: `
