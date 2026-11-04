@@ -102,11 +102,9 @@
         O que continua de um envio anterior mantém as escolhas daquele envio.
       </p>
     }
-    @if (!uploads.onlyResuming()) {
-      <app-preparation-options
-        [locked]="stage() === 'sending'"
-        [several]="uploads.entries().length > 1"
-      />
+    <!-- Out of the way while sending: the progress of each file is what matters then. -->
+    @if (!uploads.onlyResuming() && stage() !== 'sending') {
+      <app-preparation-options [several]="uploads.entries().length > 1" />
     }
 
     <footer class="actions">

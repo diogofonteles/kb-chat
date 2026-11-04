@@ -1242,6 +1242,23 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       ).toBeTruthy();
     });
 
+    it('takes the choices away while sending and brings them back after a stop', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel);
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(CREATED);
+      await panel.fixture.whenStable();
+      expect(
+        screen.queryByRole('group', { name: 'O que fazer com este áudio' }),
+      ).toBeNull();
+      expect(screen.getByRole('progressbar')).toBeTruthy();
+      panel.tus.last.fail(500);
+      await panel.fixture.whenStable();
+      expect(
+        screen.getByRole('group', { name: 'O que fazer com este áudio' }),
+      ).toBeTruthy();
+    });
+
     it('sends nothing for a repeated file, whatever the plan (AC-2)', async () => {
       const panel = await renderPanel({ features: EDITOR });
       await chooseChecked(panel, audio(), {
