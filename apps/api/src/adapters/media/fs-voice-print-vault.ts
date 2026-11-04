@@ -56,8 +56,8 @@ export class FsVoicePrintVault implements VoicePrintVaultPort {
     }
   }
 
-  async has(profileId: string): Promise<boolean> {
-    return (await this.sealedOf(profileId)) !== null;
+  async opens(profileId: string): Promise<boolean> {
+    return (await this.read(profileId)) !== null;
   }
 
   async remove(profileId: string): Promise<void> {

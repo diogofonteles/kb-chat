@@ -13,6 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type {
   DiarizeJob,
   Me,
+  Person,
   VoiceProfileList,
   VoiceProfileReport,
 } from '@kb-chat/contracts';
@@ -123,6 +124,37 @@ describe('The permission (KBC-071 AC-7, ADR 0032)', () => {
     expect((await call('GET', '/api/v1/me')).json<Me>().features).not.toContain(
       'media-voice-profiles',
     );
+  });
+
+  it('a grant saved for a member is dropped, so becoming a master gives nothing', async () => {
+    const media = await startMedia();
+    const invited = await media.owner('POST', '/api/v1/people', {
+      email: 'edita@example.com',
+      sendEmail: false,
+    });
+    const url = `/api/v1/people/${invited.json().id}`;
+    const saved = await media.owner('PATCH', url, {
+      features: ['media', 'media-voice-profiles'],
+    });
+    expect(saved.json<Person>().features).toEqual(['media']);
+    const promoted = await media.owner('PATCH', url, { role: 'master' });
+    expect(promoted.json<Person>().features).toEqual(['media']);
+  });
+
+  it('a master who loses the role loses the grant', async () => {
+    const media = await startMedia();
+    const invited = await media.owner('POST', '/api/v1/people', {
+      email: 'mestre@example.com',
+      sendEmail: false,
+    });
+    const url = `/api/v1/people/${invited.json().id}`;
+    await media.owner('PATCH', url, { role: 'master' });
+    const granted = await media.owner('PATCH', url, {
+      features: ['media-voice-profiles'],
+    });
+    expect(granted.json<Person>().features).toEqual(['media-voice-profiles']);
+    const lost = await media.owner('PATCH', url, { role: 'member' });
+    expect(lost.json<Person>().features).toEqual([]);
   });
 });
 
@@ -332,6 +364,16 @@ describe('Calculating again (KBC-071 FR-4)', () => {
     expect((await profiles(media))[0]?.status).toBe('ready');
   });
 
+  it('a print that no longer opens reads as failed, not as ready', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    writeFileSync(
+      join(media.mediaDir, PRINTS, `${profile.id}.sealed`),
+      'enc:v1:broken',
+    );
+    expect((await profiles(media))[0]?.status).toBe('failed');
+  });
+
   it('a queued job drops the old print, which is never read again', async () => {
     const { media, token } = await granted();
     const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
@@ -497,6 +539,29 @@ describe('Suggesting a name by voice (KBC-071 FR-3)', () => {
     expect(await suggestionsOf(media, heard)).toEqual([
       expect.objectContaining({ speakerId: speaker.id }),
     ]);
+  });
+
+  it('R-7: a token not marked for voice profiles cannot send matches', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const { token: plain } = await pairVoicePrinter(media, [
+      'transcribe',
+      'diarize',
+    ]);
+    const mediaId = await transcribedIn(media, { token: plain });
+    expect((await requestVoices(media, mediaId)).statusCode).toBe(202);
+    const job = await leaseDiarization(media, plain);
+    const turns = turnsOf(job, CONVERSATION_TURNS);
+    const refused = await sendTurns(media, {
+      token: plain,
+      job,
+      body: { ...turns, voiceMatches: [match(profile.id, 0.9)] },
+    });
+    expect(refused.statusCode).toBe(404);
+    expect(await suggestionsOf(media, mediaId)).toEqual([]);
+    const clean = await sendTurns(media, { token: plain, job, body: turns });
+    expect(clean.statusCode, clean.body).toBe(204);
+    expect(await suggestionsOf(media, mediaId)).toEqual([]);
   });
 
   it("sends the prints of the job's collection during its lease, and only to a marked token", async () => {
@@ -946,6 +1011,20 @@ describe('"Perfis e consentimentos" (KBC-071 FR-5)', () => {
     expect(evidence.statusCode).toBe(200);
     expect(evidence.body).toContain('Autorizo o uso');
     expect(evidence.headers['content-disposition']).toContain('attachment');
+  });
+
+  it('neither the report nor the proof stays in a cache', async () => {
+    const { media, token } = await granted();
+    await readyProfile(media, { token, name: 'Gabriel' });
+    const url = '/api/v1/voice-profiles/report';
+    const list = await media.owner('GET', url);
+    expect(list.headers['cache-control']).toBe('no-store');
+    const [entry] = await report(media);
+    const proof = await media.owner(
+      'GET',
+      `/api/v1/voice-consents/${entry?.id}/evidence`,
+    );
+    expect(proof.headers['cache-control']).toBe('no-store');
   });
 
   it('keeps an attached document sealed and gives it back whole', async () => {

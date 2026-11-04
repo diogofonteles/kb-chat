@@ -53,13 +53,14 @@ describe('FsVoicePrintVault (ADR 0032)', () => {
       new SecretBox(Buffer.alloc(32, 8)),
     );
     expect(await other.read(ID)).toBeNull();
+    expect(await other.opens(ID)).toBe(false);
   });
 
   it('removes for good, and removing again is no error', async () => {
     await vault.put(ID, PRINT);
     await vault.remove(ID);
     await vault.remove(ID);
-    expect(await vault.has(ID)).toBe(false);
+    expect(await vault.opens(ID)).toBe(false);
     expect(await vault.read(ID)).toBeNull();
     expect(await vault.ids()).toEqual([]);
   });

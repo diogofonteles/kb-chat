@@ -136,7 +136,7 @@ function assertDiarizer(request: FastifyRequest): void {
   if (!identityOf(request).kinds.includes('diarize')) throw notThisWorkers();
 }
 
-/** A print goes only to, and comes only from, a token marked for it (ADR 0032). */
+/** A print or a match goes only to, and comes only from, a token marked for it (ADR 0032). */
 function assertVoicePrinter(request: FastifyRequest): void {
   if (!identityOf(request).kinds.includes('voice-profile'))
     throw notThisWorkers();
@@ -423,6 +423,7 @@ function registerDiarization(
     OPTIONS.diarization,
     async (request, reply) => {
       assertDiarizer(request);
+      if (request.body.voiceMatches?.length) assertVoicePrinter(request);
       const owner = {
         jobId: request.params.id,
         ...ownerOf(request, request.body),

@@ -94,10 +94,16 @@ function registerReport(
   service: VoiceProfileService,
 ): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  typed.get('/api/v1/voice-profiles/report', OPTIONS.report, (request) => {
-    assertOwner(request);
-    return Promise.resolve({ items: service.report() });
-  });
+  typed.get(
+    '/api/v1/voice-profiles/report',
+    OPTIONS.report,
+    async (request, reply) => {
+      assertOwner(request);
+      return reply
+        .header('cache-control', 'no-store')
+        .send({ items: service.report() });
+    },
+  );
   typed.get(
     '/api/v1/voice-consents/:id/evidence',
     OPTIONS.evidence,
@@ -107,6 +113,7 @@ function registerReport(
       const { mime, data, extension } = service.evidence(id);
       return reply
         .header('content-type', mime)
+        .header('cache-control', 'no-store')
         .header('x-content-type-options', 'nosniff')
         .header(
           'content-disposition',

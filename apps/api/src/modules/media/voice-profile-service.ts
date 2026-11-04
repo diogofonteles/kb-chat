@@ -315,13 +315,13 @@ export class VoiceProfileService {
     return speaker && toCollectionSpeaker(speaker, this.deps.authorOf).name;
   }
 
-  /** A job at work says so; else a print on disk is ready, and no print asks to redo it. */
+  /** A job at work says so; else a print that opens is ready, and no such print asks to redo it. */
   private async statusOf(
     profile: StoredVoiceProfile,
   ): Promise<VoiceProfileStatus> {
     if (JOB_RUNNING.includes(profile.jobStatus)) return 'calculating';
-    const stored =
-      profile.model !== null && (await this.deps.prints.has(profile.id));
-    return stored ? 'ready' : 'failed';
+    const opens =
+      profile.model !== null && (await this.deps.prints.opens(profile.id));
+    return opens ? 'ready' : 'failed';
   }
 }

@@ -202,7 +202,10 @@ export function update(
     ...target,
     role,
     topics: patch.topics ? unique(patch.topics) : target.topics,
-    features: patch.features ? unique(patch.features) : target.features,
+    features: heldFeatures(
+      role,
+      patch.features ? unique(patch.features) : target.features,
+    ),
     ...(patch.ai && {
       ai: applyAiUpdate(aiOf(target), patch.ai, change.context),
     }),
@@ -211,6 +214,13 @@ export function update(
   };
   return { people: replace(people, next), result: next };
 }
+
+/** A grant by name holds for a master only: kept off a member, it cannot wake on a promotion. */
+const heldFeatures = (
+  role: StoredPerson['role'],
+  features: readonly Feature[],
+): Feature[] =>
+  role === 'master' ? [...features] : features.filter(notGrantedByName);
 
 /** A preset never gives what must be granted to one master by name (ADR 0032). */
 const notGrantedByName = (feature: Feature): boolean =>
