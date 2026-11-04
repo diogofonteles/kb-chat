@@ -19,8 +19,8 @@ export interface SpeakerStorePort {
   list(collection: string): StoredSpeaker[];
   get(id: string): StoredSpeaker | null;
   /**
-   * Registers a speaker, or returns the one that name or author already is; asked with an
-   * author, an unlinked speaker of that name gets linked.
+   * Registers a speaker, or returns the one that author, or else that name, already is; asked
+   * with an author, an unlinked speaker of that name gets linked.
    */
   add(speaker: NewSpeaker): {
     readonly speaker: StoredSpeaker;

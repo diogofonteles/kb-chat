@@ -64,6 +64,8 @@ export class SpeakersService {
       createdBy: by,
       now: this.now(),
     });
+    if (authorSlug !== null && speaker.authorSlug !== authorSlug)
+      throw new AppError('MEDIA_CONFLICT', 'Another speaker has that name');
     return { speaker: this.toView(speaker), created };
   }
 

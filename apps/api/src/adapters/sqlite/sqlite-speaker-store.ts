@@ -100,9 +100,14 @@ export class SqliteSpeakerStore implements SpeakerStorePort {
       .prepare(
         `SELECT ${COLUMNS} FROM media_speakers
          WHERE collection = ? AND (author_slug = ? OR name_key = ?)
-         ORDER BY author_slug IS NULL LIMIT 1`,
+         ORDER BY author_slug IS ? DESC, author_slug IS NULL LIMIT 1`,
       )
-      .get(speaker.collection, speaker.authorSlug, speaker.nameKey);
+      .get(
+        speaker.collection,
+        speaker.authorSlug,
+        speaker.nameKey,
+        speaker.authorSlug,
+      );
     return row ? toSpeaker(row) : null;
   }
 
