@@ -1,0 +1,136 @@
+<ol class="rows" aria-label="Faixas" i18n-aria-label="@@tracks.list">
+  @for (row of rows(); track row.track.id) {
+    <li class="row" [class.selected]="row.selected">
+      <button
+        #rowButton
+        type="button"
+        class="head"
+        [attr.aria-current]="row.selected ? 'true' : null"
+        [tabindex]="row.track.id === focusableId() ? 0 : -1"
+        (click)="selectTrack.emit(row.track.id)"
+        (keydown)="rowKey($event, row.track.id)"
+      >
+        <span class="number">{{ row.ordinal }}</span>
+        <span class="name">
+          @if (row.title) {
+            {{ row.title }}
+          } @else {
+            <em i18n="@@tracks.untitled">Sem título</em>
+          }
+        </span>
+        <span class="range">{{ row.range }}</span>
+        <span class="length">{{ row.length }}</span>
+        <span class="badge" [class.ai]="row.proposal">
+          @if (row.proposal) {
+            <ng-container i18n="@@tracks.badge.ai"
+              >Proposta pela IA</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@tracks.badge.person"
+              >Criada por você</ng-container
+            >
+          }
+        </span>
+        @for (warning of row.warnings; track warning) {
+          <span class="warning"
+            ><span aria-hidden="true">⚠ </span>{{ warning }}</span
+          >
+        }
+      </button>
+      @if (row.selected && !readOnly()) {
+        <div class="fields">
+          <label class="field title">
+            <span i18n="@@tracks.field.title">Título</span>
+            <input
+              #titleField
+              type="text"
+              [maxLength]="titleMax"
+              [value]="row.title"
+              (keydown)="titleKey($event, row)"
+              (blur)="saveTitle($event, row.track.id, row.title)"
+            />
+          </label>
+          <label class="field">
+            <span i18n="@@tracks.field.kind">Tipo</span>
+            <select (change)="chooseKind($event, row.track.id)">
+              @for (option of kinds; track option.kind) {
+                <option
+                  [value]="option.kind"
+                  [selected]="option.kind === row.track.kind"
+                >
+                  {{ option.label }}
+                </option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            <span i18n="@@tracks.field.asker">Quem pergunta</span>
+            <select (change)="choosePerson($event, row.track.id, 'asker')">
+              <option value="" i18n="@@tracks.field.nobody">Ninguém</option>
+              @for (person of people(); track person.value) {
+                <option
+                  [value]="person.value"
+                  [selected]="person.value === row.asker"
+                >
+                  {{ person.label }}
+                </option>
+              }
+            </select>
+          </label>
+          <label class="field">
+            <span i18n="@@tracks.field.answerer">Quem responde</span>
+            <select (change)="choosePerson($event, row.track.id, 'answerer')">
+              <option value="" i18n="@@tracks.field.nobody">Ninguém</option>
+              @for (person of people(); track person.value) {
+                <option
+                  [value]="person.value"
+                  [selected]="person.value === row.answerer"
+                >
+                  {{ person.label }}
+                </option>
+              }
+            </select>
+          </label>
+          <div class="actions">
+            <button
+              type="button"
+              class="action"
+              aria-keyshortcuts="Space"
+              (click)="listen.emit('track')"
+              i18n="@@tracks.listen.track"
+            >
+              ▶ Ouvir
+            </button>
+            <button
+              type="button"
+              class="action"
+              aria-keyshortcuts="I"
+              (click)="listen.emit('start')"
+              i18n="@@tracks.listen.start"
+            >
+              Ouvir o início
+            </button>
+            <button
+              type="button"
+              class="action"
+              aria-keyshortcuts="F"
+              (click)="listen.emit('end')"
+              i18n="@@tracks.listen.end"
+            >
+              Ouvir o fim
+            </button>
+            <app-menu-button
+              class="more"
+              label="Mais ações da faixa"
+              i18n-label="@@tracks.more"
+              [options]="row.actions"
+              (chosen)="act($event, row.track.id)"
+            >
+              <span aria-hidden="true">⋯</span>
+            </app-menu-button>
+          </div>
+        </div>
+      }
+    </li>
+  }
+</ol>

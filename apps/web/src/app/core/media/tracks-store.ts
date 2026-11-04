@@ -1,9 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import {
-  mediaTracksSchema,
-  type ApprovedTrack,
-} from '@kb-chat/contracts';
+import { mediaTracksSchema, type ApprovedTrack } from '@kb-chat/contracts';
 import { adjacentTrack, trackAt } from '@kb-chat/player-core';
 import { SessionStore } from '@core/auth/session-store.js';
 import { catchError, map, of, tap, type Observable } from 'rxjs';

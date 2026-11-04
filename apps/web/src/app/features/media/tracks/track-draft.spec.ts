@@ -50,11 +50,7 @@ describe('TrackDraft (KBC-066)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        TrackDraft,
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), TrackDraft],
     });
     draft = TestBed.inject(TrackDraft);
     http = TestBed.inject(HttpTestingController);

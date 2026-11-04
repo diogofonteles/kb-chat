@@ -144,15 +144,18 @@ describe('dividing and joining (FR-6)', () => {
 describe('creating (BR-3)', () => {
   it('starts where asked, inside the gap', () => {
     expect(
-      newTrackSpan([span('a', 0, 10_000)], { atMs: 20_000, durationMs: DURATION }),
+      newTrackSpan([span('a', 0, 10_000)], {
+        atMs: 20_000,
+        durationMs: DURATION,
+      }),
     ).toEqual({ startMs: 20_000, endMs: 80_000 });
   });
 
   it('stays in a short gap and refuses one of less than 5 s', () => {
     const tracks = [span('a', 0, 10_000), span('b', 18_000, 30_000)];
-    expect(newTrackSpan(tracks, { atMs: 17_000, durationMs: DURATION })).toEqual(
-      { startMs: 13_000, endMs: 18_000 },
-    );
+    expect(
+      newTrackSpan(tracks, { atMs: 17_000, durationMs: DURATION }),
+    ).toEqual({ startMs: 13_000, endMs: 18_000 });
     const tight = [span('a', 0, 10_000), span('b', 14_000, 30_000)];
     expect(
       newTrackSpan(tight, { atMs: 12_000, durationMs: DURATION }),
@@ -169,9 +172,7 @@ describe('creating (BR-3)', () => {
       startMs: 10_000,
       endMs: 20_000,
     });
-    expect(
-      selectedSpan(tracks, { ...input, startMs: 16_000 }),
-    ).toBeNull();
+    expect(selectedSpan(tracks, { ...input, startMs: 16_000 })).toBeNull();
   });
 });
 
@@ -230,7 +231,9 @@ describe('any sequence of actions (BR-3, BR-4)', () => {
         atMs: action.atMs,
         durationMs: DURATION,
       });
-      return span ? [...tracks, { id: `n${tracks.length}${action.atMs}`, ...span }] : tracks;
+      return span
+        ? [...tracks, { id: `n${tracks.length}${action.atMs}`, ...span }]
+        : tracks;
     }
     const track = tracks[action.index % Math.max(tracks.length, 1)];
     if (!track) return tracks;

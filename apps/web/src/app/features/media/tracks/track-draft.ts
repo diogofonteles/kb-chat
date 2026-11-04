@@ -24,7 +24,8 @@ const RETRY_MS = 5_000;
 /** "Rascunho salvo" is read aloud at most this often. */
 const SPOKEN_EVERY_MS = 10_000;
 
-export type SaveState = 'idle' | 'saving' | 'saved' | 'offline' | 'conflict' | 'failed';
+export type SaveState =
+  'idle' | 'saving' | 'saved' | 'offline' | 'conflict' | 'failed';
 
 /** Numbered as the screen shows them: by start time. */
 export const numbered = (tracks: readonly DraftTrack[]) =>
@@ -63,7 +64,7 @@ export function problemsOf(err: unknown): readonly TrackProblem[] {
 @Injectable()
 export class TrackDraft {
   private readonly api = inject(MediaEditApi);
-  private readonly history = new UndoHistory<readonly DraftTrack[]>();
+  private history = new UndoHistory<readonly DraftTrack[]>();
   private readonly state = signal<readonly DraftTrack[]>([]);
   private readonly saveState = signal<SaveState>('idle');
   private readonly durationValue = signal<number | null>(null);
@@ -110,17 +111,27 @@ export class TrackDraft {
     this.version = edit.version;
     this.durationValue.set(durationMs);
     this.state.set(edit.tracks);
+    this.dirty = false;
+    this.saveState.set('idle');
+    this.history = new UndoHistory();
+    this.moves.update((value) => value + 1);
   }
 
-  /** A proposal grew the draft (KBC-067): the same draft, one version on. */
+  /** A proposal changed the draft (KBC-067): what was undoable is of another draft. */
   refresh(edit: MediaEdit): void {
     this.version = edit.version;
     this.state.set(edit.tracks);
+    this.history = new UndoHistory();
     this.moves.update((value) => value + 1);
   }
 
   get currentVersion(): number {
     return this.version;
+  }
+
+  /** An approval or a reopening moved the version. */
+  setVersion(version: number): void {
+    this.version = version;
   }
 
   apply(next: readonly DraftTrack[]): void {

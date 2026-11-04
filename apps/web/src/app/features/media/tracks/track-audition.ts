@@ -27,13 +27,13 @@ export class TrackAudition {
   private range: AuditionRange | null = null;
   private frame: number | null = null;
   private readonly position = signal<number | null>(null);
-  private readonly stopAt = signal(false);
+  private readonly failure = signal(false);
 
   /** Where the cursor is while something plays; null otherwise. */
   readonly positionMs = this.position.asReadonly();
   readonly playing = computed(() => this.position() !== null);
   /** It could not play (a network error, a browser refusal): the page says so. */
-  readonly failed = this.stopAt.asReadonly();
+  readonly failed = this.failure.asReadonly();
 
   /** The element in the page's template. */
   attach(element: HTMLMediaElement): void {
@@ -46,12 +46,12 @@ export class TrackAudition {
   play(range: AuditionRange): void {
     const { element } = this;
     if (!element) return;
-    this.stopAt.set(false);
+    this.failure.set(false);
     this.range = range;
     element.currentTime = range.fromMs / 1000;
     this.position.set(range.fromMs);
     element.play().then(this.follow, () => {
-      this.stopAt.set(true);
+      this.failure.set(true);
       this.finished();
     });
   }

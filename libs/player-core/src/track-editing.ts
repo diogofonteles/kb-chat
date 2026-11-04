@@ -65,7 +65,9 @@ export function snapPointsOf(
   words: readonly WordEdge[],
   pauses: readonly WordEdge[],
 ): SnapPoints {
-  const middles = pauses.map((one) => Math.round((one.startMs + one.endMs) / 2));
+  const middles = pauses.map((one) =>
+    Math.round((one.startMs + one.endMs) / 2),
+  );
   const sorted = (points: readonly number[]) =>
     [...new Set(points)].sort((a, b) => a - b);
   return {
@@ -162,8 +164,10 @@ export function landHandle(
 }
 
 /** Where a loose move lands: the limits, no snapping (the nudge and the arrows' target). */
-export const clampHandle = (toMs: number, limits: HandleLimits): HandleLanding =>
-  clampTo(toMs, limits);
+export const clampHandle = (
+  toMs: number,
+  limits: HandleLimits,
+): HandleLanding => clampTo(toMs, limits);
 
 /** The next word edge after `ms`, or before it (`←/→` on a handle, FR-4). */
 export function neighbourPoint(
@@ -267,9 +271,7 @@ export function joinTracks<T extends TrackSpan>(
   if (!next) return [...tracks];
   return tracks
     .filter((one) => one.id !== next.id)
-    .map((one) =>
-      one.id === trackId ? { ...one, endMs: next.endMs } : one,
-    );
+    .map((one) => (one.id === trackId ? { ...one, endMs: next.endMs } : one));
 }
 
 /** The track playing at `ms`: `[start, end)`; null in a gap. */
