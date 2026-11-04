@@ -50,7 +50,7 @@ const FAILURES: Record<ProposalFailure, () => string> = {
   provider: () =>
     $localize`:@@subjects.ai.failed.provider:O provedor de IA não respondeu.`,
   'invalid-output': () =>
-    $localize`:@@subjects.ai.failed.output:A resposta da IA veio ilegível.`,
+    $localize`:@@subjects.ai.failed.output:A resposta da IA não trouxe assuntos que deem para usar.`,
   'run-cap': () =>
     $localize`:@@subjects.ai.failed.cap:Esta sugestão passaria do teto por análise.`,
   interrupted: () =>

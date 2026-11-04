@@ -73,6 +73,7 @@ import { trackSubjectsUrl } from '@core/media/track-subjects-api.js';
     }
     p {
       margin: 0;
+      overflow-wrap: anywhere;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
