@@ -22,7 +22,11 @@ describe('SpeakersService.add (KBC-065 FR-1, BR-2)', () => {
   it('finds a speaker by its author before another one by the name', () => {
     const service = aService();
     const byName = service.add('udv', { name: 'Zé', authorSlug: 'bia' }, 'a');
-    const byAuthor = service.add('udv', { name: 'Ana', authorSlug: 'ana' }, 'a');
+    const byAuthor = service.add(
+      'udv',
+      { name: 'Ana', authorSlug: 'ana' },
+      'a',
+    );
     const asked = { name: 'Zé', authorSlug: 'ana' };
     const { speaker, created } = service.add('udv', asked, 'a');
     expect(speaker.id).toBe(byAuthor.speaker.id);
