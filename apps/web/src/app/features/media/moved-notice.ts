@@ -57,7 +57,7 @@ export function mediaMoveOf(
     }
 
     a {
-      color: var(--color-accent-text, var(--color-accent));
+      color: var(--color-accent-strong);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

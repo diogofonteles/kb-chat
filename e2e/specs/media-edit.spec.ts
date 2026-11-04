@@ -213,6 +213,12 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await saveButton(page).click();
     await expect(page.getByText('Dê um título ao áudio.')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
+    await titleField(page).fill(title);
+    await saveButton(page).click();
+    await expect(
+      page.getByRole('link', { name: 'Ver o acervo' }),
+    ).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
   });
 }
 
