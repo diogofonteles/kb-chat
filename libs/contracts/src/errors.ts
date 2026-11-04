@@ -55,6 +55,8 @@ export const API_ERROR_CODES = [
   'EDIT_VERSION_REQUIRED',
   /** Overlapping, too short or untitled tracks; `details.problems` points at each (KBC-066). */
   'TRACKS_INVALID',
+  /** The term list would pass whisper's prompt limit (KBC-040 BR-2). */
+  'TERMS_OVER_LIMIT',
   'CONSENT_REQUIRED',
   /** No print while earlier revocations are unknown (ADR 0032 §4). */
   'VOICE_LIST_LOST',

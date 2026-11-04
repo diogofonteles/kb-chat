@@ -820,4 +820,20 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         WHERE voice_profile_id IS NOT NULL;
     `,
   },
+  {
+    // KBC-040: who saved each version of the term list and when (BR-1). The pilot's list has
+    // no author. Numbered 19 because 16 to 18 are taken by items not merged yet; `jobs` stays.
+    version: 19,
+    name: 'term-versions',
+    sql: `
+      CREATE TABLE term_versions (
+        version INTEGER PRIMARY KEY CHECK (version >= 1),
+        created_at TEXT NOT NULL,
+        author_principal TEXT,
+        author_name TEXT
+      ) STRICT;
+      INSERT INTO term_versions (version, created_at)
+        SELECT DISTINCT version, '2026-10-28T12:00:00.000Z' FROM terms;
+    `,
+  },
 ];
