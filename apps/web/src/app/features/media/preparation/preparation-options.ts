@@ -7,9 +7,13 @@ import {
   inject,
   input,
 } from '@angular/core';
-import type { OptionRefusal, TrackChoice } from '@kb-chat/contracts';
+import type { TrackChoice } from '@kb-chat/contracts';
 import { PlanForm } from './plan-form.js';
-import { REFUSAL_TEXTS } from './preparation-labels.js';
+import {
+  REFUSAL_TEXTS,
+  usdText,
+  type PlanRefusal,
+} from './preparation-labels.js';
 
 /** A choice, its id for `aria-describedby` and why it is off. */
 type Refusable = 'speakers' | 'manual' | 'ai' | 'subjects';
@@ -68,7 +72,7 @@ export class PreparationOptions {
   }
 
   protected refusal(id: Refusable): string {
-    const refusal: OptionRefusal | null = this.form.refusalOf(id);
+    const refusal: PlanRefusal | null = this.form.refusalOf(id);
     return refusal ? REFUSAL_TEXTS[refusal]() : '';
   }
 
@@ -95,13 +99,7 @@ export class PreparationOptions {
     else this.form.setTracks(tracks);
   }
 
-  private readonly usd = (value: number): string =>
-    new Intl.NumberFormat(this.locale, {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: value < 0.01 ? 4 : 2,
-    }).format(value);
+  private readonly usd = (value: number): string => usdText(value, this.locale);
 }
 
 /** "Depois do envio: transcrever, indicar quem fala…": changes with the choices (UP-01). */

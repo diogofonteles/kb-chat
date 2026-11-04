@@ -7,7 +7,11 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import type { Feature, UploadCheck } from '@kb-chat/contracts';
+import type {
+  Feature,
+  PreparationOptions,
+  UploadCheck,
+} from '@kb-chat/contracts';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
 import { of } from 'rxjs';
 import { aTopic } from '../../testing/fixtures.js';
@@ -15,6 +19,7 @@ import { FakeTus } from '../../testing/fake-tus.js';
 import { aMediaItem, sessionAs } from '../../testing/media-fixtures.js';
 import {
   aPreparation,
+  anOffer,
   answeringOptions,
 } from '../../testing/preparation-fixtures.js';
 import { AUDIO_LENGTH_READER, type AudioLengthReader } from './audio-length.js';
@@ -32,6 +37,7 @@ async function renderPanel(
   options: {
     readonly features?: Feature[];
     readonly length?: AudioLengthReader;
+    readonly offer?: PreparationOptions;
   } = {},
 ) {
   const uploaded = vi.fn();
@@ -41,7 +47,9 @@ async function renderPanel(
   const view = await render(UploadPanel, {
     providers: [
       provideZonelessChangeDetection(),
-      provideHttpClient(withInterceptors([answeringOptions(undefined, asked)])),
+      provideHttpClient(
+        withInterceptors([answeringOptions(options.offer, asked)]),
+      ),
       provideHttpClientTesting(),
       provideRouter([{ path: 'midia/:id/preparar', children: [] }]),
       sessionAs({ features: options.features ?? ['media', 'media-upload'] }),
@@ -1240,6 +1248,180 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       expect(
         screen.getByRole('group', { name: 'O que fazer com este áudio' }),
       ).toBeTruthy();
+    });
+
+    it('keeps a resumed title locked when the file stops again (T14, Q188)', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await chooseChecked(panel, audio(), RESUME);
+      clickSend();
+      await panel.fixture.whenStable();
+      panel.tus.last.fail(500);
+      await panel.fixture.whenStable();
+      const title = screen.getByRole<HTMLInputElement>('textbox', {
+        name: 'Título',
+      });
+      expect(title.disabled).toBe(true);
+    });
+
+    /** Four files with the AI chosen, three on their way and the fourth waiting. */
+    async function sendFourWithAi(panel: Panel) {
+      const names = ['a.mp3', 'b.mp3', 'c.mp3', 'd.mp3'];
+      choose(panel.container, ...names.map((name, i) => audio(name, 3 + i)));
+      let unchecked = names.length;
+      while (unchecked-- > 0) await answerCheck(panel);
+      await chooseAi(panel);
+      clickSend();
+      await panel.fixture.whenStable();
+      return panel.http.match(TOPIC);
+    }
+
+    it('keeps the plan and the sum of the click for a file that starts later', async () => {
+      const panel = await renderPanel({ features: PAID });
+      const [first, second, third] = await sendFourWithAi(panel);
+      first?.flush(
+        {
+          error: {
+            code: 'MEDIA_DUPLICATE',
+            message: 'x',
+            details: { media: { id: OTHER_ID, title: 'Já enviado' } },
+          },
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await panel.fixture.whenStable();
+      const [fourth] = panel.http.match(TOPIC);
+      expect(planOf(fourth?.request.body)).toMatchObject({
+        tracks: 'ai',
+        acceptedUsd: 0.005,
+      });
+      for (const call of [second, third, fourth])
+        call?.flush({}, { status: 500, statusText: 'x' });
+    });
+
+    it('takes no file dropped while sending, and says so (T14)', async () => {
+      const panel = await renderPanel({ features: PAID });
+      const calls = await sendFourWithAi(panel);
+      const zone = panel.container.querySelector('.drop');
+      if (!zone) throw new Error('no drop zone');
+      fireEvent.drop(zone, { dataTransfer: { files: [audio('tarde.mp3')] } });
+      await panel.fixture.whenStable();
+      expect(screen.queryByText('tarde.mp3')).toBeNull();
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Espere o envio terminar para adicionar arquivos.',
+      );
+      for (const call of calls)
+        call.flush({}, { status: 500, statusText: 'x' });
+      await panel.fixture.whenStable();
+      panel.http
+        .match(TOPIC)
+        .forEach((call) => call.flush({}, { status: 500, statusText: 'x' }));
+      await panel.fixture.whenStable();
+      expect(screen.queryByText(/Espere o envio terminar/)).toBeNull();
+    });
+
+    it('tells the file already arrived when its item cannot be replaced, and creates none', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel);
+      await chooseAi(panel);
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(CREATED);
+      await panel.fixture.whenStable();
+      panel.tus.last.fail();
+      await panel.fixture.whenStable();
+      fireEvent.click(screen.getByRole('radio', { name: 'Não dividir agora' }));
+      await panel.fixture.whenStable();
+      clickSend();
+      panel.http
+        .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+        .flush(
+          { error: { code: 'FORBIDDEN', message: 'x' } },
+          { status: 403, statusText: 'Forbidden' },
+        );
+      await panel.fixture.whenStable();
+      panel.http.expectNone(TOPIC);
+      const said = screen.getByRole('alert').textContent;
+      expect(said).toContain('já tinha chegado');
+      expect(said).toMatch(/IA paga de até .*0[.,]02/);
+    });
+
+    it('still replaces the item when the removal fails for another reason', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await startSending(panel);
+      panel.tus.last.fail();
+      await panel.fixture.whenStable();
+      fireEvent.input(screen.getByRole('textbox', { name: 'Título' }), {
+        target: { value: 'Outro título' },
+      });
+      clickSend();
+      panel.http
+        .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+        .flush({}, { status: 500, statusText: 'x' });
+      await panel.fixture.whenStable();
+      panel.http.expectOne(TOPIC).flush({ ...CREATED, id: OTHER_ID });
+    });
+
+    const NO_ESTIMATE = anOffer({ aiEstimateUsd: null });
+    const aiReason = () =>
+      screen.getByRole('radio', { name: 'Propor as faixas com IA' })
+        .parentElement?.parentElement?.textContent ?? '';
+
+    it('says the 24 h limit past it, not that a file cannot be read (UP-11)', async () => {
+      const panel = await renderPanel({
+        features: PAID,
+        offer: NO_ESTIMATE,
+        length: () => of(50_000_000),
+      });
+      choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
+      await answerCheck(panel);
+      await answerCheck(panel);
+      expect(aiReason()).toContain('passa de 24 h');
+      expect(aiReason()).not.toContain('consiga ler');
+    });
+
+    it('asks for a readable file when a length is unknown (BR-4)', async () => {
+      const panel = await renderPanel({
+        features: PAID,
+        offer: NO_ESTIMATE,
+        length: () => of(null),
+      });
+      await chooseChecked(panel);
+      expect(aiReason()).toContain('consiga ler');
+    });
+
+    const keptWith = (acceptedUsd: number | null, tracks = 'ai' as const) =>
+      aPreparation({
+        mediaId: CREATED.id,
+        plan: {
+          transcribe: true,
+          speakers: true,
+          tracks,
+          subjects: false,
+          acceptedUsd,
+        },
+      });
+
+    it('says the plan kept is paid, and its value (Q188)', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel, audio(), RESUME);
+      panel.http
+        .expectOne(`/api/v1/media/${CREATED.id}/preparation`)
+        .flush(keptWith(0.0016));
+      await panel.fixture.whenStable();
+      expect(
+        screen.getByText(/mantém as escolhas daquele envio/).textContent,
+      ).toMatch(/IA paga de até .*0[.,]0016/);
+    });
+
+    it('says only that the choices stay when the plan kept is free or unread', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel, audio(), RESUME);
+      panel.http
+        .expectOne(`/api/v1/media/${CREATED.id}/preparation`)
+        .flush({}, { status: 500, statusText: 'x' });
+      await panel.fixture.whenStable();
+      const notice = screen.getByText(/mantém as escolhas daquele envio/);
+      expect(notice.textContent).not.toContain('IA paga');
+      expect(screen.getByText(/Envio interrompido em/)).toBeTruthy();
     });
 
     it('takes the choices away while sending and brings them back after a stop', async () => {

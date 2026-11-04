@@ -19,8 +19,11 @@ export const STAGE_NAMES: Record<PreparationStageId, () => string> = {
   tracks: () => $localize`:@@prep.stage.tracks:Faixas com IA`,
 };
 
+/** Only the page knows the files passed the longest length the API estimates. */
+export type PlanRefusal = OptionRefusal | 'past-limit';
+
 /** Why an option is off, with the way out (BR-3, UP-11). */
-export const REFUSAL_TEXTS: Record<OptionRefusal, () => string> = {
+export const REFUSAL_TEXTS: Record<PlanRefusal, () => string> = {
   permission: () =>
     $localize`:@@prep.refusal.permission:Você não tem permissão para isto. Peça a um master em Pessoas e permissões.`,
   dependency: () =>
@@ -37,7 +40,18 @@ export const REFUSAL_TEXTS: Record<OptionRefusal, () => string> = {
     $localize`:@@prep.refusal.approved:As faixas deste áudio já foram aprovadas. Para mudar, reabra a edição.`,
   'no-estimate': () =>
     $localize`:@@prep.refusal.noEstimate:Escolha um arquivo que o navegador consiga ler para ver a estimativa de custo.`,
+  'past-limit': () =>
+    $localize`:@@prep.refusal.pastLimit:O áudio passa de 24 h, o limite da estimativa de custo. Para propor faixas com IA, envie menos horas de uma vez.`,
 };
+
+/** "US$ 0,0016", "US$ 1,20": small values keep the digits that say them. */
+export const usdText = (value: number, locale: string): string =>
+  new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: value < 0.01 ? 4 : 2,
+  }).format(value);
 
 const FAILURES: Record<StageFailure, () => string> = {
   work: () =>
