@@ -303,10 +303,20 @@ async function uploadFile(env: Running, file: string): Promise<MediaItem> {
   return (await response.json()) as MediaItem;
 }
 
+/** The next job of `kind`; a waveform (KBC-066) queued beside it takes its turn first. */
 async function leased(env: Running, kind: VmWorkerJob['kind']) {
-  const job = await env.api.lease();
+  const first = await env.api.lease();
+  const job =
+    first?.kind === 'waveform' && kind !== 'waveform'
+      ? await measuredThenNext(env, first)
+      : first;
   if (job?.kind !== kind) throw new Error(`expected a ${kind} job`);
   return job;
+}
+
+async function measuredThenNext(env: Running, waveform: VmWorkerJob) {
+  await workerFor(env).process(waveform, new AbortController().signal);
+  return env.api.lease();
 }
 
 const silencesOf = async (env: Running, id: string): Promise<MediaSilences> =>
