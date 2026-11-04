@@ -73,6 +73,7 @@ interface Draft {
   templateUrl: './edit-media-dialog.html',
   styleUrls: ['./upload-panel.css', './edit-media-dialog.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(keydown.escape)': 'escape($event)' },
 })
 export class EditMediaDialog implements OnInit {
   private readonly api = inject(MediaApi);
@@ -154,6 +155,12 @@ export class EditMediaDialog implements OnInit {
 
   protected close(): void {
     this.dialog().nativeElement.close();
+  }
+
+  /** The browser's own Escape does not reach the dialog from a text field in WebKit on Linux. */
+  protected escape(event: Event): void {
+    event.preventDefault();
+    if (!this.saving()) this.close();
   }
 
   /** Escape waits for an answer on its way: the page must hear how it ended. */

@@ -213,7 +213,7 @@ describe('EditMediaDialog (KBC-050)', () => {
   });
 
   it('asks once, and Escape waits while it saves', async () => {
-    const { http, fixture } = await open();
+    const { http, closed, fixture } = await open();
     save();
     await fixture.whenStable();
     expect(screen.getByRole('button', { name: 'Salvando…' })).toHaveProperty(
@@ -224,8 +224,42 @@ describe('EditMediaDialog (KBC-050)', () => {
     const cancel = new Event('cancel', { cancelable: true });
     dialog.dispatchEvent(cancel);
     expect(cancel.defaultPrevented).toBe(true);
+    fireEvent.keyDown(screen.getByLabelText('Título'), { key: 'Escape' });
+    await fixture.whenStable();
+    expect(closed).not.toHaveBeenCalled();
     http.expectOne(URL).flush(ITEM);
     http.verify();
+  });
+
+  it('AC-7: Escape closes it from a text field, where WebKit on Linux fires no cancel', async () => {
+    const { closed, http, fixture } = await open();
+    fireEvent.keyDown(screen.getByLabelText('Título'), { key: 'Escape' });
+    await fixture.whenStable();
+    expect(closed).toHaveBeenCalledOnce();
+    http.verify();
+  });
+
+  it("AC-7: Escape on the author's open list closes only the list", async () => {
+    const { closed, http, fixture } = await open();
+    const author = screen.getByRole('combobox', {
+      name: 'Autor',
+      hidden: true,
+    });
+    fireEvent.focus(author);
+    TestBed.tick();
+    http
+      .expectOne(`/api/v1/topics/${ITEM.topic}/authors`)
+      .flush({ items: [{ slug: 'ana', name: 'Ana', main: false }] });
+    fireEvent.keyDown(author, { key: 'ArrowDown' });
+    await fixture.whenStable();
+    expect(author.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(author, { key: 'Escape' });
+    await fixture.whenStable();
+    expect(author.getAttribute('aria-expanded')).toBe('false');
+    expect(closed).not.toHaveBeenCalled();
+    fireEvent.keyDown(author, { key: 'Escape' });
+    await fixture.whenStable();
+    expect(closed).toHaveBeenCalledOnce();
   });
 
   it('Cancelar closes without sending', async () => {
