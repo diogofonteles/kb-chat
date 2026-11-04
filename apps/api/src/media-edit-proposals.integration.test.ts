@@ -6,11 +6,11 @@ import {
   evenSegments,
   itemOf,
   proposalDb,
-} from '../../../test/track-proposal-fixtures.js';
-import { SqliteMediaEditStore } from '../../adapters/sqlite/sqlite-media-edit-store.js';
-import type { MediaActor } from '../media/index.js';
-import { ProposalService } from '../track-proposals/index.js';
-import { MediaEditService } from './media-edit-service.js';
+} from '../test/track-proposal-fixtures.js';
+import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
+import type { MediaActor } from './modules/media/index.js';
+import { ProposalService } from './modules/track-proposals/index.js';
+import { MediaEditService } from './modules/media-edit/index.js';
 
 const OWNER: MediaActor = {
   principal: 'owner',

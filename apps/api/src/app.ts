@@ -577,7 +577,7 @@ async function registerLibrary(
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
-  const { store, workerToken, createPerMinute } = wiring.media;
+  const { workerToken, createPerMinute } = wiring.media;
   const transcribers = new TranscriberService({
     store: wiring.media.transcribers,
     tokenKey: wiring.media.tokenKey,
@@ -599,12 +599,10 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     waveforms,
     authors: wiring.authors,
   });
-  const proposals = await registerProposals(app, {
-    ...wiring,
-    service: media,
-    diarization: diarizationService({ ...wiring, transcribers }),
-  });
-  await registerEdit(app, { ...wiring, service: media });
+  const diarization = diarizationService({ ...wiring, transcribers });
+  const edit = { ...wiring, service: media };
+  const proposals = await registerProposals(app, { ...edit, diarization });
+  await registerEdit(app, edit);
   startJanitor(app, { media: wiring.media, silences, waveforms, proposals });
 }
 
