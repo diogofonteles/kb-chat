@@ -54,6 +54,7 @@ export {
   canSeeTopic,
   hasFeature,
   isMaster,
+  mediaQuotaOf,
   toPerson,
   type ParentOf,
   type StoredPerson,

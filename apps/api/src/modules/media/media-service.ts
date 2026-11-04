@@ -8,6 +8,8 @@ import {
   type MediaItem,
   type TrackParent,
   type PreparationPlan,
+  type UploadCheck,
+  type UploadCheckRequest,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import {
@@ -20,7 +22,11 @@ import type {
 } from '../../ports/listening-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import type { TrackItemStorePort } from '../../ports/track-item-store.js';
-import { canEditMedia, legacyAuthorshipOf } from './media-policy.js';
+import {
+  canEditMedia,
+  estimatedBytesOf,
+  legacyAuthorshipOf,
+} from './media-policy.js';
 import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -30,6 +36,8 @@ export interface MediaActor {
   readonly isMaster: boolean;
   /** Has `media-upload`, in the collections they see. */
   readonly canUpload: boolean;
+  /** Their converted space in bytes; null: no quota, the owner (KBC-035 BR-1). */
+  readonly quotaBytes?: number | null;
   /** Has `media-tracks`: track items exist for them (KBC-068 FR-5). */
   readonly seesTracks?: boolean;
   readonly canSee: (topic: string) => boolean;
@@ -78,6 +86,13 @@ export interface PlayableFile {
 }
 
 const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
+const notWaiting = () =>
+  new AppError('MEDIA_CONFLICT', 'This media is not waiting for this part');
+
+/** An upload of this person that the janitor gave up (KBC-035 AC-6). */
+const isOwnAbandoned = (media: MediaRecord, actor: MediaActor): boolean =>
+  media.failure === 'upload-abandoned' &&
+  media.ownerPrincipal === actor.principal;
 
 function assertDeclaredSize(declared: number, expected: number): void {
   if (declared > expected)
@@ -120,6 +135,9 @@ export class MediaService {
         details: { field: 'fileName' },
       });
     const author = this.requireAuthor(topic, request.author);
+    // No await up to the insert: two uploads of one file cannot both pass (one writer).
+    if (request.sha256) this.assertNotRepeated(topic, request.sha256);
+    this.assertWithinQuota(actor, request);
     const record = this.deps.store.createMedia({
       id: randomUUID(),
       topic,
@@ -129,9 +147,156 @@ export class MediaService {
       ownerPrincipal: actor.principal,
       fileName: request.fileName,
       uploadBytes: request.bytes,
+      sourceSha256: request.sha256 ?? null,
+      estimatedBytes: estimatedBytesOf(request),
       now: this.now(),
     });
     return this.itemOf(record, actor, this.view());
+  }
+
+  /** What a chosen file is, before anything is sent (KBC-035 FR-1, FR-3). */
+  async check(
+    actor: MediaActor,
+    topic: string,
+    request: UploadCheckRequest,
+  ): Promise<UploadCheck> {
+    this.assertTopic(topic);
+    const sent = this.deps.store.findBySource(topic, request.sha256);
+    const live = sent.find((media) => media.status !== 'failed');
+    if (live?.status === 'uploading' && live.ownerPrincipal === actor.principal)
+      return {
+        verdict: 'resume',
+        media: { id: live.id, title: live.title },
+        offset: await this.deps.files.uploadOffset(live.id),
+      };
+    if (live)
+      return {
+        verdict: 'duplicate',
+        media: { id: live.id, title: live.title },
+      };
+    if (this.overQuota(actor, request))
+      return { verdict: 'over-quota', quotaBytes: actor.quotaBytes ?? 0 };
+    return sent.some((media) => isOwnAbandoned(media, actor))
+      ? { verdict: 'expired' }
+      : { verdict: 'new' };
+  }
+
+  private assertNotRepeated(topic: string, sha256: string): void {
+    const live = this.deps.store
+      .findBySource(topic, sha256)
+      .find((media) => media.status !== 'failed');
+    if (live)
+      throw new AppError('MEDIA_DUPLICATE', 'This file is already here', {
+        details: { media: { id: live.id, title: live.title } },
+      });
+  }
+
+  private assertWithinQuota(
+    actor: MediaActor,
+    request: CreateMediaRequest,
+  ): void {
+    if (this.overQuota(actor, request))
+      throw new AppError('MEDIA_QUOTA_EXCEEDED', 'Over the media quota', {
+        details: { quotaBytes: actor.quotaBytes },
+      });
+  }
+
+  private overQuota(
+    actor: MediaActor,
+    request: { readonly bytes: number; readonly durationMs?: number | null },
+  ): boolean {
+    const { quotaBytes } = actor;
+    if (quotaBytes === undefined || quotaBytes === null) return false;
+    const used = this.deps.store.usedBytes(actor.principal);
+    return used + estimatedBytesOf(request) > quotaBytes;
+  }
+
+  /** Where a resumable upload stands (tus HEAD, KBC-035 FR-2). */
+  async uploadStatus(
+    actor: MediaActor,
+    mediaId: string,
+  ): Promise<{ readonly offset: number; readonly length: number }> {
+    const media = this.ownUpload(actor, mediaId);
+    return {
+      offset: await this.deps.files.uploadOffset(mediaId),
+      length: media.uploadBytes,
+    };
+  }
+
+  /**
+   * One part (tus PATCH): it must start where the last one ended. A part cut short keeps
+   * what arrived. The last byte checks the announced hash and queues the conversion.
+   */
+  async receivePart(
+    actor: MediaActor,
+    mediaId: string,
+    part: { readonly body: Readable; readonly offset: number },
+  ): Promise<number> {
+    const media = this.ownUpload(actor, mediaId);
+    if (this.receiving.has(mediaId)) throw notWaiting();
+    this.receiving.add(mediaId);
+    try {
+      return await this.appendPart(media, part);
+    } finally {
+      this.receiving.delete(mediaId);
+    }
+  }
+
+  private async appendPart(
+    media: MediaRecord,
+    part: { readonly body: Readable; readonly offset: number },
+  ): Promise<number> {
+    const { files, store } = this.deps;
+    if ((await files.uploadOffset(media.id)) !== part.offset)
+      throw notWaiting();
+    store.touchUpload(media.id, this.now());
+    const offset = await this.append(media, part.body);
+    store.touchUpload(media.id, this.now());
+    if (offset === media.uploadBytes) await this.complete(media);
+    return offset;
+  }
+
+  private async append(media: MediaRecord, body: Readable): Promise<number> {
+    try {
+      return await this.deps.files.appendUpload({
+        mediaId: media.id,
+        body,
+        expectedBytes: media.uploadBytes,
+      });
+    } catch (err) {
+      if (err instanceof UploadRefusedError)
+        throw new AppError(
+          'PAYLOAD_TOO_LARGE',
+          'The file is larger than announced',
+        );
+      throw err;
+    }
+  }
+
+  /** Bytes that are not the announced file start over: they would never be found again. */
+  private async complete(media: MediaRecord): Promise<void> {
+    const { files } = this.deps;
+    if (
+      media.sourceSha256 &&
+      (await files.hashUpload(media.id)) !== media.sourceSha256
+    ) {
+      await files.discardUpload(media.id);
+      throw new AppError('VALIDATION_FAILED', 'The file came out different', {
+        details: { field: 'sha256' },
+      });
+    }
+    await files.finishUpload(media.id);
+    await this.queue(media.id);
+  }
+
+  /** The uploader's item, while its parts may still arrive. */
+  private ownUpload(actor: MediaActor, mediaId: string): MediaRecord {
+    const media = this.visible(actor, mediaId);
+    if (media.ownerPrincipal !== actor.principal) throw notFound();
+    if (media.status === 'failed' && media.failure === 'upload-abandoned')
+      throw new AppError('MEDIA_UPLOAD_EXPIRED', 'This upload expired');
+    if (media.status !== 'uploading') throw notWaiting();
+    return media;
   }
 
   /** The file of an item created by this person; it goes to the queue when complete. */

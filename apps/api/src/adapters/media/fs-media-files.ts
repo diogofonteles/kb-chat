@@ -6,9 +6,10 @@ import {
   rename,
   rm,
   stat,
+  truncate,
   writeFile,
 } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { Transform, type Readable, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -115,7 +116,7 @@ export class FsMediaFiles implements MediaFilesPort {
     await mkdir(this.resolve(UPLOADS), { recursive: true });
     const limit = new ByteLimit(input.expectedBytes);
     try {
-      await this.writeLimited(input.body, { limit, path: partial });
+      await this.writeLimited(input.body, { limit, path: partial, flags: 'w' });
       if (limit.bytes !== input.expectedBytes)
         throw new UploadRefusedError('incomplete');
       await rename(partial, target);
@@ -132,12 +133,12 @@ export class FsMediaFiles implements MediaFilesPort {
    */
   private async writeLimited(
     body: Readable,
-    target: { limit: ByteLimit; path: string },
+    target: { limit: ByteLimit; path: string; flags: 'w' | 'a' },
   ): Promise<void> {
     const { limit } = target;
     const written = pipeline(
       limit,
-      createWriteStream(target.path, { flags: 'w' }),
+      createWriteStream(target.path, { flags: target.flags }),
     );
     const detach = () => {
       body.unpipe(limit);
@@ -151,6 +152,44 @@ export class FsMediaFiles implements MediaFilesPort {
     limit.once('error', detach);
     body.pipe(limit);
     await written;
+  }
+
+  async uploadOffset(mediaId: string): Promise<number> {
+    const part = await this.stat(`${this.uploadPath(mediaId)}.part`);
+    return part?.size ?? 0;
+  }
+
+  async appendUpload(input: {
+    mediaId: string;
+    body: Readable;
+    expectedBytes: number;
+  }): Promise<number> {
+    const offset = await this.uploadOffset(input.mediaId);
+    const path = `${this.resolve(this.uploadPath(input.mediaId))}.part`;
+    await mkdir(this.resolve(UPLOADS), { recursive: true });
+    const limit = new ByteLimit(input.expectedBytes - offset);
+    try {
+      await this.writeLimited(input.body, { limit, path, flags: 'a' });
+    } catch (err) {
+      if (!(err instanceof UploadRefusedError)) throw err;
+      if (err.problem === 'too-large') {
+        await truncate(path, offset);
+        throw err;
+      }
+    }
+    return this.uploadOffset(input.mediaId);
+  }
+
+  async hashUpload(mediaId: string): Promise<string> {
+    const hash = createHash('sha256');
+    const path = `${this.resolve(this.uploadPath(mediaId))}.part`;
+    for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+    return hash.digest('hex');
+  }
+
+  async finishUpload(mediaId: string): Promise<void> {
+    const target = this.resolve(this.uploadPath(mediaId));
+    await rename(`${target}.part`, target);
   }
 
   async discardUpload(mediaId: string): Promise<void> {

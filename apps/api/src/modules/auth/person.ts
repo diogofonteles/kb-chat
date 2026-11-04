@@ -7,6 +7,8 @@ import {
   featureSchema,
   initialPreferencesSchema,
   invitationSchema,
+  mediaQuotaSchema,
+  MEDIA_DEFAULT_QUOTA_BYTES,
   roleSchema,
   topicSlugSchema,
   type Feature,
@@ -48,6 +50,8 @@ export const storedPersonSchema = z.object({
   ai: personAiSchema.optional(),
   /** May act as another person (KBC-060): only the owner sets it, master by master. */
   canActAs: z.boolean().optional(),
+  /** Their media quota in bytes (KBC-035 BR-1); absent or null: the default. */
+  mediaQuotaBytes: mediaQuotaSchema.nullable().optional(),
   /** Set in the invitation (KBC-028): the person's Settings until they save their own. */
   initialPreferences: initialPreferencesSchema.optional(),
 });
@@ -81,6 +85,12 @@ export interface ActingActor {
 export const mayActAs = (viewer: Viewer): boolean =>
   viewer.isOwner ||
   (isMaster(viewer.person) && viewer.person.canActAs === true);
+
+/** A person's media quota in bytes; the owner has none (KBC-035 BR-1). */
+export const mediaQuotaOf = (viewer: Viewer): number | null =>
+  viewer.isOwner
+    ? null
+    : (viewer.person.mediaQuotaBytes ?? MEDIA_DEFAULT_QUOTA_BYTES);
 
 /** Neither the owner nor a master can be acted as (BR-2). */
 export const mayBeActedAs = (person: StoredPerson, isOwner: boolean): boolean =>
@@ -182,6 +192,7 @@ export const toPerson = (person: StoredPerson, isOwner: boolean): Person => ({
   features: person.features,
   isOwner,
   canActAs: isOwner || (isMaster(person) && person.canActAs === true),
+  mediaQuotaBytes: person.mediaQuotaBytes ?? null,
   phone: person.phone ?? null,
   invitation: person.invitation ?? null,
   invitedBy: person.invitedBy,

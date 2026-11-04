@@ -211,6 +211,9 @@ export function update(
     }),
     // Only a master may hold it; losing the role takes it away (KBC-060 BR-1).
     canActAs: role === 'master' && (patch.canActAs ?? target.canActAs ?? false),
+    ...(patch.mediaQuotaBytes !== undefined && {
+      mediaQuotaBytes: patch.mediaQuotaBytes,
+    }),
   };
   return { people: replace(people, next), result: next };
 }

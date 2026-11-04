@@ -43,6 +43,8 @@ export interface MediaRecord {
   readonly fileName: string;
   /** Bytes announced for the upload. */
   readonly uploadBytes: number;
+  /** The file's SHA-256 as announced (KBC-035); null for what came before it, or a track. */
+  readonly sourceSha256: string | null;
   readonly status: MediaStatus;
   readonly progress: number | null;
   readonly failure: MediaFailure | null;
@@ -73,6 +75,10 @@ export interface NewMedia {
   readonly ownerPrincipal: string;
   readonly fileName: string;
   readonly uploadBytes: number;
+  /** The file's SHA-256 (KBC-035); absent when sent without it. */
+  readonly sourceSha256?: string | null;
+  /** What it should take once converted, for the quota until then (KBC-035 FR-3). */
+  readonly estimatedBytes?: number | null;
   readonly now: Date;
 }
 
@@ -166,6 +172,12 @@ export interface ReapResult {
  */
 export interface MediaStorePort {
   createMedia(media: NewMedia): MediaRecord;
+  /** The items of a collection sent from this file, newest first (KBC-035 BR-2). */
+  findBySource(topic: string, sha256: string): MediaRecord[];
+  /** A person's converted space: real once converted, the estimate until then (BR-1). */
+  usedBytes(principal: string): number;
+  /** A part arrived: the 24 h of an upload count from the last one (KBC-035 BR-3). */
+  touchUpload(mediaId: string, now: Date): void;
   getMedia(id: string): MediaRecord | null;
   listMedia(topic: string): MediaRecord[];
   /** The collections holding media by this author (the legacy seed, KBC-049 BR-4). */
@@ -211,7 +223,7 @@ export interface MediaStorePort {
     readonly now: Date;
     readonly maxAttempts: number;
   }): ReapResult;
-  /** Items still `uploading` since before `olderThan` fail as abandoned; their ids. */
+  /** Items with no part since before `olderThan` fail as abandoned; their ids (BR-3). */
   abandonUploads(input: {
     readonly olderThan: Date;
     readonly now: Date;

@@ -1057,4 +1057,19 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ${TRACK_SUBJECT_TABLES}
     `,
   },
+  {
+    // KBC-035: the file's SHA-256 finds a repeated upload (BR-2) and what the upload is expected
+    // to take counts against the quota until the conversion says the real size (FR-3). Only
+    // ALTERs: `jobs` stays. 16 is reserved by an open branch.
+    version: 21,
+    name: 'upload-source-and-estimate',
+    sql: `
+      ALTER TABLE media ADD COLUMN source_sha256 TEXT
+        CHECK (source_sha256 IS NULL OR length(source_sha256) = 64);
+      ALTER TABLE media ADD COLUMN estimated_bytes INTEGER CHECK (estimated_bytes > 0);
+      CREATE INDEX media_by_source ON media (topic, source_sha256)
+        WHERE source_sha256 IS NOT NULL;
+      CREATE INDEX media_by_owner ON media (owner_principal);
+    `,
+  },
 ];

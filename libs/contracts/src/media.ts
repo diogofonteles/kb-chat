@@ -14,8 +14,20 @@ import {
  * media worker and streamed to the player (ADR 0025).
  */
 
-/** The largest single upload of the walking skeleton (KBC-034 FR-2): 500 MB. */
-export const MEDIA_MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+/** The largest single upload (KBC-035 scope): 4 GB. */
+export const MEDIA_MAX_UPLOAD_BYTES = 4 * 1024 ** 3;
+
+/** Each part of a resumable upload (KBC-035 FR-2): what a broken connection can cost. */
+export const MEDIA_UPLOAD_PART_BYTES = 8 * 1024 ** 2;
+
+/** A person's converted space, unless a master changed it (KBC-035 BR-1). */
+export const MEDIA_DEFAULT_QUOTA_BYTES = 5 * 1024 ** 3;
+
+/** What an hour of audio takes once converted, for the quota's estimate (FR-3). */
+export const MEDIA_AUDIO_BYTES_PER_HOUR = 30 * 1024 ** 2;
+
+/** The largest quota a master may give a person: a typo, not a real need. */
+export const MEDIA_MAX_QUOTA_BYTES = 1024 ** 5;
 
 /** Audio formats accepted for upload, by extension and the MIME types browsers send. */
 export const MEDIA_UPLOAD_EXTENSIONS = [
@@ -192,7 +204,53 @@ export const preparationPlanSchema = z.strictObject({
 export type PreparationPlan = z.infer<typeof preparationPlanSchema>;
 export type PreparationPlanRequest = z.input<typeof preparationPlanSchema>;
 
-/** POST /api/v1/topics/:topic/media: the metadata; the file follows with PUT …/file. */
+/** The file's SHA-256, in lowercase hex: how a repeated file is recognized (KBC-035 BR-2). */
+export const mediaSha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
+
+/** The length the browser read from the file; null when it could not. */
+const measuredLengthSchema = z.number().int().positive().nullable();
+
+/** POST /api/v1/topics/:topic/media/check (KBC-035 FR-1, FR-3): before anything is sent. */
+export const uploadCheckRequestSchema = z.strictObject({
+  sha256: mediaSha256Schema,
+  bytes: z.number().int().min(1).max(MEDIA_MAX_UPLOAD_BYTES),
+  durationMs: measuredLengthSchema,
+});
+export type UploadCheckRequest = z.infer<typeof uploadCheckRequestSchema>;
+
+const uploadCheckMediaSchema = z.object({
+  id: mediaIdSchema,
+  title: z.string().min(1).max(200),
+});
+
+/** What a chosen file is to this collection and person. */
+export const uploadCheckSchema = z.discriminatedUnion('verdict', [
+  z.object({ verdict: z.literal('new') }),
+  z.object({ verdict: z.literal('duplicate'), media: uploadCheckMediaSchema }),
+  z.object({
+    verdict: z.literal('resume'),
+    media: uploadCheckMediaSchema,
+    offset: z.number().int().min(0),
+  }),
+  z.object({ verdict: z.literal('expired') }),
+  z.object({
+    verdict: z.literal('over-quota'),
+    quotaBytes: z.number().int().positive(),
+  }),
+]);
+export type UploadCheck = z.infer<typeof uploadCheckSchema>;
+
+/** The `details` of a `MEDIA_DUPLICATE`. */
+export const duplicateDetailsSchema = z.object({
+  media: uploadCheckMediaSchema,
+});
+
+/** The `details` of a `MEDIA_QUOTA_EXCEEDED`. */
+export const quotaDetailsSchema = z.object({
+  quotaBytes: z.number().int().positive(),
+});
+
+/** POST /api/v1/topics/:topic/media: the metadata; the file follows over tus (KBC-035). */
 export const createMediaRequestSchema = z.strictObject({
   title: z.string().trim().min(1).max(200),
   /** An author of the collection (registered first with POST …/authors), or null. */
@@ -201,6 +259,9 @@ export const createMediaRequestSchema = z.strictObject({
   bytes: z.number().int().min(1).max(MEDIA_MAX_UPLOAD_BYTES),
   /** Left out: only the transcription, as before KBC-072. */
   plan: preparationPlanSchema.optional(),
+  /** Left out by what sends with PUT …/file: the file is then never called repeated. */
+  sha256: mediaSha256Schema.nullable().optional(),
+  durationMs: measuredLengthSchema.optional(),
 });
 export type CreateMediaRequest = z.input<typeof createMediaRequestSchema>;
 

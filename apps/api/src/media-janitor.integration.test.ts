@@ -107,6 +107,34 @@ describe('MediaJanitor', () => {
     expect(lines.join('')).toContain('media janitor sweep');
   });
 
+  it('counts the day from the last part, and removes the parts of a stopped upload (KBC-035 AC-6)', async () => {
+    const id = '33333333-3333-4333-8333-333333333333';
+    store.createMedia({
+      id,
+      topic: 'hermetismo',
+      title: 'Palestra',
+      author: null,
+      legacyAuthorship: 'outros-autores',
+      ownerPrincipal: 'owner',
+      fileName: 'a.mp3',
+      uploadBytes: 6,
+      now: T0,
+    });
+    await files.appendUpload({
+      mediaId: id,
+      body: Readable.from([Buffer.from('abc')]),
+      expectedBytes: 6,
+    });
+    const hoursLater = (hours: number) =>
+      new Date(T0.getTime() + hours * 3_600_000);
+    store.touchUpload(id, hoursLater(23));
+    expect((await janitorAt(hoursLater(25)).sweep()).abandoned).toBe(0);
+    expect(await files.uploadOffset(id)).toBe(3);
+    expect((await janitorAt(hoursLater(48)).sweep()).abandoned).toBe(1);
+    expect(store.getMedia(id)?.failure).toBe('upload-abandoned');
+    expect(await files.uploadOffset(id)).toBe(0);
+  });
+
   it('does nothing and logs nothing when there is nothing to do', async () => {
     const lines: string[] = [];
     const log = createLogger('info', {
