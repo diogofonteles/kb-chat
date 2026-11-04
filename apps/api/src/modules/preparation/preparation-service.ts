@@ -156,19 +156,10 @@ export class PreparationService {
     const durationMs = query.durationMs ?? item?.durationMs ?? undefined;
     const rates = this.deps.plans.measuredRates();
     const ai = await this.aiOption(actor, durationMs);
-    const tracksDone = item !== null && this.isApproved(item.id);
-    const approved = tracksDone ? ('approved' as const) : null;
     return {
       options: {
         ...this.freeOptions({ actor, item, rates, durationMs }),
-        manual: option(approved ?? this.handRefusal(actor), {
-          done: tracksDone,
-        }),
-        ai: {
-          ...ai.option,
-          refusal: approved ?? ai.option.refusal,
-          done: tracksDone,
-        },
+        ...this.trackOptions(actor, item, ai.option),
         subjects: option('unavailable'),
       },
       aiEstimateUsd: ai.estimateUsd,
@@ -176,6 +167,20 @@ export class PreparationService {
         ? this.deps.proposals.monthRemainingUsd()
         : null,
       ...presenceOf(this.deps.presence()),
+    };
+  }
+
+  /** Tracks already approved stay as they are until someone reopens the edit. */
+  private trackOptions(
+    actor: PlanActor,
+    item: MediaItem | null,
+    ai: PreparationOption,
+  ) {
+    const done = item !== null && this.isApproved(item.id);
+    const refusal = done ? ('approved' as const) : null;
+    return {
+      manual: option(refusal ?? this.handRefusal(actor), { done }),
+      ai: { ...ai, refusal: refusal ?? ai.refusal, done },
     };
   }
 
