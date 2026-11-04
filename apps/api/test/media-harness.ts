@@ -83,10 +83,13 @@ export const upload = (
   });
 
 /** An item created and uploaded by the owner: waiting in the queue. */
-export async function queuedItem(media: Media): Promise<MediaItem> {
+export async function queuedItem(
+  media: Media,
+  topic = 'hermetismo',
+): Promise<MediaItem> {
   const created = await media.owner(
     'POST',
-    '/api/v1/topics/hermetismo/media',
+    `/api/v1/topics/${topic}/media`,
     aRequest(),
   );
   expect(created.statusCode).toBe(201);

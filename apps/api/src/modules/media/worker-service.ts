@@ -9,6 +9,7 @@ import {
   type LeasedWorkerJob,
   type MediaJobKind,
   type TranscribeJob,
+  type VoiceProfileJob,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaFilesPort } from '../../ports/media-files.js';
@@ -18,6 +19,8 @@ import { AUDIO_MIME, JOB_LEASE_MS, MAX_JOB_ATTEMPTS } from './media-policy.js';
 export interface WorkerServiceDeps {
   readonly store: MediaStorePort;
   readonly files: MediaFilesPort;
+  /** What a leased `voice-profile` job carries (KBC-071). */
+  readonly voiceJobOf?: (job: LeasedJob) => VoiceProfileJob;
   readonly now?: () => Date;
 }
 
@@ -69,6 +72,7 @@ export class WorkerService {
     if (job.kind === 'silences') return this.silencesJob(job);
     if (job.kind === 'waveform') return this.waveformJob(job);
     if (job.kind === 'diarize') return this.diarizeJob(job);
+    if (job.kind === 'voice-profile') return this.voiceProfileJob(job);
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
       : {
@@ -111,6 +115,12 @@ export class WorkerService {
   /** A separation fetches the same audio as a transcription, with its hint (KBC-064). */
   private diarizeJob(job: LeasedJob): LeasedWorkerJob {
     return { ...this.transcribeJob(job), kind: 'diarize', voices: job.voices };
+  }
+
+  private voiceProfileJob(job: LeasedJob): VoiceProfileJob {
+    if (!this.deps.voiceJobOf)
+      throw new Error('A voice profile job needs the voice profile service');
+    return this.deps.voiceJobOf(job);
   }
 
   private transcribeJob(job: LeasedJob): TranscribeJob {

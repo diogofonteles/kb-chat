@@ -1,7 +1,8 @@
-import type { InvitationPreset } from '@kb-chat/contracts';
+import type { Feature, InvitationPreset } from '@kb-chat/contracts';
 import {
   DEFAULT_INVITE_FEATURES,
-  FEATURES,
+  MASTER_FEATURES,
+  MASTER_GRANT_ONLY_FEATURES,
   type Invitation,
   type PersonUpdate,
 } from '@kb-chat/contracts';
@@ -50,7 +51,7 @@ export function ensureOwner(
     picture: null,
     role: 'master',
     topics: [],
-    features: [...FEATURES],
+    features: [...MASTER_FEATURES],
     invitedBy: 'KB_CHAT_OWNER_EMAIL',
     createdAt: now,
     lastLoginAt: null,
@@ -211,6 +212,10 @@ export function update(
   return { people: replace(people, next), result: next };
 }
 
+/** A preset never gives what must be granted to one master by name (ADR 0032). */
+const notGrantedByName = (feature: Feature): boolean =>
+  !MASTER_GRANT_ONLY_FEATURES.includes(feature);
+
 /** What applying a preset changes (KBC-028): access and AI, and maybe the first preferences. */
 export interface PresetChange {
   readonly id: string;
@@ -234,7 +239,7 @@ export function applyPreset(
       patch: {
         role: preset.role,
         topics: preset.topics,
-        features: preset.features,
+        features: preset.features.filter(notGrantedByName),
         ai: preset.ai,
       },
       context: change.context,

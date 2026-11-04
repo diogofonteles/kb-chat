@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { authorSchema, authorSlugSchema } from './authors.js';
 import { topicSlugSchema } from './topics.js';
+import { MAX_VOICES, voiceIndexSchema } from './voice-index.js';
+import {
+  voiceMatchSchema,
+  voiceProfileJobSchema,
+  voiceProfileSuggestionSchema,
+} from './voice-prints.js';
 
 /**
  * The media library (phase 2, ADR 0022): audio uploaded to a collection, converted by the
@@ -307,6 +313,7 @@ export const MEDIA_JOB_KINDS = [
   'silences',
   'diarize',
   'waveform',
+  'voice-profile',
 ] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;
@@ -514,8 +521,7 @@ export const mediaSilencesSchema = z.object({
 export type MediaSilenceStatus = (typeof SILENCE_MAP_STATUSES)[number];
 export type MediaSilences = z.infer<typeof mediaSilencesSchema>;
 
-/** The most voices a separation finds or a person may announce (KBC-064 BR-4). */
-export const MAX_VOICES = 10;
+export { MAX_VOICES, voiceIndexSchema };
 export const voiceCountSchema = z.number().int().min(1).max(MAX_VOICES);
 
 /** A leased voice separation (KBC-064): the audio as for a transcription, and the hint. */
@@ -533,6 +539,7 @@ export const leasedJobSchema = z.union([
   silencesJobSchema,
   diarizeJobSchema,
   waveformJobSchema,
+  voiceProfileJobSchema,
 ]);
 export type LeasedWorkerJob = z.infer<typeof leasedJobSchema>;
 
@@ -718,6 +725,8 @@ export const completeDiarizeRequestSchema = leaseOwnerSchema.extend({
   raw: z.strictObject({
     turns: z.array(rawSpeakerTurnSchema).max(MAX_SPEAKER_TURNS),
   }),
+  /** The closest voice profile per voice (KBC-071 FR-3), kept out of `raw`. */
+  voiceMatches: z.array(voiceMatchSchema).max(MAX_VOICES).optional(),
 });
 export type CompleteDiarizeRequest = z.infer<
   typeof completeDiarizeRequestSchema
@@ -742,9 +751,6 @@ export const DIARIZATION_STATUSES = [
 ] as const;
 export const diarizationStatusSchema = z.enum(DIARIZATION_STATUSES);
 export type DiarizationStatus = z.infer<typeof diarizationStatusSchema>;
-
-/** A voice of one recording: "Voz N", numbered by who speaks first; never a person. */
-export const voiceIndexSchema = z.number().int().min(1).max(MAX_VOICES);
 
 export const speakerTurnSchema = z.object({
   voice: voiceIndexSchema,
@@ -823,6 +829,8 @@ export const mediaSpeakersSchema = z.object({
   canRequest: z.boolean(),
   /** The newest separation; null before the first. */
   diarization: diarizationSchema.nullable(),
+  /** Names suggested by voice, waiting for a person (KBC-071). */
+  voiceSuggestions: z.array(voiceProfileSuggestionSchema).default([]),
 });
 export type MediaSpeakers = z.infer<typeof mediaSpeakersSchema>;
 
@@ -870,7 +878,7 @@ export type MediaTranscript = z.infer<typeof mediaTranscriptSchema>;
 /* ---------- Naming the voices (KBC-065, ADR 0029 §2) ---------- */
 
 /** Which separation a change is about: voice numbers mean nothing in another version. */
-const separationVersionSchema = z.number().int().min(1);
+export const separationVersionSchema = z.number().int().min(1);
 
 /** PUT /api/v1/media/:id/voices/:voice: a speaker, the audience, or back to no name. */
 export const nameVoiceRequestSchema = z
@@ -910,7 +918,11 @@ export const confirmVoicesRequestSchema = z.strictObject({
 export type ConfirmVoicesRequest = z.infer<typeof confirmVoicesRequestSchema>;
 
 /** PATCH /api/v1/media/transcribers/:id: what a paired transcriber may do (FR-6). */
-export const TRANSCRIBER_KINDS = ['transcribe', 'diarize'] as const;
+export const TRANSCRIBER_KINDS = [
+  'transcribe',
+  'diarize',
+  'voice-profile',
+] as const;
 export const updateTranscriberRequestSchema = z.strictObject({
   kinds: z.array(z.enum(TRANSCRIBER_KINDS)).min(1),
 });

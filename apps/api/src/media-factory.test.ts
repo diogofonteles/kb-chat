@@ -12,7 +12,11 @@ import { loadConfig } from './config.js';
 import { createMedia } from './media-factory.js';
 
 const TOKEN = 'a-media-worker-token-of-at-least-32-chars';
-const SECRETS = { tokenKey: Buffer.alloc(32, 1) };
+const SECRETS = {
+  tokenKey: Buffer.alloc(32, 1),
+  voicePrintKey: Buffer.alloc(32, 2),
+  consentKey: Buffer.alloc(32, 3),
+};
 let root: string;
 
 const configWith = (env: Record<string, string>) =>

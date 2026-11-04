@@ -118,6 +118,11 @@ import {
   TranscriptService,
   transcriptRoutes,
   workerRoutes,
+  VoicePrintService,
+  VoiceProfileService,
+  VoiceSuggestionService,
+  voiceProfileRoutes,
+  type MediaActor,
 } from './modules/media/index.js';
 import type { MediaDeps } from './media-factory.js';
 import { createLogger } from './logger.js';
@@ -467,16 +472,65 @@ async function registerWorker(
   },
 ) {
   const { store, files, transcripts } = wiring.media;
+  const voicePrints = voicePrintService(wiring);
   await app.register(
     workerRoutes({
-      service: new WorkerService({ store, files }),
+      service: new WorkerService({
+        store,
+        files,
+        voiceJobOf: (job) => voicePrints.jobOf(job),
+      }),
       transcribers: wiring.transcribers,
       transcription: new TranscriptionService({ store, transcripts, files }),
       silences: wiring.silences,
       waveforms: wiring.waveforms,
       diarization: diarizationService(wiring),
+      voicePrints,
     }),
   );
+}
+
+/** Voice prints and the transcriber (KBC-071, ADR 0032). */
+function voicePrintService(wiring: {
+  media: MediaDeps;
+  authors: AuthorsService;
+}): VoicePrintService {
+  const { media, authors } = wiring;
+  return new VoicePrintService({
+    profiles: media.voiceProfiles,
+    prints: media.voicePrintVault,
+    store: media.store,
+    diarizations: media.diarizations,
+    voiceLabels: media.voiceLabels,
+    speakers: media.speakers,
+    rootOf: (topic) => authors.rootOf(topic),
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+  });
+}
+
+/** "Perfis de voz" (KBC-071): a print with no profile goes when the API starts. */
+async function registerVoiceProfiles(
+  app: FastifyInstance,
+  wiring: {
+    media: MediaDeps;
+    authors: AuthorsService;
+    transcribers: TranscriberService;
+  },
+) {
+  const { media, authors, transcribers } = wiring;
+  const service = new VoiceProfileService({
+    profiles: media.voiceProfiles,
+    prints: media.voicePrintVault,
+    speakers: media.speakers,
+    store: media.store,
+    sealer: media.consentSealer,
+    rootOf: (topic) => authors.rootOf(topic),
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+    presence: () => transcribers.presence('voice-profile'),
+  });
+  const dropped = await service.dropOrphanPrints();
+  if (dropped > 0) app.log.warn({ dropped }, 'orphan voice prints removed');
+  await app.register(voiceProfileRoutes(service));
 }
 
 /** Each person's listening: position, bookmarks, the transcript, subtitles and voices. */
@@ -522,15 +576,19 @@ async function registerSpeakers(
 ) {
   const { deps, diarization, authors, hasTopic } = wiring;
   const rootOf = (topic: string) => authors.rootOf(topic);
+  const speakersOf = (actor: MediaActor, mediaId: string) =>
+    diarization.speakers(actor, mediaId);
+  const names = new VoiceNamesService({ ...deps, rootOf, speakersOf });
   await app.register(
-    speakerRoutes(
-      diarization,
-      new VoiceNamesService({
-        ...deps,
-        rootOf,
-        speakersOf: (actor, mediaId) => diarization.speakers(actor, mediaId),
+    speakerRoutes({
+      service: diarization,
+      names,
+      suggestions: new VoiceSuggestionService({
+        profiles: deps.voiceProfiles,
+        names,
+        speakersOf,
       }),
-    ),
+    }),
   );
   const service = new SpeakersService({
     speakers: deps.speakers,
@@ -555,6 +613,7 @@ function diarizationService(wiring: {
     voiceLabels,
     authorOf: (topic, slug) => wiring.authors.authorOf(topic, slug),
     presence: () => wiring.transcribers.presence('diarize'),
+    voicePrints: voicePrintService(wiring),
   });
 }
 
@@ -592,6 +651,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     media,
   });
   await registerLibrary(app, { ...wiring, transcribers });
+  await registerVoiceProfiles(app, { ...wiring, transcribers });
   await registerWorker(app, {
     media: wiring.media,
     transcribers,

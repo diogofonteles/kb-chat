@@ -17,6 +17,7 @@ import { topicSlugSchema } from './topics.js';
  * see who speaks in a recording (`media-speakers`, KBC-065) and navigate a recording by its
  * approved tracks (`media-tracks`, KBC-066). Every feature is granted per
  * person (owner's rule, 2026-10-28): a new feature never comes on for everyone by itself.
+ * Voice profiles (`media-voice-profiles`, KBC-071, ADR 0032) go further, see below.
  */
 export const FEATURES = [
   'search',
@@ -32,9 +33,24 @@ export const FEATURES = [
   'media-library',
   'media-speakers',
   'media-tracks',
+  /** "Cadastrar perfis de voz": biometric data, see MASTER_GRANT_ONLY_FEATURES. */
+  'media-voice-profiles',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;
+
+/**
+ * Features a master does not get by being one (ADR 0032): they need the master role and a
+ * grant to that person. Off by default, and in a member's list they do nothing.
+ */
+export const MASTER_GRANT_ONLY_FEATURES: readonly Feature[] = [
+  'media-voice-profiles',
+];
+
+/** What being a master gives by itself (KBC-010 BR-3). */
+export const MASTER_FEATURES: readonly Feature[] = FEATURES.filter(
+  (feature) => !MASTER_GRANT_ONLY_FEATURES.includes(feature),
+);
 
 /** A master grants and revokes collections, features and the master role itself. */
 export const roleSchema = z.enum(['master', 'member']);

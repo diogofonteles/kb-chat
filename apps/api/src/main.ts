@@ -144,6 +144,8 @@ const access = {
 // KBC-034 FR-1: with KB_CHAT_MEDIA=on, a media library that cannot open stops the start.
 const media = await createMedia(config, {
   tokenKey: deriveKey(secretsKey, 'transcriber-tokens'),
+  voicePrintKey: deriveKey(secretsKey, 'voice-prints'),
+  consentKey: deriveKey(secretsKey, 'voice-consents'),
 });
 
 const app = await buildApp({

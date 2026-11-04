@@ -99,3 +99,16 @@ export {
   confidenceOf,
   type ConfidenceVerdict,
 } from './transcript-confidence.js';
+export { voiceProfileRoutes } from './voice-profile-routes.js';
+export {
+  VoiceProfileService,
+  type VoiceProfileServiceDeps,
+} from './voice-profile-service.js';
+export {
+  VoicePrintService,
+  type VoicePrintServiceDeps,
+} from './voice-print-service.js';
+export {
+  VoiceSuggestionService,
+  type VoiceSuggestionServiceDeps,
+} from './voice-suggestion-service.js';

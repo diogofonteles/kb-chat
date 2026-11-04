@@ -17,6 +17,8 @@ export * from './ai-access.js';
 export * from './house-ai.js';
 export * from './invite-profiles.js';
 export * from './media.js';
+export * from './voice-prints.js';
+export * from './voice-profiles.js';
 export * from './authors.js';
 export * from './speakers.js';
 export * from './track-proposals.js';

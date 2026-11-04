@@ -6,13 +6,16 @@ import {
   completeTranscodeRequestSchema,
   completeTranscribeRequestSchema,
   completeWaveformRequestSchema,
+  completeVoicePrintRequestSchema,
   failJobRequestSchema,
   heartbeatRequestSchema,
   leaseRequestSchema,
   leasedJobSchema,
   type MediaJobKind,
   mediaJobIdSchema,
+  mediaIdSchema,
   transcriptionTermsSchema,
+  workerVoiceProfilesSchema,
 } from '@kb-chat/contracts';
 import type {
   FastifyInstance,
@@ -33,6 +36,7 @@ import type {
 import type { SilenceService } from './silence-service.js';
 import type { TranscriptionService } from './transcription-service.js';
 import type { WaveformService } from './waveform-service.js';
+import type { VoicePrintService } from './voice-print-service.js';
 import type { WorkerService } from './worker-service.js';
 
 declare module 'fastify' {
@@ -54,6 +58,8 @@ export interface WorkerRoutesDeps {
   /** Waveforms (KBC-066). */
   readonly waveforms: WaveformService;
   readonly diarization: DiarizationService;
+  /** Voice prints (KBC-071). */
+  readonly voicePrints: VoicePrintService;
 }
 
 /** The bearer token of a request, or ''. */
@@ -129,6 +135,12 @@ function assertDiarizer(request: FastifyRequest): void {
   if (!identityOf(request).kinds.includes('diarize')) throw notThisWorkers();
 }
 
+/** A print goes only to, and comes only from, a token marked for it (ADR 0032). */
+function assertVoicePrinter(request: FastifyRequest): void {
+  if (!identityOf(request).kinds.includes('voice-profile'))
+    throw notThisWorkers();
+}
+
 /** The kinds asked that this token may lease; none of them is 403. */
 function allowedKinds(
   identity: WorkerIdentity,
@@ -160,6 +172,21 @@ const OPTIONS = {
   audio: {
     config: { access: PUBLIC },
     schema: { params: jobParams, querystring: audioQuery },
+  },
+  sourceAudio: {
+    config: { access: PUBLIC },
+    schema: {
+      params: jobParams.extend({ mediaId: mediaIdSchema }),
+      querystring: audioQuery,
+    },
+  },
+  voiceProfiles: {
+    config: { access: PUBLIC },
+    schema: {
+      params: jobParams,
+      querystring: audioQuery,
+      response: { 200: workerVoiceProfilesSchema },
+    },
   },
   transcript: {
     ...route(completeTranscribeRequestSchema),
@@ -199,6 +226,7 @@ export const workerRoutes =
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
+    registerVoicePrints(app, deps);
   };
 
 function registerLease(app: FastifyInstance, service: WorkerService): void {
@@ -380,6 +408,54 @@ function registerDiarization(
       };
       await diarization.complete(owner, request.body);
       return reply.code(204).send();
+    },
+  );
+}
+
+/** The print of a `voice-profile` job, and the audio of the recordings it uses (FR-2). */
+function registerVoicePrints(
+  app: FastifyInstance,
+  deps: WorkerRoutesDeps,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  const { voicePrints, transcription } = deps;
+  typed.get(
+    '/api/v1/media-worker/jobs/:id/audio/:mediaId',
+    OPTIONS.sourceAudio,
+    async (request, reply) => {
+      const { id, mediaId } = request.params;
+      assertVoicePrinter(request);
+      const owner = {
+        jobId: id,
+        ...ownerOf(request, { worker: '', leaseId: request.query.leaseId }),
+      };
+      const usesMedia = voicePrints.usesMedia(owner, mediaId);
+      const file = await transcription.sourceAudio({ mediaId, usesMedia });
+      return serveMedia({ id, file, request, reply, open: transcription });
+    },
+  );
+  typed.post(
+    '/api/v1/media-worker/jobs/:id/voice-print',
+    route(completeVoicePrintRequestSchema),
+    async (request, reply) => {
+      assertVoicePrinter(request);
+      const owner = {
+        jobId: request.params.id,
+        ...ownerOf(request, request.body),
+      };
+      await voicePrints.complete(owner, request.body);
+      return reply.code(204).send();
+    },
+  );
+  typed.get(
+    '/api/v1/media-worker/jobs/:id/voice-profiles',
+    OPTIONS.voiceProfiles,
+    async (request) => {
+      assertVoicePrinter(request);
+      return voicePrints.printsFor({
+        jobId: request.params.id,
+        ...ownerOf(request, { worker: '', leaseId: request.query.leaseId }),
+      });
     },
   );
 }

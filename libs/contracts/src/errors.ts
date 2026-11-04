@@ -55,6 +55,7 @@ export const API_ERROR_CODES = [
   'EDIT_VERSION_REQUIRED',
   /** Overlapping, too short or untitled tracks; `details.problems` points at each (KBC-066). */
   'TRACKS_INVALID',
+  'CONSENT_REQUIRED',
   'INTERNAL',
 ] as const;
 

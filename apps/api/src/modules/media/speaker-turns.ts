@@ -31,6 +31,20 @@ export function deriveTurns(
   raw: readonly RawSpeakerTurn[],
   durationMs: number | null,
 ): SpeakerTurn[] {
+  return joinNeighbours(numberVoices(exclusiveTurns(raw, durationMs)));
+}
+
+/** The number each of the worker's voice names gets in `deriveTurns`. */
+export const voiceNumbersOf = (
+  raw: readonly RawSpeakerTurn[],
+  durationMs: number | null,
+): ReadonlyMap<string, number> => orderOf(exclusiveTurns(raw, durationMs));
+
+/** In ms, clipped to the recording, one voice per instant; the voices keep their names. */
+function exclusiveTurns(
+  raw: readonly RawSpeakerTurn[],
+  durationMs: number | null,
+) {
   const limit = durationMs ?? Number.POSITIVE_INFINITY;
   const timed = raw
     .map((turn) => ({
@@ -46,20 +60,22 @@ export function deriveTurns(
       ? { ...turn, endMs: next.startMs }
       : turn;
   });
-  return joinNeighbours(
-    numberVoices(
-      exclusive.filter((turn) => turn.endMs - turn.startMs >= MIN_TURN_MS),
-    ),
-  );
+  return exclusive.filter((turn) => turn.endMs - turn.startMs >= MIN_TURN_MS);
+}
+
+/** Voice names by first appearance. */
+function orderOf(turns: readonly { voice: string }[]): Map<string, number> {
+  const order = new Map<string, number>();
+  for (const turn of turns)
+    if (!order.has(turn.voice)) order.set(turn.voice, order.size + 1);
+  return order;
 }
 
 /** Voice names become 1, 2, … by first appearance; a name past MAX_VOICES joins the top one. */
 function numberVoices(
   turns: readonly { voice: string; startMs: number; endMs: number }[],
 ): SpeakerTurn[] {
-  const order = new Map<string, number>();
-  for (const turn of turns)
-    if (!order.has(turn.voice)) order.set(turn.voice, order.size + 1);
+  const order = orderOf(turns);
   const numbered = turns.map((turn) => ({
     voice: order.get(turn.voice) ?? 1,
     startMs: turn.startMs,
