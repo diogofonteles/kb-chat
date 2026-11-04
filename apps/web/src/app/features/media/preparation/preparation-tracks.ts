@@ -83,6 +83,12 @@ export class PreparationTracks {
     return this.audition.playing() && this.playing() === track.id;
   }
 
+  protected listenLabel({ track, ordinal }: TrackLine): string {
+    return this.isPlaying(track)
+      ? $localize`:@@prep.track.stopWhich:Parar a faixa ${ordinal}:ordinal:`
+      : $localize`:@@prep.track.listenWhich:Ouvir a faixa ${ordinal}:ordinal:`;
+  }
+
   protected listen(track: PreparationTrack): void {
     if (this.isPlaying(track)) {
       this.audition.stop();

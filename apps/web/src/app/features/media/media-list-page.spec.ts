@@ -16,11 +16,22 @@ import {
   mediaId,
   sessionAs,
 } from '../../testing/media-fixtures.js';
+import { anOffer } from '../../testing/preparation-fixtures.js';
 import { MediaListPage } from './media-list-page.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 
 const LIST_URL = '/api/v1/topics/hermetismo/media';
+
+/** The upload panel asks what the person may choose as it opens (KBC-072). */
+function answerPlanOptions(): void {
+  TestBed.tick();
+  TestBed.inject(HttpTestingController)
+    .match((request) =>
+      request.url.startsWith('/api/v1/media/preparation-options'),
+    )
+    .forEach((request) => request.flush(anOffer()));
+}
 
 async function renderList(
   who: { features: Feature[]; master?: boolean } = { features: ['search'] },
@@ -109,6 +120,7 @@ describe('MediaListPage (T14)', () => {
     const buttons = screen.getAllByRole('button', { name: 'Enviar áudio' });
     expect(buttons).toHaveLength(2);
     fireEvent.click(buttons[0] as HTMLElement);
+    answerPlanOptions();
     await fixture.whenStable();
     expect(screen.getByRole('dialog', { name: 'Enviar áudio' })).toBeTruthy();
   });
@@ -335,6 +347,7 @@ describe('MediaListPage (T14)', () => {
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
     );
+    answerPlanOptions();
     await fixture.whenStable();
     const input =
       container.querySelector<HTMLInputElement>('input[type="file"]');
@@ -377,6 +390,7 @@ describe('MediaListPage (T14)', () => {
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
     );
+    answerPlanOptions();
     await fixture.whenStable();
     const input =
       container.querySelector<HTMLInputElement>('input[type="file"]');
@@ -494,6 +508,7 @@ describe('MediaListPage (T14)', () => {
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
     );
+    answerPlanOptions();
     await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     await fixture.whenStable();

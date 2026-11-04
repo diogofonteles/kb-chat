@@ -159,7 +159,6 @@ export const mediaRoutes =
     },
   ): FastifyPluginAsync =>
   async (app) => {
-    const { createPerMinute, plans } = options;
     // The upload body is streamed to disk as it arrives, never buffered (FR-2).
     app.addContentTypeParser(
       'application/octet-stream',
@@ -169,18 +168,7 @@ export const mediaRoutes =
     typed.get('/api/v1/topics/:topic/media', OPTIONS.list, async (request) => ({
       items: service.list(actorOf(request), request.params.topic),
     }));
-    typed.post(
-      '/api/v1/topics/:topic/media',
-      createOptions(createPerMinute),
-      async (request, reply) => {
-        const created = createPlanned(
-          { actor: planActorOf(request), topic: request.params.topic },
-          request.body,
-          { service, plans },
-        );
-        return reply.code(201).send(created);
-      },
-    );
+    registerCreate(typed, { service, ...options });
     registerItemRoutes(typed, service);
     registerEditRoute(typed, service, editor);
   };
@@ -205,6 +193,28 @@ type TypedApp = FastifyInstance<
   FastifyBaseLogger,
   ZodTypeProvider
 >;
+
+function registerCreate(
+  typed: TypedApp,
+  deps: {
+    readonly service: MediaService;
+    readonly plans: UploadPlans;
+    readonly createPerMinute: number;
+  },
+): void {
+  typed.post(
+    '/api/v1/topics/:topic/media',
+    createOptions(deps.createPerMinute),
+    async (request, reply) => {
+      const created = createPlanned(
+        { actor: planActorOf(request), topic: request.params.topic },
+        request.body,
+        deps,
+      );
+      return reply.code(201).send(created);
+    },
+  );
+}
 
 /** "Editar informações" (KBC-050 FR-1): the answer is the item as the person now sees it. */
 function registerEditRoute(

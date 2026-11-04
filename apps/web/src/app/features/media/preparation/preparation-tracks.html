@@ -29,7 +29,7 @@
         <button
           type="button"
           class="secondary listen"
-          [attr.aria-pressed]="isPlaying(line.track)"
+          [attr.aria-label]="listenLabel(line)"
           (click)="listen(line.track)"
         >
           <span aria-hidden="true">{{
@@ -40,9 +40,6 @@
           } @else {
             <ng-container i18n="@@prep.track.listen">Ouvir</ng-container>
           }
-          <span class="visually-hidden" i18n="@@prep.track.listenWhich"
-            >&ngsp;a faixa {{ line.ordinal }}</span
-          >
         </button>
       </li>
     }
