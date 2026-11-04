@@ -281,6 +281,45 @@ describe('PreparationPage (T20, step 2)', () => {
     );
   });
 
+  it('says when a track cannot be played (UP-11)', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(
+      new Error('refused'),
+    );
+    const { harness } = await open(
+      aPreparation({ stages: [], tracks: [aTrack(1)] }),
+    );
+    screen.getByRole('button', { name: 'Ouvir a faixa 1' }).click();
+    await settle(harness);
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui tocar este trecho',
+    );
+  });
+
+  it('plays a click that landed on the row over its button (WebKit, UP-11)', async () => {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+    const { harness } = await open(
+      aPreparation({ stages: [], tracks: [aTrack(1)] }),
+    );
+    const button = screen.getByRole('button', { name: 'Ouvir a faixa 1' });
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 100, 80, 48),
+    );
+    const clickRow = (clientX: number, clientY: number) =>
+      button
+        .closest('li')
+        ?.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, clientX, clientY }),
+        );
+    clickRow(20, 20);
+    await settle(harness);
+    expect(play).not.toHaveBeenCalled();
+    clickRow(120, 120);
+    await settle(harness);
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
   it('offers "Validar faixas" and does not move by itself; the press goes to step 3 (AC-8)', async () => {
     const { harness, http } = await open(
       aPreparation({

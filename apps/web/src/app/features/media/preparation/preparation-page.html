@@ -51,6 +51,11 @@
     @if (actionError(); as error) {
       <p class="banner" role="alert">{{ error }}</p>
     }
+    @if (audition.failed()) {
+      <p class="banner" role="alert" i18n="@@tracks.listenFailed">
+        Não consegui tocar este trecho. Tente de novo.
+      </p>
+    }
 
     @if (choosing()) {
       <section class="choose">

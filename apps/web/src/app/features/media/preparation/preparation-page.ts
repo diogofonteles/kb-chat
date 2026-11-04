@@ -75,7 +75,7 @@ export class PreparationPage {
   private readonly destroyRef = inject(DestroyRef);
   protected readonly watch = inject(PreparationWatch);
   protected readonly form = inject(PlanForm);
-  private readonly audition = inject(TrackAudition);
+  protected readonly audition = inject(TrackAudition);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly audio = viewChild<ElementRef<HTMLAudioElement>>('audio');
 

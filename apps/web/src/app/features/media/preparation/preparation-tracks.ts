@@ -8,6 +8,7 @@ import {
   input,
   signal,
   viewChild,
+  viewChildren,
   DestroyRef,
 } from '@angular/core';
 import type { PreparationTrack } from '@kb-chat/contracts';
@@ -35,6 +36,13 @@ const lineOf = (track: PreparationTrack, index: number): TrackLine => ({
   status: trackStatusText(track.status),
 });
 
+const isOver = (element: HTMLElement, { clientX, clientY }: MouseEvent) => {
+  const { left, right, top, bottom } = element.getBoundingClientRect();
+  return (
+    clientX >= left && clientX <= right && clientY >= top && clientY <= bottom
+  );
+};
+
 /**
  * The list that grows on step 2 (T20, UP-16): each track can be heard as a stretch of the
  * recording before anything ends (BR-7). A new one fades in without moving the scroll; away
@@ -45,12 +53,15 @@ const lineOf = (track: PreparationTrack, index: number): TrackLine => ({
   templateUrl: './preparation-tracks.html',
   styleUrls: ['./preparation-buttons.css', './preparation-tracks.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(click)': 'catchLostClick($event)' },
 })
 export class PreparationTracks {
   private readonly watch = inject(PreparationWatch);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly audition = inject(TrackAudition);
   private readonly end = viewChild<ElementRef<HTMLElement>>('end');
+  private readonly listenButtons =
+    viewChildren<ElementRef<HTMLElement>>('listenButton');
 
   readonly tracks = input.required<readonly PreparationTrack[]>();
 
@@ -96,6 +107,20 @@ export class PreparationTracks {
     }
     this.playing.set(track.id);
     this.audition.play({ fromMs: track.startMs, toMs: track.endMs });
+  }
+
+  /**
+   * A row out of view is not painted (`content-visibility`), and WebKit takes a click in the
+   * very frame it jumps there for the row itself: the button's press would be lost in silence.
+   * Over a painted row the button gets the click, so this only sees that lost one.
+   */
+  protected catchLostClick(event: MouseEvent): void {
+    const index = this.listenButtons().findIndex(
+      ({ nativeElement }) => nativeElement.parentElement === event.target,
+    );
+    const button = this.listenButtons()[index]?.nativeElement;
+    const track = this.tracks()[index];
+    if (button && track && isOver(button, event)) this.listen(track);
   }
 
   protected goToEnd(): void {
