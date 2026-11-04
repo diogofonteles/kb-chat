@@ -114,7 +114,7 @@ describe('GET /api/v1/media/:id/subtitles.vtt (KBC-038 FR-1)', () => {
     const item = await transcribed(media);
     const first = await media.owner('GET', subtitlesUrl(item.id));
     const etag = String(first.headers['etag']);
-    expect(etag).toMatch(/^".+\.f1\.s1"$/);
+    expect(etag).toMatch(/^".+\.f1\.s2"$/);
     const again = await media.started.app.inject({
       method: 'GET',
       url: subtitlesUrl(item.id),
