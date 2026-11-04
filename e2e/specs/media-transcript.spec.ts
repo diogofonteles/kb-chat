@@ -130,6 +130,51 @@ const MEDIA_EVENTS = [
   'error',
 ];
 
+interface MediaEventSeen {
+  readonly event: string;
+  readonly time: number;
+}
+
+const mediaEventsSeen = (page: Page) =>
+  page.evaluate(
+    () =>
+      (window as unknown as { kbcMediaEvents: MediaEventSeen[] })
+        .kbcMediaEvents,
+  );
+
+/**
+ * Seconds played since the last seek among `events`, 0 until it ended and playback started. A
+ * click lands on a word, so the seek alone moves the clock: only `playing` proves it runs.
+ */
+async function secondsPlayed(page: Page, events: readonly MediaEventSeen[]) {
+  const seek = events.findLastIndex(({ event }) => event === 'seeking');
+  const after = events.slice(seek + 1);
+  const seeked = seek < 0 || after.some(({ event }) => event === 'seeked');
+  const playing = after.find(({ event }) => event === 'playing');
+  if (!seeked || !playing) return 0;
+  return (await audioState(page)).currentTime - playing.time;
+}
+
+/**
+ * Every caption shown from now on. A click on a word leaves little of a 2 s line, which can be
+ * gone when a read reaches it; the record cannot miss one.
+ */
+async function recordCaptions(page: Page) {
+  await page.locator('app-media-player .caption-area').evaluate((area) => {
+    const shown: string[] = [];
+    Object.assign(window, { kbcCaptions: shown });
+    new MutationObserver(() => {
+      const text = area.textContent?.trim();
+      if (text && shown.at(-1) !== text) shown.push(text);
+    }).observe(area, { childList: true, subtree: true, characterData: true });
+  });
+}
+
+const captionsShown = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as { kbcCaptions: string[] }).kbcCaptions,
+  );
+
 /** Starting playback from a segment: its text clicked. */
 async function playFromText(page: Page, text: string) {
   await segmentsList(page).getByText(text).click();
@@ -184,13 +229,15 @@ test('AC-1, AC-4: subtitles follow the audio within 84 characters, stay on for a
   await expect(cc).toHaveAttribute('aria-pressed', 'false');
   await cc.click();
   await expect(cc).toHaveAttribute('aria-pressed', 'true');
+  await recordCaptions(page);
   await playFromText(page, 'O rei Salomão falou.');
-  const caption = page.locator('app-media-player .caption');
-  await expect(caption).toContainText('Salomão');
   await expect
-    .poll(async () => (await caption.textContent())?.trim() ?? '')
+    .poll(async () => (await captionsShown(page)).join('\n'))
+    .toContain('Salomão');
+  await expect
+    .poll(async () => (await captionsShown(page)).join('\n'))
     .toMatch(/Salomao era sábio\.|E SALOMÃO voltou\./);
-  for (const text of await caption.allTextContents())
+  for (const text of await captionsShown(page))
     expect(text.replace(/\s+/g, ' ').trim().length).toBeLessThanOrEqual(84);
   await page.getByRole('button', { name: 'Pausar' }).click();
 
@@ -505,10 +552,13 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
       );
   }, MEDIA_EVENTS);
   await openPlayer(page, lecture);
+  const beforeClick = (await mediaEventsSeen(page)).length;
   await playFromText(page, 'Frase número 0 da abertura.');
   // Measured once playback runs on its own (the start of a stream is not the player's).
   await expect
-    .poll(async () => (await audioState(page)).currentTime)
+    .poll(async () =>
+      secondsPlayed(page, (await mediaEventsSeen(page)).slice(beforeClick)),
+    )
     .toBeGreaterThan(1);
   const { misses, samples, why } = await page.evaluate(async () => {
     const audio = document.querySelector<HTMLMediaElement>(
