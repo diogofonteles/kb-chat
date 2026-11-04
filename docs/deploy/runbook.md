@@ -355,3 +355,4 @@ Ensaio sugerido: um a cada trimestre.
 - O orçamento `kb-chat-budget` (US$ 1/mês) manda e-mail no primeiro centavo.
 - Não crie outra VM A1, nem volumes além de 200 GB no total, nem backups de volume além de 5.
 - Confira mensalmente em *Billing → Cost Analysis*: deve ficar US$ 0,00.
+
