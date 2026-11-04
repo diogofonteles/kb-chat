@@ -870,4 +870,50 @@ describe('ChatPage on the media pages (no question box)', () => {
       Reflect.deleteProperty(window, 'matchMedia');
     }
   });
+
+  it('gives the focus to the question box on a desktop when coming back from them (AC-14 of KBC-051)', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.view', 'search');
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: () => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
+    });
+    try {
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(withInterceptors([fakeStartRequests])),
+          provideHttpClientTesting(),
+          FAKE_ANSWERS,
+          { provide: UsageLog, useValue: usage },
+          provideRouter([
+            {
+              path: '',
+              component: ChatPage,
+              children: [
+                { path: '', children: [] },
+                { path: 'midia', component: MediaStub },
+              ],
+            },
+          ]),
+        ],
+      });
+      const harness = await RouterTestingHarness.create('/midia');
+      TestBed.inject(HttpTestingController)
+        .match('/api/v1/topics')
+        .forEach((request) => request.flush(TOPICS));
+      await harness.fixture.whenStable();
+
+      await harness.navigateByUrl('/');
+      await harness.fixture.whenStable();
+
+      expect(document.activeElement).toBe(screen.getByRole('textbox'));
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
+  });
 });

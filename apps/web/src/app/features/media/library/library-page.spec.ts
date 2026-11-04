@@ -3,9 +3,12 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import {
+  provideZonelessChangeDetection,
+  type WritableSignal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   type Feature,
@@ -19,6 +22,8 @@ import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
 } from '@core/media/media-engine.js';
+import { ChatStore } from '@features/chat/chat-store.js';
+import { ViewStore } from '@features/chat/view-store.js';
 import {
   fakeMediaElement,
   type FakeMedia,
@@ -90,13 +95,20 @@ async function renderLibrary(
   } = {},
 ) {
   const media: FakeMedia = fakeMediaElement();
+  const chatStore = chatStoreOn();
+  const chat = {
+    ask: vi.fn(),
+    selectTopic: vi.fn(),
+  };
+  const views = { select: vi.fn() };
   const view = await render(LibraryPage, {
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter([]),
-      chatStoreOn(),
+      { ...chatStore, useValue: { ...chatStore.useValue, ...chat } },
+      { provide: ViewStore, useValue: views },
       sessionAs({
         features: options.features ?? ['media', 'media-library'],
         master: options.master,
@@ -143,7 +155,7 @@ async function renderLibrary(
       .flush(page);
     await settle();
   };
-  return { ...view, http, settle, tick, start, open, media };
+  return { ...view, http, settle, tick, start, open, media, chat, views };
 }
 
 /** Longer than the search's pause, so the typed words are asked. */
@@ -387,6 +399,68 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.queryByRole('region', { name: 'Seleção' })).toBeNull();
   });
 
+  const manyItems = (count: number) =>
+    Array.from({ length: count }, (_, n) => anItem(n + 1));
+  const idsFrom = (start: number, end: number) =>
+    Array.from({ length: end - start + 1 }, (_, n) => mediaId(start + n));
+
+  it('marks more than the API takes at once in batches of 200, from "Selecionar todas" (FR-3)', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    await open(aPage(manyItems(250)));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar todas as 250' }),
+    );
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+
+    const first = http.expectOne('/api/v1/media/played');
+    expect(first.request.body).toEqual({
+      ids: idsFrom(1, 200),
+      played: true,
+    });
+    first.flush({ applied: idsFrom(1, 200) });
+    const second = http.expectOne('/api/v1/media/played');
+    expect(second.request.body).toEqual({
+      ids: idsFrom(201, 250),
+      played: true,
+    });
+    second.flush({ applied: idsFrom(201, 250) });
+    await tick();
+    http.expectOne(FIRST).flush(aPage([anItem(1)]));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+
+    expect(screen.getByRole('status').textContent).toContain(
+      '250 mídias marcadas como ouvidas.',
+    );
+    expect(screen.queryByRole('region', { name: 'Seleção' })).toBeNull();
+  });
+
+  it('says how many were marked and keeps the rest selected when a later batch fails (FR-3)', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    await open(aPage(manyItems(250)));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar todas as 250' }),
+    );
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+
+    http.expectOne('/api/v1/media/played').flush({ applied: idsFrom(1, 200) });
+    http
+      .expectOne('/api/v1/media/played')
+      .flush(null, { status: 500, statusText: 'x' });
+    await tick();
+    http.expectOne(FIRST).flush(aPage(manyItems(250)));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+
+    const bar = screen.getByRole('region', { name: 'Seleção' });
+    expect(within(bar).getByRole('alert').textContent).toContain(
+      '200 mídias marcadas como ouvidas. Faltaram 50: tente de novo.',
+    );
+    expect(within(bar).getByText('50 selecionadas')).toBeTruthy();
+  });
+
   it('marks one heard media as not heard from its ⋯ (AC-8)', async () => {
     const { open, http, settle } = await renderLibrary();
     await open(aPage([anItem(1, { completedAt: '2026-11-01T00:00:00.000Z' })]));
@@ -512,6 +586,283 @@ describe('LibraryPage (T16, KBC-051)', () => {
     await settle();
     expect(screen.getByRole('link', { name: 'Palestra 2' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
+  });
+
+  it('cancels the next page on its way when a chip changes the list (NG-22)', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    await open(aPage([anItem(1)], { nextCursor: '50', total: 2 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await tick();
+    const stale = http.expectOne(
+      '/api/v1/media/library?sort=recently-played&cursor=50',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Em andamento' }));
+    await tick();
+
+    expect(stale.cancelled).toBe(true);
+    http
+      .expectOne('/api/v1/media/library?state=in-progress&sort=recently-played')
+      .flush(aPage([anItem(7)], { nextCursor: null, total: 1 }));
+    await settle();
+    expect(screen.getByRole('link', { name: 'Palestra 7' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Palestra 2' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
+  });
+
+  it('drops a next page of the old list once the marked list arrives (NG-22)', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    await open(aPage([anItem(1), anItem(3)], { nextCursor: '50', total: 3 }));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+    );
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await tick();
+    const stale = http.expectOne(
+      '/api/v1/media/library?sort=recently-played&cursor=50',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+    http.expectOne('/api/v1/media/played').flush({ applied: [mediaId(1)] });
+    await tick();
+    http.expectOne(FIRST).flush(aPage([anItem(3)], { total: 1 }));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+
+    expect(stale.cancelled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
+  });
+
+  it('says so when the next page fails, and "Mostrar mais" tries again', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    await open(aPage([anItem(1)], { nextCursor: '50', total: 2 }));
+    const url = '/api/v1/media/library?sort=recently-played&cursor=50';
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await tick();
+    http.expectOne(url).flush(null, { status: 500, statusText: 'x' });
+    await settle();
+    expect(screen.getByRole('alert')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await tick();
+    http.expectOne(url).flush(aPage([anItem(2)], { total: 2 }));
+    await settle();
+    expect(screen.getByRole('link', { name: 'Palestra 2' })).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  describe('focus after a button leaves with its action (AC-14, WCAG 2.4.3)', () => {
+    const allHeading = () =>
+      screen.getByRole('heading', { name: 'Todas', level: 3 });
+
+    it('goes to the search box after "Limpar busca"', async () => {
+      const { open, settle } = await renderLibrary();
+      await open(aPage([anItem(1)]));
+      fireEvent.input(screen.getByLabelText('Buscar na biblioteca'), {
+        target: { value: 'conselheira' },
+      });
+      await settle();
+      const clear = screen.getByRole('button', { name: 'Limpar busca' });
+      clear.focus();
+      fireEvent.click(clear);
+      await settle();
+      expect(document.activeElement).toBe(
+        screen.getByLabelText('Buscar na biblioteca'),
+      );
+    });
+
+    it('goes to "Todas" after "Limpar filtros"', async () => {
+      const { open, http, settle, tick } = await renderLibrary();
+      await open(aPage([], { total: 0 }), aHome(), {
+        ...PREFERENCES,
+        libraryFilters: { states: ['heard'], authors: [], topic: null },
+      });
+      const clear = screen.getAllByRole('button', {
+        name: 'Limpar filtros',
+      })[0] as HTMLElement;
+      clear.focus();
+      fireEvent.click(clear);
+      await tick();
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      expect(document.activeElement).toBe(allHeading());
+    });
+
+    it('moves through "Limpar recentes": into the confirmation, back, and to the section', async () => {
+      const { open, http, settle } = await renderLibrary();
+      const played = anItem(1, { lastPlayedAt: '2026-11-01T10:00:00.000Z' });
+      await open(aPage([played]), aHome({ recentlyPlayed: [played] }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Limpar recentes' }));
+      await settle();
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Cancelar' }),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+      await settle();
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Limpar recentes' }),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Limpar recentes' }));
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: 'Limpar' }));
+      await settle();
+      http
+        .expectOne({ method: 'DELETE', url: '/api/v1/media/library/recents' })
+        .flush(null);
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Ouvidas recentemente' }),
+      );
+    });
+
+    it('goes to "Selecionar todas" after "Cancelar seleção"', async () => {
+      const { open, settle } = await renderLibrary();
+      await open(aPage([anItem(1), anItem(2)]));
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+      );
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar seleção' }));
+      await settle();
+      expect(document.activeElement).toBe(
+        screen.getByRole('checkbox', { name: 'Selecionar todas as 2' }),
+      );
+    });
+
+    it('goes to "Todas" after "Marcar como ouvida"', async () => {
+      const { open, http, settle, tick } = await renderLibrary();
+      await open(aPage([anItem(1), anItem(2)]));
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+      );
+      await settle();
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Marcar como ouvida' }),
+      );
+      http.expectOne('/api/v1/media/played').flush({ applied: [mediaId(1)] });
+      await tick();
+      http.expectOne(FIRST).flush(aPage([anItem(2)]));
+      http.expectOne(HOME).flush(aHome());
+      await settle();
+      expect(document.activeElement).toBe(allHeading());
+    });
+  });
+
+  describe('"Buscar na fala" (AC-12, FR-6)', () => {
+    const noResult = async (
+      options: Parameters<typeof renderLibrary>[0] = {},
+      preferences = PREFERENCES,
+    ) => {
+      const library = await renderLibrary(options);
+      await library.open(aPage([anItem(1)]), aHome(), preferences);
+      fireEvent.input(screen.getByLabelText('Buscar na biblioteca'), {
+        target: { value: ' conselheira ' },
+      });
+      await pause();
+      await library.tick();
+      library.http
+        .expectOne(
+          (request) =>
+            request.url.startsWith('/api/v1/media/library?') &&
+            request.url.includes('q=conselheira'),
+        )
+        .flush(aPage([], { total: 0, totalDurationMs: 0 }));
+      await library.settle();
+      return library;
+    };
+
+    it('opens the media search with the word, only in what was said', async () => {
+      const { chat, views, settle } = await noResult({
+        features: ['search', 'media', 'media-library'],
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Buscar na fala' }));
+      await settle();
+
+      expect(views.select).toHaveBeenCalledWith('search');
+      expect(chat.ask).toHaveBeenCalledWith('conselheira', {
+        kinds: ['audio'],
+      });
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('searches the collection of the Acervo filter when one is on', async () => {
+      const { chat } = await noResult(
+        { features: ['search', 'media', 'media-library'] },
+        {
+          ...PREFERENCES,
+          libraryFilters: { states: [], authors: [], topic: 'alquimia' },
+        },
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Buscar na fala' }));
+
+      expect(chat.selectTopic).toHaveBeenCalledWith('alquimia');
+    });
+
+    it('is not offered to who cannot search', async () => {
+      await noResult({ features: ['media', 'media-library'] });
+      expect(
+        screen.queryByRole('button', { name: 'Buscar na fala' }),
+      ).toBeNull();
+    });
+  });
+
+  describe('a collection the person lost (BR-7, AC-5)', () => {
+    it('leaves a saved filter aside, shows all the rest and keeps it in the account', async () => {
+      const { http, settle, start } = await renderLibrary();
+      await start(aHome(), {
+        ...PREFERENCES,
+        libraryFilters: { states: [], authors: [], topic: 'perdido' },
+      });
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+
+      expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
+      expect(
+        screen.queryByRole('button', { name: 'Limpar filtros' }),
+      ).toBeNull();
+      http.expectNone(PREFS);
+    });
+
+    it('leaves aside a collection arrived with in the address', async () => {
+      const { http, settle, start } = await renderLibrary({
+        acervo: 'perdido',
+      });
+      await start();
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
+    });
+
+    it('waits for the collections before judging a saved filter', async () => {
+      const { http, tick, start } = await renderLibrary();
+      const chat = TestBed.inject(ChatStore);
+      const known = chat.topicsKnown as WritableSignal<boolean>;
+      known.set(false);
+      await start();
+      await tick();
+      http.expectNone(FIRST);
+
+      known.set(true);
+      await tick();
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+    });
+  });
+
+  it('says so when the choice cannot reach the account (AC-10)', async () => {
+    const { open, http, settle } = await renderLibrary();
+    await open(aPage([anItem(1)]));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver em grade' }));
+    http
+      .expectOne({ method: 'PUT', url: PREFS })
+      .flush(null, { status: 500, statusText: 'x' });
+    await settle();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui guardar esta escolha na sua conta.',
+    );
   });
 
   it('shows a media still converting with its status and no ▶ (AC-13)', async () => {

@@ -1,7 +1,7 @@
 <section
   class="library"
   aria-labelledby="library-title"
-  [class.selecting]="selected().size > 0"
+  [class.selecting]="selecting()"
 >
   <header class="head">
     <h2 id="library-title" #heading tabindex="-1" i18n="@@library.title">
@@ -35,6 +35,7 @@
       >
       <div class="search-box">
         <input
+          #searchBox
           id="library-search"
           type="search"
           autocomplete="off"
@@ -57,9 +58,9 @@
     </div>
   }
 
-  @if (actionError()) {
+  @if (shownError() && !selecting()) {
     <p class="error" role="alert">
-      <span aria-hidden="true">⚠</span> {{ actionError() }}
+      <span aria-hidden="true">⚠</span> {{ shownError() }}
     </p>
   }
 
@@ -77,7 +78,7 @@
     </div>
   }
 
-  @if (!home.hasValue() && !home.error()) {
+  @if (homeLoading()) {
     <div class="skeleton-strip" aria-hidden="true">
       @for (n of [1, 2, 3]; track n) {
         <span class="skeleton-card"></span>
@@ -120,7 +121,7 @@
         @for (item of continueItems(); track item.id) {
           <app-library-card
             [item]="item"
-            [playing]="isPlaying(item)"
+            [playing]="playingId() === item.id"
             (played)="play(item)"
           />
         }
@@ -128,11 +129,12 @@
     </section>
   }
 
-  @if (home.hasValue() && (recentItems().length > 0 || recentsCleared())) {
+  @if (showRecents()) {
     <section class="recents" aria-labelledby="recents-title">
       <div class="section-head">
         <h3 id="recents-title">
           <button
+            #recentsToggle
             type="button"
             class="disclosure"
             [attr.aria-expanded]="recentsOpen()"
@@ -145,8 +147,9 @@
             >
           </button>
         </h3>
-        @if (recentItems().length > 0 && !confirmingClear()) {
+        @if (canClearRecents()) {
           <button
+            #clearRecentsButton
             type="button"
             class="link"
             (click)="askClearRecents()"
@@ -171,6 +174,7 @@
             Limpar
           </button>
           <button
+            #keepRecentsButton
             type="button"
             class="secondary"
             (click)="cancelClearRecents()"
@@ -181,16 +185,18 @@
         </div>
       }
       <div id="recents-list" [hidden]="!recentsOpen()">
-        @if (recentItems().length === 0) {
+        @if (recents().length === 0) {
           <p class="quiet" i18n="@@library.recentsEmpty">
             Nada ouvido desde que você limpou.
           </p>
         } @else {
           <ol class="recent-list">
-            @for (item of recentItems(); track item.id) {
+            @for (recent of recents(); track recent.item.id) {
               <li>
-                <a [routerLink]="['/midia', item.id]">{{ item.title }}</a>
-                <span class="quiet">{{ playedAgo(item) }}</span>
+                <a [routerLink]="['/midia', recent.item.id]">{{
+                  recent.item.title
+                }}</a>
+                <span class="quiet">{{ recent.ago }}</span>
               </li>
             }
           </ol>
@@ -201,11 +207,11 @@
 
   <section class="all" aria-labelledby="all-title">
     <div class="section-head">
-      <h3 id="all-title" i18n="@@library.all">Todas</h3>
+      <h3 id="all-title" #allTitle tabindex="-1" i18n="@@library.all">Todas</h3>
       <p class="count" aria-live="polite">{{ countText() }}</p>
     </div>
 
-    @if (!choices() || (firstPage.isLoading() && items().length === 0)) {
+    @if (showSkeleton()) {
       <ul
         class="rows skeleton"
         aria-busy="true"
@@ -250,11 +256,11 @@
             </p>
           }
         </div>
-      } @else if (lastPage() && items().length === 0) {
+      } @else if (nothingFound()) {
         <div class="empty">
-          @if (query().trim()) {
+          @if (trimmedQuery()) {
             <p i18n="@@library.searchEmpty">
-              Nenhuma mídia com '{{ query().trim() }}' no título ou no autor.
+              Nenhuma mídia com '{{ trimmedQuery() }}' no título ou no autor.
             </p>
             <button
               type="button"
@@ -264,6 +270,16 @@
             >
               Limpar busca
             </button>
+            @if (canSearch()) {
+              <button
+                type="button"
+                class="secondary"
+                (click)="searchSpoken()"
+                i18n="@@library.searchSpoken"
+              >
+                Buscar na fala
+              </button>
+            }
           } @else {
             <p i18n="@@library.filtersEmpty">
               Nenhuma mídia com estes filtros.
@@ -285,7 +301,7 @@
           @for (item of items(); track item.id) {
             <app-library-card
               [item]="item"
-              [playing]="isPlaying(item)"
+              [playing]="playingId() === item.id"
               (played)="play(item)"
             />
           }
@@ -294,6 +310,7 @@
         @if (selectable().length > 0) {
           <label class="select-all">
             <input
+              #selectAllBox
               type="checkbox"
               [checked]="allSelected()"
               (change)="toggleAll($event)"
@@ -307,7 +324,7 @@
               [item]="item"
               [topicTitle]="topicTitleOf(item)"
               [selected]="selected().has(item.id)"
-              [playing]="isPlaying(item)"
+              [playing]="playingId() === item.id"
               [master]="isMaster()"
               (played)="play(item)"
               (selectedChange)="select(item, $event)"
@@ -318,7 +335,7 @@
         </div>
       }
 
-      @if (hasMore() && items().length > 0) {
+      @if (hasMore()) {
         <button
           type="button"
           class="secondary more"
@@ -334,13 +351,18 @@
     }
   </section>
 
-  @if (selected().size > 0) {
+  @if (selecting()) {
     <div
       class="selection-bar"
       role="region"
       aria-label="Seleção"
       i18n-aria-label="@@library.selection"
     >
+      @if (shownError()) {
+        <p class="error selection-error" role="alert">
+          <span aria-hidden="true">⚠</span> {{ shownError() }}
+        </p>
+      }
       <span class="selection-count">{{ selectedText() }}</span>
       <button
         type="button"

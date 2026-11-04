@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
+  MARK_PLAYED_MAX,
   libraryPageSchema,
   listeningPreferencesSchema,
   markPlayedResultSchema,
@@ -11,7 +12,16 @@ import {
   type ListeningPreferencesUpdate,
   type MarkPlayedResult,
 } from '@kb-chat/contracts';
-import { map, type Observable } from 'rxjs';
+import {
+  catchError,
+  concatMap,
+  from,
+  map,
+  of,
+  reduce,
+  takeWhile,
+  type Observable,
+} from 'rxjs';
 import { PREFERENCES_URL } from './listening-api.js';
 
 export const LIBRARY_URL = '/api/v1/media/library';
@@ -24,6 +34,20 @@ export interface LibraryRequest {
   readonly filters: LibraryFilters;
   readonly query: string;
   readonly sort: LibrarySort;
+}
+
+/** What a mark in batches did: what the API applied, and what never reached it. */
+export interface MarkOutcome {
+  readonly applied: readonly string[];
+  readonly unsent: readonly string[];
+}
+
+/** The ids in batches the API takes at once (FR-3). */
+function batchesOf(ids: readonly string[]): readonly (readonly string[])[] {
+  const batches: (readonly string[])[] = [];
+  for (let start = 0; start < ids.length; start += MARK_PLAYED_MAX)
+    batches.push(ids.slice(start, start + MARK_PLAYED_MAX));
+  return batches;
 }
 
 /** The first page's URL; chips go as comma-separated lists, empty ones left out. */
@@ -65,6 +89,35 @@ export class LibraryApi {
     return this.http
       .put(MARK_PLAYED_URL, { ids, played })
       .pipe(map((body) => markPlayedResultSchema.parse(body)));
+  }
+
+  /**
+   * Any number of ids, one batch after the other. It stops at the first batch that fails
+   * and never errors: the outcome says what is left, since the earlier batches stay saved.
+   */
+  markPlayedInBatches(
+    ids: readonly string[],
+    played: boolean,
+  ): Observable<MarkOutcome> {
+    return from(batchesOf(ids)).pipe(
+      concatMap((batch) =>
+        this.markPlayed(batch, played).pipe(
+          map(({ applied }) => ({ batch, applied })),
+          catchError(() => of(null)),
+        ),
+      ),
+      takeWhile((sent) => sent !== null),
+      reduce<
+        { batch: readonly string[]; applied: string[] } | null,
+        MarkOutcome
+      >(
+        (outcome, sent) => ({
+          applied: [...outcome.applied, ...(sent?.applied ?? [])],
+          unsent: outcome.unsent.slice(sent?.batch.length ?? 0),
+        }),
+        { applied: [], unsent: ids },
+      ),
+    );
   }
 
   clearRecents(): Observable<void> {

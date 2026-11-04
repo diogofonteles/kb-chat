@@ -6,6 +6,7 @@ import {
   Injector,
   DestroyRef,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   signal,
@@ -210,6 +211,13 @@ export class ChatPage {
     afterNextRender(() => {
       if (this.view?.matchMedia?.(DESKTOP_QUERY).matches)
         this.composer()?.focus();
+    });
+    // Back from a media page, what was pressed left with it: the focus stays in the page.
+    let wasOnMedia = this.onMedia();
+    afterRenderEffect(() => {
+      const onMedia = this.onMedia();
+      if (wasOnMedia && !onMedia && this.desktop()) this.composer()?.focus();
+      wasOnMedia = onMedia;
     });
   }
 

@@ -6,7 +6,6 @@
     type="button"
     class="play"
     [attr.aria-label]="playLabel()"
-    [attr.aria-pressed]="playing()"
     (click)="played.emit()"
   >
     <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>

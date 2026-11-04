@@ -6,6 +6,7 @@ import {
   ElementRef,
   Injector,
   LOCALE_ID,
+  type Signal,
   afterNextRender,
   computed,
   inject,
@@ -14,11 +15,12 @@ import {
   viewChild,
 } from '@angular/core';
 import {
+  rxResource,
   takeUntilDestroyed,
   toObservable,
   toSignal,
 } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   libraryHomeSchema,
@@ -39,12 +41,14 @@ import {
   LibraryApi,
   libraryUrlOf,
   type LibraryRequest,
+  type MarkOutcome,
 } from '@core/media/library-api.js';
 import { PREFERENCES_URL } from '@core/media/listening-api.js';
 import { MediaApi } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { ChatStore } from '@features/chat/chat-store.js';
-import { EMPTY, Subject, catchError, concatMap, debounceTime } from 'rxjs';
+import { ViewStore } from '@features/chat/view-store.js';
+import { EMPTY, Subject, catchError, concatMap, debounceTime, of } from 'rxjs';
 import { UploadPanel } from '../upload-panel.js';
 import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
@@ -68,6 +72,18 @@ interface Choices {
   readonly sort: LibrarySort;
   readonly view: LibraryView;
   readonly filters: LibraryFilters;
+}
+
+/** One page after the first: of which list, and from where. */
+interface NextPageAsked {
+  readonly request: LibraryRequest;
+  readonly cursor: string;
+}
+
+/** What the pages after the first added to the list. */
+interface MorePages {
+  readonly items: readonly LibraryItem[];
+  readonly nextCursor: string | null;
 }
 
 /**
@@ -96,15 +112,27 @@ export class LibraryPage {
   private readonly mediaApi = inject(MediaApi);
   private readonly session = inject(SessionStore);
   private readonly chat = inject(ChatStore);
+  private readonly views = inject(ViewStore);
   private readonly engine = inject(MediaEngine);
   private readonly playNow = inject(PlayNow);
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
   private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
+  private readonly searchBox = viewChild<ElementRef<HTMLElement>>('searchBox');
+  private readonly allTitle = viewChild<ElementRef<HTMLElement>>('allTitle');
+  private readonly recentsToggle =
+    viewChild<ElementRef<HTMLElement>>('recentsToggle');
+  private readonly clearRecentsButton =
+    viewChild<ElementRef<HTMLElement>>('clearRecentsButton');
+  private readonly keepRecentsButton =
+    viewChild<ElementRef<HTMLElement>>('keepRecentsButton');
+  private readonly selectAllBox =
+    viewChild<ElementRef<HTMLElement>>('selectAllBox');
   private readonly removeDialog =
     viewChild<ElementRef<HTMLDialogElement>>('removeDialog');
   /** Saves one after the other: the account ends with the last choice (BR-7). */
@@ -117,13 +145,15 @@ export class LibraryPage {
   protected readonly canUpload = computed(() =>
     this.session.can('media-upload'),
   );
+  /** "Buscar na fala" opens the search, which is a feature of its own. */
+  protected readonly canSearch = computed(() => this.session.can('search'));
   protected readonly isMaster = this.session.isMaster;
 
   private readonly preferences = httpResource(() => PREFERENCES_URL, {
     parse: (body) => listeningPreferencesSchema.parse(body),
   });
   /** The account's choices once read; the defaults when the account cannot be read. */
-  protected readonly choices = linkedSignal<Choices | null>(() => {
+  private readonly kept = linkedSignal<Choices | null>(() => {
     if (this.preferences.isLoading()) return null;
     const kept = this.preferences.hasValue()
       ? this.preferences.value()
@@ -135,9 +165,22 @@ export class LibraryPage {
       filters: { ...kept.libraryFilters, topic },
     };
   });
+  /**
+   * The choices in force, once the collections are known. A collection the person no longer
+   * sees is left aside, not erased: the account keeps it for when the access comes back.
+   */
+  protected readonly choices = computed<Choices | null>(() => {
+    const kept = this.kept();
+    if (!kept || !this.chat.topicsKnown()) return null;
+    const { topic } = kept.filters;
+    const lost =
+      topic !== null && !this.topics().some((one) => one.slug === topic);
+    return lost ? { ...kept, filters: { ...kept.filters, topic: null } } : kept;
+  });
 
   /** What is typed in "Buscar na biblioteca", and what is asked after the pause. */
   protected readonly query = signal('');
+  protected readonly trimmedQuery = computed(() => this.query().trim());
   private readonly askedQuery = toSignal(
     toObservable(this.query).pipe(debounceTime(SEARCH_DEBOUNCE_MS)),
     { initialValue: '' },
@@ -169,21 +212,55 @@ export class LibraryPage {
     },
     { parse: (body) => libraryPageSchema.parse(body) },
   );
-  /** The pages after the first, loaded as the person scrolls; reset with each answer. */
-  private readonly morePages = linkedSignal({
-    source: () => (this.firstPage.hasValue() ? this.firstPage.value() : null),
-    computation: (page) => ({
-      items: [] as readonly LibraryItem[],
-      nextCursor: page?.nextCursor ?? null,
-    }),
+  private readonly firstAnswer = computed(() =>
+    this.firstPage.hasValue() ? this.firstPage.value() : null,
+  );
+  /** The next page asked; each new list forgets it, which cancels the one on its way. */
+  private readonly nextPageAsked = linkedSignal<
+    LibraryPageAnswer | null,
+    NextPageAsked | null
+  >({ source: this.firstAnswer, computation: () => null });
+  // Null, not undefined: a resource left without params would let the old load run on.
+  private readonly nextPage = rxResource<
+    LibraryPageAnswer | null,
+    NextPageAsked | null
+  >({
+    params: this.nextPageAsked,
+    stream: ({ params }) =>
+      params ? this.api.page(params.request, params.cursor) : of(null),
   });
-  protected readonly loadingMore = signal(false);
+  /** The pages after the first, loaded as the person scrolls; reset with each answer. */
+  private readonly morePages = linkedSignal<
+    {
+      readonly first: LibraryPageAnswer | null;
+      readonly next: LibraryPageAnswer | null;
+    },
+    MorePages
+  >({
+    source: () => ({
+      first: this.firstAnswer(),
+      next: this.nextPage.hasValue() ? this.nextPage.value() : null,
+    }),
+    computation: ({ first, next }, previous) => {
+      const sameList = previous?.source.first === first;
+      const kept: MorePages =
+        previous && sameList
+          ? previous.value
+          : { items: [], nextCursor: first?.nextCursor ?? null };
+      if (!next || (sameList && next === previous?.source.next)) return kept;
+      return {
+        items: [...kept.items, ...next.items],
+        nextCursor: next.nextCursor,
+      };
+    },
+  });
+  protected readonly loadingMore = this.nextPage.isLoading;
   /** What was on screen stays there while a new answer is on its way (T16 "Erro"). */
   private readonly lastPage = linkedSignal<
     LibraryPageAnswer | null,
     LibraryPageAnswer | null
   >({
-    source: () => (this.firstPage.hasValue() ? this.firstPage.value() : null),
+    source: this.firstAnswer,
     computation: (page, previous) => page ?? previous?.value ?? null,
   });
   protected readonly items = computed(() => [
@@ -212,6 +289,14 @@ export class LibraryPage {
   protected readonly libraryEmpty = computed(
     () => this.firstPage.hasValue() && this.facets().topics.length === 0,
   );
+  protected readonly nothingFound = computed(
+    () => this.lastPage() !== null && this.items().length === 0,
+  );
+  protected readonly showSkeleton = computed(
+    () =>
+      !this.choices() ||
+      (this.firstPage.isLoading() && this.items().length === 0),
+  );
   protected readonly filtered = computed(() => {
     const choices = this.choices();
     return choices !== null && activeFiltersOf(choices.filters) > 0;
@@ -222,17 +307,38 @@ export class LibraryPage {
       : '',
   );
 
+  protected readonly homeLoading = computed(
+    () => !this.home.hasValue() && !this.home.error(),
+  );
   protected readonly continueItems = computed(() =>
     this.home.hasValue() ? this.home.value().continueListening : [],
   );
-  protected readonly recentItems = computed(() =>
+  private readonly recentItems = computed(() =>
     this.home.hasValue() ? this.home.value().recentlyPlayed : [],
   );
+  /** Each recent play with "há 2 dias", worked out once per answer. */
+  protected readonly recents = computed(() => {
+    const now = new Date();
+    return this.recentItems().map((item) => ({
+      item,
+      ago: item.lastPlayedAt
+        ? playedAgoOf(item.lastPlayedAt, now, this.locale)
+        : '',
+    }));
+  });
   protected readonly recentsCleared = computed(
     () => this.home.hasValue() && this.home.value().recentsClearedAt !== null,
   );
+  protected readonly showRecents = computed(
+    () =>
+      this.home.hasValue() &&
+      (this.recents().length > 0 || this.recentsCleared()),
+  );
   protected readonly recentsOpen = signal(true);
   protected readonly confirmingClear = signal(false);
+  protected readonly canClearRecents = computed(
+    () => this.recents().length > 0 && !this.confirmingClear(),
+  );
 
   /** Selected media for "Marcar como ouvida/não ouvida" (only those on screen). */
   protected readonly selected = linkedSignal<
@@ -242,6 +348,7 @@ export class LibraryPage {
     source: this.request,
     computation: () => new Set<string>(),
   });
+  protected readonly selecting = computed(() => this.selected().size > 0);
   protected readonly selectable = computed(() =>
     this.items().filter((item) => item.status === 'ready'),
   );
@@ -264,11 +371,19 @@ export class LibraryPage {
   protected readonly uploading = signal(false);
   protected readonly removing = signal<MediaItem | null>(null);
   protected readonly actionError = signal('');
+  /** The next page failed: "Mostrar mais" stays, to try again. */
+  private readonly pageError = computed(() => {
+    const failure = this.nextPage.error();
+    return failure ? errorMessage(toUiErrorCode(failure)) : '';
+  });
+  protected readonly shownError = computed(
+    () => this.actionError() || this.pageError(),
+  );
   protected readonly announcement = signal('');
   private readonly titles = computed(
     () => new Map(this.topics().map((topic) => [topic.slug, topic.title])),
   );
-  private readonly playingId = computed(() =>
+  protected readonly playingId = computed(() =>
     this.engine.playing() ? (this.engine.source()?.id ?? null) : null,
   );
 
@@ -276,7 +391,14 @@ export class LibraryPage {
     this.saves
       .pipe(
         concatMap((update) =>
-          this.api.savePreferences(update).pipe(catchError(() => EMPTY)),
+          this.api.savePreferences(update).pipe(
+            catchError(() => {
+              this.actionError.set(
+                $localize`:@@library.saveChoiceFailed:Não consegui guardar esta escolha na sua conta. Ela vale só neste aparelho por enquanto.`,
+              );
+              return EMPTY;
+            }),
+          ),
         ),
         takeUntilDestroyed(),
       )
@@ -293,16 +415,6 @@ export class LibraryPage {
     return this.titles().get(item.topic) ?? item.topic;
   }
 
-  protected isPlaying(item: LibraryItem): boolean {
-    return this.playingId() === item.id;
-  }
-
-  protected playedAgo(item: LibraryItem): string {
-    return item.lastPlayedAt
-      ? playedAgoOf(item.lastPlayedAt, new Date(), this.locale)
-      : '';
-  }
-
   protected play(item: LibraryItem): void {
     this.playNow.play(item);
   }
@@ -316,12 +428,23 @@ export class LibraryPage {
 
   protected clearSearch(): void {
     this.query.set('');
+    this.focusAfterRender(this.searchBox);
+  }
+
+  /** Nothing in the titles: the same words in what was said, in the search (AC-12). */
+  protected searchSpoken(): void {
+    const topic = this.choices()?.filters.topic;
+    if (topic) this.chat.selectTopic(topic);
+    this.views.select('search');
+    this.chat.ask(this.trimmedQuery(), { kinds: ['audio'] });
+    void this.router.navigateByUrl('/');
   }
 
   /** A control's change, applied to the filters held now (BR-7). */
   protected changeFilter(change: FilterChange): void {
     const current = this.choices();
     if (current) this.changeFilters(applyFilterChange(current.filters, change));
+    if (change.kind === 'clear') this.focusAfterRender(this.allTitle);
   }
 
   private changeFilters(filters: LibraryFilters): void {
@@ -330,6 +453,7 @@ export class LibraryPage {
 
   protected clearFilters(): void {
     this.changeFilters(NO_FILTERS);
+    this.focusAfterRender(this.allTitle);
   }
 
   /** "Ver tudo" of "Continuar ouvindo": "Todas" with only what is in progress. */
@@ -355,7 +479,7 @@ export class LibraryPage {
   ): void {
     const current = this.choices();
     if (!current) return;
-    this.choices.set({ ...current, ...change });
+    this.kept.set({ ...current, ...change });
     this.saves.next(update);
   }
 
@@ -364,24 +488,8 @@ export class LibraryPage {
   protected loadMore(): void {
     const request = this.request();
     const cursor = this.morePages().nextCursor;
-    if (!request || !cursor || this.loadingMore()) return;
-    this.loadingMore.set(true);
-    this.api
-      .page(request, cursor)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (page) => {
-          this.loadingMore.set(false);
-          this.morePages.update((more) => ({
-            items: [...more.items, ...page.items],
-            nextCursor: page.nextCursor,
-          }));
-        },
-        error: (err: unknown) => {
-          this.loadingMore.set(false);
-          this.actionError.set(errorMessage(toUiErrorCode(err)));
-        },
-      });
+    if (request && cursor && !this.loadingMore())
+      this.nextPageAsked.set({ request, cursor });
   }
 
   protected reload(): void {
@@ -405,14 +513,17 @@ export class LibraryPage {
 
   protected askClearRecents(): void {
     this.confirmingClear.set(true);
+    this.focusAfterRender(this.keepRecentsButton);
   }
 
   protected cancelClearRecents(): void {
     this.confirmingClear.set(false);
+    this.focusAfterRender(this.clearRecentsButton);
   }
 
   protected clearRecents(): void {
     this.confirmingClear.set(false);
+    this.focusAfterRender(this.recentsToggle);
     this.api
       .clearRecents()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -450,6 +561,7 @@ export class LibraryPage {
 
   protected cancelSelection(): void {
     this.selected.set(new Set());
+    this.focusAfterRender(this.selectAllBox);
   }
 
   protected markSelected(played: boolean): void {
@@ -465,23 +577,48 @@ export class LibraryPage {
     if (ids.length === 0) return;
     this.actionError.set('');
     this.api
-      .markPlayed(ids, played)
+      .markPlayedInBatches(ids, played)
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: ({ applied }) => this.marked(applied.length, played),
-        error: () =>
-          this.actionError.set(
-            played
-              ? $localize`:@@library.markFailed:Não consegui marcar como ouvida. Tente de novo.`
-              : $localize`:@@library.unmarkFailed:Não consegui marcar como não ouvida. Tente de novo.`,
-          ),
-      });
+      .subscribe((outcome) => this.marked(ids, played, outcome));
   }
 
-  private marked(count: number, played: boolean): void {
-    this.selected.set(new Set());
+  private marked(
+    ids: readonly string[],
+    played: boolean,
+    { applied, unsent }: MarkOutcome,
+  ): void {
+    if (unsent.length === ids.length) {
+      this.actionError.set(markFailedTextOf(played));
+      return;
+    }
+    const wasSelecting = this.selecting();
+    const pending = new Set(unsent);
+    const handled = new Set(ids.filter((id) => !pending.has(id)));
+    this.selected.update(
+      (current) => new Set([...current].filter((id) => !handled.has(id))),
+    );
     this.reload();
-    this.announcement.set(markedTextOf(count, played));
+    if (unsent.length > 0) {
+      this.actionError.set(
+        `${markedTextOf(applied.length, played)} ${missingTextOf(unsent.length)}`,
+      );
+      return;
+    }
+    this.announcement.set(markedTextOf(applied.length, played));
+    // The selection bar left, or a filter may take the row away with its menu.
+    if ((wasSelecting && !this.selecting()) || this.filtered())
+      this.focusAfterRender(this.allTitle);
+  }
+
+  /** The control pressed may be gone: the focus never falls to the page (WCAG 2.4.3). */
+  private focusAfterRender(
+    target: Signal<ElementRef<HTMLElement> | undefined>,
+  ): void {
+    afterNextRender(
+      () =>
+        (target() ?? this.allTitle() ?? this.heading()).nativeElement.focus(),
+      { injector: this.injector },
+    );
   }
 
   /* ---------- Upload (T14) and the masters' actions ---------- */
@@ -548,6 +685,17 @@ export class LibraryPage {
   protected readonly selectedTopic = computed(
     () => this.chat.topicSlug() ?? '',
   );
+}
+
+function markFailedTextOf(played: boolean): string {
+  return played
+    ? $localize`:@@library.markFailed:Não consegui marcar como ouvida. Tente de novo.`
+    : $localize`:@@library.unmarkFailed:Não consegui marcar como não ouvida. Tente de novo.`;
+}
+
+/** After the first batches went through and a later one failed (FR-3). */
+function missingTextOf(count: number): string {
+  return $localize`:@@library.markMissing:Faltaram ${count}:count:: tente de novo.`;
 }
 
 /** "2 mídias marcadas como ouvidas." in the status region, after a mark (FR-3). */

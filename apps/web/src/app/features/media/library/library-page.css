@@ -252,6 +252,11 @@ a.secondary {
 }
 
 /* The selection's actions stay in reach at the foot while the list scrolls (T16). */
+.selection-error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .selection-bar {
   position: sticky;
   bottom: var(--space-3);
