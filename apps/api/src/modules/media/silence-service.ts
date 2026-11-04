@@ -3,9 +3,14 @@ import {
   SILENCE_DETECTOR,
   type CompleteSilencesRequest,
   type MediaSilences,
+  type SilenceInterval,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { LeaseOwner, MediaStorePort } from '../../ports/media-store.js';
+import type {
+  LeaseOwner,
+  MediaStorePort,
+  TrackLink,
+} from '../../ports/media-store.js';
 import type { SilenceStorePort } from '../../ports/silence-store.js';
 import type { MediaActor, MediaService } from './media-service.js';
 import { normalizeSilences } from './silence-map.js';
@@ -16,6 +21,19 @@ export interface SilenceServiceDeps {
   /** Who sees which media item (404 otherwise), as the stream does (FR-3). */
   readonly media: MediaService;
   readonly now?: () => Date;
+}
+
+/** A track has no map of its own: the recording's pauses, in the track's time (KBC-068). */
+function insideTrack(
+  intervals: readonly SilenceInterval[],
+  track: Pick<TrackLink, 'startMs' | 'endMs'>,
+): SilenceInterval[] {
+  const length = track.endMs - track.startMs;
+  return intervals.flatMap(({ startMs, endMs }) => {
+    const from = Math.max(0, startMs - track.startMs);
+    const to = Math.min(length, endMs - track.startMs);
+    return from < to ? [{ startMs: from, endMs: to }] : [];
+  });
 }
 
 const leaseLost = () =>
@@ -38,10 +56,14 @@ export class SilenceService {
     const item = this.deps.media.get(actor, mediaId);
     if (item.status !== 'ready')
       throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
-    const map = this.deps.silences.mapOf(mediaId);
+    const track = this.deps.store.getMedia(mediaId)?.track;
+    const map = this.deps.silences.mapOf(track?.parentId ?? mediaId);
     if (!map)
       return {
-        status: this.deps.silences.gaveUp(mediaId, SILENCE_DETECTOR.version)
+        status: this.deps.silences.gaveUp(
+          track?.parentId ?? mediaId,
+          SILENCE_DETECTOR.version,
+        )
           ? 'failed'
           : 'pending',
         version: null,
@@ -52,7 +74,9 @@ export class SilenceService {
       status: 'ready',
       version: map.detector.version,
       minSilenceMs: map.detector.minSilenceMs,
-      intervals: [...map.intervals],
+      intervals: track
+        ? insideTrack(map.intervals, track)
+        : [...map.intervals],
     };
   }
 

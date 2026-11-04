@@ -223,6 +223,7 @@ describe(
         complete: () => Promise.resolve(true),
         completeSilences: () => Promise.resolve(true),
         completeWaveform: () => Promise.resolve(true),
+        completeCut: () => Promise.resolve(true),
         fail: () => Promise.resolve(true),
       };
       const shutdown = new AbortController();

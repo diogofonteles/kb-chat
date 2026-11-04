@@ -21,6 +21,8 @@ export interface TranscriptionServiceDeps {
   readonly store: MediaStorePort;
   readonly transcripts: TranscriptStorePort;
   readonly files: MediaFilesPort;
+  /** The recording's new transcript is in: its tracks follow in that transaction (KBC-068). */
+  readonly onTranscript?: (mediaId: string) => void;
   readonly now?: () => Date;
 }
 
@@ -133,9 +135,13 @@ export class TranscriptionService {
     });
     if (this.wouldEraseText(transcript)) return this.dropEmpty(owner);
     await files.writeFile(rawPath, rawFileOf(done));
-    if (
-      !transcripts.completeTranscribe({ owner, transcript, now: this.now() })
-    ) {
+    const stored = transcripts.completeTranscribe({
+      owner,
+      transcript,
+      now: this.now(),
+      alongside: () => this.deps.onTranscript?.(job.mediaId),
+    });
+    if (!stored) {
       await files.remove([rawPath]);
       throw leaseLost();
     }

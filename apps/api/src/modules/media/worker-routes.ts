@@ -2,11 +2,13 @@ import {
   MAX_DIARIZATION_BYTES,
   MAX_RAW_TRANSCRIPT_BYTES,
   completeSilencesRequestSchema,
+  completeCutRequestSchema,
   completeDiarizeRequestSchema,
   completeTranscodeRequestSchema,
   completeTranscribeRequestSchema,
   completeWaveformRequestSchema,
   completeVoicePrintRequestSchema,
+  type CompleteCutRequest,
   failJobRequestSchema,
   heartbeatRequestSchema,
   heartbeatResponseSchema,
@@ -26,6 +28,7 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import type { LeaseOwner } from '../../ports/media-store.js';
 import { TRANSCRIBER_LEASE_PREFIX } from '../../ports/transcriber-store.js';
 import { PUBLIC } from '../auth/index.js';
 import { serveMedia } from './serve-media.js';
@@ -61,6 +64,19 @@ export interface WorkerRoutesDeps {
   readonly diarization: DiarizationService;
   /** Voice prints (KBC-071). */
   readonly voicePrints: VoicePrintService;
+  /** Track cuts (KBC-068): the module that publishes them. */
+  readonly cuts?: CutReceiver;
+}
+
+/** Who takes a finished cut in: the track items' side, outside this module. */
+export interface CutReceiver {
+  completeCut(
+    owner: LeaseOwner,
+    done: Pick<
+      CompleteCutRequest,
+      'bytes' | 'actualStartMs' | 'durationMs'
+    >,
+  ): Promise<void>;
 }
 
 /** The bearer token of a request, or ''. */
@@ -232,6 +248,7 @@ export const workerRoutes =
     registerTranscode(app, deps.service);
     registerSilences(app, deps);
     registerWaveform(app, deps);
+    registerCut(app, deps);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
@@ -357,6 +374,25 @@ function registerWaveform(app: FastifyInstance, deps: WorkerRoutesDeps): void {
         only: 'waveform',
       });
       deps.waveforms.complete(
+        { jobId, ...ownerOf(request, request.body) },
+        request.body,
+      );
+      return reply.code(204).send();
+    },
+  );
+}
+
+/** A track cut by the VM worker (KBC-068 FR-2). */
+function registerCut(app: FastifyInstance, deps: WorkerRoutesDeps): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/media-worker/jobs/:id/cut',
+    route(completeCutRequestSchema),
+    async (request, reply) => {
+      const jobId = request.params.id;
+      assertJobKind(request, { jobId, service: deps.service, only: 'cut' });
+      if (!deps.cuts) throw notThisWorkers();
+      await deps.cuts.completeCut(
         { jobId, ...ownerOf(request, request.body) },
         request.body,
       );

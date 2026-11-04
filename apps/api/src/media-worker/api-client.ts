@@ -2,9 +2,11 @@ import {
   CSRF_HEADER,
   CSRF_HEADER_VALUE,
   vmWorkerJobSchema,
+  type CompleteCutRequest,
   type CompleteSilencesRequest,
   type CompleteTranscodeRequest,
   type CompleteWaveformRequest,
+  type CutJob,
   type FailJobRequest,
   type SilencesJob,
   type VmWorkerJob,
@@ -31,6 +33,11 @@ export interface MediaJobsApi {
   completeWaveform(
     job: WaveformJob,
     done: Omit<CompleteWaveformRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean>;
+  /** The file of a cut job and its real bounds (KBC-068 FR-2). */
+  completeCut(
+    job: CutJob,
+    done: Omit<CompleteCutRequest, 'worker' | 'leaseId'>,
   ): Promise<boolean>;
   fail(
     job: VmWorkerJob,
@@ -62,7 +69,7 @@ export class HttpMediaJobsApi implements MediaJobsApi {
   async lease(): Promise<VmWorkerJob | null> {
     const response = await this.post('/api/v1/media-worker/jobs/lease', {
       worker: this.options.worker,
-      kinds: ['transcode', 'silences', 'waveform'],
+      kinds: ['transcode', 'silences', 'waveform', 'cut'],
     });
     if (response.status === 204) return null;
     if (!response.ok) throw await this.failure(response);
@@ -92,6 +99,13 @@ export class HttpMediaJobsApi implements MediaJobsApi {
     done: Omit<CompleteWaveformRequest, 'worker' | 'leaseId'>,
   ): Promise<boolean> {
     return this.onJob(job, 'waveform', done);
+  }
+
+  completeCut(
+    job: CutJob,
+    done: Omit<CompleteCutRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean> {
+    return this.onJob(job, 'cut', done);
   }
 
   fail(

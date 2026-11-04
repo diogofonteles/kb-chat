@@ -30,6 +30,8 @@ export interface MediaFilesPort {
    * lease cannot overwrite (or, cleaning up, delete) another worker's result.
    */
   workPath(mediaId: string, leaseId: string): string;
+  /** Where a cut waits, and then stays: a new cut of a track never overwrites the file in use. */
+  trackPath(mediaId: string, leaseId: string): string;
   /** Where the 16 kHz mono FLAC for the transcriber waits (ADR 0022 §4). */
   flacPath(mediaId: string): string;
   /** Where one lease of the conversion writes that FLAC. */

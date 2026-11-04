@@ -139,6 +139,7 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
     owner: LeaseOwner;
     transcript: NewTranscript;
     now: Date;
+    alongside?: () => void;
   }): boolean {
     const at = input.now.toISOString();
     return inTransaction(this.db, () => {
@@ -147,7 +148,18 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
       )
         return false;
       this.insertTranscript(input.transcript, at);
+      input.alongside?.();
       return true;
+    });
+  }
+
+  /** A track's transcript, always one (KBC-068 BR-4): it replaces the older, index included. */
+  replaceDerived(transcript: NewTranscript, now: Date): void {
+    inTransaction(this.db, () => {
+      this.insertTranscript(transcript, now.toISOString());
+      this.db
+        .prepare('DELETE FROM transcripts WHERE media_id = ? AND id <> ?')
+        .run(transcript.mediaId, transcript.id);
     });
   }
 

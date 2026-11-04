@@ -5,8 +5,10 @@ import {
   type LibraryItem,
   type LibraryPage,
   type LibraryQuery,
+  type LibraryTrack,
   type MarkPlayedRequest,
   type MarkPlayedResult,
+  type TrackParent,
 } from '@kb-chat/contracts';
 import type {
   ListeningMark,
@@ -47,7 +49,7 @@ export class LibraryService {
   constructor(private readonly deps: LibraryServiceDeps) {}
 
   page(actor: MediaActor, query: LibraryQuery): LibraryPage {
-    const items = this.itemsOf(actor);
+    const items = recordingsOf(this.entriesOf(actor));
     const matching = sortLibrary(
       filterLibrary(items, {
         states: query.state ?? [],
@@ -69,7 +71,10 @@ export class LibraryService {
   }
 
   home(actor: MediaActor): LibraryHome {
-    const items = this.itemsOf(actor);
+    const items = this.entriesOf(actor).map((entry) => ({
+      ...entry,
+      tracks: [],
+    }));
     const clearedAt = this.deps.listening.recentsClearedAt(actor.principal);
     return {
       continueListening: continueListening(items),
@@ -92,7 +97,7 @@ export class LibraryService {
    */
   markPlayed(actor: MediaActor, request: MarkPlayedRequest): MarkPlayedResult {
     const playable = new Map(
-      this.itemsOf(actor)
+      this.entriesOf(actor)
         .filter((item) => item.status === 'ready')
         .map((item) => [item.id, item]),
     );
@@ -112,7 +117,7 @@ export class LibraryService {
     };
   }
 
-  private markOf(item: LibraryItem, played: boolean): ListeningMark {
+  private markOf(item: LibraryTrack, played: boolean): ListeningMark {
     const now = nextSaveTime(item.positionUpdatedAt, this.now());
     const completedAt = played ? (item.completedAt ?? now.toISOString()) : null;
     return {
@@ -132,11 +137,14 @@ export class LibraryService {
     return new Set(this.deps.scopeOf?.(topic) ?? [topic]);
   }
 
-  private itemsOf(actor: MediaActor): LibraryItem[] {
+  /** Every recording and track the person may see, each with their own position. */
+  private entriesOf(actor: MediaActor): LibraryTrack[] {
     const progress = this.deps.listening.allProgressOf(actor.principal);
     const presence = this.deps.presence?.();
-    return this.deps.store
-      .listLibrary()
+    const records = this.deps.store.listLibrary();
+    const titles = new Map(records.map((one) => [one.id, one.title]));
+    const totals = countTracks(records);
+    return records
       .filter((record) => isVisible(actor, record))
       .map((record) => {
         const saved = progress.get(record.id);
@@ -146,6 +154,7 @@ export class LibraryService {
             presence,
             author: mediaAuthorOf(record, this.deps.authorOf),
             canEdit: canEditMedia(actor, record),
+            parent: parentOf(record, { titles, totals }),
           }),
           kind: record.kind,
           lastPlayedAt: saved?.playedAt ?? null,
@@ -158,12 +167,67 @@ export class LibraryService {
   }
 }
 
+/** How many tracks each recording has in force. */
+function countTracks(records: readonly LibraryRecord[]) {
+  const totals = new Map<string, number>();
+  for (const { track } of records)
+    if (track?.ordinal != null)
+      totals.set(track.parentId, (totals.get(track.parentId) ?? 0) + 1);
+  return totals;
+}
+
+function parentOf(
+  record: LibraryRecord,
+  known: {
+    readonly titles: ReadonlyMap<string, string>;
+    readonly totals: ReadonlyMap<string, number>;
+  },
+): TrackParent | null {
+  if (!record.track) return null;
+  const { parentId: id, startMs, endMs, ordinal } = record.track;
+  const title = known.titles.get(id) ?? record.title;
+  return {
+    id,
+    title,
+    startMs,
+    endMs,
+    ordinal,
+    total: known.totals.get(id) ?? 0,
+  };
+}
+
+/** The recordings, each with its tracks in order (FR-5). */
+function recordingsOf(entries: readonly LibraryTrack[]): LibraryItem[] {
+  const tracks = new Map<string, LibraryTrack[]>();
+  for (const entry of entries)
+    if (entry.parent)
+      tracks.set(entry.parent.id, [
+        ...(tracks.get(entry.parent.id) ?? []),
+        entry,
+      ]);
+  const byOrdinal = (a: LibraryTrack, b: LibraryTrack) =>
+    (a.parent?.ordinal ?? 0) - (b.parent?.ordinal ?? 0);
+  return entries
+    .filter((entry) => !entry.parent)
+    .map((entry) => ({
+      ...entry,
+      tracks: (tracks.get(entry.id) ?? []).sort(byOrdinal),
+    }));
+}
+
 /**
  * BR-2: a collection the person sees; not ready yet only for who sent it and masters. Only
- * audio for now: video comes with its own item (KBC-076).
+ * audio for now: video comes with its own item (KBC-076). A track, for `media-tracks`, once
+ * published and while it is in the edit (KBC-068 FR-1, FR-5, BR-5).
  */
 function isVisible(actor: MediaActor, record: LibraryRecord): boolean {
   if (record.kind !== 'audio' || !actor.canSee(record.topic)) return false;
+  if (record.track)
+    return (
+      actor.seesTracks === true &&
+      record.status === 'ready' &&
+      record.archivedAt === null
+    );
   return (
     record.status === 'ready' ||
     actor.isMaster ||

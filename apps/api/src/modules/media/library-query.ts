@@ -6,6 +6,7 @@ import {
   type LibraryFacets,
   type LibraryItem,
   type LibrarySort,
+  type LibraryTrack,
   type ListeningState,
   type MediaAuthor,
   NO_AUTHOR,
@@ -48,7 +49,10 @@ const allows = <T>(chosen: readonly T[], value: T): boolean =>
   chosen.length === 0 || chosen.includes(value);
 
 /** Title or author holds every word of the search (FR-1 `q`). */
-export function matchesQuery(item: LibraryItem, query: string): boolean {
+export function matchesQuery(
+  item: LibraryItem | LibraryTrack,
+  query: string,
+): boolean {
   const words = normalizeText(query).split(' ').filter(Boolean);
   if (words.length === 0) return true;
   const haystack = normalizeText(`${item.title} ${authorWordsOf(item.author)}`);
@@ -65,7 +69,8 @@ export function filterLibrary(
       allows(filter.states, listeningStateOf(item)) &&
       allows(filter.authors, authorValueOf(item)) &&
       (filter.topics === null || filter.topics.has(item.topic)) &&
-      matchesQuery(item, filter.query),
+      (matchesQuery(item, filter.query) ||
+        item.tracks.some((track) => matchesQuery(track, filter.query))),
   );
 }
 

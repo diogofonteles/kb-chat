@@ -175,3 +175,93 @@ function assertFinished(
       `ffmpeg exited with ${result.code}: ${result.stderrTail.trim()}`,
     );
 }
+
+const CUT_TIMEOUT_MS = 2 * 60_000;
+
+const secondsOf = (ms: number): string => (ms / 1000).toFixed(3);
+
+/** Stream copy (ADR 0029 §5): nothing is decoded, and seeking before `-i` uses the file's index. */
+export const cutArgs = (cut: {
+  readonly source: string;
+  readonly target: string;
+  readonly startMs: number;
+  readonly endMs: number;
+}) => [
+  '-hide_banner',
+  '-nostdin',
+  '-y',
+  '-ss',
+  secondsOf(cut.startMs),
+  '-to',
+  secondsOf(cut.endMs),
+  '-i',
+  cut.source,
+  '-map',
+  '0:a:0',
+  '-c',
+  'copy',
+  '-movflags',
+  '+faststart',
+  '-f',
+  'mp4',
+  cut.target,
+];
+
+/** Cuts `startMs..endMs` of an AAC rendition without re-encoding (KBC-068 FR-2). */
+export async function cutAudio(input: {
+  readonly bins: FfmpegBins;
+  readonly source: string;
+  readonly target: string;
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly signal?: AbortSignal;
+}): Promise<void> {
+  const result = await runProcess(input.bins.ffmpeg, cutArgs(input), {
+    timeoutMs: CUT_TIMEOUT_MS,
+    signal: input.signal,
+  });
+  assertFinished(result, CUT_TIMEOUT_MS);
+}
+
+/** How far around the asked start the packets are read: one AAC packet is ~23 ms. */
+const PACKET_WINDOW_S = 1;
+
+/**
+ * Where a stream copy from `startMs` really starts: the last packet at or before it (BR-3),
+ * read from the file's index, without decoding.
+ */
+export async function packetStartMs(input: {
+  readonly bins: FfmpegBins;
+  readonly source: string;
+  readonly startMs: number;
+  readonly signal?: AbortSignal;
+}): Promise<number> {
+  const seconds = input.startMs / 1000;
+  const from = Math.max(0, seconds - PACKET_WINDOW_S);
+  const result = await runProcess(
+    input.bins.ffprobe,
+    [
+      '-v',
+      'error',
+      '-select_streams',
+      'a:0',
+      '-read_intervals',
+      `${from.toFixed(3)}%+${(2 * PACKET_WINDOW_S).toFixed(3)}`,
+      '-show_entries',
+      'packet=pts_time',
+      '-of',
+      'csv=p=0',
+      input.source,
+    ],
+    { timeoutMs: PROBE_TIMEOUT_MS, signal: input.signal },
+  );
+  assertFinished(result, PROBE_TIMEOUT_MS);
+  const times = result.stdout
+    .split('\n')
+    .map((line) => Number.parseFloat(line))
+    .filter(Number.isFinite);
+  const before = times.filter((time) => time <= seconds + 0.0005);
+  return before.length > 0
+    ? Math.round(Math.max(...before) * 1000)
+    : input.startMs;
+}

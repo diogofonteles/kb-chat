@@ -875,6 +875,8 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ALTER TABLE media ADD COLUMN parent_media_id TEXT REFERENCES media (id) ON DELETE CASCADE;
       ALTER TABLE media ADD COLUMN parent_start_ms INTEGER CHECK (parent_start_ms >= 0);
       ALTER TABLE media ADD COLUMN parent_end_ms INTEGER CHECK (parent_end_ms >= 0);
+      -- Its place among the published tracks; null while waiting and once it left.
+      ALTER TABLE media ADD COLUMN track_ordinal INTEGER CHECK (track_ordinal >= 1);
       -- A track that left the edit: out of the library and search, kept for who saved it.
       ALTER TABLE media ADD COLUMN archived_at TEXT;
       CREATE INDEX media_tracks_of ON media (parent_media_id) WHERE parent_media_id IS NOT NULL;

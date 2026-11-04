@@ -9,6 +9,7 @@ export {
   JOB_LEASE_MS,
   MAX_JOB_ATTEMPTS,
   UPLOAD_ABANDON_MS,
+  legacyAuthorshipOf,
 } from './media-policy.js';
 export {
   MediaService,

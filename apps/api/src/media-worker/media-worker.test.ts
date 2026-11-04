@@ -29,6 +29,7 @@ function fakeApi(overrides: Partial<MediaJobsApi> = {}) {
   const told: string[] = [];
   const api: MediaJobsApi = {
     lease: async () => null,
+    completeCut: async () => true,
     heartbeat: async () => {
       told.push('heartbeat');
       return true;

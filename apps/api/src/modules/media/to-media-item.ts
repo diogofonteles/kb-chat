@@ -4,6 +4,7 @@ import type {
   MediaFailure,
   MediaItem,
   MediaTranscription,
+  TrackParent,
   TranscriptionStatus,
 } from '@kb-chat/contracts';
 import type { SavedProgress } from '../../ports/listening-store.js';
@@ -33,6 +34,8 @@ export interface ItemView {
   readonly author?: MediaAuthor;
   /** The person may change its details (KBC-050 BR-1). */
   readonly canEdit?: boolean;
+  /** A track's recording (KBC-068 FR-4). */
+  readonly parent?: TrackParent | null;
 }
 
 /** The stored author as the list now names it (still shown if no longer listed, KBC-049). */
@@ -126,5 +129,7 @@ export function toMediaItem(
       view.presence ?? NO_TRANSCRIBER,
       isMaster,
     ),
+    parent: view.parent ?? null,
+    archived: record.archivedAt !== null,
   };
 }

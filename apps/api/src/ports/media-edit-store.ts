@@ -39,10 +39,14 @@ export interface MediaEditStorePort {
   ): number | null;
   /** The draft becomes the approved tracks, replacing the previous approval (BR-9). */
   approve(
-    write: EditWrite & { readonly transcriptVersion: number | null },
+    write: EditWrite & {
+      readonly transcriptVersion: number | null;
+      /** Runs in the same transaction, on the new approved tracks (KBC-068 FR-1). */
+      readonly alongside?: () => void;
+    },
   ): number | null;
   /** Back to the draft and step 3; listeners keep the approved tracks (BR-9). */
-  reopen(write: EditWrite): number | null;
+  reopen(write: EditWrite & { readonly alongside?: () => void }): number | null;
   approved(mediaId: string): ApprovedTrack[];
   /** Which of `ids` are tracks of another recording, in its draft or approved (FR-1). */
   foreignIds(mediaId: string, ids: readonly string[]): string[];

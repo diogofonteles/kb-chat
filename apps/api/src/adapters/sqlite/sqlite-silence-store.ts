@@ -135,7 +135,7 @@ export class SqliteSilenceStore implements SilenceStorePort {
   private oldestWithoutMap(detectorVersion: number): string | null {
     const row = this.db
       .prepare(
-        `SELECT id FROM media m WHERE status = 'ready'
+        `SELECT id FROM media m WHERE status = 'ready' AND parent_media_id IS NULL
            AND NOT EXISTS (SELECT 1 FROM media_silence_maps s
                            WHERE s.media_id = m.id AND s.detector_version = ?)
            AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.media_id = m.id

@@ -127,6 +127,8 @@ export const itemOf = (mediaId: string, author: string | null): MediaItem => ({
     transcriberOffSince: null,
     lastAttemptFailed: false,
   },
+  parent: null,
+  archived: false,
 });
 
 /**

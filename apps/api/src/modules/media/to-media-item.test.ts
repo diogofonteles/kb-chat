@@ -22,6 +22,8 @@ const aRecord = (transcription: TranscriptionRecord): MediaRecord => ({
   createdAt: '2026-11-03T12:00:00.000Z',
   updatedAt: '2026-11-03T12:00:00.000Z',
   transcription,
+  track: null,
+  archivedAt: null,
 });
 
 const statusOf = (jobStatus: JobStatus | null, version: number | null) =>

@@ -23,6 +23,8 @@ export interface MediaEditServiceDeps {
   /** The top-level collection whose author and speaker lists a collection uses. */
   readonly rootOf: (topic: string) => string;
   readonly authorOf: (topic: string, slug: string) => Author | null;
+  /** The recording changed: its tracks follow, in the same transaction on a move (KBC-068 BR-2). */
+  readonly onEdited?: (mediaId: string) => void;
   readonly now?: () => Date;
 }
 
@@ -51,7 +53,7 @@ export class MediaEditService {
       throw new AppError('FORBIDDEN', 'Only who sent it or a master may edit');
     const topic = this.destinationOf(actor, media, request.topic);
     const author = this.authorAfter(media, topic, request.author);
-    const save = () =>
+    const save = () => {
       this.deps.store.editMedia({
         mediaId,
         title: request.title ?? media.title,
@@ -60,6 +62,8 @@ export class MediaEditService {
         legacyAuthorship: legacyAuthorshipOf(author),
         now: this.now(),
       });
+      this.deps.onEdited?.(mediaId);
+    };
     if (this.sameLists(media.topic, topic)) save();
     else
       this.deps.speakers.rehome({

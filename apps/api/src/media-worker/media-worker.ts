@@ -1,6 +1,7 @@
 import { stat, rm, utimes, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, normalize, sep } from 'node:path';
 import type {
+  CutJob,
   SilencesJob,
   VmWorkerJob,
   WaveformJob,
@@ -10,6 +11,8 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { MediaJobsApi } from './api-client.js';
 import {
   InvalidMediaError,
+  cutAudio,
+  packetStartMs,
   probe,
   transcodeAudio,
   type FfmpegBins,
@@ -44,6 +47,7 @@ const WORK_OF: Record<VmWorkerJob['kind'], string> = {
   transcode: 'conversion',
   silences: 'silence detection',
   waveform: 'waveform',
+  cut: 'cut',
 };
 
 const sleep = (ms: number, signal: AbortSignal) =>
@@ -98,6 +102,12 @@ export class MediaWorker {
         shutdown,
         work: (signal) => this.measureWaveform(job, signal),
       });
+    if (job.kind === 'cut')
+      return this.processMeasure({
+        job,
+        shutdown,
+        work: (signal) => this.cut(job, signal),
+      });
     return this.processTranscode(job, shutdown);
   }
 
@@ -107,7 +117,7 @@ export class MediaWorker {
    * the measure until it works.
    */
   private async processMeasure(run: {
-    readonly job: SilencesJob | WaveformJob;
+    readonly job: SilencesJob | WaveformJob | CutJob;
     readonly shutdown: AbortSignal;
     readonly work: (signal: AbortSignal) => Promise<void>;
   }): Promise<void> {
@@ -179,6 +189,43 @@ export class MediaWorker {
       { job: job.id, peaks: peaks.length, elapsedMs },
       'waveform measured',
     );
+  }
+
+  /** A track copied out of the rendition (KBC-068 FR-2); its work file never outlives it. */
+  private async cut(job: CutJob, signal: AbortSignal): Promise<void> {
+    const target = this.resolve(job.targetPath);
+    try {
+      await this.cutTo(target, job, signal);
+    } catch (err) {
+      await removeFiles([target]);
+      throw err;
+    }
+  }
+
+  private async cutTo(
+    target: string,
+    job: CutJob,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const { bins, log, api } = this.deps;
+    const source = this.resolve(job.sourcePath);
+    const { startMs, endMs } = job;
+    await cutAudio({ bins, source, target, startMs, endMs, signal });
+    const actualStartMs = await packetStartMs({
+      bins,
+      source,
+      startMs,
+      signal,
+    });
+    const { durationMs } = await probe(bins, target, signal);
+    const { size } = await stat(target);
+    const done = await api.completeCut(job, {
+      bytes: size,
+      actualStartMs,
+      durationMs,
+    });
+    if (!done) throw new LeaseLostError();
+    log.info({ job: job.id, bytes: size, durationMs }, 'track cut');
   }
 
   /** Converts one job (KBC-034). */

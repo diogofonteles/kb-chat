@@ -6,6 +6,7 @@ import {
   type CreateMediaRequest,
   type MediaAuthor,
   type MediaItem,
+  type TrackParent,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import {
@@ -17,6 +18,7 @@ import type {
   SavedProgress,
 } from '../../ports/listening-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
+import type { TrackItemStorePort } from '../../ports/track-item-store.js';
 import { canEditMedia, legacyAuthorshipOf } from './media-policy.js';
 import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
@@ -27,6 +29,8 @@ export interface MediaActor {
   readonly isMaster: boolean;
   /** Has `media-upload`, in the collections they see. */
   readonly canUpload: boolean;
+  /** Has `media-tracks`: track items exist for them (KBC-068 FR-5). */
+  readonly seesTracks?: boolean;
   readonly canSee: (topic: string) => boolean;
 }
 
@@ -45,6 +49,8 @@ export interface MediaServiceDeps {
   readonly requestTranscription?: (mediaId: string) => boolean;
   /** One author of the collection's list (KBC-049, a sub-collection uses its parent's). */
   readonly authorOf: (topic: string, slug: string) => Author | null;
+  /** The track items of a recording (KBC-068): what a removal takes with it. */
+  readonly tracks?: Pick<TrackItemStorePort, 'filesOf' | 'liveTitles'>;
   readonly now?: () => Date;
 }
 
@@ -198,9 +204,20 @@ export class MediaService {
     return this.itemOf(record, actor, this.view(progress));
   }
 
+  /** The item, for what only a recording has (proposals, voices, an edit). */
+  getRecording(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.get(actor, mediaId);
+    if (item.parent)
+      throw new AppError('MEDIA_CONFLICT', 'A track follows its recording', {
+        details: { reason: 'track' },
+      });
+    return item;
+  }
+
   async playable(actor: MediaActor, mediaId: string): Promise<PlayableFile> {
     const media = this.visible(actor, mediaId);
     const rendition = this.deps.store.getRendition(mediaId);
+    if (media.archivedAt !== null) throw notFound();
     if (media.status !== 'ready' || !rendition)
       throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
     const file = await this.deps.files.stat(rendition.path);
@@ -218,12 +235,26 @@ export class MediaService {
    * The record, its jobs and every file go (FR-8). Masters remove any item; the uploader
    * may remove their own while it is still uploading (a cancelled upload).
    */
-  async remove(actor: MediaActor, mediaId: string): Promise<void> {
+  async remove(
+    actor: MediaActor,
+    mediaId: string,
+    options: { readonly cascade?: boolean } = {},
+  ): Promise<void> {
     const media = this.visible(actor, mediaId);
     const cancelling =
       media.status === 'uploading' && media.ownerPrincipal === actor.principal;
     if (!actor.isMaster && !cancelling)
       throw new AppError('FORBIDDEN', 'Only a master may remove media');
+    if (media.track)
+      throw new AppError('MEDIA_CONFLICT', 'A track leaves through its edit', {
+        details: { reason: 'track' },
+      });
+    const titles = this.deps.tracks?.liveTitles(mediaId) ?? [];
+    if (titles.length > 0 && !options.cascade)
+      throw new AppError('MEDIA_CONFLICT', 'This recording has tracks', {
+        details: { reason: 'has-tracks', tracks: [...titles] },
+      });
+    const trackFiles = this.deps.tracks?.filesOf(mediaId) ?? [];
     const rendition = this.deps.store.getRendition(mediaId);
     this.deps.store.deleteMedia(mediaId);
     const { files } = this.deps;
@@ -231,6 +262,7 @@ export class MediaService {
     await files.remove([
       files.audioPath(mediaId),
       files.flacPath(mediaId),
+      ...trackFiles,
       ...(rendition ? [rendition.path] : []),
     ]);
     await files.removeTranscripts(mediaId);
@@ -243,7 +275,7 @@ export class MediaService {
   transcribeAgain(actor: MediaActor, mediaId: string): MediaItem {
     const media = this.visible(actor, mediaId);
     const queue = this.deps.requestTranscription;
-    if (media.status !== 'ready' || !queue || !queue(mediaId))
+    if (media.status !== 'ready' || media.track || !queue || !queue(mediaId))
       throw new AppError(
         'MEDIA_CONFLICT',
         'This media cannot be transcribed again now',
@@ -291,7 +323,24 @@ export class MediaService {
       ...view,
       author: this.authorOf(record),
       canEdit: canEditMedia(actor, record),
+      parent: this.parentOf(record),
     });
+  }
+
+  /** Where a track item comes from (FR-4); null for a recording. */
+  private parentOf(record: MediaRecord): TrackParent | null {
+    if (!record.track) return null;
+    const { parentId, startMs, endMs, ordinal } = record.track;
+    const parent = this.deps.store.getMedia(parentId);
+    if (!parent) return null;
+    return {
+      id: parentId,
+      title: parent.title,
+      startMs,
+      endMs,
+      ordinal,
+      total: this.deps.store.trackTotal(parentId),
+    };
   }
 
   /** The stored author as the list now names it (still shown if no longer listed). */
@@ -307,6 +356,9 @@ export class MediaService {
   private visible(actor: MediaActor, mediaId: string): MediaRecord {
     const media = this.deps.store.getMedia(mediaId);
     if (!media || !actor.canSee(media.topic)) throw notFound();
+    // A track exists for who has `media-tracks`, once published (FR-1, FR-5).
+    if (media.track && (!actor.seesTracks || media.status !== 'ready'))
+      throw notFound();
     return media;
   }
 

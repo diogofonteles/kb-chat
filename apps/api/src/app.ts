@@ -141,6 +141,7 @@ import {
 } from './modules/track-proposals/index.js';
 import {
   TrackEditService,
+  TrackPublisher,
   mediaEditRoutes,
 } from './modules/media-edit/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
@@ -435,6 +436,7 @@ function mediaService({
     store,
     files,
     listening,
+    tracks: media.trackItems,
     presence: () => transcribers.presence(),
     requestTranscription: (mediaId) =>
       media.transcripts.requestTranscription({
@@ -453,12 +455,23 @@ function mediaEditor({
   media,
   catalog,
   authors,
-}: MediaWiring): MediaEditService {
+  publisher,
+}: MediaWiring & { publisher: TrackPublisher }): MediaEditService {
   return new MediaEditService({
     store: media.store,
     speakers: media.speakers,
     hasTopic: (topic) => catalog.get(topic) !== undefined,
     rootOf: (topic) => authors.rootOf(topic),
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+    onEdited: (mediaId) => publisher.afterRecordingEdit(mediaId),
+  });
+}
+
+/** What approved tracks become (KBC-068, ADR 0029 §5). */
+function trackPublisher({ media, authors }: MediaWiring): TrackPublisher {
+  return new TrackPublisher({
+    ...media,
+    items: media.trackItems,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
   });
 }
@@ -472,19 +485,28 @@ async function registerWorker(
     silences: SilenceService;
     waveforms: WaveformService;
     authors: AuthorsService;
+    publisher: TrackPublisher;
   },
 ) {
-  const { store, files, transcripts } = wiring.media;
+  const { store, files, transcripts, trackItems: tracks } = wiring.media;
+  const { publisher } = wiring;
   const voicePrints = voicePrintService(wiring);
   await app.register(
     workerRoutes({
       service: new WorkerService({
         store,
         files,
+        tracks,
         voiceJobOf: (job) => voicePrints.jobOf(job),
       }),
       transcribers: wiring.transcribers,
-      transcription: new TranscriptionService({ store, transcripts, files }),
+      transcription: new TranscriptionService({
+        store,
+        transcripts,
+        files,
+        onTranscript: (mediaId) => publisher.afterTranscript(mediaId),
+      }),
+      cuts: publisher,
       silences: wiring.silences,
       waveforms: wiring.waveforms,
       diarization: diarizationService(wiring),
@@ -580,6 +602,7 @@ async function registerListening(
       new TranscriptService({
         transcripts,
         media,
+        recording: wiring.media.store,
         voices: (mediaId, transcript) =>
           diarization.voicesOn(mediaId, transcript),
       }),
@@ -696,7 +719,14 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     vmToken: workerToken,
   });
   const media = mediaService({ ...wiring, transcribers });
-  await app.register(mediaRoutes(media, mediaEditor(wiring), createPerMinute));
+  const publisher = trackPublisher(wiring);
+  await app.register(
+    mediaRoutes(
+      media,
+      mediaEditor({ ...wiring, publisher }),
+      createPerMinute,
+    ),
+  );
   await registerTranscribers(app, { transcribers, media, wiring });
   await registerListening(app, wiring, { media, transcribers });
   const { silences, waveforms } = await registerMeasures(app, {
@@ -711,9 +741,10 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     silences,
     waveforms,
     authors: wiring.authors,
+    publisher,
   });
   const diarization = diarizationService({ ...wiring, transcribers });
-  const edit = { ...wiring, service: media };
+  const edit = { ...wiring, service: media, publisher };
   const proposals = await registerProposals(app, { ...edit, diarization });
   await registerEdit(app, edit);
   startJanitor(app, { media: wiring.media, silences, waveforms, proposals });
@@ -774,7 +805,7 @@ async function registerProposals(
 ): Promise<ProposalService> {
   const proposals = createTrackProposals({
     ...wiring,
-    findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
+    findMedia: (actor, mediaId) => wiring.service.getRecording(actor, mediaId),
     log: app.log,
   });
   const interrupted = proposals.recover();
@@ -787,7 +818,10 @@ async function registerProposals(
 /** The draft of a recording's tracks, its approval and the approved tracks (KBC-066). */
 async function registerEdit(
   app: FastifyInstance,
-  wiring: MediaWiring & { readonly service: MediaService },
+  wiring: MediaWiring & {
+    readonly service: MediaService;
+    readonly publisher: TrackPublisher;
+  },
 ): Promise<void> {
   const { edits, trackProposals, transcripts, speakers } = wiring.media;
   await app.register(
@@ -799,6 +833,8 @@ async function registerEdit(
         speakers,
         rootOf: (topic) => wiring.authors.rootOf(topic),
         findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
+        publisher: wiring.publisher,
+        preparation: wiring.media.trackItems,
       }),
     ),
   );

@@ -38,6 +38,7 @@ export interface SearchRouteOptions {
 /** Spoken passages only for whoever may listen, in the collections they see. */
 const searchViewerOf = (request: FastifyRequest): SearchViewer => ({
   mayHear: hasFeature(viewerOf(request).person, 'media'),
+  seesTracks: hasFeature(viewerOf(request).person, 'media-tracks'),
   canSee: (topic) => canSee(request, topic),
 });
 

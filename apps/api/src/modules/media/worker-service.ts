@@ -14,6 +14,7 @@ import {
 import { AppError } from '../../app-error.js';
 import type { MediaFilesPort } from '../../ports/media-files.js';
 import type { LeasedJob, MediaStorePort } from '../../ports/media-store.js';
+import type { TrackItemStorePort } from '../../ports/track-item-store.js';
 import { AUDIO_MIME, JOB_LEASE_MS, MAX_JOB_ATTEMPTS } from './media-policy.js';
 
 export interface WorkerServiceDeps {
@@ -21,6 +22,8 @@ export interface WorkerServiceDeps {
   readonly files: MediaFilesPort;
   /** What a leased `voice-profile` job carries (KBC-071). */
   readonly voiceJobOf?: (job: LeasedJob) => VoiceProfileJob;
+  /** What a cut job cuts (KBC-068). */
+  readonly tracks?: Pick<TrackItemStorePort, 'cutOrder'>;
   readonly now?: () => Date;
 }
 
@@ -73,6 +76,7 @@ export class WorkerService {
     if (job.kind === 'waveform') return this.waveformJob(job);
     if (job.kind === 'diarize') return this.diarizeJob(job);
     if (job.kind === 'voice-profile') return this.voiceProfileJob(job);
+    if (job.kind === 'cut') return this.cutJob(job);
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
       : {
@@ -109,6 +113,19 @@ export class WorkerService {
       leaseMs: JOB_LEASE_MS,
       sourcePath: rendition?.path ?? this.deps.files.audioPath(job.mediaId),
       ...WAVEFORM,
+    };
+  }
+
+  /** Copying a track out of its recording's rendition, on the shared disk (KBC-068 FR-2). */
+  private cutJob(job: LeasedJob): LeasedWorkerJob {
+    const order = this.deps.tracks?.cutOrder(job.mediaId);
+    if (!order) throw new Error(`cut job ${job.id} has no track`);
+    return {
+      ...withoutHint(job),
+      kind: 'cut',
+      leaseMs: JOB_LEASE_MS,
+      targetPath: this.deps.files.workPath(job.mediaId, job.leaseId),
+      ...order,
     };
   }
 

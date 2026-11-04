@@ -20,10 +20,11 @@ const LEGACY_AUTHOR_SLUG = 'mestre-laercio';
 export const legacyAuthorshipOf = (author: string | null): LegacyAuthorship =>
   author === LEGACY_AUTHOR_SLUG ? 'mestre-laercio' : 'outros-autores';
 
-/** Who sent it, while they may still send, and any master (KBC-050 BR-1). */
+/** Who sent it, while they may still send, and any master (KBC-050 BR-1); a track follows its recording. */
 export const canEditMedia = (
   actor: MediaActor,
-  media: Pick<MediaRecord, 'ownerPrincipal'>,
+  media: Pick<MediaRecord, 'ownerPrincipal' | 'track'>,
 ): boolean =>
-  actor.isMaster ||
-  (actor.canUpload && media.ownerPrincipal === actor.principal);
+  media.track === null &&
+  (actor.isMaster ||
+    (actor.canUpload && media.ownerPrincipal === actor.principal));

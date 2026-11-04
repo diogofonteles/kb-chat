@@ -40,6 +40,7 @@ const OPTIONS = {
     schema: { params: mediaParams, response: { 200: editApprovedSchema } },
   },
   reopen: { config: { access: EDIT }, schema: editSchema },
+  retryCuts: { config: { access: EDIT }, schema: editSchema },
   words: {
     config: { access: EDIT },
     schema: { params: mediaParams, response: { 200: editWordsSchema } },
@@ -91,6 +92,11 @@ export const mediaEditRoutes =
     );
     typed.post('/api/v1/media/:id/edit/reopen', OPTIONS.reopen, (request) =>
       service.reopen(callOf(request, request.params.id)),
+    );
+    typed.post(
+      '/api/v1/media/:id/edit/retry-cuts',
+      OPTIONS.retryCuts,
+      async (request) => service.retryCuts(callOf(request, request.params.id)),
     );
     typed.get('/api/v1/media/:id/edit/words', OPTIONS.words, (request) =>
       service.words(actorOf(request), request.params.id),

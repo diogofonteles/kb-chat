@@ -27,6 +27,8 @@ import type { SearchService } from './search-service.js';
 export interface SearchViewer {
   /** The person holds "Ouvir mídia" (`media`): passages are listening. */
   readonly mayHear: boolean;
+  /** Has `media-tracks`: passages inside a track answer as the track (KBC-068 BR-6). */
+  readonly seesTracks?: boolean;
   /** The collection is one the person sees (ADR 0028 tree). */
   readonly canSee: (topic: string) => boolean;
 }
@@ -174,7 +176,12 @@ export class SearchWithMedia {
       filters.topics.length > 0
         ? visible.filter((slug) => filters.topics.includes(slug))
         : visible;
-    return this.passagesIn(media, { terms: termsOf(q), topics, filters });
+    return this.passagesIn(media, {
+      terms: termsOf(q),
+      topics,
+      filters,
+      tracks: viewer.seesTracks ?? false,
+    });
   }
 
   /** The passages under the "Autoria" choice, and the count of each group. */
@@ -184,18 +191,20 @@ export class SearchWithMedia {
       readonly terms: readonly string[];
       readonly topics: readonly string[];
       readonly filters: ParsedRequest['filters'];
+      readonly tracks: boolean;
     },
   ): SpokenPart {
-    const { terms, topics, filters } = input;
+    const { terms, topics, filters, tracks } = input;
     const { authors } = this.deps;
     const mainOf = new Map(topics.map((slug) => [slug, authors.mainOf(slug)]));
-    const byAuthorship = media.tally({ terms, topics, mainOf });
+    const byAuthorship = media.tally({ terms, topics, mainOf, tracks });
     const rule = authorRuleOf(filters.authorships, mainOf);
     if (rule === null) return { hits: [], count: 0, byAuthorship };
     const found = media.search({
       terms,
       topics,
       authors: rule,
+      tracks,
       limit: MAX_MEDIA_HITS,
       count: false,
     });

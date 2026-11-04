@@ -19,6 +19,8 @@ export interface MediaSearchQuery {
   readonly topics: readonly string[];
   readonly authors: AuthorRule;
   readonly limit: number;
+  /** Has `media-tracks`: a passage inside a track is the track's (KBC-068 BR-6). */
+  readonly tracks?: boolean;
   /** Count the matches too (default); off when the caller has the tally already. */
   readonly count?: boolean;
 }
@@ -63,6 +65,8 @@ export interface MediaSearchPort {
     readonly terms: readonly string[];
     readonly topics: readonly string[];
     readonly mainOf: ReadonlyMap<string, string | null>;
+    /** As in `search`: both must count the same passages. */
+    readonly tracks?: boolean;
   }): AuthorshipTally;
   /** Whether any of these collections has a searchable (transcribed) media. */
   hasTranscripts(topics: readonly string[]): boolean;

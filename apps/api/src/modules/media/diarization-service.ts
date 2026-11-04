@@ -153,6 +153,10 @@ export class DiarizationService {
     request: DiarizeRequest,
   ): MediaSpeakers {
     const media = this.visible(actor, mediaId);
+    if (media.track)
+      throw new AppError('MEDIA_CONFLICT', 'A track follows its recording', {
+        details: { reason: 'track' },
+      });
     const [transcript] = this.deps.transcripts.transcripts(mediaId);
     if (media.status !== 'ready' || !transcript)
       throw new AppError(
