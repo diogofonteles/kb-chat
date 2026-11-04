@@ -12,7 +12,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { EditSubjects, TrackSubjects } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
-import { caller, closeApp, signIn, start } from '../test/ai-app-harness.js';
+import {
+  caller,
+  closeApp,
+  connectHouse,
+  signIn,
+  start,
+} from '../test/ai-app-harness.js';
 import { FIXTURE_VAULT } from '../test/fixture-paths.js';
 import { member, type Media } from '../test/media-harness.js';
 import {
@@ -22,6 +28,7 @@ import {
   transcribed,
   type World,
 } from '../test/track-items-harness.js';
+import { FAKE_FREE_MODELS } from './testing/fake-openrouter.js';
 
 afterEach(closeApp);
 
@@ -36,6 +43,10 @@ const SPEECH = [
   { at: 100, text: 'a cabala na segunda faixa' },
 ];
 const EDITOR = ['media', 'media-edit'];
+const MEDIA_MODEL = {
+  id: 'deepseek/deepseek-v4-flash',
+  pricing: { prompt: '0.000000091', completion: '0.000000182' },
+};
 
 function vaultCopy(): string {
   const root = mkdtempSync(join(tmpdir(), 'kbchat-subjects-'));
@@ -79,6 +90,52 @@ const put = (
     url: `/api/v1/media/${track.mediaId}/subjects`,
     headers: { ...media.ownerHeaders, 'if-match': `"${track.version}"` },
     payload,
+  });
+
+const proposalsOf = (id: string) =>
+  `/api/v1/media/${id}/edit/subject-proposals`;
+
+/** Asks the fake model through the routes, as the screen does, until the run ends. */
+async function suggest(media: Media, id: string, answer: string) {
+  media.started.fake.models = [...FAKE_FREE_MODELS, MEDIA_MODEL];
+  await connectHouse(media.started, media.owner);
+  media.started.fake.scripted.push(() => ({ content: answer, cost: 0.0012 }));
+  const estimate = await media.owner('POST', proposalsOf(id), { dryRun: true });
+  expect(estimate.statusCode, estimate.body).toBe(200);
+  const run = await media.owner('POST', proposalsOf(id), { dryRun: false });
+  expect(run.statusCode, run.body).toBe(202);
+  for (let tick = 0; tick < 200; tick++) {
+    const step = await stepOf(media, id);
+    if (step.run?.status !== 'running') return step;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error('the suggestion never finished');
+}
+
+const ONE_CHIP_AND_ONE_NEW = JSON.stringify({
+  faixas: [
+    {
+      faixa: 1,
+      assuntos: ['Cabala'],
+      novos: ['Sete Raios'],
+      resumo: 'Abertura da palestra.',
+    },
+  ],
+});
+
+const acceptAll = (
+  media: Media,
+  track: Pick<TrackSubjects, 'mediaId' | 'version' | 'suggestions'>,
+) =>
+  media.started.app.inject({
+    method: 'POST',
+    url: `/api/v1/media/${track.mediaId}/subjects/decisions`,
+    headers: { ...media.ownerHeaders, 'if-match': `"${track.version}"` },
+    payload: {
+      accept: track.suggestions.map((one) => one.id),
+      refuse: [],
+      summary: 'accept',
+    },
   });
 
 describe('Subjects of a collection (KBC-069 FR-1)', () => {
@@ -298,6 +355,78 @@ describe('Who classifies (AC-6)', () => {
   });
 });
 
+describe('The suggestion over HTTP (KBC-069 FR-3, TE-13)', () => {
+  it('prices it, makes one call, leaves chips, and an accepted new subject joins the collection', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await approved(world);
+    await finishCuts(media);
+
+    const step = await suggest(media, recording.id, ONE_CHIP_AND_ONE_NEW);
+
+    expect(step).toMatchObject({
+      run: { status: 'done', failure: null },
+      canSuggest: false,
+    });
+    expect(media.started.fake.chats).toHaveLength(1);
+    const [first, second] = step.tracks;
+    if (!first) throw new Error('no track');
+    expect(first.subjects).toEqual([]);
+    expect(first.suggestions.map(({ kind, name }) => [kind, name])).toEqual([
+      ['concept', 'Cabala'],
+      ['new', 'Sete Raios'],
+    ]);
+    expect(first.suggestedSummary).toBe('Abertura da palestra.');
+    expect(second?.suggestions).toEqual([]);
+    const before = await media.owner('GET', SUBJECTS);
+    expect(before.json()).toMatchObject({ free: [] });
+
+    const accepted = await acceptAll(media, first);
+
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      subjects: [{ name: 'Cabala' }, { name: 'Sete Raios', kind: 'free' }],
+      suggestions: [],
+      summary: 'Abertura da palestra.',
+    });
+    const after = await media.owner('GET', SUBJECTS);
+    expect(after.json()).toMatchObject({ free: [{ name: 'Sete Raios' }] });
+  });
+
+  it('reads an answer wrapped in reasoning and fences', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await approved(world);
+    await finishCuts(media);
+    const step = await suggest(
+      media,
+      recording.id,
+      `<think>{"faixas": []}</think>Aqui está:\n\`\`\`json\n${ONE_CHIP_AND_ONE_NEW}\n\`\`\``,
+    );
+    expect(step.run).toMatchObject({ status: 'done', failure: null });
+  });
+
+  it('offers to try again, by a press, when the answer brought nothing', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await approved(world);
+    await finishCuts(media);
+    const step = await suggest(media, recording.id, '{"faixas":[]}');
+    expect(step).toMatchObject({
+      run: { status: 'failed', failure: 'invalid-output' },
+      canSuggest: true,
+    });
+  });
+
+  it('refuses a run the body did not ask for', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await approved(world);
+    const asked = await media.owner('POST', proposalsOf(recording.id), {});
+    expect(asked.statusCode).toBe(400);
+  });
+});
+
 describe('The vault stays as it is (Q7, BR-4)', () => {
   it('AC-5: a concept removed from the vault is flagged after the catalog is read again, and the track still plays', async () => {
     const vault = vaultCopy();
@@ -337,10 +466,17 @@ describe('The vault stays as it is (Q7, BR-4)', () => {
     const world = await startWorld({ vault });
     const { media } = world;
     const recording = await approved(world);
+    await finishCuts(media);
     await media.owner('POST', SUBJECTS, { name: 'Burracheira' });
-    const [first] = (await stepOf(media, recording.id)).tracks;
-    if (!first) throw new Error('no track');
-    await put(media, first, {
+    const { tracks } = await suggest(media, recording.id, ONE_CHIP_AND_ONE_NEW);
+    const [first, second] = tracks;
+    if (!first || !second) throw new Error('no track');
+    const accepted = await acceptAll(media, first);
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      subjects: [{ name: 'Cabala' }, { name: 'Sete Raios' }],
+    });
+    await put(media, second, {
       subjects: [{ kind: 'concept', name: 'Cabala' }],
       summary: 'Resumo.',
     });
