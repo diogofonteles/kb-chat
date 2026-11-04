@@ -40,9 +40,9 @@ describe('FsMediaFiles: a resumable upload (KBC-035)', () => {
     expect(await append('def')).toBe(6);
     expect(await files.stat(files.uploadPath(ID))).toBeNull();
     await files.finishUpload(ID);
-    expect(await text(files.read(files.uploadPath(ID), { start: 0, end: 5 }))).toBe(
-      'abcdef',
-    );
+    expect(
+      await text(files.read(files.uploadPath(ID), { start: 0, end: 5 })),
+    ).toBe('abcdef');
   });
 
   it('keeps what arrived of a part cut short (NFR-1)', async () => {

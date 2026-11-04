@@ -114,10 +114,10 @@ describe('newlyReady', () => {
 });
 
 describe('upload rules (MA-20, MA-25)', () => {
-  it('accepts an audio file up to 500 MB', () => {
+  it('accepts an audio file up to 4 GB', () => {
     expect(fileProblemOf({ name: 'aula.mp3', size: 1_000 })).toBeNull();
     expect(
-      fileProblemOf({ name: 'aula.OPUS', size: 500 * 1024 * 1024 }),
+      fileProblemOf({ name: 'aula.OPUS', size: 4 * 1024 ** 3 }),
     ).toBeNull();
   });
 
@@ -125,8 +125,8 @@ describe('upload rules (MA-20, MA-25)', () => {
     expect(fileProblemOf({ name: 'apostila.pdf', size: 10 })).toBe(
       'Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.',
     );
-    expect(fileProblemOf({ name: 'aula.wav', size: 612 * 1024 * 1024 })).toBe(
-      'Este arquivo tem 612 MB. O limite é 500 MB.',
+    expect(fileProblemOf({ name: 'aula.wav', size: 4.1 * 1024 ** 3 })).toBe(
+      'Este arquivo tem 4,1 GB. O limite é 4 GB.',
     );
     expect(fileProblemOf({ name: 'aula.mp3', size: 0 })).toBe(
       'Este arquivo está vazio. Escolha outro.',

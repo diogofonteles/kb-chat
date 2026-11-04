@@ -183,7 +183,8 @@ export class FsMediaFiles implements MediaFilesPort {
   async hashUpload(mediaId: string): Promise<string> {
     const hash = createHash('sha256');
     const path = `${this.resolve(this.uploadPath(mediaId))}.part`;
-    for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+    for await (const chunk of createReadStream(path))
+      hash.update(chunk as Buffer);
     return hash.digest('hex');
   }
 

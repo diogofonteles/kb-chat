@@ -27,7 +27,9 @@ const LIST_URL = '/api/v1/topics/hermetismo/media';
 
 /** The file's hash runs on its own; waits for the question and says it is new. */
 async function answerCheck(http: HttpTestingController, url: string) {
-  await vi.waitFor(() => http.expectOne(`${url}/check`).flush({ verdict: 'new' }));
+  await vi.waitFor(() =>
+    http.expectOne(`${url}/check`).flush({ verdict: 'new' }),
+  );
 }
 
 async function renderList(

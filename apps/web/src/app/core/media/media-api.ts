@@ -31,7 +31,9 @@ export const mediaPagePath = (id: string): string =>
   `/midia/${encodeURIComponent(id)}`;
 
 /** How many times tus tries again after a failure, and when: about two minutes offline. */
-const RETRY_DELAYS_MS = [0, 1_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000];
+const RETRY_DELAYS_MS = [
+  0, 1_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000,
+];
 
 /** Where an upload is: bytes sent so far, or the item once the server has it. */
 export type UploadEvent =
@@ -125,5 +127,4 @@ export class MediaApi {
       options.cascade ? `${mediaUrl(id)}?cascade=true` : mediaUrl(id),
     );
   }
-
 }

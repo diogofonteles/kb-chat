@@ -130,9 +130,12 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     clickSend();
     await panel.fixture.whenStable();
     expect(
-      screen.getByText('Nada a enviar: estes arquivos não podem ser enviados.', {
-        exact: false,
-      }),
+      screen.getByText(
+        'Nada a enviar: estes arquivos não podem ser enviados.',
+        {
+          exact: false,
+        },
+      ),
     ).toBeTruthy();
     panel.http.expectNone({ method: 'POST' });
   });
@@ -206,7 +209,11 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Acervo' }), {
       target: { value: 'alquimia' },
     });
-    await answerCheck(panel, { verdict: 'new' }, '/api/v1/topics/alquimia/media');
+    await answerCheck(
+      panel,
+      { verdict: 'new' },
+      '/api/v1/topics/alquimia/media',
+    );
     expect(screen.queryByText(/Já está no acervo:/)).toBeNull();
   });
 
@@ -390,12 +397,14 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     tus.sessions[1]?.progress(1, 4);
     await fixture.whenStable();
     expect(screen.getAllByRole('progressbar')).toHaveLength(3);
-    expect(screen.getByRole('progressbar', { name: 'Progresso de b.mp3' })).toBeTruthy();
+    expect(
+      screen.getByRole('progressbar', { name: 'Progresso de b.mp3' }),
+    ).toBeTruthy();
     const row = screen.getByRole('article', { name: 'a.mp3' });
     expect(within(row).getByText('a.mp3: 50% enviado.')).toBeTruthy();
-    expect(within(row).getByText('a.mp3: 50% enviado.').getAttribute('aria-live')).toBe(
-      'polite',
-    );
+    expect(
+      within(row).getByText('a.mp3: 50% enviado.').getAttribute('aria-live'),
+    ).toBe('polite');
     tus.sessions[0]?.progress(3, 4);
     await fixture.whenStable();
     // Steps of 25%: 75% is said, 74% would not be.
@@ -452,7 +461,9 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     choose(panel.container, audio('a.mp3'), audio('b.mp3', 4));
     await answerCheck(panel);
     await answerCheck(panel);
-    fireEvent.click(screen.getByRole('button', { name: 'Tirar a.mp3 da lista' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Tirar a.mp3 da lista' }),
+    );
     await panel.fixture.whenStable();
     expect(screen.queryByText('a.mp3')).toBeNull();
     expect(screen.getByText('b.mp3')).toBeTruthy();

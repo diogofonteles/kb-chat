@@ -29,9 +29,7 @@ describe('Migration upload-source-and-estimate (KBC-035)', () => {
     applyMigrations(db, MEDIA_MIGRATIONS);
 
     expect(
-      db
-        .prepare(`SELECT source_sha256, estimated_bytes FROM media`)
-        .get(),
+      db.prepare(`SELECT source_sha256, estimated_bytes FROM media`).get(),
     ).toEqual({ source_sha256: null, estimated_bytes: null });
     expect(
       db.prepare(`SELECT sql FROM sqlite_master WHERE name = 'jobs'`).get(),

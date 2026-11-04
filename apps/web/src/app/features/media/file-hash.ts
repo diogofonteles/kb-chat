@@ -19,7 +19,10 @@ export type HashEvent =
   | { readonly kind: 'done'; readonly sha256: string };
 
 const sliceStarts = (size: number): number[] =>
-  Array.from({ length: Math.ceil(size / SLICE_BYTES) }, (_, i) => i * SLICE_BYTES);
+  Array.from(
+    { length: Math.ceil(size / SLICE_BYTES) },
+    (_, i) => i * SLICE_BYTES,
+  );
 
 /**
  * The file's SHA-256, computed in the browser (KBC-035 FR-1). In JavaScript on purpose: Web

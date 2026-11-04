@@ -138,10 +138,14 @@
 }
 
 @if (hasQuota()) {
-  <label class="field">
-    <span i18n="@@people.mediaQuota">Cota de mídia (GB)</span>
+  <div class="field">
+    <label for="media-quota" i18n="@@people.mediaQuota"
+      >Cota de mídia (GB)</label
+    >
     <input
       #quota
+      id="media-quota"
+      class="number"
       type="text"
       inputmode="decimal"
       autocomplete="off"
@@ -159,7 +163,7 @@
         ><span aria-hidden="true">⚠</span> Use um número maior que zero.</span
       >
     }
-  </label>
+  </div>
 }
 
 @if (ownerView() && isMaster() && !who.isOwner) {

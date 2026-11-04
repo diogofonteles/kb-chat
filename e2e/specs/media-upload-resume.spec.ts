@@ -77,9 +77,9 @@ test('AC-1, NFR-1: a part that fails continues where it stopped and creates one 
   await sendButton(dialog).click();
   await expect(dialog).toBeHidden({ timeout: 60_000 });
   const title = rowTitleOf(file);
-  await expect(page.getByRole('listitem').filter({ hasText: title })).toHaveCount(
-    1,
-  );
+  await expect(
+    page.getByRole('listitem').filter({ hasText: title }),
+  ).toHaveCount(1);
   // The aborted part went again, and nothing else did.
   expect(parts).toBe(Math.ceil(size / PART_BYTES) + 1);
 });
@@ -115,9 +115,9 @@ test('FR-2: a reload loses nothing: choosing the file again continues it', async
   await sendButton(again).click();
   await expect(again).toBeHidden({ timeout: 60_000 });
   const title = rowTitleOf(file);
-  await expect(page.getByRole('listitem').filter({ hasText: title })).toHaveCount(
-    1,
-  );
+  await expect(
+    page.getByRole('listitem').filter({ hasText: title }),
+  ).toHaveCount(1);
 });
 
 test('AC-2: a file already in the collection is named, linked and not sent', async ({

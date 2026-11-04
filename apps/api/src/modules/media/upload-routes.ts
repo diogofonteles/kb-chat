@@ -21,7 +21,10 @@ const options = {
 };
 
 /** Upload-Offset as tus sends it: digits only. */
-const offsetSchema = z.string().regex(/^\d{1,13}$/).transform(Number);
+const offsetSchema = z
+  .string()
+  .regex(/^\d{1,13}$/)
+  .transform(Number);
 
 function offsetOf(request: FastifyRequest): number {
   const offset = offsetSchema.safeParse(request.headers['upload-offset']);

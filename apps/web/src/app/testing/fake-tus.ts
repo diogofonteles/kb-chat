@@ -35,7 +35,9 @@ export class FakeTusSession implements TusSession {
       originalResponse: status === 0 ? null : fakeResponse(status, body),
       causingError: null,
     });
-    this.options.onError?.(error as Parameters<NonNullable<UploadOptions['onError']>>[0]);
+    this.options.onError?.(
+      error as Parameters<NonNullable<UploadOptions['onError']>>[0],
+    );
   }
 }
 

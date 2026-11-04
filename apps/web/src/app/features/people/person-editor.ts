@@ -131,7 +131,8 @@ export class PersonEditor {
   protected changeQuota(typed: string): void {
     const gigabytes = Number(typed.replace(',', '.'));
     const bytes = Math.round(gigabytes * BYTES_PER_GB);
-    const valid = typed.trim() === '' || mediaQuotaSchema.safeParse(bytes).success;
+    const valid =
+      typed.trim() === '' || mediaQuotaSchema.safeParse(bytes).success;
     this.quotaProblem.set(!valid);
     if (valid)
       this.changed.emit({

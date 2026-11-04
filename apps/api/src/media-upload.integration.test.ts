@@ -125,9 +125,9 @@ describe('Resumable upload (KBC-035, tus core on the item)', () => {
     expect(part.statusCode).toBe(204);
     expect(part.headers['upload-offset']).toBe('10');
     expect((await offsetOf(media, id)).headers['upload-offset']).toBe('10');
-    expect((await media.owner('GET', `/api/v1/media/${id}`)).json().status).toBe(
-      'uploading',
-    );
+    expect(
+      (await media.owner('GET', `/api/v1/media/${id}`)).json().status,
+    ).toBe('uploading');
 
     const last = await patch(media, {
       id,
@@ -136,9 +136,9 @@ describe('Resumable upload (KBC-035, tus core on the item)', () => {
     });
     expect(last.statusCode).toBe(204);
     expect(last.headers['upload-offset']).toBe(String(AUDIO.length));
-    expect((await media.owner('GET', `/api/v1/media/${id}`)).json().status).toBe(
-      'queued',
-    );
+    expect(
+      (await media.owner('GET', `/api/v1/media/${id}`)).json().status,
+    ).toBe('queued');
     expect(
       readFileSync(join(media.mediaDir, 'uploads', `${id}.upload`)),
     ).toEqual(AUDIO);
@@ -326,7 +326,10 @@ describe('Asking before sending (KBC-035 FR-1, FR-3)', () => {
       topics: ['hermetismo'],
       features: ['media', 'media-upload'],
     });
-    const tenHours = aCheck({ durationMs: 10 * HOUR_MS, sha256: 'b'.repeat(64) });
+    const tenHours = aCheck({
+      durationMs: 10 * HOUR_MS,
+      sha256: 'b'.repeat(64),
+    });
     await fillQuota(media, person.call, 4.9 * 1024 ** 3);
     const reply = await person.call('POST', `${TOPIC_MEDIA}/check`, tenHours);
     expect(reply.json()).toEqual({

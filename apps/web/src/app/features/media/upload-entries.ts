@@ -1,4 +1,10 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { UploadCheck } from '@kb-chat/contracts';
 import { MediaApi } from '@core/media/media-api.js';
@@ -29,9 +35,17 @@ export type EntryState =
       readonly media: { readonly id: string; readonly title: string };
     }
   | { readonly kind: 'over-quota'; readonly quotaBytes: number }
-  | { readonly kind: 'resume'; readonly mediaId: string; readonly offset: number }
+  | {
+      readonly kind: 'resume';
+      readonly mediaId: string;
+      readonly offset: number;
+    }
   | { readonly kind: 'expired' }
-  | { readonly kind: 'sending'; readonly loaded: number; readonly total: number }
+  | {
+      readonly kind: 'sending';
+      readonly loaded: number;
+      readonly total: number;
+    }
   | { readonly kind: 'stopped'; readonly problem: string }
   | { readonly kind: 'done' };
 
@@ -183,7 +197,10 @@ export class UploadEntries {
   private inspect(key: number): Observable<never> {
     const entry = this.entry(key);
     if (!entry) return EMPTY;
-    return concat(this.measure(entry), defer(() => this.ask(key)));
+    return concat(
+      this.measure(entry),
+      defer(() => this.ask(key)),
+    );
   }
 
   private measure(entry: UploadEntry): Observable<never> {

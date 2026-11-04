@@ -146,7 +146,10 @@ describe('MediaApi', () => {
     TestBed.inject(SessionEvents).expired$.subscribe(expired);
     const failed = vi.fn();
     api.upload(ITEM.id, new Blob(['a'])).subscribe({ error: failed });
-    tus.last.fail(410, '{"error":{"code":"MEDIA_UPLOAD_EXPIRED","message":"x"}}');
+    tus.last.fail(
+      410,
+      '{"error":{"code":"MEDIA_UPLOAD_EXPIRED","message":"x"}}',
+    );
     expect(expired).not.toHaveBeenCalled();
     expect(failed.mock.calls[0]?.[0]).toMatchObject({ status: 410 });
   });

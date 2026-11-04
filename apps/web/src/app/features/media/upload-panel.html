@@ -60,7 +60,11 @@
     </section>
 
     @if (uploads.entries().length > 0) {
-      <ul class="files" aria-label="Arquivos" i18n-aria-label="@@media.upload.files">
+      <ul
+        class="files"
+        aria-label="Arquivos"
+        i18n-aria-label="@@media.upload.files"
+      >
         @for (entry of uploads.entries(); track entry.key) {
           <li>
             <app-upload-file-row
@@ -109,11 +113,7 @@
         >
           Cancelar
         </button>
-        <button
-          type="submit"
-          class="primary"
-          [disabled]="uploads.checking()"
-        >
+        <button type="submit" class="primary" [disabled]="uploads.checking()">
           @if (uploads.checking()) {
             <ng-container i18n="@@media.upload.checking"
               >Conferindo arquivos…</ng-container
