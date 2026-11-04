@@ -597,6 +597,26 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     it('stays and says why when this browser cannot hold them (R-1)', async () => {
       const { harness, http } = await openPage();
       vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    it('says why when the way out does not open, and keeps the changes (F-1)', async () => {
+      const { harness, http } = await openPage();
+      await deleteTrack(harness);
+      await saveDelay();
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .error(new ProgressEvent('error'));
+      await harness.fixture.whenStable();
+      vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockRejectedValue(
+        new Error('Failed to fetch dynamically imported module'),
+      );
+      fireEvent.click(button('Sair e continuar depois'));
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .error(new ProgressEvent('error'));
+      await harness.fixture.whenStable();
+      expect(TestBed.inject(Router).url).toContain('/faixas');
+      expect(screen.getByText(/Não consegui abrir a página/)).toBeTruthy();
+    });
+
         throw new Error('blocked');
       });
       await deleteTrack(harness);

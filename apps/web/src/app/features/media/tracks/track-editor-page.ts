@@ -691,13 +691,23 @@ export class TrackEditorPage {
       .flush()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((result) => {
-        if (result === 'saved' || this.draft.keptHere())
-          void this.router.navigateByUrl(this.mediaLink());
+        if (result === 'saved' || this.draft.keptHere()) this.goToMedia();
         else
           this.say(
             $localize`:@@tracks.notLeft:Não consegui salvar e este navegador não guarda as mudanças. Copie suas faixas antes de sair.`,
           );
       });
+  }
+
+  /** The audio's page may still have to load, and without a network it cannot (F-1). */
+  private goToMedia(): void {
+    const stayed = () =>
+      this.say(
+        $localize`:@@tracks.notOpened:Não consegui abrir a página do áudio. Suas mudanças continuam neste navegador; tente de novo com conexão.`,
+      );
+    this.router.navigateByUrl(this.mediaLink()).then((left) => {
+      if (!left) stayed();
+    }, stayed);
   }
 
   /** The way out of a conflict (FR-10): failing, the tracks to copy stay on screen. */
