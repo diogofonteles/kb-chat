@@ -312,6 +312,33 @@ describe('Registering a profile (KBC-071 FR-1, FR-2, BR-1)', () => {
     expect(database.includes(onDisk.slice(0, 40))).toBe(false);
   });
 
+  it('refuses a print of nothing but zeros: it would be "Pronto" and compare with nobody', async () => {
+    const { media, token } = await granted();
+    const speaker = await aSpeaker(media, 'Mestre Gabriel');
+    const mediaId = await namedRecording(media, {
+      token,
+      speakerId: speaker.id,
+    });
+    await media.owner('POST', PROFILES, {
+      speakerId: speaker.id,
+      sources: [{ mediaId, voice: ANSWERS.number }],
+      consent: aConsent(),
+    });
+    const job = await leasePrintJob(media, token);
+    const sent = await asTranscriber(media, token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/voice-print`,
+      payload: {
+        worker: 'mac',
+        leaseId: job.leaseId,
+        model: ECAPA,
+        embedding: new Array<number>(192).fill(0),
+      },
+    });
+    expect(sent.statusCode).toBe(400);
+    expect(printFiles(media)).toEqual([]);
+  });
+
   it('a job given up asks to calculate again', async () => {
     const { media, token } = await granted();
     const speaker = await aSpeaker(media, 'Mestre Gabriel');
@@ -700,6 +727,20 @@ describe('Revoking (KBC-071 FR-4, BR-2)', () => {
     expect(printFiles(restarted)).toEqual([]);
   });
 
+  it('a print on the list is not sent, even with the file still there', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const mediaId = await transcribedIn(media, { token });
+    expect((await requestVoices(media, mediaId)).statusCode).toBe(202);
+    const job = await leaseDiarization(media, token);
+    appendFileSync(
+      join(media.mediaDir, 'voice-revocations.list'),
+      `\n${profile.id}\n`,
+    );
+    const sent = await profilesForJob(media, { token, job });
+    expect(sent.json()).toEqual({ profiles: [] });
+  });
+
   it('a print arriving after the revocation is dropped', async () => {
     const { media, token } = await granted();
     const speaker = await aSpeaker(media, 'Gabriel');
@@ -1047,6 +1088,24 @@ describe('A backup from before a revocation (KBC-071 BR-1, BR-2, ADR 0032)', () 
     );
     expect(again.statusCode).toBe(409);
     expect(printFiles(restarted)).toEqual([`${profile.id}.sealed`]);
+  });
+
+  it('an unreadable line in the list stops new prints and logs it, until the owner marks it', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    await closeApp();
+    const list = join(media.mediaDir, REVOCATIONS);
+    appendFileSync(list, `${randomUUID().slice(0, 20)}\n${randomUUID()}\n`);
+    const restarted = await startMedia({ state: media.started.state });
+    expect(
+      restarted.started.logs.some((line) =>
+        line.includes('voice revocation list is lost'),
+      ),
+    ).toBe(true);
+    const url = `/api/v1/voice-profiles/${profile.id}/recalculate`;
+    expect((await restarted.owner('POST', url, {})).statusCode).toBe(409);
+    appendFileSync(list, `\n${REVOCATION_LIST_HEADER}\n`);
+    expect((await restarted.owner('POST', url, {})).statusCode).toBe(200);
   });
 
   it('says what stops a print in its own code, not as a revoked consent', async () => {

@@ -120,14 +120,18 @@ export class VoicePrintService {
     throw leaseLost();
   }
 
-  /** The prints of the collection of the separation this owner holds; none is 200 and []. */
+  /**
+   * The prints of the collection of the separation this owner holds; none is 200 and []. An id
+   * on the list stays out: its file may outlive the revocation by a failed delete.
+   */
   async printsFor(owner: LeaseOwner): Promise<WorkerVoiceProfiles> {
     const held = this.deps.diarizations.heldDiarization(owner);
     const media = held && this.deps.store.getMedia(held.mediaId);
     if (!media) throw notYours();
-    const ready = this.deps.profiles.readyProfiles(
-      this.deps.rootOf(media.topic),
-    );
+    const { ids } = await this.deps.revocations.read();
+    const ready = this.deps.profiles
+      .readyProfiles(this.deps.rootOf(media.topic))
+      .filter(({ id }) => !ids.includes(id));
     const read = await Promise.all(
       ready.map(async ({ id, model }) => {
         const embedding = await this.deps.prints.read(id);

@@ -684,6 +684,8 @@ Celular (390 px)
 | Sem voz nomeada | "Esta pessoa ainda não tem voz nomeada em nenhuma gravação." |
 | Erro ao carregar | "Não consegui carregar os perfis." + **Tentar de novo** |
 | Consentimento recusado (422) | volta ao consentimento: "O consentimento não foi aceito. Confira os dados." |
+| Lista de revogações perdida ou exposta | aviso em alerta com o que houve e o passo do dono (runbook, seção 11); somem **Cadastrar perfil** e **Calcular de novo**; **Revogar** fica |
+| Revogação que não entrou na lista | "O consentimento foi revogado e o perfil foi apagado, mas a lista de revogações não foi gravada…"; aviso com o passo do dono até o próximo arranque |
 
 Nenhuma tela mostra impressão de voz nem o número da semelhança.
 

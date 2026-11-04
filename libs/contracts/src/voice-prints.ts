@@ -72,7 +72,10 @@ export const completeVoicePrintRequestSchema = z.strictObject({
   worker: z.string().min(1).max(100),
   leaseId: z.uuid(),
   model: z.string().min(1).max(200),
-  embedding: voicePrintSchema,
+  /** All zeros would read "Pronto" and compare with nobody. */
+  embedding: voicePrintSchema.refine((values) => values.some(Boolean), {
+    error: 'A voice print cannot be all zeros',
+  }),
 });
 export type CompleteVoicePrintRequest = z.infer<
   typeof completeVoicePrintRequestSchema
