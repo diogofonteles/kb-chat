@@ -565,6 +565,43 @@ describe('MediaListPage: "Editar informações" (KBC-050)', () => {
     expect(screen.queryByRole('link', { name: 'Ver o acervo' })).toBeNull();
   });
 
+  it('AC-1: another audio getting ready on that reload does not take the saved notice away', async () => {
+    const item = aMediaItem({ canEdit: true });
+    const converting = aMediaItem({
+      id: mediaId(2),
+      title: 'A do vizinho',
+      status: 'processing',
+      progress: 90,
+      durationMs: null,
+    });
+    const view = await renderList();
+    await view.answer([item, converting]);
+    fireEvent.click(
+      screen.getByRole('button', { name: `Mais ações para ${item.title}` }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Editar informações' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.input(screen.getByLabelText('Título'), {
+      target: { value: 'A conselheira do rei' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const renamed = { ...item, title: 'A conselheira do rei' };
+    view.http.expectOne(itemUrl(item.id)).flush(renamed);
+    await nextRequest();
+    const ready = {
+      ...aMediaItem(),
+      id: converting.id,
+      title: converting.title,
+    };
+    view.http.expectOne(LIST_URL).flush({ items: [renamed, ready] });
+    await view.fixture.whenStable();
+    expect(screen.getByText('A do vizinho está pronta.')).toBeTruthy();
+    expect(screen.getByText('Informações salvas')).toBeTruthy();
+  });
+
   it('AC-2: a moved audio leaves the list with the notice, the link and the focus on the page', async () => {
     const item = aMediaItem({ canEdit: true, author: null });
     const { http, fixture } = await openEdit(item);

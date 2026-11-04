@@ -146,6 +146,8 @@ export class MediaListPage {
   });
   protected readonly actionError = signal('');
   protected readonly announcement = signal('');
+  /** Apart from `announcement`: a reload after an action must not replace what it said. */
+  protected readonly readyNotice = signal('');
   /** Where the last upload went, when it was another collection; cleared on a switch. */
   protected readonly sentElsewhere = linkedSignal({
     source: this.chat.topicSlug,
@@ -354,7 +356,7 @@ export class MediaListPage {
       )
       .subscribe(([before, after]) => {
         const titles = newlyReady(before, after).map((item) => item.title);
-        this.announcement.set(
+        this.readyNotice.set(
           titles.length === 1
             ? $localize`:@@media.readyOne:${titles[0]}:title: está pronta.`
             : $localize`:@@media.readyMany:${titles.join(', ')}:titles: estão prontas.`,
