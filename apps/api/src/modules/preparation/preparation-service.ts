@@ -107,6 +107,10 @@ export interface PreparationServiceDeps {
  */
 export const ESTIMATE_TOLERANCE = 1.25;
 
+/** A plan only goes on once its file arrived: an upload given up never gets there. */
+const hasWholeFile = ({ status, failure }: MediaItem): boolean =>
+  status !== 'uploading' && failure !== 'upload-abandoned';
+
 /** Before anything was measured: the screen spec's own example, 4 and 3 min for 1 h 02. */
 const DEFAULT_RATES = { transcribe: 4 / 62, speakers: 3 / 62 } as const;
 
@@ -467,7 +471,7 @@ export class PreparationService {
   listOpen(actor: PlanActor): OpenPreparations {
     const items = this.deps.plans.listOpen().flatMap((record) => {
       const item = this.visibleItem(actor, record.mediaId);
-      if (!item || item.status === 'uploading') return [];
+      if (!item || !hasWholeFile(item)) return [];
       const step = this.stepOf(record, item);
       return step === 4 ? [] : [{ mediaId: item.id, step }];
     });

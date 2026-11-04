@@ -8,7 +8,11 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { MEDIA_DEFAULT_QUOTA_BYTES } from '@kb-chat/contracts';
+import {
+  MEDIA_DEFAULT_QUOTA_BYTES,
+  type MediaPreparation,
+  type OpenPreparations,
+} from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp, type Call } from '../test/ai-app-harness.js';
 import {
@@ -510,5 +514,128 @@ describe('Asking before sending (KBC-035 FR-1, FR-3)', () => {
     await convert(media, await leaseJob(media));
     const after = await person.call('POST', `${TOPIC_MEDIA}/check`, big);
     expect(after.json().verdict).toBe('new');
+  });
+});
+
+describe('An upload with a plan (KBC-035 with KBC-072)', () => {
+  const PLAN = {
+    transcribe: true,
+    speakers: true,
+    tracks: 'none',
+    subjects: false,
+    acceptedUsd: null,
+  } as const;
+
+  const preparationOf = async (media: Media, id: string) =>
+    (
+      await media.owner('GET', `/api/v1/media/${id}/preparation`)
+    ).json<MediaPreparation>();
+
+  const openOf = async (media: Media) =>
+    (
+      await media.owner('GET', '/api/v1/media/preparations')
+    ).json<OpenPreparations>().items;
+
+  function count(media: Media, query: string): number {
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    try {
+      return Number(
+        db.prepare(`SELECT COUNT(*) AS n FROM ${query}`).get()?.['n'],
+      );
+    } finally {
+      db.close();
+    }
+  }
+
+  const plansIn = (media: Media) => count(media, 'media_preparations');
+
+  it('keeps the plan across a cut and takes it up when the last part lands', async () => {
+    const media = await startMedia();
+    const id = await created(media, { plan: PLAN });
+    await patch(media, { id, offset: 0, body: AUDIO.subarray(0, 10) });
+    expect(await openOf(media)).toEqual([]);
+    const asked = await media.owner('POST', `${TOPIC_MEDIA}/check`, aCheck());
+    expect(asked.json()).toMatchObject({
+      verdict: 'resume',
+      offset: 10,
+    });
+    expect((await preparationOf(media, id)).step).toBe(1);
+    await patch(media, { id, offset: 10, body: AUDIO.subarray(10) });
+    const after = await preparationOf(media, id);
+    expect(after.plan).toMatchObject({ speakers: true, tracks: 'none' });
+    expect(after.step).toBe(2);
+    expect(await openOf(media)).toEqual([{ mediaId: id, step: 2 }]);
+  });
+
+  it('leaves out of the transcription a resumed upload that did not ask for it', async () => {
+    const media = await startMedia();
+    const id = await created(media, {
+      plan: { ...PLAN, transcribe: false, speakers: false },
+    });
+    await patch(media, { id, offset: 0, body: AUDIO.subarray(0, 10) });
+    await patch(media, { id, offset: 10, body: AUDIO.subarray(10) });
+    expect((await convert(media, await leaseJob(media))).statusCode).toBe(204);
+    expect(count(media, `jobs WHERE kind = 'transcribe'`)).toBe(0);
+  });
+
+  it('keeps no plan of a repeated file', async () => {
+    const media = await startMedia();
+    const id = await created(media, { plan: PLAN });
+    await patch(media, { id, offset: 0, body: AUDIO });
+    expect(plansIn(media)).toBe(1);
+    const again = await media.owner(
+      'POST',
+      TOPIC_MEDIA,
+      aRequest({ sha256: SHA, durationMs: 60_000, plan: PLAN }),
+    );
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.code).toBe('MEDIA_DUPLICATE');
+    expect(plansIn(media)).toBe(1);
+  });
+
+  it('keeps no plan of a file over the quota', async () => {
+    const media = await startMedia();
+    const person = await member(media, {
+      email: 'cota-plano@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-upload', 'media-edit'],
+    });
+    await fillQuota(media, person.call, 4.9 * 1024 ** 3);
+    const refused = await person.call(
+      'POST',
+      TOPIC_MEDIA,
+      aRequest({
+        author: null,
+        sha256: 'b'.repeat(64),
+        durationMs: 10 * HOUR_MS,
+        plan: PLAN,
+      }),
+    );
+    expect(refused.json().error.code).toBe('MEDIA_QUOTA_EXCEEDED');
+    expect(plansIn(media)).toBe(0);
+  });
+
+  it('refuses a plan the person may not ask before calling the file repeated', async () => {
+    const media = await startMedia();
+    const person = await member(media, {
+      email: 'sem-edicao@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-upload'],
+    });
+    const refused = await person.call(
+      'POST',
+      TOPIC_MEDIA,
+      aRequest({ author: null, sha256: SHA, plan: PLAN }),
+    );
+    expect(refused.statusCode).toBe(422);
+    expect(refused.json().error.code).toBe('PLAN_REFUSED');
+  });
+
+  it('does not offer to continue the preparation of an upload given up', async () => {
+    const media = await startMedia();
+    const id = await created(media, { plan: PLAN });
+    await patch(media, { id, offset: 0, body: AUDIO.subarray(0, 10) });
+    expireUpload(media, id);
+    expect(await openOf(media)).toEqual([]);
   });
 });
