@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mediaStatusSchema } from '@kb-chat/contracts';
 import {
   itemOf,
   proposalDb,
@@ -121,7 +120,7 @@ function setup(
         id: String(row['id']),
         topic: String(row['topic']),
         title: String(row['title']),
-        status: mediaStatusSchema.parse(row['status']),
+        status: 'ready' as const,
         archivedAt:
           row['archived_at'] === null ? null : String(row['archived_at']),
         track:

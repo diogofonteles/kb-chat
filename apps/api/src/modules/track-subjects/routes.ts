@@ -117,8 +117,7 @@ function registerCollection(typed: Typed, deps: SubjectRoutesDeps): void {
   });
 }
 
-function registerTrack(typed: Typed, deps: SubjectRoutesDeps): void {
-  const { subjects } = deps;
+function registerAbout(typed: Typed, { subjects }: SubjectRoutesDeps): void {
   typed.get(
     '/api/v1/media/:id/about',
     {
@@ -127,6 +126,10 @@ function registerTrack(typed: Typed, deps: SubjectRoutesDeps): void {
     },
     async (request) => subjects.about(actorOf(request), request.params.id),
   );
+}
+
+function registerTrack(typed: Typed, deps: SubjectRoutesDeps): void {
+  const { subjects } = deps;
   const read = {
     config: { access: CLASSIFY },
     schema: { params: mediaParams, response: { 200: trackSubjectsSchema } },

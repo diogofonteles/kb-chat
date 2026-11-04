@@ -62,6 +62,13 @@ export interface SubjectPart {
   readonly byAuthorship: AuthorshipTally;
 }
 
+interface PartInput {
+  readonly query: SubjectQuery;
+  readonly terms: readonly string[];
+  readonly within: readonly string[];
+  readonly wordless: readonly LinkedTrack[];
+}
+
 export interface SubjectPage {
   readonly offset: number;
   readonly limit: number;
@@ -137,51 +144,63 @@ export class SubjectSearch {
     return unspoken.filter((one) => about.has(one.mediaId));
   }
 
-  private part(input: {
-    readonly query: SubjectQuery;
-    readonly terms: readonly string[];
-    readonly within: readonly string[];
-    readonly wordless: readonly LinkedTrack[];
-  }): SubjectPart {
-    const { query, terms, within, wordless } = input;
-    const { media, authors } = this.deps;
+  private part({ query, terms, within, wordless }: PartInput): SubjectPart {
+    const { authors } = this.deps;
     const { topics, filters } = query;
     const mainOf = new Map(topics.map((slug) => [slug, authors.mainOf(slug)]));
-    const tally =
+    const byAuthorship = this.tallied(
+      { query, terms, within, wordless },
+      mainOf,
+    );
+    const rule = authorRuleOf(filters.authorships, mainOf);
+    if (rule === null) return { hits: [], count: 0, byAuthorship };
+    const passages = this.passages({ query, terms, within, wordless }, rule);
+    const chosen = wordless
+      .filter((one) => inGroup(one, rule, authors.mainOf))
+      .slice(0, MAX_MEDIA_HITS - passages.length);
+    return {
+      hits: [...passages, ...this.subjectHits(chosen)],
+      count: Math.min(countUnder(rule, byAuthorship), MEDIA_COUNT_CAP),
+      byAuthorship,
+    };
+  }
+
+  /** Passages plus the tracks with none, per "Autoria" group. */
+  private tallied(
+    { query, terms, within, wordless }: PartInput,
+    mainOf: ReadonlyMap<string, string | null>,
+  ): AuthorshipTally {
+    const { media, authors } = this.deps;
+    const { topics } = query;
+    const spoken =
       within.length === 0
         ? { main: 0, others: 0 }
         : media.tally({ terms, topics, mainOf, within });
     const group = (kind: 'main' | 'others') =>
       wordless.filter((one) => inGroup(one, { kind, mainOf }, authors.mainOf))
         .length;
-    const byAuthorship = {
-      main: tally.main + group('main'),
-      others: tally.others + group('others'),
-    };
-    const rule = authorRuleOf(filters.authorships, mainOf);
-    if (rule === null) return { hits: [], count: 0, byAuthorship };
-    const passages =
-      within.length === 0
-        ? []
-        : media
-            .search({
-              terms,
-              topics,
-              authors: rule,
-              within,
-              limit: MAX_MEDIA_HITS,
-              count: false,
-            })
-            .matches.map((match) => toMediaHit(match, authors));
-    const room = MAX_MEDIA_HITS - passages.length;
-    const chosen = wordless
-      .filter((one) => inGroup(one, rule, authors.mainOf))
-      .slice(0, room);
     return {
-      hits: [...passages, ...this.subjectHits(chosen)],
-      count: Math.min(countUnder(rule, byAuthorship), MEDIA_COUNT_CAP),
-      byAuthorship,
+      main: spoken.main + group('main'),
+      others: spoken.others + group('others'),
     };
+  }
+
+  private passages(
+    { query, terms, within }: PartInput,
+    rule: AuthorRule,
+  ): MediaHit[] {
+    const { media, authors } = this.deps;
+    if (within.length === 0) return [];
+    return media
+      .search({
+        terms,
+        topics: query.topics,
+        authors: rule,
+        within,
+        limit: MAX_MEDIA_HITS,
+        count: false,
+      })
+      .matches.map((match) => toMediaHit(match, authors));
   }
 
   private subjectHits(tracks: readonly LinkedTrack[]): MediaHit[] {

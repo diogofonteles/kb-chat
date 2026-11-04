@@ -69,13 +69,14 @@ describe('authorRuleOf', () => {
 });
 
 describe('hasDocumentOnlyFilters', () => {
-  it('is true for genre, depth, subject or relevance and false for authorship or sub-collection', () => {
+  it('is true for genre, depth or relevance and false for subject, authorship or sub-collection', () => {
     expect(hasDocumentOnlyFilters(EMPTY_FILTERS)).toBe(false);
     expect(
       hasDocumentOnlyFilters({
         ...EMPTY_FILTERS,
         authorships: ['outros-autores'],
         topics: ['udv/palestras'],
+        concepts: ['Cabala'],
       }),
     ).toBe(false);
     expect(
@@ -159,6 +160,8 @@ describe('toMediaHit', () => {
       endMs: 499_000,
       confidence: 'low',
       score: 0.5,
+      match: 'speech',
+      subjects: [],
     });
   });
 

@@ -49,7 +49,7 @@ describe('migration 7: the media library (KBC-051)', () => {
       wordHighlight: true,
       librarySort: 'recently-played',
       libraryView: 'list',
-      libraryFilters: { states: [], authors: [], topic: null },
+      libraryFilters: { states: [], authors: [], topic: null, subject: null },
     });
     expect(store.recentsClearedAt('p')).toBeNull();
     db.close();
@@ -86,7 +86,7 @@ describe('migration 7: the media library (KBC-051)', () => {
       wordHighlight: true,
       librarySort: 'recently-played',
       libraryView: 'list',
-      libraryFilters: { states: [], authors: [], topic: null },
+      libraryFilters: { states: [], authors: [], topic: null, subject: null },
     });
     expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([]);
     db.close();
