@@ -91,9 +91,13 @@ function toTranscription(
   };
 }
 
-/** Ready, with no transcription waiting or running (KBC-040 FR-3). */
+/**
+ * Ready, with no transcription waiting or running (KBC-040 FR-3). A track follows its
+ * recording's transcript (KBC-068), and the API refuses it.
+ */
 const canAskAgain = (record: MediaRecord): boolean =>
   record.status === 'ready' &&
+  !record.track &&
   record.transcription.jobStatus !== 'queued' &&
   record.transcription.jobStatus !== 'leased';
 
