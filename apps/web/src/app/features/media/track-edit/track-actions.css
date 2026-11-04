@@ -20,9 +20,8 @@
 }
 
 .history summary {
-  display: flex;
-  align-items: center;
   min-height: var(--target);
+  padding: var(--space-2) 0;
   cursor: pointer;
 }
 

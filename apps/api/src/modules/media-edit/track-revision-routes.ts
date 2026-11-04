@@ -3,6 +3,7 @@ import {
   mediaIdSchema,
   mediaItemSchema,
   movedBookmarksSchema,
+  movedBookmarksSeenSchema,
   trackBoundsRequestSchema,
   trackEditViewSchema,
   trackHistorySchema,
@@ -57,7 +58,10 @@ const OPTIONS = {
   },
   seen: {
     config: { access: LISTEN },
-    schema: { response: { 204: z.undefined() } },
+    schema: {
+      body: movedBookmarksSeenSchema,
+      response: { 204: z.undefined() },
+    },
   },
 } as const;
 
@@ -123,7 +127,7 @@ function registerMoved(typed: Typed, service: TrackRevisionService): void {
     '/api/v1/media/bookmarks/moved/seen',
     OPTIONS.seen,
     async (request, reply) => {
-      service.acknowledgeMoved(actorOf(request));
+      service.acknowledgeMoved(actorOf(request), request.body.mediaId);
       return reply.code(204).send();
     },
   );

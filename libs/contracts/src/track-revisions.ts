@@ -205,6 +205,11 @@ export const movedBookmarksSchema = z.object({
 });
 export type MovedBookmarks = z.infer<typeof movedBookmarksSchema>;
 
+/** POST /api/v1/media/bookmarks/moved/seen: one track's notice, read by its owner. */
+export const movedBookmarksSeenSchema = z.strictObject({
+  mediaId: mediaIdSchema,
+});
+
 /** A track's file moved in its recording, and how long the new one is. */
 export interface TrackMove {
   readonly oldStartMs: number;

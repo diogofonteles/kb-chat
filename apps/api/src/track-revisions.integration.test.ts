@@ -288,6 +288,7 @@ describe('Bounds of an approved track (FR-2)', () => {
     const seen = await send(media, {
       method: 'POST',
       url: '/api/v1/media/bookmarks/moved/seen',
+      payload: { mediaId: first.id },
     });
     expect(seen.statusCode).toBe(204);
     const gone = await media.owner('GET', '/api/v1/media/bookmarks/moved');
@@ -354,6 +355,37 @@ describe('Bounds of an approved track (FR-2)', () => {
 
     expect(refused.statusCode).toBe(409);
     expect(refused.body).toContain('cut-running');
+  });
+});
+
+describe('The notice of a moved bookmark (BR-4)', () => {
+  it("reading one track's leaves the other track's unread", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first, second } = await published(world);
+    for (const [track, positionMs] of [
+      [first, 170_000],
+      [second, 230_000],
+    ] as const)
+      await send(media, {
+        method: 'POST',
+        url: `${urlOf(track.id)}/bookmarks`,
+        payload: { id: randomUUID(), positionMs },
+      });
+    await moveBounds(media, first.id, { startMs: 60_000, endMs: 120_000 });
+    await moveBounds(media, second.id, { startMs: 240_000, endMs: 300_000 });
+    await finishCuts(media);
+
+    await send(media, {
+      method: 'POST',
+      url: '/api/v1/media/bookmarks/moved/seen',
+      payload: { mediaId: first.id },
+    });
+
+    const notice = await media.owner('GET', '/api/v1/media/bookmarks/moved');
+    expect(
+      notice.json<MovedBookmarks>().moved.map((one) => one.mediaId),
+    ).toEqual([second.id]);
   });
 });
 

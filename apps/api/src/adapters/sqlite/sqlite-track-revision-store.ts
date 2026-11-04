@@ -424,9 +424,11 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
       }));
   }
 
-  acknowledgeMoved(principal: string): void {
+  acknowledgeMoved(principal: string, trackId: string): void {
     this.db
-      .prepare('DELETE FROM media_moved_bookmarks WHERE principal = ?')
-      .run(principal);
+      .prepare(
+        'DELETE FROM media_moved_bookmarks WHERE principal = ? AND media_id = ?',
+      )
+      .run(principal, trackId);
   }
 }

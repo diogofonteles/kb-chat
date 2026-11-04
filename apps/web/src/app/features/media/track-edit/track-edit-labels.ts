@@ -43,6 +43,8 @@ export function changeValuesText(change: TrackChange): string {
 
 /** FR-4: what a deletion touches, in numbers, and the way back. */
 export function impactText({ listeners, bookmarks }: TrackImpact): string {
+  if (listeners === 0 && bookmarks === 0)
+    return $localize`:@@trackEdit.impact.none:Ninguém ouviu esta faixa nem marcou nada nela. Você pode restaurar em até 30 dias.`;
   const people =
     listeners === 1
       ? $localize`:@@trackEdit.impact.listener:1 pessoa ouviu esta faixa`

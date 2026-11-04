@@ -111,5 +111,6 @@ export interface TrackRevisionStorePort {
   /** Forgets the files of tracks archived before `before`; the records stay (BR-7). */
   takeArchivedFiles(before: Date): readonly string[];
   movedBookmarks(principal: string): readonly MovedBookmarksEntry[];
-  acknowledgeMoved(principal: string): void;
+  /** One track's notice: the others are still unread. */
+  acknowledgeMoved(principal: string, trackId: string): void;
 }

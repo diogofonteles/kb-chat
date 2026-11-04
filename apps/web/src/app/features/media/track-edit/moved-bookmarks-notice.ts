@@ -38,7 +38,7 @@ import { movedText } from './track-edit-labels.js';
           <button
             type="button"
             class="secondary"
-            (click)="acknowledge()"
+            (click)="acknowledge(entry.mediaId)"
             i18n="@@trackEdit.moved.ok"
           >
             Entendi
@@ -55,7 +55,7 @@ import { movedText } from './track-edit-labels.js';
       align-items: center;
       justify-content: space-between;
       gap: var(--space-2);
-      margin-bottom: var(--space-3);
+      margin-block: var(--space-3);
       padding: var(--space-3);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
@@ -94,9 +94,9 @@ export class MovedBookmarksNotice {
     return movedText({ count });
   }
 
-  protected acknowledge(): void {
+  protected acknowledge(trackId: string): void {
     this.api
-      .acknowledgeMoved()
+      .acknowledgeMoved(trackId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.read.reload());
   }

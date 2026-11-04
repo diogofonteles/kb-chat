@@ -463,8 +463,8 @@ export class TrackRevisionService {
     };
   }
 
-  acknowledgeMoved(actor: MediaActor): void {
-    this.deps.revisions.acknowledgeMoved(actor.principal);
+  acknowledgeMoved(actor: MediaActor, trackId: string): void {
+    this.deps.revisions.acknowledgeMoved(actor.principal, trackId);
   }
 
   private speakerOf(

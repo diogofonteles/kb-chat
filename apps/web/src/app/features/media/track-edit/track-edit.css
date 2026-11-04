@@ -1,4 +1,9 @@
 /* Shared by the pieces that change a track after its approval (KBC-073). */
+a:not(.primary, .secondary, .danger) {
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
 .primary,
 .secondary,
 .danger {

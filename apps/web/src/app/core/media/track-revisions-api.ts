@@ -98,7 +98,7 @@ export class TrackRevisionsApi {
       .pipe(map((answer) => trackSuggestionSchema.parse(answer)));
   }
 
-  acknowledgeMoved(): Observable<unknown> {
-    return this.http.post(`${MOVED_BOOKMARKS_URL}/seen`, null);
+  acknowledgeMoved(trackId: string): Observable<unknown> {
+    return this.http.post(`${MOVED_BOOKMARKS_URL}/seen`, { mediaId: trackId });
   }
 }

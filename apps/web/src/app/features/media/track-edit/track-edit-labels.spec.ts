@@ -21,6 +21,12 @@ describe('Track edit labels (KBC-073)', () => {
     );
   });
 
+  it('FR-4: with nothing touched it does not say zero', () => {
+    expect(impactText({ listeners: 0, bookmarks: 0 })).toBe(
+      'Ninguém ouviu esta faixa nem marcou nada nela. Você pode restaurar em até 30 dias.',
+    );
+  });
+
   it('BR-4: the notice counts the bookmarks', () => {
     expect(movedText({ count: 1 })).toBe(
       '1 marcador foi movido para a gravação completa porque a faixa mudou',
