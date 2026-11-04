@@ -488,24 +488,13 @@ async function registerWorker(
     publisher: TrackPublisher;
   },
 ) {
-  const { store, files, transcripts, trackItems: tracks } = wiring.media;
   const { publisher } = wiring;
   const voicePrints = voicePrintService(wiring);
   await app.register(
     workerRoutes({
-      service: new WorkerService({
-        store,
-        files,
-        tracks,
-        voiceJobOf: (job) => voicePrints.jobOf(job),
-      }),
+      service: workerService(wiring.media, voicePrints),
       transcribers: wiring.transcribers,
-      transcription: new TranscriptionService({
-        store,
-        transcripts,
-        files,
-        onTranscript: (mediaId) => publisher.afterTranscript(mediaId),
-      }),
+      transcription: transcriptionService(wiring.media, publisher),
       cuts: publisher,
       silences: wiring.silences,
       waveforms: wiring.waveforms,
@@ -513,6 +502,32 @@ async function registerWorker(
       voicePrints,
     }),
   );
+}
+
+/** The queue as workers see it, with what cut and voice-profile jobs carry. */
+function workerService(
+  { store, files, trackItems: tracks }: MediaDeps,
+  voicePrints: VoicePrintService,
+): WorkerService {
+  return new WorkerService({
+    store,
+    files,
+    tracks,
+    voiceJobOf: (job) => voicePrints.jobOf(job),
+  });
+}
+
+/** Transcripts landing, with the tracks that follow them (KBC-068 BR-4). */
+function transcriptionService(
+  { store, transcripts, files }: MediaDeps,
+  publisher: TrackPublisher,
+): TranscriptionService {
+  return new TranscriptionService({
+    store,
+    transcripts,
+    files,
+    onTranscript: (mediaId) => publisher.afterTranscript(mediaId),
+  });
 }
 
 /** Voice prints and the transcriber (KBC-071, ADR 0032). */
@@ -710,14 +725,19 @@ async function registerTranscribers(
   );
 }
 
+/** Paired transcribers and the VM's token (ADR 0023). */
+function transcriberService(media: MediaDeps): TranscriberService {
+  return new TranscriberService({
+    store: media.transcribers,
+    tokenKey: media.tokenKey,
+    vmToken: media.workerToken,
+  });
+}
+
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
-  const { workerToken, createPerMinute } = wiring.media;
-  const transcribers = new TranscriberService({
-    store: wiring.media.transcribers,
-    tokenKey: wiring.media.tokenKey,
-    vmToken: workerToken,
-  });
+  const { createPerMinute } = wiring.media;
+  const transcribers = transcriberService(wiring.media);
   const media = mediaService({ ...wiring, transcribers });
   const publisher = trackPublisher(wiring);
   const editor = mediaEditor({ ...wiring, publisher });
