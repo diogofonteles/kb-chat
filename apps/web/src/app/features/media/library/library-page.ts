@@ -412,9 +412,12 @@ export class LibraryPage {
       .subscribe();
   }
 
-  /** The page scrolls in its own row: what takes the focus comes fully into view. */
+  /**
+   * The page scrolls in its own row: what takes the focus comes fully into view. Not what is
+   * being pressed: the page would move before the release, and the click would be lost.
+   */
   protected keepInView(event: FocusEvent): void {
-    if (event.target instanceof HTMLElement)
+    if (event.target instanceof HTMLElement && !event.target.matches(':active'))
       event.target.scrollIntoView?.({ block: 'nearest' });
   }
 

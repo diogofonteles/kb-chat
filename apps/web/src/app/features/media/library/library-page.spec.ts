@@ -378,6 +378,24 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('brings what takes the focus fully into view, but never moves the page under a press (WCAG 2.4.11)', async () => {
+    const { open } = await renderLibrary();
+    await open(aPage([anItem(1)]));
+    const link = screen.getByRole('link', { name: 'Palestra 1' });
+    const scroll = vi.fn();
+    link.scrollIntoView = scroll;
+    const pressed = vi.spyOn(link, 'matches');
+
+    pressed.mockReturnValue(true);
+    fireEvent.focusIn(link);
+    expect(pressed).toHaveBeenCalledWith(':active');
+    expect(scroll).not.toHaveBeenCalled();
+
+    pressed.mockReturnValue(false);
+    fireEvent.focusIn(link);
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
   it('marks the selected media as heard and says so (AC-7)', async () => {
     const { open, http, settle, tick } = await renderLibrary();
     await open(aPage([anItem(1, { positionMs: 5_000 }), anItem(2), anItem(3)]));
