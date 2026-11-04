@@ -124,6 +124,7 @@ export const STAGE_STOPS = [
   'not-connected',
   'provider-unavailable',
   'estimate-rose',
+  'conflict',
 ] as const;
 export const stageStopSchema = z.enum(STAGE_STOPS);
 export type StageStop = z.infer<typeof stageStopSchema>;

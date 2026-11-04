@@ -1,8 +1,14 @@
-import type { PreparationPlan, ProposalRun } from '@kb-chat/contracts';
+import type {
+  ApiErrorCode,
+  PreparationPlan,
+  ProposalRun,
+} from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
+import { AppError } from '../../app-error.js';
 import {
   nextActionOf,
   stagesOf,
+  stopOf,
   type StageFacts,
 } from './preparation-stages.js';
 
@@ -161,6 +167,46 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
       canRetry: true,
       estimateUsd: 0.05,
     });
+  });
+
+  it('reads a final failure again: what stopped it may have gone (BUG-7)', () => {
+    const stopped = { claimed: true, stop: 'monthly-cap' } as const;
+    const withPaid = (allowed: boolean) =>
+      stateOf(
+        stagesOf(
+          facts({ ...stopped, paidNow: { estimateUsd: 0.02, allowed } }),
+        ),
+        'tracks',
+      );
+    expect(withPaid(true)).toMatchObject({ canRetry: true, estimateUsd: 0.02 });
+    expect(withPaid(false)).toMatchObject({ canRetry: false });
+    expect(stateOf(stagesOf(facts(stopped)), 'tracks')).toMatchObject({
+      canRetry: false,
+    });
+  });
+
+  it('never offers a paid retry past a final failure to who may not propose', () => {
+    const stages = stagesOf(
+      facts({
+        claimed: true,
+        stop: 'no-permission',
+        canPropose: false,
+        paidNow: { estimateUsd: 0.02, allowed: true },
+      }),
+    );
+    expect(stateOf(stages, 'tracks')).toMatchObject({ canRetry: false });
+  });
+
+  it('says why a paid stage stopped, by what really stood in the way', () => {
+    const stop = (code: ApiErrorCode, details?: unknown) =>
+      stopOf(new AppError(code, 'x', { details }));
+    expect(stop('LLM_NOT_CONFIGURED')).toBe('not-connected');
+    expect(stop('MEDIA_SPEND_CAP', { cap: 'run-cap' })).toBe('run-cap');
+    expect(stop('MEDIA_NOT_FOUND')).toBe('no-permission');
+    expect(stop('MEDIA_CONFLICT')).toBe('conflict');
+    expect(stop('MEDIA_NOT_READY')).toBe('conflict');
+    expect(stop('PROVIDER_UNAVAILABLE')).toBe('provider-unavailable');
+    expect(stopOf(new Error('boom'))).toBe('provider-unavailable');
   });
 
   it('never offers a paid retry to who may not propose', () => {

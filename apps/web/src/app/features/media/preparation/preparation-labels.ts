@@ -60,6 +60,8 @@ const FAILURES: Record<StageFailure, () => string> = {
     $localize`:@@prep.failure.unavailable:Não consegui falar com o provedor de IA. Nada foi cobrado.`,
   'estimate-rose': () =>
     $localize`:@@prep.failure.estimateRose:A estimativa subiu depois da transcrição, então a análise não rodou. Nada foi cobrado.`,
+  conflict: () =>
+    $localize`:@@prep.failure.conflict:A gravação mudou enquanto a análise começava, então ela não rodou. Nada foi cobrado.`,
 };
 
 export const failureText = (failure: StageFailure): string =>

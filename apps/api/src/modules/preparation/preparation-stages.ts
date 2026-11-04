@@ -1,4 +1,6 @@
+import { spendCapSchema } from '@kb-chat/contracts';
 import type {
+  ApiErrorCode,
   DiarizationStatus,
   JobCuts,
   MediaItem,
@@ -12,6 +14,8 @@ import type {
   StageState,
   StageStop,
 } from '@kb-chat/contracts';
+import { z } from 'zod';
+import { AppError } from '../../app-error.js';
 
 /** All a plan's stages are read from: the records of the work, never a copy of them. */
 export interface StageFacts {
@@ -140,7 +144,28 @@ function speakersStage(facts: StageFacts, before: Upstream): PreparationStage {
   return stageOf('speakers', 'queued', { ahead: facts.ahead.speakers });
 }
 
-/** A failure a click cannot get past: only money or a permission changes these. */
+const spendCapDetails = z.object({ cap: spendCapSchema });
+
+/** Who asked lost the recording; the rest is the recording's own state, not the provider. */
+const STOP_BY_CODE: Partial<Record<ApiErrorCode, StageStop>> = {
+  LLM_NOT_CONFIGURED: 'not-connected',
+  MEDIA_NOT_FOUND: 'no-permission',
+  MEDIA_CONFLICT: 'conflict',
+  MEDIA_NOT_READY: 'conflict',
+};
+
+/** Why the paid stage did not start, in the words the screen has for it. */
+export function stopOf(error: unknown): StageStop {
+  if (!(error instanceof AppError)) return 'provider-unavailable';
+  if (error.code === 'MEDIA_SPEND_CAP')
+    return spendCapDetails.parse(error.details).cap;
+  return STOP_BY_CODE[error.code] ?? 'provider-unavailable';
+}
+
+/**
+ * A failure a click cannot get past while it lasts: money, a permission or the AI's connection.
+ * These are read again (`paidNow`), and the click still meets the caps when it starts.
+ */
 const FINAL_FAILURES: ReadonlySet<StageFailure> = new Set([
   'run-cap',
   'monthly-cap',
@@ -166,7 +191,9 @@ function failedTracks(
   return stageOf('tracks', 'failed', {
     ...leftByFailedRun(facts),
     failure,
-    canRetry: facts.canPropose && !FINAL_FAILURES.has(failure),
+    canRetry:
+      facts.canPropose &&
+      (!FINAL_FAILURES.has(failure) || paidNow?.allowed === true),
     estimateUsd: paidNow?.estimateUsd ?? stopUsd ?? plan.acceptedUsd,
   });
 }

@@ -110,7 +110,7 @@ async function connected() {
 }
 
 interface Upload {
-  readonly call?: Call;
+  readonly headers?: Record<string, string>;
   readonly durationMs?: number;
 }
 
@@ -118,8 +118,9 @@ interface Upload {
 async function uploaded(
   media: Media,
   plan: PreparationPlanRequest,
-  { call = media.owner, durationMs }: Upload = {},
+  { headers, durationMs }: Upload = {},
 ): Promise<MediaItem> {
+  const call = headers ? caller(media.started.app, headers) : media.owner;
   const created = await call(
     'POST',
     '/api/v1/topics/hermetismo/media',
@@ -127,9 +128,9 @@ async function uploaded(
   );
   expect(created.statusCode, created.body).toBe(201);
   const item = created.json<MediaItem>();
-  expect((await upload(media, { id: item.id, body: AUDIO })).statusCode).toBe(
-    200,
-  );
+  expect(
+    (await upload(media, { id: item.id, body: AUDIO, headers })).statusCode,
+  ).toBe(200);
   const converted = await convertWithFlac(
     media,
     await leaseJob(media),
@@ -742,6 +743,75 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
     await separate(media, token);
     await grant(['media', 'media-upload', 'media-edit']);
     const stopped = await settled(media, id);
+    expect(stage(stopped, 'tracks')?.failure).toBe('no-permission');
+    expect(media.started.fake.chatBodies).toHaveLength(0);
+  });
+
+  it('offers the paid stage back once what stopped it is gone (BUG-7)', async () => {
+    const { media, token } = await connected();
+    const invited = await media.owner('POST', '/api/v1/people', {
+      email: 'editor@example.com',
+      sendEmail: false,
+    });
+    const grant = (features: string[]) =>
+      media.owner('PATCH', `/api/v1/people/${invited.json().id}`, {
+        topics: ['hermetismo'],
+        features,
+      });
+    const every = ['media', 'media-upload', 'media-edit', 'media-edit-ai'];
+    await grant(every);
+    const headers = await signIn(media.started, 'editor@example.com');
+    const call = caller(media.started.app, headers);
+    const item = await uploaded(media, AI_PLAN, { headers });
+    await transcribe(media, token);
+    await read(media, item.id);
+    await separate(media, token);
+    await grant(['media', 'media-upload', 'media-edit']);
+    const lost = await call('GET', preparation(item.id));
+    expect(stage(lost.json(), 'tracks')).toMatchObject({
+      failure: 'no-permission',
+      canRetry: false,
+    });
+    expect(media.started.fake.chatBodies).toHaveLength(0);
+
+    await grant(every);
+    const back = await call('GET', preparation(item.id));
+    expect(stage(back.json(), 'tracks')).toMatchObject({
+      failure: 'no-permission',
+      canRetry: true,
+    });
+    expect(media.started.fake.chatBodies).toHaveLength(0);
+
+    media.started.fake.scripted.push(oneTrack('Com permissão'));
+    const pressed = await call(
+      'POST',
+      `${preparation(item.id)}/steps/tracks/retry`,
+      {},
+    );
+    expect(pressed.statusCode, pressed.body).toBe(200);
+    const done = await settled(media, item.id);
+    expect(done.tracks[0]?.title).toBe('Com permissão');
+  });
+
+  it('blames the lost collection, not the provider (BUG-5)', async () => {
+    const { media, token } = await connected();
+    const invited = await media.owner('POST', '/api/v1/people', {
+      email: 'editor@example.com',
+      sendEmail: false,
+    });
+    const grant = (topics: string[]) =>
+      media.owner('PATCH', `/api/v1/people/${invited.json().id}`, {
+        topics,
+        features: ['media', 'media-upload', 'media-edit', 'media-edit-ai'],
+      });
+    await grant(['hermetismo']);
+    const headers = await signIn(media.started, 'editor@example.com');
+    const item = await uploaded(media, AI_PLAN, { headers });
+    await transcribe(media, token);
+    await read(media, item.id);
+    await separate(media, token);
+    await grant([]);
+    const stopped = await settled(media, item.id);
     expect(stage(stopped, 'tracks')?.failure).toBe('no-permission');
     expect(media.started.fake.chatBodies).toHaveLength(0);
   });

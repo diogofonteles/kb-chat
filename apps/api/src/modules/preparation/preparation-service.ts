@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { spendCapSchema } from '@kb-chat/contracts';
 import type {
   DiarizationStatus,
   DraftTrack,
@@ -24,7 +23,6 @@ import type {
   TranscriptSpeakers,
   VoiceSuggestion,
 } from '@kb-chat/contracts';
-import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { MediaEditStorePort } from '../../ports/media-edit-store.js';
 import type {
@@ -43,6 +41,7 @@ import { isGuided, planRefusals, type PlanContext } from './plan-rules.js';
 import {
   nextActionOf,
   stagesOf,
+  stopOf,
   type PaidStageNow,
   type StageFacts,
 } from './preparation-stages.js';
@@ -108,20 +107,6 @@ const refuse = (options: PlanRefusals['options']) =>
   new AppError('PLAN_REFUSED', 'These options cannot be chosen', {
     details: { options },
   });
-
-const spendCapDetails = z.object({ cap: spendCapSchema });
-
-const capOf = (error: AppError): StageStop => {
-  const { cap } = spendCapDetails.parse(error.details);
-  return cap;
-};
-
-const stopOf = (error: unknown): StageStop => {
-  if (!(error instanceof AppError)) return 'provider-unavailable';
-  if (error.code === 'LLM_NOT_CONFIGURED') return 'not-connected';
-  if (error.code === 'MEDIA_SPEND_CAP') return capOf(error);
-  return 'provider-unavailable';
-};
 
 const minutesOf = (rate: number | null, fallback: number, ms?: number) =>
   ms === undefined ? null : Math.ceil(((rate ?? fallback) * ms) / 60_000);
