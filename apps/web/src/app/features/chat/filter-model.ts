@@ -73,6 +73,12 @@ interface GroupSource {
   readonly topicNames: ReadonlyMap<string, string>;
 }
 
+interface CountedValue {
+  readonly value: FacetValue;
+  readonly count: number;
+  readonly tracks?: number;
+}
+
 function toFacetGroup(
   key: FacetKey,
   { facets, filters, topicNames }: GroupSource,
@@ -89,13 +95,9 @@ function toFacetGroup(
     label: facetValueLabel(key, value, { topicNames }),
     selected: selected.includes(value),
   });
-  const counted = (
-    facets[key] as readonly {
-      value: FacetValue;
-      count: number;
-      tracks?: number;
-    }[]
-  ).map(({ value, count, tracks }) => option(value, count, tracks));
+  const counted = (facets[key] as readonly CountedValue[]).map(
+    ({ value, count, tracks }) => option(value, count, tracks),
+  );
   const missing = selected
     .filter((value) => !counted.some((one) => one.value === value))
     .map((value) => option(value, 0));

@@ -330,13 +330,14 @@ describe('GET …/concepts/{name}/media (FR-3)', () => {
     expect(rest.json<SubjectTracksPage>().items).toHaveLength(1);
   });
 
-  it('answers 404 for a subject the collection does not have', async () => {
+  it('reads an unknown subject as one with no track, telling nothing', async () => {
     const { reader } = await worldWithSubjects();
     const page = await reader(
       'GET',
       `/api/v1/topics/${TOPIC}/concepts/Inexistente/media`,
     );
-    expect(page.statusCode).toBe(404);
+    expect(page.statusCode).toBe(200);
+    expect(page.json<SubjectTracksPage>().total).toBe(0);
   });
 
   it('marks a concept article with its concept', async () => {

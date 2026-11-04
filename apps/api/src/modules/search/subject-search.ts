@@ -8,7 +8,6 @@ import {
   type SearchFilters,
   type SubjectTracksPage,
 } from '@kb-chat/contracts';
-import { AppError } from '../../app-error.js';
 import type {
   AuthorRule,
   AuthorshipTally,
@@ -214,7 +213,11 @@ export class SubjectSearch {
     return [...new Set([...saying, ...links.tracksAbout(required)])];
   }
 
-  /** FR-3: the tracks linked to a subject, most recent first. */
+  /**
+   * FR-3: the tracks linked to a subject, most recent first. A subject that does not exist
+   * reads as one with no track: a 404 would tell who sees only a sub-collection which subjects
+   * its parent has (BR-3).
+   */
   tracksOf(
     target: { readonly topic: string; readonly topics: readonly string[] },
     name: string,
@@ -222,8 +225,6 @@ export class SubjectSearch {
   ): SubjectTracksPage {
     const { links, lookup } = this.deps;
     const keys = lookup.keysNamed(target.topic, [name]);
-    if (keys.length === 0)
-      throw new AppError('NOT_FOUND', 'Unknown subject in this collection');
     const ids = lookup.tracksLinkedTo(keys);
     const linked = links.linkedTracks({ topics: target.topics, ids });
     const end = Math.min(offset + limit, linked.length);

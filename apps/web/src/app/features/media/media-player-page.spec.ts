@@ -21,6 +21,7 @@ import {
   aMediaItem,
   aTranscription,
   chatStoreOn,
+  viewStoreStub,
   sessionAs,
 } from '../../testing/media-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
@@ -59,6 +60,7 @@ async function openPage(
   TestBed.configureTestingModule({
     providers: [
       chatStoreOn(),
+      viewStoreStub,
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),

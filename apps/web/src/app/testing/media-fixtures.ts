@@ -53,25 +53,19 @@ export const aTranscription = (
 /** The chat page's store as the media pages read it: the selected collection. */
 export const chatStoreOn = (slug = 'hermetismo', title = 'Hermetismo') => {
   const topicSlug = signal(slug);
-  return (
-    {
-      provide: ViewStore,
-      useValue: { select: () => undefined },
+  return {
+    provide: ChatStore,
+    useValue: {
+      topicSlug,
+      selectTopic: (chosen: string) => topicSlug.set(chosen),
+      topicsKnown: signal(true),
+      topic: signal(aTopic({ slug, title, documentCount: 10 })),
+      topicList: signal([
+        aTopic({ slug, title, documentCount: 10 }),
+        aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 4 }),
+      ]),
     },
-    {
-      provide: ChatStore,
-      useValue: {
-        topicSlug,
-        selectTopic: (chosen: string) => topicSlug.set(chosen),
-        topicsKnown: signal(true),
-        topic: signal(aTopic({ slug, title, documentCount: 10 })),
-        topicList: signal([
-          aTopic({ slug, title, documentCount: 10 }),
-          aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 4 }),
-        ]),
-      },
-    }
-  );
+  };
 };
 
 /** Who is signed in, for the media pages: their features and whether they are a master. */
@@ -83,3 +77,9 @@ export const sessionAs = (who: { features: Feature[]; master?: boolean }) => ({
     me: signal({ media: true }),
   },
 });
+
+/** The chat page's view as the media pages move it. */
+export const viewStoreStub = {
+  provide: ViewStore,
+  useValue: { select: () => undefined },
+};

@@ -9,7 +9,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { HttpErrorResponse, httpResource } from '@angular/common/http';
+import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import {
@@ -137,14 +137,9 @@ export class SeeAlsoSection {
   protected readonly tracksTotal = computed(() =>
     this.firstTracks.hasValue() ? this.firstTracks.value().total : 0,
   );
-  /** A 404 is a concept out of the collection's tree: nothing to tell. */
-  protected readonly tracksFailed = computed(() => {
-    const failure = this.firstTracks.error();
-    return (
-      failure !== undefined &&
-      !(failure instanceof HttpErrorResponse && failure.status === 404)
-    );
-  });
+  protected readonly tracksFailed = computed(
+    () => this.firstTracks.error() !== undefined,
+  );
   protected readonly durationOf = (track: SubjectTrack): string =>
     track.durationMs === null ? '' : formatClock(track.durationMs);
 

@@ -383,31 +383,36 @@ async function registerCollections(
 }
 
 /** Health, topics (with the Settings default collection) and the free search. */
-async function registerSearch(
-  app: FastifyInstance,
-  deps: FullDeps,
-): Promise<void> {
-  const { config, index, catalog, authors } = deps;
-  await app.register(healthRoutes({ catalog, index }));
-  await registerCollections(app, deps);
-  // Spoken passages beside the texts (KBC-039, ADR 0024), when the media library is on.
+/** Spoken passages beside the texts (KBC-039), tracks by subject (KBC-070). */
+function combinedSearch(deps: FullDeps): SearchWithMedia {
+  const { catalog, authors, media } = deps;
   const authorView = {
     mainOf: (topic: string) => authors.mainOf(topic)?.slug ?? null,
     authorOf: (topic: string, slug: string) => authors.authorOf(topic, slug),
   };
-  const combined = new SearchWithMedia({
+  return new SearchWithMedia({
     documents: deps.agent.search,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
-    media: deps.media?.search,
+    media: media?.search,
     subjects:
-      deps.media &&
+      media &&
       new SubjectSearch({
-        links: deps.media.trackLinks,
-        lookup: createSubjectDirectory({ ...deps, media: deps.media }),
+        links: media.trackLinks,
+        lookup: createSubjectDirectory({ ...deps, media }),
         authors: authorView,
       }),
     authors: authorView,
   });
+}
+
+async function registerSearch(
+  app: FastifyInstance,
+  deps: FullDeps,
+): Promise<void> {
+  const { config, index, catalog } = deps;
+  await app.register(healthRoutes({ catalog, index }));
+  await registerCollections(app, deps);
+  const combined = combinedSearch(deps);
   await app.register(
     searchRoutes({
       service: deps.agent.search,

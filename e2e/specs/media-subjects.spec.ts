@@ -93,7 +93,7 @@ async function reader(
   const email = uniqueEmail('assuntos');
   await invite(owner, email, { topics: [TOPIC], features: [...features] });
   await owner.dispose();
-  return pageAs(browser, email, viewport ? { viewport } : {});
+  return pageAs(browser, email, viewport);
 }
 
 const seeded = async () => {

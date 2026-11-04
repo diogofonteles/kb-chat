@@ -127,13 +127,4 @@ describe('SeeAlsoSection, tracks of a concept (KBC-070 AC-5)', () => {
       'Não consegui carregar as faixas.',
     );
   });
-
-  it('hides a concept out of the tree (404)', async () => {
-    const view = await renderSection();
-    view.http
-      .expectOne(URL)
-      .flush('no', { status: 404, statusText: 'Not found' });
-    await view.fixture.whenStable();
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
 });
