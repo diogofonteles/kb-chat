@@ -131,7 +131,7 @@ describe('searchResponseSchema (KBC-039)', () => {
       media: [hit],
       kinds: { text: 0, audio: 1 },
     });
-    expect(parsed.media).toEqual([hit]);
+    expect(parsed.media).toEqual([{ ...hit, match: 'speech', subjects: [] }]);
     expect(
       searchResponseSchema.safeParse({ ...base, media: [{ ...hit, score: 2 }] })
         .success,

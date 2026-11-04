@@ -11,6 +11,7 @@ describe('contract schemas', () => {
       title: 'A',
       summary: null,
       criterion: null,
+      concept: null,
       origin: null,
       obsidianUrl: 'obsidian://open?vault=v&file=t%2Fa',
       seeAlso: {
