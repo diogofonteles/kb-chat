@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { MEDIA_JOB_KINDS } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyMigrations } from './media-database.js';
 import { MEDIA_MIGRATIONS } from './media-migrations.js';
@@ -44,6 +45,35 @@ describe('media migration 15 (KBC-071)', () => {
     ).toEqual([
       { id: 'j1', kind: 'diarize', voices: 2, voice_profile_id: null },
     ]);
+  });
+
+  it('leaves `jobs` with every kind and the profile column, whatever rebuilt it last', () => {
+    open();
+    applyMigrations(db, MEDIA_MIGRATIONS);
+    anItemWithAJob();
+    aConsent('c1');
+    aProfile('p1', 'c1');
+    const insert = db.prepare(
+      `INSERT INTO jobs (id, media_id, kind, status, voice_profile_id, created_at, updated_at)
+       VALUES (?, 'm1', ?, 'queued', ?, '${AT}', '${AT}')`,
+    );
+    // `waveform` is KBC-066's: its migration 14 rebuilds this table before this one does.
+    for (const kind of [...MEDIA_JOB_KINDS, 'waveform']) {
+      const profile = kind === 'voice-profile' ? 'p1' : null;
+      expect(() => insert.run(`job-${kind}`, kind, profile)).not.toThrow();
+    }
+    const columns = db
+      .prepare(`SELECT name FROM pragma_table_info('jobs')`)
+      .all()
+      .map((row) => String(row['name']));
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'voices',
+        'detector_version',
+        'voice_profile_id',
+      ]),
+    );
+    expect(() => insert.run('other', 'unknown', null)).toThrow();
   });
 
   it('has no table or column that could hold a print', () => {
