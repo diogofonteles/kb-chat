@@ -353,6 +353,7 @@ function registerMasterRoutes(
     const actor = actorOf(request);
     const { id } = request.params;
     if (service.isTrack(actor, id)) {
+      assertFeature(request, 'media');
       assertFeature(request, 'media-edit');
       await tracks.archive(actor, id);
     } else

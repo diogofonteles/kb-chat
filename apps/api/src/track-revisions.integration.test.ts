@@ -1216,6 +1216,43 @@ describe('"Sugerir de novo com IA" (FR-7)', () => {
   });
 });
 
+describe('Deleting a track needs `media` too (ADR 0008)', () => {
+  const editor = (features: string[]) => ({
+    email: 'editora@example.com',
+    topics: ['hermetismo'],
+    features,
+  });
+
+  it('refuses who has `media-edit` and `media-tracks` without `media`', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    const { call } = await member(
+      media,
+      editor(['media-tracks', 'media-edit']),
+    );
+
+    const refused = await call('DELETE', urlOf(first.id));
+
+    expect(refused.statusCode, refused.body).toBe(403);
+    expect((await viewOf(media, first.id)).ordinal).toBe(1);
+  });
+
+  it('lets who has `media`, `media-edit` and `media-tracks` delete it', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    const { call } = await member(
+      media,
+      editor(['media', 'media-tracks', 'media-edit']),
+    );
+
+    const deleted = await call('DELETE', urlOf(first.id));
+
+    expect(deleted.statusCode, deleted.body).toBe(204);
+  });
+});
+
 describe('The janitor (BR-3, BR-7)', () => {
   it('takes replaced cuts after a day and deleted tracks after 30 days', async () => {
     const world = await startWorld();
