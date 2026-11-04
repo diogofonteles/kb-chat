@@ -169,6 +169,16 @@ describe('ListeningPreferences (KBC-041 FR-1, BR-1)', () => {
     });
   });
 
+  it('saves "Destacar palavra a palavra" to the account, on until turned off (KBC-045)', () => {
+    const { preferences, http } = setup();
+    expect(preferences.value().wordHighlight).toBe(true);
+    preferences.setWordHighlight(false);
+    expect(preferences.value().wordHighlight).toBe(false);
+    expect(
+      http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
+    ).toMatchObject({ wordHighlight: false });
+  });
+
   it('keeps the skips the person chose and gives them in ms (KBC-043)', () => {
     const { preferences, http } = setup();
     expect(preferences.skipBackMs()).toBe(15_000);

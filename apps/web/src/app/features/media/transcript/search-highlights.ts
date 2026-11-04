@@ -27,7 +27,7 @@ interface HighlightRegistry {
   delete(name: string): boolean;
 }
 
-type HighlightConstructor = new (...ranges: Range[]) => { priority: number };
+type HighlightConstructor = new (...ranges: Range[]) => { priority?: number };
 
 /** What the person looks for stays readable over the word that goes by (0 is the default). */
 const PRIORITY: Partial<Record<SearchHighlightName, number>> = {
@@ -52,7 +52,8 @@ export const SEARCH_HIGHLIGHTS = new InjectionToken<SearchHighlights>(
       return {
         show: (name, ranges) => {
           const highlight = new Highlight(...ranges);
-          highlight.priority = PRIORITY[name] ?? 0;
+          const priority = PRIORITY[name];
+          if (priority !== undefined) highlight.priority = priority;
           registry.set(name, highlight);
         },
         clear: (name) => registry.delete(name),

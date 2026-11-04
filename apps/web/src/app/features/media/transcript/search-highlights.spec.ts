@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 
 class FakeHighlight {
+  priority?: number;
   readonly ranges: Range[];
   constructor(...ranges: Range[]) {
     this.ranges = ranges;
@@ -31,6 +32,25 @@ describe('SEARCH_HIGHLIGHTS (KBC-038 FR-8, NFR-2)', () => {
     expect(registry.get('transcript-match')).toEqual(new FakeHighlight(range));
     highlights.clear('transcript-match');
     expect(registry.has('transcript-match')).toBe(false);
+  });
+
+  it('paints the spoken word under the search (KBC-045)', () => {
+    const registry = new Map<string, FakeHighlight>();
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: DOCUMENT,
+          useValue: {
+            defaultView: {
+              CSS: { highlights: registry },
+              Highlight: FakeHighlight,
+            },
+          },
+        },
+      ],
+    });
+    TestBed.inject(SEARCH_HIGHLIGHTS).show('transcript-word', []);
+    expect(registry.get('transcript-word')?.priority).toBe(-1);
   });
 
   it('paints nothing where the browser has no highlight API', () => {
