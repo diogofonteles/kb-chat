@@ -245,12 +245,23 @@ export class SearchWithMedia {
   }
 
   /** Collection-wide counts, each subject with its tracks for who sees them (FR-2). */
-  topicFacets(topic: string, viewer: SearchViewer): TopicFacets {
+  topicFacets(
+    topic: string,
+    { viewer, report = () => undefined }: SearchContext,
+  ): TopicFacets {
     const facets = this.deps.documents.topicFacets(topic);
     const subjects = this.subjectsFor(viewer);
     if (!subjects) return facets;
-    const counted = subjects.countsIn(topic, this.visibleScope(topic, viewer));
-    return { ...facets, concepts: withTrackCounts(facets.concepts, counted) };
+    const startedAt = performance.now();
+    try {
+      const scope = this.visibleScope(topic, viewer);
+      const counted = subjects.countsIn(topic, scope);
+      return { ...facets, concepts: withTrackCounts(facets.concepts, counted) };
+    } catch (err) {
+      const mediaMs = Math.round(performance.now() - startedAt);
+      report({ mediaMs, mediaHits: 0, mediaError: err });
+      return facets;
+    }
   }
 
   /** FR-3: the tracks linked to a subject, in the collections the person sees. */

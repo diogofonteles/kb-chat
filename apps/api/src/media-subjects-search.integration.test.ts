@@ -289,6 +289,18 @@ describe('a collection with no transcript (AC-1, BR-2)', () => {
   });
 });
 
+describe('a broken media index', () => {
+  it('leaves the collection facets with the documents', async () => {
+    const { media, reader } = await worldWithSubjects();
+    sql(media, 'DROP TABLE media_subject_links');
+    const facets = await reader('GET', `/api/v1/topics/${TOPIC}/facets`);
+    expect(facets.statusCode, facets.body).toBe(200);
+    const concepts = facets.json<TopicFacets>().concepts;
+    expect(concepts.length).toBeGreaterThan(0);
+    expect(concepts.every((one) => one.tracks === undefined)).toBe(true);
+  });
+});
+
 describe('a concept the catalog lost (ADR 0029 §6)', () => {
   const CONCEPT_FILE = (vault: string) =>
     join(vault, TOPIC, 'wiki', 'concepts', 'Cabala.md');

@@ -128,9 +128,9 @@ export const searchRoutes =
         },
       },
       async (request) =>
-        options.combined.topicFacets(
-          request.params.topic,
-          searchViewerOf(request),
-        ),
+        options.combined.topicFacets(request.params.topic, {
+          viewer: searchViewerOf(request),
+          report: (entry) => logMedia(request, entry),
+        }),
     );
   };
