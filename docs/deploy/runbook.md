@@ -287,7 +287,7 @@ sudo docker compose --env-file .env --env-file release.env ps media-worker   # h
 - Com `KB_CHAT_MEDIA=on`, a API não sobe se `/data/media` não puder ser gravada, se faltar o token ou se uma migração falhar; o log diz o motivo (`docker compose logs api`).
 - O processador roda com 1 CPU e 2 GB: a conversão de 1 h de áudio leva cerca de 1 min, sem derrubar a busca.
 - Quem pode enviar: masters sempre; outras pessoas, com a permissão **Enviar áudios** em Pessoas e permissões.
-- O backup diário leva uma cópia consistente de `media.db` (nunca os áudios, que vêm de quem enviou).
+- O backup diário leva uma cópia consistente de `media.db` (nunca os áudios, que vêm de quem enviou). A pasta `media/voice-prints/` fica **fora** do backup de propósito (ADR 0032): impressão de voz revogada não pode sobreviver em cópia. Perdido o disco, cada perfil pede "Calcular de novo".
 - Para desligar: `KB_CHAT_MEDIA=off` e tire `media` de `COMPOSE_PROFILES`; os arquivos ficam em `/srv/kb-chat/media`.
 
 ## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)

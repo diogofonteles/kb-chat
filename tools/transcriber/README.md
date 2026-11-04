@@ -48,6 +48,18 @@ announced (or 10), and are dropped when the job ends; nothing is written to disk
 the `Diarizer` protocol in [`src/transcriber/diarize.py`](src/transcriber/diarize.py), so
 pyannote `community-1` can come in as another engine (it needs a Hugging Face token).
 
+## Voice profiles (KBC-071)
+
+**Biometric data: off unless you turn it on, at both ends.** The worker handles voice prints only with the `voiceprint` extra (ECAPA, SpeechBrain), and the API gives prints only to a transcriber marked **Perfis de voz** in Transcritores, which starts unmarked.
+
+```bash
+uv sync --project tools/transcriber --extra diarize --extra voiceprint
+```
+
+The API sends a print only for a profile with a recorded consent, in the collection of the job, during the lease. Prints stay in memory, are never logged or written to disk, and are zeroed when the job ends. With no profile for the job's collection, no vector is computed at all. The worker uploads only the closest profile and the score per voice. `transcriber run --no-voice-profiles` keeps the worker out of it. The first job downloads the model weights once from Hugging Face; no audio or print goes there.
+
+The recipe is the one measured in KBC-063, not a calibrated one (threshold 0.4 at the API; margin 0.1 and at least 10 s of speech here, in `config.py`).
+
 ## Run
 
 ```bash

@@ -189,7 +189,9 @@ test('AC-1: the consent comes first, on screen and at the API (axe)', async ({
   await dialog.getByLabel('Quem autorizou').fill('Pessoa de teste');
   await dialog.getByLabel('Data da autorização').fill('2026-10-01');
   await dialog.getByLabel('Colar o texto do aceite').check();
-  await dialog.getByLabel('Texto do aceite').fill('Autorizo o uso da voz.');
+  await dialog
+    .getByLabel('Texto do aceite', { exact: true })
+    .fill('Autorizo o uso da voz.');
   await dialog.getByRole('checkbox', { name: /Confirmo/ }).check();
   await dialog.getByRole('button', { name: 'Continuar' }).click();
 
