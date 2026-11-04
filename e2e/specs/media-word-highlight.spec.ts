@@ -307,8 +307,9 @@ test('a search over the spoken word stays readable, with both painted', async ({
   await expect.poll(() => spokenWord(page)).toBe('está');
   const field = page.getByLabel('Buscar na transcrição');
   await field.fill('está');
+  // Also "esta frase", far ahead: the search ignores accents.
   await expect(page.locator('app-transcript-panel [role="status"]')).toHaveText(
-    '1 de 1',
+    '1 de 2',
   );
   expect(await spokenWord(page)).toBe('está');
   await field.blur();
