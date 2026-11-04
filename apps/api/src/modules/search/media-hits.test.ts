@@ -87,7 +87,7 @@ describe('hasDocumentOnlyFilters', () => {
     );
     expect(
       hasDocumentOnlyFilters({ ...EMPTY_FILTERS, concepts: ['ritmo'] }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       hasDocumentOnlyFilters({ ...EMPTY_FILTERS, relevances: ['core'] }),
     ).toBe(true);

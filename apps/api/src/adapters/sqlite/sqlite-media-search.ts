@@ -105,18 +105,6 @@ function liveTrackClause(
       };
 }
 
-/** The passages asked for: as usual, or only those of the given tracks (KBC-070). */
-const passagesClause = (
-  tracks: boolean | undefined,
-  within: readonly string[] | undefined,
-): Clause =>
-  within === undefined
-    ? { sql: passagesFor(tracks), values: [] }
-    : {
-        sql: `${LIVE_TRACK_ROW} AND ${IN_IDS}`,
-        values: [JSON.stringify(within)],
-      };
-
 const FROM_MATCHES = `FROM segments_fts f
   JOIN segments s ON s.rowid = f.rowid
   JOIN transcripts t ON t.id = s.transcript_id
@@ -127,10 +115,23 @@ const RANKED = 10_000;
 /** Past RANKED, this many times the limit are read to put normal confidence first. */
 const UNRANKED_POOL = 4;
 
-const SELECT_MATCHES = `SELECT m.id AS media_id, m.topic, m.title, ${AUTHOR} AS author,
+const selectMatches = (rank: string, from: string): string =>
+  `SELECT m.id AS media_id, m.topic, m.title, ${AUTHOR} AS author,
     highlight(segments_fts, 0, char(2), char(3)) AS marked,
-    s.start_ms, s.end_ms, t.confidence, bm25(segments_fts) AS bm25
-  ${FROM_MATCHES}`;
+    s.start_ms, s.end_ms, t.confidence, ${rank} AS bm25
+  ${from}`;
+const SELECT_MATCHES = selectMatches('bm25(segments_fts)', FROM_MATCHES);
+/** bm25 walks a word's whole list once: past RANKED, a track's first passage is its best. */
+const UNRANKED_SCORE = '-1';
+
+/** Where each track's transcript sits in the index, in the order of the ids. */
+const SEGMENT_RANGES = `SELECT t.media_id, t.id AS transcript_id,
+    (SELECT s.rowid FROM segments s WHERE s.transcript_id = t.id
+      ORDER BY s.position LIMIT 1) AS first,
+    (SELECT s.rowid FROM segments s WHERE s.transcript_id = t.id
+      ORDER BY s.position DESC LIMIT 1) AS last
+  FROM json_each(?) j JOIN transcripts t ON t.media_id = j.value
+  ORDER BY j.key`;
 
 /** Normal confidence first (BR-3), then relevance, then the earlier passage. */
 const ORDER = `ORDER BY t.confidence = 'low', bm25(segments_fts), s.start_ms`;
@@ -180,19 +181,13 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     authors,
     limit,
     tracks,
-    within,
     count = true,
   }: MediaSearchQuery): MediaSearchResult {
     if (terms.length === 0 || topics.length === 0)
       return { matches: [], total: 0 };
     const scope = scopeClause(topics, authors);
-    const passages = passagesClause(tracks, within);
-    const where = `WHERE segments_fts MATCH ? AND ${passages.sql} AND ${scope.sql}`;
-    const values = [
-      toMatchExpression(terms),
-      ...passages.values,
-      ...scope.values,
-    ];
+    const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
+    const values = [toMatchExpression(terms), ...scope.values];
     const matches = this.top(where, values, limit);
     return { matches, total: count ? this.countWhere(where, values) : 0 };
   }
@@ -206,17 +201,14 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     topics,
     mainOf,
     tracks,
-    within,
   }: Parameters<MediaSearchPort['tally']>[0]): AuthorshipTally {
     if (terms.length === 0 || topics.length === 0)
       return { main: 0, others: 0 };
-    const passages = passagesClause(tracks, within);
     const countFor = (kind: 'main' | 'others'): number => {
       const scope = scopeClause(topics, { kind, mainOf });
-      const where = `WHERE segments_fts MATCH ? AND ${passages.sql} AND ${scope.sql}`;
+      const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
       return this.countWhere(where, [
         toMatchExpression(terms),
-        ...passages.values,
         ...scope.values,
       ]);
     };
@@ -233,6 +225,18 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     return Number(counted?.['n'] ?? 0);
   }
 
+  /** The matches in the whole index, counted up to RANKED + 1. */
+  private matchesInIndex(expression: string): number {
+    return Number(
+      this.db
+        .prepare(
+          `SELECT count(*) AS n FROM (SELECT 1 FROM segments_fts
+             WHERE segments_fts MATCH ? LIMIT ${RANKED + 1})`,
+        )
+        .get(expression)?.['n'] ?? 0,
+    );
+  }
+
   /**
    * The best passages (NFR-1): ranking every match of a word said in a large share of
    * 2,000 h costs more than the budget, and such a word ranks nothing useful. Up to
@@ -245,15 +249,7 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     limit: number,
   ): MediaSegmentMatch[] {
     const [match] = values;
-    const common = Number(
-      this.db
-        .prepare(
-          `SELECT count(*) AS n FROM (SELECT 1 FROM segments_fts
-             WHERE segments_fts MATCH ? LIMIT ${RANKED + 1})`,
-        )
-        .get(match ?? '')?.['n'] ?? 0,
-    );
-    if (common <= RANKED)
+    if (this.matchesInIndex(String(match ?? '')) <= RANKED)
       return this.db
         .prepare(`${SELECT_MATCHES} ${where} ${ORDER} LIMIT ?`)
         .all(...values, limit)
@@ -285,18 +281,66 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
       }));
   }
 
+  /**
+   * A word of a large share of the speech must not walk its whole list for a few tracks: each
+   * track asks only its own stretch of the index (one transcript's rows are written together).
+   */
   speakingTracks(terms: readonly string[], ids: readonly string[]): string[] {
     if (terms.length === 0 || ids.length === 0) return [];
     return this.db
       .prepare(
-        `SELECT DISTINCT t.media_id FROM segments_fts f
-         JOIN segments s ON s.rowid = f.rowid
-         JOIN transcripts t ON t.id = s.transcript_id
-         WHERE segments_fts MATCH ?
-           AND t.media_id IN (SELECT value FROM json_each(?))`,
+        `SELECT r.media_id FROM (${SEGMENT_RANGES}) r
+         WHERE EXISTS (SELECT 1 FROM segments_fts f CROSS JOIN segments s ON s.rowid = f.rowid
+           WHERE segments_fts MATCH ? AND f.rowid BETWEEN r.first AND r.last
+             AND s.transcript_id = r.transcript_id)`,
       )
-      .all(toMatchExpression(terms), JSON.stringify(ids))
+      .all(JSON.stringify(ids), toMatchExpression(terms))
       .map((row) => String(row['media_id']));
+  }
+
+  bestPassages(
+    terms: readonly string[],
+    ids: readonly string[],
+  ): MediaSegmentMatch[] {
+    if (terms.length === 0 || ids.length === 0) return [];
+    const expression = toMatchExpression(terms);
+    const ranked = this.matchesInIndex(expression) <= RANKED;
+    const select = selectMatches(
+      ranked ? 'bm25(segments_fts)' : UNRANKED_SCORE,
+      FROM_MATCHES.replaceAll('JOIN', 'CROSS JOIN'),
+    );
+    const best = this.db.prepare(
+      `${select} WHERE segments_fts MATCH ? AND f.rowid BETWEEN ? AND ?
+         AND s.transcript_id = ? ${ranked ? ORDER : ''} LIMIT 1`,
+    );
+    const ranges = this.db.prepare(SEGMENT_RANGES).all(JSON.stringify(ids));
+    const expression = toMatchExpression(terms);
+    return ranges.flatMap((range) => {
+      const row = best.get(
+        expression,
+        Number(range['first']),
+        Number(range['last']),
+        String(range['transcript_id']),
+      );
+      return row ? [toMatch(row)] : [];
+    });
+  }
+
+  saying(terms: readonly string[]): ReadonlySet<string> | null {
+    if (terms.length === 0) return new Set();
+    const expression = toMatchExpression(terms);
+    if (this.matchesInIndex(expression) > RANKED) return null;
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT t.media_id FROM segments_fts f
+         CROSS JOIN segments s ON s.rowid = f.rowid
+         CROSS JOIN transcripts t ON t.id = s.transcript_id
+         WHERE segments_fts MATCH ? AND EXISTS (
+           SELECT 1 FROM media_subject_links l
+           WHERE l.media_id = t.media_id AND l.status = 'accepted')`,
+      )
+      .all(expression);
+    return new Set(rows.map((row) => String(row['media_id'])));
   }
 
   tracksAbout(terms: readonly string[]): ReadonlySet<string> {

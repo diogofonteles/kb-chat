@@ -402,7 +402,6 @@ async function registerSearch(
     subjects:
       deps.media &&
       new SubjectSearch({
-        media: deps.media.search,
         links: deps.media.trackLinks,
         lookup: createSubjectDirectory({ ...deps, media: deps.media }),
         authors: authorView,

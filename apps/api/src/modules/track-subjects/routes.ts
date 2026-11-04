@@ -201,6 +201,7 @@ export const trackSubjectRoutes =
     });
     const typed = app.withTypeProvider<ZodTypeProvider>();
     registerCollection(typed, deps);
+    registerAbout(typed, deps);
     registerTrack(typed, deps);
     registerEdit(typed, deps);
   };

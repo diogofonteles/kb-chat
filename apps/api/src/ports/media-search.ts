@@ -21,8 +21,6 @@ export interface MediaSearchQuery {
   readonly limit: number;
   /** Has `media-tracks`: a passage inside a track is the track's (KBC-068 BR-6). */
   readonly tracks?: boolean;
-  /** Only the passages of these live tracks (a subject chosen, KBC-070). */
-  readonly within?: readonly string[];
   /** Count the matches too (default); off when the caller has the tally already. */
   readonly count?: boolean;
 }
@@ -97,7 +95,6 @@ export interface MediaSearchPort {
     readonly mainOf: ReadonlyMap<string, string | null>;
     /** As in `search`: both must count the same passages. */
     readonly tracks?: boolean;
-    readonly within?: readonly string[];
   }): AuthorshipTally;
   /** Whether any of these collections has a searchable (transcribed) media. */
   hasTranscripts(topics: readonly string[]): boolean;
@@ -109,6 +106,13 @@ export interface TrackLinksPort {
   linkedTracks(scope: TrackScope): LinkedTrack[];
   /** Of these tracks, those where every word is said in one segment. */
   speakingTracks(terms: readonly string[], ids: readonly string[]): string[];
+  /** Each of these tracks' best passage for the words, in the order of `ids`. */
+  bestPassages(
+    terms: readonly string[],
+    ids: readonly string[],
+  ): MediaSegmentMatch[];
+  /** Tracks with accepted links that say the words; null for a word too common to ask. */
+  saying(terms: readonly string[]): ReadonlySet<string> | null;
   /** Tracks with every word in their title and summary together (BR-2). */
   tracksAbout(terms: readonly string[]): ReadonlySet<string>;
   /** The tracks in `ids`, in that order. */
