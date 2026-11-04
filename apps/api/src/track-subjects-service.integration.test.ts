@@ -548,6 +548,41 @@ describe('Suggesting subjects with the AI (FR-3, FR-4, BR-2, BR-3, BR-5)', () =>
     expect(track?.suggestions.map((one) => one.name)).toEqual(['Cabala']);
   });
 
+  it.each([
+    ['no tracks', replyFor([])],
+    ['only tracks it cannot read', '{"faixas":[{"faixa":"um"},{"faixa":99}]}'],
+    [
+      'tracks with nothing usable',
+      replyFor([{ faixa: 1, assuntos: ['Inventado'] }]),
+    ],
+  ])(
+    'fails an answer with %s, so a person can try again (Q156)',
+    async (_, reply) => {
+      const ctx = setup({ tracks: 1, replies: [reply] });
+      const run = await ctx.suggest();
+      expect(run).toMatchObject({
+        status: 'failed',
+        failure: 'invalid-output',
+      });
+      expect(ctx.llm.calls).toHaveLength(1);
+      expect(ctx.proposals.edit(OWNER, ctx.mediaId).canSuggest).toBe(true);
+    },
+  );
+
+  it('ends as interrupted when the edit was reopened during the call, and can run after a new approval', async () => {
+    const ctx = setup({ tracks: 1 });
+    ctx.llm.replies.push(() => {
+      ctx.db.prepare(`UPDATE media_edits SET status = 'draft'`).run();
+      return replyFor([{ faixa: 1, assuntos: ['Cabala'] }]);
+    });
+    const run = await ctx.suggest();
+    expect(run).toMatchObject({ status: 'failed', failure: 'interrupted' });
+    ctx.db
+      .prepare(`UPDATE media_edits SET status = 'approved', version = 5`)
+      .run();
+    expect(ctx.proposals.edit(OWNER, ctx.mediaId).canSuggest).toBe(true);
+  });
+
   it('counts a stream that broke after it began', async () => {
     const ctx = setup({ tracks: 1, replies: [new BrokenStream('{"fai')] });
     const run = await ctx.suggest();

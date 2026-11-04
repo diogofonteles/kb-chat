@@ -89,6 +89,20 @@ interface CallResult {
   readonly error?: unknown;
 }
 
+/** How a run ended, and what it leaves for a person. */
+interface RunOutcome {
+  readonly failure: ProposalFailure | null;
+  readonly suggestions: readonly TrackSuggestions[];
+}
+
+const failed = (failure: ProposalFailure): RunOutcome => ({
+  failure,
+  suggestions: [],
+});
+
+const hasSomething = (track: TrackSuggestions): boolean =>
+  track.subjects.length > 0 || track.summary !== null;
+
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
     details: { cap },
@@ -243,31 +257,38 @@ export class SubjectProposalService {
     const result = await this.call(plan);
     if (result.error !== undefined)
       this.deps.onRunError?.(result.error, run.id);
-    const reply =
-      result.answer === null ? null : parseSubjectReply(result.answer);
-    const failure = this.failureOf(result, reply);
+    let outcome: RunOutcome = failed('interrupted');
     try {
+      outcome = this.outcomeOf(plan, result);
       this.deps.store.finishRun({
         runId: run.id,
         spendId,
-        failure,
+        failure: outcome.failure,
         spentUsd: result.spentUsd,
-        suggestions: reply ? this.suggestionsOf(plan, reply) : [],
+        suggestions: outcome.suggestions,
         now: this.now(),
       });
     } finally {
       // A no-op when finishRun closed it; the safety net when it failed.
-      this.closeSpend(spendId, { failure, spentUsd: result.spentUsd });
+      this.closeSpend(spendId, {
+        failure: outcome.failure,
+        spentUsd: result.spentUsd,
+      });
     }
   }
 
-  private failureOf(
-    result: CallResult,
-    reply: readonly TrackReply[] | null,
-  ): ProposalFailure | null {
+  /** A run only ends `done` with something to decide on: the rest can be tried again (Q156). */
+  private outcomeOf(plan: Plan, result: CallResult): RunOutcome {
     if (result.answer === null)
-      return this.closing.signal.aborted ? 'interrupted' : 'provider';
-    return reply === null ? 'invalid-output' : null;
+      return failed(this.closing.signal.aborted ? 'interrupted' : 'provider');
+    const edit = this.deps.edits.edit(plan.item.id);
+    if (edit?.status !== 'approved' || edit.version !== plan.editVersion)
+      return failed('interrupted');
+    const reply = parseSubjectReply(result.answer);
+    const suggestions = reply ? this.suggestionsOf(plan, reply) : [];
+    return suggestions.some(hasSomething)
+      ? { failure: null, suggestions }
+      : failed('invalid-output');
   }
 
   /** Read at the end: what a person did meanwhile counts against the room left. */
