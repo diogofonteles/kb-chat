@@ -637,14 +637,7 @@ export class LibraryPage {
     const byId = new Map(marks.map((mark) => [mark.id, mark]));
     const marked = (item: LibraryItem): LibraryItem => {
       const mark = byId.get(item.id);
-      return mark
-        ? {
-            ...item,
-            positionMs: 0,
-            completedAt: mark.completedAt,
-            positionUpdatedAt: mark.positionUpdatedAt,
-          }
-        : item;
+      return mark ? withMark(item, mark) : item;
     };
     const state: ListeningState = played ? 'heard' : 'unheard';
     this.lastPage.update(
@@ -740,6 +733,12 @@ export class LibraryPage {
   protected readonly selectedTopic = computed(
     () => this.chat.topicSlug() ?? '',
   );
+}
+
+/** The item as the server left it: a mark also puts the position back to 0 (BR-5). */
+function withMark(item: LibraryItem, mark: MediaMark): LibraryItem {
+  const { completedAt, positionUpdatedAt } = mark;
+  return { ...item, positionMs: 0, completedAt, positionUpdatedAt };
 }
 
 function markFailedTextOf(played: boolean): string {
