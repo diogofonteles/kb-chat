@@ -19,7 +19,7 @@ export interface TrackReply {
   readonly faixa: number;
   readonly assuntos: readonly unknown[];
   readonly novos: readonly unknown[];
-  readonly resumo: unknown;
+  readonly resumo?: unknown;
 }
 
 /** The reply's tracks; null for one that cannot be read. A bad track alone is skipped. */
@@ -82,12 +82,14 @@ export function acceptSubjects(
     if (name === null) return [];
     return [existing(known, name) ?? { kind: 'new', name }];
   });
-  const unique = new Map(
-    [...named, ...marked].map((one) => [keyOf(one), one] as const).reverse(),
-  );
-  return [...unique.values()]
-    .reverse()
-    .slice(0, Math.min(room, MAX_TRACK_SUBJECTS));
+  const seen = new Set<string>();
+  const unique = [...named, ...marked].filter((one) => {
+    const key = keyOf(one);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return unique.slice(0, Math.min(room, MAX_TRACK_SUBJECTS));
 }
 
 export const acceptSummary = (value: unknown): string | null => {

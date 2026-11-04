@@ -65,6 +65,8 @@ export interface SubjectProposalDeps {
 
 interface Plan {
   readonly item: MediaItem;
+  /** The tracks in the prompt's order: "faixa 3" of the reply is the third of these. */
+  readonly trackIds: readonly string[];
   readonly editVersion: number;
   readonly messages: readonly LlmMessage[];
   readonly maxTokens: number;
@@ -243,7 +245,7 @@ export class SubjectProposalService {
         spendId,
         failure,
         spentUsd: result.spentUsd,
-        suggestions: reply ? this.suggestionsOf(plan.item, reply) : [],
+        suggestions: reply ? this.suggestionsOf(plan, reply) : [],
         now: this.now(),
       });
     } finally {
@@ -263,13 +265,16 @@ export class SubjectProposalService {
 
   /** Read at the end: what a person did meanwhile counts against the room left. */
   private suggestionsOf(
-    item: MediaItem,
+    plan: Plan,
     reply: readonly TrackReply[],
   ): TrackSuggestions[] {
+    const { item, trackIds } = plan;
     const known = knownOf(this.deps.subjects.collection(item.topic));
-    const tracks = this.deps.subjects.tracksOf(item);
+    const tracks = new Map(
+      this.deps.subjects.tracksOf(item).map((one) => [one.mediaId, one]),
+    );
     return reply.flatMap((one) => {
-      const track = tracks[one.faixa - 1];
+      const track = tracks.get(trackIds[one.faixa - 1] ?? '');
       return track ? [this.suggestionOf(track, one, known)] : [];
     });
   }
@@ -394,6 +399,7 @@ export class SubjectProposalService {
     const usd = tokensOf(prompt) * price.input + maxTokens * price.output;
     return {
       item,
+      trackIds: tracks.map((track) => track.mediaId),
       editVersion: edit.version,
       messages,
       maxTokens,

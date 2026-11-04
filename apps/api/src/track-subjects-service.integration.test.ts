@@ -94,6 +94,8 @@ function setup(
     replies?: StubReply[];
     concepts?: string[];
     monthlyUsd?: number;
+    runUsd?: number;
+    noLlm?: boolean;
   } = {},
 ) {
   const ctx = proposalDb(evenSegments(30));
@@ -137,7 +139,7 @@ function setup(
       ctx.db
         .prepare(
           `SELECT ordinal, title, start_ms, end_ms, derived_media_id FROM media_tracks
-           WHERE media_id = ? ORDER BY ordinal`,
+           WHERE media_id = ? AND derived_media_id IS NOT NULL ORDER BY ordinal`,
         )
         .all(parentId)
         .map((row) => ({
@@ -577,20 +579,21 @@ describe('Suggesting subjects with the AI (FR-3, FR-4, BR-2, BR-3, BR-5)', () =>
     });
   });
 
-  it('skips a track gone while the run went on, and keeps the others', async () => {
-    const ctx = setup({ tracks: 2, replies: [allTracks(2)] });
-    const stale = ctx.subjects.tracksOf({
-      id: ctx.mediaId,
-      topic: 'hermetismo',
+  it('keeps each suggestion on its own track when another left during the call', async () => {
+    const ctx = setup({ tracks: 2 });
+    const [first, second] = ctx.tracks;
+    ctx.llm.replies.push(() => {
+      ctx.db.prepare('DELETE FROM media WHERE id = ?').run(first ?? '');
+      return replyFor([
+        { faixa: 1, assuntos: ['Cabala'] },
+        { faixa: 2, assuntos: ['Ritmo'] },
+      ]);
     });
-    ctx.db
-      .prepare('DELETE FROM media WHERE id = ?')
-      .run(stale[1]?.mediaId ?? '');
     const run = await ctx.suggest();
     expect(run?.status).toBe('done');
-    expect(
-      ctx.proposals.edit(OWNER, ctx.mediaId).tracks.map((one) => one.ordinal),
-    ).toEqual([1]);
+    const { tracks } = ctx.proposals.edit(OWNER, ctx.mediaId);
+    expect(tracks.map((one) => one.mediaId)).toEqual([second]);
+    expect(tracks[0]?.suggestions.map((one) => one.name)).toEqual(['Ritmo']);
   });
 });
 
