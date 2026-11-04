@@ -268,6 +268,175 @@ test('I-4: a save whose answer was lost is not a conflict with oneself', async (
   await owner.dispose();
 });
 
+/** Counts what leaves this page: only a press may send either (BR-1). */
+function pressesSent(page: Page, id: string) {
+  const sent = { approvals: 0, runs: 0 };
+  page.on('request', (request) => {
+    if (request.method() !== 'POST') return;
+    if (request.url().endsWith(`/media/${id}/edit/approve`))
+      sent.approvals += 1;
+    if (request.url().endsWith(`/media/${id}/edit/proposals`)) {
+      const { dryRun } = request.postDataJSON() as { dryRun?: boolean };
+      if (!dryRun) sent.runs += 1;
+    }
+  });
+  return sent;
+}
+
+/** PUTs wait for `release`: a press stays on hold for as long as the test looks at it. */
+async function holdSaves(page: Page, id: string) {
+  let release = () => undefined as void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/api/v1/media/${id}/edit`, async (route) => {
+    if (route.request().method() === 'PUT') await released;
+    await route.fallback();
+  });
+  return release;
+}
+
+/** The analysis answers with a cheap estimate and refuses to run: no money moves here. */
+const stubProposals = (page: Page, id: string) =>
+  page.route(new RegExp(`/api/v1/media/${id}/edit/proposals$`), (route) => {
+    const { dryRun } = route.request().postDataJSON() as { dryRun?: boolean };
+    return dryRun
+      ? route.fulfill({
+          json: {
+            allowed: true,
+            estimateUsd: 0.02,
+            runCapUsd: 0.25,
+            windows: 2,
+            model: 'stub',
+            refusal: null,
+            month: { spentUsd: 1.5, capUsd: 10 },
+          },
+        })
+      : route.fulfill({
+          status: 500,
+          json: { error: { code: 'INTERNAL', message: 'no' } },
+        });
+  });
+
+test('BUG-5: two presses in one task send one approval, and no false conflict', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const media = await audioWithTracks(owner);
+  const sent = pressesSent(page, media.id);
+  await open(page, media.id);
+  await shortenFirst(page);
+  await page.evaluate(() => {
+    const press = [...document.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Aprovar faixas'),
+    );
+    press?.click();
+    press?.click();
+  });
+  await expect(
+    page.getByRole('heading', { name: '3 faixas aplicadas.' }),
+  ).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(sent.approvals).toBe(1);
+  await owner.dispose();
+});
+
+test('BUG-6: a second change during a save, then a reload: the last change stays', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const media = await audioWithTracks(owner);
+  await open(page, media.id);
+  let arrived = false;
+  let answer = () => undefined as void;
+  const answerHeld = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  await page.route(`**/api/v1/media/${media.id}/edit`, async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    // The write lands at once; its answer does not come while the page lives.
+    const response = await route.fetch();
+    arrived = true;
+    await answerHeld;
+    await route.fulfill({ response }).catch(() => undefined);
+  });
+  await shortenFirst(page);
+  await expect.poll(() => arrived).toBe(true);
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expectSaved(owner, media.id, (tracks) => tracks[0]?.endMs === 14_500);
+  await page.unroute(`**/api/v1/media/${media.id}/edit`);
+  await page.reload();
+  await expect(page.getByText(/Recuperei mudanças/)).toBeVisible();
+  await expectSaved(owner, media.id, (tracks) => tracks[0]?.endMs === 14_000);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  answer();
+  await owner.dispose();
+});
+
+test('F-1: leaving offline from a page opened straight says why, and works back online', async ({
+  page,
+  context,
+}) => {
+  const owner = await ownerApi();
+  const media = await audioWithTracks(owner);
+  await open(page, media.id);
+  await handle(page, 'Fim da faixa 1').waitFor();
+  await context.setOffline(true);
+  await shortenFirst(page);
+  const leave = page.getByRole('button', { name: 'Sair e continuar depois' });
+  await leave.click();
+  await expect(page.getByText(/Não consegui abrir a página/)).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/midia/${media.id}/faixas$`));
+  await context.setOffline(false);
+  await leave.click();
+  await expect(page).toHaveURL(new RegExp(`/midia/${media.id}$`));
+  await expectSaved(owner, media.id, (tracks) => tracks[0]?.endMs === 14_500);
+  await owner.dispose();
+});
+
+test('F-2: "Confirmar e propor" waits for an approval on hold', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const media = await audioWithTracks(owner);
+  await stubProposals(page, media.id);
+  const sent = pressesSent(page, media.id);
+  await open(page, media.id);
+  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  const confirm = page.getByRole('button', { name: 'Confirmar e propor' });
+  await expect(confirm).toBeEnabled();
+  const release = await holdSaves(page, media.id);
+  await shortenFirst(page);
+  await page.getByRole('button', { name: 'Aprovar faixas' }).click();
+  await expect(confirm).toBeDisabled();
+  release();
+  await expect(
+    page.getByRole('heading', { name: '3 faixas aplicadas.' }),
+  ).toBeVisible();
+  expect(sent).toEqual({ approvals: 1, runs: 0 });
+  await owner.dispose();
+});
+
+test('F-2: "Aprovar faixas" waits for a paid run on hold', async ({ page }) => {
+  const owner = await ownerApi();
+  const media = await audioWithTracks(owner);
+  await stubProposals(page, media.id);
+  const sent = pressesSent(page, media.id);
+  await open(page, media.id);
+  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  const confirm = page.getByRole('button', { name: 'Confirmar e propor' });
+  await expect(confirm).toBeEnabled();
+  const release = await holdSaves(page, media.id);
+  await shortenFirst(page);
+  await confirm.click();
+  const approveNow = page.getByRole('button', { name: 'Aprovar faixas' });
+  await expect(approveNow).toBeDisabled();
+  release();
+  await expect(approveNow).toBeEnabled();
+  expect(sent).toEqual({ approvals: 0, runs: 1 });
+  await owner.dispose();
+});
+
 test('R-4: a tap on a handle moves nothing, on the whole target', async ({
   page,
 }) => {
