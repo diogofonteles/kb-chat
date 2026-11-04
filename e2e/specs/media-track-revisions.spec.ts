@@ -69,6 +69,26 @@ async function waitForCut(owner: APIRequestContext, id: string) {
 const editDialog = (page: Page) =>
   page.getByRole('dialog', { name: 'Editar faixa' });
 
+interface Box {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+const overlap = (one: Box, other: Box) =>
+  one.x < other.x + other.width &&
+  other.x < one.x + one.width &&
+  one.y < other.y + other.height &&
+  other.y < one.y + one.height;
+
+async function expectInsideTheScreen(page: Page) {
+  const menu = await page.getByRole('menu').boundingBox();
+  const width = page.viewportSize()?.width ?? 0;
+  expect(menu?.x).toBeGreaterThanOrEqual(0);
+  expect((menu?.x ?? 0) + (menu?.width ?? 0)).toBeLessThanOrEqual(width);
+}
+
 test('AC-1, AC-12: the title changes on the same page and the history says so', async ({
   page,
 }) => {
@@ -285,11 +305,60 @@ test("the library's ⋯ opens the page on the action chosen", async ({
   await expect(page.getByText(/^1 mídia/)).toBeVisible();
 
   await page.getByRole('button', { name: `Ações de ${first.title}` }).click();
+  await expectInsideTheScreen(page);
   await page.getByRole('menuitem', { name: 'Editar' }).click();
 
   await expect(editDialog(page)).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/midia/${first.id}$`));
   await owner.dispose();
+});
+
+test("the ⋯ of a track in the library's grid stays on its card", async ({
+  browser,
+  viewport,
+}) => {
+  const owner = await ownerApi();
+  const { media, first } = await approvedTracks(owner);
+  // The view is remembered per person: the owner's list stays as the other tests need it.
+  const email = uniqueEmail('grade-editor');
+  await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['media', 'media-library', 'media-tracks', 'media-edit'],
+  });
+  await owner.dispose();
+  const page = await pageAs(browser, email, viewport);
+  await page.goto('/biblioteca');
+  await page.getByRole('searchbox').fill(media.title);
+  await expect(page.getByText(/^1 mídia/)).toBeVisible();
+  const grid = page.getByRole('button', { name: 'Ver em grade' });
+  await grid.click();
+  await expect(grid).toHaveAttribute('aria-pressed', 'true');
+
+  // On the title's line: below it there is a blank line, beside the time it covers the time.
+  const actions = page.getByRole('button', { name: `Ações de ${first.title}` });
+  const title = page.getByRole('link', { name: first.title });
+  const time = page
+    .getByRole('listitem')
+    .filter({ has: actions })
+    .last()
+    .getByText('0:15');
+  await expect
+    .poll(async () => {
+      const [menu, name, length] = [
+        await actions.boundingBox(),
+        await title.boundingBox(),
+        await time.boundingBox(),
+      ];
+      if (!menu || !name || !length) return null;
+      return (
+        menu.y < name.y + name.height &&
+        !overlap(menu, name) &&
+        !overlap(menu, length)
+      );
+    })
+    .toBe(true);
+  await actions.click();
+  await expectInsideTheScreen(page);
 });
 
 test('AC-14: a listener sees none of it', async ({ browser, viewport }) => {
