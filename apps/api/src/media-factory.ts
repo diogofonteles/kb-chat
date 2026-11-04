@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { AppConfig } from './config.js';
 import { FsMediaFiles } from './adapters/media/fs-media-files.js';
 import { FsVoicePrintVault } from './adapters/media/fs-voice-print-vault.js';
+import { FsVoiceRevocationList } from './adapters/media/fs-voice-revocation-list.js';
 import { SecretBox } from './adapters/secret-box.js';
 import { openMediaDatabase } from './adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
@@ -42,6 +43,7 @@ import type { TranscriptStorePort } from './ports/transcript-store.js';
 import type { WaveformStorePort } from './ports/waveform-store.js';
 import type { SecretSealerPort } from './ports/secret-sealer.js';
 import type { VoicePrintVaultPort } from './ports/voice-print-vault.js';
+import type { VoiceRevocationListPort } from './ports/voice-revocation-list.js';
 import type { VoiceProfileStorePort } from './ports/voice-profile-store.js';
 
 /** The media library's adapters and the worker token (ADR 0022). */
@@ -82,6 +84,7 @@ export interface MediaDeps {
   readonly voiceProfiles: VoiceProfileStorePort;
   /** The prints themselves, outside the database and the backup (ADR 0032). */
   readonly voicePrintVault: VoicePrintVaultPort;
+  readonly voiceRevocations: VoiceRevocationListPort;
   /** Seals the proof of each consent. */
   readonly consentSealer: SecretSealerPort;
   readonly files: MediaFilesPort;
@@ -141,6 +144,9 @@ const voiceSafes = (dir: string, secrets: MediaSecrets) => ({
   voicePrintVault: new FsVoicePrintVault(
     join(dir, 'voice-prints'),
     new SecretBox(secrets.voicePrintKey),
+  ),
+  voiceRevocations: new FsVoiceRevocationList(
+    join(dir, 'voice-revocations.list'),
   ),
   consentSealer: new SecretBox(secrets.consentKey),
 });

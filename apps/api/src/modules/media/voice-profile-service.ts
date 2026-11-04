@@ -27,12 +27,15 @@ import type {
   StoredVoiceProfile,
   VoiceProfileStorePort,
 } from '../../ports/voice-profile-store.js';
+import type { VoiceRevocationListPort } from '../../ports/voice-revocation-list.js';
 import type { Presence } from './transcriber-service.js';
 import { toCollectionSpeaker, type AuthorLookup } from './voice-labels.js';
 
 export interface VoiceProfileServiceDeps {
   readonly profiles: VoiceProfileStorePort;
   readonly prints: VoicePrintVaultPort;
+  /** Who revoked, out of reach of a restored database (ADR 0032). */
+  readonly revocations: VoiceRevocationListPort;
   readonly speakers: SpeakerStorePort;
   readonly store: MediaStorePort;
   /** Seals the proof of each consent (ADR 0017). */
@@ -114,6 +117,7 @@ export class VoiceProfileService {
     request: CreateVoiceProfileRequest,
   ): Promise<VoiceProfile> {
     const consent = this.consentOf(request.consent);
+    await this.assertMayPrint();
     const collection = this.deps.rootOf(target.topic);
     const speaker = this.speakerOf(collection, request.speakerId);
     const sources = this.resolveSources(target.topic, request);
@@ -140,9 +144,13 @@ export class VoiceProfileService {
     return this.viewOf(profileId);
   }
 
-  /** The print goes first: a crash here leaves a profile with no print, never the reverse. */
+  /**
+   * The list first, then the print: a crash after either leaves a revocation the next start
+   * finishes, never a print or a profile of someone who revoked.
+   */
   async revoke(actor: VoiceProfileActor, profileId: string): Promise<void> {
     this.visible(actor, profileId);
+    await this.deps.revocations.add(profileId);
     await this.deps.prints.remove(profileId);
     const revoked = this.deps.profiles.revoke({
       profileId,
@@ -158,6 +166,7 @@ export class VoiceProfileService {
     profileId: string,
   ): Promise<VoiceProfile> {
     this.visible(actor, profileId);
+    await this.assertMayPrint(profileId);
     await this.deps.prints.remove(profileId);
     const queued = this.deps.profiles.recalculate({
       profileId,
@@ -191,14 +200,11 @@ export class VoiceProfileService {
     };
   }
 
-  /** A print with no profile (an older backup was restored) goes when the API starts. */
-  async dropOrphanPrints(): Promise<number> {
-    const known = new Set(this.deps.profiles.ids());
-    const orphans = (await this.deps.prints.ids()).filter(
-      (id) => !known.has(id),
-    );
-    await Promise.all(orphans.map((id) => this.deps.prints.remove(id)));
-    return orphans.length;
+  /** No print for someone who revoked, nor any at all while the list is lost (ADR 0032). */
+  private async assertMayPrint(profileId?: string): Promise<void> {
+    const { ids, complete } = await this.deps.revocations.read();
+    if (!complete || (profileId !== undefined && ids.includes(profileId)))
+      throw new AppError('MEDIA_CONFLICT', 'This consent was revoked');
   }
 
   private consentOf(sent: unknown): VoiceConsent {

@@ -100,6 +100,7 @@ export {
   type ConfidenceVerdict,
 } from './transcript-confidence.js';
 export { voiceProfileRoutes } from './voice-profile-routes.js';
+export { VoicePrintReconciler } from './voice-print-reconciler.js';
 export {
   VoiceProfileService,
   type VoiceProfileServiceDeps,

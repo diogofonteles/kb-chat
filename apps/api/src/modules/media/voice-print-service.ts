@@ -23,6 +23,7 @@ import type {
   VoiceProfileSource,
   VoiceProfileStorePort,
 } from '../../ports/voice-profile-store.js';
+import type { VoiceRevocationListPort } from '../../ports/voice-revocation-list.js';
 import { JOB_LEASE_MS } from './media-policy.js';
 import {
   aliasOf,
@@ -34,6 +35,7 @@ import {
 export interface VoicePrintServiceDeps {
   readonly profiles: VoiceProfileStorePort;
   readonly prints: VoicePrintVaultPort;
+  readonly revocations: VoiceRevocationListPort;
   readonly store: MediaStorePort;
   readonly diarizations: DiarizationStorePort;
   readonly voiceLabels: VoiceLabelStorePort;
@@ -103,6 +105,8 @@ export class VoicePrintService {
   ): Promise<void> {
     const profileId = this.deps.profiles.heldProfile(owner);
     if (!profileId) throw leaseLost();
+    const { ids, complete } = await this.deps.revocations.read();
+    if (!complete || ids.includes(profileId)) throw leaseLost();
     await this.deps.prints.put(profileId, done.embedding);
     const stored = this.deps.profiles.completePrint({
       owner,

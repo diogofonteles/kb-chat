@@ -1,11 +1,22 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {
+  appendFileSync,
+  copyFileSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type {
   Me,
   VoiceProfileList,
   VoiceProfileReport,
 } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
+import { REVOCATION_LIST_HEADER } from './adapters/media/fs-voice-revocation-list.js';
 import { MAX_JOB_ATTEMPTS } from './modules/media/index.js';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
@@ -497,6 +508,175 @@ describe('Revoking (KBC-071 FR-4, BR-2)', () => {
       matches: [match(profile.id, 0.9)],
     });
     expect(await suggestionsOf(media, mediaId)).toEqual([]);
+  });
+});
+
+describe('A backup from before a revocation (KBC-071 BR-1, BR-2, ADR 0032)', () => {
+  const REVOCATIONS = 'voice-revocations.list';
+
+  function snapshotDatabase(media: Media): string {
+    const copy = join(media.started.state, 'before-revocation.db');
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    db.exec(`VACUUM INTO '${copy}'`);
+    db.close();
+    return copy;
+  }
+
+  async function restoreAndRestart(media: Media, copy: string): Promise<Media> {
+    await closeApp();
+    for (const suffix of ['', '-wal', '-shm'])
+      rmSync(join(media.mediaDir, `media.db${suffix}`), { force: true });
+    copyFileSync(copy, join(media.mediaDir, 'media.db'));
+    return startMedia({ state: media.started.state });
+  }
+
+  async function revokedThenRestored() {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const copy = snapshotDatabase(media);
+    await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+    const restored = await restoreAndRestart(media, copy);
+    // Another run has another token key, and the old pairing keeps its name.
+    const { token: renewed } = await pairVoicePrinter(restored, [
+      'diarize',
+      'transcribe',
+      'voice-profile',
+    ]);
+    return { token: renewed, profile, restored };
+  }
+
+  it('does not bring the consent back, and no print can be queued', async () => {
+    const { restored, token, profile } = await revokedThenRestored();
+    const [consent] = await report(restored);
+    expect(consent?.revokedAt).not.toBeNull();
+    expect(consent?.revokedBy).toBe('lista de revogações');
+    expect(await profiles(restored)).toEqual([]);
+    const again = await restored.owner(
+      'POST',
+      `/api/v1/voice-profiles/${profile.id}/recalculate`,
+      {},
+    );
+    expect(again.statusCode).toBe(404);
+    expect(
+      (await leaseKinds(restored, { token, kinds: ['voice-profile'] }))
+        .statusCode,
+    ).toBe(204);
+    expect(
+      restored.started.logs.some((line) =>
+        line.includes('voice prints reconciled'),
+      ),
+    ).toBe(true);
+  });
+
+  it('a new consent after the revocation is a new profile, and it works', async () => {
+    const { restored, token, profile } = await revokedThenRestored();
+    const { profile: next } = await readyProfile(restored, {
+      token,
+      name: 'Gabriel de novo',
+      seed: 5,
+    });
+    expect(next.id).not.toBe(profile.id);
+    expect((await profiles(restored)).map(({ status }) => status)).toEqual([
+      'ready',
+    ]);
+  });
+
+  it('refuses to queue or store a print of an id on the list, whatever the database says', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const speaker = await aSpeaker(media, 'Outra voz');
+    const mediaId = await namedRecording(media, {
+      token,
+      speakerId: speaker.id,
+    });
+    const pending = await media.owner('POST', PROFILES, {
+      speakerId: speaker.id,
+      sources: [{ mediaId, voice: ANSWERS.number }],
+      consent: aConsent(),
+    });
+    const job = await leasePrintJob(media, token);
+    const list = join(media.mediaDir, REVOCATIONS);
+    appendFileSync(list, `\n${profile.id}\n${pending.json().id}\n`);
+    const again = await media.owner(
+      'POST',
+      `/api/v1/voice-profiles/${profile.id}/recalculate`,
+      {},
+    );
+    expect(again.statusCode).toBe(409);
+    expect((await sendPrint(media, { token, job, seed: 3 })).statusCode).toBe(
+      409,
+    );
+    expect(printFiles(media)).toEqual([`${profile.id}.sealed`]);
+  });
+
+  it('with the list lost alongside the disk, says so and makes no print', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    await closeApp();
+    rmSync(join(media.mediaDir, REVOCATIONS));
+    rmSync(join(media.mediaDir, PRINTS), { recursive: true });
+    const restarted = await startMedia({ state: media.started.state });
+    expect(
+      restarted.started.logs.some((line) =>
+        line.includes('voice revocation list is lost'),
+      ),
+    ).toBe(true);
+    const again = await restarted.owner(
+      'POST',
+      `/api/v1/voice-profiles/${profile.id}/recalculate`,
+      {},
+    );
+    expect(again.statusCode).toBe(409);
+    await restarted.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+    expect(await profiles(restarted)).toEqual([]);
+  });
+
+  it('checked by the owner, the lost list works again', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    await closeApp();
+    rmSync(join(media.mediaDir, REVOCATIONS));
+    const restarted = await startMedia({ state: media.started.state });
+    appendFileSync(
+      join(media.mediaDir, REVOCATIONS),
+      `${REVOCATION_LIST_HEADER}\n`,
+    );
+    const again = await restarted.owner(
+      'POST',
+      `/api/v1/voice-profiles/${profile.id}/recalculate`,
+      {},
+    );
+    expect(again.statusCode).toBe(200);
+  });
+
+  it('a crash after the list wrote the revocation is finished by the next start', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    await closeApp();
+    appendFileSync(join(media.mediaDir, REVOCATIONS), `\n${profile.id}\n`);
+    const restarted = await startMedia({ state: media.started.state });
+    expect(await profiles(restarted)).toEqual([]);
+    expect(printFiles(restarted)).toEqual([]);
+  });
+
+  it('a write a crash left unfinished goes when the API starts', async () => {
+    const { media, token } = await granted();
+    await readyProfile(media, { token, name: 'Gabriel' });
+    await closeApp();
+    const lost = `${randomUUID()}.tmp`;
+    writeFileSync(join(media.mediaDir, PRINTS, lost), 'half a sealed print');
+    const restarted = await startMedia({ state: media.started.state });
+    expect(printFiles(restarted)).not.toContain(lost);
+  });
+
+  it('a revocation puts its id on the list, and nothing else about the person', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+    const lines = readFileSync(join(media.mediaDir, REVOCATIONS), 'utf8')
+      .split('\n')
+      .filter((line) => line !== '');
+    expect(lines).toEqual([REVOCATION_LIST_HEADER, profile.id]);
   });
 });
 

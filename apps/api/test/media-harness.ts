@@ -39,7 +39,7 @@ export interface Media {
 }
 
 export async function startMedia(
-  options: { readonly vault?: string } = {},
+  options: { readonly vault?: string; readonly state?: string } = {},
 ): Promise<Media> {
   const started = await start({ media: true, ...options });
   const ownerHeaders = await signIn(started, 'owner@example.com');

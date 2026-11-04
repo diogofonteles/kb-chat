@@ -103,6 +103,7 @@ const voicePrintsOf = (media: MediaDeps): VoicePrintService =>
     ...media,
     profiles: media.voiceProfiles,
     prints: media.voicePrintVault,
+    revocations: media.voiceRevocations,
     rootOf: (topic) => topic,
     authorOf: () => null,
   });

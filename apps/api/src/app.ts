@@ -118,6 +118,7 @@ import {
   TranscriptService,
   transcriptRoutes,
   workerRoutes,
+  VoicePrintReconciler,
   VoicePrintService,
   VoiceProfileService,
   VoiceSuggestionService,
@@ -499,6 +500,7 @@ function voicePrintService(wiring: {
   return new VoicePrintService({
     profiles: media.voiceProfiles,
     prints: media.voicePrintVault,
+    revocations: media.voiceRevocations,
     store: media.store,
     diarizations: media.diarizations,
     voiceLabels: media.voiceLabels,
@@ -508,7 +510,23 @@ function voicePrintService(wiring: {
   });
 }
 
-/** "Perfis de voz" (KBC-071): a print with no profile goes when the API starts. */
+/** What a restored backup or a crash left is put right before any route answers (ADR 0032). */
+async function reconcileVoicePrints(app: FastifyInstance, media: MediaDeps) {
+  const found = await new VoicePrintReconciler({
+    profiles: media.voiceProfiles,
+    prints: media.voicePrintVault,
+    revocations: media.voiceRevocations,
+  }).reconcile();
+  const { listLost, ...counts } = found;
+  if (Object.values(counts).some((count) => count > 0))
+    app.log.warn(counts, 'voice prints reconciled');
+  if (listLost)
+    app.log.error(
+      'voice revocation list is lost: no print until it is checked',
+    );
+}
+
+/** "Perfis de voz" (KBC-071). */
 async function registerVoiceProfiles(
   app: FastifyInstance,
   wiring: {
@@ -521,6 +539,7 @@ async function registerVoiceProfiles(
   const service = new VoiceProfileService({
     profiles: media.voiceProfiles,
     prints: media.voicePrintVault,
+    revocations: media.voiceRevocations,
     speakers: media.speakers,
     store: media.store,
     sealer: media.consentSealer,
@@ -528,8 +547,7 @@ async function registerVoiceProfiles(
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
     presence: () => transcribers.presence('voice-profile'),
   });
-  const dropped = await service.dropOrphanPrints();
-  if (dropped > 0) app.log.warn({ dropped }, 'orphan voice prints removed');
+  await reconcileVoicePrints(app, media);
   await app.register(voiceProfileRoutes(service));
 }
 

@@ -287,7 +287,7 @@ sudo docker compose --env-file .env --env-file release.env ps media-worker   # h
 - Com `KB_CHAT_MEDIA=on`, a API não sobe se `/data/media` não puder ser gravada, se faltar o token ou se uma migração falhar; o log diz o motivo (`docker compose logs api`).
 - O processador roda com 1 CPU e 2 GB: a conversão de 1 h de áudio leva cerca de 1 min, sem derrubar a busca.
 - Quem pode enviar: masters sempre; outras pessoas, com a permissão **Enviar áudios** em Pessoas e permissões.
-- O backup diário leva uma cópia consistente de `media.db` (nunca os áudios, que vêm de quem enviou). A pasta `media/voice-prints/` fica **fora** do backup de propósito (ADR 0032): impressão de voz revogada não pode sobreviver em cópia. Perdido o disco, cada perfil pede "Calcular de novo".
+- O backup diário leva uma cópia consistente de `media.db` (nunca os áudios, que vêm de quem enviou). A pasta `media/voice-prints/` fica **fora** do backup de propósito (ADR 0032): impressão de voz revogada não pode sobreviver em cópia. `media/voice-revocations.list` também fica fora, para um backup antigo não desfazer uma revogação (seção 11). Perdido o disco, cada perfil pede "Calcular de novo".
 - Para desligar: `KB_CHAT_MEDIA=off` e tire `media` de `COMPOSE_PROFILES`; os arquivos ficam em `/srv/kb-chat/media`.
 
 ## 9b. 👤 DONO — IA da aplicação (na tela, depois do primeiro deploy)
@@ -329,6 +329,13 @@ age --decrypt --identity ~/.config/kb-chat/backup-age.key backup.age |
 - O arquivo é extraído numa pasta temporária primeiro; links e caminhos inesperados são recusados.
 - O estado atual fica guardado em `/srv/kb-chat/state.before-restore-<stamp>`.
 - O acervo e o índice não estão no backup: a fonte é o Mac, use `sync-vault.sh`.
+- **Perfis de voz (ADR 0032):** `media/backup/media.db` pode ser de antes de uma revogação. Restaure só `media.db` e **nunca** toque em `/srv/kb-chat/media/voice-revocations.list` nem em `media/voice-prints/`: essa lista, só com ids, é o que impede o consentimento revogado de voltar. Ao subir, a API revoga de novo cada perfil da lista; o relatório mostra a data desse arranque e "lista de revogações" como quem revogou.
+- **Disco perdido, com a lista junto:** o log diz `voice revocation list is lost`, e cadastrar, "Calcular de novo" e receber impressões respondem 409 (revogar continua funcionando). Restaure o backup **mais recente**. Depois, confira com o dono se houve revogação depois da data desse backup e revogue de novo cada uma pela tela. Só então marque a lista como conferida:
+
+  ```bash
+  F=/srv/kb-chat/media/voice-revocations.list
+  sudo sh -c "echo 'voice-revocations v1' >> $F && chown 10001:10001 $F && chmod 600 $F"
+  ```
 
 Ensaio sugerido: um a cada trimestre.
 
