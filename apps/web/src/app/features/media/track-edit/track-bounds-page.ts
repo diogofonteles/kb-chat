@@ -1,4 +1,4 @@
-import { httpResource } from '@angular/common/http';
+import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,6 +23,8 @@ import {
   mediaWaveformSchema,
   trackEditViewSchema,
   type DraftTrack,
+  type TrackBoundsRequest,
+  type TrackEditView,
   type TrackNeighbour,
 } from '@kb-chat/contracts';
 import { NUDGE_MS, snapPointsOf, type TrackEdge } from '@kb-chat/player-core';
@@ -33,7 +35,14 @@ import {
   TrackRevisionsApi,
   trackEditUrl,
 } from '@core/media/track-revisions-api.js';
-import { EMPTY, distinctUntilChanged, interval, map, switchMap } from 'rxjs';
+import {
+  EMPTY,
+  distinctUntilChanged,
+  interval,
+  map,
+  switchMap,
+  type Observable,
+} from 'rxjs';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import {
   TrackAudition,
@@ -65,6 +74,12 @@ const toDraft = (track: TrackNeighbour): DraftTrack => ({
   askerSpeakerId: null,
   answererSpeakerId: null,
 });
+
+const timesOf = ({ startMs, endMs }: TrackBoundsRequest): string => {
+  const start = formatBoundary(startMs);
+  const end = formatBoundary(endMs);
+  return $localize`:@@trackEdit.times:Início ${start}:start: · Fim ${end}:end:`;
+};
 
 /**
  * "Ajustar início e fim" (KBC-073 FR-6): the bar of the recording's edit on one track, its
@@ -138,10 +153,13 @@ export class TrackBoundsPage {
   protected readonly peaksPerSecond = computed(() =>
     this.waveform.hasValue() ? this.waveform.value().peaksPerSecond : 10,
   );
+  /** What the person moved: nothing read from the server takes it back (BR-10). */
+  private readonly adjusted = signal<TrackBoundsRequest | null>(null);
   /** The bounds on screen, from the track's until a handle moves them. */
-  protected readonly bounds = linkedSignal(() => {
+  protected readonly bounds = computed((): TrackBoundsRequest | null => {
     const track = this.current();
-    return track ? { startMs: track.startMs, endMs: track.endMs } : null;
+    if (!track) return null;
+    return this.adjusted() ?? { startMs: track.startMs, endMs: track.endMs };
   });
   protected readonly numbered = computed(() => {
     const track = this.current();
@@ -159,10 +177,13 @@ export class TrackBoundsPage {
   protected readonly edge = signal<TrackEdge>('start');
   protected readonly timesText = computed(() => {
     const bounds = this.bounds();
-    if (!bounds) return '';
-    const start = formatBoundary(bounds.startMs);
-    const end = formatBoundary(bounds.endMs);
-    return $localize`:@@trackEdit.times:Início ${start}:start: · Fim ${end}:end:`;
+    return bounds ? timesOf(bounds) : '';
+  });
+  /** The version on screen is old: the person says whose bounds go on first (BR-10). */
+  protected readonly conflict = signal<TrackEditView | null>(null);
+  protected readonly theirTimes = computed(() => {
+    const theirs = this.conflict();
+    return theirs ? timesOf(theirs) : '';
   });
   protected readonly cutting = computed(
     () => this.current()?.cut === 'running' || this.sending(),
@@ -171,6 +192,7 @@ export class TrackBoundsPage {
     const track = this.current();
     const bounds = this.bounds();
     if (!track || !bounds || track.locked || this.cutting()) return false;
+    if (this.conflict()) return false;
     return bounds.startMs !== track.startMs || bounds.endMs !== track.endMs;
   });
   private readonly sending = signal(false);
@@ -205,14 +227,13 @@ export class TrackBoundsPage {
   }
 
   protected moveHandle({ edge, ms }: HandleMoved): void {
+    const bounds = this.bounds();
+    if (!bounds) return;
     this.saved.set(false);
-    this.bounds.update(
-      (bounds) =>
-        bounds && {
-          ...bounds,
-          [edge === 'start' ? 'startMs' : 'endMs']: ms,
-        },
-    );
+    this.adjusted.set({
+      ...bounds,
+      [edge === 'start' ? 'startMs' : 'endMs']: ms,
+    });
   }
 
   protected nudge(direction: 1 | -1): void {
@@ -238,22 +259,55 @@ export class TrackBoundsPage {
     const track = this.current();
     const bounds = this.bounds();
     if (!track || !bounds) return;
+    this.send(this.api.moveBounds(track, bounds));
+  }
+
+  protected useTheirs(theirs: TrackEditView): void {
+    this.adopt(theirs);
+    this.adjusted.set(null);
+  }
+
+  protected saveOver(theirs: TrackEditView): void {
+    this.adopt(theirs);
+    this.save();
+  }
+
+  private adopt(theirs: TrackEditView): void {
+    this.view.set(theirs);
+    this.conflict.set(null);
+  }
+
+  private send(request: Observable<TrackEditView>): void {
     this.sending.set(true);
     this.failure.set('');
-    this.api
-      .moveBounds(track, bounds)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (view) => {
-          this.sending.set(false);
-          this.saved.set(true);
-          this.view.set(view);
-        },
-        error: (err: unknown) => {
-          this.sending.set(false);
-          this.failure.set(errorMessage(toUiErrorCode(err)));
-          this.view.reload();
-        },
-      });
+    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (view) => {
+        this.sending.set(false);
+        this.saved.set(true);
+        this.adjusted.set(null);
+        this.view.set(view);
+      },
+      error: (err: unknown) => this.refused(err),
+    });
+  }
+
+  private refused(err: unknown): void {
+    this.sending.set(false);
+    if (err instanceof HttpErrorResponse && err.status === 412) {
+      this.api
+        .view(this.id())
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (theirs) => this.conflict.set(theirs),
+          error: (read: unknown) => this.fail(read),
+        });
+      return;
+    }
+    this.fail(err);
+    this.view.reload();
+  }
+
+  private fail(err: unknown): void {
+    this.failure.set(errorMessage(toUiErrorCode(err)));
   }
 }

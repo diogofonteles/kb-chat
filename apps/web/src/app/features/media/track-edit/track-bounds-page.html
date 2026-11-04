@@ -97,6 +97,40 @@
       Posições e marcadores acompanham o novo recorte. Quem estiver ouvindo
       continua até o fim do arquivo atual.
     </p>
+    @if (conflict(); as theirs) {
+      <div class="conflict" role="alert">
+        <p i18n="@@trackEdit.conflict.bounds">
+          Outra pessoa mudou esta faixa enquanto você ajustava.
+        </p>
+        <p i18n="@@trackEdit.conflict.theirs">
+          Título dela: <strong>{{ theirs.title }}</strong>
+        </p>
+        <p i18n="@@trackEdit.conflict.theirBounds">
+          Limites dela: <strong>{{ theirTimes() }}</strong>
+        </p>
+        <p class="note" i18n="@@trackEdit.conflict.yourBounds">
+          O seu ajuste continua na barra.
+        </p>
+        <div class="line-actions">
+          <button
+            type="button"
+            class="secondary"
+            (click)="useTheirs(theirs)"
+            i18n="@@trackEdit.conflict.useTheirs"
+          >
+            Usar o da outra pessoa
+          </button>
+          <button
+            type="button"
+            class="primary"
+            (click)="saveOver(theirs)"
+            i18n="@@trackEdit.conflict.saveMine"
+          >
+            Salvar o meu por cima
+          </button>
+        </div>
+      </div>
+    }
     @if (failure(); as text) {
       <p class="error" role="alert">{{ text }}</p>
     }

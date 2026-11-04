@@ -121,3 +121,15 @@ a:not(.primary, .secondary, .danger) {
     flex: 1 1 100%;
   }
 }
+
+.conflict {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  overflow-wrap: anywhere;
+}
+
+.conflict p {
+  margin: 0 0 var(--space-2);
+}
