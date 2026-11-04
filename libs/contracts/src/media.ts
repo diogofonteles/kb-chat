@@ -116,6 +116,18 @@ export const mediaTranscriptionSchema = z.object({
 });
 export type MediaTranscription = z.infer<typeof mediaTranscriptionSchema>;
 
+/** Where a track item comes from (KBC-068 FR-4); bounds are the real ones, in the recording. */
+export const trackParentSchema = z.object({
+  id: mediaIdSchema,
+  title: z.string().min(1).max(200),
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(1),
+  /** 1-based, among the recording's approved tracks; null once it left the edit. */
+  ordinal: z.number().int().min(1).nullable(),
+  total: z.number().int().min(0),
+});
+export type TrackParent = z.infer<typeof trackParentSchema>;
+
 export const mediaItemSchema = z.object({
   id: mediaIdSchema,
   topic: topicSlugSchema,
@@ -150,6 +162,10 @@ export const mediaItemSchema = z.object({
   positionUpdatedAt: z.iso.datetime().nullable(),
   /** Where its automatic transcription is (KBC-036). */
   transcription: mediaTranscriptionSchema,
+  /** The recording it was cut from: only a track item has one (KBC-068). */
+  parent: trackParentSchema.nullable().default(null),
+  /** A track that left the edit: it stays to say so, and cannot be played (BR-5). */
+  archived: z.boolean().default(false),
 });
 export type MediaItem = z.infer<typeof mediaItemSchema>;
 
@@ -309,8 +325,8 @@ export function hasAcceptedAudioExtension(fileName: string): boolean {
 /**
  * Converting for the browser and measuring its silences (VM worker, KBC-044),
  * transcribing (a paired transcriber, ADR 0023), separating the voices of a transcribed
- * recording (a paired transcriber, ADR 0029 §1) and computing its waveform peaks (VM worker,
- * ADR 0029 §4).
+ * recording (a paired transcriber, ADR 0029 §1), computing its waveform peaks (VM worker,
+ * ADR 0029 §4) and cutting an approved track out of its rendition (VM worker, ADR 0029 §5).
  */
 export const MEDIA_JOB_KINDS = [
   'transcode',
@@ -319,6 +335,7 @@ export const MEDIA_JOB_KINDS = [
   'diarize',
   'waveform',
   'voice-profile',
+  'cut',
 ] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;
@@ -474,11 +491,24 @@ export const waveformJobSchema = silencesJobSchema
   });
 export type WaveformJob = z.infer<typeof waveformJobSchema>;
 
-/** The jobs the VM worker leases: conversions, silence maps and waveforms. */
+/**
+ * A leased cut (VM worker, KBC-068): `startMs..endMs` of the rendition at `sourcePath`,
+ * copied without re-encoding to `targetPath`, the lease's own work file.
+ */
+export const cutJobSchema = silencesJobSchema.omit({ detector: true }).extend({
+  kind: z.literal('cut'),
+  targetPath: z.string().min(1),
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(1),
+});
+export type CutJob = z.infer<typeof cutJobSchema>;
+
+/** The jobs the VM worker leases: conversions, silence maps, waveforms and cuts. */
 export const vmWorkerJobSchema = z.discriminatedUnion('kind', [
   workerJobSchema,
   silencesJobSchema,
   waveformJobSchema,
+  cutJobSchema,
 ]);
 export type VmWorkerJob = z.infer<typeof vmWorkerJobSchema>;
 
@@ -493,6 +523,17 @@ export const completeSilencesRequestSchema = leaseOwnerSchema.extend({
 export type CompleteSilencesRequest = z.infer<
   typeof completeSilencesRequestSchema
 >;
+
+/**
+ * POST /api/v1/media-worker/jobs/:id/cut: the file written and where it really starts and how
+ * long it really is: stream copy cuts on AAC packets (BR-3).
+ */
+export const completeCutRequestSchema = leaseOwnerSchema.extend({
+  bytes: z.number().int().min(1),
+  actualStartMs: z.number().int().min(0),
+  durationMs: z.number().int().min(1),
+});
+export type CompleteCutRequest = z.infer<typeof completeCutRequestSchema>;
 
 const peaksSchema = z.base64().max(MAX_WAVEFORM_BASE64);
 
@@ -556,6 +597,7 @@ export const leasedJobSchema = z.union([
   diarizeJobSchema,
   waveformJobSchema,
   voiceProfileJobSchema,
+  cutJobSchema,
 ]);
 export type LeasedWorkerJob = z.infer<typeof leasedJobSchema>;
 

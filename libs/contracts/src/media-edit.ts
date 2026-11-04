@@ -33,6 +33,14 @@ export const editStatusSchema = z.enum(EDIT_STATUSES);
 export type EditStatus = z.infer<typeof editStatusSchema>;
 
 /** GET /api/v1/media/:id/edit, with the version again as the `ETag`. */
+/** "Preparando faixas: 3 de 12": listeners get them only when every one is done (FR-1). */
+export const trackPreparationSchema = z.object({
+  total: z.number().int().min(1),
+  done: z.number().int().min(0),
+  failed: z.number().int().min(0),
+});
+export type TrackPreparation = z.infer<typeof trackPreparationSchema>;
+
 export const mediaEditSchema = z.object({
   mediaId: mediaIdSchema,
   /** 0 before the first save: `If-Match: "0"` starts the edit. */
@@ -51,6 +59,8 @@ export const mediaEditSchema = z.object({
   approvedTracks: z.number().int().nonnegative(),
   /** The transcript has a new version since this edit began (BR-10). */
   transcriptChanged: z.boolean(),
+  /** The tracks being cut after an approval; null when nothing is on its way (KBC-068 FR-1). */
+  preparation: trackPreparationSchema.nullable().default(null),
 });
 export type MediaEdit = z.infer<typeof mediaEditSchema>;
 
