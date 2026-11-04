@@ -200,3 +200,4 @@ export function absenceIn(answer: string, question = ''): string | null {
   }
   return refusalIn(sentences);
 }
+
