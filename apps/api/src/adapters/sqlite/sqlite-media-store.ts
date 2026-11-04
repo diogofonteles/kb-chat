@@ -331,13 +331,7 @@ export class SqliteMediaStore implements MediaStorePort {
         `INSERT OR REPLACE INTO media_transcribe_cuts
            (media_id, job_id, done, total, updated_at) VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(
-        mediaId,
-        beat.jobId,
-        cuts.done,
-        cuts.total,
-        beat.now.toISOString(),
-      );
+      .run(mediaId, beat.jobId, cuts.done, cuts.total, beat.now.toISOString());
   }
 
   /** What a job is (conversion or transcription); null when it does not exist. */

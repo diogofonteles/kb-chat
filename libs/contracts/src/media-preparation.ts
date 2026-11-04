@@ -43,6 +43,7 @@ export const OPTION_REFUSALS = [
   'run-cap',
   'monthly-cap',
   'no-estimate',
+  'approved',
 ] as const;
 export const optionRefusalSchema = z.enum(OPTION_REFUSALS);
 export type OptionRefusal = z.infer<typeof optionRefusalSchema>;

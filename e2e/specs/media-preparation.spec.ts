@@ -119,9 +119,10 @@ test('AC-1, AC-5, AC-8: choose, follow step 2 and go to step 3 by a press', asyn
   ).toHaveCount(0);
   await waitReady(page);
   await seedTranscript(owner, id);
+  await page.goto(`/midia/${id}/faixas`);
+  await expect(page).toHaveURL(/\/preparar$/);
 
   const validate = page.getByRole('button', { name: 'Validar faixas' });
-  await page.reload();
   await expect(validate).toBeVisible({ timeout: 10_000 });
   await expect(page).toHaveURL(/\/preparar$/);
   await validate.click();

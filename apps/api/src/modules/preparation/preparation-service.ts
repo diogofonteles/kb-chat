@@ -156,14 +156,19 @@ export class PreparationService {
     const durationMs = query.durationMs ?? item?.durationMs ?? undefined;
     const rates = this.deps.plans.measuredRates();
     const ai = await this.aiOption(actor, durationMs);
-    const tracksDone =
-      item !== null &&
-      (this.deps.edits.edit(item.id)?.status ?? '') === 'approved';
+    const tracksDone = item !== null && this.isApproved(item.id);
+    const approved = tracksDone ? ('approved' as const) : null;
     return {
       options: {
         ...this.freeOptions({ actor, item, rates, durationMs }),
-        manual: option(this.handRefusal(actor), { done: tracksDone }),
-        ai: { ...ai.option, done: tracksDone },
+        manual: option(approved ?? this.handRefusal(actor), {
+          done: tracksDone,
+        }),
+        ai: {
+          ...ai.option,
+          refusal: approved ?? ai.option.refusal,
+          done: tracksDone,
+        },
         subjects: option('unavailable'),
       },
       aiEstimateUsd: ai.estimateUsd,
@@ -285,6 +290,13 @@ export class PreparationService {
     item: MediaItem,
     asked: PreparationPlan,
   ): PreparationPlan {
+    if (asked.tracks !== 'none' && this.isApproved(item.id))
+      throw refuse([
+        {
+          option: asked.tracks === 'ai' ? 'ai' : 'manual',
+          refusal: 'approved',
+        },
+      ]);
     const hasTranscript = item.transcription.version !== null;
     const hasVoices = this.hasVoices(item.id);
     const plan = {
@@ -541,6 +553,10 @@ export class PreparationService {
       answerer: person(track.answererSpeakerId, track.answererVoice),
       status: statusOf(track, approved),
     }));
+  }
+
+  private isApproved(mediaId: string): boolean {
+    return this.deps.edits.edit(mediaId)?.status === 'approved';
   }
 
   private isOpen(mediaId: string): boolean {

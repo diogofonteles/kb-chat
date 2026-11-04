@@ -33,6 +33,8 @@ export const REFUSAL_TEXTS: Record<OptionRefusal, () => string> = {
     $localize`:@@prep.refusal.runCap:Esta gravação passa do teto por análise da mídia.`,
   'monthly-cap': () =>
     $localize`:@@prep.refusal.monthlyCap:O limite mensal da mídia foi atingido.`,
+  approved: () =>
+    $localize`:@@prep.refusal.approved:As faixas deste áudio já foram aprovadas. Para mudar, reabra a edição.`,
   'no-estimate': () =>
     $localize`:@@prep.refusal.noEstimate:Escolha um arquivo que o navegador consiga ler para ver a estimativa de custo.`,
 };

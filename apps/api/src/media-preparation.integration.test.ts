@@ -413,6 +413,20 @@ describe('going through the stages (FR-2, BR-5)', () => {
     expect(moved.json<MediaPreparation>().step).toBe(3);
   });
 
+  it('tells the edit where the plan stands: the editor sends who comes early back (BR-5)', async () => {
+    const { media, token } = await connected();
+    const item = await uploaded(media, {
+      ...FREE_PLAN,
+      speakers: false,
+      tracks: 'manual',
+    });
+    await transcribe(media, token);
+    const edit = () => media.owner('GET', `/api/v1/media/${item.id}/edit`);
+    expect((await edit()).json().preparationStep).toBe(2);
+    await media.owner('POST', `${preparation(item.id)}/advance`, {});
+    expect((await edit()).json().preparationStep).toBe(3);
+  });
+
   it('lists where it stopped for the same person on another device (AC-10)', async () => {
     const { media, token } = await connected();
     const item = await uploaded(media, {
@@ -696,6 +710,68 @@ describe('an audio already sent (AC-16)', () => {
     });
     await transcribe(media, token);
     expect((await read(media, item.id)).next).toBe('validate');
+  });
+
+  it('refuses dividing tracks already approved, and ends a plan on approval', async () => {
+    const { media, token } = await connected();
+    const item = await uploaded(media, {
+      ...FREE_PLAN,
+      speakers: false,
+      tracks: 'manual',
+    });
+    await transcribe(media, token);
+    await media.owner('POST', `${preparation(item.id)}/advance`, {});
+    const headers = { ...media.ownerHeaders, 'if-match': '"0"' };
+    const saved = await media.started.app.inject({
+      method: 'PUT',
+      url: `/api/v1/media/${item.id}/edit`,
+      headers,
+      payload: {
+        step: 3,
+        tracks: [
+          {
+            id: randomUUID(),
+            source: 'manual',
+            startMs: 0,
+            endMs: 30_000,
+            kind: 'qa',
+            title: 'Primeira',
+            askerVoice: null,
+            answererVoice: null,
+            askerSpeakerId: null,
+            answererSpeakerId: null,
+          },
+        ],
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const approved = await media.started.app.inject({
+      method: 'POST',
+      url: `/api/v1/media/${item.id}/edit/approve`,
+      headers: { ...media.ownerHeaders, 'if-match': '"1"' },
+      payload: {},
+    });
+    expect(approved.statusCode, approved.body).toBe(200);
+    expect(await read(media, item.id)).toMatchObject({
+      step: 4,
+      finished: true,
+    });
+    const open = await media.owner('GET', '/api/v1/media/preparations');
+    expect(open.json<OpenPreparations>().items).toEqual([]);
+    const again = await media.owner('POST', preparation(item.id), {
+      plan: { ...FREE_PLAN, speakers: false, tracks: 'manual' },
+    });
+    expect(again.statusCode).toBe(422);
+    expect(again.json().error.details.options).toEqual([
+      { option: 'manual', refusal: 'approved' },
+    ]);
+    const options = await media.owner(
+      'GET',
+      `/api/v1/media/preparation-options?mediaId=${item.id}`,
+    );
+    expect(options.json<PreparationOptions>().options.ai.refusal).toBe(
+      'approved',
+    );
   });
 
   it('refuses a second plan while one is open', async () => {
