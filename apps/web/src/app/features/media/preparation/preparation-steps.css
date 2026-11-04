@@ -1,0 +1,73 @@
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+.step-text {
+  display: inline;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.step-text .wide {
+  display: none;
+}
+
+.toggle {
+  min-height: 48px;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.steps {
+  display: none;
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.steps.open {
+  display: grid;
+}
+
+.steps [aria-current] {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.steps .skipped {
+  font-style: italic;
+}
+
+.why {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+@container (min-width: 44rem) {
+  .step-text .wide {
+    display: inline;
+  }
+
+  .step-text .narrow,
+  .toggle {
+    display: none;
+  }
+
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
