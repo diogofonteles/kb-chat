@@ -27,7 +27,12 @@ import {
   type RouteAccess,
 } from '../auth/index.js';
 import type { MediaEditService } from './media-edit-service.js';
-import type { MediaActor, MediaService } from './media-service.js';
+import type {
+  MediaActor,
+  MediaService,
+  PlanActor,
+  UploadPlans,
+} from './media-service.js';
 import { serveMedia } from './serve-media.js';
 
 /** Listening needs the `media` feature (owner's rule: every feature is granted per person). */
@@ -69,6 +74,16 @@ export function actorOf(request: FastifyRequest): MediaActor {
     canUpload: hasFeature(viewer.person, 'media-upload'),
     seesTracks: hasFeature(viewer.person, 'media-tracks'),
     canSee: (topic) => canSee(request, topic),
+  };
+}
+
+/** The person, with what decides the guided flow's options (KBC-072 BR-3). */
+export function planActorOf(request: FastifyRequest): PlanActor {
+  const { person } = viewerOf(request);
+  return {
+    ...actorOf(request),
+    canEdit: hasFeature(person, 'media-edit'),
+    canPropose: hasFeature(person, 'media-edit-ai'),
   };
 }
 
@@ -137,6 +152,8 @@ export const mediaRoutes =
     editor: MediaEditService,
     /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
     createPerMinute: number,
+    /** The guided flow's plans (KBC-072). */
+    plans: UploadPlans,
   ): FastifyPluginAsync =>
   async (app) => {
     // The upload body is streamed to disk as it arrives, never buffered (FR-2).
@@ -152,11 +169,12 @@ export const mediaRoutes =
       '/api/v1/topics/:topic/media',
       createOptions(createPerMinute),
       async (request, reply) => {
-        const created = service.create(
-          actorOf(request),
-          request.params.topic,
-          request.body,
-        );
+        const { plan, ...item } = request.body;
+        const actor = planActorOf(request);
+        // A refused option creates nothing (AC-13).
+        if (plan) plans.assertAllowed(actor, plan);
+        const created = service.create(actor, request.params.topic, item);
+        if (plan) plans.record(actor, created.id, plan);
         return reply.code(201).send(created);
       },
     );

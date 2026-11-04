@@ -19,6 +19,7 @@ import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-led
 import { SqliteMediaSearch } from './adapters/sqlite/sqlite-media-search.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
 import { SqliteTrackItemStore } from './adapters/sqlite/sqlite-track-item-store.js';
+import { SqlitePreparationStore } from './adapters/sqlite/sqlite-preparation-store.js';
 import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposal-store.js';
 import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
@@ -37,6 +38,7 @@ import type { MediaEditStorePort } from './ports/media-edit-store.js';
 import type { MediaSpendLedgerPort } from './ports/media-spend-ledger.js';
 import type { MediaSearchPort } from './ports/media-search.js';
 import type { MediaStorePort } from './ports/media-store.js';
+import type { PreparationStorePort } from './ports/preparation-store.js';
 import type { TrackProposalStorePort } from './ports/track-proposal-store.js';
 import type { SilenceStorePort } from './ports/silence-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
@@ -65,6 +67,8 @@ export interface MediaDeps {
   readonly trackProposals: TrackProposalStorePort;
   /** The draft's edit and the approved tracks (KBC-066). */
   readonly edits: MediaEditStorePort;
+  /** The plans of the guided flow (KBC-072). */
+  readonly preparations: PreparationStorePort;
   /** The media monthly spend ledger (ADR 0022 §7). */
   readonly spend: MediaSpendLedgerPort;
   /** The media AI's model and caps (KBC-067, ADR 0029). */
@@ -166,6 +170,7 @@ type MediaStores = Pick<
   | 'transcribers'
   | 'trackProposals'
   | 'edits'
+  | 'preparations'
   | 'spend'
   | 'silences'
   | 'waveforms'
@@ -199,6 +204,7 @@ function storesOf(db: DatabaseSync): MediaStores {
     transcribers: new SqliteTranscriberStore(db),
     trackProposals: new SqliteTrackProposalStore(db),
     edits: new SqliteMediaEditStore(db),
+    preparations: new SqlitePreparationStore(db),
     spend: new SqliteMediaSpendLedger(db),
     silences: new SqliteSilenceStore(db),
     waveforms: new SqliteWaveformStore(db),

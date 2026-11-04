@@ -172,6 +172,26 @@ export type MediaItem = z.infer<typeof mediaItemSchema>;
 export const mediaListSchema = z.object({ items: z.array(mediaItemSchema) });
 export type MediaList = z.infer<typeof mediaListSchema>;
 
+/** "Dividir em faixas": not now, by the person, or proposed by the AI (KBC-072 BR-1). */
+export const TRACK_CHOICES = ['none', 'manual', 'ai'] as const;
+export const trackChoiceSchema = z.enum(TRACK_CHOICES);
+export type TrackChoice = z.infer<typeof trackChoiceSchema>;
+
+/** What a person asks for an audio in the guided flow "Preparar áudio" (KBC-072 FR-1). */
+export const preparationPlanSchema = z.strictObject({
+  transcribe: z.boolean(),
+  speakers: z.boolean(),
+  tracks: trackChoiceSchema,
+  subjects: z.boolean(),
+  /**
+   * The estimate shown when the person chose a paid option: what they agreed to. The paid
+   * step never runs by itself above it (BR-4).
+   */
+  acceptedUsd: z.number().nonnegative().max(1_000).nullable().default(null),
+});
+export type PreparationPlan = z.infer<typeof preparationPlanSchema>;
+export type PreparationPlanRequest = z.input<typeof preparationPlanSchema>;
+
 /** POST /api/v1/topics/:topic/media: the metadata; the file follows with PUT …/file. */
 export const createMediaRequestSchema = z.strictObject({
   title: z.string().trim().min(1).max(200),
@@ -179,8 +199,10 @@ export const createMediaRequestSchema = z.strictObject({
   author: authorSlugSchema.nullable(),
   fileName: z.string().min(1).max(255),
   bytes: z.number().int().min(1).max(MEDIA_MAX_UPLOAD_BYTES),
+  /** Left out: only the transcription, as before KBC-072. */
+  plan: preparationPlanSchema.optional(),
 });
-export type CreateMediaRequest = z.infer<typeof createMediaRequestSchema>;
+export type CreateMediaRequest = z.input<typeof createMediaRequestSchema>;
 
 /** PATCH /api/v1/media/:id (KBC-050 FR-1): what changes; what is left out stays. */
 export const updateMediaRequestSchema = z.strictObject({
@@ -374,10 +396,22 @@ const leaseOwnerSchema = z.strictObject({
 /** More than a collection's speakers; the bound only keeps a heartbeat small. */
 export const MAX_HELD_VOICE_PROFILES = 1_000;
 
+/** The cuts of a transcription done so far (KBC-072 FR-3); older transcribers omit it. */
+export const jobCutsSchema = z
+  .strictObject({
+    done: z.number().int().nonnegative(),
+    total: z.number().int().positive(),
+  })
+  .refine(({ done, total }) => done <= total, {
+    error: 'More cuts done than there are',
+  });
+export type JobCuts = z.infer<typeof jobCutsSchema>;
+
 export const heartbeatRequestSchema = leaseOwnerSchema.extend({
   progress: z.number().int().min(0).max(100).nullable(),
   /** The profiles whose prints this job holds in memory (KBC-071 BR-2). */
   voiceProfiles: z.array(z.uuid()).max(MAX_HELD_VOICE_PROFILES).optional(),
+  cuts: jobCutsSchema.optional(),
 });
 export type HeartbeatRequest = z.infer<typeof heartbeatRequestSchema>;
 

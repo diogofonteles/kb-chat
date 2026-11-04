@@ -177,6 +177,12 @@ export class DiarizationService {
     return this.speakers(actor, mediaId);
   }
 
+  /** Where the newest separation is (FR-4), without reading its turns. */
+  status(mediaId: string): DiarizationStatus {
+    const { diarizations } = this.deps;
+    return statusOf(diarizations.latestJob(mediaId), diarizations.latest(mediaId));
+  }
+
   /** The current separation read on the current transcript (FR-4), with its status. */
   speakers(actor: MediaActor, mediaId: string): MediaSpeakers {
     const media = this.visible(actor, mediaId);

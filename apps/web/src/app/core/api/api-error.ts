@@ -138,6 +138,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.editStale:Outra pessoa mudou esta edição; recarregue para ver.`,
   EDIT_VERSION_REQUIRED: () =>
     $localize`:@@error.editVersionRequired:Recarregue a página para continuar esta edição.`,
+  PLAN_REFUSED: () =>
+    $localize`:@@error.planRefused:Uma das opções escolhidas não está disponível. Confira as opções e tente de novo.`,
   TRACKS_INVALID: () =>
     $localize`:@@error.tracksInvalid:Há faixas com problema. Corrija e tente de novo.`,
   TERMS_OVER_LIMIT: () =>

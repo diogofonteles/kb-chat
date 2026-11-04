@@ -7,6 +7,7 @@ import {
   type MediaAuthor,
   type MediaItem,
   type TrackParent,
+  type PreparationPlan,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import {
@@ -32,6 +33,20 @@ export interface MediaActor {
   /** Has `media-tracks`: track items exist for them (KBC-068 FR-5). */
   readonly seesTracks?: boolean;
   readonly canSee: (topic: string) => boolean;
+}
+
+/** What a plan's options depend on, on top of the actor (KBC-072 BR-3). */
+export interface PlanActor extends MediaActor {
+  /** Has `media-edit`. */
+  readonly canEdit: boolean;
+  /** Has `media-edit-ai`. */
+  readonly canPropose: boolean;
+}
+
+/** Checks a plan before an upload exists and keeps it once it does (KBC-072 FR-1). */
+export interface UploadPlans {
+  assertAllowed(actor: PlanActor, plan: PreparationPlan): void;
+  record(actor: PlanActor, mediaId: string, plan: PreparationPlan): void;
 }
 
 export interface MediaServiceDeps {
@@ -97,7 +112,7 @@ export class MediaService {
   create(
     actor: MediaActor,
     topic: string,
-    request: CreateMediaRequest,
+    request: Omit<CreateMediaRequest, 'plan'>,
   ): MediaItem {
     this.assertTopic(topic);
     if (!hasAcceptedAudioExtension(request.fileName))

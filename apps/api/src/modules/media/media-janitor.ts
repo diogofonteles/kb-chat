@@ -11,6 +11,8 @@ export interface MediaJanitorDeps {
   readonly backfillSilences?: () => string | null;
   /** Queues the next waveform of an older item, one at a time (KBC-066). */
   readonly backfillWaveforms?: () => string | null;
+  /** The guided flow goes on with no page open (KBC-072 BR-8). */
+  readonly advancePreparations?: () => Promise<void>;
   readonly now?: () => Date;
 }
 
@@ -56,6 +58,7 @@ export class MediaJanitor {
       this.deps.log.info({ mediaId: backfilled }, 'silence map queued');
     const waveform = this.deps.backfillWaveforms?.() ?? null;
     if (waveform) this.deps.log.info({ mediaId: waveform }, 'waveform queued');
+    await this.deps.advancePreparations?.();
     const result = {
       requeued: reaped.requeued,
       failed: reaped.failed,

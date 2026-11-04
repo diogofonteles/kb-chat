@@ -15,7 +15,7 @@ import type { TranscriptStorePort } from '../../ports/transcript-store.js';
 import type { MediaActor } from '../media/index.js';
 import { buildPlan, type ProposalPlan } from './proposal-plan.js';
 import { WindowRunner, type RunOutcome } from './window-runner.js';
-import { toPromptSegments } from './windows.js';
+import { toPromptSegments, type PromptSegment } from './windows.js';
 
 /** The collection's names the prompt carries (KBC-049; KBC-065 adds named speakers). */
 export interface CollectionContext {
@@ -46,6 +46,30 @@ export interface ProposalServiceDeps {
   readonly caps: { readonly runUsd: number; readonly monthlyUsd: number };
   readonly now?: () => Date;
   readonly onRunError?: (error: unknown, runId: string) => void;
+}
+
+/** An estimate before there are words to read. */
+export interface DurationEstimate {
+  readonly estimateUsd: number;
+  readonly refusal: SpendCap | null;
+}
+
+/** One line of speech per this long: the size of a transcript's segments. */
+const SEGMENT_MS = 30_000;
+/** Spoken Portuguese, in characters per second (150 words a minute). */
+const SPOKEN_CHARS_PER_SECOND = 15;
+
+/** Speech of this length, for a length-only estimate. */
+function spokenSegments(durationMs: number): PromptSegment[] {
+  const count = Math.max(1, Math.ceil(durationMs / SEGMENT_MS));
+  const text = 'x'.repeat((SEGMENT_MS / 1000) * SPOKEN_CHARS_PER_SECOND);
+  return Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    startMs: index * SEGMENT_MS,
+    endMs: (index + 1) * SEGMENT_MS,
+    text,
+    voice: 1,
+  }));
 }
 
 interface Prepared {
@@ -90,6 +114,40 @@ export class ProposalService {
         ? { spentUsd: used, capUsd: this.deps.caps.monthlyUsd }
         : null,
     };
+  }
+
+  /** The app's AI is connected (KBC-072 BR-3). */
+  connected(): boolean {
+    return this.deps.llm()?.configured() ?? false;
+  }
+
+  /** What the media's month has left (KBC-072 AC-3). */
+  monthRemainingUsd(): number {
+    const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
+    return Math.max(0, this.deps.caps.monthlyUsd - used);
+  }
+
+  /**
+   * The estimate of a recording not transcribed yet, from its length alone (KBC-072 FR-7):
+   * the same calculation as a run's, over speech at the measured pace.
+   */
+  async estimateByDuration(durationMs: number): Promise<DurationEstimate> {
+    const llm = this.configuredLlm();
+    const { estimateUsd } = buildPlan({
+      mediaId: '',
+      transcriptId: '',
+      segments: spokenSegments(durationMs),
+      context: {
+        collection: '',
+        knownNames: [],
+        title: '',
+        author: null,
+        terms: this.deps.transcripts.currentTerms().terms,
+      },
+      model: { id: llm.model, price: await this.priceOf(llm) },
+    });
+    const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
+    return { estimateUsd, refusal: this.refusalOf(estimateUsd, used) };
   }
 
   /** Reserves the estimate and starts the run; it goes on after the answer (FR-1). */

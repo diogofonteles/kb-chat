@@ -322,6 +322,24 @@ export class SqliteMediaStore implements MediaStorePort {
     );
   }
 
+  /** A cut count of this job replaces the last one of the recording (KBC-072 FR-3). */
+  private saveCuts(beat: Heartbeat, mediaId: string): void {
+    const { cuts } = beat;
+    if (!cuts) return;
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO media_transcribe_cuts
+           (media_id, job_id, done, total, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(
+        mediaId,
+        beat.jobId,
+        cuts.done,
+        cuts.total,
+        beat.now.toISOString(),
+      );
+  }
+
   /** What a job is (conversion or transcription); null when it does not exist. */
   kindOfJob(jobId: string): MediaJobKind | null {
     const row = this.db
@@ -349,6 +367,8 @@ export class SqliteMediaStore implements MediaStorePort {
       const job = this.db
         .prepare('SELECT media_id, kind FROM jobs WHERE id = ?')
         .get(beat.jobId);
+      if (job?.['kind'] === 'transcribe' && beat.cuts)
+        this.saveCuts(beat, text(job, 'media_id'));
       // Only a conversion's progress is the item's (a transcription has its own status).
       if (job?.['kind'] === 'transcode' && beat.progress !== null)
         this.setMediaProgress({
@@ -367,12 +387,13 @@ export class SqliteMediaStore implements MediaStorePort {
       if (!this.closeLease(result, { status: 'done', error: null, at }))
         return false;
       this.saveRendition(result, at);
-      this.insertJob({
-        id: result.transcribeJobId,
-        mediaId: result.rendition.mediaId,
-        kind: 'transcribe',
-        at,
-      });
+      if (!this.skipsTranscription(result.rendition.mediaId))
+        this.insertJob({
+          id: result.transcribeJobId,
+          mediaId: result.rendition.mediaId,
+          kind: 'transcribe',
+          at,
+        });
       this.insertJob({
         id: result.silencesJobId,
         mediaId: result.rendition.mediaId,
@@ -389,6 +410,16 @@ export class SqliteMediaStore implements MediaStorePort {
       });
       return true;
     });
+  }
+
+  skipsTranscription(mediaId: string): boolean {
+    return (
+      this.db
+        .prepare(
+          'SELECT 1 FROM media_preparations WHERE media_id = ? AND transcribe = 0',
+        )
+        .get(mediaId) !== undefined
+    );
   }
 
   /** The rendition is the item's playable file; the item is ready. */

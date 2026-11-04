@@ -15,6 +15,8 @@ export {
   MediaService,
   type MediaActor,
   type MediaServiceDeps,
+  type PlanActor,
+  type UploadPlans,
 } from './media-service.js';
 export {
   MediaEditService,
@@ -33,7 +35,7 @@ export {
   ListeningService,
   type ListeningServiceDeps,
 } from './listening-service.js';
-export { actorOf, mediaRoutes } from './routes.js';
+export { actorOf, mediaRoutes, planActorOf } from './routes.js';
 export { silenceRoutes } from './silence-routes.js';
 export { SilenceService, type SilenceServiceDeps } from './silence-service.js';
 export { waveformRoutes } from './waveform-routes.js';
