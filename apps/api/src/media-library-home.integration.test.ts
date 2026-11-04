@@ -115,6 +115,17 @@ describe('Media library: access (KBC-051 BR-1)', () => {
     expect(
       (await listenOnly.call('DELETE', `${LIBRARY}/recents`)).statusCode,
     ).toBe(403);
+    expect(
+      (
+        await libraryOnly.call('PUT', '/api/v1/media/played', {
+          ids: [id],
+          played: true,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (await libraryOnly.call('DELETE', `${LIBRARY}/recents`)).statusCode,
+    ).toBe(403);
   });
 
   it('is open to masters, who have every feature', async () => {
@@ -124,6 +135,19 @@ describe('Media library: access (KBC-051 BR-1)', () => {
 });
 
 describe('Media library: what each person sees (BR-2, NFR-3)', () => {
+  it('leaves video out until the video item comes (audio only, KBC-076)', async () => {
+    const media = await startMedia();
+    await ready(media, { title: 'Aula em áudio' });
+    const video = await ready(media, { title: 'Aula em vídeo' });
+    withDb(media, (db) =>
+      db.prepare(`UPDATE media SET kind = 'video' WHERE id = ?`).run(video),
+    );
+
+    const page = (await media.owner('GET', LIBRARY)).json();
+
+    expect(titles(page.items)).toEqual(['Aula em áudio']);
+  });
+
   it('lists only the collections the person sees, in items, chips and home (AC-5)', async () => {
     const media = await startMedia();
     const seen = await ready(media, { title: 'Aula do Hermetismo' });
@@ -535,7 +559,14 @@ describe('Media library: speed (NFR-1)', () => {
   });
 });
 
-/** Ready media written straight to the database: two collections, as the masters see. */
+/** The collections of NFR-1's measure: a master sees them all, known to the vault or not. */
+const SEEDED_TOPICS = [
+  'hermetismo',
+  'alquimia',
+  ...Array.from({ length: 8 }, (_, n) => `acervo-${n}`),
+];
+
+/** Ready media written straight to the database, spread over ten collections. */
 function seedMedia(media: Media, count: number): void {
   withDb(media, (db) => {
     const insert = db.prepare(
@@ -548,7 +579,7 @@ function seedMedia(media: Media, count: number): void {
       const at = new Date(Date.UTC(2026, 0, 1) + n * 60_000).toISOString();
       insert.run(
         randomUUID(),
-        n % 2 === 0 ? 'hermetismo' : 'alquimia',
+        SEEDED_TOPICS[n % SEEDED_TOPICS.length] ?? 'hermetismo',
         `Palestra ${String(n).padStart(4, '0')}`,
         (n % 90) * 60_000,
         at,

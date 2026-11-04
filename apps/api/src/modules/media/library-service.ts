@@ -151,9 +151,12 @@ export class LibraryService {
   }
 }
 
-/** BR-2: a collection the person sees; not ready yet only for who sent it and masters. */
+/**
+ * BR-2: a collection the person sees; not ready yet only for who sent it and masters. Only
+ * audio for now: video comes with its own item (KBC-076).
+ */
 function isVisible(actor: MediaActor, record: LibraryRecord): boolean {
-  if (!actor.canSee(record.topic)) return false;
+  if (record.kind !== 'audio' || !actor.canSee(record.topic)) return false;
   return (
     record.status === 'ready' ||
     actor.isMaster ||
