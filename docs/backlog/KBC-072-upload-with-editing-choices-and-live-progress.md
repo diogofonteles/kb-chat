@@ -139,3 +139,13 @@ Nenhuma.
 - [x] UI and architecture references linked (spec de tela neste item e no KBC-066)
 - [x] Dependencies scheduled; no open questions
 - [x] Fits one goal
+
+## Nota do KBC-069 para a opção `subjects`
+
+O KBC-069 entregou o que a opção desligada `subjects` esperava. Para ligá-la neste item:
+
+- Tirar `add('subjects', 'unavailable')` de `plan-rules.ts`, a recusa do teste `refuses subjects` e o `refusal` do envio.
+- Rodar por `SubjectProposalService.start(actor, mediaId)` (`apps/api/src/modules/track-subjects`), só depois de "Aprovar faixas": sem edição aprovada responde 409 `not-approved`. O `actor` é quem consentiu.
+- A estimativa do envio não é a do KBC-069: `estimate` precisa das faixas aprovadas, que não existem no passo 1. O valor aceito no envio tem de cobrir a sugestão, ou o gasto pede novo clique com o valor à vista. Nada pago repete sozinho.
+- Quem liga a opção precisa de `media-classify` e `media-edit-ai`.
+- O resultado são só chips "Sugerido": aceitar continua sendo de uma pessoa (BR-3). A migração 20 não depende da 17.
