@@ -75,7 +75,17 @@ jobs:
         uses: ./.github/actions/setup-ffmpeg
         timeout-minutes: 5
       - run: pnpm --filter @kb-chat/contracts build
-      - run: pnpm exec nx run-many -t test -p ${{ matrix.projects }}
+      # Stream, not the default: Nx prints a finished task in one write and exits, which drops
+      # all but the first 64 KiB. Past that lie the failures and the coverage verdict.
+      - name: Run the unit tests
+        shell: bash # bash, named, adds pipefail: tee must not hide a failure.
+        run: pnpm exec nx run-many -t test -p ${{ matrix.projects }} --output-style=stream 2>&1 | tee unit-test-output.log
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-output-${{ matrix.name }}
+          path: unit-test-output.log
+          retention-days: 7
 
   transcriber:
     # The Mac transcriber (KBC-036, ADR 0023): Python, its own lint and tests, in parallel
