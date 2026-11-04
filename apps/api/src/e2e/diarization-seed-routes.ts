@@ -84,15 +84,18 @@ export function registerDiarizationSeed(
   registerSyntheticPrint(app, { db, voicePrints });
   registerCompletion(app, {
     diarization: new DiarizationService({ ...input.media, voicePrints }),
-    take: (id) => {
-      const owner = held.get(id) ?? leaseQueued(db, id);
-      held.delete(id);
-      return owner;
-    },
+    take: (id) => takeHeld(held, id) ?? leaseQueued(db, id),
   });
 }
 
 type Held = LeaseOwner & { voices: number | null };
+
+/** The lease a spec took before, once. */
+function takeHeld(held: Map<string, Held>, id: string): Held | undefined {
+  const owner = held.get(id);
+  held.delete(id);
+  return owner;
+}
 
 /** Top-level collections only in the fixture vault, and speakers without an author. */
 const voicePrintsOf = (media: MediaDeps): VoicePrintService =>
@@ -104,6 +107,26 @@ const voicePrintsOf = (media: MediaDeps): VoicePrintService =>
     authorOf: () => null,
   });
 
+/** Leases the profile's queued job to the E2E "transcriber"; null when none. */
+function leaseProfileJob(db: DatabaseSync, profileId: string) {
+  const job = db
+    .prepare(
+      `SELECT id FROM jobs WHERE voice_profile_id = ? AND status = 'queued'`,
+    )
+    .get(profileId);
+  if (!job) return null;
+  const owner = {
+    jobId: String(job['id']),
+    leaseId: randomUUID(),
+    worker: WORKER,
+  };
+  db.prepare(
+    `UPDATE jobs SET status = 'leased', lease_id = ?, worker = ?, lease_until = ?,
+       attempts = attempts + 1 WHERE id = ?`,
+  ).run(owner.leaseId, WORKER, Date.now() + LEASE_MS, owner.jobId);
+  return owner;
+}
+
 /** Plays the Mac for a `voice-profile` job (KBC-071), with a vector no voice produced. */
 function registerSyntheticPrint(
   app: FastifyInstance,
@@ -114,20 +137,8 @@ function registerSyntheticPrint(
     { config: { access: PUBLIC } },
     async (request, reply) => {
       const { id } = printParams.parse(request.params);
-      const owner = { jobId: '', leaseId: randomUUID(), worker: WORKER };
-      const job = input.db
-        .prepare(
-          `SELECT id FROM jobs WHERE voice_profile_id = ? AND status = 'queued'`,
-        )
-        .get(id);
-      if (!job) return reply.code(409).send({ error: 'no queued job' });
-      owner.jobId = String(job['id']);
-      input.db
-        .prepare(
-          `UPDATE jobs SET status = 'leased', lease_id = ?, worker = ?, lease_until = ?,
-             attempts = attempts + 1 WHERE id = ?`,
-        )
-        .run(owner.leaseId, WORKER, Date.now() + LEASE_MS, owner.jobId);
+      const owner = leaseProfileJob(input.db, id);
+      if (!owner) return reply.code(409).send({ error: 'no queued job' });
       await input.voicePrints.complete(owner, {
         worker: WORKER,
         leaseId: owner.leaseId,

@@ -92,19 +92,22 @@ export interface MediaDeps {
   readonly createPerMinute: number;
 }
 
+/** Keys derived for the media library, one per purpose (ADR 0017). */
+export interface MediaSecrets {
+  readonly tokenKey: Buffer;
+  /** Seals the voice prints (ADR 0032). */
+  readonly voicePrintKey: Buffer;
+  /** Seals the proof of each consent. */
+  readonly consentKey: Buffer;
+}
+
 /**
  * Opens the media library when KB_CHAT_MEDIA=on (FR-1): the directory must be writable and
  * every migration must apply, or the API does not start, with a message that says why.
  */
 export async function createMedia(
   config: AppConfig,
-  secrets: {
-    readonly tokenKey: Buffer;
-    /** Seals the voice prints (ADR 0032). */
-    readonly voicePrintKey: Buffer;
-    /** Seals the proof of each consent. */
-    readonly consentKey: Buffer;
-  },
+  secrets: MediaSecrets,
 ): Promise<MediaDeps | undefined> {
   if (!config.KB_CHAT_MEDIA) return undefined;
   const dir = config.KB_CHAT_MEDIA_DIR;
@@ -120,11 +123,7 @@ export async function createMedia(
   });
   return {
     ...openStores(dir),
-    voicePrintVault: new FsVoicePrintVault(
-      join(dir, 'voice-prints'),
-      new SecretBox(secrets.voicePrintKey),
-    ),
-    consentSealer: new SecretBox(secrets.consentKey),
+    ...voiceSafes(dir, secrets),
     files,
     workerToken,
     tokenKey: secrets.tokenKey,
@@ -136,6 +135,15 @@ export async function createMedia(
     },
   };
 }
+
+/** What holds biometric data and consents' proofs, sealed (ADR 0032). */
+const voiceSafes = (dir: string, secrets: MediaSecrets) => ({
+  voicePrintVault: new FsVoicePrintVault(
+    join(dir, 'voice-prints'),
+    new SecretBox(secrets.voicePrintKey),
+  ),
+  consentSealer: new SecretBox(secrets.consentKey),
+});
 
 /** The stores that live in the media database (ADR 0022). */
 type MediaStores = Pick<

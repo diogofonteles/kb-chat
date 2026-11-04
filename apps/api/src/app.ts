@@ -576,26 +576,34 @@ async function registerSpeakers(
 ) {
   const { deps, diarization, authors, hasTopic } = wiring;
   const rootOf = (topic: string) => authors.rootOf(topic);
-  const speakersOf = (actor: MediaActor, mediaId: string) =>
-    diarization.speakers(actor, mediaId);
-  const names = new VoiceNamesService({ ...deps, rootOf, speakersOf });
-  await app.register(
-    speakerRoutes({
-      service: diarization,
-      names,
-      suggestions: new VoiceSuggestionService({
-        profiles: deps.voiceProfiles,
-        names,
-        speakersOf,
-      }),
-    }),
-  );
+  await app.register(speakerRoutesOf({ deps, diarization, rootOf }));
   const service = new SpeakersService({
     speakers: deps.speakers,
     rootOf,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
   });
   await app.register(collectionSpeakerRoutes({ service, hasTopic }));
+}
+
+/** "Vozes": names, and the answers to what is suggested by voice (KBC-065, KBC-071). */
+function speakerRoutesOf(input: {
+  deps: MediaDeps;
+  diarization: DiarizationService;
+  rootOf: (topic: string) => string;
+}) {
+  const { deps, diarization, rootOf } = input;
+  const speakersOf = (actor: MediaActor, mediaId: string) =>
+    diarization.speakers(actor, mediaId);
+  const names = new VoiceNamesService({ ...deps, rootOf, speakersOf });
+  return speakerRoutes({
+    service: diarization,
+    names,
+    suggestions: new VoiceSuggestionService({
+      profiles: deps.voiceProfiles,
+      names,
+      speakersOf,
+    }),
+  });
 }
 
 /** Voice separations (KBC-064): asked by people, done by a transcriber that separates voices. */

@@ -227,6 +227,7 @@ export const workerRoutes =
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
     registerVoicePrints(app, deps);
+    registerVoicePrintResult(app, deps.voicePrints);
     registerVoiceComparison(app, deps.voicePrints);
   };
 
@@ -413,7 +414,13 @@ function registerDiarization(
   );
 }
 
-/** The audio of a recording a `voice-profile` job uses, and the job's print (FR-2). */
+/** The job a call names, on the lease its query names. */
+const heldBy = (request: FastifyRequest, jobId: string, leaseId: string) => ({
+  jobId,
+  ...ownerOf(request, { worker: '', leaseId }),
+});
+
+/** The audio of a recording a `voice-profile` job uses (FR-2). */
 function registerVoicePrints(
   app: FastifyInstance,
   { voicePrints, transcription }: WorkerRoutesDeps,
@@ -425,15 +432,20 @@ function registerVoicePrints(
     async (request, reply) => {
       const { id, mediaId } = request.params;
       assertVoicePrinter(request);
-      const owner = {
-        jobId: id,
-        ...ownerOf(request, { worker: '', leaseId: request.query.leaseId }),
-      };
+      const owner = heldBy(request, id, request.query.leaseId);
       const usesMedia = voicePrints.usesMedia(owner, mediaId);
       const file = await transcription.sourceAudio({ mediaId, usesMedia });
       return serveMedia({ id, file, request, reply, open: transcription });
     },
   );
+}
+
+/** The print a `voice-profile` job made (FR-2). */
+function registerVoicePrintResult(
+  app: FastifyInstance,
+  voicePrints: VoicePrintService,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     '/api/v1/media-worker/jobs/:id/voice-print',
     route(completeVoicePrintRequestSchema),
@@ -460,10 +472,9 @@ function registerVoiceComparison(
     OPTIONS.voiceProfiles,
     async (request) => {
       assertVoicePrinter(request);
-      return voicePrints.printsFor({
-        jobId: request.params.id,
-        ...ownerOf(request, { worker: '', leaseId: request.query.leaseId }),
-      });
+      return voicePrints.printsFor(
+        heldBy(request, request.params.id, request.query.leaseId),
+      );
     },
   );
 }
