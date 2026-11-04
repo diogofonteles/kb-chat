@@ -550,6 +550,40 @@ test("the ⋯ of a track in the library's grid stays on its card", async ({
   await expectInsideTheScreen(page);
 });
 
+test('the ⋯ of a track stays on screen with a wide font, in the grid and the list, down to 320', async ({
+  browser,
+  viewport,
+}) => {
+  const owner = await ownerApi();
+  const { media, first } = await approvedTracks(owner);
+  const email = uniqueEmail('menu-editor');
+  await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['media', 'media-library', 'media-tracks', 'media-edit'],
+  });
+  await owner.dispose();
+  const page = await pageAs(browser, email, viewport);
+  await page.goto('/biblioteca');
+  // Linux's DejaVu Sans, which the CI has, is as wide as Verdana: a menu's width is its text's.
+  await page.addStyleTag({
+    content: `* { font-family: 'DejaVu Sans', Verdana, sans-serif !important; }`,
+  });
+  await page.getByRole('searchbox').fill(media.title);
+  await expect(page.getByText(/^1 mídia/)).toBeVisible();
+  const actions = page.getByRole('button', { name: `Ações de ${first.title}` });
+
+  for (const width of [viewport?.width ?? 390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const view of ['Ver em grade', 'Ver em lista']) {
+      await page.getByRole('button', { name: view }).click();
+      await actions.click();
+      await expectInsideTheScreen(page);
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('menu')).toHaveCount(0);
+    }
+  }
+});
+
 test('AC-14: a listener sees none of it', async ({ browser, viewport }) => {
   const owner = await ownerApi();
   const { first } = await approvedTracks(owner);
