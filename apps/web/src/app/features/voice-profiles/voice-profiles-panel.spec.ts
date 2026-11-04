@@ -57,7 +57,7 @@ const anEntry = (
   grantedOn: '2026-10-01',
   method: 'signed-paper',
   purpose: 'suggest-names-when-editing',
-  textVersion: 1,
+  textVersion: 2,
   registeredBy: 'dono@example.com',
   registeredAt: '2026-11-04T10:00:00.000Z',
   evidence: 'text',

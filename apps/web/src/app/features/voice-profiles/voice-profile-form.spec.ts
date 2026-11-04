@@ -173,7 +173,7 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
         grantedOn: '2026-10-01',
         method: 'signed-paper',
         purpose: 'suggest-names-when-editing',
-        textVersion: 1,
+        textVersion: 2,
         evidence: { kind: 'text', text: 'Autorizo o uso da minha voz.' },
       },
     });

@@ -29,6 +29,7 @@ class FakeApi:
         self.terms = {"version": 1, "terms": ["Hoasca", "Mestre Gabriel", "Caiano"]}
         self.token = TOKEN
         self.profiles: list[dict] = []
+        self.revoked: set[str] = set()
 
     def answer(self, handler: BaseHTTPRequestHandler, method: str) -> None:
         url = urlparse(handler.path)
@@ -47,6 +48,10 @@ class FakeApi:
             return self._send(handler, 200, json.dumps(self.jobs.pop(0)).encode())
         if action == "terms":
             return self._send(handler, 200, json.dumps(self.terms).encode())
+        if action == "heartbeat":
+            hits = [one for one in body.get("voiceProfiles", []) if one in self.revoked]
+            if hits:
+                return self._send(handler, 200, json.dumps({"revokedVoiceProfiles": hits}).encode())
         if action == "voice-profiles":
             return self._send(handler, 200, json.dumps({"profiles": self.profiles}).encode())
         if action == "audio" or "/audio/" in url.path:

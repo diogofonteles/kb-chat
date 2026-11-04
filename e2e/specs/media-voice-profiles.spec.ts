@@ -28,7 +28,7 @@ const aConsent = {
   grantedOn: '2026-10-01',
   method: 'email',
   purpose: 'suggest-names-when-editing',
-  textVersion: 1,
+  textVersion: 2,
   evidence: { kind: 'text', text: 'Autorizo o uso da minha voz (teste).' },
 };
 

@@ -2,17 +2,22 @@
 
 A print is the mean of ECAPA vectors over a voice's speech. It is made for a profile whose
 consent the API recorded, or to compare a recording's voices with the profiles of its
-collection. Nothing here writes to disk or logs a vector, and `wipe` zeroes the arrays when
-the job ends (BR-5). With no profile for the job's collection, no vector is computed at all.
+collection. Nothing here writes to disk or logs a vector, and every array of a job is in a
+`PrintHold`, zeroed when the job ends or as soon as a revocation arrives (BR-2, BR-5). The JSON
+a print came in and the float lists sent are Python objects: dropped, not zeroed. With no
+profile for the job's collection, no vector is computed at all.
 """
 
-from collections.abc import Iterable, Mapping, Sequence
+import threading
+import time
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 import numpy as np
 
-from .config import SAMPLE_RATE, VOICE_PARAMETERS
+from .config import SAMPLE_RATE, VOICE_MODEL_REVISION, VOICE_PARAMETERS
+from .transcribe import Stopped
 
 WINDOW_S = VOICE_PARAMETERS["window_s"]
 HOP_S = VOICE_PARAMETERS["hop_s"]
@@ -43,21 +48,94 @@ class Profile:
     embedding: np.ndarray
 
 
+def wipe(arrays: Iterable[np.ndarray]) -> None:
+    """Zeroes the arrays: they are gone before Python frees them."""
+    for array in arrays:
+        array.fill(0)
+
+
+class PrintHold:
+    """All a job has in memory of a print, which another thread can drop at any moment.
+
+    The heartbeat drops it when the API names a revocation or the lease is gone, and a watcher
+    when the API has not answered for too long. Neither waits for the job's thread, which sees
+    it at the next batch: that keeps the bound of BR-2 on a source of any length.
+    """
+
+    def __init__(self, stopped: Callable[[], bool] = lambda: False) -> None:
+        self._stopped = stopped
+        self._lock = threading.Lock()
+        self._arrays: list[np.ndarray] = []
+        self._ids: list[str] = []
+        self._dropped = False
+        self._acknowledged_at = time.time()
+
+    def keep(self, *arrays: np.ndarray) -> None:
+        """Registers arrays to wipe; if the hold was dropped meanwhile, they go right away."""
+        with self._lock:
+            if self._dropped:
+                wipe(arrays)
+            else:
+                self._arrays.extend(arrays)
+        self.check()
+
+    def compare(self, profiles: Sequence["Profile"]) -> None:
+        """The prints the API sent: from now on each heartbeat names them."""
+        self.acknowledge()
+        with self._lock:
+            self._ids = [one.id for one in profiles]
+        self.keep(*(one.embedding for one in profiles))
+
+    def check(self) -> None:
+        """Raises Stopped when this job must not go on with a print."""
+        if self._dropped or self._stopped():
+            raise Stopped
+
+    def drop(self) -> None:
+        with self._lock:
+            self._dropped = True
+            wipe(self._arrays)
+            self._arrays.clear()
+            self._ids.clear()
+
+    def acknowledge(self) -> None:
+        """The API answered: until now, it knew of no revocation."""
+        self._acknowledged_at = time.time()
+
+    def profile_ids(self) -> list[str]:
+        with self._lock:
+            return list(self._ids)
+
+    def unanswered_s(self) -> float:
+        """Seconds holding a print with no answer from the API; wall clock, so a Mac that
+        slept counts it. Nothing held, nothing to answer for."""
+        with self._lock:
+            held = bool(self._arrays)
+        return time.time() - self._acknowledged_at if held else 0.0
+
+
 def spans_of(raw: Iterable[Mapping]) -> list[Span]:
     """The API's spans (ms) as seconds."""
     return [Span(one["startMs"] / 1000, one["endMs"] / 1000) for one in raw]
 
 
-def _windows(pcm: np.ndarray, spans: Sequence[Span]) -> np.ndarray:
-    """Windows of WINDOW_S every HOP_S inside each span; a span too short gives none."""
+def _batches(pcm: np.ndarray, spans: Sequence[Span]) -> Iterator[np.ndarray]:
+    """Windows of WINDOW_S every HOP_S inside each span, BATCH at a time, made as they are
+    needed: a long source costs no more memory, and a stop lands between two batches.
+    A span too short gives none."""
     size = int(WINDOW_S * SAMPLE_RATE)
     hop = int(HOP_S * SAMPLE_RATE)
     pieces: list[np.ndarray] = []
     for span in spans:
         first = int(span.start * SAMPLE_RATE)
         last = min(int(span.end * SAMPLE_RATE), len(pcm))
-        pieces.extend(pcm[start : start + size] for start in range(first, last - size + 1, hop))
-    return np.stack(pieces) if pieces else np.empty((0, size), dtype=np.float32)
+        for start in range(first, last - size + 1, hop):
+            pieces.append(pcm[start : start + size])
+            if len(pieces) == BATCH:
+                yield np.stack(pieces)
+                pieces = []
+    if pieces:
+        yield np.stack(pieces)
 
 
 def _unit(vectors: np.ndarray) -> np.ndarray:
@@ -65,11 +143,23 @@ def _unit(vectors: np.ndarray) -> np.ndarray:
     return vectors / np.where(norms > 0, norms, 1.0)
 
 
-def window_vectors(pcm: np.ndarray, spans: Sequence[Span], embedder: Embedder) -> np.ndarray:
-    """One unit vector per window of the spans."""
-    windows = _windows(pcm, spans)
-    done = [embedder(windows[i : i + BATCH]) for i in range(0, len(windows), BATCH)]
-    return _unit(np.concatenate(done)) if done else np.empty((0, 0))
+def window_vectors(
+    pcm: np.ndarray, spans: Sequence[Span], embedder: Embedder, hold: PrintHold | None = None
+) -> np.ndarray:
+    """One unit vector per window of the spans; raises Stopped between batches."""
+    held = hold or PrintHold()
+    done: list[np.ndarray] = []
+    for windows in _batches(pcm, spans):
+        held.check()
+        vectors = embedder(windows)
+        held.keep(vectors)
+        done.append(vectors)
+    if not done:
+        return np.empty((0, 0))
+    joined = np.concatenate(done)
+    units = _unit(joined)
+    held.keep(joined, units)
+    return units
 
 
 def mean_print(vectors: Sequence[np.ndarray]) -> np.ndarray:
@@ -78,12 +168,6 @@ def mean_print(vectors: Sequence[np.ndarray]) -> np.ndarray:
     if not joined:
         raise ValueError("no speech long enough to make a voice print")
     return _unit(np.concatenate(joined).mean(axis=0))
-
-
-def wipe(arrays: Iterable[np.ndarray]) -> None:
-    """Zeroes the arrays: they are gone before Python frees them."""
-    for array in arrays:
-        array.fill(0)
 
 
 def closest(voice: np.ndarray, profiles: Sequence[Profile]) -> tuple[str, float] | None:
@@ -104,9 +188,14 @@ def closest(voice: np.ndarray, profiles: Sequence[Profile]) -> tuple[str, float]
 
 
 def match_voices(
-    pcm: np.ndarray, turns: Sequence[Mapping], profiles: Sequence[Profile], embedder: Embedder
+    pcm: np.ndarray,
+    turns: Sequence[Mapping],
+    profiles: Sequence[Profile],
+    embedder: Embedder,
+    hold: PrintHold | None = None,
 ) -> list[dict]:
     """Per voice with enough speech, only its closest profile and the score (FR-3)."""
+    held = hold or PrintHold()
     by_voice: dict[str, list[Span]] = {}
     for turn in turns:
         by_voice.setdefault(turn["voice"], []).append(Span(turn["start"], turn["end"]))
@@ -114,12 +203,14 @@ def match_voices(
     for voice, spans in by_voice.items():
         if sum(s.end - s.start for s in spans) < VOICE_PARAMETERS["min_speech_s"]:
             continue
-        vectors = window_vectors(pcm, spans, embedder)
+        vectors = window_vectors(pcm, spans, embedder, held)
         if len(vectors) == 0:
             continue
         centroid = mean_print([vectors])
         found = closest(centroid, profiles)
         wipe([vectors, centroid])
+        # A print wiped by another thread meanwhile scores nothing that may be kept.
+        held.check()
         if found:
             matches.append(
                 {"voice": voice, "profileId": found[0], "similarity": round(found[1], 4)}
@@ -146,6 +237,7 @@ class EcapaEmbedder:
             self._encoder = EncoderClassifier.from_hparams(
                 source=self.model,
                 savedir=str(Path.home() / ".cache" / "nova-alexandria-ecapa"),
+                revision=VOICE_MODEL_REVISION,
                 run_opts={"device": device},
             )
         return self._encoder

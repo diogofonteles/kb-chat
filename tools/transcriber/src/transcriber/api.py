@@ -103,8 +103,22 @@ class ApiClient:
         except (urllib.error.URLError, TimeoutError, OSError) as err:
             raise ApiError(f"audio download failed: {err}") from err
 
-    def heartbeat(self, job: dict, progress: int | None) -> bool:
-        return self._on_job(job, "heartbeat", {"progress": progress})
+    def heartbeat(
+        self, job: dict, progress: int | None, voice_profiles: Sequence[str] = ()
+    ) -> list[str] | None:
+        """Of the prints held, the ones revoked; None when the lease is no longer ours."""
+        held = {"voiceProfiles": list(voice_profiles)} if voice_profiles else {}
+        status, body = self._post(
+            f"/api/v1/media-worker/jobs/{job['id']}/heartbeat",
+            {"worker": self.worker, "leaseId": job["leaseId"], "progress": progress, **held},
+        )
+        if status == 204:
+            return []
+        if status == 200:
+            return json.loads(body)["revokedVoiceProfiles"]
+        if status == 409:
+            return None
+        raise ApiError(f"heartbeat answered {status}")
 
     def upload(self, job: dict, result: dict) -> bool:
         return self._on_job(job, "transcript", result)

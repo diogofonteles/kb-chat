@@ -15,7 +15,7 @@ import {
 /** The only purpose a consent can name (BR-1). */
 export const VOICE_CONSENT_PURPOSE = 'suggest-names-when-editing' as const;
 /** The version of the consent text on screen, kept with each consent. */
-export const VOICE_CONSENT_TEXT_VERSION = 1;
+export const VOICE_CONSENT_TEXT_VERSION = 2;
 /** Speech a profile needs, in total, from its source voices. */
 export const MIN_PROFILE_SPEECH_MS = 30_000;
 /** At most this many source voices in one profile. */

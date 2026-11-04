@@ -2,6 +2,7 @@
  * Voice profiles under test (KBC-071): the owner granted by name, a transcriber marked for
  * prints, and synthetic vectors. No print here comes from a recording (BR-1).
  */
+import { VOICE_CONSENT_TEXT_VERSION } from '@kb-chat/contracts';
 import type {
   CollectionSpeaker,
   DiarizeJob,
@@ -53,7 +54,7 @@ export const aConsent = (overrides: Partial<VoiceConsent> = {}) => ({
   grantedOn: '2026-10-01',
   method: 'signed-paper',
   purpose: 'suggest-names-when-editing',
-  textVersion: 1,
+  textVersion: VOICE_CONSENT_TEXT_VERSION,
   evidence: { kind: 'text', text: 'Autorizo o uso da minha voz para sugerir.' },
   ...overrides,
 });

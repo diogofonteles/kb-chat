@@ -10,6 +10,7 @@ import pytest
 from transcriber.api import ApiClient
 from transcriber.config import SAMPLE_RATE, VOICE_PARAMETERS
 from transcriber.voiceprint import (
+    PrintHold,
     Profile,
     Span,
     closest,
@@ -199,7 +200,7 @@ def test_the_profiles_sent_are_wiped_when_the_comparison_ends(fake_api, monkeypa
     kept.append(profile)
     monkeypatch.setattr(w, "_profiles_of", lambda job: kept)
     turns = [{"start": 0.0, "end": 12.0, "voice": "SPEAKER_01"}]
-    w._matches(DIARIZE_JOB, tone(220.0, 30.0), turns)
+    w._matches(DIARIZE_JOB, tone(220.0, 30.0), turns, PrintHold())
     assert not profile.embedding.any()
 
 
