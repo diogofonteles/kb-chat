@@ -43,6 +43,12 @@ const TRACKS = [
   { startMs: 60_000, endMs: 240_000, title: 'Primeira pergunta' },
   { startMs: 240_000, endMs: 480_000, title: 'Segunda pergunta' },
 ];
+const THIRD = { startMs: 480_000, endMs: 540_000, title: 'Terceira pergunta' };
+const RETITLED_FIRST = {
+  startMs: 60_000,
+  endMs: 240_000,
+  title: 'Primeira retitulada',
+};
 const SPEECH = [
   { at: 70, text: 'abertura da primeira faixa' },
   { at: 300, text: 'hoasca na segunda faixa' },
@@ -722,6 +728,70 @@ describe('A cut that fails (FR-2)', () => {
     expect((await viewOf(media, second.id)).cut).toBe('none');
     const landed = await media.owner('GET', urlOf(second.id));
     expect(landed.json<MediaItem>().parent?.startMs).toBe(250_000);
+  });
+
+  async function threeTracks(world: World) {
+    const { media } = world;
+    const recording = await transcribed(world, SPEECH);
+    await approve(media, recording.id, [...TRACKS, THIRD]);
+    await finishCuts(media);
+    const entry = await libraryEntry(media.owner, recording.id);
+    const [first, second, third] = entry?.tracks ?? [];
+    if (!first || !second || !third) throw new Error('no tracks');
+    return { recording, first, second, third };
+  }
+
+  const titleOf = async (media: Media, id: string) =>
+    (await media.owner('GET', urlOf(id))).json<MediaItem>().title;
+
+  it("deleting the last dead cut publishes the approval's title and removed track", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, first, second, third } = await threeTracks(world);
+    await approve(media, recording.id, [
+      RETITLED_FIRST,
+      { startMs: 250_000, endMs: 470_000, title: 'Segunda pergunta' },
+    ]);
+    killCut(media, second.id);
+    expect(await titleOf(media, first.id)).toBe('Primeira pergunta');
+
+    const deleted = await send(media, {
+      method: 'DELETE',
+      url: urlOf(second.id),
+    });
+
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    expect(await titleOf(media, first.id)).toBe(RETITLED_FIRST.title);
+    const entry = await libraryEntry(media.owner, recording.id);
+    expect(entry?.tracks.map((track) => track.id)).toEqual([first.id]);
+    const archived = await media.owner(
+      'GET',
+      `${urlOf(recording.id)}/archived-tracks`,
+    );
+    expect(
+      archived.json<ArchivedTracks>().tracks.map(({ mediaId }) => mediaId),
+    ).toEqual(expect.arrayContaining([second.id, third.id]));
+    const edited = await patch(media, first.id, { title: 'Depois' });
+    expect(edited.statusCode, edited.body).toBe(200);
+  });
+
+  it('another dead cut goes on holding the approval until it is deleted too', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, first, second, third } = await threeTracks(world);
+    await approve(media, recording.id, [
+      RETITLED_FIRST,
+      { startMs: 250_000, endMs: 470_000, title: 'Segunda pergunta' },
+      { startMs: 485_000, endMs: 538_000, title: 'Terceira pergunta' },
+    ]);
+    killCut(media, second.id);
+    killCut(media, third.id);
+
+    await send(media, { method: 'DELETE', url: urlOf(second.id) });
+    expect(await titleOf(media, first.id)).toBe('Primeira pergunta');
+
+    await send(media, { method: 'DELETE', url: urlOf(third.id) });
+    expect(await titleOf(media, first.id)).toBe(RETITLED_FIRST.title);
   });
 
   it('deleting a track waiting on a dead cut takes its candidate with it', async () => {

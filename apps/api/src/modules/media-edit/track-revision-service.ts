@@ -371,7 +371,7 @@ export class TrackRevisionService {
         [{ field: 'archived', before: null, after: null }],
         author,
       );
-      publisher.afterArchive(track.parentId);
+      publisher.afterArchive(track.parentId, track.cut === 'failed');
       return left;
     });
     if (candidate !== null) await files.remove([candidate]);

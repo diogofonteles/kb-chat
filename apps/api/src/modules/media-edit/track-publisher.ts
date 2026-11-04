@@ -184,11 +184,13 @@ export class TrackPublisher {
       items.setAuthor({ mediaId: track.mediaId, now, ...authorOf(track) });
   }
 
-  /** A deleted track stops holding back what waited for its cut (KBC-073 FR-2). */
-  afterArchive(parentId: string): void {
+  /**
+   * A deleted track stops holding back the approval its dead cut waited on (KBC-073 FR-2):
+   * titles and tracks left out wait too, with no candidate of their own.
+   */
+  afterArchive(parentId: string, cutFailed: boolean): void {
     const { items } = this.deps;
-    const waiting = items.tracksOf(parentId).some((track) => track.cut);
-    if (waiting && !items.hasPendingCuts(parentId))
+    if (cutFailed && !items.hasPendingCuts(parentId))
       items.publish({
         parentId,
         detailsOf: this.detailsFor(parentId),
