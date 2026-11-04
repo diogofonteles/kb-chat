@@ -120,10 +120,11 @@ export class TrackEditDialog {
     () => collectionSpeakersUrl(this.track().topic),
     { parse: (body) => collectionSpeakerListSchema.parse(body).items },
   );
+  protected readonly speakerList = computed(() =>
+    this.speakers.hasValue() ? this.speakers.value() : [],
+  );
   protected readonly speakerNames = computed(() =>
-    this.speakers.hasValue()
-      ? this.speakers.value().map((one) => one.name)
-      : [],
+    this.speakerList().map((one) => one.name),
   );
   private readonly subjectsRead = httpResource(
     () =>

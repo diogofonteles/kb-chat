@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
+  CollectionSpeakerList,
   ProposalEstimate,
   SuggestedSubject,
   TrackSuggestion,
@@ -20,7 +21,10 @@ import { TrackRevisionsApi } from '@core/media/track-revisions-api.js';
 
 /** One line of a suggestion, for who decides what stays. */
 export type SuggestionUse =
-  | { readonly field: 'title' | 'summary'; readonly value: string }
+  | {
+      readonly field: 'title' | 'summary' | 'asker' | 'answerer';
+      readonly value: string;
+    }
   | { readonly field: 'subject'; readonly subject: SuggestedSubject };
 
 type Phase =
@@ -30,6 +34,9 @@ type Phase =
   | { readonly kind: 'running' }
   | { readonly kind: 'done'; readonly suggestion: TrackSuggestion }
   | { readonly kind: 'failed'; readonly message: string };
+
+/** One who speaks, as the list of the collection names them. */
+export type SuggestionSpeaker = CollectionSpeakerList['items'][number];
 
 /**
  * "Sugerir de novo com IA" (KBC-073 FR-7): the cost before anything is spent, and each line waits
@@ -125,6 +132,22 @@ type Phase =
                   </button>
                 </li>
               }
+              @for (person of people(); track person.field) {
+                <li>
+                  <span>{{ person.text }}</span>
+                  <button
+                    type="button"
+                    class="secondary"
+                    [attr.aria-label]="useLabel(person.text)"
+                    (click)="
+                      use.emit({ field: person.field, value: person.name })
+                    "
+                    i18n="@@trackEdit.suggest.use"
+                  >
+                    Usar
+                  </button>
+                </li>
+              }
               @if (classifies()) {
                 @for (subject of found.subjects; track subject.name) {
                   <li>
@@ -195,6 +218,8 @@ export class TrackSuggestPanel {
 
   readonly mediaId = input.required<string>();
   readonly classifies = input(false);
+  /** The suggestion names who speaks by id: the form takes names. */
+  readonly speakers = input<readonly SuggestionSpeaker[]>([]);
   readonly use = output<SuggestionUse>();
 
   protected readonly phase = signal<Phase>({ kind: 'idle' });
@@ -219,6 +244,29 @@ export class TrackSuggestPanel {
   protected readonly suggestion = computed(() => {
     const phase = this.phase();
     return phase.kind === 'done' ? phase.suggestion : null;
+  });
+
+  /** A name no longer on the list is left out: it could not be saved. */
+  protected readonly people = computed(() => {
+    const found = this.suggestion();
+    if (!found) return [];
+    const nameOf = (id: string | null) =>
+      this.speakers().find((one) => one.id === id)?.name;
+    const roles = [
+      {
+        field: 'asker',
+        role: $localize`:@@trackEdit.field.asker:Quem pergunta`,
+        name: nameOf(found.askerSpeakerId),
+      },
+      {
+        field: 'answerer',
+        role: $localize`:@@trackEdit.field.answerer:Quem responde`,
+        name: nameOf(found.answererSpeakerId),
+      },
+    ] as const;
+    return roles.flatMap(({ field, role, name }) =>
+      name === undefined ? [] : [{ field, name, text: `${role}: ${name}` }],
+    );
   });
 
   protected useLabel(value: string): string {

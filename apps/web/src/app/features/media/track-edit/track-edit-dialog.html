@@ -154,6 +154,7 @@
       <app-track-suggest-panel
         [mediaId]="track().mediaId"
         [classifies]="canClassify()"
+        [speakers]="speakerList()"
         (use)="useSuggestion($event)"
       />
     }

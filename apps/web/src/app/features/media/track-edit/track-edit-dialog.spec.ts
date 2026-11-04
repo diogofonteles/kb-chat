@@ -102,6 +102,71 @@ describe('TrackEditDialog (KBC-073)', () => {
     expect(field('track-title').value).toBe('O meu');
   });
 
+  it('FR-7: who asks and who answers are suggested by name, and "Usar" fills the field', async () => {
+    const asker = '33333333-3333-4333-8333-333333333333';
+    const answerer = '44444444-4444-4444-8444-444444444444';
+    const fixture = TestBed.createComponent(TrackEditDialog);
+    fixture.componentRef.setInput('track', view());
+    fixture.componentRef.setInput('canSuggest', true);
+    TestBed.tick();
+    http.expectOne('/api/v1/topics/hermetismo/speakers').flush({
+      items: [
+        { id: asker, name: 'Pedro', authorSlug: null, main: false },
+        { id: answerer, name: 'Laércio', authorSlug: null, main: false },
+      ],
+    });
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    const button = (name: string) => {
+      const found = [...root.querySelectorAll('button')].find(
+        (one) =>
+          one.getAttribute('aria-label') === name ||
+          one.textContent?.trim() === name,
+      );
+      if (!found) throw new Error(`no button ${name}`);
+      return found;
+    };
+    button('Ver quanto custa').click();
+    await fixture.whenStable();
+    http.expectOne(`/api/v1/media/${ID}/suggestions`).flush({
+      estimateUsd: 0.001,
+      runCapUsd: 1,
+      windows: 1,
+      model: 'stub',
+      allowed: true,
+      refusal: null,
+      month: null,
+    });
+    await fixture.whenStable();
+    button('Confirmar e sugerir').click();
+    await fixture.whenStable();
+    http.expectOne(`/api/v1/media/${ID}/suggestions`).flush({
+      title: null,
+      summary: null,
+      askerSpeakerId: asker,
+      answererSpeakerId: answerer,
+      subjects: [],
+      spentUsd: 0.001,
+    });
+    await fixture.whenStable();
+
+    expect(root.querySelector('.suggest')?.textContent).toContain(
+      'Quem pergunta: Pedro',
+    );
+    expect(root.querySelector('.suggest')?.textContent).toContain(
+      'Quem responde: Laércio',
+    );
+
+    button('Usar a sugestão Quem pergunta: Pedro').click();
+    button('Usar a sugestão Quem responde: Laércio').click();
+    await fixture.whenStable();
+
+    const field = (id: string) =>
+      root.querySelector<HTMLInputElement>(`#${id}`);
+    expect(field('track-asker')?.value).toBe('Pedro');
+    expect(field('track-answerer')?.value).toBe('Laércio');
+  });
+
   it('offers the whole recording only for a role with a voice', async () => {
     const { fixture, field, root } = await open();
     expect(root.textContent).not.toContain('Em toda a gravação');
