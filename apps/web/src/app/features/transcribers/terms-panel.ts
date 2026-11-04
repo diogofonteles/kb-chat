@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
+  MAX_TERMS,
   normalizeTerms,
   termListSchema,
   termSchema,
@@ -52,6 +53,9 @@ const sameList = (a: readonly string[], b: readonly string[]): boolean =>
 
 const overLimitText = ({ tokens, limit }: TermsUsage): string =>
   $localize`:@@terms.overLimit:A lista passou do limite do transcritor (${tokens}:tokens: de ${limit}:limit:). Remova alguns termos.`;
+
+const tooManyText = (count: number): string =>
+  $localize`:@@terms.tooMany:A lista tem ${count}:count: termos; o máximo é ${MAX_TERMS}:limit:. Remova alguns termos.`;
 
 /** "versão 5": who got there first, when the API says so. */
 function versionIn(err: unknown): number | null {
@@ -112,11 +116,15 @@ export class TermsPanel {
     const saved = this.saved();
     return saved !== null && !sameList(this.terms(), saved.terms);
   });
+  /** Past the cap the API measures nothing, so there is no number to show. */
+  private readonly tooMany = computed(() => this.terms().length > MAX_TERMS);
   /** The saved list's use, until a change is measured. */
-  protected readonly usage = computed<TermsUsage | null>(() =>
-    this.changed() ? (this.measured() ?? this.saved()) : this.saved(),
-  );
+  protected readonly usage = computed<TermsUsage | null>(() => {
+    if (this.tooMany()) return null;
+    return this.changed() ? (this.measured() ?? this.saved()) : this.saved();
+  });
   protected readonly overLimit = computed(() => {
+    if (this.tooMany()) return tooManyText(this.terms().length);
     const usage = this.usage();
     return usage !== null && usage.tokens > usage.limit
       ? overLimitText(usage)
@@ -258,7 +266,7 @@ export class TermsPanel {
     toObservable(this.terms)
       .pipe(
         filter(() => this.changed() && this.allValid()),
-        filter((terms) => terms.length > 0),
+        filter((terms) => terms.length > 0 && terms.length <= MAX_TERMS),
         debounceTime(MEASURE_DEBOUNCE_MS),
         switchMap((terms) =>
           this.api.measure(terms).pipe(catchError(() => EMPTY)),

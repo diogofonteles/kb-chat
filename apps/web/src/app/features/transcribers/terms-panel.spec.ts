@@ -157,6 +157,24 @@ describe('TermsPanel (KBC-040)', () => {
     expect(text()).toContain('(231 de 224)');
   });
 
+  it('AC-3: past the 500 terms it says so at once and never asks the API', async () => {
+    const lines = Array.from({ length: 600 }, (_, at) => `Termo ${at}`);
+    await add(lines.join('\n'));
+    await new Promise((resolve) => setTimeout(resolve, 320));
+    await fixture.whenStable();
+
+    http.expectNone('/api/v1/media/terms/measure');
+    expect(element('[role="alert"]').textContent).toContain(
+      'A lista tem 602 termos; o máximo é 500. Remova alguns termos.',
+    );
+    expect(text()).not.toContain('180 de 224');
+
+    await submit();
+
+    http.expectNone((request) => request.method === 'PUT');
+    expect(text()).not.toContain('A pergunta não pôde ser enviada');
+  });
+
   it('removes a line, gives the focus to the next one and can discard the draft', async () => {
     button('Remover Hoasca').click();
     await fixture.whenStable();
