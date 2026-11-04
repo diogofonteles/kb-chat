@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Browser, Page } from '@playwright/test';
+import type { APIRequestContext, Browser, Page } from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -56,24 +56,57 @@ const seriousViolations = async (page: Page, include?: string) => {
   );
 };
 
-/**
- * Every transcriber was last seen 2 h ago (an E2E-only route). The specs never call the
- * worker routes with a transcriber's token, so no test turns one "on" under another.
- */
-async function transcribersOffForTwoHours(): Promise<void> {
-  const owner = await ownerApi();
+/** A new Mac, seen by nobody yet. */
+async function pairTranscriber(
+  owner: APIRequestContext,
+  name: string,
+): Promise<string> {
   const paired = await owner.post('/api/v1/media/transcribers', {
-    data: { name: `Mac desligado ${uniqueTag()}` },
+    data: { name: `${name} ${uniqueTag()}` },
     headers: CSRF,
   });
   expect(paired.status(), await paired.text()).toBe(201);
+  return (await paired.json()).transcriber.id;
+}
+
+/** This transcriber was last seen 2 h ago (an E2E-only route). */
+async function lastSeenTwoHoursAgo(
+  owner: APIRequestContext,
+  id: string,
+): Promise<void> {
   const aged = await owner.post('/api/e2e/transcribers/last-seen', {
-    data: { hoursAgo: 2 },
+    data: { id, hoursAgo: 2 },
     headers: CSRF,
   });
   expect(aged.status()).toBe(204);
+}
+
+/**
+ * One transcriber last seen 2 h ago. The specs never call the worker routes with a
+ * transcriber's token, so no test turns one "on" under another.
+ */
+async function transcribersOffForTwoHours(): Promise<void> {
+  const owner = await ownerApi();
+  await lastSeenTwoHoursAgo(
+    owner,
+    await pairTranscriber(owner, 'Mac desligado'),
+  );
   await owner.dispose();
 }
+
+test('aging one transcriber leaves the others alone: tests run side by side', async () => {
+  const owner = await ownerApi();
+  const aged = await pairTranscriber(owner, 'Mac envelhecido');
+  const other = await pairTranscriber(owner, 'Mac vizinho');
+  await lastSeenTwoHoursAgo(owner, aged);
+  const listed = await owner.get('/api/v1/media/transcribers');
+  const { items } = (await listed.json()) as {
+    items: { id: string; lastSeenAt: string | null }[];
+  };
+  expect(items.find(({ id }) => id === aged)?.lastSeenAt).not.toBeNull();
+  expect(items.find(({ id }) => id === other)?.lastSeenAt).toBeNull();
+  await owner.dispose();
+});
 
 test('AC-2: with no transcriber seen for 2 h, a ready audio waits and says since when it is off', async ({
   browser,
