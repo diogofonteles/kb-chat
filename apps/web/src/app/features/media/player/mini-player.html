@@ -36,7 +36,7 @@
       </p>
     } @else {
       <a class="title" [routerLink]="['/midia', current.id]">{{
-        current.title
+        currentTrack()?.title ?? current.title
       }}</a>
     }
     <span class="time"

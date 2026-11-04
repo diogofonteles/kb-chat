@@ -96,4 +96,25 @@ describe('player shortcuts (T15, FR-6, BR-5)', () => {
     });
     expect(shortcutOf(press(','), true)).toBeNull();
   });
+
+  it('goes to the previous and next track with Shift and the arrows (KBC-066 FR-9)', () => {
+    const press = {
+      shiftKey: true,
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      target: 'page' as const,
+    };
+    expect(shortcutOf({ ...press, key: 'ArrowLeft' }, true)).toEqual({
+      kind: 'track',
+      direction: -1,
+    });
+    expect(shortcutOf({ ...press, key: 'ArrowRight' }, true)).toEqual({
+      kind: 'track',
+      direction: 1,
+    });
+    expect(
+      shortcutOf({ ...press, key: 'ArrowRight', target: 'slider' }, true),
+    ).toBeNull();
+  });
 });

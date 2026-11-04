@@ -7,9 +7,12 @@ import {
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { TracksStore } from '@core/media/tracks-store.js';
 import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 
 const STORAGE_KEY = 'kb-chat.player.single-key';
+/** The arrows' step on the page (screens.md T15). */
+const ARROW_STEP_MS = 5_000;
 
 /** Where the focus is, as the shortcuts care about it (BR-5). */
 export function targetOf(target: EventTarget | null): ShortcutTarget {
@@ -59,6 +62,7 @@ const ONCE: ReadonlySet<ShortcutAction['kind']> = new Set([
   'speed',
   'bookmark',
   'captions',
+  'track',
 ]);
 
 /** Actions that need the player page (its shortcuts list, its bookmark note). */
@@ -80,6 +84,7 @@ export class PlayerShortcuts {
   private readonly preferences = inject(ListeningPreferences);
   private readonly bookmarks = inject(BookmarksStore);
   private readonly transcript = inject(TranscriptPreferences);
+  private readonly tracks = inject(TracksStore);
   private readonly on = signal(storedEnabled());
   private readonly help = signal(0);
 
@@ -146,6 +151,12 @@ export class PlayerShortcuts {
       help: () => this.help.update((count) => count + 1),
       bookmark: () => this.bookmarks.mark(),
       captions: () => this.transcript.toggleCaptions(),
+      // Without tracks these keys do what they did: the arrow's step (KBC-066 AC-13).
+      track: ({ direction }) => {
+        if (this.tracks.tracks().length === 0)
+          engine.skip(direction * ARROW_STEP_MS);
+        else this.tracks.step(direction);
+      },
     };
     (actions[action.kind] as (action: ShortcutAction) => void)(action);
   }

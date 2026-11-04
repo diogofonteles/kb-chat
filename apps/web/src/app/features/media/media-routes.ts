@@ -81,6 +81,13 @@ export const MEDIA_ROUTES: Routes = [
       import('./my-bookmarks-page.js').then((m) => m.MyBookmarksPage),
   },
   {
+    path: 'midia/:id/faixas',
+    canMatch: [mediaEnabled],
+    title: $localize`:@@route.tracksTitle:Preparar áudio — Nova Alexandria`,
+    loadComponent: () =>
+      import('./tracks/track-editor-page.js').then((m) => m.TrackEditorPage),
+  },
+  {
     path: 'midia/:id',
     canMatch: [mediaEnabled],
     title: $localize`:@@route.mediaTitle:Mídia — Nova Alexandria`,

@@ -2,6 +2,8 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   MIN_TRACK_LENGTH_MS,
+  adjacentTrack,
+  trackAt,
   NUDGE_MS,
   canSplit,
   canSplitAt,
@@ -170,6 +172,28 @@ describe('creating (BR-3)', () => {
     expect(
       selectedSpan(tracks, { ...input, startMs: 16_000 }),
     ).toBeNull();
+  });
+});
+
+describe('listening by track (FR-9)', () => {
+  const tracks = [
+    span('1', 0, 10_000),
+    span('2', 10_000, 20_000),
+    span('3', 30_000, 40_000),
+  ];
+
+  it('finds the track playing, with the end out of it, and none in a gap', () => {
+    expect(trackAt(tracks, 10_000)?.id).toBe('2');
+    expect(trackAt(tracks, 9_999)?.id).toBe('1');
+    expect(trackAt(tracks, 25_000)).toBeNull();
+  });
+
+  it('goes to the next or the previous track from anywhere', () => {
+    expect(adjacentTrack(tracks, { ms: 15_000, direction: 1 })?.id).toBe('3');
+    expect(adjacentTrack(tracks, { ms: 15_000, direction: -1 })?.id).toBe('1');
+    expect(adjacentTrack(tracks, { ms: 25_000, direction: -1 })?.id).toBe('2');
+    expect(adjacentTrack(tracks, { ms: 35_000, direction: 1 })).toBeNull();
+    expect(adjacentTrack(tracks, { ms: 5_000, direction: -1 })).toBeNull();
   });
 });
 

@@ -42,6 +42,8 @@ export class SeekSlider {
   readonly disabled = input(false);
   /** Where the person's bookmarks are, in ms (KBC-042 FR-3). */
   readonly marks = input<readonly number[]>([]);
+  /** Where the approved tracks start, in ms (KBC-066 FR-9). */
+  readonly trackMarks = input<readonly number[]>([]);
   /** A position to go to (a click, a drag, Home/End). */
   readonly seekRequested = output<number>();
   /**
@@ -67,6 +69,11 @@ export class SeekSlider {
   protected readonly markPercents = computed(() =>
     this.loaded()
       ? this.marks().map((ms) => fractionOf(ms, this.durationMs()) * 100)
+      : [],
+  );
+  protected readonly trackMarkPercents = computed(() =>
+    this.loaded()
+      ? this.trackMarks().map((ms) => fractionOf(ms, this.durationMs()) * 100)
       : [],
   );
   protected readonly bufferedPercent = computed(

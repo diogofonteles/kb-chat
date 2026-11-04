@@ -20,6 +20,14 @@
       }
     </div>
   }
+  @if (trackMarkPercents().length) {
+    <!-- Tracks (KBC-066): taller than bookmarks, so no color alone tells them; reached in the list. -->
+    <div class="marks" aria-hidden="true" data-testid="track-marks">
+      @for (percent of trackMarkPercents(); track $index) {
+        <span class="track-mark" [style.left.%]="percent"></span>
+      }
+    </div>
+  }
   <div
     #thumb
     class="thumb"

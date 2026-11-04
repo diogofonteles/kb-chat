@@ -271,3 +271,23 @@ export function joinTracks<T extends TrackSpan>(
       one.id === trackId ? { ...one, endMs: next.endMs } : one,
     );
 }
+
+/** The track playing at `ms`: `[start, end)`; null in a gap. */
+export function trackAt<T extends TrackSpan>(
+  tracks: readonly T[],
+  ms: number,
+): T | null {
+  return tracks.find((one) => ms >= one.startMs && ms < one.endMs) ?? null;
+}
+
+/** The track "Próxima faixa" or "Faixa anterior" goes to, from `ms` (FR-9). */
+export function adjacentTrack<T extends TrackSpan>(
+  tracks: readonly T[],
+  input: { readonly ms: number; readonly direction: 1 | -1 },
+): T | null {
+  const { ms, direction } = input;
+  if (direction > 0) return tracks.find((one) => one.startMs > ms) ?? null;
+  const current = trackAt(tracks, ms);
+  const before = current?.startMs ?? ms;
+  return tracks.filter((one) => one.startMs < before).at(-1) ?? null;
+}

@@ -29,6 +29,7 @@
 
   <app-seek-slider
     [marks]="bookmarks.positions()"
+    [trackMarks]="trackStarts()"
     [currentMs]="playback().currentMs"
     [durationMs]="playback().durationMs"
     [bufferedEndMs]="playback().bufferedEndMs"
@@ -49,6 +50,39 @@
       {{ rightTime() }}
     </button>
   </div>
+
+  @if (tracks.tracks().length) {
+    <div class="track-nav">
+      <button
+        type="button"
+        class="track-step"
+        aria-keyshortcuts="Shift+ArrowLeft"
+        [disabled]="!tracks.hasPrevious()"
+        (click)="tracks.step(-1)"
+        i18n="@@tracks.previous"
+      >
+        Faixa anterior
+      </button>
+      <p class="track-now" aria-live="off">
+        @if (tracks.current(); as current) {
+          <span class="track-number" i18n="@@tracks.number"
+            >Faixa {{ current.ordinal }}</span
+          >
+          {{ current.title }}
+        }
+      </p>
+      <button
+        type="button"
+        class="track-step"
+        aria-keyshortcuts="Shift+ArrowRight"
+        [disabled]="!tracks.hasNext()"
+        (click)="tracks.step(1)"
+        i18n="@@tracks.next"
+      >
+        Próxima faixa
+      </button>
+    </div>
+  }
 
   <div class="controls">
     <button
