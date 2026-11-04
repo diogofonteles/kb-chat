@@ -4,12 +4,33 @@ on:
   pull_request:
   push:
     branches: [develop, main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # What this change needs (tools/ci/select-jobs.mjs): on a pull request only what its paths
+  # touch, anything else in full. `verdict`, at the end, reads the result of all of it.
+  changes:
+    name: Select jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      unit: ${{ steps.select.outputs.unit }}
+      run_unit: ${{ steps.select.outputs.run_unit }}
+      transcriber: ${{ steps.select.outputs.transcriber }}
+      codex: ${{ steps.select.outputs.codex }}
+      e2e: ${{ steps.select.outputs.e2e }}
+      run_e2e: ${{ steps.select.outputs.run_e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pull request's merge commit and its base
+      - id: select
+        run: node tools/ci/select-jobs.mjs
+
   # Split so the slowest part (the API's unit tests, ~2.5 min) does not add up with lint,
   # typecheck, build and the other projects' tests: each runs in its own job, in parallel.
   checks:
@@ -32,19 +53,13 @@ jobs:
 
   test:
     name: Unit tests (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.run_unit == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: api
-            projects: '@kb-chat/api'
-            ffmpeg: true
-          - name: web
-            projects: '@kb-chat/web'
-          - name: libs
-            projects: '@kb-chat/contracts,@kb-chat/player-core'
+      matrix: ${{ fromJSON(needs.changes.outputs.unit) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -55,7 +70,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The media worker's tests convert real audio (KBC-034): ffmpeg and ffprobe.
       - if: matrix.ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        uses: ./.github/actions/setup-ffmpeg
+        timeout-minutes: 5
       - run: pnpm --filter @kb-chat/contracts build
       - run: pnpm exec nx run-many -t test -p ${{ matrix.projects }}
 
@@ -64,6 +80,8 @@ jobs:
     # with the other jobs. Linux takes the CPU-only torch wheel (pyproject) and skips
     # mlx-whisper (Apple silicon only); the tests use a fake model and the real Silero VAD.
     name: Transcriber (ruff, pytest)
+    needs: changes
+    if: needs.changes.outputs.transcriber == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -86,48 +104,13 @@ jobs:
     # one job took ~18 min; Playwright cuts a run in order, so plain shards put every slow
     # WebKit media test (real audio) in the last one. Each shard starts its own servers.
     name: E2E (Playwright) ${{ matrix.name }} ${{ matrix.shard }}
+    needs: changes
+    if: needs.changes.outputs.run_e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: app
-            projects: --project=desktop --project=mobile
-            shard: 1/3
-            browser: 'chromium'
-          - name: app
-            projects: --project=desktop --project=mobile
-            shard: 2/3
-            browser: 'chromium'
-          - name: app
-            projects: --project=desktop --project=mobile
-            shard: 3/3
-            browser: 'chromium'
-          - name: media Chrome
-            projects: --project=media-desktop --project=media-mobile
-            shard: 1/3
-            browser: ''
-          - name: media Chrome
-            projects: --project=media-desktop --project=media-mobile
-            shard: 2/3
-            browser: ''
-          - name: media Chrome
-            projects: --project=media-desktop --project=media-mobile
-            shard: 3/3
-            browser: ''
-          - name: media WebKit
-            projects: --project=media-webkit
-            shard: 1/3
-            browser: 'webkit'
-          - name: media WebKit
-            projects: --project=media-webkit
-            shard: 2/3
-            browser: 'webkit'
-          - name: media WebKit
-            projects: --project=media-webkit
-            shard: 3/3
-            browser: 'webkit'
+      matrix: ${{ fromJSON(needs.changes.outputs.e2e) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -150,11 +133,12 @@ jobs:
       # needs ffmpeg for the E2E server's media worker (KBC-034).
       - if: matrix.browser == 'webkit'
         run: pnpm --filter @kb-chat/e2e exec playwright install-deps webkit
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - uses: ./.github/actions/setup-ffmpeg
+        timeout-minutes: 5
       # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
       # Chromium of Playwright has no AAC/H.264), no download needed.
       - run: google-chrome --version
-      - run: pnpm --filter @kb-chat/e2e exec playwright test ${{ matrix.projects }} --shard=${{ matrix.shard }}
+      - run: pnpm --filter @kb-chat/e2e exec playwright test ${{ matrix.projects }} --shard=${{ matrix.shard }} ${{ matrix.specs }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -167,6 +151,8 @@ jobs:
     # deploy/compose.yml, cannot read the state, the Claude login, the deploy .env or the
     # secrets key (canary copies planted where production keeps them).
     name: Codex sandbox
+    needs: changes
+    if: needs.changes.outputs.codex == 'true'
     # The production VM is arm64 (OCI Ampere): prove the image built for that architecture.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
@@ -186,3 +172,20 @@ jobs:
         run: sudo deploy/scripts/codex-egress.sh
       - name: Prove the sandbox
         run: deploy/scripts/codex-sandbox-proof.sh proof docker.io/library
+
+  # The one check that always reports: selected jobs may be skipped, but the selection itself
+  # must have worked and nothing that ran may have failed.
+  verdict:
+    name: CI verdict
+    if: always()
+    needs: [changes, checks, test, transcriber, e2e, codex-sandbox]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          echo "$NEEDS" | jq -e '
+            .changes.result == "success" and .checks.result == "success" and
+            ([.[].result] | all(. == "success" or . == "skipped"))'
