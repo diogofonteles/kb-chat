@@ -871,6 +871,47 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     `,
   },
   {
+    // KBC-072: the guided flow's plan per recording. Stage states are read from the jobs and
+    // runs, so only what they cannot say is here. The cuts have their own table: migration 15
+    // (KBC-071) rebuilds `jobs`, and a column added here would not survive it.
+    version: 17,
+    name: 'media-preparations',
+    sql: `
+      CREATE TABLE media_preparations (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        principal TEXT NOT NULL,
+        transcribe INTEGER NOT NULL CHECK (transcribe IN (0, 1)),
+        speakers INTEGER NOT NULL CHECK (speakers IN (0, 1)),
+        tracks TEXT NOT NULL CHECK (tracks IN ('none', 'manual', 'ai')),
+        subjects INTEGER NOT NULL CHECK (subjects IN (0, 1)),
+        accepted_usd REAL CHECK (accepted_usd IS NULL OR accepted_usd >= 0),
+        speakers_asked_at TEXT,
+        proposal_claimed_at TEXT,
+        proposal_stop TEXT,
+        proposal_stop_usd REAL,
+        validating_at TEXT,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX media_preparations_open ON media_preparations (media_id)
+        WHERE finished_at IS NULL;
+
+      CREATE TABLE media_transcribe_cuts (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        job_id TEXT NOT NULL,
+        done INTEGER NOT NULL CHECK (done >= 0),
+        total INTEGER NOT NULL CHECK (total >= 1 AND total >= done),
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      -- What the runs before this one spent, when it goes on from a failed one (BR-6): each
+      -- reservation pays its own part, and the run's spent_usd is the analysis as a whole.
+      ALTER TABLE media_proposal_runs
+        ADD COLUMN carried_usd REAL NOT NULL DEFAULT 0 CHECK (carried_usd >= 0);
+    `,
+  },
+  {
     // KBC-068 (ADR 0029 §5): an approved track becomes a media row of its own, cut from its
     // recording. The bounds on the media row are the real, published ones; the ones on
     // media_tracks are what was asked. Versions 16 and 17 are KBC-045's and KBC-072's (open in

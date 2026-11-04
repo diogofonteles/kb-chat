@@ -57,6 +57,7 @@ import { keepFocusedInView } from '../keep-in-view.js';
 import { detailsSavedText } from '../edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from '../edit-media-dialog.js';
 import { MovedNotice, mediaMoveOf, type MediaMove } from '../moved-notice.js';
+import { injectOpenPreparations } from '../preparation/open-preparations.js';
 import { UploadPanel } from '../upload-panel.js';
 import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
@@ -156,6 +157,8 @@ export class LibraryPage {
   protected readonly canUpload = computed(() =>
     this.session.can('media-upload'),
   );
+  /** Where each preparation stopped (KBC-072 FR-6). */
+  protected readonly preparations = injectOpenPreparations();
   /** "Buscar na fala" opens the search, which is a feature of its own. */
   protected readonly canSearch = computed(() => this.session.can('search'));
   protected readonly isMaster = this.session.isMaster;

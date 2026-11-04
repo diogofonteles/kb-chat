@@ -8,6 +8,9 @@
   <form class="body" [formGroup]="form" (ngSubmit)="send()" novalidate>
     <header class="head">
       <h2 id="upload-title" i18n="@@media.upload.title">Enviar áudio</h2>
+      @if (showSteps()) {
+        <app-preparation-steps [step]="1" />
+      }
     </header>
 
     <section
@@ -91,6 +94,8 @@
       [disabled]="stage() === 'sending'"
       [(name)]="authorName"
     />
+
+    <app-preparation-options [locked]="stage() === 'sending'" />
 
     @if (stage() === 'sending') {
       <div class="progress">

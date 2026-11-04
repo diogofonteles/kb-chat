@@ -1,4 +1,5 @@
 import type {
+  DraftTrack,
   DraftTracks,
   ProposalFailure,
   ProposalRun,
@@ -18,6 +19,19 @@ export interface NewProposalRun {
   readonly windowsTotal: number;
   readonly estimateUsd: number;
   readonly now: Date;
+  /** What the failed attempts before it spent: the run cap holds over the whole analysis. */
+  readonly carriedUsd: number;
+  /** The failed run it goes on from: its output moves here (KBC-072 BR-6). */
+  readonly resumes: Pick<FailedAttempt, 'runId' | 'windowsDone'> | null;
+}
+
+/** How an analysis stands after a failed attempt: where it got to and all it has spent. */
+export interface FailedAttempt {
+  readonly runId: string;
+  readonly windowsDone: number;
+  readonly windowsTotal: number;
+  /** Over every attempt so far, finished windows or not. */
+  readonly spentUsd: number;
 }
 
 /** A track a window proposed, already checked (segments, times, title). */
@@ -57,10 +71,22 @@ export interface InterruptedRun {
  * draft grows while the run goes on (KBC-072).
  */
 export interface TrackProposalStorePort {
-  /** Starts a run; null when the recording already has one running. */
+  /**
+   * Starts a run, one that goes on from a failed one taking its tracks and names along; null
+   * when the recording already has one running.
+   */
   startRun(run: NewProposalRun): ProposalRun | null;
   getRun(runId: string): ProposalRun | null;
-  /** One window's result, in one transaction: tracks, voice names, progress and spend. */
+  /** The recording's newest run, whatever became of it. */
+  newestRun(mediaId: string): ProposalRun | null;
+  /** The recording's newest run when it failed on this transcript: the analysis still open. */
+  failedAttempt(mediaId: string, transcriptId: string): FailedAttempt | null;
+  /** The tracks a run has written, in order. */
+  runTracks(runId: string): DraftTrack[];
+  /**
+   * One window's result, in one transaction: tracks, voice names, progress and spend.
+   * `spentUsd` is what this run spent, without what it carried from a failed one.
+   */
   saveWindow(input: {
     readonly runId: string;
     readonly extendLast: TrackExtension | null;
@@ -70,8 +96,8 @@ export interface TrackProposalStorePort {
   }): void;
   /**
    * Ends a run and its ledger reservation in one transaction. Done: the older untouched AI
-   * tracks of the recording go (BR-6) and the spend is settled. Failed: this run's tracks and
-   * names go, the draft is what it was before and the unspent part is refunded (FR-5). The
+   * tracks of the recording go (BR-6) and the spend is settled. Failed: what its finished
+   * windows wrote stays, paid for, and the unspent part is refunded (FR-5, KBC-072 BR-6). The
    * reservation is closed even when the recording, and so the run, was deleted meanwhile.
    */
   finishRun(input: {
@@ -85,8 +111,14 @@ export interface TrackProposalStorePort {
   keptRanges(mediaId: string): KeptRange[];
   /** The edit stands approved: nothing to propose on until it is reopened (BR-9). */
   isApproved(mediaId: string): boolean;
-  /** The draft now: the newest run that did not fail, its tracks and the kept ones. */
+  /**
+   * The draft now: the newest run that did not fail or, with none, the newest failed one that
+   * finished windows; its tracks and the kept ones.
+   */
   draft(mediaId: string): DraftTracks;
-  /** Closes the runs a stopped API left running, as failed (`interrupted`). */
+  /**
+   * Closes the runs a stopped API left running: as failed (`interrupted`), keeping their
+   * finished windows, or as done when only the closing was missing.
+   */
   interruptRunning(now: Date): InterruptedRun[];
 }

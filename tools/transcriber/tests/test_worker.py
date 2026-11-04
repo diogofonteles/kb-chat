@@ -103,6 +103,22 @@ def test_a_lost_lease_on_heartbeat_stops_between_chunks(fake_api):
     assert fake_api.bodies("heartbeat")[0]["leaseId"] == JOB["leaseId"]
 
 
+def test_the_beat_carries_the_cuts_once_there_are_any(fake_api):
+    model = FakeModel(on_call=lambda n: time.sleep(0.15))
+    spans = [(0.0, 25.0), (30.0, 55.0), (60.0, 85.0)]
+    w = worker(
+        fake_api,
+        model=model,
+        find_speech=lambda _: spans,
+        decode=lambda p: np.zeros(90 * 16000, dtype=np.float32),
+        heartbeat_s=0.05,
+    )
+    w.step()
+    beats = fake_api.bodies("heartbeat")
+    assert "cuts" not in beats[0]
+    assert beats[-1]["cuts"]["total"] == 3
+
+
 def test_a_shutdown_stops_between_chunks_and_uploads_nothing(fake_api):
     stop = threading.Event()
     model = FakeModel(on_call=lambda n: stop.set())

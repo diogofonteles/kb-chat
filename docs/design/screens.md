@@ -428,7 +428,7 @@ Os tempos usam `m:ss` abaixo de 1 h e `h:mm:ss` a partir de 1 h, em algarismos t
 
 ### Faixas (KBC-066)
 - Com `media-tracks`: lista **Faixas** abaixo do player (número, título, início e duração; a atual com `aria-current` e "tocando agora"), riscos altos na barra de progresso no começo de cada faixa (os marcadores continuam pontos), o título da faixa atual entre **Faixa anterior** e **Próxima faixa** (Shift+←/→ na página; sem faixas, essas teclas seguem andando 5 s) e no lugar do título no mini-player. `?track=3` abre pausado no começo da faixa 3. Sem a permissão, nada muda.
-- Para `media-edit`: **Dividir em faixas**, ou "Preparação parada no passo 3 · Continuar", ou "12 faixas aplicadas · Ver edição", levando à T20 (`/midia/{id}/faixas`).
+- Para `media-edit`: **Preparar áudio**, ou "Preparação parada no passo 3 · Continuar", ou "12 faixas aplicadas · Ver edição", levando à T20 (`/midia/{id}/faixas`).
 
 ### Atalhos de teclado (UP-09: todos também têm botão)
 Ativos só na página do player, quando o foco está no player, na transcrição, no mini-player ou no corpo da página, e **nunca** com o foco em `input`, `textarea`, `select`, `[contenteditable]`, item de menu ou diálogo: Espaço ou K tocar/pausar · J voltar 15 s · L avançar 30 s · ←/→ 5 s · Shift+, e Shift+. diminuir/aumentar a velocidade · M silenciar · C legendas · B marcar este trecho · 0–9 ir para 0%–90% · ? lista dos atalhos. J e L seguem os pulos escolhidos (KBC-043). O diálogo "Atalhos de teclado" (com "Fechar" e Esc) tem a opção **Usar atalhos de uma tecla**, ligada por padrão e lembrada, que os desliga (WCAG 2.1.4). Os botões declaram `aria-keyshortcuts`. Um controle focado que usa uma tecla (as setas na barra de progresso e na transcrição) a consome, e o atalho global não age em dobro.
@@ -717,9 +717,17 @@ Todo par texto/fundo e acento/fundo deve passar 4,5:1 (AA). A verificação entr
 - **Precisam de teste com usuários** (`docs/research/2026-10-23-search-habit.md`): os nomes "Ligação com o tema" e "Profundidade" são entendidos? O seletor "Como buscar" é descoberto? (UP-25: o piloto com o dono acontece antes do teste com colegas.)
 - **Achado de dados:** quase todo o acervo tem profundidade 1 (3.987 de 4.235). O chip Profundidade discrimina pouco hoje. Ele fica na R1, mas vai **depois** dos outros, e a medição dirá se merece ficar (DS-22).
 
-## T20. Preparar áudio, passos 3 e 4 (KBC-066; KBC-072 traz os passos 1 e 2)
+## T20. Preparar áudio (passos 1 e 2 no KBC-072; 3 e 4 no KBC-066)
 
-Rota `/midia/{id}/faixas`. O pedido completo, com a tabela de estados, está em [`KBC-066`](../backlog/KBC-066-mark-tracks-and-play-by-track.md). Como foi construído:
+**Passos 1 e 2** (rota `/midia/{id}/preparar`; arquivo novo, no painel do T14). O pedido completo está em [`KBC-072`](../backlog/KBC-072-upload-with-editing-choices-and-live-progress.md). Como foi construído:
+
+- **Indicador:** o mesmo componente nos três lugares, com "O próximo passo fica disponível quando o processamento terminar." por extenso; em telas estreitas, "2/4 Processar" e "Ver os passos".
+- **Passo 1:** "O que fazer com este áudio", com opção desativada focável e o motivo por extenso; sem valor estimado não há opção paga. Áudio já enviado: **Preparar áudio** na página dele, só com o que falta.
+- **Passo 2:** etapas e vozes à esquerda, faixas à direita (≥ 60rem); no celular, uma coluna. Todas as linhas são pintadas: com 200 faixas a rolagem segue em 60 fps; se pesar num celular fraco, o caminho é uma lista virtual.
+- **Dinheiro:** o clique em **Enviar** com a opção paga marcada vale pelo valor mostrado. A etapa começa uma vez, reavalia e reserva só nessa hora; acima de 1,25 × o valor visto, ou de um teto, não roda e a tela diz o valor. Falha nunca repete sozinha: só "Tentar de novo", que mostra o custo.
+- **Continuar:** "Preparação parada no passo N · Continuar" na lista, na biblioteca e na página do áudio.
+
+**Passos 3 e 4:** rota `/midia/{id}/faixas`. O pedido completo, com a tabela de estados, está em [`KBC-066`](../backlog/KBC-066-mark-tracks-and-play-by-track.md). Como foi construído:
 
 - **Desktop (largura útil ≥ 60rem):** indicador de passos, barra de ferramentas (Nova faixa aqui, Desfazer, Refazer, zoom, −0,5 s/+0,5 s), Propor faixas com IA, visão geral, detalhe; abaixo, a lista à esquerda e a transcrição à direita; rodapé fixo com "12 faixas · 2 com aviso" e **Aprovar faixas**.
 - **Celular:** "3/4 Validar faixas"; a mesma ordem, com "N faixas" e "Transcrição" em abas no lugar da folha que sobe (assim a lista nunca cobre as alças).

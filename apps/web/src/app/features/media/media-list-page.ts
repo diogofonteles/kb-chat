@@ -52,6 +52,8 @@ import { MEDIA_POLL_MS } from './media-polling.js';
 import { detailsSavedText } from './edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { MovedNotice, mediaMoveOf, type MediaMove } from './moved-notice.js';
+import { injectOpenPreparations } from './preparation/open-preparations.js';
+import { PreparationEntry } from './preparation/preparation-entry.js';
 import { RowMenu } from './row-menu.js';
 import { UploadPanel } from './upload-panel.js';
 
@@ -72,6 +74,7 @@ export const FILTER_FROM = 11;
     MovedNotice,
     UploadPanel,
     RowMenu,
+    PreparationEntry,
   ],
   templateUrl: './media-list-page.html',
   styleUrl: './media-list-page.css',
@@ -96,6 +99,8 @@ export class MediaListPage {
 
   protected readonly topic = this.chat.topic;
   protected readonly topics = this.chat.topicList;
+  /** Where each preparation stopped (KBC-072 FR-6). */
+  protected readonly preparations = injectOpenPreparations();
   protected readonly list = httpResource(
     () => {
       const slug = this.chat.topicSlug();

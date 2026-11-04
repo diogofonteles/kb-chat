@@ -64,6 +64,7 @@ export const API_ERROR_CODES = [
   'VOICE_LIST_EXPOSED',
   /** A revocation took effect but is not on the list yet (ADR 0032 §4); the next start retries. */
   'VOICE_LIST_NOT_WRITTEN',
+  'PLAN_REFUSED',
   'INTERNAL',
 ] as const;
 

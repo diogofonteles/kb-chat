@@ -11,8 +11,13 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { MEDIA_UPLOAD_BACKEND } from '@core/media/media-api.js';
+import { Router, provideRouter } from '@angular/router';
+import type { Feature } from '@kb-chat/contracts';
+import { NEVER, of } from 'rxjs';
 import { aTopic } from '../../testing/fixtures.js';
-import { aMediaItem } from '../../testing/media-fixtures.js';
+import { aMediaItem, sessionAs } from '../../testing/media-fixtures.js';
+import { anOffer } from '../../testing/preparation-fixtures.js';
+import { AUDIO_LENGTH_READER, type AudioLengthReader } from './audio-length.js';
 import { UploadPanel } from './upload-panel.js';
 
 const CREATED = aMediaItem({
@@ -21,7 +26,21 @@ const CREATED = aMediaItem({
   bytes: null,
 });
 
-async function renderPanel() {
+const OPTIONS_URL = '/api/v1/media/preparation-options';
+
+const answerOptions = (offer = anOffer()) =>
+  TestBed.inject(HttpTestingController)
+    .match((request) => request.url.startsWith(OPTIONS_URL))
+    .forEach((request) => {
+      if (!request.cancelled) request.flush(offer);
+    });
+
+async function renderPanel(
+  options: {
+    readonly features?: Feature[];
+    readonly length?: AudioLengthReader;
+  } = {},
+) {
   const uploaded = vi.fn();
   const closed = vi.fn();
   const view = await render(UploadPanel, {
@@ -29,6 +48,12 @@ async function renderPanel() {
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+      provideRouter([{ path: 'midia/:id/preparar', children: [] }]),
+      sessionAs({ features: options.features ?? ['media', 'media-upload'] }),
+      {
+        provide: AUDIO_LENGTH_READER,
+        useValue: options.length ?? (() => NEVER),
+      },
       {
         provide: MEDIA_UPLOAD_BACKEND,
         useFactory: () => TestBed.inject(HttpBackend),
@@ -43,6 +68,7 @@ async function renderPanel() {
     },
     on: { uploaded, closed },
   });
+  answerOptions();
   await view.fixture.whenStable();
   const http = TestBed.inject(HttpTestingController);
   return { ...view, uploaded, closed, http };
@@ -124,7 +150,7 @@ describe('UploadPanel (T14, KBC-034)', () => {
       main: false,
     });
     const create = http.expectOne('/api/v1/topics/hermetismo/media');
-    expect(create.request.body).toEqual({
+    expect(create.request.body).toMatchObject({
       title: 'Palestra de 1998',
       author: 'mestre-gabriel',
       fileName: 'Palestra_de_1998.mp3',
@@ -396,5 +422,88 @@ describe('UploadPanel (T14, KBC-034)', () => {
     context.http
       .expectOne(`/api/v1/media/${CREATED.id}/file`)
       .flush({ ...CREATED, status: 'queued' });
+  });
+
+  describe('the choices of step 1 (KBC-072)', () => {
+    const EDITOR: Feature[] = ['media', 'media-upload', 'media-edit'];
+
+    beforeEach(() => localStorage.clear());
+
+    /** Up to the file sent and its answer; `plan` is what went with the item. */
+    async function send(view: Awaited<ReturnType<typeof renderPanel>>) {
+      const { container, fixture, http } = view;
+      choose(container, audio());
+      answerOptions();
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+      await fixture.whenStable();
+      const created = http.expectOne('/api/v1/topics/hermetismo/media');
+      const { plan } = created.request.body as { plan: object };
+      created.flush(CREATED);
+      await fixture.whenStable();
+      http
+        .expectOne(`/api/v1/media/${CREATED.id}/file`)
+        .flush({ ...CREATED, status: 'queued' });
+      await fixture.whenStable();
+      return plan;
+    }
+
+    it('shows step 1 of 4 to who edits, and asks for the length of the file (BR-4)', async () => {
+      const length = vi.fn(() => of(3_720_000));
+      const { container, fixture, http } = await renderPanel({
+        features: EDITOR,
+        length,
+      });
+      expect(screen.getByTestId('step-text').textContent).toContain(
+        'Passo 1 de 4',
+      );
+      choose(container, audio());
+      await Promise.resolve();
+      const asked = http.expectOne((request) =>
+        request.url.startsWith(OPTIONS_URL),
+      );
+      expect(asked.request.params.get('durationMs')).toBe('3720000');
+      asked.flush(anOffer());
+      await fixture.whenStable();
+      expect(length).toHaveBeenCalled();
+    });
+
+    it('goes to step 2 after sending with more than the transcription', async () => {
+      const view = await renderPanel({ features: EDITOR });
+      const plan = await send(view);
+      expect(plan).toMatchObject({
+        transcribe: true,
+        speakers: true,
+        tracks: 'none',
+        acceptedUsd: null,
+      });
+      expect(TestBed.inject(Router).url).toBe(`/midia/${CREATED.id}/preparar`);
+    });
+
+    it('with only "Transcrever", goes back to the list as ever (AC-15)', async () => {
+      const view = await renderPanel();
+      await send(view);
+      expect(view.uploaded).toHaveBeenCalled();
+      expect(TestBed.inject(Router).url).toBe('/');
+    });
+
+    it('sends the value seen with a paid choice, and does not remember it (AC-3, AC-4)', async () => {
+      const view = await renderPanel({
+        features: [...EDITOR, 'media-edit-ai'],
+      });
+      const { container, fixture } = view;
+      choose(container, audio());
+      answerOptions();
+      await fixture.whenStable();
+      fireEvent.click(
+        screen.getByRole('radio', { name: 'Propor as faixas com IA' }),
+      );
+      await fixture.whenStable();
+      const plan = await send(view);
+      expect(plan).toMatchObject({ tracks: 'ai', acceptedUsd: 0.02 });
+      expect(localStorage.getItem('kb-chat.preparation-choices')).toContain(
+        '"tracks":"none"',
+      );
+    });
   });
 });

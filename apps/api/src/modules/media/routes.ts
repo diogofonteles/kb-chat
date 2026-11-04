@@ -5,6 +5,7 @@ import {
   mediaListSchema,
   topicSlugSchema,
   updateMediaRequestSchema,
+  type MediaItem,
 } from '@kb-chat/contracts';
 import type {
   FastifyBaseLogger,
@@ -27,7 +28,12 @@ import {
   type RouteAccess,
 } from '../auth/index.js';
 import type { MediaEditService } from './media-edit-service.js';
-import type { MediaActor, MediaService } from './media-service.js';
+import type {
+  MediaActor,
+  MediaService,
+  PlanActor,
+  UploadPlans,
+} from './media-service.js';
 import { serveMedia } from './serve-media.js';
 
 /** Listening needs the `media` feature (owner's rule: every feature is granted per person). */
@@ -69,6 +75,16 @@ export function actorOf(request: FastifyRequest): MediaActor {
     canUpload: hasFeature(viewer.person, 'media-upload'),
     seesTracks: hasFeature(viewer.person, 'media-tracks'),
     canSee: (topic) => canSee(request, topic),
+  };
+}
+
+/** The person, with what decides the guided flow's options (KBC-072 BR-3). */
+export function planActorOf(request: FastifyRequest): PlanActor {
+  const { person } = viewerOf(request);
+  return {
+    ...actorOf(request),
+    canEdit: hasFeature(person, 'media-edit'),
+    canPropose: hasFeature(person, 'media-edit-ai'),
   };
 }
 
@@ -135,8 +151,12 @@ export const mediaRoutes =
   (
     service: MediaService,
     editor: MediaEditService,
-    /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
-    createPerMinute: number,
+    options: {
+      /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
+      readonly createPerMinute: number;
+      /** The guided flow's plans (KBC-072). */
+      readonly plans: UploadPlans;
+    },
   ): FastifyPluginAsync =>
   async (app) => {
     // The upload body is streamed to disk as it arrives, never buffered (FR-2).
@@ -148,21 +168,23 @@ export const mediaRoutes =
     typed.get('/api/v1/topics/:topic/media', OPTIONS.list, async (request) => ({
       items: service.list(actorOf(request), request.params.topic),
     }));
-    typed.post(
-      '/api/v1/topics/:topic/media',
-      createOptions(createPerMinute),
-      async (request, reply) => {
-        const created = service.create(
-          actorOf(request),
-          request.params.topic,
-          request.body,
-        );
-        return reply.code(201).send(created);
-      },
-    );
+    registerCreate(typed, { service, ...options });
     registerItemRoutes(typed, service);
     registerEditRoute(typed, service, editor);
   };
+
+/** An item with its plan: a refused option creates nothing (KBC-072 AC-13). */
+function createPlanned(
+  { actor, topic }: { actor: PlanActor; topic: string },
+  body: z.output<typeof createMediaRequestSchema>,
+  { service, plans }: { service: MediaService; plans: UploadPlans },
+): MediaItem {
+  const { plan, ...item } = body;
+  if (plan) plans.assertAllowed(actor, plan);
+  const created = service.create(actor, topic, item);
+  if (plan) plans.record(actor, created.id, plan);
+  return created;
+}
 
 type TypedApp = FastifyInstance<
   RawServerDefault,
@@ -171,6 +193,28 @@ type TypedApp = FastifyInstance<
   FastifyBaseLogger,
   ZodTypeProvider
 >;
+
+function registerCreate(
+  typed: TypedApp,
+  deps: {
+    readonly service: MediaService;
+    readonly plans: UploadPlans;
+    readonly createPerMinute: number;
+  },
+): void {
+  typed.post(
+    '/api/v1/topics/:topic/media',
+    createOptions(deps.createPerMinute),
+    async (request, reply) => {
+      const created = createPlanned(
+        { actor: planActorOf(request), topic: request.params.topic },
+        request.body,
+        deps,
+      );
+      return reply.code(201).send(created);
+    },
+  );
+}
 
 /** "Editar informações" (KBC-050 FR-1): the answer is the item as the person now sees it. */
 function registerEditRoute(

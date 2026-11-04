@@ -1,4 +1,5 @@
 import type {
+  JobCuts,
   MediaFailure,
   MediaJobKind,
   MediaKind,
@@ -126,6 +127,8 @@ export interface LeaseRequest {
 
 export interface Heartbeat extends LeaseOwner {
   readonly progress: number | null;
+  /** A transcription's cuts (KBC-072 FR-3). */
+  readonly cuts?: JobCuts;
   readonly now: Date;
   readonly leaseMs: number;
 }
@@ -195,8 +198,13 @@ export interface MediaStorePort {
   mediaOfJob(jobId: string): string | null;
   /** False when the lease is no longer this worker's (expired, re-leased, removed). */
   heartbeat(beat: Heartbeat): boolean;
-  /** The rendition is in place: the item is ready and its transcription is queued. */
+  /**
+   * The rendition is in place: the item is ready and its transcription is queued, unless
+   * the person asked for none (KBC-072 BR-1).
+   */
   completeTranscode(result: TranscodeResult): boolean;
+  /** The person unticked "Transcrever" on this upload. */
+  skipsTranscription(mediaId: string): boolean;
   failJob(failure: JobFailure): boolean;
   /** Expired leases go back to the queue, or fail after `maxAttempts`. */
   reapExpired(input: {

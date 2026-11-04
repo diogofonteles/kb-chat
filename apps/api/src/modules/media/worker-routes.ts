@@ -287,6 +287,7 @@ function registerBeat(
       service.heartbeat(request.params.id, {
         ...ownerOf(request, body),
         progress: body.progress,
+        cuts: body.cuts,
       });
       const marked = identityOf(request).kinds.includes('voice-profile');
       const revokedVoiceProfiles = marked

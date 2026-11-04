@@ -104,13 +104,24 @@ class ApiClient:
             raise ApiError(f"audio download failed: {err}") from err
 
     def heartbeat(
-        self, job: dict, progress: int | None, voice_profiles: Sequence[str] = ()
+        self,
+        job: dict,
+        progress: int | None,
+        voice_profiles: Sequence[str] = (),
+        cuts: dict | None = None,
     ) -> list[str] | None:
         """Of the prints held, the ones revoked; None when the lease is no longer ours."""
         held = {"voiceProfiles": list(voice_profiles)} if voice_profiles else {}
+        done = {"cuts": cuts} if cuts is not None else {}
         status, body = self._post(
             f"/api/v1/media-worker/jobs/{job['id']}/heartbeat",
-            {"worker": self.worker, "leaseId": job["leaseId"], "progress": progress, **held},
+            {
+                "worker": self.worker,
+                "leaseId": job["leaseId"],
+                "progress": progress,
+                **held,
+                **done,
+            },
         )
         if status == 204:
             return []

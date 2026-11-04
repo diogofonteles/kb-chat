@@ -55,6 +55,20 @@ afterEach(() => {
 });
 
 describe('MediaJanitor', () => {
+  it('moves the open preparations on, with no page open (KBC-072 BR-8)', async () => {
+    let advanced = 0;
+    const janitor = new MediaJanitor({
+      store,
+      files,
+      log: createLogger('silent'),
+      advancePreparations: async () => {
+        advanced += 1;
+      },
+    });
+    await janitor.sweep();
+    expect(advanced).toBe(1);
+  });
+
   it('requeues a job whose worker stopped beating', async () => {
     const id = '11111111-1111-4111-8111-111111111111';
     await uploading(id, T0);

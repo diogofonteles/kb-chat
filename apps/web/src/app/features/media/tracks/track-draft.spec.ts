@@ -304,7 +304,7 @@ describe('TrackDraft (KBC-066)', () => {
       },
     );
 
-    it.each(['approved', 'proposal-running'])(
+    it.each(['approved', 'proposal-running', 'preparation'])(
       'stops on a 409 %s, with a conflict to recover from (R-6)',
       (reason) => {
         draft.apply([one]);

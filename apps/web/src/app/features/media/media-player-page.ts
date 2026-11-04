@@ -57,6 +57,7 @@ import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
 import { TrackPreparationStatus } from './tracks/track-preparation.js';
+import { preparationPagePath } from '@core/media/preparation-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
   EMPTY,
@@ -73,6 +74,7 @@ import {
   transcriptionTextOf,
 } from './media-labels.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { PreparationEntry } from './preparation/preparation-entry.js';
 import { detailsSavedText, editDetailsLabel } from './edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { hasLibrary } from './library/library-access.js';
@@ -95,6 +97,7 @@ import { TrackNavList } from './tracks/track-nav-list.js';
 @Component({
   selector: 'app-media-player-page',
   imports: [
+    PreparationEntry,
     RouterLink,
     DatePipe,
     TrackPreparationStatus,
@@ -184,15 +187,20 @@ export class MediaPlayerPage {
     { parse: (body) => mediaEditSchema.parse(body) },
   );
   protected readonly editLink = computed(() => editPagePath(this.id()));
+  protected readonly prepareLink = computed(() =>
+    preparationPagePath(this.id()),
+  );
   /** What the entry to T20 says: nothing until the edit is known. */
   protected readonly editEntry = computed(() => {
     if (!this.edit.hasValue()) return null;
-    const { started, status, step, approvedTracks } = this.edit.value();
+    const { started, status, step, approvedTracks, preparationStep } =
+      this.edit.value();
     if (status === 'approved')
       return { state: 'approved' as const, step, tracks: approvedTracks };
+    if (preparationStep)
+      return { state: 'paused' as const, step: preparationStep };
     if (started) return { state: 'paused' as const, step };
-    // Dividing goes by the words: a new edit starts from a transcribed recording (T20).
-    return this.hasTranscript() ? { state: 'new' as const, step } : null;
+    return { state: 'new' as const, step };
   });
   protected readonly appliedText = computed(() => {
     const entry = this.editEntry();

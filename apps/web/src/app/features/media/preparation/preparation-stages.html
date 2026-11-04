@@ -1,0 +1,73 @@
+<ol class="stages" aria-label="Etapas" i18n-aria-label="@@prep.stages">
+  @for (line of lines(); track line.stage.stage) {
+    <li
+      #row
+      tabindex="-1"
+      [class.done]="line.stage.state === 'done'"
+      [class.failed]="line.stage.state === 'failed'"
+      [class.current]="line.stage.state === 'running'"
+    >
+      <p class="line">
+        <span class="name">{{ line.name }}</span>
+        <span class="state">
+          @if (line.stage.state === 'done') {
+            <span aria-hidden="true">✓</span>
+          }
+          {{ line.state }}
+        </span>
+      </p>
+      @if (line.stage.state === 'running' && line.stage.percent !== null) {
+        <div
+          class="bar"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          [attr.aria-valuenow]="line.stage.percent"
+          [attr.aria-valuetext]="valueText(line.stage)"
+          [attr.aria-label]="line.name"
+        >
+          <span [style.width.%]="line.stage.percent"></span>
+        </div>
+      }
+      @if (costText(line.stage); as cost) {
+        <p class="detail">{{ cost }}</p>
+      }
+      @if (line.stage.state === 'failed') {
+        @if (leftText(line.stage); as left) {
+          <p class="detail">{{ left }}</p>
+        }
+        @if (line.stage.canRetry) {
+          @if (retryCost(line.stage); as cost) {
+            <p class="detail">{{ cost }}</p>
+          }
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="busy()"
+            (click)="retry(line.stage)"
+            i18n="@@prep.retry"
+          >
+            Tentar de novo
+          </button>
+        }
+      }
+    </li>
+  }
+</ol>
+@if (waitsForTranscriber()) {
+  <p class="detail" i18n="@@prep.waitingTranscriber">
+    Aguardando o transcritor · desligado desde
+    {{ preparation().transcriberOffSince | date: 'dd/MM HH:mm' }}
+  </p>
+}
+@if (preparation().canSwitchToManual) {
+  <button
+    type="button"
+    class="secondary"
+    [disabled]="busy()"
+    (click)="markedByHand.emit()"
+    i18n="@@prep.markByHand"
+  >
+    Marcar as faixas eu mesmo
+  </button>
+}

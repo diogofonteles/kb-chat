@@ -196,6 +196,9 @@ export class WorkerService {
       throw leaseLost();
     }
     await this.deps.files.discardUpload(mediaId);
+    // ADR 0022 §4: the FLAC is made for the transcription; none was asked (KBC-072).
+    if (this.deps.store.skipsTranscription(mediaId))
+      await this.deps.files.remove([this.deps.files.flacPath(mediaId)]);
   }
 
   /**

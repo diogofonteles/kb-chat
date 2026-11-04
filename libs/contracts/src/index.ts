@@ -24,4 +24,5 @@ export * from './authors.js';
 export * from './speakers.js';
 export * from './track-proposals.js';
 export * from './media-edit.js';
+export * from './media-preparation.js';
 export * from './media-library.js';

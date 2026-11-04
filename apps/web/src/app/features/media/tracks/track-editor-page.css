@@ -28,29 +28,9 @@
   overflow-wrap: anywhere;
 }
 
-.steps {
-  display: none;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.steps [aria-current] {
-  color: var(--color-text);
-  font-weight: 700;
-}
-
-.step-text {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.step-text .wide {
-  display: none;
+.progress {
+  flex: 1 1 18rem;
+  min-width: 0;
 }
 
 .leave {
@@ -259,18 +239,6 @@
 }
 
 @container (min-width: 60rem) {
-  .steps {
-    display: flex;
-  }
-
-  .step-text .narrow {
-    display: none;
-  }
-
-  .step-text .wide {
-    display: inline;
-  }
-
   .tabs {
     display: none;
   }

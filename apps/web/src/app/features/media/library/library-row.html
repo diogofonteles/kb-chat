@@ -48,6 +48,9 @@
   @if (resume()) {
     <span class="resume">{{ resume() }}</span>
   }
+  @if (paused(); as step) {
+    <app-preparation-entry [mediaId]="item().id" [step]="step" />
+  }
 </span>
 @if (resume()) {
   <span class="position" aria-hidden="true"

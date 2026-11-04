@@ -58,17 +58,25 @@ const rawOf = (lines: readonly Line[]) => ({
   ],
 });
 
+/** The minute of interview stored as this audio's transcript, as a transcriber would. */
+export async function seedTranscript(
+  owner: APIRequestContext,
+  mediaId: string,
+): Promise<void> {
+  const seeded = await owner.post(`/api/e2e/media/${mediaId}/transcript`, {
+    data: { raw: rawOf(LINES) },
+    headers: CSRF,
+  });
+  expect(seeded.status(), await seeded.text()).toBe(204);
+}
+
 /** A ready audio of a minute with its transcript: what "Separar vozes" works on. */
 export async function transcribedAudio(owner: APIRequestContext) {
   const media = await uploadReady(owner, {
     title: `Entrevista ${uniqueTag()}`,
     seconds: 60,
   });
-  const seeded = await owner.post(`/api/e2e/media/${media.id}/transcript`, {
-    data: { raw: rawOf(LINES) },
-    headers: CSRF,
-  });
-  expect(seeded.status(), await seeded.text()).toBe(204);
+  await seedTranscript(owner, media.id);
   return media;
 }
 

@@ -6,16 +6,20 @@ import type {
   ProposalRun,
   SpendCap,
 } from '@kb-chat/contracts';
+import { z } from 'zod';
 import { startOfAppMonth } from '../../app-calendar.js';
 import { AppError } from '../../app-error.js';
 import type { LlmPort } from '../../ports/llm.js';
 import type { MediaSpendLedgerPort } from '../../ports/media-spend-ledger.js';
-import type { TrackProposalStorePort } from '../../ports/track-proposal-store.js';
+import type {
+  FailedAttempt,
+  TrackProposalStorePort,
+} from '../../ports/track-proposal-store.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
 import type { MediaActor } from '../media/index.js';
-import { buildPlan, type ProposalPlan } from './proposal-plan.js';
+import { buildPlan, planFrom, type ProposalPlan } from './proposal-plan.js';
 import { WindowRunner, type RunOutcome } from './window-runner.js';
-import { toPromptSegments } from './windows.js';
+import { toPromptSegments, type PromptSegment } from './windows.js';
 
 /** The collection's names the prompt carries (KBC-049; KBC-065 adds named speakers). */
 export interface CollectionContext {
@@ -48,10 +52,58 @@ export interface ProposalServiceDeps {
   readonly onRunError?: (error: unknown, runId: string) => void;
 }
 
+/** An estimate before there are words to read. */
+export interface DurationEstimate {
+  readonly estimateUsd: number;
+  readonly refusal: SpendCap | null;
+}
+
+/** One line of speech per this long: the size of a transcript's segments. */
+const SEGMENT_MS = 30_000;
+/** Spoken Portuguese, in characters per second (150 words a minute). */
+const SPOKEN_CHARS_PER_SECOND = 15;
+
+/** Speech of this length, for a length-only estimate. */
+function spokenSegments(durationMs: number): PromptSegment[] {
+  const count = Math.max(1, Math.ceil(durationMs / SEGMENT_MS));
+  const text = 'x'.repeat((SEGMENT_MS / 1000) * SPOKEN_CHARS_PER_SECOND);
+  return Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    startMs: index * SEGMENT_MS,
+    endMs: (index + 1) * SEGMENT_MS,
+    text,
+    voice: 1,
+  }));
+}
+
 interface Prepared {
   readonly plan: ProposalPlan;
   readonly llm: LlmPort;
+  /** The failed run this one goes on from, when its finished windows still fit the plan. */
+  readonly resumes: FailedAttempt | null;
+  /** What the analysis has spent so far: the cap holds over all its attempts. */
+  readonly carriedUsd: number;
 }
+
+/** Windows of it are done, others are missing and the plan still cuts the same windows. */
+const canResume = (attempt: FailedAttempt, windows: number): boolean =>
+  attempt.windowsDone > 0 &&
+  attempt.windowsDone < attempt.windowsTotal &&
+  attempt.windowsTotal === windows;
+
+const ANALYSIS_TAKEN = 'analysis-taken';
+const takenDetails = z.object({ reason: z.literal(ANALYSIS_TAKEN) });
+
+const analysisTaken = () =>
+  new AppError('MEDIA_CONFLICT', 'A proposal already started', {
+    details: { reason: ANALYSIS_TAKEN },
+  });
+
+/** Another start got there first: its analysis stands and nothing stopped. */
+export const isAnalysisTaken = (error: unknown): boolean =>
+  error instanceof AppError &&
+  error.code === 'MEDIA_CONFLICT' &&
+  takenDetails.safeParse(error.details).success;
 
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
@@ -61,7 +113,10 @@ const capError = (cap: SpendCap) =>
 /**
  * The AI's track proposals (KBC-067): an estimate first, then a run reserved against the
  * media monthly budget that writes draft tracks window by window. Nothing is applied: the
- * draft waits for a person (BR-1, KBC-066).
+ * draft waits for a person (BR-1, KBC-066). What a failed run finished stays and is not paid
+ * twice: the next run asks only the windows missing, and the spend of every failed attempt
+ * goes along, so the run cap holds over the whole analysis (KBC-072 BR-6). It takes a person
+ * asking, here or by "Tentar de novo"; nothing resumes by itself, a restart included.
  */
 export class ProposalService {
   private readonly now: () => Date;
@@ -76,13 +131,17 @@ export class ProposalService {
     actor: MediaActor,
     mediaId: string,
   ): Promise<ProposalEstimate> {
-    const { plan } = await this.prepare(actor, mediaId);
+    const { plan, carriedUsd } = await this.prepare(actor, mediaId);
     const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
-    const refusal = this.refusalOf(plan.estimateUsd, used);
+    const refusal = this.refusalOf({
+      estimateUsd: plan.estimateUsd,
+      usedUsd: used,
+      carriedUsd,
+    });
     return {
       estimateUsd: plan.estimateUsd,
       runCapUsd: this.deps.caps.runUsd,
-      windows: plan.windows.length,
+      windows: plan.windows.length - plan.fromWindow,
       model: plan.model,
       allowed: refusal === null,
       refusal,
@@ -92,21 +151,81 @@ export class ProposalService {
     };
   }
 
-  /** Reserves the estimate and starts the run; it goes on after the answer (FR-1). */
-  async start(actor: MediaActor, mediaId: string): Promise<ProposalRun> {
+  /** The app's AI is connected (KBC-072 BR-3). */
+  connected(): boolean {
+    return this.deps.llm()?.configured() ?? false;
+  }
+
+  /** What the media's month has left (KBC-072 AC-3). */
+  monthRemainingUsd(): number {
+    const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
+    return Math.max(0, this.deps.caps.monthlyUsd - used);
+  }
+
+  /**
+   * The estimate of a recording not transcribed yet, from its length alone (KBC-072 FR-7):
+   * the same calculation as a run's, over speech at the measured pace.
+   */
+  async estimateByDuration(durationMs: number): Promise<DurationEstimate> {
+    const llm = this.configuredLlm();
+    const { estimateUsd } = buildPlan({
+      mediaId: '',
+      transcriptId: '',
+      segments: spokenSegments(durationMs),
+      context: {
+        collection: '',
+        knownNames: [],
+        title: '',
+        author: null,
+        terms: this.deps.transcripts.currentTerms().terms,
+      },
+      model: { id: llm.model, price: await this.priceOf(llm) },
+    });
+    const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
+    const refusal = this.refusalOf({
+      estimateUsd,
+      usedUsd: used,
+      carriedUsd: 0,
+    });
+    return { estimateUsd, refusal };
+  }
+
+  /** The newest run's id: what a person pressing now has in front of them. */
+  newestRunId(mediaId: string): string | null {
+    return this.deps.store.newestRun(mediaId)?.id ?? null;
+  }
+
+  /**
+   * Reserves the estimate and starts the run; it goes on after the answer (FR-1). Single
+   * flight: `seenRunId` is read before anything waits, and nothing waits from the check to
+   * the run's row, so of the starts that saw the same run only the first pays. The API is one
+   * process over this database (ADR 0010), so that stretch is atomic.
+   */
+  async start(
+    actor: MediaActor,
+    mediaId: string,
+    seenRunId: string | null = this.newestRunId(mediaId),
+  ): Promise<ProposalRun> {
     const prepared = await this.prepare(actor, mediaId);
+    this.assertNotTaken(mediaId, seenRunId);
     if (this.deps.store.isApproved(mediaId))
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
       });
-    const spendId = this.reserve(actor, prepared.plan);
+    const spendId = this.reserve(actor, prepared);
     const run = this.startRun({ actor, prepared, spendId });
     if (!run) {
       this.closeSpend(spendId, { failure: 'interrupted', spentUsd: 0 });
-      throw new AppError('MEDIA_CONFLICT', 'A proposal is already running');
+      throw analysisTaken();
     }
     this.track(run.id, this.execute({ runId: run.id, spendId, prepared }));
     return run;
+  }
+
+  private assertNotTaken(mediaId: string, seenRunId: string | null): void {
+    const newest = this.deps.store.newestRun(mediaId);
+    if (newest?.status === 'running' || (newest?.id ?? null) !== seenRunId)
+      throw analysisTaken();
   }
 
   /** The run's row; a failure to write it gives the reservation back before throwing. */
@@ -115,7 +234,7 @@ export class ProposalService {
     readonly prepared: Prepared;
     readonly spendId: string;
   }): ProposalRun | null {
-    const { plan } = input.prepared;
+    const { plan, resumes, carriedUsd } = input.prepared;
     try {
       return this.deps.store.startRun({
         id: randomUUID(),
@@ -127,6 +246,8 @@ export class ProposalService {
         windowsTotal: plan.windows.length,
         estimateUsd: plan.estimateUsd,
         now: this.now(),
+        carriedUsd,
+        resumes,
       });
     } catch (err) {
       this.closeSpend(input.spendId, { failure: 'interrupted', spentUsd: 0 });
@@ -150,6 +271,7 @@ export class ProposalService {
   /**
    * At start: runs a stopped API left running end as failed, with their reservations, and
    * any reservation left open by a crash is refunded (it keeps what it recorded as spent).
+   * Their finished windows stay; going on takes a person's click, with the value in sight.
    */
   recover(): number {
     const runs = this.deps.store.interruptRunning(this.now());
@@ -195,6 +317,7 @@ export class ProposalService {
         llm: prepared.llm,
         store: this.deps.store,
         runCapUsd: this.deps.caps.runUsd,
+        carriedUsd: prepared.carriedUsd,
         signal: this.closing.signal,
       }).run();
       if (outcome.error !== undefined)
@@ -237,19 +360,27 @@ export class ProposalService {
     });
   }
 
-  private refusalOf(estimateUsd: number, usedUsd: number): SpendCap | null {
-    if (estimateUsd > this.deps.caps.runUsd) return 'run-cap';
+  /** The cap this would cross: the run's over all of the analysis' attempts (BR-3). */
+  private refusalOf(cost: {
+    readonly estimateUsd: number;
+    readonly usedUsd: number;
+    readonly carriedUsd: number;
+  }): SpendCap | null {
+    const { estimateUsd, usedUsd, carriedUsd } = cost;
+    if (carriedUsd + estimateUsd > this.deps.caps.runUsd) return 'run-cap';
     if (usedUsd + estimateUsd > this.deps.caps.monthlyUsd) return 'monthly-cap';
     return null;
   }
 
   /** The estimate reserved in the media ledger, or the cap it would cross (BR-3). */
-  private reserve(actor: MediaActor, plan: ProposalPlan): string {
+  private reserve(actor: MediaActor, prepared: Prepared): string {
+    const { plan, carriedUsd } = prepared;
     const since = startOfAppMonth(this.now());
-    const refusal = this.refusalOf(
-      plan.estimateUsd,
-      this.deps.ledger.usedSince(since),
-    );
+    const refusal = this.refusalOf({
+      estimateUsd: plan.estimateUsd,
+      usedUsd: this.deps.ledger.usedSince(since),
+      carriedUsd,
+    });
     if (refusal) throw capError(refusal);
     const id = randomUUID();
     const reserved = this.deps.ledger.reserve({
@@ -284,7 +415,16 @@ export class ProposalService {
       context: this.contextOf(item),
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
-    return { plan, llm };
+    const attempt = this.deps.store.failedAttempt(mediaId, transcript.id);
+    const carriedUsd = attempt?.spentUsd ?? 0;
+    return attempt && canResume(attempt, plan.windows.length)
+      ? {
+          plan: planFrom(plan, attempt.windowsDone),
+          llm,
+          resumes: attempt,
+          carriedUsd,
+        }
+      : { plan, llm, resumes: null, carriedUsd };
   }
 
   private contextOf(item: MediaItem) {

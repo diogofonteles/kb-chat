@@ -61,6 +61,11 @@ export const mediaEditSchema = z.object({
   transcriptChanged: z.boolean(),
   /** The tracks being cut after an approval; null when nothing is on its way (KBC-068 FR-1). */
   preparation: trackPreparationSchema.nullable().default(null),
+  /** The guided flow's open step for this recording (KBC-072 FR-6); none without a plan. */
+  preparationStep: z
+    .union([z.literal(2), z.literal(3)])
+    .nullable()
+    .optional(),
 });
 export type MediaEdit = z.infer<typeof mediaEditSchema>;
 

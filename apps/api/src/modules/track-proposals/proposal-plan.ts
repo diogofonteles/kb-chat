@@ -18,7 +18,9 @@ export interface ProposalPlan {
   readonly windows: readonly (readonly PromptSegment[])[];
   readonly context: FixedContext;
   readonly evidence: NameEvidence;
-  /** The upper bound of one pass over every window (no retry), in US$. */
+  /** The first window to ask: past 0 when a run goes on from a failed one. */
+  readonly fromWindow: number;
+  /** The upper bound of one pass over the windows to ask (no retry), in US$. */
   readonly estimateUsd: number;
 }
 
@@ -55,14 +57,28 @@ export function windowMessages(
 function estimateOf(
   plan: Pick<ProposalPlan, 'windows' | 'context'>,
   price: LlmPrice,
+  fromWindow: number,
 ): number {
   const padding = tokensOf('x'.repeat(PREVIOUS_TRACKS_CHARS)) * price.input;
-  const total = plan.windows.reduce(
-    (sum, _window, index) =>
-      sum + callCeiling(windowMessages(plan, index, []), price) + padding,
-    0,
-  );
+  const total = plan.windows
+    .slice(fromWindow)
+    .reduce(
+      (sum, _window, index) =>
+        sum +
+        callCeiling(windowMessages(plan, fromWindow + index, []), price) +
+        padding,
+      0,
+    );
   return Math.ceil(total * 1e6) / 1e6;
+}
+
+/** The same plan from a later window on: only those are asked and paid for. */
+export function planFrom(plan: ProposalPlan, fromWindow: number): ProposalPlan {
+  return {
+    ...plan,
+    fromWindow,
+    estimateUsd: estimateOf(plan, plan.price, fromWindow),
+  };
 }
 
 /** The plan of a run over these segments, with the model's price. */
@@ -92,6 +108,7 @@ export function buildPlan(input: {
     windows,
     context,
     evidence,
-    estimateUsd: estimateOf({ windows, context }, model.price),
+    fromWindow: 0,
+    estimateUsd: estimateOf({ windows, context }, model.price, 0),
   };
 }
