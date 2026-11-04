@@ -41,3 +41,22 @@ ERROR_BACKOFF_S: Final = 60.0
 
 KEYCHAIN_SERVICE: Final = "nova-alexandria-transcriber"
 KEYCHAIN_ACCOUNT: Final = "transcriber"
+
+# Voice separation (KBC-064, ADR 0029 §1). Bump DIARIZE_PARAMETERS_VERSION with any change:
+# the API stores both with every separation, next to its raw turns.
+DIARIZE_PARAMETERS_VERSION: Final = "2026-11-03.1"
+
+DIARIZE_PARAMETERS: Final[dict] = {
+    "engine": "senko",
+    # github.com/narcotic-sh/senko at this commit (MIT): measured best on our pt-BR audio.
+    "senko_commit": "1bcb090",
+    # Senko's merged segments (gaps <= 4 s of one voice joined, turns <= 0.78 s dropped).
+    "segments": "merged",
+    # One voice per instant: where two turns overlap, the later one takes over.
+    "exclusive": True,
+    # At most this many voices (BR-4): more are joined by the cosine of their centroids,
+    # in memory; the number a person announces caps it too.
+    "max_voices": 10,
+    # Under 20 min Senko clusters spectrally and takes the announced number directly.
+    "announced_voices": "spectral oracle + centroid join",
+}

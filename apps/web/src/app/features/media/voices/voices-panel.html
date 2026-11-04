@@ -1,0 +1,95 @@
+<section class="voices" aria-labelledby="voices-title">
+  <h3 id="voices-title" class="title" i18n="@@voices.title">Vozes</h3>
+  <p class="lead" i18n="@@voices.lead">
+    Marca onde muda a voz que fala (Voz 1, Voz 2…). Vale só para esta gravação;
+    nenhuma impressão de voz é guardada.
+  </p>
+  @if (speakers.error()) {
+    <div class="notice" role="alert">
+      <p i18n="@@voices.loadFailed">Não consegui carregar as vozes.</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="reload()"
+        i18n="@@voices.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (current(); as speakers) {
+    <p class="status" role="status">{{ statusText() }}</p>
+    @if (diarization(); as result) {
+      @if (result.staleTranscript) {
+        <p class="stale" i18n="@@voices.stale">
+          Feita sobre uma transcrição anterior.
+        </p>
+      }
+      @if (voices().length > 0) {
+        <ul class="voice-list">
+          @for (one of voices(); track one.voice) {
+            <li class="voice">
+              <app-voice-tag [voice]="one.voice" />&ngsp;<span
+                class="spoken"
+                i18n="@@voices.spoken"
+                >{{ one.spoken }} de fala</span
+              >
+            </li>
+          }
+        </ul>
+      }
+    }
+    @if (speakers.canRequest) {
+      <form class="request" novalidate (submit)="request($event)">
+        <label for="voices-count" class="label" i18n="@@voices.countLabel"
+          >Número de vozes (opcional)</label
+        >
+        <p id="voices-count-hint" class="hint" i18n="@@voices.countHint">
+          De 1 a 10. Em branco, o transcritor estima.
+        </p>
+        <div class="row">
+          <input
+            id="voices-count"
+            class="input"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            [value]="voicesText()"
+            [attr.aria-invalid]="invalid() ? 'true' : null"
+            [attr.aria-describedby]="
+              invalid()
+                ? 'voices-count-hint voices-count-error'
+                : 'voices-count-hint'
+            "
+            (input)="editVoices($event)"
+          />
+          <button
+            type="submit"
+            [class.primary]="!diarization()"
+            [class.secondary]="diarization() !== null"
+            [disabled]="busy()"
+          >
+            {{ actionLabel() }}
+          </button>
+        </div>
+        @if (invalid()) {
+          <p
+            id="voices-count-error"
+            class="field-error"
+            i18n="@@voices.countInvalid"
+          >
+            Informe um número de 1 a {{ maxVoices }}, ou deixe em branco.
+          </p>
+        }
+      </form>
+    } @else if (needsTranscript()) {
+      <p class="hint" i18n="@@voices.needsTranscript">
+        Dá para separar as vozes quando a transcrição estiver pronta.
+      </p>
+    }
+    @if (failure()) {
+      <p class="field-error" role="alert">{{ failure() }}</p>
+    }
+  } @else {
+    <p class="hint" i18n="@@voices.loading">Carregando…</p>
+  }
+</section>

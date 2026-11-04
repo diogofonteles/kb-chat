@@ -159,7 +159,22 @@
   text-underline-offset: 0.2em;
 }
 
+.body {
+  min-width: 0;
+}
+
+/* "Voz N" heads its segment, level with the time; the text follows right below (KBC-064 FR-5). */
+.voice {
+  display: flex;
+  width: fit-content;
+  margin-bottom: var(--space-1);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  user-select: none;
+}
+
 .text {
+  display: block;
   max-width: 70ch;
   overflow-wrap: anywhere;
 }

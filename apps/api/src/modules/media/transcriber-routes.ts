@@ -5,6 +5,8 @@ import {
   pairedTranscriberSchema,
   transcriberIdSchema,
   transcriberListSchema,
+  transcriberSchema,
+  updateTranscriberRequestSchema,
 } from '@kb-chat/contracts';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -34,6 +36,14 @@ const OPTIONS = {
     schema: {
       params: z.object({ id: transcriberIdSchema }),
       response: { 204: z.undefined() },
+    },
+  },
+  update: {
+    config: { access: MASTER },
+    schema: {
+      params: z.object({ id: transcriberIdSchema }),
+      body: updateTranscriberRequestSchema,
+      response: { 200: transcriberSchema },
     },
   },
   again: {
@@ -66,6 +76,11 @@ export const transcriberRoutes =
         deps.transcribers.revoke(request.params.id);
         return reply.code(204).send();
       },
+    );
+    typed.patch('/api/v1/media/transcribers/:id', OPTIONS.update, (request) =>
+      Promise.resolve(
+        deps.transcribers.setKinds(request.params.id, request.body.kinds),
+      ),
     );
     typed.post(
       '/api/v1/media/:id/transcription',

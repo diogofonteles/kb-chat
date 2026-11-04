@@ -56,6 +56,18 @@ export {
   type SubtitleCue,
 } from './subtitle-cues.js';
 export {
+  DiarizationService,
+  type DiarizationServiceDeps,
+  type TranscriptVoices,
+} from './diarization-service.js';
+export { speakerRoutes } from './speaker-routes.js';
+export {
+  DERIVATION_VERSION,
+  deriveTurns,
+  dominantVoices,
+  wordVoicesOf,
+} from './speaker-turns.js';
+export {
   FILTER_VERSION,
   deriveTranscript,
   type DerivedTranscript,

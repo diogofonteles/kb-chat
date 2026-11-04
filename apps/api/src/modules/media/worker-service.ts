@@ -7,6 +7,7 @@ import {
   type LeaseRequest,
   type LeasedWorkerJob,
   type MediaJobKind,
+  type TranscribeJob,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaFilesPort } from '../../ports/media-files.js';
@@ -26,6 +27,14 @@ const leaseOf = (done: CompleteTranscodeRequest) => ({
 
 const audioRendition = (mediaId: string, path: string) =>
   ({ mediaId, rendition: 'audio', path, mime: AUDIO_MIME }) as const;
+
+/** A leased job as the protocol names it: only a separation carries the voices hint. */
+const withoutHint = (job: LeasedJob) => ({
+  id: job.id,
+  leaseId: job.leaseId,
+  mediaId: job.mediaId,
+  attempt: job.attempt,
+});
 
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
@@ -57,10 +66,11 @@ export class WorkerService {
     });
     if (!job) return null;
     if (job.kind === 'silences') return this.silencesJob(job);
+    if (job.kind === 'diarize') return this.diarizeJob(job);
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
       : {
-          ...job,
+          ...withoutHint(job),
           kind: 'transcode',
           sourcePath: this.deps.files.uploadPath(job.mediaId),
           targetPath: this.deps.files.workPath(job.mediaId, job.leaseId),
@@ -76,7 +86,7 @@ export class WorkerService {
   private silencesJob(job: LeasedJob): LeasedWorkerJob {
     const rendition = this.deps.store.getRendition(job.mediaId);
     return {
-      ...job,
+      ...withoutHint(job),
       kind: 'silences',
       leaseMs: JOB_LEASE_MS,
       sourcePath: rendition?.path ?? this.deps.files.audioPath(job.mediaId),
@@ -84,9 +94,14 @@ export class WorkerService {
     };
   }
 
-  private transcribeJob(job: LeasedJob): LeasedWorkerJob {
+  /** A separation fetches the same audio as a transcription, with its hint (KBC-064). */
+  private diarizeJob(job: LeasedJob): LeasedWorkerJob {
+    return { ...this.transcribeJob(job), kind: 'diarize', voices: job.voices };
+  }
+
+  private transcribeJob(job: LeasedJob): TranscribeJob {
     return {
-      ...job,
+      ...withoutHint(job),
       kind: 'transcribe',
       leaseMs: JOB_LEASE_MS,
       durationMs: this.deps.store.getMedia(job.mediaId)?.durationMs ?? null,

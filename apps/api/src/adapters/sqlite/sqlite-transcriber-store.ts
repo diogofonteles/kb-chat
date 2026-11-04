@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import { z } from 'zod';
-import { mediaJobKindSchema } from '@kb-chat/contracts';
+import { mediaJobKindSchema, type MediaJobKind } from '@kb-chat/contracts';
 import {
   TRANSCRIBER_LEASE_PREFIX,
   leaseNameOf,
@@ -20,7 +20,9 @@ const COLUMNS = `t.id, t.name, t.kinds, t.created_at, t.last_seen_at,
      AND j.status = 'leased' ORDER BY j.updated_at DESC LIMIT 1) AS job_media,
   (SELECT m.title FROM jobs j JOIN media m ON m.id = j.media_id
      WHERE j.worker = '${TRANSCRIBER_LEASE_PREFIX}' || t.id AND j.status = 'leased'
-     ORDER BY j.updated_at DESC LIMIT 1) AS job_title`;
+     ORDER BY j.updated_at DESC LIMIT 1) AS job_title,
+  (SELECT j.kind FROM jobs j WHERE j.worker = '${TRANSCRIBER_LEASE_PREFIX}' || t.id
+     AND j.status = 'leased' ORDER BY j.updated_at DESC LIMIT 1) AS job_kind`;
 
 function toRecord(row: Row): TranscriberRecord {
   const mediaId = row['job_media'];
@@ -33,7 +35,11 @@ function toRecord(row: Row): TranscriberRecord {
       row['last_seen_at'] === null ? null : String(row['last_seen_at']),
     currentJob:
       typeof mediaId === 'string'
-        ? { mediaId, title: String(row['job_title']) }
+        ? {
+            mediaId,
+            title: String(row['job_title']),
+            kind: mediaJobKindSchema.parse(row['job_kind']),
+          }
         : null,
   };
 }
@@ -85,6 +91,18 @@ export class SqliteTranscriberStore implements TranscriberStorePort {
     this.db
       .prepare('UPDATE transcribers SET last_seen_at = ? WHERE id = ?')
       .run(input.now.toISOString(), input.id);
+  }
+
+  setKinds(input: {
+    id: string;
+    kinds: readonly MediaJobKind[];
+  }): TranscriberRecord | null {
+    const changed = this.db
+      .prepare(
+        'UPDATE transcribers SET kinds = ? WHERE id = ? AND revoked_at IS NULL',
+      )
+      .run(JSON.stringify(input.kinds), input.id).changes;
+    return changed === 1 ? this.byId(input.id) : null;
   }
 
   revoke(input: { id: string; now: Date }): boolean {

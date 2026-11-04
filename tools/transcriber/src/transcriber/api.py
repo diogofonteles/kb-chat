@@ -6,7 +6,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -62,16 +62,17 @@ class ApiClient:
         self._timeout = timeout_s
         self._opener = urllib.request.build_opener(_NoRedirect)
 
-    def lease(self) -> dict | None:
+    def lease(self, kinds: Sequence[str] = ("transcribe",)) -> dict | None:
+        """The oldest job of `kinds` this token may lease; None when the queue has none."""
         status, body = self._post(
-            "/api/v1/media-worker/jobs/lease", {"worker": self.worker, "kinds": ["transcribe"]}
+            "/api/v1/media-worker/jobs/lease", {"worker": self.worker, "kinds": list(kinds)}
         )
         if status == 204:
             return None
         if status != 200:
             raise ApiError(f"lease answered {status}")
         job = json.loads(body)
-        if job.get("kind") != "transcribe":
+        if job.get("kind") not in kinds:
             raise ApiError(f"leased a job of another kind: {job.get('kind')}")
         return job
 
@@ -107,6 +108,10 @@ class ApiClient:
 
     def upload(self, job: dict, result: dict) -> bool:
         return self._on_job(job, "transcript", result)
+
+    def upload_diarization(self, job: dict, result: dict) -> bool:
+        """The turns of a diarize job (KBC-064); the API refuses any other field."""
+        return self._on_job(job, "diarization", result)
 
     def fail(self, job: dict, failure: str, detail: str) -> bool:
         return self._on_job(job, "fail", {"failure": failure, "detail": detail[:2000]})

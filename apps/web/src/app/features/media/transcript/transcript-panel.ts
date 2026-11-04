@@ -39,6 +39,8 @@ import { PlaybackClock } from '@core/media/playback-clock.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import type { PassageFocus } from '../search-hit/passage-focus.js';
 import { Subject, debounceTime, distinctUntilChanged, merge, skip } from 'rxjs';
+import { voiceChangeStarts } from '../voices/voice-changes.js';
+import { VoiceTag } from '../voices/voice-tag.js';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
 
 /** One segment as the list shows it. */
@@ -48,6 +50,8 @@ interface SegmentView {
   readonly clock: string;
   readonly label: string;
   readonly text: string;
+  /** "Voz N" on the first segment of each change of voice (KBC-064 FR-5); else null. */
+  readonly voice: number | null;
 }
 
 /** A passage the person selected in the list, and where its first segment starts. */
@@ -88,6 +92,7 @@ const COMFORT = 0.15;
  */
 @Component({
   selector: 'app-transcript-panel',
+  imports: [VoiceTag],
   templateUrl: './transcript-panel.html',
   styleUrl: './transcript-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -176,16 +181,21 @@ export class TranscriptPanel {
       : $localize`:@@transcript.search.count:${this.currentHit() + 1}:current: de ${count}:total:`;
   });
   /** The segments as listed, made once per transcript (labels and times). */
-  protected readonly view = computed<SegmentView[]>(() =>
-    this.segments().map((segment, index) => ({
+  protected readonly view = computed<SegmentView[]>(() => {
+    const segments = this.segments();
+    const starts = voiceChangeStarts(
+      segments.map((segment) => ({ voice: segment.voice ?? null })),
+    );
+    return segments.map((segment, index) => ({
       index,
       startMs: segment.startMs,
       clock: formatClock(segment.startMs),
       // The name starts with the visible time, for voice control (WCAG 2.5.3).
       label: $localize`:@@transcript.playFromClock:${formatClock(segment.startMs)}:clock:, tocar de ${speak(segment.startMs)}:time:`,
       text: segment.text,
-    })),
-  );
+      voice: starts.has(index) ? (segment.voice ?? null) : null,
+    }));
+  });
   /** The segment of the current occurrence: its outline shows it in any browser. */
   protected readonly currentHitSegment = computed(
     () => this.hits()[this.currentHit()]?.segment ?? -1,

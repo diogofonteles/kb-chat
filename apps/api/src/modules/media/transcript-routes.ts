@@ -2,7 +2,7 @@ import { mediaIdSchema, mediaTranscriptSchema } from '@kb-chat/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import type { RouteAccess } from '../auth/index.js';
+import { hasFeature, viewerOf, type RouteAccess } from '../auth/index.js';
 import { actorOf } from './routes.js';
 import type { TranscriptService } from './transcript-service.js';
 
@@ -33,7 +33,12 @@ export const transcriptRoutes =
   async (app) => {
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.get('/api/v1/media/:id/transcript', OPTIONS.transcript, (request) =>
-      Promise.resolve(service.current(actorOf(request), request.params.id)),
+      Promise.resolve(
+        service.current(actorOf(request), request.params.id, {
+          // The voices are for whoever edits recordings (KBC-064 FR-4).
+          withVoices: hasFeature(viewerOf(request).person, 'media-edit'),
+        }),
+      ),
     );
     typed.get(
       '/api/v1/media/:id/subtitles.vtt',

@@ -481,3 +481,53 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     expect(painted.has('transcript-passage')).toBe(false);
   });
 });
+
+describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)', () => {
+  const voiced = (voices: readonly (number | null)[]) => {
+    const base = transcriptOf();
+    return transcriptOf({
+      segments: base.segments.map((segment, index) => ({
+        ...segment,
+        voice: voices[index] ?? null,
+      })),
+    });
+  };
+  const labels = () =>
+    screen.queryAllByText(/^Voz \d+$/).map((label) => ({
+      voice: label.textContent,
+      segment: label.closest('li')?.getAttribute('data-index'),
+    }));
+
+  it('labels the first segment of each voice, not one that goes on after a silence', async () => {
+    await renderPanel(voiced([1, 1, 2, null, 2]));
+    expect(labels()).toEqual([
+      { voice: 'Voz 1', segment: '0' },
+      { voice: 'Voz 2', segment: '2' },
+    ]);
+  });
+
+  it('labels voice 1 again when it speaks after voice 2', async () => {
+    await renderPanel(voiced([1, 2, 1, 1, 3]));
+    expect(labels().map((label) => label.segment)).toEqual([
+      '0',
+      '1',
+      '2',
+      '4',
+    ]);
+  });
+
+  it('shows no voice to whoever gets the transcript without voices', async () => {
+    await renderPanel();
+    expect(labels()).toEqual([]);
+  });
+
+  it('keeps the search on the text, not on the voice label', async () => {
+    const { view } = await renderPanel(voiced([1, 2, 2, 2, 2]));
+    await typeQuery(
+      screen.getByLabelText('Buscar na transcrição'),
+      'conselheira',
+      view,
+    );
+    expect(painted.get('transcript-current')).toEqual(['conselheira']);
+  });
+});

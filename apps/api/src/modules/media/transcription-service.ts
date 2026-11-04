@@ -73,11 +73,12 @@ export class TranscriptionService {
   }
 
   /**
-   * The audio of a transcription this worker holds (BR-2): the 16 kHz FLAC, or the audio
-   * rendition when there is none. Any other job is 404, not even confirmed to exist.
+   * The audio of a transcription or voice separation this worker holds (BR-2): the 16 kHz
+   * FLAC, or the audio rendition when there is none (a separation usually comes after the
+   * FLAC went, ADR 0022 §4). Any other job is 404, not even confirmed to exist.
    */
   async audio(owner: LeaseOwner): Promise<PlayableFile> {
-    const job = this.heldTranscription(owner);
+    const job = this.heldSpeechJob(owner);
     if (!job) throw notYours();
     const { files, store } = this.deps;
     const flac = await files.stat(files.flacPath(job.mediaId));
@@ -143,6 +144,12 @@ export class TranscriptionService {
       segments: derived.segments,
       words: derived.words,
     };
+  }
+
+  /** A job whose audio a paired transcriber may fetch: a transcription or a separation. */
+  private heldSpeechJob(owner: LeaseOwner): JobLease | null {
+    const job = this.deps.transcripts.heldJob(owner);
+    return job?.kind === 'transcribe' || job?.kind === 'diarize' ? job : null;
   }
 
   private heldTranscription(owner: LeaseOwner): JobLease | null {

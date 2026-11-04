@@ -54,8 +54,9 @@
     grid-template-columns: minmax(0, 1fr) minmax(20rem, 27rem);
     grid-template-areas:
       'main side'
-      'bookmarks side';
-    grid-template-rows: auto 1fr;
+      'bookmarks side'
+      'voices side';
+    grid-template-rows: auto auto 1fr;
     align-items: start;
     max-width: calc(var(--column) + 28rem);
     /* The column's own notice is in view: no second one with the subtitles. */
@@ -68,6 +69,10 @@
 
   .with-transcript .bookmarks {
     grid-area: bookmarks;
+  }
+
+  .with-transcript .voices {
+    grid-area: voices;
   }
 
   .with-transcript .side {

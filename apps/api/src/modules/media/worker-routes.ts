@@ -1,6 +1,8 @@
 import {
+  MAX_DIARIZATION_BYTES,
   MAX_RAW_TRANSCRIPT_BYTES,
   completeSilencesRequestSchema,
+  completeDiarizeRequestSchema,
   completeTranscodeRequestSchema,
   completeTranscribeRequestSchema,
   failJobRequestSchema,
@@ -22,6 +24,7 @@ import { AppError } from '../../app-error.js';
 import { TRANSCRIBER_LEASE_PREFIX } from '../../ports/transcriber-store.js';
 import { PUBLIC } from '../auth/index.js';
 import { serveMedia } from './serve-media.js';
+import type { DiarizationService } from './diarization-service.js';
 import type {
   TranscriberService,
   WorkerIdentity,
@@ -46,6 +49,7 @@ export interface WorkerRoutesDeps {
   readonly transcription: TranscriptionService;
   /** Silence maps (KBC-044). */
   readonly silences: SilenceService;
+  readonly diarization: DiarizationService;
 }
 
 /** The bearer token of a request, or ''. */
@@ -111,7 +115,14 @@ function assertJobKind(
 
 /** The routes below are the transcriber's only (ADR 0023): other tokens get 404. */
 function assertTranscriber(request: FastifyRequest): void {
-  if (!identityOf(request).kinds.includes('transcribe')) throw notThisWorkers();
+  const { kinds } = identityOf(request);
+  if (!kinds.includes('transcribe') && !kinds.includes('diarize'))
+    throw notThisWorkers();
+}
+
+/** A separation's result comes only from a token that may separate voices (FR-6). */
+function assertDiarizer(request: FastifyRequest): void {
+  if (!identityOf(request).kinds.includes('diarize')) throw notThisWorkers();
 }
 
 /** The kinds asked that this token may lease; none of them is 403. */
@@ -151,6 +162,10 @@ const OPTIONS = {
     // An hour of speech is a few MB of raw JSON; the default limit is 1 MB.
     bodyLimit: MAX_RAW_TRANSCRIPT_BYTES,
   },
+  diarization: {
+    ...route(completeDiarizeRequestSchema),
+    bodyLimit: MAX_DIARIZATION_BYTES,
+  },
 } as const;
 
 /** Every worker call names its token: unknown or revoked is 401 (FR-6). */
@@ -178,6 +193,7 @@ export const workerRoutes =
     registerSilences(app, deps);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
+    registerDiarization(app, deps.diarization);
   };
 
 function registerLease(app: FastifyInstance, service: WorkerService): void {
@@ -315,6 +331,27 @@ function registerTranscript(
         ...ownerOf(request, request.body),
       };
       await transcription.complete(owner, request.body);
+      return reply.code(204).send();
+    },
+  );
+}
+
+/** The turns of a voice separation (KBC-064 FR-2): no voice print has a field here (BR-1). */
+function registerDiarization(
+  app: FastifyInstance,
+  diarization: DiarizationService,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/media-worker/jobs/:id/diarization',
+    OPTIONS.diarization,
+    async (request, reply) => {
+      assertDiarizer(request);
+      const owner = {
+        jobId: request.params.id,
+        ...ownerOf(request, request.body),
+      };
+      await diarization.complete(owner, request.body);
       return reply.code(204).send();
     },
   );

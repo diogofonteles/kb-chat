@@ -36,9 +36,11 @@ export interface MediaFilesPort {
   flacWorkPath(mediaId: string, leaseId: string): string;
   /** Where one transcript's raw JSON is kept (ADR 0023 §4: next to the database). */
   transcriptPath(mediaId: string, transcriptId: string): string;
+  /** Where one voice separation's raw JSON is kept, beside the item's transcripts. */
+  diarizationPath(mediaId: string, diarizationId: string): string;
   /** Writes a whole file atomically (temp file and rename), creating its folder. */
   writeFile(path: string, data: string): Promise<void>;
-  /** Removes every raw transcript of an item (the item is being removed). */
+  /** Removes every raw transcript and separation of an item (the item is being removed). */
   removeTranscripts(mediaId: string): Promise<void>;
   /** Moves a finished work file to its final path (atomic rename). */
   promote(from: string, to: string): Promise<void>;

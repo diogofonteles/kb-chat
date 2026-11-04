@@ -102,6 +102,8 @@ import {
   ListeningService,
   mediaRoutes,
   silenceRoutes,
+  DiarizationService,
+  speakerRoutes,
   transcriberRoutes,
   TranscriberService,
   TranscriptionService,
@@ -442,24 +444,53 @@ async function registerWorker(
       transcribers: wiring.transcribers,
       transcription: new TranscriptionService({ store, transcripts, files }),
       silences: wiring.silences,
+      diarization: diarizationService(wiring),
     }),
   );
 }
 
-/** Each person's listening: position, bookmarks, the transcript and subtitles. */
+/** Each person's listening: position, bookmarks, the transcript, subtitles and voices. */
 async function registerListening(
   app: FastifyInstance,
-  wiring: { deps: MediaDeps; media: MediaService },
+  wiring: {
+    deps: MediaDeps;
+    media: MediaService;
+    transcribers: TranscriberService;
+  },
 ) {
   const { listening, bookmarks, transcripts } = wiring.deps;
-  const { media } = wiring;
+  const { media, transcribers } = wiring;
+  const diarization = diarizationService({ media: wiring.deps, transcribers });
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
   );
   await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
   await app.register(
-    transcriptRoutes(new TranscriptService({ transcripts, media })),
+    transcriptRoutes(
+      new TranscriptService({
+        transcripts,
+        media,
+        voices: (mediaId, transcript) =>
+          diarization.voicesOn(mediaId, transcript),
+      }),
+    ),
   );
+  await app.register(speakerRoutes(diarization));
+}
+
+/** Voice separations (KBC-064): asked by people, done by a transcriber that separates voices. */
+function diarizationService(wiring: {
+  media: MediaDeps;
+  transcribers: TranscriberService;
+}): DiarizationService {
+  const { store, files, transcripts, diarizations } = wiring.media;
+  return new DiarizationService({
+    store,
+    files,
+    transcripts,
+    diarizations,
+    presence: () => wiring.transcribers.presence('diarize'),
+  });
 }
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
@@ -473,7 +504,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   await app.register(mediaRoutes(media, createPerMinute));
   await app.register(transcriberRoutes({ transcribers, media }));
-  await registerListening(app, { deps: wiring.media, media });
+  await registerListening(app, { deps: wiring.media, media, transcribers });
   const silences = new SilenceService({
     store,
     silences: wiring.media.silences,

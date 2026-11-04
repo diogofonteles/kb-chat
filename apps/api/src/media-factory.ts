@@ -1,8 +1,10 @@
+import type { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import type { AppConfig } from './config.js';
 import { FsMediaFiles } from './adapters/media/fs-media-files.js';
 import { openMediaDatabase } from './adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
+import { SqliteDiarizationStore } from './adapters/sqlite/sqlite-diarization-store.js';
 import { SqliteBookmarkStore } from './adapters/sqlite/sqlite-bookmark-store.js';
 import { SqliteListeningStore } from './adapters/sqlite/sqlite-listening-store.js';
 import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-ledger.js';
@@ -12,6 +14,7 @@ import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposa
 import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
+import type { DiarizationStorePort } from './ports/diarization-store.js';
 import type { BookmarkStorePort } from './ports/bookmark-store.js';
 import type { ListeningStorePort } from './ports/listening-store.js';
 import type { MediaFilesPort } from './ports/media-files.js';
@@ -48,6 +51,8 @@ export interface MediaDeps {
   readonly silences: SilenceStorePort;
   /** The current transcripts' search index (KBC-039, ADR 0024). */
   readonly search: MediaSearchPort;
+  /** Voice separations (KBC-064). */
+  readonly diarizations: DiarizationStorePort;
   readonly files: MediaFilesPort;
   readonly workerToken: string;
   /** Keys the transcriber token hashes (KB_CHAT_SECRETS_KEY, ADR 0017). */
@@ -90,7 +95,7 @@ export async function createMedia(
   };
 }
 
-/** The stores that live in the media database. */
+/** The stores that live in the media database (ADR 0022). */
 type MediaStores = Pick<
   MediaDeps,
   | 'store'
@@ -102,27 +107,32 @@ type MediaStores = Pick<
   | 'spend'
   | 'silences'
   | 'search'
+  | 'diarizations'
 >;
 
 /** The queue, each person's listening and bookmarks share one database (ADR 0022). */
 function openStores(dir: string): MediaStores {
   try {
-    const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
-    return {
-      store: new SqliteMediaStore(db),
-      listening: new SqliteListeningStore(db),
-      bookmarks: new SqliteBookmarkStore(db),
-      transcripts: new SqliteTranscriptStore(db),
-      transcribers: new SqliteTranscriberStore(db),
-      trackProposals: new SqliteTrackProposalStore(db),
-      spend: new SqliteMediaSpendLedger(db),
-      silences: new SqliteSilenceStore(db),
-      search: new SqliteMediaSearch(db),
-    };
+    return storesOf(openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS));
   } catch (err) {
     throw new Error(
       `The media library cannot start: the media database in ${dir} did not open or migrate`,
       { cause: err },
     );
   }
+}
+
+function storesOf(db: DatabaseSync): MediaStores {
+  return {
+    store: new SqliteMediaStore(db),
+    listening: new SqliteListeningStore(db),
+    bookmarks: new SqliteBookmarkStore(db),
+    transcripts: new SqliteTranscriptStore(db),
+    transcribers: new SqliteTranscriberStore(db),
+    trackProposals: new SqliteTrackProposalStore(db),
+    spend: new SqliteMediaSpendLedger(db),
+    silences: new SqliteSilenceStore(db),
+    search: new SqliteMediaSearch(db),
+    diarizations: new SqliteDiarizationStore(db),
+  };
 }

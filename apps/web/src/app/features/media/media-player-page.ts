@@ -36,6 +36,7 @@ import {
 } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { AUTHORSHIP_LABELS } from '@core/i18n/facet-labels.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { MediaSessionAdapter } from '@core/media/media-session.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
@@ -65,6 +66,7 @@ import {
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
+import { VoicesPanel } from './voices/voices-panel.js';
 import { PlayerShortcuts } from './player/player-shortcuts.js';
 import { TranscriptPanel } from './transcript/transcript-panel.js';
 
@@ -83,6 +85,7 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
     MediaPlayer,
     BookmarkList,
     TranscriptPanel,
+    VoicesPanel,
   ],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
@@ -94,6 +97,7 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
 })
 export class MediaPlayerPage {
   private readonly engine = inject(MediaEngine);
+  private readonly session = inject(SessionStore);
   private readonly saver = inject(ProgressSaver);
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly title = inject(Title);
@@ -119,6 +123,10 @@ export class MediaPlayerPage {
     this.item.hasValue() ? this.item.value() : null,
   );
   protected readonly ready = computed(() => this.media()?.status === 'ready');
+  /** "Vozes" is for whoever edits recordings (KBC-064 BR-2, AC-2), once signed in. */
+  protected readonly canEdit = computed(
+    () => this.session.me() !== null && this.session.can('media-edit'),
+  );
   protected readonly status = computed(() => {
     const media = this.media();
     return media ? statusTextOf(media) : '';
@@ -258,6 +266,13 @@ export class MediaPlayerPage {
 
   protected reloadTranscript(): void {
     this.transcript.reload();
+  }
+
+  /** "Vozes" shows a new separation: the transcript reads its voices again (KBC-064 FR-5). */
+  protected readVoicesOf(version: number): void {
+    if (!this.transcript.hasValue()) return;
+    if (this.transcript.value().speakers?.version !== version)
+      this.transcript.reload();
   }
 
   /** "Começar do início". */

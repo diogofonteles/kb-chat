@@ -203,11 +203,27 @@
                 <span i18n="@@transcribers.neverSeen">ainda não foi visto</span>
               }
               @if (item.currentJob; as job) {
-                <span class="job" i18n="@@transcribers.currentJob"
-                  >transcrevendo "{{ job.title }}"</span
-                >
+                @if (job.kind === 'diarize') {
+                  <span class="job" i18n="@@transcribers.currentDiarize"
+                    >separando as vozes de "{{ job.title }}"</span
+                  >
+                } @else {
+                  <span class="job" i18n="@@transcribers.currentJob"
+                    >transcrevendo "{{ job.title }}"</span
+                  >
+                }
               }
             </span>
+            <label class="check">
+              <input
+                type="checkbox"
+                [checked]="separatesVoices(item)"
+                [disabled]="busy()"
+                [attr.aria-label]="diarizeLabelOf(item)"
+                (change)="toggleDiarize(item, $event)"
+              />
+              <span i18n="@@transcribers.diarize">Separa vozes</span>
+            </label>
           </div>
           @if (confirming() === item.id) {
             <div class="confirm" role="group" [attr.aria-label]="item.name">
