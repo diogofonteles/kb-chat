@@ -1,5 +1,5 @@
-import { HttpBackend, provideHttpClient } from '@angular/common/http';
-import { MEDIA_UPLOAD_BACKEND } from '@core/media/media-api.js';
+import { provideHttpClient } from '@angular/common/http';
+import { TUS_UPLOAD } from '@core/media/tus-upload.js';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -16,21 +16,18 @@ import {
   mediaId,
   sessionAs,
 } from '../../testing/media-fixtures.js';
-import { anOffer } from '../../testing/preparation-fixtures.js';
 import { MediaListPage } from './media-list-page.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
+import { AUDIO_LENGTH_READER } from './audio-length.js';
+import { of } from 'rxjs';
+import { FakeTus } from '../../testing/fake-tus.js';
 
 const LIST_URL = '/api/v1/topics/hermetismo/media';
 
-/** The upload panel asks what the person may choose as it opens (KBC-072). */
-function answerPlanOptions(): void {
-  TestBed.tick();
-  TestBed.inject(HttpTestingController)
-    .match((request) =>
-      request.url.startsWith('/api/v1/media/preparation-options'),
-    )
-    .forEach((request) => request.flush(anOffer()));
+/** The file's hash runs on its own; waits for the question and says it is new. */
+async function answerCheck(http: HttpTestingController, url: string) {
+  await vi.waitFor(() => http.expectOne(`${url}/check`).flush({ verdict: 'new' }));
 }
 
 async function renderList(
@@ -38,6 +35,7 @@ async function renderList(
   /** Long by default: a poll firing during whenStable would keep it waiting. */
   pollMs = 60_000,
 ) {
+  const tus = new FakeTus();
   const view = await render(MediaListPage, {
     providers: [
       provideZonelessChangeDetection(),
@@ -47,10 +45,8 @@ async function renderList(
       chatStoreOn(),
       sessionAs(who),
       { provide: MEDIA_POLL_MS, useValue: pollMs },
-      {
-        provide: MEDIA_UPLOAD_BACKEND,
-        useFactory: () => TestBed.inject(HttpBackend),
-      },
+      { provide: TUS_UPLOAD, useValue: tus.factory },
+      { provide: AUDIO_LENGTH_READER, useValue: () => of(60_000) },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -58,7 +54,7 @@ async function renderList(
     http.expectOne(LIST_URL).flush({ items });
     await view.fixture.whenStable();
   };
-  return { ...view, http, answer };
+  return { ...view, http, answer, tus };
 }
 
 describe('MediaListPage (T14)', () => {
@@ -120,7 +116,6 @@ describe('MediaListPage (T14)', () => {
     const buttons = screen.getAllByRole('button', { name: 'Enviar áudio' });
     expect(buttons).toHaveLength(2);
     fireEvent.click(buttons[0] as HTMLElement);
-    answerPlanOptions();
     await fixture.whenStable();
     expect(screen.getByRole('dialog', { name: 'Enviar áudio' })).toBeTruthy();
   });
@@ -340,24 +335,23 @@ describe('MediaListPage (T14)', () => {
   });
 
   it('puts the new item on top and focuses it after an upload (UP-01)', async () => {
-    const { answer, http, fixture, container } = await renderList({
+    const { answer, http, fixture, container, tus } = await renderList({
       features: ['media-upload'],
     });
     await answer([]);
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
     );
-    answerPlanOptions();
     await fixture.whenStable();
     const input =
       container.querySelector<HTMLInputElement>('input[type="file"]');
     const file = new File([new Uint8Array(3)], 'Nova.mp3', {
       type: 'audio/mpeg',
     });
-    Object.defineProperty(input, 'files', {
-      value: { item: () => file, length: 1 },
-    });
+    Object.defineProperty(input, 'files', { value: [file] });
     fireEvent.change(input as HTMLInputElement);
+    await answerCheck(http, LIST_URL);
+    await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     const created = aMediaItem({
       id: mediaId(9),
@@ -366,8 +360,9 @@ describe('MediaListPage (T14)', () => {
       durationMs: null,
     });
     http.expectOne({ method: 'POST', url: LIST_URL }).flush(created);
+    tus.last.succeed();
     http
-      .expectOne(`/api/v1/media/${created.id}/file`)
+      .expectOne(`/api/v1/media/${created.id}`)
       .flush({ ...created, status: 'queued' });
     TestBed.tick();
     http
@@ -383,27 +378,27 @@ describe('MediaListPage (T14)', () => {
   });
 
   it('says where an upload sent to another collection went, without moving the focus', async () => {
-    const { answer, http, fixture, container } = await renderList({
+    const { answer, http, fixture, container, tus } = await renderList({
       features: ['media-upload'],
     });
     await answer([]);
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
     );
-    answerPlanOptions();
     await fixture.whenStable();
     const input =
       container.querySelector<HTMLInputElement>('input[type="file"]');
     const file = new File([new Uint8Array(3)], 'Nova.mp3', {
       type: 'audio/mpeg',
     });
-    Object.defineProperty(input, 'files', {
-      value: { item: () => file, length: 1 },
-    });
+    Object.defineProperty(input, 'files', { value: [file] });
     fireEvent.change(input as HTMLInputElement);
+    await answerCheck(http, LIST_URL);
     fireEvent.change(screen.getByRole('combobox', { name: 'Acervo' }), {
       target: { value: 'alquimia' },
     });
+    await answerCheck(http, '/api/v1/topics/alquimia/media');
+    await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     const created = aMediaItem({
       id: mediaId(9),
@@ -415,8 +410,9 @@ describe('MediaListPage (T14)', () => {
     http
       .expectOne({ method: 'POST', url: '/api/v1/topics/alquimia/media' })
       .flush(created);
+    tus.last.succeed();
     http
-      .expectOne(`/api/v1/media/${created.id}/file`)
+      .expectOne(`/api/v1/media/${created.id}`)
       .flush({ ...created, status: 'queued' });
     await fixture.whenStable();
     expect(screen.getByRole('status').textContent).toContain(
@@ -508,7 +504,6 @@ describe('MediaListPage (T14)', () => {
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Enviar áudio' })[0] as HTMLElement,
     );
-    answerPlanOptions();
     await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     await fixture.whenStable();

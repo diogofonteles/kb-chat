@@ -219,8 +219,8 @@ export const personSchema = z.object({
   initialPreferences: initialPreferencesSchema.optional(),
   /** May act as another person (KBC-060): set by the owner, master by master. */
   canActAs: z.boolean().default(false),
-  /** Their converted space in bytes (KBC-035 BR-1); null: the default. Never for the owner. */
-  mediaQuotaBytes: mediaQuotaSchema.nullable().default(null),
+  /** Their converted space in bytes (KBC-035 BR-1); null: the default. Unused for the owner. */
+  mediaQuotaBytes: mediaQuotaSchema.nullable().optional(),
   /** Which app AI serves the person and their limits (KBC-022); an older API sends none. */
   ai: personAiSchema.default(() => ({
     ...DEFAULT_PERSON_AI,

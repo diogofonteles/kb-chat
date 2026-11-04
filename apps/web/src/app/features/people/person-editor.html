@@ -137,6 +137,31 @@
   </fieldset>
 }
 
+@if (hasQuota()) {
+  <label class="field">
+    <span i18n="@@people.mediaQuota">Cota de mídia (GB)</span>
+    <input
+      #quota
+      type="text"
+      inputmode="decimal"
+      autocomplete="off"
+      [value]="quotaGb()"
+      [disabled]="busy()"
+      [attr.aria-invalid]="quotaProblem()"
+      aria-describedby="media-quota-hint"
+      (change)="changeQuota(quota.value)"
+    />
+    <span id="media-quota-hint" class="hint" i18n="@@people.mediaQuotaHint"
+      >Em branco, vale o padrão de {{ defaultQuotaGb }} GB.</span
+    >
+    @if (quotaProblem()) {
+      <span class="field-error" role="alert" i18n="@@people.mediaQuotaProblem"
+        ><span aria-hidden="true">⚠</span> Use um número maior que zero.</span
+      >
+    }
+  </label>
+}
+
 @if (ownerView() && isMaster() && !who.isOwner) {
   <label class="check grant">
     <input

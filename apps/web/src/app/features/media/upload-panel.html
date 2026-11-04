@@ -8,9 +8,6 @@
   <form class="body" [formGroup]="form" (ngSubmit)="send()" novalidate>
     <header class="head">
       <h2 id="upload-title" i18n="@@media.upload.title">Enviar áudio</h2>
-      @if (showSteps()) {
-        <app-preparation-steps [step]="1" />
-      }
     </header>
 
     <section
@@ -24,11 +21,9 @@
     >
       <p id="file-label" class="label" i18n="@@media.upload.file">Arquivo</p>
       <p class="rule" id="file-rule">{{ rule }}</p>
-      @if (file(); as chosen) {
-        <p class="chosen">{{ chosen.name }}</p>
-      } @else {
+      @if (uploads.entries().length === 0) {
         <p class="hint" i18n="@@media.upload.dropHint">
-          Arraste o arquivo para cá ou
+          Arraste os arquivos para cá ou
         </p>
       }
       <button
@@ -37,13 +32,13 @@
         [disabled]="stage() === 'sending'"
         (click)="chooseFile()"
       >
-        @if (file()) {
+        @if (uploads.entries().length > 0) {
           <ng-container i18n="@@media.upload.chooseOther"
-            >Escolher outro arquivo</ng-container
+            >Adicionar arquivos</ng-container
           >
         } @else {
           <ng-container i18n="@@media.upload.choose"
-            >Escolher arquivo</ng-container
+            >Escolher arquivos</ng-container
           >
         }
       </button>
@@ -51,6 +46,7 @@
         #fileInput
         class="visually-hidden"
         type="file"
+        multiple
         accept=".mp3,.m4a,.wav,.flac,.ogg,.opus,audio/*"
         tabindex="-1"
         aria-hidden="true"
@@ -63,22 +59,21 @@
       }
     </section>
 
-    <label class="field">
-      <span class="label" i18n="@@media.upload.titleLabel">Título</span>
-      <input
-        type="text"
-        formControlName="title"
-        maxlength="200"
-        autocomplete="off"
-        [attr.aria-invalid]="submitted() && form.controls.title.invalid"
-        aria-describedby="title-error"
-      />
-      @if (submitted() && form.controls.title.invalid) {
-        <span id="title-error" class="error" i18n="@@media.upload.titleMissing"
-          ><span aria-hidden="true">⚠</span> Dê um título ao áudio.</span
-        >
-      }
-    </label>
+    @if (uploads.entries().length > 0) {
+      <ul class="files" aria-label="Arquivos" i18n-aria-label="@@media.upload.files">
+        @for (entry of uploads.entries(); track entry.key) {
+          <li>
+            <app-upload-file-row
+              [entry]="entry"
+              [locked]="stage() === 'sending'"
+              [submitted]="submitted()"
+              (renamed)="uploads.rename(entry.key, $event)"
+              (removed)="uploads.remove(entry.key)"
+            />
+          </li>
+        }
+      </ul>
+    }
 
     <label class="field">
       <span class="label" i18n="@@media.upload.topic">Acervo</span>
@@ -94,27 +89,6 @@
       [disabled]="stage() === 'sending'"
       [(name)]="authorName"
     />
-
-    <app-preparation-options [locked]="stage() === 'sending'" />
-
-    @if (stage() === 'sending') {
-      <div class="progress">
-        <progress
-          max="100"
-          [value]="percent()"
-          aria-label="Progresso do envio"
-          i18n-aria-label="@@media.upload.progressLabel"
-        ></progress>
-        <p i18n="@@media.upload.sending">
-          Enviando… {{ sentText() }} · {{ percent() }}%
-        </p>
-      </div>
-    }
-    @if (failure()) {
-      <p class="error" role="alert">
-        <span aria-hidden="true">⚠</span> {{ failure() }}
-      </p>
-    }
 
     <footer class="actions">
       @if (stage() === 'sending') {
@@ -135,8 +109,16 @@
         >
           Cancelar
         </button>
-        <button type="submit" class="primary">
-          @if (stage() === 'stopped') {
+        <button
+          type="submit"
+          class="primary"
+          [disabled]="uploads.checking()"
+        >
+          @if (uploads.checking()) {
+            <ng-container i18n="@@media.upload.checking"
+              >Conferindo arquivos…</ng-container
+            >
+          } @else if (stage() === 'stopped') {
             <ng-container i18n="@@media.upload.retry"
               >Tentar de novo</ng-container
             >

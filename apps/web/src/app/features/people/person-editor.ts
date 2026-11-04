@@ -15,6 +15,8 @@ import {
 import {
   MASTER_FEATURES,
   MASTER_GRANT_ONLY_FEATURES,
+  MEDIA_DEFAULT_QUOTA_BYTES,
+  mediaQuotaSchema,
   type AppAi,
   type Feature,
   type InviteProfile,
@@ -34,6 +36,8 @@ const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
  * One person's collections, features and role (KBC-010 FR-3). Presentational: each change
  * goes up as a patch and the page saves it, as Preferências do.
  */
+const BYTES_PER_GB = 1024 ** 3;
+
 @Component({
   selector: 'app-person-editor',
   imports: [PersonAiEditor],
@@ -109,6 +113,31 @@ export class PersonEditor {
   protected readonly collections = computed(() =>
     collectionChoices(this.topics(), this.person().topics, this.isMaster()),
   );
+
+  /** Masters may give someone who sends another quota; the owner has none (KBC-035 BR-1). */
+  protected readonly hasQuota = computed(
+    () =>
+      !this.person().isOwner &&
+      (this.isMaster() || this.person().features.includes('media-upload')),
+  );
+  protected readonly quotaGb = computed(() => {
+    const bytes = this.person().mediaQuotaBytes ?? null;
+    return bytes === null ? '' : String(bytes / BYTES_PER_GB);
+  });
+  protected readonly defaultQuotaGb = MEDIA_DEFAULT_QUOTA_BYTES / BYTES_PER_GB;
+  protected readonly quotaProblem = signal(false);
+
+  /** Blank goes back to the default; a value the API would refuse is said here. */
+  protected changeQuota(typed: string): void {
+    const gigabytes = Number(typed.replace(',', '.'));
+    const bytes = Math.round(gigabytes * BYTES_PER_GB);
+    const valid = typed.trim() === '' || mediaQuotaSchema.safeParse(bytes).success;
+    this.quotaProblem.set(!valid);
+    if (valid)
+      this.changed.emit({
+        mediaQuotaBytes: typed.trim() === '' ? null : bytes,
+      });
+  }
 
   protected toggleTopic(slug: string, on: boolean): void {
     this.changed.emit({ topics: toggled(this.person().topics, slug, on) });

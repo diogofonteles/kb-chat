@@ -1,23 +1,19 @@
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
 import {
-  HttpClient,
-  HttpErrorResponse,
-  HttpEventType,
-  HttpHeaders,
-  HttpRequest,
-  HttpXhrBackend,
-  type HttpBackend,
-  type HttpEvent,
-} from '@angular/common/http';
-import { Injectable, InjectionToken, inject } from '@angular/core';
-import {
+  MEDIA_UPLOAD_PART_BYTES,
   mediaItemSchema,
+  uploadCheckSchema,
   type CreateMediaRequest,
   type MediaItem,
   type UpdateMediaRequest,
+  type UploadCheck,
+  type UploadCheckRequest,
 } from '@kb-chat/contracts';
 import { CSRF } from '@core/auth/auth-interceptor.js';
 import { SessionEvents } from '@core/auth/session-events.js';
-import { catchError, filter, map, throwError, type Observable } from 'rxjs';
+import { Observable, catchError, concat, map, throwError } from 'rxjs';
+import { TUS_UPLOAD, toHttpError } from './tus-upload.js';
 
 /** API URLs of the media library (ADR 0022); slugs and ids are always encoded. */
 export const mediaListUrl = (topic: string): string =>
@@ -34,17 +30,8 @@ export const mediaSubtitlesUrl = (id: string): string =>
 export const mediaPagePath = (id: string): string =>
   `/midia/${encodeURIComponent(id)}`;
 
-/**
- * The backend uploads go through: XHR, since the app's fetch backend reports no upload
- * progress. Tests swap it for the testing backend.
- */
-export const MEDIA_UPLOAD_BACKEND = new InjectionToken<HttpBackend>(
-  'MEDIA_UPLOAD_BACKEND',
-  {
-    providedIn: 'root',
-    factory: () => inject(HttpXhrBackend),
-  },
-);
+/** How many times tus tries again after a failure, and when: about two minutes offline. */
+const RETRY_DELAYS_MS = [0, 1_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000];
 
 /** Where an upload is: bytes sent so far, or the item once the server has it. */
 export type UploadEvent =
@@ -59,11 +46,7 @@ export type UploadEvent =
 @Injectable({ providedIn: 'root' })
 export class MediaApi {
   private readonly http = inject(HttpClient);
-  /**
-   * Uploads go over XHR: the app's HttpClient uses fetch, which reports no upload progress.
-   * This client skips the interceptors, so it adds the CSRF header and reports a 401 itself.
-   */
-  private readonly xhr = new HttpClient(inject(MEDIA_UPLOAD_BACKEND));
+  private readonly tus = inject(TUS_UPLOAD);
   private readonly session = inject(SessionEvents);
 
   create(topic: string, request: CreateMediaRequest): Observable<MediaItem> {
@@ -72,24 +55,48 @@ export class MediaApi {
       .pipe(map((body) => mediaItemSchema.parse(body)));
   }
 
-  /** Sends the file; unsubscribing cancels the upload (XHR abort). */
+  /** What a chosen file is here, before anything is sent (KBC-035 FR-1, FR-3). */
+  check(topic: string, request: UploadCheckRequest): Observable<UploadCheck> {
+    return this.http
+      .post(`${mediaListUrl(topic)}/check`, request)
+      .pipe(map((body) => uploadCheckSchema.parse(body)));
+  }
+
+  /**
+   * Sends the file over tus from wherever the server stopped (KBC-035 FR-2), and answers
+   * the item once it has every byte. Unsubscribing stops; what arrived stays on the server.
+   */
   upload(id: string, file: Blob): Observable<UploadEvent> {
-    const request = new HttpRequest('PUT', `${mediaUrl(id)}/file`, file, {
-      reportProgress: true,
-      headers: new HttpHeaders({
-        'content-type': 'application/octet-stream',
-        [CSRF.header]: CSRF.value,
+    const done = this.http.get(mediaUrl(id)).pipe(
+      map((body): UploadEvent => {
+        return { kind: 'done', item: mediaItemSchema.parse(body) };
       }),
-    });
-    return this.xhr.request(request).pipe(
-      map((event) => this.toUploadEvent(event, file.size)),
-      filter((event): event is UploadEvent => event !== null),
+    );
+    return concat(this.sendParts(id, file), done).pipe(
       catchError((err: unknown) => {
         if (err instanceof HttpErrorResponse && err.status === 401)
           this.session.expired$.next();
         return throwError(() => err);
       }),
     );
+  }
+
+  private sendParts(id: string, file: Blob): Observable<UploadEvent> {
+    return new Observable<UploadEvent>((subscriber) => {
+      const session = this.tus(file, {
+        uploadUrl: `${mediaUrl(id)}/upload`,
+        chunkSize: MEDIA_UPLOAD_PART_BYTES,
+        retryDelays: RETRY_DELAYS_MS,
+        storeFingerprintForResuming: false,
+        headers: { [CSRF.header]: CSRF.value },
+        onProgress: (loaded, total) =>
+          subscriber.next({ kind: 'progress', loaded, total }),
+        onSuccess: () => subscriber.complete(),
+        onError: (err) => subscriber.error(toHttpError(err)),
+      });
+      session.start();
+      return () => void session.abort();
+    });
   }
 
   /** Changes its title, author or collection (KBC-050); what is left out stays. */
@@ -119,18 +126,4 @@ export class MediaApi {
     );
   }
 
-  private toUploadEvent(
-    event: HttpEvent<unknown>,
-    size: number,
-  ): UploadEvent | null {
-    if (event.type === HttpEventType.UploadProgress)
-      return {
-        kind: 'progress',
-        loaded: event.loaded,
-        total: event.total ?? size,
-      };
-    if (event.type === HttpEventType.Response)
-      return { kind: 'done', item: mediaItemSchema.parse(event.body) };
-    return null;
-  }
 }
