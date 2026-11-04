@@ -75,6 +75,13 @@ interface Plan {
   readonly llm: LlmPort;
 }
 
+/** What the stream gave so far. */
+interface StreamRead {
+  answer: string;
+  started: boolean;
+  usd: number | null;
+}
+
 /** What the one call gave. */
 interface CallResult {
   readonly answer: string | null;
@@ -94,7 +101,7 @@ const conflict = (reason: string) =>
 
 /** Words of the transcript that fall inside a track, by segment. */
 function speechOf(
-  segments: ReadonlyArray<{ startMs: number; endMs: number; text: string }>,
+  segments: readonly { startMs: number; endMs: number; text: string }[],
   track: TrackSpan,
 ): string {
   return segments
@@ -294,29 +301,28 @@ export class SubjectProposalService {
 
   /** The one call of a run; a stream that broke after it began may still be billed. */
   private async call(plan: Plan): Promise<CallResult> {
-    const read = { answer: '', started: false, usd: null as number | null };
+    const read: StreamRead = { answer: '', started: false, usd: null };
+    const spent = () => read.usd ?? this.costOf(plan, read.answer, null);
     try {
-      const stream = plan.llm.stream(plan.messages, {
-        maxTokens: plan.maxTokens,
-        signal: AbortSignal.any([
-          this.closing.signal,
-          AbortSignal.timeout(CALL_TIMEOUT_MS),
-        ]),
-      });
-      for await (const chunk of stream) {
-        read.started = true;
-        if (chunk.type === 'token') read.answer += chunk.text;
-        else read.usd = this.costOf(plan, read.answer, chunk.usage);
-      }
-      return {
-        answer: read.answer,
-        spentUsd: read.usd ?? this.costOf(plan, read.answer, null),
-      };
+      await this.consume(plan, read);
+      return { answer: read.answer, spentUsd: spent() };
     } catch (error) {
-      const spentUsd = read.started
-        ? (read.usd ?? this.costOf(plan, read.answer, null))
-        : 0;
-      return { answer: null, spentUsd, error };
+      return { answer: null, spentUsd: read.started ? spent() : 0, error };
+    }
+  }
+
+  private async consume(plan: Plan, read: StreamRead): Promise<void> {
+    const stream = plan.llm.stream(plan.messages, {
+      maxTokens: plan.maxTokens,
+      signal: AbortSignal.any([
+        this.closing.signal,
+        AbortSignal.timeout(CALL_TIMEOUT_MS),
+      ]),
+    });
+    for await (const chunk of stream) {
+      read.started = true;
+      if (chunk.type === 'token') read.answer += chunk.text;
+      else read.usd = this.costOf(plan, read.answer, chunk.usage);
     }
   }
 

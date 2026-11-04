@@ -101,7 +101,7 @@
             [collection]="collection()"
             [busy]="isBusy(track)"
             (add)="add(track, $event)"
-            (drop)="remove(track, $event)"
+            (removeSubject)="remove(track, $event)"
             (decide)="decide(track, $event)"
             (summary)="saveSummary(track, $event)"
           />

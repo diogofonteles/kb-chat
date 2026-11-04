@@ -77,39 +77,39 @@ const knownTopic = (deps: SubjectRoutesDeps, topic: string): string => {
   return topic;
 };
 
+const COLLECTION_ROUTE = {
+  config: { access: COLLECTION },
+  schema: { params: topicParams },
+};
+
 function registerCollection(typed: Typed, deps: SubjectRoutesDeps): void {
-  typed.get(
-    '/api/v1/topics/:topic/subjects',
-    {
-      config: { access: COLLECTION },
-      schema: {
-        params: topicParams,
-        response: { 200: collectionSubjectsSchema },
-      },
+  const { subjects } = deps;
+  const url = '/api/v1/topics/:topic/subjects';
+  const read = {
+    ...COLLECTION_ROUTE,
+    schema: {
+      ...COLLECTION_ROUTE.schema,
+      response: { 200: collectionSubjectsSchema },
     },
-    async (request) =>
-      deps.subjects.collection(knownTopic(deps, request.params.topic)),
+  };
+  const create = {
+    ...COLLECTION_ROUTE,
+    schema: {
+      ...COLLECTION_ROUTE.schema,
+      body: createSubjectRequestSchema,
+      response: { 201: freeSubjectSchema },
+    },
+  };
+  typed.get(url, read, async (request) =>
+    subjects.collection(knownTopic(deps, request.params.topic)),
   );
-  typed.post(
-    '/api/v1/topics/:topic/subjects',
-    {
-      config: { access: COLLECTION },
-      schema: {
-        params: topicParams,
-        body: createSubjectRequestSchema,
-        response: { 201: freeSubjectSchema },
-      },
-    },
-    async (request, reply) => {
-      const topic = knownTopic(deps, request.params.topic);
-      const subject = deps.subjects.createFree(
-        actorOf(request),
-        topic,
-        request.body.name,
-      );
-      return reply.code(201).send(subject);
-    },
-  );
+  typed.post(url, create, async (request, reply) => {
+    const topic = knownTopic(deps, request.params.topic);
+    const { name } = request.body;
+    return reply
+      .code(201)
+      .send(subjects.createFree(actorOf(request), topic, name));
+  });
 }
 
 function registerTrack(typed: Typed, deps: SubjectRoutesDeps): void {
@@ -141,29 +141,31 @@ function registerTrack(typed: Typed, deps: SubjectRoutesDeps): void {
   );
 }
 
+const STEP_ROUTE = {
+  config: { access: CLASSIFY },
+  schema: { params: mediaParams, response: { 200: editSubjectsSchema } },
+};
+
+const PROPOSE_ROUTE = {
+  config: {
+    access: SUGGEST,
+    rateLimit: { max: RUNS_PER_MINUTE, timeWindow: '1 minute' },
+  },
+  schema: {
+    params: mediaParams,
+    body: subjectProposalRequestSchema,
+    response: { 200: subjectEstimateSchema, 202: subjectRunSchema },
+  },
+};
+
 function registerEdit(typed: Typed, deps: SubjectRoutesDeps): void {
-  const { subjects, proposals } = deps;
-  typed.get(
-    '/api/v1/media/:id/edit/subjects',
-    {
-      config: { access: CLASSIFY },
-      schema: { params: mediaParams, response: { 200: editSubjectsSchema } },
-    },
-    async (request) => proposals.edit(actorOf(request), request.params.id),
+  const { proposals } = deps;
+  typed.get('/api/v1/media/:id/edit/subjects', STEP_ROUTE, async (request) =>
+    proposals.edit(actorOf(request), request.params.id),
   );
   typed.post(
     '/api/v1/media/:id/edit/subject-proposals',
-    {
-      config: {
-        access: SUGGEST,
-        rateLimit: { max: RUNS_PER_MINUTE, timeWindow: '1 minute' },
-      },
-      schema: {
-        params: mediaParams,
-        body: subjectProposalRequestSchema,
-        response: { 200: subjectEstimateSchema, 202: subjectRunSchema },
-      },
-    },
+    PROPOSE_ROUTE,
     async (request, reply) => {
       assertFeature(request, 'media-classify');
       const actor = actorOf(request);

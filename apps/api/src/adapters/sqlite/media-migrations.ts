@@ -69,6 +69,75 @@ function rebuildAccepting(
   ].join('\n');
 }
 
+const TRACK_SUBJECT_TABLES = `
+      -- The collection's free subjects, always on the top-level collection (BR-1).
+      CREATE TABLE media_subjects (
+        id TEXT PRIMARY KEY,
+        collection TEXT NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (collection, name_key)
+      ) STRICT;
+
+      CREATE TABLE media_subject_runs (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        -- The approval it read: one done run per approval (FR-3).
+        edit_version INTEGER NOT NULL,
+        principal TEXT NOT NULL,
+        model TEXT NOT NULL,
+        spend_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'done', 'failed')),
+        estimate_usd REAL NOT NULL CHECK (estimate_usd >= 0),
+        spent_usd REAL NOT NULL DEFAULT 0 CHECK (spent_usd >= 0),
+        failure TEXT,
+        created_at TEXT NOT NULL,
+        finished_at TEXT
+      ) STRICT;
+      CREATE INDEX media_subject_runs_by_media ON media_subject_runs (media_id, created_at);
+      CREATE UNIQUE INDEX media_subject_runs_one_running ON media_subject_runs (media_id)
+        WHERE status = 'running';
+
+      -- What a track carries besides its links; the version guards a person's write.
+      CREATE TABLE media_track_subjects (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        summary TEXT,
+        suggested_summary TEXT,
+        version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
+        updated_by TEXT,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      -- One row per subject of a track. Only 'accepted' counts anywhere (BR-3); 'refused' stays
+      -- so that no later run offers it again, and to measure the suggestions (NFR-1).
+      CREATE TABLE media_subject_links (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('concept', 'free', 'new')),
+        -- 'concept:<key>', 'free:<id>' or 'new:<key>': a subject once per track.
+        subject_key TEXT NOT NULL,
+        concept_name TEXT,
+        subject_id TEXT REFERENCES media_subjects (id),
+        new_name TEXT,
+        source TEXT NOT NULL CHECK (source IN ('manual', 'ai')),
+        status TEXT NOT NULL CHECK (status IN ('suggested', 'accepted', 'refused')),
+        run_id TEXT REFERENCES media_subject_runs (id) ON DELETE SET NULL,
+        decided_by TEXT,
+        created_at TEXT NOT NULL,
+        decided_at TEXT,
+        UNIQUE (media_id, subject_key),
+        CHECK ((kind = 'concept') = (concept_name IS NOT NULL)),
+        CHECK ((kind = 'free') = (subject_id IS NOT NULL)),
+        CHECK ((kind = 'new') = (new_name IS NOT NULL)),
+        CHECK (kind <> 'new' OR status <> 'accepted')
+      ) STRICT;
+      -- What KBC-070 reads: accepted links, by subject.
+      CREATE INDEX media_subject_links_accepted ON media_subject_links (subject_key, media_id)
+        WHERE status = 'accepted';
+`;
+
 export const MEDIA_MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -985,72 +1054,7 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     sql: (db) => `
       ${rebuildAccepting(db, { table: 'media_spend', kind: 'subject-proposal' })}
 
-      -- The collection's free subjects, always on the top-level collection (BR-1).
-      CREATE TABLE media_subjects (
-        id TEXT PRIMARY KEY,
-        collection TEXT NOT NULL,
-        name TEXT NOT NULL,
-        name_key TEXT NOT NULL,
-        created_by TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        UNIQUE (collection, name_key)
-      ) STRICT;
-
-      CREATE TABLE media_subject_runs (
-        id TEXT PRIMARY KEY,
-        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
-        -- The approval it read: one done run per approval (FR-3).
-        edit_version INTEGER NOT NULL,
-        principal TEXT NOT NULL,
-        model TEXT NOT NULL,
-        spend_id TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('running', 'done', 'failed')),
-        estimate_usd REAL NOT NULL CHECK (estimate_usd >= 0),
-        spent_usd REAL NOT NULL DEFAULT 0 CHECK (spent_usd >= 0),
-        failure TEXT,
-        created_at TEXT NOT NULL,
-        finished_at TEXT
-      ) STRICT;
-      CREATE INDEX media_subject_runs_by_media ON media_subject_runs (media_id, created_at);
-      CREATE UNIQUE INDEX media_subject_runs_one_running ON media_subject_runs (media_id)
-        WHERE status = 'running';
-
-      -- What a track carries besides its links; the version guards a person's write.
-      CREATE TABLE media_track_subjects (
-        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
-        summary TEXT,
-        suggested_summary TEXT,
-        version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
-        updated_by TEXT,
-        updated_at TEXT NOT NULL
-      ) STRICT;
-
-      -- One row per subject of a track. Only 'accepted' counts anywhere (BR-3); 'refused' stays
-      -- so that no later run offers it again, and to measure the suggestions (NFR-1).
-      CREATE TABLE media_subject_links (
-        id TEXT PRIMARY KEY,
-        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('concept', 'free', 'new')),
-        -- 'concept:<key>', 'free:<id>' or 'new:<key>': a subject once per track.
-        subject_key TEXT NOT NULL,
-        concept_name TEXT,
-        subject_id TEXT REFERENCES media_subjects (id),
-        new_name TEXT,
-        source TEXT NOT NULL CHECK (source IN ('manual', 'ai')),
-        status TEXT NOT NULL CHECK (status IN ('suggested', 'accepted', 'refused')),
-        run_id TEXT REFERENCES media_subject_runs (id) ON DELETE SET NULL,
-        decided_by TEXT,
-        created_at TEXT NOT NULL,
-        decided_at TEXT,
-        UNIQUE (media_id, subject_key),
-        CHECK ((kind = 'concept') = (concept_name IS NOT NULL)),
-        CHECK ((kind = 'free') = (subject_id IS NOT NULL)),
-        CHECK ((kind = 'new') = (new_name IS NOT NULL)),
-        CHECK (kind <> 'new' OR status <> 'accepted')
-      ) STRICT;
-      -- What KBC-070 reads: accepted links, by subject.
-      CREATE INDEX media_subject_links_accepted ON media_subject_links (subject_key, media_id)
-        WHERE status = 'accepted';
+      ${TRACK_SUBJECT_TABLES}
     `,
   },
 ];

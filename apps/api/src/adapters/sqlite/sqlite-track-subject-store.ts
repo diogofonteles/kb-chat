@@ -47,6 +47,16 @@ const keyOfTarget = (target: LinkTarget): string => {
   return `${target.kind}:${subjectKey(target.name)}`;
 };
 
+/** kind, subject_key, concept_name, subject_id, new_name. */
+const targetColumns = (target: LinkTarget) =>
+  [
+    target.kind,
+    keyOfTarget(target),
+    target.kind === 'concept' ? target.name : null,
+    target.kind === 'free' ? target.id : null,
+    target.kind === 'new' ? target.name : null,
+  ] as const;
+
 const LINKS = `SELECT l.id, l.media_id, l.kind, l.status, l.concept_name, l.new_name,
     l.subject_id, s.name AS free_name, s.collection
   FROM media_subject_links l LEFT JOIN media_subjects s ON s.id = l.subject_id
@@ -462,7 +472,6 @@ export class SqliteTrackSubjectStore implements TrackSubjectStorePort {
     readonly by?: string;
     readonly at: Date;
   }): void {
-    const { target } = link;
     const at = link.at.toISOString();
     // A subject already on the track, even refused, is not offered again (FR-4).
     this.db
@@ -475,11 +484,7 @@ export class SqliteTrackSubjectStore implements TrackSubjectStorePort {
       .run(
         randomUUID(),
         link.mediaId,
-        target.kind,
-        keyOfTarget(target),
-        target.kind === 'concept' ? target.name : null,
-        target.kind === 'free' ? target.id : null,
-        target.kind === 'new' ? target.name : null,
+        ...targetColumns(link.target),
         link.source,
         link.status,
         link.runId ?? null,

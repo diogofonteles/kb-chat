@@ -46,7 +46,7 @@ export class TrackSubjectRow {
   readonly busy = input(false);
 
   readonly add = output<SubjectChoice>();
-  readonly drop = output<TrackSubject>();
+  readonly removeSubject = output<TrackSubject>();
   readonly decide = output<SubjectDecisionEvent>();
   readonly summary = output<string>();
 
@@ -109,7 +109,7 @@ export class TrackSubjectRow {
   protected removed(subject: TrackSubject): void {
     this.full.set(false);
     this.refocus = true;
-    this.drop.emit(subject);
+    this.removeSubject.emit(subject);
   }
 
   protected accept(suggestion: SubjectSuggestion): void {
