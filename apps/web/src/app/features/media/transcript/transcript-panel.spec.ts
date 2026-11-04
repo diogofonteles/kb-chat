@@ -780,6 +780,32 @@ describe('TranscriptPanel: word by word (KBC-045)', () => {
     expect(media.calls).not.toContain('seek:1000.3');
   });
 
+  it('leaves the person where a later skip took them, not on the pending word (F-2)', async () => {
+    const { media, engine, view } = await renderPanel(lecture());
+    clickWord('muito mais adiante', 6);
+    engine.skip(-15_000);
+    await answerWords(view, 0, spoken(1_000_000, 'muito mais adiante', 2));
+    expect(media.calls).not.toContain('seek:1000.3');
+    expect(media.calls.at(-1)).toBe('seek:985');
+  });
+
+  it('lands on the pending word after the seek of its own click lands', async () => {
+    const { media, view } = await renderPanel(lecture());
+    clickWord('muito mais adiante', 6);
+    media.emit('seeked');
+    await view.fixture.whenStable();
+    await answerWords(view, 0, spoken(1_000_000, 'muito mais adiante', 2));
+    expect(media.calls.at(-1)).toBe('seek:1000.3');
+  });
+
+  it('still lands on the pending word when the app jumps a silence meanwhile', async () => {
+    const { media, engine, view } = await renderPanel(lecture());
+    clickWord('muito mais adiante', 6);
+    engine.skipSilence(1_000_100);
+    await answerWords(view, 0, spoken(1_000_000, 'muito mais adiante', 2));
+    expect(media.calls.at(-1)).toBe('seek:1000.3');
+  });
+
   it('keeps the segment start when the words of a clicked segment fail', async () => {
     wordByWordOption = false;
     const { media, view } = await renderPanel(lecture());

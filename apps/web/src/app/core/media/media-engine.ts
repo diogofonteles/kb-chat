@@ -119,6 +119,7 @@ export class MediaEngine {
   private readonly volumeValue = signal(1);
   private readonly mutedValue = signal(false);
   private readonly landedSeeks = signal(0);
+  private readonly askedSeeks = signal(0);
   private readonly playedSinceLoad = signal(false);
 
   readonly playback = this.state.asReadonly();
@@ -135,6 +136,8 @@ export class MediaEngine {
   readonly muted = this.mutedValue.asReadonly();
   /** Counts the seeks the person asked for that landed (announcements, KBC-041 FR-10). */
   readonly seeksLanded = this.landedSeeks.asReadonly();
+  /** Counts the seeks asked for, the moment they are asked: a later one replaces a plan. */
+  readonly seeksAsked = this.askedSeeks.asReadonly();
   /** The current source played at least once since it was loaded. */
   readonly hasPlayed = this.playedSinceLoad.asReadonly();
 
@@ -223,6 +226,11 @@ export class MediaEngine {
    * the browser land on a nearby keyframe (the system's seek bar asks for it, FR-7).
    */
   seek(ms: number, fast = false): void {
+    this.askedSeeks.update((count) => count + 1);
+    this.moveTo(ms, fast);
+  }
+
+  private moveTo(ms: number, fast = false): void {
     const element = this.element;
     if (!element || !this.current()) return;
     const target = clampToDuration(ms, this.state().durationMs);
@@ -243,7 +251,7 @@ export class MediaEngine {
   skipSilence(toMs: number): void {
     if (!this.element || !this.current()) return;
     this.ownSeek = true;
-    this.seek(toMs);
+    this.moveTo(toMs);
   }
 
   /**
@@ -346,7 +354,7 @@ export class MediaEngine {
     this.pendingStartMs = null;
     if (start === null) return;
     this.ownSeek = true;
-    this.seek(start);
+    this.moveTo(start);
   }
 
   /**

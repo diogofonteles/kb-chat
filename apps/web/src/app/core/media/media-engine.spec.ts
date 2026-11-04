@@ -124,6 +124,17 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(engine.seeksLanded()).toBe(1);
   });
 
+  it('counts a seek when it is asked, and not the ones the app makes (KBC-045)', () => {
+    engine.load(LECTURE, 30_000);
+    media.setDuration(60);
+    media.emit('loadedmetadata');
+    engine.skipSilence(40_000);
+    expect(engine.seeksAsked()).toBe(0);
+    engine.skip(5_000);
+    expect(engine.seeksAsked()).toBe(1);
+    expect(engine.seeksLanded()).toBe(0);
+  });
+
   it('reads the position live from the element, and skips nothing without a source', () => {
     expect(engine.positionNowMs()).toBe(0);
     engine.skipSilence(1_000);

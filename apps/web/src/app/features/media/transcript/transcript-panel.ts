@@ -195,6 +195,8 @@ export class TranscriptPanel {
   private readonly pendingWord = new Subject<{
     readonly segment: number;
     readonly char: number;
+    /** The engine's seek count after the click's own: any later seek outranks the word. */
+    readonly seeks: number;
   } | null>();
   /** Off once the person scrolls or moves through the list themselves (FR-3). */
   private readonly tracking = signal(true);
@@ -320,7 +322,10 @@ export class TranscriptPanel {
     });
   }
 
-  /** Once the page of a clicked word arrives, moves from its segment to the word (FR-3). */
+  /**
+   * Once the page of a clicked word arrives, moves from its segment to the word (FR-3),
+   * unless the person went elsewhere meanwhile: a skip, the slider, a bookmark, the keys.
+   */
   private landOnPendingWord(): void {
     this.pendingWord
       .pipe(
@@ -329,6 +334,7 @@ export class TranscriptPanel {
             ? this.words.load(wordsPageOf(clicked.segment)).pipe(
                 map(() => this.wordAt(clicked.segment, clicked.char)),
                 filter((word) => word !== null),
+                filter(() => this.engine.seeksAsked() === clicked.seeks),
               )
             : EMPTY,
         ),
@@ -649,7 +655,11 @@ export class TranscriptPanel {
     this.engine.seek(word?.startMs ?? segment.startMs);
     this.engine.play();
     const waiting = char !== null && this.words.of(index) === null;
-    this.pendingWord.next(waiting ? { segment: index, char } : null);
+    this.pendingWord.next(
+      waiting
+        ? { segment: index, char, seeks: this.engine.seeksAsked() }
+        : null,
+    );
   }
 
   private resumeTracking(): void {
