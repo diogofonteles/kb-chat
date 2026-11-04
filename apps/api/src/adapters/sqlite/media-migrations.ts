@@ -1,3 +1,5 @@
+import type { DatabaseSync } from 'node:sqlite';
+
 /**
  * The media database's schema (ADR 0022), as numbered migrations applied in order at API
  * start. A migration is never edited once released: a change is a new migration.
@@ -5,7 +7,55 @@
 export interface Migration {
   readonly version: number;
   readonly name: string;
-  readonly sql: string;
+  /** A function reads the database first: its SQL depends on what is already there. */
+  readonly sql: string | ((db: DatabaseSync) => string);
+}
+
+const columnsOfJobs = (db: DatabaseSync): string =>
+  db
+    .prepare(`SELECT name FROM pragma_table_info('jobs')`)
+    .all()
+    .map((row) => String(row['name']))
+    .join(', ');
+
+const indexesOfJobs = (db: DatabaseSync): string[] =>
+  db
+    .prepare(
+      `SELECT sql FROM sqlite_master
+       WHERE type = 'index' AND tbl_name = 'jobs' AND sql IS NOT NULL`,
+    )
+    .all()
+    .map((row) => `${String(row['sql'])};`);
+
+/**
+ * Rebuilds `jobs` with `kind` in its CHECK from the table as it stands, every column, check and
+ * index kept. Branches rebuild `jobs` in parallel (KBC-071's 15 adds a kind, a column and a
+ * check): a fixed copy of the table here would drop what the other one added. Nothing to do
+ * when the kind is already accepted. SQLite cannot change a CHECK in place.
+ */
+export function rebuildJobsAccepting(db: DatabaseSync, kind: string): string {
+  const table = String(
+    db
+      .prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'jobs'`,
+      )
+      .get()?.['sql'],
+  );
+  const kinds = /kind\s+IN\s*\(([^)]*)\)/.exec(table);
+  if (!kinds?.[1]) throw new Error('jobs has no kind check to extend');
+  if (kinds[1].includes(`'${kind}'`)) return '';
+  const rebuilt = table
+    .replace(kinds[0], `kind IN (${kinds[1]}, '${kind}')`)
+    .replace(/^CREATE TABLE\s+"?jobs"?/, 'CREATE TABLE jobs_rebuilt');
+  const columns = columnsOfJobs(db);
+  const indexes = indexesOfJobs(db);
+  return [
+    `${rebuilt};`,
+    `INSERT INTO jobs_rebuilt (${columns}) SELECT ${columns} FROM jobs;`,
+    'DROP TABLE jobs;',
+    'ALTER TABLE jobs_rebuilt RENAME TO jobs;',
+    ...indexes,
+  ].join('\n');
 }
 
 export const MEDIA_MIGRATIONS: readonly Migration[] = [
@@ -818,6 +868,43 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
       CREATE INDEX jobs_by_voice_profile ON jobs (voice_profile_id)
         WHERE voice_profile_id IS NOT NULL;
+    `,
+  },
+  {
+    // KBC-068 (ADR 0029 §5): an approved track becomes a media row of its own, cut from its
+    // recording. The bounds on the media row are the real, published ones; the ones on
+    // media_tracks are what was asked. Versions 16 and 17 are KBC-045's and KBC-072's (open in
+    // parallel) and 19 may already be applied: `jobs` is rebuilt from what it is, see the helper.
+    version: 18,
+    name: 'track-items',
+    sql: (db) => `
+      ${rebuildJobsAccepting(db, 'cut')}
+
+      ALTER TABLE media ADD COLUMN parent_media_id TEXT REFERENCES media (id) ON DELETE CASCADE;
+      ALTER TABLE media ADD COLUMN parent_start_ms INTEGER CHECK (parent_start_ms >= 0);
+      ALTER TABLE media ADD COLUMN parent_end_ms INTEGER CHECK (parent_end_ms >= 0);
+      -- Its place among the published tracks; null while waiting and once it left.
+      ALTER TABLE media ADD COLUMN track_ordinal INTEGER CHECK (track_ordinal >= 1);
+      -- A track that left the edit: out of the library and search, kept for who saved it.
+      ALTER TABLE media ADD COLUMN archived_at TEXT;
+      CREATE INDEX media_tracks_of ON media (parent_media_id) WHERE parent_media_id IS NOT NULL;
+
+      ALTER TABLE media_tracks ADD COLUMN derived_media_id TEXT
+        REFERENCES media (id) ON DELETE SET NULL;
+      -- none: approved before tracks became items; pending: its cut is on the way; cut: the
+      -- candidate waits for the others; published: listeners have it.
+      ALTER TABLE media_tracks ADD COLUMN cut_status TEXT NOT NULL DEFAULT 'none'
+        CHECK (cut_status IN ('none', 'pending', 'cut', 'published'));
+      ALTER TABLE media_tracks ADD COLUMN cut_path TEXT;
+      ALTER TABLE media_tracks ADD COLUMN cut_bytes INTEGER CHECK (cut_bytes > 0);
+      ALTER TABLE media_tracks ADD COLUMN cut_duration_ms INTEGER CHECK (cut_duration_ms > 0);
+      CREATE INDEX media_tracks_by_derived ON media_tracks (derived_media_id)
+        WHERE derived_media_id IS NOT NULL;
+      -- Search asks, per matched segment, whether any of its words is outside the tracks (BR-6).
+      -- KBC-045's migration 16 creates \`words_by_segment\` with these columns and may run before
+      -- or after this one, so the name differs; with \`position\`, this index can replace that one.
+      CREATE INDEX words_by_segment_position
+        ON words (transcript_id, segment_position, position);
     `,
   },
   {

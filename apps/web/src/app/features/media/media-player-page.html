@@ -37,6 +37,22 @@
       </div>
     } @else if (media(); as current) {
       <header class="head">
+        @if (current.parent; as parent) {
+          <p class="part-of">
+            <span i18n="@@tracks.partOf">Parte de:</span>
+            <a [routerLink]="['/midia', parent.id]">{{ parent.title }}</a>
+            @if (trackPlace()) {
+              <span>· {{ trackPlace() }}</span>
+            }
+            ·
+            <a
+              [routerLink]="['/midia', parent.id]"
+              [queryParams]="contextParams()"
+              i18n="@@tracks.inContext"
+              >Ouvir no contexto</a
+            >
+          </p>
+        }
         <h2 id="media-item-title">{{ current.title }}</h2>
         <p class="meta">
           <app-authorship-badge [mediaAuthor]="current.author" />
@@ -121,6 +137,7 @@
                 <a [routerLink]="editLink()" i18n="@@tracks.entry.see"
                   >Ver edição</a
                 >
+                <app-track-preparation [mediaId]="id()" />
               }
             }
           </p>
@@ -145,6 +162,10 @@
           </button>
         }
         <app-transcribe-again [media]="current" (queued)="item.set($event)" />
+      } @else if (current.archived) {
+        <div class="notice" role="status">
+          <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>
+        </div>
       } @else {
         <p class="not-ready" role="status">
           <span class="status">{{ status() }}</span>

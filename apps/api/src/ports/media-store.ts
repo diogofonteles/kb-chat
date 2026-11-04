@@ -21,6 +21,15 @@ export interface TranscriptionRecord {
 /** The authorship column the app had before KBC-049, still written for a rollback. */
 export type LegacyAuthorship = 'mestre-laercio' | 'outros-autores';
 
+/** Where a track item sits in its recording; bounds are real (KBC-068). */
+export interface TrackLink {
+  readonly parentId: string;
+  readonly startMs: number;
+  readonly endMs: number;
+  /** Among the approved tracks; null once it left the edit. */
+  readonly ordinal: number | null;
+}
+
 /** A media item as stored (ADR 0022): the catalog row the module turns into the contract. */
 export interface MediaRecord {
   readonly id: string;
@@ -42,6 +51,10 @@ export interface MediaRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly transcription: TranscriptionRecord;
+  /** Only a track item has one (KBC-068). */
+  readonly track: TrackLink | null;
+  /** A track that left the edit (BR-5). */
+  readonly archivedAt: string | null;
 }
 
 /** A media item with its kind, for the library (KBC-051). */
@@ -154,6 +167,8 @@ export interface MediaStorePort {
   listMedia(topic: string): MediaRecord[];
   /** The collections holding media by this author (the legacy seed, KBC-049 BR-4). */
   topicsWithAuthor(author: string): string[];
+  /** How many tracks the recording has in force. */
+  trackTotal(parentId: string): number;
   /** Every media item, any collection (the library filters what the person sees). */
   listLibrary(): LibraryRecord[];
   /** The upload arrived: the item waits in the queue with a new `transcode` job. */

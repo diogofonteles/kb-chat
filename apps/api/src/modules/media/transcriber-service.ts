@@ -42,13 +42,13 @@ export interface TranscriberServiceDeps {
 }
 
 /**
- * Transcribers lease transcriptions only (ADR 0023 §2); the VM converts and measures
- * silences (KBC-044).
+ * Transcribers lease transcriptions only (ADR 0023 §2); the VM converts, measures silences
+ * (KBC-044) and cuts tracks (KBC-068).
  */
 const TRANSCRIBER_KINDS: readonly MediaJobKind[] = ['transcribe'];
 const VM_WORKER: WorkerIdentity = {
   leaseName: null,
-  kinds: ['transcode', 'silences', 'waveform'],
+  kinds: ['transcode', 'silences', 'waveform', 'cut'],
 };
 const TOKEN_PREFIX = 'nat_';
 /** At most one "seen" write per transcriber in this window. */

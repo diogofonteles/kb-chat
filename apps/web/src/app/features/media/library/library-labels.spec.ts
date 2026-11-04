@@ -18,6 +18,7 @@ const anItem = (overrides: Partial<LibraryItem> = {}): LibraryItem => ({
   ...aMediaItem(),
   kind: 'audio',
   lastPlayedAt: null,
+  tracks: [],
   ...overrides,
 });
 

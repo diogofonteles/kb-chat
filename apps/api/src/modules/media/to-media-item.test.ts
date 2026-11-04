@@ -22,6 +22,8 @@ const aRecord = (transcription: TranscriptionRecord): MediaRecord => ({
   createdAt: '2026-11-03T12:00:00.000Z',
   updatedAt: '2026-11-03T12:00:00.000Z',
   transcription,
+  track: null,
+  archivedAt: null,
 });
 
 const statusOf = (jobStatus: JobStatus | null, version: number | null) =>
@@ -59,6 +61,20 @@ describe('toMediaItem: the transcription (KBC-036)', () => {
       transcriberOffSince: null,
       lastAttemptFailed: false,
     });
+  });
+
+  it('offers a new transcription for a recording, never for its track (KBC-068)', () => {
+    const recording = aRecord({
+      jobStatus: 'done',
+      version: 1,
+      confidence: 'normal',
+    });
+    const track = {
+      ...recording,
+      track: { parentId: recording.id, startMs: 0, endMs: 500, ordinal: 1 },
+    };
+    expect(toMediaItem(recording, true).canTranscribeAgain).toBe(true);
+    expect(toMediaItem(track, true).canTranscribeAgain).toBe(false);
   });
 
   it('tells only masters that an attempt failed (KBC-040)', () => {

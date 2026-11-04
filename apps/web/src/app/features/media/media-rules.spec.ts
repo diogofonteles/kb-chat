@@ -4,6 +4,8 @@ import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
 import { fileProblemOf, sentOf, titleFromFileName } from './upload-rules.js';
 
 const anItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
+  parent: null,
+  archived: false,
   id: '11111111-1111-4111-8111-111111111111',
   topic: 'hermetismo',
   title: 'Palestra de 1998',

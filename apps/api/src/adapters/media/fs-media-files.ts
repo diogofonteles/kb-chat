@@ -61,6 +61,10 @@ export class FsMediaFiles implements MediaFilesPort {
     return `${AUDIO}/${mediaId}.${leaseId}.work.m4a`;
   }
 
+  trackPath(mediaId: string, leaseId: string): string {
+    return `${AUDIO}/${mediaId}.${leaseId}.m4a`;
+  }
+
   flacPath(mediaId: string): string {
     return `${AUDIO}/${mediaId}.flac`;
   }

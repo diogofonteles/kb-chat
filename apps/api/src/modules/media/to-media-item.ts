@@ -4,6 +4,7 @@ import type {
   MediaFailure,
   MediaItem,
   MediaTranscription,
+  TrackParent,
   TranscriptionStatus,
 } from '@kb-chat/contracts';
 import type { SavedProgress } from '../../ports/listening-store.js';
@@ -33,6 +34,8 @@ export interface ItemView {
   readonly author?: MediaAuthor;
   /** The person may change its details (KBC-050 BR-1). */
   readonly canEdit?: boolean;
+  /** A track's recording (KBC-068 FR-4). */
+  readonly parent?: TrackParent | null;
 }
 
 /** The stored author as the list now names it (still shown if no longer listed, KBC-049). */
@@ -88,11 +91,21 @@ function toTranscription(
   };
 }
 
-/** Ready, with no transcription waiting or running (KBC-040 FR-3). */
+/**
+ * Ready, with no transcription waiting or running (KBC-040 FR-3). A track follows its
+ * recording's transcript (KBC-068), and the API refuses it.
+ */
 const canAskAgain = (record: MediaRecord): boolean =>
   record.status === 'ready' &&
+  !record.track &&
   record.transcription.jobStatus !== 'queued' &&
   record.transcription.jobStatus !== 'leased';
+
+const progressOf = (progress: ItemView['progress']) => ({
+  positionMs: progress?.positionMs ?? 0,
+  completedAt: progress?.completedAt ?? null,
+  positionUpdatedAt: progress?.updatedAt ?? null,
+});
 
 /**
  * The contract view of a stored item for one person: only masters may retry (KBC-034
@@ -103,7 +116,7 @@ export function toMediaItem(
   isMaster: boolean,
   view: ItemView = {},
 ): MediaItem {
-  const { progress, author = null } = view;
+  const { author = null } = view;
   return {
     id: record.id,
     topic: record.topic,
@@ -118,13 +131,13 @@ export function toMediaItem(
     canRetry: isMaster && isRetryable(record),
     canEdit: view.canEdit ?? false,
     canTranscribeAgain: isMaster && canAskAgain(record),
-    positionMs: progress?.positionMs ?? 0,
-    completedAt: progress?.completedAt ?? null,
-    positionUpdatedAt: progress?.updatedAt ?? null,
+    ...progressOf(view.progress),
     transcription: toTranscription(
       record.transcription,
       view.presence ?? NO_TRANSCRIBER,
       isMaster,
     ),
+    parent: view.parent ?? null,
+    archived: record.archivedAt !== null,
   };
 }

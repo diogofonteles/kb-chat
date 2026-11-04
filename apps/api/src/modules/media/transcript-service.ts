@@ -1,5 +1,6 @@
 import type { MediaTranscript, TranscriptSpeakers } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
+import type { MediaStorePort } from '../../ports/media-store.js';
 import type {
   TranscriptStorePort,
   TranscriptSummary,
@@ -19,6 +20,8 @@ export interface TranscriptServiceDeps {
   >;
   /** Who sees which media: `get` throws the stream's 404 (KBC-038 FR-1). */
   readonly media: { get(actor: MediaActor, mediaId: string): unknown };
+  /** A track's bounds, to read its voices from the recording (KBC-068 FR-3). */
+  readonly recording?: Pick<MediaStorePort, 'getMedia'>;
   /** The current separation on a transcript (KBC-064 FR-4); null before the first. */
   readonly voices?: (
     mediaId: string,
@@ -116,7 +119,7 @@ export class TranscriptService {
   ): MediaTranscript {
     const voices =
       audience.withVoices || audience.withNames
-        ? (this.deps.voices?.(transcript.mediaId, summary) ?? null)
+        ? this.voicesOf(transcript, summary)
         : null;
     if (!voices) return transcript;
     const { speakers } = voices;
@@ -130,6 +133,32 @@ export class TranscriptService {
     return audience.withVoices
       ? { ...voiced, speakers, voiceNames: speakers.labels }
       : { ...voiced, voiceNames: namesForListeners(speakers) };
+  }
+
+  /** A track has no separation: each segment says the voice at that time of its recording. */
+  private voicesOf(
+    transcript: MediaTranscript,
+    summary: TranscriptSummary,
+  ): TranscriptVoices | null {
+    const { voices, recording } = this.deps;
+    const track = recording?.getMedia(transcript.mediaId)?.track;
+    if (!track) return voices?.(transcript.mediaId, summary) ?? null;
+    const [current] = this.deps.transcripts.transcripts(track.parentId);
+    const whole = current ? voices?.(track.parentId, current) : null;
+    if (!current || !whole) return null;
+    const source = this.deps.transcripts.segments(current.id);
+    const voiceAt = (ms: number): number | null => {
+      const index = source.findIndex(
+        (one) => ms >= one.startMs && ms < one.endMs,
+      );
+      return whole.segmentVoices[index] ?? null;
+    };
+    return {
+      ...whole,
+      segmentVoices: transcript.segments.map((segment) =>
+        voiceAt(track.startMs + (segment.startMs + segment.endMs) / 2),
+      ),
+    };
   }
 
   subtitles(actor: MediaActor, mediaId: string): Subtitles {

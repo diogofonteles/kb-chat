@@ -36,6 +36,8 @@ const UPLOAD: RouteAccess = { feature: 'media-upload' };
 const MASTER: RouteAccess = { master: true };
 const topicParams = z.object({ topic: topicSlugSchema });
 const mediaParams = z.object({ id: mediaIdSchema });
+/** "Remover" with the recording's tracks listed and confirmed (KBC-073 FR-8). */
+const removeQuery = z.object({ cascade: z.literal('true').optional() });
 
 /** The upload body: a stream only with `Content-Type: application/octet-stream`. */
 function uploadBodyOf(body: unknown): Readable {
@@ -65,6 +67,7 @@ export function actorOf(request: FastifyRequest): MediaActor {
     principal: viewer.principal,
     isMaster: isMaster(viewer.person),
     canUpload: hasFeature(viewer.person, 'media-upload'),
+    seesTracks: hasFeature(viewer.person, 'media-tracks'),
     canSee: (topic) => canSee(request, topic),
   };
 }
@@ -110,7 +113,11 @@ const OPTIONS = {
   // Masters, or the uploader cancelling their own upload: decided by the service.
   remove: {
     config: { access: {} },
-    schema: { params: mediaParams, response: { 204: z.undefined() } },
+    schema: {
+      params: mediaParams,
+      querystring: removeQuery,
+      response: { 204: z.undefined() },
+    },
   },
 } as const;
 
@@ -211,7 +218,9 @@ function registerMasterRoutes(typed: TypedApp, service: MediaService): void {
     service.retry(actorOf(request), request.params.id),
   );
   typed.delete('/api/v1/media/:id', OPTIONS.remove, async (request, reply) => {
-    await service.remove(actorOf(request), request.params.id);
+    await service.remove(actorOf(request), request.params.id, {
+      cascade: request.query.cascade === 'true',
+    });
     return reply.code(204).send();
   });
 }

@@ -13,6 +13,7 @@ import {
 import type {
   LibraryRecord,
   Heartbeat,
+  TrackLink,
   JobStatus,
   JobFailure,
   LeaseOwner,
@@ -35,6 +36,16 @@ const text = (row: Row, column: string): string => String(row[column]);
 const nullableNumber = (row: Row, column: string): number | null =>
   row[column] === null ? null : Number(row[column]);
 
+function trackLinkOf(row: Row): TrackLink | null {
+  if (row['parent_media_id'] === null) return null;
+  return {
+    parentId: text(row, 'parent_media_id'),
+    startMs: Number(row['parent_start_ms'] ?? 0),
+    endMs: Number(row['parent_end_ms'] ?? 0),
+    ordinal: nullableNumber(row, 'track_ordinal'),
+  };
+}
+
 /** A media row, read back through the contract's enums so a bad row fails loudly. */
 function toMediaRecord(row: Row): MediaRecord {
   return {
@@ -53,17 +64,23 @@ function toMediaRecord(row: Row): MediaRecord {
     bytes: nullableNumber(row, 'bytes'),
     createdAt: text(row, 'created_at'),
     updatedAt: text(row, 'updated_at'),
-    transcription: {
-      jobStatus:
-        row['transcribe_job'] === null
-          ? null
-          : jobStatusOf(row['transcribe_job']),
-      version: nullableNumber(row, 'transcript_version'),
-      confidence:
-        row['transcript_confidence'] === null
-          ? null
-          : transcriptConfidenceSchema.parse(row['transcript_confidence']),
-    },
+    track: trackLinkOf(row),
+    archivedAt: row['archived_at'] === null ? null : text(row, 'archived_at'),
+    transcription: transcriptionOf(row),
+  };
+}
+
+function transcriptionOf(row: Row): MediaRecord['transcription'] {
+  return {
+    jobStatus:
+      row['transcribe_job'] === null
+        ? null
+        : jobStatusOf(row['transcribe_job']),
+    version: nullableNumber(row, 'transcript_version'),
+    confidence:
+      row['transcript_confidence'] === null
+        ? null
+        : transcriptConfidenceSchema.parse(row['transcript_confidence']),
   };
 }
 
@@ -91,6 +108,7 @@ const AUTHOR_COLUMN = `COALESCE(author,
 /** The item, its newest transcribe job and its current transcript (KBC-036). */
 const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_principal, file_name, upload_bytes,
   status, progress, failure, duration_ms, bytes, created_at, updated_at,
+  parent_media_id, parent_start_ms, parent_end_ms, track_ordinal, archived_at,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
   (SELECT t.version FROM transcripts t WHERE t.media_id = media.id
@@ -144,7 +162,8 @@ export class SqliteMediaStore implements MediaStorePort {
   listMedia(topic: string): MediaRecord[] {
     return this.db
       .prepare(
-        `SELECT ${MEDIA_COLUMNS} FROM media WHERE topic = ?
+        `SELECT ${MEDIA_COLUMNS} FROM media
+         WHERE topic = ? AND parent_media_id IS NULL
          ORDER BY created_at DESC, id`,
       )
       .all(topic)
@@ -158,6 +177,16 @@ export class SqliteMediaStore implements MediaStorePort {
       )
       .all(author)
       .map((row) => text(row, 'topic'));
+  }
+
+  trackTotal(parentId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT count(*) AS n FROM media
+         WHERE parent_media_id = ? AND status = 'ready' AND archived_at IS NULL`,
+      )
+      .get(parentId);
+    return Number(row?.['n'] ?? 0);
   }
 
   listLibrary(): LibraryRecord[] {
@@ -212,21 +241,30 @@ export class SqliteMediaStore implements MediaStorePort {
     };
   }
 
+  /** A recording's tracks go where it goes: they have no collection of their own (BR-2). */
   editMedia(edit: MediaEdit): MediaRecord | null {
-    this.db
-      .prepare(
-        `UPDATE media SET title = ?, topic = ?, author = ?, authorship = ?, updated_at = ?
-         WHERE id = ?`,
-      )
-      .run(
-        edit.title,
-        edit.topic,
-        edit.author,
-        edit.legacyAuthorship,
-        edit.now.toISOString(),
-        edit.mediaId,
-      );
-    return this.getMedia(edit.mediaId);
+    const at = edit.now.toISOString();
+    return inTransaction(this.db, () => {
+      this.db
+        .prepare(
+          `UPDATE media SET title = ?, topic = ?, author = ?, authorship = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(
+          edit.title,
+          edit.topic,
+          edit.author,
+          edit.legacyAuthorship,
+          at,
+          edit.mediaId,
+        );
+      this.db
+        .prepare(
+          'UPDATE media SET topic = ?, updated_at = ? WHERE parent_media_id = ?',
+        )
+        .run(edit.topic, at, edit.mediaId);
+      return this.getMedia(edit.mediaId);
+    });
   }
 
   deleteMedia(id: string): boolean {

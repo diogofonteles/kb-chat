@@ -258,6 +258,11 @@
     <p id="remove-text" i18n="@@media.removeText">
       O áudio e a transcrição serão apagados e não podem ser recuperados.
     </p>
+    @if (removingTracks(); as tracks) {
+      <p class="remove-tracks" role="alert">
+        {{ removingTracksText() }}
+      </p>
+    }
     <div class="confirm-actions">
       <button
         type="button"

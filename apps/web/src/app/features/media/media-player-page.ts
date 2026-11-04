@@ -56,6 +56,7 @@ import {
 import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
+import { TrackPreparationStatus } from './tracks/track-preparation.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
   EMPTY,
@@ -96,6 +97,7 @@ import { TrackNavList } from './tracks/track-nav-list.js';
   imports: [
     RouterLink,
     DatePipe,
+    TrackPreparationStatus,
     AuthorshipBadge,
     MediaPlayer,
     BookmarkList,
@@ -154,10 +156,26 @@ export class MediaPlayerPage {
   protected readonly media = computed<MediaItem | null>(() =>
     this.item.hasValue() ? this.item.value() : null,
   );
-  protected readonly ready = computed(() => this.media()?.status === 'ready');
+  protected readonly ready = computed(() => {
+    const current = this.media();
+    return current?.status === 'ready' && !current.archived;
+  });
+  /** "faixa 3 de 12" (KBC-068 FR-4); nothing once it left the edit. */
+  protected readonly trackPlace = computed(() => {
+    const parent = this.media()?.parent;
+    if (!parent || parent.ordinal === null) return '';
+    return $localize`:@@tracks.place:faixa ${parent.ordinal}:ordinal: de ${parent.total}:total:`;
+  });
+  /** The recording at the start of the track (`?t=`, KBC-038 FR-5). */
+  protected readonly contextParams = computed(() => ({
+    t: Math.floor((this.media()?.parent?.startMs ?? 0) / 1000),
+  }));
   /** "Vozes" is for whoever edits recordings (KBC-064 BR-2, AC-2), once signed in. */
   protected readonly canEdit = computed(
-    () => this.session.me() !== null && this.session.can('media-edit'),
+    () =>
+      this.session.me() !== null &&
+      this.session.can('media-edit') &&
+      !this.media()?.parent,
   );
   /** Where the preparation is, for whoever edits (T20, AC-17). */
   private readonly edit = httpResource(

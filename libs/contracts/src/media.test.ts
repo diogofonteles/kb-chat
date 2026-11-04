@@ -119,6 +119,8 @@ describe('media contracts', () => {
         transcriberOffSince: null,
         lastAttemptFailed: false,
       },
+      parent: null,
+      archived: false,
     };
     expect(mediaItemSchema.parse(item)).toEqual(item);
     expect(mediaItemSchema.safeParse({ ...item, positionMs: -1 }).success).toBe(

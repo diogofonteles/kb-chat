@@ -312,8 +312,13 @@ describe('the transcript-segments-fts migration (KBC-039)', () => {
   it('indexes only the current version of transcripts stored before it', () => {
     const before = MEDIA_MIGRATIONS.filter((one) => one.version < FTS_VERSION);
     db = openMediaDatabase(':memory:', before);
-    store = new SqliteMediaStore(db);
-    const id = aMedia();
+    // That schema, not the store's: later migrations add columns the store reads.
+    const id = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
+         upload_bytes, status, created_at, updated_at)
+       VALUES (?, 'udv', 'Palestra', 'outros-autores', 'owner', 'a.mp3', 3, 'ready', ?, ?)`,
+    ).run(id, T0.toISOString(), T0.toISOString());
     const insert = (version: number, text: string) => {
       const transcriptId = crypto.randomUUID();
       db.prepare(

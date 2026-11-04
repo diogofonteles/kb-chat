@@ -93,16 +93,26 @@ function assertSameNames(
 
 function applyMigration(db: DatabaseSync, migration: Migration): void {
   inTransaction(db, () => {
-    db.exec(migration.sql);
+    db.exec(
+      typeof migration.sql === 'string' ? migration.sql : migration.sql(db),
+    );
     db.prepare(
       'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
     ).run(migration.version, migration.name, new Date().toISOString());
   });
 }
 
-/** Runs `work` in an immediate transaction: all of it is written, or none. */
+/** The connections inside `inTransaction`: an inner call joins the outer transaction. */
+const inProgress = new WeakSet<DatabaseSync>();
+
+/**
+ * Runs `work` in an immediate transaction: all of it is written, or none. Called within
+ * another, `work` simply belongs to the outer one.
+ */
 export function inTransaction<T>(db: DatabaseSync, work: () => T): T {
+  if (inProgress.has(db)) return work();
   db.exec('BEGIN IMMEDIATE');
+  inProgress.add(db);
   try {
     const result = work();
     db.exec('COMMIT');
@@ -110,5 +120,7 @@ export function inTransaction<T>(db: DatabaseSync, work: () => T): T {
   } catch (err) {
     db.exec('ROLLBACK');
     throw err;
+  } finally {
+    inProgress.delete(db);
   }
 }

@@ -55,6 +55,32 @@ function scopeClause(topics: readonly string[], authors: AuthorRule): Clause {
   };
 }
 
+/**
+ * Whose passage a match is (KBC-068 BR-6). Without `media-tracks` only recordings answer. With
+ * it, a recording keeps a segment unless the tracks took all of it: the same rule as the slice
+ * (`track-slice.ts`), word by word, so a word in a gap between tracks is never lost; a segment
+ * in part inside a track may then repeat, which beats losing it. A track's rows exist only
+ * while it is published.
+ */
+const ONLY_RECORDINGS = 'm.parent_media_id IS NULL';
+const LIVE_TRACK = `SELECT 1 FROM media d
+  WHERE d.parent_media_id = m.id AND d.status = 'ready' AND d.archived_at IS NULL`;
+const inTrack = (midpointMs: string): string =>
+  `EXISTS (${LIVE_TRACK} AND ${midpointMs} >= d.parent_start_ms
+    AND ${midpointMs} < d.parent_end_ms)`;
+const WORDS_OF_SEGMENT = `FROM words w
+  WHERE w.transcript_id = s.transcript_id AND w.segment_position = s.position`;
+const INSIDE_ONE_TRACK = `EXISTS (${LIVE_TRACK} AND s.start_ms >= d.parent_start_ms
+  AND s.end_ms <= d.parent_end_ms)`;
+/** The usual answers come first: no tracks at all, or a segment inside one, read no word. */
+const NOT_INSIDE_TRACKS = `(NOT EXISTS (${LIVE_TRACK})
+  OR (NOT ${INSIDE_ONE_TRACK} AND (
+    EXISTS (SELECT 1 ${WORDS_OF_SEGMENT} AND NOT ${inTrack('(w.start_ms + w.end_ms) / 2.0')})
+    OR (NOT EXISTS (SELECT 1 ${WORDS_OF_SEGMENT})
+      AND NOT ${inTrack('(s.start_ms + s.end_ms) / 2.0')}))))`;
+const passagesFor = (tracks: boolean | undefined): string =>
+  tracks ? NOT_INSIDE_TRACKS : ONLY_RECORDINGS;
+
 const FROM_MATCHES = `FROM segments_fts f
   JOIN segments s ON s.rowid = f.rowid
   JOIN transcripts t ON t.id = s.transcript_id
@@ -103,12 +129,13 @@ export class SqliteMediaSearch implements MediaSearchPort {
     topics,
     authors,
     limit,
+    tracks,
     count = true,
   }: MediaSearchQuery): MediaSearchResult {
     if (terms.length === 0 || topics.length === 0)
       return { matches: [], total: 0 };
     const scope = scopeClause(topics, authors);
-    const where = `WHERE segments_fts MATCH ? AND ${scope.sql}`;
+    const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
     const values = [toMatchExpression(terms), ...scope.values];
     const matches = this.top(where, values, limit);
     return { matches, total: count ? this.countWhere(where, values) : 0 };
@@ -122,12 +149,14 @@ export class SqliteMediaSearch implements MediaSearchPort {
     terms,
     topics,
     mainOf,
+    tracks,
   }: Parameters<MediaSearchPort['tally']>[0]): AuthorshipTally {
     if (terms.length === 0 || topics.length === 0)
       return { main: 0, others: 0 };
     const countFor = (kind: 'main' | 'others'): number => {
       const scope = scopeClause(topics, { kind, mainOf });
-      return this.countWhere(`WHERE segments_fts MATCH ? AND ${scope.sql}`, [
+      const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
+      return this.countWhere(where, [
         toMatchExpression(terms),
         ...scope.values,
       ]);

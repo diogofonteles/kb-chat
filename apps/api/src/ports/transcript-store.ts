@@ -56,6 +56,8 @@ export interface TranscriptSummary {
   readonly id: string;
   readonly mediaId: string;
   readonly version: number;
+  /** The engine's model; on a track, the id of the recording's transcript it was cut from. */
+  readonly model: string;
   readonly confidence: TranscriptConfidence;
   readonly vad: 'applied' | 'skipped';
   /** The term list it was made with (KBC-040 FR-4). */
@@ -110,7 +112,11 @@ export interface TranscriptStorePort {
     readonly owner: LeaseOwner;
     readonly transcript: NewTranscript;
     readonly now: Date;
+    /** Runs in the same transaction, once stored (KBC-068 BR-4: the tracks follow). */
+    readonly alongside?: () => void;
   }): boolean;
+  /** Stores a track's transcript, replacing the one it had, in the search index too. */
+  replaceDerived(transcript: NewTranscript, now: Date): void;
   /** Queues a new transcription of an item; false when one is already queued or running. */
   requestTranscription(input: {
     readonly mediaId: string;

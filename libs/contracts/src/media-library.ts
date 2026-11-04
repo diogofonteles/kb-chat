@@ -112,10 +112,19 @@ export const libraryQuerySchema = z.strictObject({
 export type LibraryQuery = z.infer<typeof libraryQuerySchema>;
 
 /** A media in the library: the item plus its kind and when the person last played it. */
-export const libraryItemSchema = mediaItemSchema.extend({
+const libraryEntrySchema = mediaItemSchema.extend({
   kind: mediaKindSchema,
   /** When the person's player last saved a position in it; null when never played. */
   lastPlayedAt: z.iso.datetime().nullable(),
+});
+
+/** A recording's published track, with the person's own position (KBC-068 FR-5). */
+export const libraryTrackSchema = libraryEntrySchema;
+export type LibraryTrack = z.infer<typeof libraryTrackSchema>;
+
+export const libraryItemSchema = libraryEntrySchema.extend({
+  /** In order; empty without `media-tracks`, so the recording shows alone (FR-5). */
+  tracks: z.array(libraryTrackSchema).default([]),
 });
 export type LibraryItem = z.infer<typeof libraryItemSchema>;
 

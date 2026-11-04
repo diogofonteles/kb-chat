@@ -105,7 +105,7 @@ export class SqliteWaveformStore implements WaveformStorePort {
   private oldestWithout(version: number): string | null {
     const row = this.db
       .prepare(
-        `SELECT id FROM media m WHERE status = 'ready'
+        `SELECT id FROM media m WHERE status = 'ready' AND parent_media_id IS NULL
            AND NOT EXISTS (SELECT 1 FROM media_waveforms w
                            WHERE w.media_id = m.id AND w.version = ?)
            AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.media_id = m.id

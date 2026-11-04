@@ -18,6 +18,7 @@ import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.
 import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-ledger.js';
 import { SqliteMediaSearch } from './adapters/sqlite/sqlite-media-search.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
+import { SqliteTrackItemStore } from './adapters/sqlite/sqlite-track-item-store.js';
 import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposal-store.js';
 import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
@@ -39,6 +40,7 @@ import type { MediaStorePort } from './ports/media-store.js';
 import type { TrackProposalStorePort } from './ports/track-proposal-store.js';
 import type { SilenceStorePort } from './ports/silence-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
+import type { TrackItemStorePort } from './ports/track-item-store.js';
 import type { TranscriptStorePort } from './ports/transcript-store.js';
 import type { WaveformStorePort } from './ports/waveform-store.js';
 import type { SecretSealerPort } from './ports/secret-sealer.js';
@@ -55,6 +57,8 @@ export interface MediaDeps {
   readonly bookmarks: BookmarkStorePort;
   /** Transcripts and the term list (KBC-036). */
   readonly transcripts: TranscriptStorePort;
+  /** The items approved tracks become (KBC-068, ADR 0029 §5). */
+  readonly trackItems: TrackItemStorePort;
   /** Paired transcribers (KBC-036). */
   readonly transcribers: TranscriberStorePort;
   /** The AI's proposal runs and draft tracks (KBC-067). */
@@ -154,6 +158,7 @@ const voiceSafes = (dir: string, secrets: MediaSecrets) => ({
 /** The stores that live in the media database (ADR 0022). */
 type MediaStores = Pick<
   MediaDeps,
+  | 'trackItems'
   | 'store'
   | 'listening'
   | 'bookmarks'
@@ -184,11 +189,13 @@ function openStores(dir: string): MediaStores {
 }
 
 function storesOf(db: DatabaseSync): MediaStores {
+  const transcripts = new SqliteTranscriptStore(db);
   return {
     store: new SqliteMediaStore(db),
     listening: new SqliteListeningStore(db),
     bookmarks: new SqliteBookmarkStore(db),
-    transcripts: new SqliteTranscriptStore(db),
+    transcripts,
+    trackItems: new SqliteTrackItemStore(db, transcripts),
     transcribers: new SqliteTranscriberStore(db),
     trackProposals: new SqliteTrackProposalStore(db),
     edits: new SqliteMediaEditStore(db),

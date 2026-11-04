@@ -44,6 +44,7 @@ const anItem = (
   n: number,
   overrides: Partial<LibraryItem> = {},
 ): LibraryItem => ({
+  tracks: [],
   ...aMediaItem({
     id: mediaId(n),
     title: `Palestra ${n}`,

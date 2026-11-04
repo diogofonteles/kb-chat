@@ -191,12 +191,16 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
   }
 
   approve(
-    write: EditWrite & { transcriptVersion: number | null },
+    write: EditWrite & {
+      transcriptVersion: number | null;
+      alongside?: () => void;
+    },
   ): number | null {
     return inTransaction(this.db, () => {
       const current = this.edit(write.mediaId);
       if (!current || current.version !== write.expectedVersion) return null;
       this.replaceApproved(write);
+      write.alongside?.();
       // Approved proposals are no longer proposals (KBC-067 AC-11): a new run keeps them.
       this.db
         .prepare('UPDATE media_draft_tracks SET edited = 1 WHERE media_id = ?')
@@ -240,10 +244,11 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
     );
   }
 
-  reopen(write: EditWrite): number | null {
+  reopen(write: EditWrite & { alongside?: () => void }): number | null {
     return inTransaction(this.db, () => {
       const current = this.edit(write.mediaId);
       if (!current || current.version !== write.expectedVersion) return null;
+      write.alongside?.();
       const next = write.expectedVersion + 1;
       this.db
         .prepare(

@@ -20,7 +20,9 @@ import type {
 import type { SpeakerStorePort } from '../../ports/speaker-store.js';
 import type { TrackProposalStorePort } from '../../ports/track-proposal-store.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
+import type { TrackItemStorePort } from '../../ports/track-item-store.js';
 import type { MediaActor } from '../media/index.js';
+import type { TrackPublisher } from './track-publisher.js';
 
 export interface TrackEditServiceDeps {
   readonly edits: MediaEditStorePort;
@@ -31,6 +33,9 @@ export interface TrackEditServiceDeps {
   readonly rootOf: (topic: string) => string;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: MediaActor, mediaId: string) => MediaItem;
+  /** What an approval turns into (KBC-068); absent, tracks stay chapters. */
+  readonly publisher?: TrackPublisher;
+  readonly preparation?: Pick<TrackItemStorePort, 'preparation'>;
   readonly now?: () => Date;
 }
 
@@ -73,7 +78,7 @@ export class TrackEditService {
   }
 
   get(actor: MediaActor, mediaId: string): MediaEdit {
-    this.ready(actor, mediaId);
+    this.recording(actor, mediaId);
     const { edits, drafts } = this.deps;
     const edit = edits.edit(mediaId);
     const transcript = this.transcriptVersion(mediaId);
@@ -89,11 +94,15 @@ export class TrackEditService {
         edit?.transcriptVersion != null &&
         transcript !== null &&
         edit.transcriptVersion !== transcript,
+      preparation:
+        edit?.status === 'approved'
+          ? (this.deps.preparation?.preparation(mediaId) ?? null)
+          : null,
     };
   }
 
   save(call: EditCall, request: SaveEdit): EditSaved {
-    const item = this.ready(call.actor, call.mediaId);
+    const item = this.recording(call.actor, call.mediaId);
     this.assertWritable(call);
     this.assertOwnTracks(call.mediaId, request.tracks);
     this.assertOwnSpeakers(item, request.tracks);
@@ -111,7 +120,7 @@ export class TrackEditService {
 
   /** The last check and the only way to listeners (BR-1). */
   approve(call: EditCall): EditApproved {
-    const item = this.ready(call.actor, call.mediaId);
+    const item = this.recording(call.actor, call.mediaId);
     this.assertWritable(call);
     const { tracks } = this.deps.drafts.draft(call.mediaId);
     if (tracks.length === 0)
@@ -124,19 +133,44 @@ export class TrackEditService {
       this.deps.edits.approve({
         ...this.writeOf(call),
         transcriptVersion: this.transcriptVersion(call.mediaId),
+        alongside: () => this.deps.publisher?.afterApproval(call.mediaId),
       }),
     );
     return { version, tracks: tracks.length };
   }
 
-  reopen(call: EditCall): EditSaved {
-    this.ready(call.actor, call.mediaId);
-    return this.written(this.deps.edits.reopen(this.writeOf(call)));
+  /** Stops the cuts of the last approval; the items published stay (FR-1). */
+  async reopen(call: EditCall): Promise<EditSaved> {
+    this.recording(call.actor, call.mediaId);
+    const { publisher } = this.deps;
+    const candidates: string[] = [];
+    const saved = this.written(
+      this.deps.edits.reopen({
+        ...this.writeOf(call),
+        alongside: () => {
+          candidates.push(...(publisher?.cancel(call.mediaId) ?? []));
+        },
+      }),
+    );
+    await publisher?.removeFiles(candidates);
+    return saved;
+  }
+
+  /** "Tentar de novo" for the cuts given up: the approval stands (FR-1). */
+  retryCuts(call: EditCall): EditSaved {
+    this.recording(call.actor, call.mediaId);
+    const edit = this.deps.edits.edit(call.mediaId);
+    if (edit?.version !== call.expectedVersion) throw stale();
+    if (!this.deps.publisher?.retryCuts(call.mediaId))
+      throw new AppError('MEDIA_CONFLICT', 'No cut failed', {
+        details: { reason: 'no-failed-cuts' },
+      });
+    return { version: edit.version };
   }
 
   /** The current transcript's words: where a handle snaps (BR-2). */
   words(actor: MediaActor, mediaId: string): EditWords {
-    this.ready(actor, mediaId);
+    this.recording(actor, mediaId);
     const transcript = this.deps.transcripts.transcripts(mediaId)[0];
     if (!transcript)
       throw new AppError('MEDIA_NOT_READY', 'This media has no transcript yet');
@@ -156,6 +190,16 @@ export class TrackEditService {
 
   private listenable(item: MediaItem): ApprovedTrack[] {
     return this.deps.edits.approved(item.id);
+  }
+
+  /** Only a recording is edited: a track is changed through its recording's edit. */
+  private recording(actor: MediaActor, mediaId: string): MediaItem {
+    const item = this.ready(actor, mediaId);
+    if (item.parent)
+      throw new AppError('MEDIA_CONFLICT', 'A track has no edit of its own', {
+        details: { reason: 'track' },
+      });
+    return item;
   }
 
   private ready(actor: MediaActor, mediaId: string): MediaItem {

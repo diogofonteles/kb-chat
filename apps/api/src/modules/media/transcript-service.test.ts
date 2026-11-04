@@ -19,6 +19,7 @@ const summaryOf = (id: string, version: number): TranscriptSummary => ({
   id,
   mediaId: id,
   version,
+  model: 'large-v3',
   confidence: 'normal',
   vad: 'applied',
   termsVersion: 1,

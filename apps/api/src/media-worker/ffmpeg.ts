@@ -175,3 +175,54 @@ function assertFinished(
       `ffmpeg exited with ${result.code}: ${result.stderrTail.trim()}`,
     );
 }
+
+const CUT_TIMEOUT_MS = 2 * 60_000;
+
+const secondsOf = (ms: number): string => (ms / 1000).toFixed(3);
+
+/** Stream copy (ADR 0029 §5): nothing is decoded, and seeking before `-i` uses the file's index. */
+export const cutArgs = (cut: {
+  readonly source: string;
+  readonly target: string;
+  readonly startMs: number;
+  readonly endMs: number;
+}) => [
+  '-hide_banner',
+  '-nostdin',
+  '-y',
+  '-ss',
+  secondsOf(cut.startMs),
+  '-to',
+  secondsOf(cut.endMs),
+  '-i',
+  cut.source,
+  '-map',
+  '0:a:0',
+  '-c',
+  'copy',
+  '-movflags',
+  '+faststart',
+  '-f',
+  'mp4',
+  cut.target,
+];
+
+/**
+ * Cuts `startMs..endMs` of an AAC rendition without re-encoding (KBC-068 FR-2). ffmpeg keeps the
+ * packet just before the start as pre-roll, with an edit list, so time 0 of the file is the
+ * asked start; only the end falls on a packet, and the probed duration says where.
+ */
+export async function cutAudio(input: {
+  readonly bins: FfmpegBins;
+  readonly source: string;
+  readonly target: string;
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly signal?: AbortSignal;
+}): Promise<void> {
+  const result = await runProcess(input.bins.ffmpeg, cutArgs(input), {
+    timeoutMs: CUT_TIMEOUT_MS,
+    signal: input.signal,
+  });
+  assertFinished(result, CUT_TIMEOUT_MS);
+}

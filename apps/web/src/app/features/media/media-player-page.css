@@ -216,6 +216,23 @@
   margin: 0;
 }
 
+.part-of {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.35em;
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.part-of a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
 .edit-entry a:not(.secondary) {
   color: var(--color-accent-strong);
   font-weight: 600;

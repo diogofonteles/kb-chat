@@ -35,6 +35,13 @@ const versioned = (version: number) => ({
 export class MediaEditApi {
   private readonly http = inject(HttpClient);
 
+  /** The cuts given up go back to the queue (KBC-068 FR-1). */
+  retryCuts(mediaId: string, version: number): Observable<EditSaved> {
+    return this.http
+      .post(`${mediaEditUrl(mediaId)}/retry-cuts`, null, versioned(version))
+      .pipe(map((answer) => editSavedSchema.parse(answer)));
+  }
+
   read(mediaId: string): Observable<MediaEdit> {
     return this.http
       .get(mediaEditUrl(mediaId))
