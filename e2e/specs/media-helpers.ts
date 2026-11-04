@@ -49,6 +49,9 @@ export function makeMp3(
     'libmp3lame',
     '-b:a',
     bitrate,
+    // The same tone twice would be a repeated file in the shared collection (KBC-035 BR-2).
+    '-metadata',
+    `comment=${uniqueTag()}`,
     path,
   ]);
   return path;

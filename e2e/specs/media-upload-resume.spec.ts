@@ -48,13 +48,10 @@ async function uploaderPage(
   return pageAs(browser, email, test.info().project.use.viewport ?? null);
 }
 
-/** A real MP3 over `parts` parts of 8 MB; a new tag makes a file nobody sent. */
+/** A real MP3 over `parts` parts of 8 MB. */
 const largeMp3 = (parts: number): string => {
   const seconds = Math.ceil((parts * PART_BYTES * 8) / 256_000);
-  return makeMp3(`grande-${uniqueTag()}`, seconds, {
-    bitrate: '256k',
-    source: `aevalsrc='0.4*sin(2*PI*(330+${Math.round(Math.random() * 300)})*t)':s=44100:d=${seconds}`,
-  });
+  return makeMp3(`grande-${uniqueTag()}`, seconds, { bitrate: '256k' });
 };
 
 const sendButton = (dialog: Locator) =>
@@ -150,7 +147,7 @@ test('AC-3: a send over the quota says so and sends nothing', async ({
   browser,
 }) => {
   const page = await uploaderPage(browser, {
-    mediaQuotaBytes: 0.1 * 1024 ** 3,
+    mediaQuotaBytes: Math.round(0.1 * 1024 ** 3),
   });
   // Four hours at 8 kbit/s: a small file that converts to about 120 MB.
   const file = makeMp3(`Longo ${uniqueTag()}`, 4 * 3600, { bitrate: '8k' });
