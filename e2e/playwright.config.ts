@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices, webkit } from '@playwright/test';
 
 // Overridable so a second checkout (a worktree) can run beside the default ports.
 const API_PORT = process.env['KBC_E2E_API_PORT'] ?? '3117';
@@ -13,9 +13,46 @@ const MEDIA_SPECS = /media-.*\.spec\.ts$/;
  */
 const MUTE_AUDIO = ['--mute-audio'];
 /**
- * WebKit cannot mute its output, so its media project runs only in CI or on demand
- * (`KBC_E2E_WEBKIT=1 pnpm e2e`): a local run never plays tones out loud.
+ * WebKit has no switch to mute its output, so every WebKit browser the tests launch sends
+ * the page's media through a Web Audio gain of zero: the element plays, seeks and keeps
+ * its `muted` and `volume`, but nothing reaches the speakers. (This file loads in every
+ * worker, before the `browser` fixture launches WebKit.)
  */
+const SILENT_MEDIA = () => {
+  const routed = new WeakSet<HTMLMediaElement>();
+  let audio: AudioContext | undefined;
+  const play = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+    if (!routed.has(this)) {
+      routed.add(this);
+      try {
+        audio ??= new AudioContext();
+        const silence = audio.createGain();
+        silence.gain.value = 0;
+        audio
+          .createMediaElementSource(this)
+          .connect(silence)
+          .connect(audio.destination);
+        void audio.resume();
+      } catch {
+        // Not routable (already routed elsewhere): leave it as the page set it.
+      }
+    }
+    return play.call(this);
+  };
+};
+const launchWebkit = webkit.launch.bind(webkit);
+webkit.launch = async (options) => {
+  const browser = await launchWebkit(options);
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (contextOptions) => {
+    const context = await newContext(contextOptions);
+    await context.addInitScript(SILENT_MEDIA);
+    return context;
+  };
+  return browser;
+};
+/** WebKit runs locally only on demand (`KBC_E2E_WEBKIT=1 pnpm e2e`); always in CI. */
 const WITH_WEBKIT = !!process.env.CI || process.env['KBC_E2E_WEBKIT'] === '1';
 
 /**
