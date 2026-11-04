@@ -18,12 +18,17 @@ import {
   filter,
   ignoreElements,
   of,
+  takeWhile,
   tap,
   type Observable,
 } from 'rxjs';
 import { AUDIO_LENGTH_READER } from './audio-length.js';
 import { hashFile } from './file-hash.js';
-import { fileProblemOf, titleFromFileName } from './upload-rules.js';
+import {
+  fileProblemOf,
+  titleFromFileName,
+  unreadableFile,
+} from './upload-rules.js';
 
 /** Where a chosen file is, from the choice to "Enviado" (screens.md T14, KBC-035). */
 export type EntryState =
@@ -208,27 +213,37 @@ export class UploadEntries {
     );
   }
 
-  /** Hash, length, then the API's word; a file taken off the list stops counting. */
+  /**
+   * Hash, length, then the API's word; a file taken off the list stops counting, and one
+   * that can no longer be read fails alone: the rest of the queue goes on.
+   */
   private inspect(key: number): Observable<never> {
     const entry = this.entry(key);
     if (!entry) return EMPTY;
     return concat(
       this.measure(entry),
       defer(() => this.ask(key)),
+    ).pipe(
+      catchError(() => {
+        this.set(key, { kind: 'refused', problem: unreadableFile() });
+        return EMPTY;
+      }),
     );
   }
 
   private measure(entry: UploadEntry): Observable<never> {
     if (entry.sha256 !== null) return EMPTY;
     const { key, file } = entry;
+    const listed = () => this.entry(key) !== undefined;
     const hashed = hashFile(file).pipe(
+      takeWhile(listed),
       tap((event) =>
         event.kind === 'done'
           ? this.update(key, { sha256: event.sha256 })
           : this.onlyIfChecking(key, event.percent),
       ),
     );
-    const length = this.readLength(file).pipe(
+    const length = defer(() => (listed() ? this.readLength(file) : EMPTY)).pipe(
       tap((durationMs) => this.update(key, { durationMs })),
     );
     return concat(hashed, length).pipe(ignoreElements());

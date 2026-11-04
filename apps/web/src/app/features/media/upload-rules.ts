@@ -26,6 +26,10 @@ const gigabytes = (bytes: number): string =>
 export const overQuota = (quotaBytes: number): string =>
   $localize`:@@media.upload.overQuota:Este envio passa da sua cota de ${gigabytes(quotaBytes)}:quota: GB. Fale com um master para aumentar.`;
 
+/** A file that moved or changed after it was chosen (MA-25). */
+export const unreadableFile = (): string =>
+  $localize`:@@media.upload.unreadable:Não foi possível ler este arquivo. Tire-o da lista e escolha de novo.`;
+
 /** Why a chosen file cannot be sent, with the fix (MA-25); null when it can. */
 export function fileProblemOf(
   file: Pick<File, 'name' | 'size'>,

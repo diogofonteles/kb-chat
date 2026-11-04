@@ -217,6 +217,46 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     expect(screen.queryByText(/Já está no acervo:/)).toBeNull();
   });
 
+  it('fails only the file that cannot be read, and goes on with the next', async () => {
+    const panel = await renderPanel();
+    const gone = audio('sumiu.mp3');
+    vi.spyOn(gone, 'slice').mockReturnValue(
+      Object.assign(new Blob(), {
+        arrayBuffer: () =>
+          Promise.reject(new DOMException('gone', 'NotReadableError')),
+      }),
+    );
+    choose(panel.container, gone, audio('fica.mp3'));
+    await answerCheck(panel);
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Não foi possível ler este arquivo. Tire-o da lista e escolha de novo.',
+    );
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeTruthy();
+  });
+
+  it('stops hashing a file taken off the list', async () => {
+    const panel = await renderPanel();
+    const large = audio('grande.mp3', 3 * 1024 ** 2);
+    const slice = vi.spyOn(large, 'slice');
+    let read: (bytes: ArrayBuffer) => void = () => undefined;
+    slice.mockReturnValue(
+      Object.assign(new Blob(), {
+        arrayBuffer: () =>
+          new Promise<ArrayBuffer>((resolve) => (read = resolve)),
+      }),
+    );
+    choose(panel.container, large);
+    await panel.fixture.whenStable();
+    await vi.waitFor(() => expect(slice).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Tirar grande.mp3 da lista' }),
+    );
+    read(new ArrayBuffer(1024 ** 2));
+    await panel.fixture.whenStable();
+    await chooseChecked(panel, audio('outro.mp3'));
+    expect(slice).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores the answer of a check from the collection the person left (BR-2)', async () => {
     const panel = await renderPanel();
     const { http, fixture } = panel;
