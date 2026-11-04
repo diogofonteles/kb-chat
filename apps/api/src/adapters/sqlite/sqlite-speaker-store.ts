@@ -179,19 +179,7 @@ export class SqliteVoiceLabelStore implements VoiceLabelStorePort {
   merge(input: { diarizationId: string; voice: number; into: number }): void {
     const { diarizationId, voice, into } = input;
     inTransaction(this.db, () => {
-      this.db
-        .prepare(
-          `INSERT INTO media_voice_labels
-             (diarization_id, voice, speaker_id, audience, name_from_join)
-           SELECT diarization_id, ?, speaker_id, audience, 1 FROM media_voice_labels
-             WHERE diarization_id = ? AND voice = ?
-               AND (speaker_id IS NOT NULL OR audience = 1)
-           ON CONFLICT (diarization_id, voice) DO UPDATE SET
-             speaker_id = excluded.speaker_id, audience = excluded.audience,
-             name_from_join = 1
-             WHERE speaker_id IS NULL AND audience = 0`,
-        )
-        .run(into, diarizationId, voice);
+      this.lendName(input);
       this.db
         .prepare(
           `INSERT INTO media_voice_labels (diarization_id, voice, merged_into)
@@ -206,6 +194,27 @@ export class SqliteVoiceLabelStore implements VoiceLabelStorePort {
         )
         .run(into, diarizationId, voice);
     });
+  }
+
+  /** `into` takes the name of `voice` when it has none, marked as not its own. */
+  private lendName(input: {
+    diarizationId: string;
+    voice: number;
+    into: number;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_voice_labels
+           (diarization_id, voice, speaker_id, audience, name_from_join)
+         SELECT diarization_id, ?, speaker_id, audience, 1 FROM media_voice_labels
+           WHERE diarization_id = ? AND voice = ?
+             AND (speaker_id IS NOT NULL OR audience = 1)
+         ON CONFLICT (diarization_id, voice) DO UPDATE SET
+           speaker_id = excluded.speaker_id, audience = excluded.audience,
+           name_from_join = 1
+           WHERE speaker_id IS NULL AND audience = 0`,
+      )
+      .run(input.into, input.diarizationId, input.voice);
   }
 
   split(input: { diarizationId: string; voice: number }): void {

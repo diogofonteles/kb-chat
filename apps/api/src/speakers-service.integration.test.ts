@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { openMediaDatabase } from '../../adapters/sqlite/media-database.js';
-import { MEDIA_MIGRATIONS } from '../../adapters/sqlite/media-migrations.js';
-import { SqliteSpeakerStore } from '../../adapters/sqlite/sqlite-speaker-store.js';
-import { SpeakersService } from './speakers-service.js';
+import { openMediaDatabase } from './adapters/sqlite/media-database.js';
+import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
+import { SqliteSpeakerStore } from './adapters/sqlite/sqlite-speaker-store.js';
+import { SpeakersService } from './modules/media/index.js';
 
 const AUTHORS: Record<string, string> = { ana: 'Ana', bia: 'Bia' };
 
