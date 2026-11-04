@@ -222,6 +222,7 @@ describe(
         heartbeat: () => Promise.resolve(true),
         complete: () => Promise.resolve(true),
         completeSilences: () => Promise.resolve(true),
+        completeWaveform: () => Promise.resolve(true),
         fail: () => Promise.resolve(true),
       };
       const shutdown = new AbortController();

@@ -57,14 +57,16 @@ function toTrack(row: Row): DraftTrack {
     runId: textOrNull(row, 'run_id'),
     source: draftTrackSourceSchema.parse(row['source']),
     edited: row['edited'] === 1,
-    firstSegment: Number(row['first_segment']),
-    lastSegment: Number(row['last_segment']),
+    firstSegment: numberOrNull(row, 'first_segment'),
+    lastSegment: numberOrNull(row, 'last_segment'),
     startMs: Number(row['start_ms']),
     endMs: Number(row['end_ms']),
     kind: trackKindSchema.parse(row['kind']),
     title: textOrNull(row, 'title'),
     askerVoice: numberOrNull(row, 'asker_voice'),
     answererVoice: numberOrNull(row, 'answerer_voice'),
+    askerSpeakerId: textOrNull(row, 'asker_speaker_id'),
+    answererSpeakerId: textOrNull(row, 'answerer_speaker_id'),
   };
 }
 
@@ -131,6 +133,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       for (const track of input.tracks)
         this.insertTrack({ runId: input.runId, mediaId, track });
       for (const voice of input.voices) this.upsertVoice(input.runId, voice);
+      this.bumpEdit(mediaId);
       this.db
         .prepare(
           `UPDATE media_proposal_runs SET windows_done = windows_done + 1, spent_usd = ?
@@ -171,6 +174,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     if (mediaId === null) return;
     if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
     else this.dropRunOutput(input.runId);
+    this.bumpEdit(mediaId);
     this.db
       .prepare(
         `UPDATE media_proposal_runs SET status = ?, failure = ?, spent_usd = ?,
@@ -263,6 +267,17 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         now,
       });
     return runs;
+  }
+
+  /** A proposal changed the draft: a person's older read must not overwrite it (KBC-066). */
+  private bumpEdit(mediaId: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_edits (media_id, version, status, step, updated_at)
+         VALUES (?, 1, 'draft', 3, ?)
+         ON CONFLICT (media_id) DO UPDATE SET version = version + 1`,
+      )
+      .run(mediaId, new Date().toISOString());
   }
 
   private mediaOf(runId: string): string {

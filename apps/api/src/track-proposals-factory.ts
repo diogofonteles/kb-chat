@@ -5,7 +5,7 @@ import type { HouseAi } from './house-ai-factory.js';
 import type { MediaDeps } from './media-factory.js';
 import type { AuthorsService } from './modules/authors/index.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
-import type { MediaActor } from './modules/media/index.js';
+import type { DiarizationService, MediaActor } from './modules/media/index.js';
 import { ProposalService } from './modules/track-proposals/index.js';
 import type { LlmPort } from './ports/llm.js';
 
@@ -18,6 +18,7 @@ export interface TrackProposalWiring {
   readonly catalog: CatalogRegistry;
   readonly authors: AuthorsService;
   readonly findMedia: (actor: MediaActor, mediaId: string) => MediaItem;
+  readonly diarization: Pick<DiarizationService, 'voicesOn'>;
   readonly log: FastifyBaseLogger;
 }
 
@@ -65,8 +66,15 @@ export function createTrackProposals(
       collection: catalog.get(topic)?.topic.title ?? topic,
       knownNames: authors.list(topic).map((author) => author.name),
     }),
-    // KBC-064 (in progress) supplies the voice of each segment; until then none.
-    segmentVoices: () => null,
+    segmentVoices: (mediaId, transcriptId) => {
+      const transcript = media.transcripts
+        .transcripts(mediaId)
+        .find((one) => one.id === transcriptId);
+      if (!transcript) return null;
+      return (
+        wiring.diarization.voicesOn(mediaId, transcript)?.segmentVoices ?? null
+      );
+    },
     llm: mediaLlm(wiring),
     caps: {
       runUsd: media.ai.runCapUsd,

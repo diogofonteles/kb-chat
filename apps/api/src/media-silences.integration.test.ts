@@ -380,9 +380,12 @@ describe(
         expect(conversion.mediaId).toBe(id);
         await workerFor(env).process(conversion, run);
       }
-      // Items converted before KBC-044 had no silences job: drop the ones just queued.
+      // Items converted before KBC-044 had no silences job: drop the ones just queued, and
+      // the waveforms (KBC-066), which would take their turn in this test's worker.
       const db = databaseOf(env);
-      db.prepare("DELETE FROM jobs WHERE kind = 'silences'").run();
+      db.prepare(
+        "DELETE FROM jobs WHERE kind IN ('silences', 'waveform')",
+      ).run();
       const queued = new SqliteSilenceStore(db).queueBackfill({
         detectorVersion: 1,
         jobId: crypto.randomUUID(),

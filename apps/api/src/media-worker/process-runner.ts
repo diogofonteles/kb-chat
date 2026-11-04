@@ -17,6 +17,8 @@ export interface RunOptions {
   readonly onLine?: (line: string) => void;
   /** Each stderr line as it arrives (ffmpeg's filter reports, e.g. silencedetect). */
   readonly onErrorLine?: (line: string) => void;
+  /** Raw stdout (decoded samples): read here and neither kept nor split into lines. */
+  readonly onData?: (chunk: Buffer) => void;
 }
 
 interface Collected {
@@ -94,9 +96,11 @@ function watchForKill(
 function collectOutput(
   child: ChildProcess,
   state: Collected,
-  sink: Pick<RunOptions, 'onLine' | 'onErrorLine'>,
+  sink: Pick<RunOptions, 'onLine' | 'onErrorLine' | 'onData'>,
 ): void {
-  if (child.stdout)
+  const { onData } = sink;
+  if (onData) child.stdout?.on('data', onData);
+  else if (child.stdout)
     createInterface({ input: child.stdout }).on('line', (line) => {
       state.stdout += `${line}\n`;
       sink.onLine?.(line);

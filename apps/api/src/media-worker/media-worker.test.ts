@@ -41,6 +41,10 @@ function fakeApi(overrides: Partial<MediaJobsApi> = {}) {
       told.push(`silences:${done.intervals.length}`);
       return true;
     },
+    completeWaveform: async (_job, done) => {
+      told.push(`waveform:${done.peaks.length}`);
+      return true;
+    },
     fail: async (_job, failure) => {
       told.push(`fail:${failure.failure}`);
       return true;

@@ -95,6 +95,7 @@ import {
   MediaJanitor,
   MediaService,
   SilenceService,
+  WaveformService,
   WorkerService,
   listeningRoutes,
   libraryRoutes,
@@ -105,6 +106,7 @@ import {
   mediaRoutes,
   MediaEditService,
   silenceRoutes,
+  waveformRoutes,
   DiarizationService,
   SpeakersService,
   VoiceNamesService,
@@ -129,6 +131,10 @@ import {
   type ProposalService,
   trackProposalRoutes,
 } from './modules/track-proposals/index.js';
+import {
+  MediaEditService,
+  mediaEditRoutes,
+} from './modules/media-edit/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
 import {
@@ -456,6 +462,7 @@ async function registerWorker(
     media: MediaDeps;
     transcribers: TranscriberService;
     silences: SilenceService;
+    waveforms: WaveformService;
     authors: AuthorsService;
   },
 ) {
@@ -466,6 +473,7 @@ async function registerWorker(
       transcribers: wiring.transcribers,
       transcription: new TranscriptionService({ store, transcripts, files }),
       silences: wiring.silences,
+      waveforms: wiring.waveforms,
       diarization: diarizationService(wiring),
     }),
   );
@@ -585,18 +593,26 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     media,
   });
   await app.register(silenceRoutes(silences));
+  const waveforms = new WaveformService({
+    waveforms: wiring.media.waveforms,
+    media,
+  });
+  await app.register(waveformRoutes(waveforms));
   await registerLibrary(app, { ...wiring, transcribers });
   await registerWorker(app, {
     media: wiring.media,
     transcribers,
     silences,
+    waveforms,
     authors: wiring.authors,
   });
   const proposals = await registerProposals(app, {
     ...wiring,
     service: media,
+    diarization: diarizationService({ ...wiring, transcribers }),
   });
-  startJanitor(app, { media: wiring.media, silences, proposals });
+  await registerEdit(app, { ...wiring, service: media });
+  startJanitor(app, { media: wiring.media, silences, waveforms, proposals });
 }
 
 /** The queue's janitor, which also backfills silence maps (KBC-044 FR-2). */
@@ -605,6 +621,7 @@ function startJanitor(
   wiring: {
     media: MediaDeps;
     silences: SilenceService;
+    waveforms: WaveformService;
     proposals: ProposalService;
   },
 ): void {
@@ -615,6 +632,7 @@ function startJanitor(
     files,
     log: app.log,
     backfillSilences: () => wiring.silences.backfill(),
+    backfillWaveforms: () => wiring.waveforms.backfill(),
   });
   janitor.start(JANITOR_INTERVAL_MS);
   app.addHook('onClose', async () => {
@@ -628,7 +646,10 @@ function startJanitor(
 /** The AI's track proposals (KBC-067): runs a restart cut short end first, then the routes. */
 async function registerProposals(
   app: FastifyInstance,
-  wiring: MediaWiring & { readonly service: MediaService },
+  wiring: MediaWiring & {
+    readonly service: MediaService;
+    readonly diarization: DiarizationService;
+  },
 ): Promise<ProposalService> {
   const proposals = createTrackProposals({
     ...wiring,
@@ -640,6 +661,26 @@ async function registerProposals(
     app.log.warn({ interrupted }, 'track proposals interrupted by a restart');
   await app.register(trackProposalRoutes(proposals));
   return proposals;
+}
+
+/** The draft of a recording's tracks, its approval and the approved tracks (KBC-066). */
+async function registerEdit(
+  app: FastifyInstance,
+  wiring: MediaWiring & { readonly service: MediaService },
+): Promise<void> {
+  const { edits, trackProposals, transcripts, speakers } = wiring.media;
+  await app.register(
+    mediaEditRoutes(
+      new MediaEditService({
+        edits,
+        drafts: trackProposals,
+        transcripts,
+        speakers,
+        rootOf: (topic) => wiring.authors.rootOf(topic),
+        findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
+      }),
+    ),
+  );
 }
 
 /** The one-time codes, access requests and messages of KBC-014 (ADR 0011). */

@@ -1,6 +1,11 @@
 import { stat, rm, utimes, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, normalize, sep } from 'node:path';
-import type { SilencesJob, VmWorkerJob, WorkerJob } from '@kb-chat/contracts';
+import type {
+  SilencesJob,
+  VmWorkerJob,
+  WaveformJob,
+  WorkerJob,
+} from '@kb-chat/contracts';
 import type { FastifyBaseLogger } from 'fastify';
 import type { MediaJobsApi } from './api-client.js';
 import {
@@ -10,6 +15,7 @@ import {
   type FfmpegBins,
 } from './ffmpeg.js';
 import { detectSilences } from './silence-detector.js';
+import { measurePeaks } from './waveform.js';
 
 export interface MediaWorkerDeps {
   readonly api: MediaJobsApi;
@@ -26,9 +32,19 @@ const HEARTBEAT_MS = 15_000;
 /** At least half an hour, or twice the audio's length (1 h converts in ~50 s on the VM). */
 const timeoutFor = (durationMs: number) =>
   Math.max(30 * 60_000, 2 * durationMs);
+/** Decoding the audio, at the same scale as the silences. */
+const waveformTimeoutFor = (durationMs: number) =>
+  Math.max(10 * 60_000, durationMs);
 /** Silences take ~18 s per hour on the VM (ADR 0022): ten minutes, or the audio's length. */
 const silencesTimeoutFor = (durationMs: number) =>
   Math.max(10 * 60_000, durationMs);
+
+/** What a job's lease being lost stops, for the log. */
+const WORK_OF: Record<VmWorkerJob['kind'], string> = {
+  transcode: 'conversion',
+  silences: 'silence detection',
+  waveform: 'waveform',
+};
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -70,24 +86,38 @@ export class MediaWorker {
 
   /** Runs one job; never throws (failures are reported to the API or logged). */
   async process(job: VmWorkerJob, shutdown: AbortSignal): Promise<void> {
-    if (job.kind === 'silences') return this.processSilences(job, shutdown);
+    if (job.kind === 'silences')
+      return this.processMeasure({
+        job,
+        shutdown,
+        work: (signal) => this.measure(job, signal),
+      });
+    if (job.kind === 'waveform')
+      return this.processMeasure({
+        job,
+        shutdown,
+        work: (signal) => this.measureWaveform(job, signal),
+      });
     return this.processTranscode(job, shutdown);
   }
 
   /**
-   * Measures the pauses of a ready item's audio (KBC-044 FR-1). A failure is reported as
-   * one the queue retries: the item stays ready, without a map until it works.
+   * Measures something of a ready item's audio (the pauses, KBC-044 FR-1; the peaks,
+   * KBC-066). A failure is reported as one the queue retries: the item stays ready, without
+   * the measure until it works.
    */
-  private async processSilences(
-    job: SilencesJob,
-    shutdown: AbortSignal,
-  ): Promise<void> {
+  private async processMeasure(run: {
+    readonly job: SilencesJob | WaveformJob;
+    readonly shutdown: AbortSignal;
+    readonly work: (signal: AbortSignal) => Promise<void>;
+  }): Promise<void> {
+    const { job, shutdown } = run;
     const abort = new AbortController();
     const stop = () => abort.abort();
     shutdown.addEventListener('abort', stop, { once: true });
     const beats = this.startHeartbeat(job, { progress: null, abort });
     try {
-      await this.measure(job, abort.signal);
+      await run.work(abort.signal);
     } catch (err) {
       if (!abort.signal.aborted) await this.reportFailure(job, err);
     } finally {
@@ -119,6 +149,35 @@ export class MediaWorker {
     log.info(
       { job: job.id, pauses: intervals.length, elapsedMs },
       'silences measured',
+    );
+  }
+
+  /** The peaks of the audio rendition, one byte each (KBC-066). */
+  private async measureWaveform(
+    job: WaveformJob,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const { bins, log, api } = this.deps;
+    const source = this.resolve(job.sourcePath);
+    const started = Date.now();
+    const { durationMs } = await probe(bins, source, signal);
+    const peaks = await measurePeaks({
+      bins,
+      source,
+      peaksPerSecond: job.peaksPerSecond,
+      timeoutMs: waveformTimeoutFor(durationMs),
+      signal,
+    });
+    const elapsedMs = Date.now() - started;
+    const done = await api.completeWaveform(job, {
+      version: job.version,
+      peaks: peaks.toString('base64'),
+      elapsedMs,
+    });
+    if (!done) throw new LeaseLostError();
+    log.info(
+      { job: job.id, peaks: peaks.length, elapsedMs },
+      'waveform measured',
     );
   }
 
@@ -214,7 +273,7 @@ export class MediaWorker {
           if (held) return;
           this.deps.log.warn(
             { job: job.id },
-            `lease lost: stopping the ${job.kind === 'silences' ? 'silence detection' : 'conversion'}`,
+            `lease lost: stopping the ${WORK_OF[job.kind]}`,
           );
           state.abort.abort();
         },

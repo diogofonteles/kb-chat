@@ -32,9 +32,14 @@ export {
   ListeningService,
   type ListeningServiceDeps,
 } from './listening-service.js';
-export { mediaRoutes } from './routes.js';
+export { actorOf, mediaRoutes } from './routes.js';
 export { silenceRoutes } from './silence-routes.js';
 export { SilenceService, type SilenceServiceDeps } from './silence-service.js';
+export { waveformRoutes } from './waveform-routes.js';
+export {
+  WaveformService,
+  type WaveformServiceDeps,
+} from './waveform-service.js';
 export { WorkerService, type WorkerServiceDeps } from './worker-service.js';
 export { workerRoutes, type WorkerRoutesDeps } from './worker-routes.js';
 export {
