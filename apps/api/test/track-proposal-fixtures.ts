@@ -114,6 +114,7 @@ export const itemOf = (mediaId: string, author: string | null): MediaItem => ({
   bytes: 10,
   createdAt: new Date().toISOString(),
   canRetry: false,
+  canEdit: false,
   positionMs: 0,
   completedAt: null,
   positionUpdatedAt: null,

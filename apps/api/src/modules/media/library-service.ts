@@ -23,6 +23,7 @@ import {
 } from './library-query.js';
 import { nextSaveTime } from './listening-service.js';
 import type { MediaActor } from './media-service.js';
+import { canEditMedia } from './media-policy.js';
 import { mediaAuthorOf, toMediaItem } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -144,6 +145,7 @@ export class LibraryService {
             progress: saved,
             presence,
             author: mediaAuthorOf(record, this.deps.authorOf),
+            canEdit: canEditMedia(actor, record),
           }),
           kind: record.kind,
           lastPlayedAt: saved?.playedAt ?? null,

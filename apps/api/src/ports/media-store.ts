@@ -62,6 +62,16 @@ export interface NewMedia {
   readonly now: Date;
 }
 
+/** An item's details after an edit (KBC-050); the file and its jobs are not touched. */
+export interface MediaEdit {
+  readonly mediaId: string;
+  readonly title: string;
+  readonly topic: string;
+  readonly author: string | null;
+  readonly legacyAuthorship: LegacyAuthorship;
+  readonly now: Date;
+}
+
 /** A playable file of a media item (ADR 0022: `media_files`). */
 export interface MediaRendition {
   readonly mediaId: string;
@@ -152,6 +162,8 @@ export interface MediaStorePort {
     readonly now: Date;
   }): MediaRecord;
   getRendition(mediaId: string): MediaRendition | null;
+  /** Writes the item's details; null when it no longer exists. */
+  editMedia(edit: MediaEdit): MediaRecord | null;
   /** Removes the item, its renditions and jobs; false when it did not exist. */
   deleteMedia(id: string): boolean;
   /** A failed item goes back to the queue with a fresh attempt count. */

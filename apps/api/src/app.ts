@@ -103,6 +103,7 @@ import {
   BookmarkService,
   ListeningService,
   mediaRoutes,
+  MediaEditService,
   silenceRoutes,
   DiarizationService,
   SpeakersService,
@@ -433,6 +434,21 @@ function mediaService({
   });
 }
 
+/** Changing an item's details (KBC-050): the author and speaker lists follow a move. */
+function mediaEditService({
+  media,
+  catalog,
+  authors,
+}: MediaWiring): MediaEditService {
+  return new MediaEditService({
+    store: media.store,
+    speakers: media.speakers,
+    hasTopic: (topic) => catalog.get(topic) !== undefined,
+    rootOf: (topic) => authors.rootOf(topic),
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+  });
+}
+
 /** The workers' protocol: the VM's conversions and the paired transcribers' (ADR 0023). */
 async function registerWorker(
   app: FastifyInstance,
@@ -560,7 +576,9 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     vmToken: workerToken,
   });
   const media = mediaService({ ...wiring, transcribers });
-  await app.register(mediaRoutes(media, createPerMinute));
+  await app.register(
+    mediaRoutes(media, mediaEditService(wiring), createPerMinute),
+  );
   await app.register(transcriberRoutes({ transcribers, media }));
   await registerListening(app, wiring, { media, transcribers });
   const silences = new SilenceService({

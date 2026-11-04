@@ -11,6 +11,7 @@ import { TranscriptService } from './transcript-service.js';
 const ACTOR: MediaActor = {
   principal: 'p',
   isMaster: false,
+  canUpload: false,
   canSee: () => true,
 };
 

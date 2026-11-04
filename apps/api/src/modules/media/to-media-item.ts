@@ -31,6 +31,8 @@ export interface ItemView {
   readonly presence?: Presence;
   /** Its author as the collection's list names it now (KBC-049); null is "Outros autores". */
   readonly author?: MediaAuthor;
+  /** The person may change its details (KBC-050 BR-1). */
+  readonly canEdit?: boolean;
 }
 
 /** The stored author as the list now names it (still shown if no longer listed, KBC-049). */
@@ -103,6 +105,7 @@ export function toMediaItem(
     bytes: record.bytes,
     createdAt: record.createdAt,
     canRetry: isMaster && isRetryable(record),
+    canEdit: view.canEdit ?? false,
     positionMs: progress?.positionMs ?? 0,
     completedAt: progress?.completedAt ?? null,
     positionUpdatedAt: progress?.updatedAt ?? null,
