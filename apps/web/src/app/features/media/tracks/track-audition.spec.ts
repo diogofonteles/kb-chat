@@ -21,6 +21,7 @@ describe('TrackAudition (KBC-066 FR-5)', () => {
   it('starts at the range and stops at its end', async () => {
     const { audition, media } = setup();
     audition.play({ fromMs: 8_000, toMs: 13_000 });
+    media.emit('loadedmetadata');
     expect(media.element.currentTime).toBe(8);
     expect(audition.positionMs()).toBe(8_000);
     await Promise.resolve();
@@ -31,6 +32,32 @@ describe('TrackAudition (KBC-066 FR-5)', () => {
     media.emit('timeupdate');
     expect(media.calls).toContain('pause');
     expect(audition.playing()).toBe(false);
+  });
+
+  it('seeks only when the audio can, as the first press may come before it loaded', () => {
+    const { audition, media } = setup();
+    audition.play({ fromMs: 8_000, toMs: 13_000 });
+    expect(media.calls).toContain('play');
+    expect(media.element.currentTime).toBe(0);
+    media.emit('loadedmetadata');
+    expect(media.element.currentTime).toBe(8);
+  });
+
+  it('seeks at once when the audio has loaded', () => {
+    const { audition, media } = setup();
+    Object.defineProperty(media.element, 'readyState', {
+      value: HTMLMediaElement.HAVE_METADATA,
+    });
+    audition.play({ fromMs: 8_000, toMs: 13_000 });
+    expect(media.element.currentTime).toBe(8);
+  });
+
+  it('forgets the seek of a press replaced before the audio loaded', () => {
+    const { audition, media } = setup();
+    audition.play({ fromMs: 8_000, toMs: 13_000 });
+    audition.play({ fromMs: 20_000, toMs: 25_000 });
+    media.emit('loadedmetadata');
+    expect(media.element.currentTime).toBe(20);
   });
 
   it('says it failed when the browser refuses to play', async () => {

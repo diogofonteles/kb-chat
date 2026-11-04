@@ -48,12 +48,21 @@ export class TrackAudition {
     if (!element) return;
     this.failure.set(false);
     this.range = range;
-    element.currentTime = range.fromMs / 1000;
+    this.seekTo(element, range);
     this.position.set(range.fromMs);
     element.play().then(this.follow, () => {
       this.failure.set(true);
       this.finished();
     });
+  }
+
+  /** Before the metadata there is nothing to seek in, as in the player's own engine. */
+  private seekTo(element: HTMLMediaElement, range: AuditionRange): void {
+    const seek = () => {
+      if (this.range === range) element.currentTime = range.fromMs / 1000;
+    };
+    if (element.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
+    else element.addEventListener('loadedmetadata', seek, { once: true });
   }
 
   readonly stop = (): void => {

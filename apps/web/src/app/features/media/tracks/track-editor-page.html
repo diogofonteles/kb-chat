@@ -74,7 +74,12 @@
       }
     </header>
 
-    <audio #auditionElement hidden preload="none" [src]="streamUrl()"></audio>
+    <audio
+      #auditionElement
+      hidden
+      preload="metadata"
+      [src]="streamUrl()"
+    ></audio>
     <p class="visually-hidden" aria-live="polite">{{ draft.announcement() }}</p>
 
     @if (audition.failed()) {
