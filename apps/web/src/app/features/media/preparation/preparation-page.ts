@@ -10,6 +10,7 @@ import {
   inject,
   signal,
   viewChild,
+  type Signal,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
@@ -132,23 +133,25 @@ export class PreparationPage {
           `${stepTitle(this.step())} — ${preparation.title}`,
         );
     });
-    let attached = false;
-    afterRenderEffect(() => {
-      const element = this.audio()?.nativeElement;
-      if (element && !attached) {
-        attached = true;
-        this.audition.attach(element);
-      }
-    });
-    let focused = false;
-    afterRenderEffect(() => {
-      const heading = this.heading()?.nativeElement;
-      if (heading && !focused) {
-        focused = true;
-        heading.focus();
-      }
-    });
+    this.onceRendered(this.audio, (element) => this.audition.attach(element));
+    // Arriving is the one time the focus moves: on to the step's title.
+    this.onceRendered(this.heading, (element) => element.focus());
     this.destroyRef.onDestroy(() => this.audition.stop());
+  }
+
+  /** Runs once, the first time the element is on the page. */
+  private onceRendered<T extends HTMLElement>(
+    query: Signal<ElementRef<T> | undefined>,
+    run: (element: T) => void,
+  ): void {
+    let done = false;
+    afterRenderEffect(() => {
+      const element = query()?.nativeElement;
+      if (element && !done) {
+        done = true;
+        run(element);
+      }
+    });
   }
 
   protected start(): void {

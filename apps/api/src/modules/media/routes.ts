@@ -5,6 +5,7 @@ import {
   mediaListSchema,
   topicSlugSchema,
   updateMediaRequestSchema,
+  type MediaItem,
 } from '@kb-chat/contracts';
 import type {
   FastifyBaseLogger,
@@ -150,12 +151,15 @@ export const mediaRoutes =
   (
     service: MediaService,
     editor: MediaEditService,
-    /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
-    createPerMinute: number,
-    /** The guided flow's plans (KBC-072). */
-    plans: UploadPlans,
+    options: {
+      /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
+      readonly createPerMinute: number;
+      /** The guided flow's plans (KBC-072). */
+      readonly plans: UploadPlans;
+    },
   ): FastifyPluginAsync =>
   async (app) => {
+    const { createPerMinute, plans } = options;
     // The upload body is streamed to disk as it arrives, never buffered (FR-2).
     app.addContentTypeParser(
       'application/octet-stream',
@@ -169,18 +173,30 @@ export const mediaRoutes =
       '/api/v1/topics/:topic/media',
       createOptions(createPerMinute),
       async (request, reply) => {
-        const { plan, ...item } = request.body;
-        const actor = planActorOf(request);
-        // A refused option creates nothing (AC-13).
-        if (plan) plans.assertAllowed(actor, plan);
-        const created = service.create(actor, request.params.topic, item);
-        if (plan) plans.record(actor, created.id, plan);
+        const created = createPlanned(
+          { actor: planActorOf(request), topic: request.params.topic },
+          request.body,
+          { service, plans },
+        );
         return reply.code(201).send(created);
       },
     );
     registerItemRoutes(typed, service);
     registerEditRoute(typed, service, editor);
   };
+
+/** An item with its plan: a refused option creates nothing (KBC-072 AC-13). */
+function createPlanned(
+  { actor, topic }: { actor: PlanActor; topic: string },
+  body: z.output<typeof createMediaRequestSchema>,
+  { service, plans }: { service: MediaService; plans: UploadPlans },
+): MediaItem {
+  const { plan, ...item } = body;
+  if (plan) plans.assertAllowed(actor, plan);
+  const created = service.create(actor, topic, item);
+  if (plan) plans.record(actor, created.id, plan);
+  return created;
+}
 
 type TypedApp = FastifyInstance<
   RawServerDefault,

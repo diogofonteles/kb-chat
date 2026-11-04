@@ -155,7 +155,6 @@ export class PreparationService {
       : null;
     const durationMs = query.durationMs ?? item?.durationMs ?? undefined;
     const rates = this.deps.plans.measuredRates();
-    const presence = this.deps.presence();
     const ai = await this.aiOption(actor, durationMs);
     const tracksDone =
       item !== null &&
@@ -171,8 +170,7 @@ export class PreparationService {
       monthRemainingUsd: actor.canPropose
         ? this.deps.proposals.monthRemainingUsd()
         : null,
-      transcriber: presence.transcriber,
-      transcriberOffSince: presence.offSince,
+      ...presenceOf(this.deps.presence()),
     };
   }
 
@@ -269,8 +267,26 @@ export class PreparationService {
     if (item.status !== 'ready')
       throw new AppError('MEDIA_NOT_READY', 'This media is not ready yet');
     if (this.isOpen(mediaId)) throw conflict('A preparation is already open');
+    const plan = this.missingOf(actor, item, asked);
+    this.deps.plans.save({
+      mediaId,
+      principal: actor.principal,
+      plan,
+      finished: false,
+      now: this.now(),
+    });
+    if (plan.transcribe) this.requestTranscription(mediaId);
+    return this.view(actor, mediaId);
+  }
+
+  /** What is asked of a recording, less what it has; checked against what it will have. */
+  private missingOf(
+    actor: PlanActor,
+    item: MediaItem,
+    asked: PreparationPlan,
+  ): PreparationPlan {
     const hasTranscript = item.transcription.version !== null;
-    const hasVoices = this.hasVoices(mediaId);
+    const hasVoices = this.hasVoices(item.id);
     const plan = {
       ...asked,
       transcribe: asked.transcribe && !hasTranscript,
@@ -282,15 +298,7 @@ export class PreparationService {
       hasTranscript: hasTranscript || plan.transcribe,
       hasVoices: hasVoices || plan.speakers,
     });
-    this.deps.plans.save({
-      mediaId,
-      principal: actor.principal,
-      plan,
-      finished: false,
-      now: this.now(),
-    });
-    if (plan.transcribe) this.requestTranscription(mediaId);
-    return this.view(actor, mediaId);
+    return plan;
   }
 
   /* ---------- Going on ---------- */
@@ -446,18 +454,12 @@ export class PreparationService {
     const item = this.deps.findMedia(actor, mediaId);
     const record = this.deps.plans.get(mediaId);
     const draft = this.deps.drafts.draft(mediaId);
-    const [transcript] = this.deps.transcripts.transcripts(mediaId);
-    const speakers = transcript
-      ? (this.deps.separation.voicesOn(mediaId, transcript)?.speakers ?? null)
-      : null;
-    const presence = this.deps.presence();
-    const stages = record ? this.stagesFor(actor, record, item, draft) : [];
+    const speakers = this.speakersOf(mediaId);
+    const stages = record ? this.stagesFor(actor, { record, item, draft }) : [];
     const open = record !== null && record.finishedAt === null;
     return {
       mediaId,
-      title: item.title,
-      topic: item.topic,
-      author: item.author?.name ?? null,
+      ...detailsOf(item),
       step: record ? this.stepOf(record, item) : 1,
       skipped: record?.plan.tracks === 'none',
       finished: record?.finishedAt != null,
@@ -470,25 +472,28 @@ export class PreparationService {
       next:
         open && !record.validatingAt ? nextActionOf(record.plan, stages) : null,
       canSwitchToManual: open && switchable(record.plan, stages),
-      transcriber: presence.transcriber,
-      transcriberOffSince: presence.offSince,
+      ...presenceOf(this.deps.presence()),
     };
+  }
+
+  private speakersOf(mediaId: string): TranscriptSpeakers | null {
+    const [transcript] = this.deps.transcripts.transcripts(mediaId);
+    return transcript
+      ? (this.deps.separation.voicesOn(mediaId, transcript)?.speakers ?? null)
+      : null;
   }
 
   private stagesFor(
     actor: PlanActor,
-    record: PreparationRecord,
-    item: MediaItem,
-    draft: DraftTracks,
+    input: {
+      readonly record: PreparationRecord;
+      readonly item: MediaItem;
+      readonly draft: DraftTracks;
+    },
   ) {
+    const { record, item, draft } = input;
     const { plans, separation } = this.deps;
     const { mediaId, proposalClaimedAt } = record;
-    const run =
-      proposalClaimedAt !== null &&
-      draft.run !== null &&
-      draft.run.createdAt >= proposalClaimedAt
-        ? draft.run
-        : null;
     return stagesOf({
       plan: record.plan,
       item,
@@ -498,7 +503,7 @@ export class PreparationService {
       starting: this.starting.has(mediaId),
       stop: record.proposalStop,
       stopUsd: record.proposalStopUsd,
-      run,
+      run: ownRun(draft.run, proposalClaimedAt),
       runFailure: proposalClaimedAt === null ? null : draft.lastFailure,
       cuts: plans.runningCuts(mediaId),
       ahead: {
@@ -559,6 +564,24 @@ export class PreparationService {
     });
   }
 }
+
+const detailsOf = ({ title, topic, author }: MediaItem) => ({
+  title,
+  topic,
+  author: author?.name ?? null,
+});
+
+const presenceOf = ({ transcriber, offSince }: Presence) => ({
+  transcriber,
+  transcriberOffSince: offSince,
+});
+
+/** The run this plan started; an older one is not its progress. */
+const ownRun = (
+  run: ProposalRun | null,
+  claimedAt: string | null,
+): ProposalRun | null =>
+  claimedAt !== null && run !== null && run.createdAt >= claimedAt ? run : null;
 
 const statusOf = (
   track: DraftTrack,

@@ -132,6 +132,7 @@ import {
   type MediaActor,
 } from './modules/media/index.js';
 import type { MediaDeps } from './media-factory.js';
+import type { TranscriptSummary } from './ports/transcript-store.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
 import { mcpRoutes, peerOnlyMcp } from './mcp/mcp-routes.js';
@@ -749,46 +750,51 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const { createPerMinute } = wiring.media;
   const transcribers = transcriberService(wiring.media);
   const media = mediaService({ ...wiring, transcribers });
+  const publisher = trackPublisher(wiring);
   await registerTranscribers(app, { transcribers, media, wiring });
   await registerListening(app, wiring, { media, transcribers });
-  const measures = { deps: wiring.media, media };
-  const { silences, waveforms } = await registerMeasures(app, measures);
+  const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
   await registerWorker(app, {
+    ...measures,
     media: wiring.media,
     transcribers,
-    silences,
-    waveforms,
     authors: wiring.authors,
     publisher,
   });
-  const diarization = diarizationService({ ...wiring, transcribers });
-  const edit = { ...wiring, service: media, publisher };
-  const proposals = await registerProposals(app, { ...edit, diarization });
-  await registerEdit(app, edit);
+  const service = media;
+  const edited = await registerEditing(app, {
+    ...wiring,
+    service,
+    transcribers,
+    publisher,
+  });
+  const plans = edited.preparation;
+  const editor = mediaEditor({ ...wiring, publisher });
+  await app.register(mediaRoutes(media, editor, { createPerMinute, plans }));
+  startJanitor(app, { ...measures, ...edited, media: wiring.media });
+}
+
+/** Proposals, the draft and the guided flow that orchestrates them (KBC-066, 067, 072). */
+async function registerEditing(
+  app: FastifyInstance,
+  wiring: MediaWiring & {
+    readonly service: MediaService;
+    readonly transcribers: TranscriberService;
+    readonly publisher: TrackPublisher;
+  },
+) {
+  const diarization = diarizationService(wiring);
+  const proposals = await registerProposals(app, { ...wiring, diarization });
+  await registerEdit(app, wiring);
   const preparation = preparationService(app, {
-    ...edit,
+    ...wiring,
     diarization,
     proposals,
-    transcribers,
   });
   await app.register(preparationRoutes(preparation));
-  await app.register(
-    mediaRoutes(
-      media,
-      mediaEditor({ ...wiring, publisher: trackPublisher(wiring) }),
-      createPerMinute,
-      preparation,
-    ),
-  );
-  startJanitor(app, {
-    media: wiring.media,
-    silences,
-    waveforms,
-    proposals,
-    preparation,
-  });
+  return { proposals, preparation };
 }
 
 /** The person who asked for a plan, as they stand now (KBC-072 BR-4). */
@@ -824,6 +830,22 @@ function speakerNamesOf(
   );
 }
 
+/** The voices as a plan sees them; the model estimates how many (KBC-064 BR-4). */
+function planSeparation(media: MediaDeps, diarization: DiarizationService) {
+  return {
+    status: (mediaId: string) => diarization.status(mediaId),
+    voicesOn: (mediaId: string, transcript: TranscriptSummary) =>
+      diarization.voicesOn(mediaId, transcript),
+    request: (mediaId: string) =>
+      media.diarizations.requestDiarization({
+        mediaId,
+        jobId: randomUUID(),
+        voices: null,
+        now: new Date(),
+      }),
+  };
+}
+
 /** The guided flow over the stages' own services (KBC-072). */
 function preparationService(
   app: FastifyInstance,
@@ -834,22 +856,11 @@ function preparationService(
     readonly transcribers: TranscriberService;
   },
 ): PreparationService {
-  const { media, service, diarization, proposals, transcribers } = wiring;
+  const { media, service, proposals, transcribers } = wiring;
   return new PreparationService({
     plans: media.preparations,
     transcripts: media.transcripts,
-    separation: {
-      status: (mediaId) => diarization.status(mediaId),
-      voicesOn: (mediaId, transcript) =>
-        diarization.voicesOn(mediaId, transcript),
-      request: (mediaId) =>
-        media.diarizations.requestDiarization({
-          mediaId,
-          jobId: randomUUID(),
-          voices: null,
-          now: new Date(),
-        }),
-    },
+    separation: planSeparation(media, wiring.diarization),
     edits: media.edits,
     drafts: media.trackProposals,
     findMedia: (actor, mediaId) => service.get(actor, mediaId),

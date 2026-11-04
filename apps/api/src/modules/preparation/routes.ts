@@ -8,7 +8,7 @@ import {
   retryStageSchema,
   startPreparationRequestSchema,
 } from '@kb-chat/contracts';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { assertFeature, type RouteAccess } from '../auth/index.js';
@@ -68,6 +68,44 @@ const OPTIONS = {
   },
 } as const;
 
+/** Reading where things stand (FR-2, FR-6, FR-7). */
+function registerReads(app: FastifyInstance, service: PreparationService) {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.get('/api/v1/media/preparation-options', OPTIONS.options, (request) =>
+    service.options(planActorOf(request), request.query),
+  );
+  typed.get('/api/v1/media/preparations', OPTIONS.open, async (request) =>
+    service.listOpen(planActorOf(request)),
+  );
+  typed.get('/api/v1/media/:id/preparation', OPTIONS.read, (request) =>
+    service.view(planActorOf(request), request.params.id),
+  );
+}
+
+/** A person's moves (FR-4, FR-5, AC-16). */
+function registerMoves(app: FastifyInstance, service: PreparationService) {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post('/api/v1/media/:id/preparation', OPTIONS.start, (request) =>
+    service.start(planActorOf(request), request.params.id, request.body.plan),
+  );
+  typed.patch('/api/v1/media/:id/preparation', OPTIONS.change, (request) =>
+    service.switchToManual(planActorOf(request), request.params.id),
+  );
+  typed.post(
+    '/api/v1/media/:id/preparation/steps/:step/retry',
+    OPTIONS.retry,
+    (request) =>
+      service.retry(
+        planActorOf(request),
+        request.params.id,
+        request.params.step,
+      ),
+  );
+  typed.post('/api/v1/media/:id/preparation/advance', OPTIONS.next, (request) =>
+    service.next(planActorOf(request), request.params.id),
+  );
+}
+
 /** The guided flow's plan (KBC-072 FR-1 to FR-6), on top of `media` as every media route. */
 export const preparationRoutes =
   (service: PreparationService): FastifyPluginAsync =>
@@ -75,35 +113,6 @@ export const preparationRoutes =
     app.addHook('preHandler', async (request) => {
       assertFeature(request, 'media');
     });
-    const typed = app.withTypeProvider<ZodTypeProvider>();
-    typed.get('/api/v1/media/preparation-options', OPTIONS.options, (request) =>
-      service.options(planActorOf(request), request.query),
-    );
-    typed.get('/api/v1/media/preparations', OPTIONS.open, async (request) =>
-      service.listOpen(planActorOf(request)),
-    );
-    typed.get('/api/v1/media/:id/preparation', OPTIONS.read, (request) =>
-      service.view(planActorOf(request), request.params.id),
-    );
-    typed.post('/api/v1/media/:id/preparation', OPTIONS.start, (request) =>
-      service.start(planActorOf(request), request.params.id, request.body.plan),
-    );
-    typed.patch('/api/v1/media/:id/preparation', OPTIONS.change, (request) =>
-      service.switchToManual(planActorOf(request), request.params.id),
-    );
-    typed.post(
-      '/api/v1/media/:id/preparation/steps/:step/retry',
-      OPTIONS.retry,
-      (request) =>
-        service.retry(
-          planActorOf(request),
-          request.params.id,
-          request.params.step,
-        ),
-    );
-    typed.post(
-      '/api/v1/media/:id/preparation/advance',
-      OPTIONS.next,
-      (request) => service.next(planActorOf(request), request.params.id),
-    );
+    registerReads(app, service);
+    registerMoves(app, service);
   };

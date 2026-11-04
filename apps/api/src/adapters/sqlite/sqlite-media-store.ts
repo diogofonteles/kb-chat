@@ -364,21 +364,26 @@ export class SqliteMediaStore implements MediaStorePort {
           beat.worker,
         ).changes;
       if (changed !== 1) return false;
-      const job = this.db
-        .prepare('SELECT media_id, kind FROM jobs WHERE id = ?')
-        .get(beat.jobId);
-      if (job?.['kind'] === 'transcribe' && beat.cuts)
-        this.saveCuts(beat, text(job, 'media_id'));
-      // Only a conversion's progress is the item's (a transcription has its own status).
-      if (job?.['kind'] === 'transcode' && beat.progress !== null)
-        this.setMediaProgress({
-          mediaId: text(job, 'media_id'),
-          status: 'processing',
-          progress: beat.progress,
-          at: beat.now.toISOString(),
-        });
+      this.noteProgress(beat);
       return true;
     });
+  }
+
+  /** What a beat says of the work: each kind keeps its own (KBC-072 FR-3). */
+  private noteProgress(beat: Heartbeat): void {
+    const job = this.db
+      .prepare('SELECT media_id, kind FROM jobs WHERE id = ?')
+      .get(beat.jobId);
+    if (job?.['kind'] === 'transcribe' && beat.cuts)
+      this.saveCuts(beat, text(job, 'media_id'));
+    // Only a conversion's progress is the item's (a transcription has its own status).
+    if (job?.['kind'] === 'transcode' && beat.progress !== null)
+      this.setMediaProgress({
+        mediaId: text(job, 'media_id'),
+        status: 'processing',
+        progress: beat.progress,
+        at: beat.now.toISOString(),
+      });
   }
 
   completeTranscode(result: TranscodeResult): boolean {

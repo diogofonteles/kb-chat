@@ -4,6 +4,7 @@ import type {
   PreparationStageId,
   PreparationTrack,
   StageFailure,
+  StageState,
   TrackPerson,
   TrackRowStatus,
 } from '@kb-chat/contracts';
@@ -133,27 +134,30 @@ const queuedText = (stage: PreparationStage): string => {
     : $localize`:@@prep.state.ahead:Na fila: ${stage.ahead}:count: trabalhos antes deste`;
 };
 
+const blockedText = ({ blockedBy }: PreparationStage): string =>
+  blockedBy
+    ? $localize`:@@prep.state.blocked:Esperando: ${STAGE_NAMES[blockedBy]()}:stage: não terminou`
+    : $localize`:@@prep.state.waitingAlone:Esperando`;
+
+const waitingText = (before: PreparationStage | null): string =>
+  before
+    ? $localize`:@@prep.state.waiting:Esperando: ${STAGE_NAMES[before.stage]()}:stage:`
+    : $localize`:@@prep.state.waitingAlone:Esperando`;
+
 /** The state of a stage in words: never by colour alone (UP-20). */
-export function stageStateText(
+const STATE_TEXTS: Record<
+  StageState,
+  (stage: PreparationStage, before: PreparationStage | null) => string
+> = {
+  waiting: (_stage, before) => waitingText(before),
+  queued: queuedText,
+  running: runningText,
+  done: () => $localize`:@@prep.state.done:Feito`,
+  failed: (stage) => failureText(stage.failure ?? 'work'),
+  blocked: blockedText,
+};
+
+export const stageStateText = (
   stage: PreparationStage,
   before: PreparationStage | null,
-): string {
-  switch (stage.state) {
-    case 'waiting':
-      return before
-        ? $localize`:@@prep.state.waiting:Esperando: ${STAGE_NAMES[before.stage]()}:stage:`
-        : $localize`:@@prep.state.waitingAlone:Esperando`;
-    case 'queued':
-      return queuedText(stage);
-    case 'running':
-      return runningText(stage);
-    case 'done':
-      return $localize`:@@prep.state.done:Feito`;
-    case 'failed':
-      return failureText(stage.failure ?? 'work');
-    case 'blocked':
-      return stage.blockedBy
-        ? $localize`:@@prep.state.blocked:Esperando: ${STAGE_NAMES[stage.blockedBy]()}:stage: não terminou`
-        : $localize`:@@prep.state.waitingAlone:Esperando`;
-  }
-}
+): string => STATE_TEXTS[stage.state](stage, before);

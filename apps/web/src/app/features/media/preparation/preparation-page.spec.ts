@@ -8,7 +8,7 @@ import { TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { screen, within } from '@testing-library/angular';
+import { screen } from '@testing-library/angular';
 import type { MediaPreparation } from '@kb-chat/contracts';
 import { aMediaItem, sessionAs } from '../../../testing/media-fixtures.js';
 import {
@@ -107,19 +107,16 @@ describe('PreparationPage (T20, step 2)', () => {
     expect(screen.getByTestId('step-text').textContent).toContain(
       'Passo 2 de 4: Processar',
     );
-    const steps = within(
-      screen.getByRole('list', { name: 'Preparar áudio', hidden: true }),
-    );
     expect(
-      steps.getByText('1 Enviar e escolher').closest('li')?.textContent,
+      screen.getByText('1 Enviar e escolher').closest('li')?.textContent,
     ).toContain('✓');
     expect(
-      steps
+      screen
         .getByText('2 Processar')
         .closest('li')
         ?.getAttribute('aria-current'),
     ).toBe('step');
-    expect(steps.queryByRole('link', { hidden: true })).toBeNull();
+    expect(screen.getByText('3 Validar faixas').closest('a')).toBeNull();
     expect(
       screen.getByText('Disponível quando o processamento terminar.'),
     ).toBeTruthy();
@@ -345,14 +342,12 @@ describe('PreparationPage (T20, step 2)', () => {
     expect(screen.getByText('Vozes achadas: 2')).toBeTruthy();
     expect(screen.getByText(/é o autor da gravação/)).toBeTruthy();
     screen.getByRole('button', { name: 'Aceitar' }).click();
-    http
-      .expectOne('/api/v1/topics/hermetismo/speakers')
-      .flush({
-        id: '33333333-3333-4333-8333-333333333333',
-        name: 'Mestre Gabriel',
-        authorSlug: null,
-        main: false,
-      });
+    http.expectOne('/api/v1/topics/hermetismo/speakers').flush({
+      id: '33333333-3333-4333-8333-333333333333',
+      name: 'Mestre Gabriel',
+      authorSlug: null,
+      main: false,
+    });
     await settle(harness);
     const named = http.expectOne(`${ITEM}/voices/1`);
     expect(named.request.body).toMatchObject({
