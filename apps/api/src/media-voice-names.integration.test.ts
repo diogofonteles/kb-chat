@@ -135,15 +135,16 @@ describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
-    // The best of four: a busy machine must not read as a slow save.
     const times: number[] = [];
-    for (const speakerId of [null, gabriel.id, null, gabriel.id]) {
+    for (let round = 19; round >= 0; round--) {
+      const speakerId = round % 2 === 0 ? gabriel.id : null;
       const started = performance.now();
       const saved = await nameVoice(media, [mediaId, 2], { speakerId });
       times.push(performance.now() - started);
       expect(saved.statusCode).toBe(200);
     }
-    expect(Math.min(...times)).toBeLessThan(300);
+    // p95 of 20: one pause of a busy machine must not read as a slow save.
+    expect(times.sort((a, b) => a - b).at(18)).toBeLessThan(300);
     const { call } = await listener(media);
     const names = (await transcriptOf(call, mediaId)).voiceNames;
     expect(names?.[1]).toMatchObject({ name: 'Mestre Gabriel', main: false });
@@ -374,6 +375,15 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
       ).statusCode,
     ).toBe(403);
     expect((await withNames.call('GET', SPEAKERS)).statusCode).toBe(403);
+    const noAudio = await member(media, {
+      email: 'sem-audio@example.com',
+      topics: ['hermetismo'],
+      features: ['media-speakers'],
+    });
+    expect(
+      (await noAudio.call('GET', `/api/v1/media/${mediaId}/transcript`))
+        .statusCode,
+    ).toBe(403);
   });
 
   it('AC-5: a voice with no name comes unnamed to whoever only listens', async () => {

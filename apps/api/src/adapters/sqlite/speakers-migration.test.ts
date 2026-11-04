@@ -15,17 +15,8 @@ describe('media migration 13 (KBC-065)', () => {
     db.exec('PRAGMA foreign_keys = ON');
   }
 
-  it('keeps the separations made before it, with no names waiting', () => {
-    open();
-    applyMigrations(db, BEFORE);
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([13]);
-    const columns = db.prepare('PRAGMA table_info(diarizations)').all();
-    expect(columns.map((row) => row['name'])).toContain('names_pending');
-  });
-
-  it('removes the names of a removed separation and keeps the speaker', () => {
-    open();
-    applyMigrations(db, MEDIA_MIGRATIONS);
+  /** One item, its transcript and its separation `d1`. */
+  function aSeparation(): void {
     db.exec(`INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
         upload_bytes, status, created_at, updated_at)
       VALUES ('m1', 'udv', 'A', 'outros-autores', 'a', 'a.mp3', 3, 'ready', '${AT}', '${AT}')`);
@@ -39,6 +30,22 @@ describe('media migration 13 (KBC-065)', () => {
         parameters, parameters_version, voice_count, elapsed_ms, raw_path, derivation_version,
         created_at)
       VALUES ('d1', 'm1', 1, 't1', 'senko', 'm', '{}', 'p', 1, 1, 'r', 1, 'now')`);
+  }
+
+  it('keeps the separations made before it, with no names waiting', () => {
+    open();
+    applyMigrations(db, BEFORE);
+    aSeparation();
+    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([13]);
+    expect(
+      db.prepare('SELECT id, names_pending FROM diarizations').all(),
+    ).toEqual([{ id: 'd1', names_pending: 0 }]);
+  });
+
+  it('removes the names of a removed separation and keeps the speaker', () => {
+    open();
+    applyMigrations(db, MEDIA_MIGRATIONS);
+    aSeparation();
     db.exec(`INSERT INTO media_speakers (id, collection, name, name_key, created_by,
         created_at, updated_at) VALUES ('s1', 'udv', 'Ana', 'ana', 'a', 'now', 'now')`);
     db.exec(`INSERT INTO media_voice_labels (diarization_id, voice, speaker_id)
