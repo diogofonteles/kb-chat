@@ -220,9 +220,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     http
       .expectOne({ method: 'PUT', url: `${BASE}/edit` })
       .flush({ version: 3 });
-    http
-      .expectOne(`${BASE}/edit/approve`)
-      .flush({ version: 4, tracks: 1 });
+    http.expectOne(`${BASE}/edit/approve`).flush({ version: 4, tracks: 1 });
     TestBed.tick();
     http
       .expectOne(`${BASE}/edit`)
