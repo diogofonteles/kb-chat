@@ -79,6 +79,38 @@ export function snapPointsOf(
 const byTime = <T extends TrackSpan>(tracks: readonly T[]): T[] =>
   [...tracks].sort((a, b) => a.startMs - b.startMs);
 
+const RECORDING_ENDS: HandleStop = { kind: 'recording' };
+
+/** Bounds for a start between the previous track and 5 s before its end. */
+function startLimits(
+  track: TrackSpan,
+  previous: { track: TrackSpan | undefined; ordinal: number },
+): HandleLimits {
+  return {
+    minMs: previous.track?.endMs ?? 0,
+    maxMs: track.endMs - MIN_TRACK_LENGTH_MS,
+    below: previous.track
+      ? { kind: 'neighbour', ordinal: previous.ordinal }
+      : RECORDING_ENDS,
+    above: { kind: 'minimum' },
+  };
+}
+
+/** Bounds for an end between 5 s after its start and the next track. */
+function endLimits(
+  track: TrackSpan,
+  next: { track: TrackSpan | undefined; ordinal: number; durationMs: number },
+): HandleLimits {
+  return {
+    minMs: track.startMs + MIN_TRACK_LENGTH_MS,
+    maxMs: next.track?.startMs ?? next.durationMs,
+    below: { kind: 'minimum' },
+    above: next.track
+      ? { kind: 'neighbour', ordinal: next.ordinal }
+      : RECORDING_ENDS,
+  };
+}
+
 /** How far a handle may go: to the neighbour, to 5 s, to the recording's ends (BR-3, BR-4). */
 export function limitsOf(
   tracks: readonly TrackSpan[],
@@ -91,28 +123,16 @@ export function limitsOf(
     return {
       minMs: 0,
       maxMs: input.durationMs,
-      below: { kind: 'recording' },
-      above: { kind: 'recording' },
+      below: RECORDING_ENDS,
+      above: RECORDING_ENDS,
     };
-  const previous = ordered[index - 1];
-  const next = ordered[index + 1];
-  if (input.edge === 'start')
-    return {
-      minMs: previous?.endMs ?? 0,
-      maxMs: track.endMs - MIN_TRACK_LENGTH_MS,
-      below: previous
-        ? { kind: 'neighbour', ordinal: index }
-        : { kind: 'recording' },
-      above: { kind: 'minimum' },
-    };
-  return {
-    minMs: track.startMs + MIN_TRACK_LENGTH_MS,
-    maxMs: next?.startMs ?? input.durationMs,
-    below: { kind: 'minimum' },
-    above: next
-      ? { kind: 'neighbour', ordinal: index + 2 }
-      : { kind: 'recording' },
-  };
+  return input.edge === 'start'
+    ? startLimits(track, { track: ordered[index - 1], ordinal: index })
+    : endLimits(track, {
+        track: ordered[index + 1],
+        ordinal: index + 2,
+        durationMs: input.durationMs,
+      });
 }
 
 /** The nearest point within the radius, or null (no words there: the loose time stands). */

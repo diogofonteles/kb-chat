@@ -119,7 +119,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
   });
 
   it('opens on step 3 with the tracks and says undo started over (BR-6)', async () => {
-    const { harness, http } = await openPage();
+    await openPage();
     expect(screen.getAllByText(/Passo 3 de 4/).length).toBeGreaterThan(0);
     expect(screen.getByText(/histórico de desfazer recomeçou/)).toBeTruthy();
     expect(screen.getByRole('tab', { name: '2 faixas' })).toBeTruthy();
@@ -129,18 +129,14 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
   });
 
   it('offers the AI only with `media-edit-ai` (KBC-067 AC-7)', async () => {
-    const { harness, http } = await openPage(anEdit(), [
-      'media',
-      'media-edit',
-      'media-edit-ai',
-    ]);
+    await openPage(anEdit(), ['media', 'media-edit', 'media-edit-ai']);
     expect(
       screen.getByRole('button', { name: 'Propor faixas com IA' }),
     ).toBeTruthy();
   });
 
   it('shows the empty state and creates a track at the cursor', async () => {
-    const { harness, http } = await openPage(
+    const { harness } = await openPage(
       anEdit({ tracks: [], started: false, version: 0 }),
     );
     expect(screen.getByText(/Nenhuma faixa ainda/)).toBeTruthy();
@@ -192,9 +188,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
   });
 
   it('says the transcript changed (BR-10)', async () => {
-    const { harness, http } = await openPage(
-      anEdit({ transcriptChanged: true }),
-    );
+    await openPage(anEdit({ transcriptChanged: true }));
     expect(
       screen.getByText('Revise os limites: a transcrição mudou.'),
     ).toBeTruthy();
@@ -244,7 +238,7 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
   });
 
   it('watches a running proposal without handles or approval (KBC-067 FR-3)', async () => {
-    const { harness, http } = await openPage(
+    await openPage(
       anEdit({
         run: {
           id: '22222222-2222-4222-8222-222222222222',

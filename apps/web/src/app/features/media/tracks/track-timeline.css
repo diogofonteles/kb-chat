@@ -60,6 +60,11 @@
   contain: layout paint;
 }
 
+.detail:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
 .wave {
   position: absolute;
   inset: 0 0 48px;

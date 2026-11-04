@@ -24,14 +24,14 @@ export interface TextSpan {
 @Component({
   selector: 'app-track-transcript',
   template: `
-    <ol
-      #list
-      class="segments"
-      (mouseup)="readSelection()"
-      (keyup)="readSelection()"
-    >
+    <ol #list class="segments">
       @for (row of rows(); track row.startMs) {
-        <li class="segment" [class.inside]="row.inside">
+        <li
+          class="segment"
+          [class.inside]="row.inside"
+          [class.playing]="row.playing"
+          [attr.aria-current]="row.playing ? 'true' : null"
+        >
           <button type="button" class="time" (click)="place.emit(row.startMs)">
             {{ row.clock }}
           </button>
@@ -66,6 +66,9 @@ export interface TextSpan {
     .segment.inside {
       border-left-color: var(--color-accent);
     }
+    .segment.playing {
+      background: var(--color-mark);
+    }
     .time {
       min-width: 44px;
       min-height: 32px;
@@ -83,11 +86,14 @@ export interface TextSpan {
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(mouseup)': 'readSelection()', '(keyup)': 'readSelection()' },
 })
 export class TrackTranscript {
   readonly segments = input.required<readonly TranscriptSegment[]>();
   /** The selected track's span: its passages are marked at the side. */
   readonly span = input<TextSpan | null>(null);
+  /** What plays now (FR-5): the cursor in the text. */
+  readonly playheadMs = input<number | null>(null);
   readonly place = output<number>();
   /** What the person selected; null when nothing is. */
   readonly selection = output<TextSpan | null>();
@@ -96,9 +102,14 @@ export class TrackTranscript {
 
   protected readonly rows = computed(() => {
     const span = this.span();
+    const playhead = this.playheadMs();
     return this.segments().map((segment, index) => ({
       ...segment,
       index,
+      playing:
+        playhead !== null &&
+        playhead >= segment.startMs &&
+        playhead < segment.endMs,
       clock: formatClock(segment.startMs),
       inside:
         span !== null &&

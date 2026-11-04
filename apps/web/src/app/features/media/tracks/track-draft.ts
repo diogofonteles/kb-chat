@@ -231,11 +231,13 @@ export class TrackDraft {
     this.inFlight = false;
     this.dirty = true;
     const status = statusOf(err);
-    if (status === 412) this.saveState.set('conflict');
-    else if (status === 0 || status === 502 || status === 504) {
+    if (status === 0 || status === 502 || status === 504) {
+      // Who waits for the save goes on waiting: the changes are still here.
       this.saveState.set('offline');
       this.schedule(RETRY_MS);
-    } else this.saveState.set('failed');
-    if (status !== 0) this.settled();
+      return;
+    }
+    this.saveState.set(status === 412 ? 'conflict' : 'failed');
+    this.settled();
   }
 }

@@ -170,7 +170,9 @@ export class MediaPlayerPage {
     const { started, status, step, approvedTracks } = this.edit.value();
     if (status === 'approved')
       return { state: 'approved' as const, step, tracks: approvedTracks };
-    return { state: started ? ('paused' as const) : ('new' as const), step };
+    if (started) return { state: 'paused' as const, step };
+    // Dividing goes by the words: a new edit starts from a transcribed recording (T20).
+    return this.hasTranscript() ? { state: 'new' as const, step } : null;
   });
   protected readonly appliedText = computed(() => {
     const entry = this.editEntry();

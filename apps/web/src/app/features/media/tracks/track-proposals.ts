@@ -54,6 +54,9 @@ export class TrackProposals {
   /** The separation's version; null without one: names cannot be accepted. */
   readonly separation = input<number | null>(null);
 
+  /** Runs `done` once the person's changes are saved. */
+  readonly saveFirst = input<(done: () => void) => void>((done) => done());
+
   /** The draft grew or a run ended: read it again. */
   readonly changed = output();
   /** A suggested name was accepted (BR-5). */
@@ -152,6 +155,10 @@ export class TrackProposals {
 
   protected confirm(): void {
     this.busy.set(true);
+    this.saveFirst()(() => this.start());
+  }
+
+  private start(): void {
     this.api
       .propose(this.mediaId())
       .pipe(takeUntilDestroyed(this.destroyRef))

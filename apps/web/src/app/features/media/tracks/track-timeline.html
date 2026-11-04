@@ -30,8 +30,13 @@
 <div
   #detail
   class="detail"
+  role="group"
+  tabindex="0"
+  aria-label="Detalhe da faixa. As setas movem o cursor."
+  i18n-aria-label="@@tracks.detail"
   data-testid="track-detail"
   (click)="placeCursor($event)"
+  (keydown)="cursorKey($event)"
   (pointerdown)="touch($event)"
   (pointermove)="touchMove($event)"
   (pointerup)="touchEnd($event)"

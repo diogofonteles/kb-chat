@@ -549,9 +549,10 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     await harness.fixture.whenStable();
     expect(screen.getByRole('heading', { name: 'Vozes' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Separar vozes' })).toBeTruthy();
+    // Not transcribed: nothing to divide by yet (T20).
     expect(
-      screen.getByRole('link', { name: 'Dividir em faixas' }),
-    ).toBeTruthy();
+      screen.queryByRole('link', { name: 'Dividir em faixas' }),
+    ).toBeNull();
   });
 
   it('says where a preparation stopped, with the way back (KBC-066 AC-17)', async () => {

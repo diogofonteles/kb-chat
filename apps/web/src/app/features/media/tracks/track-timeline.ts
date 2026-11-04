@@ -35,6 +35,8 @@ import {
 const MARGIN_MS = 30_000;
 const MIN_SPAN_MS = 5_000;
 const ZOOM_STEP = 1.5;
+/** The arrows on the detail. */
+const CURSOR_STEP_MS = 1_000;
 /** Past this many words in view the row says to zoom in: they would be unreadable. */
 const MAX_WORDS_SHOWN = 150;
 /** Two rows of words; a word that fits neither waits for more zoom. */
@@ -404,6 +406,18 @@ export class TrackTimeline {
     const id = block?.getAttribute('data-track');
     if (id && id !== this.selected()?.track.id) this.selectTrack.emit(id);
     this.cursorChange.emit(Math.round(this.msAt(event)));
+  }
+
+  /** The cursor by keyboard: where "Nova faixa aqui" and "Dividir aqui" act (AC-18). */
+  protected cursorKey(event: KeyboardEvent): void {
+    if (event.target !== event.currentTarget) return;
+    const direction =
+      event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (direction === 0) return;
+    event.preventDefault();
+    const step = event.shiftKey ? HANDLE_JUMP_MS : CURSOR_STEP_MS;
+    const ms = this.cursorMs() + direction * step;
+    this.cursorChange.emit(Math.max(0, Math.min(ms, this.durationMs())));
   }
 
   protected placeAtWord(event: Event, ms: number): void {

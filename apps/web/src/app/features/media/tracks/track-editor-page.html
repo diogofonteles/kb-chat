@@ -181,6 +181,29 @@
         </p>
       }
 
+      <app-track-timeline
+        [tracks]="draft.numbered()"
+        [selected]="selected()"
+        [durationMs]="durationMs()"
+        [peaks]="peaks()"
+        [peaksPerSecond]="peaksPerSecond()"
+        [words]="wordList()"
+        [snap]="snap()"
+        [cursorMs]="cursorMs()"
+        [playheadMs]="audition.positionMs()"
+        [readOnly]="readOnly()"
+        (selectTrack)="choose($event)"
+        (moved)="moveHandle($event)"
+        (cursorChange)="placeCursor($event)"
+        (listen)="listen($event)"
+        (edgeChange)="edge.set($event)"
+      />
+      @if (waveformPending()) {
+        <p class="hint" i18n="@@tracks.waveformPending">
+          A onda do áudio ainda está sendo preparada; dá para validar sem ela.
+        </p>
+      }
+
       <div
         class="toolbar"
         role="group"
@@ -288,32 +311,10 @@
           [suggestions]="voiceSuggestions()"
           [speakers]="speakerList()"
           [separation]="separation()"
+          [saveFirst]="saveFirst"
           (changed)="reloadProposals()"
           (named)="reloadVoices()"
         />
-      }
-
-      <app-track-timeline
-        [tracks]="draft.numbered()"
-        [selected]="selected()"
-        [durationMs]="durationMs()"
-        [peaks]="peaks()"
-        [peaksPerSecond]="peaksPerSecond()"
-        [words]="wordList()"
-        [snap]="snap()"
-        [cursorMs]="cursorMs()"
-        [playheadMs]="audition.positionMs()"
-        [readOnly]="readOnly()"
-        (selectTrack)="choose($event)"
-        (moved)="moveHandle($event)"
-        (cursorChange)="placeCursor($event)"
-        (listen)="listen($event)"
-        (edgeChange)="edge.set($event)"
-      />
-      @if (waveformPending()) {
-        <p class="hint" i18n="@@tracks.waveformPending">
-          A onda do áudio ainda está sendo preparada; dá para validar sem ela.
-        </p>
       }
 
       <div
@@ -385,6 +386,7 @@
           <app-track-transcript
             [segments]="segments()"
             [span]="selectedSpanMs()"
+            [playheadMs]="audition.positionMs()"
             (place)="placeCursor($event)"
             (selection)="noteText($event)"
           />

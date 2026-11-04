@@ -637,6 +637,10 @@ export class TrackEditorPage {
     this.edit.reload();
   }
 
+  /** A proposal writes the draft: what is on screen reaches the server before it starts. */
+  protected readonly saveFirst = (done: () => void): void =>
+    this.draft.flush(done);
+
   protected reloadProposals(): void {
     this.edit.reload();
   }
