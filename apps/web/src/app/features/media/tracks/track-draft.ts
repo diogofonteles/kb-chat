@@ -233,7 +233,7 @@ export class TrackDraft {
         return EMPTY;
       const answer = this.settled.pipe(take(1));
       if (phase.kind === 'saving') {
-        this.to({ ...phase, lock });
+        this.to({ ...phase, lock: lock ?? phase.lock });
         return answer;
       }
       return merge(
@@ -245,7 +245,7 @@ export class TrackDraft {
 
   /** The only way to apply (BR-1): after a save of this draft that came back fine. */
   approve(): Observable<ApproveResult> {
-    return this.flush('approve').pipe(
+    return this.unlessBusy('approve').pipe(
       switchMap((result) =>
         result === 'saved'
           ? this.sendApproval()
@@ -256,7 +256,7 @@ export class TrackDraft {
 
   /** The only way to a paid run (KBC-067 BR-2): after a save that came back fine. */
   propose(): Observable<ProposeResult> {
-    return this.flush('propose').pipe(
+    return this.unlessBusy('propose').pipe(
       switchMap((result) =>
         result === 'saved'
           ? this.startRun()
@@ -270,6 +270,11 @@ export class TrackDraft {
       map(({ version }) => {
         this.version = version;
         this.server.update(
+  /** Decided at subscription: two presses in one frame come before any button turns off. */
+  private unlessBusy(action: DraftAction): Observable<SaveResult> {
+    return defer(() => (this.busy() ? EMPTY : this.flush(action)));
+  }
+
           (edit) =>
             edit && {
               ...edit,

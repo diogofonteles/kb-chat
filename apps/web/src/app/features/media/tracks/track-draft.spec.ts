@@ -316,6 +316,63 @@ describe('TrackDraft (KBC-066)', () => {
       },
     );
 
+    it('sends one approval for two presses on a change waiting to save (BUG-5)', () => {
+      draft.apply([one]);
+      const first = heard(draft.approve());
+      const second = heard(draft.approve());
+      saves().flush({ version: 5 });
+      http.expectOne(APPROVE).flush({ version: 6, tracks: 1 });
+      reads().flush(edit([one], 6, { status: 'approved', step: 4 }));
+      expect(first).toEqual([{ kind: 'approved' }]);
+      expect(second).toEqual([]);
+    });
+
+    it('sends one approval for two presses during a save already going (BUG-5)', () => {
+      change();
+      const first = heard(draft.approve());
+      const second = heard(draft.approve());
+      saves().flush({ version: 5 });
+      http.expectOne(APPROVE).flush({ version: 6, tracks: 1 });
+      reads().flush(edit([one], 6, { status: 'approved', step: 4 }));
+      expect(first).toEqual([{ kind: 'approved' }]);
+      expect(second).toEqual([]);
+    });
+
+    it('starts no run while an approval waits on its save (F-2)', () => {
+      draft.apply([one]);
+      const approval = heard(draft.approve());
+      const run = heard(draft.propose());
+      saves().flush({ version: 5 });
+      noRun();
+      http.expectOne(APPROVE).flush({ version: 6, tracks: 1 });
+      reads().flush(edit([one], 6, { status: 'approved', step: 4 }));
+      expect(approval).toEqual([{ kind: 'approved' }]);
+      expect(run).toEqual([]);
+    });
+
+    it('sends no approval while a run waits on its save (F-2)', () => {
+      draft.apply([one]);
+      const run = heard(draft.propose());
+      const approval = heard(draft.approve());
+      saves().flush({ version: 5 });
+      noApproval();
+      http.expectOne(PROPOSE).flush(RUN);
+      expect(run).toEqual([{ kind: 'started' }]);
+      expect(approval).toEqual([]);
+    });
+
+    it('keeps the press on hold when something else asks to save', () => {
+      change();
+      heard(draft.approve());
+      heard(draft.flush());
+      expect(draft.approving()).toBe(true);
+      draft.apply([two]);
+      expect(draft.tracks()).toEqual([one]);
+      saves().flush({ version: 5 });
+      http.expectOne(APPROVE).flush({ version: 6, tracks: 1 });
+      reads().flush(edit([one], 6, { status: 'approved', step: 4 }));
+    });
+
     it('stops on a 412 and on a lost answer', () => {
       draft.apply([one]);
       const late = heard(draft.approve());
