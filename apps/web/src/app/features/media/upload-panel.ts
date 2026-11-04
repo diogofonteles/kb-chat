@@ -195,6 +195,11 @@ export class UploadPanel implements OnInit {
   protected dropped(event: DragEvent): void {
     event.preventDefault();
     this.dragging.set(false);
+    // The button is off while sending; the list stays as it was at the click (T14).
+    if (this.stage() === 'sending')
+      return this.fileProblem.set(
+        $localize`:@@media.upload.dropWhileSending:Espere o envio terminar para adicionar arquivos.`,
+      );
     this.takeFiles(event.dataTransfer?.files ?? null);
   }
 
@@ -213,9 +218,13 @@ export class UploadPanel implements OnInit {
       return;
     this.enter('sending');
     this.interrupted = false;
-    const author = this.authorOf().pipe(shareReplay(1));
+    const batch: Batch = {
+      author: this.authorOf().pipe(shareReplay(1)),
+      plan: this.plan.plan(),
+      allMs: this.uploads.plannedMs(),
+    };
     this.sending = from(targets)
-      .pipe(mergeMap((entry) => this.sendOne(entry, author), FILES_AT_ONCE))
+      .pipe(mergeMap((entry) => this.sendOne(entry, batch), FILES_AT_ONCE))
       .subscribe({ complete: () => this.settle() });
   }
 
@@ -247,8 +256,9 @@ export class UploadPanel implements OnInit {
   private enter(stage: Stage): void {
     this.stage.set(stage);
     const { topic } = this.form.controls;
-    if (stage === 'sending') topic.disable();
-    else topic.enable();
+    if (stage === 'sending') return topic.disable();
+    topic.enable();
+    this.fileProblem.set(null);
   }
 
   private takeFiles(files: FileList | null): void {
@@ -263,7 +273,7 @@ export class UploadPanel implements OnInit {
       : $localize`:@@media.upload.nothingToSend:Nada a enviar: estes arquivos não podem ser enviados.`;
   }
 
-  private draftOf(entry: UploadEntry): Draft {
+  private draftOf(entry: UploadEntry, batch: Batch): Draft {
     const { file, title } = entry;
     const { topic } = this.form.getRawValue();
     return {
@@ -271,24 +281,12 @@ export class UploadPanel implements OnInit {
       title: title.trim(),
       topic,
       author: this.authorName().trim(),
-      plan: this.planOf(entry),
+      plan: planOfEntry(entry, batch),
     };
   }
 
-  /** None for a file that goes on: its item keeps the plan it was created with. */
-  private planOf(entry: UploadEntry): PreparationPlanRequest | null {
-    if (entry.resumes) return null;
-    const plan = this.plan.plan();
-    const allMs = this.uploads.plannedMs();
-    if (allMs === null || entry.durationMs === null) return plan;
-    return planShare(plan, { lengthMs: entry.durationMs, allMs });
-  }
-
   /** One file, from its item to its last byte; a failure stays on its own line. */
-  private sendOne(
-    entry: UploadEntry,
-    author: Observable<string | null>,
-  ): Observable<never> {
+  private sendOne(entry: UploadEntry, batch: Batch): Observable<never> {
     const { key, file } = entry;
     const start = entry.state.kind === 'resume' ? entry.state.offset : 0;
     this.uploads.set(key, {
@@ -296,7 +294,7 @@ export class UploadPanel implements OnInit {
       loaded: start,
       total: file.size,
     });
-    return this.itemFor(entry, author).pipe(
+    return this.itemFor(entry, batch).pipe(
       concatMap((id) => this.api.upload(id, file)),
       concatMap((event) => {
         this.follow(key, event);
@@ -320,12 +318,9 @@ export class UploadPanel implements OnInit {
    * The item for this file: the one being resumed, the one created before when the person
    * only retries, or a new one (the old removed) when they changed its details.
    */
-  private itemFor(
-    entry: UploadEntry,
-    author: Observable<string | null>,
-  ): Observable<string> {
+  private itemFor(entry: UploadEntry, batch: Batch): Observable<string> {
     const { key, file, title, sha256, durationMs, state } = entry;
-    const draft = this.draftOf(entry);
+    const draft = this.draftOf(entry, batch);
     if (state.kind === 'resume') {
       this.created.set(key, { id: state.mediaId, draft });
       return of(state.mediaId);
@@ -333,7 +328,7 @@ export class UploadPanel implements OnInit {
     const held = this.created.get(key);
     if (held && sameDraft(held.draft, draft)) return of(held.id);
     return this.removeHeld(key).pipe(
-      concatMap(() => author),
+      concatMap(() => batch.author),
       concatMap((authorSlug) =>
         this.api.create(draft.topic, {
           title: title.trim(),
@@ -482,6 +477,16 @@ export class UploadPanel implements OnInit {
   }
 }
 
+/** None for a file that goes on: its item keeps the plan it was created with. */
+function planOfEntry(
+  entry: UploadEntry,
+  { plan, allMs }: Batch,
+): PreparationPlanRequest | null {
+  if (entry.resumes) return null;
+  if (allMs === null || entry.durationMs === null) return plan;
+  return planShare(plan, { lengthMs: entry.durationMs, allMs });
+}
+
 /** The title as the row's field and the API read it. */
 const validTitle = (title: string): boolean =>
   title.trim().length > 0 && title.length <= 200;
@@ -499,6 +504,15 @@ function problemOf(err: unknown): string {
   return code === 'VALIDATION_FAILED'
     ? $localize`:@@media.upload.refused:Envie um áudio de até 4 GB (mp3, m4a, wav, flac, ogg ou opus).`
     : errorMessage(code);
+}
+
+/** What the click on "Enviar" fixed: nothing a later file reads may change it. */
+interface Batch {
+  /** One registration for all the files. */
+  readonly author: Observable<string | null>;
+  readonly plan: PreparationPlanRequest;
+  /** The length the value seen is for; null when it is not known. */
+  readonly allMs: number | null;
 }
 
 /** An item on the server and what it was created for. */

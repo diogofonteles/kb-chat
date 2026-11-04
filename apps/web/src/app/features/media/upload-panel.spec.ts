@@ -1255,6 +1255,62 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       expect(title.disabled).toBe(true);
     });
 
+    /** Four files with the AI chosen, three on their way and the fourth waiting. */
+    async function sendFourWithAi(panel: Panel) {
+      const names = ['a.mp3', 'b.mp3', 'c.mp3', 'd.mp3'];
+      choose(panel.container, ...names.map((name, i) => audio(name, 3 + i)));
+      let unchecked = names.length;
+      while (unchecked-- > 0) await answerCheck(panel);
+      await chooseAi(panel);
+      clickSend();
+      await panel.fixture.whenStable();
+      return panel.http.match(TOPIC);
+    }
+
+    it('keeps the plan and the sum of the click for a file that starts later', async () => {
+      const panel = await renderPanel({ features: PAID });
+      const [first, second, third] = await sendFourWithAi(panel);
+      first?.flush(
+        {
+          error: {
+            code: 'MEDIA_DUPLICATE',
+            message: 'x',
+            details: { media: { id: OTHER_ID, title: 'Já enviado' } },
+          },
+        },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await panel.fixture.whenStable();
+      const [fourth] = panel.http.match(TOPIC);
+      expect(planOf(fourth?.request.body)).toMatchObject({
+        tracks: 'ai',
+        acceptedUsd: 0.005,
+      });
+      for (const call of [second, third, fourth])
+        call?.flush({}, { status: 500, statusText: 'x' });
+    });
+
+    it('takes no file dropped while sending, and says so (T14)', async () => {
+      const panel = await renderPanel({ features: PAID });
+      const calls = await sendFourWithAi(panel);
+      const zone = panel.container.querySelector('.drop');
+      if (!zone) throw new Error('no drop zone');
+      fireEvent.drop(zone, { dataTransfer: { files: [audio('tarde.mp3')] } });
+      await panel.fixture.whenStable();
+      expect(screen.queryByText('tarde.mp3')).toBeNull();
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Espere o envio terminar para adicionar arquivos.',
+      );
+      for (const call of calls)
+        call.flush({}, { status: 500, statusText: 'x' });
+      await panel.fixture.whenStable();
+      panel.http
+        .match(TOPIC)
+        .forEach((call) => call.flush({}, { status: 500, statusText: 'x' }));
+      await panel.fixture.whenStable();
+      expect(screen.queryByText(/Espere o envio terminar/)).toBeNull();
+    });
+
     it('takes the choices away while sending and brings them back after a stop', async () => {
       const panel = await renderPanel({ features: EDITOR });
       await chooseChecked(panel);
