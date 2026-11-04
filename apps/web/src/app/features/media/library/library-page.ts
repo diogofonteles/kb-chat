@@ -185,16 +185,27 @@ export class LibraryPage {
     const seen = this.topics().some((one) => one.slug === topic);
     return seen ? null : topic;
   });
+  /** The kept subject, when the person no longer sees subjects (KBC-070 BR-3). */
+  private readonly lostSubject = computed(() => {
+    const seesSubjects =
+      this.session.can('media-tracks') && this.session.can('media-subjects');
+    return seesSubjects ? null : (this.kept()?.filters.subject ?? null);
+  });
   /**
    * The choices in force, once the collections are known. A collection the person no longer
-   * sees is left aside, not erased: the account keeps it for when the access comes back.
+   * sees, or a subject, is left aside, not erased: the account keeps it for when the access
+   * comes back.
    */
   protected readonly choices = computed<Choices | null>(() => {
     const kept = this.kept();
     if (!kept || !this.chat.topicsKnown()) return null;
-    return this.lostTopic()
-      ? { ...kept, filters: { ...kept.filters, topic: null } }
-      : kept;
+    const { topic, subject } = kept.filters;
+    const filters = {
+      ...kept.filters,
+      topic: this.lostTopic() ? null : topic,
+      subject: this.lostSubject() ? null : subject,
+    };
+    return { ...kept, filters };
   });
 
   /** What is typed in "Buscar na biblioteca", and what is asked after the pause. */
@@ -486,7 +497,9 @@ export class LibraryPage {
     this.saveFilters({ ...filters, topic });
   }
 
-  private saveFilters(filters: LibraryFilters): void {
+  private saveFilters(chosen: LibraryFilters): void {
+    const subject = chosen.subject ?? this.lostSubject();
+    const filters = { ...chosen, subject };
     this.choose({ filters }, { libraryFilters: filters });
   }
 

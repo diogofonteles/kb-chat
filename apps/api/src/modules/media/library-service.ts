@@ -74,18 +74,20 @@ export class LibraryService {
         (sum, item) => sum + (item.durationMs ?? 0),
         0,
       ),
-      facets: { ...facetsOf(items), subjects: distinctSubjects(subjects) },
+      facets: {
+        ...facetsOf(items),
+        subjects: subjects ? distinctSubjects(subjects) : [],
+      },
     };
   }
 
-  /** Each track's subjects, only for who sees subjects and tracks (BR-3). */
+  /** Each track's subjects; null for who does not see subjects and tracks (BR-3). */
   private subjectsAmong(
     actor: MediaActor,
     entries: readonly LibraryTrack[],
-  ): ReadonlyMap<string, readonly HitSubject[]> {
+  ): ReadonlyMap<string, readonly HitSubject[]> | null {
     const { subjectsOf } = this.deps;
-    if (!subjectsOf || !actor.seesTracks || !actor.seesSubjects)
-      return new Map();
+    if (!subjectsOf || !actor.seesTracks || !actor.seesSubjects) return null;
     return subjectsOf(
       entries
         .filter((entry) => entry.parent)
@@ -190,13 +192,16 @@ export class LibraryService {
   }
 }
 
-/** The chosen subject's tracks, as rows of their own (AC-7); null with none chosen. */
+/**
+ * The chosen subject's tracks, as rows of their own (AC-7). Null when no subject applies:
+ * none chosen, or one saved by who no longer sees subjects, ignored and kept (BR-3).
+ */
 function linkedTracks(
   entries: readonly LibraryTrack[],
-  subjects: ReadonlyMap<string, readonly HitSubject[]>,
+  subjects: ReadonlyMap<string, readonly HitSubject[]> | null,
   chosen: string | undefined,
 ): LibraryItem[] | null {
-  if (chosen === undefined || subjects.size === 0) return null;
+  if (chosen === undefined || subjects === null) return null;
   return entries
     .filter((entry) => subjects.get(entry.id)?.some((s) => s.key === chosen))
     .map((entry) => ({ ...entry, tracks: [] }));

@@ -624,6 +624,64 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
   });
 
+  describe('a saved "Assunto" (KBC-070 BR-3)', () => {
+    const SAVED_SUBJECT = {
+      ...PREFERENCES,
+      libraryFilters: {
+        states: [],
+        authors: [],
+        topic: null,
+        subject: 'concept:cabala',
+      },
+    };
+
+    it('is left aside for who lost `media-subjects`: no filter, nothing to clear', async () => {
+      const { http, settle, start } = await renderLibrary();
+      await start(aHome(), SAVED_SUBJECT);
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
+      expect(screen.queryByRole('combobox', { name: 'Assunto' })).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Limpar filtros' }),
+      ).toBeNull();
+    });
+
+    it('stays in the account when another filter changes', async () => {
+      const { http, settle, start, tick } = await renderLibrary();
+      await start(aHome(), SAVED_SUBJECT);
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: /^Em andamento/ }));
+      await tick();
+      const save = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(save.request.body).toEqual({
+        libraryFilters: {
+          states: ['in-progress'],
+          authors: [],
+          topic: null,
+          subject: 'concept:cabala',
+        },
+      });
+    });
+
+    it('still filters for who holds the features', async () => {
+      const { http, settle, start } = await renderLibrary({
+        features: ['media', 'media-library', 'media-tracks', 'media-subjects'],
+      });
+      await start(aHome(), SAVED_SUBJECT);
+      http
+        .expectOne((request) =>
+          request.urlWithParams.includes('subject=concept'),
+        )
+        .flush(aPage([anItem(1)]));
+      await settle();
+      expect(
+        screen.getAllByRole('button', { name: 'Limpar filtros' }).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
   it('loads the next page with "Mostrar mais"', async () => {
     const { open, http, settle } = await renderLibrary();
     await open(aPage([anItem(1)], { nextCursor: '50', total: 2 }));

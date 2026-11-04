@@ -412,13 +412,31 @@ describe('GET /media/{id}/about', () => {
       media,
       `UPDATE media SET archived_at = '2026-11-04T00:00:00.000Z' WHERE id = '${first.mediaId}'`,
     );
-    const archived = await reader('GET', `/api/v1/media/${first.mediaId}/about`);
+    const archived = await reader(
+      'GET',
+      `/api/v1/media/${first.mediaId}/about`,
+    );
     expect(archived.statusCode).toBe(404);
     expect(archived.body).toBe(nobody.body);
   });
 });
 
 describe('the library by subject (AC-7)', () => {
+  it('lists nothing for a chosen subject where no track is in sight', async () => {
+    const world = await startWorld();
+    await transcribed(world, SPEECH);
+    const { call } = await member(world.media, {
+      email: 'leitora@example.com',
+      topics: [TOPIC],
+      features: SUBJECTS,
+    });
+    const page = await call(
+      'GET',
+      `/api/v1/media/library?subject=${encodeURIComponent('concept:cabala')}`,
+    );
+    expect(page.json<LibraryPage>().items).toEqual([]);
+  });
+
   it('offers the subjects and lists only the linked tracks', async () => {
     const { reader, first } = await worldWithSubjects();
     const all = await reader('GET', '/api/v1/media/library');

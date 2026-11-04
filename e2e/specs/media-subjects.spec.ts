@@ -241,9 +241,24 @@ test('AC-6: without `media-subjects` nothing of a subject shows', async ({
     page.getByRole('heading', { level: 2, name: seed.title }),
   ).toBeVisible();
   await expect(page.getByText('Assuntos:')).toHaveCount(0);
+  // A subject saved while the person still had the feature: left aside, not a filter.
+  const saved = await page.request.put('/api/v1/media/preferences', {
+    data: {
+      libraryFilters: {
+        states: [],
+        authors: [],
+        topic: null,
+        subject: 'concept:cabala',
+      },
+    },
+  });
+  expect(saved.ok()).toBe(true);
   await page.goto('/biblioteca');
   await expect(page.getByRole('searchbox')).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Assunto' })).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Limpar filtros' }),
+  ).toHaveCount(0);
   await page.context().close();
 });
 
