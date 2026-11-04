@@ -84,11 +84,14 @@ function callOf(request: FastifyRequest, mediaId: string): EditCall {
   };
 }
 
-/** "Tentar de novo" for cuts given up (KBC-068 FR-1). */
-function registerRetryCuts(
+/** Reopening, and "Tentar de novo" for cuts given up (KBC-068 FR-1). */
+function registerAfterApproval(
   typed: TypedRoutes,
   service: TrackEditService,
 ): void {
+  typed.post('/api/v1/media/:id/edit/reopen', OPTIONS.reopen, (request) =>
+    service.reopen(callOf(request, request.params.id)),
+  );
   typed.post(
     '/api/v1/media/:id/edit/retry-cuts',
     OPTIONS.retryCuts,
@@ -118,10 +121,7 @@ export const mediaEditRoutes =
     typed.post('/api/v1/media/:id/edit/approve', OPTIONS.approve, (request) =>
       service.approve(callOf(request, request.params.id)),
     );
-    typed.post('/api/v1/media/:id/edit/reopen', OPTIONS.reopen, (request) =>
-      service.reopen(callOf(request, request.params.id)),
-    );
-    registerRetryCuts(typed, service);
+    registerAfterApproval(typed, service);
     typed.get('/api/v1/media/:id/edit/words', OPTIONS.words, (request) =>
       service.words(actorOf(request), request.params.id),
     );
