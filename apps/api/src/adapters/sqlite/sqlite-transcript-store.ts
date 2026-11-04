@@ -242,7 +242,7 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
     return this.db
       .prepare(
         `SELECT segment_position, start_ms, end_ms, text, probability
-         FROM words INDEXED BY words_by_segment
+         FROM words INDEXED BY words_by_segment_position
          WHERE transcript_id = ? AND segment_position >= ? AND segment_position < ?
          ORDER BY segment_position, position`,
       )
