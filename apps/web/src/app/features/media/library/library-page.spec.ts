@@ -54,6 +54,16 @@ const anItem = (
   ...overrides,
 });
 
+/** The API's answer to a mark, heard or not. */
+const marked = (ids: readonly string[], played = true) => ({
+  applied: ids,
+  marks: ids.map((id) => ({
+    id,
+    completedAt: played ? '2026-11-03T12:00:00.000Z' : null,
+    positionUpdatedAt: '2026-11-03T12:00:00.000Z',
+  })),
+});
+
 const aPage = (
   items: LibraryItem[],
   overrides: Partial<LibraryAnswer> = {},
@@ -388,9 +398,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
       ids: [mediaId(1), mediaId(2)],
       played: true,
     });
-    put.flush({ applied: [mediaId(1), mediaId(2)] });
+    put.flush(marked([mediaId(1), mediaId(2)]));
     await tick();
-    http.expectOne(FIRST).flush(aPage([anItem(3)]));
+    http.expectNone(FIRST);
     http.expectOne(HOME).flush(aHome());
     await settle();
     expect(screen.getByRole('status').textContent).toContain(
@@ -418,15 +428,14 @@ describe('LibraryPage (T16, KBC-051)', () => {
       ids: idsFrom(1, 200),
       played: true,
     });
-    first.flush({ applied: idsFrom(1, 200) });
+    first.flush(marked(idsFrom(1, 200)));
     const second = http.expectOne('/api/v1/media/played');
     expect(second.request.body).toEqual({
       ids: idsFrom(201, 250),
       played: true,
     });
-    second.flush({ applied: idsFrom(201, 250) });
+    second.flush(marked(idsFrom(201, 250)));
     await tick();
-    http.expectOne(FIRST).flush(aPage([anItem(1)]));
     http.expectOne(HOME).flush(aHome());
     await settle();
 
@@ -445,12 +454,11 @@ describe('LibraryPage (T16, KBC-051)', () => {
     await settle();
     fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
 
-    http.expectOne('/api/v1/media/played').flush({ applied: idsFrom(1, 200) });
+    http.expectOne('/api/v1/media/played').flush(marked(idsFrom(1, 200)));
     http
       .expectOne('/api/v1/media/played')
       .flush(null, { status: 500, statusText: 'x' });
     await tick();
-    http.expectOne(FIRST).flush(aPage(manyItems(250)));
     http.expectOne(HOME).flush(aHome());
     await settle();
 
@@ -610,27 +618,89 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
   });
 
-  it('drops a next page of the old list once the marked list arrives (NG-22)', async () => {
+  it('asks again and drops the next page on its way when a state filter may take rows away (NG-22)', async () => {
     const { open, http, settle, tick } = await renderLibrary();
-    await open(aPage([anItem(1), anItem(3)], { nextCursor: '50', total: 3 }));
+    const url = '/api/v1/media/library?state=unheard&sort=recently-played';
+    await open(
+      aPage([anItem(1), anItem(3)], { nextCursor: '50', total: 3 }),
+      aHome(),
+      {
+        ...PREFERENCES,
+        libraryFilters: { states: ['unheard'], authors: [], topic: null },
+      },
+    );
     fireEvent.click(
       screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
     );
     await settle();
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
     await tick();
-    const stale = http.expectOne(
-      '/api/v1/media/library?sort=recently-played&cursor=50',
-    );
+    const stale = http.expectOne(`${url}&cursor=50`);
     fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
-    http.expectOne('/api/v1/media/played').flush({ applied: [mediaId(1)] });
+    http.expectOne('/api/v1/media/played').flush(marked([mediaId(1)]));
     await tick();
-    http.expectOne(FIRST).flush(aPage([anItem(3)], { total: 1 }));
+    http.expectOne(url).flush(aPage([anItem(3)], { total: 1 }));
     http.expectOne(HOME).flush(aHome());
     await settle();
 
     expect(stale.cancelled).toBe(true);
-    expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Palestra 1' })).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: 'Todas', level: 3 }),
+    );
+  });
+
+  it('keeps a row of a later page in place when marked from its ⋯, list and cursor included (AC-14)', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    await open(aPage([anItem(1)], { nextCursor: '50', total: 3 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+    await tick();
+    http
+      .expectOne('/api/v1/media/library?sort=recently-played&cursor=50')
+      .flush(aPage([anItem(2)], { nextCursor: '100', total: 3 }));
+    await settle();
+    const menu = screen.getByRole('button', {
+      name: 'Mais ações para Palestra 2',
+    });
+    fireEvent.click(menu);
+    await settle();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Marcar como ouvida' }),
+    );
+    http.expectOne('/api/v1/media/played').flush(marked([mediaId(2)]));
+    await tick();
+    http.expectOne(HOME).flush(aHome());
+    http.expectNone(FIRST);
+    await settle();
+
+    expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
+    const row = screen
+      .getByRole('link', { name: 'Palestra 2' })
+      .closest('app-library-row') as HTMLElement;
+    expect(within(row).getByText('✓ Ouvida')).toBeTruthy();
+    expect(row.contains(document.activeElement)).toBe(true);
+    expect(screen.getByRole('button', { name: 'Mostrar mais' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain(
+      '1 mídia marcada como ouvida.',
+    );
+  });
+
+  it('says nothing changed when no media could be marked, and asks for the list again', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    await open(aPage([anItem(1)]));
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Selecionar Palestra 1' }),
+    );
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+    http.expectOne('/api/v1/media/played').flush(marked([]));
+    await tick();
+    http.expectOne(FIRST).flush(aPage([]));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Nada mudou: estas mídias não estão mais disponíveis.',
+    );
   });
 
   it('says so when the next page fails, and "Mostrar mais" tries again', async () => {
@@ -741,9 +811,8 @@ describe('LibraryPage (T16, KBC-051)', () => {
       fireEvent.click(
         screen.getByRole('button', { name: 'Marcar como ouvida' }),
       );
-      http.expectOne('/api/v1/media/played').flush({ applied: [mediaId(1)] });
+      http.expectOne('/api/v1/media/played').flush(marked([mediaId(1)]));
       await tick();
-      http.expectOne(FIRST).flush(aPage([anItem(2)]));
       http.expectOne(HOME).flush(aHome());
       await settle();
       expect(document.activeElement).toBe(allHeading());
@@ -825,6 +894,49 @@ describe('LibraryPage (T16, KBC-051)', () => {
         screen.queryByRole('button', { name: 'Limpar filtros' }),
       ).toBeNull();
       http.expectNone(PREFS);
+    });
+
+    it('keeps it in the account when a chip, the order or "Limpar filtros" write', async () => {
+      const { http, settle, start, tick } = await renderLibrary();
+      await start(aHome(), {
+        ...PREFERENCES,
+        libraryFilters: { states: [], authors: [], topic: 'perdido' },
+      });
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Em andamento' }));
+      await tick();
+      const chipSave = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(chipSave.request.body).toEqual({
+        libraryFilters: {
+          states: ['in-progress'],
+          authors: [],
+          topic: 'perdido',
+        },
+      });
+      chipSave.flush(PREFERENCES);
+      http
+        .expectOne(
+          '/api/v1/media/library?state=in-progress&sort=recently-played',
+        )
+        .flush(aPage([anItem(1)]));
+      await settle();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ver em grade' }));
+      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      await settle();
+      fireEvent.click(
+        screen.getAllByRole('button', {
+          name: 'Limpar filtros',
+        })[0] as HTMLElement,
+      );
+      await tick();
+      expect(
+        http.expectOne({ method: 'PUT', url: PREFS }).request.body,
+      ).toEqual({
+        libraryFilters: { states: [], authors: [], topic: 'perdido' },
+      });
     });
 
     it('leaves aside a collection arrived with in the address', async () => {

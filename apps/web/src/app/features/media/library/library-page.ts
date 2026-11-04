@@ -32,7 +32,9 @@ import {
   type LibrarySort,
   type LibraryView,
   type ListeningPreferencesUpdate,
+  type ListeningState,
   type MediaItem,
+  type MediaMark,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
@@ -165,6 +167,12 @@ export class LibraryPage {
       filters: { ...kept.libraryFilters, topic },
     };
   });
+  /** The kept collection, when the person no longer sees it. */
+  private readonly lostTopic = computed(() => {
+    const topic = this.kept()?.filters.topic ?? null;
+    const seen = this.topics().some((one) => one.slug === topic);
+    return seen ? null : topic;
+  });
   /**
    * The choices in force, once the collections are known. A collection the person no longer
    * sees is left aside, not erased: the account keeps it for when the access comes back.
@@ -172,10 +180,9 @@ export class LibraryPage {
   protected readonly choices = computed<Choices | null>(() => {
     const kept = this.kept();
     if (!kept || !this.chat.topicsKnown()) return null;
-    const { topic } = kept.filters;
-    const lost =
-      topic !== null && !this.topics().some((one) => one.slug === topic);
-    return lost ? { ...kept, filters: { ...kept.filters, topic: null } } : kept;
+    return this.lostTopic()
+      ? { ...kept, filters: { ...kept.filters, topic: null } }
+      : kept;
   });
 
   /** What is typed in "Buscar na biblioteca", and what is asked after the pause. */
@@ -443,11 +450,21 @@ export class LibraryPage {
   /** A control's change, applied to the filters held now (BR-7). */
   protected changeFilter(change: FilterChange): void {
     const current = this.choices();
-    if (current) this.changeFilters(applyFilterChange(current.filters, change));
+    if (!current) return;
+    const filters = applyFilterChange(current.filters, change);
+    // Choosing a collection replaces the kept one; only that does.
+    if (change.kind === 'topic') this.saveFilters(filters);
+    else this.changeFilters(filters);
     if (change.kind === 'clear') this.focusAfterRender(this.allTitle);
   }
 
+  /** Any change but the collection's: a lost collection stays for when access returns. */
   private changeFilters(filters: LibraryFilters): void {
+    const topic = filters.topic ?? this.lostTopic();
+    this.saveFilters({ ...filters, topic });
+  }
+
+  private saveFilters(filters: LibraryFilters): void {
     this.choose({ filters }, { libraryFilters: filters });
   }
 
@@ -477,8 +494,8 @@ export class LibraryPage {
     change: Partial<Choices>,
     update: ListeningPreferencesUpdate,
   ): void {
-    const current = this.choices();
-    if (!current) return;
+    const current = this.kept();
+    if (!current || !this.choices()) return;
     this.kept.set({ ...current, ...change });
     this.saves.next(update);
   }
@@ -585,7 +602,7 @@ export class LibraryPage {
   private marked(
     ids: readonly string[],
     played: boolean,
-    { applied, unsent }: MarkOutcome,
+    { marks, unsent }: MarkOutcome,
   ): void {
     if (unsent.length === ids.length) {
       this.actionError.set(markFailedTextOf(played));
@@ -597,17 +614,55 @@ export class LibraryPage {
     this.selected.update(
       (current) => new Set([...current].filter((id) => !handled.has(id))),
     );
-    this.reload();
+    // A state filter drops what changed state; a skipped media is gone or no longer ready.
+    const rowsMayLeave =
+      (this.choices()?.filters.states.length ?? 0) > 0 ||
+      marks.length < handled.size;
+    if (rowsMayLeave) this.reload();
+    else this.showMarks(marks, played);
     if (unsent.length > 0) {
       this.actionError.set(
-        `${markedTextOf(applied.length, played)} ${missingTextOf(unsent.length)}`,
+        `${markedTextOf(marks.length, played)} ${missingTextOf(unsent.length)}`,
       );
       return;
     }
-    this.announcement.set(markedTextOf(applied.length, played));
-    // The selection bar left, or a filter may take the row away with its menu.
-    if ((wasSelecting && !this.selecting()) || this.filtered())
+    this.announcement.set(markedTextOf(marks.length, played));
+    // The selection bar left, or the row may leave along with its ⋯.
+    if ((wasSelecting && !this.selecting()) || rowsMayLeave)
       this.focusAfterRender(this.allTitle);
+  }
+
+  /** The rows change in place: asking again would fold the pages already loaded. */
+  private showMarks(marks: readonly MediaMark[], played: boolean): void {
+    const byId = new Map(marks.map((mark) => [mark.id, mark]));
+    const marked = (item: LibraryItem): LibraryItem => {
+      const mark = byId.get(item.id);
+      return mark
+        ? {
+            ...item,
+            positionMs: 0,
+            completedAt: mark.completedAt,
+            positionUpdatedAt: mark.positionUpdatedAt,
+          }
+        : item;
+    };
+    const state: ListeningState = played ? 'heard' : 'unheard';
+    this.lastPage.update(
+      (page) =>
+        page && {
+          ...page,
+          items: page.items.map(marked),
+          facets: {
+            ...page.facets,
+            states: [...new Set([...page.facets.states, state])],
+          },
+        },
+    );
+    this.morePages.update((more) => ({
+      ...more,
+      items: more.items.map(marked),
+    }));
+    this.home.reload();
   }
 
   /** The control pressed may be gone: the focus never falls to the page (WCAG 2.4.3). */
@@ -700,6 +755,8 @@ function missingTextOf(count: number): string {
 
 /** "2 mídias marcadas como ouvidas." in the status region, after a mark (FR-3). */
 function markedTextOf(count: number, played: boolean): string {
+  if (count === 0)
+    return $localize`:@@library.markedNone:Nada mudou: estas mídias não estão mais disponíveis.`;
   if (count === 1)
     return played
       ? $localize`:@@library.markedPlayedOne:1 mídia marcada como ouvida.`

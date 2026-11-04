@@ -339,7 +339,9 @@ describe('Media library: marking (FR-3, BR-5)', () => {
       played: true,
     });
     expect(marked.statusCode).toBe(200);
-    expect(marked.json()).toEqual({ applied: [playing, fresh] });
+    expect(marked.json().applied).toEqual([playing, fresh]);
+    expect(marked.json().marks[0].id).toBe(playing);
+    expect(marked.json().marks[0].completedAt).toEqual(expect.any(String));
     for (const id of [playing, fresh]) {
       const item = (await media.owner('GET', `/api/v1/media/${id}`)).json();
       expect(item.positionMs).toBe(0);
@@ -354,7 +356,8 @@ describe('Media library: marking (FR-3, BR-5)', () => {
       ids: [playing],
       played: false,
     });
-    expect(unmarked.json()).toEqual({ applied: [playing] });
+    expect(unmarked.json().applied).toEqual([playing]);
+    expect(unmarked.json().marks[0].completedAt).toBeNull();
     expect(
       (await media.owner('GET', `/api/v1/media/${playing}`)).json(),
     ).toMatchObject({ positionMs: 0, completedAt: null });
@@ -378,7 +381,7 @@ describe('Media library: marking (FR-3, BR-5)', () => {
       played: true,
     });
     expect(marked.statusCode).toBe(200);
-    expect(marked.json()).toEqual({ applied: [seen] });
+    expect(marked.json().applied).toEqual([seen]);
     const rows = withDb(media, (db) =>
       db
         .prepare('SELECT COUNT(*) AS n FROM media_progress WHERE media_id = ?')

@@ -158,9 +158,18 @@ export const markPlayedRequestSchema = z.strictObject({
 });
 export type MarkPlayedRequest = z.infer<typeof markPlayedRequestSchema>;
 
+/** One media as the mark left it: a list on screen updates in place, without asking again. */
+export const mediaMarkSchema = z.object({
+  id: mediaIdSchema,
+  completedAt: z.iso.datetime().nullable(),
+  positionUpdatedAt: z.iso.datetime(),
+});
+export type MediaMark = z.infer<typeof mediaMarkSchema>;
+
 /** The media the change applied to; the ones the person does not see are left out. */
 export const markPlayedResultSchema = z.object({
   applied: z.array(mediaIdSchema),
+  marks: z.array(mediaMarkSchema),
 });
 export type MarkPlayedResult = z.infer<typeof markPlayedResultSchema>;
 

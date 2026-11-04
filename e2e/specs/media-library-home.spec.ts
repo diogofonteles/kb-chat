@@ -519,7 +519,17 @@ test('FR-3: "Selecionar todas" marks more than the API takes at once, in batches
   await page.route('**/api/v1/media/played', async (route) => {
     const { ids } = route.request().postDataJSON() as { ids: string[] };
     batches.push(ids.length);
-    await route.fulfill({ json: { applied: ids } });
+    const at = '2026-11-03T12:00:00.000Z';
+    await route.fulfill({
+      json: {
+        applied: ids,
+        marks: ids.map((id) => ({
+          id,
+          completedAt: at,
+          positionUpdatedAt: at,
+        })),
+      },
+    });
   });
   await openLibrary(page);
   await scrollToTheEnd(page, 5);

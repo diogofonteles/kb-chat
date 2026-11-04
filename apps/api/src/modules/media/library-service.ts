@@ -99,11 +99,16 @@ export class LibraryService {
       const item = playable.get(id);
       return item ? [item] : [];
     });
-    this.deps.listening.markMany({
-      principal: actor.principal,
-      marks: chosen.map((item) => this.markOf(item, request.played)),
-    });
-    return { applied: chosen.map((item) => item.id) };
+    const marks = chosen.map((item) => this.markOf(item, request.played));
+    this.deps.listening.markMany({ principal: actor.principal, marks });
+    return {
+      applied: marks.map((mark) => mark.mediaId),
+      marks: marks.map((mark) => ({
+        id: mark.mediaId,
+        completedAt: mark.progress.completedAt,
+        positionUpdatedAt: mark.now.toISOString(),
+      })),
+    };
   }
 
   private markOf(item: LibraryItem, played: boolean): ListeningMark {

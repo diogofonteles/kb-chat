@@ -11,6 +11,7 @@ import {
   type ListeningPreferences,
   type ListeningPreferencesUpdate,
   type MarkPlayedResult,
+  type MediaMark,
 } from '@kb-chat/contracts';
 import {
   catchError,
@@ -38,7 +39,7 @@ export interface LibraryRequest {
 
 /** What a mark in batches did: what the API applied, and what never reached it. */
 export interface MarkOutcome {
-  readonly applied: readonly string[];
+  readonly marks: readonly MediaMark[];
   readonly unsent: readonly string[];
 }
 
@@ -102,20 +103,20 @@ export class LibraryApi {
     return from(batchesOf(ids)).pipe(
       concatMap((batch) =>
         this.markPlayed(batch, played).pipe(
-          map(({ applied }) => ({ batch, applied })),
+          map(({ marks }) => ({ batch, marks })),
           catchError(() => of(null)),
         ),
       ),
       takeWhile((sent) => sent !== null),
       reduce<
-        { batch: readonly string[]; applied: string[] } | null,
+        { batch: readonly string[]; marks: readonly MediaMark[] } | null,
         MarkOutcome
       >(
         (outcome, sent) => ({
-          applied: [...outcome.applied, ...(sent?.applied ?? [])],
+          marks: [...outcome.marks, ...(sent?.marks ?? [])],
           unsent: outcome.unsent.slice(sent?.batch.length ?? 0),
         }),
-        { applied: [], unsent: ids },
+        { marks: [], unsent: ids },
       ),
     );
   }
