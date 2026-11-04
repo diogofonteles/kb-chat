@@ -104,6 +104,13 @@ function registerReport(
         .send({ items: service.report() });
     },
   );
+}
+
+function registerEvidence(
+  app: FastifyInstance,
+  service: VoiceProfileService,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.get(
     '/api/v1/voice-consents/:id/evidence',
     OPTIONS.evidence,
@@ -172,4 +179,5 @@ export const voiceProfileRoutes =
     );
     registerRevocation(app, service);
     registerReport(app, service);
+    registerEvidence(app, service);
   };
