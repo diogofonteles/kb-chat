@@ -221,7 +221,7 @@ HTTP JSON API under `/api/v1` (versioned by path). The zod schemas in `libs/cont
 
 ## Phase 2: media library (planned, KBC-034 to KBC-040)
 
-- Module `preparation` (KBC-072): the guided flow's plan per recording; it asks the transcription, the separation and the proposals for each stage in turn and reads their state from them, keeping only what they cannot say. A paid stage starts once, from the person's stored choice, and only reserves then.
+- Module `preparation` (KBC-072): the guided flow's plan per recording; it asks the transcription, the separation and the proposals for each stage in turn and reads their state from them, keeping only what they cannot say. A paid stage starts once, from the person's stored choice, and only reserves then. A run that failed or was cut by a restart keeps its finished windows; only a click goes on, paying for the windows missing.
 - New module `media`: owns `/data/media/media.db` (SQLite with WAL and FTS5), the media files, the job queue (leases, heartbeats, janitor, dead jobs), the transcript versions and the term list (ADR 0022). The vault stays read-only (Q7): transcripts are indexed in the app's own FTS5 and merged into search results (ADR 0024).
 - New container `media-worker` (API image, 1 CPU, 2 GB, ffmpeg): transcodes, silence detection and later cuts and compilations; it leases jobs over HTTP with a worker token like any remote worker (ADR 0022).
 - Transcription runs outside the VM, in a pull worker on the owner's Mac (`tools/transcriber/`, Python with uv, mlx-whisper turbo with VAD and terms), with Groq as an opt-in fallback under a monthly cap (ADR 0023). The raw JSON is the source of truth; segments, words, filter and confidence are derived in the API.

@@ -433,6 +433,8 @@ test('AC-11: a failure keeps the work and offers both ways out', async ({
           failure: 'provider',
           canRetry: true,
           estimateUsd: 0.02,
+          windows: { done: 1, total: 3 },
+          spentUsd: 0.0012,
         }),
       ] as MediaPreparation['stages'],
       tracks: [track(1, 5_000, 15_000)] as MediaPreparation['tracks'],
@@ -440,6 +442,7 @@ test('AC-11: a failure keeps the work and offers both ways out', async ({
     },
   ]);
   await page.goto(`/midia/${media.id}/preparar`);
+  await expect(page.getByText(/1 de 3 janelas prontas/)).toBeVisible();
   await expect(
     page.getByText('Falhou: o provedor de IA não respondeu.'),
   ).toBeVisible();
@@ -453,6 +456,107 @@ test('AC-11: a failure keeps the work and offers both ways out', async ({
   ).toBeVisible();
   await owner.dispose();
 });
+
+test('UP-11: a track that cannot play says so on step 2', async ({
+  browser,
+  viewport,
+}) => {
+  const { page, owner } = await person(browser, viewport);
+  const media = await transcribedAudio(owner);
+  await script(page, media.id, [
+    { tracks: [track(1, 5_000, 15_000)] as MediaPreparation['tracks'] },
+  ]);
+  await page.route(`**/api/v1/media/${media.id}/stream`, (route) =>
+    route.abort(),
+  );
+  await page.goto(`/midia/${media.id}/preparar`);
+  await page.getByRole('button', { name: 'Ouvir a faixa 1' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Não consegui tocar este trecho',
+  );
+  await owner.dispose();
+});
+
+test('UP-11: a jump to a far row and a click in the same frame plays it', async ({
+  browser,
+  viewport,
+}) => {
+  const { page, owner } = await person(browser, viewport);
+  const media = await transcribedAudio(owner);
+  await script(page, media.id, [
+    {
+      tracks: Array.from({ length: 60 }, (_, index) =>
+        track(index + 1, 5_000, 15_000),
+      ) as MediaPreparation['tracks'],
+    },
+  ]);
+  await page.goto(`/midia/${media.id}/preparar`);
+  await page.getByRole('button', { name: 'Ouvir a faixa 50' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Parar a faixa 50' }),
+  ).toBeVisible();
+  await owner.dispose();
+});
+
+const serious = async (page: Page) =>
+  (await new AxeBuilder({ page }).analyze()).violations.filter(
+    ({ impact }) => impact === 'serious' || impact === 'critical',
+  );
+
+for (const theme of ['light', 'dark', 'esoteric'] as const)
+  test(`AC-17: the failed and the concluded step 2 pass axe in the ${theme} theme`, async ({
+    browser,
+    viewport,
+  }) => {
+    const { page, owner } = await person(browser, viewport);
+    await useTheme(page, theme);
+    const failed = await transcribedAudio(owner);
+    await script(page, failed.id, [
+      {
+        stages: [
+          ...DONE,
+          stage({
+            stage: 'tracks',
+            state: 'failed',
+            failure: 'provider',
+            canRetry: true,
+            estimateUsd: 0.02,
+            windows: { done: 1, total: 3 },
+            spentUsd: 0.0012,
+          }),
+        ] as MediaPreparation['stages'],
+        tracks: [track(1, 5_000, 15_000)] as MediaPreparation['tracks'],
+        canSwitchToManual: true,
+      },
+    ]);
+    await page.goto(`/midia/${failed.id}/preparar`);
+    await expect(page.getByText(/1 de 3 janelas prontas/)).toBeVisible();
+    expect(await serious(page)).toEqual([]);
+
+    const concluded = await transcribedAudio(owner);
+    await script(page, concluded.id, [
+      {
+        stages: [
+          ...DONE,
+          stage({
+            stage: 'tracks',
+            state: 'done',
+            windows: { done: 3, total: 3 },
+            reservedUsd: 0.02,
+            spentUsd: 0.01,
+          }),
+        ] as MediaPreparation['stages'],
+        tracks: [track(1, 5_000, 15_000)] as MediaPreparation['tracks'],
+        next: 'validate',
+      },
+    ]);
+    await page.goto(`/midia/${concluded.id}/preparar`);
+    await expect(
+      page.getByRole('button', { name: 'Validar faixas' }),
+    ).toBeVisible();
+    expect(await serious(page)).toEqual([]);
+    await owner.dispose();
+  });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const)
   test(`AC-17: steps 1 and 2 pass axe in the ${theme} theme`, async ({
