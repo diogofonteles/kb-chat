@@ -38,8 +38,9 @@ export function aiRefusal(context: PlanContext): OptionRefusal | null {
 }
 
 /**
- * Why each option of a plan cannot go on (FR-1). Subjects wait for KBC-069: nothing can run
- * them yet, so asking is refused rather than ignored.
+ * Why each option of a plan cannot go on (FR-1). Subjects stay off: their run is priced by
+ * the approved tracks, so the upload's consent cannot cover it yet, and asking is refused
+ * rather than ignored (the note on KBC-072).
  */
 export function planRefusals(
   plan: PreparationPlan,
