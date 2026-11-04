@@ -143,4 +143,20 @@ describe('TrackRowList (KBC-066)', () => {
     expect(spies.selectTrack).toHaveBeenCalledWith(IDS.two);
     expect(spies.listen).toHaveBeenCalledWith('start');
   });
+
+  it('turns only the button that plays into a stop, in words', async () => {
+    const { spies } = await setup(IDS.one, { playing: 'start' });
+    const stop = screen.getByRole('button', { name: 'Parar o início' });
+    expect(stop.textContent).toContain('Parar o início');
+    expect(screen.getByRole('button', { name: '▶ Ouvir' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ouvir o fim' })).toBeTruthy();
+    fireEvent.click(stop);
+    expect(spies.listen).toHaveBeenCalledWith('start');
+  });
+
+  it('says "■ Parar" on the track that plays', async () => {
+    await setup(IDS.one, { playing: 'track' });
+    expect(screen.getByRole('button', { name: '■ Parar' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '▶ Ouvir' })).toBeNull();
+  });
 });

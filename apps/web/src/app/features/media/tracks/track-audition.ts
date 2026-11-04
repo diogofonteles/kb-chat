@@ -27,11 +27,14 @@ export class TrackAudition {
   private range: AuditionRange | null = null;
   private frame: number | null = null;
   private readonly position = signal<number | null>(null);
+  private readonly key = signal<string | null>(null);
   private readonly failure = signal(false);
 
   /** Where the cursor is while something plays; null otherwise. */
   readonly positionMs = this.position.asReadonly();
   readonly playing = computed(() => this.position() !== null);
+  /** Which control's range plays, as named to `play`, so only that one offers to stop. */
+  readonly playingKey = this.key.asReadonly();
   /** It could not play (a network error, a browser refusal): the page says so. */
   readonly failed = this.failure.asReadonly();
 
@@ -43,11 +46,12 @@ export class TrackAudition {
     element.addEventListener('pause', this.finished);
   }
 
-  play(range: AuditionRange): void {
+  play(range: AuditionRange, key: string | null = null): void {
     const { element } = this;
     if (!element) return;
     this.failure.set(false);
     this.range = range;
+    this.key.set(key);
     this.seekTo(element, range);
     this.position.set(range.fromMs);
     element.play().then(this.follow, () => {
@@ -74,6 +78,7 @@ export class TrackAudition {
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.frame = null;
     this.range = null;
+    this.key.set(null);
     this.position.set(null);
   };
 

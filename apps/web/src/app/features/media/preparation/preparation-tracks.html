@@ -32,14 +32,14 @@
           [attr.aria-label]="listenLabel(line)"
           (click)="listen(line.track)"
         >
-          <span aria-hidden="true">{{
-            isPlaying(line.track) ? '■' : '▶'
-          }}</span>
-          @if (isPlaying(line.track)) {
-            <ng-container i18n="@@prep.track.stop">Parar</ng-container>
-          } @else {
-            <ng-container i18n="@@prep.track.listen">Ouvir</ng-container>
-          }
+          <span class="swap" aria-hidden="true">
+            <span [class.off]="isPlaying(line.track)" i18n="@@prep.track.listen"
+              >▶ Ouvir</span
+            >
+            <span [class.off]="!isPlaying(line.track)" i18n="@@prep.track.stop"
+              >■ Parar</span
+            >
+          </span>
         </button>
       </li>
     }

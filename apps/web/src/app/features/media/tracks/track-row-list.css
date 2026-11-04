@@ -113,6 +113,20 @@
   grid-column: 1 / -1;
 }
 
+/* Both labels hold the width, so the buttons beside this one do not move. */
+.swap {
+  display: inline-grid;
+}
+
+.swap > * {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+
+.swap > .off {
+  visibility: hidden;
+}
+
 .action {
   min-height: 44px;
   padding: var(--space-1) var(--space-3);

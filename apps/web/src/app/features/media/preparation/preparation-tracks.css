@@ -92,3 +92,16 @@
   bottom: var(--space-3);
   justify-self: center;
 }
+
+/* Both labels hold the width: the row does not move when one takes over. */
+.swap {
+  display: inline-grid;
+}
+
+.swap > * {
+  grid-area: 1 / 1;
+}
+
+.swap > .off {
+  visibility: hidden;
+}

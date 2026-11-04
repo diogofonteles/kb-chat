@@ -100,6 +100,8 @@ const tracksText = (count: number): string =>
     ? $localize`:@@tracks.one:1 faixa`
     : $localize`:@@tracks.many:${count}:count: faixas`;
 
+const LISTEN_KINDS: readonly ListenKind[] = ['track', 'start', 'end'];
+
 const touched = (track: DraftTrack): DraftTrack => ({ ...track, edited: true });
 
 /** The name of who asks or answers; a voice without one, by its number. */
@@ -319,6 +321,14 @@ export class TrackEditorPage {
         label: one.name,
       })),
     ];
+  });
+  /** What the selected track is playing: another row's range stops nothing here. */
+  protected readonly playingKind = computed<ListenKind | null>(() => {
+    const id = this.selected()?.track.id;
+    const key = this.audition.playingKey();
+    if (!id || !key?.startsWith(`${id}:`)) return null;
+    const kind = key.slice(id.length + 1);
+    return LISTEN_KINDS.find((one) => one === kind) ?? null;
   });
   protected readonly segments = computed(() =>
     this.transcript.hasValue() ? this.transcript.value().segments : [],
@@ -662,7 +672,7 @@ export class TrackEditorPage {
   protected listen(kind: ListenKind): void {
     const track = this.selected()?.track;
     if (!track) return;
-    if (kind === 'track' && this.audition.playing()) {
+    if (this.playingKind() === kind) {
       this.audition.stop();
       return;
     }
@@ -671,7 +681,7 @@ export class TrackEditorPage {
       start: () => startRange(track.startMs),
       end: () => endRange(track.endMs),
     };
-    this.audition.play(ranges[kind]());
+    this.audition.play(ranges[kind](), `${track.id}:${kind}`);
   }
 
   protected pageKey(event: KeyboardEvent): void {

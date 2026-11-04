@@ -54,6 +54,33 @@ const PROBLEM_LABELS: Record<
   range: () => $localize`:@@tracks.problem.range:Passa do fim da gravação`,
 };
 
+/** The listening buttons of a row: each stops what it started (KBC-066 FR-5). */
+const LISTEN_BUTTONS: readonly {
+  readonly kind: ListenKind;
+  readonly shortcut: string;
+  readonly idle: () => string;
+  readonly stop: () => string;
+}[] = [
+  {
+    kind: 'track',
+    shortcut: 'Space',
+    idle: () => $localize`:@@tracks.listen.track:▶ Ouvir`,
+    stop: () => $localize`:@@tracks.listen.stopTrack:■ Parar`,
+  },
+  {
+    kind: 'start',
+    shortcut: 'I',
+    idle: () => $localize`:@@tracks.listen.start:Ouvir o início`,
+    stop: () => $localize`:@@tracks.listen.stopStart:Parar o início`,
+  },
+  {
+    kind: 'end',
+    shortcut: 'F',
+    idle: () => $localize`:@@tracks.listen.end:Ouvir o fim`,
+    stop: () => $localize`:@@tracks.listen.stopEnd:Parar o fim`,
+  },
+];
+
 /** An overlap says its size: under a tenth of a second, both times read the same (KBC-094). */
 export function problemLabel(
   problem: TrackProblem,
@@ -92,6 +119,8 @@ export class TrackRowList {
   readonly problems = input<readonly TrackProblem[]>([]);
   readonly people = input<readonly PersonChoice[]>([]);
   readonly readOnly = input(false);
+  /** What plays on the selected row. */
+  readonly playing = input<ListenKind | null>(null);
 
   readonly selectTrack = output<string>();
   readonly titleChange = output<{ id: string; title: string }>();
@@ -140,6 +169,15 @@ export class TrackRowList {
         ) && closeOverlap(plain, track.id) !== null,
     }));
   });
+  protected readonly listenButtons = computed(() =>
+    LISTEN_BUTTONS.map(({ kind, shortcut, idle, stop }) => ({
+      kind,
+      shortcut,
+      idle: idle(),
+      stop: stop(),
+      playing: this.playing() === kind,
+    })),
+  );
   protected readonly focusableId = computed(
     () => this.selectedId() ?? this.tracks()[0]?.track.id ?? null,
   );
