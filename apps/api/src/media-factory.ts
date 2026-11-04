@@ -21,6 +21,7 @@ import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
 import { SqliteTrackItemStore } from './adapters/sqlite/sqlite-track-item-store.js';
 import { SqlitePreparationStore } from './adapters/sqlite/sqlite-preparation-store.js';
 import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposal-store.js';
+import { SqliteTrackSubjectStore } from './adapters/sqlite/sqlite-track-subject-store.js';
 import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
@@ -40,6 +41,7 @@ import type { MediaSearchPort } from './ports/media-search.js';
 import type { MediaStorePort } from './ports/media-store.js';
 import type { PreparationStorePort } from './ports/preparation-store.js';
 import type { TrackProposalStorePort } from './ports/track-proposal-store.js';
+import type { TrackSubjectStorePort } from './ports/track-subject-store.js';
 import type { SilenceStorePort } from './ports/silence-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
 import type { TrackItemStorePort } from './ports/track-item-store.js';
@@ -65,6 +67,8 @@ export interface MediaDeps {
   readonly transcribers: TranscriberStorePort;
   /** The AI's proposal runs and draft tracks (KBC-067). */
   readonly trackProposals: TrackProposalStorePort;
+  /** Free subjects, a track's links and the AI's subject runs (KBC-069). */
+  readonly trackSubjects: TrackSubjectStorePort;
   /** The draft's edit and the approved tracks (KBC-066). */
   readonly edits: MediaEditStorePort;
   /** The plans of the guided flow (KBC-072). */
@@ -169,6 +173,7 @@ type MediaStores = Pick<
   | 'transcripts'
   | 'transcribers'
   | 'trackProposals'
+  | 'trackSubjects'
   | 'edits'
   | 'preparations'
   | 'spend'
@@ -203,6 +208,7 @@ function storesOf(db: DatabaseSync): MediaStores {
     trackItems: new SqliteTrackItemStore(db, transcripts),
     transcribers: new SqliteTranscriberStore(db),
     trackProposals: new SqliteTrackProposalStore(db),
+    trackSubjects: new SqliteTrackSubjectStore(db),
     edits: new SqliteMediaEditStore(db),
     preparations: new SqlitePreparationStore(db),
     spend: new SqliteMediaSpendLedger(db),

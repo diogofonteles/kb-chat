@@ -124,6 +124,9 @@
         </div>
         <app-track-preparation [mediaId]="id()" />
       </section>
+      @if (canClassify()) {
+        <app-track-subjects [mediaId]="id()" [topic]="topic()" />
+      }
     } @else {
       @if (offlineKept() === true) {
         <p class="banner" role="status" i18n="@@tracks.offline">
@@ -150,6 +153,11 @@
       @if (transcriptChanged()) {
         <p class="banner" role="status" i18n="@@tracks.transcriptChanged">
           Revise os limites: a transcrição mudou.
+        </p>
+      }
+      @if (canClassify() && approvedCount() > 0) {
+        <p class="hint" i18n="@@subjects.reopened">
+          Os assuntos voltam depois de aprovar. Faixas mantidas guardam os seus.
         </p>
       }
       @if (draft.restored()) {

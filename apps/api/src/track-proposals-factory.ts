@@ -28,7 +28,9 @@ export interface TrackProposalWiring {
  * nor keep the text (`data_collection: deny`, `zdr`: DeepSeek V4 Flash has ZDR endpoints).
  * One adapter per key, so the model's price is fetched once.
  */
-function mediaLlm(wiring: TrackProposalWiring): () => LlmPort | null {
+export function mediaLlm(
+  wiring: Pick<TrackProposalWiring, 'media' | 'house'>,
+): () => LlmPort | null {
   let cached: { key: string; llm: LlmPort } | null = null;
   return () => {
     const key = wiring.house.service.houseKey();

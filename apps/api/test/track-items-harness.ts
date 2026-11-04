@@ -90,10 +90,12 @@ async function vaultWithTwoCollections(): Promise<string> {
   return root;
 }
 
-export async function startWorld(): Promise<World> {
+export async function startWorld(
+  options: { readonly vault?: string } = {},
+): Promise<World> {
   const started = await start({
     media: true,
-    vault: await vaultWithTwoCollections(),
+    vault: options.vault ?? (await vaultWithTwoCollections()),
   });
   const ownerHeaders = await signIn(started, 'owner@example.com');
   const media: Media = {

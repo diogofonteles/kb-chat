@@ -87,6 +87,7 @@ import { PlayerShortcuts } from './player/player-shortcuts.js';
 import { TranscribeAgain } from './transcribe-again.js';
 import { TranscriptPanel } from './transcript/transcript-panel.js';
 import { TrackNavList } from './tracks/track-nav-list.js';
+import { TrackSubjectsView } from './track-subjects-view.js';
 
 /**
  * One media item (screens.md T15): its title, authorship and length, and the player once
@@ -109,6 +110,7 @@ import { TrackNavList } from './tracks/track-nav-list.js';
     TranscriptPanel,
     VoicesPanel,
     TrackNavList,
+    TrackSubjectsView,
   ],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
@@ -179,6 +181,13 @@ export class MediaPlayerPage {
       this.session.me() !== null &&
       this.session.can('media-edit') &&
       !this.media()?.parent,
+  );
+  /** A track's subjects, for who classifies (KBC-069 scope). */
+  protected readonly canSeeSubjects = computed(
+    () =>
+      this.session.me() !== null &&
+      this.session.can('media-classify') &&
+      !!this.media()?.parent,
   );
   /** Where the preparation is, for whoever edits (T20, AC-17). */
   private readonly edit = httpResource(

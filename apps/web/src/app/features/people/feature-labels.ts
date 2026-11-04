@@ -18,6 +18,8 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
   'media-speakers': () =>
     $localize`:@@feature.mediaSpeakers:Ver quem fala na transcrição`,
   'media-tracks': () => $localize`:@@feature.mediaTracks:Navegar por faixas`,
+  'media-classify': () =>
+    $localize`:@@feature.mediaClassify:Classificar mídia por assunto`,
   'media-voice-profiles': () =>
     $localize`:@@feature.mediaVoiceProfiles:Cadastrar perfis de voz`,
 };

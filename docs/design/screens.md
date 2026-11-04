@@ -735,6 +735,20 @@ Todo par texto/fundo e acento/fundo deve passar 4,5:1 (AA). A verificação entr
 - **Enquanto a IA propõe:** as faixas aparecem conforme cada janela termina, sem alças nem edição, até a análise acabar.
 - **Dividir aqui** usa o cursor (um clique no detalhe, numa palavra ou no tempo da transcrição); fora dos 5 s de cada lado, vai ao ponto válido mais próximo.
 
+
+### Assuntos, passo 4 (KBC-069)
+
+Com `media-classify`, abaixo do resumo do passo 4, a seção **Assuntos** lista as faixas aprovadas. Cada linha tem número e título à esquerda e, à direita, a coluna de assuntos; abaixo de 900 px a coluna empilha.
+
+- **Chips aceitos:** nome e "×" ("Remover assunto Cabala"). Sumido do acervo: ⚠ e "Assunto não encontrado no acervo", com borda de perigo; o texto é o sinal, não a cor.
+- **Chips sugeridos:** borda tracejada, rótulo "Sugerido", "Aceitar" e "Recusar" ("Aceitar sugestão Cabala"). Assunto novo: "Novo assunto: «nome»", criado só ao aceitar. Com mais de uma sugestão, "Aceitar todas as sugestões desta faixa".
+- **Adicionar assunto:** combobox como o de autor; lista conceitos e assuntos livres e oferece "Criar assunto «nome»" quando o nome não existe sem acento e sem maiúscula.
+- **Limite:** o sexto é recusado com "Até 5 assuntos por faixa".
+- **Resumo:** campo editável, salvo ao sair dele; o sugerido aparece à parte, com "Aceitar resumo" e "Recusar resumo".
+- **Sugerir assuntos com IA** (também `media-edit-ai`): "Custa cerca de US$ …", "Confirmar e sugerir" e "Cancelar". Uma sugestão concluída por aprovação; depois dela o botão some e fica "Custou …". Falha: "Não foi possível sugerir." com o motivo e "Tentar de novo". Teto: "O teto mensal da mídia foi atingido.", sem confirmar.
+- **Edição reaberta (passo 3):** só a dica "Os assuntos voltam depois de aprovar. Faixas mantidas guardam os seus."
+- **Página da faixa:** com `media-classify`, assuntos e resumo só para leitura. Para quem ouve, no KBC-070.
+
 ## T21. Termos da transcrição e "Transcrever de novo" (KBC-040)
 
 Configurações → **Termos da transcrição**: só masters, onde a mídia está ligada, logo depois de Transcritores.

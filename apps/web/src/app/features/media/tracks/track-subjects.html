@@ -1,0 +1,112 @@
+<section class="subjects" aria-labelledby="subjects-heading">
+  <h3 id="subjects-heading" i18n="@@subjects.heading">Assuntos</h3>
+  <div class="ai" role="status">
+    @if (running()) {
+      <p i18n="@@subjects.ai.running">Sugerindo assuntos…</p>
+    } @else if (estimate(); as shown) {
+      @if (refusal()) {
+        <p class="refusal">{{ refusal() }}</p>
+      } @else {
+        <p i18n="@@subjects.ai.estimate">
+          Custa cerca de {{ estimateText() }}.
+        </p>
+      }
+      @if (month()) {
+        <p class="hint">{{ month() }}</p>
+      }
+      <div class="buttons">
+        @if (shown.allowed) {
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="waiting()"
+            (click)="confirm()"
+            i18n="@@subjects.ai.confirm"
+          >
+            Confirmar e sugerir
+          </button>
+        }
+        <button
+          type="button"
+          class="secondary"
+          (click)="cancel()"
+          i18n="@@subjects.ai.cancel"
+        >
+          Cancelar
+        </button>
+      </div>
+    } @else {
+      @if (failureText()) {
+        <p class="refusal">
+          <ng-container i18n="@@subjects.ai.failed"
+            >Não foi possível sugerir.</ng-container
+          >
+          {{ failureText() }}
+        </p>
+      }
+      @if (canSuggest()) {
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="waiting()"
+          (click)="askEstimate()"
+        >
+          @if (failureText()) {
+            <ng-container i18n="@@subjects.ai.retry"
+              >Tentar de novo</ng-container
+            >
+          } @else {
+            <ng-container i18n="@@subjects.ai.suggest"
+              >Sugerir assuntos com IA</ng-container
+            >
+          }
+        </button>
+      }
+      @if (cost()) {
+        <p class="hint" i18n="@@subjects.ai.cost">Custou {{ cost() }}</p>
+      }
+    }
+  </div>
+  @if (notice()) {
+    <p class="banner" role="alert">{{ notice() }}</p>
+  }
+  @if (readFailed()) {
+    <div class="banner" role="alert">
+      <p i18n="@@subjects.readFailed">Não consegui carregar os assuntos.</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="reload()"
+        i18n="@@subjects.readRetry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (loading()) {
+    <div class="skeleton" aria-busy="true">
+      <span class="visually-hidden" i18n="@@subjects.loading"
+        >Carregando os assuntos…</span
+      >
+    </div>
+  } @else {
+    <ol
+      class="tracks"
+      aria-label="Assuntos por faixa"
+      i18n-aria-label="@@subjects.perTrack"
+    >
+      @for (track of tracks(); track track.mediaId) {
+        <li>
+          <app-track-subject-row
+            [track]="track"
+            [collection]="collection()"
+            [busy]="isBusy(track)"
+            (add)="add(track, $event)"
+            (removeSubject)="remove(track, $event)"
+            (decide)="decide(track, $event)"
+            (summary)="saveSummary(track, $event)"
+          />
+        </li>
+      }
+    </ol>
+  }
+</section>

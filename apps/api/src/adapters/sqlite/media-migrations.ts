@@ -11,18 +11,18 @@ export interface Migration {
   readonly sql: string | ((db: DatabaseSync) => string);
 }
 
-const columnsOfJobs = (db: DatabaseSync): string =>
+const columnsOf = (db: DatabaseSync, table: string): string =>
   db
-    .prepare(`SELECT name FROM pragma_table_info('jobs')`)
+    .prepare(`SELECT name FROM pragma_table_info('${table}')`)
     .all()
     .map((row) => String(row['name']))
     .join(', ');
 
-const indexesOfJobs = (db: DatabaseSync): string[] =>
+const indexesOf = (db: DatabaseSync, table: string): string[] =>
   db
     .prepare(
       `SELECT sql FROM sqlite_master
-       WHERE type = 'index' AND tbl_name = 'jobs' AND sql IS NOT NULL`,
+       WHERE type = 'index' AND tbl_name = '${table}' AND sql IS NOT NULL`,
     )
     .all()
     .map((row) => `${String(row['sql'])};`);
@@ -34,29 +34,109 @@ const indexesOfJobs = (db: DatabaseSync): string[] =>
  * when the kind is already accepted. SQLite cannot change a CHECK in place.
  */
 export function rebuildJobsAccepting(db: DatabaseSync, kind: string): string {
-  const table = String(
+  return rebuildAccepting(db, { table: 'jobs', kind });
+}
+
+/** `jobs`' rebuild for any table with a `kind IN (…)` CHECK and nothing referencing it. */
+function rebuildAccepting(
+  db: DatabaseSync,
+  { table, kind }: { readonly table: string; readonly kind: string },
+): string {
+  const ddl = String(
     db
       .prepare(
-        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'jobs'`,
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '${table}'`,
       )
       .get()?.['sql'],
   );
-  const kinds = /kind\s+IN\s*\(([^)]*)\)/.exec(table);
-  if (!kinds?.[1]) throw new Error('jobs has no kind check to extend');
+  const kinds = /kind\s+IN\s*\(([^)]*)\)/.exec(ddl);
+  if (!kinds?.[1]) throw new Error(`${table} has no kind check to extend`);
   if (kinds[1].includes(`'${kind}'`)) return '';
-  const rebuilt = table
+  const rebuilt = ddl
     .replace(kinds[0], `kind IN (${kinds[1]}, '${kind}')`)
-    .replace(/^CREATE TABLE\s+"?jobs"?/, 'CREATE TABLE jobs_rebuilt');
-  const columns = columnsOfJobs(db);
-  const indexes = indexesOfJobs(db);
+    .replace(
+      new RegExp(`^CREATE TABLE\\s+"?${table}"?`),
+      `CREATE TABLE ${table}_rebuilt`,
+    );
+  const columns = columnsOf(db, table);
+  const indexes = indexesOf(db, table);
   return [
     `${rebuilt};`,
-    `INSERT INTO jobs_rebuilt (${columns}) SELECT ${columns} FROM jobs;`,
-    'DROP TABLE jobs;',
-    'ALTER TABLE jobs_rebuilt RENAME TO jobs;',
+    `INSERT INTO ${table}_rebuilt (${columns}) SELECT ${columns} FROM ${table};`,
+    `DROP TABLE ${table};`,
+    `ALTER TABLE ${table}_rebuilt RENAME TO ${table};`,
     ...indexes,
   ].join('\n');
 }
+
+const TRACK_SUBJECT_TABLES = `
+      -- The collection's free subjects, always on the top-level collection (BR-1).
+      CREATE TABLE media_subjects (
+        id TEXT PRIMARY KEY,
+        collection TEXT NOT NULL,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (collection, name_key)
+      ) STRICT;
+
+      CREATE TABLE media_subject_runs (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        -- The approval it read: one done run per approval (FR-3).
+        edit_version INTEGER NOT NULL,
+        principal TEXT NOT NULL,
+        model TEXT NOT NULL,
+        spend_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'done', 'failed')),
+        estimate_usd REAL NOT NULL CHECK (estimate_usd >= 0),
+        spent_usd REAL NOT NULL DEFAULT 0 CHECK (spent_usd >= 0),
+        failure TEXT,
+        created_at TEXT NOT NULL,
+        finished_at TEXT
+      ) STRICT;
+      CREATE INDEX media_subject_runs_by_media ON media_subject_runs (media_id, created_at);
+      CREATE UNIQUE INDEX media_subject_runs_one_running ON media_subject_runs (media_id)
+        WHERE status = 'running';
+
+      -- What a track carries besides its links; the version guards a person's write.
+      CREATE TABLE media_track_subjects (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        summary TEXT,
+        suggested_summary TEXT,
+        version INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
+        updated_by TEXT,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      -- One row per subject of a track. Only 'accepted' counts anywhere (BR-3); 'refused' stays
+      -- so that no later run offers it again, and to measure the suggestions (NFR-1).
+      CREATE TABLE media_subject_links (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('concept', 'free', 'new')),
+        -- 'concept:<key>', 'free:<id>' or 'new:<key>': a subject once per track.
+        subject_key TEXT NOT NULL,
+        concept_name TEXT,
+        subject_id TEXT REFERENCES media_subjects (id),
+        new_name TEXT,
+        source TEXT NOT NULL CHECK (source IN ('manual', 'ai')),
+        status TEXT NOT NULL CHECK (status IN ('suggested', 'accepted', 'refused')),
+        run_id TEXT REFERENCES media_subject_runs (id) ON DELETE SET NULL,
+        decided_by TEXT,
+        created_at TEXT NOT NULL,
+        decided_at TEXT,
+        UNIQUE (media_id, subject_key),
+        CHECK ((kind = 'concept') = (concept_name IS NOT NULL)),
+        CHECK ((kind = 'free') = (subject_id IS NOT NULL)),
+        CHECK ((kind = 'new') = (new_name IS NOT NULL)),
+        CHECK (kind <> 'new' OR status <> 'accepted')
+      ) STRICT;
+      -- What KBC-070 reads: accepted links, by subject.
+      CREATE INDEX media_subject_links_accepted ON media_subject_links (subject_key, media_id)
+        WHERE status = 'accepted';
+`;
 
 export const MEDIA_MIGRATIONS: readonly Migration[] = [
   {
@@ -962,6 +1042,19 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ) STRICT;
       INSERT INTO term_versions (version, created_at)
         SELECT DISTINCT version, '2026-10-28T12:00:00.000Z' FROM terms;
+    `,
+  },
+  {
+    // KBC-069 (ADR 0029 §6): subjects of a track. A concept is kept by name, the vault stays
+    // read-only (Q7), and whether it still exists is asked of the catalog on every read
+    // (BR-4). Versions 16 and 17 are KBC-045's and KBC-072's (open in parallel): `media_spend`
+    // is rebuilt from what it is, and `jobs` stays.
+    version: 20,
+    name: 'track-subjects',
+    sql: (db) => `
+      ${rebuildAccepting(db, { table: 'media_spend', kind: 'subject-proposal' })}
+
+      ${TRACK_SUBJECT_TABLES}
     `,
   },
 ];

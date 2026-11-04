@@ -33,6 +33,8 @@ export const FEATURES = [
   'media-library',
   'media-speakers',
   'media-tracks',
+  /** "Classificar mídia por assunto" (KBC-069, ADR 0029 §9). */
+  'media-classify',
   /** "Cadastrar perfis de voz": biometric data, see MASTER_GRANT_ONLY_FEATURES. */
   'media-voice-profiles',
 ] as const;
