@@ -75,8 +75,9 @@
               {{ speaker.name }}
             </span>
             <button type="button" class="secondary" (click)="edit(speaker)">
-              Editar<span class="visually-hidden"
-                >&nbsp;{{ speaker.name }}</span
+              <span i18n="@@voices.edit">Editar</span>&ngsp;<span
+                class="visually-hidden"
+                >{{ speaker.name }}</span
               >
             </button>
           }
