@@ -53,11 +53,81 @@ describe('FsVoiceRevocationList (ADR 0032)', () => {
     );
   });
 
-  it('survives a line torn by a crash, and the next id still counts', async () => {
+  it('a line it cannot read in the list makes the list incomplete', async () => {
     await list.start(AT);
-    appendFileSync(path, `\n${TWO.slice(0, 10)}`);
     await list.add(ONE);
-    expect((await list.read()).ids).toEqual([ONE]);
+    appendFileSync(path, `${TWO.slice(0, 20)}\n`);
+    await list.add(TWO);
+    expect(await list.read()).toEqual({
+      ids: [ONE, TWO],
+      complete: false,
+      startedAt: AT.toISOString(),
+    });
+  });
+
+  it('a last line with its break and no sense is not a torn write', async () => {
+    await list.start(AT);
+    appendFileSync(path, `${TWO.slice(0, 20)}\n`);
+    expect((await list.read()).complete).toBe(false);
+  });
+
+  it('a torn write at the very end had no answer yet, so the list stays whole', async () => {
+    await list.start(AT);
+    await list.add(ONE);
+    appendFileSync(path, TWO.slice(0, 20));
+    expect(await list.read()).toEqual({
+      ids: [ONE],
+      complete: true,
+      startedAt: AT.toISOString(),
+    });
+  });
+
+  it('a whole id whose line break was lost still counts', async () => {
+    await list.start(AT);
+    appendFileSync(path, TWO);
+    await list.add(ONE);
+    expect(await list.read()).toEqual({
+      ids: [TWO, ONE],
+      complete: true,
+      startedAt: AT.toISOString(),
+    });
+  });
+
+  it('the next revocation cuts a torn write away, so the list stays whole', async () => {
+    await list.start(AT);
+    appendFileSync(path, TWO.slice(0, 20));
+    await list.add(ONE);
+    expect((await list.read()).complete).toBe(true);
+    expect(readFileSync(path, 'utf8')).not.toContain(TWO.slice(0, 20));
+  });
+
+  it('two revocations at once, over a torn write, both stay', async () => {
+    await list.start(AT);
+    appendFileSync(path, TWO.slice(0, 20));
+    await Promise.all([list.add(ONE), list.add(TWO)]);
+    const { ids, complete } = await list.read();
+    expect(complete).toBe(true);
+    expect([...ids].sort()).toEqual([ONE, TWO]);
+  });
+
+  it("the owner's mark after a check trusts the list from there on", async () => {
+    await list.start(AT);
+    appendFileSync(path, `${TWO.slice(0, 20)}\n`);
+    appendFileSync(path, `\n${REVOCATION_LIST_HEADER}\n`);
+    expect((await list.read()).complete).toBe(true);
+  });
+
+  it('the header after a torn line still counts', async () => {
+    await list.add(ONE);
+    appendFileSync(path, TWO.slice(0, 20));
+    await list.start(AT);
+    expect((await list.read()).complete).toBe(true);
+  });
+
+  it('starts once, however many ask at the same time', async () => {
+    const later = new Date(AT.getTime() + 1000);
+    await Promise.all([list.start(AT), list.start(later)]);
+    expect(readFileSync(path, 'utf8').match(/since/g)).toHaveLength(1);
   });
 
   it('a revocation on a lost list counts, and the list stays lost', async () => {

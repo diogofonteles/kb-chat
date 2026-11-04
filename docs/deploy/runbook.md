@@ -330,11 +330,11 @@ age --decrypt --identity ~/.config/kb-chat/backup-age.key backup.age |
 - O estado atual fica guardado em `/srv/kb-chat/state.before-restore-<stamp>`.
 - O acervo e o índice não estão no backup: a fonte é o Mac, use `sync-vault.sh`.
 - **Perfis de voz (ADR 0032):** `media/backup/media.db` pode ser de antes de uma revogação. Restaure só `media.db` e **nunca** toque em `/srv/kb-chat/media/voice-revocations.list` nem em `media/voice-prints/`: essa lista, só com ids, é o que impede o consentimento revogado de voltar. Ao subir, a API revoga de novo cada perfil da lista; o relatório mostra a data desse arranque e "lista de revogações" como quem revogou.
-- **Disco perdido, com a lista junto:** o log diz `voice revocation list is lost`, e cadastrar, "Calcular de novo" e receber impressões respondem 409 (revogar continua funcionando). Restaure o backup **mais recente**. Depois, confira com o dono se houve revogação depois da data desse backup e revogue de novo cada uma pela tela. Só então marque a lista como conferida:
+- **Disco perdido, com a lista junto, ou linha ilegível na lista:** o log diz `voice revocation list is lost`, a tela "Perfis de voz" avisa, e cadastrar, "Calcular de novo" e receber impressões respondem 409 (revogar continua funcionando). Isso vale em qualquer ordem: uma API que subiu no disco vazio não escreve nada na lista, e a lista começa com o primeiro consentimento. Restaure o backup **mais recente**. Depois, confira com o dono se houve revogação depois da data desse backup e revogue de novo cada uma pela tela. Só então marque a lista como conferida:
 
   ```bash
   F=/srv/kb-chat/media/voice-revocations.list
-  sudo sh -c "echo 'voice-revocations v1' >> $F && chown 10001:10001 $F && chmod 600 $F"
+  sudo sh -c "printf '\nvoice-revocations v1\n' >> $F && chown 10001:10001 $F && chmod 600 $F"
   ```
 
 Ensaio sugerido: um a cada trimestre.
