@@ -142,6 +142,24 @@ describe('TrackTimeline (KBC-066)', () => {
       expect(moved).toEqual([]);
     });
 
+    it('takes the click that ends a drag for no click on the bar', async () => {
+      const cursors: number[] = [];
+      const rendered = await setup();
+      rendered.fixture.componentInstance.cursorChange.subscribe((ms) =>
+        cursors.push(ms),
+      );
+      sized();
+      const detail = screen.getByTestId('track-detail');
+      press(120);
+      moveTo(160);
+      lift(160);
+      fireEvent.click(detail, { clientX: 160 });
+      expect(cursors).toEqual([]);
+      fireEvent.pointerDown(detail, { clientX: 300 });
+      fireEvent.click(detail, { clientX: 300 });
+      expect(cursors).toEqual([30_000]);
+    });
+
     it('moves by what the pointer moved, not to where it landed (R-4)', async () => {
       const moved: HandleMoved[] = [];
       await setup(moved);

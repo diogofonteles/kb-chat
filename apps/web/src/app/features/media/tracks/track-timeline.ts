@@ -142,6 +142,8 @@ export class TrackTimeline {
   private readonly moving = linkedSignal(() => this.selected()?.track ?? null);
   private readonly pinch = new Map<number, number>();
   private pinchSpan: number | null = null;
+  /** A handle was pressed: the click that ends it is not a click on the bar. */
+  private handlePressed = false;
   /** Why the last move stopped, beside the handle (FR-3). */
   protected readonly stop = signal('');
 
@@ -356,6 +358,7 @@ export class TrackTimeline {
     event.stopPropagation();
     (event.target as Element).setPointerCapture?.(event.pointerId);
     this.edgeChange.emit(edge);
+    this.handlePressed = true;
     const ms = this.edgeOf(edge);
     this.drag.set({
       edge,
@@ -402,6 +405,7 @@ export class TrackTimeline {
 
   /** Two fingers on the detail zoom it (UP-09: the buttons do the same). */
   protected touch(event: PointerEvent): void {
+    this.handlePressed = false;
     if (event.pointerType !== 'touch') return;
     this.pinch.set(event.pointerId, event.clientX);
     this.pinchSpan = null;
@@ -425,7 +429,12 @@ export class TrackTimeline {
     this.pinchSpan = null;
   }
 
+  /** Safari ends a drag with a click on the bar, not on the handle that was held. */
   protected placeCursor(event: MouseEvent): void {
+    if (this.handlePressed) {
+      this.handlePressed = false;
+      return;
+    }
     const target = event.target;
     const block =
       target instanceof HTMLElement ? target.closest('[data-track]') : null;
