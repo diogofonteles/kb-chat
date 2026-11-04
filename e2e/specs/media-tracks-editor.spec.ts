@@ -95,9 +95,10 @@ test('AC-3: the keys of a handle: nudge without snapping, then the next word', a
     'Fim da faixa 1: 31 segundos',
   );
   await page.keyboard.press('ArrowRight');
-  const landed = Number(await end.getAttribute('aria-valuenow'));
-  expect(landed).toBeGreaterThan(31);
-  expect(landed).toBeLessThan(35);
+  await expect
+    .poll(async () => Number(await end.getAttribute('aria-valuenow')))
+    .toBeGreaterThan(31);
+  expect(Number(await end.getAttribute('aria-valuenow'))).toBeLessThan(35);
   await owner.dispose();
 });
 
@@ -220,7 +221,7 @@ test('AC-11: an untitled track blocks the approval and takes the focus to its ti
   await page.getByRole('button', { name: 'Aprovar faixas' }).click();
   await expect(
     page.getByRole('heading', { name: '2 faixas aplicadas.' }),
-  ).toBeVisible();
+  ).toBeFocused();
   await owner.dispose();
 });
 

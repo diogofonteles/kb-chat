@@ -170,23 +170,6 @@ describe('The draft (KBC-066 FR-1)', () => {
     ]);
   });
 
-  it('saves 200 tracks in at most 300 ms (NFR-3)', async () => {
-    const media = await startMedia();
-    const { item } = await transcribed(media);
-    const tracks = Array.from({ length: 200 }, (_, index) =>
-      track(index * 800, index * 800 + 5_000),
-    ).filter((_, index) => index % 7 === 0);
-    await put(ownerOf(media), item.id, { version: 0, tracks });
-    const longer = tracks.map((one) => ({ ...one, title: 'Outro título' }));
-    const started = performance.now();
-    const saved = await put(ownerOf(media), item.id, {
-      version: 1,
-      tracks: longer,
-    });
-    expect(saved.statusCode, saved.body).toBe(200);
-    expect(performance.now() - started).toBeLessThan(300);
-  });
-
   it('refuses a speaker of another collection', async () => {
     const media = await startMedia();
     const { item } = await transcribed(media);

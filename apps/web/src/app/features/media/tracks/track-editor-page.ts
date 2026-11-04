@@ -140,6 +140,8 @@ export class TrackEditorPage {
 
   private readonly timeline = viewChild(TrackTimeline);
   private readonly list = viewChild(TrackRowList);
+  private readonly summaryHeading =
+    viewChild<ElementRef<HTMLElement>>('summaryHeading');
   private readonly audio =
     viewChild<ElementRef<HTMLAudioElement>>('auditionElement');
 
@@ -356,12 +358,26 @@ export class TrackEditorPage {
   private receive(edit: NonNullable<ReturnType<TrackEditorPage['readyEdit']>>) {
     if (this.loaded()) {
       this.draft.refresh(edit);
+      this.keepFocus();
       return;
     }
     this.draft.load(edit, this.media()?.durationMs ?? null);
     this.restored.set(edit.started && edit.tracks.length > 0);
     this.loaded.set(true);
     afterNextRender(() => this.audioReady(), { injector: this.injector });
+  }
+
+  /** The button that had the focus is gone with the step: it moves on (WCAG 2.4.3). */
+  private keepFocus(): void {
+    afterNextRender(
+      () => {
+        if (this.document.activeElement !== this.document.body) return;
+        const heading = this.summaryHeading()?.nativeElement;
+        if (heading) heading.focus();
+        else this.list()?.focusRow();
+      },
+      { injector: this.injector },
+    );
   }
 
   protected choose(id: string): void {

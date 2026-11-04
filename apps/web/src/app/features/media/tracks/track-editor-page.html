@@ -79,10 +79,15 @@
     @if (notice()) {
       <p class="banner" role="status">{{ notice() }}</p>
     }
+    @if (audition.failed()) {
+      <p class="banner" role="alert" i18n="@@tracks.listenFailed">
+        Não consegui tocar este trecho. Tente de novo.
+      </p>
+    }
 
     @if (step() === 4) {
       <section class="summary">
-        <h3>{{ appliedText() }}</h3>
+        <h3 #summaryHeading tabindex="-1">{{ appliedText() }}</h3>
         <p i18n="@@tracks.appliedLead">Quem ouve já vê as faixas no player.</p>
         <div class="summary-actions">
           <a

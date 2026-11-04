@@ -45,10 +45,15 @@ const reply = (titles: readonly string[]) => () =>
     vozes: [],
   });
 
+const LONG_RECORDING_MS = 7_200_000;
+
 function setup(titles: readonly string[] = ['Primeira', 'Segunda']) {
   const db = proposalDb(evenSegments(30));
   const llm = new StubLlm([reply(titles)]);
-  const findMedia = (_actor: MediaActor, id: string) => itemOf(id, null);
+  const findMedia = (_actor: MediaActor, id: string) => ({
+    ...itemOf(id, null),
+    durationMs: LONG_RECORDING_MS,
+  });
   const proposals = new ProposalService({
     store: db.store,
     ledger: db.ledger,
@@ -159,5 +164,18 @@ describe('The draft and the AI proposals (KBC-066 with KBC-067)', () => {
       'ai',
       'manual',
     ]);
+  });
+
+  it('saves 200 tracks in at most 300 ms, all of them changed (NFR-3)', () => {
+    const ctx = setup();
+    const tracks = Array.from({ length: 200 }, (_, index) =>
+      manual(index * 30_000, (index + 1) * 30_000),
+    );
+    ctx.edits.save(ctx.call(0), { tracks, step: 3 });
+    const retitled = tracks.map((track) => ({ ...track, title: 'Outro' }));
+    const started = performance.now();
+    ctx.edits.save(ctx.call(1), { tracks: retitled, step: 3 });
+    expect(performance.now() - started).toBeLessThan(300);
+    expect(ctx.edits.get(OWNER, ctx.mediaId).tracks).toHaveLength(200);
   });
 });
