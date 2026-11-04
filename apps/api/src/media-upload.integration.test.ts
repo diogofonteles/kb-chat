@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { MEDIA_DEFAULT_QUOTA_BYTES } from '@kb-chat/contracts';
@@ -25,6 +31,12 @@ const SHA = shaOf(AUDIO);
 
 const partPath = (media: Media, id: string) =>
   join(media.mediaDir, 'uploads', `${id}.upload.part`);
+
+/** The disk as a restart leaves it: these bytes kept, and nothing finished. */
+function keepPart(media: Media, id: string, bytes: Buffer): void {
+  mkdirSync(join(media.mediaDir, 'uploads'), { recursive: true });
+  writeFileSync(partPath(media, id), bytes);
+}
 
 const aCheck = (overrides: object = {}) => ({
   sha256: SHA,
@@ -153,6 +165,38 @@ describe('Resumable upload (KBC-035, tus core on the item)', () => {
     expect(head.headers['upload-offset']).toBe(String(AUDIO.length));
     const listed = await media.owner('GET', TOPIC_MEDIA);
     expect(listed.json().items).toHaveLength(1);
+  });
+
+  it('finishes an upload whose whole file is kept but never ended, once (AC-1)', async () => {
+    const media = await startMedia();
+    const id = await created(media);
+    keepPart(media, id, AUDIO);
+    const heads = await Promise.all([
+      offsetOf(media, id),
+      offsetOf(media, id),
+    ]);
+    for (const head of heads) {
+      expect(head.statusCode).toBe(204);
+      expect(head.headers['upload-offset']).toBe(String(AUDIO.length));
+    }
+    expect((await media.owner('GET', `/api/v1/media/${id}`)).json().status).toBe(
+      'queued',
+    );
+    expect(existsSync(partPath(media, id))).toBe(false);
+    expect((await leaseJob(media)).mediaId).toBe(id);
+  });
+
+  it('starts over when the whole file kept is not the one announced (AC-1)', async () => {
+    const media = await startMedia();
+    const id = await created(media);
+    keepPart(media, id, Buffer.alloc(AUDIO.length, 7));
+    const head = await offsetOf(media, id);
+    expect(head.statusCode).toBe(204);
+    expect(head.headers['upload-offset']).toBe('0');
+    expect(existsSync(partPath(media, id))).toBe(false);
+    expect((await media.owner('GET', `/api/v1/media/${id}`)).json().status).toBe(
+      'uploading',
+    );
   });
 
   it('refuses a part at the wrong offset, without changing what it has (a retry reads HEAD)', async () => {

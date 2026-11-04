@@ -117,8 +117,8 @@ function assertDeclaredSize(declared: number, expected: number): void {
  */
 export class MediaService {
   private readonly now: () => Date;
-  /** Uploads streaming in now: a second request for the same item is refused. */
-  private readonly receiving = new Set<string>();
+  /** What is writing an item's upload now: a second write is refused, a HEAD waits. */
+  private readonly receiving = new Map<string, Promise<unknown>>();
 
   constructor(private readonly deps: MediaServiceDeps) {
     this.now = deps.now ?? (() => new Date());
@@ -211,19 +211,39 @@ export class MediaService {
     return used + estimatedBytesOf(request) > quotaBytes;
   }
 
-  /** Where a resumable upload stands (tus HEAD, KBC-035 FR-2). */
+  /**
+   * Where a resumable upload stands (tus HEAD, KBC-035 FR-2). A client takes a whole file
+   * for a finished upload and sends nothing more, so a whole file is only answered as such
+   * once it was finished: here, when nothing else is doing it (a restart in the middle).
+   */
   async uploadStatus(
     actor: MediaActor,
     mediaId: string,
   ): Promise<{ readonly offset: number; readonly length: number }> {
     const media = this.ownItem(actor, mediaId);
+    const length = media.uploadBytes;
     // The answer to the last part was lost: for the client, that is a finished upload.
-    if (media.status !== 'uploading')
-      return { offset: media.uploadBytes, length: media.uploadBytes };
-    return {
-      offset: await this.deps.files.uploadOffset(mediaId),
-      length: media.uploadBytes,
-    };
+    if (media.status !== 'uploading') return { offset: length, length };
+    const offset = await this.deps.files.uploadOffset(mediaId);
+    if (offset < length) return { offset, length };
+    const running = this.receiving.get(mediaId);
+    if (!running) {
+      const finished = await this.hold(mediaId, () => this.finish(media));
+      return { offset: finished ? length : 0, length };
+    }
+    await running.catch(() => undefined);
+    return this.uploadStatus(actor, mediaId);
+  }
+
+  /** Runs what writes this item's upload, and marks it as running until it ends. */
+  private async hold<T>(mediaId: string, write: () => Promise<T>): Promise<T> {
+    const running = write();
+    this.receiving.set(mediaId, running);
+    try {
+      return await running;
+    } finally {
+      this.receiving.delete(mediaId);
+    }
   }
 
   /**
@@ -238,12 +258,7 @@ export class MediaService {
     const media = this.ownItem(actor, mediaId);
     if (media.status !== 'uploading' || this.receiving.has(mediaId))
       throw notWaiting();
-    this.receiving.add(mediaId);
-    try {
-      return await this.appendPart(media, part);
-    } finally {
-      this.receiving.delete(mediaId);
-    }
+    return this.hold(mediaId, () => this.appendPart(media, part));
   }
 
   private async appendPart(
@@ -256,7 +271,10 @@ export class MediaService {
     store.touchUpload(media.id, this.now());
     const offset = await this.append(media, part.body);
     store.touchUpload(media.id, this.now());
-    if (offset === media.uploadBytes) await this.complete(media);
+    if (offset === media.uploadBytes && !(await this.finish(media)))
+      throw new AppError('VALIDATION_FAILED', 'The file came out different', {
+        details: { field: 'sha256' },
+      });
     return offset;
   }
 
@@ -277,20 +295,22 @@ export class MediaService {
     }
   }
 
-  /** Bytes that are not the announced file start over: they would never be found again. */
-  private async complete(media: MediaRecord): Promise<void> {
+  /**
+   * The whole file goes to the queue. Bytes that are not the announced file start over
+   * (false): they would never be found again.
+   */
+  private async finish(media: MediaRecord): Promise<boolean> {
     const { files } = this.deps;
     if (
       media.sourceSha256 &&
       (await files.hashUpload(media.id)) !== media.sourceSha256
     ) {
       await files.discardUpload(media.id);
-      throw new AppError('VALIDATION_FAILED', 'The file came out different', {
-        details: { field: 'sha256' },
-      });
+      return false;
     }
     await files.finishUpload(media.id);
     await this.queue(media.id);
+    return true;
   }
 
   /** The uploader's own item; one whose upload expired says so. */
@@ -319,9 +339,8 @@ export class MediaService {
     // A Content-Length that disagrees is refused before a byte is read.
     if (declaredBytes !== undefined)
       assertDeclaredSize(declaredBytes, media.uploadBytes);
-    this.receiving.add(mediaId);
     try {
-      await this.save(media, body);
+      await this.hold(mediaId, () => this.save(media, body));
     } catch (err) {
       // Removed while its bytes were arriving: the file is gone, so is the item.
       if (!this.deps.store.getMedia(mediaId)) {
@@ -329,8 +348,6 @@ export class MediaService {
         throw notFound();
       }
       throw err;
-    } finally {
-      this.receiving.delete(mediaId);
     }
     const queued = await this.queue(mediaId);
     return this.itemOf(queued, actor, this.view());
