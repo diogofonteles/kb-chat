@@ -721,11 +721,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   const publisher = trackPublisher(wiring);
   await app.register(
-    mediaRoutes(
-      media,
-      mediaEditor({ ...wiring, publisher }),
-      createPerMinute,
-    ),
+    mediaRoutes(media, mediaEditor({ ...wiring, publisher }), createPerMinute),
   );
   await registerTranscribers(app, { transcribers, media, wiring });
   await registerListening(app, wiring, { media, transcribers });

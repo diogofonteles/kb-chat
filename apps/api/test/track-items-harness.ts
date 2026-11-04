@@ -264,9 +264,7 @@ export async function libraryEntry(
 ): Promise<LibraryEntry | undefined> {
   const page = await call('GET', '/api/v1/media/library');
   expect(page.statusCode, page.body).toBe(200);
-  return page.json<{ items: LibraryEntry[] }>().items.find(
-    (item) => item.id === id,
-  );
+  return page
+    .json<{ items: LibraryEntry[] }>()
+    .items.find((item) => item.id === id);
 }
-
-

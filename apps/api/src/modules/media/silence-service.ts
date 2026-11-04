@@ -74,9 +74,7 @@ export class SilenceService {
       status: 'ready',
       version: map.detector.version,
       minSilenceMs: map.detector.minSilenceMs,
-      intervals: track
-        ? insideTrack(map.intervals, track)
-        : [...map.intervals],
+      intervals: track ? insideTrack(map.intervals, track) : [...map.intervals],
     };
   }
 

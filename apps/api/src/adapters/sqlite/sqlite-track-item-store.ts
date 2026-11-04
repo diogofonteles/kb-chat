@@ -194,12 +194,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
              cut_duration_ms = ?
            WHERE derived_media_id = ? RETURNING media_id`,
         )
-        .get(
-          cut.path,
-          cut.bytes,
-          cut.durationMs,
-          cut.mediaId,
-        );
+        .get(cut.path, cut.bytes, cut.durationMs, cut.mediaId);
       if (!row) return null;
       const parentId = String(row['media_id']);
       if (this.hasPendingCuts(parentId)) return { replaced: [] };

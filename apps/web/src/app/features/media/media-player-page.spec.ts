@@ -577,7 +577,9 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     await Promise.resolve();
     TestBed.tick();
     expect(harness.routeNativeElement).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Palestra completa' })).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Palestra completa' }),
+    ).toBeTruthy();
     expect(screen.getByText('· faixa 3 de 12')).toBeTruthy();
     const context = screen.getByRole('link', { name: 'Ouvir no contexto' });
     expect(context.getAttribute('href')).toBe(
@@ -610,7 +612,9 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     await harness.fixture.whenStable();
     expect(screen.getByText('Faixa removida da edição')).toBeTruthy();
     expect(screen.queryByText(/faixa \d+ de/)).toBeNull();
-    expect(screen.getByRole('link', { name: 'Ouvir no contexto' })).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Ouvir no contexto' }),
+    ).toBeTruthy();
     expect(screen.queryByRole('slider')).toBeNull();
   });
 

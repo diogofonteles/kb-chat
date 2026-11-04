@@ -14,7 +14,6 @@ import {
   say,
   startWorld,
   transcribed,
-
   withVersion,
   type World,
 } from '../test/track-items-harness.js';
@@ -137,7 +136,9 @@ describe('Approved tracks become items (KBC-068)', () => {
       ordinal: 3,
       total: 3,
     });
-    expect((await world.media.owner('GET', urlOf(recording.id))).json()).toMatchObject({
+    expect(
+      (await world.media.owner('GET', urlOf(recording.id))).json(),
+    ).toMatchObject({
       parent: null,
       archived: false,
     });
@@ -233,7 +234,9 @@ describe('Approving again (KBC-068 BR-5)', () => {
     );
     await approve(media, recording.id, shorter);
     expect(await finishCuts(media)).toBe(1);
-    const after = (await media.owner('GET', urlOf(second.id))).json<MediaItem>();
+    const after = (
+      await media.owner('GET', urlOf(second.id))
+    ).json<MediaItem>();
     expect(after).toMatchObject({
       id: second.id,
       durationMs: 160_000,
@@ -269,7 +272,9 @@ describe('Approving again (KBC-068 BR-5)', () => {
     ] as typeof THREE;
     await approve(media, recording.id, moved);
     await finishCuts(media);
-    const after = (await media.owner('GET', urlOf(second.id))).json<MediaItem>();
+    const after = (
+      await media.owner('GET', urlOf(second.id))
+    ).json<MediaItem>();
     expect(after.positionMs).toBe(30_000);
     const parent = await media.owner('GET', `${urlOf(recording.id)}/bookmarks`);
     expect(parent.json().items[0]).toMatchObject({
@@ -295,7 +300,9 @@ describe('Approving again (KBC-068 BR-5)', () => {
     ] as typeof THREE;
     await approve(media, recording.id, shorter);
     await finishCuts(media);
-    const after = (await media.owner('GET', urlOf(second.id))).json<MediaItem>();
+    const after = (
+      await media.owner('GET', urlOf(second.id))
+    ).json<MediaItem>();
     expect(after.positionMs).toBe(0);
     expect(after.completedAt).not.toBeNull();
   });
@@ -334,10 +341,16 @@ describe('Approving again (KBC-068 BR-5)', () => {
       archived: true,
       parent: { ordinal: null, total: 2 },
     });
-    expect((await media.owner('GET', `${urlOf(third.id)}/stream`)).statusCode).toBe(404);
-    const search = await media.owner('POST', '/api/v1/topics/hermetismo/searches', {
-      q: 'mariri',
-    });
+    expect(
+      (await media.owner('GET', `${urlOf(third.id)}/stream`)).statusCode,
+    ).toBe(404);
+    const search = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/searches',
+      {
+        q: 'mariri',
+      },
+    );
     expect(
       search.json().media.map((hit: { mediaId: string }) => hit.mediaId),
     ).toEqual([recording.id]);
@@ -356,7 +369,9 @@ describe('Approving again (KBC-068 BR-5)', () => {
       tracks.map((one) => one.id),
     );
     await finishCuts(media);
-    expect((await libraryEntry(media.owner, recording.id))?.tracks).toHaveLength(2);
+    expect(
+      (await libraryEntry(media.owner, recording.id))?.tracks,
+    ).toHaveLength(2);
   });
 
   it('reopening stops the cuts and leaves no file behind', async () => {
@@ -479,9 +494,13 @@ describe('A track follows its recording (KBC-068)', () => {
     await say(world, [{ at: 100, text: 'palavra nova da faixa' }]);
     const read = await media.owner('GET', `${urlOf(second)}/transcript`);
     expect(read.json().segments[0].text).toContain('palavra nova');
-    const search = await media.owner('POST', '/api/v1/topics/hermetismo/searches', {
-      q: 'hoasca',
-    });
+    const search = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/searches',
+      {
+        q: 'hoasca',
+      },
+    );
     expect(search.json().media).toEqual([]);
   });
 
@@ -529,13 +548,17 @@ describe('A track follows its recording (KBC-068)', () => {
     const { tracks } = await published(world);
     const id = tracks[0]?.id ?? '';
     const url = urlOf(id);
-    expect((await media.owner('PATCH', url, { title: 'x' })).statusCode).toBe(403);
+    expect((await media.owner('PATCH', url, { title: 'x' })).statusCode).toBe(
+      403,
+    );
     expect((await media.owner('GET', `${url}/edit`)).statusCode).toBe(409);
-    expect((await media.owner('POST', `${url}/transcription`, {})).statusCode).toBe(409);
-    expect((await media.owner('DELETE', url)).statusCode).toBe(409);
     expect(
-      (await media.owner('POST', `${url}/diarize`, {})).statusCode,
+      (await media.owner('POST', `${url}/transcription`, {})).statusCode,
     ).toBe(409);
+    expect((await media.owner('DELETE', url)).statusCode).toBe(409);
+    expect((await media.owner('POST', `${url}/diarize`, {})).statusCode).toBe(
+      409,
+    );
   });
 
   it('a recording with tracks is removed only with them, by name, and leaves no file', async () => {
@@ -553,17 +576,24 @@ describe('A track follows its recording (KBC-068)', () => {
       `${urlOf(recording.id)}?cascade=true`,
     );
     expect(gone.statusCode, gone.body).toBe(204);
-    expect((await media.owner('GET', urlOf(tracks[0]?.id ?? ''))).statusCode).toBe(404);
+    expect(
+      (await media.owner('GET', urlOf(tracks[0]?.id ?? ''))).statusCode,
+    ).toBe(404);
     const left = readdirSync(join(media.mediaDir, 'audio'));
     expect(left.filter((name) => name.endsWith('.m4a'))).toEqual([]);
-    expect(existsSync(join(media.mediaDir, 'transcripts', tracks[0]?.id ?? ''))).toBe(false);
+    expect(
+      existsSync(join(media.mediaDir, 'transcripts', tracks[0]?.id ?? '')),
+    ).toBe(false);
   });
 
   it('reads the pauses of a track from its recording, in its own time', async () => {
     const world = await startWorld();
     const { media } = world;
     const { tracks } = await published(world);
-    const read = await media.owner('GET', `${urlOf(tracks[0]?.id ?? '')}/silences`);
+    const read = await media.owner(
+      'GET',
+      `${urlOf(tracks[0]?.id ?? '')}/silences`,
+    );
     expect(read.statusCode, read.body).toBe(200);
     expect(read.json().status).toBe('pending');
   });
@@ -610,9 +640,13 @@ describe('Searching a track (KBC-068 BR-6)', () => {
       topic: 'udv',
       author: null,
     });
-    const found = await person.call('POST', '/api/v1/topics/hermetismo/searches', {
-      q: 'hoasca',
-    });
+    const found = await person.call(
+      'POST',
+      '/api/v1/topics/hermetismo/searches',
+      {
+        q: 'hoasca',
+      },
+    );
     expect(found.json().media).toEqual([]);
   });
 });

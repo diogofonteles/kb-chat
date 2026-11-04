@@ -38,8 +38,7 @@ export class TrackGroup {
       : $localize`:@@library.tracks:${count}:count: faixas`;
   });
   protected readonly listName = computed(
-    () =>
-      $localize`:@@library.tracksOf:Faixas de ${this.item().title}:title:`,
+    () => $localize`:@@library.tracksOf:Faixas de ${this.item().title}:title:`,
   );
   protected readonly listId = computed(() => `tracks-${this.item().id}`);
 

@@ -87,7 +87,9 @@ describe('migration track-items (KBC-068)', () => {
       'jobs_queued',
     ]);
     // A later migration may need columns for its kind (voice-profile): the rule is the CHECK.
-    const kinds = MEDIA_JOB_KINDS.filter((kind) => String(kind) !== 'voice-profile');
+    const kinds = MEDIA_JOB_KINDS.filter(
+      (kind) => String(kind) !== 'voice-profile',
+    );
     kinds.forEach((kind, index) => insertJob(db, `new-${index}`, kind));
     expect(() => insertJob(db, 'nope', 'unknown')).toThrow(/CHECK/);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
@@ -102,9 +104,7 @@ describe('migration track-items (KBC-068)', () => {
       `INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at, voice_profile_id)
        VALUES ('voice', ?, 'voice-profile', 'queued', ?, ?, 'profile-1')`,
     ).run(MEDIA_ID, AT, AT);
-    expect(() => insertJob(db, 'no-profile', 'voice-profile')).toThrow(
-      /CHECK/,
-    );
+    expect(() => insertJob(db, 'no-profile', 'voice-profile')).toThrow(/CHECK/);
     expect(indexesOfJobs(db)).toContain('jobs_by_voice_profile');
     db.close();
   });

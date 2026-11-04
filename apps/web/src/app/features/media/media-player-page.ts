@@ -172,14 +172,15 @@ export class MediaPlayerPage {
   }));
   /** "Vozes" is for whoever edits recordings (KBC-064 BR-2, AC-2), once signed in. */
   protected readonly canEdit = computed(
-    () => this.session.me() !== null && this.session.can('media-edit'),
+    () =>
+      this.session.me() !== null &&
+      this.session.can('media-edit') &&
+      !this.media()?.parent,
   );
   /** Where the preparation is, for whoever edits (T20, AC-17). */
   private readonly edit = httpResource(
     () =>
-      this.canEdit() && this.ready() && !this.media()?.parent
-        ? mediaEditUrl(this.id())
-        : undefined,
+      this.canEdit() && this.ready() ? mediaEditUrl(this.id()) : undefined,
     { parse: (body) => mediaEditSchema.parse(body) },
   );
   protected readonly editLink = computed(() => editPagePath(this.id()));

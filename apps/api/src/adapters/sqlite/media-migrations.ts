@@ -20,7 +20,9 @@ export interface Migration {
 export function rebuildJobsAccepting(db: DatabaseSync, kind: string): string {
   const table = String(
     db
-      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'jobs'`)
+      .prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'jobs'`,
+      )
       .get()?.['sql'],
   );
   const kinds = /kind\s+IN\s*\(([^)]*)\)/.exec(table);
