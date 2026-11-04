@@ -354,6 +354,13 @@ Acessibilidade: o foco vai para o campo do código quando ele aparece; status em
 4. **Enviar** mostra o progresso real ("Enviando… 128 de 312 MB · 41%") com **Cancelar envio**. Sair da página durante o envio pede confirmação do navegador. Ao terminar, o painel fecha, a mídia aparece no topo da lista em "Na fila" e o foco vai para ela (UP-01).
 5. Se a conexão falhar, aparece "O envio parou: verifique a conexão e tente de novo." com **Tentar de novo**, mantendo os campos (MA-26). No KBC-035, o envio passa a continuar de onde parou.
 
+### Editar informações (KBC-050)
+- **Editar informações** fica no menu "⋯" da linha (T14, T16) e, como botão, na página do áudio (T15), só para quem enviou (com `media-upload`) e para masters. Na grade do T16 não há "⋯": a edição fica na página do áudio.
+- Abre o mesmo painel do envio, já preenchido, com o foco no **Título**: **Título**, **Acervo** (os que a pessoa vê e abre) e **Autor** (o combobox do envio). Ao trocar o acervo, uma nota diz o que acontece: "Posições, marcadores e transcrição vão junto. Quem não vê este acervo deixa de ver o áudio."
+- **Salvar** fecha o painel, atualiza a lista e a página e anuncia "Informações salvas". Um erro mantém o painel aberto com o que foi digitado e a mensagem (MA-26). Esc e **Cancelar** fecham e o foco volta ao "⋯".
+- Ao mover, o áudio sai da lista (fica nela só se foi para um sub-acervo dela) e aparece "<título> foi movido para o acervo <nome>." com o link **Ver o acervo**; o foco vai para o título da página (UP-01).
+- Em outro acervo de topo, o nome do autor é cadastrado no destino como no envio, e os falantes do áudio passam para a lista do destino.
+
 ### Falhas e remoção (só masters)
 - "Falhou: o arquivo não é um áudio válido" não oferece nova tentativa. Uma falha temporária ("Falhou: a conversão parou 3 vezes") oferece **Tentar de novo** na própria linha (UP-13).
 - **Remover** fica no menu "⋯" da linha. Como apaga o áudio convertido e a transcrição sem volta, pede confirmação em diálogo (UP-07), que nomeia o item: "Remover 'Palestra de 1998'? O áudio e a transcrição serão apagados e não podem ser recuperados." Os botões são "Remover" (perigo) e "Cancelar".
