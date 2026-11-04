@@ -149,7 +149,7 @@ export const ANSWERS = { voice: 'SPEAKER_01', number: 2 } as const;
 /** A recording whose answering voice a person named; its id. */
 export async function namedRecording(
   media: Media,
-  input: { token: string; speakerId: string },
+  input: { token: string; speakerId: string; topic?: string },
 ): Promise<string> {
   const mediaId = await transcribedIn(media, input);
   await separate(media, { token: input.token, mediaId });

@@ -20,10 +20,18 @@ import { REVOCATION_LIST_HEADER } from './adapters/media/fs-voice-revocation-lis
 import { MAX_JOB_ATTEMPTS } from './modules/media/index.js';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
+  CONVERSATION_TURNS,
   leaseDiarization,
   requestVoices,
+  sendTurns,
+  turnsOf,
 } from '../test/diarization-harness.js';
-import { member, startMedia, type Media } from '../test/media-harness.js';
+import {
+  member,
+  startMedia,
+  vaultWithUdv,
+  type Media,
+} from '../test/media-harness.js';
 import { asTranscriber } from '../test/transcription-harness.js';
 import {
   ANSWERS,
@@ -435,6 +443,59 @@ describe('Suggesting a name by voice (KBC-071 FR-3)', () => {
       },
     });
     expect(await suggestionsOf(media, elsewhere)).toEqual([]);
+  });
+
+  it("BR-4: holds on a sub-collection's recordings, as a source and as a suggestion", async () => {
+    const media = await startMedia({ vault: await vaultWithUdv() });
+    await grantVoiceProfiles(media);
+    const { token } = await pairVoicePrinter(media);
+    const sub = encodeURIComponent('udv/palavra-do-mestre');
+    const speaker = await aSpeaker(
+      media,
+      'Mestre Gabriel',
+      '/api/v1/topics/udv/speakers',
+    );
+    const source = await namedRecording(media, {
+      token,
+      speakerId: speaker.id,
+      topic: sub,
+    });
+    const created = await media.owner(
+      'POST',
+      '/api/v1/topics/udv/voice-profiles',
+      {
+        speakerId: speaker.id,
+        sources: [{ mediaId: source, voice: ANSWERS.number }],
+        consent: aConsent(),
+      },
+    );
+    expect(created.statusCode, created.body).toBe(201);
+    const printJob = await leasePrintJob(media, token);
+    await sendPrint(media, { token, job: printJob, seed: 4 });
+
+    const heard = await transcribedIn(media, { token, topic: sub });
+    expect((await requestVoices(media, heard)).statusCode).toBe(202);
+    const job = await leaseDiarization(media, token);
+    const sent = await profilesForJob(media, { token, job });
+    expect(sent.json().profiles).toEqual([
+      {
+        id: created.json().id,
+        model: ECAPA,
+        embedding: syntheticPrint(4),
+      },
+    ]);
+    const done = await sendTurns(media, {
+      token,
+      job,
+      body: {
+        ...turnsOf(job, CONVERSATION_TURNS),
+        voiceMatches: [match(created.json().id, 0.9)],
+      },
+    });
+    expect(done.statusCode, done.body).toBe(204);
+    expect(await suggestionsOf(media, heard)).toEqual([
+      expect.objectContaining({ speakerId: speaker.id }),
+    ]);
   });
 
   it("sends the prints of the job's collection during its lease, and only to a marked token", async () => {

@@ -1,6 +1,3 @@
-import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { CollectionSpeaker } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -10,23 +7,11 @@ import {
   signIn,
   start,
 } from '../test/ai-app-harness.js';
-import { FIXTURE_VAULT } from '../test/fixture-paths.js';
-import { member, startMedia } from '../test/media-harness.js';
+import { member, startMedia, vaultWithUdv } from '../test/media-harness.js';
 
 afterEach(closeApp);
 
 const URL = '/api/v1/topics/hermetismo/speakers';
-
-/** A copy of the fixture vault with `udv` and its sub-collection. */
-async function vaultWithUdv(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'kbchat-speakers-'));
-  await cp(FIXTURE_VAULT, root, { recursive: true });
-  const sub = join(root, 'udv', 'palavra-do-mestre');
-  await mkdir(sub, { recursive: true });
-  await writeFile(join(root, 'udv', 'topic.yaml'), 'title: UDV\n');
-  await writeFile(join(sub, 'topic.yaml'), 'title: Palavra do Mestre\n');
-  return root;
-}
 
 describe('The speakers of a collection (KBC-065 FR-1, AC-7, BR-2)', () => {
   it('registers, lists by name and keeps one speaker for one name', async () => {

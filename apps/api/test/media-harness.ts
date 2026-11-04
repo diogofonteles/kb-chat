@@ -3,6 +3,8 @@
  * in, members with chosen grants, and a fake worker that "converts" an upload.
  */
 import { writeFileSync } from 'node:fs';
+import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MediaItem, WorkerJob } from '@kb-chat/contracts';
 import { expect } from 'vitest';
@@ -15,6 +17,7 @@ import {
   type Call,
   type Started,
 } from './ai-app-harness.js';
+import { FIXTURE_VAULT } from './fixture-paths.js';
 
 export const WORKER = {
   ...LOCAL,
@@ -49,6 +52,17 @@ export async function startMedia(
     ownerHeaders,
     mediaDir: join(started.state, 'media'),
   };
+}
+
+/** A copy of the fixture vault with `udv` and its sub-collection. */
+export async function vaultWithUdv(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'kbchat-speakers-'));
+  await cp(FIXTURE_VAULT, root, { recursive: true });
+  const sub = join(root, 'udv', 'palavra-do-mestre');
+  await mkdir(sub, { recursive: true });
+  await writeFile(join(root, 'udv', 'topic.yaml'), 'title: UDV\n');
+  await writeFile(join(sub, 'topic.yaml'), 'title: Palavra do Mestre\n');
+  return root;
 }
 
 /** A member who sees `topics` with `features`. */
