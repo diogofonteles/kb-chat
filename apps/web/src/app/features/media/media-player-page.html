@@ -61,6 +61,7 @@
         }
         @if (current.canEdit) {
           <button
+            #editButton
             type="button"
             class="secondary edit"
             aria-haspopup="dialog"
@@ -180,6 +181,6 @@
     [item]="current"
     [topics]="topics()"
     (saved)="edited($event)"
-    (closed)="editing.set(false)"
+    (closed)="editClosed()"
   />
 }

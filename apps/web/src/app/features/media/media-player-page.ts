@@ -258,6 +258,8 @@ export class MediaPlayerPage {
   );
   private readonly backToList =
     viewChild<ElementRef<HTMLAnchorElement>>('backToList');
+  private readonly editButton =
+    viewChild<ElementRef<HTMLButtonElement>>('editButton');
 
   constructor() {
     toObservable(this.media)
@@ -283,6 +285,12 @@ export class MediaPlayerPage {
   protected edited({ after }: MediaEdited): void {
     this.item.set(after);
     this.announcement.set(detailsSavedText());
+  }
+
+  /** Safari leaves a clicked button unfocused, so the dialog has nothing to give back. */
+  protected editClosed(): void {
+    this.editing.set(false);
+    this.editButton()?.nativeElement.focus();
   }
 
   /** "Continuar de 23:10": plays from where the person stopped. */
