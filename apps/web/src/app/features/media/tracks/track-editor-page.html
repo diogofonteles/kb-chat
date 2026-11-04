@@ -77,9 +77,6 @@
     <audio #auditionElement hidden preload="none" [src]="streamUrl()"></audio>
     <p class="visually-hidden" aria-live="polite">{{ draft.announcement() }}</p>
 
-    @if (notice()) {
-      <p class="banner" role="status">{{ notice() }}</p>
-    }
     @if (audition.failed()) {
       <p class="banner" role="alert" i18n="@@tracks.listenFailed">
         Não consegui tocar este trecho. Tente de novo.
@@ -122,6 +119,9 @@
           }
         </div>
       </section>
+    }
+    @if (notice()) {
+      <p class="banner" role="status">{{ notice() }}</p>
     }
 
     @if (step() === 4) {
