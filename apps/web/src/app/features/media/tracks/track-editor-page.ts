@@ -261,6 +261,9 @@ export class TrackEditorPage {
     const phase = this.draft.phase();
     return phase.kind === 'conflict' ? phase : null;
   });
+  protected readonly proposalsBlocked = computed(
+    () => this.conflicted() !== null || this.draft.busy(),
+  );
   protected readonly unsavedText = computed(() => {
     const phase = this.draft.phase();
     if (phase.kind === 'conflict') return CONFLICT_TEXT[phase.reason]();

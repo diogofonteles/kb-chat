@@ -212,6 +212,90 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
   it('reopens from the summary (BR-9)', async () => {
     const { harness, http } = await openPage(
       anEdit({ status: 'approved', step: 4, approvedTracks: 2 }),
+  it('approves once for two presses with a change waiting to save (BUG-5)', async () => {
+    const { harness, http } = await openPage();
+    await deleteTrack(harness);
+    fireEvent.click(button('Aprovar faixas'));
+    fireEvent.click(button('Aprovar faixas'));
+    http
+      .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+      .flush({ version: 3 });
+    http
+      .expectOne(`${BASE}/edit/approve`)
+      .flush({ version: 4, tracks: 1 });
+    TestBed.tick();
+    http
+      .expectOne(`${BASE}/edit`)
+      .flush(anEdit({ status: 'approved', step: 4, approvedTracks: 1 }));
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: '1 faixa aplicada.' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  describe('two presses that spend or apply (F-2)', () => {
+    const ESTIMATE = {
+      allowed: true,
+      estimateUsd: 0.02,
+      runCapUsd: 0.25,
+      windows: 2,
+      model: 'stub',
+      refusal: null,
+      month: { spentUsd: 1.5, capUsd: 10 },
+    };
+    const estimated = async () => {
+      const opened = await openPage(anEdit(), [
+        'media',
+        'media-edit',
+        'media-edit-ai',
+      ]);
+      fireEvent.click(button('Propor faixas com IA'));
+      opened.http.expectOne(`${BASE}/edit/proposals`).flush(ESTIMATE);
+      await opened.harness.fixture.whenStable();
+      await deleteTrack(opened.harness);
+      return opened;
+    };
+
+    it('turns off "Confirmar e propor" while an approval waits on its save', async () => {
+      const { harness, http } = await estimated();
+      expect(button('Confirmar e propor').disabled).toBe(false);
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      expect(button('Confirmar e propor').disabled).toBe(true);
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush({}, { status: 500, statusText: 'No' });
+      await harness.fixture.whenStable();
+      expect(button('Confirmar e propor').disabled).toBe(false);
+    });
+
+    it('turns off "Aprovar faixas" while a run waits on its save', async () => {
+      const { harness, http } = await estimated();
+      expect(button('Aprovar faixas').disabled).toBe(false);
+      fireEvent.click(button('Confirmar e propor'));
+      await harness.fixture.whenStable();
+      expect(button('Aprovar faixas').disabled).toBe(true);
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush({}, { status: 500, statusText: 'No' });
+      await harness.fixture.whenStable();
+      expect(button('Aprovar faixas').disabled).toBe(false);
+    });
+
+    it('leaves "Confirmar e propor" ready for a press lost to an approval', async () => {
+      const { harness, http } = await estimated();
+      fireEvent.click(button('Aprovar faixas'));
+      fireEvent.click(button('Confirmar e propor'));
+      http
+        .expectOne({ method: 'PUT', url: `${BASE}/edit` })
+        .flush({}, { status: 500, statusText: 'No' });
+      await harness.fixture.whenStable();
+      http.expectNone(`${BASE}/edit/proposals`);
+      expect(button('Confirmar e propor').disabled).toBe(false);
+    });
+  });
+
     );
     fireEvent.click(screen.getByRole('button', { name: 'Reabrir edição' }));
     http.expectOne(`${BASE}/edit/reopen`).flush({ version: 3 });

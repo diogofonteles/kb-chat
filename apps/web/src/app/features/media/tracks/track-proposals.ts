@@ -61,7 +61,7 @@ export class TrackProposals {
 
   /** Saves the person's changes and starts the run: only when that save came back fine. */
   readonly start = input.required<() => Observable<ProposeResult>>();
-  /** The draft cannot be saved now (a conflict): no run starts over it (R-3). */
+  /** A conflict (R-3), or a press on the draft waiting for its answer (F-2): no run starts. */
   readonly blocked = input(false);
 
   /** A suggested name was accepted (BR-5). */
@@ -149,7 +149,13 @@ export class TrackProposals {
     this.asking.set({ ...asking, kind: 'starting' });
     this.start()()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((result) => this.answered(result, asking.estimate));
+      .subscribe({
+        next: (result) => this.answered(result, asking.estimate),
+        // No answer: another press got there first, and this one stays to press again.
+        complete: () => {
+          if (this.asking().kind === 'starting') this.asking.set(asking);
+        },
+      });
   }
 
   private answered(result: ProposeResult, estimate: ProposalEstimate): void {

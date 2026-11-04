@@ -344,7 +344,7 @@
           [speakers]="speakerList()"
           [separation]="separation()"
           [start]="startProposal"
-          [blocked]="conflicted() !== null"
+          [blocked]="proposalsBlocked()"
           (named)="reloadVoices()"
         />
       }
