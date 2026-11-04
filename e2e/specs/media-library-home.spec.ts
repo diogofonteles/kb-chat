@@ -367,6 +367,29 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
   await page.context().close();
 });
 
+test('MA-01: a row keeps its size when it takes the focus', async ({
+  browser,
+}) => {
+  const { page } = await libraryListener(browser);
+  await openLibrary(page);
+  await searchFor(page, tag);
+  await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
+  const row = all(page)
+    .getByRole('listitem')
+    .filter({ hasText: lecture(3).title });
+  const before = await row.boundingBox();
+  await row.getByRole('link', { name: lecture(3).title }).focus();
+  // The row laying out anew under a press moved the page and lost the click on WebKit.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  expect((await row.boundingBox())?.height).toBe(before?.height);
+  await page.context().close();
+});
+
 test('AC-9: "Limpar recentes" empties the recents and keeps "Continuar ouvindo"', async ({
   browser,
 }) => {
