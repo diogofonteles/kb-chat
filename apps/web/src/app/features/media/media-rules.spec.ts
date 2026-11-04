@@ -1,7 +1,12 @@
 import type { MediaItem } from '@kb-chat/contracts';
 import { isInFlight, statusTextOf } from './media-labels.js';
 import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
-import { fileProblemOf, sentOf, titleFromFileName } from './upload-rules.js';
+import {
+  fileProblemOf,
+  overQuota,
+  sentOf,
+  titleFromFileName,
+} from './upload-rules.js';
 
 const anItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   parent: null,
@@ -119,6 +124,21 @@ describe('upload rules (MA-20, MA-25)', () => {
     expect(
       fileProblemOf({ name: 'aula.OPUS', size: 4 * 1024 ** 3 }),
     ).toBeNull();
+  });
+
+  it('never calls a file over the limit a file of 4 GB', () => {
+    expect(fileProblemOf({ name: 'aula.mp3', size: 4 * 1024 ** 3 + 10 })).toBe(
+      'Este arquivo tem 4,1 GB. O limite é 4 GB.',
+    );
+  });
+
+  it('says a small quota in MB, never as 0 GB', () => {
+    expect(overQuota(50 * 1024 ** 2)).toBe(
+      'Este envio passa da sua cota de 50 MB. Fale com um master para aumentar.',
+    );
+    expect(overQuota(5 * 1024 ** 3)).toBe(
+      'Este envio passa da sua cota de 5 GB. Fale com um master para aumentar.',
+    );
   });
 
   it('says what is wrong and how to fix it', () => {

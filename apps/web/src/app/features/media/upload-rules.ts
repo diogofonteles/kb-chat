@@ -22,9 +22,22 @@ const gigabytes = (bytes: number): string =>
     bytes / 1024 ** 3,
   );
 
+/** Rounded up: a file over the limit never reads as the limit. */
+const gigabytesAbove = (bytes: number): string =>
+  new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: 1,
+    roundingMode: 'ceil',
+  }).format(bytes / 1024 ** 3);
+
+/** One decimal of a GB is about 100 MB: below half of that, it would read as "0 GB". */
+const SMALLEST_IN_GB = 0.05 * 1024 ** 3;
+
+const quotaText = (bytes: number): string =>
+  bytes < SMALLEST_IN_GB ? `${megabytes(bytes)} MB` : `${gigabytes(bytes)} GB`;
+
 /** The wall a person hit, in their own numbers (KBC-035 AC-3). */
 export const overQuota = (quotaBytes: number): string =>
-  $localize`:@@media.upload.overQuota:Este envio passa da sua cota de ${gigabytes(quotaBytes)}:quota: GB. Fale com um master para aumentar.`;
+  $localize`:@@media.upload.overQuota:Este envio passa da sua cota de ${quotaText(quotaBytes)}:quota:. Fale com um master para aumentar.`;
 
 /** A file that moved or changed after it was chosen (MA-25). */
 export const unreadableFile = (): string =>
@@ -37,7 +50,7 @@ export function fileProblemOf(
   if (!hasAcceptedAudioExtension(file.name))
     return $localize`:@@media.upload.badType:Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.`;
   if (file.size > MEDIA_MAX_UPLOAD_BYTES)
-    return $localize`:@@media.upload.tooLarge:Este arquivo tem ${gigabytes(file.size)}:size: GB. O limite é 4 GB.`;
+    return $localize`:@@media.upload.tooLarge:Este arquivo tem ${gigabytesAbove(file.size)}:size: GB. O limite é 4 GB.`;
   if (file.size === 0)
     return $localize`:@@media.upload.empty:Este arquivo está vazio. Escolha outro.`;
   return null;
