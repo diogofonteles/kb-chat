@@ -118,6 +118,18 @@ const backToCurrent = (page: Page) =>
 const captionsButton = (page: Page) =>
   page.getByRole('button', { name: 'Legendas' });
 
+/** The element's events worth seeing when frames of playback are not measured. */
+const MEDIA_EVENTS = [
+  'seeking',
+  'seeked',
+  'waiting',
+  'stalled',
+  'playing',
+  'pause',
+  'canplay',
+  'error',
+];
+
 /** Starting playback from a segment: its text clicked. */
 async function playFromText(page: Page, text: string) {
   await segmentsList(page).getByText(text).click();
@@ -473,14 +485,32 @@ test('AC-6: a low-confidence transcript says so above the text', async ({
 
 test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
   page,
-}) => {
+}, testInfo) => {
+  // The element's events since the page opened: a seek may come before the measured window.
+  await page.addInitScript((events) => {
+    const seen: { event: string; at: number; time: number }[] = [];
+    Object.assign(window, { kbcMediaEvents: seen });
+    for (const event of events)
+      document.addEventListener(
+        event,
+        ({ target }) => {
+          if (target instanceof HTMLMediaElement)
+            seen.push({
+              event,
+              at: Math.round(performance.now()),
+              time: target.currentTime,
+            });
+        },
+        true,
+      );
+  }, MEDIA_EVENTS);
   await openPlayer(page, lecture);
   await playFromText(page, 'Frase número 0 da abertura.');
   // Measured once playback runs on its own (the start of a stream is not the player's).
   await expect
     .poll(async () => (await audioState(page)).currentTime)
     .toBeGreaterThan(1);
-  const { misses, samples } = await page.evaluate(async () => {
+  const { misses, samples, why } = await page.evaluate(async () => {
     const audio = document.querySelector<HTMLMediaElement>(
       '[data-media-engine]',
     );
@@ -489,16 +519,50 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
     ).map((item) => Number(item.dataset['startMs']));
     const misses: number[] = [];
     let samples = 0;
+    // Why frames were skipped: a frame may count under several. `seeking` skips nothing by
+    // itself; it says whether a seek in flight is behind the other reasons.
+    const skipped = {
+      frames: 0,
+      frozen: 0,
+      noAudio: 0,
+      readyStateBelow3: 0,
+      paused: 0,
+      seeking: 0,
+    };
+    const gaps: number[] = [];
+    const timeline: Record<string, number | boolean | undefined>[] = [];
+    const startedAt = Math.round(performance.now());
     const until = performance.now() + 6_000;
     let previous = performance.now();
+    let snapshotAt = 0;
     while (performance.now() < until) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const frameAt = performance.now();
       // A frame after the page itself froze (a loaded machine), or with the audio waiting
       // for data, shows nothing about the highlight: those are not samples.
       const frozen = frameAt - previous > 100;
+      gaps.push(Math.round(frameAt - previous));
       previous = frameAt;
-      if (frozen || !audio || audio.readyState < 3 || audio.paused) continue;
+      if (frameAt - snapshotAt >= 500) {
+        snapshotAt = frameAt;
+        timeline.push({
+          at: Math.round(frameAt),
+          currentTime: audio?.currentTime,
+          readyState: audio?.readyState,
+          networkState: audio?.networkState,
+          paused: audio?.paused,
+          seeking: audio?.seeking,
+        });
+      }
+      if (frozen || !audio || audio.readyState < 3 || audio.paused) {
+        skipped.frames++;
+        if (frozen) skipped.frozen++;
+        if (!audio) skipped.noAudio++;
+        if (audio && audio.readyState < 3) skipped.readyStateBelow3++;
+        if (audio?.paused) skipped.paused++;
+        if (audio?.seeking) skipped.seeking++;
+        continue;
+      }
       samples++;
       const now = audio.currentTime * 1000;
       const shown = Number(
@@ -510,8 +574,30 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
       // The marked segment must contain the audio's time, give or take 250 ms.
       if (shown > now + 250 || next < now - 250) misses.push(now);
     }
-    return { misses, samples };
+    const sorted = [...gaps].sort((a, b) => a - b);
+    return {
+      misses,
+      samples,
+      why: {
+        skipped,
+        frames: gaps.length,
+        startedAt,
+        gapMs: {
+          median: sorted[Math.floor(sorted.length / 2)],
+          max: sorted.at(-1),
+        },
+        timeline,
+        events: (window as unknown as { kbcMediaEvents: unknown[] })
+          .kbcMediaEvents,
+      },
+    };
   });
+  // Evidence of why a frame did not count: CI's report has it, a local run prints it.
+  await testInfo.attach('nfr-1-frames', {
+    body: JSON.stringify({ samples, why }, null, 2),
+    contentType: 'application/json',
+  });
+  console.log(`NFR-1 ${testInfo.project.name}: ${JSON.stringify(why.skipped)}`);
   // Frames are skipped only when they say nothing; 6 s must still give real samples
   // (about 360 at 60 fps), or the check would pass without measuring.
   expect(samples).toBeGreaterThanOrEqual(120);
