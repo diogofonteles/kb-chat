@@ -19,8 +19,8 @@ import { mediaUrl } from '@core/media/media-api.js';
     @if (shown(); as about) {
       <section
         class="about"
-        aria-label="Sobre a faixa"
-        i18n-aria-label="@@trackAbout.label"
+        aria-label="Assuntos da faixa"
+        i18n-aria-label="@@subjects.ofTrack"
       >
         @if (about.subjects.length > 0) {
           <div class="subjects">
