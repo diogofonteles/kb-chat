@@ -112,7 +112,9 @@ test('AC-1, AC-5, AC-8: choose, follow step 2 and go to step 3 by a press', asyn
   const id = await sendGuided(page, dialog);
 
   await expect(
-    page.getByText('O próximo passo fica disponível quando o processamento terminar.'),
+    page.getByText(
+      'O próximo passo fica disponível quando o processamento terminar.',
+    ),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Validar faixas' }),
