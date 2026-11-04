@@ -306,6 +306,34 @@ describe('Registering a profile (KBC-071 FR-1, FR-2, BR-1)', () => {
   });
 });
 
+describe('Calculating again (KBC-071 FR-4)', () => {
+  it('a refusal leaves a valid print where it was', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    db.exec('DELETE FROM voice_profile_sources');
+    db.close();
+    const refused = await media.owner(
+      'POST',
+      `/api/v1/voice-profiles/${profile.id}/recalculate`,
+      {},
+    );
+    expect(refused.statusCode).toBe(409);
+    expect(printFiles(media)).toEqual([`${profile.id}.sealed`]);
+    expect((await profiles(media))[0]?.status).toBe('ready');
+  });
+
+  it('a queued job drops the old print, which is never read again', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const url = `/api/v1/voice-profiles/${profile.id}/recalculate`;
+    expect((await media.owner('POST', url, {})).statusCode).toBe(200);
+    expect(printFiles(media)).toEqual([]);
+    expect((await profiles(media))[0]?.status).toBe('calculating');
+    expect((await media.owner('POST', url, {})).statusCode).toBe(409);
+  });
+});
+
 describe('Suggesting a name by voice (KBC-071 FR-3)', () => {
   it('AC-2: a close voice reads "parece ser", and becomes a name only when accepted', async () => {
     const { media, token } = await granted();

@@ -139,8 +139,7 @@ export class VoiceProfileService {
       registeredBy: target.by,
       now: this.now(),
     });
-    if (!created)
-      throw new AppError('MEDIA_CONFLICT', 'This speaker has a profile');
+    if (!created) throw new AppError('MEDIA_CONFLICT', 'This speaker has one');
     return this.viewOf(profileId);
   }
 
@@ -160,14 +159,16 @@ export class VoiceProfileService {
     if (!revoked) throw notFound();
   }
 
-  /** "Calcular de novo", for a job given up or a print lost with a disk. */
+  /**
+   * "Calcular de novo", for a job given up or a print lost with a disk. The store decides
+   * first, in one transaction: a refusal must not cost a valid print.
+   */
   async recalculate(
     actor: VoiceProfileActor,
     profileId: string,
   ): Promise<VoiceProfile> {
     this.visible(actor, profileId);
     await this.assertMayPrint(profileId);
-    await this.deps.prints.remove(profileId);
     const queued = this.deps.profiles.recalculate({
       profileId,
       jobId: randomUUID(),
@@ -175,6 +176,7 @@ export class VoiceProfileService {
     });
     if (!queued)
       throw new AppError('MEDIA_CONFLICT', 'This profile cannot be queued');
+    await this.deps.prints.remove(profileId);
     return this.viewOf(profileId);
   }
 
