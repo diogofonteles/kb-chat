@@ -49,7 +49,8 @@ export interface StageFacts {
 export interface PaidStageNow {
   /** What is left to pay for: the windows a failed run did not finish. */
   readonly estimateUsd: number;
-  readonly allowed: boolean;
+  /** The cap a click would meet: the true state of the stage, whatever stopped it before. */
+  readonly refusal: StageStop | null;
 }
 
 const BLANK = {
@@ -193,10 +194,10 @@ function failedTracks(
   const { plan, stopUsd, paidNow } = facts;
   return stageOf('tracks', 'failed', {
     ...leftByFailedRuns(facts),
-    failure,
+    failure: paidNow?.refusal ?? failure,
     canRetry:
       facts.canPropose &&
-      (!FINAL_FAILURES.has(failure) || paidNow?.allowed === true),
+      (paidNow ? paidNow.refusal === null : !FINAL_FAILURES.has(failure)),
     estimateUsd: paidNow?.estimateUsd ?? stopUsd ?? plan.acceptedUsd,
   });
 }

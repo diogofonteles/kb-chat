@@ -516,11 +516,7 @@ export class PreparationService {
     mediaId: string,
   ): Promise<PaidStageNow | null> {
     try {
-      const { estimateUsd, refusal } = await this.deps.proposals.estimate(
-        actor,
-        mediaId,
-      );
-      return { estimateUsd, allowed: refusal === null };
+      return await this.deps.proposals.estimate(actor, mediaId);
     } catch (err) {
       // No estimate now (the AI off, its price out of reach): the failure as it was stands.
       if (!(err instanceof AppError)) this.deps.onError?.(err, mediaId);

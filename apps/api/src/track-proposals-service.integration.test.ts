@@ -701,6 +701,25 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     expect(monthUsed(ctx)).toBeCloseTo(0.3, 9);
   });
 
+  it('refuses, in the estimate and at the start, an analysis past its cap (BUG-9)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow(), new Error('HTTP 503')],
+    });
+    ctx.llm.costPerCall = 0.2;
+    await runToEnd(ctx);
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    await runToEnd(ctx);
+    const calls = ctx.llm.calls.length;
+    const estimate = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(estimate).toMatchObject({ allowed: false, refusal: 'run-cap' });
+    await expect(ctx.service.start(OWNER, ctx.mediaId)).rejects.toMatchObject({
+      code: 'MEDIA_SPEND_CAP',
+      details: { cap: 'run-cap' },
+    });
+    expect(ctx.llm.calls).toHaveLength(calls);
+  });
+
   it('carries the spend of a failure whose windows no longer match the plan', async () => {
     const ctx = failedInTheMiddle();
     await runToEnd(ctx);

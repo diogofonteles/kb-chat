@@ -49,7 +49,7 @@ const FAILURES: Record<StageFailure, () => string> = {
   interrupted: () =>
     $localize`:@@prep.failure.interrupted:Falhou: a análise foi interrompida.`,
   'run-cap': () =>
-    $localize`:@@prep.failure.runCap:A análise passaria do teto por gravação. As faixas com IA não rodaram.`,
+    $localize`:@@prep.failure.runCap:A análise passaria do teto por gravação, então a IA parou aqui.`,
   'monthly-cap': () =>
     $localize`:@@prep.failure.monthlyCap:O limite mensal da mídia foi atingido. As faixas com IA não rodaram.`,
   'no-permission': () =>

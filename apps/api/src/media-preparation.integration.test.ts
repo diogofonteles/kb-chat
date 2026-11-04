@@ -707,6 +707,27 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
     expect(media.started.fake.chatBodies).toHaveLength(5);
   });
 
+  it('after a real run cap offers no retry, and the way out stays (BUG-9)', async () => {
+    const { media, token } = await connected();
+    const unreadable = () => ({ content: 'ilegível', cost: 0.15 });
+    media.started.fake.scripted.push(unreadable, unreadable);
+    const id = await upToLongProposal(media, token);
+    const failed = await settled(media, id);
+    expect(stage(failed, 'tracks')).toMatchObject({
+      failure: 'run-cap',
+      canRetry: false,
+    });
+    expect(stage(failed, 'tracks')?.spentUsd).toBeCloseTo(0.3, 9);
+    expect(failed.canSwitchToManual).toBe(true);
+    const pressed = await media.owner(
+      'POST',
+      `${preparation(id)}/steps/tracks/retry`,
+      {},
+    );
+    expect(pressed.statusCode).toBe(409);
+    expect(media.started.fake.chatBodies).toHaveLength(2);
+  });
+
   it('a person takes the windows done to step 3 by hand, as proposals (AC-11)', async () => {
     const { media, token } = await connected();
     media.started.fake.scripted.push(oneTrack('Primeira'), { status: 503 });

@@ -2,6 +2,7 @@ import type {
   ApiErrorCode,
   PreparationPlan,
   ProposalRun,
+  StageStop,
 } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../../app-error.js';
@@ -173,15 +174,15 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
 
   it('reads a final failure again: what stopped it may have gone (BUG-7)', () => {
     const stopped = { claimed: true, stop: 'monthly-cap' } as const;
-    const withPaid = (allowed: boolean) =>
+    const withPaid = (refusal: StageStop | null) =>
       stateOf(
         stagesOf(
-          facts({ ...stopped, paidNow: { estimateUsd: 0.02, allowed } }),
+          facts({ ...stopped, paidNow: { estimateUsd: 0.02, refusal } }),
         ),
         'tracks',
       );
-    expect(withPaid(true)).toMatchObject({ canRetry: true, estimateUsd: 0.02 });
-    expect(withPaid(false)).toMatchObject({ canRetry: false });
+    expect(withPaid(null)).toMatchObject({ canRetry: true, estimateUsd: 0.02 });
+    expect(withPaid('monthly-cap')).toMatchObject({ canRetry: false });
     expect(stateOf(stagesOf(facts(stopped)), 'tracks')).toMatchObject({
       canRetry: false,
     });
@@ -210,13 +211,27 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
     expect(failed(0, 0)).toMatchObject({ windows: null, spentUsd: null });
   });
 
+  it('tells what a click would meet now, whatever stopped the run (BUG-9)', () => {
+    const stages = stagesOf(
+      facts({
+        claimed: true,
+        runFailure: 'provider',
+        paidNow: { estimateUsd: 0.02, refusal: 'run-cap' },
+      }),
+    );
+    expect(stateOf(stages, 'tracks')).toMatchObject({
+      failure: 'run-cap',
+      canRetry: false,
+    });
+  });
+
   it('never offers a paid retry past a final failure to who may not propose', () => {
     const stages = stagesOf(
       facts({
         claimed: true,
         stop: 'no-permission',
         canPropose: false,
-        paidNow: { estimateUsd: 0.02, allowed: true },
+        paidNow: { estimateUsd: 0.02, refusal: null },
       }),
     );
     expect(stateOf(stages, 'tracks')).toMatchObject({ canRetry: false });

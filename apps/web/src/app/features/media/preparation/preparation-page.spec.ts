@@ -395,6 +395,29 @@ describe('PreparationPage (T20, step 2)', () => {
     ).toBeTruthy();
   });
 
+  it('offers no retry in words past the cap: only what stands (BUG-9)', async () => {
+    await open(
+      aPreparation({
+        stages: [
+          aStage('tracks', 'failed', {
+            failure: 'run-cap',
+            canRetry: false,
+            estimateUsd: 0.02,
+            windows: { done: 2, total: 3 },
+            spentUsd: 0.4,
+          }),
+        ],
+        canSwitchToManual: true,
+      }),
+    );
+    expect(
+      screen.getByText(/2 de 3 janelas prontas, por US\$\s0,40\.$/),
+    ).toBeTruthy();
+    expect(screen.getByText(/passaria do teto por gravação/)).toBeTruthy();
+    expect(screen.queryByText(/não rodaram/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+  });
+
   it('says what attempts that finished no window cost (BUG-8)', async () => {
     await open(
       aPreparation({

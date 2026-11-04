@@ -116,9 +116,13 @@ export class ProposalService {
     actor: MediaActor,
     mediaId: string,
   ): Promise<ProposalEstimate> {
-    const { plan } = await this.prepare(actor, mediaId);
+    const { plan, carriedUsd } = await this.prepare(actor, mediaId);
     const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
-    const refusal = this.refusalOf(plan.estimateUsd, used);
+    const refusal = this.refusalOf({
+      estimateUsd: plan.estimateUsd,
+      usedUsd: used,
+      carriedUsd,
+    });
     return {
       estimateUsd: plan.estimateUsd,
       runCapUsd: this.deps.caps.runUsd,
@@ -163,7 +167,12 @@ export class ProposalService {
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
     const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
-    return { estimateUsd, refusal: this.refusalOf(estimateUsd, used) };
+    const refusal = this.refusalOf({
+      estimateUsd,
+      usedUsd: used,
+      carriedUsd: 0,
+    });
+    return { estimateUsd, refusal };
   }
 
   /** Reserves the estimate and starts the run; it goes on after the answer (FR-1). */
@@ -173,7 +182,7 @@ export class ProposalService {
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
       });
-    const spendId = this.reserve(actor, prepared.plan);
+    const spendId = this.reserve(actor, prepared);
     const run = this.startRun({ actor, prepared, spendId });
     if (!run) {
       this.closeSpend(spendId, { failure: 'interrupted', spentUsd: 0 });
@@ -315,19 +324,27 @@ export class ProposalService {
     });
   }
 
-  private refusalOf(estimateUsd: number, usedUsd: number): SpendCap | null {
-    if (estimateUsd > this.deps.caps.runUsd) return 'run-cap';
+  /** The cap this would cross: the run's over all of the analysis' attempts (BR-3). */
+  private refusalOf(cost: {
+    readonly estimateUsd: number;
+    readonly usedUsd: number;
+    readonly carriedUsd: number;
+  }): SpendCap | null {
+    const { estimateUsd, usedUsd, carriedUsd } = cost;
+    if (carriedUsd + estimateUsd > this.deps.caps.runUsd) return 'run-cap';
     if (usedUsd + estimateUsd > this.deps.caps.monthlyUsd) return 'monthly-cap';
     return null;
   }
 
   /** The estimate reserved in the media ledger, or the cap it would cross (BR-3). */
-  private reserve(actor: MediaActor, plan: ProposalPlan): string {
+  private reserve(actor: MediaActor, prepared: Prepared): string {
+    const { plan, carriedUsd } = prepared;
     const since = startOfAppMonth(this.now());
-    const refusal = this.refusalOf(
-      plan.estimateUsd,
-      this.deps.ledger.usedSince(since),
-    );
+    const refusal = this.refusalOf({
+      estimateUsd: plan.estimateUsd,
+      usedUsd: this.deps.ledger.usedSince(since),
+      carriedUsd,
+    });
     if (refusal) throw capError(refusal);
     const id = randomUUID();
     const reserved = this.deps.ledger.reserve({
