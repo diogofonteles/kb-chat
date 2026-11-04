@@ -15,7 +15,6 @@
   list-style: none;
 }
 
-/* Rows out of view are skipped by the browser: 200 tracks scroll without a virtual list. */
 .tracks li {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
@@ -23,8 +22,6 @@
   align-items: start;
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--color-border);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 6.5rem;
 }
 
 .tracks li.fresh {

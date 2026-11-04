@@ -294,7 +294,7 @@ const DONE = [
 ];
 
 const track = (index: number, startMs: number, endMs: number) => ({
-  id: `22222222-2222-4222-8222-00000000000${index}`,
+  id: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
   title: `Pergunta ${index}`,
   startMs,
   endMs,
@@ -490,11 +490,15 @@ test('UP-11: a jump to a far row and a click in the same frame plays it', async 
       ) as MediaPreparation['tracks'],
     },
   ]);
+  // No stream: the failure proves the press arrived, and nothing reaches the speakers.
+  await page.route(`**/api/v1/media/${media.id}/stream`, (route) =>
+    route.abort(),
+  );
   await page.goto(`/midia/${media.id}/preparar`);
   await page.getByRole('button', { name: 'Ouvir a faixa 50' }).click();
-  await expect(
-    page.getByRole('button', { name: 'Parar a faixa 50' }),
-  ).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText(
+    'Não consegui tocar este trecho',
+  );
   await owner.dispose();
 });
 
