@@ -1,8 +1,7 @@
-import type { WaveformJob } from '@kb-chat/contracts';
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { WorkerJob } from '@kb-chat/contracts';
+import type { WaveformJob, WorkerJob } from '@kb-chat/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ffmpegBins, makeLongWav, makeTone } from '../../test/media-tools.js';
 import { createLogger } from '../logger.js';
@@ -84,7 +83,7 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
       aJob({ targetPath: '../escape.m4a' }),
       new AbortController().signal,
     );
-    expect(told).toEqual(['fail:invalid-audio']);
+    expect(told).toEqual(['fail:conversion-failed']);
     expect(lines.join('')).toContain('outside the media directory');
   });
 
