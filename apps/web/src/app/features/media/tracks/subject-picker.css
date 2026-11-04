@@ -46,5 +46,5 @@ input:focus-visible {
 
 .options li.active,
 .options li:hover {
-  background: var(--color-surface-2, var(--color-border));
+  background: var(--color-surface-muted);
 }

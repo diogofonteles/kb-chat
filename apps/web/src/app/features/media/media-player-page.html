@@ -54,6 +54,9 @@
           </p>
         }
         <h2 id="media-item-title">{{ current.title }}</h2>
+        @if (canSeeSubjects()) {
+          <app-track-subjects-view [mediaId]="current.id" />
+        }
         <p class="meta">
           <app-authorship-badge [mediaAuthor]="current.author" />
           @if (duration()) {
