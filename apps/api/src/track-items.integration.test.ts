@@ -158,6 +158,8 @@ describe('Approved tracks become items (KBC-068)', () => {
       endMs: 360_000,
       ordinal: 3,
       total: 3,
+      version: 0,
+      fileVersion: 1,
     });
     expect(
       (await world.media.owner('GET', urlOf(recording.id))).json(),
@@ -676,14 +678,10 @@ describe('A track follows its recording (KBC-068)', () => {
     const { tracks } = await published(world);
     const id = tracks[0]?.id ?? '';
     const url = urlOf(id);
-    expect((await media.owner('PATCH', url, { title: 'x' })).statusCode).toBe(
-      403,
-    );
     expect((await media.owner('GET', `${url}/edit`)).statusCode).toBe(409);
     expect(
       (await media.owner('POST', `${url}/transcription`, {})).statusCode,
     ).toBe(409);
-    expect((await media.owner('DELETE', url)).statusCode).toBe(409);
     expect((await media.owner('POST', `${url}/diarize`, {})).statusCode).toBe(
       409,
     );

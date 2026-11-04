@@ -315,6 +315,11 @@ function registerItemRoutes(
   typed.get('/api/v1/media/:id', OPTIONS.item, async (request) =>
     service.get(actorOf(request), request.params.id),
   );
+  registerStream(typed, service);
+  registerMasterRoutes(typed, service, tracks);
+}
+
+function registerStream(typed: TypedApp, service: MediaService): void {
   typed.get(
     '/api/v1/media/:id/stream',
     OPTIONS.stream,
@@ -333,7 +338,6 @@ function registerItemRoutes(
       });
     },
   );
-  registerMasterRoutes(typed, service, tracks);
 }
 
 /** Masters only: "Tentar de novo" and "Remover" (FR-7, FR-8). */

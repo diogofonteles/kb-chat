@@ -5,7 +5,7 @@ import type {
   TranscriptWordsQuery,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { MediaStorePort } from '../../ports/media-store.js';
+import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import type {
   TranscriptStorePort,
   TranscriptSummary,
@@ -189,27 +189,33 @@ export class TranscriptService {
       );
       return whole.segmentVoices[index] ?? null;
     };
-    const own = this.deps.trackVoices?.(record.id, record.topic) ?? [];
     return {
       ...whole,
-      speakers: {
-        ...whole.speakers,
-        labels: whole.speakers.labels.map((label) => {
-          const named = own.find((one) => one.voice === label.voice);
-          return named
-            ? {
-                ...label,
-                kind: 'person' as const,
-                speakerId: named.speakerId,
-                name: named.name,
-              }
-            : label;
-        }),
-      },
+      speakers: this.namedHere(whole.speakers, record),
       segmentVoices: transcript.segments.map((segment) =>
         voiceAt(track.startMs + (segment.startMs + segment.endMs) / 2),
       ),
     };
+  }
+
+  /** What the track says of its own voices wins over the recording's names (KBC-073 FR-1). */
+  private namedHere(
+    speakers: TranscriptSpeakers,
+    record: Pick<MediaRecord, 'id' | 'topic'>,
+  ): TranscriptSpeakers {
+    const own = this.deps.trackVoices?.(record.id, record.topic) ?? [];
+    const labels = speakers.labels.map((label) => {
+      const named = own.find((one) => one.voice === label.voice);
+      return named
+        ? {
+            ...label,
+            kind: 'person' as const,
+            speakerId: named.speakerId,
+            name: named.name,
+          }
+        : label;
+    });
+    return { ...speakers, labels };
   }
 
   subtitles(actor: MediaActor, mediaId: string): Subtitles {

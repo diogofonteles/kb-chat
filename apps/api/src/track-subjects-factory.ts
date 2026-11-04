@@ -21,6 +21,11 @@ export interface TrackSubjectWiring {
   readonly log: FastifyBaseLogger;
 }
 
+const capsOf = ({ ai }: MediaDeps) => ({
+  runUsd: ai.runCapUsd,
+  monthlyUsd: ai.monthlyCapUsd,
+});
+
 /** Subjects as the search and the library read them (KBC-070). */
 export function createSubjectDirectory(
   wiring: Pick<TrackSubjectWiring, 'media' | 'catalog' | 'authors'>,
@@ -56,11 +61,24 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     findMedia: (actor, mediaId) => service.getRecording(actor, mediaId),
     titleOf: (topic) => catalog.get(topic)?.topic.title ?? topic,
     llm: mediaLlm(wiring),
-    caps: { runUsd: media.ai.runCapUsd, monthlyUsd: media.ai.monthlyCapUsd },
+    caps: capsOf(media),
     onRunError: (err, runId) =>
       wiring.log.warn({ err, runId }, 'subject run failed'),
   });
-  const suggestions = new TrackSuggestionService({
+  return {
+    subjects,
+    proposals,
+    suggestions: suggestionService(wiring, subjects),
+  };
+}
+
+/** "Sugerir de novo com IA" for one track (KBC-073 FR-7). */
+function suggestionService(
+  wiring: TrackSubjectWiring,
+  subjects: TrackSubjectService,
+): TrackSuggestionService {
+  const { media, authors, service } = wiring;
+  return new TrackSuggestionService({
     ledger: media.spend,
     subjects,
     store: media.store,
@@ -69,9 +87,8 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     findMedia: (actor, mediaId) => service.get(actor, mediaId),
     rootOf: (topic) => authors.rootOf(topic),
     llm: mediaLlm(wiring),
-    caps: { runUsd: media.ai.runCapUsd, monthlyUsd: media.ai.monthlyCapUsd },
+    caps: capsOf(media),
     onError: (err, mediaId) =>
       wiring.log.warn({ err, mediaId }, 'track suggestion failed'),
   });
-  return { subjects, proposals, suggestions };
 }

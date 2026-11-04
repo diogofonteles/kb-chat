@@ -158,14 +158,7 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
     jobId: string;
     now: Date;
   }): void {
-    const { track, startMs, endMs, jobId } = input;
-    const at = input.now.toISOString();
-    this.db
-      .prepare(
-        `DELETE FROM jobs WHERE media_id = ? AND kind = 'cut'
-           AND status IN ('failed', 'dead')`,
-      )
-      .run(track.mediaId);
+    const { track, startMs, endMs } = input;
     this.db
       .prepare(
         `UPDATE media_tracks SET start_ms = ?, end_ms = ?, cut_status = 'pending'
@@ -177,12 +170,22 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
         'UPDATE media_draft_tracks SET start_ms = ?, end_ms = ?, edited = 1 WHERE id = ?',
       )
       .run(startMs, endMs, track.trackId);
+    this.queueCut(track.mediaId, input.jobId, input.now.toISOString());
+  }
+
+  private queueCut(mediaId: string, jobId: string, at: string): void {
+    this.db
+      .prepare(
+        `DELETE FROM jobs WHERE media_id = ? AND kind = 'cut'
+           AND status IN ('failed', 'dead')`,
+      )
+      .run(mediaId);
     this.db
       .prepare(
         `INSERT INTO jobs (id, media_id, kind, status, created_at, updated_at)
          VALUES (?, ?, 'cut', 'queued', ?, ?)`,
       )
-      .run(jobId, track.mediaId, at, at);
+      .run(jobId, mediaId, at, at);
   }
 
   archive(track: RevisableTrack, now: Date): void {
@@ -245,25 +248,8 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
   }): void {
     const { mediaId, principal } = input;
     const at = input.now.toISOString();
-    const kept = this.db
-      .prepare('SELECT * FROM media_track_archive WHERE media_id = ?')
-      .get(mediaId);
-    const row = this.mediaRow(mediaId);
-    const trackId = kept ? String(kept['track_id']) : input.trackId;
-    const parentId = String(row['parent_media_id']);
-    const values = [
-      trackId,
-      parentId,
-      row['parent_start_ms'] ?? 0,
-      row['parent_end_ms'] ?? 0,
-      kept?.['kind'] ?? 'qa',
-      row['title'] ?? '',
-      kept?.['source'] ?? 'manual',
-      kept?.['asker_voice'] ?? null,
-      kept?.['answerer_voice'] ?? null,
-      kept?.['asker_speaker_id'] ?? null,
-      kept?.['answerer_speaker_id'] ?? null,
-    ] as const;
+    const values = this.keptValues(mediaId, input.trackId);
+    const parentId = String(values[1]);
     this.db
       .prepare(
         `INSERT INTO media_tracks (id, media_id, start_ms, end_ms, kind, title, source,
@@ -290,6 +276,27 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
       .prepare('DELETE FROM media_track_archive WHERE media_id = ?')
       .run(mediaId);
     this.renumber(parentId);
+  }
+
+  /** The row as it was; one that left by an approval keeps only what its item says. */
+  private keptValues(mediaId: string, trackId: string) {
+    const kept = this.db
+      .prepare('SELECT * FROM media_track_archive WHERE media_id = ?')
+      .get(mediaId);
+    const row = this.mediaRow(mediaId);
+    return [
+      kept ? String(kept['track_id']) : trackId,
+      String(row['parent_media_id']),
+      row['parent_start_ms'] ?? 0,
+      row['parent_end_ms'] ?? 0,
+      kept?.['kind'] ?? 'qa',
+      row['title'] ?? '',
+      kept?.['source'] ?? 'manual',
+      kept?.['asker_voice'] ?? null,
+      kept?.['answerer_voice'] ?? null,
+      kept?.['asker_speaker_id'] ?? null,
+      kept?.['answerer_speaker_id'] ?? null,
+    ] as const;
   }
 
   private mediaRow(mediaId: string): Row {

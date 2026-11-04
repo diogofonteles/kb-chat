@@ -642,13 +642,29 @@ async function registerVoiceProfiles(
   await app.register(voiceProfileRoutes(service));
 }
 
+function transcriptService(
+  wiring: MediaWiring,
+  services: { media: MediaService; diarization: DiarizationService },
+): TranscriptService {
+  const { diarization, media } = services;
+  return new TranscriptService({
+    transcripts: wiring.media.transcripts,
+    media,
+    recording: wiring.media.store,
+    voices: (mediaId, transcript) => diarization.voicesOn(mediaId, transcript),
+    trackVoices: trackVoiceNames(wiring.media, (topic, slug) =>
+      wiring.authors.authorOf(topic, slug),
+    ),
+  });
+}
+
 /** Each person's listening: position, bookmarks, the transcript, subtitles and voices. */
 async function registerListening(
   app: FastifyInstance,
   wiring: MediaWiring,
   services: { media: MediaService; transcribers: TranscriberService },
 ) {
-  const { listening, bookmarks, transcripts } = wiring.media;
+  const { listening, bookmarks } = wiring.media;
   const { media, transcribers } = services;
   const diarization = diarizationService({ ...wiring, transcribers });
   await app.register(
@@ -656,18 +672,7 @@ async function registerListening(
   );
   await app.register(bookmarkRoutes(new BookmarkService({ bookmarks, media })));
   await app.register(
-    transcriptRoutes(
-      new TranscriptService({
-        transcripts,
-        media,
-        recording: wiring.media.store,
-        voices: (mediaId, transcript) =>
-          diarization.voicesOn(mediaId, transcript),
-        trackVoices: trackVoiceNames(wiring.media, (topic, slug) =>
-          wiring.authors.authorOf(topic, slug),
-        ),
-      }),
-    ),
+    transcriptRoutes(transcriptService(wiring, { media, diarization })),
   );
   await registerSpeakers(app, {
     deps: wiring.media,
@@ -784,7 +789,6 @@ function transcriberService(media: MediaDeps): TranscriberService {
 
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
-  const { createPerMinute } = wiring.media;
   const transcribers = transcriberService(wiring.media);
   const media = mediaService({ ...wiring, transcribers });
   const publisher = trackPublisher(wiring);
@@ -793,28 +797,20 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
-  await registerWorker(app, {
-    ...measures,
-    media: wiring.media,
-    transcribers,
-    authors: wiring.authors,
-    publisher,
-  });
-  const service = media;
+  const { authors, media: deps } = wiring;
+  const worker = { ...measures, media: deps, authors, transcribers };
+  await registerWorker(app, { ...worker, publisher });
   const edited = await registerEditing(app, {
     ...wiring,
-    service,
+    service: media,
     transcribers,
     publisher,
   });
-  const plans = edited.preparation;
-  const editor = mediaEditor({ ...wiring, publisher });
-  const { revisions } = edited;
   await app.register(
-    mediaRoutes(media, editor, {
-      createPerMinute,
-      plans,
-      tracks: revisions,
+    mediaRoutes(media, mediaEditor({ ...wiring, publisher }), {
+      createPerMinute: wiring.media.createPerMinute,
+      plans: edited.preparation,
+      tracks: edited.revisions,
     }),
   );
   startJanitor(app, { ...measures, ...edited, media: wiring.media });
@@ -940,6 +936,21 @@ async function registerMeasures(
   return { silences, waveforms };
 }
 
+type JanitorWiring = Parameters<typeof startJanitor>[1];
+
+function janitorOf(app: FastifyInstance, wiring: JanitorWiring): MediaJanitor {
+  const { store, files } = wiring.media;
+  return new MediaJanitor({
+    store,
+    files,
+    log: app.log,
+    backfillSilences: () => wiring.silences.backfill(),
+    backfillWaveforms: () => wiring.waveforms.backfill(),
+    advancePreparations: () => wiring.preparation.advanceAll(),
+    purgeTrackFiles: () => wiring.revisions.purge(),
+  });
+}
+
 /** The queue's janitor, which also backfills silence maps (KBC-044 FR-2) and peaks. */
 function startJanitor(
   app: FastifyInstance,
@@ -953,17 +964,9 @@ function startJanitor(
     revisions: TrackRevisionService;
   },
 ): void {
-  const { store, files } = wiring.media;
+  const { store } = wiring.media;
   const { proposals, subjects } = wiring;
-  const janitor = new MediaJanitor({
-    store,
-    files,
-    log: app.log,
-    backfillSilences: () => wiring.silences.backfill(),
-    backfillWaveforms: () => wiring.waveforms.backfill(),
-    advancePreparations: () => wiring.preparation.advanceAll(),
-    purgeTrackFiles: () => wiring.revisions.purge(),
-  });
+  const janitor = janitorOf(app, wiring);
   janitor.start(JANITOR_INTERVAL_MS);
   app.addHook('onClose', async () => {
     // Runs in flight end as interrupted before the database closes.

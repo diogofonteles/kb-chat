@@ -58,6 +58,11 @@ interface StreamUsage {
   readonly usd: number | null;
 }
 
+interface StreamRead {
+  answer: string;
+  usage: StreamUsage | null;
+}
+
 interface Plan {
   readonly item: MediaItem;
   readonly topic: string;
@@ -156,23 +161,26 @@ export class TrackSuggestionService {
   }
 
   private async ask(plan: Plan): Promise<{ answer: string; usd: number }> {
-    let answer = '';
-    let usage: StreamUsage | null = null;
+    const read: StreamRead = { answer: '', usage: null };
     try {
-      const stream = plan.llm.stream(plan.messages, {
-        maxTokens: SUGGESTION_OUTPUT_TOKENS,
-        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-      });
-      for await (const chunk of stream) {
-        if (chunk.type === 'token') answer += chunk.text;
-        else usage = chunk.usage;
-      }
+      await this.consume(plan, read);
     } catch (err) {
       throw new AppError('PROVIDER_UNAVAILABLE', 'The model did not answer', {
         cause: err,
       });
     }
-    return { answer, usd: costOf(plan, answer, usage) };
+    return { answer: read.answer, usd: costOf(plan, read) };
+  }
+
+  private async consume(plan: Plan, read: StreamRead): Promise<void> {
+    const stream = plan.llm.stream(plan.messages, {
+      maxTokens: SUGGESTION_OUTPUT_TOKENS,
+      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    });
+    for await (const chunk of stream) {
+      if (chunk.type === 'token') read.answer += chunk.text;
+      else read.usage = chunk.usage;
+    }
   }
 
   private toSuggestion(
@@ -289,7 +297,7 @@ export class TrackSuggestionService {
   }
 }
 
-function costOf(plan: Plan, answer: string, usage: StreamUsage | null): number {
+function costOf(plan: Plan, { answer, usage }: StreamRead): number {
   if (usage?.usd != null) return usage.usd;
   const prompt = plan.messages.map((one) => one.content).join('\n');
   const input = usage?.inputTokens ?? tokensOf(prompt);

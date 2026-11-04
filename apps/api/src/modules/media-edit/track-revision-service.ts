@@ -218,29 +218,52 @@ export class TrackRevisionService {
     },
     speakerId: string | null,
   ): void {
-    const { call, track, role, author } = input;
-    const voice = voiceOf(track, role);
-    const latest = this.deps.diarizations.latest(track.parentId);
-    if (voice === null || !latest)
-      throw conflict('no-voice', 'This track has no voice to name');
+    const { track, role, author } = input;
+    const voice = this.namedVoice(voiceOf(track, role));
     const parent = this.parentOf(track.parentId);
-    const named = this.labelsOf(track.parentId);
+    const former = this.labelsOf(track.parentId).get(voice) ?? null;
     const before = this.deps.revisions
       .tracks(track.parentId)
       .map((one) => ({ one, shown: this.shownNames(one, parent) }));
-    this.deps.names.name(
-      call.actor,
-      { mediaId: track.parentId, voice },
-      { version: latest.version, speakerId, audience: false },
-    );
+    this.renameVoice(input, { voice, speakerId });
     this.deps.revisions.setSpeaker(track, { role, speakerId: null });
     this.deps.revisions.followVoice({
       parentId: track.parentId,
       voice,
-      former: named.get(voice) ?? null,
+      former,
     });
     for (const { one, shown } of before)
       this.recordNames({ track: one, shown, parent, author });
+  }
+
+  private renameVoice(
+    {
+      call,
+      track,
+    }: { readonly call: TrackCall; readonly track: RevisableTrack },
+    name: { readonly voice: number; readonly speakerId: string | null },
+  ): void {
+    this.deps.names.name(
+      call.actor,
+      { mediaId: track.parentId, voice: name.voice },
+      {
+        version: this.separationOf(track.parentId),
+        speakerId: name.speakerId,
+        audience: false,
+      },
+    );
+  }
+
+  private namedVoice(voice: number | null): number {
+    if (voice === null)
+      throw conflict('no-voice', 'This track has no voice to name');
+    return voice;
+  }
+
+  private separationOf(parentId: string): number {
+    const latest = this.deps.diarizations.latest(parentId);
+    if (!latest) throw conflict('no-voice', 'This recording has no voices');
+    return latest.version;
   }
 
   private shownNames(track: RevisableTrack, parent: MediaRecord) {
