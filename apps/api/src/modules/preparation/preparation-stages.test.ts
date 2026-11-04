@@ -47,6 +47,7 @@ const facts = (over: Partial<StageFacts> = {}): StageFacts => ({
   stop: null,
   stopUsd: null,
   run: null,
+  attempt: null,
   runFailure: null,
   cuts: null,
   ahead: { transcribe: 0, speakers: 0 },
@@ -184,6 +185,29 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
     expect(stateOf(stagesOf(facts(stopped)), 'tracks')).toMatchObject({
       canRetry: false,
     });
+  });
+
+  it('shows what failed attempts left, with or without a finished window (BUG-8)', () => {
+    const failed = (windowsDone: number, spentUsd: number) =>
+      stateOf(
+        stagesOf(
+          facts({
+            claimed: true,
+            runFailure: 'invalid-output',
+            attempt: { runId: 'r', windowsDone, windowsTotal: 3, spentUsd },
+          }),
+        ),
+        'tracks',
+      );
+    expect(failed(0, 0.12)).toMatchObject({
+      windows: { done: 0, total: 3 },
+      spentUsd: 0.12,
+    });
+    expect(failed(2, 0.2)).toMatchObject({
+      windows: { done: 2, total: 3 },
+      spentUsd: 0.2,
+    });
+    expect(failed(0, 0)).toMatchObject({ windows: null, spentUsd: null });
   });
 
   it('never offers a paid retry past a final failure to who may not propose', () => {

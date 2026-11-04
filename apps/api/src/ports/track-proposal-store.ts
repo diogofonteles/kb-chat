@@ -19,15 +19,18 @@ export interface NewProposalRun {
   readonly windowsTotal: number;
   readonly estimateUsd: number;
   readonly now: Date;
+  /** What the failed attempts before it spent: the run cap holds over the whole analysis. */
+  readonly carriedUsd: number;
   /** The failed run it goes on from: its output moves here (KBC-072 BR-6). */
-  readonly resumes?: ResumableRun | null;
+  readonly resumes: Pick<FailedAttempt, 'runId' | 'windowsDone'> | null;
 }
 
-/** A failed run whose finished windows a new run can go on from (KBC-072 BR-6). */
-export interface ResumableRun {
+/** How an analysis stands after a failed attempt: where it got to and all it has spent. */
+export interface FailedAttempt {
   readonly runId: string;
   readonly windowsDone: number;
   readonly windowsTotal: number;
+  /** Over every attempt so far, finished windows or not. */
   readonly spentUsd: number;
 }
 
@@ -74,11 +77,8 @@ export interface TrackProposalStorePort {
    */
   startRun(run: NewProposalRun): ProposalRun | null;
   getRun(runId: string): ProposalRun | null;
-  /**
-   * The recording's newest run when it failed with windows of this transcript done and others
-   * missing: a new run pays only for those.
-   */
-  resumable(mediaId: string, transcriptId: string): ResumableRun | null;
+  /** The recording's newest run when it failed on this transcript: the analysis still open. */
+  failedAttempt(mediaId: string, transcriptId: string): FailedAttempt | null;
   /** The tracks a run has written, in order. */
   runTracks(runId: string): DraftTrack[];
   /**

@@ -30,7 +30,10 @@ import type {
   PreparationRecord,
   PreparationStorePort,
 } from '../../ports/preparation-store.js';
-import type { TrackProposalStorePort } from '../../ports/track-proposal-store.js';
+import type {
+  FailedAttempt,
+  TrackProposalStorePort,
+} from '../../ports/track-proposal-store.js';
 import type {
   TranscriptStorePort,
   TranscriptSummary,
@@ -74,7 +77,7 @@ export interface PreparationServiceDeps {
     request(mediaId: string): boolean;
   };
   readonly edits: Pick<MediaEditStorePort, 'edit'>;
-  readonly drafts: Pick<TrackProposalStorePort, 'draft'>;
+  readonly drafts: Pick<TrackProposalStorePort, 'draft' | 'failedAttempt'>;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: PlanActor, mediaId: string) => MediaItem;
   /** "Tentar de novo" of a failed conversion, for masters. */
@@ -539,6 +542,7 @@ export class PreparationService {
       stop: record.proposalStop,
       stopUsd: record.proposalStopUsd,
       run: ownRun(draft.run, proposalClaimedAt),
+      attempt: this.failedAttemptOf(mediaId),
       runFailure: proposalClaimedAt === null ? null : draft.lastFailure,
       cuts: plans.runningCuts(mediaId),
       ahead: {
@@ -548,6 +552,13 @@ export class PreparationService {
       canPropose: actor.canEdit && actor.canPropose,
       paidNow: null,
     };
+  }
+
+  private failedAttemptOf(mediaId: string): FailedAttempt | null {
+    const [transcript] = this.deps.transcripts.transcripts(mediaId);
+    return transcript
+      ? this.deps.drafts.failedAttempt(mediaId, transcript.id)
+      : null;
   }
 
   /** Server state, so reloading or another device lands on the same step (BR-8). */

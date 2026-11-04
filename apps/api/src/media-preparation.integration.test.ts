@@ -683,6 +683,30 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
     expect(after.json().tracks).toEqual([]);
   });
 
+  it('shows what attempts with no window cost, and holds the cap over them (BUG-8)', async () => {
+    const { media, token } = await connected();
+    const unreadable = () => ({ content: 'ilegível', cost: 0.06 });
+    media.started.fake.scripted.push(
+      ...Array<typeof unreadable>(6).fill(unreadable),
+    );
+    const id = await upToLongProposal(media, token);
+    const first = await settled(media, id);
+    expect(stage(first, 'tracks')).toMatchObject({
+      failure: 'invalid-output',
+      windows: { done: 0, total: 3 },
+    });
+    expect(stage(first, 'tracks')?.spentUsd).toBeCloseTo(0.12, 9);
+    const retryPath = `${preparation(id)}/steps/tracks/retry`;
+    expect((await media.owner('POST', retryPath, {})).statusCode).toBe(200);
+    const second = await settled(media, id);
+    expect(stage(second, 'tracks')?.spentUsd).toBeCloseTo(0.24, 9);
+    expect((await media.owner('POST', retryPath, {})).statusCode).toBe(200);
+    const third = await settled(media, id);
+    expect(stage(third, 'tracks')).toMatchObject({ failure: 'run-cap' });
+    expect(stage(third, 'tracks')?.spentUsd).toBeCloseTo(0.3, 9);
+    expect(media.started.fake.chatBodies).toHaveLength(5);
+  });
+
   it('a person takes the windows done to step 3 by hand, as proposals (AC-11)', async () => {
     const { media, token } = await connected();
     media.started.fake.scripted.push(oneTrack('Primeira'), { status: 503 });

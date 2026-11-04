@@ -103,9 +103,11 @@ export class PreparationStageList {
 
   /** What a proposal that failed left in the draft, and what became of its cost (BR-6). */
   protected leftText({ windows, spentUsd }: PreparationStage): string {
-    if (!windows || windows.done === 0) return '';
+    if (!windows) return '';
     const { done, total } = windows;
     const spent = this.usd(spentUsd ?? 0);
+    if (done === 0)
+      return $localize`:@@prep.failure.spent:Nenhuma janela ficou pronta. Gasto até aqui: ${spent}:spent:.`;
     return $localize`:@@prep.failure.left:${done}:done: de ${total}:total: janelas prontas, por ${spent}:spent:. Tentar de novo refaz só as que faltam.`;
   }
 

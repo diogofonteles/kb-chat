@@ -11,7 +11,7 @@ import { AppError } from '../../app-error.js';
 import type { LlmPort } from '../../ports/llm.js';
 import type { MediaSpendLedgerPort } from '../../ports/media-spend-ledger.js';
 import type {
-  ResumableRun,
+  FailedAttempt,
   TrackProposalStorePort,
 } from '../../ports/track-proposal-store.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
@@ -78,9 +78,17 @@ function spokenSegments(durationMs: number): PromptSegment[] {
 interface Prepared {
   readonly plan: ProposalPlan;
   readonly llm: LlmPort;
-  /** The failed run this one goes on from, when there is one. */
-  readonly resumes: ResumableRun | null;
+  /** The failed run this one goes on from, when its finished windows still fit the plan. */
+  readonly resumes: FailedAttempt | null;
+  /** What the analysis has spent so far: the cap holds over all its attempts. */
+  readonly carriedUsd: number;
 }
+
+/** Windows of it are done, others are missing and the plan still cuts the same windows. */
+const canResume = (attempt: FailedAttempt, windows: number): boolean =>
+  attempt.windowsDone > 0 &&
+  attempt.windowsDone < attempt.windowsTotal &&
+  attempt.windowsTotal === windows;
 
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
@@ -91,8 +99,9 @@ const capError = (cap: SpendCap) =>
  * The AI's track proposals (KBC-067): an estimate first, then a run reserved against the
  * media monthly budget that writes draft tracks window by window. Nothing is applied: the
  * draft waits for a person (BR-1, KBC-066). What a failed run finished stays and is not paid
- * twice: the next run asks only the windows missing (KBC-072 BR-6). It takes a person asking,
- * here or by "Tentar de novo"; nothing resumes by itself, a restart included.
+ * twice: the next run asks only the windows missing, and the spend of every failed attempt
+ * goes along, so the run cap holds over the whole analysis (KBC-072 BR-6). It takes a person
+ * asking, here or by "Tentar de novo"; nothing resumes by itself, a restart included.
  */
 export class ProposalService {
   private readonly now: () => Date;
@@ -180,7 +189,7 @@ export class ProposalService {
     readonly prepared: Prepared;
     readonly spendId: string;
   }): ProposalRun | null {
-    const { plan, resumes } = input.prepared;
+    const { plan, resumes, carriedUsd } = input.prepared;
     try {
       return this.deps.store.startRun({
         id: randomUUID(),
@@ -192,6 +201,7 @@ export class ProposalService {
         windowsTotal: plan.windows.length,
         estimateUsd: plan.estimateUsd,
         now: this.now(),
+        carriedUsd,
         resumes,
       });
     } catch (err) {
@@ -262,7 +272,7 @@ export class ProposalService {
         llm: prepared.llm,
         store: this.deps.store,
         runCapUsd: this.deps.caps.runUsd,
-        carriedUsd: prepared.resumes?.spentUsd ?? 0,
+        carriedUsd: prepared.carriedUsd,
         signal: this.closing.signal,
       }).run();
       if (outcome.error !== undefined)
@@ -352,10 +362,16 @@ export class ProposalService {
       context: this.contextOf(item),
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
-    const resumes = this.deps.store.resumable(mediaId, transcript.id);
-    return resumes?.windowsTotal === plan.windows.length
-      ? { plan: planFrom(plan, resumes.windowsDone), llm, resumes }
-      : { plan, llm, resumes: null };
+    const attempt = this.deps.store.failedAttempt(mediaId, transcript.id);
+    const carriedUsd = attempt?.spentUsd ?? 0;
+    return attempt && canResume(attempt, plan.windows.length)
+      ? {
+          plan: planFrom(plan, attempt.windowsDone),
+          llm,
+          resumes: attempt,
+          carriedUsd,
+        }
+      : { plan, llm, resumes: null, carriedUsd };
   }
 
   private contextOf(item: MediaItem) {

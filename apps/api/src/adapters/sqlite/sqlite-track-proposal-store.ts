@@ -12,11 +12,11 @@ import {
   type VoiceSuggestion,
 } from '@kb-chat/contracts';
 import type {
+  FailedAttempt,
   InterruptedRun,
   KeptRange,
   NewProposalRun,
   ProposedTrack,
-  ResumableRun,
   TrackExtension,
   TrackProposalStorePort,
 } from '../../ports/track-proposal-store.js';
@@ -100,7 +100,6 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   }
 
   private insertRun(run: NewProposalRun): void {
-    const carriedUsd = run.resumes?.spentUsd ?? 0;
     this.db
       .prepare(
         `INSERT INTO media_proposal_runs (id, media_id, transcript_id, principal, model,
@@ -118,8 +117,8 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         run.windowsTotal,
         run.resumes?.windowsDone ?? 0,
         run.estimateUsd,
-        carriedUsd,
-        carriedUsd,
+        run.carriedUsd,
+        run.carriedUsd,
         run.now.toISOString(),
       );
   }
@@ -141,7 +140,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     return row ? toRun(row) : null;
   }
 
-  resumable(mediaId: string, transcriptId: string): ResumableRun | null {
+  failedAttempt(mediaId: string, transcriptId: string): FailedAttempt | null {
     const row = this.db
       .prepare(
         `SELECT r.id, r.status, r.transcript_id, r.windows_done, r.windows_total, r.spent_usd
@@ -151,13 +150,10 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       .get(mediaId);
     if (row?.['status'] !== 'failed' || row['transcript_id'] !== transcriptId)
       return null;
-    const windowsDone = Number(row['windows_done']);
-    const windowsTotal = Number(row['windows_total']);
-    if (windowsDone === 0 || windowsDone >= windowsTotal) return null;
     return {
       runId: text(row, 'id'),
-      windowsDone,
-      windowsTotal,
+      windowsDone: Number(row['windows_done']),
+      windowsTotal: Number(row['windows_total']),
       spentUsd: Number(row['spent_usd']),
     };
   }

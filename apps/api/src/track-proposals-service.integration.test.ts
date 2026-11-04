@@ -414,6 +414,8 @@ describe('ProposalService: windows and the draft (KBC-067 FR-3, BR-6)', () => {
       windowsTotal: 1,
       estimateUsd: 0.01,
       now: NOW,
+      carriedUsd: 0,
+      resumes: null,
     });
     ctx.ledger.reserve({
       id: 'spend-1',
@@ -557,6 +559,8 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
       windowsTotal: 3,
       estimateUsd: 0.01,
       now: NOW,
+      carriedUsd: 0,
+      resumes: null,
     });
     for (let window = 0; window < windowsDone; window++)
       ctx.store.saveWindow({
@@ -681,11 +685,43 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     expect(second.spentUsd).toBeCloseTo(0.4, 9);
   });
 
+  it('holds the run cap over attempts that finished no window', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: ['ilegível', 'ilegível', 'ilegível', 'ilegível'],
+    });
+    ctx.llm.costPerCall = 0.1;
+    const first = await runToEnd(ctx);
+    expect(first).toMatchObject({ failure: 'invalid-output', windowsDone: 0 });
+    expect(first.spentUsd).toBeCloseTo(0.2, 9);
+    const second = await runToEnd(ctx);
+    expect(second).toMatchObject({ status: 'failed', failure: 'run-cap' });
+    expect(second.spentUsd).toBeCloseTo(0.3, 9);
+    expect(ctx.llm.calls).toHaveLength(3);
+    expect(monthUsed(ctx)).toBeCloseTo(0.3, 9);
+  });
+
+  it('carries the spend of a failure whose windows no longer match the plan', async () => {
+    const ctx = failedInTheMiddle();
+    await runToEnd(ctx);
+    ctx.db
+      .prepare(
+        'UPDATE media_proposal_runs SET windows_total = 9, spent_usd = 0.2',
+      )
+      .run();
+    ctx.llm.replies.push(new Error('HTTP 503'));
+    const second = await runToEnd(ctx);
+    expect(second).toMatchObject({ windowsDone: 0, tracks: 0 });
+    expect(second.spentUsd).toBeCloseTo(0.2, 9);
+  });
+
   it('starts over when the transcript changed since the failure', async () => {
     const ctx = failedInTheMiddle();
     await runToEnd(ctx);
-    expect(ctx.store.resumable(ctx.mediaId, randomUUID())).toBeNull();
-    expect(ctx.store.resumable(ctx.mediaId, ctx.transcriptId)).not.toBeNull();
+    expect(ctx.store.failedAttempt(ctx.mediaId, randomUUID())).toBeNull();
+    expect(
+      ctx.store.failedAttempt(ctx.mediaId, ctx.transcriptId),
+    ).toMatchObject({ windowsDone: 1 });
   });
 
   it('leaves a finished proposal in place when a new run fails part way (KBC-067 AC-6)', async () => {

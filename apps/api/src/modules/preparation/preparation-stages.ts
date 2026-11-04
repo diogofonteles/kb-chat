@@ -16,6 +16,7 @@ import type {
 } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
+import type { FailedAttempt } from '../../ports/track-proposal-store.js';
 
 /** All a plan's stages are read from: the records of the work, never a copy of them. */
 export interface StageFacts {
@@ -34,6 +35,8 @@ export interface StageFacts {
   readonly stopUsd: number | null;
   /** The run of this plan; an older one is not its progress. */
   readonly run: ProposalRun | null;
+  /** The analysis a failed run left open; its spend counts with or without a window. */
+  readonly attempt: FailedAttempt | null;
   readonly runFailure: ProposalFailure | null;
   readonly cuts: JobCuts | null;
   readonly ahead: { readonly transcribe: number; readonly speakers: number };
@@ -173,14 +176,14 @@ const FINAL_FAILURES: ReadonlySet<StageFailure> = new Set([
   'not-connected',
 ]);
 
-/** What a failed run left: its windows stay, and so does what they cost (BR-6). */
-function leftByFailedRun({ run }: StageFacts): Partial<PreparationStage> {
-  return run?.status === 'failed'
-    ? {
-        windows: { done: run.windowsDone, total: run.windowsTotal },
-        spentUsd: run.spentUsd,
-      }
-    : {};
+/** What failed attempts left: finished windows stay, and so does all they cost (BR-6). */
+function leftByFailedRuns({ attempt }: StageFacts): Partial<PreparationStage> {
+  if (!attempt || (attempt.windowsDone === 0 && attempt.spentUsd === 0))
+    return {};
+  return {
+    windows: { done: attempt.windowsDone, total: attempt.windowsTotal },
+    spentUsd: attempt.spentUsd,
+  };
 }
 
 function failedTracks(
@@ -189,7 +192,7 @@ function failedTracks(
 ): PreparationStage {
   const { plan, stopUsd, paidNow } = facts;
   return stageOf('tracks', 'failed', {
-    ...leftByFailedRun(facts),
+    ...leftByFailedRuns(facts),
     failure,
     canRetry:
       facts.canPropose &&

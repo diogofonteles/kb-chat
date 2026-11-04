@@ -395,6 +395,27 @@ describe('PreparationPage (T20, step 2)', () => {
     ).toBeTruthy();
   });
 
+  it('says what attempts that finished no window cost (BUG-8)', async () => {
+    await open(
+      aPreparation({
+        stages: [
+          aStage('tracks', 'failed', {
+            failure: 'invalid-output',
+            canRetry: true,
+            estimateUsd: 0.02,
+            windows: { done: 0, total: 3 },
+            spentUsd: 0.12,
+          }),
+        ],
+      }),
+    );
+    expect(
+      screen.getByText(
+        /Nenhuma janela ficou pronta\. Gasto até aqui: US\$\s0,12\./,
+      ),
+    ).toBeTruthy();
+  });
+
   it('"Marcar as faixas eu mesmo" switches and goes to step 3 (AC-11)', async () => {
     const { harness, http } = await open(
       aPreparation({
