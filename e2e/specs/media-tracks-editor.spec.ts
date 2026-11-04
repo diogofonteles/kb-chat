@@ -250,7 +250,7 @@ test('AC-14: on a phone, a finger moves the handle and "+0,5 s" too, and the tar
   const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
   const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
   const cdp = await page.context().newCDPSession(page);
-  const touch = (type: string, atX: number) =>
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', atX: number) =>
     cdp.send('Input.dispatchTouchEvent', {
       type,
       touchPoints: type === 'touchEnd' ? [] : [{ x: atX, y }],
