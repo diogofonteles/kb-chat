@@ -21,6 +21,9 @@ import {
 
 let nextId = 0;
 
+/** About what the field shows at 390 px: a longer name wraps below it, never cut (T15). */
+const FIELD_CHARS = 40;
+
 /**
  * "Quem é a Voz N?" (screens.md T15, KBC-065): an editable combobox in the APG pattern, as
  * the author's (KBC-049). Choosing an option saves it at once: the panel does the saving and
@@ -55,6 +58,11 @@ export class SpeakerCombobox {
   protected readonly invalid = computed(
     () => this.blankTried() || isInvalidSpeakerName(this.text()),
   );
+  /** The field is one line: the name in full goes under it. Readers already get the value. */
+  protected readonly wholeName = computed(() => {
+    const name = this.current();
+    return name.length > FIELD_CHARS && this.text() === name ? name : '';
+  });
   protected readonly open = signal(false);
   protected readonly active = signal(-1);
   protected readonly options = computed(() =>

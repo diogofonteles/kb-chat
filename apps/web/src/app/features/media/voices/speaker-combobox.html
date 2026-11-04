@@ -19,6 +19,9 @@
   (keydown)="keydown($event)"
   (blur)="leave()"
 />
+@if (wholeName(); as name) {
+  <p class="whole-name" aria-hidden="true">{{ name }}</p>
+}
 <ul
   class="options"
   role="listbox"

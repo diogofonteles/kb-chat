@@ -24,6 +24,17 @@ async function renderField(current = '') {
 }
 
 describe('SpeakerCombobox (KBC-065, screens.md T15)', () => {
+  it('shows in full a name too long for the field', async () => {
+    const longName = 'Maria Aparecida da Conceição dos Santos Oliveira Bezerra';
+    await renderField(longName);
+    expect(screen.getByText(longName).tagName).toBe('P');
+  });
+
+  it('keeps a short name only in the field', async () => {
+    await renderField('Ana');
+    expect(screen.queryByText('Ana', { selector: 'p' })).toBeNull();
+  });
+
   it('opens with ↓, walks the list and chooses with Enter, only by keyboard (AC-8)', async () => {
     const { fixture, field, chosen } = await renderField();
     fireEvent.keyDown(field, { key: 'ArrowDown' });

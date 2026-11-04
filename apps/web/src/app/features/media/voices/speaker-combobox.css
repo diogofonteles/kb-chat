@@ -67,6 +67,12 @@ input[aria-invalid='true'] {
   color: var(--color-accent);
 }
 
+.whole-name {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
 .error {
   margin: 0;
   color: var(--color-danger);
