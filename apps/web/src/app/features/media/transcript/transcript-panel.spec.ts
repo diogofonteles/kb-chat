@@ -342,6 +342,17 @@ describe('TranscriptPanel (KBC-038, T15)', () => {
     ).toBeTruthy();
   });
 
+  it('says which term list it was made with, when the API tells (KBC-040 AC-5)', async () => {
+    await renderPanel(
+      transcriptOf({
+        termList: { version: 3, createdAt: '2026-10-28T12:00:00.000Z' },
+      }),
+    );
+    expect(
+      screen.getByText('Feita com a lista de termos v3 (28/10/2026)'),
+    ).toBeTruthy();
+  });
+
   it('shows no notice for a normal transcript', async () => {
     await renderPanel();
     expect(screen.queryByText(/baixa confiança/)).toBeNull();

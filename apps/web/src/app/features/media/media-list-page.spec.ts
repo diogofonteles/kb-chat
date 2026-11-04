@@ -462,7 +462,7 @@ describe('MediaListPage (T14)', () => {
     expect(low?.textContent).toContain(
       'Transcrição automática de baixa confiança',
     );
-    expect(again?.textContent).toContain('Transcrevendo…');
+    expect(again?.textContent).toContain('Retranscrevendo…');
     expect(again?.textContent).toContain(
       'Transcrição automática de baixa confiança',
     );

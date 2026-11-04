@@ -3,6 +3,14 @@
     Transcrição
   </h3>
 
+  @if (termList(); as list) {
+    <p class="made-with" i18n="@@transcript.termList">
+      Feita com a lista de termos v{{ list.version }} ({{
+        list.createdAt | date: 'dd/MM/yyyy'
+      }})
+    </p>
+  }
+
   @if (low()) {
     <p
       class="warning-notice low-confidence"

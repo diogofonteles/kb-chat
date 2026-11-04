@@ -144,6 +144,7 @@
             }
           </button>
         }
+        <app-transcribe-again [media]="current" (queued)="item.set($event)" />
       } @else {
         <p class="not-ready" role="status">
           <span class="status">{{ status() }}</span>

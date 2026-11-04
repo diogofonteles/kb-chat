@@ -1,0 +1,186 @@
+<p class="lead" i18n="@@terms.lead">
+  O transcritor usa esta lista para escrever certo nomes, lugares e chamadas.
+  Ela vale para as próximas transcrições; o que já foi transcrito só muda quando
+  alguém pede "Transcrever de novo" na mídia.
+</p>
+
+@if (saved(); as current) {
+  <form class="block" (submit)="save($event)" novalidate>
+    <div class="usage">
+      @if (usage(); as use) {
+        <p class="use" role="status" i18n="@@terms.usage">
+          {{ use.tokens }} de {{ use.limit }} do limite do transcritor
+        </p>
+        <meter
+          aria-hidden="true"
+          min="0"
+          [max]="use.limit"
+          [value]="use.tokens"
+        ></meter>
+      }
+      <p class="hint" i18n="@@terms.current">
+        Versão {{ current.version }}, de
+        {{ current.createdAt | date: 'dd/MM/yyyy' }}
+      </p>
+    </div>
+
+    @if (overLimit(); as text) {
+      <p class="field-error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ text }}
+      </p>
+    }
+
+    <div class="field">
+      <label class="label" for="terms-add" i18n="@@terms.addLabel"
+        >Adicionar termos</label
+      >
+      <span class="hint" id="terms-add-hint" i18n="@@terms.addHint"
+        >Um por linha. Pode colar vários de uma vez.</span
+      >
+      <textarea
+        id="terms-add"
+        class="input add"
+        rows="3"
+        autocapitalize="off"
+        autocomplete="off"
+        aria-describedby="terms-add-hint"
+        [value]="toAdd()"
+        (input)="editToAdd($event)"
+      ></textarea>
+      <button
+        type="button"
+        class="secondary"
+        (click)="addTerms()"
+        i18n="@@terms.add"
+      >
+        Adicionar
+      </button>
+    </div>
+
+    <h4 class="block-title" i18n="@@terms.listTitle">
+      Termos ({{ rows().length }})
+    </h4>
+    @if (rows().length === 0) {
+      <p class="hint" i18n="@@terms.none">Nenhum termo na lista.</p>
+    } @else {
+      <ol class="terms">
+        @for (row of rows(); track row.id; let index = $index) {
+          <li>
+            <div class="term">
+              <input
+                class="input"
+                type="text"
+                maxlength="100"
+                autocomplete="off"
+                [id]="'term-' + row.id"
+                [value]="row.text"
+                [attr.aria-label]="termLabel(index + 1)"
+                [attr.aria-invalid]="isValid(row) ? null : 'true'"
+                [attr.aria-describedby]="
+                  isValid(row) ? null : 'term-error-' + row.id
+                "
+                (input)="editRow(row.id, $event)"
+              />
+              <button
+                type="button"
+                class="ghost remove"
+                [attr.aria-label]="removeLabel(row)"
+                (click)="removeRow(index)"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+            @if (!isValid(row)) {
+              <p
+                class="field-error"
+                [id]="'term-error-' + row.id"
+                i18n="@@terms.invalid"
+              >
+                Tire a vírgula e os sinais &lt; &gt; |.
+              </p>
+            }
+          </li>
+        }
+      </ol>
+    }
+
+    <div class="row">
+      <button
+        type="submit"
+        class="primary"
+        [disabled]="busy()"
+        i18n="@@terms.save"
+      >
+        Salvar lista
+      </button>
+      @if (changed()) {
+        <button
+          type="button"
+          class="secondary"
+          (click)="discard()"
+          i18n="@@terms.discard"
+        >
+          Descartar mudanças
+        </button>
+      }
+      @if (stale()) {
+        <button
+          type="button"
+          class="secondary"
+          (click)="reload()"
+          i18n="@@terms.reload"
+        >
+          Recarregar
+        </button>
+      }
+    </div>
+    <p
+      class="status"
+      role="status"
+      [class.error]="notice()?.kind === 'error'"
+      [class.empty]="!notice()"
+    >
+      @if (notice(); as message) {
+        <span aria-hidden="true">{{
+          message.kind === 'error' ? '⚠' : '✓'
+        }}</span>
+        {{ message.text }}
+      }
+    </p>
+  </form>
+
+  <details class="versions">
+    <summary i18n="@@terms.versions">Versões da lista</summary>
+    <ul>
+      @for (one of current.versions; track one.version) {
+        <li>
+          <span i18n="@@terms.versionLine"
+            >Versão {{ one.version }}, {{ one.termCount }} termos, em
+            {{ one.createdAt | date: 'dd/MM/yyyy' }}</span
+          >
+          @if (one.authorName; as name) {
+            <span i18n="@@terms.versionAuthor">por {{ name }}</span>
+          } @else {
+            <span i18n="@@terms.versionInitial">(lista inicial)</span>
+          }
+        </li>
+      }
+    </ul>
+  </details>
+} @else if (list.error()) {
+  <div class="block">
+    <p class="field-error" role="alert" i18n="@@terms.loadFailed">
+      Não foi possível carregar a lista.
+    </p>
+    <button
+      type="button"
+      class="secondary"
+      (click)="reload()"
+      i18n="@@terms.tryAgain"
+    >
+      Tentar de novo
+    </button>
+  </div>
+} @else {
+  <p class="hint" role="status" i18n="@@terms.loading">Carregando a lista…</p>
+}

@@ -44,6 +44,13 @@ export function refusedFieldOf(err: unknown): string | null {
     : null;
 }
 
+/** The `details` of the API's error envelope, null when the error has none. */
+export function errorDetailsOf(err: unknown): unknown {
+  if (!(err instanceof HttpErrorResponse)) return null;
+  const parsed = apiErrorSchema.safeParse(parseBody(err.error));
+  return parsed.success ? (parsed.data.error.details ?? null) : null;
+}
+
 const MESSAGES: Record<UiErrorCode, () => string> = {
   OFFLINE: () =>
     $localize`:@@error.offline:Não consegui falar com o servidor de busca. Verifique se ele está rodando (pnpm dev:api).`,
@@ -133,6 +140,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.editVersionRequired:Recarregue a página para continuar esta edição.`,
   TRACKS_INVALID: () =>
     $localize`:@@error.tracksInvalid:Há faixas com problema. Corrija e tente de novo.`,
+  TERMS_OVER_LIMIT: () =>
+    $localize`:@@error.termsOverLimit:A lista passou do limite do transcritor. Remova alguns termos.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

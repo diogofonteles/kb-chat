@@ -89,10 +89,14 @@ const WAITING_REASONS: Record<TranscriberPresence, Label> = {
 const TRANSCRIPTION_LABELS: Record<TranscriptionStatus, Label> = {
   none: () => '',
   waiting: (transcription, locale) =>
-    $localize`:@@media.transcription.waiting:Aguardando o transcritor` +
+    (transcription.version === null
+      ? $localize`:@@media.transcription.waiting:Aguardando o transcritor`
+      : $localize`:@@media.transcription.againWaiting:Retranscrevendo · aguardando o transcritor`) +
     WAITING_REASONS[transcription.transcriber](transcription, locale),
-  transcribing: () =>
-    $localize`:@@media.transcription.transcribing:Transcrevendo…`,
+  transcribing: (transcription) =>
+    transcription.version === null
+      ? $localize`:@@media.transcription.transcribing:Transcrevendo…`
+      : $localize`:@@media.transcription.again:Retranscrevendo…`,
   done: (transcription) =>
     transcription.confidence === 'low'
       ? LOW_CONFIDENCE()

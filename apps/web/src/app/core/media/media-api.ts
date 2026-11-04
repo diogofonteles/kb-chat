@@ -99,6 +99,13 @@ export class MediaApi {
       .pipe(map((body) => mediaItemSchema.parse(body)));
   }
 
+  /** A master asks for a new transcription; the current one stays until it is ready. */
+  transcribeAgain(id: string): Observable<MediaItem> {
+    return this.http
+      .post(`${mediaUrl(id)}/transcription`, null)
+      .pipe(map((body) => mediaItemSchema.parse(body)));
+  }
+
   retry(id: string): Observable<MediaItem> {
     return this.http
       .post(`${mediaUrl(id)}/retry`, null)

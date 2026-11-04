@@ -15,6 +15,7 @@ const anItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   bytes: 30_000_000,
   createdAt: '2026-10-28T12:00:00.000Z',
   canRetry: false,
+  canTranscribeAgain: false,
   canEdit: false,
   positionMs: 0,
   completedAt: null,
@@ -25,6 +26,7 @@ const anItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
     version: null,
     transcriber: 'none',
     transcriberOffSince: null,
+    lastAttemptFailed: false,
   },
   ...overrides,
 });
