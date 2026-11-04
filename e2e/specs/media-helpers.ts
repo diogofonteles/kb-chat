@@ -84,6 +84,36 @@ export function makeLongMp3(
   return path;
 }
 
+/**
+ * Real audio of about `bytes`, and only seconds of it: an upload test wants a size, and the
+ * one worker of the run converts by length, so minutes here keep other tests waiting.
+ */
+export function makeHeavyWav(name: string, bytes: number): string {
+  const seconds = Math.ceil(bytes / HEAVY_WAV_BYTES_PER_SECOND);
+  const path = join(dir, `${name}.wav`);
+  execFileSync(ffmpeg(), [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    `sine=frequency=330:sample_rate=192000:duration=${seconds}`,
+    '-ac',
+    '2',
+    '-c:a',
+    'pcm_s32le',
+    '-metadata',
+    `comment=${uniqueTag()}`,
+    path,
+  ]);
+  return path;
+}
+
+/** 192 kHz, two channels, four bytes each. */
+const HEAVY_WAV_BYTES_PER_SECOND = 192_000 * 2 * 4;
+
 /** A tag no other parallel test shares (time plus randomness), for titles. */
 export const uniqueTag = (): string =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

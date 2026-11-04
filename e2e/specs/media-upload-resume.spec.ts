@@ -11,7 +11,13 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { makeLongMp3, makeMp3, uniqueTag, useTheme } from './media-helpers.js';
+import {
+  makeHeavyWav,
+  makeLongMp3,
+  makeMp3,
+  uniqueTag,
+  useTheme,
+} from './media-helpers.js';
 
 /** KBC-035: resumable upload, quota and repeated files, in the real panel. */
 
@@ -50,11 +56,9 @@ async function uploaderPage(
   return pageAs(browser, email, test.info().project.use.viewport ?? null);
 }
 
-/** A real MP3 over `parts` parts of 8 MB. */
-const largeMp3 = (parts: number): string => {
-  const seconds = Math.ceil((parts * PART_BYTES * 8) / 256_000);
-  return makeMp3(`grande-${uniqueTag()}`, seconds, { bitrate: '256k' });
-};
+/** A real audio over `parts` parts of 8 MB. */
+const largeAudio = (parts: number): string =>
+  makeHeavyWav(`grande-${uniqueTag()}`, parts * PART_BYTES);
 
 const sendButton = (dialog: Locator) =>
   dialog.getByRole('button', { name: 'Enviar', exact: true });
@@ -63,7 +67,7 @@ test('AC-1, NFR-1: a part that fails continues where it stopped and creates one 
   browser,
 }) => {
   const page = await uploaderPage(browser);
-  const file = largeMp3(3);
+  const file = largeAudio(3);
   const size = statSync(file).size;
   let parts = 0;
   await page.route(UPLOAD_URL, async (route: Route) => {
@@ -87,7 +91,7 @@ test('AC-1: the network goes down and comes back: it continues alone, one item',
   browser,
 }) => {
   const page = await uploaderPage(browser);
-  const file = largeMp3(3);
+  const file = largeAudio(3);
   const held = deferred();
   const offline = deferred();
   const context = page.context();
@@ -123,7 +127,7 @@ test('FR-2: a reload loses nothing: choosing the file again continues it', async
   browser,
 }) => {
   const page = await uploaderPage(browser);
-  const file = largeMp3(2);
+  const file = largeAudio(2);
   const dialog = await openPanel(page);
   let held = false;
   await page.route(UPLOAD_URL, async (route: Route) => {
@@ -293,7 +297,7 @@ test('KBC-072: a cut upload keeps its plan and goes on to step 2', async ({
   browser,
 }) => {
   const page = await uploaderPage(browser, { features: EDITOR });
-  const file = largeMp3(2);
+  const file = largeAudio(2);
   const dialog = await openPanel(page);
   let held = false;
   await page.route(UPLOAD_URL, async (route: Route) => {
@@ -336,5 +340,5 @@ function deferred(): { done: Promise<void>; finish: () => void } {
 /** The title the panel suggests for a file. */
 function rowTitleOf(path: string): string {
   const name = path.split('/').at(-1) ?? '';
-  return name.replace(/\.mp3$/, '').replace(/_+/g, ' ');
+  return name.replace(/\.(mp3|wav)$/, '').replace(/_+/g, ' ');
 }
