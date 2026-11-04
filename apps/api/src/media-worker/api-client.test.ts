@@ -44,7 +44,7 @@ describe('HttpMediaJobsApi', () => {
     expect(headers.get('x-requested-with')).toBe('kb-chat');
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
       worker: 'vm',
-      kinds: ['transcode', 'silences', 'waveform'],
+      kinds: ['transcode', 'silences', 'waveform', 'cut'],
     });
   });
 
