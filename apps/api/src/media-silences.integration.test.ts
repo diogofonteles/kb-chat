@@ -212,7 +212,12 @@ describe('Silence skipping preference (KBC-044 BR-2)', () => {
     };
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
-    ).toEqual({ ...base, skipSilences: false, ...DEFAULT_LIBRARY_PREFERENCES });
+    ).toEqual({
+      ...base,
+      skipSilences: false,
+      wordHighlight: true,
+      ...DEFAULT_LIBRARY_PREFERENCES,
+    });
     await media.owner('PUT', '/api/v1/media/preferences', {
       ...base,
       skipSilences: true,
