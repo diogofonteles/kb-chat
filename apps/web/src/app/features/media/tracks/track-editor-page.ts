@@ -71,6 +71,7 @@ import {
   type PersonChange,
   type PersonChoice,
 } from './track-row-list.js';
+import { TrackSubjects } from './track-subjects.js';
 import { TrackTimeline, type ListenKind } from './track-timeline.js';
 import { TrackTranscript, type TextSpan } from './track-transcript.js';
 
@@ -151,6 +152,7 @@ function copyableLine(
     TrackTranscript,
     TrackProposals,
     TrackPreparationStatus,
+    TrackSubjects,
   ],
   templateUrl: './track-editor-page.html',
   styleUrl: './track-editor-page.css',
@@ -237,6 +239,9 @@ export class TrackEditorPage {
   );
   protected readonly canPropose = computed(() =>
     this.session.can('media-edit-ai'),
+  );
+  protected readonly canClassify = computed(() =>
+    this.session.can('media-classify'),
   );
   protected readonly ready = computed(
     () => this.draft.loaded() && this.media() !== null,
