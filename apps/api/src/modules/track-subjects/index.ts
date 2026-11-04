@@ -8,3 +8,4 @@ export {
   type SubjectCall,
   type TrackSubjectServiceDeps,
 } from './track-subject-service.js';
+export { SubjectDirectory, type PlacedTrack } from './subject-directory.js';

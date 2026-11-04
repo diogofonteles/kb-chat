@@ -7,6 +7,7 @@ import {
   type FreeSubject,
   type MediaItem,
   type SubjectRef,
+  type TrackAbout,
   type TrackSubject,
   type TrackSubjects,
 } from '@kb-chat/contracts';
@@ -20,6 +21,7 @@ import type {
   TrackSubjectStorePort,
 } from '../../ports/track-subject-store.js';
 import type { MediaActor } from '../media/index.js';
+import type { SubjectDirectory } from './subject-directory.js';
 
 /** A track as a list shows it; a track that left the approved ones has no place. */
 interface TrackRow {
@@ -35,7 +37,7 @@ export interface TrackSubjectServiceDeps {
       id: string,
     ): Pick<
       NonNullable<ReturnType<MediaStorePort['getMedia']>>,
-      'id' | 'topic' | 'title' | 'track' | 'archivedAt'
+      'id' | 'topic' | 'title' | 'track' | 'archivedAt' | 'status'
     > | null;
   };
   readonly items: { tracksOf(parentId: string): readonly TrackRow[] };
@@ -45,6 +47,8 @@ export interface TrackSubjectServiceDeps {
   readonly rootOf: (topic: string) => string;
   /** The concept names of a collection in the catalog as it stands now (FR-5). */
   readonly conceptsOf: (collection: string) => readonly string[];
+  /** What listeners read of a track (KBC-070). */
+  readonly directory: Pick<SubjectDirectory, 'about'>;
   readonly now?: () => Date;
 }
 
@@ -119,6 +123,13 @@ export class TrackSubjectService {
   read(actor: MediaActor, trackId: string): TrackSubjects {
     const track = this.track(actor, trackId);
     return this.shownOne(track.topic, this.rowOf(track));
+  }
+
+  /** The page of a published track, for who listens (KBC-070): never a suggestion. */
+  about(actor: MediaActor, trackId: string): TrackAbout {
+    const track = this.track(actor, trackId);
+    if (track.status !== 'ready' || track.archivedAt !== null) throw notFound();
+    return this.deps.directory.about({ mediaId: track.id, topic: track.topic });
   }
 
   /**

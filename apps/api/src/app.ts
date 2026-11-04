@@ -33,7 +33,11 @@ import {
 } from './modules/research/index.js';
 import { SpendService, spendRoutes } from './modules/spend/index.js';
 import { healthRoutes } from './modules/health/index.js';
-import { SearchWithMedia, searchRoutes } from './modules/search/index.js';
+import {
+  SearchWithMedia,
+  SubjectSearch,
+  searchRoutes,
+} from './modules/search/index.js';
 import {
   CollectionRegistry,
   CollectionsVault,
@@ -144,7 +148,10 @@ import {
   preparationRoutes,
 } from './modules/preparation/index.js';
 import { createTrackProposals } from './track-proposals-factory.js';
-import { createTrackSubjects } from './track-subjects-factory.js';
+import {
+  createSubjectDirectory,
+  createTrackSubjects,
+} from './track-subjects-factory.js';
 import {
   type ProposalService,
   trackProposalRoutes,
@@ -384,14 +391,23 @@ async function registerSearch(
   await app.register(healthRoutes({ catalog, index }));
   await registerCollections(app, deps);
   // Spoken passages beside the texts (KBC-039, ADR 0024), when the media library is on.
+  const authorView = {
+    mainOf: (topic: string) => authors.mainOf(topic)?.slug ?? null,
+    authorOf: (topic: string, slug: string) => authors.authorOf(topic, slug),
+  };
   const combined = new SearchWithMedia({
     documents: deps.agent.search,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
     media: deps.media?.search,
-    authors: {
-      mainOf: (topic) => authors.mainOf(topic)?.slug ?? null,
-      authorOf: (topic, slug) => authors.authorOf(topic, slug),
-    },
+    subjects:
+      deps.media &&
+      new SubjectSearch({
+        media: deps.media.search,
+        links: deps.media.trackLinks,
+        lookup: createSubjectDirectory({ ...deps, media: deps.media }),
+        authors: authorView,
+      }),
+    authors: authorView,
   });
   await app.register(
     searchRoutes({
@@ -714,6 +730,7 @@ async function registerLibrary(
   wiring: MediaWiring & { transcribers: TranscriberService },
 ) {
   const { store, listening } = wiring.media;
+  const directory = createSubjectDirectory(wiring);
   const service = new LibraryService({
     store,
     listening,
@@ -721,6 +738,7 @@ async function registerLibrary(
     presence: () => wiring.transcribers.presence(),
     scopeOf: (topic) =>
       wiring.catalog.scope(topic).map((one) => one.topic.slug),
+    subjectsOf: (tracks) => directory.shownOn(tracks),
   });
   await app.register(libraryRoutes(service));
 }

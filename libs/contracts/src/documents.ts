@@ -52,6 +52,8 @@ export const documentSchema = documentFacetsSchema.extend({
   summary: z.string().nullable(),
   /** What a concept article covers (kb `criterion`), null for sources. */
   criterion: z.string().nullable(),
+  /** The concept a concept article is about, as a track links it; null for sources. */
+  concept: z.string().nullable(),
   origin: documentOriginSchema,
   /** Opens the file in the Obsidian vault. */
   obsidianUrl: z.string(),

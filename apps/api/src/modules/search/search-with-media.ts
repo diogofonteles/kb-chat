@@ -1,13 +1,17 @@
 import {
+  EMPTY_FILTERS,
   MAX_MEDIA_HITS,
   MEDIA_COUNT_CAP,
   searchRequestSchema,
   type Authorship,
   type KindCounts,
   type MediaHit,
+  type ResultFacets,
   type SearchKind,
   type SearchRequest,
   type SearchResponse,
+  type SubjectTracksPage,
+  type TopicFacets,
 } from '@kb-chat/contracts';
 import type {
   AuthorRule,
@@ -22,6 +26,12 @@ import {
   type AuthorView,
 } from './media-hits.js';
 import type { SearchService } from './search-service.js';
+import {
+  withTrackCounts,
+  type SubjectPage,
+  type SubjectQuery,
+  type SubjectSearch,
+} from './subject-search.js';
 
 /** Who searches, as the spoken passages need it (BR-1 and the per-person feature). */
 export interface SearchViewer {
@@ -29,6 +39,8 @@ export interface SearchViewer {
   readonly mayHear: boolean;
   /** Has `media-tracks`: passages inside a track answer as the track (KBC-068 BR-6). */
   readonly seesTracks?: boolean;
+  /** Has `media-subjects` as well: subjects reach the search (KBC-070 BR-3). */
+  readonly seesSubjects?: boolean;
   /** The collection is one the person sees (ADR 0028 tree). */
   readonly canSee: (topic: string) => boolean;
 }
@@ -47,11 +59,13 @@ export interface MediaReport {
 }
 
 export interface SearchWithMediaDeps {
-  readonly documents: Pick<SearchService, 'search'>;
+  readonly documents: Pick<SearchService, 'search' | 'topicFacets'>;
   /** The collection and its sub-collections, by the catalog's tree (ADR 0028). */
   readonly scopeOf: (topic: string) => readonly string[];
   /** Absent when the media library is off (KB_CHAT_MEDIA=off). */
   readonly media?: MediaSearchPort;
+  /** Tracks by subject (KBC-070); absent with the media library. */
+  readonly subjects?: SubjectSearch;
   readonly authors: AuthorView;
 }
 
@@ -63,6 +77,8 @@ interface SpokenPart {
   readonly count: number | null;
   /** Matches per "Autoria" group, whatever group is chosen (a disjunctive facet). */
   readonly byAuthorship?: AuthorshipTally;
+  /** Tracks per subject, for who sees subjects (KBC-070 BR-4). */
+  readonly tracksPerConcept?: ResultFacets['concepts'];
 }
 
 const NO_AUDIO: SpokenPart = { hits: [], count: null };
@@ -107,6 +123,20 @@ function withSpokenAuthorships(
   return { ...facets, authorships: merged };
 }
 
+/** The passages' counts over the documents': "Autoria" and the tracks per subject. */
+function withSpoken(
+  facets: SearchResponse['facets'],
+  spoken: SpokenPart,
+): SearchResponse['facets'] {
+  const merged = withSpokenAuthorships(facets, spoken.byAuthorship);
+  return spoken.tracksPerConcept
+    ? {
+        ...merged,
+        concepts: withTrackCounts(merged.concepts, spoken.tracksPerConcept),
+      }
+    : merged;
+}
+
 /**
  * The free search over texts and spoken passages (KBC-039, ADR 0024 §2): the vault's
  * index as before and, beside it, the transcripts' own index; both always run so each
@@ -138,9 +168,7 @@ export class SearchWithMedia {
         };
     const audio = reach.includes('audio');
     const media = audio && parsed.offset === 0 ? spoken.hits : [];
-    const facets = audio
-      ? withSpokenAuthorships(texts.facets, spoken.byAuthorship)
-      : texts.facets;
+    const facets = audio ? withSpoken(texts.facets, spoken) : texts.facets;
     return { ...texts, facets, media: [...media], kinds };
   }
 
@@ -176,12 +204,73 @@ export class SearchWithMedia {
       filters.topics.length > 0
         ? visible.filter((slug) => filters.topics.includes(slug))
         : visible;
-    return this.passagesIn(media, {
-      terms: termsOf(q),
-      topics,
-      filters,
-      tracks: viewer.seesTracks ?? false,
-    });
+    const subjects = this.subjectsFor(viewer);
+    const query = { topic, topics, q, filters };
+    if (filters.concepts.length > 0 && !subjects) return { hits: [], count: 0 };
+    const part =
+      filters.concepts.length > 0 && subjects
+        ? subjects.find(query)
+        : this.passagesIn(media, {
+            terms: termsOf(q),
+            topics,
+            filters,
+            tracks: viewer.seesTracks ?? false,
+          });
+    return subjects ? this.withSubjectFacets(subjects, query, part) : part;
+  }
+
+  /** Subjects only with tracks in sight: `media`, `media-tracks` and `media-subjects`. */
+  private subjectsFor(viewer: SearchViewer): SubjectSearch | undefined {
+    const allowed = viewer.mayHear && viewer.seesTracks && viewer.seesSubjects;
+    return allowed ? this.deps.subjects : undefined;
+  }
+
+  private withSubjectFacets(
+    subjects: SubjectSearch,
+    query: SubjectQuery,
+    part: SpokenPart,
+  ): SpokenPart {
+    const { topics, filters } = query;
+    const { authors } = this.deps;
+    const mainOf = new Map(topics.map((slug) => [slug, authors.mainOf(slug)]));
+    return {
+      ...part,
+      hits: subjects.withSubjects(part.hits),
+      tracksPerConcept: subjects.counts(
+        query,
+        authorRuleOf(filters.authorships, mainOf),
+      ),
+    };
+  }
+
+  /** Collection-wide counts, each subject with its tracks for who sees them (FR-2). */
+  topicFacets(topic: string, viewer: SearchViewer): TopicFacets {
+    const facets = this.deps.documents.topicFacets(topic);
+    const subjects = this.subjectsFor(viewer);
+    if (!subjects) return facets;
+    const counted = subjects.counts(
+      {
+        topic,
+        topics: this.visibleScope(topic, viewer),
+        q: '',
+        filters: EMPTY_FILTERS,
+      },
+      { kind: 'any' },
+    );
+    return { ...facets, concepts: withTrackCounts(facets.concepts, counted) };
+  }
+
+  /** FR-3: the tracks linked to a subject, in the collections the person sees. */
+  subjectTracks(
+    target: { readonly topic: string; readonly name: string },
+    page: SubjectPage,
+    viewer: SearchViewer,
+  ): SubjectTracksPage {
+    const subjects = this.subjectsFor(viewer);
+    if (!subjects) return { items: [], total: 0, nextOffset: null };
+    const { topic, name } = target;
+    const topics = this.visibleScope(topic, viewer);
+    return subjects.tracksOf({ topic, topics }, name, page);
   }
 
   /** The passages under the "Autoria" choice, and the count of each group. */

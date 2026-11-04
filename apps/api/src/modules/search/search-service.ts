@@ -114,7 +114,8 @@ export class SearchService {
     const collection = toCollection(catalog.topic.slug);
     const hits = await this.queryIndex({
       collection,
-      q: normalizeQuestion(q),
+      // A subject alone (KBC-070): the documents are found by its name.
+      q: normalizeQuestion(q) || normalizeQuestion(filters.concepts.join(' ')),
       mode,
       limit,
     });

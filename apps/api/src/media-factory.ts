@@ -37,7 +37,7 @@ import type { ListeningStorePort } from './ports/listening-store.js';
 import type { MediaFilesPort } from './ports/media-files.js';
 import type { MediaEditStorePort } from './ports/media-edit-store.js';
 import type { MediaSpendLedgerPort } from './ports/media-spend-ledger.js';
-import type { MediaSearchPort } from './ports/media-search.js';
+import type { MediaSearchPort, TrackLinksPort } from './ports/media-search.js';
 import type { MediaStorePort } from './ports/media-store.js';
 import type { PreparationStorePort } from './ports/preparation-store.js';
 import type { TrackProposalStorePort } from './ports/track-proposal-store.js';
@@ -87,6 +87,8 @@ export interface MediaDeps {
   readonly waveforms: WaveformStorePort;
   /** The current transcripts' search index (KBC-039, ADR 0024). */
   readonly search: MediaSearchPort;
+  /** Tracks and their subjects in the same index (KBC-070). */
+  readonly trackLinks: TrackLinksPort;
   /** Voice separations (KBC-064). */
   readonly diarizations: DiarizationStorePort;
   /** The speakers of each collection and who each voice is (KBC-065). */
@@ -180,6 +182,7 @@ type MediaStores = Pick<
   | 'silences'
   | 'waveforms'
   | 'search'
+  | 'trackLinks'
   | 'diarizations'
   | 'speakers'
   | 'voiceLabels'
@@ -200,6 +203,7 @@ function openStores(dir: string): MediaStores {
 
 function storesOf(db: DatabaseSync): MediaStores {
   const transcripts = new SqliteTranscriptStore(db);
+  const search = new SqliteMediaSearch(db);
   return {
     store: new SqliteMediaStore(db),
     listening: new SqliteListeningStore(db),
@@ -214,7 +218,8 @@ function storesOf(db: DatabaseSync): MediaStores {
     spend: new SqliteMediaSpendLedger(db),
     silences: new SqliteSilenceStore(db),
     waveforms: new SqliteWaveformStore(db),
-    search: new SqliteMediaSearch(db),
+    search,
+    trackLinks: search,
     diarizations: new SqliteDiarizationStore(db),
     speakers: new SqliteSpeakerStore(db),
     voiceLabels: new SqliteVoiceLabelStore(db),

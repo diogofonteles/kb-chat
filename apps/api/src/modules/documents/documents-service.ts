@@ -7,6 +7,7 @@ import type {
 import { AppError } from '../../app-error.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
+  conceptOfArticle,
   splitFrontmatter,
   type CatalogEntry,
   type CatalogRegistry,
@@ -45,6 +46,7 @@ export class DocumentsService {
       title: entry.title,
       summary: entry.summary,
       criterion: entry.criterion,
+      concept: conceptOfArticle(entry.id),
       origin: entry.origin,
       genre: entry.genre,
       depth: entry.depth,

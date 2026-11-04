@@ -6,10 +6,15 @@ import {
 import type {
   AuthorRule,
   AuthorshipTally,
+  LinkedTrack,
   MediaSearchPort,
   MediaSearchQuery,
   MediaSearchResult,
   MediaSegmentMatch,
+  SubjectCount,
+  TrackDetails,
+  TrackLinksPort,
+  TrackScope,
 } from '../../ports/media-search.js';
 
 /** A WHERE fragment with its placeholders' values, in order. */
@@ -81,6 +86,37 @@ const NOT_INSIDE_TRACKS = `(NOT EXISTS (${LIVE_TRACK})
 const passagesFor = (tracks: boolean | undefined): string =>
   tracks ? NOT_INSIDE_TRACKS : ONLY_RECORDINGS;
 
+/** A track someone may be told about: published, not archived (KBC-068 FR-1, BR-5). */
+const LIVE_TRACK_ROW = `m.parent_media_id IS NOT NULL AND m.status = 'ready'
+  AND m.archived_at IS NULL AND m.kind = 'audio'`;
+const IN_IDS = `m.id IN (SELECT value FROM json_each(?))`;
+
+/** The tracks a person may be told about, narrowed to `ids` when given. */
+function liveTrackClause(
+  topics: readonly string[],
+  ids: readonly string[] | undefined,
+): Clause {
+  const inTopics = `m.topic IN (${placeholders(topics.length)})`;
+  return ids === undefined
+    ? { sql: `${LIVE_TRACK_ROW} AND ${inTopics}`, values: topics }
+    : {
+        sql: `${LIVE_TRACK_ROW} AND ${IN_IDS} AND ${inTopics}`,
+        values: [JSON.stringify(ids), ...topics],
+      };
+}
+
+/** The passages asked for: as usual, or only those of the given tracks (KBC-070). */
+const passagesClause = (
+  tracks: boolean | undefined,
+  within: readonly string[] | undefined,
+): Clause =>
+  within === undefined
+    ? { sql: passagesFor(tracks), values: [] }
+    : {
+        sql: `${LIVE_TRACK_ROW} AND ${IN_IDS}`,
+        values: [JSON.stringify(within)],
+      };
+
 const FROM_MATCHES = `FROM segments_fts f
   JOIN segments s ON s.rowid = f.rowid
   JOIN transcripts t ON t.id = s.transcript_id
@@ -120,8 +156,22 @@ function toMatch(row: Record<string, unknown>): MediaSegmentMatch {
   };
 }
 
+function toDetails(row: Record<string, unknown>): TrackDetails {
+  const duration = row['duration_ms'];
+  const summary = row['summary'];
+  return {
+    mediaId: String(row['id']),
+    topic: String(row['topic']),
+    title: String(row['title']),
+    author: row['author'] === null ? null : String(row['author']),
+    durationMs: duration === null ? null : Number(duration),
+    summary: summary === null ? null : String(summary),
+    parentTitle: String(row['parent_title']),
+  };
+}
+
 /** The current transcripts' segments in SQLite FTS5 (ADR 0024 §1, KBC-039). */
-export class SqliteMediaSearch implements MediaSearchPort {
+export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
   constructor(private readonly db: DatabaseSync) {}
 
   search({
@@ -130,13 +180,19 @@ export class SqliteMediaSearch implements MediaSearchPort {
     authors,
     limit,
     tracks,
+    within,
     count = true,
   }: MediaSearchQuery): MediaSearchResult {
     if (terms.length === 0 || topics.length === 0)
       return { matches: [], total: 0 };
     const scope = scopeClause(topics, authors);
-    const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
-    const values = [toMatchExpression(terms), ...scope.values];
+    const passages = passagesClause(tracks, within);
+    const where = `WHERE segments_fts MATCH ? AND ${passages.sql} AND ${scope.sql}`;
+    const values = [
+      toMatchExpression(terms),
+      ...passages.values,
+      ...scope.values,
+    ];
     const matches = this.top(where, values, limit);
     return { matches, total: count ? this.countWhere(where, values) : 0 };
   }
@@ -150,14 +206,17 @@ export class SqliteMediaSearch implements MediaSearchPort {
     topics,
     mainOf,
     tracks,
+    within,
   }: Parameters<MediaSearchPort['tally']>[0]): AuthorshipTally {
     if (terms.length === 0 || topics.length === 0)
       return { main: 0, others: 0 };
+    const passages = passagesClause(tracks, within);
     const countFor = (kind: 'main' | 'others'): number => {
       const scope = scopeClause(topics, { kind, mainOf });
-      const where = `WHERE segments_fts MATCH ? AND ${passagesFor(tracks)} AND ${scope.sql}`;
+      const where = `WHERE segments_fts MATCH ? AND ${passages.sql} AND ${scope.sql}`;
       return this.countWhere(where, [
         toMatchExpression(terms),
+        ...passages.values,
         ...scope.values,
       ]);
     };
@@ -205,6 +264,88 @@ export class SqliteMediaSearch implements MediaSearchPort {
       .map(toMatch)
       .sort(byConfidenceThenRelevance)
       .slice(0, limit);
+  }
+
+  linkedTracks({ topics, ids }: TrackScope): LinkedTrack[] {
+    if (topics.length === 0) return [];
+    const scope = liveTrackClause(topics, ids);
+    return this.db
+      .prepare(
+        `SELECT m.id, m.topic, ${AUTHOR} AS author FROM media m
+         WHERE ${scope.sql} AND EXISTS (
+           SELECT 1 FROM media_subject_links l
+           WHERE l.media_id = m.id AND l.status = 'accepted')
+         ORDER BY m.created_at DESC, m.id`,
+      )
+      .all(...scope.values)
+      .map((row) => ({
+        mediaId: String(row['id']),
+        topic: String(row['topic']),
+        author: row['author'] === null ? null : String(row['author']),
+      }));
+  }
+
+  speakingTracks(terms: readonly string[], ids: readonly string[]): string[] {
+    if (terms.length === 0 || ids.length === 0) return [];
+    return this.db
+      .prepare(
+        `SELECT DISTINCT t.media_id FROM segments_fts f
+         JOIN segments s ON s.rowid = f.rowid
+         JOIN transcripts t ON t.id = s.transcript_id
+         WHERE segments_fts MATCH ?
+           AND t.media_id IN (SELECT value FROM json_each(?))`,
+      )
+      .all(toMatchExpression(terms), JSON.stringify(ids))
+      .map((row) => String(row['media_id']));
+  }
+
+  tracksAbout(terms: readonly string[]): ReadonlySet<string> {
+    if (terms.length === 0) return new Set();
+    const rows = this.db
+      .prepare(
+        `SELECT media_id FROM track_about_fts WHERE track_about_fts MATCH ?`,
+      )
+      .all(toMatchExpression(terms));
+    return new Set(rows.map((row) => String(row['media_id'])));
+  }
+
+  trackDetails(ids: readonly string[]): TrackDetails[] {
+    const rows = this.db
+      .prepare(
+        `SELECT m.id, m.topic, m.title, ${AUTHOR} AS author, m.duration_ms, a.summary,
+           p.title AS parent_title
+         FROM media m JOIN media p ON p.id = m.parent_media_id
+         LEFT JOIN media_track_subjects a ON a.media_id = m.id
+         WHERE ${IN_IDS}`,
+      )
+      .all(JSON.stringify(ids));
+    const found = new Map(rows.map((row) => [String(row['id']), row]));
+    return ids.flatMap((id) => {
+      const row = found.get(id);
+      return row ? [toDetails(row)] : [];
+    });
+  }
+
+  subjectCounts({
+    topics,
+    authors,
+    ids,
+  }: Parameters<TrackLinksPort['subjectCounts']>[0]): SubjectCount[] {
+    if (topics.length === 0) return [];
+    const live = liveTrackClause(topics, ids);
+    const scope = scopeClause(topics, authors);
+    return this.db
+      .prepare(
+        `SELECT l.subject_key, count(*) AS n
+         FROM media_subject_links l JOIN media m ON m.id = l.media_id
+         WHERE l.status = 'accepted' AND ${live.sql} AND ${scope.sql}
+         GROUP BY l.subject_key`,
+      )
+      .all(...live.values, ...scope.values)
+      .map((row) => ({
+        key: String(row['subject_key']),
+        tracks: Number(row['n']),
+      }));
   }
 
   hasTranscripts(topics: readonly string[]): boolean {

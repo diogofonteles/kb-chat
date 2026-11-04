@@ -1082,4 +1082,47 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX media_by_owner ON media (owner_principal);
     `,
   },
+  {
+    // KBC-070 BR-2: a track's title and summary, read word by word as its speech is, so a
+    // subject with text stays inside p95 150 ms over 20,000 links. Kept by triggers: a later
+    // rebuild of `media` or `media_track_subjects` must recreate them. Numbered 23 because 22
+    // is taken by an item not merged yet.
+    version: 23,
+    name: 'track-about-index',
+    sql: `
+      CREATE VIRTUAL TABLE track_about_fts USING fts5(
+        media_id UNINDEXED,
+        title,
+        summary,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      INSERT INTO track_about_fts (media_id, title, summary)
+        SELECT m.id, m.title, COALESCE(a.summary, '')
+        FROM media m LEFT JOIN media_track_subjects a ON a.media_id = m.id
+        WHERE m.parent_media_id IS NOT NULL;
+
+      CREATE TRIGGER track_about_on_insert AFTER INSERT ON media
+      WHEN NEW.parent_media_id IS NOT NULL BEGIN
+        INSERT INTO track_about_fts (media_id, title, summary)
+          VALUES (NEW.id, NEW.title, '');
+      END;
+      CREATE TRIGGER track_about_on_title AFTER UPDATE OF title ON media
+      WHEN NEW.parent_media_id IS NOT NULL BEGIN
+        UPDATE track_about_fts SET title = NEW.title WHERE media_id = NEW.id;
+      END;
+      CREATE TRIGGER track_about_on_delete AFTER DELETE ON media
+      WHEN OLD.parent_media_id IS NOT NULL BEGIN
+        DELETE FROM track_about_fts WHERE media_id = OLD.id;
+      END;
+      CREATE TRIGGER track_about_on_summary_insert AFTER INSERT ON media_track_subjects BEGIN
+        UPDATE track_about_fts SET summary = COALESCE(NEW.summary, '')
+          WHERE media_id = NEW.media_id;
+      END;
+      CREATE TRIGGER track_about_on_summary_update AFTER UPDATE OF summary ON media_track_subjects
+      BEGIN
+        UPDATE track_about_fts SET summary = COALESCE(NEW.summary, '')
+          WHERE media_id = NEW.media_id;
+      END;
+    `,
+  },
 ];

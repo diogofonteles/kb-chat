@@ -21,6 +21,8 @@ export interface MediaSearchQuery {
   readonly limit: number;
   /** Has `media-tracks`: a passage inside a track is the track's (KBC-068 BR-6). */
   readonly tracks?: boolean;
+  /** Only the passages of these live tracks (a subject chosen, KBC-070). */
+  readonly within?: readonly string[];
   /** Count the matches too (default); off when the caller has the tally already. */
   readonly count?: boolean;
 }
@@ -54,6 +56,34 @@ export interface MediaSearchResult {
   readonly total: number;
 }
 
+/** Which tracks: these collections, and among these ids when given. */
+export interface TrackScope {
+  readonly topics: readonly string[];
+  readonly ids?: readonly string[];
+}
+
+/** A published track with an accepted subject: what its group in "Autoria" needs. */
+export interface LinkedTrack {
+  readonly mediaId: string;
+  readonly topic: string;
+  /** The media's author id, or null ("Outros autores"). */
+  readonly author: string | null;
+}
+
+/** What a track's card or line shows. */
+export interface TrackDetails extends LinkedTrack {
+  readonly title: string;
+  readonly durationMs: number | null;
+  readonly summary: string | null;
+  readonly parentTitle: string;
+}
+
+/** Tracks with one accepted subject (`concept:<key>` or `free:<id>`). */
+export interface SubjectCount {
+  readonly key: string;
+  readonly tracks: number;
+}
+
 /** The transcripts' own index (ADR 0024 §1), in the media database. */
 export interface MediaSearchPort {
   search(query: MediaSearchQuery): MediaSearchResult;
@@ -67,9 +97,26 @@ export interface MediaSearchPort {
     readonly mainOf: ReadonlyMap<string, string | null>;
     /** As in `search`: both must count the same passages. */
     readonly tracks?: boolean;
+    readonly within?: readonly string[];
   }): AuthorshipTally;
   /** Whether any of these collections has a searchable (transcribed) media. */
   hasTranscripts(topics: readonly string[]): boolean;
+}
+
+/** What tracks and their subjects need from the same index (KBC-070). */
+export interface TrackLinksPort {
+  /** Published tracks with an accepted subject, newest first (KBC-070 FR-3). */
+  linkedTracks(scope: TrackScope): LinkedTrack[];
+  /** Of these tracks, those where every word is said in one segment. */
+  speakingTracks(terms: readonly string[], ids: readonly string[]): string[];
+  /** Tracks with every word in their title and summary together (BR-2). */
+  tracksAbout(terms: readonly string[]): ReadonlySet<string>;
+  /** The tracks in `ids`, in that order. */
+  trackDetails(ids: readonly string[]): TrackDetails[];
+  /** Accepted links per subject over published tracks: suggestions never count (BR-1). */
+  subjectCounts(
+    scope: TrackScope & { readonly authors: AuthorRule },
+  ): SubjectCount[];
 }
 
 /** Start and end markers of a match in `marked`. */

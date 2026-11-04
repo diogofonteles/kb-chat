@@ -5,6 +5,7 @@ import type { AuthorsService } from './modules/authors/index.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
 import type { MediaService } from './modules/media/index.js';
 import {
+  SubjectDirectory,
   SubjectProposalService,
   TrackSubjectService,
 } from './modules/track-subjects/index.js';
@@ -19,6 +20,18 @@ export interface TrackSubjectWiring {
   readonly log: FastifyBaseLogger;
 }
 
+/** Subjects as the search and the library read them (KBC-070). */
+export function createSubjectDirectory(
+  wiring: Pick<TrackSubjectWiring, 'media' | 'catalog' | 'authors'>,
+): SubjectDirectory {
+  const { media, catalog, authors } = wiring;
+  return new SubjectDirectory({
+    store: media.trackSubjects,
+    rootOf: (topic) => authors.rootOf(topic),
+    conceptsOf: (root) => catalog.get(root)?.relations.conceptNames() ?? [],
+  });
+}
+
 /** Subjects of a track over the media database, the catalog read-only (KBC-069). */
 export function createTrackSubjects(wiring: TrackSubjectWiring) {
   const { media, catalog, authors, service } = wiring;
@@ -29,6 +42,7 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     findMedia: (actor, mediaId) => service.getRecording(actor, mediaId),
     rootOf: (topic) => authors.rootOf(topic),
     conceptsOf: (root) => catalog.get(root)?.relations.conceptNames() ?? [],
+    directory: createSubjectDirectory(wiring),
   });
   const proposals = new SubjectProposalService({
     store: media.trackSubjects,
