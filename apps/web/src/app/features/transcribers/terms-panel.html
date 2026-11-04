@@ -93,13 +93,23 @@
               </button>
             </div>
             @if (!isValid(row)) {
-              <p
-                class="field-error"
-                [id]="'term-error-' + row.id"
-                i18n="@@terms.invalid"
-              >
-                Tire a vírgula e os sinais &lt; &gt; |.
-              </p>
+              @if (isTooLong(row)) {
+                <p
+                  class="field-error"
+                  [id]="'term-error-' + row.id"
+                  i18n="@@terms.tooLong"
+                >
+                  Encurte este termo: o máximo é {{ maxTermLength }} caracteres.
+                </p>
+              } @else {
+                <p
+                  class="field-error"
+                  [id]="'term-error-' + row.id"
+                  i18n="@@terms.invalid"
+                >
+                  Tire a vírgula e os sinais &lt; &gt; |.
+                </p>
+              }
             }
           </li>
         }

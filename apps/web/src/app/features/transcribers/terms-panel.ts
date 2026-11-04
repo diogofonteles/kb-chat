@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
+  MAX_TERM_LENGTH,
   MAX_TERMS,
   normalizeTerms,
   termListSchema,
@@ -105,6 +106,7 @@ export class TermsPanel {
   protected readonly rows = linkedSignal<TermRow[]>(() =>
     rowsOf(this.saved()?.terms ?? []),
   );
+  protected readonly maxTermLength = MAX_TERM_LENGTH;
   protected readonly toAdd = signal('');
   protected readonly busy = signal(false);
   protected readonly notice = signal<Notice | null>(null);
@@ -146,6 +148,10 @@ export class TermsPanel {
 
   protected isValid(row: TermRow): boolean {
     return isValid(row.text);
+  }
+
+  protected isTooLong(row: TermRow): boolean {
+    return row.text.trim().length > MAX_TERM_LENGTH;
   }
 
   protected termLabel(position: number): string {

@@ -230,6 +230,14 @@ describe('TermsPanel (KBC-040)', () => {
     expect(text()).toContain('Corrija os termos marcados.');
   });
 
+  it('says a pasted term is too long, not that it has a comma', async () => {
+    await add('a'.repeat(101));
+    await fixture.whenStable();
+
+    expect(text()).toContain('Encurte este termo: o máximo é 100 caracteres.');
+    expect(text()).not.toContain('Tire a vírgula');
+  });
+
   it('says when nothing changed, and when the list would be empty', async () => {
     await submit();
     expect(text()).toContain('Nada mudou.');
