@@ -80,6 +80,8 @@ a.main {
   margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-4));
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
+  /* Room for the focus outline when the row reaches the scroller's edge. */
+  scroll-margin-block: var(--space-1);
 }
 
 a.main .title {
@@ -107,8 +109,6 @@ a.main:focus-visible {
 
 .meta {
   grid-area: meta;
-  /* A press here is a press on the row. */
-  pointer-events: none;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -116,6 +116,11 @@ a.main:focus-visible {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+}
+
+/* A press here is a press on the row; a row with no link keeps its text selectable. */
+a.main ~ .meta {
+  pointer-events: none;
 }
 
 .state,
@@ -140,6 +145,7 @@ a.main:focus-visible {
   overflow: hidden;
   border-radius: 2px;
   background: var(--color-border);
+  pointer-events: none;
 }
 
 .position span {
