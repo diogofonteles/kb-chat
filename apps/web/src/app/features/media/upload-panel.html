@@ -98,9 +98,7 @@
     />
 
     @if (uploads.anyResuming()) {
-      <p class="kept" i18n="@@media.upload.planKept">
-        O que continua de um envio anterior mantém as escolhas daquele envio.
-      </p>
+      <p class="kept">{{ keptNotice() }}</p>
     }
     <!-- Out of the way while sending: the progress of each file is what matters then. -->
     @if (!uploads.onlyResuming() && stage() !== 'sending') {

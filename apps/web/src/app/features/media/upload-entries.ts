@@ -10,7 +10,9 @@ import {
   PREPARATION_MAX_DURATION_MS,
   type UploadCheck,
 } from '@kb-chat/contracts';
+import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi } from '@core/media/media-api.js';
+import { PreparationApi } from '@core/media/preparation-api.js';
 import {
   EMPTY,
   Subject,
@@ -67,6 +69,8 @@ export interface UploadEntry {
   readonly durationMs: number | null;
   /** Continues an item of an earlier upload, which keeps the plan it was created with. */
   readonly resumes: boolean;
+  /** What that plan may spend, once read; null when it is free or unknown. */
+  readonly keptUsd: number | null;
   readonly state: EntryState;
 }
 
@@ -119,6 +123,8 @@ const stateOf = <V extends UploadCheck['verdict']>(
 @Injectable()
 export class UploadEntries {
   private readonly api = inject(MediaApi);
+  private readonly preparations = inject(PreparationApi);
+  private readonly session = inject(SessionStore);
   private readonly readLength = inject(AUDIO_LENGTH_READER);
   private readonly list = signal<readonly UploadEntry[]>([]);
   private readonly toCheck = new Subject<number>();
@@ -146,6 +152,13 @@ export class UploadEntries {
   readonly anyResuming = computed(() =>
     this.list().some(({ resumes }) => resumes),
   );
+  /** The value kept by what goes on, in all; null when none of it is paid. */
+  readonly keptUsd = computed<number | null>(() => {
+    const kept = this.list().flatMap(({ resumes, keptUsd }) =>
+      resumes && keptUsd !== null ? [keptUsd] : [],
+    );
+    return kept.length > 0 ? kept.reduce((sum, usd) => sum + usd, 0) : null;
+  });
   /**
    * The length the plan's estimates go by: all of its files, unless one is not known or
    * cannot be read, or the sum is past what the API estimates (KBC-072 BR-4).
@@ -203,6 +216,7 @@ export class UploadEntries {
         sha256: null,
         durationMs: null,
         resumes: false,
+        keptUsd: null,
         state: problem
           ? { kind: 'refused', problem }
           : { kind: 'checking', percent: 0 },
@@ -325,7 +339,24 @@ export class UploadEntries {
         this.update(key, { resumes: check.verdict === 'resume' });
         this.set(key, stateOf(check));
       }),
+      concatMap((check) => this.readKept(key, check)),
       ignoreElements(),
+    );
+  }
+
+  /**
+   * What the plan of a resumed item may spend, for the panel's notice. Only who may ask for
+   * the paid step can have one; if it cannot be read the notice just says less.
+   */
+  private readKept(key: number, check: UploadCheck): Observable<unknown> {
+    if (check.verdict !== 'resume' || !this.session.can('media-edit-ai'))
+      return EMPTY;
+    return this.preparations.read(check.media.id).pipe(
+      tap(({ plan }) => {
+        if (plan?.tracks === 'ai')
+          this.update(key, { keptUsd: plan.acceptedUsd });
+      }),
+      catchError(() => EMPTY),
     );
   }
 }

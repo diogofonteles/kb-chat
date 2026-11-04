@@ -5,6 +5,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  LOCALE_ID,
   type OnInit,
   afterNextRender,
   computed,
@@ -64,6 +65,7 @@ import {
 import { AuthorCombobox } from './author-combobox.js';
 import { planShare, sameChoices } from './preparation/plan-choices.js';
 import { PlanForm } from './preparation/plan-form.js';
+import { usdText } from './preparation/preparation-labels.js';
 import { PreparationOptions } from './preparation/preparation-options.js';
 import { PreparationSteps } from './preparation/preparation-steps.js';
 import {
@@ -109,6 +111,7 @@ export class UploadPanel implements OnInit {
   private readonly preparations = inject(PreparationApi);
   private readonly session = inject(SessionStore);
   private readonly router = inject(Router);
+  private readonly locale = inject(LOCALE_ID);
   protected readonly plan = inject(PlanForm);
   /** Who may only send sees no flow of four steps: the upload is all there is (AC-15). */
   protected readonly showSteps = computed(() => this.session.can('media-edit'));
@@ -153,6 +156,13 @@ export class UploadPanel implements OnInit {
   private sending: Subscription | null = null;
   /** A file came back refused while sending: the panel stays so the person sees it. */
   private interrupted = false;
+  /** Who goes on with a paid plan sees that it is paid, and how much (Q188). */
+  protected readonly keptNotice = computed(() => {
+    const usd = this.uploads.keptUsd();
+    return usd === null
+      ? $localize`:@@media.upload.planKept:O que continua de um envio anterior mantém as escolhas daquele envio.`
+      : $localize`:@@media.upload.planKeptPaid:O que continua de um envio anterior mantém as escolhas daquele envio, com IA paga de até ${usdText(usd, this.locale)}:value:.`;
+  });
 
   constructor() {
     afterNextRender(() => this.dialog().nativeElement.showModal());

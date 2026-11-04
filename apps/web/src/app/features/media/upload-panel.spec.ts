@@ -1347,6 +1347,42 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       expect(aiReason()).toContain('consiga ler');
     });
 
+    const keptWith = (acceptedUsd: number | null, tracks = 'ai' as const) =>
+      aPreparation({
+        mediaId: CREATED.id,
+        plan: {
+          transcribe: true,
+          speakers: true,
+          tracks,
+          subjects: false,
+          acceptedUsd,
+        },
+      });
+
+    it('says the plan kept is paid, and its value (Q188)', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel, audio(), RESUME);
+      panel.http
+        .expectOne(`/api/v1/media/${CREATED.id}/preparation`)
+        .flush(keptWith(0.0016));
+      await panel.fixture.whenStable();
+      expect(
+        screen.getByText(/mantém as escolhas daquele envio/).textContent,
+      ).toMatch(/IA paga de até .*0[.,]0016/);
+    });
+
+    it('says only that the choices stay when the plan kept is free or unread', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel, audio(), RESUME);
+      panel.http
+        .expectOne(`/api/v1/media/${CREATED.id}/preparation`)
+        .flush({}, { status: 500, statusText: 'x' });
+      await panel.fixture.whenStable();
+      const notice = screen.getByText(/mantém as escolhas daquele envio/);
+      expect(notice.textContent).not.toContain('IA paga');
+      expect(screen.getByText(/Envio interrompido em/)).toBeTruthy();
+    });
+
     it('takes the choices away while sending and brings them back after a stop', async () => {
       const panel = await renderPanel({ features: EDITOR });
       await chooseChecked(panel);
