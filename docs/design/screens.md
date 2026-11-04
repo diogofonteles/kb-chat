@@ -730,6 +730,8 @@ Todo par texto/fundo e acento/fundo deve passar 4,5:1 (AA). A verificação entr
 - **Passo 2:** etapas e vozes à esquerda, faixas à direita (≥ 60rem); no celular, uma coluna. Todas as linhas são pintadas: com 200 faixas a rolagem segue em 60 fps; se pesar num celular fraco, o caminho é uma lista virtual.
 - **Dinheiro:** o clique em **Enviar** com a opção paga marcada vale pelo valor mostrado. A etapa começa uma vez, reavalia e reserva só nessa hora; acima de 1,25 × o valor visto, ou de um teto, não roda e a tela diz o valor. Falha nunca repete sozinha: só "Tentar de novo", que mostra o custo.
 - **Continuar:** "Preparação parada no passo N · Continuar" na lista, na biblioteca e na página do áudio.
+- **Vários arquivos (KBC-035):** as escolhas valem para todos ("O que fazer com estes áudios"); as estimativas somam as durações dos que vão com elas, e sem a duração de um deles, ou com mais de 24 h somadas, não há estimativa nem opção paga. Cada arquivo leva sua parte do valor visto, pela duração. Depois de um arquivo enviado, vai ao passo 2; depois de vários, fica na lista, com "Preparação parada no passo N · Continuar" em cada um. Repetidos e recusados não contam.
+- **Envio retomado (KBC-035):** o item mantém o plano do primeiro envio; o painel diz "O que continua de um envio anterior mantém as escolhas daquele envio." e, se só houver retomadas, esconde as opções. O passo 2 abre pelo plano que está no servidor.
 
 **Passos 3 e 4:** rota `/midia/{id}/faixas`. O pedido completo, com a tabela de estados, está em [`KBC-066`](../backlog/KBC-066-mark-tracks-and-play-by-track.md). Como foi construído:
 
