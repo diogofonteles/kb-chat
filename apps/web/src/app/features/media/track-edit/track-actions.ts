@@ -8,9 +8,9 @@ import {
   effect,
   inject,
   input,
+  linkedSignal,
   output,
   signal,
-  untracked,
   viewChild,
 } from '@angular/core';
 import {
@@ -28,7 +28,15 @@ import {
   trackBoundsPath,
   trackEditUrl,
 } from '@core/media/track-revisions-api.js';
-import { EMPTY, distinctUntilChanged, interval, map, switchMap } from 'rxjs';
+import {
+  EMPTY,
+  distinctUntilChanged,
+  filter,
+  interval,
+  map,
+  pairwise,
+  switchMap,
+} from 'rxjs';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import { TrackDeleteDialog } from './track-delete-dialog.js';
 import { TrackEditDialog } from './track-edit-dialog.js';
@@ -86,8 +94,27 @@ export class TrackActions {
   private readonly cut = computed(() => this.current()?.cut ?? 'none');
   protected readonly cutting = computed(() => this.cut() === 'running');
   protected readonly cutFailed = computed(() => this.cut() === 'failed');
-  protected readonly cutDone = signal(false);
-  protected readonly open = signal<Dialog | null>(null);
+  /** The cut this page was following landed. */
+  private readonly cutLanded = toObservable(this.cut).pipe(
+    pairwise(),
+    filter(([was, now]) => was === 'running' && now === 'none'),
+  );
+  protected readonly cutDone = toSignal(this.cutLanded.pipe(map(() => true)), {
+    initialValue: false,
+  });
+  private readonly asked = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('acao'))),
+    { initialValue: null },
+  );
+  /** What the address asks, once the track can take it. */
+  private readonly askedDialog = computed(() => {
+    const track = this.current();
+    return track && !track.locked ? dialogOf(this.asked()) : null;
+  });
+  protected readonly open = linkedSignal<Dialog | null, Dialog | null>({
+    source: this.askedDialog,
+    computation: (asked, previous) => asked ?? previous?.value ?? null,
+  });
   protected readonly historyOpen = signal(false);
   protected readonly failure = signal('');
   protected readonly restoring = signal(false);
@@ -97,29 +124,21 @@ export class TrackActions {
   protected readonly editLink = computed(() =>
     editPagePath(this.current()?.recordingId ?? ''),
   );
-  private readonly asked = toSignal(
-    this.route.queryParamMap.pipe(map((params) => params.get('acao'))),
-    { initialValue: null },
-  );
 
   constructor() {
-    this.openAsked();
+    this.forgetAsked();
     this.followCut();
   }
 
-  private openAsked(): void {
+  /** The address is not a signal to set: once read, `?acao=` leaves it. */
+  private forgetAsked(): void {
     effect(() => {
-      const dialog = dialogOf(this.asked());
-      const track = this.current();
-      if (!dialog || !track || track.locked) return;
-      untracked(() => {
-        this.open.set(dialog);
-        void this.router.navigate([], {
-          relativeTo: this.route,
-          queryParams: { acao: null },
-          queryParamsHandling: 'merge',
-          replaceUrl: true,
-        });
+      if (!this.askedDialog()) return;
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { acao: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
       });
     });
   }
@@ -133,17 +152,9 @@ export class TrackActions {
         takeUntilDestroyed(),
       )
       .subscribe(() => this.view.reload());
-    let wasCutting = false;
-    effect(() => {
-      const cutting = this.cutting();
-      const done = wasCutting && !cutting && this.cut() === 'none';
-      wasCutting = cutting;
-      if (done)
-        untracked(() => {
-          this.cutDone.set(true);
-          this.changed.emit(null);
-        });
-    });
+    this.cutLanded
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.changed.emit(null));
   }
 
   protected toggleHistory(event: Event): void {
