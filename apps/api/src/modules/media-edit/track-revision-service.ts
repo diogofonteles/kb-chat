@@ -425,6 +425,7 @@ export class TrackRevisionService {
 
   archived(actor: MediaActor, recordingId: string): ArchivedTracks {
     this.deps.findMedia(actor, recordingId);
+    if (!actor.seesTracks) return { tracks: [] };
     const since = new Date(this.now().getTime() - TRACK_RESTORE_MS);
     return {
       tracks: this.deps.revisions.archived(recordingId, since).map((one) => ({
@@ -458,8 +459,17 @@ export class TrackRevisionService {
   }
 
   movedBookmarks(actor: MediaActor): MovedBookmarks {
+    if (!actor.seesTracks) return { moved: [] };
     return {
-      moved: [...this.deps.revisions.movedBookmarks(actor.principal)],
+      moved: this.deps.revisions
+        .movedBookmarks(actor.principal)
+        .filter((entry) => actor.canSee(entry.topic))
+        .map(({ mediaId, recordingId, title, count }) => ({
+          mediaId,
+          recordingId,
+          title,
+          count,
+        })),
     };
   }
 

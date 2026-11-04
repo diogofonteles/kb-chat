@@ -389,6 +389,122 @@ describe('The notice of a moved bookmark (BR-4)', () => {
   });
 });
 
+describe('What a person no longer sees (ADR 0008)', () => {
+  const personId = async (media: Media, email: string) => {
+    const people = await media.owner('GET', '/api/v1/people');
+    const found = people
+      .json<{ items: { id: string; email: string }[] }>()
+      .items.find((one) => one.email === email);
+    if (!found) throw new Error(`no person ${email}`);
+    return found.id;
+  };
+
+  /** A bookmark of `email` at 2:50 of the first track, then sent to the recording. */
+  async function movedFor(world: World, email: string) {
+    const { media } = world;
+    const tracks = await published(world);
+    const { call } = await member(media, {
+      email,
+      topics: ['hermetismo'],
+      features: ['media', 'media-tracks'],
+    });
+    const marked = await call('POST', `${urlOf(tracks.first.id)}/bookmarks`, {
+      id: randomUUID(),
+      positionMs: 170_000,
+    });
+    expect(marked.statusCode, marked.body).toBe(201);
+    await moveBounds(media, tracks.first.id, {
+      startMs: 60_000,
+      endMs: 120_000,
+    });
+    await finishCuts(media);
+    const moved = await call('GET', '/api/v1/media/bookmarks/moved');
+    expect(moved.json<MovedBookmarks>().moved).toHaveLength(1);
+    return { ...tracks, call };
+  }
+
+  it('the notice of a moved bookmark leaves with the collection', async () => {
+    const world = await startWorld();
+    const email = 'perdeu@example.com';
+    const { first, call } = await movedFor(world, email);
+    const id = await personId(world.media, email);
+
+    await world.media.owner('PATCH', `/api/v1/people/${id}`, { topics: [] });
+
+    const notice = await call('GET', '/api/v1/media/bookmarks/moved');
+    expect(notice.statusCode).toBe(200);
+    expect(notice.json<MovedBookmarks>().moved).toEqual([]);
+    expect(notice.body).not.toContain(first.id);
+  });
+
+  it('the notice names no track to who lost `media-tracks`', async () => {
+    const world = await startWorld();
+    const email = 'sem-faixas@example.com';
+    const { call } = await movedFor(world, email);
+    const id = await personId(world.media, email);
+
+    await world.media.owner('PATCH', `/api/v1/people/${id}`, {
+      features: ['media'],
+    });
+
+    const notice = await call('GET', '/api/v1/media/bookmarks/moved');
+    expect(notice.json<MovedBookmarks>().moved).toEqual([]);
+  });
+
+  it('deleted tracks are not listed to who has no `media-tracks`', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, first } = await published(world);
+    await send(media, { method: 'DELETE', url: urlOf(first.id) });
+    const { call } = await member(media, {
+      email: 'editor@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-edit'],
+    });
+
+    const listed = await call('GET', `${urlOf(recording.id)}/archived-tracks`);
+
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json<ArchivedTracks>().tracks).toEqual([]);
+  });
+
+  it.each([
+    ['GET', 'track-edit', undefined],
+    ['GET', 'track-impact', undefined],
+    ['GET', 'history', undefined],
+    ['GET', 'stream', undefined],
+    ['POST', 'restore', undefined],
+    ['PUT', 'bounds', { startMs: 60_000, endMs: 120_000 }],
+    ['POST', 'bounds/retry', undefined],
+    ['POST', 'suggestions', { dryRun: true }],
+  ] as const)(
+    '%s %s is a 404 to who lost the collection',
+    async (method, path, payload) => {
+      const world = await startWorld();
+      const { media } = world;
+      const { first } = await published(world);
+      const email = 'fora@example.com';
+      const { headers } = await member(media, {
+        email,
+        topics: ['hermetismo'],
+        features: ['media', 'media-tracks', 'media-edit', 'media-edit-ai'],
+      });
+      const id = await personId(media, email);
+      await media.owner('PATCH', `/api/v1/people/${id}`, { topics: [] });
+
+      const answer = await media.started.app.inject({
+        method,
+        url: `${urlOf(first.id)}/${path}`,
+        headers: { ...headers, 'if-match': '"0"' },
+        ...(payload ? { payload } : {}),
+      });
+
+      expect(answer.statusCode, answer.body).toBe(404);
+      expect(answer.body).not.toContain('Primeira pergunta');
+    },
+  );
+});
+
 describe('A cut that fails (FR-2)', () => {
   const giveUpCut = (media: Media) => {
     const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
