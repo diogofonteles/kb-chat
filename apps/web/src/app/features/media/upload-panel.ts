@@ -279,8 +279,8 @@ export class UploadPanel implements OnInit {
     }
     const held = this.created.get(key);
     if (held && sameDraft(held.draft, draft)) return of(held.id);
-    this.discardCreated(key);
-    return author.pipe(
+    return this.removeHeld(key).pipe(
+      concatMap(() => author),
       concatMap((authorSlug) =>
         this.api.create(draft.topic, {
           title: title.trim(),
@@ -341,10 +341,16 @@ export class UploadPanel implements OnInit {
 
   private abandon(): void {
     this.halt();
-    for (const key of [...this.created.keys()]) {
-      this.discardCreated(key);
-      this.uploads.set(key, { kind: 'ready' });
-    }
+    for (const key of [...this.created.keys()]) this.discardCreated(key);
+    this.uploads.backToReady();
+  }
+
+  /** The old item goes first: while it lives, the API calls the same file repeated. */
+  private removeHeld(key: number): Observable<unknown> {
+    const held = this.created.get(key);
+    this.created.delete(key);
+    if (!held) return of(null);
+    return this.api.remove(held.id).pipe(catchError(() => of(null)));
   }
 
   /** Not tied to this panel's life: the removal must reach the server after it closes. */

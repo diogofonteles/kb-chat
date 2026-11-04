@@ -147,6 +147,17 @@ export class UploadEntries {
     this.update(key, { state });
   }
 
+  /** After a cancel: what was on its way, or stopped, can go again as new. */
+  backToReady(): void {
+    this.list.update((list) =>
+      list.map((entry) =>
+        ['sending', 'stopped'].includes(entry.state.kind)
+          ? { ...entry, state: { kind: 'ready' } }
+          : entry,
+      ),
+    );
+  }
+
   private holds({ name, size, lastModified }: File): boolean {
     return this.list().some(
       ({ file }) =>
