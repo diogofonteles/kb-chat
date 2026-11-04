@@ -534,6 +534,20 @@ describe('Suggesting subjects with the AI (FR-3, FR-4, BR-2, BR-3, BR-5)', () =>
     expect(ctx.proposals.edit(OWNER, ctx.mediaId).canSuggest).toBe(true);
   });
 
+  it('reads a fenced answer with reasoning and text around it (FR-3)', async () => {
+    const body = replyFor([{ faixa: 1, assuntos: ['Cabala'] }]);
+    const ctx = setup({
+      tracks: 1,
+      replies: [
+        `<think>hmm {x}</think>Pronto:\n\`\`\`json\n${body}\n\`\`\`\nFim.`,
+      ],
+    });
+    const run = await ctx.suggest();
+    expect(run).toMatchObject({ status: 'done', failure: null });
+    const [track] = ctx.proposals.edit(OWNER, ctx.mediaId).tracks;
+    expect(track?.suggestions.map((one) => one.name)).toEqual(['Cabala']);
+  });
+
   it('counts a stream that broke after it began', async () => {
     const ctx = setup({ tracks: 1, replies: [new BrokenStream('{"fai')] });
     const run = await ctx.suggest();

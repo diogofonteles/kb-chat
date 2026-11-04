@@ -53,7 +53,7 @@ export type ParsedReply =
   | { readonly ok: false; readonly error: string };
 
 /** The JSON object in the answer, without a reasoning block or code fences around it. */
-function jsonOf(text: string): unknown {
+export function jsonOf(text: string): unknown {
   const bare = text.replace(/<think>[\s\S]*?<\/think>/g, '');
   const start = bare.indexOf('{');
   const end = bare.lastIndexOf('}');

@@ -6,6 +6,7 @@ import {
 } from '@kb-chat/contracts';
 import { z } from 'zod';
 import type { LinkTarget } from '../../ports/track-subject-store.js';
+import { jsonOf } from '../track-proposals/index.js';
 
 const trackReplySchema = z.looseObject({
   faixa: z.number().int().positive(),
@@ -26,7 +27,7 @@ export interface TrackReply {
 export function parseSubjectReply(answer: string): TrackReply[] | null {
   let json: unknown;
   try {
-    json = JSON.parse(answer);
+    json = jsonOf(answer);
   } catch {
     return null;
   }
