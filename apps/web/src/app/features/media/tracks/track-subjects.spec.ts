@@ -121,6 +121,12 @@ async function setup(opening: Opening = {}) {
   return { fixture, http, root, button, stable };
 }
 
+const fieldOf = (root: HTMLElement) => {
+  const field = root.querySelector<HTMLInputElement>('input[role=combobox]');
+  if (!field) throw new Error('no field');
+  return field;
+};
+
 const type = (root: HTMLElement, text: string) => {
   const field = root.querySelector<HTMLInputElement>('input[role=combobox]');
   if (!field) throw new Error('no field');
@@ -171,6 +177,40 @@ describe('Assuntos, step 4 (KBC-069)', () => {
     expect(
       root.querySelector('[aria-label="Remover assunto Cabala"]'),
     ).toBeTruthy();
+  });
+
+  it('NG-30: gives the focus back to the field when the add ends, saved or refused', async () => {
+    const { fixture, root, http, stable } = await setup();
+    document.body.append(root);
+    const field = fieldOf(root);
+    field.focus();
+    type(root, 'cab');
+    await stable();
+    pick(root, 'Cabala');
+    // A browser drops the focus of a field that gets disabled.
+    field.blur();
+    await stable();
+    http
+      .expectOne(WRITE)
+      .flush(aTrack({ version: 3, subjects: [concept('Cabala')] }));
+    await stable();
+    expect(document.activeElement).toBe(field);
+
+    type(root, 'ritm');
+    await stable();
+    pick(root, 'Ritmo');
+    field.blur();
+    await stable();
+    http
+      .expectOne(WRITE)
+      .flush(
+        { error: { code: 'MEDIA_CONFLICT' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await stable();
+    expect(document.activeElement).toBe(field);
+    fixture.destroy();
+    root.remove();
   });
 
   it('does not offer what the track has, nor to create what exists without accent', async () => {

@@ -74,10 +74,11 @@ export class TrackSubjectRow {
   );
 
   constructor() {
-    // A chip pressed is gone with the answer: the focus stays on this track (WCAG 2.4.3).
+    // A chip pressed is gone with the answer, and the field is disabled while it saves: the
+    // focus stays on this track, whatever the answer was (WCAG 2.4.3).
     afterRenderEffect(() => {
       this.track();
-      if (!this.refocus) return;
+      if (this.busy() || !this.refocus) return;
       this.refocus = false;
       if (this.document.activeElement === this.document.body)
         this.picker()?.focus();
@@ -103,7 +104,9 @@ export class TrackSubjectRow {
   }
 
   protected added(choice: SubjectChoice): void {
-    if (this.fits(1)) this.add.emit(choice);
+    if (!this.fits(1)) return;
+    this.refocus = true;
+    this.add.emit(choice);
   }
 
   protected removed(subject: TrackSubject): void {
