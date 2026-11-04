@@ -6,13 +6,17 @@ import {
   completeTranscodeRequestSchema,
   completeTranscribeRequestSchema,
   completeWaveformRequestSchema,
+  completeVoicePrintRequestSchema,
   failJobRequestSchema,
   heartbeatRequestSchema,
+  heartbeatResponseSchema,
   leaseRequestSchema,
   leasedJobSchema,
   type MediaJobKind,
   mediaJobIdSchema,
+  mediaIdSchema,
   transcriptionTermsSchema,
+  workerVoiceProfilesSchema,
 } from '@kb-chat/contracts';
 import type {
   FastifyInstance,
@@ -33,6 +37,7 @@ import type {
 import type { SilenceService } from './silence-service.js';
 import type { TranscriptionService } from './transcription-service.js';
 import type { WaveformService } from './waveform-service.js';
+import type { VoicePrintService } from './voice-print-service.js';
 import type { WorkerService } from './worker-service.js';
 
 declare module 'fastify' {
@@ -54,6 +59,8 @@ export interface WorkerRoutesDeps {
   /** Waveforms (KBC-066). */
   readonly waveforms: WaveformService;
   readonly diarization: DiarizationService;
+  /** Voice prints (KBC-071). */
+  readonly voicePrints: VoicePrintService;
 }
 
 /** The bearer token of a request, or ''. */
@@ -129,6 +136,12 @@ function assertDiarizer(request: FastifyRequest): void {
   if (!identityOf(request).kinds.includes('diarize')) throw notThisWorkers();
 }
 
+/** A print or a match goes only to, and comes only from, a token marked for it (ADR 0032). */
+function assertVoicePrinter(request: FastifyRequest): void {
+  if (!identityOf(request).kinds.includes('voice-profile'))
+    throw notThisWorkers();
+}
+
 /** The kinds asked that this token may lease; none of them is 403. */
 function allowedKinds(
   identity: WorkerIdentity,
@@ -161,6 +174,29 @@ const OPTIONS = {
     config: { access: PUBLIC },
     schema: { params: jobParams, querystring: audioQuery },
   },
+  sourceAudio: {
+    config: { access: PUBLIC },
+    schema: {
+      params: jobParams.extend({ mediaId: mediaIdSchema }),
+      querystring: audioQuery,
+    },
+  },
+  heartbeat: {
+    config: { access: PUBLIC },
+    schema: {
+      params: jobParams,
+      body: heartbeatRequestSchema,
+      response: { 200: heartbeatResponseSchema, 204: z.undefined() },
+    },
+  },
+  voiceProfiles: {
+    config: { access: PUBLIC },
+    schema: {
+      params: jobParams,
+      querystring: audioQuery,
+      response: { 200: workerVoiceProfilesSchema },
+    },
+  },
   transcript: {
     ...route(completeTranscribeRequestSchema),
     // An hour of speech is a few MB of raw JSON; the default limit is 1 MB.
@@ -191,7 +227,7 @@ export const workerRoutes =
     app.decorateRequest('workerIdentity', null);
     app.addHook('onRequest', identifyWorker(deps.transcribers));
     registerLease(app, deps.service);
-    registerBeat(app, deps.service);
+    registerBeat(app, deps);
     registerFail(app, deps.service);
     registerTranscode(app, deps.service);
     registerSilences(app, deps);
@@ -199,6 +235,9 @@ export const workerRoutes =
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
+    registerVoicePrints(app, deps);
+    registerVoicePrintResult(app, deps.voicePrints);
+    registerVoiceComparison(app, deps.voicePrints);
   };
 
 function registerLease(app: FastifyInstance, service: WorkerService): void {
@@ -219,11 +258,15 @@ function registerLease(app: FastifyInstance, service: WorkerService): void {
   );
 }
 
-function registerBeat(app: FastifyInstance, service: WorkerService): void {
+/** The heartbeat also tells the Mac which prints it holds were revoked (KBC-071 BR-2). */
+function registerBeat(
+  app: FastifyInstance,
+  { service, voicePrints }: WorkerRoutesDeps,
+): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     '/api/v1/media-worker/jobs/:id/heartbeat',
-    route(heartbeatRequestSchema),
+    OPTIONS.heartbeat,
     async (request, reply) => {
       const { body } = request;
       assertJobKind(request, { jobId: request.params.id, service });
@@ -231,7 +274,13 @@ function registerBeat(app: FastifyInstance, service: WorkerService): void {
         ...ownerOf(request, body),
         progress: body.progress,
       });
-      return reply.code(204).send();
+      const marked = identityOf(request).kinds.includes('voice-profile');
+      const revokedVoiceProfiles = marked
+        ? await voicePrints.revokedAmong(body.voiceProfiles ?? [])
+        : [];
+      return revokedVoiceProfiles.length > 0
+        ? reply.code(200).send({ revokedVoiceProfiles })
+        : reply.code(204).send();
     },
   );
 }
@@ -374,12 +423,78 @@ function registerDiarization(
     OPTIONS.diarization,
     async (request, reply) => {
       assertDiarizer(request);
+      if (request.body.voiceMatches?.length) assertVoicePrinter(request);
       const owner = {
         jobId: request.params.id,
         ...ownerOf(request, request.body),
       };
       await diarization.complete(owner, request.body);
       return reply.code(204).send();
+    },
+  );
+}
+
+/** The job a call names, on the lease its query names. */
+const heldBy = (request: FastifyRequest, jobId: string, leaseId: string) => ({
+  jobId,
+  ...ownerOf(request, { worker: '', leaseId }),
+});
+
+/** The audio of a recording a `voice-profile` job uses (FR-2). */
+function registerVoicePrints(
+  app: FastifyInstance,
+  { voicePrints, transcription }: WorkerRoutesDeps,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.get(
+    '/api/v1/media-worker/jobs/:id/audio/:mediaId',
+    OPTIONS.sourceAudio,
+    async (request, reply) => {
+      const { id, mediaId } = request.params;
+      assertVoicePrinter(request);
+      const owner = heldBy(request, id, request.query.leaseId);
+      const usesMedia = voicePrints.usesMedia(owner, mediaId);
+      const file = await transcription.sourceAudio({ mediaId, usesMedia });
+      return serveMedia({ id, file, request, reply, open: transcription });
+    },
+  );
+}
+
+/** The print a `voice-profile` job made (FR-2). */
+function registerVoicePrintResult(
+  app: FastifyInstance,
+  voicePrints: VoicePrintService,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/media-worker/jobs/:id/voice-print',
+    route(completeVoicePrintRequestSchema),
+    async (request, reply) => {
+      assertVoicePrinter(request);
+      const owner = {
+        jobId: request.params.id,
+        ...ownerOf(request, request.body),
+      };
+      await voicePrints.complete(owner, request.body);
+      return reply.code(204).send();
+    },
+  );
+}
+
+/** The prints of a separation's collection, for the time of its lease (FR-3, BR-5). */
+function registerVoiceComparison(
+  app: FastifyInstance,
+  voicePrints: VoicePrintService,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.get(
+    '/api/v1/media-worker/jobs/:id/voice-profiles',
+    OPTIONS.voiceProfiles,
+    async (request) => {
+      assertVoicePrinter(request);
+      return voicePrints.printsFor(
+        heldBy(request, request.params.id, request.query.leaseId),
+      );
     },
   );
 }

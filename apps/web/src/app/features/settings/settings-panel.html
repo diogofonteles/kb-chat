@@ -162,6 +162,17 @@
         </h3>
         <app-transcribers-panel />
       </section>
+    } @else if (section() === 'voice-profiles') {
+      <section class="section" aria-labelledby="settings-voice-profiles">
+        <h3
+          id="settings-voice-profiles"
+          class="section-title"
+          i18n="@@settings.voiceProfilesTitle"
+        >
+          Perfis de voz
+        </h3>
+        <app-voice-profiles-panel />
+      </section>
     } @else if (section() === 'audit') {
       <section class="section" aria-labelledby="settings-audit">
         <h3

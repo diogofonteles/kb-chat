@@ -101,8 +101,11 @@ export async function convertWithFlac(media: Media, job: WorkerJob) {
 }
 
 /** An item converted with its FLAC: ready, and waiting for the transcriber. */
-export async function readyForTranscription(media: Media): Promise<MediaItem> {
-  const item = await queuedItem(media);
+export async function readyForTranscription(
+  media: Media,
+  topic?: string,
+): Promise<MediaItem> {
+  const item = await queuedItem(media, topic);
   const done = await convertWithFlac(media, await leaseJob(media));
   expect(done.statusCode).toBe(204);
   return item;

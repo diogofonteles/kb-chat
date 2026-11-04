@@ -74,7 +74,7 @@ describe('PrivacyPage (KBC-016)', () => {
       screen.getByText(/Registros de uso: os que passam de 90 dias/),
     ).toBeTruthy();
     expect(
-      screen.getByText(/Última atualização: 3 de novembro de 2026/),
+      screen.getByText(/Última atualização: 4 de novembro de 2026/),
     ).toBeTruthy();
     expect(
       screen

@@ -2,6 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import type { AppConfig } from './config.js';
 import { FsMediaFiles } from './adapters/media/fs-media-files.js';
+import { FsVoicePrintVault } from './adapters/media/fs-voice-print-vault.js';
+import { FsVoiceRevocationList } from './adapters/media/fs-voice-revocation-list.js';
+import { SecretBox } from './adapters/secret-box.js';
 import { openMediaDatabase } from './adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
 import { SqliteDiarizationStore } from './adapters/sqlite/sqlite-diarization-store.js';
@@ -20,6 +23,7 @@ import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
 import { SqliteWaveformStore } from './adapters/sqlite/sqlite-waveform-store.js';
+import { SqliteVoiceProfileStore } from './adapters/sqlite/sqlite-voice-profile-store.js';
 import type { DiarizationStorePort } from './ports/diarization-store.js';
 import type {
   SpeakerStorePort,
@@ -37,6 +41,10 @@ import type { SilenceStorePort } from './ports/silence-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
 import type { TranscriptStorePort } from './ports/transcript-store.js';
 import type { WaveformStorePort } from './ports/waveform-store.js';
+import type { SecretSealerPort } from './ports/secret-sealer.js';
+import type { VoicePrintVaultPort } from './ports/voice-print-vault.js';
+import type { VoiceRevocationListPort } from './ports/voice-revocation-list.js';
+import type { VoiceProfileStorePort } from './ports/voice-profile-store.js';
 
 /** The media library's adapters and the worker token (ADR 0022). */
 export interface MediaDeps {
@@ -72,6 +80,13 @@ export interface MediaDeps {
   /** The speakers of each collection and who each voice is (KBC-065). */
   readonly speakers: SpeakerStorePort;
   readonly voiceLabels: VoiceLabelStorePort;
+  /** Consents, voice profiles and suggestions (KBC-071). */
+  readonly voiceProfiles: VoiceProfileStorePort;
+  /** The prints themselves, outside the database and the backup (ADR 0032). */
+  readonly voicePrintVault: VoicePrintVaultPort;
+  readonly voiceRevocations: VoiceRevocationListPort;
+  /** Seals the proof of each consent. */
+  readonly consentSealer: SecretSealerPort;
   readonly files: MediaFilesPort;
   readonly workerToken: string;
   /** Keys the transcriber token hashes (KB_CHAT_SECRETS_KEY, ADR 0017). */
@@ -80,13 +95,22 @@ export interface MediaDeps {
   readonly createPerMinute: number;
 }
 
+/** Keys derived for the media library, one per purpose (ADR 0017). */
+export interface MediaSecrets {
+  readonly tokenKey: Buffer;
+  /** Seals the voice prints (ADR 0032). */
+  readonly voicePrintKey: Buffer;
+  /** Seals the proof of each consent. */
+  readonly consentKey: Buffer;
+}
+
 /**
  * Opens the media library when KB_CHAT_MEDIA=on (FR-1): the directory must be writable and
  * every migration must apply, or the API does not start, with a message that says why.
  */
 export async function createMedia(
   config: AppConfig,
-  secrets: { readonly tokenKey: Buffer },
+  secrets: MediaSecrets,
 ): Promise<MediaDeps | undefined> {
   if (!config.KB_CHAT_MEDIA) return undefined;
   const dir = config.KB_CHAT_MEDIA_DIR;
@@ -102,6 +126,7 @@ export async function createMedia(
   });
   return {
     ...openStores(dir),
+    ...voiceSafes(dir, secrets),
     files,
     workerToken,
     tokenKey: secrets.tokenKey,
@@ -113,6 +138,18 @@ export async function createMedia(
     },
   };
 }
+
+/** What holds biometric data and consents' proofs, sealed (ADR 0032). */
+const voiceSafes = (dir: string, secrets: MediaSecrets) => ({
+  voicePrintVault: new FsVoicePrintVault(
+    join(dir, 'voice-prints'),
+    new SecretBox(secrets.voicePrintKey),
+  ),
+  voiceRevocations: new FsVoiceRevocationList(
+    join(dir, 'voice-revocations.list'),
+  ),
+  consentSealer: new SecretBox(secrets.consentKey),
+});
 
 /** The stores that live in the media database (ADR 0022). */
 type MediaStores = Pick<
@@ -131,6 +168,7 @@ type MediaStores = Pick<
   | 'diarizations'
   | 'speakers'
   | 'voiceLabels'
+  | 'voiceProfiles'
 >;
 
 /** The queue, each person's listening and bookmarks share one database (ADR 0022). */
@@ -161,5 +199,6 @@ function storesOf(db: DatabaseSync): MediaStores {
     diarizations: new SqliteDiarizationStore(db),
     speakers: new SqliteSpeakerStore(db),
     voiceLabels: new SqliteVoiceLabelStore(db),
+    voiceProfiles: new SqliteVoiceProfileStore(db),
   };
 }

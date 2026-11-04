@@ -14,7 +14,7 @@ import {
 import {
   APP_AI_ASSIGNMENTS,
   DEFAULT_VIEWS,
-  FEATURES,
+  MASTER_FEATURES,
   MAX_DAILY_RESEARCHES,
   MAX_MONTHLY_CAP_USD,
   RESEARCH_PROFILES,
@@ -96,7 +96,7 @@ export class InvitePresetEditor {
     collectionChoices(this.topics(), this.preset().topics, this.isMaster()),
   );
   protected readonly features = computed(() =>
-    FEATURES.map((id) => ({
+    MASTER_FEATURES.map((id) => ({
       id,
       label: FEATURE_LABELS[id](),
       checked: this.isMaster() || this.preset().features.includes(id),

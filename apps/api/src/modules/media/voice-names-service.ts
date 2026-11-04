@@ -92,7 +92,7 @@ export class VoiceNamesService {
   }
 
   /** The item and its newest separation, which must be the one the change was made on. */
-  private editable(
+  editable(
     actor: MediaActor,
     mediaId: string,
     version: number,

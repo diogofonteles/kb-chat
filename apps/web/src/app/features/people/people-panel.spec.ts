@@ -486,6 +486,30 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
   });
 });
 
+describe('PeoplePanel: voice profiles need a grant by name (ADR 0032)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  const VOICE = 'Cadastrar perfis de voz';
+
+  it('never comes on with the master role: the box starts off and can be changed', async () => {
+    const { fixture } = await renderPanel([
+      aPerson({ role: 'master', features: [] }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const box = screen.getByRole<HTMLInputElement>('checkbox', { name: VOICE });
+    expect(box.checked).toBe(false);
+    expect(box.disabled).toBe(false);
+  });
+
+  it('is not offered to a member', async () => {
+    const { fixture } = await renderPanel([aPerson({ role: 'member' })]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    expect(screen.queryByRole('checkbox', { name: VOICE })).toBeNull();
+  });
+});
+
 describe('PeoplePanel for the owner (BR-6)', () => {
   it("shows each person's AI spend today", async () => {
     const result = await render(PeoplePanel, {

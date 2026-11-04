@@ -17,6 +17,10 @@ export function createLogger(
       '*.key',
       '*.keys',
       '*.token',
+      // Voice prints (KBC-071 BR-5): nothing logs them; this is the second lock.
+      'embedding',
+      '*.embedding',
+      '*.profiles[*].embedding',
       '*.OPENROUTER_API_KEY',
       '*.ANTHROPIC_API_KEY',
       '*.OPENAI_API_KEY',

@@ -1,5 +1,6 @@
 import {
   confirmVoicesRequestSchema,
+  decideVoiceSuggestionRequestSchema,
   diarizeRequestSchema,
   mediaIdSchema,
   mediaSpeakersSchema,
@@ -22,6 +23,7 @@ import { assertFeature, type RouteAccess } from '../auth/index.js';
 import type { DiarizationService } from './diarization-service.js';
 import { actorOf } from './routes.js';
 import type { VoiceNamesService } from './voice-names-service.js';
+import type { VoiceSuggestionService } from './voice-suggestion-service.js';
 
 type Typed = FastifyInstance<
   RawServerDefault,
@@ -65,6 +67,14 @@ const OPTIONS = {
     schema: {
       params: voiceParams,
       body: nameVoiceRequestSchema,
+      response: changed,
+    },
+  },
+  suggestion: {
+    config: { access: EDIT },
+    schema: {
+      params: voiceParams,
+      body: decideVoiceSuggestionRequestSchema,
       response: changed,
     },
   },
@@ -120,9 +130,34 @@ function registerNames(typed: Typed, names: VoiceNamesService): void {
   );
 }
 
+/** A person's answer to "parece ser" (KBC-071 AC-2). */
+function registerSuggestions(
+  typed: Typed,
+  suggestions: VoiceSuggestionService,
+): void {
+  typed.post(
+    '/api/v1/media/:id/voices/:voice/suggestion',
+    OPTIONS.suggestion,
+    (request) =>
+      Promise.resolve(
+        suggestions.decide(
+          actorOf(request),
+          { mediaId: request.params.id, voice: request.params.voice },
+          request.body,
+        ),
+      ),
+  );
+}
+
+export interface SpeakerRoutesDeps {
+  readonly service: DiarizationService;
+  readonly names: VoiceNamesService;
+  readonly suggestions: VoiceSuggestionService;
+}
+
 /** "Vozes": the separation and who each voice is. */
 export const speakerRoutes =
-  (service: DiarizationService, names: VoiceNamesService): FastifyPluginAsync =>
+  ({ service, names, suggestions }: SpeakerRoutesDeps): FastifyPluginAsync =>
   async (app) => {
     app.addHook('preHandler', async (request) =>
       assertFeature(request, 'media'),
@@ -130,4 +165,5 @@ export const speakerRoutes =
     const typed = app.withTypeProvider<ZodTypeProvider>();
     registerSeparation(typed, service);
     registerNames(typed, names);
+    registerSuggestions(typed, suggestions);
   };

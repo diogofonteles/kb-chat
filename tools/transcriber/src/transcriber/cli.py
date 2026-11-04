@@ -58,6 +58,7 @@ def run(args: argparse.Namespace) -> int:
     from .audio import decode_pcm16k, ffmpeg_bin
     from .diarize import senko_or_none
     from .vad import silero_speech
+    from .voiceprint import ecapa_or_none
     from .worker import Worker
 
     config = load_config()
@@ -89,6 +90,9 @@ def run(args: argparse.Namespace) -> int:
         # KBC-064: separates voices too when the `diarize` extra (Senko) is installed and
         # not turned off; the API still gives it a separation only if marked in Transcritores.
         diarizer=None if args.no_diarize else senko_or_none(),
+        # KBC-071: only with the `voiceprint` extra; the API gives prints only to a token
+        # marked for them, and nothing is marked by default (ADR 0032).
+        embedder=None if args.no_voice_profiles else ecapa_or_none(),
     )
     if args.poll:
         worker.poll_s = args.poll
@@ -121,6 +125,9 @@ def main(argv: list[str] | None = None) -> int:
     running.add_argument("--poll", type=float, help="seconds between leases when idle (30)")
     running.add_argument(
         "--no-diarize", action="store_true", help="never lease voice separations (KBC-064)"
+    )
+    running.add_argument(
+        "--no-voice-profiles", action="store_true", help="never handle voice prints (KBC-071)"
     )
     running.set_defaults(handler=run)
     args = parser.parse_args(argv)

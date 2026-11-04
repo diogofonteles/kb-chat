@@ -702,4 +702,122 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         FROM media_draft_tracks d GROUP BY d.media_id;
     `,
   },
+  {
+    // KBC-071 (ADR 0032): consents, profiles without their print (a print is a sealed file
+    // outside this database and its backup), their sources and the suggestions. `jobs` takes
+    // the kind 'voice-profile' and the profile it calculates, and keeps KBC-066's
+    // 'waveform' from version 14. A rebuild of `jobs` that lands after this one must keep this
+    // kind and column.
+    version: 15,
+    name: 'voice-profiles',
+    sql: `
+      CREATE TABLE voice_consents (
+        id TEXT PRIMARY KEY,
+        -- Stays after the profile goes: a revocation the list missed is written at the next start.
+        profile_id TEXT NOT NULL UNIQUE,
+        collection TEXT NOT NULL,
+        speaker_id TEXT NOT NULL REFERENCES media_speakers (id),
+        -- The name authorised, as it was then: this row is the record of the consent.
+        speaker_name TEXT NOT NULL,
+        subject TEXT NOT NULL CHECK (subject IN ('living', 'deceased')),
+        granted_by TEXT NOT NULL,
+        granted_by_role TEXT,
+        granted_on TEXT NOT NULL,
+        method TEXT NOT NULL CHECK (method IN ('signed-paper', 'signed-digital', 'email')),
+        purpose TEXT NOT NULL CHECK (purpose = 'suggest-names-when-editing'),
+        text_version INTEGER NOT NULL CHECK (text_version >= 1),
+        registered_by TEXT NOT NULL,
+        registered_at TEXT NOT NULL,
+        revoked_at TEXT,
+        revoked_by TEXT,
+        -- Kept here because revoking deletes the suggestions (FR-5).
+        suggestions_made INTEGER NOT NULL DEFAULT 0 CHECK (suggestions_made >= 0),
+        suggestions_accepted INTEGER NOT NULL DEFAULT 0 CHECK (suggestions_accepted >= 0),
+        suggestions_refused INTEGER NOT NULL DEFAULT 0 CHECK (suggestions_refused >= 0),
+        CHECK (subject = 'living' OR granted_by_role IS NOT NULL),
+        CHECK ((revoked_at IS NULL) = (revoked_by IS NULL))
+      ) STRICT;
+      CREATE INDEX voice_consents_by_date ON voice_consents (registered_at DESC);
+
+      -- The text of the acceptance or the attached document, sealed (ADR 0017).
+      CREATE TABLE voice_consent_evidence (
+        consent_id TEXT PRIMARY KEY REFERENCES voice_consents (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('text', 'attachment')),
+        file_name TEXT,
+        mime TEXT,
+        sealed TEXT NOT NULL,
+        CHECK (kind = 'text' OR (file_name IS NOT NULL AND mime IS NOT NULL))
+      ) STRICT;
+
+      -- No consent, no profile (BR-1).
+      CREATE TABLE voice_profiles (
+        id TEXT PRIMARY KEY,
+        consent_id TEXT NOT NULL UNIQUE REFERENCES voice_consents (id),
+        speaker_id TEXT NOT NULL UNIQUE REFERENCES media_speakers (id),
+        -- The top-level collection: the profile holds there and in its sub-collections (BR-4).
+        collection TEXT NOT NULL,
+        -- Set when the print is stored; null while it is calculated, or when it failed.
+        model TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX voice_profiles_by_collection ON voice_profiles (collection);
+
+      CREATE TABLE voice_profile_sources (
+        profile_id TEXT NOT NULL REFERENCES voice_profiles (id) ON DELETE CASCADE,
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        voice INTEGER NOT NULL CHECK (voice BETWEEN 1 AND 10),
+        PRIMARY KEY (profile_id, diarization_id, voice)
+      ) STRICT, WITHOUT ROWID;
+
+      -- Above the threshold only (BR-3), and always waiting for a person (AC-2).
+      CREATE TABLE voice_profile_suggestions (
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        voice INTEGER NOT NULL CHECK (voice BETWEEN 1 AND 10),
+        profile_id TEXT NOT NULL REFERENCES voice_profiles (id) ON DELETE CASCADE,
+        similarity REAL NOT NULL CHECK (similarity BETWEEN -1 AND 1),
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending', 'accepted', 'refused')),
+        decided_by TEXT,
+        decided_at TEXT,
+        PRIMARY KEY (diarization_id, voice)
+      ) STRICT, WITHOUT ROWID;
+      CREATE INDEX voice_profile_suggestions_by_profile
+        ON voice_profile_suggestions (profile_id);
+
+      CREATE TABLE jobs_voice_profile (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN
+          ('transcode', 'transcribe', 'silences', 'diarize', 'waveform', 'voice-profile')),
+        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        lease_id TEXT,
+        lease_until INTEGER,
+        heartbeat_at INTEGER,
+        worker TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        detector_version INTEGER CHECK (detector_version IS NULL OR detector_version >= 1),
+        voices INTEGER CHECK (voices IS NULL OR voices BETWEEN 1 AND 10),
+        -- Revoking takes the job with the profile (BR-2).
+        voice_profile_id TEXT REFERENCES voice_profiles (id) ON DELETE CASCADE,
+        CHECK ((kind = 'voice-profile') = (voice_profile_id IS NOT NULL))
+      ) STRICT;
+      INSERT INTO jobs_voice_profile (id, media_id, kind, status, attempts, lease_id,
+        lease_until, heartbeat_at, worker, error, created_at, updated_at, detector_version,
+        voices)
+        SELECT id, media_id, kind, status, attempts, lease_id, lease_until, heartbeat_at,
+          worker, error, created_at, updated_at, detector_version, voices FROM jobs;
+      DROP TABLE jobs;
+      ALTER TABLE jobs_voice_profile RENAME TO jobs;
+      CREATE INDEX jobs_queued ON jobs (kind, created_at) WHERE status = 'queued';
+      CREATE INDEX jobs_leased ON jobs (lease_until) WHERE status = 'leased';
+      CREATE INDEX jobs_by_media ON jobs (media_id, kind, created_at);
+      CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
+      CREATE INDEX jobs_by_voice_profile ON jobs (voice_profile_id)
+        WHERE voice_profile_id IS NOT NULL;
+    `,
+  },
 ];

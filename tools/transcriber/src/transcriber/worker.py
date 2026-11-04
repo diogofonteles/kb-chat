@@ -25,6 +25,7 @@ from .config import (
     PARAMETERS,
     PARAMETERS_VERSION,
     POLL_S,
+    PRINT_ACK_S,
     UNAUTHORIZED_BACKOFF_S,
 )
 from .diarize import Diarizer, separate
@@ -32,8 +33,19 @@ from .secret import TokenError
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
 from .vad import SpeechFinder
+from .voiceprint import (
+    Embedder,
+    PrintHold,
+    Profile,
+    match_voices,
+    mean_print,
+    spans_of,
+    window_vectors,
+)
 
 REVOKED = "Token revogado; pareie de novo."
+# No message of a numeric library near a print goes to a log or to `jobs.error`.
+NO_PRINT = "A voice print could not be made from these sources."
 log = logging.getLogger("transcriber")
 
 
@@ -43,6 +55,7 @@ class _JobStop:
     def __init__(self, shutdown: threading.Event) -> None:
         self._shutdown = shutdown
         self.lease_lost = threading.Event()
+        self.prints = PrintHold(self.is_set)
 
     def is_set(self) -> bool:
         return self._shutdown.is_set() or self.lease_lost.is_set()
@@ -62,10 +75,14 @@ class Worker:
     count_tokens: TokenCounter = estimate_tokens
     # Voice separation (KBC-064): without an engine, the worker never asks for it.
     diarizer: Diarizer | None = None
+    # Voice prints (KBC-071): without a speaker model, none is ever fetched or made.
+    embedder: Embedder | None = None
+    print_ack_s: float = PRINT_ACK_S
 
     @property
     def kinds(self) -> tuple[str, ...]:
-        return ("transcribe", "diarize") if self.diarizer else ("transcribe",)
+        kinds = ("transcribe", "diarize") if self.diarizer else ("transcribe",)
+        return (*kinds, "voice-profile") if self.embedder else kinds
 
     def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
         """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
@@ -113,15 +130,25 @@ class Worker:
             return "error"
         # One bad job must not stop the Mac's worker: it is given back, the loop goes on.
         except Exception as err:
-            log.exception("job %s: unexpected failure", job["id"])
+            self._log_crash(job, err)
             self._report_crash(job, err)
             return "error"
         return "job"
 
+    @staticmethod
+    def _log_crash(job: dict, err: Exception) -> None:
+        if job["kind"] == "voice-profile":
+            log.error("job %s: unexpected failure: %s", job["id"], type(err).__name__)
+        else:
+            log.exception("job %s: unexpected failure", job["id"])
+
     def _report_crash(self, job: dict, err: Exception) -> None:
         """Gives the job back as retryable; the lease would expire anyway if this fails."""
         try:
-            self.api.fail(job, "conversion-failed", f"{type(err).__name__}: {err}")
+            detail = f"{type(err).__name__}: {err}"
+            if job["kind"] == "voice-profile":
+                detail = NO_PRINT
+            self.api.fail(job, "conversion-failed", detail)
         except Exception:
             log.warning("job %s: could not report the failure", job["id"])
 
@@ -131,15 +158,20 @@ class Worker:
         done = threading.Event()
         beats = threading.Thread(target=self._beat, args=(job, progress, stop, done), daemon=True)
         beats.start()
+        watch = threading.Thread(target=self._watch_prints, args=(stop, done), daemon=True)
+        watch.start()
         try:
             with tempfile.TemporaryDirectory(prefix="transcriber-") as work:
-                if job["kind"] == "diarize":
-                    self._diarize(job, Path(work), progress, stop)
-                else:
-                    self._transcribe(job, Path(work), progress, stop)
+                handler = {
+                    "diarize": self._diarize,
+                    "voice-profile": self._voice_profile,
+                }.get(job["kind"], self._transcribe)
+                handler(job, Path(work), progress, stop)
         finally:
             done.set()
+            stop.prints.drop()
             beats.join(timeout=5)
+            watch.join(timeout=5)
 
     def _transcribe(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
         terms = self.api.terms()
@@ -195,15 +227,93 @@ class Worker:
             "elapsedMs": int((time.monotonic() - started) * 1000),
             "raw": {"turns": turns},
         }
+        matches = self._matches(job, pcm, turns, stop.prints)
+        if matches:
+            body["voiceMatches"] = matches
+        if stop.is_set():
+            log.warning("job %s stopped before the upload: nothing uploaded", job["id"])
+            return
         if self.api.upload_diarization(job, body):
             voices = len({turn["voice"] for turn in turns})
             log.info("job %s: %d voices, %d turns", job["id"], voices, len(turns))
         else:
             log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
 
-    def _audio_of(self, job: dict, work: Path) -> np.ndarray | None:
+    def _matches(
+        self, job: dict, pcm: np.ndarray, turns: list[dict], hold: PrintHold
+    ) -> list[dict]:
+        """The closest profile per voice; a failure here never costs the separation."""
+        if self.embedder is None:
+            return []
+        try:
+            asked_at = time.time()
+            profiles = self._profiles_of(job)
+            if not profiles:
+                return []
+            hold.compare(profiles, asked_at)
+            return match_voices(pcm, turns, profiles, self.embedder, hold)
+        except Stopped:
+            log.warning("job %s: the prints were dropped: no voice comparison", job["id"])
+        except ApiError as err:
+            log.warning("job %s: no voice comparison: %s", job["id"], err)
+        except Exception as err:
+            # The type only: no message of a numeric library near a print goes to a log.
+            log.warning("job %s: no voice comparison: %s", job["id"], type(err).__name__)
+        finally:
+            hold.drop()
+        return []
+
+    def _profiles_of(self, job: dict) -> list[Profile]:
+        """The prints of the job's collection on this model; they live in memory only."""
+        model = self.embedder.model if self.embedder else None
+        return [
+            Profile(one["id"], np.asarray(one["embedding"], dtype=np.float64))
+            for one in self.api.voice_profiles(job)
+            if one["model"] == model
+        ]
+
+    def _voice_profile(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Calculates the print of a voice a person named, and uploads only that (FR-2)."""
+        if self.embedder is None:
+            raise RuntimeError("leased a voice profile without a speaker model")
+        vectors: list[np.ndarray] = []
+        hold = stop.prints
+        try:
+            for index, source in enumerate(job["sources"]):
+                pcm = self._audio_of(job, work, source["audioPath"])
+                if pcm is None:
+                    return
+                spans = spans_of(source["spans"])
+                vectors.append(window_vectors(pcm, spans, self.embedder, hold))
+                progress["percent"] = int((index + 1) * 90 / len(job["sources"]))
+            hold.check()
+            self._upload_print(job, vectors, hold)
+        except Stopped:
+            log.warning("job %s stopped: nothing uploaded", job["id"])
+        except ValueError:
+            self.api.fail(job, "conversion-failed", NO_PRINT)
+        finally:
+            hold.drop()
+
+    def _upload_print(self, job: dict, vectors: list[np.ndarray], hold: PrintHold) -> None:
+        if self.embedder is None:
+            raise RuntimeError("leased a voice profile without a speaker model")
+        voice_print = mean_print(vectors)
+        hold.keep(voice_print)
+        body = {
+            "model": self.embedder.model,
+            "embedding": [round(float(value), 7) for value in voice_print],
+        }
+        # A drop while the body was made left zeros in it.
+        hold.check()
+        if self.api.upload_print(job, body):
+            log.info("job %s: voice print stored", job["id"])
+        else:
+            log.warning("job %s: the lease was lost before the upload: dropped", job["id"])
+
+    def _audio_of(self, job: dict, work: Path, path: str | None = None) -> np.ndarray | None:
         """The job's audio as 16 kHz PCM; None when it is not ours or cannot be decoded."""
-        audio = self.api.download(job, work)
+        audio = self.api.download(job, work, path)
         if audio is None:
             log.warning("job %s: its audio is not ours (404): dropped", job["id"])
             return None
@@ -242,15 +352,29 @@ class Worker:
 
     def _beat(self, job: dict, progress: dict, stop: _JobStop, done: threading.Event) -> None:
         while not done.wait(self.heartbeat_s):
+            sent_at = time.time()
             try:
-                held = self.api.heartbeat(job, progress["percent"])
+                revoked = self.api.heartbeat(job, progress["percent"], stop.prints.profile_ids())
             except Unauthorized:
                 log.error(REVOKED)
-                held = False
+                revoked = None
             except ApiError as err:
                 log.warning("job %s: heartbeat failed: %s", job["id"], err)
                 continue
-            if not held:
+            if revoked is None:
                 log.warning("job %s: lease lost, stopping", job["id"])
                 stop.lease_lost.set()
+                stop.prints.drop()
+                return
+            stop.prints.acknowledge(sent_at)
+            if revoked:
+                log.warning("job %s: a voice profile was revoked: prints dropped", job["id"])
+                stop.prints.drop()
+
+    def _watch_prints(self, stop: _JobStop, done: threading.Event) -> None:
+        """Apart from the heartbeat, which a hung call can hold for the whole timeout."""
+        while not done.wait(min(1.0, self.print_ack_s / 4)):
+            if stop.prints.unanswered_s() >= self.print_ack_s:
+                log.warning("no answer from the API: voice prints dropped")
+                stop.prints.drop()
                 return

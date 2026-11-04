@@ -16,6 +16,11 @@ dependencies = [
 diarize = [
   "senko==0.1.0 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
+# KBC-071: voice prints with ECAPA (SpeechBrain, Apache-2.0). Biometric data: leave it out on
+# any machine that should not handle prints. `uv sync --extra voiceprint`.
+voiceprint = [
+  "speechbrain==1.1.2 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 [project.scripts]
 transcriber = "transcriber.cli:main"

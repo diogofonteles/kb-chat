@@ -6,6 +6,7 @@ import {
   type CollectionSpeaker,
   type CollectionSpeakerCreate,
   type CollectionSpeakerUpdate,
+  type DecideVoiceSuggestionRequest,
   type MediaSpeakers,
   type MergeVoicesRequest,
   type NameVoiceRequest,
@@ -42,6 +43,17 @@ export class SpeakersApi {
   ): Observable<MediaSpeakers> {
     return this.http
       .put(`${mediaUrl(mediaId)}/voices/${voice}`, body)
+      .pipe(map((answer) => mediaSpeakersSchema.parse(answer)));
+  }
+
+  /** Accepts or refuses "parece ser" (KBC-071): a person always decides. */
+  decideSuggestion(
+    mediaId: string,
+    voice: number,
+    body: DecideVoiceSuggestionRequest,
+  ): Observable<MediaSpeakers> {
+    return this.http
+      .post(`${mediaUrl(mediaId)}/voices/${voice}/suggestion`, body)
       .pipe(map((answer) => mediaSpeakersSchema.parse(answer)));
   }
 

@@ -1,0 +1,170 @@
+<div class="panel">
+  <p class="lead" i18n="@@voiceProfiles.lead">
+    Com o consentimento da pessoa, a voz dela vira uma sugestão de nome ao
+    editar gravações deste acervo. Quem edita sempre confirma.
+  </p>
+  <div class="field">
+    <label
+      for="voice-profiles-collection"
+      class="label"
+      i18n="@@voiceProfiles.collection"
+      >Acervo</label
+    >
+    <select
+      id="voice-profiles-collection"
+      class="input"
+      (change)="chooseTopic($event)"
+    >
+      @for (one of collections(); track one.slug) {
+        <option [value]="one.slug" [selected]="one.slug === topic()">
+          {{ one.title }}
+        </option>
+      }
+    </select>
+  </div>
+
+  @if (notice(); as said) {
+    <p
+      class="notice"
+      [class.error]="said.kind === 'error'"
+      [attr.role]="said.kind === 'error' ? 'alert' : 'status'"
+    >
+      {{ said.text }}
+    </p>
+  }
+
+  @if (list.error()) {
+    <div class="notice" role="alert">
+      <p i18n="@@voiceProfiles.loadFailed">Não consegui carregar os perfis.</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="list.reload()"
+        i18n="@@voiceProfiles.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (list.hasValue()) {
+    @if (listNotice(); as problem) {
+      <div class="notice error" role="alert">
+        <p>{{ problem.what }}</p>
+        <p>{{ problem.step }}</p>
+      </div>
+    }
+    @if (noTranscriber()) {
+      <p class="hint" i18n="@@voiceProfiles.noTranscriber">
+        Nenhum transcritor ligado trata perfis de voz; o cálculo espera até que
+        um seja marcado em Transcritores.
+      </p>
+    }
+    <h4
+      class="block-title"
+      data-list-title
+      tabindex="-1"
+      i18n="@@voiceProfiles.listTitle"
+    >
+      Perfis deste acervo
+    </h4>
+    @if (items().length === 0) {
+      <p class="hint" i18n="@@voiceProfiles.empty">
+        Nenhum perfil neste acervo.
+      </p>
+    }
+    <ul class="profiles">
+      @for (profile of items(); track profile.id) {
+        <li class="profile">
+          <div class="profile-head">
+            <span class="name">{{ profile.speakerName }}</span>
+            <span class="state">{{ statusOf(profile) }}</span>
+          </div>
+          <p class="hint" i18n="@@voiceProfiles.consentLine">
+            Autorizado por {{ profile.grantedBy }} em
+            {{ profile.grantedOn | date: 'dd/MM/yyyy' : 'UTC' }}
+          </p>
+          @if (confirming() === profile.id) {
+            <div
+              class="confirm"
+              role="group"
+              [attr.aria-label]="profile.speakerName"
+            >
+              <p class="confirm-text" i18n="@@voiceProfiles.revokeQuestion">
+                Revogar o consentimento de {{ profile.speakerName }}? O perfil e
+                as sugestões pendentes são apagados agora. Os nomes já
+                confirmados ficam.
+              </p>
+              <div class="row">
+                <button
+                  type="button"
+                  class="secondary"
+                  [attr.data-cancel-revoke]="profile.id"
+                  (click)="cancelRevoke(profile.id)"
+                  i18n="@@voiceProfiles.cancel"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  class="danger"
+                  [disabled]="busy()"
+                  (click)="revoke(profile)"
+                  i18n="@@voiceProfiles.revokeConfirm"
+                >
+                  Revogar e apagar
+                </button>
+              </div>
+            </div>
+          } @else {
+            <div class="row">
+              @if (profile.status === 'failed' && !printsStopped()) {
+                <button
+                  type="button"
+                  class="secondary"
+                  [disabled]="busy()"
+                  (click)="recalculate(profile)"
+                  i18n="@@voiceProfiles.recalculate"
+                >
+                  Calcular de novo
+                </button>
+              }
+              <button
+                type="button"
+                class="secondary"
+                [attr.data-revoke]="profile.id"
+                [attr.aria-label]="revokeLabelOf(profile)"
+                (click)="askRevoke(profile.id)"
+                i18n="@@voiceProfiles.revoke"
+              >
+                Revogar
+              </button>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+
+    @if (adding()) {
+      <app-voice-profile-form
+        [topic]="topic()"
+        [taken]="taken()"
+        (created)="created($event)"
+        (cancelled)="adding.set(false)"
+      />
+    } @else if (!printsStopped()) {
+      <button
+        type="button"
+        class="primary"
+        (click)="adding.set(true)"
+        i18n="@@voiceProfiles.add"
+      >
+        Cadastrar perfil
+      </button>
+    }
+  } @else {
+    <p class="hint" i18n="@@voiceProfiles.loading">Carregando…</p>
+  }
+
+  @if (isOwner()) {
+    <app-voice-profile-report [version]="reportVersion()" />
+  }
+</div>

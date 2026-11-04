@@ -35,6 +35,10 @@ PARAMETERS: Final[dict] = {
 }
 
 HEARTBEAT_S: Final = 15.0
+# This long after the last answered heartbeat was sent, a job drops what it holds of a voice
+# print: it cannot know of a revocation (KBC-071 BR-2). It allows one missed heartbeat, and it
+# keeps the 1 minute of the consent with the API out of reach or answering late.
+PRINT_ACK_S: Final = 40.0
 POLL_S: Final = 30.0
 UNAUTHORIZED_BACKOFF_S: Final = 600.0
 ERROR_BACKOFF_S: Final = 60.0
@@ -59,4 +63,19 @@ DIARIZE_PARAMETERS: Final[dict] = {
     "max_voices": 10,
     # Under 20 min Senko clusters spectrally and takes the announced number directly.
     "announced_voices": "spectral oracle + centroid join",
+}
+
+# The checkpoint runs on the Mac that handles biometric data: this commit, never the latest.
+VOICE_MODEL_REVISION: Final = "0f99f2d0ebe89ac095bcc5903c4dd8f72b367286"
+
+# Voice profiles (KBC-071, ADR 0032). The recipe measured in KBC-063, not calibrated: 2
+# speakers and 3 decisions cannot show a false-positive rate. The threshold itself is the API's.
+VOICE_PARAMETERS: Final[dict] = {
+    "model": "speechbrain/spkrec-ecapa-voxceleb",
+    "window_s": 1.5,
+    "hop_s": 0.75,
+    # A voice needs this much speech to be compared at all.
+    "min_speech_s": 10.0,
+    # The closest profile must beat the next by this much (it kept out a false positive).
+    "margin": 0.1,
 }

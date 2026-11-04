@@ -305,6 +305,7 @@ Acessibilidade: o foco vai para o campo do código quando ele aparece; status em
 - Rota `/privacidade`, aberta com ou sem sessão (a tela de consentimento do Google aponta para ela). Link discreto "Privacidade" abaixo da nota da tela de entrada.
 - Coluna de leitura (até 42rem, serifa de leitura, três tamanhos de texto): "Nova Alexandria" (marca discreta, link para o início), h1 "Política de privacidade", introdução e as seções h2 "Quais dados guardamos", "Para que usamos", "Quem participa", "Por quanto tempo", "Seus direitos"; "Última atualização" e o link "Voltar à Nova Alexandria".
 - "O responsável pelos dados é o administrador da Nova Alexandria, que aprova os acessos." Contato para pedidos sobre os dados: o e-mail do dono (`KB_CHAT_OWNER_EMAIL`, por `GET /api/v1/auth/config`) como link `mailto:`; sem ele (ou com erro), "fale com o administrador que aprovou o seu acesso"; enquanto carrega, só "…".
+- Perfis de voz (KBC-071): "Quais dados" diz o que é o perfil e que só existe com consentimento; "Para que usamos", a finalidade única e a base legal; "Por quanto tempo", a revogação em até 1 minuto (com a exceção do computador suspenso), fora das cópias de segurança; "Seus direitos", revogar a qualquer momento. Padrão recomendado, **a revisar por uma pessoa da área jurídica antes de qualquer uso real**.
 - Título da aba: "Privacidade — Nova Alexandria"; nas outras telas, "Nova Alexandria".
 
 ## T12. IA da aplicação (KBC-022, só masters)
@@ -422,6 +423,7 @@ Os tempos usam `m:ss` abaixo de 1 h e `h:mm:ss` a partir de 1 h, em algarismos t
 - **Juntar vozes:** "Juntar a voz [ ] com a voz [ ]" e **Juntar**; depois, "Voz 4 junta à Voz 2" com **Separar a Voz 4**, que desfaz (UP-07).
 - **Separação nova:** com nomes na anterior, aviso "Confirme os nomes das vozes" e **Confirmar nomes**. Os nomes vêm pré-preenchidos quando ≥ 70 % do tempo da voz antiga cai na nova; quem só ouve lê "Falante não identificado" até a confirmação.
 - **Falantes do acervo (N)**, recolhido: lista com **Editar** para renomear e dizer qual autor o falante é.
+- **Sugestão por voz** (KBC-071), no painel "Vozes", sob a voz sem nome: "Parece ser Mestre Gabriel (semelhança alta)" ou "(semelhança média)", com **Aceitar** e **Recusar**. Nunca vira nome sozinha; sem perfil cadastrado, nada aparece.
 - **Transcrição e legenda**, para `media-speakers` ou `media-edit`: o nome na troca de falante ("✦ Mestre Gabriel", "Pergunta da plateia"); voz sem nome é "Voz N" para quem edita e "Falante não identificado" para quem só ouve. A legenda prefixa o cue: "— ✦ Mestre Gabriel: …". **Mostrar quem fala** fica no menu ⋯, ligado por padrão e lembrado neste navegador.
 
 ### Faixas (KBC-066)
@@ -663,6 +665,29 @@ Celular (390 px)
 ### Acessibilidade
 - O progresso é um `progressbar` com `aria-valuetext` ("41%, 120 de 290 megabytes"); a região de status anuncia só a cada 25% e no fim ("'Aula 3' baixada."), nunca a cada parte.
 - Chaves com `role="switch"` e o estado em texto; confirmações em linha com o foco em **Cancelar** (MA-27); alvos ≥ 48 px no celular.
+
+## T20. Perfis de voz (KBC-071, ADR 0032)
+
+**Objetivo:** sugerir o nome de quem fala só para quem autorizou. **Sucesso:** nenhuma voz é escolhida antes do consentimento; revogar apaga na hora.
+
+- Seção de ⚙ Configurações, depois de Transcritores. Só aparece para um **master** que recebeu "Cadastrar perfis de voz" **pelo nome**: ser master não basta, e a permissão começa desligada para todos. Em Pessoas e permissões, a caixa fica no grupo "Só com autorização individual", só para masters.
+- **Acervo** (só acervos de topo; um sub-acervo usa os perfis do pai, BR-4), lista **Perfis deste acervo** (pessoa, estado em palavras, "Autorizado por … em dd/mm/aaaa", **Revogar**), **Cadastrar perfil**.
+- **Cadastrar:** primeiro a pessoa e o consentimento. Texto em destaque (borda, no corpo da tela), com finalidade, guarda e revogação, e **Copiar texto**; "Quem é" (viva ou falecida; falecida troca o texto e pede quem responde pela obra e em que qualidade); data; meio; prova (documento ou texto do aceite); caixa de confirmação desmarcada. **Continuar** só passa com tudo isso, e só então aparecem as vozes já nomeadas, com o tempo de fala. **Calcular perfil** exige 30 s de fala no total.
+- **Revogar:** pergunta no lugar, foco em **Cancelar**; "Revogar e apagar" (perigo). Depois, o foco vai ao título da lista e o status diz o que aconteceu.
+- **Perfis e consentimentos**, só para o dono: cada consentimento (pessoa, acervo, quem autorizou, quando, meio, finalidade, versão do texto, quem registrou), "Revogado em …" ou "Em vigor", sugestões feitas, aceitas e recusadas, e **Baixar a prova do consentimento**.
+
+| Estado | Mostra |
+|---|---|
+| Vazio | "Nenhum perfil neste acervo." |
+| Sem transcritor marcado | "Nenhum transcritor ligado trata perfis de voz; …" |
+| Calculando / Pronto / Precisa calcular de novo | em palavras; o último com **Calcular de novo** |
+| Sem voz nomeada | "Esta pessoa ainda não tem voz nomeada em nenhuma gravação." |
+| Erro ao carregar | "Não consegui carregar os perfis." + **Tentar de novo** |
+| Consentimento recusado (422) | volta ao consentimento: "O consentimento não foi aceito. Confira os dados." |
+| Lista de revogações perdida ou exposta | aviso em alerta com o que houve e o passo do dono (runbook, seção 11); somem **Cadastrar perfil** e **Calcular de novo**; **Revogar** fica |
+| Revogação que não entrou na lista | "O consentimento foi revogado e o perfil foi apagado, mas a lista de revogações não foi gravada…"; aviso com o passo do dono até o próximo arranque |
+
+Nenhuma tela mostra impressão de voz nem o número da semelhança.
 
 ## Temas e tokens (DS-12, UP-17 a UP-19)
 

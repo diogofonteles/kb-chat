@@ -13,7 +13,8 @@ import {
   viewChild,
 } from '@angular/core';
 import {
-  FEATURES,
+  MASTER_FEATURES,
+  MASTER_GRANT_ONLY_FEATURES,
   type AppAi,
   type Feature,
   type InviteProfile,
@@ -90,10 +91,18 @@ export class PersonEditor {
   });
   protected readonly isMaster = computed(() => this.person().role === 'master');
   protected readonly features = computed(() =>
-    FEATURES.map((id) => ({
+    MASTER_FEATURES.map((id) => ({
       id,
       label: FEATURE_LABELS[id](),
       checked: this.isMaster() || this.person().features.includes(id),
+    })),
+  );
+  /** Biometric data (ADR 0032): shown only for a master, and given to that master by name. */
+  protected readonly namedFeatures = computed(() =>
+    MASTER_GRANT_ONLY_FEATURES.map((id) => ({
+      id,
+      label: FEATURE_LABELS[id](),
+      checked: this.person().features.includes(id),
     })),
   );
   /** The collections as a tree; a sub-collection comes with its parent (KBC-048 BR-3). */

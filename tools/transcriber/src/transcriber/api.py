@@ -82,10 +82,10 @@ class ApiClient:
             raise ApiError(f"terms answered {status}")
         return json.loads(body)
 
-    def download(self, job: dict, directory: Path) -> Path | None:
-        """The job's audio in `directory`; None when the API says it is not ours (404)."""
+    def download(self, job: dict, directory: Path, path: str | None = None) -> Path | None:
+        """The audio at `path` (the job's own by default); None when it is not ours (404)."""
         query = urllib.parse.urlencode({"leaseId": job["leaseId"]})
-        request = self._build("GET", f"{job['audioPath']}?{query}")
+        request = self._build("GET", f"{path or job['audioPath']}?{query}")
         try:
             with self._opener.open(request, timeout=self._timeout) as response:
                 kind = response.headers.get_content_type()
@@ -103,8 +103,22 @@ class ApiClient:
         except (urllib.error.URLError, TimeoutError, OSError) as err:
             raise ApiError(f"audio download failed: {err}") from err
 
-    def heartbeat(self, job: dict, progress: int | None) -> bool:
-        return self._on_job(job, "heartbeat", {"progress": progress})
+    def heartbeat(
+        self, job: dict, progress: int | None, voice_profiles: Sequence[str] = ()
+    ) -> list[str] | None:
+        """Of the prints held, the ones revoked; None when the lease is no longer ours."""
+        held = {"voiceProfiles": list(voice_profiles)} if voice_profiles else {}
+        status, body = self._post(
+            f"/api/v1/media-worker/jobs/{job['id']}/heartbeat",
+            {"worker": self.worker, "leaseId": job["leaseId"], "progress": progress, **held},
+        )
+        if status == 204:
+            return []
+        if status == 200:
+            return json.loads(body)["revokedVoiceProfiles"]
+        if status == 409:
+            return None
+        raise ApiError(f"heartbeat answered {status}")
 
     def upload(self, job: dict, result: dict) -> bool:
         return self._on_job(job, "transcript", result)
@@ -112,6 +126,22 @@ class ApiClient:
     def upload_diarization(self, job: dict, result: dict) -> bool:
         """The turns of a diarize job (KBC-064); the API refuses any other field."""
         return self._on_job(job, "diarization", result)
+
+    def voice_profiles(self, job: dict) -> list[dict]:
+        """The prints of the job's collection (KBC-071); none when this token has no right."""
+        query = urllib.parse.urlencode({"leaseId": job["leaseId"]})
+        status, body = self._request(
+            "GET", f"/api/v1/media-worker/jobs/{job['id']}/voice-profiles?{query}"
+        )
+        if status == 404:
+            return []
+        if status != 200:
+            raise ApiError(f"voice profiles answered {status}")
+        return json.loads(body)["profiles"]
+
+    def upload_print(self, job: dict, result: dict) -> bool:
+        """The print of a `voice-profile` job (KBC-071 FR-2)."""
+        return self._on_job(job, "voice-print", result)
 
     def fail(self, job: dict, failure: str, detail: str) -> bool:
         return self._on_job(job, "fail", {"failure": failure, "detail": detail[:2000]})

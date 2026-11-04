@@ -38,9 +38,11 @@ import {
   dominantVoices,
   speakingTimeOf,
   voiceCountOf,
+  voiceNumbersOf,
   wordVoicesOf,
 } from './speaker-turns.js';
 import type { Presence } from './transcriber-service.js';
+import type { VoicePrintService } from './voice-print-service.js';
 import {
   aliasOf,
   carryLabels,
@@ -61,6 +63,8 @@ export interface DiarizationServiceDeps {
   readonly authorOf?: AuthorLookup;
   /** Whether a transcriber that separates voices is on (AC-9). */
   readonly presence?: () => Presence;
+  /** Suggestions by voice (KBC-071): only with voice profiles wired in. */
+  readonly voicePrints?: VoicePrintService;
   readonly now?: () => Date;
 }
 
@@ -177,6 +181,9 @@ export class DiarizationService {
     const result = diarizations.latest(mediaId);
     const [transcript] = transcripts.transcripts(mediaId);
     const presence = this.deps.presence?.() ?? NO_TRANSCRIBER;
+    const diarization = transcript
+      ? this.toDiarization(mediaId, transcript)
+      : null;
     return {
       mediaId,
       status: statusOf(job, result),
@@ -184,8 +191,24 @@ export class DiarizationService {
       transcriberOffSince: presence.offSince,
       canRequest:
         media.status === 'ready' && transcript !== undefined && !isPending(job),
-      diarization: transcript ? this.toDiarization(mediaId, transcript) : null,
+      diarization,
+      voiceSuggestions: this.suggestionsOn(media, diarization),
     };
+  }
+
+  /** "Parece ser", for the voices with no name yet (KBC-071 FR-3). */
+  private suggestionsOn(media: MediaRecord, diarization: Diarization | null) {
+    const result = this.deps.diarizations.latest(media.id);
+    if (!diarization || !result) return [];
+    return (
+      this.deps.voicePrints?.suggestions({
+        media,
+        diarizationId: result.id,
+        voices: diarization.labels
+          .filter((label) => label.kind === 'unnamed')
+          .map((label) => label.voice),
+      }) ?? []
+    );
   }
 
   /**
@@ -219,6 +242,27 @@ export class DiarizationService {
       if (!stored) await files.remove([diarization.rawPath]);
     }
     if (!stored) throw leaseLost();
+    this.recordMatches(job.mediaId, diarization.id, done);
+  }
+
+  /** What the Mac found by voice, on this separation's voice numbers (KBC-071 FR-3). */
+  private recordMatches(
+    mediaId: string,
+    diarizationId: string,
+    done: CompleteDiarizeRequest,
+  ): void {
+    const media = this.deps.store.getMedia(mediaId);
+    const { voicePrints } = this.deps;
+    if (!media || !voicePrints) return;
+    const numbers = voiceNumbersOf(done.raw.turns, media.durationMs);
+    voicePrints.recordMatches({
+      media,
+      diarizationId,
+      matches: (done.voiceMatches ?? []).flatMap((match) => {
+        const voice = numbers.get(match.voice);
+        return voice === undefined ? [] : [{ ...match, voice }];
+      }),
+    });
   }
 
   /**

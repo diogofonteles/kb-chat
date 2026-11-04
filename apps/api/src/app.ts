@@ -118,6 +118,12 @@ import {
   TranscriptService,
   transcriptRoutes,
   workerRoutes,
+  VoicePrintReconciler,
+  VoicePrintService,
+  VoiceProfileService,
+  VoiceSuggestionService,
+  voiceProfileRoutes,
+  type MediaActor,
 } from './modules/media/index.js';
 import type { MediaDeps } from './media-factory.js';
 import { createLogger } from './logger.js';
@@ -467,16 +473,91 @@ async function registerWorker(
   },
 ) {
   const { store, files, transcripts } = wiring.media;
+  const voicePrints = voicePrintService(wiring);
   await app.register(
     workerRoutes({
-      service: new WorkerService({ store, files }),
+      service: new WorkerService({
+        store,
+        files,
+        voiceJobOf: (job) => voicePrints.jobOf(job),
+      }),
       transcribers: wiring.transcribers,
       transcription: new TranscriptionService({ store, transcripts, files }),
       silences: wiring.silences,
       waveforms: wiring.waveforms,
       diarization: diarizationService(wiring),
+      voicePrints,
     }),
   );
+}
+
+/** Voice prints and the transcriber (KBC-071, ADR 0032). */
+function voicePrintService(wiring: {
+  media: MediaDeps;
+  authors: AuthorsService;
+}): VoicePrintService {
+  const { media, authors } = wiring;
+  return new VoicePrintService({
+    profiles: media.voiceProfiles,
+    prints: media.voicePrintVault,
+    revocations: media.voiceRevocations,
+    store: media.store,
+    diarizations: media.diarizations,
+    voiceLabels: media.voiceLabels,
+    speakers: media.speakers,
+    rootOf: (topic) => authors.rootOf(topic),
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+  });
+}
+
+/** What a restored backup or a crash left is put right before any route answers (ADR 0032). */
+async function reconcileVoicePrints(app: FastifyInstance, media: MediaDeps) {
+  const found = await new VoicePrintReconciler({
+    profiles: media.voiceProfiles,
+    prints: media.voicePrintVault,
+    revocations: media.voiceRevocations,
+  }).reconcile();
+  const { listLost, listExposed, listError, ...counts } = found;
+  if (Object.values(counts).some((count) => count > 0))
+    app.log.warn(counts, 'voice prints reconciled');
+  if (listError)
+    app.log.error(
+      { err: listError },
+      'voice revocation list could not be written: the next start tries again',
+    );
+  if (listLost)
+    app.log.error(
+      'voice revocation list is lost: no print until it is checked',
+    );
+  if (listExposed)
+    app.log.error(
+      'voice revocation list is exposed: wrong owner or mode, nothing applied from it, no print until it is checked',
+    );
+}
+
+/** "Perfis de voz" (KBC-071). */
+async function registerVoiceProfiles(
+  app: FastifyInstance,
+  wiring: {
+    media: MediaDeps;
+    authors: AuthorsService;
+    transcribers: TranscriberService;
+  },
+) {
+  const { media, authors, transcribers } = wiring;
+  const service = new VoiceProfileService({
+    profiles: media.voiceProfiles,
+    prints: media.voicePrintVault,
+    revocations: media.voiceRevocations,
+    speakers: media.speakers,
+    store: media.store,
+    sealer: media.consentSealer,
+    rootOf: (topic) => authors.rootOf(topic),
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+    presence: () => transcribers.presence('voice-profile'),
+  });
+  await reconcileVoicePrints(app, media);
+  await app.register(voiceProfileRoutes(service));
 }
 
 /** Each person's listening: position, bookmarks, the transcript, subtitles and voices. */
@@ -522,22 +603,34 @@ async function registerSpeakers(
 ) {
   const { deps, diarization, authors, hasTopic } = wiring;
   const rootOf = (topic: string) => authors.rootOf(topic);
-  await app.register(
-    speakerRoutes(
-      diarization,
-      new VoiceNamesService({
-        ...deps,
-        rootOf,
-        speakersOf: (actor, mediaId) => diarization.speakers(actor, mediaId),
-      }),
-    ),
-  );
+  await app.register(speakerRoutesOf({ deps, diarization, rootOf }));
   const service = new SpeakersService({
     speakers: deps.speakers,
     rootOf,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
   });
   await app.register(collectionSpeakerRoutes({ service, hasTopic }));
+}
+
+/** "Vozes": names, and the answers to what is suggested by voice (KBC-065, KBC-071). */
+function speakerRoutesOf(input: {
+  deps: MediaDeps;
+  diarization: DiarizationService;
+  rootOf: (topic: string) => string;
+}) {
+  const { deps, diarization, rootOf } = input;
+  const speakersOf = (actor: MediaActor, mediaId: string) =>
+    diarization.speakers(actor, mediaId);
+  const names = new VoiceNamesService({ ...deps, rootOf, speakersOf });
+  return speakerRoutes({
+    service: diarization,
+    names,
+    suggestions: new VoiceSuggestionService({
+      profiles: deps.voiceProfiles,
+      names,
+      speakersOf,
+    }),
+  });
 }
 
 /** Voice separations (KBC-064): asked by people, done by a transcriber that separates voices. */
@@ -555,6 +648,7 @@ function diarizationService(wiring: {
     voiceLabels,
     authorOf: (topic, slug) => wiring.authors.authorOf(topic, slug),
     presence: () => wiring.transcribers.presence('diarize'),
+    voicePrints: voicePrintService(wiring),
   });
 }
 
@@ -592,6 +686,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
     media,
   });
   await registerLibrary(app, { ...wiring, transcribers });
+  await registerVoiceProfiles(app, { ...wiring, transcribers });
   await registerWorker(app, {
     media: wiring.media,
     transcribers,

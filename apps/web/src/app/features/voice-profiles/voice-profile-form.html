@@ -1,0 +1,242 @@
+@if (step() === 'consent') {
+  <form
+    class="block"
+    novalidate
+    [formGroup]="form"
+    (submit)="continueToSources($event)"
+  >
+    <h4 class="block-title" i18n="@@voiceProfiles.newTitle">
+      Novo perfil de voz
+    </h4>
+    <div class="field">
+      <label
+        for="voice-consent-speaker"
+        class="label"
+        i18n="@@voiceConsent.speaker"
+        >Pessoa</label
+      >
+      <select
+        id="voice-consent-speaker"
+        class="input"
+        formControlName="speakerId"
+      >
+        <option value=""></option>
+        @for (speaker of speakers(); track speaker.id) {
+          <option [value]="speaker.id">{{ speaker.name }}</option>
+        }
+      </select>
+    </div>
+    @if (speakerList.hasValue() && speakers().length === 0) {
+      <p class="hint" i18n="@@voiceConsent.noSpeakers">
+        Ninguém para cadastrar. Dê nome às vozes em uma gravação primeiro.
+      </p>
+    }
+
+    <fieldset class="group">
+      <legend class="label" i18n="@@voiceConsent.subject">Quem é</legend>
+      <label class="check">
+        <input type="radio" formControlName="subject" value="living" />
+        <span i18n="@@voiceConsent.living">Pessoa viva</span>
+      </label>
+      <label class="check">
+        <input type="radio" formControlName="subject" value="deceased" />
+        <span i18n="@@voiceConsent.deceased">Pessoa falecida</span>
+      </label>
+    </fieldset>
+
+    <section class="consent" aria-labelledby="consent-text-title">
+      <h5
+        id="consent-text-title"
+        class="consent-title"
+        i18n="@@voiceConsent.textTitle"
+      >
+        Consentimento específico
+      </h5>
+      @for (paragraph of paragraphs(); track paragraph; let first = $first) {
+        <p [class.consent-lead]="first">{{ paragraph }}</p>
+      }
+      <p class="consent-note" i18n="@@voiceConsent.legalNote">
+        Texto padrão, ainda sem revisão jurídica. Colha a assinatura neste
+        texto, com o nome da pessoa, a data e o local.
+      </p>
+      <button type="button" class="secondary" (click)="copyText()">
+        @if (copied()) {
+          <ng-container i18n="@@voiceConsent.copied"
+            >Texto copiado</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@voiceConsent.copy">Copiar texto</ng-container>
+        }
+      </button>
+    </section>
+
+    <label class="field">
+      <span class="label">
+        @if (deceased()) {
+          <ng-container i18n="@@voiceConsent.grantedByWork"
+            >Quem responde pela obra (nome ou instituição)</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@voiceConsent.grantedBy"
+            >Quem autorizou</ng-container
+          >
+        }
+      </span>
+      <input
+        class="input"
+        type="text"
+        autocomplete="off"
+        maxlength="120"
+        formControlName="grantedBy"
+        [attr.aria-invalid]="invalid('grantedBy') ? 'true' : null"
+      />
+    </label>
+    @if (deceased()) {
+      <label class="field">
+        <span class="label" i18n="@@voiceConsent.role"
+          >Em que qualidade (por exemplo, herdeira ou presidente)</span
+        >
+        <input
+          class="input"
+          type="text"
+          autocomplete="off"
+          maxlength="120"
+          formControlName="grantedByRole"
+          [attr.aria-invalid]="invalid('grantedByRole') ? 'true' : null"
+        />
+      </label>
+    }
+    <label class="field">
+      <span class="label" i18n="@@voiceConsent.when">Data da autorização</span>
+      <input
+        class="input"
+        type="date"
+        [max]="maxDate"
+        formControlName="grantedOn"
+        [attr.aria-invalid]="invalid('grantedOn') ? 'true' : null"
+      />
+    </label>
+    <div class="field">
+      <label for="voice-consent-method" class="label" i18n="@@voiceConsent.how"
+        >Por qual meio</label
+      >
+      <select id="voice-consent-method" class="input" formControlName="method">
+        @for (method of methods; track method.id) {
+          <option [value]="method.id">{{ method.label }}</option>
+        }
+      </select>
+    </div>
+
+    <fieldset class="group">
+      <legend class="label" i18n="@@voiceConsent.proof">Prova do aceite</legend>
+      <label class="check">
+        <input type="radio" formControlName="evidenceKind" value="attachment" />
+        <span i18n="@@voiceConsent.proofFile">Anexar o documento</span>
+      </label>
+      <label class="check">
+        <input type="radio" formControlName="evidenceKind" value="text" />
+        <span i18n="@@voiceConsent.proofText">Colar o texto do aceite</span>
+      </label>
+    </fieldset>
+    @if (evidenceKind() === 'attachment') {
+      <label class="field">
+        <span class="label" i18n="@@voiceConsent.file"
+          >Documento (PDF, JPEG ou PNG, até 5 MB)</span
+        >
+        <input type="file" [accept]="accepted" (change)="chooseFile($event)" />
+      </label>
+    } @else {
+      <label class="field">
+        <span class="label" i18n="@@voiceConsent.pasted">Texto do aceite</span>
+        <textarea
+          class="input"
+          rows="4"
+          formControlName="evidenceText"
+        ></textarea>
+      </label>
+    }
+
+    <label class="check confirm-box">
+      <input type="checkbox" formControlName="confirmed" />
+      <span i18n="@@voiceConsent.confirm">
+        Confirmo que a autorização foi dada, para esta finalidade, por quem pode
+        dá-la.
+      </span>
+    </label>
+
+    @if (problem()) {
+      <p class="field-error" role="alert">{{ problem() }}</p>
+    }
+    <div class="row">
+      <button type="submit" class="primary" i18n="@@voiceConsent.continue">
+        Continuar
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        (click)="cancelled.emit()"
+        i18n="@@voiceConsent.cancel"
+      >
+        Cancelar
+      </button>
+    </div>
+  </form>
+} @else {
+  <div class="block">
+    <h4 class="block-title" i18n="@@voiceConsent.sourcesTitle">
+      De quais vozes calcular
+    </h4>
+    <p class="hint" i18n="@@voiceConsent.sourcesHint">
+      Só vozes que uma pessoa já nomeou. Prefira trechos limpos de pelo menos
+      duas gravações, com 30 segundos de fala ou mais no total.
+    </p>
+    @if (voiceList.error()) {
+      <p class="field-error" role="alert" i18n="@@voiceConsent.voicesFailed">
+        Não consegui carregar as vozes.
+      </p>
+    } @else if (voiceList.hasValue() && voices().length === 0) {
+      <p class="hint" i18n="@@voiceConsent.noVoices">
+        Esta pessoa ainda não tem voz nomeada em nenhuma gravação.
+      </p>
+    }
+    <ul class="sources">
+      @for (one of voices(); track one.key) {
+        <li>
+          <label class="check">
+            <input
+              #box
+              type="checkbox"
+              [checked]="chosen().has(one.key)"
+              (change)="toggle(one.key, box.checked)"
+            />
+            <span i18n="@@voiceConsent.source"
+              >{{ one.title }}, Voz {{ one.voice }} ({{ one.spoken }})</span
+            >
+          </label>
+        </li>
+      }
+    </ul>
+    @if (problem()) {
+      <p class="field-error" role="alert">{{ problem() }}</p>
+    }
+    <div class="row">
+      <button
+        type="button"
+        class="primary"
+        [disabled]="busy() || !enough()"
+        (click)="save()"
+        i18n="@@voiceConsent.save"
+      >
+        Calcular perfil
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        (click)="backToConsent()"
+        i18n="@@voiceConsent.back"
+      >
+        Voltar ao consentimento
+      </button>
+    </div>
+  </div>
+}

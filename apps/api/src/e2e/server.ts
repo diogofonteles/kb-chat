@@ -225,7 +225,11 @@ const access = {
   requests: new MemoryDocumentStore(),
   delivery: { email: outbox, sms: null },
 };
-const media = await createMedia(config, { tokenKey: Buffer.alloc(32, 9) });
+const media = await createMedia(config, {
+  tokenKey: Buffer.alloc(32, 9),
+  voicePrintKey: Buffer.alloc(32, 10),
+  consentKey: Buffer.alloc(32, 11),
+});
 const app = await buildApp({
   config,
   auth,

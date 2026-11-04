@@ -80,11 +80,27 @@ export class TranscriptionService {
   async audio(owner: LeaseOwner): Promise<PlayableFile> {
     const job = this.heldSpeechJob(owner);
     if (!job) throw notYours();
+    return this.audioOf(job.mediaId);
+  }
+
+  /**
+   * One of the recordings a `voice-profile` job uses (KBC-071 FR-2): `usesMedia` says whether
+   * the lease covers it.
+   */
+  async sourceAudio(input: {
+    readonly mediaId: string;
+    readonly usesMedia: boolean;
+  }): Promise<PlayableFile> {
+    if (!input.usesMedia) throw notYours();
+    return this.audioOf(input.mediaId);
+  }
+
+  private async audioOf(mediaId: string): Promise<PlayableFile> {
     const { files, store } = this.deps;
-    const flac = await files.stat(files.flacPath(job.mediaId));
+    const flac = await files.stat(files.flacPath(mediaId));
     if (flac)
-      return { path: files.flacPath(job.mediaId), mime: FLAC_MIME, ...flac };
-    const rendition = store.getRendition(job.mediaId);
+      return { path: files.flacPath(mediaId), mime: FLAC_MIME, ...flac };
+    const rendition = store.getRendition(mediaId);
     const file = rendition ? await files.stat(rendition.path) : null;
     if (!rendition || !file) throw notYours();
     return { path: rendition.path, mime: rendition.mime, ...file };

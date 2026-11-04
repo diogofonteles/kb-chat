@@ -117,6 +117,14 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.notWhileActing:Isto só a própria pessoa pode fazer.`,
   TOPIC_EXISTS: () =>
     $localize`:@@error.topicExists:Já existe um acervo com esse nome.`,
+  CONSENT_REQUIRED: () =>
+    $localize`:@@error.consentRequired:Registre o consentimento antes de cadastrar o perfil de voz.`,
+  VOICE_LIST_LOST: () =>
+    $localize`:@@error.voiceListLost:A lista de revogações se perdeu. Nenhum perfil pode ser calculado até o dono conferir (runbook, seção 11).`,
+  VOICE_LIST_EXPOSED: () =>
+    $localize`:@@error.voiceListExposed:A lista de revogações pode ter sido alterada. Nenhum perfil pode ser calculado até o dono conferir (runbook, seção 11).`,
+  VOICE_LIST_NOT_WRITTEN: () =>
+    $localize`:@@error.voiceListNotWritten:O consentimento foi revogado e o perfil foi apagado, mas a lista de revogações não foi gravada. Veja "Perfis de voz".`,
   MEDIA_SPEND_CAP: () =>
     $localize`:@@error.mediaSpendCap:O limite de gasto da mídia foi atingido; a análise não rodou.`,
   EDIT_STALE: () =>

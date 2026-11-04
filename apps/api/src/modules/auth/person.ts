@@ -2,6 +2,7 @@ import type { StoredActing } from '../../ports/session-store.js';
 import {
   DEFAULT_PERSON_AI,
   FEATURES,
+  MASTER_GRANT_ONLY_FEATURES,
   personAiSchema,
   featureSchema,
   initialPreferencesSchema,
@@ -94,12 +95,16 @@ export const auditPersonOf = (person: StoredPerson) => ({
 export const isMaster = (person: StoredPerson): boolean =>
   person.role === 'master';
 
-/** A master has every feature (BR-3). */
-export const effectiveFeatures = (person: StoredPerson): Feature[] =>
-  isMaster(person) ? [...FEATURES] : [...person.features];
+/** A master has every feature but the ones granted to each master by name (ADR 0032). */
+export const hasFeature = (person: StoredPerson, feature: Feature): boolean => {
+  const granted = person.features.includes(feature);
+  if (MASTER_GRANT_ONLY_FEATURES.includes(feature))
+    return isMaster(person) && granted;
+  return isMaster(person) || granted;
+};
 
-export const hasFeature = (person: StoredPerson, feature: Feature): boolean =>
-  isMaster(person) || person.features.includes(feature);
+export const effectiveFeatures = (person: StoredPerson): Feature[] =>
+  FEATURES.filter((feature) => hasFeature(person, feature));
 
 /**
  * The collection a sub-collection sits in, from the real tree (the catalog, ADR 0028), never
