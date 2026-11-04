@@ -204,27 +204,25 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
         .get(cut.path, cut.bytes, cut.durationMs, cut.mediaId);
       if (!row) return false;
       const parentId = String(row['media_id']);
-      const publication = {
+      this.landCut(row, {
         parentId,
         detailsOf: detailsFor(parentId),
         now: cut.now,
-      };
-      if (row['cut_alone'] === 1)
-        this.publishAlone(String(row['id']), publication);
-      if (!this.hasPendingCuts(parentId)) this.publish(publication);
+      });
       return true;
     });
   }
 
   /** New bounds on one track wait for nothing else: a sibling's dead cut holds no one (FR-2). */
-  private publishAlone(
-    trackId: string,
+  private landCut(
+    row: Row,
     input: { parentId: string; detailsOf: DetailsOf; now: Date },
   ): void {
     const track = this.tracksOf(input.parentId).find(
-      (one) => one.trackId === trackId,
+      (one) => one.trackId === row['id'],
     );
-    if (track) this.publishTrack(track, input);
+    if (track && row['cut_alone'] === 1) this.publishTrack(track, input);
+    if (!this.hasPendingCuts(input.parentId)) this.publish(input);
   }
 
   publish(input: { parentId: string; detailsOf: DetailsOf; now: Date }): void {

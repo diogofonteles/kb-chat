@@ -75,17 +75,8 @@ export class BookmarkService {
     request: CreateMediaBookmarkRequest,
   ): { readonly bookmark: MediaBookmark; readonly created: boolean } {
     const item = this.deps.media.get(actor, mediaId);
-    const existing = this.deps.bookmarks.bookmark(request.id);
-    if (existing) {
-      // Another person's (or another media's): as if it did not exist (BR-1).
-      const here = [mediaId, item.parent?.id];
-      if (
-        existing.principal !== actor.principal ||
-        !here.includes(existing.mediaId)
-      )
-        throw unknownBookmark();
-      return { bookmark: asBookmark(existing), created: false };
-    }
+    const existing = this.retried(actor, item, request.id);
+    if (existing) return { bookmark: existing, created: false };
     const place = this.placeOf(actor, item, request);
     this.assertCreatable(actor, place.media, place.positionMs);
     const now = this.now().toISOString();
@@ -103,6 +94,23 @@ export class BookmarkService {
       ...(place.left ? { left: place.left } : {}),
     });
     return { bookmark, created: true };
+  }
+
+  /** The same bookmark sent again; another person's or another media's does not exist (BR-1). */
+  private retried(
+    actor: MediaActor,
+    item: MediaItem,
+    id: string,
+  ): MediaBookmark | null {
+    const existing = this.deps.bookmarks.bookmark(id);
+    if (!existing) return null;
+    const here = [item.id, item.parent?.id];
+    if (
+      existing.principal !== actor.principal ||
+      !here.includes(existing.mediaId)
+    )
+      throw unknownBookmark();
+    return asBookmark(existing);
   }
 
   /** On a cut already replaced, it lands where one made there would have gone (KBC-073 BR-4). */

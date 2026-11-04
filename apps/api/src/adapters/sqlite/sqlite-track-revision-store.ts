@@ -209,12 +209,7 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
 
   archive(track: RevisableTrack, now: Date): string | null {
     const at = now.toISOString();
-    const candidate = this.db
-      .prepare('SELECT cut_path FROM media_tracks WHERE id = ?')
-      .get(track.trackId)?.['cut_path'];
-    this.db
-      .prepare(`DELETE FROM jobs WHERE media_id = ? AND kind = 'cut'`)
-      .run(track.mediaId);
+    const candidate = this.dropCut(track);
     this.db
       .prepare(
         `INSERT OR REPLACE INTO media_track_archive (media_id, track_id, kind, source,
@@ -239,7 +234,19 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
     for (const table of ['media_tracks', 'media_draft_tracks'])
       this.db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(track.trackId);
     this.renumber(track.parentId);
-    return nullableText(candidate);
+    return candidate;
+  }
+
+  /** Its cut job goes; the path of a candidate it left, to remove. */
+  private dropCut(track: RevisableTrack): string | null {
+    this.db
+      .prepare(`DELETE FROM jobs WHERE media_id = ? AND kind = 'cut'`)
+      .run(track.mediaId);
+    return nullableText(
+      this.db
+        .prepare('SELECT cut_path FROM media_tracks WHERE id = ?')
+        .get(track.trackId)?.['cut_path'],
+    );
   }
 
   /** Places by start time, as the screen numbers them. */
