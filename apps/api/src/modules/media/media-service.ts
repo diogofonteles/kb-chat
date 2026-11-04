@@ -216,7 +216,10 @@ export class MediaService {
     actor: MediaActor,
     mediaId: string,
   ): Promise<{ readonly offset: number; readonly length: number }> {
-    const media = this.ownUpload(actor, mediaId);
+    const media = this.ownItem(actor, mediaId);
+    // The answer to the last part was lost: for the client, that is a finished upload.
+    if (media.status !== 'uploading')
+      return { offset: media.uploadBytes, length: media.uploadBytes };
     return {
       offset: await this.deps.files.uploadOffset(mediaId),
       length: media.uploadBytes,
@@ -232,8 +235,9 @@ export class MediaService {
     mediaId: string,
     part: { readonly body: Readable; readonly offset: number },
   ): Promise<number> {
-    const media = this.ownUpload(actor, mediaId);
-    if (this.receiving.has(mediaId)) throw notWaiting();
+    const media = this.ownItem(actor, mediaId);
+    if (media.status !== 'uploading' || this.receiving.has(mediaId))
+      throw notWaiting();
     this.receiving.add(mediaId);
     try {
       return await this.appendPart(media, part);
@@ -289,13 +293,12 @@ export class MediaService {
     await this.queue(media.id);
   }
 
-  /** The uploader's item, while its parts may still arrive. */
-  private ownUpload(actor: MediaActor, mediaId: string): MediaRecord {
+  /** The uploader's own item; one whose upload expired says so. */
+  private ownItem(actor: MediaActor, mediaId: string): MediaRecord {
     const media = this.visible(actor, mediaId);
     if (media.ownerPrincipal !== actor.principal) throw notFound();
-    if (media.status === 'failed' && media.failure === 'upload-abandoned')
+    if (media.failure === 'upload-abandoned')
       throw new AppError('MEDIA_UPLOAD_EXPIRED', 'This upload expired');
-    if (media.status !== 'uploading') throw notWaiting();
     return media;
   }
 

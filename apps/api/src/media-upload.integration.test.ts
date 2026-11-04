@@ -144,6 +144,17 @@ describe('Resumable upload (KBC-035, tus core on the item)', () => {
     ).toEqual(AUDIO);
   });
 
+  it('says a finished upload is finished when the answer to the last part was lost (AC-1)', async () => {
+    const media = await startMedia();
+    const id = await created(media);
+    await patch(media, { id, offset: 0, body: AUDIO });
+    const head = await offsetOf(media, id);
+    expect(head.statusCode).toBe(204);
+    expect(head.headers['upload-offset']).toBe(String(AUDIO.length));
+    const listed = await media.owner('GET', TOPIC_MEDIA);
+    expect(listed.json().items).toHaveLength(1);
+  });
+
   it('refuses a part at the wrong offset, without changing what it has (a retry reads HEAD)', async () => {
     const media = await startMedia();
     const id = await created(media);
