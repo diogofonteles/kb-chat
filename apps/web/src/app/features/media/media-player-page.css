@@ -216,6 +216,16 @@
   margin: 0;
 }
 
+.part-of {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.part-of a {
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
 .edit-entry a:not(.secondary) {
   color: var(--color-accent-strong);
   font-weight: 600;

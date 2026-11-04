@@ -112,8 +112,11 @@ export class MediaApi {
       .pipe(map((body) => mediaItemSchema.parse(body)));
   }
 
-  remove(id: string): Observable<unknown> {
-    return this.http.delete(mediaUrl(id));
+  /** `cascade`: the person saw the tracks that go with the recording (KBC-068). */
+  remove(id: string, options: { cascade?: boolean } = {}): Observable<unknown> {
+    return this.http.delete(
+      options.cascade ? `${mediaUrl(id)}?cascade=true` : mediaUrl(id),
+    );
   }
 
   private toUploadEvent(

@@ -40,6 +40,7 @@ const edit = (
   version = 4,
   overrides: Partial<MediaEdit> = {},
 ): MediaEdit => ({
+  preparation: null,
   mediaId: MEDIA,
   version,
   started: true,

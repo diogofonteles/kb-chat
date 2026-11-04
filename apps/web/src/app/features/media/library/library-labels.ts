@@ -1,7 +1,7 @@
 import {
   listeningStateOf,
   type LibraryFilters,
-  type LibraryItem,
+  type LibraryTrack,
   type LibrarySort,
   type ListeningState,
 } from '@kb-chat/contracts';
@@ -30,7 +30,7 @@ export const SORT_LABELS: Record<LibrarySort, () => string> = {
  * Where the person is, in words next to the row (T16): "Não ouvida" is left out (most of
  * the list), "Em andamento" comes with "Continuar de" and the bar, "Ouvida" with ✓.
  */
-export function stateTextOf(item: LibraryItem): string {
+export function stateTextOf(item: LibraryTrack): string {
   const state = listeningStateOf(item);
   if (state === 'heard') return $localize`:@@library.state.heard:✓ Ouvida`;
   if (state === 'in-progress')
@@ -39,7 +39,7 @@ export function stateTextOf(item: LibraryItem): string {
 }
 
 /** "Continuar de 23:10" for a ready media heard in part. */
-export function resumeTextOf(item: LibraryItem): string {
+export function resumeTextOf(item: LibraryTrack): string {
   const at =
     item.status === 'ready'
       ? resumeFrom(item.positionMs, item.durationMs)
@@ -50,7 +50,7 @@ export function resumeTextOf(item: LibraryItem): string {
 }
 
 /** The share already heard, for the thin bar (the text says it too). */
-export const percentOf = (item: LibraryItem): number =>
+export const percentOf = (item: LibraryTrack): number =>
   item.durationMs
     ? Math.min(100, (item.positionMs / item.durationMs) * 100)
     : 0;

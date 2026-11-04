@@ -49,6 +49,7 @@ const aTrack = (n: number, startMs: number, endMs: number): DraftTrack => ({
 });
 
 const anEdit = (overrides: Partial<MediaEdit> = {}): MediaEdit => ({
+  preparation: null,
   mediaId: ITEM.id,
   version: 2,
   started: true,
@@ -202,9 +203,9 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     expect(approve.request.headers.get('If-Match')).toBe('"2"');
     approve.flush({ version: 3, tracks: 2 });
     TestBed.tick();
-    http
-      .expectOne(`${BASE}/edit`)
-      .flush(anEdit({ status: 'approved', step: 4, approvedTracks: 2 }));
+    // The page reads again, and "Preparando faixas" reads for itself (KBC-068 FR-1).
+    for (const read of http.match(`${BASE}/edit`))
+      read.flush(anEdit({ status: 'approved', step: 4, approvedTracks: 2 }));
     await harness.fixture.whenStable();
     expect(
       screen.getByRole('heading', { name: '2 faixas aplicadas.' }),
@@ -222,9 +223,8 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       .flush({ version: 3 });
     http.expectOne(`${BASE}/edit/approve`).flush({ version: 4, tracks: 1 });
     TestBed.tick();
-    http
-      .expectOne(`${BASE}/edit`)
-      .flush(anEdit({ status: 'approved', step: 4, approvedTracks: 1 }));
+    for (const read of http.match(`${BASE}/edit`))
+      read.flush(anEdit({ status: 'approved', step: 4, approvedTracks: 1 }));
     await harness.fixture.whenStable();
     expect(
       screen.getByRole('heading', { name: '1 faixa aplicada.' }),

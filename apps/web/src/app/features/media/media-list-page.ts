@@ -21,6 +21,7 @@ import { RouterLink } from '@angular/router';
 import { mediaListSchema, type MediaItem } from '@kb-chat/contracts';
 import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { trackListText, tracksInTheWay } from './track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi, mediaListUrl } from '@core/media/media-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
@@ -138,6 +139,12 @@ export class MediaListPage {
   });
   protected readonly uploading = signal(false);
   protected readonly removing = signal<MediaItem | null>(null);
+  /** The tracks that go with it, once the API named them (KBC-068). */
+  protected readonly removingTracks = signal<readonly string[] | null>(null);
+  protected readonly removingTracksText = computed(() => {
+    const titles = this.removingTracks() ?? [];
+    return $localize`:@@media.removeTracks:Também remove ${titles.length}:count: faixas: ${trackListText(titles)}:list:`;
+  });
   protected readonly editing = signal<MediaItem | null>(null);
   /** The last audio moved from here (FR-3); cleared on a switch. */
   protected readonly moved = linkedSignal<string | null, MediaMove | null>({
@@ -295,6 +302,10 @@ export class MediaListPage {
 
   protected askRemove(item: MediaItem): void {
     this.removing.set(item);
+    this.showRemoveDialog();
+  }
+
+  private showRemoveDialog(): void {
     afterNextRender(() => this.removeDialog()?.nativeElement.showModal(), {
       injector: this.injector,
     });
@@ -302,16 +313,28 @@ export class MediaListPage {
 
   protected confirmRemove(): void {
     const item = this.removing();
+    const cascade = this.removingTracks() !== null;
     this.removeDialog()?.nativeElement.close();
     if (!item) return;
     this.api
-      .remove(item.id)
+      .remove(item.id, { cascade })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => this.removed(item),
-        error: (err: unknown) =>
-          this.actionError.set(errorMessage(toUiErrorCode(err))),
+        error: (err: unknown) => this.removeRefused(item, err),
       });
+  }
+
+  /** It has tracks: the dialog comes back naming them (KBC-068). */
+  private removeRefused(item: MediaItem, err: unknown): void {
+    const tracks = tracksInTheWay(err);
+    if (!tracks) {
+      this.actionError.set(errorMessage(toUiErrorCode(err)));
+      return;
+    }
+    this.removing.set(item);
+    this.removingTracks.set(tracks);
+    this.showRemoveDialog();
   }
 
   /** The row is gone: say so and keep the focus on the page, not on <body> (NG-30). */
@@ -329,6 +352,7 @@ export class MediaListPage {
 
   protected removeClosed(): void {
     this.removing.set(null);
+    this.removingTracks.set(null);
   }
 
   protected reload(): void {

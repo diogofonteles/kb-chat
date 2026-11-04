@@ -19,6 +19,8 @@ import {
 } from './media-api.js';
 
 const ITEM: MediaItem = {
+  parent: null,
+  archived: false,
   id: '11111111-1111-4111-8111-111111111111',
   topic: 'hermetismo',
   title: 'Palestra',

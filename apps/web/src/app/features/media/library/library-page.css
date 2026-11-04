@@ -224,6 +224,11 @@ a.secondary {
   list-style: none;
 }
 
+.row-tracks {
+  margin-top: calc(var(--space-1) * -1);
+  padding-left: var(--space-4);
+}
+
 /* A flex column: grid track sizing over 2 000 rows costs a frame at every layout (NFR-2). */
 .rows {
   display: flex;

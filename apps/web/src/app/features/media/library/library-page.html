@@ -310,7 +310,16 @@
               [item]="item"
               [playing]="playingId() === item.id"
               (played)="play(item)"
-            />
+            >
+              @if (item.tracks.length > 0) {
+                <app-track-group
+                  [item]="item"
+                  [openByDefault]="query() !== ''"
+                  [playingId]="playingId()"
+                  (played)="play($event)"
+                />
+              }
+            </app-library-card>
           }
         </div>
       } @else {
@@ -338,6 +347,16 @@
               (acted)="rowAction(item, $event)"
               (retried)="retry(item)"
             />
+            @if (item.tracks.length > 0) {
+              <app-track-group
+                class="row-tracks"
+                role="listitem"
+                [item]="item"
+                [openByDefault]="query() !== ''"
+                [playingId]="playingId()"
+                (played)="play($event)"
+              />
+            }
           }
         </div>
       }
@@ -433,6 +452,11 @@
     <p id="remove-text" i18n="@@media.removeText">
       O áudio e a transcrição serão apagados e não podem ser recuperados.
     </p>
+    @if (removingTracks(); as tracks) {
+      <p class="remove-tracks" role="alert">
+        {{ removingTracksText() }}
+      </p>
+    }
     <div class="confirm-actions">
       <button
         type="button"

@@ -59,6 +59,7 @@ import {
   formatBoundary,
   notDoneText,
 } from './track-labels.js';
+import { TrackPreparationStatus } from './track-preparation.js';
 import { TrackProposals } from './track-proposals.js';
 import {
   TrackRowList,
@@ -145,6 +146,7 @@ function copyableLine(
     TrackRowList,
     TrackTranscript,
     TrackProposals,
+    TrackPreparationStatus,
   ],
   templateUrl: './track-editor-page.html',
   styleUrl: './track-editor-page.css',

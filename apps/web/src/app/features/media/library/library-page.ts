@@ -37,6 +37,8 @@ import {
   type MediaMark,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { TrackGroup } from './track-group.js';
+import { trackListText, tracksInTheWay } from '../track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import {
   LIBRARY_HOME_URL,
@@ -108,6 +110,7 @@ interface MorePages {
     LibraryRow,
     MovedNotice,
     NearEnd,
+    TrackGroup,
     UploadPanel,
   ],
   templateUrl: './library-page.html',
@@ -383,6 +386,12 @@ export class LibraryPage {
 
   protected readonly uploading = signal(false);
   protected readonly removing = signal<MediaItem | null>(null);
+  /** The tracks that go with it, once the API named them (KBC-068). */
+  protected readonly removingTracks = signal<readonly string[] | null>(null);
+  protected readonly removingTracksText = computed(() => {
+    const titles = this.removingTracks() ?? [];
+    return $localize`:@@media.removeTracks:Também remove ${titles.length}:count: faixas: ${trackListText(titles)}:list:`;
+  });
   protected readonly editing = signal<LibraryItem | null>(null);
   /** The last audio moved from here (KBC-050 FR-3). */
   protected readonly moved = signal<MediaMove | null>(null);
@@ -432,7 +441,7 @@ export class LibraryPage {
     return this.titles().get(item.topic) ?? item.topic;
   }
 
-  protected play(item: LibraryItem): void {
+  protected play(item: MediaItem): void {
     this.playNow.play(item);
   }
 
@@ -750,6 +759,10 @@ export class LibraryPage {
 
   private askRemove(item: LibraryItem): void {
     this.removing.set(item);
+    this.showRemoveDialog();
+  }
+
+  private showRemoveDialog(): void {
     afterNextRender(() => this.removeDialog()?.nativeElement.showModal(), {
       injector: this.injector,
     });
@@ -757,10 +770,11 @@ export class LibraryPage {
 
   protected confirmRemove(): void {
     const item = this.removing();
+    const cascade = this.removingTracks() !== null;
     this.removeDialog()?.nativeElement.close();
     if (!item) return;
     this.mediaApi
-      .remove(item.id)
+      .remove(item.id, { cascade })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
@@ -770,9 +784,20 @@ export class LibraryPage {
           );
           this.heading().nativeElement.focus();
         },
-        error: (err: unknown) =>
-          this.actionError.set(errorMessage(toUiErrorCode(err))),
+        error: (err: unknown) => this.removeRefused(item, err),
       });
+  }
+
+  /** It has tracks: the dialog comes back naming them (KBC-068). */
+  private removeRefused(item: MediaItem, err: unknown): void {
+    const tracks = tracksInTheWay(err);
+    if (!tracks) {
+      this.actionError.set(errorMessage(toUiErrorCode(err)));
+      return;
+    }
+    this.removing.set(item);
+    this.removingTracks.set(tracks);
+    this.showRemoveDialog();
   }
 
   protected cancelRemove(): void {
@@ -781,6 +806,7 @@ export class LibraryPage {
 
   protected removeClosed(): void {
     this.removing.set(null);
+    this.removingTracks.set(null);
   }
 
   protected readonly selectedTopic = computed(

@@ -556,6 +556,64 @@ describe('MediaPlayerPage: "Vozes" (KBC-064 AC-2)', () => {
     ).toBeNull();
   });
 
+  it('names the recording of a track and listens in context (KBC-068 AC-2)', async () => {
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-edit', 'media-tracks'],
+    });
+    http.expectOne(ITEM_URL).flush({
+      ...ITEM,
+      parent: {
+        id: '22222222-2222-4222-8222-222222222222',
+        title: 'Palestra completa',
+        startMs: 754_500,
+        endMs: 900_000,
+        ordinal: 3,
+        total: 12,
+      },
+    });
+    await Promise.resolve();
+    TestBed.tick();
+    http.expectOne(`${ITEM_URL}/tracks`).flush({ tracks: [] });
+    await Promise.resolve();
+    TestBed.tick();
+    expect(harness.routeNativeElement).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Palestra completa' })).toBeTruthy();
+    expect(screen.getByText('· faixa 3 de 12')).toBeTruthy();
+    const context = screen.getByRole('link', { name: 'Ouvir no contexto' });
+    expect(context.getAttribute('href')).toBe(
+      '/midia/22222222-2222-4222-8222-222222222222?t=754',
+    );
+    http.expectNone(`${ITEM_URL}/edit`);
+    expect(
+      screen.queryByRole('link', { name: 'Dividir em faixas' }),
+    ).toBeNull();
+  });
+
+  it('says a track left the edit, with no player (KBC-068 AC-5)', async () => {
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-tracks'],
+    });
+    http.expectOne(ITEM_URL).flush({
+      ...ITEM,
+      archived: true,
+      parent: {
+        id: '22222222-2222-4222-8222-222222222222',
+        title: 'Palestra completa',
+        startMs: 0,
+        endMs: 60_000,
+        ordinal: null,
+        total: 11,
+      },
+    });
+    await Promise.resolve();
+    TestBed.tick();
+    await harness.fixture.whenStable();
+    expect(screen.getByText('Faixa removida da edição')).toBeTruthy();
+    expect(screen.queryByText(/faixa \d+ de/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Ouvir no contexto' })).toBeTruthy();
+    expect(screen.queryByRole('slider')).toBeNull();
+  });
+
   it('says where a preparation stopped, with the way back (KBC-066 AC-17)', async () => {
     const { harness, http } = await openPage(undefined, {
       features: ['media', 'media-edit'],

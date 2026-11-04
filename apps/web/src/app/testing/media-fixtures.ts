@@ -31,6 +31,8 @@ export const aMediaItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   completedAt: null,
   positionUpdatedAt: null,
   transcription: aTranscription(),
+  parent: null,
+  archived: false,
   ...overrides,
 });
 
