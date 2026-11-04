@@ -910,6 +910,7 @@ function preparationService(
     edits: media.edits,
     drafts: media.trackProposals,
     findMedia: (actor, mediaId) => service.get(actor, mediaId),
+    followable: (actor, mediaId) => service.followable(actor, mediaId),
     retryConversion: (actor, mediaId) => {
       service.retry(actor, mediaId);
     },
@@ -917,6 +918,7 @@ function preparationService(
     proposals,
     actorOf: planActors(app, wiring),
     presence: () => transcribers.presence(),
+    voicePresence: () => transcribers.presence('diarize'),
     onError: (err, mediaId) =>
       app.log.warn({ err, mediaId }, 'media preparation could not go on'),
   });

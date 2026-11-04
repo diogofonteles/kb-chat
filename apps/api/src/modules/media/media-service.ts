@@ -432,6 +432,18 @@ export class MediaService {
     return this.itemOf(record, actor, this.view(progress));
   }
 
+  /**
+   * A recording the queue may show this person (KBC-090): as in the library, one not ready
+   * yet only for who sent it and masters (KBC-051 BR-2); null for anything else.
+   */
+  followable(actor: MediaActor, mediaId: string): MediaItem | null {
+    const media = this.deps.store.getMedia(mediaId);
+    if (!media || media.track !== null || !actor.canSee(media.topic))
+      return null;
+    const mine = actor.isMaster || media.ownerPrincipal === actor.principal;
+    return media.status === 'ready' || mine ? this.get(actor, mediaId) : null;
+  }
+
   /** The item, for what only a recording has (proposals, voices, an edit). */
   getRecording(actor: MediaActor, mediaId: string): MediaItem {
     const item = this.get(actor, mediaId);

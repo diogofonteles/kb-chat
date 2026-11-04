@@ -279,3 +279,57 @@ export const openPreparationsSchema = z.object({
   ),
 });
 export type OpenPreparations = z.infer<typeof openPreparationsSchema>;
+
+/** Where an audio stands in the queue: at work, waiting its turn, or waiting for a person. */
+export const QUEUE_PHASES = ['running', 'next', 'attention'] as const;
+export const queuePhaseSchema = z.enum(QUEUE_PHASES);
+export type QueuePhase = z.infer<typeof queuePhaseSchema>;
+
+/** What the person can do for an audio in the queue. */
+export const QUEUE_ACTIONS = [
+  'continue',
+  'validate',
+  'conclude',
+  'retry',
+] as const;
+export const queueActionSchema = z.enum(QUEUE_ACTIONS);
+export type QueueAction = z.infer<typeof queueActionSchema>;
+
+/** One audio being processed (KBC-090). */
+export const processingQueueItemSchema = z.object({
+  mediaId: mediaIdSchema,
+  title: z.string().min(1),
+  /** The audio's own collection. */
+  topic: z.string().min(1),
+  phase: queuePhaseSchema,
+  /** The stage it is on: the first one not done; null when every stage is. */
+  stage: preparationStageIdSchema.nullable(),
+  state: stageStateSchema.nullable(),
+  percent: z.number().int().min(0).max(100).nullable(),
+  cuts: z.object({ done: countSchema, total: countSchema }).nullable(),
+  windows: z.object({ done: countSchema, total: countSchema }).nullable(),
+  failure: stageFailureSchema.nullable(),
+  blockedBy: preparationStageIdSchema.nullable(),
+  /** 1 is the next one the worker takes; null when it is not in a line. */
+  position: z.number().int().min(1).nullable(),
+  /** The stage after this one. */
+  nextStage: preparationStageIdSchema.nullable(),
+  /** Nothing moves because no transcriber is on. */
+  waitsForTranscriber: z.boolean(),
+  action: queueActionSchema.nullable(),
+  /** "Tentar de novo" can happen right here; null when it takes the audio's page. */
+  retryStage: retryStageSchema.nullable(),
+  /** The step of its plan; null for an audio with no plan. */
+  step: preparationStepSchema.nullable(),
+});
+export type ProcessingQueueItem = z.infer<typeof processingQueueItemSchema>;
+
+/** GET /api/v1/media/processing: at work first, then the line, then what waits for a person. */
+export const processingQueueSchema = z.object({
+  items: z.array(processingQueueItemSchema),
+  /** The audios at work or in line: what the sidebar counts. */
+  active: countSchema,
+  transcriber: transcriberPresenceSchema,
+  transcriberOffSince: z.iso.datetime().nullable(),
+});
+export type ProcessingQueue = z.infer<typeof processingQueueSchema>;

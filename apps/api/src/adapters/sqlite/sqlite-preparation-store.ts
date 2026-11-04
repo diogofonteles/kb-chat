@@ -6,6 +6,7 @@ import {
   type TrackChoice,
 } from '@kb-chat/contracts';
 import type {
+  ActiveJob,
   MeasuredRates,
   PreparationRecord,
   PreparationStorePort,
@@ -47,6 +48,12 @@ const ratio = (row: Row | undefined): number | null => {
   return elapsed !== null && audio !== null && audio > 0
     ? elapsed / audio
     : null;
+};
+
+const activeKindOf = (kind: SQLOutputValue | undefined): ActiveJob['kind'] => {
+  if (kind === 'transcode' || kind === 'transcribe' || kind === 'diarize')
+    return kind;
+  throw new Error(`unexpected job kind ${String(kind)}`);
 };
 
 /** The plans in `media.db` (KBC-072, migration media-preparations). */
@@ -187,6 +194,37 @@ export class SqlitePreparationStore implements PreparationStorePort {
       )
       .get(kind, mediaId, mediaId, kind);
     return Number(row?.['ahead'] ?? 0);
+  }
+
+  activeJobs(): ActiveJob[] {
+    return this.db
+      .prepare(
+        `SELECT media_id, kind, status FROM jobs
+         WHERE kind IN ('transcode', 'transcribe', 'diarize')
+           AND status IN ('queued', 'leased')
+         ORDER BY created_at, id`,
+      )
+      .all()
+      .map((row) => ({
+        mediaId: String(row['media_id']),
+        kind: activeKindOf(row['kind']),
+        status: row['status'] === 'leased' ? 'leased' : 'queued',
+      }));
+  }
+
+  failedRecordings(): string[] {
+    return this.db
+      .prepare(
+        `SELECT m.id FROM media m
+         WHERE m.parent_media_id IS NULL AND m.archived_at IS NULL AND (
+           m.status = 'failed' OR (
+             SELECT j.status FROM jobs j WHERE j.media_id = m.id AND j.kind = 'transcribe'
+             ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1
+           ) IN ('failed', 'dead'))
+         ORDER BY m.created_at, m.id`,
+      )
+      .all()
+      .map((row) => String(row['id']));
   }
 
   measuredRates(): MeasuredRates {

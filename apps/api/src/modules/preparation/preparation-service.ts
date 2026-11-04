@@ -16,6 +16,7 @@ import type {
   PreparationStep,
   PreparationTrack,
   PreparationVoice,
+  ProcessingQueue,
   ProposalRun,
   RetryStage,
   StageStop,
@@ -46,6 +47,13 @@ import {
   type DurationEstimate,
 } from '../track-proposals/index.js';
 import { isGuided, planRefusals, type PlanContext } from './plan-rules.js';
+import {
+  activeCountOf,
+  impliedPlan,
+  inQueueOrder,
+  positionsOf,
+  queueItemOf,
+} from './processing-queue.js';
 import {
   nextActionOf,
   stagesOf,
@@ -95,6 +103,8 @@ export interface PreparationServiceDeps {
   readonly drafts: Pick<TrackProposalStorePort, 'draft' | 'failedAttempt'>;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: PlanActor, mediaId: string) => MediaItem;
+  /** The recording, when this person may follow it in the queue (KBC-051 BR-2). */
+  readonly followable: (actor: PlanActor, mediaId: string) => MediaItem | null;
   /** "Tentar de novo" of a failed conversion, for masters. */
   readonly retryConversion: (actor: PlanActor, mediaId: string) => void;
   /** The names of a collection's speakers, by id (KBC-065). */
@@ -103,6 +113,8 @@ export interface PreparationServiceDeps {
   /** The person who asked, as they stand now; null when they are gone. */
   readonly actorOf: (principal: string) => Promise<PlanActor | null>;
   readonly presence: () => Presence;
+  /** Who can separate voices, which not every transcriber does (KBC-064). */
+  readonly voicePresence?: () => Presence;
   readonly now?: () => Date;
   readonly onError?: (error: unknown, mediaId: string) => void;
 }
@@ -489,6 +501,75 @@ export class PreparationService {
     return { items };
   }
 
+  /**
+   * What is being processed, for this person (KBC-090). Read every few seconds: it moves no
+   * plan and asks no estimate, so it can never start or price paid work.
+   */
+  queue(actor: PlanActor): ProcessingQueue {
+    const { plans } = this.deps;
+    const jobs = plans.activeJobs();
+    const open = new Map(plans.listOpen().map((one) => [one.mediaId, one]));
+    const ids = new Set([
+      ...jobs.map(({ mediaId }) => mediaId),
+      ...open.keys(),
+      ...plans.failedRecordings(),
+    ]);
+    const positions = positionsOf(jobs);
+    const separating = new Set(
+      jobs.filter(({ kind }) => kind === 'diarize').map((job) => job.mediaId),
+    );
+    const items = [...ids].flatMap((mediaId) => {
+      const item = this.deps.followable(actor, mediaId);
+      if (!item || !hasWholeFile(item)) return [];
+      const record = open.get(mediaId) ?? null;
+      const step = record ? this.stepOf(record, item) : null;
+      if (step === 4) return [];
+      const facts = this.factsOf(actor, {
+        record: record ?? planlessRecord(item, separating.has(mediaId)),
+        item,
+        draft: this.deps.drafts.draft(mediaId),
+      });
+      const stages = stagesOf(facts);
+      return [
+        queueItemOf({
+          item,
+          stages,
+          next: record ? nextActionOf(record.plan, stages) : null,
+          position: positions.get(mediaId) ?? null,
+          step,
+          canEdit: actor.canEdit,
+          transcriberOn: (stage) => this.transcriberOn(stage),
+        }),
+      ];
+    });
+    return {
+      items: inQueueOrder(items),
+      active: activeCountOf(items),
+      ...presenceOf(this.presenceFor(items)),
+    };
+  }
+
+  private transcriberOn({ stage }: PreparationStage): boolean {
+    const presence =
+      stage === 'speakers' ? this.voicePresence() : this.deps.presence();
+    return presence.transcriber === 'on';
+  }
+
+  private voicePresence(): Presence {
+    return (this.deps.voicePresence ?? this.deps.presence)();
+  }
+
+  /** The presence that explains the wait: the voices' when only they wait. */
+  private presenceFor(items: ProcessingQueue['items']): Presence {
+    const transcribing = this.deps.presence();
+    const waitsForVoices = items.some(
+      (one) => one.waitsForTranscriber && one.stage === 'speakers',
+    );
+    return waitsForVoices && transcribing.transcriber === 'on'
+      ? this.voicePresence()
+      : transcribing;
+  }
+
   private visibleItem(actor: PlanActor, mediaId: string): MediaItem | null {
     try {
       return this.deps.findMedia(actor, mediaId);
@@ -660,6 +741,23 @@ interface StageInput {
   readonly item: MediaItem;
   readonly draft: DraftTracks;
 }
+
+/** An audio with no plan read as one, by what is happening to it. */
+const planlessRecord = (
+  item: MediaItem,
+  separating: boolean,
+): PreparationRecord => ({
+  mediaId: item.id,
+  principal: '',
+  plan: impliedPlan(item, separating),
+  speakersAskedAt: null,
+  proposalClaimedAt: null,
+  proposalStop: null,
+  proposalStopUsd: null,
+  validatingAt: null,
+  finishedAt: null,
+  createdAt: '',
+});
 
 const detailsOf = ({ title, topic, author }: MediaItem) => ({
   title,
