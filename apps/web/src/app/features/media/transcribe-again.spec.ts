@@ -96,6 +96,35 @@ describe('TranscribeAgain (KBC-040 FR-3)', () => {
     expect(text()).not.toContain('Esta mídia mudou');
   });
 
+  it('keeps the focus in place after the confirmation (WCAG 2.4.3)', async () => {
+    await show();
+    fixture.componentInstance.queued.subscribe((one) =>
+      fixture.componentRef.setInput('media', one),
+    );
+    await press('Transcrever de novo');
+    await press('Transcrever de novo');
+    http
+      .expectOne(`/api/v1/media/${item.id}/transcription`)
+      .flush({ ...item, canTranscribeAgain: false });
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement);
+  });
+
+  it('gives the focus back to the question when it could not be asked', async () => {
+    await show();
+    await press('Transcrever de novo');
+    buttons()[0]?.focus();
+    await press('Transcrever de novo');
+    http
+      .expectOne(`/api/v1/media/${item.id}/transcription`)
+      .flush(
+        { error: { code: 'MEDIA_CONFLICT', message: 'no' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent?.trim()).toBe('Cancelar');
+  });
+
   it('says a failed attempt kept the text', async () => {
     await show({
       ...item,

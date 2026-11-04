@@ -25,12 +25,15 @@ import { MediaApi } from '@core/media/media-api.js';
   selector: 'app-transcribe-again',
   templateUrl: './transcribe-again.html',
   styleUrl: './transcribe-again.css',
+  // Where the focus lands when the buttons go away (WCAG 2.4.3).
+  host: { tabindex: '-1' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscribeAgain {
   private readonly api = inject(MediaApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly openButton =
     viewChild<ElementRef<HTMLButtonElement>>('openButton');
   private readonly cancelButton =
@@ -66,10 +69,14 @@ export class TranscribeAgain {
           this.busy.set(false);
           this.confirming.set(false);
           this.queued.emit(item);
+          this.focusAfterRender(
+            () => this.openButton()?.nativeElement ?? this.host.nativeElement,
+          );
         },
         error: (err: unknown) => {
           this.busy.set(false);
           this.error.set(errorMessage(toUiErrorCode(err)));
+          this.focusAfterRender(() => this.cancelButton()?.nativeElement);
         },
       });
   }

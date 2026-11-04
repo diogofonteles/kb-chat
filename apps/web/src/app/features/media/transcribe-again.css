@@ -4,6 +4,10 @@
   justify-items: start;
 }
 
+:host(:focus) {
+  outline: none;
+}
+
 .confirm {
   display: grid;
   gap: var(--space-2);
