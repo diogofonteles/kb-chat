@@ -79,9 +79,7 @@ describe('TermsPanel (KBC-040)', () => {
   /** Past the debounce: `tokens` is what the API answers for the draft. */
   async function measured(tokens: number) {
     await new Promise((resolve) => setTimeout(resolve, 320));
-    http
-      .expectOne('/api/v1/media/terms/measure')
-      .flush({ tokens, limit: 224 });
+    http.expectOne('/api/v1/media/terms/measure').flush({ tokens, limit: 224 });
     await fixture.whenStable();
   }
 
@@ -104,7 +102,9 @@ describe('TermsPanel (KBC-040)', () => {
   it('FR-2: shows the use of the limit, the version and that nothing is redone alone', () => {
     expect(text()).toContain('180 de 224');
     expect(text()).toContain('Versão 3');
-    expect(text()).toContain('só muda quando alguém pede "Transcrever de novo"');
+    expect(text()).toContain(
+      'só muda quando alguém pede "Transcrever de novo"',
+    );
     expect(text()).toContain('(lista inicial)');
   });
 
@@ -143,18 +143,16 @@ describe('TermsPanel (KBC-040)', () => {
     await add('Outro');
     await measured(200);
     await submit();
-    http
-      .expectOne('/api/v1/media/terms')
-      .flush(
-        {
-          error: {
-            code: 'TERMS_OVER_LIMIT',
-            message: 'no',
-            details: { tokens: 231, limit: 224 },
-          },
+    http.expectOne('/api/v1/media/terms').flush(
+      {
+        error: {
+          code: 'TERMS_OVER_LIMIT',
+          message: 'no',
+          details: { tokens: 231, limit: 224 },
         },
-        { status: 422, statusText: 'Unprocessable' },
-      );
+      },
+      { status: 422, statusText: 'Unprocessable' },
+    );
     await fixture.whenStable();
     expect(text()).toContain('(231 de 224)');
   });

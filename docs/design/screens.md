@@ -726,3 +726,16 @@ Rota `/midia/{id}/faixas`. O pedido completo, com a tabela de estados, está em 
 - **Lista:** um ponto de Tab, ↑/↓ entre as linhas; campos e ações só na linha selecionada (é o que mantém 200 faixas leves e o Tab curto).
 - **Enquanto a IA propõe:** as faixas aparecem conforme cada janela termina, sem alças nem edição, até a análise acabar.
 - **Dividir aqui** usa o cursor (um clique no detalhe, numa palavra ou no tempo da transcrição); fora dos 5 s de cada lado, vai ao ponto válido mais próximo.
+
+## T21. Termos da transcrição e "Transcrever de novo" (KBC-040)
+
+Configurações → **Termos da transcrição**: só masters, onde a mídia está ligada, logo depois de Transcritores.
+
+- **Topo:** para que serve a lista, que ela vale para as próximas transcrições e que o que já foi transcrito só muda com "Transcrever de novo"; depois o uso ("180 de 224 do limite do transcritor") com uma barra, e a versão atual.
+- **Adicionar termos:** um por linha; colar vários funciona. Repetido fica de fora, com aviso.
+- **Lista:** uma linha editável por termo, com ×. Nada é salvo antes de **Salvar lista**; **Descartar mudanças** aparece quando há mudança.
+- **Limite:** acima de 224, "A lista passou do limite do transcritor (231 de 224). Remova alguns termos." O servidor conta, porque o vocabulário do Whisper não vai ao navegador.
+- **Conflito:** quando outra pessoa salvou antes, a edição fica na tela, com **Recarregar**.
+- **Versões da lista:** fechado por padrão; versão, termos, data e autor.
+
+Player (T15), só masters: **Transcrever de novo** abaixo de "Esconder transcrição", com confirmação em linha e o foco em **Cancelar**. Enquanto refaz, quem vê a mídia lê "Retranscrevendo…" ou "Retranscrevendo · aguardando o transcritor", e o texto, as legendas e a busca continuam os atuais. Uma tentativa que falha diz, a masters, "A nova transcrição falhou. O texto atual foi mantido." O painel da transcrição mostra a masters "Feita com a lista de termos v3 (28/10/2026)".

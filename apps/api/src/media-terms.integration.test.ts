@@ -28,8 +28,7 @@ const listOf = async (media: Media): Promise<TermList> =>
 const save = (media: Media, terms: string[], baseVersion: number) =>
   media.owner('PUT', TERMS, { baseVersion, terms });
 
-const raw = (text: string): RawTranscript =>
-  conversationRaw([[0, 10, text]]);
+const raw = (text: string): RawTranscript => conversationRaw([[0, 10, text]]);
 
 const SILENT: RawTranscript = { chunks: [] };
 
@@ -117,7 +116,11 @@ describe('The term list (KBC-040 FR-1, FR-2, BR-1)', () => {
   it('tidies the list and takes no version when nothing changed', async () => {
     const media = await startMedia();
     const { terms } = await listOf(media);
-    const same = await save(media, [...terms, ` ${terms[0]?.toUpperCase()} `], 1);
+    const same = await save(
+      media,
+      [...terms, ` ${terms[0]?.toUpperCase()} `],
+      1,
+    );
     expect(same.statusCode).toBe(200);
     expect(same.json<TermList>().version).toBe(1);
   });
@@ -125,7 +128,10 @@ describe('The term list (KBC-040 FR-1, FR-2, BR-1)', () => {
   it('AC-3: refuses a list past the limit and says by how much', async () => {
     const media = await startMedia();
     const { terms } = await listOf(media);
-    const many = [...terms, ...Array.from({ length: 30 }, (_, n) => `Termo ${n}`)];
+    const many = [
+      ...terms,
+      ...Array.from({ length: 30 }, (_, n) => `Termo ${n}`),
+    ];
 
     const refused = await save(media, many, 1);
 
@@ -289,7 +295,10 @@ describe('Which list a transcript was made with (KBC-040 FR-4)', () => {
   it('AC-5: a master sees it; whoever only listens does not', async () => {
     const media = await startMedia();
     const { item } = await transcribed(media);
-    const read = await media.owner('GET', `/api/v1/media/${item.id}/transcript`);
+    const read = await media.owner(
+      'GET',
+      `/api/v1/media/${item.id}/transcript`,
+    );
     expect(read.json<MediaTranscript>().termList).toEqual({
       version: 1,
       createdAt: '2026-10-28T12:00:00.000Z',
@@ -310,9 +319,16 @@ describe('Which list a transcript was made with (KBC-040 FR-4)', () => {
     const job = await leaseTranscription(media, token);
     await save(media, ['Outra lista'], 1);
 
-    await sendTranscript(media, { token, job, raw: raw('Uma frase qualquer.') });
+    await sendTranscript(media, {
+      token,
+      job,
+      raw: raw('Uma frase qualquer.'),
+    });
 
-    const read = await media.owner('GET', `/api/v1/media/${item.id}/transcript`);
+    const read = await media.owner(
+      'GET',
+      `/api/v1/media/${item.id}/transcript`,
+    );
     expect(read.json<MediaTranscript>().termList?.version).toBe(1);
   });
 

@@ -45,7 +45,7 @@ function anItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
       version: null,
       transcriber: 'none',
       transcriberOffSince: null,
-    lastAttemptFailed: false,
+      lastAttemptFailed: false,
     },
     kind: 'audio',
     lastPlayedAt: null,

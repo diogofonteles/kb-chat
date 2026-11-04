@@ -17,7 +17,7 @@ describe('termSchema', () => {
     },
   );
 
-  it("accepts a name with an accent, an apostrophe and a hyphen", () => {
+  it('accepts a name with an accent, an apostrophe and a hyphen', () => {
     expect(termSchema.safeParse("São João d'Aliança-GO").success).toBe(true);
   });
 });

@@ -45,7 +45,9 @@ export const termRoutes =
         name: viewerOf(request).person.name,
       }),
     );
-    typed.post('/api/v1/media/terms/measure', OPTIONS.measure, async (request) =>
-      service.measure(request.body.terms),
+    typed.post(
+      '/api/v1/media/terms/measure',
+      OPTIONS.measure,
+      async (request) => service.measure(request.body.terms),
     );
   };

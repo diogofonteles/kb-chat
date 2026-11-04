@@ -57,6 +57,23 @@ describe('toMediaItem: the transcription (KBC-036)', () => {
       version: null,
       transcriber: 'none',
       transcriberOffSince: null,
+      lastAttemptFailed: false,
+    });
+  });
+
+  it('calls a failed attempt so only when a transcript stayed (KBC-040 BR-3)', () => {
+    const kept = toMediaItem(aRecord({ jobStatus: 'dead' }), true);
+    expect(kept.transcription).toMatchObject({
+      status: 'done',
+      lastAttemptFailed: true,
+    });
+    const none = toMediaItem(
+      aRecord({ jobStatus: 'failed', version: null, confidence: null }),
+      true,
+    );
+    expect(none.transcription).toMatchObject({
+      status: 'failed',
+      lastAttemptFailed: false,
     });
   });
 });

@@ -43,7 +43,11 @@ describe('countPromptTokens (KBC-040 BR-2)', () => {
   it.each([
     ['the pilot list', PILOT, 162],
     ['one term', ['Tiuaco'], 4],
-    ['accents, digits, symbols and other scripts', ["São João d'Aliança", 'R$ 1.000', 'ação—reação', '日本語', 'Çá é 123a'], 30],
+    [
+      'accents, digits, symbols and other scripts',
+      ["São João d'Aliança", 'R$ 1.000', 'ação—reação', '日本語', 'Çá é 123a'],
+      30,
+    ],
     ['contractions', ["it's", "we'll go"], 7],
   ])('counts %s as the transcriber does', (_name, terms, tokens) => {
     expect(countPromptTokens(terms)).toBe(tokens);

@@ -94,7 +94,10 @@ export interface TranscriptStorePort {
   saveTerms(input: {
     readonly baseVersion: number;
     readonly terms: readonly string[];
-    readonly author: { readonly principal: string; readonly name: string | null };
+    readonly author: {
+      readonly principal: string;
+      readonly name: string | null;
+    };
     readonly now: Date;
   }): boolean;
   /** The job when `owner` holds its lease now; null otherwise. */
