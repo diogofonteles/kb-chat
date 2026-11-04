@@ -199,6 +199,12 @@ export class VoicesPanel {
   protected readonly authors = computed(() =>
     this.authorList.hasValue() ? this.authorList.value().items : [],
   );
+  /** The first reading only: a list being read again still has what it had. */
+  protected readonly listsLoading = computed(
+    () =>
+      (this.speakerList.isLoading() && !this.speakerList.hasValue()) ||
+      (this.authorList.isLoading() && !this.authorList.hasValue()),
+  );
   protected readonly voices = computed(() => {
     const diarization = this.diarization();
     const labels = diarization?.labels ?? [];

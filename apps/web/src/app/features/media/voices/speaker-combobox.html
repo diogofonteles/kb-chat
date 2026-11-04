@@ -8,7 +8,6 @@
   aria-autocomplete="list"
   [id]="inputId"
   [value]="text()"
-  [disabled]="disabled()"
   [attr.aria-expanded]="expanded()"
   [attr.aria-controls]="listId"
   [attr.aria-activedescendant]="activeId()"
@@ -47,6 +46,19 @@
         >
       }
       {{ option.label }}
+    </li>
+  }
+  @if (loading()) {
+    <li
+      class="loading"
+      role="option"
+      aria-disabled="true"
+      aria-selected="false"
+      tabindex="-1"
+      i18n="@@voices.loading"
+      (mousedown)="$event.preventDefault()"
+    >
+      Carregando…
     </li>
   }
 </ul>

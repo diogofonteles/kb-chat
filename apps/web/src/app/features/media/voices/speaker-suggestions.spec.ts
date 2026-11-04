@@ -47,6 +47,30 @@ describe('suggestSpeakers (KBC-065 AC-2)', () => {
     ]);
   });
 
+  it('BUG-8: a speaker and a free author of one name are one option, the author', () => {
+    const options = suggestSpeakers({
+      speakers: [speaker('Ana')],
+      authors: [OTHER],
+      text: '',
+      current: '',
+    });
+    expect(options.map(({ label }) => label)).toEqual([
+      'Pergunta da plateia',
+      'Ana',
+    ]);
+    expect(options[1]?.choice).toEqual({ kind: 'author', author: OTHER });
+  });
+
+  it('keeps an exact name on a list cut short', () => {
+    const speakers = [
+      ...Array.from({ length: 9 }, (_, index) =>
+        speaker(`Ana Falante ${index}`, index),
+      ),
+      speaker('Ana', 9),
+    ];
+    expect(labels({ speakers, text: 'Ana' })).toContain('Ana');
+  });
+
   it('filters without accents or case and offers to register a new name', () => {
     expect(labels({ speakers: [speaker('José')], text: 'jose' })).toEqual([
       'José',

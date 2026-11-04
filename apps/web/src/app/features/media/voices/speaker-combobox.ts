@@ -14,6 +14,7 @@ import {
 } from '@kb-chat/contracts';
 import {
   isInvalidSpeakerName,
+  optionForText,
   suggestSpeakers,
   type SpeakerChoice,
   type SpeakerOption,
@@ -42,7 +43,8 @@ export class SpeakerCombobox {
   readonly current = input('');
   readonly speakers = input<readonly CollectionSpeaker[]>([]);
   readonly authors = input<readonly Author[]>([]);
-  readonly disabled = input(false);
+  /** The lists are on their way: a name typed now may be on them, so none is registered. */
+  readonly loading = input(false);
   readonly chosen = output<SpeakerChoice>();
 
   private readonly id = `speaker-${nextId++}`;
@@ -65,16 +67,19 @@ export class SpeakerCombobox {
   });
   protected readonly open = signal(false);
   protected readonly active = signal(-1);
-  protected readonly options = computed(() =>
-    suggestSpeakers({
+  protected readonly options = computed(() => {
+    const options = suggestSpeakers({
       speakers: this.speakers(),
       authors: this.authors(),
       text: this.text(),
       current: this.current(),
-    }),
-  );
+    });
+    return this.loading()
+      ? options.filter(({ key }) => key !== '+new')
+      : options;
+  });
   protected readonly expanded = computed(
-    () => this.open() && this.options().length > 0,
+    () => this.open() && (this.options().length > 0 || this.loading()),
   );
   protected readonly activeId = computed(() =>
     this.expanded() && this.active() >= 0 ? this.optionId(this.active()) : null,
@@ -99,7 +104,7 @@ export class SpeakerCombobox {
   /** Leaving without choosing saves nothing: an invalid text stays, with its error. */
   protected leave(): void {
     this.close();
-    if (!this.invalid()) this.text.set(this.current());
+    if (!isInvalidSpeakerName(this.text())) this.text.set(this.current());
     this.blankTried.set(false);
   }
 
@@ -132,16 +137,25 @@ export class SpeakerCombobox {
     this.active.set(from < 0 ? first : (from + step + count) % count);
   }
 
-  /** The active option; else the only thing the text can mean: a name to register. */
+  /** Saves only what was chosen or spelled out: anything else asks for a choice (UP-06). */
   private enter(event: KeyboardEvent): void {
     event.preventDefault();
+    const chosen = this.enterChoice();
+    if (chosen) return this.pick(chosen);
+    const text = this.text().trim();
+    if (text === '') this.blankTried.set(true);
+    else if (text === this.current().trim()) this.close();
+    else this.open.set(true);
+  }
+
+  private enterChoice(): SpeakerOption | undefined {
     const options = this.options();
-    const chosen =
-      options[this.active()] ??
-      options.find((option) => option.key === '+new') ??
-      (this.text().trim() === '' ? undefined : options[0]);
-    if (chosen) this.pick(chosen);
-    else if (this.text().trim() === '') this.blankTried.set(true);
+    const active = options[this.active()];
+    if (active) return active;
+    const text = this.text();
+    return text.trim() === this.current().trim()
+      ? undefined
+      : optionForText(options, text);
   }
 
   private pick(option: SpeakerOption): void {

@@ -78,6 +78,7 @@
                 [current]="one.current"
                 [speakers]="collectionSpeakers()"
                 [authors]="authors()"
+                [loading]="listsLoading()"
                 (chosen)="nameVoice(one.voice, $event)"
               />
               @if (fieldFailure() === one.voice) {

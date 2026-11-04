@@ -79,3 +79,10 @@ input[aria-invalid='true'] {
   font-size: var(--text-sm);
   font-weight: 600;
 }
+
+[role='option'].loading,
+[role='option'].loading:hover {
+  background: none;
+  color: var(--color-text-muted);
+  cursor: default;
+}
