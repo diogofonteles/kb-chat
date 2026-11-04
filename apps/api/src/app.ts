@@ -144,10 +144,15 @@ import {
   preparationRoutes,
 } from './modules/preparation/index.js';
 import { createTrackProposals } from './track-proposals-factory.js';
+import { createTrackSubjects } from './track-subjects-factory.js';
 import {
   type ProposalService,
   trackProposalRoutes,
 } from './modules/track-proposals/index.js';
+import {
+  trackSubjectRoutes,
+  type SubjectProposalService,
+} from './modules/track-subjects/index.js';
 import {
   TrackEditService,
   TrackPublisher,
@@ -776,7 +781,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   startJanitor(app, { ...measures, ...edited, media: wiring.media });
 }
 
-/** Proposals, the draft and the guided flow that orchestrates them (KBC-066, 067, 072). */
+/** Proposals, the draft, subjects and the guided flow over them (KBC-066, 067, 069, 072). */
 async function registerEditing(
   app: FastifyInstance,
   wiring: MediaWiring & {
@@ -788,13 +793,14 @@ async function registerEditing(
   const diarization = diarizationService(wiring);
   const proposals = await registerProposals(app, { ...wiring, diarization });
   await registerEdit(app, wiring);
+  const subjects = await registerSubjects(app, wiring);
   const preparation = preparationService(app, {
     ...wiring,
     diarization,
     proposals,
   });
   await app.register(preparationRoutes(preparation));
-  return { proposals, preparation };
+  return { proposals, preparation, subjects };
 }
 
 /** The person who asked for a plan, as they stand now (KBC-072 BR-4). */
@@ -902,10 +908,11 @@ function startJanitor(
     waveforms: WaveformService;
     proposals: ProposalService;
     preparation: PreparationService;
+    subjects: SubjectProposalService;
   },
 ): void {
   const { store, files } = wiring.media;
-  const { proposals } = wiring;
+  const { proposals, subjects } = wiring;
   const janitor = new MediaJanitor({
     store,
     files,
@@ -918,6 +925,7 @@ function startJanitor(
   app.addHook('onClose', async () => {
     // Runs in flight end as interrupted before the database closes.
     await proposals.stop();
+    await subjects.stop();
     janitor.stop();
     store.close();
   });
@@ -940,6 +948,28 @@ async function registerProposals(
   if (interrupted > 0)
     app.log.warn({ interrupted }, 'track proposals interrupted by a restart');
   await app.register(trackProposalRoutes(proposals));
+  return proposals;
+}
+
+/** A track's subjects (KBC-069): runs a restart cut short end first, then the routes. */
+async function registerSubjects(
+  app: FastifyInstance,
+  wiring: MediaWiring & { readonly service: MediaService },
+): Promise<SubjectProposalService> {
+  const { subjects, proposals } = createTrackSubjects({
+    ...wiring,
+    log: app.log,
+  });
+  const interrupted = proposals.recover();
+  if (interrupted > 0)
+    app.log.warn({ interrupted }, 'subject runs interrupted by a restart');
+  await app.register(
+    trackSubjectRoutes({
+      subjects,
+      proposals,
+      hasTopic: (topic) => wiring.catalog.get(topic) !== undefined,
+    }),
+  );
   return proposals;
 }
 

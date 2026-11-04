@@ -56,6 +56,15 @@ export class RelationIndex {
     for (const entry of all) this.indexReverse(entry);
   }
 
+  /** Concept articles by name as written, sorted: what a track can link to (KBC-069). */
+  conceptNames(): string[] {
+    return [...this.conceptByName.values()]
+      .map((entry) =>
+        entry.id.slice(CONCEPTS_FOLDER.length).replace(/\.md$/, ''),
+      )
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }
+
   /** The groups shown on one document, each fully listed and without copies (callers page them). */
   groupsOf(
     entry: CatalogEntry,

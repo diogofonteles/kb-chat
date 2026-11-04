@@ -1,5 +1,5 @@
-/** What a paid media run spends on (ADR 0022 §7); KBC-069 adds subjects later. */
-export type MediaSpendKind = 'track-proposal';
+/** What a paid media run spends on (ADR 0022 §7). */
+export type MediaSpendKind = 'track-proposal' | 'subject-proposal';
 
 /** How a reservation ended: all of it counted, or the unspent part given back. */
 export type MediaSpendOutcome = 'settled' | 'refunded';
