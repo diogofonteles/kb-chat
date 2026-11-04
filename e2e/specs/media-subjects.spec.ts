@@ -243,6 +243,7 @@ test('AC-6: without `media-subjects` nothing of a subject shows', async ({
   await expect(page.getByText('Assuntos:')).toHaveCount(0);
   // A subject saved while the person still had the feature: left aside, not a filter.
   const saved = await page.request.put('/api/v1/media/preferences', {
+    headers: CSRF,
     data: {
       libraryFilters: {
         states: [],
