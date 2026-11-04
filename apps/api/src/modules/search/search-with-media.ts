@@ -1,5 +1,4 @@
 import {
-  EMPTY_FILTERS,
   MAX_MEDIA_HITS,
   MEDIA_COUNT_CAP,
   searchRequestSchema,
@@ -190,6 +189,7 @@ export class SearchWithMedia {
     }
   }
 
+  /** A linked track is audio to reach even where nothing was transcribed (BR-2). */
   private findSpoken(
     topic: string,
     { q, filters }: ParsedRequest,
@@ -198,13 +198,14 @@ export class SearchWithMedia {
     const { media } = this.deps;
     if (!media || !viewer.mayHear) return NO_AUDIO;
     const visible = this.visibleScope(topic, viewer);
-    if (!media.hasTranscripts(visible)) return NO_AUDIO;
+    const subjects = this.subjectsFor(viewer);
+    const linked = () => (subjects?.countsIn(topic, visible).length ?? 0) > 0;
+    if (!media.hasTranscripts(visible) && !linked()) return NO_AUDIO;
     if (hasDocumentOnlyFilters(filters)) return { hits: [], count: 0 };
     const topics =
       filters.topics.length > 0
         ? visible.filter((slug) => filters.topics.includes(slug))
         : visible;
-    const subjects = this.subjectsFor(viewer);
     const query = { topic, topics, q, filters };
     if (filters.concepts.length > 0 && !subjects) return { hits: [], count: 0 };
     const part =
@@ -248,15 +249,7 @@ export class SearchWithMedia {
     const facets = this.deps.documents.topicFacets(topic);
     const subjects = this.subjectsFor(viewer);
     if (!subjects) return facets;
-    const counted = subjects.counts(
-      {
-        topic,
-        topics: this.visibleScope(topic, viewer),
-        q: '',
-        filters: EMPTY_FILTERS,
-      },
-      { kind: 'any' },
-    );
+    const counted = subjects.countsIn(topic, this.visibleScope(topic, viewer));
     return { ...facets, concepts: withTrackCounts(facets.concepts, counted) };
   }
 

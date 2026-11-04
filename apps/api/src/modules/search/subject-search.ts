@@ -1,4 +1,5 @@
 import {
+  EMPTY_FILTERS,
   MAX_MEDIA_HITS,
   MEDIA_COUNT_CAP,
   subjectKey,
@@ -199,6 +200,14 @@ export class SubjectSearch {
     const ids = required.length === 0 ? undefined : this.holding(required);
     const counted = links.subjectCounts({ topics, authors: rule, ids });
     return namedCounts(counted, lookup.namesIn(topic));
+  }
+
+  /** Tracks per subject in these collections, with no question and no filter. */
+  countsIn(topic: string, topics: readonly string[]): ConceptCount[] {
+    return this.counts(
+      { topic, topics, q: '', filters: EMPTY_FILTERS },
+      { kind: 'any' },
+    );
   }
 
   /**

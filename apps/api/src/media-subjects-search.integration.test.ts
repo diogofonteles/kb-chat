@@ -260,6 +260,27 @@ describe('the concept filter over tracks (KBC-070)', () => {
   });
 });
 
+describe('a collection with no transcript (AC-1, BR-2)', () => {
+  it('finds and counts a linked track as the facets and the concept route do', async () => {
+    const { media, reader, first } = await worldWithSubjects();
+    sql(media, 'DELETE FROM transcripts');
+    const found = await search(reader, byConcept('Cabala', ''));
+    expect(found.media.map((hit) => hit.mediaId)).toEqual([first.mediaId]);
+    expect(found.kinds.audio).toBe(1);
+    expect(cabalaCount(found)?.tracks).toBe(1);
+    const plain = await search(reader, { q: 'burracheira' });
+    expect(cabalaCount(plain)?.tracks).toBe(1);
+  });
+
+  it('still has no audio where no track is linked', async () => {
+    const { media, reader } = await worldWithSubjects();
+    sql(media, 'DELETE FROM media_subject_links; DELETE FROM transcripts');
+    const found = await search(reader, byConcept('Cabala', ''));
+    expect(found.media).toEqual([]);
+    expect(found.kinds.audio).toBeNull();
+  });
+});
+
 describe('who sees subjects (AC-6, BR-3)', () => {
   it.each([
     ['no media-subjects', LISTENER],
