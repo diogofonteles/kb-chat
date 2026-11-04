@@ -165,7 +165,10 @@ export class SqliteListeningStore implements ListeningStorePort {
       );
   }
 
-  markMany(input: { principal: string; marks: readonly ListeningMark[] }): void {
+  markMany(input: {
+    principal: string;
+    marks: readonly ListeningMark[];
+  }): void {
     inTransaction(this.db, () => {
       for (const mark of input.marks)
         this.saveProgress({
