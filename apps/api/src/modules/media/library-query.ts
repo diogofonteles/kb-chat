@@ -112,7 +112,9 @@ export function sortLibrary(
 }
 
 /** The states, authors and collections that exist (SL-16: no empty chip). */
-export function facetsOf(items: readonly LibraryItem[]): LibraryFacets {
+export function facetsOf(
+  items: readonly LibraryItem[],
+): Omit<LibraryFacets, 'subjects'> {
   const distinct = <T>(pick: (item: LibraryItem) => T): T[] => [
     ...new Set(items.map(pick)),
   ];

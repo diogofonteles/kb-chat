@@ -76,9 +76,11 @@ export function termsOf(question: string): string[] {
   return (content.length > 0 ? content : words).slice(0, MAX_TERMS);
 }
 
-/** Facets that media do not have (BR-2): any of them active hides the spoken passages. */
+/**
+ * Facets that media never have (BR-2): any of them active hides the spoken passages. Concepts
+ * are apart: for who sees subjects they reach the tracks (KBC-070).
+ */
 export const hasDocumentOnlyFilters = (filters: SearchFilters): boolean =>
-  filters.concepts.length > 0 ||
   filters.genres.length > 0 ||
   filters.depths.length > 0 ||
   filters.relevances.length > 0;
@@ -161,5 +163,7 @@ export function toMediaHit(
     endMs: match.endMs,
     confidence: match.confidence,
     score: scoreOf(match.bm25),
+    match: 'speech',
+    subjects: [],
   };
 }

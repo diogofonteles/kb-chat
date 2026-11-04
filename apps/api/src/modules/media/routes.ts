@@ -77,6 +77,7 @@ export function actorOf(request: FastifyRequest): MediaActor {
     canUpload: hasFeature(viewer.person, 'media-upload'),
     quotaBytes: mediaQuotaOf(viewer),
     seesTracks: hasFeature(viewer.person, 'media-tracks'),
+    seesSubjects: hasFeature(viewer.person, 'media-subjects'),
     canSee: (topic) => canSee(request, topic),
   };
 }

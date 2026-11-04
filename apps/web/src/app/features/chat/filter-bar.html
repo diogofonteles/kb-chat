@@ -82,7 +82,7 @@
                     (change)="toggle(group.key, option.value)"
                   />
                   <span class="option-label">{{ option.label }}</span>
-                  <span class="option-count">{{ option.count }}</span>
+                  <span class="option-count">{{ option.countText }}</span>
                 </label>
               }
               @if (hiddenOptions(group) > 0) {
@@ -177,7 +177,7 @@
                 (change)="toggleDraft(group.key, option.value)"
               />
               <span class="option-label">{{ option.label }}</span>
-              <span class="option-count">{{ option.count }}</span>
+              <span class="option-count">{{ option.countText }}</span>
             </label>
           }
           @if (hiddenOptions(group) > 0) {

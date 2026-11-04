@@ -266,7 +266,7 @@ describe('No voice print reaches the API (KBC-064 AC-3, BR-1, NFR-3)', () => {
       ),
     ).toEqual([]);
     // The only binary columns are the waveform's loudness peaks (KBC-066), which say nothing
-    // of a voice, and SQLite's own for the text search index (KBC-039).
+    // of a voice, and SQLite's own for the text search indexes (KBC-039, KBC-070).
     expect(
       columns
         .filter((row) => row['type'] === 'BLOB')
@@ -276,6 +276,8 @@ describe('No voice print reaches the API (KBC-064 AC-3, BR-1, NFR-3)', () => {
       'media_waveforms.peaks',
       'segments_fts_data.block',
       'segments_fts_docsize.sz',
+      'track_about_fts_data.block',
+      'track_about_fts_docsize.sz',
     ]);
   });
 });

@@ -78,6 +78,7 @@ const aPage = (
     authors: [{ slug: 'mestre-laercio', name: 'Mestre Laércio', main: true }],
     otherAuthors: true,
     topics: ['hermetismo'],
+    subjects: [],
   },
   ...overrides,
 });
@@ -243,6 +244,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           ],
           otherAuthors: true,
           topics: ['hermetismo'],
+          subjects: [],
         },
       }),
     );
@@ -274,6 +276,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         states: ['in-progress'],
         authors: ['mestre-laercio'],
         topic: null,
+        subject: null,
       },
     });
     saves.forEach((save) => save.flush(PREFERENCES));
@@ -330,6 +333,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         states: ['heard'],
         authors: [],
         topic: null,
+        subject: null,
       },
     });
     expect(screen.getByText('Nenhuma mídia com estes filtros.')).toBeTruthy();
@@ -341,7 +345,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
   it('tells an empty library apart for who sends and who only listens', async () => {
     const empty = aPage([], {
       total: 0,
-      facets: { states: [], authors: [], otherAuthors: false, topics: [] },
+      facets: {
+        states: [],
+        authors: [],
+        otherAuthors: false,
+        topics: [],
+        subjects: [],
+      },
     });
     const reader = await renderLibrary();
     await reader.open(empty);
@@ -614,6 +624,64 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
   });
 
+  describe('a saved "Assunto" (KBC-070 BR-3)', () => {
+    const SAVED_SUBJECT = {
+      ...PREFERENCES,
+      libraryFilters: {
+        states: [],
+        authors: [],
+        topic: null,
+        subject: 'concept:cabala',
+      },
+    };
+
+    it('is left aside for who lost `media-subjects`: no filter, nothing to clear', async () => {
+      const { http, settle, start } = await renderLibrary();
+      await start(aHome(), SAVED_SUBJECT);
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
+      expect(screen.queryByRole('combobox', { name: 'Assunto' })).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Limpar filtros' }),
+      ).toBeNull();
+    });
+
+    it('stays in the account when another filter changes', async () => {
+      const { http, settle, start, tick } = await renderLibrary();
+      await start(aHome(), SAVED_SUBJECT);
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: /^Em andamento/ }));
+      await tick();
+      const save = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(save.request.body).toEqual({
+        libraryFilters: {
+          states: ['in-progress'],
+          authors: [],
+          topic: null,
+          subject: 'concept:cabala',
+        },
+      });
+    });
+
+    it('still filters for who holds the features', async () => {
+      const { http, settle, start } = await renderLibrary({
+        features: ['media', 'media-library', 'media-tracks', 'media-subjects'],
+      });
+      await start(aHome(), SAVED_SUBJECT);
+      http
+        .expectOne((request) =>
+          request.urlWithParams.includes('subject=concept'),
+        )
+        .flush(aPage([anItem(1)]));
+      await settle();
+      expect(
+        screen.getAllByRole('button', { name: 'Limpar filtros' }).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
   it('loads the next page with "Mostrar mais"', async () => {
     const { open, http, settle } = await renderLibrary();
     await open(aPage([anItem(1)], { nextCursor: '50', total: 2 }));
@@ -656,7 +724,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
       aHome(),
       {
         ...PREFERENCES,
-        libraryFilters: { states: ['unheard'], authors: [], topic: null },
+        libraryFilters: {
+          states: ['unheard'],
+          authors: [],
+          topic: null,
+          subject: null,
+        },
       },
     );
     fireEvent.click(
@@ -775,7 +848,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
       const { open, http, settle, tick } = await renderLibrary();
       await open(aPage([], { total: 0 }), aHome(), {
         ...PREFERENCES,
-        libraryFilters: { states: ['heard'], authors: [], topic: null },
+        libraryFilters: {
+          states: ['heard'],
+          authors: [],
+          topic: null,
+          subject: null,
+        },
       });
       const clear = screen.getAllByRole('button', {
         name: 'Limpar filtros',
@@ -892,7 +970,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
         { features: ['search', 'media', 'media-library'] },
         {
           ...PREFERENCES,
-          libraryFilters: { states: [], authors: [], topic: 'alquimia' },
+          libraryFilters: {
+            states: [],
+            authors: [],
+            topic: 'alquimia',
+            subject: null,
+          },
         },
       );
 
@@ -914,7 +997,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
       const { http, settle, start } = await renderLibrary();
       await start(aHome(), {
         ...PREFERENCES,
-        libraryFilters: { states: [], authors: [], topic: 'perdido' },
+        libraryFilters: {
+          states: [],
+          authors: [],
+          topic: 'perdido',
+          subject: null,
+        },
       });
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
       await settle();
@@ -930,7 +1018,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
       const { http, settle, start, tick } = await renderLibrary();
       await start(aHome(), {
         ...PREFERENCES,
-        libraryFilters: { states: [], authors: [], topic: 'perdido' },
+        libraryFilters: {
+          states: [],
+          authors: [],
+          topic: 'perdido',
+          subject: null,
+        },
       });
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
       await settle();
@@ -943,6 +1036,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['in-progress'],
           authors: [],
           topic: 'perdido',
+          subject: null,
         },
       });
       chipSave.flush(PREFERENCES);
@@ -965,7 +1059,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(
         http.expectOne({ method: 'PUT', url: PREFS }).request.body,
       ).toEqual({
-        libraryFilters: { states: [], authors: [], topic: 'perdido' },
+        libraryFilters: {
+          states: [],
+          authors: [],
+          topic: 'perdido',
+          subject: null,
+        },
       });
     });
 

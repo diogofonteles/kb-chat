@@ -54,6 +54,34 @@ export interface MediaSearchResult {
   readonly total: number;
 }
 
+/** Which tracks: these collections, and among these ids when given. */
+export interface TrackScope {
+  readonly topics: readonly string[];
+  readonly ids?: readonly string[];
+}
+
+/** A published track with an accepted subject: what its group in "Autoria" needs. */
+export interface LinkedTrack {
+  readonly mediaId: string;
+  readonly topic: string;
+  /** The media's author id, or null ("Outros autores"). */
+  readonly author: string | null;
+}
+
+/** What a track's card or line shows. */
+export interface TrackDetails extends LinkedTrack {
+  readonly title: string;
+  readonly durationMs: number | null;
+  readonly summary: string | null;
+  readonly parentTitle: string;
+}
+
+/** Tracks with one accepted subject (`concept:<key>` or `free:<id>`). */
+export interface SubjectCount {
+  readonly key: string;
+  readonly tracks: number;
+}
+
 /** The transcripts' own index (ADR 0024 §1), in the media database. */
 export interface MediaSearchPort {
   search(query: MediaSearchQuery): MediaSearchResult;
@@ -70,6 +98,29 @@ export interface MediaSearchPort {
   }): AuthorshipTally;
   /** Whether any of these collections has a searchable (transcribed) media. */
   hasTranscripts(topics: readonly string[]): boolean;
+}
+
+/** What tracks and their subjects need from the same index (KBC-070). */
+export interface TrackLinksPort {
+  /** Published tracks with an accepted subject, newest first (KBC-070 FR-3). */
+  linkedTracks(scope: TrackScope): LinkedTrack[];
+  /** Of these tracks, those where every word is said in one segment. */
+  speakingTracks(terms: readonly string[], ids: readonly string[]): string[];
+  /** Each of these tracks' best passage for the words, in the order of `ids`. */
+  bestPassages(
+    terms: readonly string[],
+    ids: readonly string[],
+  ): MediaSegmentMatch[];
+  /** Tracks with accepted links that say the words; null for a word too common to ask. */
+  saying(terms: readonly string[]): ReadonlySet<string> | null;
+  /** Tracks with every word in their title and summary together (BR-2). */
+  tracksAbout(terms: readonly string[]): ReadonlySet<string>;
+  /** The tracks in `ids`, in that order. */
+  trackDetails(ids: readonly string[]): TrackDetails[];
+  /** Accepted links per subject over published tracks: suggestions never count (BR-1). */
+  subjectCounts(
+    scope: TrackScope & { readonly authors: AuthorRule },
+  ): SubjectCount[];
 }
 
 /** Start and end markers of a match in `marked`. */

@@ -217,9 +217,10 @@ describe('migration track-items (KBC-068)', () => {
     const db = new DatabaseSync(':memory:');
     applyMigrations(db, [
       ...OURS_BEFORE,
-      ...OURS.filter((one) => one.version > VERSION),
+      // 23 reads the column this one adds: it can only come after it.
+      ...OURS.filter((one) => one.version > VERSION && one.version < 23),
     ]);
-    expect(applyMigrations(db, OURS)).toEqual([VERSION]);
+    expect(applyMigrations(db, OURS)).toEqual([VERSION, 23]);
     db.close();
   });
 

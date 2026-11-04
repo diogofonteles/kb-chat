@@ -28,6 +28,8 @@ import {
   type ParamMap,
 } from '@angular/router';
 import {
+  EMPTY_FILTERS,
+  SEARCH_KINDS,
   mediaEditSchema,
   mediaItemSchema,
   mediaTranscriptSchema,
@@ -75,6 +77,7 @@ import {
   transcriptionTextOf,
 } from './media-labels.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { ViewStore } from '@features/chat/view-store.js';
 import { PreparationEntry } from './preparation/preparation-entry.js';
 import { detailsSavedText, editDetailsLabel } from './edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
@@ -88,6 +91,7 @@ import { PlayerShortcuts } from './player/player-shortcuts.js';
 import { TranscribeAgain } from './transcribe-again.js';
 import { TranscriptPanel } from './transcript/transcript-panel.js';
 import { TrackNavList } from './tracks/track-nav-list.js';
+import { TrackAboutView } from './track-about-view.js';
 import { TrackSubjectsView } from './track-subjects-view.js';
 
 /**
@@ -111,6 +115,7 @@ import { TrackSubjectsView } from './track-subjects-view.js';
     TranscriptPanel,
     VoicesPanel,
     TrackNavList,
+    TrackAboutView,
     TrackSubjectsView,
   ],
   templateUrl: './media-player-page.html',
@@ -133,7 +138,11 @@ export class MediaPlayerPage {
   private readonly preferences = inject(TranscriptPreferences);
   private readonly listening = inject(ListeningPreferences);
   /** The collections the person sees, for "Editar informações" (KBC-050). */
-  protected readonly topics = inject(ChatStore).topicList;
+  private readonly chat = inject(ChatStore);
+  private readonly router = inject(Router);
+  private readonly views = inject(ViewStore);
+  protected readonly topics = this.chat.topicList;
+  protected readonly canSearch = computed(() => this.session.can('search'));
   protected readonly editLabel = editDetailsLabel();
   protected readonly editing = signal(false);
   protected readonly announcement = signal('');
@@ -184,11 +193,20 @@ export class MediaPlayerPage {
       this.session.can('media-edit') &&
       !this.media()?.parent,
   );
+  /** A track's subjects and summary, for who listens with `media-subjects` (KBC-070). */
+  protected readonly canReadAbout = computed(
+    () =>
+      this.session.me() !== null &&
+      this.session.can('media-subjects') &&
+      this.session.can('media-tracks') &&
+      !!this.media()?.parent,
+  );
   /** A track's subjects, for who classifies (KBC-069 scope). */
   protected readonly canSeeSubjects = computed(
     () =>
       this.session.me() !== null &&
       this.session.can('media-classify') &&
+      !this.canReadAbout() &&
       !!this.media()?.parent,
   );
   /** Where the preparation is, for whoever edits (T20, AC-17). */
@@ -474,6 +492,19 @@ export class MediaPlayerPage {
 
   protected reload(): void {
     this.item.reload();
+  }
+
+  /** A subject chip: the search filtered by it, texts and audio (KBC-070). */
+  protected searchSubject(name: string): void {
+    const topic = this.media()?.topic;
+    if (topic) this.chat.selectTopic(topic);
+    this.views.select('search');
+    this.chat.ask(name, {
+      filters: { ...EMPTY_FILTERS, concepts: [name] },
+      kinds: SEARCH_KINDS,
+      origin: 'suggestion',
+    });
+    void this.router.navigateByUrl('/');
   }
 
   /** The tracks come first when the link names one; else they never hold the player. */

@@ -1,6 +1,7 @@
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   type Author,
+  type HitSubject,
   type LibraryHome,
   type LibraryItem,
   type LibraryPage,
@@ -37,6 +38,10 @@ export interface LibraryServiceDeps {
   readonly presence?: () => Presence;
   /** One author of the collection's list (KBC-049, a sub-collection uses its parent's). */
   readonly authorOf: (topic: string, slug: string) => Author | null;
+  /** Tracks' accepted subjects (KBC-070); absent, the library has no "Assunto". */
+  readonly subjectsOf?: (
+    tracks: readonly { readonly mediaId: string; readonly topic: string }[],
+  ) => ReadonlyMap<string, readonly HitSubject[]>;
   readonly now?: () => Date;
 }
 
@@ -49,9 +54,12 @@ export class LibraryService {
   constructor(private readonly deps: LibraryServiceDeps) {}
 
   page(actor: MediaActor, query: LibraryQuery): LibraryPage {
-    const items = recordingsOf(this.entriesOf(actor));
+    const entries = this.entriesOf(actor);
+    const items = recordingsOf(entries);
+    const subjects = this.subjectsAmong(actor, entries);
+    const shown = linkedTracks(entries, subjects, query.subject) ?? items;
     const matching = sortLibrary(
-      filterLibrary(items, {
+      filterLibrary(shown, {
         states: query.state ?? [],
         authors: query.author ?? [],
         topics: this.scope(actor, query.topic),
@@ -66,8 +74,25 @@ export class LibraryService {
         (sum, item) => sum + (item.durationMs ?? 0),
         0,
       ),
-      facets: facetsOf(items),
+      facets: {
+        ...facetsOf(items),
+        subjects: subjects ? distinctSubjects(subjects) : [],
+      },
     };
+  }
+
+  /** Each track's subjects; null for who does not see subjects and tracks (BR-3). */
+  private subjectsAmong(
+    actor: MediaActor,
+    entries: readonly LibraryTrack[],
+  ): ReadonlyMap<string, readonly HitSubject[]> | null {
+    const { subjectsOf } = this.deps;
+    if (!subjectsOf || !actor.seesTracks || !actor.seesSubjects) return null;
+    return subjectsOf(
+      entries
+        .filter((entry) => entry.parent)
+        .map((entry) => ({ mediaId: entry.id, topic: entry.topic })),
+    );
   }
 
   home(actor: MediaActor): LibraryHome {
@@ -165,6 +190,33 @@ export class LibraryService {
   private now(): Date {
     return (this.deps.now ?? (() => new Date()))();
   }
+}
+
+/**
+ * The chosen subject's tracks, as rows of their own (AC-7). Null when no subject applies:
+ * none chosen, or one saved by who no longer sees subjects, ignored and kept (BR-3).
+ */
+function linkedTracks(
+  entries: readonly LibraryTrack[],
+  subjects: ReadonlyMap<string, readonly HitSubject[]> | null,
+  chosen: string | undefined,
+): LibraryItem[] | null {
+  if (chosen === undefined || subjects === null) return null;
+  return entries
+    .filter((entry) => subjects.get(entry.id)?.some((s) => s.key === chosen))
+    .map((entry) => ({ ...entry, tracks: [] }));
+}
+
+/** Each subject once, by name: what "Assunto" offers. */
+function distinctSubjects(
+  subjects: ReadonlyMap<string, readonly HitSubject[]>,
+): HitSubject[] {
+  const byKey = new Map(
+    [...subjects.values()].flat().map((subject) => [subject.key, subject]),
+  );
+  return [...byKey.values()].sort((a, b) =>
+    a.name.localeCompare(b.name, 'pt-BR'),
+  );
 }
 
 /** How many tracks each recording has in force. */

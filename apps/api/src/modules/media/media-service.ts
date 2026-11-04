@@ -41,6 +41,8 @@ export interface MediaActor {
   readonly quotaBytes?: number | null;
   /** Has `media-tracks`: track items exist for them (KBC-068 FR-5). */
   readonly seesTracks?: boolean;
+  /** Has `media-subjects`: subjects reach the library (KBC-070 BR-3). */
+  readonly seesSubjects?: boolean;
   readonly canSee: (topic: string) => boolean;
 }
 

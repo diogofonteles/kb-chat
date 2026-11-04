@@ -6,6 +6,7 @@ import type {
 } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { ViewStore } from '@features/chat/view-store.js';
 import { aTopic } from './fixtures.js';
 
 /** A valid media id (the contract requires UUIDs): the n-th of a list. */
@@ -76,3 +77,9 @@ export const sessionAs = (who: { features: Feature[]; master?: boolean }) => ({
     me: signal({ media: true }),
   },
 });
+
+/** The chat page's view as the media pages move it. */
+export const viewStoreStub = {
+  provide: ViewStore,
+  useValue: { select: () => undefined },
+};

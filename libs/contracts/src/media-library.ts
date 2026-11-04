@@ -6,6 +6,7 @@ import {
   mediaPreferencesSchema,
   type MediaItem,
 } from './media.js';
+import { hitSubjectSchema } from './search.js';
 import { authorSlugSchema } from './slugs.js';
 import { topicSlugSchema } from './topics.js';
 
@@ -61,6 +62,9 @@ export const libraryAuthorSchema = z.union([
 /** The most authors one filter names. */
 export const LIBRARY_AUTHORS_MAX = 20;
 
+/** `concept:<key>` or `free:<id>`: a key may hold a comma, so it never rides in a list. */
+const librarySubjectSchema = z.string().min(1).max(120);
+
 /**
  * The library's filters as kept in the account (BR-7): within a group the chips add up
  * (Não ouvidas or Em andamento), across groups they narrow (Em andamento and an author).
@@ -70,6 +74,8 @@ export const libraryFiltersSchema = z.strictObject({
   authors: z.array(libraryAuthorSchema).max(LIBRARY_AUTHORS_MAX),
   /** A collection, its sub-collections included (ADR 0028); null for all. */
   topic: topicSlugSchema.nullable(),
+  /** One subject (KBC-070 FR-4); null for all, also on what was saved before it. */
+  subject: librarySubjectSchema.nullable().default(null),
 });
 export type LibraryFilters = z.infer<typeof libraryFiltersSchema>;
 
@@ -77,6 +83,7 @@ export const NO_LIBRARY_FILTERS: LibraryFilters = {
   states: [],
   authors: [],
   topic: null,
+  subject: null,
 };
 
 /** Items per page of `GET /media/library` (FR-1). */
@@ -102,6 +109,7 @@ export const libraryQuerySchema = z.strictObject({
   state: csvOf(listeningStateSchema).optional(),
   author: csvOf(libraryAuthorSchema).optional(),
   topic: topicSlugSchema.optional(),
+  subject: librarySubjectSchema.optional(),
   q: z.string().max(LIBRARY_QUERY_MAX).optional(),
   sort: librarySortSchema.optional(),
   cursor: z
@@ -137,6 +145,8 @@ export const libraryFacetsSchema = z.object({
   otherAuthors: z.boolean(),
   /** The collections holding the person's media. */
   topics: z.array(topicSlugSchema),
+  /** The subjects of the tracks the person sees, for who has `media-subjects` (KBC-070). */
+  subjects: z.array(hitSubjectSchema).default([]),
 });
 export type LibraryFacets = z.infer<typeof libraryFacetsSchema>;
 

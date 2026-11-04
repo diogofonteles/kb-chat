@@ -120,6 +120,7 @@ function setup(
         id: String(row['id']),
         topic: String(row['topic']),
         title: String(row['title']),
+        status: 'ready' as const,
         archivedAt:
           row['archived_at'] === null ? null : String(row['archived_at']),
         track:
@@ -157,6 +158,7 @@ function setup(
     findMedia,
     rootOf: (topic) => topic,
     conceptsOf: () => concepts.names,
+    directory: { about: () => ({ subjects: [], summary: null }) },
   });
   const proposals = new SubjectProposalService({
     store,

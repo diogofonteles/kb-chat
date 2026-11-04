@@ -7,7 +7,9 @@ import {
   type RelationPage,
   type SearchRequest,
   type SearchResponse,
+  subjectTracksPageSchema,
   type SeeAlsoGroupName,
+  type SubjectTracksPage,
   type Topic,
   type TopicCreate,
   type TopicUpdate,
@@ -63,7 +65,21 @@ export class KbApi {
       })
       .pipe(map((body) => relationPageSchema.parse(body)));
   }
+
+  /** More of the tracks linked to a subject (KBC-070 FR-3). */
+  subjectTracks(
+    topic: string,
+    name: string,
+    page: { offset: number; limit: number },
+  ): Observable<SubjectTracksPage> {
+    return this.http
+      .get(subjectTracksUrl(topic, name), { params: page })
+      .pipe(map((body) => subjectTracksPageSchema.parse(body)));
+  }
 }
+
+export const subjectTracksUrl = (topic: string, name: string): string =>
+  `${topicsUrl()}/${encodeURIComponent(topic)}/concepts/${encodeURIComponent(name)}/media`;
 
 export const relationsUrl = (
   topic: string,

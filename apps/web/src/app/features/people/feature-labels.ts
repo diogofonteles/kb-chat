@@ -20,6 +20,7 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
   'media-tracks': () => $localize`:@@feature.mediaTracks:Navegar por faixas`,
   'media-classify': () =>
     $localize`:@@feature.mediaClassify:Classificar mídia por assunto`,
+  'media-subjects': () => $localize`:@@feature.mediaSubjects:Assuntos na mídia`,
   'media-voice-profiles': () =>
     $localize`:@@feature.mediaVoiceProfiles:Cadastrar perfis de voz`,
 };

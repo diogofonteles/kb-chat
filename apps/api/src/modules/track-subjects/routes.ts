@@ -10,6 +10,7 @@ import {
   subjectProposalRequestSchema,
   subjectRunSchema,
   topicSlugSchema,
+  trackAboutSchema,
   trackSubjectsSchema,
 } from '@kb-chat/contracts';
 import type {
@@ -37,6 +38,10 @@ const CLASSIFY: RouteAccess = { feature: 'media-classify' };
 const COLLECTION: RouteAccess = {
   feature: 'media-classify',
   topicParam: 'topic',
+};
+/** What a listener reads of a track: its feature, with tracks in sight (KBC-070). */
+const ABOUT: RouteAccess = {
+  feature: ['media', 'media-tracks', 'media-subjects'],
 };
 /** The route checks the AI's feature, the handler `media-classify` (AC-6). */
 const SUGGEST: RouteAccess = { feature: 'media-edit-ai' };
@@ -112,6 +117,17 @@ function registerCollection(typed: Typed, deps: SubjectRoutesDeps): void {
   });
 }
 
+function registerAbout(typed: Typed, { subjects }: SubjectRoutesDeps): void {
+  typed.get(
+    '/api/v1/media/:id/about',
+    {
+      config: { access: ABOUT },
+      schema: { params: mediaParams, response: { 200: trackAboutSchema } },
+    },
+    async (request) => subjects.about(actorOf(request), request.params.id),
+  );
+}
+
 function registerTrack(typed: Typed, deps: SubjectRoutesDeps): void {
   const { subjects } = deps;
   const read = {
@@ -185,6 +201,7 @@ export const trackSubjectRoutes =
     });
     const typed = app.withTypeProvider<ZodTypeProvider>();
     registerCollection(typed, deps);
+    registerAbout(typed, deps);
     registerTrack(typed, deps);
     registerEdit(typed, deps);
   };

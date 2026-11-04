@@ -8,23 +8,43 @@
   >
     <span class="kind">
       <span class="note" aria-hidden="true">♪</span>
-      <span i18n="@@mediaHit.kind">Áudio · Na fala</span>
-      <span aria-hidden="true">·</span>
-      <span class="clock" aria-hidden="true">{{ clock() }}</span>
-      <span class="visually-hidden" i18n="@@mediaHit.at"
-        >aos {{ spokenClock() }}</span
-      >
-    </span>
-    <span class="title">{{ hit().title }}</span>
-    <span class="snippet">
-      @for (part of parts(); track $index) {
-        @if (part.marked) {
-          <mark>{{ part.text }}</mark>
-        } @else {
-          <span>{{ part.text }}</span>
-        }
+      @if (byTopic()) {
+        <span i18n="@@mediaHit.subjectKind">Faixa · Assunto</span>
+      } @else {
+        <span i18n="@@mediaHit.kind">Áudio · Na fala</span>
+        <span aria-hidden="true">·</span>
+        <span class="clock" aria-hidden="true">{{ clock() }}</span>
+        <span class="visually-hidden" i18n="@@mediaHit.at"
+          >aos {{ spokenClock() }}</span
+        >
       }
     </span>
+    <span class="title">{{ hit().title }}</span>
+    @if (byTopic()) {
+      @if (hit().text) {
+        <span class="summary">{{ hit().text }}</span>
+      }
+    } @else {
+      <span class="snippet">
+        @for (part of parts(); track $index) {
+          @if (part.marked) {
+            <mark>{{ part.text }}</mark>
+          } @else {
+            <span>{{ part.text }}</span>
+          }
+        }
+      </span>
+    }
+    @if (hit().subjects.length > 0) {
+      <span class="subjects">
+        <span class="visually-hidden" i18n="@@mediaHit.subjects"
+          >Assuntos:</span
+        >
+        @for (subject of hit().subjects; track subject.key) {
+          <span class="subject">{{ subject.name }}</span>
+        }
+      </span>
+    }
     <span class="meta">
       <app-authorship-badge [mediaAuthor]="hit().author" />
       @if (place(); as where) {

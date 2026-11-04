@@ -525,6 +525,7 @@ describe('Media library: choices in the account (FR-5, BR-7)', () => {
         states: ['in-progress'],
         authors: [],
         topic: 'hermetismo',
+        subject: null,
       },
     });
   });

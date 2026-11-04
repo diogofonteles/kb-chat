@@ -1,15 +1,21 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import {
+  MAX_MEDIA_HITS,
   MEDIA_COUNT_CAP,
   transcriptConfidenceSchema,
 } from '@kb-chat/contracts';
 import type {
   AuthorRule,
   AuthorshipTally,
+  LinkedTrack,
   MediaSearchPort,
   MediaSearchQuery,
   MediaSearchResult,
   MediaSegmentMatch,
+  SubjectCount,
+  TrackDetails,
+  TrackLinksPort,
+  TrackScope,
 } from '../../ports/media-search.js';
 
 /** A WHERE fragment with its placeholders' values, in order. */
@@ -81,6 +87,25 @@ const NOT_INSIDE_TRACKS = `(NOT EXISTS (${LIVE_TRACK})
 const passagesFor = (tracks: boolean | undefined): string =>
   tracks ? NOT_INSIDE_TRACKS : ONLY_RECORDINGS;
 
+/** A track someone may be told about: published, not archived (KBC-068 FR-1, BR-5). */
+const LIVE_TRACK_ROW = `m.parent_media_id IS NOT NULL AND m.status = 'ready'
+  AND m.archived_at IS NULL AND m.kind = 'audio'`;
+const IN_IDS = `m.id IN (SELECT value FROM json_each(?))`;
+
+/** The tracks a person may be told about, narrowed to `ids` when given. */
+function liveTrackClause(
+  topics: readonly string[],
+  ids: readonly string[] | undefined,
+): Clause {
+  const inTopics = `m.topic IN (${placeholders(topics.length)})`;
+  return ids === undefined
+    ? { sql: `${LIVE_TRACK_ROW} AND ${inTopics}`, values: topics }
+    : {
+        sql: `${LIVE_TRACK_ROW} AND ${IN_IDS} AND ${inTopics}`,
+        values: [JSON.stringify(ids), ...topics],
+      };
+}
+
 const FROM_MATCHES = `FROM segments_fts f
   JOIN segments s ON s.rowid = f.rowid
   JOIN transcripts t ON t.id = s.transcript_id
@@ -91,10 +116,23 @@ const RANKED = 10_000;
 /** Past RANKED, this many times the limit are read to put normal confidence first. */
 const UNRANKED_POOL = 4;
 
-const SELECT_MATCHES = `SELECT m.id AS media_id, m.topic, m.title, ${AUTHOR} AS author,
+const selectMatches = (rank: string, from: string): string =>
+  `SELECT m.id AS media_id, m.topic, m.title, ${AUTHOR} AS author,
     highlight(segments_fts, 0, char(2), char(3)) AS marked,
-    s.start_ms, s.end_ms, t.confidence, bm25(segments_fts) AS bm25
-  ${FROM_MATCHES}`;
+    s.start_ms, s.end_ms, t.confidence, ${rank} AS bm25
+  ${from}`;
+const SELECT_MATCHES = selectMatches('bm25(segments_fts)', FROM_MATCHES);
+/** bm25 walks a word's whole list once: past RANKED, a track's first passage is its best. */
+const UNRANKED_SCORE = '-1';
+
+/** Where each track's transcript sits in the index, in the order of the ids. */
+const SEGMENT_RANGES = `SELECT t.media_id, t.id AS transcript_id,
+    (SELECT s.rowid FROM segments s WHERE s.transcript_id = t.id
+      ORDER BY s.position LIMIT 1) AS first,
+    (SELECT s.rowid FROM segments s WHERE s.transcript_id = t.id
+      ORDER BY s.position DESC LIMIT 1) AS last
+  FROM json_each(?) j JOIN transcripts t ON t.media_id = j.value
+  ORDER BY j.key`;
 
 /** Normal confidence first (BR-3), then relevance, then the earlier passage. */
 const ORDER = `ORDER BY t.confidence = 'low', bm25(segments_fts), s.start_ms`;
@@ -120,8 +158,22 @@ function toMatch(row: Record<string, unknown>): MediaSegmentMatch {
   };
 }
 
+function toDetails(row: Record<string, unknown>): TrackDetails {
+  const duration = row['duration_ms'];
+  const summary = row['summary'];
+  return {
+    mediaId: String(row['id']),
+    topic: String(row['topic']),
+    title: String(row['title']),
+    author: row['author'] === null ? null : String(row['author']),
+    durationMs: duration === null ? null : Number(duration),
+    summary: summary === null ? null : String(summary),
+    parentTitle: String(row['parent_title']),
+  };
+}
+
 /** The current transcripts' segments in SQLite FTS5 (ADR 0024 §1, KBC-039). */
-export class SqliteMediaSearch implements MediaSearchPort {
+export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
   constructor(private readonly db: DatabaseSync) {}
 
   search({
@@ -174,6 +226,18 @@ export class SqliteMediaSearch implements MediaSearchPort {
     return Number(counted?.['n'] ?? 0);
   }
 
+  /** The matches in the whole index, counted up to RANKED + 1. */
+  private matchesInIndex(expression: string): number {
+    return Number(
+      this.db
+        .prepare(
+          `SELECT count(*) AS n FROM (SELECT 1 FROM segments_fts
+             WHERE segments_fts MATCH ? LIMIT ${RANKED + 1})`,
+        )
+        .get(expression)?.['n'] ?? 0,
+    );
+  }
+
   /**
    * The best passages (NFR-1): ranking every match of a word said in a large share of
    * 2,000 h costs more than the budget, and such a word ranks nothing useful. Up to
@@ -186,15 +250,7 @@ export class SqliteMediaSearch implements MediaSearchPort {
     limit: number,
   ): MediaSegmentMatch[] {
     const [match] = values;
-    const common = Number(
-      this.db
-        .prepare(
-          `SELECT count(*) AS n FROM (SELECT 1 FROM segments_fts
-             WHERE segments_fts MATCH ? LIMIT ${RANKED + 1})`,
-        )
-        .get(match ?? '')?.['n'] ?? 0,
-    );
-    if (common <= RANKED)
+    if (this.matchesInIndex(String(match ?? '')) <= RANKED)
       return this.db
         .prepare(`${SELECT_MATCHES} ${where} ${ORDER} LIMIT ?`)
         .all(...values, limit)
@@ -205,6 +261,137 @@ export class SqliteMediaSearch implements MediaSearchPort {
       .map(toMatch)
       .sort(byConfidenceThenRelevance)
       .slice(0, limit);
+  }
+
+  linkedTracks({ topics, ids }: TrackScope): LinkedTrack[] {
+    if (topics.length === 0) return [];
+    const scope = liveTrackClause(topics, ids);
+    return this.db
+      .prepare(
+        `SELECT m.id, m.topic, ${AUTHOR} AS author FROM media m
+         WHERE ${scope.sql} AND EXISTS (
+           SELECT 1 FROM media_subject_links l
+           WHERE l.media_id = m.id AND l.status = 'accepted')
+         ORDER BY m.created_at DESC, m.id`,
+      )
+      .all(...scope.values)
+      .map((row) => ({
+        mediaId: String(row['id']),
+        topic: String(row['topic']),
+        author: row['author'] === null ? null : String(row['author']),
+      }));
+  }
+
+  /**
+   * A word of a large share of the speech must not walk its whole list for a few tracks: each
+   * track asks only its own stretch of the index (one transcript's rows are written together).
+   */
+  speakingTracks(terms: readonly string[], ids: readonly string[]): string[] {
+    if (terms.length === 0 || ids.length === 0) return [];
+    return this.db
+      .prepare(
+        `SELECT r.media_id FROM (${SEGMENT_RANGES}) r
+         WHERE EXISTS (SELECT 1 FROM segments_fts f CROSS JOIN segments s ON s.rowid = f.rowid
+           WHERE segments_fts MATCH ? AND f.rowid BETWEEN r.first AND r.last
+             AND s.transcript_id = r.transcript_id)`,
+      )
+      .all(JSON.stringify(ids), toMatchExpression(terms))
+      .map((row) => String(row['media_id']));
+  }
+
+  bestPassages(
+    terms: readonly string[],
+    ids: readonly string[],
+  ): MediaSegmentMatch[] {
+    if (terms.length === 0 || ids.length === 0) return [];
+    const expression = toMatchExpression(terms);
+    const ranked = this.matchesInIndex(expression) <= RANKED;
+    const select = selectMatches(
+      ranked ? 'bm25(segments_fts)' : UNRANKED_SCORE,
+      FROM_MATCHES.replaceAll('JOIN', 'CROSS JOIN'),
+    );
+    const best = this.db.prepare(
+      `${select} WHERE segments_fts MATCH ? AND f.rowid BETWEEN ? AND ?
+         AND s.transcript_id = ? ${ranked ? ORDER : ''} LIMIT 1`,
+    );
+    // Unranked there is nothing to choose among: only the passages that will show are read.
+    const pool = ranked ? ids : ids.slice(0, MAX_MEDIA_HITS);
+    const ranges = this.db.prepare(SEGMENT_RANGES).all(JSON.stringify(pool));
+    return ranges.flatMap((range) => {
+      const row = best.get(
+        expression,
+        Number(range['first']),
+        Number(range['last']),
+        String(range['transcript_id']),
+      );
+      return row ? [toMatch(row)] : [];
+    });
+  }
+
+  saying(terms: readonly string[]): ReadonlySet<string> | null {
+    if (terms.length === 0) return new Set();
+    const expression = toMatchExpression(terms);
+    if (this.matchesInIndex(expression) > RANKED) return null;
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT t.media_id FROM segments_fts f
+         CROSS JOIN segments s ON s.rowid = f.rowid
+         CROSS JOIN transcripts t ON t.id = s.transcript_id
+         WHERE segments_fts MATCH ? AND EXISTS (
+           SELECT 1 FROM media_subject_links l
+           WHERE l.media_id = t.media_id AND l.status = 'accepted')`,
+      )
+      .all(expression);
+    return new Set(rows.map((row) => String(row['media_id'])));
+  }
+
+  tracksAbout(terms: readonly string[]): ReadonlySet<string> {
+    if (terms.length === 0) return new Set();
+    const rows = this.db
+      .prepare(
+        `SELECT media_id FROM track_about_fts WHERE track_about_fts MATCH ?`,
+      )
+      .all(toMatchExpression(terms));
+    return new Set(rows.map((row) => String(row['media_id'])));
+  }
+
+  trackDetails(ids: readonly string[]): TrackDetails[] {
+    const rows = this.db
+      .prepare(
+        `SELECT m.id, m.topic, m.title, ${AUTHOR} AS author, m.duration_ms, a.summary,
+           p.title AS parent_title
+         FROM media m JOIN media p ON p.id = m.parent_media_id
+         LEFT JOIN media_track_subjects a ON a.media_id = m.id
+         WHERE ${IN_IDS}`,
+      )
+      .all(JSON.stringify(ids));
+    const found = new Map(rows.map((row) => [String(row['id']), row]));
+    return ids.flatMap((id) => {
+      const row = found.get(id);
+      return row ? [toDetails(row)] : [];
+    });
+  }
+
+  subjectCounts({
+    topics,
+    authors,
+    ids,
+  }: Parameters<TrackLinksPort['subjectCounts']>[0]): SubjectCount[] {
+    if (topics.length === 0) return [];
+    const live = liveTrackClause(topics, ids);
+    const scope = scopeClause(topics, authors);
+    return this.db
+      .prepare(
+        `SELECT l.subject_key, count(*) AS n
+         FROM media_subject_links l JOIN media m ON m.id = l.media_id
+         WHERE l.status = 'accepted' AND ${live.sql} AND ${scope.sql}
+         GROUP BY l.subject_key`,
+      )
+      .all(...live.values, ...scope.values)
+      .map((row) => ({
+        key: String(row['subject_key']),
+        tracks: Number(row['n']),
+      }));
   }
 
   hasTranscripts(topics: readonly string[]): boolean {

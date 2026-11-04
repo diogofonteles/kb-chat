@@ -103,3 +103,29 @@ mark {
 .low::before {
   content: '⚠ ' / '';
 }
+
+.summary {
+  font-family: var(--font-reading);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.subjects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.subject {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}

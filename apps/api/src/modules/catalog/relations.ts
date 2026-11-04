@@ -20,6 +20,12 @@ const toRef = (entry: CatalogEntry): RelatedDocument => ({
   relevance: entry.relevance,
 });
 
+/** The concept a concept article is about, as written in its file name; null for sources. */
+export const conceptOfArticle = (id: string): string | null =>
+  id.startsWith(CONCEPTS_FOLDER)
+    ? id.slice(CONCEPTS_FOLDER.length).replace(/\.md$/, '')
+    : null;
+
 /** Concept article name as kb links it, compared case-insensitively. */
 const conceptKey = (name: string): string => name.trim().toLowerCase();
 const conceptName = (id: string): string =>

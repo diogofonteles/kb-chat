@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { searchRequestSchema, searchResponseSchema } from './search.js';
+import {
+  SUBJECT_TRACKS_OFFSET_MAX,
+  SUBJECT_TRACKS_PREVIEW,
+  searchRequestSchema,
+  searchResponseSchema,
+  subjectTracksQuerySchema,
+} from './search.js';
 import { topicSlugSchema } from './topics.js';
 
 describe('searchRequestSchema', () => {
@@ -131,10 +137,21 @@ describe('searchResponseSchema (KBC-039)', () => {
       media: [hit],
       kinds: { text: 0, audio: 1 },
     });
-    expect(parsed.media).toEqual([hit]);
+    expect(parsed.media).toEqual([{ ...hit, match: 'speech', subjects: [] }]);
     expect(
       searchResponseSchema.safeParse({ ...base, media: [{ ...hit, score: 2 }] })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('subjectTracksQuerySchema (KBC-070)', () => {
+  it('reads a page and refuses an offset past the ceiling', () => {
+    expect(subjectTracksQuerySchema.parse({ offset: '5' })).toEqual({
+      offset: 5,
+      limit: SUBJECT_TRACKS_PREVIEW,
+    });
+    const past = { offset: String(SUBJECT_TRACKS_OFFSET_MAX + 1) };
+    expect(subjectTracksQuerySchema.safeParse(past).success).toBe(false);
   });
 });

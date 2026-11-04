@@ -13,3 +13,4 @@ export {
   type SearchViewer,
   type SearchWithMediaDeps,
 } from './search-with-media.js';
+export { SubjectSearch, type SubjectLookup } from './subject-search.js';

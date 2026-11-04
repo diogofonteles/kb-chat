@@ -9,9 +9,13 @@ const NONE: LibraryFilters = {
   states: [],
   authors: [],
   topic: null,
+  subject: null,
 };
 
-async function renderControls(filters: LibraryFilters = NONE) {
+async function renderControls(
+  filters: LibraryFilters = NONE,
+  subjects: readonly { key: string; name: string }[] = [],
+) {
   const changes: FilterChange[] = [];
   const sorts: string[] = [];
   const views: string[] = [];
@@ -25,6 +29,7 @@ async function renderControls(filters: LibraryFilters = NONE) {
         ],
         otherAuthors: true,
         topics: ['udv/palavra-do-mestre', 'alquimia'],
+        subjects: [...subjects],
       },
       filters,
       sort: 'recently-played',
@@ -104,5 +109,30 @@ describe('LibraryControls (T16, SL-13/15/16)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ver em grade' }));
     expect(sorts).toEqual(['duration']);
     expect(views).toEqual(['grid']);
+  });
+});
+
+describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
+  const CABALA = { key: 'concept:cabala', name: 'Cabala' };
+
+  it('is absent with no subject to offer', async () => {
+    await renderControls();
+    expect(screen.queryByRole('combobox', { name: 'Assunto' })).toBeNull();
+  });
+
+  it('offers the subjects and says which was chosen', async () => {
+    const { changes } = await renderControls(NONE, [CABALA]);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Assunto' }), {
+      target: { value: CABALA.key },
+    });
+    expect(changes).toEqual([{ kind: 'subject', subject: CABALA.key }]);
+  });
+
+  it('keeps a chosen subject that left, to be cleared', async () => {
+    await renderControls({ ...NONE, subject: 'free:gone' }, [CABALA]);
+    expect(
+      screen.getByRole('option', { name: 'Assunto indisponível' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Limpar filtros' })).toBeTruthy();
   });
 });

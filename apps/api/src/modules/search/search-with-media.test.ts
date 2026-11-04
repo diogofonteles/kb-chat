@@ -68,7 +68,7 @@ function mediaIndex(broken = false): MediaSearchPort {
 
 function searcher(media: MediaSearchPort | undefined) {
   return new SearchWithMedia({
-    documents: { search: async () => texts },
+    documents: { search: async () => texts, topicFacets: () => texts.facets },
     scopeOf: () => ['udv'],
     media,
     authors: { mainOf: () => null, authorOf: () => null },
