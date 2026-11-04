@@ -244,9 +244,16 @@ export type SubjectTracksPage = z.infer<typeof subjectTracksPageSchema>;
 /** Tracks shown on a concept's panel before "Ver todas" (KBC-070). */
 export const SUBJECT_TRACKS_PREVIEW = 5;
 export const SUBJECT_TRACKS_PAGE_MAX = 50;
+/** Far past any subject's tracks: the query's number has bounds (`z.coerce`). */
+export const SUBJECT_TRACKS_OFFSET_MAX = 100_000;
 
 export const subjectTracksQuerySchema = z.object({
-  offset: z.coerce.number().int().min(0).default(0),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(SUBJECT_TRACKS_OFFSET_MAX)
+    .default(0),
   limit: z.coerce
     .number()
     .int()
