@@ -80,6 +80,9 @@
                 [authors]="authors()"
                 (chosen)="nameVoice(one.voice, $event)"
               />
+              @if (fieldFailure() === one.voice) {
+                <p class="field-error" role="alert">{{ failure() }}</p>
+              }
             </li>
           }
         </ul>
@@ -210,7 +213,7 @@
         Dá para separar as vozes quando a transcrição estiver pronta.
       </p>
     }
-    @if (failure()) {
+    @if (failure() && fieldFailure() === null) {
       <p class="field-error" role="alert">{{ failure() }}</p>
     }
   } @else {

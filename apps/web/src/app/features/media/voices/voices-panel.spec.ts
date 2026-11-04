@@ -437,6 +437,7 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'As vozes mudaram.',
     );
+    expect(field(1).closest('li')?.textContent).toContain('As vozes mudaram.');
   });
 
   it('keeps a voice field usable while saving and sends changes in order', async () => {
@@ -469,6 +470,12 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
       .flush(null, { status: 500, statusText: 'Server Error' });
     await fixture.whenStable();
     expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui salvar.',
+    );
+    expect(field(1).closest('li')?.textContent).toContain(
+      'Não consegui salvar.',
+    );
+    expect(field(2).closest('li')?.textContent).not.toContain(
       'Não consegui salvar.',
     );
   });

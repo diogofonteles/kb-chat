@@ -152,6 +152,7 @@ export class VoicesPanel {
   private readonly changes = new Subject<{
     readonly change: Observable<MediaSpeakers>;
     readonly done: string;
+    readonly voice: number | null;
   }>();
   protected readonly sample = inject(VoiceSample);
   readonly mediaId = input.required<string>();
@@ -230,6 +231,13 @@ export class VoicesPanel {
   protected readonly invalid = signal(false);
   protected readonly busy = signal(false);
   protected readonly failure = signal('');
+  /** Whose name failed to save: the message goes beside that field (T15). */
+  private readonly failedVoice = signal<number | null>(null);
+  protected readonly fieldFailure = computed(() => {
+    const voice = this.failedVoice();
+    const shown = this.voices().some((one) => one.voice === voice);
+    return this.failure() && shown ? voice : null;
+  });
   /** "Nome salvo." and the like: said after each change (UP-01). */
   protected readonly saved = signal('');
   protected readonly mergeVoice = signal<number | null>(null);
@@ -255,6 +263,7 @@ export class VoicesPanel {
     if (voices === 'invalid') return this.invalid.set(true);
     this.busy.set(true);
     this.failure.set('');
+    this.failedVoice.set(null);
     this.api
       .diarize(this.mediaId(), voices)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -289,6 +298,7 @@ export class VoicesPanel {
         ),
       ),
       $localize`:@@voices.saved:Nome salvo.`,
+      voice,
     );
   }
 
@@ -368,19 +378,24 @@ export class VoicesPanel {
    * Sends a change, after the ones before it: each answer is the whole state of the voices,
    * so they must arrive in order. Nothing is disabled meanwhile: that would drop the focus.
    */
-  private apply(change: Observable<MediaSpeakers>, done: string): void {
+  private apply(
+    change: Observable<MediaSpeakers>,
+    done: string,
+    voice: number | null = null,
+  ): void {
     this.failure.set('');
     this.saved.set('');
-    this.changes.next({ change, done });
+    this.changes.next({ change, done, voice });
   }
 
   private applyInOrder(): void {
     this.changes
       .pipe(
-        concatMap(({ change, done }) =>
+        concatMap(({ change, done, voice }) =>
           change.pipe(
             tap((speakers) => this.settleChange(speakers, done)),
             catchError((err: unknown) => {
+              this.failedVoice.set(voice);
               this.changeFailed(err);
               return EMPTY;
             }),
