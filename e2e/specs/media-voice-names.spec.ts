@@ -113,6 +113,52 @@ test('AC-3: two voices become one, and the join can be undone', async ({
   await expect(transcriptList(page).getByText(/^Voz 3$/)).toHaveCount(1);
 });
 
+test('AC-3: undoing a join gives each voice back what it had', async ({
+  page,
+}) => {
+  const { owner, media } = await audioWithVoices();
+  await owner.dispose();
+  await page.goto(`/midia/${media.id}`);
+  const block = voicesBlock(page);
+  await nameByKeyboard(page, 3, 'Pergunta');
+  await block.getByLabel('Juntar a voz').selectOption({ label: 'Voz 3' });
+  await block.getByLabel('com a voz').selectOption({ label: 'Voz 1' });
+  await block.getByRole('button', { name: 'Juntar', exact: true }).click();
+  await expect(whoIs(page, 1)).toHaveValue('Pergunta da plateia');
+
+  await block.getByRole('button', { name: 'Separar a Voz 3' }).click();
+  await expect(whoIs(page, 1)).toHaveValue('');
+  await expect(whoIs(page, 3)).toHaveValue('Pergunta da plateia');
+});
+
+test('AC-8: Enter saves only what was chosen or spelled out', async ({
+  page,
+}) => {
+  const { owner, media } = await audioWithVoices();
+  await page.goto(`/midia/${media.id}`);
+  await nameByKeyboard(page, 2, 'Mestre Laércio');
+  const named = whoIs(page, 2);
+  await named.press('Enter');
+  await named.blur();
+  await named.focus();
+  await named.press('Enter');
+  await expect(named).toHaveValue('Mestre Laércio');
+
+  const partial = whoIs(page, 1);
+  await partial.fill('Mes');
+  await partial.press('Enter');
+  await expect(partial).toHaveAttribute('aria-expanded', 'true');
+  await expect(partial).toHaveValue('Mes');
+  await partial.blur();
+  await expect(partial).toHaveValue('');
+  await page.reload();
+  await expect(whoIs(page, 2)).toHaveValue('Mestre Laércio');
+  const list = await owner.get('/api/v1/topics/hermetismo/speakers');
+  const { items } = (await list.json()) as { items: { name: string }[] };
+  expect(items.some(({ name }) => name === 'Mes')).toBe(false);
+  await owner.dispose();
+});
+
 test('AC-6: a new separation keeps the names and asks to confirm them', async ({
   page,
   browser,
@@ -223,4 +269,27 @@ test('FR-3: a voice plays a short sample and leaves the player where it was', as
     block.getByRole('button', { name: 'Ouvir amostra da Voz 3' }),
   ).toBeVisible({ timeout: 12_000 });
   await expect(block.getByRole('alert')).toHaveCount(0);
+});
+
+test('FR-3: the player goes on after one sample replaced another', async ({
+  page,
+}) => {
+  const { owner, media } = await audioWithVoices();
+  await owner.dispose();
+  await page.goto(`/midia/${media.id}`);
+  const block = voicesBlock(page);
+  await page.getByRole('button', { name: 'Tocar', exact: true }).click();
+  const pause = page.getByRole('button', { name: 'Pausar', exact: true });
+  await expect(pause).toBeVisible();
+
+  await block.getByRole('button', { name: 'Ouvir amostra da Voz 3' }).click();
+  await expect(
+    block.getByRole('button', { name: 'Parar amostra da Voz 3' }),
+  ).toBeVisible();
+  await expect(pause).toHaveCount(0);
+  await block.getByRole('button', { name: 'Ouvir amostra da Voz 1' }).click();
+  await expect(
+    block.getByRole('button', { name: 'Parar amostra da Voz 1' }),
+  ).toBeVisible();
+  await expect(pause).toBeVisible({ timeout: 12_000 });
 });
