@@ -21,6 +21,7 @@ const summaryOf = (id: string, version: number): TranscriptSummary => ({
   version,
   confidence: 'normal',
   vad: 'applied',
+  termsVersion: 1,
   rawPath: `${id}.json`,
   filterVersion: 1,
   confidenceVersion: 1,
@@ -47,16 +48,19 @@ function fakeStore(ids: readonly string[]) {
     text: 'Olá.',
     probability: 1,
   };
-  const store: Pick<TranscriptStorePort, 'transcripts' | 'segments' | 'words'> =
-    {
-      transcripts: (mediaId) =>
-        ids.includes(mediaId) ? [summaryOf(mediaId, 1)] : [],
-      segments: () => [segment],
-      words: () => {
-        reads.words++;
-        return [word];
-      },
-    };
+  const store: Pick<
+    TranscriptStorePort,
+    'transcripts' | 'segments' | 'words' | 'termVersion'
+  > = {
+    transcripts: (mediaId) =>
+      ids.includes(mediaId) ? [summaryOf(mediaId, 1)] : [],
+    segments: () => [segment],
+    termVersion: () => null,
+    words: () => {
+      reads.words++;
+      return [word];
+    },
+  };
   return { store, reads };
 }
 

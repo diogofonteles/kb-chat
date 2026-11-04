@@ -67,6 +67,7 @@ const STATUS_BY_JOB: Record<
 function toTranscription(
   record: TranscriptionRecord,
   presence: Presence,
+  isMaster: boolean,
 ): MediaTranscription {
   const hasTranscript = record.version !== null;
   const status = record.jobStatus
@@ -80,8 +81,18 @@ function toTranscription(
     version: record.version,
     transcriber: presence.transcriber,
     transcriberOffSince: presence.offSince,
+    lastAttemptFailed:
+      isMaster &&
+      hasTranscript &&
+      (record.jobStatus === 'failed' || record.jobStatus === 'dead'),
   };
 }
+
+/** Ready, with no transcription waiting or running (KBC-040 FR-3). */
+const canAskAgain = (record: MediaRecord): boolean =>
+  record.status === 'ready' &&
+  record.transcription.jobStatus !== 'queued' &&
+  record.transcription.jobStatus !== 'leased';
 
 /**
  * The contract view of a stored item for one person: only masters may retry (KBC-034
@@ -106,12 +117,14 @@ export function toMediaItem(
     createdAt: record.createdAt,
     canRetry: isMaster && isRetryable(record),
     canEdit: view.canEdit ?? false,
+    canTranscribeAgain: isMaster && canAskAgain(record),
     positionMs: progress?.positionMs ?? 0,
     completedAt: progress?.completedAt ?? null,
     positionUpdatedAt: progress?.updatedAt ?? null,
     transcription: toTranscription(
       record.transcription,
       view.presence ?? NO_TRANSCRIBER,
+      isMaster,
     ),
   };
 }

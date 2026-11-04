@@ -107,6 +107,7 @@ describe('media contracts', () => {
       createdAt: '2026-10-28T12:00:00.000Z',
       canRetry: false,
       canEdit: false,
+      canTranscribeAgain: false,
       positionMs: 0,
       completedAt: null,
       positionUpdatedAt: null,
@@ -116,6 +117,7 @@ describe('media contracts', () => {
         version: null,
         transcriber: 'none',
         transcriberOffSince: null,
+        lastAttemptFailed: false,
       },
     };
     expect(mediaItemSchema.parse(item)).toEqual(item);

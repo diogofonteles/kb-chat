@@ -52,6 +52,8 @@ export {
   TranscriptionService,
   type TranscriptionServiceDeps,
 } from './transcription-service.js';
+export { TermListService } from './term-list-service.js';
+export { termRoutes } from './term-routes.js';
 export { transcriberRoutes } from './transcriber-routes.js';
 export {
   TranscriptService,

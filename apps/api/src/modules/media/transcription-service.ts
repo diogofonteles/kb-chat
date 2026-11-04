@@ -29,6 +29,10 @@ const FLAC_MIME = 'audio/flac';
 const notYours = () => new AppError('NOT_FOUND', 'No such job for this worker');
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
+const unknownTerms = () =>
+  new AppError('VALIDATION_FAILED', 'No such version of the term list', {
+    details: { field: 'termsVersion' },
+  });
 
 /** How a transcript was made: the worker's model, parameters, terms and VAD. */
 const provenanceOf = (done: CompleteTranscribeRequest) => ({
@@ -117,11 +121,18 @@ export class TranscriptionService {
     const job = this.heldTranscription(owner);
     if (!job) throw leaseLost();
     const { files, transcripts, store } = this.deps;
+    const used = transcripts.termsAt(done.termsVersion);
+    if (!used) throw unknownTerms();
     assertPlausible(done.raw, store.getMedia(job.mediaId)?.durationMs ?? null);
     const id = randomUUID();
     const rawPath = files.transcriptPath(job.mediaId, id);
+    const transcript = this.derive({
+      ids: { id, mediaId: job.mediaId, rawPath },
+      done,
+      terms: used.terms,
+    });
+    if (this.wouldEraseText(transcript)) return this.dropEmpty(owner);
     await files.writeFile(rawPath, rawFileOf(done));
-    const transcript = this.derive({ id, mediaId: job.mediaId, rawPath, done });
     if (
       !transcripts.completeTranscribe({ owner, transcript, now: this.now() })
     ) {
@@ -132,25 +143,41 @@ export class TranscriptionService {
     await files.remove([files.flacPath(job.mediaId)]);
   }
 
+  /** An empty result would take the text, the subtitles and the search hits with it. */
+  private wouldEraseText(transcript: NewTranscript): boolean {
+    const [current] = this.deps.transcripts.transcripts(transcript.mediaId);
+    return transcript.wordCount === 0 && (current?.wordCount ?? 0) > 0;
+  }
+
+  /** The attempt ends as failed, for good, and the current transcript stays (KBC-040 BR-3). */
+  private dropEmpty(owner: LeaseOwner): void {
+    const failed = this.deps.store.failJob({
+      ...owner,
+      failure: 'invalid-audio',
+      detail: 'The new transcription came back empty',
+      now: this.now(),
+      maxAttempts: 1,
+    });
+    if (!failed) throw leaseLost();
+  }
+
   /** The bytes `start..end` of the job's audio. */
   openRange(path: string, range: { start: number; end: number }): Readable {
     return this.deps.files.read(path, range);
   }
 
+  /** With the list the job was prompted with: only that one can leak into the text. */
   private derive(input: {
-    id: string;
-    mediaId: string;
-    rawPath: string;
+    ids: { id: string; mediaId: string; rawPath: string };
     done: CompleteTranscribeRequest;
+    terms: readonly string[];
   }): NewTranscript {
-    const { done } = input;
-    const derived = deriveTranscript(done.raw, this.terms().terms);
+    const { done, ids } = input;
+    const derived = deriveTranscript(done.raw, input.terms);
     const verdict = confidenceOf(derived);
     return {
-      id: input.id,
-      mediaId: input.mediaId,
+      ...ids,
       ...provenanceOf(done),
-      rawPath: input.rawPath,
       filterVersion: FILTER_VERSION,
       confidenceVersion: CONFIDENCE_VERSION,
       confidence: verdict.confidence,

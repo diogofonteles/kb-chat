@@ -162,6 +162,17 @@
         </h3>
         <app-transcribers-panel />
       </section>
+    } @else if (section() === 'terms') {
+      <section class="section" aria-labelledby="settings-terms">
+        <h3
+          id="settings-terms"
+          class="section-title"
+          i18n="@@settings.termsTitle"
+        >
+          Termos da transcrição
+        </h3>
+        <app-terms-panel />
+      </section>
     } @else if (section() === 'voice-profiles') {
       <section class="section" aria-labelledby="settings-voice-profiles">
         <h3

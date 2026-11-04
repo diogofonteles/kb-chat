@@ -29,6 +29,15 @@ describe('transcriptionTextOf (KBC-036 FR-1, BR-5)', () => {
       'Transcrição automática de baixa confiança',
     ],
     [{ status: 'failed' as const }, 'A transcrição falhou'],
+    [{ status: 'transcribing' as const, version: 1 }, 'Retranscrevendo…'],
+    [
+      { status: 'waiting' as const, version: 1, transcriber: 'on' as const },
+      'Retranscrevendo · aguardando o transcritor',
+    ],
+    [
+      { status: 'waiting' as const, version: 2, transcriber: 'none' as const },
+      'Retranscrevendo · aguardando o transcritor · nenhum transcritor pareado',
+    ],
   ])('%o reads "%s"', (transcription, text) => {
     expect(transcriptionTextOf(withTranscription(transcription), 'pt-BR')).toBe(
       text,

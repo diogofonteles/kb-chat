@@ -1,4 +1,4 @@
-import { DOCUMENT } from '@angular/common';
+import { DatePipe, DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -92,7 +92,7 @@ const COMFORT = 0.15;
  */
 @Component({
   selector: 'app-transcript-panel',
-  imports: [VoiceTag],
+  imports: [DatePipe, VoiceTag],
   templateUrl: './transcript-panel.html',
   styleUrl: './transcript-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -123,6 +123,8 @@ export class TranscriptPanel {
   private readonly times = viewChildren<ElementRef<HTMLButtonElement>>('time');
 
   protected readonly segments = computed(() => this.transcript().segments);
+  /** Masters only: the API sends it to no one else (KBC-040 FR-4). */
+  protected readonly termList = computed(() => this.transcript().termList);
   protected readonly low = computed(
     () => this.transcript().confidence === 'low',
   );

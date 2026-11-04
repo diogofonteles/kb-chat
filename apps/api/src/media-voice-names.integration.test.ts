@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
   CONVERSATION_TURNS,
+  conversationRaw,
   leaseDiarization,
   pairDiarizer,
   requestVoices,
@@ -17,6 +18,10 @@ import {
   turnsOf,
 } from '../test/diarization-harness.js';
 import { member, startMedia, type Media } from '../test/media-harness.js';
+import {
+  leaseTranscription,
+  sendTranscript,
+} from '../test/transcription-harness.js';
 
 afterEach(closeApp);
 
@@ -148,6 +153,27 @@ describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
     const { call } = await listener(media);
     const names = (await transcriptOf(call, mediaId)).voiceNames;
     expect(names?.[1]).toMatchObject({ name: 'Mestre Gabriel', main: false });
+  });
+
+  it('keeps the names through a new transcription, on the new segments (KBC-040)', async () => {
+    const media = await startMedia();
+    const { mediaId, token } = await separated(media);
+    const gabriel = await aSpeaker(media, 'Mestre Gabriel');
+    await nameVoice(media, [mediaId, 2], { speakerId: gabriel.id });
+    await media.owner('POST', `/api/v1/media/${mediaId}/transcription`);
+    const job = await leaseTranscription(media, token);
+
+    await sendTranscript(media, {
+      token,
+      job,
+      raw: conversationRaw([[5.5, 15, 'Eu lembro sim, foi numa sessão.']]),
+    });
+
+    const { call } = await listener(media);
+    const read = await transcriptOf(call, mediaId);
+    expect(read.version).toBe(2);
+    expect(read.segments.map((one) => one.voice)).toEqual([2]);
+    expect(read.voiceNames?.[1]).toMatchObject({ name: 'Mestre Gabriel' });
   });
 
   it('takes a name away and refuses a speaker of another collection or an unknown voice', async () => {

@@ -15,7 +15,7 @@ import {
 export interface TranscriptServiceDeps {
   readonly transcripts: Pick<
     TranscriptStorePort,
-    'transcripts' | 'segments' | 'words'
+    'transcripts' | 'segments' | 'words' | 'termVersion'
   >;
   /** Who sees which media: `get` throws the stream's 404 (KBC-038 FR-1). */
   readonly media: { get(actor: MediaActor, mediaId: string): unknown };
@@ -32,6 +32,8 @@ export interface TranscriptServiceDeps {
 export interface TranscriptAudience {
   readonly withVoices: boolean;
   readonly withNames: boolean;
+  /** Masters also see which term list it was made with (KBC-040 FR-4). */
+  readonly withTermList?: boolean;
 }
 
 const NOBODY: TranscriptAudience = { withVoices: false, withNames: false };
@@ -94,8 +96,16 @@ export class TranscriptService {
       version: summary.version,
       confidence: summary.confidence,
       segments,
+      ...(options.withTermList ? this.termListOf(summary) : {}),
     };
     return this.withSpeakers(transcript, summary, options);
+  }
+
+  private termListOf(summary: TranscriptSummary) {
+    const list = this.deps.transcripts.termVersion(summary.termsVersion);
+    return list
+      ? { termList: { version: list.version, createdAt: list.createdAt } }
+      : {};
   }
 
   /** The transcript with what `audience` may read of the current separation, if any. */

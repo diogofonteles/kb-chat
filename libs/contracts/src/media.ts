@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { transcriptTermListSchema } from './media-terms.js';
 import { authorSchema, authorSlugSchema } from './authors.js';
 import { topicSlugSchema } from './topics.js';
 import { MAX_VOICES, voiceIndexSchema } from './voice-index.js';
@@ -110,6 +111,8 @@ export const mediaTranscriptionSchema = z.object({
   transcriber: transcriberPresenceSchema,
   /** With `off`: the last time one was seen (or paired, if never seen). */
   transcriberOffSince: z.iso.datetime().nullable(),
+  /** The newest attempt failed and the current transcript stayed (KBC-040 BR-3). */
+  lastAttemptFailed: z.boolean().default(false),
 });
 export type MediaTranscription = z.infer<typeof mediaTranscriptionSchema>;
 
@@ -134,6 +137,8 @@ export const mediaItemSchema = z.object({
    * its API still reads the item.
    */
   canEdit: z.boolean().default(false),
+  /** A master may queue a new transcription: it is ready and none is pending (KBC-040 FR-3). */
+  canTranscribeAgain: z.boolean().default(false),
   /** Where the person who asks stopped (KBC-041 FR-2): 0 when never heard or heard to the end. */
   positionMs: z.number().int().min(0),
   /** When that person heard it to 95% or more (BR-2); null otherwise. */
@@ -883,6 +888,8 @@ export const mediaTranscriptSchema = z.object({
    * (KBC-065 FR-4); for whoever only listens, names waiting for confirmation read as unnamed.
    */
   voiceNames: z.array(voiceLabelSchema).optional(),
+  /** The term list it was made with: for masters only (KBC-040 FR-4). */
+  termList: transcriptTermListSchema.optional(),
 });
 export type MediaTranscript = z.infer<typeof mediaTranscriptSchema>;
 

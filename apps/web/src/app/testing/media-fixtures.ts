@@ -26,6 +26,7 @@ export const aMediaItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   createdAt: '2026-10-28T12:00:00.000Z',
   canRetry: false,
   canEdit: false,
+  canTranscribeAgain: false,
   positionMs: 0,
   completedAt: null,
   positionUpdatedAt: null,
@@ -42,6 +43,7 @@ export const aTranscription = (
   version: null,
   transcriber: 'none',
   transcriberOffSince: null,
+  lastAttemptFailed: false,
   ...overrides,
 });
 

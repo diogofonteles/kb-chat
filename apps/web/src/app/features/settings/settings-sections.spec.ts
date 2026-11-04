@@ -106,6 +106,7 @@ describe('Configurações per permission (KBC-010)', () => {
     flushAiStatus(http);
     TestBed.tick();
     expect(sectionNames()).toContain('Transcritores');
+    expect(sectionNames()).toContain('Termos da transcrição');
     expect(sectionNames().indexOf('Transcritores')).toBe(
       sectionNames().indexOf('Pessoas e permissões') + 1,
     );
@@ -119,6 +120,7 @@ describe('Configurações per permission (KBC-010)', () => {
     );
     TestBed.tick();
     expect(sectionNames()).not.toContain('Transcritores');
+    expect(sectionNames()).not.toContain('Termos da transcrição');
     for (const request of http.match(() => true)) request.flush({});
     await fixture.whenStable();
   });

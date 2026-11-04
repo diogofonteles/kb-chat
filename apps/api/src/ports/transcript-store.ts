@@ -1,5 +1,6 @@
 import type {
   MediaJobKind,
+  TermVersion,
   TranscriptConfidence,
   TranscriptionTerms,
 } from '@kb-chat/contracts';
@@ -57,6 +58,8 @@ export interface TranscriptSummary {
   readonly version: number;
   readonly confidence: TranscriptConfidence;
   readonly vad: 'applied' | 'skipped';
+  /** The term list it was made with (KBC-040 FR-4). */
+  readonly termsVersion: number;
   readonly rawPath: string;
   readonly filterVersion: number;
   readonly confidenceVersion: number;
@@ -78,6 +81,25 @@ export interface JobLease {
 export interface TranscriptStorePort {
   /** The newest term list. */
   currentTerms(): TranscriptionTerms;
+  /** The list as a version had it; null when there is no such version. */
+  termsAt(version: number): TranscriptionTerms | null;
+  /** Every version of the list, newest first (KBC-040 BR-1). */
+  termVersions(): TermVersion[];
+  /** One version of the list, null when unknown. */
+  termVersion(version: number): TermVersion | null;
+  /**
+   * Stores the list as the next version; false when `baseVersion` is no longer the newest.
+   * Queues nothing: only a person asks for a transcription again.
+   */
+  saveTerms(input: {
+    readonly baseVersion: number;
+    readonly terms: readonly string[];
+    readonly author: {
+      readonly principal: string;
+      readonly name: string | null;
+    };
+    readonly now: Date;
+  }): boolean;
   /** The job when `owner` holds its lease now; null otherwise. */
   heldJob(owner: LeaseOwner): JobLease | null;
   /**
