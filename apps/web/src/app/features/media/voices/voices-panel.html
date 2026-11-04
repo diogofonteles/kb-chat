@@ -24,19 +24,145 @@
           Feita sobre uma transcrição anterior.
         </p>
       }
+      @if (result.namesPending) {
+        <div class="confirm">
+          <p class="confirm-title" i18n="@@voices.confirmTitle">
+            Confirme os nomes das vozes
+          </p>
+          <p class="hint" i18n="@@voices.confirmHint">
+            Eles vieram da separação anterior. Quem ouve só os vê depois da
+            confirmação.
+          </p>
+          <button
+            type="button"
+            class="primary"
+            [disabled]="busy()"
+            (click)="confirmNames()"
+            i18n="@@voices.confirm"
+          >
+            Confirmar nomes
+          </button>
+        </div>
+      }
       @if (voices().length > 0) {
         <ul class="voice-list">
           @for (one of voices(); track one.voice) {
             <li class="voice">
-              <app-voice-tag [voice]="one.voice" />&ngsp;<span
-                class="spoken"
-                i18n="@@voices.spoken"
-                >{{ one.spoken }} de fala</span
-              >
+              <div class="voice-head">
+                <app-voice-tag [voice]="one.voice" />&ngsp;<span
+                  class="spoken"
+                  i18n="@@voices.spoken"
+                  >{{ one.spoken }} de fala</span
+                >
+                <button
+                  type="button"
+                  class="secondary sample"
+                  (click)="playSample(one.voice)"
+                >
+                  @if (sample.playing() === one.voice) {
+                    <ng-container i18n="@@voices.sampleStop"
+                      >Parar amostra da Voz {{ one.voice }}</ng-container
+                    >
+                  } @else {
+                    <ng-container i18n="@@voices.sample"
+                      >Ouvir amostra da Voz {{ one.voice }}</ng-container
+                    >
+                  }
+                </button>
+              </div>
+              <app-speaker-combobox
+                [voice]="one.voice"
+                [current]="one.current"
+                [speakers]="collectionSpeakers()"
+                [authors]="authors()"
+                [disabled]="busy()"
+                (chosen)="nameVoice(one.voice, $event)"
+              />
             </li>
           }
         </ul>
+        @if (sample.failed()) {
+          <p class="field-error" role="alert" i18n="@@voices.sampleFailed">
+            Não consegui tocar a amostra.
+          </p>
+        }
+        <p class="saved" aria-live="polite">{{ saved() }}</p>
       }
+      @for (one of result.merged; track one.voice) {
+        <p class="merged">
+          <span i18n="@@voices.mergedInto"
+            >Voz {{ one.voice }} junta à Voz {{ one.into }}</span
+          >
+          <button
+            type="button"
+            class="secondary"
+            [disabled]="busy()"
+            (click)="split(one.voice)"
+            i18n="@@voices.split"
+          >
+            Separar a Voz {{ one.voice }}
+          </button>
+        </p>
+      }
+      @if (voices().length > 1) {
+        <form class="merge" novalidate (submit)="merge($event)">
+          <h4 class="merge-title" i18n="@@voices.mergeTitle">Juntar vozes</h4>
+          <p class="hint" i18n="@@voices.mergeHint">
+            Para duas vozes que são a mesma pessoa. Dá para desfazer.
+          </p>
+          <div class="row">
+            <label class="select">
+              <span class="label" i18n="@@voices.mergeVoice">Juntar a voz</span>
+              <select (change)="chooseMergeVoice($event)">
+                <option value="" [selected]="mergeVoice() === null"></option>
+                @for (one of voices(); track one.voice) {
+                  <option
+                    [value]="one.voice"
+                    [selected]="mergeVoice() === one.voice"
+                    i18n="@@voices.voiceOption"
+                  >
+                    Voz {{ one.voice }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label class="select">
+              <span class="label" i18n="@@voices.mergeInto">com a voz</span>
+              <select (change)="chooseMergeInto($event)">
+                <option value="" [selected]="mergeInto() === null"></option>
+                @for (one of mergeTargets(); track one.voice) {
+                  <option
+                    [value]="one.voice"
+                    [selected]="mergeInto() === one.voice"
+                    i18n="@@voices.voiceOption"
+                  >
+                    Voz {{ one.voice }}
+                  </option>
+                }
+              </select>
+            </label>
+            <button
+              type="submit"
+              class="secondary"
+              [disabled]="busy()"
+              i18n="@@voices.mergeAction"
+            >
+              Juntar
+            </button>
+          </div>
+          @if (mergeInvalid()) {
+            <p class="field-error" role="alert" i18n="@@voices.mergeInvalid">
+              Escolha as duas vozes.
+            </p>
+          }
+        </form>
+      }
+      <app-collection-speakers
+        [topic]="topic()"
+        [speakers]="collectionSpeakers()"
+        [authors]="authors()"
+        (changed)="speakerChanged()"
+      />
     }
     @if (speakers.canRequest) {
       <form class="request" novalidate (submit)="request($event)">

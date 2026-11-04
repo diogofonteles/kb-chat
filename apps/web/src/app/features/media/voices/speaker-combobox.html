@@ -1,0 +1,55 @@
+<label class="label" [for]="inputId" i18n="@@voices.who"
+  >Quem é a Voz {{ voice() }}?</label
+>
+<input
+  type="text"
+  role="combobox"
+  autocomplete="off"
+  aria-autocomplete="list"
+  [id]="inputId"
+  [value]="text()"
+  [disabled]="disabled()"
+  [attr.aria-expanded]="expanded()"
+  [attr.aria-controls]="listId"
+  [attr.aria-activedescendant]="activeId()"
+  [attr.aria-describedby]="invalid() ? errorId : null"
+  [attr.aria-invalid]="invalid() ? 'true' : null"
+  (input)="typed($event)"
+  (click)="toggle()"
+  (keydown)="keydown($event)"
+  (blur)="leave()"
+/>
+<ul
+  class="options"
+  role="listbox"
+  aria-label="Falantes do acervo"
+  i18n-aria-label="@@voices.listLabel"
+  [id]="listId"
+  [hidden]="!expanded()"
+>
+  @for (option of options(); track option.key; let index = $index) {
+    <li
+      role="option"
+      [id]="optionId(index)"
+      [class.active]="index === active()"
+      [class.register]="option.key === '+new'"
+      [attr.aria-selected]="index === active()"
+      tabindex="-1"
+      (mousedown)="choose($event, option)"
+    >
+      @if (option.main) {
+        <span class="mark" aria-hidden="true">✦</span>
+        <span class="visually-hidden" i18n="@@media.author.mainPrefix"
+          >Autor principal:&nbsp;</span
+        >
+      }
+      {{ option.label }}
+    </li>
+  }
+</ul>
+@if (invalid()) {
+  <p class="error" [id]="errorId" i18n="@@voices.nameInvalid">
+    <span aria-hidden="true">⚠</span> O nome deve ter de 1 a {{ nameMax }}
+    caracteres, em uma linha, sem aspas nem « ».
+  </p>
+}

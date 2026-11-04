@@ -5,13 +5,37 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { fireEvent, render, screen } from '@testing-library/angular';
-import type { Diarization, MediaSpeakers } from '@kb-chat/contracts';
+import { fireEvent, render, screen, within } from '@testing-library/angular';
+import type {
+  Diarization,
+  MediaSpeakers,
+  VoiceLabel,
+} from '@kb-chat/contracts';
+import { MediaEngine } from '@core/media/media-engine.js';
+import { SAMPLE_ELEMENT_FACTORY } from './voice-sample.js';
 import { VoicesPanel } from './voices-panel.js';
 
 const MEDIA_ID = '11111111-1111-4111-8111-111111111111';
 const URL = `/api/v1/media/${MEDIA_ID}/speakers`;
 const DIARIZE = `/api/v1/media/${MEDIA_ID}/diarize`;
+const VOICES = `/api/v1/media/${MEDIA_ID}/voices`;
+const TOPIC_SPEAKERS = '/api/v1/topics/udv/speakers';
+const TOPIC_AUTHORS = '/api/v1/topics/udv/authors';
+const ANA = {
+  id: '00000000-0000-4000-8000-000000000001',
+  name: 'Ana',
+  authorSlug: null,
+  main: false,
+};
+const MASTER = { slug: 'mestre-gabriel', name: 'Mestre Gabriel', main: true };
+
+const unnamed = (voice: number): VoiceLabel => ({
+  voice,
+  kind: 'unnamed',
+  speakerId: null,
+  name: null,
+  main: false,
+});
 
 const aDiarization = (overrides: Partial<Diarization> = {}): Diarization => ({
   version: 1,
@@ -25,8 +49,15 @@ const aDiarization = (overrides: Partial<Diarization> = {}): Diarization => ({
     { voice: 2, speakingMs: 642_900 },
     { voice: 3, speakingMs: 5_000 },
   ],
-  turns: [],
+  turns: [
+    { voice: 1, startMs: 0, endMs: 12_100 },
+    { voice: 2, startMs: 12_100, endMs: 655_000 },
+    { voice: 3, startMs: 655_000, endMs: 660_000 },
+  ],
   segments: [],
+  labels: [unnamed(1), unnamed(2), unnamed(3)],
+  merged: [],
+  namesPending: false,
   ...overrides,
 });
 
@@ -40,20 +71,40 @@ const speakers = (overrides: Partial<MediaSpeakers> = {}): MediaSpeakers => ({
   ...overrides,
 });
 
+const ENGINE = { playing: () => false, pause: vi.fn(), play: vi.fn() };
+const renames = { count: 0 };
+const fakeSample = () => {
+  const element = document.createElement('audio');
+  element.play = () => Promise.resolve();
+  element.pause = () => undefined;
+  return element;
+};
+
 async function renderPanel(first: MediaSpeakers) {
+  renames.count = 0;
   const result = await render(VoicesPanel, {
-    inputs: { mediaId: MEDIA_ID },
+    inputs: { mediaId: MEDIA_ID, topic: 'udv' },
+    on: { renamed: () => (renames.count += 1) },
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
+      { provide: MediaEngine, useValue: ENGINE },
+      { provide: SAMPLE_ELEMENT_FACTORY, useValue: fakeSample },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
   http.expectOne(URL).flush(first);
   await result.fixture.whenStable();
+  if (first.diarization) flushLists(http);
+  await result.fixture.whenStable();
   return { ...result, http };
 }
+
+const flushLists = (http: HttpTestingController) => {
+  http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
+  http.expectOne(TOPIC_AUTHORS).flush({ items: [MASTER] });
+};
 
 const status = () => screen.getByRole('status').textContent?.trim();
 
@@ -140,11 +191,12 @@ describe('VoicesPanel (KBC-064 FR-1, FR-4)', () => {
     expect(status()).toBe('Vozes separadas: 3');
     const voices = screen
       .getAllByRole('listitem')
-      .map((item) => item.textContent?.replace(/\s+/g, ' ').trim());
+      .map((item) => item.querySelector('.voice-head')?.textContent)
+      .map((text) => text?.replace(/\s+/g, ' ').trim());
     expect(voices).toEqual([
-      'Voz 1 0:12 de fala',
-      'Voz 2 10:42 de fala',
-      'Voz 3 0:05 de fala',
+      'Voz 1 0:12 de fala Ouvir amostra da Voz 1',
+      'Voz 2 10:42 de fala Ouvir amostra da Voz 2',
+      'Voz 3 0:05 de fala Ouvir amostra da Voz 3',
     ]);
     expect(
       screen.getByRole('button', { name: 'Separar vozes de novo' }),
@@ -244,5 +296,282 @@ describe('VoicesPanel (KBC-064 FR-1, FR-4)', () => {
     http.expectOne(URL).flush(speakers());
     await result.fixture.whenStable();
     expect(screen.getByRole('button', { name: 'Separar vozes' })).toBeTruthy();
+  });
+});
+
+describe('VoicesPanel: naming the voices (KBC-065)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  const done = (overrides: Partial<Diarization> = {}) =>
+    speakers({ status: 'done', diarization: aDiarization(overrides) });
+  const field = (voice: number) =>
+    screen.getByRole<HTMLInputElement>('combobox', {
+      name: `Quem é a Voz ${voice}?`,
+    });
+
+  async function choose(
+    fixture: { whenStable(): Promise<unknown> },
+    voice: number,
+    option: string | RegExp,
+  ) {
+    fireEvent.click(field(voice));
+    await fixture.whenStable();
+    fireEvent.mouseDown(
+      within(
+        field(voice).closest('app-speaker-combobox') as HTMLElement,
+      ).getByRole('option', { name: option }),
+    );
+  }
+
+  it('AC-2: offers the speakers and authors of the collection, and names a voice', async () => {
+    const { fixture, http } = await renderPanel(done());
+    fireEvent.click(field(1));
+    await fixture.whenStable();
+    const list = within(
+      field(1).closest('app-speaker-combobox') as HTMLElement,
+    );
+    expect(
+      list.getAllByRole('option').map((one) => one.textContent?.trim()),
+    ).toEqual([
+      'Pergunta da plateia',
+      expect.stringContaining('Mestre Gabriel'),
+      'Ana',
+    ]);
+    fireEvent.mouseDown(list.getByRole('option', { name: 'Ana' }));
+    const put = http.expectOne({ method: 'PUT', url: `${VOICES}/1` });
+    expect(put.request.body).toEqual({
+      version: 1,
+      speakerId: ANA.id,
+      audience: false,
+    });
+    put.flush(
+      done({
+        labels: [
+          { ...unnamed(1), kind: 'person', speakerId: ANA.id, name: 'Ana' },
+          unnamed(2),
+          unnamed(3),
+        ],
+      }),
+    );
+    await fixture.whenStable();
+    expect(field(1).value).toBe('Ana');
+    expect(document.body.textContent).toContain('Nome salvo.');
+    expect(renames.count).toBe(1);
+  });
+
+  it('AC-1: marks a voice as the audience', async () => {
+    const { fixture, http } = await renderPanel(done());
+    await choose(fixture, 2, 'Pergunta da plateia');
+    const put = http.expectOne({ method: 'PUT', url: `${VOICES}/2` });
+    expect(put.request.body).toEqual({
+      version: 1,
+      speakerId: null,
+      audience: true,
+    });
+    put.flush(
+      done({
+        labels: [unnamed(1), { ...unnamed(2), kind: 'audience' }, unnamed(3)],
+      }),
+    );
+    await fixture.whenStable();
+    expect(field(2).value).toBe('Pergunta da plateia');
+  });
+
+  it('turns an author into a speaker first, then names the voice', async () => {
+    const { fixture, http } = await renderPanel(done());
+    await choose(fixture, 1, /Mestre Gabriel/);
+    const created = http.expectOne({ method: 'POST', url: TOPIC_SPEAKERS });
+    expect(created.request.body).toEqual({
+      name: 'Mestre Gabriel',
+      authorSlug: 'mestre-gabriel',
+    });
+    created.flush({ ...ANA, name: 'Mestre Gabriel', main: true });
+    await fixture.whenStable();
+    http.expectOne({ method: 'PUT', url: `${VOICES}/1` }).flush(done());
+    http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
+    await fixture.whenStable();
+  });
+
+  it('registers a new name typed in the field', async () => {
+    const { fixture, http } = await renderPanel(done());
+    fireEvent.input(field(3), { target: { value: 'Maria' } });
+    fireEvent.keyDown(field(3), { key: 'Enter' });
+    const created = http.expectOne({ method: 'POST', url: TOPIC_SPEAKERS });
+    expect(created.request.body).toEqual({ name: 'Maria' });
+    created.flush({ ...ANA, name: 'Maria' });
+    await fixture.whenStable();
+    http.expectOne({ method: 'PUT', url: `${VOICES}/3` }).flush(done());
+    http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
+    await fixture.whenStable();
+  });
+
+  it('reads the voices again and says so when they changed (409)', async () => {
+    const { fixture, http } = await renderPanel(done());
+    await choose(fixture, 1, 'Ana');
+    http
+      .expectOne({ method: 'PUT', url: `${VOICES}/1` })
+      .flush(
+        { error: { code: 'MEDIA_CONFLICT', message: 'old' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    TestBed.tick();
+    http.expectOne(URL).flush(done());
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'As vozes mudaram.',
+    );
+  });
+
+  it('says a failure to save', async () => {
+    const { fixture, http } = await renderPanel(done());
+    await choose(fixture, 1, 'Ana');
+    http
+      .expectOne({ method: 'PUT', url: `${VOICES}/1` })
+      .flush(null, { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui salvar.',
+    );
+  });
+
+  it('AC-3: joins two voices and offers to undo it', async () => {
+    const { fixture, http } = await renderPanel(done());
+    const from = screen.getByLabelText('Juntar a voz');
+    fireEvent.change(from, { target: { value: '3' } });
+    await fixture.whenStable();
+    const into = screen.getByLabelText('com a voz');
+    expect(within(into).queryByRole('option', { name: 'Voz 3' })).toBeNull();
+    fireEvent.change(into, { target: { value: '2' } });
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Juntar' }));
+    const merged = http.expectOne({ method: 'POST', url: `${VOICES}/merge` });
+    expect(merged.request.body).toEqual({ version: 1, voice: 3, into: 2 });
+    merged.flush(
+      done({
+        voiceCount: 2,
+        voices: [
+          { voice: 1, speakingMs: 12_100 },
+          { voice: 2, speakingMs: 647_900 },
+        ],
+        merged: [{ voice: 3, into: 2 }],
+      }),
+    );
+    await fixture.whenStable();
+    expect(document.body.textContent).toContain('Voz 3 junta à Voz 2');
+    fireEvent.click(screen.getByRole('button', { name: 'Separar a Voz 3' }));
+    const split = http.expectOne({ method: 'POST', url: `${VOICES}/split` });
+    expect(split.request.body).toEqual({ version: 1, voice: 3 });
+    split.flush(done());
+    await fixture.whenStable();
+    expect(document.body.textContent).not.toContain('Voz 3 junta à Voz 2');
+  });
+
+  it('asks for both voices before joining', async () => {
+    const { fixture, http } = await renderPanel(done());
+    fireEvent.click(screen.getByRole('button', { name: 'Juntar' }));
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Escolha as duas vozes.',
+    );
+    http.expectNone(`${VOICES}/merge`);
+  });
+
+  it('has nothing to join with one voice', async () => {
+    await renderPanel(
+      done({
+        voiceCount: 1,
+        voices: [{ voice: 1, speakingMs: 60_000 }],
+        labels: [unnamed(1)],
+      }),
+    );
+    expect(screen.queryByRole('button', { name: 'Juntar' })).toBeNull();
+  });
+
+  it('AC-6: asks to confirm the names of a new separation until someone does', async () => {
+    const { fixture, http } = await renderPanel(done({ namesPending: true }));
+    expect(document.body.textContent).toContain('Confirme os nomes das vozes');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar nomes' }));
+    const confirmed = http.expectOne({
+      method: 'POST',
+      url: `${VOICES}/confirm`,
+    });
+    expect(confirmed.request.body).toEqual({ version: 1 });
+    confirmed.flush(done());
+    await fixture.whenStable();
+    expect(document.body.textContent).not.toContain(
+      'Confirme os nomes das vozes',
+    );
+  });
+
+  it('AC-8: each voice has its sample button, whose name follows the state', async () => {
+    const { fixture } = await renderPanel(done());
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ouvir amostra da Voz 2' }),
+    );
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Parar amostra da Voz 2' }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Parar amostra da Voz 2' }),
+    );
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Ouvir amostra da Voz 2' }),
+    ).toBeTruthy();
+  });
+
+  it('renames a speaker of the collection and reads the names again', async () => {
+    const { fixture, http } = await renderPanel(done());
+    fireEvent.click(screen.getByRole('button', { name: /^Editar\s+Ana$/ }));
+    await fixture.whenStable();
+    const name = screen.getByLabelText('Nome');
+    fireEvent.input(name, { target: { value: 'Ana Maria' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const patched = http.expectOne({
+      method: 'PATCH',
+      url: `${TOPIC_SPEAKERS}/${ANA.id}`,
+    });
+    expect(patched.request.body).toEqual({
+      name: 'Ana Maria',
+      authorSlug: null,
+    });
+    patched.flush({ ...ANA, name: 'Ana Maria' });
+    TestBed.tick();
+    http.expectOne(TOPIC_SPEAKERS).flush({ items: [ANA] });
+    http.expectOne(URL).flush(done());
+    await fixture.whenStable();
+    expect(renames.count).toBe(1);
+  });
+
+  it('says a speaker name is taken or invalid at the form', async () => {
+    const { fixture, http } = await renderPanel(done());
+    fireEvent.click(screen.getByRole('button', { name: /^Editar\s+Ana$/ }));
+    await fixture.whenStable();
+    fireEvent.input(screen.getByLabelText('Nome'), {
+      target: { value: 'a'.repeat(121) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'de 1 a 120 caracteres',
+    );
+    fireEvent.input(screen.getByLabelText('Nome'), {
+      target: { value: 'Bia' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    http
+      .expectOne({ method: 'PATCH', url: `${TOPIC_SPEAKERS}/${ANA.id}` })
+      .flush(
+        { error: { code: 'MEDIA_CONFLICT', message: 'taken' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Já existe um falante com esse nome.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    expect(screen.queryByLabelText('Nome')).toBeNull();
   });
 });

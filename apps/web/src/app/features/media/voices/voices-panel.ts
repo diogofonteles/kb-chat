@@ -8,6 +8,7 @@ import {
   computed,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import {
@@ -17,16 +18,41 @@ import {
 } from '@angular/core/rxjs-interop';
 import {
   MAX_VOICES,
+  authorListSchema,
+  collectionSpeakerListSchema,
   mediaSpeakersSchema,
+  type CollectionSpeaker,
   type DiarizationStatus,
   type MediaSpeakers,
+  type VoiceLabel,
 } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
 import { seenAtFormat } from '@core/i18n/date-formats.js';
-import { SpeakersApi, speakersUrl } from '@core/media/speakers-api.js';
-import { EMPTY, distinctUntilChanged, filter, interval, switchMap } from 'rxjs';
+import { authorsUrl } from '@core/media/authors-api.js';
+import { mediaStreamUrl } from '@core/media/media-api.js';
+import {
+  SpeakersApi,
+  collectionSpeakersUrl,
+  speakersUrl,
+} from '@core/media/speakers-api.js';
+import {
+  EMPTY,
+  distinctUntilChanged,
+  filter,
+  interval,
+  map,
+  of,
+  switchMap,
+  type Observable,
+} from 'rxjs';
 import { MEDIA_POLL_MS } from '../media-polling.js';
 import { SLOW_POLL_FACTOR } from '../media-labels.js';
+import { CollectionSpeakers } from './collection-speakers.js';
+import { audienceLabel } from './speaker-names.js';
+import { SpeakerCombobox } from './speaker-combobox.js';
+import type { SpeakerChoice } from './speaker-suggestions.js';
+import { sampleOf } from './voice-changes.js';
+import { VoiceSample } from './voice-sample.js';
 import { VoiceTag } from './voice-tag.js';
 
 type Label = (speakers: MediaSpeakers, locale: string) => string;
@@ -61,6 +87,12 @@ function pollEveryOf(speakers: MediaSpeakers | null, fastMs: number) {
   return null;
 }
 
+/** The voice chosen in a select; null for its blank option. */
+function voiceOf(event: Event): number | null {
+  const value = Number((event.target as HTMLSelectElement).value);
+  return value > 0 ? value : null;
+}
+
 /** "3", "", or null when the field holds something that is not 1 to 10 (MA-23). */
 function parseVoices(text: string): number | null | 'invalid' {
   const trimmed = text.trim();
@@ -71,16 +103,26 @@ function parseVoices(text: string): number | null | 'invalid' {
     : 'invalid';
 }
 
+/** What the field shows for a voice; '' with no name. */
+function fieldTextOf(label: VoiceLabel | undefined): string {
+  if (label?.kind === 'person') return label.name ?? '';
+  return label?.kind === 'audience' ? audienceLabel() : '';
+}
+
+/** A voice with no name. */
+const NO_LABEL = { speakerId: null, audience: false };
+
 /**
- * "Vozes" on the audio page (screens.md T15; KBC-064 FR-1, FR-4): for whoever edits
+ * "Vozes" on the audio page (screens.md T15; KBC-064 FR-1, FR-4; KBC-065): for whoever edits
  * recordings. Asks the Mac to separate the voices, with an optional number of voices,
- * follows the job in words and lists the voices found. The labels in the transcript
- * itself are KBC-038's panel's (`app-voice-tag`, `voiceChangeStarts`): `separated` tells
- * the page which separation is current, so it reads the transcript's voices again.
+ * follows the job in words, lists the voices found and says who each one is. The labels in
+ * the transcript itself are KBC-038's panel's: `separated` and `renamed` tell the page to
+ * read the transcript's voices again.
  */
 @Component({
   selector: 'app-voices-panel',
-  imports: [VoiceTag],
+  imports: [CollectionSpeakers, SpeakerCombobox, VoiceTag],
+  providers: [VoiceSample],
   templateUrl: './voices-panel.html',
   styleUrl: './voices-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -90,7 +132,12 @@ export class VoicesPanel {
   private readonly destroyRef = inject(DestroyRef);
   private readonly locale = inject(LOCALE_ID);
   private readonly pollMs = inject(MEDIA_POLL_MS);
+  protected readonly sample = inject(VoiceSample);
   readonly mediaId = input.required<string>();
+  /** The audio's collection: its speakers and authors (a sub-collection's are its parent's). */
+  readonly topic = input.required<string>();
+  /** A name or a join changed. */
+  readonly renamed = output();
   /** The current separation's version, each time a new one is shown. */
   readonly separated = outputFromObservable(
     toObservable(computed(() => this.diarization()?.version ?? null)).pipe(
@@ -113,12 +160,34 @@ export class VoicesPanel {
   protected readonly diarization = computed(
     () => this.current()?.diarization ?? null,
   );
-  protected readonly voices = computed(() =>
-    (this.diarization()?.voices ?? []).map((one) => ({
-      voice: one.voice,
-      spoken: formatClock(one.speakingMs),
-    })),
+  /** The lists the voices' fields offer, read once there are voices to name. */
+  protected readonly speakerList = httpResource(
+    () =>
+      this.diarization() ? collectionSpeakersUrl(this.topic()) : undefined,
+    { parse: (body) => collectionSpeakerListSchema.parse(body) },
   );
+  private readonly authorList = httpResource(
+    () => (this.diarization() ? authorsUrl(this.topic()) : undefined),
+    { parse: (body) => authorListSchema.parse(body) },
+  );
+  protected readonly collectionSpeakers = computed(() =>
+    this.speakerList.hasValue() ? this.speakerList.value().items : [],
+  );
+  protected readonly authors = computed(() =>
+    this.authorList.hasValue() ? this.authorList.value().items : [],
+  );
+  protected readonly voices = computed(() => {
+    const diarization = this.diarization();
+    const labels = diarization?.labels ?? [];
+    return (diarization?.voices ?? []).map((one) => {
+      const label = labels.find(({ voice }) => voice === one.voice);
+      return {
+        voice: one.voice,
+        spoken: formatClock(one.speakingMs),
+        current: fieldTextOf(label),
+      };
+    });
+  });
   /** Nothing waits or runs and there is no transcript yet: why the button is missing. */
   protected readonly needsTranscript = computed(() => {
     const speakers = this.current();
@@ -139,6 +208,14 @@ export class VoicesPanel {
   protected readonly invalid = signal(false);
   protected readonly busy = signal(false);
   protected readonly failure = signal('');
+  /** "Nome salvo." and the like: said after each change (UP-01). */
+  protected readonly saved = signal('');
+  protected readonly mergeVoice = signal<number | null>(null);
+  protected readonly mergeInto = signal<number | null>(null);
+  protected readonly mergeInvalid = signal(false);
+  protected readonly mergeTargets = computed(() =>
+    this.voices().filter(({ voice }) => voice !== this.mergeVoice()),
+  );
 
   constructor() {
     this.pollWhileWorking();
@@ -166,6 +243,143 @@ export class VoicesPanel {
 
   protected reload(): void {
     this.speakers.reload();
+  }
+
+  protected playSample(voice: number): void {
+    const range = sampleOf(this.diarization()?.turns ?? [], voice);
+    if (range)
+      this.sample.toggle({
+        voice,
+        src: mediaStreamUrl(this.mediaId()),
+        ...range,
+      });
+  }
+
+  /** Saves what the voice's field chose, registering the speaker first when needed. */
+  protected nameVoice(voice: number, choice: SpeakerChoice): void {
+    const version = this.diarization()?.version;
+    if (version === undefined) return;
+    this.apply(
+      this.labelFor(choice).pipe(
+        switchMap((label) =>
+          this.api.nameVoice(this.mediaId(), voice, { version, ...label }),
+        ),
+      ),
+      $localize`:@@voices.saved:Nome salvo.`,
+    );
+  }
+
+  protected chooseMergeVoice(event: Event): void {
+    const voice = voiceOf(event);
+    this.mergeVoice.set(voice);
+    if (this.mergeInto() === voice) this.mergeInto.set(null);
+    this.mergeInvalid.set(false);
+  }
+
+  protected chooseMergeInto(event: Event): void {
+    this.mergeInto.set(voiceOf(event));
+    this.mergeInvalid.set(false);
+  }
+
+  protected merge(event: Event): void {
+    event.preventDefault();
+    const version = this.diarization()?.version;
+    const voice = this.mergeVoice();
+    const into = this.mergeInto();
+    if (version === undefined || voice === null || into === null)
+      return this.mergeInvalid.set(true);
+    this.apply(
+      this.api.mergeVoices(this.mediaId(), { version, voice, into }),
+      $localize`:@@voices.merged:Vozes juntadas.`,
+    );
+    this.mergeVoice.set(null);
+    this.mergeInto.set(null);
+  }
+
+  /** Undoes a join (UP-07). */
+  protected split(voice: number): void {
+    const version = this.diarization()?.version;
+    if (version === undefined) return;
+    this.apply(
+      this.api.splitVoice(this.mediaId(), { version, voice }),
+      $localize`:@@voices.splitDone:Vozes separadas de novo.`,
+    );
+  }
+
+  protected confirmNames(): void {
+    const version = this.diarization()?.version;
+    if (version === undefined) return;
+    this.apply(
+      this.api.confirmNames(this.mediaId(), version),
+      $localize`:@@voices.confirmed:Nomes confirmados.`,
+    );
+  }
+
+  /** A speaker's name or author changed: the list and every label are read again. */
+  protected speakerChanged(): void {
+    this.speakerList.reload();
+    this.speakers.reload();
+    this.renamed.emit();
+  }
+
+  /** What the chosen option saves; a new name or an author becomes a speaker first. */
+  private labelFor(
+    choice: SpeakerChoice,
+  ): Observable<{ speakerId: string | null; audience: boolean }> {
+    const label = (speaker: CollectionSpeaker) => {
+      this.speakerList.reload();
+      return { speakerId: speaker.id, audience: false };
+    };
+    switch (choice.kind) {
+      case 'speaker':
+        return of({ speakerId: choice.id, audience: false });
+      case 'audience':
+        return of({ speakerId: null, audience: true });
+      case 'none':
+        return of(NO_LABEL);
+      case 'new':
+        return this.api
+          .createSpeaker(this.topic(), { name: choice.name })
+          .pipe(map(label));
+      case 'author':
+        return this.api
+          .createSpeaker(this.topic(), {
+            name: choice.author.name,
+            authorSlug: choice.author.slug,
+          })
+          .pipe(map(label));
+    }
+  }
+
+  /** Sends a change: the answer is the new state of the voices. */
+  private apply(change: Observable<MediaSpeakers>, done: string): void {
+    this.busy.set(true);
+    this.failure.set('');
+    this.saved.set('');
+    change.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (speakers) => {
+        this.busy.set(false);
+        this.speakers.set(speakers);
+        this.saved.set(done);
+        this.renamed.emit();
+      },
+      error: (err: unknown) => this.changeFailed(err),
+    });
+  }
+
+  /** 409: the voices changed under the screen; it reads them again and says so. */
+  private changeFailed(err: unknown): void {
+    this.busy.set(false);
+    if (err instanceof HttpErrorResponse && err.status === 409) {
+      this.speakers.reload();
+      this.failure.set(
+        $localize`:@@voices.changed:As vozes mudaram. Veja de novo e repita.`,
+      );
+      return;
+    }
+    this.failure.set(
+      $localize`:@@voices.saveFailed:Não consegui salvar. Tente de novo.`,
+    );
   }
 
   private settle(speakers: MediaSpeakers): void {

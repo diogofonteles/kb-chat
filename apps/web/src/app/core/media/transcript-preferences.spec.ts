@@ -31,6 +31,15 @@ describe('TranscriptPreferences (KBC-038 FR-6, FR-9)', () => {
     expect(announcer.message()).toBe('Legendas desligadas');
   });
 
+  it('shows who speaks by default and remembers turning it off (KBC-065 FR-4)', () => {
+    const first = TestBed.inject(TranscriptPreferences);
+    expect(first.speakersOn()).toBe(true);
+    first.toggleSpeakers();
+    expect(first.speakersOn()).toBe(false);
+    TestBed.resetTestingModule();
+    expect(TestBed.inject(TranscriptPreferences).speakersOn()).toBe(false);
+  });
+
   it('still works when the browser keeps nothing (a private window)', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked');
@@ -40,6 +49,7 @@ describe('TranscriptPreferences (KBC-038 FR-6, FR-9)', () => {
     });
     const preferences = TestBed.inject(TranscriptPreferences);
     expect(preferences.captionsOn()).toBe(false);
+    expect(preferences.speakersOn()).toBe(true);
     preferences.toggleCaptions();
     expect(preferences.captionsOn()).toBe(true);
   });

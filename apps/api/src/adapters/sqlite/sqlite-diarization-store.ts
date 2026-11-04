@@ -199,12 +199,17 @@ export class SqliteDiarizationStore implements DiarizationStorePort {
     diarization.wordVoices.forEach((voice, position) =>
       word.run(diarization.id, position, voice),
     );
+    this.insertLabels(diarization);
+  }
+
+  /** The names carried over from the separation before (KBC-065 FR-5). */
+  private insertLabels({ id, labels }: NewDiarization): void {
     const label = this.db.prepare(
       `INSERT INTO media_voice_labels (diarization_id, voice, speaker_id, audience)
        VALUES (?, ?, ?, ?)`,
     );
-    diarization.labels.forEach((one) =>
-      label.run(diarization.id, one.voice, one.speakerId, one.audience ? 1 : 0),
+    labels.forEach((one) =>
+      label.run(id, one.voice, one.speakerId, one.audience ? 1 : 0),
     );
   }
 }

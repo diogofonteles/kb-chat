@@ -80,6 +80,7 @@
         <app-media-player
           [cues]="cues()"
           [captionsAvailable]="hasTranscript()"
+          [speakersAvailable]="canSeeSpeakers()"
           [lowConfidence]="lowCaptions()"
         />
         @if (hasTranscript()) {
@@ -124,6 +125,7 @@
         <app-transcript-panel
           [transcript]="transcript.value()"
           [title]="current.title"
+          [showSpeakers]="speakersOn()"
         />
       } @else if (transcriptError()) {
         <div class="notice" role="alert">
@@ -154,7 +156,9 @@
       <app-voices-panel
         class="voices"
         [mediaId]="current.id"
+        [topic]="current.topic"
         (separated)="readVoicesOf($event)"
+        (renamed)="reloadTranscript()"
       />
     }
   }
