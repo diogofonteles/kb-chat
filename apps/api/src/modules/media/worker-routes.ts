@@ -227,6 +227,7 @@ export const workerRoutes =
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
     registerVoicePrints(app, deps);
+    registerVoiceComparison(app, deps.voicePrints);
   };
 
 function registerLease(app: FastifyInstance, service: WorkerService): void {
@@ -412,13 +413,12 @@ function registerDiarization(
   );
 }
 
-/** The print of a `voice-profile` job, and the audio of the recordings it uses (FR-2). */
+/** The audio of a recording a `voice-profile` job uses, and the job's print (FR-2). */
 function registerVoicePrints(
   app: FastifyInstance,
-  deps: WorkerRoutesDeps,
+  { voicePrints, transcription }: WorkerRoutesDeps,
 ): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const { voicePrints, transcription } = deps;
   typed.get(
     '/api/v1/media-worker/jobs/:id/audio/:mediaId',
     OPTIONS.sourceAudio,
@@ -447,6 +447,14 @@ function registerVoicePrints(
       return reply.code(204).send();
     },
   );
+}
+
+/** The prints of a separation's collection, for the time of its lease (FR-3, BR-5). */
+function registerVoiceComparison(
+  app: FastifyInstance,
+  voicePrints: VoicePrintService,
+): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.get(
     '/api/v1/media-worker/jobs/:id/voice-profiles',
     OPTIONS.voiceProfiles,

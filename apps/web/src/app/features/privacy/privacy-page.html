@@ -48,7 +48,17 @@
           <strong>Vozes das gravações:</strong> quando alguém que edita as
           gravações pede, o computador do transcritor marca onde muda a voz que
           fala ("Voz 1", "Voz 2"…). Isso vale só para aquela gravação e não liga
-          a voz a uma pessoa; nenhuma impressão de voz é guardada.
+          a voz a uma pessoa; sem consentimento, nenhuma impressão de voz é
+          guardada.
+        </li>
+        <li i18n="@@privacy.dataVoiceProfiles">
+          <strong>Perfis de voz (dado biométrico):</strong> só existem para quem
+          assinou um consentimento específico, ou, para pessoas falecidas, com
+          autorização escrita de quem responde pela obra. O perfil é uma
+          representação numérica da voz, calculada a partir de gravações do
+          acervo e guardada cifrada, junto com o registro do consentimento (quem
+          autorizou, quando, por qual meio e para qual finalidade). Nunca de
+          quem pergunta da plateia.
         </li>
         <li i18n="@@privacy.dataSettings">
           <strong>Configurações:</strong> suas preferências e, se você
@@ -68,6 +78,13 @@
         serviço de busca e de pesquisa com IA, para enviar os códigos de entrada
         e os avisos sobre pedidos de acesso, e para acompanhar o uso e o gasto
         do serviço. Não usamos os seus dados para publicidade.
+      </p>
+      <p i18n="@@privacy.purposeVoiceProfiles">
+        O perfil de voz tem uma única finalidade: sugerir o nome da pessoa a
+        quem edita as gravações do acervo onde ela foi cadastrada. A sugestão só
+        vira nome quando uma pessoa confirma. Base legal: consentimento
+        específico e destacado (LGPD, art. 11, I). O perfil de voz não vai para
+        terceiros nem para serviços de IA.
       </p>
     </section>
 
@@ -130,6 +147,13 @@
           Registros de uso: os que passam de 90 dias são apagados sempre que o
           servidor reinicia; você também pode pedir que sejam apagados antes.
         </li>
+        <li i18n="@@privacy.retentionVoiceProfiles">
+          Perfis de voz: enquanto o consentimento valer. Ao revogar, o perfil e
+          as sugestões pendentes são apagados em até 1 minuto. O perfil não
+          entra nas cópias de segurança. O registro do consentimento e da
+          revogação fica guardado como prova, e os nomes já confirmados por uma
+          pessoa continuam nas gravações.
+        </li>
         <li i18n="@@privacy.retentionShort">
           Códigos de entrada: 10 minutos. Sessões: 30 dias depois do último uso.
         </li>
@@ -148,7 +172,9 @@
       </p>
       <p i18n="@@privacy.rights">
         Pela LGPD, você pode pedir para ver, corrigir ou apagar os seus dados, e
-        pedir o fim do seu acesso a qualquer momento.
+        pedir o fim do seu acesso a qualquer momento. Quem tem perfil de voz
+        pode revogar o consentimento a qualquer momento, sem justificativa e sem
+        custo.
       </p>
       @if (loading()) {
         <p class="pending" aria-hidden="true">…</p>
@@ -165,7 +191,7 @@
     </section>
 
     <p class="updated" i18n="@@privacy.updated">
-      Última atualização: 3 de novembro de 2026.
+      Última atualização: 4 de novembro de 2026.
     </p>
     <p class="links">
       <a class="back" routerLink="/" i18n="@@privacy.back"

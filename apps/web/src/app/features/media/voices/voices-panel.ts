@@ -25,6 +25,7 @@ import {
   authorListSchema,
   collectionSpeakerListSchema,
   mediaSpeakersSchema,
+  type DecideVoiceSuggestionRequest,
   type DiarizationStatus,
   type MediaSpeakers,
   type VoiceLabel,
@@ -214,6 +215,9 @@ export class VoicesPanel {
         voice: one.voice,
         spoken: formatClock(one.speakingMs),
         current: fieldTextOf(label),
+        suggestion: this.current()?.voiceSuggestions.find(
+          ({ voice }) => voice === one.voice,
+        ),
       };
     });
   });
@@ -306,6 +310,30 @@ export class VoicesPanel {
       $localize`:@@voices.saved:Nome salvo.`,
       voice,
     );
+  }
+
+  /** "Parece ser" (KBC-071 AC-2): only this turns a suggestion into a name. */
+  protected decideSuggestion(
+    voice: number,
+    decision: DecideVoiceSuggestionRequest['decision'],
+  ): void {
+    const version = this.diarization()?.version;
+    if (version === undefined) return;
+    this.apply(
+      this.api.decideSuggestion(this.mediaId(), voice, { version, decision }),
+      decision === 'accept'
+        ? $localize`:@@voices.suggestionAccepted:Nome salvo.`
+        : $localize`:@@voices.suggestionRefused:Sugestão recusada.`,
+      voice,
+    );
+  }
+
+  protected acceptLabelOf(voice: number, name: string): string {
+    return $localize`:@@voices.suggestionAcceptLabel:Aceitar ${name}:name: para a Voz ${voice}:voice:`;
+  }
+
+  protected refuseLabelOf(voice: number, name: string): string {
+    return $localize`:@@voices.suggestionRefuseLabel:Recusar ${name}:name: para a Voz ${voice}:voice:`;
   }
 
   protected chooseMergeVoice(event: Event): void {

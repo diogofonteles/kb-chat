@@ -14,9 +14,11 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
+  TRANSCRIBER_KINDS,
   transcriberListSchema,
   type PairedTranscriber,
   type Transcriber,
+  type UpdateTranscriberRequest,
 } from '@kb-chat/contracts';
 import { seenAtFormat } from '@core/i18n/date-formats.js';
 import {
@@ -24,6 +26,7 @@ import {
   transcribersUrl,
 } from '@core/media/transcribers-api.js';
 
+type Kind = UpdateTranscriberRequest['kinds'][number];
 type CopyState = 'idle' | 'copied' | 'failed';
 type Copied = 'command' | 'token';
 type NameProblem = 'required' | 'taken' | null;
@@ -41,6 +44,21 @@ const COPIED: Record<Copied, () => string> = {
   command: () => $localize`:@@transcribers.commandCopied:Comando copiado.`,
   token: () => $localize`:@@transcribers.tokenCopied:Token copiado.`,
 };
+
+/** What a transcriber may do, with `kind` in or out. */
+const withKind = (
+  kinds: readonly Transcriber['kinds'][number][],
+  kind: Kind,
+  on: boolean,
+): Kind[] => {
+  const others = kinds.filter(
+    (one): one is Kind => one !== kind && isTranscriberKind(one),
+  );
+  return on ? [...others, kind] : others;
+};
+
+const isTranscriberKind = (kind: string): kind is Kind =>
+  (TRANSCRIBER_KINDS as readonly string[]).includes(kind);
 
 /**
  * "Transcritores" (KBC-036 FR-5, BR-1; masters only): pair the Mac that transcribes, see
@@ -153,19 +171,48 @@ export class TranscribersPanel {
   /** Marks or unmarks "Separa vozes" (KBC-064 FR-6); the status says what changed. */
   protected toggleDiarize(transcriber: Transcriber, event: Event): void {
     const on = (event.target as HTMLInputElement).checked;
+    this.setKinds(
+      transcriber,
+      withKind(transcriber.kinds, 'diarize', on),
+      on
+        ? $localize`:@@transcribers.diarizeOn:"${transcriber.name}:name:" agora separa vozes.`
+        : $localize`:@@transcribers.diarizeOff:"${transcriber.name}:name:" não separa mais vozes.`,
+    );
+  }
+
+  protected calculatesPrints(transcriber: Transcriber): boolean {
+    return transcriber.kinds.includes('voice-profile');
+  }
+
+  /** "Perfis de voz: Mac do dono": which one, in a list of alike boxes (WCAG 2.5.3). */
+  protected voicePrintLabelOf(transcriber: Transcriber): string {
+    return $localize`:@@transcribers.voicePrintLabel:Perfis de voz: ${transcriber.name}:name:`;
+  }
+
+  /** Off on every transcriber: without it no voice print reaches this Mac (ADR 0032). */
+  protected toggleVoicePrints(transcriber: Transcriber, event: Event): void {
+    const on = (event.target as HTMLInputElement).checked;
+    this.setKinds(
+      transcriber,
+      withKind(transcriber.kinds, 'voice-profile', on),
+      on
+        ? $localize`:@@transcribers.voicePrintOn:"${transcriber.name}:name:" agora trata perfis de voz.`
+        : $localize`:@@transcribers.voicePrintOff:"${transcriber.name}:name:" não trata mais perfis de voz.`,
+    );
+  }
+
+  private setKinds(
+    transcriber: Transcriber,
+    kinds: readonly Kind[],
+    done: string,
+  ): void {
     this.busy.set(true);
     this.notice.set(null);
     this.api
-      .setKinds(transcriber.id, on ? ['transcribe', 'diarize'] : ['transcribe'])
+      .setKinds(transcriber.id, [...kinds])
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () =>
-          this.settle({
-            kind: 'ok',
-            text: on
-              ? $localize`:@@transcribers.diarizeOn:"${transcriber.name}:name:" agora separa vozes.`
-              : $localize`:@@transcribers.diarizeOff:"${transcriber.name}:name:" não separa mais vozes.`,
-          }),
+        next: () => this.settle({ kind: 'ok', text: done }),
         error: () =>
           this.settle({
             kind: 'error',

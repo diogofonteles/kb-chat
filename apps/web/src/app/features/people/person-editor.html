@@ -45,6 +45,25 @@
   }
 </fieldset>
 
+@if (isMaster()) {
+  <fieldset class="group" [disabled]="busy()">
+    <legend class="legend" i18n="@@people.namedFeatures">
+      Só com autorização individual
+    </legend>
+    @for (feature of namedFeatures(); track feature.id) {
+      <label class="check">
+        <input
+          #box
+          type="checkbox"
+          [checked]="feature.checked"
+          (change)="toggleFeature(feature.id, box.checked)"
+        />
+        <span>{{ feature.label }}</span>
+      </label>
+    }
+  </fieldset>
+}
+
 <app-person-ai-editor
   [ai]="who.ai"
   [defaultAppAi]="defaultAppAi()"

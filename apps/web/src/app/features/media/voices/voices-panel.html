@@ -2,7 +2,7 @@
   <h3 id="voices-title" class="title" i18n="@@voices.title">Vozes</h3>
   <p class="lead" i18n="@@voices.lead">
     Marca onde muda a voz que fala (Voz 1, Voz 2…). Vale só para esta gravação;
-    nenhuma impressão de voz é guardada.
+    sem consentimento registrado, nenhuma impressão de voz é guardada.
   </p>
   @if (speakers.error()) {
     <div class="notice" role="alert">
@@ -81,6 +81,47 @@
                 [loading]="listsLoading()"
                 (chosen)="nameVoice(one.voice, $event)"
               />
+              @if (one.suggestion; as suggestion) {
+                <div class="suggestion">
+                  <p class="suggestion-text">
+                    @if (suggestion.level === 'high') {
+                      <ng-container i18n="@@voices.suggestionHigh"
+                        >Parece ser {{ suggestion.name }} (semelhança
+                        alta)</ng-container
+                      >
+                    } @else {
+                      <ng-container i18n="@@voices.suggestionMedium"
+                        >Parece ser {{ suggestion.name }} (semelhança
+                        média)</ng-container
+                      >
+                    }
+                  </p>
+                  <div class="row">
+                    <button
+                      type="button"
+                      class="secondary"
+                      [attr.aria-label]="
+                        acceptLabelOf(one.voice, suggestion.name)
+                      "
+                      (click)="decideSuggestion(one.voice, 'accept')"
+                      i18n="@@voices.suggestionAccept"
+                    >
+                      Aceitar
+                    </button>
+                    <button
+                      type="button"
+                      class="secondary"
+                      [attr.aria-label]="
+                        refuseLabelOf(one.voice, suggestion.name)
+                      "
+                      (click)="decideSuggestion(one.voice, 'refuse')"
+                      i18n="@@voices.suggestionRefuse"
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                </div>
+              }
               @if (fieldFailure() === one.voice) {
                 <p class="field-error" role="alert">{{ failure() }}</p>
               }

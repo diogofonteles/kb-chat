@@ -93,7 +93,7 @@ export class SqliteVoiceProfileStore implements VoiceProfileStorePort {
   }
 
   private insertConsent(profile: NewVoiceProfile): void {
-    const { consent, evidence } = profile;
+    const { consent } = profile;
     this.db
       .prepare(
         `INSERT INTO voice_consents (id, collection, speaker_id, speaker_name, subject,
@@ -116,18 +116,17 @@ export class SqliteVoiceProfileStore implements VoiceProfileStorePort {
         profile.registeredBy,
         profile.now.toISOString(),
       );
+    this.insertEvidence(profile.consentId, profile.evidence);
+  }
+
+  private insertEvidence(consentId: string, evidence: SealedEvidence): void {
+    const { kind, fileName, mime, sealed } = evidence;
     this.db
       .prepare(
         `INSERT INTO voice_consent_evidence (consent_id, kind, file_name, mime, sealed)
          VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(
-        profile.consentId,
-        evidence.kind,
-        evidence.fileName,
-        evidence.mime,
-        evidence.sealed,
-      );
+      .run(consentId, kind, fileName, mime, sealed);
   }
 
   private insertProfile(profile: NewVoiceProfile): void {
@@ -364,6 +363,9 @@ export class SqliteVoiceProfileStore implements VoiceProfileStorePort {
     by: string;
     now: Date;
   }): boolean {
+    const { diarizationId, voice, status, by } = input;
+    const counter =
+      status === 'accepted' ? 'suggestions_accepted' : 'suggestions_refused';
     return inTransaction(this.db, () => {
       const row = this.db
         .prepare(
@@ -371,21 +373,9 @@ export class SqliteVoiceProfileStore implements VoiceProfileStorePort {
            WHERE diarization_id = ? AND voice = ? AND status = 'pending'
            RETURNING profile_id`,
         )
-        .get(
-          input.status,
-          input.by,
-          input.now.toISOString(),
-          input.diarizationId,
-          input.voice,
-        );
-      if (!row) return false;
-      this.count(
-        input.status === 'accepted'
-          ? 'suggestions_accepted'
-          : 'suggestions_refused',
-        text(row, 'profile_id'),
-      );
-      return true;
+        .get(status, by, input.now.toISOString(), diarizationId, voice);
+      if (row) this.count(counter, text(row, 'profile_id'));
+      return row !== undefined;
     });
   }
 

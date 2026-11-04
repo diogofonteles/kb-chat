@@ -1,0 +1,67 @@
+<section class="block report" aria-labelledby="voice-report-title">
+  <h4 id="voice-report-title" class="block-title" i18n="@@voiceReport.title">
+    Perfis e consentimentos
+  </h4>
+  @if (report.error()) {
+    <p class="field-error" role="alert" i18n="@@voiceReport.failed">
+      Não consegui carregar o relatório.
+    </p>
+  } @else if (report.hasValue() && entries().length === 0) {
+    <p class="hint" i18n="@@voiceReport.empty">
+      Nenhum consentimento registrado.
+    </p>
+  }
+  <ul class="profiles">
+    @for (entry of entries(); track track(entry)) {
+      <li class="profile">
+        <div class="profile-head">
+          <span class="name">{{ entry.speakerName }}</span>
+          @if (entry.revokedAt) {
+            <span class="state" i18n="@@voiceReport.revoked"
+              >Revogado em {{ entry.revokedAt | date: 'dd/MM/yyyy' }}</span
+            >
+          } @else {
+            <span class="state" i18n="@@voiceReport.active">Em vigor</span>
+          }
+        </div>
+        <dl class="facts">
+          <dt i18n="@@voiceReport.collection">Acervo</dt>
+          <dd>{{ entry.collection }}</dd>
+          <dt i18n="@@voiceReport.who">Quem autorizou</dt>
+          <dd>
+            {{ entry.grantedBy }}
+            @if (entry.grantedByRole) {
+              ({{ entry.grantedByRole }})
+            }
+            · {{ entry.subjectLabel }}
+          </dd>
+          <dt i18n="@@voiceReport.when">Quando</dt>
+          <dd>{{ entry.grantedOn | date: 'dd/MM/yyyy' : 'UTC' }}</dd>
+          <dt i18n="@@voiceReport.how">Meio</dt>
+          <dd>{{ entry.methodLabel }}</dd>
+          <dt i18n="@@voiceReport.purpose">Finalidade</dt>
+          <dd i18n="@@voiceReport.purposeText">
+            Sugerir o nome ao editar gravações do acervo (texto v{{
+              entry.textVersion
+            }})
+          </dd>
+          <dt i18n="@@voiceReport.registered">Registrado por</dt>
+          <dd>{{ entry.registeredBy }}</dd>
+          @if (entry.revokedBy) {
+            <dt i18n="@@voiceReport.revokedBy">Revogado por</dt>
+            <dd>{{ entry.revokedBy }}</dd>
+          }
+          <dt i18n="@@voiceReport.suggestions">Sugestões</dt>
+          <dd i18n="@@voiceReport.counts">
+            {{ entry.suggestions.made }} feitas,
+            {{ entry.suggestions.accepted }} aceitas,
+            {{ entry.suggestions.refused }} recusadas
+          </dd>
+        </dl>
+        <a [href]="entry.evidenceUrl" download i18n="@@voiceReport.evidence"
+          >Baixar a prova do consentimento</a
+        >
+      </li>
+    }
+  </ul>
+</section>

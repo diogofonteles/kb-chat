@@ -207,6 +207,10 @@
                   <span class="job" i18n="@@transcribers.currentDiarize"
                     >separando as vozes de "{{ job.title }}"</span
                   >
+                } @else if (job.kind === 'voice-profile') {
+                  <span class="job" i18n="@@transcribers.currentVoicePrint"
+                    >calculando um perfil de voz</span
+                  >
                 } @else {
                   <span class="job" i18n="@@transcribers.currentJob"
                     >transcrevendo "{{ job.title }}"</span
@@ -223,6 +227,16 @@
                 (change)="toggleDiarize(item, $event)"
               />
               <span i18n="@@transcribers.diarize">Separa vozes</span>
+            </label>
+            <label class="check">
+              <input
+                type="checkbox"
+                [checked]="calculatesPrints(item)"
+                [disabled]="busy()"
+                [attr.aria-label]="voicePrintLabelOf(item)"
+                (change)="toggleVoicePrints(item, $event)"
+              />
+              <span i18n="@@transcribers.voicePrint">Perfis de voz</span>
             </label>
           </div>
           @if (confirming() === item.id) {

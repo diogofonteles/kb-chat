@@ -346,4 +346,46 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       'separando as vozes de "Entrevista"',
     );
   });
+
+  describe('voice profiles (KBC-071, ADR 0032)', () => {
+    it('starts unmarked, and marking it keeps what the transcriber already does', async () => {
+      const { http, fixture } = await renderPanel([
+        aTranscriber({ kinds: ['transcribe', 'diarize'] }),
+      ]);
+      const box = screen.getByRole<HTMLInputElement>('checkbox', {
+        name: 'Perfis de voz: Mac do dono',
+      });
+      expect(box.checked).toBe(false);
+      fireEvent.click(box);
+      await fixture.whenStable();
+      const patch = http.expectOne(
+        `${URL}/dddddddd-dddd-4ddd-8ddd-dddddddddddd`,
+      );
+      expect(patch.request.body).toEqual({
+        kinds: ['transcribe', 'diarize', 'voice-profile'],
+      });
+      patch.flush(aTranscriber());
+      http.expectOne(URL).flush({ items: [aTranscriber()] });
+      await fixture.whenStable();
+    });
+
+    it('unmarking "Separa vozes" keeps the voice profiles mark', async () => {
+      const { http, fixture } = await renderPanel([
+        aTranscriber({ kinds: ['transcribe', 'diarize', 'voice-profile'] }),
+      ]);
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: 'Separa vozes: Mac do dono' }),
+      );
+      await fixture.whenStable();
+      const patch = http.expectOne(
+        `${URL}/dddddddd-dddd-4ddd-8ddd-dddddddddddd`,
+      );
+      expect(patch.request.body).toEqual({
+        kinds: ['transcribe', 'voice-profile'],
+      });
+      patch.flush(aTranscriber());
+      http.expectOne(URL).flush({ items: [aTranscriber()] });
+      await fixture.whenStable();
+    });
+  });
 });

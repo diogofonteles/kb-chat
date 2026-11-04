@@ -33,6 +33,7 @@ export type SettingsSection =
   | 'preferences'
   | 'people'
   | 'transcribers'
+  | 'voice-profiles'
   | 'audit'
   | 'accesses'
   | 'about';

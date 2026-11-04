@@ -68,6 +68,7 @@ const speakers = (overrides: Partial<MediaSpeakers> = {}): MediaSpeakers => ({
   transcriberOffSince: null,
   canRequest: true,
   diarization: null,
+  voiceSuggestions: [],
   ...overrides,
 });
 
@@ -733,5 +734,49 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     await fixture.whenStable();
     expect(screen.queryByLabelText('Nome')).toBeNull();
+  });
+
+  describe('a name suggested by voice (KBC-071 AC-2)', () => {
+    const suggested = () =>
+      speakers({
+        status: 'done',
+        diarization: aDiarization(),
+        voiceSuggestions: [
+          {
+            voice: 2,
+            speakerId: ANA.id,
+            name: 'Mestre Gabriel',
+            level: 'high',
+          },
+        ],
+      });
+
+    it('reads as a suggestion and names nobody until a person answers', async () => {
+      await open(suggested());
+      expect(screen.getByText(/Parece ser Mestre Gabriel/)).toHaveTextContent(
+        'semelhança alta',
+      );
+      expect(
+        screen.getByRole('button', {
+          name: 'Aceitar Mestre Gabriel para a Voz 2',
+        }),
+      ).toBeTruthy();
+    });
+
+    it('sends the answer with the separation it was made on', async () => {
+      const { http, fixture } = await open(suggested());
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Recusar Mestre Gabriel para a Voz 2',
+        }),
+      );
+      await fixture.whenStable();
+      const sent = http.expectOne(`${VOICES}/2/suggestion`);
+      expect(sent.request.body).toEqual({ version: 1, decision: 'refuse' });
+      sent.flush(speakers({ status: 'done', diarization: aDiarization() }));
+      await fixture.whenStable();
+      expect(screen.queryByText(/Parece ser/)).toBeNull();
+      expect(screen.getByText('Sugestão recusada.')).toBeTruthy();
+    });
   });
 });
