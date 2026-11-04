@@ -118,7 +118,9 @@ describe('PreparationPage (T20, step 2)', () => {
     ).toBe('step');
     expect(screen.getByText('3 Validar faixas').closest('a')).toBeNull();
     expect(
-      screen.getByText('Disponível quando o processamento terminar.'),
+      screen.getByText(
+        'O próximo passo fica disponível quando o processamento terminar.',
+      ),
     ).toBeTruthy();
     expect(TestBed.inject(Title).getTitle()).toBe(
       'Passo 2 de 4: Processar — Palestra de 1998',
@@ -164,7 +166,7 @@ describe('PreparationPage (T20, step 2)', () => {
       }),
     );
     expect(screen.getByText('Pergunta 12')).toBeTruthy();
-    expect(screen.getByText('12:00–13:00 · 1 min 0 s')).toBeTruthy();
+    expect(screen.getByText('12:00–13:00 · 1 min')).toBeTruthy();
     expect(
       screen.getByText(
         'Pergunta: Pergunta da plateia · Resposta: Mestre Gabriel',
@@ -227,6 +229,7 @@ describe('PreparationPage (T20, step 2)', () => {
     expect(
       screen.getByText('Processamento concluído: 2 faixas propostas, 2 vozes.'),
     ).toBeTruthy();
+    expect(screen.queryByText(/O próximo passo fica disponível/)).toBeNull();
     expect(TestBed.inject(Router).url).toContain('/preparar');
     screen.getByRole('button', { name: 'Validar faixas' }).click();
     http.expectOne(`${URL}/advance`).flush(aPreparation({ step: 3 }));

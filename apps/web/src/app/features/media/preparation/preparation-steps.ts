@@ -114,6 +114,8 @@ export class PreparationSteps {
   readonly step = input.required<PreparationStep>();
   /** Step 3 was not asked for. */
   readonly skipped = input(false);
+  /** Processing ended: the next step only waits for the press. */
+  readonly processed = input(false);
   /** Empty on the upload: nothing to go back to yet. */
   readonly mediaId = input('');
 
@@ -131,8 +133,8 @@ export class PreparationSteps {
     const step = this.step();
     if (step === 1)
       return $localize`:@@prep.step.why1:Os próximos passos abrem depois do envio.`;
-    if (step === 2)
-      return $localize`:@@prep.step.why2:Disponível quando o processamento terminar.`;
+    if (step === 2 && !this.processed())
+      return $localize`:@@prep.step.why2:O próximo passo fica disponível quando o processamento terminar.`;
     return '';
   });
 }

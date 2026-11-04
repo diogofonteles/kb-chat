@@ -83,6 +83,8 @@ export function spanText(ms: number): string {
   const rest = seconds % 60;
   if (hours > 0)
     return $localize`:@@prep.span.hours:${hours}:hours: h ${String(minutes).padStart(2, '0')}:minutes: min`;
+  if (minutes > 0 && rest === 0)
+    return $localize`:@@prep.span.wholeMinutes:${minutes}:minutes: min`;
   if (minutes > 0)
     return $localize`:@@prep.span.minutes:${minutes}:minutes: min ${rest}:seconds: s`;
   return $localize`:@@prep.span.seconds:${rest}:seconds: s`;

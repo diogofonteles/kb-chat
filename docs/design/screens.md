@@ -721,7 +721,7 @@ Todo par texto/fundo e acento/fundo deve passar 4,5:1 (AA). A verificação entr
 
 **Passos 1 e 2** (rota `/midia/{id}/preparar`; arquivo novo, no painel do T14). O pedido completo está em [`KBC-072`](../backlog/KBC-072-upload-with-editing-choices-and-live-progress.md). Como foi construído:
 
-- **Indicador:** o mesmo componente nos três lugares, com "Disponível quando o processamento terminar." por extenso; em telas estreitas, "2/4 Processar" e "Ver os passos".
+- **Indicador:** o mesmo componente nos três lugares, com "O próximo passo fica disponível quando o processamento terminar." por extenso; em telas estreitas, "2/4 Processar" e "Ver os passos".
 - **Passo 1:** "O que fazer com este áudio", com opção desativada focável e o motivo por extenso; sem valor estimado não há opção paga. Áudio já enviado: **Preparar áudio** na página dele, só com o que falta.
 - **Passo 2:** etapas e vozes à esquerda, faixas à direita (≥ 60rem); no celular, uma coluna. Linhas com `content-visibility`, no lugar de uma lista virtual.
 - **Dinheiro:** o clique em **Enviar** com a opção paga marcada vale pelo valor mostrado. A etapa começa uma vez, reavalia e reserva só nessa hora; acima de 1,25 × o valor visto, ou de um teto, não roda e a tela diz o valor. Falha nunca repete sozinha: só "Tentar de novo", que mostra o custo.

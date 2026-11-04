@@ -19,7 +19,7 @@
           criar legendas. Grátis, no computador do transcritor.</ng-container
         >
         @if (transcribeMinutes(); as minutes) {
-          <ng-container i18n="@@prep.option.minutes"
+          &ngsp;<ng-container i18n="@@prep.option.minutes"
             >Estimativa: cerca de {{ minutes }} min.</ng-container
           >
         }
@@ -60,7 +60,7 @@
             Grátis.</ng-container
           >
           @if (speakersMinutes(); as minutes) {
-            <ng-container i18n="@@prep.option.minutes"
+            &ngsp;<ng-container i18n="@@prep.option.minutes"
               >Estimativa: cerca de {{ minutes }} min.</ng-container
             >
           }
@@ -130,12 +130,12 @@
           >
           @if (estimateText(); as estimate) {
             @if (remainingText(); as remaining) {
-              <ng-container i18n="@@prep.option.aiCost"
+              &ngsp;<ng-container i18n="@@prep.option.aiCost"
                 >Estimativa: {{ estimate }}, descontado do limite mensal da
                 mídia (restam {{ remaining }}).</ng-container
               >
             } @else {
-              <ng-container i18n="@@prep.option.aiCostAlone"
+              &ngsp;<ng-container i18n="@@prep.option.aiCostAlone"
                 >Estimativa: {{ estimate }}, descontado do limite mensal da
                 mídia.</ng-container
               >
