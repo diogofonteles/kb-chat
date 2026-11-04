@@ -4,7 +4,6 @@ import {
   TRACK_TITLE_MAX,
   proposalEstimateSchema,
   proposalFailureSchema,
-  proposalRequestSchema,
   proposalStatusSchema,
 } from './track-proposals.js';
 
@@ -162,6 +161,8 @@ export const editSubjectsSchema = z.object({
 });
 export type EditSubjects = z.infer<typeof editSubjectsSchema>;
 
-/** POST /api/v1/media/{id}/edit/subject-proposals: as KBC-067, `dryRun` only estimates. */
-export const subjectProposalRequestSchema = proposalRequestSchema;
+/** POST /api/v1/media/{id}/edit/subject-proposals: `dryRun` is explicit, a run spends money. */
+export const subjectProposalRequestSchema = z.strictObject({
+  dryRun: z.boolean(),
+});
 export const subjectEstimateSchema = proposalEstimateSchema;
