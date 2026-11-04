@@ -175,6 +175,39 @@ describe('TermsPanel (KBC-040)', () => {
     expect(text()).not.toContain('A pergunta não pôde ser enviada');
   });
 
+  it('BR-2: a discarded list does not refuse the next one', async () => {
+    await add('Muitos termos');
+    await measured(642);
+
+    button('Descartar mudanças').click();
+    await fixture.whenStable();
+    expect(text()).toContain('180 de 224');
+    await type('#term-0', 'Hoasca nova');
+    expect(text()).not.toContain('642');
+
+    await submit();
+
+    const saved = http.expectOne('/api/v1/media/terms');
+    expect(saved.request.method).toBe('PUT');
+    saved.flush({ ...LIST, version: 4, terms: saved.request.body.terms });
+    await fixture.whenStable();
+    expect(text()).toContain('Lista salva: versão 4.');
+  });
+
+  it('BR-2: a number that arrives for an older draft is not used', async () => {
+    await add('Muitos termos');
+    await new Promise((resolve) => setTimeout(resolve, 320));
+    const late = http.expectOne('/api/v1/media/terms/measure');
+
+    await type('#term-0', 'Hoasca nova');
+    if (!late.cancelled) late.flush({ tokens: 642, limit: 224 });
+    await fixture.whenStable();
+
+    expect(text()).not.toContain('642');
+    await measured(190);
+    expect(text()).toContain('190 de 224');
+  });
+
   it('removes a line, gives the focus to the next one and can discard the draft', async () => {
     button('Remover Hoasca').click();
     await fixture.whenStable();

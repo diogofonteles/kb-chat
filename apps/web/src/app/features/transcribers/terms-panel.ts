@@ -27,12 +27,18 @@ import {
   toUiErrorCode,
 } from '@core/api/api-error.js';
 import { TermsApi, termsUrl } from '@core/media/terms-api.js';
-import { EMPTY, catchError, debounceTime, filter, switchMap } from 'rxjs';
+import { EMPTY, catchError, debounceTime, map, switchMap } from 'rxjs';
 
 /** One line of the draft; the id keeps its input when the lines around it change. */
 interface TermRow {
   readonly id: number;
   readonly text: string;
+}
+
+/** A number is only true of the list it was asked for. */
+interface Measure {
+  readonly terms: readonly string[];
+  readonly usage: TermsUsage;
 }
 
 interface Notice {
@@ -111,7 +117,7 @@ export class TermsPanel {
   private readonly allValid = computed(() =>
     this.rows().every((row) => isValid(row.text)),
   );
-  private readonly measured = signal<TermsUsage | null>(null);
+  private readonly measured = signal<Measure | null>(null);
   protected readonly changed = computed(() => {
     const saved = this.saved();
     return saved !== null && !sameList(this.terms(), saved.terms);
@@ -121,7 +127,10 @@ export class TermsPanel {
   /** The saved list's use, until a change is measured. */
   protected readonly usage = computed<TermsUsage | null>(() => {
     if (this.tooMany()) return null;
-    return this.changed() ? (this.measured() ?? this.saved()) : this.saved();
+    const measured = this.measured();
+    return this.changed() && measured && sameList(measured.terms, this.terms())
+      ? measured.usage
+      : this.saved();
   });
   protected readonly overLimit = computed(() => {
     if (this.tooMany()) return tooManyText(this.terms().length);
@@ -261,19 +270,31 @@ export class TermsPanel {
     this.notice.set({ kind: 'error', text });
   }
 
-  /** Asks the API a moment after the last change; a failure leaves the last number. */
+  /** Asks the API a moment after the last change; a failure leaves the saved number. */
   private measureChanges(): void {
     toObservable(this.terms)
       .pipe(
-        filter(() => this.changed() && this.allValid()),
-        filter((terms) => terms.length > 0 && terms.length <= MAX_TERMS),
         debounceTime(MEASURE_DEBOUNCE_MS),
         switchMap((terms) =>
-          this.api.measure(terms).pipe(catchError(() => EMPTY)),
+          this.measurable(terms)
+            ? this.api.measure(terms).pipe(
+                map((usage) => ({ terms, usage })),
+                catchError(() => EMPTY),
+              )
+            : EMPTY,
         ),
         takeUntilDestroyed(),
       )
-      .subscribe((usage) => this.measured.set(usage));
+      .subscribe((measure) => this.measured.set(measure));
+  }
+
+  private measurable(terms: readonly string[]): boolean {
+    return (
+      this.changed() &&
+      this.allValid() &&
+      terms.length > 0 &&
+      terms.length <= MAX_TERMS
+    );
   }
 
   private focusAfterRender(selector: string): void {
