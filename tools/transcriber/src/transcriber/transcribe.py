@@ -102,6 +102,7 @@ def transcribe_track(
     find_speech: SpeechFinder,
     stop: threading.Event | None = None,
     on_progress: Callable[[int], None] | None = None,
+    on_cuts: Callable[[int, int], None] | None = None,
 ) -> TrackResult:
     """Transcribes a 16 kHz mono track. Under 40 % speech the whole track goes without VAD."""
     duration = len(pcm) / SAMPLE_RATE
@@ -126,6 +127,8 @@ def transcribe_track(
         raw["chunks"].append({"offset": start, "end": end, "result": sanitized(json_safe(result))})
         if on_progress is not None:
             on_progress(int((index + 1) * 100 / len(chunks)))
+        if on_cuts is not None:
+            on_cuts(index + 1, len(chunks))
     if stop is not None and stop.is_set():
         raise Stopped
     return TrackResult(raw=raw, vad=vad, speech_ratio=round(ratio, 4))

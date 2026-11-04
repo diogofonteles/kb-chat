@@ -187,6 +187,9 @@ class Worker:
                 find_speech=self.find_speech,
                 stop=stop,
                 on_progress=lambda percent: progress.__setitem__("percent", percent),
+                on_cuts=lambda done, total: progress.__setitem__(
+                    "cuts", {"done": done, "total": total}
+                ),
             )
         except Stopped:
             reason = "lease lost" if stop.lease_lost.is_set() else "shutdown"
@@ -354,7 +357,9 @@ class Worker:
         while not done.wait(self.heartbeat_s):
             sent_at = time.time()
             try:
-                revoked = self.api.heartbeat(job, progress["percent"], stop.prints.profile_ids())
+                revoked = self.api.heartbeat(
+                    job, progress["percent"], stop.prints.profile_ids(), progress.get("cuts")
+                )
             except Unauthorized:
                 log.error(REVOKED)
                 revoked = None

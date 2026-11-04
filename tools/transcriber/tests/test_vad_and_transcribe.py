@@ -88,6 +88,18 @@ def test_stops_between_chunks_and_reports_progress():
     assert progress == [33]
 
 
+def test_reports_each_cut_done_out_of_the_total():
+    cuts = []
+    transcribe_track(
+        silence(80),
+        model=FakeModel(),
+        prompt="",
+        find_speech=lambda _: [(0.0, 25.0), (26.0, 50.0), (51.0, 75.0)],
+        on_cuts=lambda done, total: cuts.append((done, total)),
+    )
+    assert cuts == [(1, 3), (2, 3), (3, 3)]
+
+
 def test_cuts_the_term_list_at_whole_terms_to_fit_the_prompt():
     terms = [f"Termo{i}" for i in range(100)]
     prompt = build_prompt(terms, max_tokens=20, count=lambda text: len(text.split(",")))
