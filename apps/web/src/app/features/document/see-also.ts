@@ -7,7 +7,6 @@ import {
   input,
   linkedSignal,
   output,
-  signal,
 } from '@angular/core';
 import { httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';

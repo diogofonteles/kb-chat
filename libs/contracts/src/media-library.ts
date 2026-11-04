@@ -62,13 +62,13 @@ export const libraryAuthorSchema = z.union([
 /** The most authors one filter names. */
 export const LIBRARY_AUTHORS_MAX = 20;
 
+/** `concept:<key>` or `free:<id>`: a key may hold a comma, so it never rides in a list. */
+const librarySubjectSchema = z.string().min(1).max(120);
+
 /**
  * The library's filters as kept in the account (BR-7): within a group the chips add up
  * (Não ouvidas or Em andamento), across groups they narrow (Em andamento and an author).
  */
-/** `concept:<key>` or `free:<id>`: a key may hold a comma, so it never rides in a list. */
-const librarySubjectSchema = z.string().min(1).max(120);
-
 export const libraryFiltersSchema = z.strictObject({
   states: z.array(listeningStateSchema).max(LISTENING_STATES.length),
   authors: z.array(libraryAuthorSchema).max(LIBRARY_AUTHORS_MAX),

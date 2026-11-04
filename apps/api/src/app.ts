@@ -382,7 +382,6 @@ async function registerCollections(
   );
 }
 
-/** Health, topics (with the Settings default collection) and the free search. */
 /** Spoken passages beside the texts (KBC-039), tracks by subject (KBC-070). */
 function combinedSearch(deps: FullDeps): SearchWithMedia {
   const { catalog, authors, media } = deps;
@@ -405,6 +404,7 @@ function combinedSearch(deps: FullDeps): SearchWithMedia {
   });
 }
 
+/** Health, topics (with the Settings default collection) and the free search. */
 async function registerSearch(
   app: FastifyInstance,
   deps: FullDeps,
