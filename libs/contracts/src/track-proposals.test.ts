@@ -18,6 +18,8 @@ const track = {
   title: 'O que é a burracheira?',
   askerVoice: 2,
   answererVoice: 1,
+  askerSpeakerId: null,
+  answererSpeakerId: null,
 };
 
 describe('track proposal contracts (KBC-067)', () => {
@@ -27,11 +29,11 @@ describe('track proposal contracts (KBC-067)', () => {
     expect(proposalRequestSchema.safeParse({ dry: true }).success).toBe(false);
   });
 
-  it('keeps titles up to 80 characters and voices from 1 to 10', () => {
+  it('keeps titles up to 120 characters and voices from 1 to 10', () => {
     expect(draftTrackSchema.parse(track).title).toBe('O que é a burracheira?');
     expect(draftTrackSchema.parse({ ...track, title: null }).title).toBeNull();
     expect(
-      draftTrackSchema.safeParse({ ...track, title: 'x'.repeat(81) }).success,
+      draftTrackSchema.safeParse({ ...track, title: 'x'.repeat(121) }).success,
     ).toBe(false);
     expect(
       draftTrackSchema.safeParse({ ...track, askerVoice: 11 }).success,
