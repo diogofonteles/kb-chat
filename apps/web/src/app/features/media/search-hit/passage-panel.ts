@@ -86,6 +86,10 @@ export class PassagePanel {
     startMs: this.passage().startMs,
     endMs: this.passage().endMs,
   }));
+  /** A whole track reached by its subject (KBC-070): no passage to mark. */
+  protected readonly byTopic = computed(
+    () => this.passage().match === 'subject',
+  );
   protected readonly clock = computed(() =>
     formatClock(this.passage().startMs),
   );

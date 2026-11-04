@@ -5,6 +5,7 @@ import { aTopic } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatStore } from './chat-store.js';
 import { FilterBar } from './filter-bar.js';
+import { toFacetGroups } from './filter-model.js';
 
 const FACETS: ResultFacets = {
   concepts: Array.from({ length: 14 }, (_, i) => ({
@@ -360,5 +361,24 @@ describe('FilterBar "Sub-acervo" (KBC-048 FR-4)', () => {
   it('is not offered when the search spans one collection only', async () => {
     await renderBar();
     expect(screen.queryByRole('button', { name: /^Sub-acervo/ })).toBeNull();
+  });
+});
+
+describe('FilterBar tracks per subject (KBC-070 BR-4)', () => {
+  const withTracks = (tracks: number | undefined, count = 12) =>
+    toFacetGroups(
+      {
+        ...FACETS,
+        concepts: [{ value: 'Cabala', count, tracks }],
+      },
+      NO_FILTERS,
+    ).find((group) => group.key === 'concepts')?.options[0]?.countText;
+
+  it('says documents and tracks apart, and only what there is', () => {
+    expect(withTracks(3)).toBe('12 · 3 faixas');
+    expect(withTracks(1)).toBe('12 · 1 faixa');
+    expect(withTracks(2, 0)).toBe('2 faixas');
+    expect(withTracks(0)).toBe('12');
+    expect(withTracks(undefined)).toBe('12');
   });
 });

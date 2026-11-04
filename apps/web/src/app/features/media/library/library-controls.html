@@ -39,6 +39,28 @@
       </select>
     </label>
   }
+  @if (showSubjects()) {
+    <label class="choice" [class.on]="filters().subject !== null">
+      <span class="label" i18n="@@library.subject">Assunto</span>
+      <select (change)="chooseSubject($event)">
+        <option
+          value=""
+          [selected]="filters().subject === null"
+          i18n="@@library.allSubjects"
+        >
+          Todos
+        </option>
+        @for (option of subjectOptions(); track option.key) {
+          <option
+            [value]="option.key"
+            [selected]="option.key === filters().subject"
+          >
+            {{ option.name }}
+          </option>
+        }
+      </select>
+    </label>
+  }
   @if (showTopics()) {
     <label class="choice" [class.on]="filters().topic !== null">
       <span class="label" i18n="@@library.topic">Acervo</span>

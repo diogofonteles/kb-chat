@@ -66,6 +66,8 @@ export const aMediaHit = (overrides: Partial<MediaHit> = {}): MediaHit => ({
   endMs: 499_000,
   confidence: 'normal',
   score: 0.95,
+  match: 'speech',
+  subjects: [],
   ...overrides,
 });
 
@@ -101,6 +103,7 @@ export const aDocument = (overrides: Partial<KbDocument> = {}): KbDocument => ({
   authorship: 'mestre-laercio',
   author: 'José Laércio do Egito',
   criterion: null,
+  concept: null,
   origin: null,
   obsidianUrl:
     'obsidian://open?vault=hermetismo&file=hermetismo%2Fraw%2Farticles%2Fa-lei-do-ritmo',

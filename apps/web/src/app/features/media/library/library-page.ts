@@ -295,6 +295,7 @@ export class LibraryPage {
         states: [],
         authors: [],
         topics: [],
+        subjects: [],
       },
   );
   /** "42 mídias · 31 h", read aloud at each change (aria-live, AC-14). */
@@ -500,6 +501,7 @@ export class LibraryPage {
       states: ['in-progress'],
       authors: [],
       topic: null,
+      subject: null,
     });
   }
 

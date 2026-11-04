@@ -106,6 +106,18 @@ export class LibraryControls {
   protected readonly showTopics = computed(
     () => this.topicOptions().length > 1 || this.filters().topic !== null,
   );
+  /** The subjects of the tracks in sight; a chosen one that left stays, to be cleared. */
+  protected readonly subjectOptions = computed(() => {
+    const { subjects } = this.facets();
+    const chosen = this.filters().subject;
+    const known = subjects.some((one) => one.key === chosen);
+    if (chosen === null || known) return subjects;
+    const name = $localize`:@@library.subjectGone:Assunto indisponível`;
+    return [...subjects, { key: chosen, name }];
+  });
+  protected readonly showSubjects = computed(
+    () => this.subjectOptions().length > 0,
+  );
   protected readonly active = computed(() => activeFiltersOf(this.filters()));
   protected readonly sortOptions = computed<readonly MenuOption[]>(() =>
     LIBRARY_SORTS.map((id) => ({
@@ -134,6 +146,12 @@ export class LibraryControls {
     if (!(event.target instanceof HTMLSelectElement)) return;
     const { value } = event.target;
     this.filtersChange.emit({ kind: 'topic', topic: value || null });
+  }
+
+  protected chooseSubject(event: Event): void {
+    if (!(event.target instanceof HTMLSelectElement)) return;
+    const { value } = event.target;
+    this.filtersChange.emit({ kind: 'subject', subject: value || null });
   }
 
   protected clear(): void {

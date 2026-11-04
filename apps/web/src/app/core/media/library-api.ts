@@ -65,6 +65,7 @@ export function libraryUrlOf(
   for (const [name, values] of Object.entries(lists))
     if (values.length > 0) params.set(name, values.join(','));
   if (filters.topic) params.set('topic', filters.topic);
+  if (filters.subject) params.set('subject', filters.subject);
   const query = request.query.trim();
   if (query) params.set('q', query);
   params.set('sort', request.sort);

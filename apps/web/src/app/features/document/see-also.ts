@@ -7,16 +7,24 @@ import {
   input,
   linkedSignal,
   output,
+  signal,
 } from '@angular/core';
+import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import {
   SEE_ALSO_GROUPS,
+  SUBJECT_TRACKS_PAGE_MAX,
+  subjectTracksPageSchema,
   type DocumentRef,
   type RelatedDocument,
   type SeeAlso,
   type SeeAlsoGroupName,
+  type SubjectTrack,
 } from '@kb-chat/contracts';
-import { KbApi } from '@core/api/kb-api.js';
+import { formatClock } from '@kb-chat/player-core';
+import { KbApi, subjectTracksUrl } from '@core/api/kb-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { describeFacets } from '@core/i18n/facet-labels.js';
 
 const GROUP_TITLES: Record<SeeAlsoGroupName, string> = {
@@ -50,9 +58,13 @@ const toItem = (ref: RelatedDocument): ItemView => ({
   facets: describeFacets(ref),
 });
 
-/** "Veja também" in the document panel (screens.md T3, KBC-003 BR-1/BR-3). */
+/**
+ * "Veja também" in the document panel (screens.md T3, KBC-003 BR-1/BR-3); on a concept's
+ * article, with the tracks about it for who sees subjects (KBC-070 FR-3).
+ */
 @Component({
   selector: 'app-see-also',
+  imports: [RouterLink],
   templateUrl: './see-also.html',
   styleUrl: './see-also.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,10 +72,13 @@ const toItem = (ref: RelatedDocument): ItemView => ({
 export class SeeAlsoSection {
   private readonly api = inject(KbApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly session = inject(SessionStore);
 
   readonly topic = input.required<string>();
   readonly documentId = input.required<string>();
   readonly seeAlso = input.required<SeeAlso>();
+  /** The concept this article is about; null on a source. */
+  readonly concept = input<string | null>(null);
   readonly opened = output<DocumentRef>();
 
   /** Items loaded with "ver todos", reset whenever another document is shown. */
@@ -91,6 +106,48 @@ export class SeeAlsoSection {
     computation: () => new Set(),
   });
 
+  private readonly tracksUrl = computed(() => {
+    const concept = this.concept();
+    const allowed =
+      this.session.can('media') &&
+      this.session.can('media-tracks') &&
+      this.session.can('media-subjects');
+    return concept && allowed
+      ? subjectTracksUrl(this.topic(), concept)
+      : undefined;
+  });
+  private readonly firstTracks = httpResource(() => this.tracksUrl(), {
+    parse: (body) => subjectTracksPageSchema.parse(body),
+  });
+  /** Tracks loaded with "Ver todas", reset with the document. */
+  private readonly moreTracks = linkedSignal<
+    string | undefined,
+    readonly SubjectTrack[]
+  >({ source: this.tracksUrl, computation: () => [] });
+  protected readonly tracksLoading = signal(false);
+  protected readonly moreTracksFailed = linkedSignal(() => {
+    this.tracksUrl();
+    return false;
+  });
+  protected readonly tracks = computed(() =>
+    this.firstTracks.hasValue()
+      ? [...this.firstTracks.value().items, ...this.moreTracks()]
+      : [],
+  );
+  protected readonly tracksTotal = computed(() =>
+    this.firstTracks.hasValue() ? this.firstTracks.value().total : 0,
+  );
+  /** A 404 is a concept out of the collection's tree: nothing to tell. */
+  protected readonly tracksFailed = computed(() => {
+    const failure = this.firstTracks.error();
+    return (
+      failure !== undefined &&
+      !(failure instanceof HttpErrorResponse && failure.status === 404)
+    );
+  });
+  protected readonly durationOf = (track: SubjectTrack): string =>
+    track.durationMs === null ? '' : formatClock(track.durationMs);
+
   protected readonly groups = computed<GroupView[]>(() =>
     SEE_ALSO_GROUPS.map((name) => ({
       name,
@@ -101,6 +158,30 @@ export class SeeAlsoSection {
       failed: this.failed().has(name),
     })).filter((group) => group.total > 0),
   );
+
+  /** The rest of the tracks, up to a full page at a time. */
+  protected showAllTracks(): void {
+    const concept = this.concept();
+    if (!concept || this.tracksLoading()) return;
+    this.tracksLoading.set(true);
+    this.moreTracksFailed.set(false);
+    this.api
+      .subjectTracks(this.topic(), concept, {
+        offset: this.tracks().length,
+        limit: SUBJECT_TRACKS_PAGE_MAX,
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => {
+          this.moreTracks.update((all) => [...all, ...page.items]);
+          this.tracksLoading.set(false);
+        },
+        error: () => {
+          this.moreTracksFailed.set(true);
+          this.tracksLoading.set(false);
+        },
+      });
+  }
 
   /** Loads the next page of a group; ignored while that group is already loading. */
   protected showMore(group: GroupView): void {

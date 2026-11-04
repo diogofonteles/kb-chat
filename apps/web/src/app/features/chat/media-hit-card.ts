@@ -14,7 +14,9 @@ import { textParts } from '@core/text/text-parts.js';
 /**
  * A spoken passage among the results (KBC-039 FR-6, screens.md T2): "♪ Áudio · Na fala"
  * and the minute, the title, the sentence with the words found marked, the author and,
- * for an automatic transcript of low confidence, the badge saying so (BR-3).
+ * for an automatic transcript of low confidence, the badge saying so (BR-3). A track reached
+ * by its subject says "♪ Faixa · Assunto" with its summary, and any track shows its subjects
+ * as text: the whole card is one button (KBC-070).
  */
 @Component({
   selector: 'app-media-hit-card',
@@ -36,4 +38,6 @@ export class MediaHitCard {
     textParts(this.hit().text, this.hit().highlights),
   );
   protected readonly low = computed(() => this.hit().confidence === 'low');
+  /** A whole track, reached by its subject (KBC-070): no minute, its summary if any. */
+  protected readonly byTopic = computed(() => this.hit().match === 'subject');
 }

@@ -116,7 +116,10 @@ export function coverToneOf(topic: string): number {
 
 /** How many filters are on (for "Limpar filtros"). */
 export const activeFiltersOf = (filters: LibraryFilters): number =>
-  filters.states.length + filters.authors.length + (filters.topic ? 1 : 0);
+  filters.states.length +
+  filters.authors.length +
+  (filters.topic ? 1 : 0) +
+  (filters.subject ? 1 : 0);
 
 /** The list with the value added or taken out (a chip pressed). */
 export function toggled<T>(values: readonly T[], value: T): T[] {
@@ -134,12 +137,15 @@ export type FilterChange =
   /** An author's id, NO_AUTHOR for "Outros autores", null for every author. */
   | { readonly kind: 'author'; readonly author: string | null }
   | { readonly kind: 'topic'; readonly topic: string | null }
+  /** A subject's key (KBC-070), null for every subject. */
+  | { readonly kind: 'subject'; readonly subject: string | null }
   | { readonly kind: 'clear' };
 
 export const NO_FILTERS: LibraryFilters = {
   states: [],
   authors: [],
   topic: null,
+  subject: null,
 };
 
 const FILTER_CHANGES: {
@@ -157,6 +163,7 @@ const FILTER_CHANGES: {
     authors: change.author ? [change.author] : [],
   }),
   topic: (filters, change) => ({ ...filters, topic: change.topic }),
+  subject: (filters, change) => ({ ...filters, subject: change.subject }),
   clear: () => NO_FILTERS,
 };
 

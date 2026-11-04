@@ -7,11 +7,15 @@
   </div>
   <p class="kind">
     <span aria-hidden="true">♪</span>
-    <span i18n="@@mediaHit.kind">Áudio · Na fala</span>
-    <span aria-hidden="true">· {{ clock() }}</span>
-    <span class="visually-hidden" i18n="@@mediaHit.at"
-      >aos {{ spokenClock() }}</span
-    >
+    @if (byTopic()) {
+      <span i18n="@@mediaHit.subjectKind">Faixa · Assunto</span>
+    } @else {
+      <span i18n="@@mediaHit.kind">Áudio · Na fala</span>
+      <span aria-hidden="true">· {{ clock() }}</span>
+      <span class="visually-hidden" i18n="@@mediaHit.at"
+        >aos {{ spokenClock() }}</span
+      >
+    }
   </p>
   <h2 id="passage-title" #heading tabindex="-1">{{ passage().title }}</h2>
   <div class="meta">
@@ -25,20 +29,26 @@
       Transcrição automática de baixa confiança: pode haver trechos errados.
     </p>
   }
-  <figure class="passage" [attr.data-start-ms]="focus().startMs">
-    <figcaption class="visually-hidden" i18n="@@passage.caption">
-      Trecho encontrado
-    </figcaption>
-    <blockquote>
-      @for (part of parts(); track $index) {
-        @if (part.marked) {
-          <mark>{{ part.text }}</mark>
-        } @else {
-          <span>{{ part.text }}</span>
+  @if (byTopic()) {
+    @if (passage().text) {
+      <p class="summary">{{ passage().text }}</p>
+    }
+  } @else {
+    <figure class="passage" [attr.data-start-ms]="focus().startMs">
+      <figcaption class="visually-hidden" i18n="@@passage.caption">
+        Trecho encontrado
+      </figcaption>
+      <blockquote>
+        @for (part of parts(); track $index) {
+          @if (part.marked) {
+            <mark>{{ part.text }}</mark>
+          } @else {
+            <span>{{ part.text }}</span>
+          }
         }
-      }
-    </blockquote>
-  </figure>
+      </blockquote>
+    </figure>
+  }
 
   @if (loadError()) {
     <div class="notice" role="alert">

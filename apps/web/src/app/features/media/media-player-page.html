@@ -66,6 +66,13 @@
             <span class="transcription">{{ text }}</span>
           }
         </p>
+        @if (canReadAbout()) {
+          <app-track-about-view
+            [mediaId]="current.id"
+            [canSearch]="canSearch()"
+            (subjectChosen)="searchSubject($event)"
+          />
+        }
         @if (canSeeSubjects()) {
           <app-track-subjects-view [mediaId]="current.id" />
         }

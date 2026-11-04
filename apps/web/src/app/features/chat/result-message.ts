@@ -27,7 +27,7 @@ import { KindsChoice } from './kinds-choice.js';
 import { MediaHitCard } from './media-hit-card.js';
 import { mixReferences, passageKey } from './references.js';
 import { ResultCard, type OpenedHit } from './result-card.js';
-import { describeResultCount, describeSpokenCount } from './result-count.js';
+import { describeMediaCount, describeResultCount } from './result-count.js';
 
 /** A spoken passage opened, with its place among the results (KBC-039 FR-4). */
 export interface OpenedPassage {
@@ -88,12 +88,12 @@ export class ResultMessage {
   /** "3 documentos" or "3 documentos · 2 trechos na fala" (one text: no stray spaces). */
   protected readonly found = computed(() => {
     const response = this.response();
-    const spoken = response?.media.length ?? 0;
-    if (spoken === 0) return this.count();
+    const spoken = response?.media ?? [];
+    if (spoken.length === 0) return this.count();
     // "Textos" not chosen: no "0 documentos" before the passages.
     return !this.message().kinds.includes('text')
-      ? describeSpokenCount(spoken)
-      : `${this.count()} · ${describeSpokenCount(spoken)}`;
+      ? describeMediaCount(spoken)
+      : `${this.count()} · ${describeMediaCount(spoken)}`;
   });
   protected readonly modeName = computed(() => modeLabel(this.message().mode));
   protected readonly count = computed(() => {

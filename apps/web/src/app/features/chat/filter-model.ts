@@ -29,6 +29,8 @@ export interface FacetOption {
   readonly value: FacetValue;
   readonly label: string;
   readonly count: number;
+  /** "12", or "12 · 3 faixas" for who sees subjects (KBC-070 BR-4). */
+  readonly countText: string;
   readonly selected: boolean;
 }
 
@@ -44,6 +46,19 @@ export interface ActiveFilter {
   readonly value: FacetValue;
   readonly label: string;
   readonly removeLabel: string;
+}
+
+const tracksText = (tracks: number): string =>
+  tracks === 1
+    ? $localize`:@@filters.tracksOne:1 faixa`
+    : $localize`:@@filters.tracksMany:${tracks}:tracks: faixas`;
+
+/** Documents and tracks apart; a subject only tracks have says just them. */
+function countTextOf(count: number, tracks: number): string {
+  if (tracks === 0) return String(count);
+  return count === 0
+    ? tracksText(tracks)
+    : `${String(count)} · ${tracksText(tracks)}`;
 }
 
 const selectedValues = (
@@ -63,15 +78,24 @@ function toFacetGroup(
   { facets, filters, topicNames }: GroupSource,
 ): FacetGroup {
   const selected = selectedValues(filters, key);
-  const option = (value: FacetValue, count: number): FacetOption => ({
+  const option = (
+    value: FacetValue,
+    count: number,
+    tracks = 0,
+  ): FacetOption => ({
     value,
     count,
+    countText: countTextOf(count, tracks),
     label: facetValueLabel(key, value, { topicNames }),
     selected: selected.includes(value),
   });
   const counted = (
-    facets[key] as readonly { value: FacetValue; count: number }[]
-  ).map(({ value, count }) => option(value, count));
+    facets[key] as readonly {
+      value: FacetValue;
+      count: number;
+      tracks?: number;
+    }[]
+  ).map(({ value, count, tracks }) => option(value, count, tracks));
   const missing = selected
     .filter((value) => !counted.some((one) => one.value === value))
     .map((value) => option(value, 0));

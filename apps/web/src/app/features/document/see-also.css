@@ -37,6 +37,12 @@ ul {
   cursor: pointer;
 }
 
+a.ref {
+  display: flex;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
 .ref {
   width: 100%;
   border-radius: var(--radius-sm);

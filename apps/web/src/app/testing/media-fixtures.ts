@@ -6,6 +6,7 @@ import type {
 } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { ViewStore } from '@features/chat/view-store.js';
 import { aTopic } from './fixtures.js';
 
 /** A valid media id (the contract requires UUIDs): the n-th of a list. */
@@ -52,19 +53,25 @@ export const aTranscription = (
 /** The chat page's store as the media pages read it: the selected collection. */
 export const chatStoreOn = (slug = 'hermetismo', title = 'Hermetismo') => {
   const topicSlug = signal(slug);
-  return {
-    provide: ChatStore,
-    useValue: {
-      topicSlug,
-      selectTopic: (chosen: string) => topicSlug.set(chosen),
-      topicsKnown: signal(true),
-      topic: signal(aTopic({ slug, title, documentCount: 10 })),
-      topicList: signal([
-        aTopic({ slug, title, documentCount: 10 }),
-        aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 4 }),
-      ]),
+  return (
+    {
+      provide: ViewStore,
+      useValue: { select: () => undefined },
     },
-  };
+    {
+      provide: ChatStore,
+      useValue: {
+        topicSlug,
+        selectTopic: (chosen: string) => topicSlug.set(chosen),
+        topicsKnown: signal(true),
+        topic: signal(aTopic({ slug, title, documentCount: 10 })),
+        topicList: signal([
+          aTopic({ slug, title, documentCount: 10 }),
+          aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 4 }),
+        ]),
+      },
+    }
+  );
 };
 
 /** Who is signed in, for the media pages: their features and whether they are a master. */
