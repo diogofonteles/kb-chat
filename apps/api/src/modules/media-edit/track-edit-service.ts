@@ -226,8 +226,8 @@ export class TrackEditService {
 
   /**
    * The version first: who is late hears "someone changed this" whatever happened since, and
-   * keeps their change to copy (FR-10). Then a proposal writing the draft, or an approval
-   * standing, leaves no draft to change.
+   * keeps their change to copy (FR-10). Then a proposal writing the draft, an approval standing
+   * or a plan still before "Validar faixas" (KBC-072 BR-5) leaves no draft to change.
    */
   private assertWritable(call: EditCall): void {
     const { edits, drafts } = this.deps;
@@ -240,6 +240,10 @@ export class TrackEditService {
     if (drafts.draft(call.mediaId).run?.status === 'running')
       throw new AppError('MEDIA_CONFLICT', 'A proposal is running', {
         details: { reason: 'proposal-running' },
+      });
+    if (this.preparationStep(call.mediaId, edit?.status) === 2)
+      throw new AppError('MEDIA_CONFLICT', 'Still at step 2 of its plan', {
+        details: { reason: 'preparation' },
       });
   }
 

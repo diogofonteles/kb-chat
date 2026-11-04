@@ -465,6 +465,57 @@ describe('going through the stages (FR-2, BR-5)', () => {
     expect((await edit()).json().preparationStep).toBe(3);
   });
 
+  it('keeps a direct call to the order of the steps: no saving or approving at step 2 (AC-9)', async () => {
+    const { media, token } = await connected();
+    const item = await uploaded(media, {
+      ...FREE_PLAN,
+      speakers: false,
+      tracks: 'manual',
+    });
+    await transcribe(media, token);
+    const tracks = [
+      {
+        id: randomUUID(),
+        source: 'manual',
+        startMs: 0,
+        endMs: 30_000,
+        kind: 'qa',
+        title: 'Primeira',
+        askerVoice: null,
+        answererVoice: null,
+        askerSpeakerId: null,
+        answererSpeakerId: null,
+      },
+    ];
+    const save = (version: number) =>
+      media.started.app.inject({
+        method: 'PUT',
+        url: `/api/v1/media/${item.id}/edit`,
+        headers: { ...media.ownerHeaders, 'if-match': `"${version}"` },
+        payload: { step: 3, tracks },
+      });
+    const approve = (version: number) =>
+      media.started.app.inject({
+        method: 'POST',
+        url: `/api/v1/media/${item.id}/edit/approve`,
+        headers: { ...media.ownerHeaders, 'if-match': `"${version}"` },
+        payload: {},
+      });
+
+    for (const early of [await save(0), await approve(0)]) {
+      expect(early.statusCode, early.body).toBe(409);
+      expect(early.json().error).toMatchObject({
+        code: 'MEDIA_CONFLICT',
+        details: { reason: 'preparation' },
+      });
+    }
+    expect((await read(media, item.id)).tracks).toEqual([]);
+
+    await media.owner('POST', `${preparation(item.id)}/advance`, {});
+    expect((await save(0)).statusCode).toBe(200);
+    expect((await approve(1)).statusCode).toBe(200);
+  });
+
   it('lists where it stopped for the same person on another device (AC-10)', async () => {
     const { media, token } = await connected();
     const item = await uploaded(media, {
@@ -903,6 +954,7 @@ describe('speed (NFR-2)', () => {
       tracks: 'manual',
     });
     await transcribe(media, token);
+    await media.owner('POST', `${preparation(item.id)}/advance`, {});
     const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
     db.prepare('UPDATE media SET duration_ms = 7200000 WHERE id = ?').run(
       item.id,
