@@ -64,30 +64,34 @@ export class SqliteSpeakerStore implements SpeakerStorePort {
     authorSlug: string | null;
     now: Date;
   }): boolean {
+    const { id, name, nameKey, authorSlug, now } = change;
     return inTransaction(this.db, () => {
-      const taken = this.db
-        .prepare(
-          `SELECT 1 FROM media_speakers other
-           JOIN media_speakers self ON self.collection = other.collection
-           WHERE self.id = ? AND other.id <> self.id
-             AND (other.name_key = ? OR other.author_slug = ?)`,
-        )
-        .get(change.id, change.nameKey, change.authorSlug);
-      if (taken) return false;
+      if (this.isTaken(id, nameKey, authorSlug)) return false;
       this.db
         .prepare(
           `UPDATE media_speakers SET name = ?, name_key = ?, author_slug = ?, updated_at = ?
            WHERE id = ?`,
         )
-        .run(
-          change.name,
-          change.nameKey,
-          change.authorSlug,
-          change.now.toISOString(),
-          change.id,
-        );
+        .run(name, nameKey, authorSlug, now.toISOString(), id);
       return true;
     });
+  }
+
+  /** Whether another speaker of the same collection has that name or author. */
+  private isTaken(
+    id: string,
+    nameKey: string,
+    authorSlug: string | null,
+  ): boolean {
+    const other = this.db
+      .prepare(
+        `SELECT 1 FROM media_speakers other
+         JOIN media_speakers self ON self.collection = other.collection
+         WHERE self.id = ? AND other.id <> self.id
+           AND (other.name_key = ? OR other.author_slug = ?)`,
+      )
+      .get(id, nameKey, authorSlug);
+    return other !== undefined;
   }
 
   /** The speaker that author, or else that name, already is. */

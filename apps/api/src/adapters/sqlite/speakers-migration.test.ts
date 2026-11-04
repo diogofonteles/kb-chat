@@ -27,9 +27,8 @@ describe('media migration 13 (KBC-065)', () => {
     open();
     applyMigrations(db, MEDIA_MIGRATIONS);
     db.exec(`INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
-        file_ext, file_size, status, created_at, updated_at)
-      VALUES ('m1', 'udv', 'A', 'outros-autores', 'a', 'a.mp3', 'mp3', 1, 'ready', '${AT}',
-        '${AT}')`);
+        upload_bytes, status, created_at, updated_at)
+      VALUES ('m1', 'udv', 'A', 'outros-autores', 'a', 'a.mp3', 3, 'ready', '${AT}', '${AT}')`);
     db.exec(`INSERT INTO transcripts (id, media_id, version, provider, model, parameters,
         parameters_version, terms_version, vad, speech_ratio, elapsed_ms, raw_path,
         filter_version, confidence_version, confidence, word_count, removed_words, low_words,

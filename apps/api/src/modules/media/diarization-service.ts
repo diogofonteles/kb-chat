@@ -300,28 +300,36 @@ export class DiarizationService {
     const alias = aliasOf(rows);
     const turns = mergeTurns(diarizations.turns(result.id), alias);
     const stale = result.transcriptId !== transcript.id;
-    const voices = speakingTimeOf(turns);
     return {
-      speakers: {
-        version: result.version,
-        createdAt: result.createdAt,
-        transcriptVersion: transcript.version,
-        staleTranscript: stale,
-        requestedVoices: result.requestedVoices,
-        voiceCount: voices.length,
-        voices,
-        turns,
-        labels: this.labelsOf(voices, rows),
-        merged: mergedOf(rows),
-        namesPending: result.namesPending,
-      },
+      speakers: this.speakersOf({ result, transcript, rows, turns, stale }),
       segmentVoices: stale
         ? dominantVoices(transcripts.segments(transcript.id), turns)
-        : diarizations
-            .segmentVoices(result.id)
-            .map((voice) =>
-              voice === null ? null : (alias.get(voice) ?? voice),
-            ),
+        : readAs(diarizations.segmentVoices(result.id), alias),
+    };
+  }
+
+  /** The separation as read: joined voices as one, each voice with who it is. */
+  private speakersOf(input: {
+    result: DiarizationSummary;
+    transcript: TranscriptSummary;
+    rows: readonly StoredVoiceLabel[];
+    turns: readonly SpeakerTurn[];
+    stale: boolean;
+  }): TranscriptSpeakers {
+    const { result, transcript, rows, turns, stale } = input;
+    const voices = speakingTimeOf(turns);
+    return {
+      version: result.version,
+      createdAt: result.createdAt,
+      transcriptVersion: transcript.version,
+      staleTranscript: stale,
+      requestedVoices: result.requestedVoices,
+      voiceCount: voices.length,
+      voices,
+      turns: [...turns],
+      labels: this.labelsOf(voices, rows),
+      merged: mergedOf(rows),
+      namesPending: result.namesPending,
     };
   }
 
@@ -363,6 +371,13 @@ export class DiarizationService {
     return media;
   }
 }
+
+/** The voices of the segments, joined ones as the voice they read as. */
+const readAs = (
+  voices: readonly (number | null)[],
+  alias: ReadonlyMap<number, number>,
+): (number | null)[] =>
+  voices.map((voice) => (voice === null ? null : (alias.get(voice) ?? voice)));
 
 /** Turns past the item's end are a wrong upload, refused whole (as transcripts are). */
 function assertWithin(

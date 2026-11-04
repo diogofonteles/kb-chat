@@ -95,20 +95,29 @@ export class TranscriptService {
       confidence: summary.confidence,
       segments,
     };
+    return this.withSpeakers(transcript, summary, options);
+  }
+
+  /** The transcript with what `audience` may read of the current separation, if any. */
+  private withSpeakers(
+    transcript: MediaTranscript,
+    summary: TranscriptSummary,
+    audience: TranscriptAudience,
+  ): MediaTranscript {
     const voices =
-      options.withVoices || options.withNames
-        ? (this.deps.voices?.(mediaId, summary) ?? null)
+      audience.withVoices || audience.withNames
+        ? (this.deps.voices?.(transcript.mediaId, summary) ?? null)
         : null;
     if (!voices) return transcript;
     const { speakers } = voices;
     const voiced = {
       ...transcript,
-      segments: segments.map((segment, index) => ({
+      segments: transcript.segments.map((segment, index) => ({
         ...segment,
         voice: voices.segmentVoices[index] ?? null,
       })),
     };
-    return options.withVoices
+    return audience.withVoices
       ? { ...voiced, speakers, voiceNames: speakers.labels }
       : { ...voiced, voiceNames: namesForListeners(speakers) };
   }
