@@ -67,6 +67,13 @@ const anEntry = (
   ...overrides,
 });
 
+/** Lets a resource take a flushed answer and ask what depends on it. */
+const settle = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve));
+  TestBed.tick();
+  await new Promise((resolve) => setTimeout(resolve));
+};
+
 async function renderPanel(input: {
   list?: VoiceProfileList;
   owner?: boolean;
@@ -86,7 +93,7 @@ async function renderPanel(input: {
     items: [aTopic('udv'), aTopic('udv/sub', 'udv')],
     defaultSlug: null,
   });
-  await result.fixture.whenStable();
+  await settle();
   http.expectOne(PROFILES).flush(input.list ?? aListOf([]));
   if (input.owner) http.expectOne(REPORT).flush({ items: input.entries ?? [] });
   await result.fixture.whenStable();
@@ -129,10 +136,10 @@ describe('VoiceProfilesPanel (KBC-071)', () => {
     });
     expect(screen.getByText('Precisa calcular de novo')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Calcular de novo' }));
-    await fixture.whenStable();
     http
       .expectOne(`/api/v1/voice-profiles/${ID}/recalculate`)
       .flush(aProfile({ status: 'calculating' }));
+    TestBed.tick();
     http.expectOne(PROFILES).flush(aListOf([]));
     await fixture.whenStable();
   });
@@ -165,13 +172,13 @@ describe('VoiceProfilesPanel (KBC-071)', () => {
     );
     await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Revogar e apagar' }));
-    await fixture.whenStable();
     const sent = http.expectOne(`/api/v1/voice-profiles/${ID}`);
     expect(sent.request.method).toBe('DELETE');
     sent.flush(null);
+    TestBed.tick();
     http.expectOne(PROFILES).flush(aListOf([]));
     await fixture.whenStable();
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByRole('status').textContent).toContain(
       'Consentimento revogado',
     );
   });
@@ -187,13 +194,15 @@ describe('VoiceProfilesPanel (KBC-071)', () => {
     );
     await fixture.whenStable();
     fireEvent.click(screen.getByRole('button', { name: 'Revogar e apagar' }));
-    await fixture.whenStable();
     http
       .expectOne(`/api/v1/voice-profiles/${ID}`)
       .flush({}, { status: 500, statusText: 'x' });
+    TestBed.tick();
     http.expectOne(PROFILES).flush(aListOf([aProfile()]));
     await fixture.whenStable();
-    expect(screen.getByRole('alert')).toHaveTextContent('Não consegui revogar');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Não consegui revogar',
+    );
     expect(screen.getByText(/Os nomes já confirmados/)).toBeTruthy();
   });
 
@@ -219,14 +228,16 @@ describe('VoiceProfilesPanel (KBC-071)', () => {
       screen.getByText(/4 feitas,\s+2 aceitas,\s+1 recusadas/),
     ).toBeTruthy();
     expect(
-      screen.getByRole('link', { name: 'Baixar a prova do consentimento' }),
-    ).toHaveAttribute('href', `/api/v1/voice-consents/${ID}/evidence`);
+      screen
+        .getByRole('link', { name: 'Baixar a prova do consentimento' })
+        .getAttribute('href'),
+    ).toBe(`/api/v1/voice-consents/${ID}/evidence`);
   });
 
   it('AC-1: asks for the consent before any voice', async () => {
     const { http, fixture } = await renderPanel({});
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar perfil' }));
-    await fixture.whenStable();
+    await settle();
     http.expectOne(SPEAKERS).flush({
       items: [{ id: SPEAKER, name: 'Gabriel', authorSlug: null, main: false }],
     });

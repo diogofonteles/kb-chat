@@ -21,6 +21,13 @@ const aSpeaker = (id: string, name: string) => ({
   main: false,
 });
 
+/** Lets a resource take a flushed answer and ask what depends on it. */
+const settle = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve));
+  TestBed.tick();
+  await new Promise((resolve) => setTimeout(resolve));
+};
+
 async function renderForm(taken: readonly string[] = []) {
   const created = vi.fn();
   const result = await render(VoiceProfileForm, {
@@ -63,7 +70,7 @@ async function toSources(view: Awaited<ReturnType<typeof renderForm>>) {
   type('Texto do aceite', 'Autorizo o uso da minha voz.');
   fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo/ }));
   proceed();
-  await view.fixture.whenStable();
+  await settle();
   view.http.expectOne(VOICES).flush({
     items: [
       { mediaId: MEDIA, title: 'Palestra', voice: 2, speakingMs: 45_000 },
@@ -95,18 +102,20 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
     const view = await renderForm();
     proceed();
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert')).toHaveTextContent('Escolha a pessoa.');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Escolha a pessoa.',
+    );
     fillConsent();
     await view.fixture.whenStable();
     proceed();
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('alert').textContent).toContain(
       'Anexe o documento ou cole o texto do aceite.',
     );
     type('Texto do aceite', 'Autorizo o uso da minha voz.');
     proceed();
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('alert').textContent).toContain(
       'Confirme a autorização para continuar.',
     );
     expect(screen.queryByText('De quais vozes calcular')).toBeNull();
@@ -123,7 +132,7 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
     await view.fixture.whenStable();
     proceed();
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('alert').textContent).toContain(
       'Preencha os campos do consentimento.',
     );
     expect(screen.getByLabelText(/Em que qualidade/)).toBeTruthy();
@@ -136,7 +145,7 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
       target: { files: [file] },
     });
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('alert').textContent).toContain(
       'Use um PDF, JPEG ou PNG de até 5 MB.',
     );
   });
@@ -191,7 +200,7 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
     await view.fixture.whenStable();
     view.http.expectOne(PROFILES).flush({}, { status: 422, statusText: 'x' });
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('alert').textContent).toContain(
       'O consentimento não foi aceito.',
     );
     expect(screen.getByText('Consentimento específico')).toBeTruthy();
@@ -204,7 +213,7 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
     type('Texto do aceite', 'Autorizo o uso da minha voz.');
     fireEvent.click(screen.getByRole('checkbox', { name: /Confirmo/ }));
     proceed();
-    await view.fixture.whenStable();
+    await settle();
     view.http.expectOne(VOICES).flush({ items: [] });
     await view.fixture.whenStable();
     expect(screen.getByText(/ainda não tem voz nomeada/)).toBeTruthy();

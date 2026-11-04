@@ -752,10 +752,10 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
       });
 
     it('reads as a suggestion and names nobody until a person answers', async () => {
-      await open(suggested());
-      expect(screen.getByText(/Parece ser Mestre Gabriel/)).toHaveTextContent(
-        'semelhança alta',
-      );
+      await renderPanel(suggested());
+      expect(
+        screen.getByText(/Parece ser Mestre Gabriel/).textContent,
+      ).toContain('semelhança alta');
       expect(
         screen.getByRole('button', {
           name: 'Aceitar Mestre Gabriel para a Voz 2',
@@ -764,7 +764,7 @@ describe('VoicesPanel: naming the voices (KBC-065)', () => {
     });
 
     it('sends the answer with the separation it was made on', async () => {
-      const { http, fixture } = await open(suggested());
+      const { http, fixture } = await renderPanel(suggested());
       fireEvent.click(
         screen.getByRole('button', {
           name: 'Recusar Mestre Gabriel para a Voz 2',

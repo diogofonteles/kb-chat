@@ -357,7 +357,6 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       });
       expect(box.checked).toBe(false);
       fireEvent.click(box);
-      await fixture.whenStable();
       const patch = http.expectOne(
         `${URL}/dddddddd-dddd-4ddd-8ddd-dddddddddddd`,
       );
@@ -365,6 +364,7 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         kinds: ['transcribe', 'diarize', 'voice-profile'],
       });
       patch.flush(aTranscriber());
+      TestBed.tick();
       http.expectOne(URL).flush({ items: [aTranscriber()] });
       await fixture.whenStable();
     });
@@ -376,7 +376,6 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       fireEvent.click(
         screen.getByRole('checkbox', { name: 'Separa vozes: Mac do dono' }),
       );
-      await fixture.whenStable();
       const patch = http.expectOne(
         `${URL}/dddddddd-dddd-4ddd-8ddd-dddddddddddd`,
       );
@@ -384,6 +383,7 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
         kinds: ['transcribe', 'voice-profile'],
       });
       patch.flush(aTranscriber());
+      TestBed.tick();
       http.expectOne(URL).flush({ items: [aTranscriber()] });
       await fixture.whenStable();
     });
