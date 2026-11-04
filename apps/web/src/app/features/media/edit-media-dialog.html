@@ -1,0 +1,96 @@
+<!-- Escape and "Cancelar" close it, and the browser gives the focus back to what opened it. -->
+<dialog
+  #dialog
+  class="panel"
+  aria-labelledby="edit-title"
+  (cancel)="holdWhileSaving($event)"
+  (close)="closed.emit()"
+>
+  <form class="body" [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <header class="head">
+      <h2 id="edit-title">{{ heading }}</h2>
+    </header>
+
+    <div class="field">
+      <label
+        class="label"
+        for="edit-title-field"
+        i18n="@@media.upload.titleLabel"
+        >Título</label
+      >
+      <input
+        #titleInput
+        id="edit-title-field"
+        type="text"
+        formControlName="title"
+        maxlength="200"
+        autocomplete="off"
+        [attr.aria-invalid]="submitted() && form.controls.title.invalid"
+        aria-describedby="edit-title-error"
+      />
+      @if (submitted() && form.controls.title.invalid) {
+        <span
+          id="edit-title-error"
+          class="error"
+          i18n="@@media.upload.titleMissing"
+          ><span aria-hidden="true">⚠</span> Dê um título ao áudio.</span
+        >
+      }
+    </div>
+
+    <div class="field">
+      <label class="label" for="edit-topic-field" i18n="@@media.upload.topic"
+        >Acervo</label
+      >
+      <select
+        id="edit-topic-field"
+        formControlName="topic"
+        aria-describedby="edit-move-note"
+        (change)="topicChosen()"
+      >
+        @for (option of choices(); track option.slug) {
+          <option [value]="option.slug">{{ treeTitle(option) }}</option>
+        }
+      </select>
+      <span id="edit-move-note" class="note">
+        @if (moving()) {
+          <ng-container i18n="@@media.edit.moveNote"
+            >Posições, marcadores e transcrição vão junto. Quem não vê este
+            acervo deixa de ver o áudio.</ng-container
+          >
+        }
+      </span>
+    </div>
+
+    <app-author-combobox
+      [topic]="chosenTopic()"
+      [disabled]="saving()"
+      [(name)]="authorName"
+    />
+
+    @if (failure()) {
+      <p class="error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ failure() }}
+      </p>
+    }
+
+    <footer class="actions">
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="saving()"
+        (click)="close()"
+        i18n="@@media.upload.cancel"
+      >
+        Cancelar
+      </button>
+      <button type="submit" class="primary" [disabled]="saving()">
+        @if (saving()) {
+          <ng-container i18n="@@media.edit.saving">Salvando…</ng-container>
+        } @else {
+          <ng-container i18n="@@media.edit.save">Salvar</ng-container>
+        }
+      </button>
+    </footer>
+  </form>
+</dialog>

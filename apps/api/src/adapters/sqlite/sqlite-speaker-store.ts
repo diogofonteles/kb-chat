@@ -1,6 +1,7 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import type {
   NewSpeaker,
+  SpeakerMove,
   SpeakerStorePort,
   StoredSpeaker,
   StoredVoiceLabel,
@@ -41,20 +42,60 @@ export class SqliteSpeakerStore implements SpeakerStorePort {
   }
 
   add(speaker: NewSpeaker): { speaker: StoredSpeaker; created: boolean } {
+    return inTransaction(this.db, () => this.place(speaker));
+  }
+
+  labelled(mediaId: string): StoredSpeaker[] {
+    return this.db
+      .prepare(
+        `SELECT DISTINCT speaker.id, speaker.collection, speaker.name, speaker.author_slug
+         FROM media_voice_labels label
+         JOIN diarizations diarization ON diarization.id = label.diarization_id
+         JOIN media_speakers speaker ON speaker.id = label.speaker_id
+         WHERE diarization.media_id = ?`,
+      )
+      .all(mediaId)
+      .map(toSpeaker);
+  }
+
+  rehome<T>(input: {
+    mediaId: string;
+    moves: readonly SpeakerMove[];
+    alongside: () => T;
+  }): T {
     return inTransaction(this.db, () => {
-      const existing = this.sameAs(speaker);
-      if (!existing) {
-        this.insert(speaker);
-        return { speaker, created: true };
-      }
-      if (existing.authorSlug !== null || speaker.authorSlug === null)
-        return { speaker: existing, created: false };
-      this.link(existing.id, speaker);
-      return {
-        speaker: { ...existing, authorSlug: speaker.authorSlug },
-        created: false,
-      };
+      for (const move of input.moves) this.relabel(input.mediaId, move);
+      return input.alongside();
     });
+  }
+
+  private relabel(mediaId: string, move: SpeakerMove): void {
+    const { speaker } = this.place(move.to);
+    this.db
+      .prepare(
+        `UPDATE media_voice_labels SET speaker_id = ?
+         WHERE speaker_id = ? AND diarization_id IN
+           (SELECT id FROM diarizations WHERE media_id = ?)`,
+      )
+      .run(speaker.id, move.from, mediaId);
+  }
+
+  private place(speaker: NewSpeaker): {
+    speaker: StoredSpeaker;
+    created: boolean;
+  } {
+    const existing = this.sameAs(speaker);
+    if (!existing) {
+      this.insert(speaker);
+      return { speaker, created: true };
+    }
+    if (existing.authorSlug !== null || speaker.authorSlug === null)
+      return { speaker: existing, created: false };
+    this.link(existing.id, speaker);
+    return {
+      speaker: { ...existing, authorSlug: speaker.authorSlug },
+      created: false,
+    };
   }
 
   update(change: {

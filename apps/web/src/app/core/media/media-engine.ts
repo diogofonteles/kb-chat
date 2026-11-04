@@ -158,6 +158,13 @@ export class MediaEngine {
     this.applySpeed(element);
   }
 
+  /** The loaded media got a new title (KBC-050): the sound goes on, the labels follow. */
+  retitle(id: string, title: string): void {
+    this.current.update((source) =>
+      source?.id === id ? { ...source, title } : source,
+    );
+  }
+
   /** Plays this and every later source at `speed`, keeping the voice's pitch. */
   setSpeed(speed: PlaybackSpeed): void {
     this.speedValue.set(speed);

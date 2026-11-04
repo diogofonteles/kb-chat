@@ -13,6 +13,7 @@ import {
   mediaItemSchema,
   type CreateMediaRequest,
   type MediaItem,
+  type UpdateMediaRequest,
 } from '@kb-chat/contracts';
 import { CSRF } from '@core/auth/auth-interceptor.js';
 import { SessionEvents } from '@core/auth/session-events.js';
@@ -89,6 +90,13 @@ export class MediaApi {
         return throwError(() => err);
       }),
     );
+  }
+
+  /** Changes its title, author or collection (KBC-050); what is left out stays. */
+  update(id: string, request: UpdateMediaRequest): Observable<MediaItem> {
+    return this.http
+      .patch(mediaUrl(id), request)
+      .pipe(map((body) => mediaItemSchema.parse(body)));
   }
 
   retry(id: string): Observable<MediaItem> {

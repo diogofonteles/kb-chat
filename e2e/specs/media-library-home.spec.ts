@@ -557,6 +557,7 @@ function synthetic(n: number) {
     bytes: 1,
     createdAt: new Date(Date.UTC(2026, 0, 1) + n * 60_000).toISOString(),
     canRetry: false,
+    canEdit: false,
     positionMs: inProgress ? 60_000 : 0,
     completedAt: null,
     positionUpdatedAt: inProgress ? '2026-11-01T10:00:00.000Z' : null,

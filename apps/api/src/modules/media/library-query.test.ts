@@ -34,6 +34,7 @@ function anItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
     bytes: 1,
     createdAt: new Date(Date.UTC(2026, 0, 1, 0, next)).toISOString(),
     canRetry: false,
+    canEdit: false,
     positionMs: 0,
     completedAt: null,
     positionUpdatedAt: null,

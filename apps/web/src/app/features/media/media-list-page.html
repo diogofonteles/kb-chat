@@ -71,6 +71,11 @@
   }
 
   <p class="sent-elsewhere" role="status">{{ sentElsewhere() }}</p>
+  <app-moved-notice
+    [move]="moved()"
+    path="/midia"
+    (opened)="openMovedTopic($event)"
+  />
 
   @if (actionError()) {
     <p class="error" role="alert">
@@ -191,7 +196,7 @@
               ><span [style.width.%]="percentOf(item)"></span
             ></span>
           }
-          @if (isMaster()) {
+          @if (isMaster() || item.canEdit) {
             <span class="actions">
               @if (item.canRetry) {
                 <button
@@ -205,6 +210,9 @@
               }
               <app-row-menu
                 [label]="menuLabelOf(item)"
+                [canEdit]="item.canEdit"
+                [canRemove]="isMaster()"
+                (editChosen)="openEdit(item)"
                 (removeChosen)="askRemove(item)"
               />
             </span>
@@ -214,6 +222,7 @@
     </ul>
   }
 
+  <p class="visually-hidden" aria-live="polite">{{ readyNotice() }}</p>
   <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
 </section>
 
@@ -223,6 +232,15 @@
     [topics]="topics()"
     (uploaded)="uploaded($event)"
     (closed)="uploadClosed()"
+  />
+}
+
+@if (editing(); as item) {
+  <app-edit-media-dialog
+    [item]="item"
+    [topics]="topics()"
+    (saved)="edited($event)"
+    (closed)="editClosed()"
   />
 }
 

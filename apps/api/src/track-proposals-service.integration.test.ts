@@ -19,6 +19,7 @@ import type { MediaActor } from './modules/media/index.js';
 const OWNER: MediaActor = {
   principal: 'owner',
   isMaster: true,
+  canUpload: true,
   canSee: () => true,
 };
 const EDITOR: MediaActor = { ...OWNER, principal: 'ana', isMaster: false };

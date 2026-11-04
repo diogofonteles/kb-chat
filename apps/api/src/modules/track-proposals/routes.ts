@@ -11,6 +11,7 @@ import { z } from 'zod';
 import {
   assertFeature,
   canSee,
+  hasFeature,
   isMaster,
   viewerOf,
   type RouteAccess,
@@ -31,6 +32,7 @@ function actorOf(request: FastifyRequest): MediaActor {
   return {
     principal: viewer.principal,
     isMaster: isMaster(viewer.person),
+    canUpload: hasFeature(viewer.person, 'media-upload'),
     canSee: (topic) => canSee(request, topic),
   };
 }

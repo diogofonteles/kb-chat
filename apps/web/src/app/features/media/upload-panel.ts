@@ -14,14 +14,17 @@ import {
   viewChild,
 } from '@angular/core';
 import {
-  type AbstractControl,
   FormControl,
   FormGroup,
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import { apiErrorSchema, type MediaItem, type Topic } from '@kb-chat/contracts';
-import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import type { MediaItem, Topic } from '@kb-chat/contracts';
+import {
+  errorMessage,
+  refusedFieldOf,
+  toUiErrorCode,
+} from '@core/api/api-error.js';
 import { AuthorsApi } from '@core/media/authors-api.js';
 import { MediaApi } from '@core/media/media-api.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
@@ -35,10 +38,15 @@ import {
   throwError,
   type Observable,
 } from 'rxjs';
-import { isInvalidAuthorName } from './author-suggestions.js';
+import {
+  AuthorRefused,
+  authorFailureOf,
+  isInvalidAuthorName,
+} from './author-suggestions.js';
 import { AuthorCombobox } from './author-combobox.js';
 import {
   fileProblemOf,
+  notBlank,
   sentOf,
   titleFromFileName,
   uploadRule,
@@ -250,9 +258,7 @@ export class UploadPanel implements OnInit {
     if (!author) return of(null);
     return this.authorsApi.create(topic, author).pipe(
       map(({ slug }) => slug),
-      catchError((err: unknown) =>
-        throwError(() => (refused(err) ? new AuthorRefused() : err)),
-      ),
+      catchError((err: unknown) => throwError(() => authorFailureOf(err))),
     );
   }
 
@@ -288,7 +294,7 @@ export class UploadPanel implements OnInit {
     this.failure.set(
       offline
         ? $localize`:@@media.upload.stopped:O envio parou: verifique a conexão e tente de novo.`
-        : err instanceof AuthorRefused || refusedField(err) === 'author'
+        : err instanceof AuthorRefused || refusedFieldOf(err) === 'author'
           ? $localize`:@@media.upload.authorRefused:O nome do autor não foi aceito: use uma linha, até 60 caracteres, sem aspas nem « ».`
           : code === 'VALIDATION_FAILED'
             ? $localize`:@@media.upload.refused:Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus).`
@@ -296,33 +302,6 @@ export class UploadPanel implements OnInit {
     );
   }
 }
-
-/** The author's name was refused (400): told as an author problem, never as the file's. */
-class AuthorRefused extends Error {
-  constructor() {
-    super('The author name was refused');
-  }
-}
-
-const refused = (err: unknown): boolean =>
-  err instanceof HttpErrorResponse && err.status === 400;
-
-/** The field a 400 names (`details.field` of the API's error envelope), if any. */
-function refusedField(err: unknown): string | null {
-  if (!refused(err) || !(err instanceof HttpErrorResponse)) return null;
-  const parsed = apiErrorSchema.safeParse(err.error);
-  const details = parsed.success ? parsed.data.error.details : null;
-  return typeof details === 'object' &&
-    details !== null &&
-    'field' in details &&
-    typeof details.field === 'string'
-    ? details.field
-    : null;
-}
-
-/** A title is required, and spaces alone are not one (the API trims it too). */
-const notBlank = (control: AbstractControl<string>) =>
-  control.value.trim() ? null : { required: true };
 
 /** What an item was created for. */
 interface Draft {

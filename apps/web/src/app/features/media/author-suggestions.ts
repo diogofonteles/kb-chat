@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   authorNameSchema,
   authorSlugOf,
@@ -10,6 +11,19 @@ import {
  */
 export const isInvalidAuthorName = (text: string): boolean =>
   text.trim() !== '' && !authorNameSchema.safeParse(text).success;
+
+/** The author's name was refused (400): told as an author problem, never as another's. */
+export class AuthorRefused extends Error {
+  constructor() {
+    super('The author name was refused');
+  }
+}
+
+/** Registering a name failed: a 400 is the name's fault, anything else stays as it is. */
+export const authorFailureOf = (err: unknown): unknown =>
+  err instanceof HttpErrorResponse && err.status === 400
+    ? new AuthorRefused()
+    : err;
 
 /** At most this many suggestions, so the list is scanned at a glance (SL-11). */
 export const MAX_SUGGESTIONS = 8;

@@ -15,6 +15,10 @@ export {
   type MediaActor,
   type MediaServiceDeps,
 } from './media-service.js';
+export {
+  MediaEditService,
+  type MediaEditServiceDeps,
+} from './media-edit-service.js';
 export { bookmarkRoutes } from './bookmark-routes.js';
 export {
   BookmarkService,

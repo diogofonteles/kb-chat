@@ -123,6 +123,11 @@ export const mediaItemSchema = z.object({
   createdAt: z.iso.datetime(),
   /** A master may queue the conversion again (a failure that is not permanent). */
   canRetry: z.boolean(),
+  /**
+   * The person may change its details (KBC-050 BR-1). Defaults to false so a web newer than
+   * its API still reads the item.
+   */
+  canEdit: z.boolean().default(false),
   /** Where the person who asks stopped (KBC-041 FR-2): 0 when never heard or heard to the end. */
   positionMs: z.number().int().min(0),
   /** When that person heard it to 95% or more (BR-2); null otherwise. */
@@ -149,6 +154,16 @@ export const createMediaRequestSchema = z.strictObject({
   bytes: z.number().int().min(1).max(MEDIA_MAX_UPLOAD_BYTES),
 });
 export type CreateMediaRequest = z.infer<typeof createMediaRequestSchema>;
+
+/** PATCH /api/v1/media/:id (KBC-050 FR-1): what changes; what is left out stays. */
+export const updateMediaRequestSchema = z.strictObject({
+  title: z.string().trim().min(1).max(200).optional(),
+  /** An author of the collection it ends up in, or null for "Outros autores". */
+  author: authorSlugSchema.nullable().optional(),
+  /** The collection to move it to. */
+  topic: topicSlugSchema.optional(),
+});
+export type UpdateMediaRequest = z.infer<typeof updateMediaRequestSchema>;
 
 /* ---------- Listening: speed, display and position, per person (KBC-041) ---------- */
 

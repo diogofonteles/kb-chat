@@ -17,6 +17,7 @@ import type {
   SavedProgress,
 } from '../../ports/listening-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
+import { canEditMedia, legacyAuthorshipOf } from './media-policy.js';
 import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
@@ -24,6 +25,8 @@ import type { Presence } from './transcriber-service.js';
 export interface MediaActor {
   readonly principal: string;
   readonly isMaster: boolean;
+  /** Has `media-upload`, in the collections they see. */
+  readonly canUpload: boolean;
   readonly canSee: (topic: string) => boolean;
 }
 
@@ -52,9 +55,6 @@ export interface PlayableFile {
   readonly modifiedMs: number;
   readonly mime: string;
 }
-
-/** The author the pre-KBC-049 column means by `mestre-laercio` (ADR 0030 §4). */
-const LEGACY_AUTHOR_SLUG = 'mestre-laercio';
 
 const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
 
@@ -104,17 +104,13 @@ export class MediaService {
       topic,
       title: request.title,
       author: author?.slug ?? null,
-      // The old image reads only this column: never name the Mestre for another author.
-      legacyAuthorship:
-        author?.slug === LEGACY_AUTHOR_SLUG
-          ? 'mestre-laercio'
-          : 'outros-autores',
+      legacyAuthorship: legacyAuthorshipOf(author?.slug ?? null),
       ownerPrincipal: actor.principal,
       fileName: request.fileName,
       uploadBytes: request.bytes,
       now: this.now(),
     });
-    return this.itemOf(record, actor.isMaster, this.view());
+    return this.itemOf(record, actor, this.view());
   }
 
   /** The file of an item created by this person; it goes to the queue when complete. */
@@ -148,7 +144,7 @@ export class MediaService {
       this.receiving.delete(mediaId);
     }
     const queued = await this.queue(mediaId);
-    return this.itemOf(queued, actor.isMaster, this.view());
+    return this.itemOf(queued, actor, this.view());
   }
 
   /** The file arrived: queue the conversion, unless the item was removed meanwhile. */
@@ -187,7 +183,7 @@ export class MediaService {
     );
     const presence = this.deps.presence?.();
     return records.map((record) =>
-      this.itemOf(record, actor.isMaster, {
+      this.itemOf(record, actor, {
         progress: progress.get(record.id),
         presence,
       }),
@@ -199,7 +195,7 @@ export class MediaService {
     const progress = this.deps.listening
       .progressOf(actor.principal, [mediaId])
       .get(mediaId);
-    return this.itemOf(record, actor.isMaster, this.view(progress));
+    return this.itemOf(record, actor, this.view(progress));
   }
 
   async playable(actor: MediaActor, mediaId: string): Promise<PlayableFile> {
@@ -262,14 +258,14 @@ export class MediaService {
   /** Masters only (route access): a failure that a new conversion may fix (FR-7). */
   retry(actor: MediaActor, mediaId: string): MediaItem {
     const media = this.visible(actor, mediaId);
-    if (!this.itemOf(media, true).canRetry)
+    if (!this.itemOf(media, { ...actor, isMaster: true }).canRetry)
       throw new AppError(
         'MEDIA_CONFLICT',
         'This media cannot be converted again',
       );
     return this.itemOf(
       this.deps.store.retryMedia({ mediaId, now: this.now() }),
-      actor.isMaster,
+      actor,
       this.view(),
     );
   }
@@ -288,12 +284,13 @@ export class MediaService {
   /** The contract view with the item's author as the collection names it (KBC-049). */
   private itemOf(
     record: MediaRecord,
-    isMaster: boolean,
+    actor: MediaActor,
     view: ItemView = {},
   ): MediaItem {
-    return toMediaItem(record, isMaster, {
+    return toMediaItem(record, actor.isMaster, {
       ...view,
       author: this.authorOf(record),
+      canEdit: canEditMedia(actor, record),
     });
   }
 

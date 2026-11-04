@@ -58,6 +58,13 @@
     </div>
   }
 
+  <app-moved-notice
+    [move]="moved()"
+    path="/biblioteca"
+    [query]="movedQuery()"
+    (opened)="openMovedTopic($event)"
+  />
+
   @if (shownError() && !selecting()) {
     <p class="error" role="alert">
       <span aria-hidden="true">⚠</span> {{ shownError() }}
@@ -393,6 +400,15 @@
 
   <p class="visually-hidden" role="status">{{ announcement() }}</p>
 </section>
+
+@if (editing(); as item) {
+  <app-edit-media-dialog
+    [item]="item"
+    [topics]="topics()"
+    (saved)="edited($event)"
+    (closed)="editClosed()"
+  />
+}
 
 @if (uploading()) {
   <app-upload-panel

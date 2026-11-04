@@ -63,6 +63,9 @@ import {
   statusTextOf,
   transcriptionTextOf,
 } from './media-labels.js';
+import { ChatStore } from '@features/chat/chat-store.js';
+import { detailsSavedText, editDetailsLabel } from './edit-labels.js';
+import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
 import { hasLibrary } from './library/library-access.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { BookmarkList } from './bookmark-list.js';
@@ -86,6 +89,7 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
     AuthorshipBadge,
     MediaPlayer,
     BookmarkList,
+    EditMediaDialog,
     TranscriptPanel,
     VoicesPanel,
   ],
@@ -107,6 +111,11 @@ export class MediaPlayerPage {
   private readonly title = inject(Title);
   private readonly route = inject(ActivatedRoute);
   private readonly preferences = inject(TranscriptPreferences);
+  /** The collections the person sees, for "Editar informações" (KBC-050). */
+  protected readonly topics = inject(ChatStore).topicList;
+  protected readonly editLabel = editDetailsLabel();
+  protected readonly editing = signal(false);
+  protected readonly announcement = signal('');
   private readonly id = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('id') ?? '')),
     { initialValue: '' },
@@ -249,6 +258,8 @@ export class MediaPlayerPage {
   );
   private readonly backToList =
     viewChild<ElementRef<HTMLAnchorElement>>('backToList');
+  private readonly editButton =
+    viewChild<ElementRef<HTMLButtonElement>>('editButton');
 
   constructor() {
     toObservable(this.media)
@@ -268,6 +279,18 @@ export class MediaPlayerPage {
       // Playing, it goes on in the mini-player; paused, leaving closes it (FR-8).
       if (!this.engine.playing() && !this.engine.busy()) this.engine.unload();
     });
+  }
+
+  /** The page shows what was saved at once; playback does not notice (AC-1). */
+  protected edited({ after }: MediaEdited): void {
+    this.item.set(after);
+    this.announcement.set(detailsSavedText());
+  }
+
+  /** Safari leaves a clicked button unfocused, so the dialog has nothing to give back. */
+  protected editClosed(): void {
+    this.editing.set(false);
+    this.editButton()?.nativeElement.focus();
   }
 
   /** "Continuar de 23:10": plays from where the person stopped. */

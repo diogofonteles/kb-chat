@@ -17,6 +17,7 @@ import type {
   LeaseOwner,
   LeaseRequest,
   LeasedJob,
+  MediaEdit,
   MediaRecord,
   MediaRendition,
   MediaStorePort,
@@ -208,6 +209,23 @@ export class SqliteMediaStore implements MediaStorePort {
       bytes: Number(row['bytes']),
       mime: text(row, 'mime'),
     };
+  }
+
+  editMedia(edit: MediaEdit): MediaRecord | null {
+    this.db
+      .prepare(
+        `UPDATE media SET title = ?, topic = ?, author = ?, authorship = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        edit.title,
+        edit.topic,
+        edit.author,
+        edit.legacyAuthorship,
+        edit.now.toISOString(),
+        edit.mediaId,
+      );
+    return this.getMedia(edit.mediaId);
   }
 
   deleteMedia(id: string): boolean {

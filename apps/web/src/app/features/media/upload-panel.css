@@ -1,5 +1,7 @@
 .panel {
   width: min(32rem, 100vw);
+  /* The browser's own limit on a modal would leave a strip beside it on a phone (T14). */
+  max-width: 100vw;
   max-height: 100dvh;
   margin: 0 0 0 auto;
   height: 100dvh;

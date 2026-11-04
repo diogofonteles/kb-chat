@@ -4,6 +4,7 @@ import {
   mediaItemSchema,
   mediaListSchema,
   topicSlugSchema,
+  updateMediaRequestSchema,
 } from '@kb-chat/contracts';
 import type {
   FastifyBaseLogger,
@@ -18,7 +19,14 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { Readable } from 'node:stream';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
-import { canSee, isMaster, viewerOf, type RouteAccess } from '../auth/index.js';
+import {
+  canSee,
+  hasFeature,
+  isMaster,
+  viewerOf,
+  type RouteAccess,
+} from '../auth/index.js';
+import type { MediaEditService } from './media-edit-service.js';
 import type { MediaActor, MediaService } from './media-service.js';
 import { serveMedia } from './serve-media.js';
 
@@ -56,6 +64,7 @@ export function actorOf(request: FastifyRequest): MediaActor {
   return {
     principal: viewer.principal,
     isMaster: isMaster(viewer.person),
+    canUpload: hasFeature(viewer.person, 'media-upload'),
     canSee: (topic) => canSee(request, topic),
   };
 }
@@ -84,6 +93,15 @@ const OPTIONS = {
     config: { access: LISTEN },
     schema: { params: mediaParams, response: itemResponse },
   },
+  // Who may edit is decided by the service: 404 without access to it, 403 without the right.
+  edit: {
+    config: { access: LISTEN },
+    schema: {
+      params: mediaParams,
+      body: updateMediaRequestSchema,
+      response: itemResponse,
+    },
+  },
   stream: { config: { access: LISTEN }, schema: { params: mediaParams } },
   retry: {
     config: { access: MASTER },
@@ -109,6 +127,7 @@ const createOptions = (perMinute: number) => ({
 export const mediaRoutes =
   (
     service: MediaService,
+    editor: MediaEditService,
     /** Items created per minute per client (MEDIA_CREATE_RATE_LIMIT). */
     createPerMinute: number,
   ): FastifyPluginAsync =>
@@ -135,6 +154,7 @@ export const mediaRoutes =
       },
     );
     registerItemRoutes(typed, service);
+    registerEditRoute(typed, service, editor);
   };
 
 type TypedApp = FastifyInstance<
@@ -144,6 +164,19 @@ type TypedApp = FastifyInstance<
   FastifyBaseLogger,
   ZodTypeProvider
 >;
+
+/** "Editar informações" (KBC-050 FR-1): the answer is the item as the person now sees it. */
+function registerEditRoute(
+  typed: TypedApp,
+  service: MediaService,
+  editor: MediaEditService,
+): void {
+  typed.patch('/api/v1/media/:id', OPTIONS.edit, async (request) => {
+    const actor = actorOf(request);
+    editor.edit(actor, request.params.id, request.body);
+    return service.get(actor, request.params.id);
+  });
+}
 
 function registerItemRoutes(typed: TypedApp, service: MediaService): void {
   typed.put('/api/v1/media/:id/file', OPTIONS.upload, async (request) =>

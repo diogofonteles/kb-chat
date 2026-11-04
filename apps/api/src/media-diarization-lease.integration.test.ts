@@ -266,6 +266,7 @@ describe('Edges of a separation (KBC-064)', () => {
   const actor = {
     principal: 'owner',
     isMaster: true,
+    canUpload: true,
     canSee: () => true,
   };
   const ask = () =>

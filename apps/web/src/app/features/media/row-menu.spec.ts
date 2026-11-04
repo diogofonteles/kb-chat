@@ -103,3 +103,21 @@ describe('RowMenu (menu button pattern)', () => {
     expect(screen.getByRole('menu')).toBeTruthy();
   });
 });
+
+describe('RowMenu "Editar informações" (KBC-050 FR-2)', () => {
+  it('offers it to who may edit, and only then', async () => {
+    const editChosen = vi.fn();
+    const { fixture } = await render(RowMenu, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: { label: 'Mais', canEdit: true, canRemove: false },
+      on: { editChosen },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    await fixture.whenStable();
+    expect(screen.queryByRole('menuitem', { name: 'Remover' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Editar informações' }),
+    );
+    expect(editChosen).toHaveBeenCalledOnce();
+  });
+});

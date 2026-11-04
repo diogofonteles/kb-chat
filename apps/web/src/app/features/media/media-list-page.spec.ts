@@ -32,7 +32,7 @@ async function renderList(
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
-      provideRouter([]),
+      provideRouter([{ path: 'midia', children: [] }]),
       chatStoreOn(),
       sessionAs(who),
       { provide: MEDIA_POLL_MS, useValue: pollMs },
@@ -320,6 +320,7 @@ describe('MediaListPage (T14)', () => {
         status: 'failed',
         failure: 'conversion-failed',
         canRetry: false,
+        canEdit: false,
       }),
     ]);
     expect(screen.queryByRole('button', { name: /Mais ações/ })).toBeNull();
@@ -503,5 +504,156 @@ describe('MediaListPage (T14)', () => {
     const { answer } = await renderList();
     await answer([aMediaItem()]);
     expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+});
+
+describe('MediaListPage: "Editar informações" (KBC-050)', () => {
+  const itemUrl = (id: string) => `/api/v1/media/${id}`;
+  /** A resource's request goes out after the answer's task, in the effects. */
+  const nextRequest = async () => {
+    await new Promise((resolve) => setTimeout(resolve));
+    TestBed.tick();
+  };
+
+  async function openEdit(
+    item: MediaItem,
+    who?: Parameters<typeof renderList>[0],
+  ) {
+    const view = await renderList(who);
+    await view.answer([item]);
+    fireEvent.click(
+      screen.getByRole('button', { name: `Mais ações para ${item.title}` }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Editar informações' }),
+    );
+    await view.fixture.whenStable();
+    return view;
+  }
+
+  it('FR-2: shows no menu to who may not edit', async () => {
+    const { answer } = await renderList({ features: ['media'] });
+    await answer([aMediaItem({ canEdit: false })]);
+    expect(screen.queryByRole('button', { name: /Mais ações/ })).toBeNull();
+  });
+
+  it('FR-2: who sent it edits but does not remove', async () => {
+    const { answer, fixture } = await renderList({ features: ['media'] });
+    await answer([aMediaItem({ canEdit: true })]);
+    fireEvent.click(screen.getByRole('button', { name: /Mais ações/ }));
+    await fixture.whenStable();
+    expect(
+      screen.getAllByRole('menuitem').map((one) => one.textContent?.trim()),
+    ).toEqual(['Editar informações']);
+  });
+
+  it('AC-1: saving closes the dialog, reloads and says so', async () => {
+    const item = aMediaItem({ canEdit: true });
+    const { http, fixture } = await openEdit(item);
+    fireEvent.input(screen.getByLabelText('Título'), {
+      target: { value: 'A conselheira do rei' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const renamed = { ...item, title: 'A conselheira do rei' };
+    http.expectOne(itemUrl(item.id)).flush(renamed);
+    await nextRequest();
+    http.expectOne(LIST_URL).flush({ items: [renamed] });
+    await fixture.whenStable();
+    expect(screen.getByText('Informações salvas')).toBeTruthy();
+    expect(screen.getByRole('link', { name: renamed.title })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Ver o acervo' })).toBeNull();
+  });
+
+  it('AC-1: another audio getting ready on that reload does not take the saved notice away', async () => {
+    const item = aMediaItem({ canEdit: true });
+    const converting = aMediaItem({
+      id: mediaId(2),
+      title: 'A do vizinho',
+      status: 'processing',
+      progress: 90,
+      durationMs: null,
+    });
+    const view = await renderList();
+    await view.answer([item, converting]);
+    fireEvent.click(
+      screen.getByRole('button', { name: `Mais ações para ${item.title}` }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Editar informações' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.input(screen.getByLabelText('Título'), {
+      target: { value: 'A conselheira do rei' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const renamed = { ...item, title: 'A conselheira do rei' };
+    view.http.expectOne(itemUrl(item.id)).flush(renamed);
+    await nextRequest();
+    const ready = {
+      ...aMediaItem(),
+      id: converting.id,
+      title: converting.title,
+    };
+    view.http.expectOne(LIST_URL).flush({ items: [renamed, ready] });
+    await view.fixture.whenStable();
+    expect(screen.getByText('A do vizinho está pronta.')).toBeTruthy();
+    expect(screen.getByText('Informações salvas')).toBeTruthy();
+  });
+
+  it('AC-2: a moved audio leaves the list with the notice, the link and the focus on the page', async () => {
+    const item = aMediaItem({ canEdit: true, author: null });
+    const { http, fixture } = await openEdit(item);
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    http.expectOne(itemUrl(item.id)).flush({ ...item, topic: 'alquimia' });
+    await nextRequest();
+    http.expectOne(LIST_URL).flush({ items: [] });
+    await fixture.whenStable();
+    const text = 'Palestra de 1998 foi movido para o acervo Alquimia.';
+    expect(screen.getAllByText(new RegExp(text)).length).toBe(2);
+    const link = screen.getByRole('link', { name: 'Ver o acervo' });
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: /Mídia/ }),
+    );
+    fireEvent.click(link);
+    expect(TestBed.inject(ChatStore).topicSlug()).toBe('alquimia');
+  });
+
+  it('a filter that no longer shows it takes the focus to the page', async () => {
+    const item = aMediaItem({ canEdit: true, author: null });
+    const view = await renderList();
+    const many = Array.from({ length: 11 }, (_, n) =>
+      aMediaItem({ id: mediaId(n + 1), title: `Palestra ${n}`, canEdit: true }),
+    );
+    await view.answer(many);
+    fireEvent.input(screen.getByLabelText('Filtrar por título'), {
+      target: { value: 'Palestra 1' },
+    });
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais ações para Palestra 1' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Editar informações' }),
+    );
+    await view.fixture.whenStable();
+    fireEvent.input(screen.getByLabelText('Título'), {
+      target: { value: 'Outra' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    view.http
+      .expectOne(itemUrl(mediaId(2)))
+      .flush({ ...item, id: mediaId(2), title: 'Outra' });
+    await nextRequest();
+    view.http.expectOne(LIST_URL).flush({ items: many });
+    await view.fixture.whenStable();
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: /Mídia/ }),
+    );
   });
 });
