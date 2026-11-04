@@ -42,6 +42,15 @@
             <span class="state">{{ stateOf(track) }}</span>
           }
         </span>
+        @if (canEdit()) {
+          <app-menu-button
+            [label]="menuLabel(track)"
+            [options]="trackOptions"
+            (chosen)="chooseAction(track, $event)"
+          >
+            <span aria-hidden="true">⋯</span>
+          </app-menu-button>
+        }
       </li>
     }
   </ol>

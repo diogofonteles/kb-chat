@@ -1,0 +1,41 @@
+:host {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.status {
+  margin: 0;
+}
+
+.status:empty {
+  display: none;
+}
+
+.history summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--target);
+  cursor: pointer;
+}
+
+.note a {
+  margin-left: var(--space-2);
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+@media (max-width: 599px) {
+  .line > .primary,
+  .line > .secondary,
+  .line > .danger {
+    flex: 1 1 100%;
+  }
+}

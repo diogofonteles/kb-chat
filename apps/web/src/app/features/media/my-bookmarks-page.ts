@@ -15,6 +15,7 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MY_BOOKMARKS_URL } from '@core/media/bookmarks-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { hasLibrary } from './library/library-access.js';
+import { MovedBookmarksNotice } from './track-edit/moved-bookmarks-notice.js';
 
 /** What the player page reads to play from a bookmark (navigation state, not the URL). */
 export interface PlayFromState {
@@ -27,7 +28,7 @@ export interface PlayFromState {
  */
 @Component({
   selector: 'app-my-bookmarks-page',
-  imports: [RouterLink],
+  imports: [RouterLink, MovedBookmarksNotice],
   template: `
     <section class="page" aria-labelledby="my-bookmarks-title">
       @if (backToLibrary()) {
@@ -38,6 +39,7 @@ export interface PlayFromState {
         <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
       }
       <h2 id="my-bookmarks-title" i18n="@@bookmarks.mine">Meus marcadores</h2>
+      <app-moved-bookmarks-notice />
 
       @if (loadError()) {
         <div class="notice" role="alert">

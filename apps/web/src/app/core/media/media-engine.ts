@@ -32,6 +32,8 @@ export interface PlayableSource {
   readonly durationMs?: number | null;
   /** Who is speaking, for the system's media controls (KBC-041 FR-7). */
   readonly artist?: string;
+  /** A track's cut: positions read on it name it, so an older one is translated (KBC-073). */
+  readonly fileVersion?: number;
 }
 
 /**

@@ -170,6 +170,14 @@ export class BookmarksStore {
     this.writes.next({ kind: 'create', id: bookmark.id });
   }
 
+  /** The cut a bookmark was marked on: an older one is translated (KBC-073 BR-3). */
+  private loadedCut(mediaId: string): { fileVersion?: number } {
+    const source = this.engine.source();
+    return source?.id === mediaId && source.fileVersion !== undefined
+      ? { fileVersion: source.fileVersion }
+      : {};
+  }
+
   /** The note as typed (trimmed; blank clears it), shown at once and then sent. */
   saveNote(id: string, text: string): void {
     const found = this.list().find((b) => b.id === id);
@@ -276,6 +284,7 @@ export class BookmarksStore {
         ? this.api.create(bookmark.mediaId, {
             id: bookmark.id,
             positionMs: bookmark.positionMs,
+            ...this.loadedCut(bookmark.mediaId),
           })
         : this.api.updateNote(bookmark.mediaId, bookmark.id, bookmark.note);
     return request.pipe(

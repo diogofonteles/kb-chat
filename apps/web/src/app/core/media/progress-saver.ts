@@ -39,6 +39,8 @@ interface KeptPosition {
   readonly positionMs: number;
   readonly delivered: boolean;
   readonly basedOn: string | null;
+  /** The track's cut it was read on (KBC-073 BR-3). */
+  readonly fileVersion?: number;
 }
 
 function isKept(value: unknown): value is KeptPosition {
@@ -193,6 +195,9 @@ export class ProgressSaver {
       positionMs,
       delivered: false,
       basedOn: this.bases.get(source.id) ?? null,
+      ...(source.fileVersion === undefined
+        ? {}
+        : { fileVersion: source.fileVersion }),
     });
   }
 
@@ -219,7 +224,13 @@ export class ProgressSaver {
     return this.api
       .saveProgress(
         id,
-        { positionMs: kept.positionMs, basedOn: kept.basedOn },
+        {
+          positionMs: kept.positionMs,
+          basedOn: kept.basedOn,
+          ...(kept.fileVersion === undefined
+            ? {}
+            : { fileVersion: kept.fileVersion }),
+        },
         options,
       )
       .pipe(

@@ -1,0 +1,185 @@
+<dialog
+  #dialog
+  class="dialog"
+  aria-labelledby="track-edit-title"
+  (close)="closed.emit()"
+>
+  <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <h2 id="track-edit-title" i18n="@@trackEdit.title">Editar faixa</h2>
+
+    @if (conflict(); as theirs) {
+      <div class="conflict" role="alert">
+        <p i18n="@@trackEdit.conflict">
+          Outra pessoa mudou esta faixa enquanto você editava.
+        </p>
+        <p>
+          <span i18n="@@trackEdit.conflict.theirs">Título dela:</span>
+          <strong>{{ theirs.title }}</strong>
+        </p>
+        <p class="note" i18n="@@trackEdit.conflict.yours">
+          O que você escreveu continua nos campos abaixo, para copiar.
+        </p>
+        <div class="line-actions">
+          <button
+            type="button"
+            class="secondary"
+            (click)="useTheirs(theirs)"
+            i18n="@@trackEdit.conflict.useTheirs"
+          >
+            Usar o da outra pessoa
+          </button>
+          <button
+            type="button"
+            class="primary"
+            (click)="saveOver(theirs)"
+            i18n="@@trackEdit.conflict.saveMine"
+          >
+            Salvar o meu por cima
+          </button>
+        </div>
+      </div>
+    }
+
+    <div class="field">
+      <label for="track-title" i18n="@@trackEdit.field.title">Título</label>
+      <input
+        #titleInput
+        id="track-title"
+        type="text"
+        formControlName="title"
+        autocomplete="off"
+        [attr.maxlength]="titleMax"
+        [attr.aria-invalid]="submitted() && form.controls.title.invalid"
+        aria-describedby="track-title-error"
+      />
+      @if (submitted() && form.controls.title.invalid) {
+        <span
+          id="track-title-error"
+          class="error"
+          i18n="@@trackEdit.titleMissing"
+          ><span aria-hidden="true">⚠</span> Dê um título à faixa.</span
+        >
+      }
+    </div>
+
+    <div class="field">
+      <label for="track-summary" i18n="@@trackEdit.field.summary"
+        >Descrição</label
+      >
+      <textarea
+        id="track-summary"
+        rows="3"
+        formControlName="summary"
+        [attr.maxlength]="summaryMax"
+      ></textarea>
+    </div>
+
+    <datalist id="track-speakers">
+      @for (name of speakerNames(); track name) {
+        <option [value]="name"></option>
+      }
+    </datalist>
+    <div class="field">
+      <label for="track-asker" i18n="@@trackEdit.field.asker"
+        >Quem pergunta</label
+      >
+      <input
+        id="track-asker"
+        type="text"
+        list="track-speakers"
+        formControlName="asker"
+        autocomplete="off"
+      />
+    </div>
+    <div class="field">
+      <label for="track-answerer" i18n="@@trackEdit.field.answerer"
+        >Quem responde</label
+      >
+      <input
+        id="track-answerer"
+        type="text"
+        list="track-speakers"
+        formControlName="answerer"
+        autocomplete="off"
+      />
+    </div>
+
+    @if (canSpreadName()) {
+      <fieldset class="field">
+        <legend i18n="@@trackEdit.scope">Aplicar o nome</legend>
+        <label class="option">
+          <input type="radio" formControlName="scope" value="track" />
+          <span i18n="@@trackEdit.scope.track">Só nesta faixa</span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="scope" value="recording" />
+          <span i18n="@@trackEdit.scope.recording">Em toda a gravação</span>
+        </label>
+      </fieldset>
+    }
+
+    @if (canClassify() && collection(); as subjects) {
+      <div class="field">
+        <span class="legend" i18n="@@trackEdit.field.subjects">Assuntos</span>
+        @if (chips().length > 0) {
+          <ul class="chips">
+            @for (chip of chips(); track chip.key) {
+              <li>
+                <span>{{ chip.name }}</span>
+                <button
+                  type="button"
+                  class="remove"
+                  [attr.aria-label]="removeLabel(chip.name)"
+                  (click)="removeChip(chip.key)"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+        @if (chips().length < maxSubjects) {
+          <app-subject-picker
+            [collection]="subjects"
+            [taken]="chipKeys()"
+            [label]="pickerLabel"
+            (chosen)="addChip($event)"
+          />
+        } @else {
+          <p class="note" i18n="@@subjects.limit">Até 5 assuntos por faixa</p>
+        }
+      </div>
+    }
+
+    @if (canSuggest()) {
+      <app-track-suggest-panel
+        [mediaId]="track().mediaId"
+        [classifies]="canClassify()"
+        (use)="useSuggestion($event)"
+      />
+    }
+
+    @if (failure(); as text) {
+      <p class="error" role="alert">{{ text }}</p>
+    }
+    <div class="line-actions">
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="saving()"
+        (click)="cancel()"
+        i18n="@@trackEdit.cancel"
+      >
+        Cancelar
+      </button>
+      <button
+        type="submit"
+        class="primary"
+        [disabled]="saving()"
+        i18n="@@trackEdit.save"
+      >
+        Salvar
+      </button>
+    </div>
+  </form>
+</dialog>

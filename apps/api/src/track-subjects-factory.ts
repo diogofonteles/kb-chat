@@ -53,25 +53,32 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     directory: createSubjectDirectory(wiring),
     history: media.trackRevisions,
   });
-  const proposals = new SubjectProposalService({
+  return {
+    subjects,
+    proposals: proposalService(wiring, subjects),
+    suggestions: suggestionService(wiring, subjects),
+  };
+}
+
+function proposalService(
+  wiring: TrackSubjectWiring,
+  subjects: TrackSubjectService,
+): SubjectProposalService {
+  const { media, catalog, service } = wiring;
+  return new SubjectProposalService({
     store: media.trackSubjects,
     ledger: media.spend,
     subjects,
     items: media.trackItems,
     edits: media.edits,
     transcripts: media.transcripts,
-    findMedia,
+    findMedia: (actor, mediaId) => service.getRecording(actor, mediaId),
     titleOf: (topic) => catalog.get(topic)?.topic.title ?? topic,
     llm: mediaLlm(wiring),
     caps: capsOf(media),
     onRunError: (err, runId) =>
       wiring.log.warn({ err, runId }, 'subject run failed'),
   });
-  return {
-    subjects,
-    proposals,
-    suggestions: suggestionService(wiring, subjects),
-  };
 }
 
 /** "Sugerir de novo com IA" for one track (KBC-073 FR-7). */

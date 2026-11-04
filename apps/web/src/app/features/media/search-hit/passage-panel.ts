@@ -164,9 +164,10 @@ export class PassagePanel {
         {
           id: media.id,
           title: media.title,
-          src: mediaStreamUrl(media.id),
+          src: mediaStreamUrl(media.id, media.parent?.fileVersion),
           durationMs: media.durationMs,
           artist: media.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
+          ...(media.parent ? { fileVersion: media.parent.fileVersion } : {}),
         },
         at,
       );
