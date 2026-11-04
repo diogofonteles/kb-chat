@@ -9,9 +9,19 @@ import { authorSlugSchema } from './slugs.js';
 /** Longest speaker name (FR-1). */
 export const SPEAKER_NAME_MAX = 120;
 
+/** Two names with the same key are the same speaker: accents, case and spaces aside. */
+export const speakerKeyOf = (name: string): string =>
+  name
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
 /**
  * A name as kept: one line, no control or format characters and no quotes or guillemets
- * (it goes into "Cadastrar «nome»"), inner spaces collapsed.
+ * (it goes into "Cadastrar «nome»"), inner spaces collapsed, and something left once accents
+ * are set aside: a name with no key could not be a speaker.
  */
 export const speakerNameSchema = z
   .string()
@@ -21,7 +31,10 @@ export const speakerNameSchema = z
       .string()
       .min(1)
       .max(SPEAKER_NAME_MAX)
-      .regex(/^[^\p{Cc}\p{Cf}"«»]+$/u, { error: 'invalid speaker name' }),
+      .regex(/^[^\p{Cc}\p{Cf}"«»]+$/u, { error: 'invalid speaker name' })
+      .refine((name) => speakerKeyOf(name) !== '', {
+        error: 'invalid speaker name',
+      }),
   );
 
 export const collectionSpeakerSchema = z.object({
@@ -57,12 +70,3 @@ export const collectionSpeakerUpdateSchema = z.strictObject({
 export type CollectionSpeakerUpdate = z.infer<
   typeof collectionSpeakerUpdateSchema
 >;
-
-/** Two names with the same key are the same speaker: accents, case and spaces aside. */
-export const speakerKeyOf = (name: string): string =>
-  name
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();

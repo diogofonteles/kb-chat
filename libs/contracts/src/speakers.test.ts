@@ -22,12 +22,18 @@ describe('speakerNameSchema (KBC-065 FR-1, AC-7)', () => {
     expect(speakerNameSchema.parse(longest)).toBe(longest);
   });
 
-  it.each(['', '   ', 'a'.repeat(121), 'Ana\nMaria', 'Ana «Maria»', 'Ana "M"'])(
-    'refuses %j',
-    (name) => {
-      expect(speakerNameSchema.safeParse(name).success).toBe(false);
-    },
-  );
+  it.each([
+    '',
+    '   ',
+    'a'.repeat(121),
+    'Ana\nMaria',
+    'Ana «Maria»',
+    'Ana "M"',
+    '\u0301',
+    '\u0301\u0302 \u0303',
+  ])('refuses %j', (name) => {
+    expect(speakerNameSchema.safeParse(name).success).toBe(false);
+  });
 });
 
 describe('speakerKeyOf', () => {
