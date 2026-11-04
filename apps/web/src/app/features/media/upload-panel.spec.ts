@@ -51,7 +51,10 @@ async function renderPanel(
         withInterceptors([answeringOptions(options.offer, asked)]),
       ),
       provideHttpClientTesting(),
-      provideRouter([{ path: 'midia/:id/preparar', children: [] }]),
+      provideRouter([
+        { path: 'midia/:id/preparar', children: [] },
+        { path: 'fila', children: [] },
+      ]),
       sessionAs({ features: options.features ?? ['media', 'media-upload'] }),
       { provide: TUS_UPLOAD, useValue: tus.factory },
       {
@@ -1054,7 +1057,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       expect(TestBed.inject(Router).url).toBe('/');
     });
 
-    it('sends the plan with every file and stays on the list after several (Q177)', async () => {
+    it('sends the plan with every file and goes to the queue after several (KBC-090)', async () => {
       const panel = await renderPanel({ features: EDITOR });
       const { container, fixture, http, uploaded } = panel;
       choose(container, audio('a.mp3'), audio('b.mp3', 4));
@@ -1070,7 +1073,8 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       await finish(panel, CREATED.id, 0);
       await finish(panel, SECOND_ID, 1);
       expect(uploaded).toHaveBeenCalledTimes(2);
-      expect(TestBed.inject(Router).url).toBe('/');
+      await fixture.whenStable();
+      expect(TestBed.inject(Router).url).toBe('/fila');
     });
 
     it('gives each file its share of the value seen, by length (BR-4)', async () => {

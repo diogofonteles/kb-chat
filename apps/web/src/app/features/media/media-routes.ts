@@ -38,6 +38,23 @@ export const libraryEnabled: CanMatchFn = () => {
   );
 };
 
+/** The queue (KBC-090): for who sends media. */
+export const queueEnabled: CanMatchFn = () => {
+  const session = inject(SessionStore);
+  const router = inject(Router);
+  return toObservable(session.state).pipe(
+    filter((state) => state.kind !== 'loading'),
+    take(1),
+    map(() =>
+      session.me()?.media === true &&
+      session.can('media') &&
+      session.can('media-upload')
+        ? true
+        : router.parseUrl('/'),
+    ),
+  );
+};
+
 /** /midia, for who has the library, is /biblioteca (FR-7); else it is not this route. */
 export const libraryOnly: CanMatchFn = () => {
   const session = inject(SessionStore);
@@ -59,6 +76,15 @@ export const MEDIA_ROUTES: Routes = [
     title: $localize`:@@route.libraryTitle:Biblioteca — Nova Alexandria`,
     loadComponent: () =>
       import('./library/library-page.js').then((m) => m.LibraryPage),
+  },
+  {
+    path: 'fila',
+    canMatch: [queueEnabled],
+    title: $localize`:@@route.queueTitle:Fila de processamento — Nova Alexandria`,
+    loadComponent: () =>
+      import('./queue/processing-queue-page.js').then(
+        (m) => m.ProcessingQueuePage,
+      ),
   },
   {
     path: 'midia',

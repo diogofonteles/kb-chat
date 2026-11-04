@@ -1,0 +1,68 @@
+<section class="queue" aria-labelledby="queue-title">
+  <h2
+    id="queue-title"
+    #heading
+    class="heading"
+    tabindex="-1"
+    i18n="@@queue.title"
+  >
+    Fila de processamento
+  </h2>
+
+  @if (transcriberText(); as text) {
+    <p class="banner" role="status">{{ text }}</p>
+  }
+  @if (stale()) {
+    <p class="banner" role="status" i18n="@@prep.readFailed">
+      Sem atualizar agora: esta tela pode estar atrasada. Tento de novo em
+      instantes.
+    </p>
+  }
+  @if (actionError(); as error) {
+    <p class="banner" role="alert">{{ error }}</p>
+  }
+
+  @if (loadFailed()) {
+    <div class="notice" role="alert">
+      <p i18n="@@queue.loadFailed">Não consegui carregar a fila.</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="reload()"
+        i18n="@@media.reload"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (loading()) {
+    <div aria-busy="true">
+      <span class="visually-hidden" i18n="@@prep.loading">Carregando…</span>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  } @else if (empty()) {
+    <div class="notice">
+      <p i18n="@@queue.empty">Nada sendo processado agora.</p>
+      <a class="secondary" routerLink="/biblioteca" i18n="@@queue.toLibrary"
+        >Ir para a Biblioteca</a
+      >
+    </div>
+  } @else {
+    @for (section of sections(); track section.phase) {
+      <section class="group" [attr.aria-label]="section.title">
+        <h3>{{ section.title }}</h3>
+        <div class="rows" role="list">
+          @for (item of section.items; track item.mediaId) {
+            <app-queue-row
+              [item]="item"
+              [topicTitle]="topicTitleOf(item)"
+              [canEdit]="canEdit()"
+              [busy]="acting() === item.mediaId"
+              (moved)="move(item, $event)"
+            />
+          }
+        </div>
+      </section>
+    }
+  }
+</section>

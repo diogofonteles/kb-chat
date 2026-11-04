@@ -77,6 +77,7 @@ import { detailsSavedText } from '../edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from '../edit-media-dialog.js';
 import { MovedNotice, mediaMoveOf, type MediaMove } from '../moved-notice.js';
 import { injectOpenPreparations } from '../preparation/open-preparations.js';
+import { QueueSummary } from '../queue/queue-summary.js';
 import { UploadPanel } from '../upload-panel.js';
 import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
@@ -142,6 +143,7 @@ interface MorePages {
     LibrarySearchResults,
     MovedNotice,
     NearEnd,
+    QueueSummary,
     TrackGroup,
     UploadPanel,
   ],

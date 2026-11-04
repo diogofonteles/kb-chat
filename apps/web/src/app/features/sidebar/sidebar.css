@@ -277,7 +277,8 @@ select {
   border-color: var(--color-text-muted);
 }
 
-.people-button .count {
+.people-button .count,
+.media-link .count {
   min-width: 1.5rem;
   margin-inline-start: auto;
   padding: 0 var(--space-2);

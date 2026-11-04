@@ -48,7 +48,7 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
 const isMediaUrl = (url: string): boolean =>
-  /^\/(midia|biblioteca)(\/|\?|#|$)/.test(url);
+  /^\/(midia|biblioteca|fila)(\/|\?|#|$)/.test(url);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free

@@ -1,3 +1,4 @@
+import { ProcessingQueueStore } from './queue/processing-queue-store.js';
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
@@ -40,6 +41,7 @@ import { AuthorsApi } from '@core/media/authors-api.js';
 import { MediaApi, type UploadEvent } from '@core/media/media-api.js';
 import {
   PreparationApi,
+  QUEUE_PAGE_PATH,
   preparationPagePath,
 } from '@core/media/preparation-api.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
@@ -109,6 +111,7 @@ export class UploadPanel implements OnInit {
   private readonly api = inject(MediaApi);
   private readonly authorsApi = inject(AuthorsApi);
   private readonly preparations = inject(PreparationApi);
+  private readonly queue = inject(ProcessingQueueStore);
   private readonly session = inject(SessionStore);
   private readonly router = inject(Router);
   private readonly locale = inject(LOCALE_ID);
@@ -395,12 +398,16 @@ export class UploadPanel implements OnInit {
   }
 
   /**
-   * One file goes on to step 2; several stay on the list, where each says where its own
-   * preparation stopped (KBC-072 FR-6). Only "Transcrever" ends here too, as ever (AC-15).
+   * One file goes on to step 2; several go to the queue, which says what each one is doing
+   * and what comes next (KBC-090). Only "Transcrever" of one file ends here, as ever (AC-15).
    */
   private continuePreparation(guided: boolean): void {
     const [only, ...others] = this.sent.entries();
-    if (!only || others.length > 0) return;
+    if (!only) return;
+    if (others.length > 0) {
+      void this.router.navigateByUrl(QUEUE_PAGE_PATH);
+      return;
+    }
     const [key, item] = only;
     if (this.uploads.entries().find((e) => e.key === key)?.resumes)
       return this.continueResumed(item.id);
@@ -425,6 +432,7 @@ export class UploadPanel implements OnInit {
 
   /** The list learns of each new item once; the last one ends up focused (UP-01). */
   private reportSent(): void {
+    this.queue.refresh();
     for (const [key, item] of this.sent) {
       if (this.reported.has(key)) continue;
       this.reported.add(key);

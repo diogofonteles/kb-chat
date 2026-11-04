@@ -32,6 +32,7 @@ import { SettingsStore } from '@features/settings/settings-store.js';
 import { GoogleIdentity } from '@core/auth/google-identity.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { hasLibrary } from '@features/media/library/library-access.js';
+import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 
 export type SidebarAction = 'new' | 'restore' | 'topic' | 'media';
 
@@ -97,6 +98,8 @@ export class Sidebar {
   protected readonly session = inject(SessionStore);
   /** The count badge on "Pessoas e permissões" (masters, KBC-014). */
   protected readonly requests = inject(AccessRequestsStore);
+  /** "Fila" (KBC-090): always reachable, with a count while anything runs. */
+  protected readonly queue = inject(ProcessingQueueStore);
   private readonly google = inject(GoogleIdentity);
   private readonly settings = inject(SettingsStore);
   /** Research conversations go to the research view (KBC-008 FR-6), shown as saved. */

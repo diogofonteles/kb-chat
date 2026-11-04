@@ -20,6 +20,7 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { mediaPagePath, mediaUrl } from '@core/media/media-api.js';
 import { editPagePath } from '@core/media/media-edit-api.js';
 import { PreparationApi } from '@core/media/preparation-api.js';
+import { ProcessingQueueStore } from '../queue/processing-queue-store.js';
 import { map, of, switchMap, type Observable } from 'rxjs';
 import { TrackAudition } from '../tracks/track-audition.js';
 import type { MediaPreparation } from '@kb-chat/contracts';
@@ -71,6 +72,7 @@ export class PreparationPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(PreparationApi);
+  private readonly queue = inject(ProcessingQueueStore);
   private readonly pageTitle = inject(Title);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly watch = inject(PreparationWatch);
@@ -196,6 +198,7 @@ export class PreparationPage {
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (preparation) => {
         this.busy.set(false);
+        this.queue.refresh();
         this.arrive(preparation);
       },
       error: (err: unknown) => {
