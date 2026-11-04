@@ -88,12 +88,6 @@
         }
       </header>
 
-      @if (current.archived) {
-        <div class="notice" role="status">
-          <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>
-        </div>
-      }
-
       @if (ready()) {
         @if (resumeAt() !== null) {
           <div class="resume">
@@ -168,6 +162,10 @@
           </button>
         }
         <app-transcribe-again [media]="current" (queued)="item.set($event)" />
+      } @else if (current.archived) {
+        <div class="notice" role="status">
+          <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>
+        </div>
       } @else {
         <p class="not-ready" role="status">
           <span class="status">{{ status() }}</span>

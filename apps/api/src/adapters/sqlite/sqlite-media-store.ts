@@ -66,17 +66,21 @@ function toMediaRecord(row: Row): MediaRecord {
     updatedAt: text(row, 'updated_at'),
     track: trackLinkOf(row),
     archivedAt: row['archived_at'] === null ? null : text(row, 'archived_at'),
-    transcription: {
-      jobStatus:
-        row['transcribe_job'] === null
-          ? null
-          : jobStatusOf(row['transcribe_job']),
-      version: nullableNumber(row, 'transcript_version'),
-      confidence:
-        row['transcript_confidence'] === null
-          ? null
-          : transcriptConfidenceSchema.parse(row['transcript_confidence']),
-    },
+    transcription: transcriptionOf(row),
+  };
+}
+
+function transcriptionOf(row: Row): MediaRecord['transcription'] {
+  return {
+    jobStatus:
+      row['transcribe_job'] === null
+        ? null
+        : jobStatusOf(row['transcribe_job']),
+    version: nullableNumber(row, 'transcript_version'),
+    confidence:
+      row['transcript_confidence'] === null
+        ? null
+        : transcriptConfidenceSchema.parse(row['transcript_confidence']),
   };
 }
 

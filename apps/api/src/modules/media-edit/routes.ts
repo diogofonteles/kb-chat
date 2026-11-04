@@ -7,7 +7,15 @@ import {
   mediaTracksSchema,
   saveEditRequestSchema,
 } from '@kb-chat/contracts';
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import type {
+  FastifyBaseLogger,
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyRequest,
+  RawReplyDefaultExpression,
+  RawRequestDefaultExpression,
+  RawServerDefault,
+} from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
@@ -16,6 +24,14 @@ import { actorOf } from '../media/index.js';
 import type { EditCall, TrackEditService } from './track-edit-service.js';
 
 /** Editing is `media-edit`, on top of `media` as every other media route (BR-8). */
+type TypedRoutes = FastifyInstance<
+  RawServerDefault,
+  RawRequestDefaultExpression,
+  RawReplyDefaultExpression,
+  FastifyBaseLogger,
+  ZodTypeProvider
+>;
+
 const EDIT: RouteAccess = { feature: 'media-edit' };
 const NAVIGATE: RouteAccess = { feature: 'media-tracks' };
 const mediaParams = z.object({ id: mediaIdSchema });
@@ -68,6 +84,18 @@ function callOf(request: FastifyRequest, mediaId: string): EditCall {
   };
 }
 
+/** "Tentar de novo" for cuts given up (KBC-068 FR-1). */
+function registerRetryCuts(
+  typed: TypedRoutes,
+  service: TrackEditService,
+): void {
+  typed.post(
+    '/api/v1/media/:id/edit/retry-cuts',
+    OPTIONS.retryCuts,
+    async (request) => service.retryCuts(callOf(request, request.params.id)),
+  );
+}
+
 /** The draft and its approval (KBC-066 FR-1, FR-2) and the approved tracks. */
 export const mediaEditRoutes =
   (service: TrackEditService): FastifyPluginAsync =>
@@ -93,11 +121,7 @@ export const mediaEditRoutes =
     typed.post('/api/v1/media/:id/edit/reopen', OPTIONS.reopen, (request) =>
       service.reopen(callOf(request, request.params.id)),
     );
-    typed.post(
-      '/api/v1/media/:id/edit/retry-cuts',
-      OPTIONS.retryCuts,
-      async (request) => service.retryCuts(callOf(request, request.params.id)),
-    );
+    registerRetryCuts(typed, service);
     typed.get('/api/v1/media/:id/edit/words', OPTIONS.words, (request) =>
       service.words(actorOf(request), request.params.id),
     );

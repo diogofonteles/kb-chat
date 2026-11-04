@@ -128,7 +128,7 @@ export async function transcribed(
   world: World,
   passages: readonly Spoken[],
 ): Promise<MediaItem> {
-  const { media, token } = world;
+  const { media } = world;
   const item = await queuedItem(media);
   await convertLong(media, await leaseJob(media));
   await say(world, passages);
@@ -171,39 +171,41 @@ export const withVersion = async (
     },
   });
 
+const draftOf = (tracks: readonly Bounds[]) =>
+  tracks.map((track, index) => ({
+    id: randomUUID(),
+    source: 'manual',
+    kind: 'qa',
+    title: track.title ?? `Pergunta ${index + 1}`,
+    startMs: track.startMs,
+    endMs: track.endMs,
+    askerVoice: null,
+    answererVoice: null,
+    askerSpeakerId: null,
+    answererSpeakerId: track.answererSpeakerId ?? null,
+  }));
+
+async function reopenIfApproved(media: Media, id: string): Promise<void> {
+  const edit = await media.owner('GET', editUrl(id));
+  if (edit.json<{ status: string }>().status !== 'approved') return;
+  const reopened = await withVersion(media, id, {
+    method: 'POST',
+    url: `${editUrl(id)}/reopen`,
+  });
+  expect(reopened.statusCode, reopened.body).toBe(200);
+}
+
 /** Saves `tracks` as the draft and approves it. */
 export async function approve(
   media: Media,
   id: string,
   tracks: readonly Bounds[],
 ): Promise<void> {
-  const edit = await media.owner('GET', editUrl(id));
-  const { status } = edit.json<{ status: string }>();
-  if (status === 'approved') {
-    const reopened = await withVersion(media, id, {
-      method: 'POST',
-      url: `${editUrl(id)}/reopen`,
-    });
-    expect(reopened.statusCode, reopened.body).toBe(200);
-  }
+  await reopenIfApproved(media, id);
   const saved = await withVersion(media, id, {
     method: 'PUT',
     url: editUrl(id),
-    payload: {
-      step: 3,
-      tracks: tracks.map((track, index) => ({
-        id: randomUUID(),
-        source: 'manual',
-        kind: 'qa',
-        title: track.title ?? `Pergunta ${index + 1}`,
-        startMs: track.startMs,
-        endMs: track.endMs,
-        askerVoice: null,
-        answererVoice: null,
-        askerSpeakerId: null,
-        answererSpeakerId: track.answererSpeakerId ?? null,
-      })),
-    },
+    payload: { step: 3, tracks: draftOf(tracks) },
   });
   expect(saved.statusCode, saved.body).toBe(200);
   const approved = await withVersion(media, id, {

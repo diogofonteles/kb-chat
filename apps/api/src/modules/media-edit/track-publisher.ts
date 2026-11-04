@@ -238,6 +238,17 @@ export class TrackPublisher {
   }
 }
 
+/** What a transcription run has and a slice does not. */
+const NO_RUN = {
+  parametersVersion: 'track-slice-1',
+  termsVersion: 0,
+  speechRatio: 1,
+  elapsedMs: 0,
+  rawPath: '',
+  removedWords: 0,
+  lowWords: 0,
+} as const;
+
 /** A version as any other for the player and search (ADR 0029 §5), with no file behind it. */
 function toDerived(
   mediaId: string,
@@ -254,18 +265,12 @@ function toDerived(
     provider: 'derived',
     model: current.id,
     parameters: JSON.stringify(window),
-    parametersVersion: 'track-slice-1',
-    termsVersion: 0,
+    ...NO_RUN,
     vad: current.vad,
-    speechRatio: 1,
-    elapsedMs: 0,
-    rawPath: '',
     filterVersion: current.filterVersion,
     confidenceVersion: current.confidenceVersion,
     confidence: current.confidence,
     wordCount: slice.words.length,
-    removedWords: 0,
-    lowWords: 0,
     segments: slice.segments,
     words: slice.words,
   };

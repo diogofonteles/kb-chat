@@ -138,27 +138,31 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
         )
         .all(parentId)
         .map((row) => String(row['cut_path']));
-      this.db
-        .prepare(
-          `DELETE FROM jobs WHERE kind = 'cut' AND media_id IN
-             (SELECT id FROM media WHERE parent_media_id = ?)`,
-        )
-        .run(parentId);
-      this.db
-        .prepare(
-          `DELETE FROM media WHERE parent_media_id = ? AND status <> 'ready'
-             AND archived_at IS NULL`,
-        )
-        .run(parentId);
-      this.db
-        .prepare(
-          `UPDATE media_tracks SET cut_status = 'none', cut_path = NULL, cut_bytes = NULL,
-             cut_duration_ms = NULL
-           WHERE media_id = ? AND cut_status IN ('pending', 'cut')`,
-        )
-        .run(parentId);
+      this.dropPreparation(parentId);
       return candidates;
     });
+  }
+
+  private dropPreparation(parentId: string): void {
+    this.db
+      .prepare(
+        `DELETE FROM jobs WHERE kind = 'cut' AND media_id IN
+           (SELECT id FROM media WHERE parent_media_id = ?)`,
+      )
+      .run(parentId);
+    this.db
+      .prepare(
+        `DELETE FROM media WHERE parent_media_id = ? AND status <> 'ready'
+           AND archived_at IS NULL`,
+      )
+      .run(parentId);
+    this.db
+      .prepare(
+        `UPDATE media_tracks SET cut_status = 'none', cut_path = NULL, cut_bytes = NULL,
+           cut_duration_ms = NULL
+         WHERE media_id = ? AND cut_status IN ('pending', 'cut')`,
+      )
+      .run(parentId);
   }
 
   cutOrder(mediaId: string): CutOrder | null {
@@ -241,37 +245,14 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     track: TrackItemRow,
     input: { parentId: string; at: string },
   ): readonly string[] {
-    const row = this.db
-      .prepare(
-        `SELECT t.cut_path, t.cut_bytes, t.cut_duration_ms, m.status, m.parent_start_ms,
-           f.path AS old_path
-         FROM media_tracks t JOIN media m ON m.id = t.derived_media_id
-         LEFT JOIN media_files f ON f.media_id = m.id AND f.rendition = 'audio'
-         WHERE t.id = ?`,
-      )
-      .get(track.trackId);
-    if (!row) throw new Error(`track ${track.trackId} has no candidate`);
+    const row = this.candidateOf(track);
     const durationMs = Number(row['cut_duration_ms']);
-    const bytes = Number(row['cut_bytes']);
-    this.db
-      .prepare(
-        `INSERT OR REPLACE INTO media_files (media_id, rendition, path, bytes, mime)
-         VALUES (?, 'audio', ?, ?, 'audio/mp4')`,
-      )
-      .run(track.mediaId, String(row['cut_path']), bytes);
-    this.db
-      .prepare(
-        `UPDATE media SET status = 'ready', progress = NULL, duration_ms = ?, bytes = ?,
-           parent_start_ms = ?, parent_end_ms = ?, updated_at = ? WHERE id = ?`,
-      )
-      .run(
-        durationMs,
-        bytes,
-        track.realStartMs,
-        track.realEndMs,
-        input.at,
-        track.mediaId,
-      );
+    this.writeFile(track, {
+      path: String(row['cut_path']),
+      bytes: Number(row['cut_bytes']),
+      durationMs,
+      at: input.at,
+    });
     if (row['status'] === 'ready')
       this.remap({
         mediaId: track.mediaId,
@@ -283,6 +264,45 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
       });
     const oldPath = nullableText(row['old_path']);
     return oldPath !== null && oldPath !== row['cut_path'] ? [oldPath] : [];
+  }
+
+  private candidateOf(track: TrackItemRow): Row {
+    const row = this.db
+      .prepare(
+        `SELECT t.cut_path, t.cut_bytes, t.cut_duration_ms, m.status, m.parent_start_ms,
+           f.path AS old_path
+         FROM media_tracks t JOIN media m ON m.id = t.derived_media_id
+         LEFT JOIN media_files f ON f.media_id = m.id AND f.rendition = 'audio'
+         WHERE t.id = ?`,
+      )
+      .get(track.trackId);
+    if (!row) throw new Error(`track ${track.trackId} has no candidate`);
+    return row;
+  }
+
+  private writeFile(
+    track: TrackItemRow,
+    file: { path: string; bytes: number; durationMs: number; at: string },
+  ): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO media_files (media_id, rendition, path, bytes, mime)
+         VALUES (?, 'audio', ?, ?, 'audio/mp4')`,
+      )
+      .run(track.mediaId, file.path, file.bytes);
+    this.db
+      .prepare(
+        `UPDATE media SET status = 'ready', progress = NULL, duration_ms = ?, bytes = ?,
+           parent_start_ms = ?, parent_end_ms = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(
+        file.durationMs,
+        file.bytes,
+        track.realStartMs,
+        track.realEndMs,
+        file.at,
+        track.mediaId,
+      );
   }
 
   /** KBC-073 BR-4: through the absolute time. Past the end is heard; before the start is 0. */

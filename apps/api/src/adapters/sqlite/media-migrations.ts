@@ -11,6 +11,22 @@ export interface Migration {
   readonly sql: string | ((db: DatabaseSync) => string);
 }
 
+const columnsOfJobs = (db: DatabaseSync): string =>
+  db
+    .prepare(`SELECT name FROM pragma_table_info('jobs')`)
+    .all()
+    .map((row) => String(row['name']))
+    .join(', ');
+
+const indexesOfJobs = (db: DatabaseSync): string[] =>
+  db
+    .prepare(
+      `SELECT sql FROM sqlite_master
+       WHERE type = 'index' AND tbl_name = 'jobs' AND sql IS NOT NULL`,
+    )
+    .all()
+    .map((row) => `${String(row['sql'])};`);
+
 /**
  * Rebuilds `jobs` with `kind` in its CHECK from the table as it stands, every column, check and
  * index kept. Branches rebuild `jobs` in parallel (KBC-071's 15 adds a kind, a column and a
@@ -31,18 +47,8 @@ export function rebuildJobsAccepting(db: DatabaseSync, kind: string): string {
   const rebuilt = table
     .replace(kinds[0], `kind IN (${kinds[1]}, '${kind}')`)
     .replace(/^CREATE TABLE\s+"?jobs"?/, 'CREATE TABLE jobs_rebuilt');
-  const columns = db
-    .prepare(`SELECT name FROM pragma_table_info('jobs')`)
-    .all()
-    .map((row) => String(row['name']))
-    .join(', ');
-  const indexes = db
-    .prepare(
-      `SELECT sql FROM sqlite_master
-       WHERE type = 'index' AND tbl_name = 'jobs' AND sql IS NOT NULL`,
-    )
-    .all()
-    .map((row) => `${String(row['sql'])};`);
+  const columns = columnsOfJobs(db);
+  const indexes = indexesOfJobs(db);
   return [
     `${rebuilt};`,
     `INSERT INTO jobs_rebuilt (${columns}) SELECT ${columns} FROM jobs;`,

@@ -245,15 +245,7 @@ export class MediaService {
       media.status === 'uploading' && media.ownerPrincipal === actor.principal;
     if (!actor.isMaster && !cancelling)
       throw new AppError('FORBIDDEN', 'Only a master may remove media');
-    if (media.track)
-      throw new AppError('MEDIA_CONFLICT', 'A track leaves through its edit', {
-        details: { reason: 'track' },
-      });
-    const titles = this.deps.tracks?.liveTitles(mediaId) ?? [];
-    if (titles.length > 0 && !options.cascade)
-      throw new AppError('MEDIA_CONFLICT', 'This recording has tracks', {
-        details: { reason: 'has-tracks', tracks: [...titles] },
-      });
+    this.assertRemovable(media, options.cascade ?? false);
     const trackFiles = this.deps.tracks?.filesOf(mediaId) ?? [];
     const rendition = this.deps.store.getRendition(mediaId);
     this.deps.store.deleteMedia(mediaId);
@@ -266,6 +258,19 @@ export class MediaService {
       ...(rendition ? [rendition.path] : []),
     ]);
     await files.removeTranscripts(mediaId);
+  }
+
+  /** A track leaves through its edit; a recording's live tracks are named first (KBC-073 FR-8). */
+  private assertRemovable(media: MediaRecord, cascade: boolean): void {
+    if (media.track)
+      throw new AppError('MEDIA_CONFLICT', 'A track leaves through its edit', {
+        details: { reason: 'track' },
+      });
+    const titles = this.deps.tracks?.liveTitles(media.id) ?? [];
+    if (titles.length > 0 && !cascade)
+      throw new AppError('MEDIA_CONFLICT', 'This recording has tracks', {
+        details: { reason: 'has-tracks', tracks: [...titles] },
+      });
   }
 
   /**
