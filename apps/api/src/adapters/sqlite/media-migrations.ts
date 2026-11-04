@@ -873,8 +873,8 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
   {
     // KBC-068 (ADR 0029 §5): an approved track becomes a media row of its own, cut from its
     // recording. The bounds on the media row are the real, published ones; the ones on
-    // media_tracks are what was asked. Versions 15 to 17 are KBC-071's, KBC-045's and KBC-072's
-    // (open in parallel): `jobs` is rebuilt from what it is at this point, see the helper.
+    // media_tracks are what was asked. Versions 16 and 17 are KBC-045's and KBC-072's (open in
+    // parallel) and 19 may already be applied: `jobs` is rebuilt from what it is, see the helper.
     version: 18,
     name: 'track-items',
     sql: (db) => `

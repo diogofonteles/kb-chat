@@ -220,6 +220,16 @@ describe('migration track-items (KBC-068)', () => {
     db.close();
   });
 
+  it('applies on a database that already took the term list after it', () => {
+    const db = new DatabaseSync(':memory:');
+    applyMigrations(db, [
+      ...OURS_BEFORE,
+      ...OURS.filter((one) => one.version > VERSION),
+    ]);
+    expect(applyMigrations(db, OURS)).toEqual([VERSION]);
+    db.close();
+  });
+
   it('gives a track the media row of its recording to cascade from', () => {
     const db = seeded(BEFORE);
     applyMigrations(db, MEDIA_MIGRATIONS);
