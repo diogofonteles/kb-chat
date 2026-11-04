@@ -462,7 +462,9 @@ describe('Assuntos, step 4 (KBC-069)', () => {
       run: aRun('failed', 'invalid-output'),
     });
     expect(root.textContent).toContain('Não foi possível sugerir.');
-    expect(root.textContent).toContain('A resposta da IA não trouxe assuntos que deem para usar.');
+    expect(root.textContent).toContain(
+      'A resposta da IA não trouxe assuntos que deem para usar.',
+    );
     expect(button('Tentar de novo')).toBeTruthy();
   });
 
