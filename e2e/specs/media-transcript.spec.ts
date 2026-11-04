@@ -576,7 +576,7 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
       frames: 0,
       frozen: 0,
       noAudio: 0,
-      readyStateBelow3: 0,
+      stalled: 0,
       paused: 0,
       seeking: 0,
     };
@@ -585,13 +585,18 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
     const startedAt = Math.round(performance.now());
     const until = performance.now() + 6_000;
     let previous = performance.now();
+    let previousTime = audio?.currentTime ?? 0;
     let snapshotAt = 0;
     while (performance.now() < until) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const frameAt = performance.now();
       // A frame after the page itself froze (a loaded machine), or with the audio waiting
-      // for data, shows nothing about the highlight: those are not samples.
+      // for data, shows nothing about the highlight: those are not samples. readyState alone
+      // cannot say the audio waits: Linux WebKit stays at 2 while currentTime runs normally.
       const frozen = frameAt - previous > 100;
+      const stalled =
+        !!audio && audio.readyState < 3 && audio.currentTime <= previousTime;
+      previousTime = audio?.currentTime ?? previousTime;
       gaps.push(Math.round(frameAt - previous));
       previous = frameAt;
       if (frameAt - snapshotAt >= 500) {
@@ -605,11 +610,11 @@ test('NFR-1: the highlighted segment follows the audio within 250 ms', async ({
           seeking: audio?.seeking,
         });
       }
-      if (frozen || !audio || audio.readyState < 3 || audio.paused) {
+      if (frozen || !audio || stalled || audio.paused) {
         skipped.frames++;
         if (frozen) skipped.frozen++;
         if (!audio) skipped.noAudio++;
-        if (audio && audio.readyState < 3) skipped.readyStateBelow3++;
+        if (stalled) skipped.stalled++;
         if (audio?.paused) skipped.paused++;
         if (audio?.seeking) skipped.seeking++;
         continue;
