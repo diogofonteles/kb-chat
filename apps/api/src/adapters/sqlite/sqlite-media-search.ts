@@ -314,8 +314,8 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
          AND s.transcript_id = ? ${ranked ? ORDER : ''} LIMIT 1`,
     );
     const ranges = this.db.prepare(SEGMENT_RANGES).all(JSON.stringify(ids));
-    const expression = toMatchExpression(terms);
     return ranges.flatMap((range) => {
+      const row = best.get(
         expression,
         Number(range['first']),
         Number(range['last']),
