@@ -235,7 +235,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
       : [];
     const details = input.detailsOf(track);
     this.writeDetails(track, details, at);
-    if (track.cut && details.transcript)
+    if (details.transcript)
       this.transcripts.replaceDerived(details.transcript, input.now);
     return replaced;
   }

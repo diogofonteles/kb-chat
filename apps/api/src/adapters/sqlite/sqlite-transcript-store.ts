@@ -32,6 +32,7 @@ function toSummary(row: Row): TranscriptSummary {
     id: text(row, 'id'),
     mediaId: text(row, 'media_id'),
     version: Number(row['version']),
+    model: text(row, 'model'),
     confidence: transcriptConfidenceSchema.parse(row['confidence']),
     vad: vadOf(row['vad']),
     termsVersion: Number(row['terms_version']),
@@ -190,7 +191,8 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
   transcripts(mediaId: string): TranscriptSummary[] {
     return this.db
       .prepare(
-        `SELECT id, media_id, version, confidence, vad, terms_version, raw_path, filter_version,
+        `SELECT id, media_id, version, model, confidence, vad, terms_version, raw_path,
+            filter_version,
            confidence_version, word_count, removed_words, created_at
          FROM transcripts WHERE media_id = ? ORDER BY version DESC`,
       )

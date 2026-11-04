@@ -32,7 +32,7 @@ export interface TrackItemRow {
 export interface TrackDetails {
   readonly author: string | null;
   readonly legacyAuthorship: LegacyAuthorship;
-  /** Null: a recording with no transcript yet. */
+  /** Its text, when it has to change; null: it stays as it is. */
   readonly transcript: NewTranscript | null;
 }
 
@@ -59,7 +59,10 @@ export interface CutOrder {
  * publication. Every write is one transaction, joining the caller's when there is one.
  */
 export interface TrackItemStorePort {
-  /** The live items of a recording: published and not archived. */
+  /**
+   * The live items of a recording: published and not archived, with their real bounds. A
+   * cancelled approval can leave some of them with no row in `tracksOf`.
+   */
   published(
     parentId: string,
   ): readonly { mediaId: string; startMs: number; endMs: number }[];
@@ -94,7 +97,7 @@ export interface TrackItemStorePort {
     readonly detailsOf: DetailsOf;
     readonly now: Date;
   }): readonly string[];
-  /** The tracks approved now, for a new transcript or a move of the recording. */
+  /** The tracks approved now, for what follows them: publishing, a move of the recording. */
   tracksOf(parentId: string): readonly TrackItemRow[];
   /** A new author for the tracks of a recording (BR-2). */
   setAuthor(input: {

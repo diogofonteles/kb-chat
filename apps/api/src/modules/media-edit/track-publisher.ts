@@ -46,6 +46,9 @@ export interface TrackPublisherDeps {
   readonly now?: () => Date;
 }
 
+/** An item and the real part of the recording its file holds. */
+type LiveItem = ReturnType<TrackItemStorePort['published']>[number];
+
 /** Bounds this close are the same cut: stream copy never lands exactly on the asked time. */
 const SAME_BOUNDS_MS = 50;
 
@@ -143,17 +146,16 @@ export class TrackPublisher {
   }
 
   /**
-   * Inside the new transcript's transaction (BR-4): each live track gets its slice. Every
-   * read of a track's text is derived; nothing is transcribed again.
+   * Inside the new transcript's transaction (BR-4): each live item gets its slice, by the file
+   * it has now, even one a cancelled approval left with no track row. Every read of a track's
+   * text is derived; nothing is transcribed again.
    */
   afterTranscript(parentId: string): void {
     const { items, transcripts } = this.deps;
     const now = this.now();
     const slice = this.slicerOf(parentId);
-    const live = new Set(items.published(parentId).map((one) => one.mediaId));
-    for (const track of items.tracksOf(parentId)) {
-      if (!live.has(track.mediaId)) continue;
-      const transcript = slice(track);
+    for (const item of items.published(parentId)) {
+      const transcript = slice(item);
       if (transcript) transcripts.replaceDerived(transcript, now);
     }
   }
@@ -177,10 +179,24 @@ export class TrackPublisher {
     if (!parent) throw new Error(`recording ${parentId} does not exist`);
     const slice = this.slicerOf(parentId);
     const authorOf = this.authorResolver(parent);
+    const [current] = this.deps.transcripts.transcripts(parentId);
     return (track) => ({
       ...authorOf(track),
-      transcript: track.cut ? slice(track) : null,
+      transcript:
+        track.cut || this.isBehind(track.mediaId, current)
+          ? slice({
+              mediaId: track.mediaId,
+              startMs: track.realStartMs,
+              endMs: track.realEndMs,
+            })
+          : null,
     });
+  }
+
+  /** Whether an item's text was not cut from the recording's current transcript (BR-4). */
+  private isBehind(mediaId: string, current?: TranscriptSummary): boolean {
+    const [derived] = this.deps.transcripts.transcripts(mediaId);
+    return current !== undefined && derived?.model !== current.id;
   }
 
   /** Who answers, when they are an author of the collection; else the recording's (AC-1). */
@@ -227,9 +243,9 @@ export class TrackPublisher {
       segments: transcripts.segments(current.id),
       words: transcripts.words(current.id),
     };
-    return (track: TrackItemRow): NewTranscript => {
-      const window = { startMs: track.realStartMs, endMs: track.realEndMs };
-      return toDerived(track.mediaId, {
+    return ({ mediaId, startMs, endMs }: LiveItem): NewTranscript => {
+      const window = { startMs, endMs };
+      return toDerived(mediaId, {
         current,
         window,
         slice: sliceTranscript(source, window),

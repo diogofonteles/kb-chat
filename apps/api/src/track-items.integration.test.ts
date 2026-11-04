@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type { MediaItem } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
@@ -45,6 +46,28 @@ async function published(world: World, tracks = THREE) {
   const entry = await libraryEntry(media.owner, recording.id);
   return { recording, tracks: entry?.tracks ?? [] };
 }
+
+/**
+ * Approves without the third track, with a cut on its way, and reopens: the cancelled approval
+ * leaves the third live, published, with no `media_tracks` row.
+ */
+async function leaveThirdBehind(media: Media, recordingId: string) {
+  await approve(media, recordingId, [
+    THREE[0] as (typeof THREE)[number],
+    { ...(THREE[1] as (typeof THREE)[number]), endMs: 200_000 },
+  ]);
+  const reopened = await withVersion(media, recordingId, {
+    method: 'POST',
+    url: `${urlOf(recordingId)}/edit/reopen`,
+  });
+  expect(reopened.statusCode, reopened.body).toBe(200);
+}
+
+const textOf = async (media: Media, id: string) =>
+  (await media.owner('GET', `${urlOf(id)}/transcript`))
+    .json<{ segments: { text: string }[] }>()
+    .segments.map((segment) => segment.text)
+    .join(' ');
 
 const preparationOf = async (media: Media, id: string) =>
   (await media.owner('GET', `${urlOf(id)}/edit`)).json<{
@@ -502,6 +525,57 @@ describe('A track follows its recording (KBC-068)', () => {
       },
     );
     expect(search.json().media).toEqual([]);
+  });
+
+  it('AC-8, BR-4: a live track a cancelled approval left behind gets the new transcript too', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, tracks } = await published(world);
+    await leaveThirdBehind(media, recording.id);
+    const queued = await media.owner(
+      'POST',
+      `${urlOf(recording.id)}/transcription`,
+      {},
+    );
+    expect(queued.statusCode, queued.body).toBeLessThan(300);
+    await say(world, [{ at: 310, text: 'ayahuasca na faixa deixada' }]);
+    const third = tracks[2]?.id ?? '';
+    expect(await textOf(media, third)).toContain('ayahuasca');
+    const search = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/searches',
+      { q: 'ayahuasca' },
+    );
+    expect(search.json().media).toHaveLength(1);
+    expect(search.json().media[0]).toMatchObject({
+      mediaId: third,
+      startMs: 10_000,
+    });
+  });
+
+  it('BR-4: approving the same bounds again brings a track left on an old version up to date', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, tracks } = await published(world);
+    await leaveThirdBehind(media, recording.id);
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    const third = tracks[2]?.id ?? '';
+    const first = tracks[0]?.id ?? '';
+    db.prepare(
+      `UPDATE segments SET text = 'texto antigo' WHERE transcript_id IN
+         (SELECT id FROM transcripts WHERE media_id = ?)`,
+    ).run(third);
+    db.prepare(`UPDATE transcripts SET model = 'older' WHERE media_id = ?`).run(
+      third,
+    );
+    const versionOfFirst = () =>
+      db.prepare(`SELECT id FROM transcripts WHERE media_id = ?`).get(first);
+    const before = versionOfFirst();
+    await approve(media, recording.id, THREE);
+    expect(await finishCuts(media)).toBe(0);
+    expect(await textOf(media, third)).toContain('mariri');
+    expect(versionOfFirst()).toEqual(before);
+    db.close();
   });
 
   it('AC-1: the track is by who answers when they are an author, else by the recording', async () => {

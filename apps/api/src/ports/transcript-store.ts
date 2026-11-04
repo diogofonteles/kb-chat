@@ -56,6 +56,8 @@ export interface TranscriptSummary {
   readonly id: string;
   readonly mediaId: string;
   readonly version: number;
+  /** The engine's model; on a track, the id of the recording's transcript it was cut from. */
+  readonly model: string;
   readonly confidence: TranscriptConfidence;
   readonly vad: 'applied' | 'skipped';
   /** The term list it was made with (KBC-040 FR-4). */
