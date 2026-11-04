@@ -10,6 +10,7 @@ import type {
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type {
+  CarriedLabel,
   DiarizationStorePort,
   DiarizationSummary,
   DiarizeJobRecord,
@@ -22,6 +23,10 @@ import type {
   MediaRecord,
   MediaStorePort,
 } from '../../ports/media-store.js';
+import type {
+  StoredVoiceLabel,
+  VoiceLabelStorePort,
+} from '../../ports/speaker-store.js';
 import type {
   TranscriptStorePort,
   TranscriptSummary,
@@ -36,12 +41,24 @@ import {
   wordVoicesOf,
 } from './speaker-turns.js';
 import type { Presence } from './transcriber-service.js';
+import {
+  aliasOf,
+  carryLabels,
+  mergedOf,
+  mergeTurns,
+  voiceLabelOf,
+  type AuthorLookup,
+} from './voice-labels.js';
 
 export interface DiarizationServiceDeps {
   readonly store: MediaStorePort;
   readonly transcripts: TranscriptStorePort;
   readonly diarizations: DiarizationStorePort;
+  /** Who the voices are (KBC-065). */
+  readonly voiceLabels: VoiceLabelStorePort;
   readonly files: MediaFilesPort;
+  /** The author a speaker is linked to (BR-2); without it, the speaker's own name. */
+  readonly authorOf?: AuthorLookup;
   /** Whether a transcriber that separates voices is on (AC-9). */
   readonly presence?: () => Presence;
   readonly now?: () => Date;
@@ -226,6 +243,29 @@ export class DiarizationService {
       derivationVersion: DERIVATION_VERSION,
       turns,
       ...this.voicesOfTurns(transcript.id, turns),
+      ...this.carriedNames(mediaId, turns),
+    };
+  }
+
+  /** The names of the separation before, by the time the voices share (FR-5, BR-5). */
+  private carriedNames(
+    mediaId: string,
+    turns: readonly SpeakerTurn[],
+  ): { labels: CarriedLabel[]; namesPending: boolean } {
+    const { diarizations, voiceLabels } = this.deps;
+    const previous = diarizations.latest(mediaId);
+    if (!previous) return { labels: [], namesPending: false };
+    const before = voiceLabels.labels(previous.id);
+    return {
+      labels: carryLabels({
+        labels: before,
+        oldTurns: mergeTurns(diarizations.turns(previous.id), aliasOf(before)),
+        newTurns: turns,
+      }),
+      namesPending: before.some(
+        (one) =>
+          one.mergedInto === null && (one.speaker !== null || one.audience),
+      ),
     };
   }
 
@@ -256,8 +296,11 @@ export class DiarizationService {
     const { diarizations, transcripts } = this.deps;
     const result = diarizations.latest(mediaId);
     if (!result) return null;
-    const turns = diarizations.turns(result.id);
+    const rows = this.deps.voiceLabels.labels(result.id);
+    const alias = aliasOf(rows);
+    const turns = mergeTurns(diarizations.turns(result.id), alias);
     const stale = result.transcriptId !== transcript.id;
+    const voices = speakingTimeOf(turns);
     return {
       speakers: {
         version: result.version,
@@ -265,14 +308,36 @@ export class DiarizationService {
         transcriptVersion: transcript.version,
         staleTranscript: stale,
         requestedVoices: result.requestedVoices,
-        voiceCount: result.voiceCount,
-        voices: speakingTimeOf(turns),
+        voiceCount: voices.length,
+        voices,
         turns,
+        labels: this.labelsOf(voices, rows),
+        merged: mergedOf(rows),
+        namesPending: result.namesPending,
       },
       segmentVoices: stale
         ? dominantVoices(transcripts.segments(transcript.id), turns)
-        : diarizations.segmentVoices(result.id),
+        : diarizations
+            .segmentVoices(result.id)
+            .map((voice) =>
+              voice === null ? null : (alias.get(voice) ?? voice),
+            ),
     };
+  }
+
+  /** One label per voice shown, a voice with no row being unnamed. */
+  private labelsOf(
+    voices: readonly { readonly voice: number }[],
+    rows: readonly StoredVoiceLabel[],
+  ) {
+    const authorOf = this.deps.authorOf ?? (() => null);
+    return voices.map(({ voice }) =>
+      voiceLabelOf(
+        voice,
+        rows.find((row) => row.voice === voice),
+        authorOf,
+      ),
+    );
   }
 
   private toDiarization(

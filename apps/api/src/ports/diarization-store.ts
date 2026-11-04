@@ -23,6 +23,17 @@ export interface NewDiarization {
   readonly segmentVoices: readonly (number | null)[];
   /** The voice of each word of that transcript, in its order. */
   readonly wordVoices: readonly (number | null)[];
+  /** The names carried over from the previous separation (KBC-065 FR-5). */
+  readonly labels: readonly CarriedLabel[];
+  /** The previous separation had names: this one waits for a person (BR-5). */
+  readonly namesPending: boolean;
+}
+
+/** A name a new separation takes from the one before. */
+export interface CarriedLabel {
+  readonly voice: number;
+  readonly speakerId: string | null;
+  readonly audience: boolean;
 }
 
 /** A stored separation, without its turns and voices. */
@@ -36,6 +47,7 @@ export interface DiarizationSummary {
   readonly rawPath: string;
   readonly derivationVersion: number;
   readonly createdAt: string;
+  readonly namesPending: boolean;
 }
 
 /** The newest diarize job of an item: its status and the hint it carries. */

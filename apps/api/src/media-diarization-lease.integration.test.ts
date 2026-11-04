@@ -9,6 +9,7 @@ import { FsMediaFiles } from './adapters/media/fs-media-files.js';
 import { openMediaDatabase } from './adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
 import { SqliteDiarizationStore } from './adapters/sqlite/sqlite-diarization-store.js';
+import { SqliteVoiceLabelStore } from './adapters/sqlite/sqlite-speaker-store.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
 import { createLogger } from './logger.js';
@@ -38,7 +39,14 @@ const openDb = () => database;
 const now = () => clock;
 const workers = () => new WorkerService({ store, files, now });
 const diarization = () =>
-  new DiarizationService({ store, transcripts, diarizations, files, now });
+  new DiarizationService({
+    store,
+    transcripts,
+    diarizations,
+    voiceLabels: new SqliteVoiceLabelStore(database),
+    files,
+    now,
+  });
 const janitor = () =>
   new MediaJanitor({ store, files, log: createLogger('silent'), now });
 

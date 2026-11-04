@@ -7,6 +7,8 @@ import { MEDIA_MIGRATIONS, type Migration } from './media-migrations.js';
 const THROUGH_TEN = MEDIA_MIGRATIONS.filter((one) => one.version <= 10);
 /** Up to 11: later ones (KBC-039's index) are not what this proves. */
 const THROUGH_ELEVEN = MEDIA_MIGRATIONS.filter((one) => one.version <= 11);
+/** Up to the search index: KBC-065's 13 needs 8, which some of these leave out on purpose. */
+const THROUGH_TWELVE = MEDIA_MIGRATIONS.filter((one) => one.version <= 12);
 const MEDIA_ID = '33333333-3333-4333-8333-333333333333';
 const AT = '2026-11-01T10:00:00.000Z';
 
@@ -112,7 +114,7 @@ describe('migration 11: jobs take the kind "diarize" after the silence maps (KBC
     db.exec('PRAGMA foreign_keys = ON');
     applyMigrations(
       db,
-      MEDIA_MIGRATIONS.filter((one) => ![8, 9, 11].includes(one.version)),
+      THROUGH_TWELVE.filter((one) => ![8, 9, 11].includes(one.version)),
     );
     expect(applyMigrations(db, THROUGH_ELEVEN)).toEqual([8, 9, 11]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
@@ -120,9 +122,9 @@ describe('migration 11: jobs take the kind "diarize" after the silence maps (KBC
 
   it('is applied on a database that already has the search index (12)', () => {
     const db = freshDatabase(
-      MEDIA_MIGRATIONS.filter((one) => ![8, 11].includes(one.version)),
+      THROUGH_TWELVE.filter((one) => ![8, 11].includes(one.version)),
     );
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([8, 11]);
+    expect(applyMigrations(db, THROUGH_TWELVE)).toEqual([8, 11]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     expect(indexesOf(db)).toHaveLength(4);
     expect(

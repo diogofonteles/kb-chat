@@ -548,4 +548,45 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       END;
     `,
   },
+  {
+    // KBC-065 (ADR 0029 §2): the people named in a collection's recordings and who each
+    // voice of a separation is. A label belongs to one separation: voice numbers mean nothing
+    // outside it. Version 13: 7 is KBC-051's (open in parallel); nothing here depends on it.
+    version: 13,
+    name: 'media-speakers',
+    sql: `
+      CREATE TABLE media_speakers (
+        id TEXT PRIMARY KEY,
+        -- The top-level collection: a sub-collection uses its parent's list (BR-1).
+        collection TEXT NOT NULL,
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 120),
+        name_key TEXT NOT NULL CHECK (name_key <> ''),
+        author_slug TEXT,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (collection, name_key)
+      ) STRICT;
+      CREATE UNIQUE INDEX media_speakers_author ON media_speakers (collection, author_slug)
+        WHERE author_slug IS NOT NULL;
+
+      CREATE TABLE media_voice_labels (
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        voice INTEGER NOT NULL CHECK (voice BETWEEN 1 AND 10),
+        speaker_id TEXT REFERENCES media_speakers (id),
+        audience INTEGER NOT NULL DEFAULT 0 CHECK (audience IN (0, 1)),
+        -- Joined to that voice of the same separation; its own label is kept for the undo.
+        merged_into INTEGER CHECK (merged_into IS NULL OR merged_into BETWEEN 1 AND 10),
+        CHECK (audience = 0 OR speaker_id IS NULL),
+        CHECK (merged_into IS NULL OR merged_into <> voice),
+        PRIMARY KEY (diarization_id, voice)
+      ) STRICT, WITHOUT ROWID;
+      CREATE INDEX media_voice_labels_speaker ON media_voice_labels (speaker_id)
+        WHERE speaker_id IS NOT NULL;
+
+      -- A new separation's names wait for a person to confirm them (BR-5).
+      ALTER TABLE diarizations ADD COLUMN names_pending INTEGER NOT NULL DEFAULT 0
+        CHECK (names_pending IN (0, 1));
+    `,
+  },
 ];

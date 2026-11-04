@@ -705,7 +705,29 @@ export const segmentVoiceSchema = z.object({
 });
 export type SegmentVoice = z.infer<typeof segmentVoiceSchema>;
 
-/** The current separation of a recording, read against its current transcript. */
+/** Who a voice is, as read (KBC-065 BR-2, BR-6): `name` is null but for a `person`. */
+export const VOICE_LABEL_KINDS = ['person', 'audience', 'unnamed'] as const;
+export const voiceLabelSchema = z.object({
+  voice: voiceIndexSchema,
+  kind: z.enum(VOICE_LABEL_KINDS),
+  speakerId: z.uuid().nullable(),
+  name: z.string().min(1).nullable(),
+  /** The collection's main author: shown with ✦ (BR-2). */
+  main: z.boolean(),
+});
+export type VoiceLabel = z.infer<typeof voiceLabelSchema>;
+
+/** A voice joined to another (KBC-065 FR-2), kept so the join can be undone. */
+export const mergedVoiceSchema = z.object({
+  voice: voiceIndexSchema,
+  into: voiceIndexSchema,
+});
+export type MergedVoice = z.infer<typeof mergedVoiceSchema>;
+
+/**
+ * The current separation of a recording, read against its current transcript. Voices joined
+ * by a person read as one everywhere: `turns`, `voices`, `voiceCount` and `segments`.
+ */
 export const diarizationSchema = z.object({
   version: z.number().int().min(1),
   createdAt: z.iso.datetime(),
@@ -723,6 +745,11 @@ export const diarizationSchema = z.object({
   ),
   turns: z.array(speakerTurnSchema),
   segments: z.array(segmentVoiceSchema),
+  /** One per voice in `voices` (KBC-065). */
+  labels: z.array(voiceLabelSchema),
+  merged: z.array(mergedVoiceSchema),
+  /** A new separation's names wait for "Confirmar nomes" (BR-5). */
+  namesPending: z.boolean(),
 });
 export type Diarization = z.infer<typeof diarizationSchema>;
 
@@ -773,8 +800,55 @@ export const mediaTranscriptSchema = z.object({
   segments: z.array(transcriptSegmentSchema),
   /** The current separation (KBC-064 FR-4): only for `media-edit`, once there is one. */
   speakers: transcriptSpeakersSchema.optional(),
+  /**
+   * Who each voice is, for `media-speakers` or `media-edit` once voices are separated
+   * (KBC-065 FR-4); for whoever only listens, names waiting for confirmation read as unnamed.
+   */
+  voiceNames: z.array(voiceLabelSchema).optional(),
 });
 export type MediaTranscript = z.infer<typeof mediaTranscriptSchema>;
+
+/* ---------- Naming the voices (KBC-065, ADR 0029 §2) ---------- */
+
+/** Which separation a change is about: voice numbers mean nothing in another version. */
+const separationVersionSchema = z.number().int().min(1);
+
+/** PUT /api/v1/media/:id/voices/:voice: a speaker, the audience, or back to no name. */
+export const nameVoiceRequestSchema = z
+  .strictObject({
+    version: separationVersionSchema,
+    speakerId: z.uuid().nullable(),
+    audience: z.boolean(),
+  })
+  .refine((one) => !(one.audience && one.speakerId !== null), {
+    error: 'a voice is a speaker or the audience, not both',
+  });
+export type NameVoiceRequest = z.infer<typeof nameVoiceRequestSchema>;
+
+/** POST /api/v1/media/:id/voices/merge: `voice` becomes part of `into`. */
+export const mergeVoicesRequestSchema = z
+  .strictObject({
+    version: separationVersionSchema,
+    voice: voiceIndexSchema,
+    into: voiceIndexSchema,
+  })
+  .refine((one) => one.voice !== one.into, {
+    error: 'a voice cannot join itself',
+  });
+export type MergeVoicesRequest = z.infer<typeof mergeVoicesRequestSchema>;
+
+/** POST /api/v1/media/:id/voices/split: undoes a join. */
+export const splitVoiceRequestSchema = z.strictObject({
+  version: separationVersionSchema,
+  voice: voiceIndexSchema,
+});
+export type SplitVoiceRequest = z.infer<typeof splitVoiceRequestSchema>;
+
+/** POST /api/v1/media/:id/voices/confirm: "Confirmar nomes" (BR-5). */
+export const confirmVoicesRequestSchema = z.strictObject({
+  version: separationVersionSchema,
+});
+export type ConfirmVoicesRequest = z.infer<typeof confirmVoicesRequestSchema>;
 
 /** PATCH /api/v1/media/transcribers/:id: what a paired transcriber may do (FR-6). */
 export const TRANSCRIBER_KINDS = ['transcribe', 'diarize'] as const;

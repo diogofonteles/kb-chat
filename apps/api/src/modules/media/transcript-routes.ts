@@ -35,8 +35,10 @@ export const transcriptRoutes =
     typed.get('/api/v1/media/:id/transcript', OPTIONS.transcript, (request) =>
       Promise.resolve(
         service.current(actorOf(request), request.params.id, {
-          // The voices are for whoever edits recordings (KBC-064 FR-4).
+          // The voices are for whoever edits recordings (KBC-064 FR-4), who sees the names
+          // anyway; the names, for whoever may see who speaks (KBC-065 BR-4).
           withVoices: hasFeature(viewerOf(request).person, 'media-edit'),
+          withNames: hasFeature(viewerOf(request).person, 'media-speakers'),
         }),
       ),
     );
