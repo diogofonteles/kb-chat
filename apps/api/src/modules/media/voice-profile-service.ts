@@ -211,6 +211,7 @@ export class VoiceProfileService {
     const state = voiceListState(list, this.deps.profiles.oldestConsentAt());
     if (
       state === 'lost' ||
+      state === 'exposed' ||
       (profileId !== undefined && list.ids.includes(profileId))
     )
       throw new AppError('MEDIA_CONFLICT', 'This consent was revoked');

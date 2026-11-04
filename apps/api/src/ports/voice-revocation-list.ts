@@ -11,6 +11,11 @@ export interface VoiceRevocations {
    * checked, or nobody did. A consent older than this is older than the list (ADR 0032 §4).
    */
   readonly startedAt: string | null;
+  /**
+   * False when others can write the file (ADR 0032 §3): its lines are then only a claim, and
+   * no print is deleted, nor a new one made, on it until the owner has looked.
+   */
+  readonly guarded: boolean;
 }
 
 /**

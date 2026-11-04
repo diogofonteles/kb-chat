@@ -1,7 +1,7 @@
 import type { VoiceRevocations } from '../../ports/voice-revocation-list.js';
 
 /** `unused`: no consent yet, so there is nothing to have lost and no need for a list. */
-export type VoiceListState = 'unused' | 'whole' | 'lost';
+export type VoiceListState = 'unused' | 'whole' | 'lost' | 'exposed';
 
 /**
  * Whether the list can vouch for the consents in the database (ADR 0032 §4). Only the two
@@ -13,6 +13,7 @@ export function voiceListState(
   list: VoiceRevocations,
   oldestConsentAt: string | null,
 ): VoiceListState {
+  if (!list.guarded) return 'exposed';
   if (oldestConsentAt === null) return list.complete ? 'whole' : 'unused';
   if (!list.complete) return 'lost';
   const youngerThanConsents =

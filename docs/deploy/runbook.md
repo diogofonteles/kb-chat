@@ -337,6 +337,8 @@ age --decrypt --identity ~/.config/kb-chat/backup-age.key backup.age |
   sudo sh -c "printf '\nvoice-revocations v1\n' >> $F && chown 10001:10001 $F && chmod 600 $F"
   ```
 
+- **Lista exposta:** o log diz `voice revocation list is exposed` e a tela avisa: o arquivo não é do usuário da API (10001) ou não está em 0600. Nada da lista é aplicado no arranque e cadastrar, "Calcular de novo" e receber impressões respondem 409 (revogar continua funcionando). A API não aperta o arquivo sozinha, porque alguém pode ter escrito nele. Confira se cada id da lista é de uma revogação de verdade (o relatório mostra as revogações; id de consentimento em vigor na lista é suspeito e deve sair da lista), depois rode o mesmo comando acima e reinicie a API.
+
 Ensaio sugerido: um a cada trimestre.
 
 ## 12. Reconstruir a VM (perdida ou recuperada)

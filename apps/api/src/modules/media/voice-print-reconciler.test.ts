@@ -8,7 +8,12 @@ import {
 } from './voice-print-reconciler.js';
 
 const AT = new Date('2026-11-04T12:00:00.000Z');
-const WHOLE: VoiceRevocations = { ids: [], complete: true, startedAt: null };
+const WHOLE: VoiceRevocations = {
+  ids: [],
+  complete: true,
+  startedAt: null,
+  guarded: true,
+};
 const LOST: VoiceRevocations = { ...WHOLE, complete: false };
 
 const reconcilerWith = (input: {
@@ -71,6 +76,7 @@ describe('VoicePrintReconciler (ADR 0032)', () => {
       orphans: 0,
       unfinished: 0,
       listLost: false,
+      listExposed: false,
     });
     expect(remove).not.toHaveBeenCalled();
     expect(revoke).not.toHaveBeenCalled();
@@ -111,6 +117,20 @@ describe('VoicePrintReconciler (ADR 0032)', () => {
       list: { ...WHOLE, startedAt: '2026-11-01T00:00:00.000Z' },
     });
     expect((await reconciler.reconcile()).listLost).toBe(true);
+  });
+
+  it('deletes nothing on the word of a list others can write', async () => {
+    const { reconciler, remove, revoke } = reconcilerWith({
+      profiles: ['valid'],
+      prints: ['valid'],
+      list: { ...WHOLE, ids: ['valid'], guarded: false },
+    });
+    expect(await reconciler.reconcile()).toMatchObject({
+      reapplied: 0,
+      listExposed: true,
+    });
+    expect(remove).not.toHaveBeenCalled();
+    expect(revoke).not.toHaveBeenCalled();
   });
 
   it('a list marked lost still reapplies the ids it has', async () => {

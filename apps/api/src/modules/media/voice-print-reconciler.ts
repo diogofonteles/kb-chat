@@ -22,6 +22,7 @@ export interface Reconciled {
   readonly orphans: number;
   readonly unfinished: number;
   readonly listLost: boolean;
+  readonly listExposed: boolean;
 }
 
 /** Stands for the person in a reapplied revocation: the list keeps ids and nothing else. */
@@ -42,14 +43,16 @@ export class VoicePrintReconciler {
   async reconcile(): Promise<Reconciled> {
     const { revocations, profiles, prints } = this.deps;
     const list = await revocations.read();
-    const reapplied = await this.reapply(list.ids);
+    const state = voiceListState(list, profiles.oldestConsentAt());
+    const reapplied = list.guarded ? await this.reapply(list.ids) : 0;
     const orphans = await this.dropOrphans();
     const unfinished = await prints.removeUnfinished();
     return {
       reapplied,
       orphans,
       unfinished,
-      listLost: voiceListState(list, profiles.oldestConsentAt()) === 'lost',
+      listLost: state === 'lost',
+      listExposed: state === 'exposed',
     };
   }
 

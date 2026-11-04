@@ -1,10 +1,20 @@
-import { open, readFile, type FileHandle } from 'node:fs/promises';
+import { constants, type Stats } from 'node:fs';
+import { open, type FileHandle } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type {
   VoiceRevocationListPort,
   VoiceRevocations,
 } from '../../ports/voice-revocation-list.js';
 import { isMissingFile } from '../atomic-json.js';
+
+/** Who else may touch the file: nobody. */
+const OTHERS = 0o077;
+const READ_NO_LINK = constants.O_RDONLY | constants.O_NOFOLLOW;
+const APPEND_NO_LINK =
+  constants.O_RDWR |
+  constants.O_APPEND |
+  constants.O_CREAT |
+  constants.O_NOFOLLOW;
 
 /** The owner's mark on a list checked by hand (runbook 11): it trusts the list from there. */
 export const REVOCATION_LIST_HEADER = 'voice-revocations v1';
@@ -14,7 +24,10 @@ const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const STARTED =
   /^voice-revocations v1 since (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)$/;
 const LINE_BREAK = 0x0a;
+const NO_LIST = { ids: [], complete: false, startedAt: null };
 
+const isLink = (err: unknown): boolean =>
+  err instanceof Error && 'code' in err && err.code === 'ELOOP';
 const isHeader = (line: string): boolean =>
   line === REVOCATION_LIST_HEADER || STARTED.test(line);
 const isKnownLine = (line: string): boolean =>
@@ -33,28 +46,35 @@ function linesOf(content: string): string[] {
  * so only the very end of the file can be torn, by a crash, and that revocation had no answer.
  * Any other line that makes no sense may be a revocation already answered: the list is then
  * incomplete, from the last header on, and the owner's next mark takes it back.
+ *
+ * Owner and mode are checked on every read, and nothing tightens them: a file found open may
+ * already have been written, so that is for the owner to look at (ADR 0032 §3).
  */
 export class FsVoiceRevocationList implements VoiceRevocationListPort {
   private turn: Promise<unknown> = Promise.resolve();
+  private readonly uid: number | undefined;
 
-  constructor(private readonly path: string) {}
+  constructor(
+    private readonly path: string,
+    options: { readonly uid?: number } = {},
+  ) {
+    this.uid = options.uid ?? process.getuid?.();
+  }
 
   add(profileId: string): Promise<void> {
     return this.inTurn(() => this.append(profileId));
   }
 
   async read(): Promise<VoiceRevocations> {
-    const lines = linesOf(await this.content());
-    const start = lines.findLastIndex(isHeader);
-    const header = lines[start];
-    const since = lines.slice(start + 1);
-    return {
-      ids: [...new Set(lines.filter((line) => UUID.test(line)))],
-      complete:
-        header !== undefined &&
-        since.every((line) => line === '' || UUID.test(line)),
-      startedAt: header?.match(STARTED)?.[1] ?? null,
-    };
+    const file = await this.openToRead();
+    if (file === 'missing') return { ...NO_LIST, guarded: true };
+    if (file === 'link') return { ...NO_LIST, guarded: false };
+    try {
+      const guarded = this.isGuarded(await file.stat());
+      return { ...parsed(await file.readFile('utf8')), guarded };
+    } finally {
+      await file.close();
+    }
   }
 
   /** Twice at once writes one header: a second date would be younger than the first consent. */
@@ -63,6 +83,22 @@ export class FsVoiceRevocationList implements VoiceRevocationListPort {
       if ((await this.read()).complete) return;
       await this.append(`${REVOCATION_LIST_HEADER} since ${at.toISOString()}`);
     });
+  }
+
+  private async openToRead(): Promise<FileHandle | 'missing' | 'link'> {
+    try {
+      return await open(this.path, READ_NO_LINK);
+    } catch (err) {
+      if (isMissingFile(err)) return 'missing';
+      if (isLink(err)) return 'link';
+      throw err;
+    }
+  }
+
+  private isGuarded(stats: Stats): boolean {
+    return (
+      stats.isFile() && (stats.mode & OTHERS) === 0 && stats.uid === this.uid
+    );
   }
 
   /** One writer at a time: cutting a torn end must not cut what another write just added. */
@@ -74,7 +110,7 @@ export class FsVoiceRevocationList implements VoiceRevocationListPort {
 
   /** Between line breaks; a torn end goes first, or it would read as a line that ended. */
   private async append(line: string): Promise<void> {
-    const file = await open(this.path, 'a+', 0o600);
+    const file = await open(this.path, APPEND_NO_LINK, 0o600);
     try {
       await cutTornEnd(file);
       await file.appendFile(`\n${line}\n`);
@@ -94,15 +130,20 @@ export class FsVoiceRevocationList implements VoiceRevocationListPort {
       await folder.close();
     }
   }
+}
 
-  private async content(): Promise<string> {
-    try {
-      return await readFile(this.path, 'utf8');
-    } catch (err) {
-      if (isMissingFile(err)) return '';
-      throw err;
-    }
-  }
+function parsed(content: string): Omit<VoiceRevocations, 'guarded'> {
+  const lines = linesOf(content);
+  const start = lines.findLastIndex(isHeader);
+  const header = lines[start];
+  const since = lines.slice(start + 1);
+  return {
+    ids: [...new Set(lines.filter((line) => UUID.test(line)))],
+    complete:
+      header !== undefined &&
+      since.every((line) => line === '' || UUID.test(line)),
+    startedAt: header?.match(STARTED)?.[1] ?? null,
+  };
 }
 
 async function cutTornEnd(file: FileHandle): Promise<void> {

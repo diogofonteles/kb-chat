@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -959,6 +960,30 @@ describe('A backup from before a revocation (KBC-071 BR-1, BR-2, ADR 0032)', () 
     });
   });
 
+  it('a list others can write revokes nobody, deletes nothing and stops new prints', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    await closeApp();
+    const list = join(media.mediaDir, REVOCATIONS);
+    appendFileSync(list, `\n${profile.id}\n`);
+    chmodSync(list, 0o666);
+    const restarted = await startMedia({ state: media.started.state });
+    expect(
+      restarted.started.logs.some((line) =>
+        line.includes('voice revocation list is exposed'),
+      ),
+    ).toBe(true);
+    expect(await profiles(restarted)).toHaveLength(1);
+    expect(printFiles(restarted)).toEqual([`${profile.id}.sealed`]);
+    const again = await restarted.owner(
+      'POST',
+      `/api/v1/voice-profiles/${profile.id}/recalculate`,
+      {},
+    );
+    expect(again.statusCode).toBe(409);
+    expect(printFiles(restarted)).toEqual([`${profile.id}.sealed`]);
+  });
+
   it('checked by the owner, the lost list works again', async () => {
     const { media, token } = await granted();
     const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
@@ -968,6 +993,7 @@ describe('A backup from before a revocation (KBC-071 BR-1, BR-2, ADR 0032)', () 
     appendFileSync(
       join(media.mediaDir, REVOCATIONS),
       `${REVOCATION_LIST_HEADER}\n`,
+      { mode: 0o600 },
     );
     const again = await restarted.owner(
       'POST',

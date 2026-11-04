@@ -1,9 +1,12 @@
 import {
   appendFileSync,
+  chmodSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -34,6 +37,7 @@ describe('FsVoiceRevocationList (ADR 0032)', () => {
       ids: [],
       complete: false,
       startedAt: null,
+      guarded: true,
     });
   });
 
@@ -46,6 +50,7 @@ describe('FsVoiceRevocationList (ADR 0032)', () => {
       ids: [ONE, TWO],
       complete: true,
       startedAt: AT.toISOString(),
+      guarded: true,
     });
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(readFileSync(path, 'utf8').replaceAll(/\s/g, '')).toBe(
@@ -62,6 +67,7 @@ describe('FsVoiceRevocationList (ADR 0032)', () => {
       ids: [ONE, TWO],
       complete: false,
       startedAt: AT.toISOString(),
+      guarded: true,
     });
   });
 
@@ -79,6 +85,7 @@ describe('FsVoiceRevocationList (ADR 0032)', () => {
       ids: [ONE],
       complete: true,
       startedAt: AT.toISOString(),
+      guarded: true,
     });
   });
 
@@ -90,6 +97,7 @@ describe('FsVoiceRevocationList (ADR 0032)', () => {
       ids: [TWO, ONE],
       complete: true,
       startedAt: AT.toISOString(),
+      guarded: true,
     });
   });
 
@@ -130,12 +138,63 @@ describe('FsVoiceRevocationList (ADR 0032)', () => {
     expect(readFileSync(path, 'utf8').match(/since/g)).toHaveLength(1);
   });
 
+  describe('who else can write it', () => {
+    it('a closed list is guarded', async () => {
+      await list.start(AT);
+      expect((await list.read()).guarded).toBe(true);
+    });
+
+    it('a missing list has nobody to distrust', async () => {
+      expect((await list.read()).guarded).toBe(true);
+    });
+
+    it.each([0o666, 0o640, 0o620, 0o604])(
+      'a list with mode %o is not guarded, and no line of it is believed less for being there',
+      async (mode) => {
+        await list.start(AT);
+        await list.add(ONE);
+        chmodSync(path, mode);
+        expect((await list.read()).guarded).toBe(false);
+      },
+    );
+
+    it('a list of another owner is not guarded', async () => {
+      await list.start(AT);
+      const other = (process.getuid?.() ?? 0) + 1;
+      const owned = new FsVoiceRevocationList(path, { uid: other });
+      expect((await owned.read()).guarded).toBe(false);
+    });
+
+    it('a link in place of the list is not guarded, and nothing is read through it', async () => {
+      const elsewhere = join(dir, 'elsewhere');
+      writeFileSync(elsewhere, `${REVOCATION_LIST_HEADER}\n${ONE}\n`, {
+        mode: 0o600,
+      });
+      symlinkSync(elsewhere, path);
+      expect(await list.read()).toEqual({
+        ids: [],
+        complete: false,
+        startedAt: null,
+        guarded: false,
+      });
+    });
+
+    it('adding to it still works: a revocation is never refused', async () => {
+      await list.start(AT);
+      chmodSync(path, 0o666);
+      await list.add(ONE);
+      expect((await list.read()).ids).toEqual([ONE]);
+      expect(statSync(path).mode & 0o777).toBe(0o666);
+    });
+  });
+
   it('a revocation on a lost list counts, and the list stays lost', async () => {
     await list.add(ONE);
     expect(await list.read()).toEqual({
       ids: [ONE],
       complete: false,
       startedAt: null,
+      guarded: true,
     });
   });
 

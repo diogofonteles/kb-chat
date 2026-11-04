@@ -517,12 +517,16 @@ async function reconcileVoicePrints(app: FastifyInstance, media: MediaDeps) {
     prints: media.voicePrintVault,
     revocations: media.voiceRevocations,
   }).reconcile();
-  const { listLost, ...counts } = found;
+  const { listLost, listExposed, ...counts } = found;
   if (Object.values(counts).some((count) => count > 0))
     app.log.warn(counts, 'voice prints reconciled');
   if (listLost)
     app.log.error(
       'voice revocation list is lost: no print until it is checked',
+    );
+  if (listExposed)
+    app.log.error(
+      'voice revocation list is exposed: wrong owner or mode, nothing applied from it, no print until it is checked',
     );
 }
 
