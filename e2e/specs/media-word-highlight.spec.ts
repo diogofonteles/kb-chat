@@ -299,6 +299,22 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
   });
 }
 
+test('a search over the spoken word stays readable, with both painted', async ({
+  page,
+}, testInfo) => {
+  await openPlayer(page, lecture);
+  await moveAudioTo(page, 2.7);
+  await expect.poll(() => spokenWord(page)).toBe('está');
+  const field = page.getByLabel('Buscar na transcrição');
+  await field.fill('está');
+  await expect(page.locator('app-transcript-panel [role="status"]')).toHaveText(
+    '1 de 1',
+  );
+  expect(await spokenWord(page)).toBe('está');
+  await field.blur();
+  await saveEvidence(page, `${testInfo.project.name}-search-over-word`);
+});
+
 test('NFR-1: the marked word differs from the spoken one by at most 120 ms', async ({
   page,
 }) => {
