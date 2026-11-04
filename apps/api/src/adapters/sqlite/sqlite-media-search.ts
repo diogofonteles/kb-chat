@@ -56,17 +56,30 @@ function scopeClause(topics: readonly string[], authors: AuthorRule): Clause {
 }
 
 /**
- * Whose passage a match is (KBC-068 BR-6). Without `media-tracks` only recordings answer.
- * With it, a passage whose midpoint is inside a published track is the track's, and the
- * recording does not say it again; a track's rows exist only while it is published.
+ * Whose passage a match is (KBC-068 BR-6). Without `media-tracks` only recordings answer. With
+ * it, a recording keeps a segment unless the tracks took all of it: the same rule as the slice
+ * (`track-slice.ts`), word by word, so a word in a gap between tracks is never lost; a segment
+ * in part inside a track may then repeat, which beats losing it. A track's rows exist only
+ * while it is published.
  */
 const ONLY_RECORDINGS = 'm.parent_media_id IS NULL';
-const NOT_INSIDE_A_TRACK = `NOT EXISTS (SELECT 1 FROM media d
-  WHERE d.parent_media_id = m.id AND d.status = 'ready' AND d.archived_at IS NULL
-    AND (s.start_ms + s.end_ms) / 2 >= d.parent_start_ms
-    AND (s.start_ms + s.end_ms) / 2 < d.parent_end_ms)`;
+const LIVE_TRACK = `SELECT 1 FROM media d
+  WHERE d.parent_media_id = m.id AND d.status = 'ready' AND d.archived_at IS NULL`;
+const inTrack = (midpointMs: string): string =>
+  `EXISTS (${LIVE_TRACK} AND ${midpointMs} >= d.parent_start_ms
+    AND ${midpointMs} < d.parent_end_ms)`;
+const WORDS_OF_SEGMENT = `FROM words w
+  WHERE w.transcript_id = s.transcript_id AND w.segment_position = s.position`;
+const INSIDE_ONE_TRACK = `EXISTS (${LIVE_TRACK} AND s.start_ms >= d.parent_start_ms
+  AND s.end_ms <= d.parent_end_ms)`;
+/** The usual answers come first: no tracks at all, or a segment inside one, read no word. */
+const NOT_INSIDE_TRACKS = `(NOT EXISTS (${LIVE_TRACK})
+  OR (NOT ${INSIDE_ONE_TRACK} AND (
+    EXISTS (SELECT 1 ${WORDS_OF_SEGMENT} AND NOT ${inTrack('(w.start_ms + w.end_ms) / 2.0')})
+    OR (NOT EXISTS (SELECT 1 ${WORDS_OF_SEGMENT})
+      AND NOT ${inTrack('(s.start_ms + s.end_ms) / 2.0')}))))`;
 const passagesFor = (tracks: boolean | undefined): string =>
-  tracks ? NOT_INSIDE_A_TRACK : ONLY_RECORDINGS;
+  tracks ? NOT_INSIDE_TRACKS : ONLY_RECORDINGS;
 
 const FROM_MATCHES = `FROM segments_fts f
   JOIN segments s ON s.rowid = f.rowid

@@ -719,6 +719,49 @@ describe('Searching a track (KBC-068 BR-6)', () => {
     expect(outside.json().media[0]).toMatchObject({ mediaId: recording.id });
   });
 
+  it('BR-6: a word in the gap after a track, in a segment past its end, stays with the recording', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await transcribed(world, [
+      {
+        at: 100,
+        text: 'dentro dentro dentro dentro dentro dentro ultimapalavra final',
+      },
+    ]);
+    await approve(media, recording.id, [{ startMs: 60_000, endMs: 102_500 }]);
+    await finishCuts(media);
+    const found = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/searches',
+      { q: 'ultimapalavra' },
+    );
+    expect(found.json().media).toHaveLength(1);
+    expect(found.json().media[0]).toMatchObject({
+      mediaId: recording.id,
+      startMs: 100_000,
+    });
+  });
+
+  it('BR-6: a segment split between two tracks answers only as the tracks', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const recording = await transcribed(world, [
+      { at: 100, text: 'uma duas tres quatro cinco seis sete oitava' },
+    ]);
+    await approve(media, recording.id, [
+      { startMs: 60_000, endMs: 102_000, title: 'Antes' },
+      { startMs: 102_000, endMs: 120_000, title: 'Depois' },
+    ]);
+    await finishCuts(media);
+    const found = await media.owner(
+      'POST',
+      '/api/v1/topics/hermetismo/searches',
+      { q: 'oitava' },
+    );
+    expect(found.json().media).toHaveLength(1);
+    expect(found.json().media[0]).toMatchObject({ title: 'Depois' });
+  });
+
   it('AC-7: nothing of a moved recording reaches who cannot see its collection', async () => {
     const world = await startWorld();
     const { media } = world;
