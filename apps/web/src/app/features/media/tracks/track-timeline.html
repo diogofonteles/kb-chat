@@ -51,7 +51,7 @@
       [class.active]="block.active"
       [class.proposed]="block.proposed"
       [style.left.%]="block.left"
-      [style.right.%]="100 - block.right"
+      [style.right.%]="block.rightGap"
     >
       <span class="region-number">{{ block.ordinal }}</span>
     </span>
@@ -75,12 +75,13 @@
       tabindex="0"
       [class.start]="handle.edge === 'start'"
       [class.end]="handle.edge === 'end'"
+      [class.in-view]="handle.inView"
       [attr.aria-label]="handle.name"
       [attr.aria-valuemin]="handle.min"
       [attr.aria-valuemax]="handle.max"
       [attr.aria-valuenow]="handle.now"
       [attr.aria-valuetext]="handle.text"
-      [style.left.%]="handle.left"
+      [style.--at]="handle.left"
       (click)="$event.stopPropagation()"
       (focus)="focusEdge(handle.edge)"
       (keydown)="keydown($event, handle.edge)"

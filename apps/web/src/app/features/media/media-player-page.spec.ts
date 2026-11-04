@@ -41,6 +41,7 @@ const NOT_STARTED = {
   step: 3,
   tracks: [],
   run: null,
+  lastFailure: null,
   voices: [],
   approvedTracks: 0,
   transcriptChanged: false,

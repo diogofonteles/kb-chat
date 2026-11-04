@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import type { DraftTrack } from '@kb-chat/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TrackTimeline, type HandleMoved } from './track-timeline.js';
 import { barHeight } from './waveform-canvas.js';
 
@@ -75,11 +75,84 @@ describe('TrackTimeline (KBC-066)', () => {
   it('goes to the limits with Home and End, and says why it stopped', async () => {
     const moved: HandleMoved[] = [];
     await setup(moved);
+    key('Início da faixa 1', { key: 'Home' });
+    expect(moved.at(-1)?.ms).toBe(0);
     key('Fim da faixa 1', { key: 'End' });
-    expect(moved.at(-1)?.ms).toBe(20_000);
+    expect(moved).toHaveLength(1);
     key('Fim da faixa 1', { key: 'ArrowRight', altKey: true });
-    expect(moved.at(-1)?.ms).toBe(20_000);
     expect(await screen.findByText('Encostou na faixa 2')).toBeTruthy();
+  });
+
+  it('moves nothing when a held key stays at a limit (R-4)', async () => {
+    const moved: HandleMoved[] = [];
+    await setup(moved);
+    key('Fim da faixa 1', { key: 'ArrowRight', altKey: true });
+    key('Fim da faixa 1', { key: 'ArrowRight', altKey: true });
+    key('Fim da faixa 1', { key: 'ArrowRight', altKey: true });
+    expect(moved).toEqual([]);
+    expect(await screen.findByText('Encostou na faixa 2')).toBeTruthy();
+  });
+
+  describe('with a pointer', () => {
+    /** The detail 500 px wide: the view is 50 s, so 100 ms a pixel. */
+    const sized = () => {
+      const detail = screen.getByTestId('track-detail');
+      vi.spyOn(detail, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        width: 500,
+      } as DOMRect);
+    };
+    const name = 'Início da faixa 1';
+    const press = (clientX: number) =>
+      fireEvent.pointerDown(screen.getByRole('slider', { name }), {
+        button: 0,
+        clientX,
+        pointerId: 1,
+      });
+    const moveTo = (clientX: number) =>
+      fireEvent.pointerMove(screen.getByRole('slider', { name }), {
+        clientX,
+        pointerId: 1,
+      });
+    const lift = (clientX: number) =>
+      fireEvent.pointerUp(screen.getByRole('slider', { name }), {
+        clientX,
+        pointerId: 1,
+      });
+
+    it('moves nothing on a tap, anywhere on the 48 px target (R-4)', async () => {
+      const moved: HandleMoved[] = [];
+      await setup(moved);
+      sized();
+      // The line is at 100 px; the edge of the target at 124 px, 2,4 s away.
+      press(124);
+      lift(124);
+      press(100);
+      lift(100);
+      expect(moved).toEqual([]);
+    });
+
+    it('moves nothing when a finger trembles under the slop', async () => {
+      const moved: HandleMoved[] = [];
+      await setup(moved);
+      sized();
+      press(120);
+      moveTo(123);
+      lift(123);
+      expect(moved).toEqual([]);
+    });
+
+    it('moves by what the pointer moved, not to where it landed (R-4)', async () => {
+      const moved: HandleMoved[] = [];
+      await setup(moved);
+      sized();
+      press(120);
+      moveTo(160);
+      lift(160);
+      expect(moved).toEqual([
+        { trackId: ONE.track.id, edge: 'start', ms: 14_000 },
+      ]);
+    });
   });
 
   it('listens with I and F and Space, from a handle (FR-5)', async () => {

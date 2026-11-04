@@ -17,6 +17,7 @@ import {
   snapPointsOf,
   snapTo,
   splitPointNear,
+  splitTrack,
   withHandle,
   type TrackEdge,
   type TrackSpan,
@@ -129,6 +130,31 @@ describe('dividing and joining (FR-6)', () => {
     expect(splitPointNear(track, 11_000)).toBe(7_000);
   });
 
+  it('divides into two touching tracks, the second made by the caller', () => {
+    const tracks = [span('a', 0, 20_000), span('b', 20_000, 30_000)];
+    const parts = splitTrack(tracks, {
+      trackId: 'a',
+      atMs: 1_000,
+      second: (track, startMs) => ({ ...track, id: 'c', startMs }),
+    });
+    expect(parts).toEqual([
+      span('a', 0, 5_000),
+      span('b', 20_000, 30_000),
+      span('c', 5_000, 20_000),
+    ]);
+  });
+
+  it('refuses to divide what is too short, or is not there', () => {
+    const second = (track: TrackSpan) => track;
+    const tracks = [span('a', 0, 9_000)];
+    expect(
+      splitTrack(tracks, { trackId: 'a', atMs: 4_000, second }),
+    ).toBeNull();
+    expect(
+      splitTrack(tracks, { trackId: 'z', atMs: 4_000, second }),
+    ).toBeNull();
+  });
+
   it('joins with the next, to its end, keeping the first (AC-10)', () => {
     const joined = joinTracks(
       [
@@ -238,15 +264,18 @@ describe('any sequence of actions (BR-3, BR-4)', () => {
     const track = tracks[action.index % Math.max(tracks.length, 1)];
     if (!track) return tracks;
     if (action.kind === 'join') return joinTracks(tracks, track.id);
-    if (action.kind === 'split') {
-      if (!canSplit(track)) return tracks;
-      const ms = splitPointNear(track, action.atMs);
-      return [
-        ...tracks.filter((one) => one.id !== track.id),
-        { ...track, endMs: ms },
-        { id: `${track.id}s${ms}`, startMs: ms, endMs: track.endMs },
-      ];
-    }
+    if (action.kind === 'split')
+      return (
+        splitTrack(tracks, {
+          trackId: track.id,
+          atMs: action.atMs,
+          second: (one, startMs) => ({
+            ...one,
+            id: `${one.id}s${startMs}`,
+            startMs,
+          }),
+        }) ?? tracks
+      );
     const { ms } = landHandle(
       { toMs: action.toMs, edge: action.edge },
       {

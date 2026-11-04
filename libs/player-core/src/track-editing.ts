@@ -226,6 +226,27 @@ export const splitPointNear = (track: TrackSpan, ms: number): number =>
     track.endMs - MIN_TRACK_LENGTH_MS,
   );
 
+/**
+ * Divides a track at the point nearest `atMs` (BR-4); null when it is too short. The first
+ * part keeps the track, the second is what `second` makes of it from that point on.
+ */
+export function splitTrack<T extends TrackSpan>(
+  tracks: readonly T[],
+  input: {
+    readonly trackId: string;
+    readonly atMs: number;
+    readonly second: (track: T, startMs: number) => T;
+  },
+): T[] | null {
+  const track = tracks.find((one) => one.id === input.trackId);
+  if (!track || !canSplit(track)) return null;
+  const ms = splitPointNear(track, input.atMs);
+  return [
+    ...tracks.map((one) => (one === track ? { ...one, endMs: ms } : one)),
+    input.second(track, ms),
+  ];
+}
+
 /** The gap around `ms` between tracks; null when `ms` is inside a track. */
 function gapAround(
   ordered: readonly TrackSpan[],

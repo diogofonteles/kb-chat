@@ -44,6 +44,8 @@ const WORD_ROWS = 2;
 /** A character of the words' row, on average, with room between words. */
 const CHAR_PX = 8;
 const WORD_GAP_PX = 6;
+/** A press that moved less than this is a tap, however a finger trembles (R-4). */
+const TAP_SLOP_PX = 6;
 
 export interface NumberedTrack {
   readonly track: DraftTrack;
@@ -68,6 +70,11 @@ interface Drag {
   readonly limits: HandleLimits;
   readonly ms: number;
   readonly stopText: string;
+  /** Where the press began, and how far from the line: the target is 48 px wide. */
+  readonly pressX: number;
+  readonly grabMs: number;
+  /** Past the slop: a tap moves nothing (UP-06). */
+  readonly moved: boolean;
 }
 
 const isProposal = (track: DraftTrack) =>
@@ -163,7 +170,8 @@ export class TrackTimeline {
           active,
           proposed: isProposal(track),
           left: this.percent(active ? this.shownEdge('start') : track.startMs),
-          right: this.percent(active ? this.shownEdge('end') : track.endMs),
+          rightGap:
+            100 - this.percent(active ? this.shownEdge('end') : track.endMs),
         };
       }),
   );
@@ -177,6 +185,7 @@ export class TrackTimeline {
         edge,
         name: edgeName(edge, selected.ordinal),
         left: this.percent(ms),
+        inView: this.inView(ms, ms),
         min: Math.round(limits.minMs / 100) / 10,
         max: Math.round(limits.maxMs / 100) / 10,
         now: Math.round(ms / 100) / 10,
@@ -322,10 +331,12 @@ export class TrackTimeline {
     );
   }
 
+  /** A landing where the handle already is changes nothing: no undo step, no "edited". */
   private commit(edge: TrackEdge, landing: HandleLanding): void {
     const trackId = this.selected()?.track.id;
     if (!trackId) return;
     this.stop.set(stopText(landing.stop));
+    if (landing.ms === this.edgeOf(edge)) return;
     this.moving.update(
       (track) =>
         track && {
@@ -342,11 +353,15 @@ export class TrackTimeline {
     event.stopPropagation();
     (event.target as Element).setPointerCapture?.(event.pointerId);
     this.edgeChange.emit(edge);
+    const ms = this.edgeOf(edge);
     this.drag.set({
       edge,
       limits: this.limitsFor(edge),
-      ms: this.edgeOf(edge),
+      ms,
       stopText: '',
+      pressX: event.clientX,
+      grabMs: this.msAt(event) - ms,
+      moved: false,
     });
     this.stop.set('');
   }
@@ -354,11 +369,15 @@ export class TrackTimeline {
   protected dragMove(event: PointerEvent): void {
     const drag = this.drag();
     if (!drag) return;
-    const landing = clampHandle(this.msAt(event), drag.limits);
+    const moved =
+      drag.moved || Math.abs(event.clientX - drag.pressX) >= TAP_SLOP_PX;
+    if (!moved) return;
+    const landing = clampHandle(this.msAt(event) - drag.grabMs, drag.limits);
     this.drag.set({
       ...drag,
       ms: landing.ms,
       stopText: stopText(landing.stop),
+      moved,
     });
   }
 
@@ -367,7 +386,11 @@ export class TrackTimeline {
     if (!drag) return;
     event.stopPropagation();
     this.drag.set(null);
-    this.commit(drag.edge, this.land(drag.edge, this.msAt(event)));
+    if (drag.moved)
+      this.commit(
+        drag.edge,
+        this.land(drag.edge, this.msAt(event) - drag.grabMs),
+      );
   }
 
   protected cancelDrag(): void {
