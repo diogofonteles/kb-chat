@@ -206,6 +206,25 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
     expect(screen.getByText('Consentimento específico')).toBeTruthy();
   });
 
+  it('with the list lost it says so, not that the person has a profile', async () => {
+    const view = await renderForm();
+    await toSources(view);
+    fireEvent.click(screen.getByLabelText(/Palestra, Voz 2/));
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Calcular perfil' }));
+    await view.fixture.whenStable();
+    view.http
+      .expectOne(PROFILES)
+      .flush(
+        { error: { code: 'VOICE_LIST_LOST', message: 'x' } },
+        { status: 409, statusText: 'x' },
+      );
+    await view.fixture.whenStable();
+    const alert = screen.getByRole('alert').textContent;
+    expect(alert).toContain('lista de revogações');
+    expect(alert).not.toContain('já tem um perfil');
+  });
+
   it('says so when a speaker has no named voice yet', async () => {
     const view = await renderForm();
     fillConsent();

@@ -1,6 +1,7 @@
 import type {
   VoiceConsentMethod,
   VoiceProfileStatus,
+  VoiceRevocationListState,
   VoiceSubject,
 } from '@kb-chat/contracts';
 
@@ -39,6 +40,30 @@ export const METHOD_LABELS: Record<VoiceConsentMethod, () => string> = {
 export const SUBJECT_LABELS: Record<VoiceSubject, () => string> = {
   living: () => $localize`:@@voiceConsent.living:Pessoa viva`,
   deceased: () => $localize`:@@voiceConsent.deceased:Pessoa falecida`,
+};
+
+/** What the screen says about the revocation list, and what the owner does (ADR 0032). */
+export interface ListNotice {
+  readonly what: string;
+  readonly step: string;
+}
+
+export const LIST_NOTICES: Record<
+  Exclude<VoiceRevocationListState, 'ok'>,
+  () => ListNotice
+> = {
+  lost: () => ({
+    what: $localize`:@@voiceProfiles.listLost:A lista de revogações se perdeu ou tem uma linha ilegível, então uma revogação antiga pode não valer. Nenhum perfil novo será calculado até o dono conferir. Revogar continua funcionando.`,
+    step: $localize`:@@voiceProfiles.listLostStep:Passo do dono: confira se houve revogação depois do backup mais recente, revogue aqui de novo cada uma e marque a lista como conferida (runbook, seção 11).`,
+  }),
+  exposed: () => ({
+    what: $localize`:@@voiceProfiles.listExposed:A lista de revogações pode ter sido alterada: o arquivo não é do usuário da API ou não está fechado. Nada dela foi aplicado, e nenhum perfil novo será calculado até o dono conferir. Revogar continua funcionando.`,
+    step: $localize`:@@voiceProfiles.listExposedStep:Passo do dono: confira cada linha da lista, corrija o dono e a permissão do arquivo e reinicie a API (runbook, seção 11).`,
+  }),
+  behind: () => ({
+    what: $localize`:@@voiceProfiles.listBehind:Uma revogação valeu, e o perfil já foi apagado, mas ela não foi gravada na lista de revogações. Restaurar um backup agora poderia trazê-la de volta.`,
+    step: $localize`:@@voiceProfiles.listBehindStep:Passo do dono: libere espaço no disco ou corrija a permissão da lista e reinicie a API, que grava o que faltou (runbook, seção 11).`,
+  }),
 };
 
 export const STATUS_LABELS: Record<VoiceProfileStatus, () => string> = {

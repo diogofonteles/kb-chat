@@ -18,13 +18,18 @@ import {
   voiceProfileListSchema,
   type VoiceProfile,
 } from '@kb-chat/contracts';
+import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { topicsUrl } from '@core/api/kb-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import {
   VoiceProfilesApi,
   voiceProfilesUrl,
 } from '@core/media/voice-profiles-api.js';
-import { STATUS_LABELS } from './consent-text.js';
+import {
+  LIST_NOTICES,
+  STATUS_LABELS,
+  type ListNotice,
+} from './consent-text.js';
 import { VoiceProfileForm } from './voice-profile-form.js';
 import { VoiceProfileReportView } from './voice-profile-report.js';
 
@@ -32,6 +37,13 @@ import { VoiceProfileReportView } from './voice-profile-report.js';
 interface Notice {
   readonly kind: 'ok' | 'error';
   readonly text: string;
+}
+
+function recalculateErrorOf(err: unknown): string {
+  const code = toUiErrorCode(err);
+  return code === 'VOICE_LIST_LOST' || code === 'VOICE_LIST_EXPOSED'
+    ? errorMessage(code)
+    : $localize`:@@voiceProfiles.recalculateFailed:Não consegui pedir o cálculo. Tente de novo.`;
 }
 
 /**
@@ -87,6 +99,17 @@ export class VoiceProfilesPanel {
   protected readonly noTranscriber = computed(
     () => this.list.hasValue() && this.list.value().transcriber !== 'on',
   );
+  private readonly listState = computed(() =>
+    this.list.hasValue() ? this.list.value().revocationList : 'ok',
+  );
+  protected readonly listNotice = computed<ListNotice | null>(() => {
+    const state = this.listState();
+    return state === 'ok' ? null : LIST_NOTICES[state]();
+  });
+  /** A print would be refused: the buttons go, revoking stays (ADR 0032 §4). */
+  protected readonly printsStopped = computed(
+    () => this.listState() === 'lost' || this.listState() === 'exposed',
+  );
   protected readonly taken = computed(() =>
     this.items().map(({ speakerId }) => speakerId),
   );
@@ -134,20 +157,22 @@ export class VoiceProfilesPanel {
       .revoke(profile.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
-          this.confirming.set(null);
-          this.reportVersion.update((version) => version + 1);
-          this.settle({
+        next: () =>
+          this.revoked({
             kind: 'ok',
             text: $localize`:@@voiceProfiles.revoked:Consentimento revogado. O perfil de ${profile.speakerName}:name: foi apagado.`,
-          });
-          this.focus('[data-list-title]');
-        },
-        error: () =>
+          }),
+        error: (err: unknown) => {
+          if (toUiErrorCode(err) === 'VOICE_LIST_NOT_WRITTEN')
+            return this.revoked({
+              kind: 'error',
+              text: errorMessage('VOICE_LIST_NOT_WRITTEN'),
+            });
           this.settle({
             kind: 'error',
             text: $localize`:@@voiceProfiles.revokeFailed:Não consegui revogar. Tente de novo.`,
-          }),
+          });
+        },
       });
   }
 
@@ -159,12 +184,16 @@ export class VoiceProfilesPanel {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => this.settle(null),
-        error: () =>
-          this.settle({
-            kind: 'error',
-            text: $localize`:@@voiceProfiles.recalculateFailed:Não consegui pedir o cálculo. Tente de novo.`,
-          }),
+        error: (err: unknown) =>
+          this.settle({ kind: 'error', text: recalculateErrorOf(err) }),
       });
+  }
+
+  private revoked(notice: Notice): void {
+    this.confirming.set(null);
+    this.reportVersion.update((version) => version + 1);
+    this.settle(notice);
+    this.focus('[data-list-title]');
   }
 
   private settle(notice: Notice | null): void {

@@ -149,6 +149,14 @@
   color: var(--color-danger);
 }
 
+.notice p {
+  margin: 0;
+}
+
+.notice p + p {
+  margin-top: var(--space-2);
+}
+
 .sources,
 .profiles {
   display: grid;

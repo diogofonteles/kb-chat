@@ -127,10 +127,24 @@ export const voiceProfileSchema = z.object({
 });
 export type VoiceProfile = z.infer<typeof voiceProfileSchema>;
 
+/**
+ * What the screen must tell about the revocation list (ADR 0032): `lost` and `exposed` stop
+ * new prints, `behind` is a revocation that took effect and is not written on it yet.
+ */
+export const VOICE_REVOCATION_LIST_STATES = [
+  'ok',
+  'lost',
+  'exposed',
+  'behind',
+] as const;
+export type VoiceRevocationListState =
+  (typeof VOICE_REVOCATION_LIST_STATES)[number];
+
 export const voiceProfileListSchema = z.object({
   items: z.array(voiceProfileSchema),
   /** A transcriber marked for voice profiles is on, off, or none is marked. */
   transcriber: transcriberPresenceSchema,
+  revocationList: z.enum(VOICE_REVOCATION_LIST_STATES),
 });
 export type VoiceProfileList = z.infer<typeof voiceProfileListSchema>;
 

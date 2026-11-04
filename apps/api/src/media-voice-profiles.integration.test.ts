@@ -1049,6 +1049,43 @@ describe('A backup from before a revocation (KBC-071 BR-1, BR-2, ADR 0032)', () 
     expect(printFiles(restarted)).toEqual([`${profile.id}.sealed`]);
   });
 
+  it('says what stops a print in its own code, not as a revoked consent', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    rmSync(join(media.mediaDir, REVOCATIONS));
+    const url = `/api/v1/voice-profiles/${profile.id}/recalculate`;
+    const lost = await media.owner('POST', url, {});
+    expect(lost.statusCode).toBe(409);
+    expect(lost.json().error.code).toBe('VOICE_LIST_LOST');
+    appendFileSync(
+      join(media.mediaDir, REVOCATIONS),
+      `${REVOCATION_LIST_HEADER}\n`,
+    );
+    const exposed = await media.owner('POST', url, {});
+    expect(exposed.statusCode).toBe(409);
+    expect(exposed.json().error.code).toBe('VOICE_LIST_EXPOSED');
+  });
+
+  it('the list of profiles says how the revocation list is', async () => {
+    const { media, token } = await granted();
+    const health = async (): Promise<string> =>
+      (await media.owner('GET', PROFILES)).json<VoiceProfileList>()
+        .revocationList;
+    expect(await health()).toBe('ok');
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    expect(await health()).toBe('ok');
+    const list = join(media.mediaDir, REVOCATIONS);
+    const kept = readFileSync(list, 'utf8');
+    chmodSync(list, 0o400);
+    await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+    expect(await health()).toBe('behind');
+    chmodSync(list, 0o666);
+    expect(await health()).toBe('exposed');
+    chmodSync(list, 0o600);
+    writeFileSync(list, kept.replaceAll(/voice-revocations.*/g, ''));
+    expect(await health()).toBe('lost');
+  });
+
   it('checked by the owner, the lost list works again', async () => {
     const { media, token } = await granted();
     const { profile } = await readyProfile(media, { token, name: 'Gabriel' });

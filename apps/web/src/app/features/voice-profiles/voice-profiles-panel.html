@@ -46,6 +46,12 @@
       </button>
     </div>
   } @else if (list.hasValue()) {
+    @if (listNotice(); as problem) {
+      <div class="notice error" role="alert">
+        <p>{{ problem.what }}</p>
+        <p>{{ problem.step }}</p>
+      </div>
+    }
     @if (noTranscriber()) {
       <p class="hint" i18n="@@voiceProfiles.noTranscriber">
         Nenhum transcritor ligado trata perfis de voz; o cálculo espera até que
@@ -110,7 +116,7 @@
             </div>
           } @else {
             <div class="row">
-              @if (profile.status === 'failed') {
+              @if (profile.status === 'failed' && !printsStopped()) {
                 <button
                   type="button"
                   class="secondary"
@@ -144,7 +150,7 @@
         (created)="created($event)"
         (cancelled)="adding.set(false)"
       />
-    } @else {
+    } @else if (!printsStopped()) {
       <button
         type="button"
         class="primary"

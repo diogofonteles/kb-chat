@@ -308,3 +308,30 @@ test('AC-8: the owner reads each consent, the revocation and the counts', async 
     entry.getByRole('link', { name: 'Baixar a prova do consentimento' }),
   ).toBeVisible();
 });
+
+test('a lost revocation list says so, with the step of the owner (axe)', async ({
+  browser,
+  viewport,
+}) => {
+  const { page } = await grantedMaster(browser, viewport);
+  await page.route(`**${PROFILES}`, async (route) => {
+    const answer = await route.fetch();
+    const body = (await answer.json()) as object;
+    await route.fulfill({
+      response: answer,
+      json: { ...body, revocationList: 'lost' },
+    });
+  });
+  await firstVisit(page);
+  const dialog = await openPanel(page);
+  const alert = dialog.getByRole('alert');
+  await expect(alert).toContainText('A lista de revogações se perdeu');
+  await expect(alert).toContainText('Passo do dono');
+  await expect(
+    dialog.getByRole('button', { name: 'Cadastrar perfil' }),
+  ).toHaveCount(0);
+  const { violations } = await new AxeBuilder({ page })
+    .include('[role="dialog"]')
+    .analyze();
+  expect(violations).toEqual([]);
+});

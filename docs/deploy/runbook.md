@@ -339,6 +339,8 @@ age --decrypt --identity ~/.config/kb-chat/backup-age.key backup.age |
 
 - **Lista exposta:** o log diz `voice revocation list is exposed` e a tela avisa: o arquivo não é do usuário da API (10001) ou não está em 0600. Nada da lista é aplicado no arranque e cadastrar, "Calcular de novo" e receber impressões respondem 409 (revogar continua funcionando). A API não aperta o arquivo sozinha, porque alguém pode ter escrito nele. Confira se cada id da lista é de uma revogação de verdade (o relatório mostra as revogações; id de consentimento em vigor na lista é suspeito e deve sair da lista), depois rode o mesmo comando acima e reinicie a API.
 
+- **Revogação fora da lista:** se a lista não pôde ser gravada (disco cheio, permissão), revogar responde 503 e a tela avisa: o perfil e a impressão já foram apagados, falta a linha na lista. Libere o espaço ou corrija a permissão (sem deixar o arquivo aberto) e reinicie a API: todo arranque grava na lista as revogações que o banco tem e ela não. Se o arranque ainda não conseguir, o log diz `voice revocation list could not be written`. Não restaure backup antes disso.
+
 Ensaio sugerido: um a cada trimestre.
 
 ## 12. Reconstruir a VM (perdida ou recuperada)

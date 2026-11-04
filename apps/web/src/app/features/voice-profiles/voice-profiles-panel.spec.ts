@@ -43,6 +43,7 @@ const aProfile = (overrides: Partial<VoiceProfile> = {}): VoiceProfile => ({
 const aListOf = (items: VoiceProfile[]): VoiceProfileList => ({
   items,
   transcriber: 'on',
+  revocationList: 'ok',
 });
 
 const anEntry = (
@@ -110,7 +111,9 @@ describe('VoiceProfilesPanel (KBC-071)', () => {
   });
 
   it('says when no transcriber handles profiles', async () => {
-    await renderPanel({ list: { items: [], transcriber: 'none' } });
+    await renderPanel({
+      list: { items: [], transcriber: 'none', revocationList: 'ok' },
+    });
     expect(
       screen.getByText(/Nenhum transcritor ligado trata perfis de voz/),
     ).toBeTruthy();
@@ -204,6 +207,108 @@ describe('VoiceProfilesPanel (KBC-071)', () => {
       'Não consegui revogar',
     );
     expect(screen.getByText(/Os nomes já confirmados/)).toBeTruthy();
+  });
+
+  describe('the revocation list (ADR 0032 §4)', () => {
+    const listWith = (
+      revocationList: VoiceProfileList['revocationList'],
+      items: VoiceProfile[] = [aProfile({ status: 'failed' })],
+    ): VoiceProfileList => ({ ...aListOf(items), revocationList });
+
+    it('says nothing while the list is fine', async () => {
+      await renderPanel({ list: aListOf([aProfile()]) });
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('lost: says so, gives the owner step, and offers no new print', async () => {
+      await renderPanel({ list: listWith('lost') });
+      const alert = screen.getByRole('alert').textContent;
+      expect(alert).toContain('A lista de revogações se perdeu');
+      expect(alert).toContain('Passo do dono');
+      expect(alert).toContain('runbook, seção 11');
+      expect(
+        screen.queryByRole('button', { name: 'Cadastrar perfil' }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Calcular de novo' }),
+      ).toBeNull();
+    });
+
+    it('lost: revoking is still there', async () => {
+      await renderPanel({ list: listWith('lost') });
+      expect(
+        screen.getByRole('button', {
+          name: 'Revogar o consentimento de Mestre Gabriel',
+        }),
+      ).toBeTruthy();
+    });
+
+    it('exposed: says why and gives the owner step', async () => {
+      await renderPanel({ list: listWith('exposed') });
+      const alert = screen.getByRole('alert').textContent;
+      expect(alert).toContain('pode ter sido alterada');
+      expect(alert).toContain('Passo do dono');
+      expect(
+        screen.queryByRole('button', { name: 'Cadastrar perfil' }),
+      ).toBeNull();
+    });
+
+    it('behind: says what took effect and what the owner does, and new prints go on', async () => {
+      await renderPanel({ list: listWith('behind', []) });
+      const alert = screen.getByRole('alert').textContent;
+      expect(alert).toContain('não foi gravada na lista');
+      expect(alert).toContain('reinicie a API');
+      expect(
+        screen.getByRole('button', { name: 'Cadastrar perfil' }),
+      ).toBeTruthy();
+    });
+
+    it('a revocation the list missed reads as done, with what failed', async () => {
+      const { http, fixture } = await renderPanel({
+        list: aListOf([aProfile()]),
+      });
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Revogar o consentimento de Mestre Gabriel',
+        }),
+      );
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Revogar e apagar' }));
+      http
+        .expectOne(`/api/v1/voice-profiles/${ID}`)
+        .flush(
+          { error: { code: 'VOICE_LIST_NOT_WRITTEN', message: 'x' } },
+          { status: 503, statusText: 'x' },
+        );
+      TestBed.tick();
+      http.expectOne(PROFILES).flush(listWith('behind', []));
+      await fixture.whenStable();
+      const alerts = screen.getAllByRole('alert').map((one) => one.textContent);
+      expect(alerts.join()).toContain('foi revogado');
+      expect(alerts.join()).not.toContain('Não consegui revogar');
+      expect(
+        screen.queryByRole('button', { name: 'Revogar e apagar' }),
+      ).toBeNull();
+    });
+
+    it('calculating again says the list is lost, not "try again"', async () => {
+      const { http, fixture } = await renderPanel({
+        list: aListOf([aProfile({ status: 'failed' })]),
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Calcular de novo' }));
+      http
+        .expectOne(`/api/v1/voice-profiles/${ID}/recalculate`)
+        .flush(
+          { error: { code: 'VOICE_LIST_LOST', message: 'x' } },
+          { status: 409, statusText: 'x' },
+        );
+      TestBed.tick();
+      http.expectOne(PROFILES).flush(listWith('lost'));
+      await fixture.whenStable();
+      const alerts = screen.getAllByRole('alert').map((one) => one.textContent);
+      expect(alerts.join()).not.toContain('Tente de novo');
+      expect(alerts.join()).toContain('runbook, seção 11');
+    });
   });
 
   it('shows no report to a master who is not the owner', async () => {

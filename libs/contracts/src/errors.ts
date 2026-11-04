@@ -56,6 +56,10 @@ export const API_ERROR_CODES = [
   /** Overlapping, too short or untitled tracks; `details.problems` points at each (KBC-066). */
   'TRACKS_INVALID',
   'CONSENT_REQUIRED',
+  /** No print while earlier revocations are unknown (ADR 0032 §4). */
+  'VOICE_LIST_LOST',
+  /** No print while others can write the revocation list (ADR 0032 §3). */
+  'VOICE_LIST_EXPOSED',
   /** A revocation took effect but is not on the list yet (ADR 0032 §4); the next start retries. */
   'VOICE_LIST_NOT_WRITTEN',
   'INTERNAL',

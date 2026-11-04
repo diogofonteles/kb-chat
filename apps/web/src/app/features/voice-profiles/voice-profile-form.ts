@@ -35,6 +35,7 @@ import {
   type VoiceSubject,
 } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
+import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { collectionSpeakersUrl } from '@core/media/speakers-api.js';
 import {
   VoiceProfilesApi,
@@ -310,6 +311,9 @@ export class VoiceProfileForm {
         $localize`:@@voiceConsent.refused:O consentimento não foi aceito. Confira os dados.`,
       );
     }
+    const code = toUiErrorCode(err);
+    if (code === 'VOICE_LIST_LOST' || code === 'VOICE_LIST_EXPOSED')
+      return this.problem.set(errorMessage(code));
     this.problem.set(
       status === 409
         ? $localize`:@@voiceConsent.conflict:Esta pessoa já tem um perfil.`

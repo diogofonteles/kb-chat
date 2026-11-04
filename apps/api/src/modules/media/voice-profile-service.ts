@@ -11,6 +11,7 @@ import {
   type VoiceProfile,
   type VoiceProfileList,
   type VoiceProfileStatus,
+  type VoiceRevocationListState,
   type VoiceSource,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -103,7 +104,11 @@ export class VoiceProfileService {
     const stored = this.deps.profiles.list(this.deps.rootOf(topic));
     const items = await Promise.all(stored.map((one) => this.toView(one)));
     const presence = this.deps.presence();
-    return { items, transcriber: presence.transcriber };
+    return {
+      items,
+      transcriber: presence.transcriber,
+      revocationList: await this.revocationListState(),
+    };
   }
 
   /** The voices a person named as this speaker, in this collection's recordings. */
@@ -226,13 +231,23 @@ export class VoiceProfileService {
   private async assertMayPrint(profileId?: string): Promise<VoiceListState> {
     const list = await this.deps.revocations.read();
     const state = voiceListState(list, this.deps.profiles.oldestConsentAt());
-    if (
-      state === 'lost' ||
-      state === 'exposed' ||
-      (profileId !== undefined && list.ids.includes(profileId))
-    )
+    if (state === 'lost')
+      throw new AppError('VOICE_LIST_LOST', 'The revocation list is lost');
+    if (state === 'exposed')
+      throw new AppError('VOICE_LIST_EXPOSED', 'Others can write the list');
+    if (profileId !== undefined && list.ids.includes(profileId))
       throw new AppError('MEDIA_CONFLICT', 'This consent was revoked');
     return state;
+  }
+
+  private async revocationListState(): Promise<VoiceRevocationListState> {
+    const { profiles, revocations } = this.deps;
+    const list = await revocations.read();
+    const state = voiceListState(list, profiles.oldestConsentAt());
+    if (state === 'lost' || state === 'exposed') return state;
+    const listed = new Set(list.ids);
+    const isBehind = profiles.revokedProfileIds().some((id) => !listed.has(id));
+    return isBehind ? 'behind' : 'ok';
   }
 
   private consentOf(sent: unknown): VoiceConsent {
