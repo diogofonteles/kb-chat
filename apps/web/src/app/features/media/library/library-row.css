@@ -12,11 +12,15 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  /* 2 000 rows (NFR-2): a change in one row does not lay out or paint the others. */
+  contain: content;
 }
 
-/* An open ⋯ menu (focus inside) is drawn whole and above the next rows. */
+/* An open ⋯ menu (focus inside) is drawn whole and above the next rows; containment would
+   clip it. */
 :host(:focus-within) {
   z-index: 2;
+  contain: none;
 }
 
 :host(.selected) {

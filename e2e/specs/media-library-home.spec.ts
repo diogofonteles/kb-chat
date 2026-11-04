@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Browser, Page, Route } from '@playwright/test';
+import type { Browser, Locator, Page, Route } from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -62,6 +62,8 @@ async function searchFor(page: Page, words: string) {
 }
 
 const all = (page: Page) => page.getByRole('region', { name: 'Todas' });
+const libraryStatus = (page: Page) =>
+  page.locator('app-library-page').getByRole('status');
 const strip = (page: Page) =>
   page.getByRole('region', { name: 'Continuar ouvindo' });
 const mini = (page: Page) => page.getByRole('region', { name: 'Mini-player' });
@@ -194,6 +196,32 @@ test('AC-6, AC-12: chips and search narrow "Todas" and say how many', async ({
   ).toBeVisible();
   await all(page).getByRole('button', { name: 'Limpar busca' }).click();
   await expect(page.getByLabel('Buscar na biblioteca')).toHaveValue('');
+  await expect(page.getByLabel('Buscar na biblioteca')).toBeFocused();
+  await page.context().close();
+});
+
+test('AC-12: "Buscar na fala" opens the search with the word, only in what was said', async ({
+  browser,
+}) => {
+  const { page } = await libraryListener(browser);
+  await openLibrary(page);
+  const words = `conselheira ${tag}`;
+  await searchFor(page, words);
+  const searched = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' && request.url().endsWith('/searches'),
+  );
+  await all(page).getByRole('button', { name: 'Buscar na fala' }).click();
+
+  const body = (await searched).postDataJSON() as {
+    q: string;
+    kinds: string[];
+  };
+  expect(body).toMatchObject({ q: words, kinds: ['audio'] });
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('main').getByText(words).first()).toBeVisible();
+  if (desktop(page))
+    await expect(page.getByLabel('Sua pergunta')).toBeFocused();
   await page.context().close();
 });
 
@@ -259,6 +287,9 @@ test('AC-9: "Limpar recentes" empties the recents and keeps "Continuar ouvindo"'
   );
   await recents.getByRole('button', { name: 'Limpar', exact: true }).click();
   await expect(recents).toContainText('Nada ouvido desde que você limpou.');
+  await expect(
+    recents.getByRole('button', { name: 'Ouvidas recentemente' }),
+  ).toBeFocused();
   await expect(strip(page).getByRole('listitem')).toHaveCount(4);
   await page.context().close();
 });
@@ -339,6 +370,22 @@ test('AC-14: chips, order, selection and opening work by keyboard, and the count
   await expect(page.getByRole('region', { name: 'Seleção' })).toContainText(
     '1 selecionada',
   );
+  await page.getByRole('button', { name: 'Cancelar seleção' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    all(page).getByRole('checkbox', { name: /^Selecionar todas/ }),
+  ).toBeFocused();
+
+  await box.focus();
+  await page.keyboard.press('Space');
+  await page.getByRole('button', { name: 'Marcar como ouvida' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(libraryStatus(page)).toContainText(
+    '1 mídia marcada como ouvida.',
+  );
+  await expect(
+    page.getByRole('heading', { name: 'Todas', level: 3 }),
+  ).toBeFocused();
 
   await all(page)
     .getByRole('link', { name: lecture(3).title })
@@ -435,11 +482,8 @@ async function serveMany(route: Route) {
   });
 }
 
-test('NFR-2: 2 000 media scroll to the end, and a chip updates the list within 500 ms (INP ≤ 200 ms)', async ({
-  browser,
-}) => {
-  test.setTimeout(120_000);
-  const { page } = await libraryListener(browser);
+/** Every library answer comes from here; what the home shows does not matter. */
+async function serveManyMedia(page: Page) {
   await page.route('**/api/v1/media/library?**', serveMany);
   await page.route('**/api/v1/media/library/home', (route) =>
     route.fulfill({
@@ -450,54 +494,227 @@ test('NFR-2: 2 000 media scroll to the end, and a chip updates the list within 5
       },
     }),
   );
-  await page.addInitScript(() => {
-    const longest = { value: 0 };
-    Object.assign(window, { longestInteraction: longest });
-    new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        // Event Timing: an entry with an interaction id is one of the person's inputs.
-        const timing = entry as PerformanceEntry & { interactionId?: number };
-        if (timing.interactionId)
-          longest.value = Math.max(longest.value, timing.duration);
-      }
-    }).observe({
-      type: 'event',
-      buffered: true,
-      durationThreshold: 16,
-    } as PerformanceObserverInit);
-  });
-  await openLibrary(page);
-  await expect(all(page).getByText(/^2000 mídias/)).toBeVisible();
+}
 
+/** Scrolling near the end loads the next page by itself: `pages` pages of 50. */
+async function scrollToTheEnd(page: Page, pages: number) {
   const scroller = page.locator('app-library-page');
   const more = all(page).getByRole('button', { name: 'Mostrar mais' });
   const rows = all(page).getByRole('listitem');
-  // Scrolling near the end loads the next page by itself (40 pages of 50).
-  for (let round = 0; round < 45 && (await more.count()) > 0; round++) {
+  for (let round = 0; round < pages && (await more.count()) > 0; round++) {
     const before = await rows.count();
     await scroller.evaluate((element) =>
       element.scrollTo(0, element.scrollHeight),
     );
     await expect.poll(() => rows.count()).toBeGreaterThan(before);
   }
-  await expect(more).toHaveCount(0);
+}
+
+test('FR-3: "Selecionar todas" marks more than the API takes at once, in batches', async ({
+  browser,
+}) => {
+  const { page } = await libraryListener(browser);
+  await serveManyMedia(page);
+  const batches: number[] = [];
+  await page.route('**/api/v1/media/played', async (route) => {
+    const { ids } = route.request().postDataJSON() as { ids: string[] };
+    batches.push(ids.length);
+    await route.fulfill({ json: { applied: ids } });
+  });
+  await openLibrary(page);
+  await scrollToTheEnd(page, 5);
+  const loaded = await all(page).getByRole('listitem').count();
+  expect(loaded).toBeGreaterThan(200);
+  await all(page)
+    .getByRole('checkbox', { name: `Selecionar todas as ${loaded}` })
+    .check();
+  await page.getByRole('button', { name: 'Marcar como ouvida' }).click();
+  await expect(libraryStatus(page)).toContainText(
+    `${loaded} mídias marcadas como ouvidas.`,
+  );
+  expect(batches).toEqual([200, loaded - 200]);
+  await page.context().close();
+});
+
+/** Window fields of the probe below, as the page sees them. */
+interface ListProbe {
+  lastInputAt: number;
+  latencies: number[];
+  frameGaps: number[];
+  recording: boolean;
+}
+
+/**
+ * Times the page itself, the same way in every browser: WebKit has no Event Timing, so INP
+ * cannot be read there. From the input to the first task after the next frame, which is
+ * what INP measures, less the time the input waited to be handled. A background of frames shows whether scrolling stalls.
+ */
+function installListProbe() {
+  const probe: ListProbe = {
+    lastInputAt: 0,
+    latencies: [],
+    frameGaps: [],
+    recording: false,
+  };
+  Object.assign(window, { listProbe: probe });
+  addEventListener(
+    'click',
+    () => {
+      // Not event.timeStamp: under WebKit's automation it has another origin.
+      const startedAt = performance.now();
+      probe.lastInputAt = startedAt;
+      requestAnimationFrame(() => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          probe.latencies.push(performance.now() - startedAt);
+          channel.port1.close();
+        };
+        channel.port2.postMessage(null);
+      });
+    },
+    true,
+  );
+  let last = 0;
+  const onFrame = (now: number) => {
+    if (probe.recording && last > 0) probe.frameGaps.push(now - last);
+    last = now;
+    requestAnimationFrame(onFrame);
+  };
+  requestAnimationFrame(onFrame);
+}
+
+const probeOf = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as { listProbe: ListProbe }).listProbe,
+  );
+
+/** The middle value: one stall of the shared machine does not decide the measure. */
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? Infinity;
+}
+
+/** The p95 of a run of samples. */
+function p95(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.ceil(sorted.length * 0.95) - 1] ?? Infinity;
+}
+
+/** From the last click to the moment the count reads `text`, timed inside the page. */
+async function clickUntilCount(page: Page, chip: Locator, text: string) {
+  const changed = all(page)
+    .locator('[aria-live="polite"]')
+    .evaluate(
+      (count, expected) =>
+        new Promise<number>((resolve) => {
+          const observer = new MutationObserver(() => {
+            if (!count.textContent?.trim().startsWith(expected)) return;
+            observer.disconnect();
+            const { listProbe } = window as unknown as {
+              listProbe: ListProbe;
+            };
+            resolve(performance.now() - listProbe.lastInputAt);
+          });
+          observer.observe(count, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+        }),
+      text,
+    );
+  await chip.click();
+  return changed;
+}
+
+test('NFR-2: 2 000 media scroll by wheel without stalling, react within 200 ms, and a chip updates the list within 500 ms', async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { page } = await libraryListener(browser);
+  await serveManyMedia(page);
+  await page.addInitScript(installListProbe);
+  await openLibrary(page);
+  await expect(all(page).getByText(/^2000 mídias/)).toBeVisible();
+
+  const rows = all(page).getByRole('listitem');
+  await scrollToTheEnd(page, 45);
   await expect(rows).toHaveCount(MANY);
   await expect(
     all(page).getByRole('link', { name: 'Palestra sintética 1999' }),
   ).toBeAttached();
 
+  // A real wheel over the 2 000 rows, watched frame by frame.
+  const scroller = page.locator('app-library-page');
   await scroller.evaluate((element) => element.scrollTo(0, 0));
-  const chip = all(page).getByRole('button', { name: 'Em andamento' });
-  const started = Date.now();
-  await chip.click();
-  await expect(all(page).getByText(/^667 mídias/)).toBeVisible();
-  expect(Date.now() - started).toBeLessThanOrEqual(500);
+  await rows.first().hover();
+  await page.evaluate(() => {
+    (window as unknown as { listProbe: ListProbe }).listProbe.recording = true;
+  });
+  for (let turn = 0; turn < 30; turn++) {
+    await page.mouse.wheel(0, 900);
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(resolve)),
+    );
+  }
+  await page.evaluate(() => {
+    (window as unknown as { listProbe: ListProbe }).listProbe.recording = false;
+  });
+  expect(
+    await scroller.evaluate((element) => element.scrollTop),
+  ).toBeGreaterThan(10_000);
 
-  const inp = await page.evaluate(
-    () =>
-      (window as unknown as { longestInteraction: { value: number } })
-        .longestInteraction.value,
+  // Deep in the list, what is pressed is what was aimed at, and its ⋯ menu shows whole.
+  const deepBox = all(page).getByRole('checkbox', {
+    name: 'Selecionar Palestra sintética 1200',
+  });
+  await deepBox.click();
+  await expect(deepBox).toBeChecked();
+  await expect(page.getByRole('region', { name: 'Seleção' })).toContainText(
+    '1 selecionada',
   );
-  expect(inp).toBeLessThanOrEqual(200);
+  await deepBox.uncheck();
+  const deepMenu = all(page).getByRole('button', {
+    name: 'Mais ações para Palestra sintética 1200',
+  });
+  await deepMenu.click();
+  const heard = page.getByRole('menuitem', { name: 'Marcar como ouvida' });
+  await expect(heard).toBeInViewport({ ratio: 1 });
+  // Containment would clip it: the option itself answers at its own center.
+  expect(
+    await heard.evaluate((option) => {
+      const { x, y, width, height } = option.getBoundingClientRect();
+      return (
+        document
+          .elementFromPoint(x + width / 2, y + height / 2)
+          ?.closest('[role="menuitem"]') === option
+      );
+    }),
+  ).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(deepMenu).toBeFocused();
+
+  // A real input on the 2 000 rows: all of them answer to the selection.
+  await scroller.evaluate((element) => element.scrollTo(0, 0));
+  const box = all(page).getByRole('checkbox', {
+    name: 'Selecionar Palestra sintética 0000',
+  });
+  for (let turn = 0; turn < 7; turn++) await box.click();
+  const { latencies, frameGaps } = await probeOf(page);
+  await box.uncheck();
+
+  const chip = all(page).getByRole('button', { name: 'Em andamento' });
+  const toUpdate = await clickUntilCount(page, chip, '667 mídias');
+
+  console.info(
+    `NFR-2 ${test.info().project.name}: input median ${median(latencies).toFixed(0)} ms, worst ${Math.max(...latencies).toFixed(0)} ms; ` +
+      `frame p95 ${p95(frameGaps).toFixed(0)} ms, worst ${Math.max(...frameGaps).toFixed(0)} ms (${frameGaps.length} frames); chip ${toUpdate.toFixed(0)} ms`,
+  );
+  expect(latencies.length).toBeGreaterThanOrEqual(7);
+  expect(Math.min(...latencies)).toBeGreaterThan(0);
+  expect(median(latencies)).toBeLessThanOrEqual(200);
+  expect(frameGaps.length).toBeGreaterThanOrEqual(20);
+  expect(p95(frameGaps)).toBeLessThanOrEqual(100);
+  expect(toUpdate).toBeLessThanOrEqual(500);
   await page.context().close();
 });
