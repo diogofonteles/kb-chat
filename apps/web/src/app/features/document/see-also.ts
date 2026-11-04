@@ -124,7 +124,10 @@ export class SeeAlsoSection {
     string | undefined,
     readonly SubjectTrack[]
   >({ source: this.tracksUrl, computation: () => [] });
-  protected readonly tracksLoading = signal(false);
+  protected readonly tracksLoading = linkedSignal(() => {
+    this.tracksUrl();
+    return false;
+  });
   protected readonly moreTracksFailed = linkedSignal(() => {
     this.tracksUrl();
     return false;
@@ -160,6 +163,9 @@ export class SeeAlsoSection {
     if (!concept || this.tracksLoading()) return;
     this.tracksLoading.set(true);
     this.moreTracksFailed.set(false);
+    // A late answer belongs to the concept the person left: it must not land on this one.
+    const asked = this.tracksUrl();
+    const isCurrent = () => this.tracksUrl() === asked;
     this.api
       .subjectTracks(this.topic(), concept, {
         offset: this.tracks().length,
@@ -168,10 +174,12 @@ export class SeeAlsoSection {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (page) => {
+          if (!isCurrent()) return;
           this.moreTracks.update((all) => [...all, ...page.items]);
           this.tracksLoading.set(false);
         },
         error: () => {
+          if (!isCurrent()) return;
           this.moreTracksFailed.set(true);
           this.tracksLoading.set(false);
         },

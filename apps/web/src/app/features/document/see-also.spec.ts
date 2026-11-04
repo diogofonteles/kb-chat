@@ -103,6 +103,28 @@ describe('SeeAlsoSection, tracks of a concept (KBC-070 AC-5)', () => {
     expect(screen.queryByRole('button', { name: /Ver todas/ })).toBeNull();
   });
 
+  it('drops a late "Ver todas" of the concept the person left', async () => {
+    const view = await renderSection();
+    view.http
+      .expectOne(URL)
+      .flush({ items: [aTrack(1)], total: 2, nextOffset: 1 });
+    await view.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver todas (2)' }));
+    const late = view.http.expectOne(`${URL}?offset=1&limit=50`);
+    view.fixture.componentRef.setInput('concept', 'Ritmo');
+    TestBed.tick();
+    view.http
+      .expectOne('/api/v1/topics/hermetismo/concepts/Ritmo/media')
+      .flush({ items: [aTrack(3)], total: 2, nextOffset: 1 });
+    late.flush({ items: [aTrack(2)], total: 2, nextOffset: null });
+    await view.fixture.whenStable();
+    expect(screen.queryByRole('link', { name: 'Pergunta 2' })).toBeNull();
+    const more = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Ver todas (2)',
+    });
+    expect(more.disabled).toBe(false);
+  });
+
   it('says so when "Ver todas" fails, keeping what it has', async () => {
     const view = await renderSection();
     view.http
