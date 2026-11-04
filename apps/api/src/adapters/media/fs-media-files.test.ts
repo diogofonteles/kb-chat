@@ -90,6 +90,37 @@ describe('FsMediaFiles: a resumable upload (KBC-035)', () => {
   });
 });
 
+describe('FsMediaFiles, a part that stops arriving', () => {
+  it('keeps what arrived and lets go of the part, so the upload can go on', async () => {
+    const quiet = new FsMediaFiles(root, { partIdleMs: 20 });
+    const body = new Readable({ read: () => undefined });
+    body.push(Buffer.from('abc'));
+    const offset = await quiet.appendUpload({
+      mediaId: ID,
+      body,
+      expectedBytes: 6,
+    });
+    expect(offset).toBe(3);
+    await expect(quiet.uploadOffset(ID)).resolves.toBe(3);
+  });
+
+  it('waits for a part that keeps arriving, however slowly', async () => {
+    const quiet = new FsMediaFiles(root, { partIdleMs: 200 });
+    const body = new Readable({ read: () => undefined });
+    const appending = quiet.appendUpload({
+      mediaId: ID,
+      body,
+      expectedBytes: 6,
+    });
+    for (const letters of ['ab', 'cd', 'ef']) {
+      body.push(Buffer.from(letters));
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    body.push(null);
+    await expect(appending).resolves.toBe(6);
+  });
+});
+
 describe('FsMediaFiles', () => {
   it('saves an upload of exactly the announced size', async () => {
     await files.saveUpload({

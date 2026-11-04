@@ -46,9 +46,45 @@ class ByteLimit extends Transform {
   }
 }
 
+/**
+ * How long a part may stay silent. A network that falls sends no close, and a part that waits
+ * on a dead socket keeps the item locked: the client's retries, about two minutes of them,
+ * would all hear "busy". Well under that, and far over any pause of a connection still alive.
+ */
+const PART_IDLE_MS = 30_000;
+
+/** Where a stream goes through its byte limit. */
+interface LimitedWrite {
+  readonly limit: ByteLimit;
+  readonly path: string;
+  readonly flags: 'w' | 'a';
+  readonly idleMs?: number;
+}
+
+/** Ends the stream as incomplete once no byte went through it for `idleMs`, if given. */
+function listenForSilence(
+  limit: ByteLimit,
+  idleMs: number | undefined,
+): NodeJS.Timeout | undefined {
+  if (!idleMs) return undefined;
+  const silence = setTimeout(
+    () => limit.destroy(new UploadRefusedError('incomplete')),
+    idleMs,
+  );
+  limit.on('data', () => silence.refresh());
+  return silence;
+}
+
 /** Media files under one directory, mounted at /data/media in production (ADR 0022). */
 export class FsMediaFiles implements MediaFilesPort {
-  constructor(private readonly root: string) {}
+  private readonly partIdleMs: number;
+
+  constructor(
+    private readonly root: string,
+    options: { readonly partIdleMs?: number } = {},
+  ) {
+    this.partIdleMs = options.partIdleMs ?? PART_IDLE_MS;
+  }
 
   uploadPath(mediaId: string): string {
     return `${UPLOADS}/${mediaId}.upload`;
@@ -135,11 +171,12 @@ export class FsMediaFiles implements MediaFilesPort {
   /**
    * Streams the body through the byte limit into the file. The body is never destroyed:
    * on a refusal the rest is drained, so the API can still answer 413 on the connection;
-   * a body that closes before its end (the client gave up) counts as incomplete.
+   * a body that closes before its end (the client gave up), or goes silent for `idleMs`,
+   * counts as incomplete.
    */
   private async writeLimited(
     body: Readable,
-    target: { limit: ByteLimit; path: string; flags: 'w' | 'a' },
+    target: LimitedWrite,
   ): Promise<void> {
     const { limit } = target;
     const written = pipeline(
@@ -156,8 +193,13 @@ export class FsMediaFiles implements MediaFilesPort {
         limit.destroy(new UploadRefusedError('incomplete'));
     });
     limit.once('error', detach);
+    const hearing = listenForSilence(limit, target.idleMs);
     body.pipe(limit);
-    await written;
+    try {
+      await written;
+    } finally {
+      clearTimeout(hearing);
+    }
   }
 
   async uploadOffset(mediaId: string): Promise<number> {
@@ -175,7 +217,12 @@ export class FsMediaFiles implements MediaFilesPort {
     await mkdir(this.resolve(UPLOADS), { recursive: true });
     const limit = new ByteLimit(input.expectedBytes - offset);
     try {
-      await this.writeLimited(input.body, { limit, path, flags: 'a' });
+      await this.writeLimited(input.body, {
+        limit,
+        path,
+        flags: 'a',
+        idleMs: this.partIdleMs,
+      });
     } catch (err) {
       if (!(err instanceof UploadRefusedError)) throw err;
       if (err.problem === 'too-large') {
