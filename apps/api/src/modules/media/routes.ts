@@ -120,7 +120,7 @@ export interface TrackCall {
 /** The writes on a track that arrive by the item's own routes (KBC-073 FR-1, FR-3). */
 export interface TrackWrites {
   patch(call: TrackCall, patch: TrackPatch): void;
-  archive(actor: MediaActor, mediaId: string): void;
+  archive(actor: MediaActor, mediaId: string): Promise<void>;
 }
 
 const itemResponse = { 200: mediaItemSchema };
@@ -354,7 +354,7 @@ function registerMasterRoutes(
     const { id } = request.params;
     if (service.isTrack(actor, id)) {
       assertFeature(request, 'media-edit');
-      tracks.archive(actor, id);
+      await tracks.archive(actor, id);
     } else
       await service.remove(actor, id, {
         cascade: request.query.cascade === 'true',

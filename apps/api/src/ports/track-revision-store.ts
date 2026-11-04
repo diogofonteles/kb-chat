@@ -24,6 +24,8 @@ export interface RevisableTrack {
   readonly askerSpeakerId: string | null;
   readonly answererSpeakerId: string | null;
   readonly cut: TrackCutState;
+  /** A finished cut that waits for its approval's others. */
+  readonly hasCandidate: boolean;
 }
 
 /** A track out of the edit, not yet past its window. */
@@ -88,7 +90,8 @@ export interface TrackRevisionStorePort {
     readonly jobId: string;
     readonly now: Date;
   }): void;
-  archive(track: RevisableTrack, now: Date): void;
+  /** The row goes aside, with its cut job; the path of a candidate it left, to remove. */
+  archive(track: RevisableTrack, now: Date): string | null;
   /** Back as it was; `trackId` names it when no row was kept (it left by a new approval). */
   restore(input: {
     readonly mediaId: string;

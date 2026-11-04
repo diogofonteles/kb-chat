@@ -27,7 +27,10 @@ const TRACK = `SELECT t.id, t.derived_media_id, t.media_id, t.ordinal, t.title, 
     t.end_ms, t.asker_voice, t.answerer_voice, t.asker_speaker_id, t.answerer_speaker_id,
     t.cut_status,
     (SELECT j.status FROM jobs j WHERE j.media_id = t.derived_media_id AND j.kind = 'cut'
-     ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS job_status
+     ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS job_status,
+    EXISTS (SELECT 1 FROM media_tracks o JOIN jobs j ON j.media_id = o.derived_media_id
+      WHERE o.media_id = t.media_id AND o.cut_status = 'pending' AND j.kind = 'cut'
+        AND j.status IN ('failed', 'dead')) AS sibling_failed
   FROM media_tracks t`;
 
 const RESTORE_APPROVED = `INSERT INTO media_tracks (id, media_id, start_ms, end_ms, kind, title,
@@ -47,8 +50,10 @@ const nullableText = (value: SQLOutputValue | undefined): string | null =>
   value === null || value === undefined ? null : String(value);
 
 function cutStateOf(row: Row): TrackCutState {
-  if (row['cut_status'] !== 'pending' && row['cut_status'] !== 'cut')
-    return 'none';
+  // A candidate waits for the whole approval: a dead sibling is this track's failure too.
+  if (row['cut_status'] === 'cut')
+    return row['sibling_failed'] === 1 ? 'failed' : 'running';
+  if (row['cut_status'] !== 'pending') return 'none';
   const job = row['job_status'];
   return job === 'failed' || job === 'dead' ? 'failed' : 'running';
 }
@@ -67,6 +72,7 @@ function toTrack(row: Row): RevisableTrack {
     askerSpeakerId: nullableText(row['asker_speaker_id']),
     answererSpeakerId: nullableText(row['answerer_speaker_id']),
     cut: cutStateOf(row),
+    hasCandidate: row['cut_status'] === 'cut',
   };
 }
 
@@ -172,7 +178,7 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
     const { track, startMs, endMs } = input;
     this.db
       .prepare(
-        `UPDATE media_tracks SET start_ms = ?, end_ms = ?, cut_status = 'pending'
+        `UPDATE media_tracks SET start_ms = ?, end_ms = ?, cut_status = 'pending', cut_alone = 1
          WHERE id = ?`,
       )
       .run(startMs, endMs, track.trackId);
@@ -201,8 +207,14 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
       .run(jobId, mediaId, at, at);
   }
 
-  archive(track: RevisableTrack, now: Date): void {
+  archive(track: RevisableTrack, now: Date): string | null {
     const at = now.toISOString();
+    const candidate = this.db
+      .prepare('SELECT cut_path FROM media_tracks WHERE id = ?')
+      .get(track.trackId)?.['cut_path'];
+    this.db
+      .prepare(`DELETE FROM jobs WHERE media_id = ? AND kind = 'cut'`)
+      .run(track.mediaId);
     this.db
       .prepare(
         `INSERT OR REPLACE INTO media_track_archive (media_id, track_id, kind, source,
@@ -227,6 +239,7 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
     for (const table of ['media_tracks', 'media_draft_tracks'])
       this.db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(track.trackId);
     this.renumber(track.parentId);
+    return nullableText(candidate);
   }
 
   /** Places by start time, as the screen numbers them. */

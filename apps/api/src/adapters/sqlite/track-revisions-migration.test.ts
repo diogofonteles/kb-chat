@@ -44,5 +44,7 @@ describe('Migration 22: track revisions (KBC-073)', () => {
 
     expect(columns).toContain('track_version');
     expect(columns).toContain('file_version');
+    const tracks = ddlOf(db, 'media_tracks');
+    expect(tracks).toContain('cut_alone');
   });
 });

@@ -184,6 +184,18 @@ export class TrackPublisher {
       items.setAuthor({ mediaId: track.mediaId, now, ...authorOf(track) });
   }
 
+  /** A deleted track stops holding back what waited for its cut (KBC-073 FR-2). */
+  afterArchive(parentId: string): void {
+    const { items } = this.deps;
+    const waiting = items.tracksOf(parentId).some((track) => track.cut);
+    if (waiting && !items.hasPendingCuts(parentId))
+      items.publish({
+        parentId,
+        detailsOf: this.detailsFor(parentId),
+        now: this.now(),
+      });
+  }
+
   /** A track came back: its text, cut from the transcript of today, enters search again. */
   afterRestore(parentId: string, mediaId: string): void {
     const slice = this.slicerOf(parentId);

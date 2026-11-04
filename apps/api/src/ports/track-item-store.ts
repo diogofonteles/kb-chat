@@ -82,7 +82,8 @@ export interface TrackItemStorePort {
   cutOrder(mediaId: string): CutOrder | null;
   /**
    * Closes the lease and keeps the candidate; the last one publishes, in the same transaction,
-   * so no crash leaves a finished approval unpublished. False when the lease was lost.
+   * so no crash leaves a finished approval unpublished, and a cut of new bounds publishes its
+   * own track (KBC-073 FR-2). False when the lease was lost.
    */
   recordCut(
     cut: RecordedCut,

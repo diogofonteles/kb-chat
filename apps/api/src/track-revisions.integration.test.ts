@@ -606,6 +606,141 @@ describe('A cut that fails (FR-2)', () => {
     expect(item.parent?.startMs).toBe(80_000);
   });
 
+  const killCut = (media: Media, id: string) => {
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    db.prepare(
+      `UPDATE jobs SET status = 'dead' WHERE kind = 'cut' AND media_id = ?`,
+    ).run(id);
+    db.close();
+  };
+
+  it("a finished cut lands on its own though its sibling's died", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first, second } = await published(world);
+    await moveBounds(media, first.id, { startMs: 90_000, endMs: 210_000 });
+    await moveBounds(media, second.id, { startMs: 300_000, endMs: 420_000 });
+    killCut(media, first.id);
+
+    expect(await finishCuts(media)).toBe(1);
+
+    expect((await viewOf(media, second.id)).cut).toBe('none');
+    const landed = await media.owner('GET', urlOf(second.id));
+    expect(landed.json<MediaItem>().parent?.startMs).toBe(300_000);
+    expect((await viewOf(media, first.id)).cut).toBe('failed');
+    const failed = await media.owner('GET', urlOf(first.id));
+    expect(failed.json<MediaItem>().parent?.startMs).toBe(60_000);
+    const deleted = await send(media, {
+      method: 'DELETE',
+      url: urlOf(second.id),
+    });
+    expect(deleted.statusCode, deleted.body).toBe(204);
+  });
+
+  it('the track of a dead cut can be deleted, and comes back as it was published', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    await moveBounds(media, first.id, { startMs: 90_000, endMs: 210_000 });
+    killCut(media, first.id);
+
+    const deleted = await send(media, {
+      method: 'DELETE',
+      url: urlOf(first.id),
+    });
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    const restored = await send(media, {
+      method: 'POST',
+      url: `${urlOf(first.id)}/restore`,
+    });
+
+    expect(restored.statusCode, restored.body).toBe(200);
+    expect(restored.json<MediaItem>().parent?.startMs).toBe(60_000);
+    expect((await viewOf(media, first.id)).cut).toBe('none');
+  });
+
+  /** An approval that moves both tracks: the second finished, the first's cut is dead. */
+  async function approvalBehindADeadCut(world: World) {
+    const { media } = world;
+    const { recording, first, second } = await published(world);
+    await approve(media, recording.id, [
+      { startMs: 65_000, endMs: 235_000, title: 'Primeira pergunta' },
+      { startMs: 250_000, endMs: 470_000, title: 'Segunda pergunta' },
+    ]);
+    killCut(media, first.id);
+    expect(await finishCuts(media)).toBe(1);
+    return { first, second };
+  }
+
+  it("an approval's finished track says its sibling failed, and the retry reaches it", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first, second } = await approvalBehindADeadCut(world);
+    const waiting = await viewOf(media, second.id);
+    expect(waiting.cut).toBe('failed');
+    const held = await media.owner('GET', urlOf(second.id));
+    expect(held.json<MediaItem>().parent?.startMs).toBe(240_000);
+
+    const retried = await send(media, {
+      method: 'POST',
+      url: `${urlOf(second.id)}/bounds/retry`,
+      version: waiting.version,
+    });
+
+    expect(retried.statusCode, retried.body).toBe(202);
+    expect(await finishCuts(media)).toBe(1);
+    expect((await viewOf(media, first.id)).cut).toBe('none');
+    expect((await viewOf(media, second.id)).cut).toBe('none');
+    const landed = await media.owner('GET', urlOf(second.id));
+    expect(landed.json<MediaItem>().parent?.startMs).toBe(250_000);
+  });
+
+  it('a track waiting on a dead cut keeps its candidate: new bounds are refused', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { second } = await approvalBehindADeadCut(world);
+
+    const moved = await moveBounds(media, second.id, {
+      startMs: 300_000,
+      endMs: 420_000,
+    });
+
+    expect(moved.statusCode, moved.body).toBe(409);
+  });
+
+  it("deleting the track of a dead cut publishes the approval's other", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first, second } = await approvalBehindADeadCut(world);
+
+    const deleted = await send(media, {
+      method: 'DELETE',
+      url: urlOf(first.id),
+    });
+
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    expect((await viewOf(media, second.id)).cut).toBe('none');
+    const landed = await media.owner('GET', urlOf(second.id));
+    expect(landed.json<MediaItem>().parent?.startMs).toBe(250_000);
+  });
+
+  it('deleting a track waiting on a dead cut takes its candidate with it', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { second } = await approvalBehindADeadCut(world);
+    const filesBefore = readdirSync(media.mediaDir, { recursive: true }).length;
+
+    const deleted = await send(media, {
+      method: 'DELETE',
+      url: urlOf(second.id),
+    });
+
+    expect(deleted.statusCode, deleted.body).toBe(204);
+    expect(readdirSync(media.mediaDir, { recursive: true }).length).toBe(
+      filesBefore - 1,
+    );
+  });
+
   it('a jump over the neighbour renumbers the tracks', async () => {
     const world = await startWorld();
     const { media } = world;

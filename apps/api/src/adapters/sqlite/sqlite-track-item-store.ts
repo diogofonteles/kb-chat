@@ -162,7 +162,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     this.db
       .prepare(
         `UPDATE media_tracks SET cut_status = 'none', cut_path = NULL, cut_bytes = NULL,
-           cut_duration_ms = NULL
+           cut_duration_ms = NULL, cut_alone = 0
          WHERE media_id = ? AND cut_status IN ('pending', 'cut')`,
       )
       .run(parentId);
@@ -199,19 +199,32 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
         .prepare(
           `UPDATE media_tracks SET cut_status = 'cut', cut_path = ?, cut_bytes = ?,
              cut_duration_ms = ?
-           WHERE derived_media_id = ? RETURNING media_id`,
+           WHERE derived_media_id = ? RETURNING id, media_id, cut_alone`,
         )
         .get(cut.path, cut.bytes, cut.durationMs, cut.mediaId);
       if (!row) return false;
       const parentId = String(row['media_id']);
-      if (!this.hasPendingCuts(parentId))
-        this.publish({
-          parentId,
-          detailsOf: detailsFor(parentId),
-          now: cut.now,
-        });
+      const publication = {
+        parentId,
+        detailsOf: detailsFor(parentId),
+        now: cut.now,
+      };
+      if (row['cut_alone'] === 1)
+        this.publishAlone(String(row['id']), publication);
+      if (!this.hasPendingCuts(parentId)) this.publish(publication);
       return true;
     });
+  }
+
+  /** New bounds on one track wait for nothing else: a sibling's dead cut holds no one (FR-2). */
+  private publishAlone(
+    trackId: string,
+    input: { parentId: string; detailsOf: DetailsOf; now: Date },
+  ): void {
+    const track = this.tracksOf(input.parentId).find(
+      (one) => one.trackId === trackId,
+    );
+    if (track) this.publishTrack(track, input);
   }
 
   publish(input: { parentId: string; detailsOf: DetailsOf; now: Date }): void {
@@ -419,7 +432,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     this.db
       .prepare(
         `UPDATE media_tracks SET cut_status = 'published', cut_path = NULL, cut_bytes = NULL,
-           cut_duration_ms = NULL WHERE id = ?`,
+           cut_duration_ms = NULL, cut_alone = 0 WHERE id = ?`,
       )
       .run(track.trackId);
   }

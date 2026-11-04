@@ -42,7 +42,7 @@ export interface TrackRevisionDeps {
   readonly revisions: TrackRevisionStorePort;
   readonly publisher: Pick<
     TrackPublisher,
-    'afterRecordingEdit' | 'afterRestore' | 'retryCuts'
+    'afterArchive' | 'afterRecordingEdit' | 'afterRestore' | 'retryCuts'
   >;
   readonly edits: Pick<MediaEditStorePort, 'edit'>;
   readonly store: Pick<MediaStorePort, 'getMedia'>;
@@ -299,7 +299,7 @@ export class TrackRevisionService {
   /** "Ajustar início e fim" (FR-2): the cut runs on the worker, the file changes when it lands. */
   bounds(call: TrackCall, asked: TrackBoundsRequest): TrackEditView {
     const { track } = this.writable(call.actor, call.mediaId);
-    if (track.cut === 'running')
+    if (track.cut === 'running' || track.hasCandidate)
       throw conflict('cut-running', 'A cut of this track is on its way');
     this.assertFits(track, asked);
     if (track.startMs === asked.startMs && track.endMs === asked.endMs)
@@ -358,20 +358,23 @@ export class TrackRevisionService {
   }
 
   /** "Apagar faixa" (FR-3): the row goes aside; file, positions and bookmarks stay (BR-7). */
-  archive(actor: MediaActor, mediaId: string): void {
+  async archive(actor: MediaActor, mediaId: string): Promise<void> {
     const { track } = this.writable(actor, mediaId);
-    if (track.cut !== 'none')
+    if (track.cut === 'running')
       throw conflict('cut-running', 'A cut of this track is on its way');
     const author = this.authorOf(actor);
-    const { revisions } = this.deps;
-    revisions.atomically(() => {
-      revisions.archive(track, author.now);
+    const { revisions, publisher, files } = this.deps;
+    const candidate = revisions.atomically(() => {
+      const left = revisions.archive(track, author.now);
       revisions.record(
         mediaId,
         [{ field: 'archived', before: null, after: null }],
         author,
       );
+      publisher.afterArchive(track.parentId);
+      return left;
     });
+    if (candidate !== null) await files.remove([candidate]);
   }
 
   /** Within the window, in a place still free (BR-5, BR-7). */

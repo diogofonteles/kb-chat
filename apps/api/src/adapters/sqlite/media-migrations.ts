@@ -17,6 +17,10 @@ const TRACK_REVISION_TABLES = `
       ALTER TABLE media ADD COLUMN file_version INTEGER NOT NULL DEFAULT 1
         CHECK (file_version >= 1);
 
+      -- A cut asked for one track, after its approval: it lands alone, not with the others.
+      ALTER TABLE media_tracks ADD COLUMN cut_alone INTEGER NOT NULL DEFAULT 0
+        CHECK (cut_alone IN (0, 1));
+
       CREATE TABLE media_track_changes (
         id TEXT PRIMARY KEY,
         media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
