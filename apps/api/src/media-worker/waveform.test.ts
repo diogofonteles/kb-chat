@@ -1,5 +1,9 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PeakMeter, waveformArgs } from './waveform.js';
+import { ffmpegBins } from '../../test/media-tools.js';
+import { PeakMeter, measurePeaks, waveformArgs } from './waveform.js';
 
 const samples = (...levels: number[]) => {
   const bytes = Buffer.alloc(levels.length * 2);
@@ -36,5 +40,29 @@ describe('waveformArgs', () => {
     expect(args).toContain('s16le');
     expect(args).toContain('-vn');
     expect(args.at(-1)).toBe('pipe:1');
+  });
+});
+
+describe('measurePeaks when ffmpeg does not finish', () => {
+  const bins = ffmpegBins();
+  const source = join(mkdtempSync(join(tmpdir(), 'peaks-')), 'missing.m4a');
+  const base = { bins, source, peaksPerSecond: 10, timeoutMs: 30_000 };
+
+  it('fails when ffmpeg cannot read the file', async () => {
+    await expect(measurePeaks(base)).rejects.toThrow(/ffmpeg exited/);
+  });
+
+  it('says so when it was stopped', async () => {
+    await expect(
+      measurePeaks({ ...base, signal: AbortSignal.abort() }),
+    ).rejects.toThrow(/aborted/);
+  });
+
+  it('says so when it took too long', async () => {
+    const ffmpeg = join(mkdtempSync(join(tmpdir(), 'slow-')), 'ffmpeg');
+    writeFileSync(ffmpeg, '#!/bin/sh\nexec sleep 5\n', { mode: 0o755 });
+    await expect(
+      measurePeaks({ ...base, bins: { ...bins, ffmpeg }, timeoutMs: 50 }),
+    ).rejects.toThrow(/timed out/);
   });
 });
