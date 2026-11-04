@@ -130,10 +130,17 @@ class Worker:
             return "error"
         # One bad job must not stop the Mac's worker: it is given back, the loop goes on.
         except Exception as err:
-            log.exception("job %s: unexpected failure", job["id"])
+            self._log_crash(job, err)
             self._report_crash(job, err)
             return "error"
         return "job"
+
+    @staticmethod
+    def _log_crash(job: dict, err: Exception) -> None:
+        if job["kind"] == "voice-profile":
+            log.error("job %s: unexpected failure: %s", job["id"], type(err).__name__)
+        else:
+            log.exception("job %s: unexpected failure", job["id"])
 
     def _report_crash(self, job: dict, err: Exception) -> None:
         """Gives the job back as retryable; the lease would expire anyway if this fails."""
@@ -297,6 +304,8 @@ class Worker:
             "model": self.embedder.model,
             "embedding": [round(float(value), 7) for value in voice_print],
         }
+        # A drop while the body was made left zeros in it.
+        hold.check()
         if self.api.upload_print(job, body):
             log.info("job %s: voice print stored", job["id"])
         else:

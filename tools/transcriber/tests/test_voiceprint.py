@@ -9,6 +9,7 @@ import pytest
 
 from transcriber.api import ApiClient
 from transcriber.config import SAMPLE_RATE, VOICE_PARAMETERS
+from transcriber.transcribe import Stopped
 from transcriber.voiceprint import (
     PrintHold,
     Profile,
@@ -219,6 +220,37 @@ def test_a_token_that_may_not_read_prints_compares_nothing(fake_api):
     embedder = ToneEmbedder()
     worker(fake_api, embedder=embedder).step()
     assert embedder.windows == 0
+
+
+def test_a_failed_print_job_logs_the_type_of_the_error_and_not_its_message(fake_api, caplog):
+    caplog.set_level(logging.DEBUG, logger="transcriber")
+    fake_api.jobs = [dict(VOICE_JOB)]
+
+    def explodes(_windows):
+        raise RuntimeError("tensor([0.1234, 0.5678])")
+
+    w = worker(fake_api, embedder=explodes)
+    assert w.step() == "error"
+    assert "RuntimeError" in caplog.text
+    assert "0.1234" not in caplog.text
+    assert "0.1234" not in str(fake_api.bodies("fail"))
+
+
+def test_a_drop_while_the_body_is_made_uploads_nothing(fake_api, monkeypatch):
+    hold = PrintHold()
+
+    class DropsWhenRead(np.ndarray):
+        def __iter__(self):
+            hold.drop()
+            return super().__iter__()
+
+    monkeypatch.setattr(
+        "transcriber.worker.mean_print", lambda _vectors: np.ones(3).view(DropsWhenRead)
+    )
+    w = worker(fake_api, embedder=ToneEmbedder())
+    with pytest.raises(Stopped):
+        w._upload_print(VOICE_JOB, [], hold)
+    assert fake_api.bodies("voice-print") == []
 
 
 def test_a_lost_lease_drops_the_print(fake_api, caplog):

@@ -2,10 +2,12 @@
 
 A print is the mean of ECAPA vectors over a voice's speech. It is made for a profile whose
 consent the API recorded, or to compare a recording's voices with the profiles of its
-collection. Nothing here writes to disk or logs a vector, and every array of a job is in a
-`PrintHold`, zeroed when the job ends or as soon as a revocation arrives (BR-2, BR-5). The JSON
-a print came in and the float lists sent are Python objects: dropped, not zeroed. With no
-profile for the job's collection, no vector is computed at all.
+collection. Nothing here writes to disk or logs a vector. The main arrays of a job (the prints
+received, the window vectors, the print made) are in a `PrintHold`, zeroed when the job ends or
+as soon as a revocation arrives (BR-2, BR-5). What is not: the arrays numpy makes on the way
+(each concatenation and mean; a voice's centroid is zeroed right after use, outside the hold),
+the model's tensors, on the GPU too, the JSON a print came in and the float lists sent. They are
+released, not zeroed. With no profile for the job's collection, no vector is computed at all.
 """
 
 import threading
@@ -55,7 +57,7 @@ def wipe(arrays: Iterable[np.ndarray]) -> None:
 
 
 class PrintHold:
-    """All a job has in memory of a print, which another thread can drop at any moment.
+    """The main arrays a job has of a print, which another thread can drop at any moment.
 
     The heartbeat drops it when the API names a revocation or the lease is gone, and a watcher
     when the API has not answered for too long. Neither waits for the job's thread, which sees
