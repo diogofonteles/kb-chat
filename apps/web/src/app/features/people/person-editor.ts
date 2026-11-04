@@ -32,12 +32,18 @@ import { PersonAiEditor } from './person-ai-editor.js';
 const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
   on ? [...new Set([...values, value])] : values.filter((v) => v !== value);
 
+const BYTES_PER_GB = 1024 ** 3;
+
+/** The quota in the field: three decimals reach 1 MB, and hide what a binary GB leaves over. */
+const quotaFormat = new Intl.NumberFormat('pt-BR', {
+  maximumFractionDigits: 3,
+  useGrouping: false,
+});
+
 /**
  * One person's collections, features and role (KBC-010 FR-3). Presentational: each change
  * goes up as a patch and the page saves it, as Preferências do.
  */
-const BYTES_PER_GB = 1024 ** 3;
-
 @Component({
   selector: 'app-person-editor',
   imports: [PersonAiEditor],
@@ -122,7 +128,7 @@ export class PersonEditor {
   );
   protected readonly quotaGb = computed(() => {
     const bytes = this.person().mediaQuotaBytes ?? null;
-    return bytes === null ? '' : String(bytes / BYTES_PER_GB).replace('.', ',');
+    return bytes === null ? '' : quotaFormat.format(bytes / BYTES_PER_GB);
   });
   protected readonly defaultQuotaGb = MEDIA_DEFAULT_QUOTA_BYTES / BYTES_PER_GB;
   protected readonly quotaProblem = signal(false);

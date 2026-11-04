@@ -352,6 +352,22 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     cleared.flush(aPerson({ features: ['media-upload'] }));
   });
 
+  it('shows a typed quota as typed, with no floating point noise (KBC-035 BR-1)', async () => {
+    const { fixture } = await renderPanel([
+      owner,
+      aPerson({
+        features: ['media-upload'],
+        mediaQuotaBytes: Math.round(0.1 * 1024 ** 3),
+      }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Cota de mídia (GB)',
+    });
+    expect(field.value).toBe('0,1');
+  });
+
   it('asks no quota of who does not send', async () => {
     const { fixture } = await renderPanel();
     fireEvent.click(row(/Guest/));
