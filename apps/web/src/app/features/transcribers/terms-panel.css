@@ -67,10 +67,17 @@ meter {
   cursor: pointer;
 }
 
+.versions li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.25em;
+}
+
 .versions ul {
   display: grid;
   gap: var(--space-1);
   margin: 0;
-  padding-left: var(--space-5, 1.5rem);
+  padding: 0;
+  list-style: none;
   font-size: var(--text-sm);
 }

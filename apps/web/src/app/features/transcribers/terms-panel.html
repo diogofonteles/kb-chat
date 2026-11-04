@@ -14,7 +14,9 @@
         <meter
           aria-hidden="true"
           min="0"
+          optimum="0"
           [max]="use.limit"
+          [high]="use.limit - 1"
           [value]="use.tokens"
         ></meter>
       }
