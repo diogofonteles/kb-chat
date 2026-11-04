@@ -19,28 +19,45 @@ function binary(name: 'ffmpeg' | 'ffprobe'): string {
 }
 
 /**
- * The media worker of the E2E run, in this process: it leases from the API over HTTP,
- * with real ffmpeg, as the media-worker container does in production (ADR 0022). The
- * returned function stops it; the server decides when (it also closes the API then).
+ * Conversions a run does at once. One was not enough: the queue is first in, first out, and
+ * a two-hour lecture (media-transcript.spec.ts) holds a worker for minutes while every other
+ * test of the shard waits, `queued`, past its time limit of 60 s.
  */
-export function startMediaWorker(options: {
+const DEFAULT_WORKERS = 3;
+
+function workerCount(): number {
+  const count = Number(process.env['KBC_E2E_MEDIA_WORKERS'] ?? DEFAULT_WORKERS);
+  if (!Number.isInteger(count) || count < 1)
+    throw new Error('KBC_E2E_MEDIA_WORKERS must be a positive integer');
+  return count;
+}
+
+/**
+ * The media workers of the E2E run, in this process: they lease from the API over HTTP,
+ * with real ffmpeg, as the media-worker container does in production (ADR 0022). The
+ * returned function stops them; the server decides when (it also closes the API then).
+ */
+export function startMediaWorkers(options: {
   readonly apiUrl: string;
   readonly token: string;
   readonly mediaDir: string;
   readonly log: FastifyBaseLogger;
 }): () => void {
-  const worker = new MediaWorker({
-    api: new HttpMediaJobsApi({
-      baseUrl: options.apiUrl,
-      token: options.token,
-      worker: 'e2e',
-    }),
-    bins: { ffmpeg: binary('ffmpeg'), ffprobe: binary('ffprobe') },
-    mediaDir: options.mediaDir,
-    log: options.log,
-    pollMs: 300,
-  });
+  const bins = { ffmpeg: binary('ffmpeg'), ffprobe: binary('ffprobe') };
   const shutdown = new AbortController();
-  void worker.run(shutdown.signal);
+  for (let index = 1; index <= workerCount(); index++) {
+    const worker = new MediaWorker({
+      api: new HttpMediaJobsApi({
+        baseUrl: options.apiUrl,
+        token: options.token,
+        worker: `e2e-${index}`,
+      }),
+      bins,
+      mediaDir: options.mediaDir,
+      log: options.log,
+      pollMs: 300,
+    });
+    void worker.run(shutdown.signal);
+  }
   return () => shutdown.abort();
 }

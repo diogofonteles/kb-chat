@@ -1,0 +1,21 @@
+name: Set up ffmpeg
+description: Static ffmpeg and ffprobe 6.1.1 on the PATH, cached. Give the calling step a timeout-minutes.
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/kb-chat-ffmpeg
+        key: ffmpeg-b6.1.1-${{ runner.os }}-${{ runner.arch }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/install.sh" "$HOME/.cache/kb-chat-ffmpeg"
+    - shell: bash
+      run: |
+        echo "$HOME/.cache/kb-chat-ffmpeg" >> "$GITHUB_PATH"
+        export PATH="$HOME/.cache/kb-chat-ffmpeg:$PATH"
+        ffmpeg -hide_banner -version | sed -n 1p
+        ffprobe -hide_banner -version | sed -n 1p
+        # What the worker and the E2E fixtures encode (ADR 0022 §4).
+        ffmpeg -hide_banner -encoders | grep -E ' (aac|flac|libmp3lame|pcm_s32le) '

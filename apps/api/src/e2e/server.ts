@@ -2,7 +2,7 @@ import { createMedia } from '../media-factory.js';
 import { registerTranscriberClock } from './transcriber-clock-routes.js';
 import { registerTranscriptSeed } from './transcript-seed-routes.js';
 import { registerDiarizationSeed } from './diarization-seed-routes.js';
-import { startMediaWorker } from './media-worker-runner.js';
+import { startMediaWorkers } from './media-worker-runner.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -257,16 +257,16 @@ if (media) {
 }
 registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });
-const stopWorker = startMediaWorker({
+const stopWorkers = startMediaWorkers({
   apiUrl: `http://127.0.0.1:${config.PORT}`,
   token: E2E_MEDIA_WORKER_TOKEN,
   mediaDir: config.KB_CHAT_MEDIA_DIR,
   log: logger,
 });
-// A stop signal ends the whole server: never an API left running without its worker
+// A stop signal ends the whole server: never an API left running without its workers
 // (a later run would reuse it and its uploads would wait in the queue forever).
 for (const signal of ['SIGTERM', 'SIGINT'] as const)
   process.once(signal, () => {
-    stopWorker();
+    stopWorkers();
     void app.close().finally(() => process.exit(0));
   });
