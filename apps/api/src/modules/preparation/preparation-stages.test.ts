@@ -28,6 +28,7 @@ const transcription = (
   version: status === 'done' ? 1 : null,
   transcriber: 'on' as const,
   transcriberOffSince: null,
+  lastAttemptFailed: false,
 });
 
 const facts = (over: Partial<StageFacts> = {}): StageFacts => ({
