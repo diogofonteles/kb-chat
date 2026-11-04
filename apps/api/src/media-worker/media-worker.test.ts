@@ -57,7 +57,7 @@ function fakeApi(overrides: Partial<MediaJobsApi> = {}) {
 
 /** Holds a job open until a heartbeat arrives, whatever the speed of the machine. */
 function firstBeat() {
-  let heard = () => {};
+  let heard: () => void = () => undefined;
   const beat = new Promise<void>((resolve) => (heard = resolve));
   return { beat, heard: () => heard() };
 }
