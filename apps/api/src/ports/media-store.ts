@@ -124,6 +124,7 @@ export interface TranscodeResult extends LeaseOwner {
   readonly transcribeJobId: string;
   /** …and its silences are measured with this job id (KBC-044 FR-1). */
   readonly silencesJobId: string;
+  readonly waveformJobId: string;
   readonly now: Date;
 }
 

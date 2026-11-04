@@ -36,7 +36,7 @@ describe('media migration 13 (KBC-065)', () => {
     open();
     applyMigrations(db, BEFORE);
     aSeparation();
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([13]);
+    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toContain(13);
     expect(
       db.prepare('SELECT id, names_pending FROM diarizations').all(),
     ).toEqual([{ id: 'd1', names_pending: 0 }]);

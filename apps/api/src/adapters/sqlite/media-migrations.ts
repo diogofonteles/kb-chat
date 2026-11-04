@@ -591,4 +591,115 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         CHECK (names_pending IN (0, 1));
     `,
   },
+  {
+    // KBC-066 (ADR 0029 §4): the draft stays in KBC-067's table, rebuilt because a person's
+    // title goes to 120 characters and a person's track has no segments, and `media_tracks`
+    // holds what was approved, the only tracks listeners see. `jobs` takes the kind
+    // 'waveform'; SQLite cannot change a CHECK, so both are rebuilt as in 5, 10 and 11.
+    version: 14,
+    name: 'media-edits',
+    sql: `
+      CREATE TABLE jobs_waveform (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL
+          CHECK (kind IN ('transcode', 'transcribe', 'silences', 'diarize', 'waveform')),
+        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        lease_id TEXT,
+        lease_until INTEGER,
+        heartbeat_at INTEGER,
+        worker TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        -- The parameter set of a silences or waveform job (a newer one measures again).
+        detector_version INTEGER CHECK (detector_version IS NULL OR detector_version >= 1),
+        voices INTEGER CHECK (voices IS NULL OR voices BETWEEN 1 AND 10)
+      ) STRICT;
+      INSERT INTO jobs_waveform (id, media_id, kind, status, attempts, lease_id, lease_until,
+        heartbeat_at, worker, error, created_at, updated_at, detector_version, voices)
+        SELECT id, media_id, kind, status, attempts, lease_id, lease_until, heartbeat_at,
+          worker, error, created_at, updated_at, detector_version, voices FROM jobs;
+      DROP TABLE jobs;
+      ALTER TABLE jobs_waveform RENAME TO jobs;
+      CREATE INDEX jobs_queued ON jobs (kind, created_at) WHERE status = 'queued';
+      CREATE INDEX jobs_leased ON jobs (lease_until) WHERE status = 'leased';
+      CREATE INDEX jobs_by_media ON jobs (media_id, kind, created_at);
+      CREATE INDEX jobs_by_worker ON jobs (worker) WHERE status = 'leased';
+
+      -- One byte per peak, 10 per second: 2 h is 72 kB.
+      CREATE TABLE media_waveforms (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        peaks BLOB NOT NULL,
+        elapsed_ms INTEGER NOT NULL CHECK (elapsed_ms >= 0),
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE media_draft_tracks_edit (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES media_proposal_runs (id) ON DELETE CASCADE,
+        source TEXT NOT NULL CHECK (source IN ('ai', 'manual')),
+        edited INTEGER NOT NULL DEFAULT 0 CHECK (edited IN (0, 1)),
+        first_segment INTEGER CHECK (first_segment IS NULL OR first_segment >= 1),
+        last_segment INTEGER CHECK (last_segment IS NULL OR last_segment >= first_segment),
+        start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+        end_ms INTEGER NOT NULL CHECK (end_ms - start_ms >= 5000),
+        kind TEXT NOT NULL CHECK (kind IN ('qa', 'talk')),
+        title TEXT CHECK (title IS NULL OR length(title) BETWEEN 1 AND 120),
+        asker_voice INTEGER CHECK (asker_voice IS NULL OR asker_voice BETWEEN 1 AND 10),
+        answerer_voice INTEGER CHECK (answerer_voice IS NULL OR answerer_voice BETWEEN 1 AND 10),
+        asker_speaker_id TEXT REFERENCES media_speakers (id) ON DELETE SET NULL,
+        answerer_speaker_id TEXT REFERENCES media_speakers (id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      INSERT INTO media_draft_tracks_edit (id, media_id, run_id, source, edited, first_segment,
+        last_segment, start_ms, end_ms, kind, title, asker_voice, answerer_voice, created_at)
+        SELECT id, media_id, run_id, source, edited, first_segment, last_segment, start_ms,
+          end_ms, kind, title, asker_voice, answerer_voice, created_at FROM media_draft_tracks;
+      DROP TABLE media_draft_tracks;
+      ALTER TABLE media_draft_tracks_edit RENAME TO media_draft_tracks;
+      CREATE INDEX media_draft_tracks_by_media ON media_draft_tracks (media_id, start_ms);
+      CREATE INDEX media_draft_tracks_by_run ON media_draft_tracks (run_id);
+
+      -- One edit per recording. A proposal's windows change the draft too: they bump version.
+      CREATE TABLE media_edits (
+        media_id TEXT PRIMARY KEY REFERENCES media (id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        status TEXT NOT NULL CHECK (status IN ('draft', 'approved')),
+        step INTEGER NOT NULL CHECK (step IN (3, 4)),
+        -- The transcript the edit began on or was last approved on (BR-10); null: none then.
+        transcript_version INTEGER,
+        updated_by TEXT,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE media_tracks (
+        id TEXT PRIMARY KEY,
+        media_id TEXT NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 1),
+        start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+        end_ms INTEGER NOT NULL CHECK (end_ms - start_ms >= 5000),
+        kind TEXT NOT NULL CHECK (kind IN ('qa', 'talk')),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 120),
+        source TEXT NOT NULL CHECK (source IN ('ai', 'manual')),
+        asker_voice INTEGER CHECK (asker_voice IS NULL OR asker_voice BETWEEN 1 AND 10),
+        answerer_voice INTEGER CHECK (answerer_voice IS NULL OR answerer_voice BETWEEN 1 AND 10),
+        asker_speaker_id TEXT REFERENCES media_speakers (id) ON DELETE SET NULL,
+        answerer_speaker_id TEXT REFERENCES media_speakers (id) ON DELETE SET NULL,
+        approved_by TEXT NOT NULL,
+        approved_at TEXT NOT NULL,
+        UNIQUE (media_id, ordinal)
+      ) STRICT;
+
+      -- A draft older than this table: without an edit it would read as version 0.
+      INSERT INTO media_edits (media_id, version, status, step, transcript_version, updated_at)
+        SELECT d.media_id, 1, 'draft', 3,
+          (SELECT max(t.version) FROM transcripts t WHERE t.media_id = d.media_id),
+          max(d.created_at)
+        FROM media_draft_tracks d GROUP BY d.media_id;
+    `,
+  },
 ];

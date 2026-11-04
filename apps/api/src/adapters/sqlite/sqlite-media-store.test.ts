@@ -127,6 +127,7 @@ describe('SqliteMediaStore catalog', () => {
     store.completeTranscode({
       transcribeJobId: crypto.randomUUID(),
       silencesJobId: crypto.randomUUID(),
+      waveformJobId: crypto.randomUUID(),
       ...owner(job),
       durationMs: 1_000,
       now: at(5),
@@ -228,6 +229,7 @@ describe('SqliteMediaStore queue', () => {
       store.completeTranscode({
         transcribeJobId: crypto.randomUUID(),
         silencesJobId: crypto.randomUUID(),
+        waveformJobId: crypto.randomUUID(),
         ...stranger,
         durationMs: 1,
         now: at(1),
@@ -252,6 +254,7 @@ describe('SqliteMediaStore queue', () => {
       store.completeTranscode({
         transcribeJobId: crypto.randomUUID(),
         silencesJobId: crypto.randomUUID(),
+        waveformJobId: crypto.randomUUID(),
         ...owner(job),
         durationMs: 180_000,
         now: at(30),
@@ -358,6 +361,7 @@ describe('SqliteMediaStore queue', () => {
       store.completeTranscode({
         transcribeJobId: crypto.randomUUID(),
         silencesJobId: crypto.randomUUID(),
+        waveformJobId: crypto.randomUUID(),
         ...owner(stale),
         durationMs: 1,
         now: at(63),

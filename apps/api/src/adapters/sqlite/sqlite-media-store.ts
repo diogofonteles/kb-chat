@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
   SILENCE_DETECTOR,
+  WAVEFORM,
   mediaFailureSchema,
   mediaJobKindSchema,
   mediaKindSchema,
@@ -341,6 +342,13 @@ export class SqliteMediaStore implements MediaStorePort {
         at,
         detectorVersion: SILENCE_DETECTOR.version,
       });
+      this.insertJob({
+        id: result.waveformJobId,
+        mediaId: result.rendition.mediaId,
+        kind: 'waveform',
+        at,
+        detectorVersion: WAVEFORM.version,
+      });
       return true;
     });
   }
@@ -456,7 +464,7 @@ export class SqliteMediaStore implements MediaStorePort {
     mediaId: string;
     kind: MediaJobKind;
     at: string;
-    /** A silences job's detector version (KBC-044); null for the other kinds. */
+    /** A silences or waveform job's parameter set; null for the other kinds. */
     detectorVersion?: number;
   }): void {
     this.db

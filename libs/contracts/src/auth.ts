@@ -13,8 +13,9 @@ import { topicSlugSchema } from './topics.js';
  * a collection (KBC-009), keep their own AI settings and keys, listen to the media of the
  * collections they see and upload audio to them (KBC-034), create collections and
  * sub-collections (KBC-048), edit recordings (`media-edit`), ask the app's AI to propose
- * their tracks (`media-edit-ai`, KBC-067, ADR 0029 §9), use the media library (KBC-051) and
- * see who speaks in a recording (`media-speakers`, KBC-065). Every feature is granted per
+ * their tracks (`media-edit-ai`, KBC-067, ADR 0029 §9), use the media library (KBC-051),
+ * see who speaks in a recording (`media-speakers`, KBC-065) and navigate a recording by its
+ * approved tracks (`media-tracks`, KBC-066). Every feature is granted per
  * person (owner's rule, 2026-10-28): a new feature never comes on for everyone by itself.
  */
 export const FEATURES = [
@@ -30,6 +31,7 @@ export const FEATURES = [
   /** "Biblioteca de mídia" (KBC-051 BR-1): needs `media` as well. */
   'media-library',
   'media-speakers',
+  'media-tracks',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;

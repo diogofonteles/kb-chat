@@ -1,0 +1,84 @@
+<div class="proposals" role="status">
+  @if (running()) {
+    <p i18n="@@tracks.ai.running">
+      Propondo… janela {{ run()?.windowsDone }} de {{ run()?.windowsTotal }}
+    </p>
+  } @else if (estimate(); as shown) {
+    @if (refusal()) {
+      <p class="refusal">{{ refusal() }}</p>
+    } @else {
+      <p i18n="@@tracks.ai.estimate">Custa cerca de {{ estimateText() }}.</p>
+    }
+    @if (month()) {
+      <p class="hint">{{ month() }}</p>
+    }
+    <div class="buttons">
+      @if (shown.allowed) {
+        <button
+          type="button"
+          class="secondary"
+          [disabled]="busy() || blocked()"
+          (click)="confirm()"
+          i18n="@@tracks.ai.confirm"
+        >
+          Confirmar e propor
+        </button>
+      }
+      <button
+        type="button"
+        class="secondary"
+        (click)="cancel()"
+        i18n="@@tracks.ai.cancel"
+      >
+        Cancelar
+      </button>
+    </div>
+  } @else {
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="busy() || blocked()"
+      (click)="askEstimate()"
+      i18n="@@tracks.ai.propose"
+    >
+      Propor faixas com IA
+    </button>
+    @if (cost()) {
+      <p class="hint" i18n="@@tracks.ai.cost">Custou {{ cost() }}</p>
+    }
+    @if (failed()) {
+      <p class="refusal" i18n="@@tracks.ai.failed">Não foi possível propor.</p>
+    }
+  }
+  @if (error()) {
+    <p class="refusal">{{ error() }}</p>
+  }
+</div>
+@if (pending().length && separation() !== null) {
+  <ul class="suggestions">
+    @for (suggestion of pending(); track suggestion.voice) {
+      <li>
+        <span>
+          <strong i18n="@@tracks.ai.voice">Voz {{ suggestion.voice }}:</strong
+          >&ngsp;
+          @if (suggestion.audience) {
+            <ng-container i18n="@@tracks.ai.audience"
+              >Pergunta da plateia</ng-container
+            >
+          } @else {
+            {{ suggestion.name }}
+          }
+          {{ ' ' }}<span class="hint">({{ suggestion.reason }})</span>
+        </span>
+        <button
+          type="button"
+          class="secondary"
+          (click)="accept(suggestion)"
+          i18n="@@tracks.ai.accept"
+        >
+          Aceitar
+        </button>
+      </li>
+    }
+  </ul>
+}

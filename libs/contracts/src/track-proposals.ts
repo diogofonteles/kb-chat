@@ -15,6 +15,9 @@ export type TrackKind = z.infer<typeof trackKindSchema>;
 /** Longest proposed title kept (KBC-067 BR-4); a longer one is dropped for the person to write. */
 export const PROPOSED_TITLE_MAX = 80;
 
+/** Longest title a person may give a track (KBC-066 BR-5). */
+export const TRACK_TITLE_MAX = 120;
+
 /** Shortest track (ADR 0029 §4, KBC-066 BR-4). */
 export const MIN_TRACK_MS = 5_000;
 
@@ -32,16 +35,19 @@ export const draftTrackSchema = z.object({
   source: draftTrackSourceSchema,
   /** A person moved or renamed it: a new run leaves it alone (BR-6). */
   edited: z.boolean(),
-  /** First and last segment (1-based, of the transcript the run read). */
-  firstSegment: z.number().int().min(1),
-  lastSegment: z.number().int().min(1),
+  /** First and last segment (1-based, of the transcript the run read); null for a person's. */
+  firstSegment: z.number().int().min(1).nullable(),
+  lastSegment: z.number().int().min(1).nullable(),
   startMs: z.number().int().nonnegative(),
   endMs: z.number().int().positive(),
   kind: trackKindSchema,
   /** Null when the AI's title was refused (BR-4): the person writes one. */
-  title: z.string().min(1).max(PROPOSED_TITLE_MAX).nullable(),
+  title: z.string().min(1).max(TRACK_TITLE_MAX).nullable(),
   askerVoice: voiceSchema.nullable(),
   answererVoice: voiceSchema.nullable(),
+  /** The speaker a person chose (KBC-066); wins over the voice's name. */
+  askerSpeakerId: z.uuid().nullable(),
+  answererSpeakerId: z.uuid().nullable(),
 });
 export type DraftTrack = z.infer<typeof draftTrackSchema>;
 
@@ -119,6 +125,8 @@ export type ProposalEstimate = z.infer<typeof proposalEstimateSchema>;
 export const draftTracksSchema = z.object({
   /** The run whose proposals are shown (the newest that did not fail); null before one. */
   run: proposalRunSchema.nullable(),
+  /** Why the newest run failed; null once a later one runs or ends well (FR-5). */
+  lastFailure: proposalFailureSchema.nullable(),
   tracks: z.array(draftTrackSchema),
   voices: z.array(voiceSuggestionSchema),
 });

@@ -48,7 +48,7 @@ export interface TranscriberServiceDeps {
 const TRANSCRIBER_KINDS: readonly MediaJobKind[] = ['transcribe'];
 const VM_WORKER: WorkerIdentity = {
   leaseName: null,
-  kinds: ['transcode', 'silences'],
+  kinds: ['transcode', 'silences', 'waveform'],
 };
 const TOKEN_PREFIX = 'nat_';
 /** At most one "seen" write per transcriber in this window. */

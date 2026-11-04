@@ -17,4 +17,5 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
   'media-library': () => $localize`:@@feature.mediaLibrary:Biblioteca de mídia`,
   'media-speakers': () =>
     $localize`:@@feature.mediaSpeakers:Ver quem fala na transcrição`,
+  'media-tracks': () => $localize`:@@feature.mediaTracks:Navegar por faixas`,
 };

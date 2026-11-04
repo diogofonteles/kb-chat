@@ -1,0 +1,241 @@
+:host {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.overview {
+  position: relative;
+  height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+/* Who made it never by color alone (UP-20): a dashed border is a proposal. */
+.block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 3px;
+  padding: 0;
+  border: 2px solid var(--color-text-muted);
+  border-radius: 3px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-xs, 0.75rem);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.block.proposed {
+  border-style: dashed;
+}
+
+.block.active {
+  border-color: var(--color-accent);
+  background: var(--color-mark);
+  font-weight: 600;
+}
+
+.window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1px solid var(--color-focus);
+  pointer-events: none;
+}
+
+.detail {
+  position: relative;
+  height: 200px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+  touch-action: pan-y;
+  user-select: none;
+  contain: layout paint;
+  container-type: inline-size;
+}
+
+.detail:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.wave {
+  position: absolute;
+  inset: 0 0 48px;
+  width: 100%;
+  height: calc(100% - 48px);
+  color: var(--color-text-muted);
+}
+
+.region {
+  position: absolute;
+  top: 0;
+  bottom: 48px;
+  border-inline: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-muted) 55%, transparent);
+  opacity: 0.6;
+}
+
+.region.proposed {
+  border-inline-style: dashed;
+}
+
+.region.active {
+  background: color-mix(in srgb, var(--color-mark) 55%, transparent);
+  opacity: 1;
+}
+
+.region-number {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.tick {
+  position: absolute;
+  bottom: 48px;
+  width: 1px;
+  height: 10px;
+  background: var(--color-focus);
+}
+
+.cursor,
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 48px;
+  width: 1px;
+  background: var(--color-focus);
+  pointer-events: none;
+}
+
+.playhead {
+  width: 2px;
+  background: var(--color-accent);
+}
+
+/*
+ * 48 × 48 of touch around a thin line (MA-01, MA-06). The detail clips what leaves it, so at
+ * its edges the target stays whole and the line moves inside it: --line is where the line is
+ * in the target.
+ */
+.handle {
+  --x: calc(var(--at) * 1cqw);
+  --left: calc(var(--x) - 24px);
+  --line: 24px;
+  position: absolute;
+  top: 0;
+  bottom: 48px;
+  left: var(--left);
+  width: 48px;
+  min-height: 48px;
+  cursor: ew-resize;
+  touch-action: none;
+  will-change: left;
+}
+
+.handle.in-view {
+  --left: clamp(0px, calc(var(--x) - 24px), calc(100cqw - 48px));
+  --line: calc(var(--x) - var(--left));
+}
+
+.handle::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--line);
+  width: 3px;
+  background: var(--color-accent);
+  transform: translateX(-50%);
+  content: '';
+}
+
+/* The grip: start and end differ by shape, not only by place. */
+.handle::after {
+  position: absolute;
+  top: 50%;
+  left: clamp(9px, var(--line), 39px);
+  width: 14px;
+  height: 28px;
+  border: 2px solid var(--color-on-accent);
+  background: var(--color-accent);
+  transform: translate(-50%, -50%);
+  content: '';
+}
+
+.handle.start::after {
+  border-radius: 8px 2px 2px 8px;
+}
+
+.handle.end::after {
+  border-radius: 2px 8px 8px 2px;
+}
+
+.handle:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: -3px;
+}
+
+.tag {
+  position: absolute;
+  top: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.words {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 48px;
+  border-top: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.word {
+  position: absolute;
+  top: 4px;
+  padding-inline: 2px;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.word.lower {
+  top: 24px;
+}
+
+.stop,
+.hint {
+  min-height: 1.25em;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.stop {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .region {
+    transition: opacity 120ms ease;
+  }
+}

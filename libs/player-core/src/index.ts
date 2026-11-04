@@ -10,3 +10,4 @@ export * from './silence-skip.js';
 export * from './cues.js';
 export * from './transcript-search.js';
 export * from './minute-link.js';
+export * from './track-editing.js';

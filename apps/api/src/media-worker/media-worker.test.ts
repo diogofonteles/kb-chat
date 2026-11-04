@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { WorkerJob } from '@kb-chat/contracts';
+import type { WaveformJob, WorkerJob } from '@kb-chat/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ffmpegBins, makeLongWav, makeTone } from '../../test/media-tools.js';
 import { createLogger } from '../logger.js';
@@ -39,6 +39,10 @@ function fakeApi(overrides: Partial<MediaJobsApi> = {}) {
     },
     completeSilences: async (_job, done) => {
       told.push(`silences:${done.intervals.length}`);
+      return true;
+    },
+    completeWaveform: async (_job, done) => {
+      told.push(`waveform:${done.peaks.length}`);
       return true;
     },
     fail: async (_job, failure) => {
@@ -92,6 +96,40 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
       new AbortController().signal,
     );
     expect(lines.join('')).toContain('could not report the failure');
+  });
+
+  const aWaveformJob = (): WaveformJob => ({
+    id: 'job-w',
+    leaseId: 'lease-w',
+    kind: 'waveform',
+    mediaId: 'media-1',
+    attempt: 1,
+    sourcePath: 'tone.mp3',
+    leaseMs: 60_000,
+    version: 1,
+    peaksPerSecond: 10,
+  });
+
+  it('measures the peaks of a waveform job (KBC-066)', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 1);
+    const { api, told } = fakeApi();
+    await workerWith(api).process(aWaveformJob(), new AbortController().signal);
+    expect(told).toHaveLength(1);
+    expect(told[0]).toMatch(/^waveform:\d+$/);
+  });
+
+  it('reports a waveform it could not measure, so the queue tries again', async () => {
+    const { api, told } = fakeApi();
+    await workerWith(api).process(aWaveformJob(), new AbortController().signal);
+    expect(told).toEqual(['fail:invalid-audio']);
+  });
+
+  it('drops the peaks when the lease was lost', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 1);
+    const { api, told } = fakeApi({ completeWaveform: async () => false });
+    await workerWith(api).process(aWaveformJob(), new AbortController().signal);
+    expect(told).toEqual([]);
+    expect(lines.join('')).toContain('lease lost before completion');
   });
 
   it('drops the result when the API says the lease was lost at completion', async () => {

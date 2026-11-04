@@ -210,3 +210,20 @@
 .edit {
   margin-top: var(--space-3);
 }
+
+/* The way into T20 (KBC-066). */
+.edit-entry {
+  margin: 0;
+}
+
+.edit-entry a:not(.secondary) {
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+.edit-entry .secondary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  text-decoration: none;
+}

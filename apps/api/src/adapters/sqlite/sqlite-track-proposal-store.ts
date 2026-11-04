@@ -57,14 +57,16 @@ function toTrack(row: Row): DraftTrack {
     runId: textOrNull(row, 'run_id'),
     source: draftTrackSourceSchema.parse(row['source']),
     edited: row['edited'] === 1,
-    firstSegment: Number(row['first_segment']),
-    lastSegment: Number(row['last_segment']),
+    firstSegment: numberOrNull(row, 'first_segment'),
+    lastSegment: numberOrNull(row, 'last_segment'),
     startMs: Number(row['start_ms']),
     endMs: Number(row['end_ms']),
     kind: trackKindSchema.parse(row['kind']),
     title: textOrNull(row, 'title'),
     askerVoice: numberOrNull(row, 'asker_voice'),
     answererVoice: numberOrNull(row, 'answerer_voice'),
+    askerSpeakerId: textOrNull(row, 'asker_speaker_id'),
+    answererSpeakerId: textOrNull(row, 'answerer_speaker_id'),
   };
 }
 
@@ -131,6 +133,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       for (const track of input.tracks)
         this.insertTrack({ runId: input.runId, mediaId, track });
       for (const voice of input.voices) this.upsertVoice(input.runId, voice);
+      this.bumpEdit(mediaId, input.runId);
       this.db
         .prepare(
           `UPDATE media_proposal_runs SET windows_done = windows_done + 1, spent_usd = ?
@@ -171,6 +174,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     if (mediaId === null) return;
     if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
     else this.dropRunOutput(input.runId);
+    this.bumpEdit(mediaId, input.runId);
     this.db
       .prepare(
         `UPDATE media_proposal_runs SET status = ?, failure = ?, spent_usd = ?,
@@ -240,7 +244,27 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       )
       .all(run?.id ?? null)
       .map(toVoice);
-    return { run, tracks, voices };
+    return { run, lastFailure: this.lastFailure(mediaId), tracks, voices };
+  }
+
+  /** The newest run, failed or not, decides: a later one clears the failure (FR-5). */
+  private lastFailure(mediaId: string): ProposalFailure | null {
+    const row = this.db
+      .prepare(
+        `SELECT r.status, r.failure FROM media_proposal_runs r WHERE r.media_id = ?
+         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1`,
+      )
+      .get(mediaId);
+    return row?.['status'] === 'failed'
+      ? proposalFailureSchema.parse(row['failure'])
+      : null;
+  }
+
+  isApproved(mediaId: string): boolean {
+    const row = this.db
+      .prepare('SELECT status FROM media_edits WHERE media_id = ?')
+      .get(mediaId);
+    return row?.['status'] === 'approved';
   }
 
   interruptRunning(now: Date): InterruptedRun[] {
@@ -263,6 +287,25 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         now,
       });
     return runs;
+  }
+
+  /**
+   * A proposal changed the draft: a person's older read must not overwrite it (KBC-066). A
+   * draft born here is based on the transcript the run read (BR-10).
+   */
+  private bumpEdit(mediaId: string, runId: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_edits (media_id, version, status, step, transcript_version,
+           updated_at)
+         VALUES (?, 1, 'draft', 3, (
+           SELECT t.version FROM transcripts t
+           JOIN media_proposal_runs r ON r.transcript_id = t.id WHERE r.id = ?), ?)
+         ON CONFLICT (media_id) DO UPDATE SET version = version + 1,
+           transcript_version = coalesce(media_edits.transcript_version,
+             excluded.transcript_version)`,
+      )
+      .run(mediaId, runId, new Date().toISOString());
   }
 
   private mediaOf(runId: string): string {

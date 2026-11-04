@@ -102,3 +102,13 @@
     border: 1px solid CanvasText;
   }
 }
+
+/* The start of a track: a tall tick across the rail (KBC-066). */
+.track-mark {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 18px;
+  background: var(--color-text-muted);
+  transform: translate(-50%, -50%);
+}

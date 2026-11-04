@@ -4,15 +4,17 @@ import {
   vmWorkerJobSchema,
   type CompleteSilencesRequest,
   type CompleteTranscodeRequest,
+  type CompleteWaveformRequest,
   type FailJobRequest,
   type SilencesJob,
   type VmWorkerJob,
+  type WaveformJob,
   type WorkerJob,
 } from '@kb-chat/contracts';
 
 /** What the worker loop needs from the API (ADR 0022 §3); a fake stands in for tests. */
 export interface MediaJobsApi {
-  /** The oldest conversion or silences job (KBC-044), or null when there is none. */
+  /** The oldest conversion, silences or waveform job, or null when there is none. */
   lease(): Promise<VmWorkerJob | null>;
   /** False when the lease is no longer this worker's (409): drop the work. */
   heartbeat(job: VmWorkerJob, progress: number | null): Promise<boolean>;
@@ -24,6 +26,11 @@ export interface MediaJobsApi {
   completeSilences(
     job: SilencesJob,
     done: Omit<CompleteSilencesRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean>;
+  /** The peaks of a waveform job (KBC-066). */
+  completeWaveform(
+    job: WaveformJob,
+    done: Omit<CompleteWaveformRequest, 'worker' | 'leaseId'>,
   ): Promise<boolean>;
   fail(
     job: VmWorkerJob,
@@ -55,7 +62,7 @@ export class HttpMediaJobsApi implements MediaJobsApi {
   async lease(): Promise<VmWorkerJob | null> {
     const response = await this.post('/api/v1/media-worker/jobs/lease', {
       worker: this.options.worker,
-      kinds: ['transcode', 'silences'],
+      kinds: ['transcode', 'silences', 'waveform'],
     });
     if (response.status === 204) return null;
     if (!response.ok) throw await this.failure(response);
@@ -78,6 +85,13 @@ export class HttpMediaJobsApi implements MediaJobsApi {
     done: Omit<CompleteSilencesRequest, 'worker' | 'leaseId'>,
   ): Promise<boolean> {
     return this.onJob(job, 'silences', done);
+  }
+
+  completeWaveform(
+    job: WaveformJob,
+    done: Omit<CompleteWaveformRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean> {
+    return this.onJob(job, 'waveform', done);
   }
 
   fail(

@@ -297,14 +297,16 @@ export function hasAcceptedAudioExtension(fileName: string): boolean {
 
 /**
  * Converting for the browser and measuring its silences (VM worker, KBC-044),
- * transcribing (a paired transcriber, ADR 0023) and separating the voices of a transcribed
- * recording (a paired transcriber, ADR 0029 §1).
+ * transcribing (a paired transcriber, ADR 0023), separating the voices of a transcribed
+ * recording (a paired transcriber, ADR 0029 §1) and computing its waveform peaks (VM worker,
+ * ADR 0029 §4).
  */
 export const MEDIA_JOB_KINDS = [
   'transcode',
   'transcribe',
   'silences',
   'diarize',
+  'waveform',
 ] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;
@@ -430,10 +432,30 @@ export const silencesJobSchema = z.object({
 });
 export type SilencesJob = z.infer<typeof silencesJobSchema>;
 
-/** The jobs the VM worker leases: conversions and silence maps. */
+/**
+ * How the worker measures a waveform (KBC-066): the loudest sample of every 100 ms as one
+ * byte. The version names this set: a waveform of an older one is measured again.
+ */
+export const WAVEFORM = { version: 1, peaksPerSecond: 10 } as const;
+
+/** The longest recording's peaks in base64 (12 h at 10 per second, 4 chars per 3 bytes). */
+export const MAX_WAVEFORM_BASE64 = 576_000;
+
+/** A leased waveform job (VM worker): measure the audio rendition at `sourcePath`. */
+export const waveformJobSchema = silencesJobSchema
+  .omit({ detector: true })
+  .extend({
+    kind: z.literal('waveform'),
+    version: z.number().int().min(1),
+    peaksPerSecond: z.number().int().min(1),
+  });
+export type WaveformJob = z.infer<typeof waveformJobSchema>;
+
+/** The jobs the VM worker leases: conversions, silence maps and waveforms. */
 export const vmWorkerJobSchema = z.discriminatedUnion('kind', [
   workerJobSchema,
   silencesJobSchema,
+  waveformJobSchema,
 ]);
 export type VmWorkerJob = z.infer<typeof vmWorkerJobSchema>;
 
@@ -448,6 +470,27 @@ export const completeSilencesRequestSchema = leaseOwnerSchema.extend({
 export type CompleteSilencesRequest = z.infer<
   typeof completeSilencesRequestSchema
 >;
+
+const peaksSchema = z.base64().max(MAX_WAVEFORM_BASE64);
+
+/** POST /api/v1/media-worker/jobs/:id/waveform: one byte per peak, in base64. */
+export const completeWaveformRequestSchema = leaseOwnerSchema.extend({
+  version: z.number().int().min(1),
+  peaks: peaksSchema,
+  /** Wall time on the worker (NFR-2: ≤ 20 s per hour of audio). */
+  elapsedMs: z.number().int().min(0),
+});
+export type CompleteWaveformRequest = z.infer<
+  typeof completeWaveformRequestSchema
+>;
+
+/** GET /api/v1/media/:id/waveform (for whoever may listen): the peaks, empty until measured. */
+export const mediaWaveformSchema = z.object({
+  status: z.enum(['pending', 'ready', 'failed']),
+  peaksPerSecond: z.number().int().min(1),
+  peaks: peaksSchema,
+});
+export type MediaWaveform = z.infer<typeof mediaWaveformSchema>;
 
 /**
  * Whether a media item's silence map exists: still to be measured (FR-1: after the
@@ -489,6 +532,7 @@ export const leasedJobSchema = z.union([
   transcribeJobSchema,
   silencesJobSchema,
   diarizeJobSchema,
+  waveformJobSchema,
 ]);
 export type LeasedWorkerJob = z.infer<typeof leasedJobSchema>;
 

@@ -21,8 +21,14 @@ import {
   toSignal,
 } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
+  ActivatedRoute,
+  Router,
+  RouterLink,
+  type ParamMap,
+} from '@angular/router';
+import {
+  mediaEditSchema,
   mediaItemSchema,
   mediaTranscriptSchema,
   type MediaItem,
@@ -48,6 +54,8 @@ import {
   mediaUrl,
 } from '@core/media/media-api.js';
 import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
+import { TracksStore } from '@core/media/tracks-store.js';
+import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import {
   EMPTY,
@@ -74,6 +82,7 @@ import { cuesWithSpeakers } from './voices/speaker-names.js';
 import { VoicesPanel } from './voices/voices-panel.js';
 import { PlayerShortcuts } from './player/player-shortcuts.js';
 import { TranscriptPanel } from './transcript/transcript-panel.js';
+import { TrackNavList } from './tracks/track-nav-list.js';
 
 /**
  * One media item (screens.md T15): its title, authorship and length, and the player once
@@ -92,6 +101,7 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
     EditMediaDialog,
     TranscriptPanel,
     VoicesPanel,
+    TrackNavList,
   ],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
@@ -116,6 +126,7 @@ export class MediaPlayerPage {
   protected readonly editLabel = editDetailsLabel();
   protected readonly editing = signal(false);
   protected readonly announcement = signal('');
+  private readonly tracks = inject(TracksStore);
   private readonly id = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('id') ?? '')),
     { initialValue: '' },
@@ -125,6 +136,12 @@ export class MediaPlayerPage {
     this.route.queryParamMap.pipe(
       map((params) => startFromParam(params.get('t'))),
     ),
+    { initialValue: null },
+  );
+
+  /** `?track=3`: opens at that track's start (KBC-066 FR-9). */
+  private readonly askedTrack = toSignal(
+    this.route.queryParamMap.pipe(map((params) => trackFromParam(params))),
     { initialValue: null },
   );
 
@@ -140,6 +157,30 @@ export class MediaPlayerPage {
   protected readonly canEdit = computed(
     () => this.session.me() !== null && this.session.can('media-edit'),
   );
+  /** Where the preparation is, for whoever edits (T20, AC-17). */
+  private readonly edit = httpResource(
+    () =>
+      this.canEdit() && this.ready() ? mediaEditUrl(this.id()) : undefined,
+    { parse: (body) => mediaEditSchema.parse(body) },
+  );
+  protected readonly editLink = computed(() => editPagePath(this.id()));
+  /** What the entry to T20 says: nothing until the edit is known. */
+  protected readonly editEntry = computed(() => {
+    if (!this.edit.hasValue()) return null;
+    const { started, status, step, approvedTracks } = this.edit.value();
+    if (status === 'approved')
+      return { state: 'approved' as const, step, tracks: approvedTracks };
+    if (started) return { state: 'paused' as const, step };
+    // Dividing goes by the words: a new edit starts from a transcribed recording (T20).
+    return this.hasTranscript() ? { state: 'new' as const, step } : null;
+  });
+  protected readonly appliedText = computed(() => {
+    const entry = this.editEntry();
+    const count = entry?.state === 'approved' ? entry.tracks : 0;
+    return count === 1
+      ? $localize`:@@tracks.entry.appliedOne:1 faixa aplicada`
+      : $localize`:@@tracks.entry.applied:${count}:count: faixas aplicadas`;
+  });
   /** Who speaks is for `media-speakers`, and for whoever names the voices (KBC-065 BR-4). */
   protected readonly canSeeSpeakers = computed(
     () =>
@@ -251,6 +292,7 @@ export class MediaPlayerPage {
   private readonly pollMs = inject(MEDIA_POLL_MS);
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly document = inject(DOCUMENT);
   /** Opened from "Meus marcadores": plays from that bookmark (KBC-042 FR-5). */
   private playFrom = playFromOf(
@@ -268,14 +310,14 @@ export class MediaPlayerPage {
         distinctUntilChanged((a, b) => a.id === b.id),
         takeUntilDestroyed(),
       )
-      .subscribe((media) => this.open(media));
+      .subscribe((media) => this.openWithTracks(media));
     this.pollWhileConverting();
     this.checkItemOnPlaybackError();
     // The lock screen and the status region follow the engine from now on (FR-7, FR-10).
     inject(MediaSessionAdapter);
     inject(PlayerAnnouncer);
     this.followPlayback();
-    inject(DestroyRef).onDestroy(() => {
+    this.destroyRef.onDestroy(() => {
       // Playing, it goes on in the mini-player; paused, leaving closes it (FR-8).
       if (!this.engine.playing() && !this.engine.busy()) this.engine.unload();
     });
@@ -391,14 +433,26 @@ export class MediaPlayerPage {
     this.item.reload();
   }
 
+  /** The tracks come first when the link names one; else they never hold the player. */
+  private openWithTracks(media: MediaItem): void {
+    const asked = this.askedTrack();
+    if (asked === null) this.open(media);
+    this.tracks
+      .load(media.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((tracks) => {
+        if (asked !== null) this.open(media, tracks[asked - 1]?.startMs);
+      });
+  }
+
   /**
    * Loads the media paused at the saved position (this browser's unsent one when no other
    * device saved since, FR-3). Coming back from the mini-player keeps what plays.
    */
-  private open(media: MediaItem): void {
+  private open(media: MediaItem, trackStartMs?: number): void {
     const playFrom = this.playFrom;
     this.playFrom = null;
-    const startAt = this.startAt();
+    const startAt = trackStartMs ?? this.startAt();
     if (this.engine.source()?.id === media.id) {
       if (playFrom !== null) this.playAt(playFrom);
       else if (startAt !== null) this.engine.seek(startAt);
@@ -437,6 +491,12 @@ export class MediaPlayerPage {
       artist: media.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
     };
   }
+}
+
+/** The track a link names, 1-based; null without a usable `?track=`. */
+function trackFromParam(params: ParamMap): number | null {
+  const track = Number(params.get('track'));
+  return Number.isInteger(track) && track >= 1 ? track : null;
 }
 
 /** A bookmark's position from the navigation state, when it is one. */

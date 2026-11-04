@@ -31,6 +31,7 @@ import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
 import { BookmarksStore } from '@core/media/bookmarks-store.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { TracksStore } from '@core/media/tracks-store.js';
 import { mediaPagePath } from '@core/media/media-api.js';
 import { PlaybackClock } from '@core/media/playback-clock.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
@@ -124,6 +125,11 @@ export class MediaPlayer {
     () => this.operable() && this.bookmarks.mediaId() !== null,
   );
   protected readonly playback = this.engine.playback;
+  /** The approved tracks (KBC-066 FR-9): none without `media-tracks`. */
+  protected readonly tracks = inject(TracksStore);
+  protected readonly trackStarts = computed(() =>
+    this.tracks.tracks().map((track) => track.startMs),
+  );
   /** The volume control exists only where the page may set the volume (FR-9). */
   private readonly volumeAnswer = toSignal(from(inject(VOLUME_SUPPORT)));
   protected readonly volumeSupported = computed(

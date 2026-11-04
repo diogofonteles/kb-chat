@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   SILENCE_DETECTOR,
+  WAVEFORM,
   type CompleteTranscodeRequest,
   type FailJobRequest,
   type HeartbeatRequest,
@@ -66,6 +67,7 @@ export class WorkerService {
     });
     if (!job) return null;
     if (job.kind === 'silences') return this.silencesJob(job);
+    if (job.kind === 'waveform') return this.waveformJob(job);
     if (job.kind === 'diarize') return this.diarizeJob(job);
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
@@ -91,6 +93,18 @@ export class WorkerService {
       leaseMs: JOB_LEASE_MS,
       sourcePath: rendition?.path ?? this.deps.files.audioPath(job.mediaId),
       detector: SILENCE_DETECTOR,
+    };
+  }
+
+  /** Measuring the peaks of the audio rendition on the shared disk (KBC-066). */
+  private waveformJob(job: LeasedJob): LeasedWorkerJob {
+    const rendition = this.deps.store.getRendition(job.mediaId);
+    return {
+      ...withoutHint(job),
+      kind: 'waveform',
+      leaseMs: JOB_LEASE_MS,
+      sourcePath: rendition?.path ?? this.deps.files.audioPath(job.mediaId),
+      ...WAVEFORM,
     };
   }
 
@@ -143,6 +157,7 @@ export class WorkerService {
       jobId,
       transcribeJobId: randomUUID(),
       silencesJobId: randomUUID(),
+      waveformJobId: randomUUID(),
       now: this.now(),
       rendition: { ...audioRendition(mediaId, path), bytes: done.bytes },
     });

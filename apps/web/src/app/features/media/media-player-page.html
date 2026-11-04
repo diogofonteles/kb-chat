@@ -94,6 +94,37 @@
           [speakersAvailable]="canSeeSpeakers()"
           [lowConfidence]="lowCaptions()"
         />
+        <app-track-nav-list />
+        @if (editEntry(); as entry) {
+          <p class="edit-entry">
+            @switch (entry.state) {
+              @case ('new') {
+                <a
+                  class="secondary"
+                  [routerLink]="editLink()"
+                  i18n="@@tracks.entry.new"
+                  >Dividir em faixas</a
+                >
+              }
+              @case ('paused') {
+                <span i18n="@@tracks.entry.paused"
+                  >Preparação parada no passo {{ entry.step }}</span
+                >
+                ·
+                <a [routerLink]="editLink()" i18n="@@tracks.entry.continue"
+                  >Continuar</a
+                >
+              }
+              @case ('approved') {
+                <span>{{ appliedText() }}</span>
+                ·
+                <a [routerLink]="editLink()" i18n="@@tracks.entry.see"
+                  >Ver edição</a
+                >
+              }
+            }
+          </p>
+        }
         @if (hasTranscript()) {
           <button
             type="button"

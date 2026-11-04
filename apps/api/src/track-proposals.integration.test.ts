@@ -149,7 +149,35 @@ describe('Track proposals over HTTP (KBC-067)', () => {
     const draft = (
       await media.owner('GET', `/api/v1/media/${item.id}/edit/draft-tracks`)
     ).json<DraftTracks>();
-    expect(draft).toEqual({ run: null, tracks: [], voices: [] });
+    expect(draft).toEqual({
+      run: null,
+      lastFailure: 'provider',
+      tracks: [],
+      voices: [],
+    });
+  });
+
+  it('says a run failed on every read, until a later run ends well (FR-5, AC-6)', async () => {
+    const { media, item } = await transcribed();
+    const read = async () =>
+      (await media.owner('GET', `/api/v1/media/${item.id}/edit`)).json();
+    media.started.fake.scripted.push(oneTrack);
+    const done = (await media.owner('POST', proposals(item.id), {})).json();
+    await finished(media, done);
+    expect((await read()).lastFailure).toBeNull();
+
+    media.started.fake.scripted.push({ status: 503 });
+    const failed = (await media.owner('POST', proposals(item.id), {})).json();
+    await finished(media, failed);
+    expect(await read()).toMatchObject({
+      lastFailure: 'provider',
+      run: { id: done.id, status: 'done' },
+    });
+
+    media.started.fake.scripted.push(oneTrack);
+    const again = (await media.owner('POST', proposals(item.id), {})).json();
+    await finished(media, again);
+    expect((await read()).lastFailure).toBeNull();
   });
 
   it('needs both features: editing alone or AI alone is 403 (AC-7, BR-2)', async () => {
@@ -177,6 +205,36 @@ describe('Track proposals over HTTP (KBC-067)', () => {
       dryRun: true,
     });
     expect(alsoRefused.statusCode).toBe(403);
+    expect(media.started.fake.chatBodies).toHaveLength(0);
+  });
+
+  it('needs `media` on every route of proposals, as every media route (ADR 0029)', async () => {
+    const { media, item } = await transcribed();
+    const runId = crypto.randomUUID();
+    const without = await member(media, {
+      email: 'sem-midia@example.com',
+      topics: ['hermetismo'],
+      features: ['media-edit', 'media-edit-ai'],
+    });
+    const estimate = await without.call('POST', proposals(item.id), {
+      dryRun: true,
+    });
+    expect(estimate.statusCode).toBe(403);
+    const run = await without.call('GET', `${proposals(item.id)}/${runId}`);
+    expect(run.statusCode).toBe(403);
+    const draftUrl = `/api/v1/media/${item.id}/edit/draft-tracks`;
+    expect((await without.call('GET', draftUrl)).statusCode).toBe(403);
+
+    const allowed = await member(media, {
+      email: 'com-midia@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-edit', 'media-edit-ai'],
+    });
+    const asked = await allowed.call('POST', proposals(item.id), {
+      dryRun: true,
+    });
+    expect(asked.statusCode).toBe(200);
+    expect((await allowed.call('GET', draftUrl)).statusCode).toBe(200);
     expect(media.started.fake.chatBodies).toHaveLength(0);
   });
 

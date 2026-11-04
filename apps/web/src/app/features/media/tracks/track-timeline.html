@@ -1,0 +1,118 @@
+<div
+  class="overview"
+  role="group"
+  aria-label="Visão geral da gravação"
+  i18n-aria-label="@@tracks.overview"
+>
+  @for (block of blocks(); track block.id) {
+    <button
+      type="button"
+      class="block"
+      tabindex="-1"
+      data-testid="overview-block"
+      [class.proposed]="block.proposed"
+      [class.active]="block.active"
+      [style.left.%]="block.left"
+      [style.width.%]="block.width"
+      (click)="chooseBlock(block.id)"
+    >
+      @if (block.numbered) {
+        <span class="number">{{ block.ordinal }}</span>
+      }
+    </button>
+  }
+  <span
+    class="window"
+    aria-hidden="true"
+    [style.left.%]="overviewWindow().left"
+    [style.width.%]="overviewWindow().width"
+  ></span>
+</div>
+
+<div
+  #detail
+  class="detail"
+  role="group"
+  tabindex="0"
+  aria-label="Detalhe da faixa. As setas movem o cursor."
+  i18n-aria-label="@@tracks.detail"
+  data-testid="track-detail"
+  (click)="placeCursor($event)"
+  (keydown)="cursorKey($event)"
+  (pointerdown)="touch($event)"
+  (pointermove)="touchMove($event)"
+  (pointerup)="touchEnd($event)"
+  (pointercancel)="touchEnd($event)"
+>
+  <canvas #wave class="wave" aria-hidden="true"></canvas>
+  @for (block of detailBlocks(); track block.id) {
+    <span
+      class="region"
+      aria-hidden="true"
+      [attr.data-track]="block.id"
+      [class.active]="block.active"
+      [class.proposed]="block.proposed"
+      [style.left.%]="block.left"
+      [style.right.%]="block.rightGap"
+    >
+      <span class="region-number">{{ block.ordinal }}</span>
+    </span>
+  }
+  @for (tick of ticks(); track $index) {
+    <span class="tick" aria-hidden="true" [style.left.%]="tick"></span>
+  }
+  <span class="cursor" aria-hidden="true" [style.left.%]="cursor()"></span>
+  @if (playhead(); as at) {
+    <span
+      class="playhead"
+      aria-hidden="true"
+      data-testid="playhead"
+      [style.left.%]="at"
+    ></span>
+  }
+  @for (handle of handles(); track handle.edge) {
+    <div
+      class="handle"
+      role="slider"
+      tabindex="0"
+      [class.start]="handle.edge === 'start'"
+      [class.end]="handle.edge === 'end'"
+      [class.in-view]="handle.inView"
+      [attr.aria-label]="handle.name"
+      [attr.aria-valuemin]="handle.min"
+      [attr.aria-valuemax]="handle.max"
+      [attr.aria-valuenow]="handle.now"
+      [attr.aria-valuetext]="handle.text"
+      [style.--at]="handle.left"
+      (click)="$event.stopPropagation()"
+      (focus)="focusEdge(handle.edge)"
+      (keydown)="keydown($event, handle.edge)"
+      (pointerdown)="grab($event, handle.edge)"
+      (pointermove)="dragMove($event)"
+      (pointerup)="release($event)"
+      (pointercancel)="cancelDrag()"
+    ></div>
+  }
+  @if (tag(); as shown) {
+    <span class="tag" aria-hidden="true" [style.left.%]="shown.left">{{
+      shown.text
+    }}</span>
+  }
+  <div class="words" aria-hidden="true">
+    @for (word of visibleWords() ?? []; track word.key) {
+      <span
+        class="word"
+        [class.lower]="word.row === 1"
+        [style.left.%]="word.left"
+        (click)="placeAtWord($event, word.from)"
+        >{{ word.text }}</span
+      >
+    }
+  </div>
+</div>
+<p class="stop" aria-live="polite">{{ dragStop() }}</p>
+@if (visibleWords() === null) {
+  <p class="hint" i18n="@@tracks.zoomForWords">
+    Aproxime para ver as palavras.
+  </p>
+}

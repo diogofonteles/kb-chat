@@ -424,6 +424,10 @@ Os tempos usam `m:ss` abaixo de 1 h e `h:mm:ss` a partir de 1 h, em algarismos t
 - **Falantes do acervo (N)**, recolhido: lista com **Editar** para renomear e dizer qual autor o falante é.
 - **Transcrição e legenda**, para `media-speakers` ou `media-edit`: o nome na troca de falante ("✦ Mestre Gabriel", "Pergunta da plateia"); voz sem nome é "Voz N" para quem edita e "Falante não identificado" para quem só ouve. A legenda prefixa o cue: "— ✦ Mestre Gabriel: …". **Mostrar quem fala** fica no menu ⋯, ligado por padrão e lembrado neste navegador.
 
+### Faixas (KBC-066)
+- Com `media-tracks`: lista **Faixas** abaixo do player (número, título, início e duração; a atual com `aria-current` e "tocando agora"), riscos altos na barra de progresso no começo de cada faixa (os marcadores continuam pontos), o título da faixa atual entre **Faixa anterior** e **Próxima faixa** (Shift+←/→ na página; sem faixas, essas teclas seguem andando 5 s) e no lugar do título no mini-player. `?track=3` abre pausado no começo da faixa 3. Sem a permissão, nada muda.
+- Para `media-edit`: **Dividir em faixas**, ou "Preparação parada no passo 3 · Continuar", ou "12 faixas aplicadas · Ver edição", levando à T20 (`/midia/{id}/faixas`).
+
 ### Atalhos de teclado (UP-09: todos também têm botão)
 Ativos só na página do player, quando o foco está no player, na transcrição, no mini-player ou no corpo da página, e **nunca** com o foco em `input`, `textarea`, `select`, `[contenteditable]`, item de menu ou diálogo: Espaço ou K tocar/pausar · J voltar 15 s · L avançar 30 s · ←/→ 5 s · Shift+, e Shift+. diminuir/aumentar a velocidade · M silenciar · C legendas · B marcar este trecho · 0–9 ir para 0%–90% · ? lista dos atalhos. J e L seguem os pulos escolhidos (KBC-043). O diálogo "Atalhos de teclado" (com "Fechar" e Esc) tem a opção **Usar atalhos de uma tecla**, ligada por padrão e lembrada, que os desliga (WCAG 2.1.4). Os botões declaram `aria-keyshortcuts`. Um controle focado que usa uma tecla (as setas na barra de progresso e na transcrição) a consome, e o atalho global não age em dobro.
 
@@ -687,3 +691,13 @@ Todo par texto/fundo e acento/fundo deve passar 4,5:1 (AA). A verificação entr
 - **Fora:** autocomplete, histórico persistente, login, upload, edição, filas de revisão, conversa de IA multi-turno (cada "Responder com IA" é independente na R1).
 - **Precisam de teste com usuários** (`docs/research/2026-10-23-search-habit.md`): os nomes "Ligação com o tema" e "Profundidade" são entendidos? O seletor "Como buscar" é descoberto? (UP-25: o piloto com o dono acontece antes do teste com colegas.)
 - **Achado de dados:** quase todo o acervo tem profundidade 1 (3.987 de 4.235). O chip Profundidade discrimina pouco hoje. Ele fica na R1, mas vai **depois** dos outros, e a medição dirá se merece ficar (DS-22).
+
+## T20. Preparar áudio, passos 3 e 4 (KBC-066; KBC-072 traz os passos 1 e 2)
+
+Rota `/midia/{id}/faixas`. O pedido completo, com a tabela de estados, está em [`KBC-066`](../backlog/KBC-066-mark-tracks-and-play-by-track.md). Como foi construído:
+
+- **Desktop (largura útil ≥ 60rem):** indicador de passos, barra de ferramentas (Nova faixa aqui, Desfazer, Refazer, zoom, −0,5 s/+0,5 s), Propor faixas com IA, visão geral, detalhe; abaixo, a lista à esquerda e a transcrição à direita; rodapé fixo com "12 faixas · 2 com aviso" e **Aprovar faixas**.
+- **Celular:** "3/4 Validar faixas"; a mesma ordem, com "N faixas" e "Transcrição" em abas no lugar da folha que sobe (assim a lista nunca cobre as alças).
+- **Lista:** um ponto de Tab, ↑/↓ entre as linhas; campos e ações só na linha selecionada (é o que mantém 200 faixas leves e o Tab curto).
+- **Enquanto a IA propõe:** as faixas aparecem conforme cada janela termina, sem alças nem edição, até a análise acabar.
+- **Dividir aqui** usa o cursor (um clique no detalhe, numa palavra ou no tempo da transcrição); fora dos 5 s de cada lado, vai ao ponto válido mais próximo.

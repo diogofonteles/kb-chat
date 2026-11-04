@@ -11,6 +11,7 @@ import {
 } from './adapters/sqlite/sqlite-speaker-store.js';
 import { SqliteBookmarkStore } from './adapters/sqlite/sqlite-bookmark-store.js';
 import { SqliteListeningStore } from './adapters/sqlite/sqlite-listening-store.js';
+import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
 import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-ledger.js';
 import { SqliteMediaSearch } from './adapters/sqlite/sqlite-media-search.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
@@ -18,6 +19,7 @@ import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposa
 import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
+import { SqliteWaveformStore } from './adapters/sqlite/sqlite-waveform-store.js';
 import type { DiarizationStorePort } from './ports/diarization-store.js';
 import type {
   SpeakerStorePort,
@@ -26,6 +28,7 @@ import type {
 import type { BookmarkStorePort } from './ports/bookmark-store.js';
 import type { ListeningStorePort } from './ports/listening-store.js';
 import type { MediaFilesPort } from './ports/media-files.js';
+import type { MediaEditStorePort } from './ports/media-edit-store.js';
 import type { MediaSpendLedgerPort } from './ports/media-spend-ledger.js';
 import type { MediaSearchPort } from './ports/media-search.js';
 import type { MediaStorePort } from './ports/media-store.js';
@@ -33,6 +36,7 @@ import type { TrackProposalStorePort } from './ports/track-proposal-store.js';
 import type { SilenceStorePort } from './ports/silence-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
 import type { TranscriptStorePort } from './ports/transcript-store.js';
+import type { WaveformStorePort } from './ports/waveform-store.js';
 
 /** The media library's adapters and the worker token (ADR 0022). */
 export interface MediaDeps {
@@ -47,6 +51,8 @@ export interface MediaDeps {
   readonly transcribers: TranscriberStorePort;
   /** The AI's proposal runs and draft tracks (KBC-067). */
   readonly trackProposals: TrackProposalStorePort;
+  /** The draft's edit and the approved tracks (KBC-066). */
+  readonly edits: MediaEditStorePort;
   /** The media monthly spend ledger (ADR 0022 §7). */
   readonly spend: MediaSpendLedgerPort;
   /** The media AI's model and caps (KBC-067, ADR 0029). */
@@ -57,6 +63,8 @@ export interface MediaDeps {
   };
   /** Silence maps (KBC-044). */
   readonly silences: SilenceStorePort;
+  /** Waveform peaks (KBC-066). */
+  readonly waveforms: WaveformStorePort;
   /** The current transcripts' search index (KBC-039, ADR 0024). */
   readonly search: MediaSearchPort;
   /** Voice separations (KBC-064). */
@@ -115,8 +123,10 @@ type MediaStores = Pick<
   | 'transcripts'
   | 'transcribers'
   | 'trackProposals'
+  | 'edits'
   | 'spend'
   | 'silences'
+  | 'waveforms'
   | 'search'
   | 'diarizations'
   | 'speakers'
@@ -143,8 +153,10 @@ function storesOf(db: DatabaseSync): MediaStores {
     transcripts: new SqliteTranscriptStore(db),
     transcribers: new SqliteTranscriberStore(db),
     trackProposals: new SqliteTrackProposalStore(db),
+    edits: new SqliteMediaEditStore(db),
     spend: new SqliteMediaSpendLedger(db),
     silences: new SqliteSilenceStore(db),
+    waveforms: new SqliteWaveformStore(db),
     search: new SqliteMediaSearch(db),
     diarizations: new SqliteDiarizationStore(db),
     speakers: new SqliteSpeakerStore(db),

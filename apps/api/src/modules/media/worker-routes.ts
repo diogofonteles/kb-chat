@@ -5,6 +5,7 @@ import {
   completeDiarizeRequestSchema,
   completeTranscodeRequestSchema,
   completeTranscribeRequestSchema,
+  completeWaveformRequestSchema,
   failJobRequestSchema,
   heartbeatRequestSchema,
   leaseRequestSchema,
@@ -31,6 +32,7 @@ import type {
 } from './transcriber-service.js';
 import type { SilenceService } from './silence-service.js';
 import type { TranscriptionService } from './transcription-service.js';
+import type { WaveformService } from './waveform-service.js';
 import type { WorkerService } from './worker-service.js';
 
 declare module 'fastify' {
@@ -49,6 +51,8 @@ export interface WorkerRoutesDeps {
   readonly transcription: TranscriptionService;
   /** Silence maps (KBC-044). */
   readonly silences: SilenceService;
+  /** Waveforms (KBC-066). */
+  readonly waveforms: WaveformService;
   readonly diarization: DiarizationService;
 }
 
@@ -191,6 +195,7 @@ export const workerRoutes =
     registerFail(app, deps.service);
     registerTranscode(app, deps.service);
     registerSilences(app, deps);
+    registerWaveform(app, deps);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
@@ -281,6 +286,28 @@ function registerSilences(app: FastifyInstance, deps: WorkerRoutesDeps): void {
         only: 'silences',
       });
       deps.silences.complete(
+        { jobId, ...ownerOf(request, request.body) },
+        request.body,
+      );
+      return reply.code(204).send();
+    },
+  );
+}
+
+/** The peaks measured by the VM worker (KBC-066). */
+function registerWaveform(app: FastifyInstance, deps: WorkerRoutesDeps): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/media-worker/jobs/:id/waveform',
+    route(completeWaveformRequestSchema),
+    async (request, reply) => {
+      const jobId = request.params.id;
+      assertJobKind(request, {
+        jobId,
+        service: deps.service,
+        only: 'waveform',
+      });
+      deps.waveforms.complete(
         { jobId, ...ownerOf(request, request.body) },
         request.body,
       );

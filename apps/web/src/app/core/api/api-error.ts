@@ -119,6 +119,12 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.topicExists:Já existe um acervo com esse nome.`,
   MEDIA_SPEND_CAP: () =>
     $localize`:@@error.mediaSpendCap:O limite de gasto da mídia foi atingido; a análise não rodou.`,
+  EDIT_STALE: () =>
+    $localize`:@@error.editStale:Outra pessoa mudou esta edição; recarregue para ver.`,
+  EDIT_VERSION_REQUIRED: () =>
+    $localize`:@@error.editVersionRequired:Recarregue a página para continuar esta edição.`,
+  TRACKS_INVALID: () =>
+    $localize`:@@error.tracksInvalid:Há faixas com problema. Corrija e tente de novo.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

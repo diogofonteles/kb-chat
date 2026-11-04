@@ -9,6 +9,8 @@ export interface MediaJanitorDeps {
   readonly log: FastifyBaseLogger;
   /** Queues the next silence map of an older item, one at a time (KBC-044 FR-2). */
   readonly backfillSilences?: () => string | null;
+  /** Queues the next waveform of an older item, one at a time (KBC-066). */
+  readonly backfillWaveforms?: () => string | null;
   readonly now?: () => Date;
 }
 
@@ -21,7 +23,8 @@ export interface SweepResult {
 /**
  * The queue's janitor (ADR 0022 §2): jobs whose worker stopped beating go back to the
  * queue, or fail after the last attempt; uploads left unfinished for a day are dropped;
- * items without a silence map get one queued, one at a time (KBC-044 FR-2).
+ * items without a silence map (KBC-044 FR-2) or peaks (KBC-066) get one queued, one at a
+ * time.
  */
 export class MediaJanitor {
   private timer: NodeJS.Timeout | null = null;
@@ -51,6 +54,8 @@ export class MediaJanitor {
     const backfilled = this.deps.backfillSilences?.() ?? null;
     if (backfilled)
       this.deps.log.info({ mediaId: backfilled }, 'silence map queued');
+    const waveform = this.deps.backfillWaveforms?.() ?? null;
+    if (waveform) this.deps.log.info({ mediaId: waveform }, 'waveform queued');
     const result = {
       requeued: reaped.requeued,
       failed: reaped.failed,

@@ -49,6 +49,12 @@ export const API_ERROR_CODES = [
   'TOPIC_EXISTS',
   /** A media AI run would cross its own cap or the media monthly budget (KBC-067 BR-3). */
   'MEDIA_SPEND_CAP',
+  /** Someone else saved this edit first (KBC-066 FR-10). */
+  'EDIT_STALE',
+  /** A write to an edit must name the version it read (`If-Match`, KBC-066 FR-1). */
+  'EDIT_VERSION_REQUIRED',
+  /** Overlapping, too short or untitled tracks; `details.problems` points at each (KBC-066). */
+  'TRACKS_INVALID',
   'INTERNAL',
 ] as const;
 

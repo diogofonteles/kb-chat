@@ -15,6 +15,7 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { formatClock, positionToSecond } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { TracksStore } from '@core/media/tracks-store.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import { ProgressSaver } from '@core/media/progress-saver.js';
 import { SleepTimerService } from '@core/media/sleep-timer.js';
@@ -84,6 +85,8 @@ export class MiniPlayer {
   );
 
   protected readonly source = this.engine.source;
+  /** The track playing, under the recording's title (KBC-066 FR-9). */
+  protected readonly currentTrack = inject(TracksStore).current;
   /** The server no longer has what plays for this person (removed, access taken away). */
   protected readonly gone = computed(() => {
     const source = this.source();
