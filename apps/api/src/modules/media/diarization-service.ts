@@ -205,10 +205,15 @@ export class DiarizationService {
     await files.writeFile(diarization.rawPath, rawFileOf(done));
     let stored = false;
     try {
+      // Read here, with no await before the store: a name saved while the file was being
+      // written still reaches the new separation (BR-5).
       stored = diarizations.completeDiarize({
         owner,
         now: this.now(),
-        diarization,
+        diarization: {
+          ...diarization,
+          ...this.carriedNames(job.mediaId, diarization.turns),
+        },
       });
     } finally {
       if (!stored) await files.remove([diarization.rawPath]);
@@ -218,12 +223,13 @@ export class DiarizationService {
 
   /**
    * Checks the turns against the item and the job, and derives what is stored with them;
-   * more voices than the person announced is a wrong result, refused whole.
+   * more voices than the person announced is a wrong result, refused whole. The names come
+   * last, in `complete`.
    */
   private derive(
     mediaId: string,
     done: CompleteDiarizeRequest,
-  ): NewDiarization {
+  ): Omit<NewDiarization, 'labels' | 'namesPending'> {
     const { transcripts, store, files } = this.deps;
     const durationMs = store.getMedia(mediaId)?.durationMs ?? null;
     assertWithin(done, durationMs);
@@ -243,7 +249,6 @@ export class DiarizationService {
       derivationVersion: DERIVATION_VERSION,
       turns,
       ...this.voicesOfTurns(transcript.id, turns),
-      ...this.carriedNames(mediaId, turns),
     };
   }
 
