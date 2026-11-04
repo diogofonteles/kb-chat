@@ -56,14 +56,14 @@ export interface VoiceLabelStorePort {
   }): void;
   /**
    * `voice` becomes part of `into`, and whatever had joined `voice` too; `into` takes
-   * `voice`'s name when it has none.
+   * `voice`'s name when it has none, until the join is undone.
    */
   merge(input: {
     readonly diarizationId: string;
     readonly voice: number;
     readonly into: number;
   }): void;
-  /** Undoes the join of `voice`. */
+  /** Undoes the join of `voice`, and takes back the name it had lent. */
   split(input: {
     readonly diarizationId: string;
     readonly voice: number;

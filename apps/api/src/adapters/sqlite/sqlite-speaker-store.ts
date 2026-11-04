@@ -176,11 +176,14 @@ export class SqliteVoiceLabelStore implements VoiceLabelStorePort {
     inTransaction(this.db, () => {
       this.db
         .prepare(
-          `INSERT INTO media_voice_labels (diarization_id, voice, speaker_id, audience)
-           SELECT diarization_id, ?, speaker_id, audience FROM media_voice_labels
+          `INSERT INTO media_voice_labels
+             (diarization_id, voice, speaker_id, audience, name_from_join)
+           SELECT diarization_id, ?, speaker_id, audience, 1 FROM media_voice_labels
              WHERE diarization_id = ? AND voice = ?
+               AND (speaker_id IS NOT NULL OR audience = 1)
            ON CONFLICT (diarization_id, voice) DO UPDATE SET
-             speaker_id = excluded.speaker_id, audience = excluded.audience
+             speaker_id = excluded.speaker_id, audience = excluded.audience,
+             name_from_join = 1
              WHERE speaker_id IS NULL AND audience = 0`,
         )
         .run(into, diarizationId, voice);
@@ -201,12 +204,37 @@ export class SqliteVoiceLabelStore implements VoiceLabelStorePort {
   }
 
   split(input: { diarizationId: string; voice: number }): void {
+    const { diarizationId, voice } = input;
+    inTransaction(this.db, () => {
+      this.db
+        .prepare(
+          `UPDATE media_voice_labels SET merged_into = NULL
+           WHERE diarization_id = ? AND voice = ?`,
+        )
+        .run(diarizationId, voice);
+      this.takeBackJoinedNames(diarizationId);
+    });
+  }
+
+  /**
+   * A name that came from a join lasts as long as a voice with a name of its own is still
+   * joined there: it takes that voice's name, or goes back to none. The left join keeps one
+   * row when no such voice is left, so the columns are set to nothing.
+   */
+  private takeBackJoinedNames(diarizationId: string): void {
     this.db
       .prepare(
-        `UPDATE media_voice_labels SET merged_into = NULL
-         WHERE diarization_id = ? AND voice = ?`,
+        `UPDATE media_voice_labels AS kept
+         SET (speaker_id, audience, name_from_join) = (
+           SELECT own.speaker_id, coalesce(own.audience, 0), own.voice IS NOT NULL
+           FROM (SELECT 1) LEFT JOIN media_voice_labels own
+             ON own.diarization_id = kept.diarization_id AND own.merged_into = kept.voice
+               AND own.name_from_join = 0
+               AND (own.speaker_id IS NOT NULL OR own.audience = 1)
+           ORDER BY own.voice LIMIT 1)
+         WHERE kept.diarization_id = ? AND kept.name_from_join = 1`,
       )
-      .run(input.diarizationId, input.voice);
+      .run(diarizationId);
   }
 
   confirmNames(diarizationId: string): void {
@@ -226,7 +254,8 @@ export class SqliteVoiceLabelStore implements VoiceLabelStorePort {
         `INSERT INTO media_voice_labels (diarization_id, voice, speaker_id, audience)
          VALUES (?, ?, ?, ?)
          ON CONFLICT (diarization_id, voice) DO UPDATE SET
-           speaker_id = excluded.speaker_id, audience = excluded.audience`,
+           speaker_id = excluded.speaker_id, audience = excluded.audience,
+           name_from_join = 0`,
       )
       .run(
         input.diarizationId,

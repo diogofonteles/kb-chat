@@ -577,6 +577,8 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         audience INTEGER NOT NULL DEFAULT 0 CHECK (audience IN (0, 1)),
         -- Joined to that voice of the same separation; its own label is kept for the undo.
         merged_into INTEGER CHECK (merged_into IS NULL OR merged_into BETWEEN 1 AND 10),
+        -- The name came from a voice joined to this one, not from a person: the undo takes it back.
+        name_from_join INTEGER NOT NULL DEFAULT 0 CHECK (name_from_join IN (0, 1)),
         CHECK (audience = 0 OR speaker_id IS NULL),
         CHECK (merged_into IS NULL OR merged_into <> voice),
         PRIMARY KEY (diarization_id, voice)

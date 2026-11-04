@@ -232,8 +232,95 @@ describe('Joining two voices (KBC-065 AC-3, FR-2)', () => {
       voiceCount: 4,
       merged: [],
     });
-    expect(split.json().diarization.labels[3]).toMatchObject({
-      name: 'Mestre Gabriel',
+    // The undo gives each voice back what it had: the kept one had no name.
+    expect(split.json().diarization.labels).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ voice: 3, kind: 'unnamed', name: null }),
+        expect.objectContaining({ voice: 4, name: 'Mestre Gabriel' }),
+      ]),
+    );
+    const undone = await transcriptOf(media.owner, mediaId);
+    expect(undone.voiceNames).toEqual(split.json().diarization.labels);
+  });
+
+  const splitVoice = (media: Media, mediaId: string, voice: number) =>
+    media.owner('POST', `/api/v1/media/${mediaId}/voices/split`, {
+      version: 1,
+      voice,
+    });
+  const namesOf = (read: { json: () => unknown }) =>
+    Object.fromEntries(
+      (read.json() as MediaSpeakers).diarization?.labels.map((label) => [
+        label.voice,
+        label.name ?? label.kind,
+      ]) ?? [],
+    );
+
+  it('undoes a name carried by the join, and an audience too', async () => {
+    const media = await startMedia();
+    const { mediaId } = await separated(media, FOUR_VOICES);
+    await nameVoice(media, [mediaId, 4], { audience: true });
+    await merge(media, mediaId, [4, 3]);
+    const split = await splitVoice(media, mediaId, 4);
+    expect(namesOf(split)).toMatchObject({ 3: 'unnamed', 4: 'audience' });
+  });
+
+  it('keeps on the undo a name the kept voice already had or was given after the join', async () => {
+    const media = await startMedia();
+    const { mediaId } = await separated(media, FOUR_VOICES);
+    const ana = await aSpeaker(media, 'Ana');
+    const bia = await aSpeaker(media, 'Bia');
+    await nameVoice(media, [mediaId, 1], { speakerId: ana.id });
+    await nameVoice(media, [mediaId, 2], { speakerId: bia.id });
+    await merge(media, mediaId, [2, 1]);
+    expect(namesOf(await splitVoice(media, mediaId, 2))).toMatchObject({
+      1: 'Ana',
+      2: 'Bia',
+    });
+
+    await nameVoice(media, [mediaId, 1], { speakerId: null });
+    await merge(media, mediaId, [2, 1]);
+    await nameVoice(media, [mediaId, 1], { speakerId: ana.id });
+    expect(namesOf(await splitVoice(media, mediaId, 2))).toMatchObject({
+      1: 'Ana',
+      2: 'Bia',
+    });
+  });
+
+  it('keeps the kept voice named by another voice still joined to it', async () => {
+    const media = await startMedia();
+    const { mediaId } = await separated(media, FOUR_VOICES);
+    const ana = await aSpeaker(media, 'Ana');
+    const bia = await aSpeaker(media, 'Bia');
+    await nameVoice(media, [mediaId, 3], { speakerId: ana.id });
+    await nameVoice(media, [mediaId, 4], { speakerId: bia.id });
+    await merge(media, mediaId, [3, 1]);
+    await merge(media, mediaId, [4, 1]);
+    expect(namesOf(await splitVoice(media, mediaId, 3))).toMatchObject({
+      1: 'Bia',
+      3: 'Ana',
+    });
+    expect(namesOf(await splitVoice(media, mediaId, 4))).toMatchObject({
+      1: 'unnamed',
+      4: 'Bia',
+    });
+  });
+
+  it('undoes a chain of joins one voice at a time', async () => {
+    const media = await startMedia();
+    const { mediaId } = await separated(media, FOUR_VOICES);
+    const ana = await aSpeaker(media, 'Ana');
+    await nameVoice(media, [mediaId, 4], { speakerId: ana.id });
+    await merge(media, mediaId, [4, 3]);
+    await merge(media, mediaId, [3, 2]);
+    expect(namesOf(await splitVoice(media, mediaId, 3))).toMatchObject({
+      2: 'Ana',
+      3: 'unnamed',
+    });
+    expect(namesOf(await splitVoice(media, mediaId, 4))).toMatchObject({
+      2: 'unnamed',
+      3: 'unnamed',
+      4: 'Ana',
     });
   });
 
