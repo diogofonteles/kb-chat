@@ -56,3 +56,13 @@ Three things are hard to reverse once data exists: how a track is represented (c
 - Bad: track boundaries are approximate by one AAC packet.
 - Revisit when: KBC-063 changes the diarization or proposal approach; video editing is requested; the owner decides to hide or replace originals.
 - Compliance: migration tests; integration tests for overlap and minimum-length validation (editor and API), nothing cut before approval, re-approval matching, archive on removal, derived transcripts and search; a test that no embedding is persisted without a consent row and that revocation deletes it; the vault hash unchanged in every edit test (Q7).
+
+## As built: KBC-073 (a track after its approval)
+
+- **Same id, one version per track.** `media.track_version` guards a person's write (`If-Match`, 412); `media_track_subjects.version` keeps guarding subjects. `media_tracks` and the draft change in the same transaction, and `media_edits.version` does not move, so a subject run in flight survives a title fix.
+- **An open edit wins.** While a recording's edit is reopened, every write on its tracks answers 409 `edit-open`: its next approval replaces those rows.
+- **A new cut never mixes.** `media.file_version` names the cut. The replaced file goes to `media_track_old_files` and stays for 24 h; the player asks `stream?v=<fileVersion>`, so a range on the old file never lands on the new bytes, and a position or bookmark sent with an older version is translated through the absolute time. A forgotten version is a 404, never the new file.
+- **Delete is an archive.** `media_track_archive` keeps what leaves `media_tracks`; restore puts the row, the draft and the search index back, within 30 days and in a place still free. The janitor removes the file after 30 days; the record stays. Tracks that left by a new approval can be restored too, without their voices.
+- **Names.** `scope: track` writes the speaker on the track and wins over the voice's name in that track's transcript. `scope: recording` names the voice through `VoiceNamesService` and releases the tracks that named the former person; a track's own different choice stays.
+- **Bookmarks that leave** get a row in `media_moved_bookmarks` until their owner acknowledges it.
+- **One suggestion.** `POST /media/{id}/suggestions` is a synchronous single call on the media ledger (`track-suggestion`); it writes nothing but the spend.
