@@ -68,6 +68,18 @@ describe('VoiceSample (KBC-065 FR-3)', () => {
     expect(engine.play).toHaveBeenCalledTimes(1);
   });
 
+  it('I2: goes on after the last sample when one sample replaces another', () => {
+    const { sample, engine, element } = setUp(true);
+    sample.toggle(REQUEST);
+    // Paused for the first sample: the engine is no longer playing.
+    engine.playing = () => false;
+    sample.toggle({ ...REQUEST, voice: 3 });
+    expect(engine.play).not.toHaveBeenCalled();
+    expect(sample.playing()).toBe(3);
+    element.dispatchEvent(new Event('ended'));
+    expect(engine.play).toHaveBeenCalledTimes(1);
+  });
+
   it('leaves the player paused when it was', () => {
     const { sample, engine } = setUp(false);
     sample.toggle(REQUEST);

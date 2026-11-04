@@ -54,9 +54,8 @@ export class VoiceSample {
 
   /** Plays the sample, or stops it when it is this voice's that plays. */
   toggle(sample: SampleRequest): void {
-    const same = this.voice() === sample.voice;
-    this.stop();
-    if (!same) this.play(sample);
+    if (this.voice() === sample.voice) this.stop();
+    else this.play(sample);
   }
 
   stop(): void {
@@ -67,10 +66,11 @@ export class VoiceSample {
     this.resume = false;
   }
 
+  /** A sample replacing another keeps its promise: the player goes on after the last one. */
   private play(sample: SampleRequest): void {
     const element = this.ready();
     this.failedOnce.set(false);
-    this.resume = this.engine.playing();
+    this.resume ||= this.engine.playing();
     this.engine.pause();
     this.endMs = sample.endMs;
     this.voice.set(sample.voice);
