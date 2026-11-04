@@ -1,4 +1,4 @@
-import { voiceChangeStarts, voiceLookOf } from './voice-changes.js';
+import { sampleOf, voiceChangeStarts, voiceLookOf } from './voice-changes.js';
 
 const segments = (...voices: (number | null)[]) =>
   voices.map((voice) => ({ voice }));
@@ -32,5 +32,33 @@ describe('voiceLookOf (AC-8: never colour alone)', () => {
     expect(new Set(keys).size).toBe(10);
     expect(new Set(looks.slice(0, 5).map((look) => look.shape)).size).toBe(5);
     expect(looks[5]).toEqual({ tone: 1, shape: 'circle', hollow: true });
+  });
+});
+
+describe('sampleOf (KBC-065 FR-3)', () => {
+  const turn = (voice: number, startMs: number, endMs: number) => ({
+    voice,
+    startMs,
+    endMs,
+  });
+
+  it("takes the first 5 s of the voice's longest turn", () => {
+    expect(
+      sampleOf(
+        [turn(1, 0, 2_000), turn(2, 2_000, 30_000), turn(1, 30_000, 60_000)],
+        1,
+      ),
+    ).toEqual({ startMs: 30_000, endMs: 35_000 });
+  });
+
+  it('plays a shorter turn whole', () => {
+    expect(sampleOf([turn(3, 1_000, 3_000)], 3)).toEqual({
+      startMs: 1_000,
+      endMs: 3_000,
+    });
+  });
+
+  it('has nothing for a voice with no turn', () => {
+    expect(sampleOf([turn(1, 0, 1_000)], 2)).toBeNull();
   });
 });

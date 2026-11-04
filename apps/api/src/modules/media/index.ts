@@ -63,6 +63,15 @@ export {
   type TranscriptVoices,
 } from './diarization-service.js';
 export { speakerRoutes } from './speaker-routes.js';
+export { collectionSpeakerRoutes } from './collection-speaker-routes.js';
+export {
+  SpeakersService,
+  type SpeakersServiceDeps,
+} from './speakers-service.js';
+export {
+  VoiceNamesService,
+  type VoiceNamesServiceDeps,
+} from './voice-names-service.js';
 export {
   DERIVATION_VERSION,
   deriveTurns,

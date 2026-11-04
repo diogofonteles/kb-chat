@@ -5,6 +5,10 @@ import { FsMediaFiles } from './adapters/media/fs-media-files.js';
 import { openMediaDatabase } from './adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
 import { SqliteDiarizationStore } from './adapters/sqlite/sqlite-diarization-store.js';
+import {
+  SqliteSpeakerStore,
+  SqliteVoiceLabelStore,
+} from './adapters/sqlite/sqlite-speaker-store.js';
 import { SqliteBookmarkStore } from './adapters/sqlite/sqlite-bookmark-store.js';
 import { SqliteListeningStore } from './adapters/sqlite/sqlite-listening-store.js';
 import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-ledger.js';
@@ -15,6 +19,10 @@ import { SqliteSilenceStore } from './adapters/sqlite/sqlite-silence-store.js';
 import { SqliteTranscriberStore } from './adapters/sqlite/sqlite-transcriber-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
 import type { DiarizationStorePort } from './ports/diarization-store.js';
+import type {
+  SpeakerStorePort,
+  VoiceLabelStorePort,
+} from './ports/speaker-store.js';
 import type { BookmarkStorePort } from './ports/bookmark-store.js';
 import type { ListeningStorePort } from './ports/listening-store.js';
 import type { MediaFilesPort } from './ports/media-files.js';
@@ -53,6 +61,9 @@ export interface MediaDeps {
   readonly search: MediaSearchPort;
   /** Voice separations (KBC-064). */
   readonly diarizations: DiarizationStorePort;
+  /** The speakers of each collection and who each voice is (KBC-065). */
+  readonly speakers: SpeakerStorePort;
+  readonly voiceLabels: VoiceLabelStorePort;
   readonly files: MediaFilesPort;
   readonly workerToken: string;
   /** Keys the transcriber token hashes (KB_CHAT_SECRETS_KEY, ADR 0017). */
@@ -108,6 +119,8 @@ type MediaStores = Pick<
   | 'silences'
   | 'search'
   | 'diarizations'
+  | 'speakers'
+  | 'voiceLabels'
 >;
 
 /** The queue, each person's listening and bookmarks share one database (ADR 0022). */
@@ -134,5 +147,7 @@ function storesOf(db: DatabaseSync): MediaStores {
     silences: new SqliteSilenceStore(db),
     search: new SqliteMediaSearch(db),
     diarizations: new SqliteDiarizationStore(db),
+    speakers: new SqliteSpeakerStore(db),
+    voiceLabels: new SqliteVoiceLabelStore(db),
   };
 }

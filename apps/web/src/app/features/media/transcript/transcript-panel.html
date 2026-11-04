@@ -97,8 +97,13 @@
               {{ segment.clock }}
             </button>
             <div class="body">
-              @if (segment.voice !== null) {
-                <app-voice-tag class="voice" [voice]="segment.voice" />
+              @if (segment.speaker; as speaker) {
+                <app-voice-tag
+                  class="voice"
+                  [voice]="speaker.voice"
+                  [name]="speaker.name"
+                  [main]="speaker.main"
+                />
               }
               <span class="text" [id]="'transcript-text-' + segment.index">{{
                 segment.text

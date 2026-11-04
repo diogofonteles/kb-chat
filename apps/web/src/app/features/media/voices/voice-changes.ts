@@ -1,4 +1,4 @@
-import type { SegmentVoice } from '@kb-chat/contracts';
+import type { SegmentVoice, SpeakerTurn } from '@kb-chat/contracts';
 
 /**
  * Where "Voz N" is shown in the transcript (KBC-064 FR-5): the index of the first segment
@@ -42,4 +42,24 @@ export function voiceLookOf(voice: number): VoiceLook {
     shape: SHAPES[index] ?? 'circle',
     hollow: voice > SHAPES.length,
   };
+}
+
+/** How long a voice's sample plays (KBC-065 FR-3). */
+export const SAMPLE_MS = 5_000;
+
+/** The first 5 s of the voice's longest turn (the whole turn when shorter); null with none. */
+export function sampleOf(
+  turns: readonly SpeakerTurn[],
+  voice: number,
+): { readonly startMs: number; readonly endMs: number } | null {
+  let longest: SpeakerTurn | null = null;
+  for (const turn of turns)
+    if (
+      turn.voice === voice &&
+      (!longest || turn.endMs - turn.startMs > longest.endMs - longest.startMs)
+    )
+      longest = turn;
+  if (!longest) return null;
+  const { startMs, endMs } = longest;
+  return { startMs, endMs: Math.min(endMs, startMs + SAMPLE_MS) };
 }

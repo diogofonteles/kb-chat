@@ -67,6 +67,7 @@ import { hasLibrary } from './library/library-access.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
+import { cuesWithSpeakers } from './voices/speaker-names.js';
 import { VoicesPanel } from './voices/voices-panel.js';
 import { PlayerShortcuts } from './player/player-shortcuts.js';
 import { TranscriptPanel } from './transcript/transcript-panel.js';
@@ -130,6 +131,16 @@ export class MediaPlayerPage {
   protected readonly canEdit = computed(
     () => this.session.me() !== null && this.session.can('media-edit'),
   );
+  /** Who speaks is for `media-speakers`, and for whoever names the voices (KBC-065 BR-4). */
+  protected readonly canSeeSpeakers = computed(
+    () =>
+      this.session.me() !== null &&
+      (this.session.can('media-speakers') || this.session.can('media-edit')),
+  );
+  /** "Mostrar quem fala" (FR-4): on by default. */
+  protected readonly speakersOn = computed(
+    () => this.canSeeSpeakers() && this.preferences.speakersOn(),
+  );
   protected readonly status = computed(() => {
     const media = this.media();
     return media ? statusTextOf(media) : '';
@@ -152,8 +163,14 @@ export class MediaPlayerPage {
     () => this.transcriptVersion() !== null,
   );
   protected readonly collapsed = this.preferences.transcriptCollapsed;
+  /** The subtitles' names come from the transcript, even with its column hidden (FR-4). */
+  private readonly wantsTranscript = computed(
+    () =>
+      !this.collapsed() || (this.preferences.captionsOn() && this.speakersOn()),
+  );
   protected readonly transcript = httpResource(
-    () => (this.collapsed() ? undefined : this.requestFor(mediaTranscriptUrl)),
+    () =>
+      this.wantsTranscript() ? this.requestFor(mediaTranscriptUrl) : undefined,
     { parse: (body) => mediaTranscriptSchema.parse(body) },
   );
   private readonly subtitles = httpResource.text(() =>
@@ -161,8 +178,13 @@ export class MediaPlayerPage {
       ? this.requestFor(mediaSubtitlesUrl)
       : undefined,
   );
-  protected readonly cues = computed(() =>
+  private readonly parsedCues = computed(() =>
     this.subtitles.hasValue() ? parseWebVtt(this.subtitles.value()) : [],
+  );
+  protected readonly cues = computed(() =>
+    this.speakersOn() && this.transcript.hasValue()
+      ? cuesWithSpeakers(this.parsedCues(), this.transcript.value())
+      : this.parsedCues(),
   );
   /** The column shows: there is a transcript and the person did not hide it (FR-9). */
   protected readonly showTranscript = computed(

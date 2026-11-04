@@ -9,6 +9,7 @@ import { FsMediaFiles } from './adapters/media/fs-media-files.js';
 import { openMediaDatabase } from './adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
 import { SqliteDiarizationStore } from './adapters/sqlite/sqlite-diarization-store.js';
+import { SqliteVoiceLabelStore } from './adapters/sqlite/sqlite-speaker-store.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
 import { SqliteTranscriptStore } from './adapters/sqlite/sqlite-transcript-store.js';
 import { createLogger } from './logger.js';
@@ -38,7 +39,14 @@ const openDb = () => database;
 const now = () => clock;
 const workers = () => new WorkerService({ store, files, now });
 const diarization = () =>
-  new DiarizationService({ store, transcripts, diarizations, files, now });
+  new DiarizationService({
+    store,
+    transcripts,
+    diarizations,
+    voiceLabels: new SqliteVoiceLabelStore(database),
+    files,
+    now,
+  });
 const janitor = () =>
   new MediaJanitor({ store, files, log: createLogger('silent'), now });
 
@@ -132,6 +140,53 @@ beforeEach(() => {
 afterEach(() => {
   store.close();
   rmSync(dir, { recursive: true, force: true });
+});
+
+/** Files that let something happen while the raw file is being written. */
+class FilesWithWrites extends FsMediaFiles {
+  whileWriting: () => void = () => undefined;
+
+  override async writeFile(path: string, data: string): Promise<void> {
+    this.whileWriting();
+    await super.writeFile(path, data);
+  }
+}
+
+describe('A name saved while a new separation ends (KBC-065 BR-5)', () => {
+  it('reaches the new separation, waiting to be confirmed', async () => {
+    const slow = new FilesWithWrites(dir);
+    files = slow;
+    await transcribedItem();
+    const ask = () =>
+      diarizations.requestDiarization({
+        mediaId: MEDIA_ID,
+        jobId: crypto.randomUUID(),
+        voices: null,
+        now: clock,
+      });
+    ask();
+    await complete(leaseFor('transcriber:mac'), 'transcriber:mac');
+    const first = diarizations.latest(MEDIA_ID);
+    if (!first) throw new Error('no separation');
+    ask();
+    const labels = new SqliteVoiceLabelStore(database);
+    slow.whileWriting = () =>
+      labels.setLabel({
+        diarizationId: first.id,
+        voice: 2,
+        speakerId: null,
+        audience: true,
+      });
+
+    await complete(leaseFor('transcriber:mac'), 'transcriber:mac');
+
+    const second = diarizations.latest(MEDIA_ID);
+    expect(second?.version).toBe(2);
+    expect(second?.id && labels.labels(second.id)).toEqual([
+      { voice: 2, speaker: null, audience: true, mergedInto: null },
+    ]);
+    expect(second?.namesPending).toBe(true);
+  });
 });
 
 describe('A separation whose Mac stopped (KBC-064 AC-7)', () => {

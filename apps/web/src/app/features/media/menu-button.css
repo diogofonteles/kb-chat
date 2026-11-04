@@ -74,7 +74,7 @@
 /* On phones the row's actions sit on the left (T14): the menu opens to the right of them. */
 @media (max-width: 1023px) {
   .menu {
-    right: auto;
-    left: 0;
+    right: var(--menu-phone-right, auto);
+    left: var(--menu-phone-left, 0);
   }
 }

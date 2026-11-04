@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -9,71 +9,12 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { uniqueTag, uploadReady, useTheme } from './media-helpers.js';
+import { useTheme } from './media-helpers.js';
+import { TURNS, transcribedAudio } from './voices-helpers.js';
 
 // KBC-064: "Separar vozes" on the audio page, for whoever edits recordings. The E2E server
 // stores the transcript and the turns through the real paths (E2E-only routes), as a
 // transcriber would; no spec leases through the worker routes.
-
-type Line = readonly [start: number, end: number, text: string];
-
-/** A minute of interview: A asks, B answers, A asks, B answers, C (audience) asks, B. */
-const LINES: readonly Line[] = [
-  [0, 5, 'Mestre, o senhor está lembrado daquele dia?'],
-  [5.5, 15, 'Eu lembro sim, foi numa sessão em mil novecentos e sessenta.'],
-  [15.5, 22, 'E como foi que o senhor chegou lá?'],
-  [22.5, 40, 'Cheguei pela mão de um amigo que trabalhava na construção.'],
-  [40.5, 45, 'Uma pergunta da plateia sobre o vegetal.'],
-  [45.5, 59, 'Respondo com alegria: o vegetal é a nossa comunhão.'],
-];
-
-const TURNS = [
-  { start: 0, end: 5.2, voice: 'SPEAKER_02' },
-  { start: 5.2, end: 15.3, voice: 'SPEAKER_01' },
-  { start: 15.3, end: 22.2, voice: 'SPEAKER_02' },
-  { start: 22.2, end: 40.3, voice: 'SPEAKER_01' },
-  { start: 40.3, end: 45.3, voice: 'SPEAKER_03' },
-  { start: 45.3, end: 59, voice: 'SPEAKER_01' },
-];
-
-const rawOf = (lines: readonly Line[]) => ({
-  chunks: [
-    {
-      offset: 0,
-      end: 60,
-      result: {
-        segments: lines.map(([start, end, text]) => ({
-          start,
-          end,
-          text: ` ${text}`,
-          avg_logprob: -0.2,
-          compression_ratio: 1.3,
-          no_speech_prob: 0.01,
-          words: text.split(' ').map((word, index, all) => ({
-            word: ` ${word}`,
-            start: start + ((end - start) * index) / all.length,
-            end: start + ((end - start) * (index + 1)) / all.length,
-            probability: 0.95,
-          })),
-        })),
-      },
-    },
-  ],
-});
-
-/** A ready audio of a minute with its transcript: what "Separar vozes" works on. */
-async function transcribedAudio(owner: APIRequestContext) {
-  const media = await uploadReady(owner, {
-    title: `Entrevista ${uniqueTag()}`,
-    seconds: 60,
-  });
-  const seeded = await owner.post(`/api/e2e/media/${media.id}/transcript`, {
-    data: { raw: rawOf(LINES) },
-    headers: CSRF,
-  });
-  expect(seeded.status(), await seeded.text()).toBe(204);
-  return media;
-}
 
 const seriousViolations = async (page: Page, include: string) =>
   (await new AxeBuilder({ page }).include(include).analyze()).violations.filter(
@@ -125,12 +66,12 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await expect(voicesBlock(page).getByRole('status')).toHaveText(
       'Vozes separadas: 3',
     );
-    const voices = voicesBlock(page).getByRole('listitem');
-    await expect(voices).toHaveText([
-      /^Voz 1\s+0:12 de fala$/,
-      /^Voz 2\s+0:41 de fala$/,
-      /^Voz 3\s+0:05 de fala$/,
-    ]);
+    const voices = voicesBlock(page)
+      .getByRole('list', { name: 'Vozes encontradas' })
+      .getByRole('listitem');
+    await expect(voices.nth(0)).toContainText(/Voz 1\s+0:12 de fala/);
+    await expect(voices.nth(1)).toContainText(/Voz 2\s+0:41 de fala/);
+    await expect(voices.nth(2)).toContainText(/Voz 3\s+0:05 de fala/);
     await expect(
       voicesBlock(page).getByRole('button', { name: 'Separar vozes de novo' }),
     ).toBeVisible();

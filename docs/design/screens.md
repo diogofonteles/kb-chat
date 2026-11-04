@@ -409,6 +409,14 @@ Desktop (≥ 1024 px)                                           Celular (< 1024 
 
 Os tempos usam `m:ss` abaixo de 1 h e `h:mm:ss` a partir de 1 h, em algarismos tabulares, para não tremer ao contar.
 
+### Vozes e quem fala (KBC-064, KBC-065)
+- **Painel "Vozes"**, abaixo dos marcadores, só para quem tem `media-edit`. Cada voz é uma linha: marca e "Voz N", tempo de fala, **Ouvir amostra da Voz N** (5 s do trecho mais longo, num elemento próprio: não mexe na posição; vira "Parar amostra da Voz N") e o campo **Quem é a Voz N?**.
+- **Quem é a Voz N?** é um combobox no padrão APG, como o de autor: "Pergunta da plateia" primeiro, autor principal com ✦, falantes e autores do acervo (até 8), "Sem nome" quando a voz tem nome e **Cadastrar «nome»**. Escolher salva na hora ("Nome salvo."); sair sem escolher volta ao que estava. Nome vazio ou fora da regra (1 a 120 caracteres, uma linha, sem aspas nem « ») aparece no campo e nada é criado. Enter sem opção ativa só salva o que está escrito por inteiro: o nome exato ou um nome que ninguém da lista contém; texto igual ao atual não muda nada, e parte de um nome abre a lista (cadastrar fica a uma tecla, em ↑). Enquanto as listas chegam, o campo mostra "Carregando…" e não oferece cadastrar.
+- **Juntar vozes:** "Juntar a voz [ ] com a voz [ ]" e **Juntar**; depois, "Voz 4 junta à Voz 2" com **Separar a Voz 4**, que desfaz (UP-07).
+- **Separação nova:** com nomes na anterior, aviso "Confirme os nomes das vozes" e **Confirmar nomes**. Os nomes vêm pré-preenchidos quando ≥ 70 % do tempo da voz antiga cai na nova; quem só ouve lê "Falante não identificado" até a confirmação.
+- **Falantes do acervo (N)**, recolhido: lista com **Editar** para renomear e dizer qual autor o falante é.
+- **Transcrição e legenda**, para `media-speakers` ou `media-edit`: o nome na troca de falante ("✦ Mestre Gabriel", "Pergunta da plateia"); voz sem nome é "Voz N" para quem edita e "Falante não identificado" para quem só ouve. A legenda prefixa o cue: "— ✦ Mestre Gabriel: …". **Mostrar quem fala** fica no menu ⋯, ligado por padrão e lembrado neste navegador.
+
 ### Atalhos de teclado (UP-09: todos também têm botão)
 Ativos só na página do player, quando o foco está no player, na transcrição, no mini-player ou no corpo da página, e **nunca** com o foco em `input`, `textarea`, `select`, `[contenteditable]`, item de menu ou diálogo: Espaço ou K tocar/pausar · J voltar 15 s · L avançar 30 s · ←/→ 5 s · Shift+, e Shift+. diminuir/aumentar a velocidade · M silenciar · C legendas · B marcar este trecho · 0–9 ir para 0%–90% · ? lista dos atalhos. J e L seguem os pulos escolhidos (KBC-043). O diálogo "Atalhos de teclado" (com "Fechar" e Esc) tem a opção **Usar atalhos de uma tecla**, ligada por padrão e lembrada, que os desliga (WCAG 2.1.4). Os botões declaram `aria-keyshortcuts`. Um controle focado que usa uma tecla (as setas na barra de progresso e na transcrição) a consome, e o atalho global não age em dobro.
 

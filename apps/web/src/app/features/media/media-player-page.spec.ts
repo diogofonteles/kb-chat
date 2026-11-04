@@ -576,7 +576,65 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
       { voice: 1, startMs: 0, endMs: 3_000 },
       { voice: 2, startMs: 3_000, endMs: 6_000 },
     ],
+    labels: [
+      { voice: 1, kind: 'unnamed', speakerId: null, name: null, main: false },
+      { voice: 2, kind: 'unnamed', speakerId: null, name: null, main: false },
+    ],
+    merged: [],
+    namesPending: false,
+  } as const;
+  const VOICED_TRANSCRIPT: MediaTranscript = {
+    ...TWO_SEGMENTS,
+    segments: TWO_SEGMENTS.segments.map((segment, index) => ({
+      ...segment,
+      voice: index + 1,
+    })),
+    voiceNames: [
+      {
+        voice: 1,
+        kind: 'person',
+        speakerId: '11111111-1111-4111-8111-111111111111',
+        name: 'Mestre Gabriel',
+        main: true,
+      },
+      { voice: 2, kind: 'audience', speakerId: null, name: null, main: false },
+    ],
   };
+  const VTT = 'WEBVTT\n\n00:00.000 --> 00:02.000\nExistia um rei.\n';
+
+  it('AC-1, FR-4: subtitles say who speaks, even with the column hidden', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.player.captions', 'on');
+    localStorage.setItem('kb-chat.player.transcript-collapsed', 'on');
+    const { harness, http } = await openPage(undefined, {
+      features: ['media', 'media-speakers'],
+    });
+    http.expectOne(ITEM_URL).flush(VOICED_ITEM);
+    await settle();
+    http.expectOne(transcriptRequest).flush(VOICED_TRANSCRIPT);
+    http.expectOne((r) => r.url === `${ITEM_URL}/subtitles.vtt`).flush(VTT);
+    await harness.fixture.whenStable();
+    const page = harness.routeDebugElement?.componentInstance as {
+      cues(): readonly { text: string }[];
+    };
+    expect(page.cues()[0]?.text).toBe('— ✦ Mestre Gabriel: Existia um rei.');
+    localStorage.clear();
+  });
+
+  it('AC-4: without `media-speakers` a hidden column stays unread', async () => {
+    localStorage.clear();
+    localStorage.setItem('kb-chat.player.captions', 'on');
+    localStorage.setItem('kb-chat.player.transcript-collapsed', 'on');
+    const { harness, http } = await openPage(undefined, {
+      features: ['media'],
+    });
+    http.expectOne(ITEM_URL).flush(VOICED_ITEM);
+    await settle();
+    http.expectNone(transcriptRequest);
+    http.expectOne((r) => r.url === `${ITEM_URL}/subtitles.vtt`).flush(VTT);
+    await harness.fixture.whenStable();
+    localStorage.clear();
+  });
 
   it('asks for the transcript again once "Vozes" shows a separation it lacks, and labels it', async () => {
     localStorage.clear();
@@ -609,6 +667,10 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
       })),
       speakers: separation,
     });
+    http
+      .expectOne(`/api/v1/topics/${ITEM.topic}/speakers`)
+      .flush({ items: [] });
+    http.expectOne(`/api/v1/topics/${ITEM.topic}/authors`).flush({ items: [] });
     await harness.fixture.whenStable();
     const list = screen.getByRole('list', { name: 'Trechos da transcrição' });
     expect(within(list).getByText('Voz 1')).toBeTruthy();

@@ -80,7 +80,7 @@ function mostSpoken(turns: readonly SpeakerTurn[]): number {
 }
 
 /** Back-to-back turns of the same voice become one. */
-function joinNeighbours(turns: readonly SpeakerTurn[]): SpeakerTurn[] {
+export function joinNeighbours(turns: readonly SpeakerTurn[]): SpeakerTurn[] {
   const joined: SpeakerTurn[] = [];
   for (const turn of turns) {
     const last = joined.at(-1);

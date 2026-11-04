@@ -43,6 +43,7 @@ function toSummary(row: Row): DiarizationSummary {
     rawPath: text(row, 'raw_path'),
     derivationVersion: Number(row['derivation_version']),
     createdAt: text(row, 'created_at'),
+    namesPending: row['names_pending'] === 1,
   };
 }
 
@@ -127,7 +128,7 @@ export class SqliteDiarizationStore implements DiarizationStorePort {
     const row = this.db
       .prepare(
         `SELECT id, media_id, version, transcript_id, requested_voices, voice_count,
-           raw_path, derivation_version, created_at
+           raw_path, derivation_version, created_at, names_pending
          FROM diarizations WHERE media_id = ? ORDER BY version DESC LIMIT 1`,
       )
       .get(mediaId);
@@ -198,14 +199,26 @@ export class SqliteDiarizationStore implements DiarizationStorePort {
     diarization.wordVoices.forEach((voice, position) =>
       word.run(diarization.id, position, voice),
     );
+    this.insertLabels(diarization);
+  }
+
+  /** The names carried over from the separation before (KBC-065 FR-5). */
+  private insertLabels({ id, labels }: NewDiarization): void {
+    const label = this.db.prepare(
+      `INSERT INTO media_voice_labels (diarization_id, voice, speaker_id, audience)
+       VALUES (?, ?, ?, ?)`,
+    );
+    labels.forEach((one) =>
+      label.run(id, one.voice, one.speakerId, one.audience ? 1 : 0),
+    );
   }
 }
 
 const INSERT_DIARIZATION = `INSERT INTO diarizations (id, media_id, version, transcript_id,
     engine, model, parameters, parameters_version, requested_voices, voice_count, elapsed_ms,
-    raw_path, derivation_version, created_at)
+    raw_path, derivation_version, created_at, names_pending)
   VALUES (?, ?, (SELECT coalesce(max(version), 0) + 1 FROM diarizations WHERE media_id = ?),
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /** The values of INSERT_DIARIZATION, in its order. */
 const diarizationRow = (d: NewDiarization, at: string) =>
@@ -224,4 +237,5 @@ const diarizationRow = (d: NewDiarization, at: string) =>
     d.rawPath,
     d.derivationVersion,
     at,
+    d.namesPending ? 1 : 0,
   ] as const;

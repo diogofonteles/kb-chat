@@ -1,4 +1,4 @@
-import type { MediaTranscript } from '@kb-chat/contracts';
+import type { MediaTranscript, TranscriptSpeakers } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type {
   TranscriptStorePort,
@@ -28,6 +28,26 @@ export interface TranscriptServiceDeps {
   readonly cacheSize?: number;
 }
 
+/** What the person may read besides the text. */
+export interface TranscriptAudience {
+  readonly withVoices: boolean;
+  readonly withNames: boolean;
+}
+
+const NOBODY: TranscriptAudience = { withVoices: false, withNames: false };
+
+/** Names waiting for a person's confirmation are not said to listeners yet (BR-5). */
+const namesForListeners = ({ labels, namesPending }: TranscriptSpeakers) =>
+  namesPending
+    ? labels.map(({ voice }) => ({
+        voice,
+        kind: 'unnamed' as const,
+        speakerId: null,
+        name: null,
+        main: false,
+      }))
+    : labels;
+
 /** A media's subtitles and the tag that names their version (transcript, filter, rules). */
 export interface Subtitles {
   readonly etag: string;
@@ -56,11 +76,14 @@ export class TranscriptService {
     this.cacheSize = deps.cacheSize ?? DEFAULT_CACHE_SIZE;
   }
 
-  /** The transcript; with `withVoices` (`media-edit`, KBC-064 FR-4), its voices too. */
+  /**
+   * The transcript; with `withVoices` (`media-edit`, KBC-064 FR-4) its separation and names,
+   * with `withNames` (`media-speakers`, KBC-065 FR-4) only who speaks in each segment.
+   */
   current(
     actor: MediaActor,
     mediaId: string,
-    options: { readonly withVoices: boolean } = { withVoices: false },
+    options: TranscriptAudience = NOBODY,
   ): MediaTranscript {
     const summary = this.currentOf(actor, mediaId);
     const segments = this.deps.transcripts
@@ -72,18 +95,31 @@ export class TranscriptService {
       confidence: summary.confidence,
       segments,
     };
-    const voices = options.withVoices
-      ? (this.deps.voices?.(mediaId, summary) ?? null)
-      : null;
+    return this.withSpeakers(transcript, summary, options);
+  }
+
+  /** The transcript with what `audience` may read of the current separation, if any. */
+  private withSpeakers(
+    transcript: MediaTranscript,
+    summary: TranscriptSummary,
+    audience: TranscriptAudience,
+  ): MediaTranscript {
+    const voices =
+      audience.withVoices || audience.withNames
+        ? (this.deps.voices?.(transcript.mediaId, summary) ?? null)
+        : null;
     if (!voices) return transcript;
-    return {
+    const { speakers } = voices;
+    const voiced = {
       ...transcript,
-      segments: segments.map((segment, index) => ({
+      segments: transcript.segments.map((segment, index) => ({
         ...segment,
         voice: voices.segmentVoices[index] ?? null,
       })),
-      speakers: voices.speakers,
     };
+    return audience.withVoices
+      ? { ...voiced, speakers, voiceNames: speakers.labels }
+      : { ...voiced, voiceNames: namesForListeners(speakers) };
   }
 
   subtitles(actor: MediaActor, mediaId: string): Subtitles {

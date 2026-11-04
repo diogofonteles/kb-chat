@@ -1,0 +1,103 @@
+<details class="speakers">
+  <summary #summary i18n="@@voices.speakers">
+    Falantes do acervo ({{ count() }})
+  </summary>
+  @if (count() === 0) {
+    <p class="hint" i18n="@@voices.speakersEmpty">
+      Nenhum falante ainda. Digite um nome no campo de uma voz para cadastrar.
+    </p>
+  } @else {
+    <ul class="list">
+      @for (speaker of speakers(); track speaker.id) {
+        <li class="speaker">
+          @if (editing() === speaker.id) {
+            <form class="edit" novalidate (submit)="save($event, speaker.id)">
+              <label
+                [for]="'speaker-name-' + speaker.id"
+                i18n="@@voices.nameLabel"
+                >Nome</label
+              >
+              <input
+                type="text"
+                autocomplete="off"
+                [id]="'speaker-name-' + speaker.id"
+                [value]="authorName() ?? name()"
+                [readOnly]="authorName() !== null"
+                [attr.aria-invalid]="error() ? 'true' : null"
+                [attr.aria-describedby]="
+                  authorName() !== null
+                    ? 'speaker-name-hint-' + speaker.id
+                    : null
+                "
+                (input)="typeName($event)"
+              />
+              @if (authorName() !== null) {
+                <p
+                  class="hint"
+                  [id]="'speaker-name-hint-' + speaker.id"
+                  i18n="@@voices.nameFromAuthor"
+                >
+                  O nome vem do autor.
+                </p>
+              }
+              <label
+                [for]="'speaker-author-' + speaker.id"
+                i18n="@@voices.isAuthor"
+                >Autor do acervo</label
+              >
+              <select
+                [id]="'speaker-author-' + speaker.id"
+                (change)="chooseAuthor($event)"
+              >
+                <option
+                  value=""
+                  [selected]="author() === ''"
+                  i18n="@@voices.noAuthor"
+                >
+                  Não é autor
+                </option>
+                @for (one of authorChoices(); track one.slug) {
+                  <option [value]="one.slug" [selected]="author() === one.slug">
+                    {{ one.name }}
+                  </option>
+                }
+              </select>
+              @if (error()) {
+                <p class="error" role="alert">{{ error() }}</p>
+              }
+              <div class="actions">
+                <button type="submit" class="primary" i18n="@@voices.save">
+                  Salvar
+                </button>
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="cancel()"
+                  i18n="@@voices.cancel"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          } @else {
+            <span class="name">
+              @if (speaker.main) {
+                <span class="mark" aria-hidden="true">✦</span>
+                <span class="visually-hidden" i18n="@@media.author.mainPrefix"
+                  >Autor principal:&nbsp;</span
+                >
+              }
+              {{ speaker.name }}
+            </span>
+            <button type="button" class="secondary" (click)="edit(speaker)">
+              <span i18n="@@voices.edit">Editar</span>&ngsp;<span
+                class="visually-hidden"
+                >{{ speaker.name }}</span
+              >
+            </button>
+          }
+        </li>
+      }
+    </ul>
+  }
+</details>

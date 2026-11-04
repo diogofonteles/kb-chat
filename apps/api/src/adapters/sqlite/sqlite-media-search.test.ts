@@ -331,7 +331,7 @@ describe('the transcript-segments-fts migration (KBC-039)', () => {
     };
     insert(1, 'Palavra antiga.');
     insert(2, 'Palavra nova.');
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([FTS_VERSION]);
+    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toContain(FTS_VERSION);
     search = new SqliteMediaSearch(db);
     expect(search.search(query(['nova'])).total).toBe(1);
     expect(search.search(query(['antiga'])).total).toBe(0);

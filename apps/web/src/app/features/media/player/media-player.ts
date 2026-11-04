@@ -91,6 +91,8 @@ export class MediaPlayer {
   readonly cues = input<readonly Cue[]>([]);
   /** The media has a transcript: CC can be used. */
   readonly captionsAvailable = input(false);
+  /** The person may see who speaks: "Mostrar quem fala" in ⋯ (KBC-065 FR-4). */
+  readonly speakersAvailable = input(false);
   /**
    * The transcript is of low confidence and its own notice may be out of sight (stacked
    * layout): a short notice goes with the subtitles (KBC-036 BR-5).
@@ -211,6 +213,7 @@ export class MediaPlayer {
       id: 'sleep',
       label: $localize`:@@player.sleep.open:Timer para dormir`,
     },
+    ...this.speakersOption(),
     {
       id: 'shortcuts',
       label: $localize`:@@player.shortcuts.open:Atalhos de teclado`,
@@ -324,8 +327,18 @@ export class MediaPlayer {
     this.transcriptPreferences.toggleCaptions();
   }
 
+  /** The choice says its state in words, as "Encurtar silêncios: ligado". */
+  private speakersOption(): readonly MenuOption[] {
+    if (!this.speakersAvailable()) return [];
+    const label = this.transcriptPreferences.speakersOn()
+      ? $localize`:@@player.speakers.on:Mostrar quem fala: ligado`
+      : $localize`:@@player.speakers.off:Mostrar quem fala: desligado`;
+    return [{ id: 'speakers', label }];
+  }
+
   protected chooseMore(id: string): void {
     if (id === 'link') this.copyMinuteLink();
+    if (id === 'speakers') this.transcriptPreferences.toggleSpeakers();
     if (id === 'shortcuts') this.shortcutsDialog().open();
     if (id === 'skips') this.skipsDialog().open();
     if (id === 'sleep') this.sleepDialog().open();

@@ -105,6 +105,9 @@ import {
   mediaRoutes,
   silenceRoutes,
   DiarizationService,
+  SpeakersService,
+  VoiceNamesService,
+  collectionSpeakerRoutes,
   speakerRoutes,
   transcriberRoutes,
   TranscriberService,
@@ -437,6 +440,7 @@ async function registerWorker(
     media: MediaDeps;
     transcribers: TranscriberService;
     silences: SilenceService;
+    authors: AuthorsService;
   },
 ) {
   const { store, files, transcripts } = wiring.media;
@@ -454,15 +458,12 @@ async function registerWorker(
 /** Each person's listening: position, bookmarks, the transcript, subtitles and voices. */
 async function registerListening(
   app: FastifyInstance,
-  wiring: {
-    deps: MediaDeps;
-    media: MediaService;
-    transcribers: TranscriberService;
-  },
+  wiring: MediaWiring,
+  services: { media: MediaService; transcribers: TranscriberService },
 ) {
-  const { listening, bookmarks, transcripts } = wiring.deps;
-  const { media, transcribers } = wiring;
-  const diarization = diarizationService({ media: wiring.deps, transcribers });
+  const { listening, bookmarks, transcripts } = wiring.media;
+  const { media, transcribers } = services;
+  const diarization = diarizationService({ ...wiring, transcribers });
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
   );
@@ -477,20 +478,58 @@ async function registerListening(
       }),
     ),
   );
-  await app.register(speakerRoutes(diarization));
+  await registerSpeakers(app, {
+    deps: wiring.media,
+    diarization,
+    authors: wiring.authors,
+    hasTopic: (topic) => wiring.catalog.get(topic) !== undefined,
+  });
+}
+
+/** Who the voices are and the speakers of each collection (KBC-065). */
+async function registerSpeakers(
+  app: FastifyInstance,
+  wiring: {
+    deps: MediaDeps;
+    diarization: DiarizationService;
+    authors: AuthorsService;
+    hasTopic: (topic: string) => boolean;
+  },
+) {
+  const { deps, diarization, authors, hasTopic } = wiring;
+  const rootOf = (topic: string) => authors.rootOf(topic);
+  await app.register(
+    speakerRoutes(
+      diarization,
+      new VoiceNamesService({
+        ...deps,
+        rootOf,
+        speakersOf: (actor, mediaId) => diarization.speakers(actor, mediaId),
+      }),
+    ),
+  );
+  const service = new SpeakersService({
+    speakers: deps.speakers,
+    rootOf,
+    authorOf: (topic, slug) => authors.authorOf(topic, slug),
+  });
+  await app.register(collectionSpeakerRoutes({ service, hasTopic }));
 }
 
 /** Voice separations (KBC-064): asked by people, done by a transcriber that separates voices. */
 function diarizationService(wiring: {
   media: MediaDeps;
   transcribers: TranscriberService;
+  authors: AuthorsService;
 }): DiarizationService {
-  const { store, files, transcripts, diarizations } = wiring.media;
+  const { store, files, transcripts, diarizations, voiceLabels } = wiring.media;
   return new DiarizationService({
     store,
     files,
     transcripts,
     diarizations,
+    voiceLabels,
+    authorOf: (topic, slug) => wiring.authors.authorOf(topic, slug),
     presence: () => wiring.transcribers.presence('diarize'),
   });
 }
@@ -523,7 +562,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   await app.register(mediaRoutes(media, createPerMinute));
   await app.register(transcriberRoutes({ transcribers, media }));
-  await registerListening(app, { deps: wiring.media, media, transcribers });
+  await registerListening(app, wiring, { media, transcribers });
   const silences = new SilenceService({
     store,
     silences: wiring.media.silences,
@@ -531,7 +570,12 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   });
   await app.register(silenceRoutes(silences));
   await registerLibrary(app, { ...wiring, transcribers });
-  await registerWorker(app, { media: wiring.media, transcribers, silences });
+  await registerWorker(app, {
+    media: wiring.media,
+    transcribers,
+    silences,
+    authors: wiring.authors,
+  });
   const proposals = await registerProposals(app, {
     ...wiring,
     service: media,
