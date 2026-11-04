@@ -7,7 +7,7 @@ import type {
  * The subtitle rules of ADR 0023 §8, applied to the stored words (never to the raw JSON).
  * Bump the version whenever a rule changes: cached WebVTT is keyed by it and re-derived.
  */
-export const SUBTITLE_RULES_VERSION = 1;
+export const SUBTITLE_RULES_VERSION = 2;
 
 export const SUBTITLE_RULES = {
   /** A pause this long between two words starts a new cue. */
@@ -72,9 +72,12 @@ function lineBreakOf(text: string): number | null {
   return best;
 }
 
-/** The text fits the caption area: one line, or two of at most 42 characters. */
+/**
+ * The text fits the caption area: one line, or two of at most 42 characters that hold 84
+ * in all, the space between them included (two full lines would make 85).
+ */
 export const fitsTwoLines = (text: string): boolean =>
-  lineBreakOf(text) !== null;
+  text.length <= SUBTITLE_RULES.maxCueChars && lineBreakOf(text) !== null;
 
 /** True when `word` must start a new cue after `current` (silence, sentence, 6 s, 2 lines). */
 function breaksBefore(current: readonly TimedWord[], word: TimedWord): boolean {

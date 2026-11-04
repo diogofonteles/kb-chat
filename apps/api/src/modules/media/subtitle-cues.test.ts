@@ -139,6 +139,26 @@ describe('cuesOf (KBC-038 FR-1, ADR 0023 §8)', () => {
     expect(cues[0]?.text).toContain('\n');
   });
 
+  it('keeps two full 42-character lines apart: the join space would make 85 (timed words)', () => {
+    const [first, second] = ['a'.repeat(42), 'b'.repeat(42)];
+    const cues = cuesOf({
+      segments: [segmentAt(0, 2_000, '')],
+      words: wordsOf(`${first} ${second}`, { startMs: 0 }),
+    });
+    expect(cues.map((cue) => cue.text)).toEqual([first, second]);
+    expectWithinRules(cues);
+  });
+
+  it('keeps two full 42-character lines apart: the join space would make 85 (segment times)', () => {
+    const [first, second] = ['a'.repeat(42), 'b'.repeat(42)];
+    const cues = cuesOf({
+      segments: [segmentAt(0, 2_000, `${first} ${second}`)],
+      words: [],
+    });
+    expect(cues.map((cue) => cue.text)).toEqual([first, second]);
+    expectWithinRules(cues);
+  });
+
   it('uses the segment times when a segment has no words, split to the limits', () => {
     const text = Array.from({ length: 30 }, () => 'cantado').join(' ');
     const cues = cuesOf({
@@ -167,10 +187,11 @@ describe('cuesOf (KBC-038 FR-1, ADR 0023 §8)', () => {
       segments: [segmentAt(0, 2_000, word)],
       words: [],
     });
-    expect(cues.map((cue) => cue.text.replace('\n', ''))).toEqual([
-      'a'.repeat(84),
-      'a'.repeat(16),
+    expect(cues.map((cue) => cue.text)).toEqual([
+      'a'.repeat(42),
+      `${'a'.repeat(42)}\n${'a'.repeat(16)}`,
     ]);
+    expectWithinRules(cues);
   });
 
   it('keeps cues from running into the next one', () => {
