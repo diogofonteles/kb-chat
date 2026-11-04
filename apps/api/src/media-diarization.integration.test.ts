@@ -270,7 +270,8 @@ describe('No voice print reaches the API (KBC-064 AC-3, BR-1, NFR-3)', () => {
     expect(
       columns
         .filter((row) => row['type'] === 'BLOB')
-        .map((row) => `${row['tbl']}.${row['col']}`),
+        .map((row) => `${row['tbl']}.${row['col']}`)
+        .sort(),
     ).toEqual([
       'media_waveforms.peaks',
       'segments_fts_data.block',

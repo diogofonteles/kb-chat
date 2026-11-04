@@ -587,17 +587,10 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   await app.register(mediaRoutes(media, mediaEditor(wiring), createPerMinute));
   await app.register(transcriberRoutes({ transcribers, media }));
   await registerListening(app, wiring, { media, transcribers });
-  const silences = new SilenceService({
-    store,
-    silences: wiring.media.silences,
+  const { silences, waveforms } = await registerMeasures(app, {
+    deps: wiring.media,
     media,
   });
-  await app.register(silenceRoutes(silences));
-  const waveforms = new WaveformService({
-    waveforms: wiring.media.waveforms,
-    media,
-  });
-  await app.register(waveformRoutes(waveforms));
   await registerLibrary(app, { ...wiring, transcribers });
   await registerWorker(app, {
     media: wiring.media,
@@ -615,7 +608,24 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   startJanitor(app, { media: wiring.media, silences, waveforms, proposals });
 }
 
-/** The queue's janitor, which also backfills silence maps (KBC-044 FR-2). */
+/** What the VM worker measures on the audio: pauses (KBC-044) and peaks (KBC-066). */
+async function registerMeasures(
+  app: FastifyInstance,
+  wiring: { deps: MediaDeps; media: MediaService },
+) {
+  const { deps, media } = wiring;
+  const silences = new SilenceService({
+    store: deps.store,
+    silences: deps.silences,
+    media,
+  });
+  await app.register(silenceRoutes(silences));
+  const waveforms = new WaveformService({ waveforms: deps.waveforms, media });
+  await app.register(waveformRoutes(waveforms));
+  return { silences, waveforms };
+}
+
+/** The queue's janitor, which also backfills silence maps (KBC-044 FR-2) and peaks. */
 function startJanitor(
   app: FastifyInstance,
   wiring: {

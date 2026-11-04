@@ -79,26 +79,35 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
       const current = this.edit(write.mediaId);
       if ((current?.version ?? 0) !== write.expectedVersion) return null;
       this.replaceDraft(write.mediaId, write.tracks, write.now);
-      const next = write.expectedVersion + 1;
-      this.db
-        .prepare(
-          `INSERT INTO media_edits (media_id, version, status, step, transcript_version,
-             updated_by, updated_at)
-           VALUES (?, ?, 'draft', ?, ?, ?, ?)
-           ON CONFLICT (media_id) DO UPDATE SET version = excluded.version,
-             step = excluded.step, updated_by = excluded.updated_by,
-             updated_at = excluded.updated_at`,
-        )
-        .run(
-          write.mediaId,
-          next,
-          write.step,
-          write.transcriptVersion,
-          write.principal,
-          write.now.toISOString(),
-        );
-      return next;
+      this.writeEdit({ ...write, version: write.expectedVersion + 1 });
+      return write.expectedVersion + 1;
     });
+  }
+
+  private writeEdit(
+    input: EditWrite & {
+      version: number;
+      step: EditStep;
+      transcriptVersion: number | null;
+    },
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_edits (media_id, version, status, step, transcript_version,
+           updated_by, updated_at)
+         VALUES (?, ?, 'draft', ?, ?, ?, ?)
+         ON CONFLICT (media_id) DO UPDATE SET version = excluded.version,
+           step = excluded.step, updated_by = excluded.updated_by,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        input.mediaId,
+        input.version,
+        input.step,
+        input.transcriptVersion,
+        input.principal,
+        input.now.toISOString(),
+      );
   }
 
   /** Only what changed is written: an untouched proposal stays one. */

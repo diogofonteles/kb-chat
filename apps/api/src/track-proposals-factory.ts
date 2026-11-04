@@ -52,6 +52,18 @@ function mediaLlm(wiring: TrackProposalWiring): () => LlmPort | null {
   };
 }
 
+/** The voice of each segment a run reads, once voices are separated (KBC-064). */
+function segmentVoicesOf(wiring: TrackProposalWiring) {
+  return (mediaId: string, transcriptId: string) => {
+    const transcript = wiring.media.transcripts
+      .transcripts(mediaId)
+      .find((one) => one.id === transcriptId);
+    if (!transcript) return null;
+    const voices = wiring.diarization.voicesOn(mediaId, transcript);
+    return voices?.segmentVoices ?? null;
+  };
+}
+
 /** The AI's track proposals over the media database (KBC-067). */
 export function createTrackProposals(
   wiring: TrackProposalWiring,
@@ -66,15 +78,7 @@ export function createTrackProposals(
       collection: catalog.get(topic)?.topic.title ?? topic,
       knownNames: authors.list(topic).map((author) => author.name),
     }),
-    segmentVoices: (mediaId, transcriptId) => {
-      const transcript = media.transcripts
-        .transcripts(mediaId)
-        .find((one) => one.id === transcriptId);
-      if (!transcript) return null;
-      return (
-        wiring.diarization.voicesOn(mediaId, transcript)?.segmentVoices ?? null
-      );
-    },
+    segmentVoices: segmentVoicesOf(wiring),
     llm: mediaLlm(wiring),
     caps: {
       runUsd: media.ai.runCapUsd,
