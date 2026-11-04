@@ -433,14 +433,14 @@ describe('LibraryPage (T16, KBC-051)', () => {
   const idsFrom = (start: number, end: number) =>
     Array.from({ length: end - start + 1 }, (_, n) => mediaId(start + n));
 
+  // 250 rows: role and name lookups over all of them took 6 s on CI, so these two stay on
+  // labels and text, and skip the accessibility tree walk where a role is needed.
   it('marks more than the API takes at once in batches of 200, from "Selecionar todas" (FR-3)', async () => {
     const { open, http, settle, tick } = await renderLibrary();
     await open(aPage(manyItems(250)));
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: 'Selecionar todas as 250' }),
-    );
+    fireEvent.click(screen.getByLabelText('Selecionar todas as 250'));
     await settle();
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+    fireEvent.click(screen.getByText('Marcar como ouvida'));
 
     const first = http.expectOne('/api/v1/media/played');
     expect(first.request.body).toEqual({
@@ -458,20 +458,20 @@ describe('LibraryPage (T16, KBC-051)', () => {
     http.expectOne(HOME).flush(aHome());
     await settle();
 
-    expect(screen.getByRole('status').textContent).toContain(
+    expect(screen.getByRole('status', { hidden: true }).textContent).toContain(
       '250 mídias marcadas como ouvidas.',
     );
-    expect(screen.queryByRole('region', { name: 'Seleção' })).toBeNull();
+    expect(
+      screen.queryByRole('region', { name: 'Seleção', hidden: true }),
+    ).toBeNull();
   });
 
   it('says how many were marked and keeps the rest selected when a later batch fails (FR-3)', async () => {
     const { open, http, settle, tick } = await renderLibrary();
     await open(aPage(manyItems(250)));
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: 'Selecionar todas as 250' }),
-    );
+    fireEvent.click(screen.getByLabelText('Selecionar todas as 250'));
     await settle();
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+    fireEvent.click(screen.getByText('Marcar como ouvida'));
 
     http.expectOne('/api/v1/media/played').flush(marked(idsFrom(1, 200)));
     http
@@ -481,7 +481,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
     http.expectOne(HOME).flush(aHome());
     await settle();
 
-    const bar = screen.getByRole('region', { name: 'Seleção' });
+    const bar = screen.getByRole('region', { name: 'Seleção', hidden: true });
     expect(within(bar).getByRole('alert').textContent).toContain(
       '200 mídias marcadas como ouvidas. Faltaram 50: tente de novo.',
     );
