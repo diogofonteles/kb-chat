@@ -1,0 +1,238 @@
+import { provideHttpClient } from '@angular/common/http';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { fireEvent, render, screen } from '@testing-library/angular';
+import type { MediaItem } from '@kb-chat/contracts';
+import { aMediaItem } from '../../testing/media-fixtures.js';
+import { aTopic } from '../../testing/fixtures.js';
+import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
+
+const ITEM = aMediaItem();
+const URL = `/api/v1/media/${ITEM.id}`;
+const AUTHORS = '/api/v1/topics/udv/authors';
+
+async function open(item: MediaItem = ITEM) {
+  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+    this.open = false;
+    this.dispatchEvent(new Event('close'));
+  };
+  const saved = vi.fn<(edit: MediaEdited) => void>();
+  const closed = vi.fn();
+  const view = await render(EditMediaDialog, {
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(),
+      provideHttpClientTesting(),
+    ],
+    inputs: {
+      item,
+      topics: [
+        aTopic({ slug: 'hermetismo', title: 'Hermetismo' }),
+        aTopic({ slug: 'udv', title: 'UDV' }),
+        aTopic({ slug: 'fechado', title: 'Fechado', canOpen: false }),
+      ],
+    },
+    on: { saved, closed },
+  });
+  await view.fixture.whenStable();
+  return {
+    ...view,
+    saved,
+    closed,
+    http: TestBed.inject(HttpTestingController),
+  };
+}
+
+const typeTitle = (text: string) =>
+  fireEvent.input(screen.getByLabelText('Título'), {
+    target: { value: text },
+  });
+
+const chooseTopic = (slug: string) =>
+  fireEvent.change(screen.getByLabelText('Acervo'), {
+    target: { value: slug },
+  });
+
+const save = () =>
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+describe('EditMediaDialog (KBC-050)', () => {
+  it('opens filled in, with the focus on the title', async () => {
+    await open();
+    const title = screen.getByLabelText<HTMLInputElement>('Título');
+    expect(title.value).toBe('Palestra de 1998');
+    expect(screen.getByLabelText<HTMLSelectElement>('Acervo').value).toBe(
+      'hermetismo',
+    );
+    expect(screen.getByLabelText<HTMLInputElement>('Autor').value).toBe(
+      'Mestre Laércio',
+    );
+    expect(document.activeElement).toBe(title);
+  });
+
+  it('AC-4: offers only the collections the person opens', async () => {
+    await open();
+    expect(screen.queryByRole('option', { name: /Fechado/ })).toBeNull();
+    expect(screen.getByRole('option', { name: 'UDV' })).toBeTruthy();
+  });
+
+  it('AC-1: sends only the new title, closes and tells the page', async () => {
+    const { http, saved, fixture } = await open();
+    typeTitle('  A conselheira do rei ');
+    save();
+    const request = http.expectOne(URL);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ title: 'A conselheira do rei' });
+    const answer = aMediaItem({ title: 'A conselheira do rei' });
+    request.flush(answer);
+    await fixture.whenStable();
+    expect(saved).toHaveBeenCalledWith({
+      before: ITEM,
+      after: expect.objectContaining(answer),
+    });
+    http.verify();
+  });
+
+  it('AC-5: a blank title is said at the field and nothing is sent', async () => {
+    const { http, saved, fixture } = await open();
+    typeTitle('   ');
+    save();
+    await fixture.whenStable();
+    expect(screen.getByText(/Dê um título ao áudio/)).toBeTruthy();
+    expect(screen.getByLabelText('Título').getAttribute('aria-invalid')).toBe(
+      'true',
+    );
+    expect(saved).not.toHaveBeenCalled();
+    http.verify();
+  });
+
+  it('a move registers the author in the new collection, then moves', async () => {
+    const { http, saved, fixture } = await open();
+    chooseTopic('udv');
+    await fixture.whenStable();
+    expect(screen.getByText(/Quem não vê este acervo/)).toBeTruthy();
+    save();
+    const author = http.expectOne(AUTHORS);
+    expect(author.request.body).toEqual({ name: 'Mestre Laércio' });
+    author.flush({
+      slug: 'mestre-laercio',
+      name: 'Mestre Laércio',
+      main: false,
+    });
+    const request = http.expectOne(URL);
+    expect(request.request.body).toEqual({
+      topic: 'udv',
+      author: 'mestre-laercio',
+    });
+    request.flush(aMediaItem({ topic: 'udv' }));
+    await fixture.whenStable();
+    expect(saved).toHaveBeenCalled();
+    http.verify();
+  });
+
+  it('a move without an author says so, registering nothing', async () => {
+    const { http } = await open(aMediaItem({ author: null }));
+    chooseTopic('udv');
+    save();
+    const request = http.expectOne(URL);
+    expect(request.request.body).toEqual({ topic: 'udv', author: null });
+    request.flush(aMediaItem({ topic: 'udv', author: null }));
+    http.verify();
+  });
+
+  it('a cleared author becomes "Outros autores"', async () => {
+    const { http } = await open();
+    fireEvent.input(screen.getByLabelText('Autor'), {
+      target: { value: '' },
+    });
+    save();
+    const request = http.expectOne(URL);
+    expect(request.request.body).toEqual({ author: null });
+    request.flush(aMediaItem({ author: null }));
+    http.verify();
+  });
+
+  it('FR-4: a server error keeps the dialog and what was typed', async () => {
+    const { http, saved, fixture } = await open();
+    typeTitle('Novo');
+    save();
+    http
+      .expectOne(URL)
+      .flush(
+        { error: { code: 'FORBIDDEN', message: 'no' } },
+        { status: 403, statusText: 'Forbidden' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain('permissão');
+    expect(screen.getByLabelText<HTMLInputElement>('Título').value).toBe(
+      'Novo',
+    );
+    expect(saved).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [0, /verifique a conexão/],
+    [502, /verifique a conexão/],
+  ])('a status %d says to check the connection', async (status, text) => {
+    const { http, fixture } = await open();
+    save();
+    http.expectOne(URL).flush(null, { status, statusText: 'Down' });
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toMatch(text);
+  });
+
+  it('a refused author is told as the author, a refused field as the fields', async () => {
+    const { http, fixture } = await open();
+    chooseTopic('udv');
+    save();
+    http
+      .expectOne(AUTHORS)
+      .flush(
+        { error: { code: 'VALIDATION_FAILED', message: 'no' } },
+        { status: 400, statusText: 'Bad' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain('nome do autor');
+    chooseTopic('hermetismo');
+    save();
+    http
+      .expectOne(URL)
+      .flush(
+        { error: { code: 'VALIDATION_FAILED', message: 'no' } },
+        { status: 400, statusText: 'Bad' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain('revise os campos');
+  });
+
+  it('asks once, and Escape waits while it saves', async () => {
+    const { http, fixture } = await open();
+    save();
+    await fixture.whenStable();
+    expect(screen.getByRole('button', { name: 'Salvando…' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    const dialog = screen.getByRole('dialog', { hidden: true });
+    const cancel = new Event('cancel', { cancelable: true });
+    dialog.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    http.expectOne(URL).flush(ITEM);
+    http.verify();
+  });
+
+  it('Cancelar closes without sending', async () => {
+    const { http, closed, fixture } = await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(closed).toHaveBeenCalled());
+    http.verify();
+  });
+});

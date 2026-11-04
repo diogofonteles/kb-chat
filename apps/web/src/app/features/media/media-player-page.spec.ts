@@ -20,6 +20,7 @@ import {
 import {
   aMediaItem,
   aTranscription,
+  chatStoreOn,
   sessionAs,
 } from '../../testing/media-fixtures.js';
 import { MediaPlayerPage } from './media-player-page.js';
@@ -43,6 +44,7 @@ async function openPage(
   const media = fakeMediaElement('audio');
   TestBed.configureTestingModule({
     providers: [
+      chatStoreOn(),
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
@@ -676,5 +678,43 @@ describe('MediaPlayerPage: the transcript reads its voices again (KBC-064 FR-5)'
     expect(within(list).getByText('Voz 1')).toBeTruthy();
     expect(within(list).getByText('Voz 2')).toBeTruthy();
     http.expectNone(transcriptRequest);
+  });
+});
+
+describe('MediaPlayerPage: "Editar informações" (KBC-050 FR-2)', () => {
+  it('stays hidden from who may not edit', async () => {
+    const { harness, http } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    expect(
+      screen.queryByRole('button', { name: 'Editar informações' }),
+    ).toBeNull();
+  });
+
+  it('AC-1: the page shows the new title at once and the sound goes on', async () => {
+    const { harness, http, media } = await openPage();
+    const editable = aMediaItem({ canEdit: true });
+    http.expectOne(ITEM_URL).flush(editable);
+    await harness.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar informações' }));
+    await harness.fixture.whenStable();
+    fireEvent.input(screen.getByLabelText('Título'), {
+      target: { value: 'A conselheira do rei' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    const calls = [...media.calls];
+    http
+      .expectOne(ITEM_URL)
+      .flush({ ...editable, title: 'A conselheira do rei' });
+    await harness.fixture.whenStable();
+    expect(
+      screen.getByRole('heading', { name: 'A conselheira do rei' }),
+    ).toBeTruthy();
+    expect(screen.getByText('Informações salvas')).toBeTruthy();
+    expect(media.calls).toEqual(calls);
+    expect(TestBed.inject(Title).getTitle()).toContain('A conselheira do rei');
+    expect(TestBed.inject(MediaEngine).source()?.title).toBe(
+      'A conselheira do rei',
+    );
   });
 });

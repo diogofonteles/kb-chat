@@ -48,6 +48,9 @@ import {
 } from './media-labels.js';
 import { matchesTitle, newlyReady, summaryOf } from './media-summary.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
+import { detailsSavedText } from './edit-labels.js';
+import { EditMediaDialog, type MediaEdited } from './edit-media-dialog.js';
+import { MovedNotice, mediaMoveOf, type MediaMove } from './moved-notice.js';
 import { RowMenu } from './row-menu.js';
 import { UploadPanel } from './upload-panel.js';
 
@@ -60,7 +63,15 @@ export const FILTER_FROM = 11;
  */
 @Component({
   selector: 'app-media-list-page',
-  imports: [RouterLink, DatePipe, AuthorshipBadge, UploadPanel, RowMenu],
+  imports: [
+    RouterLink,
+    DatePipe,
+    AuthorshipBadge,
+    EditMediaDialog,
+    MovedNotice,
+    UploadPanel,
+    RowMenu,
+  ],
   templateUrl: './media-list-page.html',
   styleUrl: './media-list-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -127,6 +138,12 @@ export class MediaListPage {
   });
   protected readonly uploading = signal(false);
   protected readonly removing = signal<MediaItem | null>(null);
+  protected readonly editing = signal<MediaItem | null>(null);
+  /** The last audio moved from here (FR-3); cleared on a switch. */
+  protected readonly moved = linkedSignal<string | null, MediaMove | null>({
+    source: this.chat.topicSlug,
+    computation: () => null,
+  });
   protected readonly actionError = signal('');
   protected readonly announcement = signal('');
   /** Where the last upload went, when it was another collection; cleared on a switch. */
@@ -238,6 +255,40 @@ export class MediaListPage {
         error: (err: unknown) =>
           this.actionError.set(errorMessage(toUiErrorCode(err))),
       });
+  }
+
+  protected openEdit(item: MediaItem): void {
+    this.moved.set(null);
+    this.editing.set(item);
+  }
+
+  protected editClosed(): void {
+    this.editing.set(null);
+  }
+
+  /** Saved (FR-2). A row that left took its ⋯ along: the focus stays on the page (NG-30). */
+  protected edited({ before, after }: MediaEdited): void {
+    this.list.reload();
+    const moved = before.topic !== after.topic;
+    const move = moved ? mediaMoveOf(after, this.topics()) : null;
+    this.moved.set(move);
+    this.announcement.set(move?.text ?? detailsSavedText());
+    if (!this.staysListed(after)) this.heading().nativeElement.focus();
+  }
+
+  /** In this list (a sub-collection's items are too) and in what the filters show. */
+  private staysListed(item: MediaItem): boolean {
+    const slug = this.chat.topicSlug();
+    const parent = this.topics().find((one) => one.slug === item.topic)?.parent;
+    return (
+      (item.topic === slug || parent === slug) &&
+      matchesTitle(item, this.query()) &&
+      matchesAuthor(item, this.author())
+    );
+  }
+
+  protected openMovedTopic(topic: string): void {
+    this.chat.selectTopic(topic);
   }
 
   protected askRemove(item: MediaItem): void {

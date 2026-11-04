@@ -1035,3 +1035,94 @@ describe('LibraryPage (T16, KBC-051)', () => {
     );
   });
 });
+
+describe('LibraryPage: "Editar informações" (KBC-050)', () => {
+  const edit = async (item: LibraryItem, settle: () => Promise<unknown>) => {
+    fireEvent.click(
+      screen.getByRole('button', { name: `Mais ações para ${item.title}` }),
+    );
+    await settle();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Editar informações' }),
+    );
+    await settle();
+  };
+
+  it('is offered only for what the person may edit', async () => {
+    const { open, settle } = await renderLibrary();
+    await open(aPage([anItem(1)]));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Mais ações para Palestra 1' }),
+    );
+    await settle();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Editar informações' }),
+    ).toBeNull();
+  });
+
+  it('a new title changes the row in place, without asking for the list again', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    const item = { ...anItem(1), canEdit: true };
+    await open(aPage([item]));
+    await edit(item, settle);
+    fireEvent.input(screen.getByLabelText('Título'), {
+      target: { value: 'Novo título' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    http
+      .expectOne(`/api/v1/media/${mediaId(1)}`)
+      .flush({ ...item, title: 'Novo título' });
+    await tick();
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+    http.expectNone(FIRST);
+    expect(screen.getByRole('link', { name: 'Novo título' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Informações salvas',
+    );
+  });
+
+  it('AC-2: a move asks again, says where it went and links the collection', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    const item = { ...anItem(1), canEdit: true, author: null };
+    await open(aPage([item]));
+    await edit(item, settle);
+    fireEvent.change(screen.getByLabelText('Acervo'), {
+      target: { value: 'alquimia' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    http
+      .expectOne(`/api/v1/media/${mediaId(1)}`)
+      .flush({ ...item, topic: 'alquimia' });
+    await tick();
+    http.expectOne(FIRST).flush(aPage([{ ...item, topic: 'alquimia' }]));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Palestra 1 foi movido para o acervo Alquimia.',
+    );
+    const link = screen.getByRole<HTMLAnchorElement>('link', {
+      name: 'Ver o acervo',
+    });
+    expect(link.getAttribute('href')).toBe('/biblioteca?acervo=alquimia');
+  });
+
+  it('a new author asks again too', async () => {
+    const { open, http, settle, tick } = await renderLibrary();
+    const item = { ...anItem(1), canEdit: true };
+    await open(aPage([item]));
+    await edit(item, settle);
+    fireEvent.input(screen.getByLabelText('Autor'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+    http
+      .expectOne(`/api/v1/media/${mediaId(1)}`)
+      .flush({ ...item, author: null });
+    await tick();
+    http.expectOne(FIRST).flush(aPage([{ ...item, author: null }]));
+    http.expectOne(HOME).flush(aHome());
+    await settle();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Informações salvas',
+    );
+  });
+});

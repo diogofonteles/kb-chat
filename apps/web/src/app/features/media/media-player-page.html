@@ -59,6 +59,16 @@
             errados.
           </p>
         }
+        @if (current.canEdit) {
+          <button
+            type="button"
+            class="secondary edit"
+            aria-haspopup="dialog"
+            (click)="editing.set(true)"
+          >
+            {{ editLabel }}
+          </button>
+        }
       </header>
 
       @if (ready()) {
@@ -162,4 +172,14 @@
       />
     }
   }
+  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
 </article>
+
+@if (editing() && media(); as current) {
+  <app-edit-media-dialog
+    [item]="current"
+    [topics]="topics()"
+    (saved)="edited($event)"
+    (closed)="editing.set(false)"
+  />
+}

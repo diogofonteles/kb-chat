@@ -92,6 +92,16 @@ describe.each(['audio', 'video'] as const)('MediaEngine over <%s>', (tag) => {
     expect(media.calls.at(-1)).toBe('pause');
   });
 
+  it('takes a new title without touching the sound, and only for its own media', () => {
+    ready();
+    const calls = [...media.calls];
+    engine.retitle(OTHER.id, 'Outra');
+    expect(engine.source()?.title).toBe(LECTURE.title);
+    engine.retitle(LECTURE.id, 'Novo título');
+    expect(engine.source()).toEqual({ ...LECTURE, title: 'Novo título' });
+    expect(media.calls).toEqual(calls);
+  });
+
   it('does not count opening at a saved position as a skip of the person', () => {
     engine.load(LECTURE, 30_000);
     media.setDuration(60);

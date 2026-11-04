@@ -52,6 +52,9 @@ import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { EMPTY, Subject, catchError, concatMap, debounceTime, of } from 'rxjs';
 import { keepFocusedInView } from '../keep-in-view.js';
+import { detailsSavedText } from '../edit-labels.js';
+import { EditMediaDialog, type MediaEdited } from '../edit-media-dialog.js';
+import { MovedNotice, mediaMoveOf, type MediaMove } from '../moved-notice.js';
 import { UploadPanel } from '../upload-panel.js';
 import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
@@ -99,9 +102,11 @@ interface MorePages {
   selector: 'app-library-page',
   imports: [
     RouterLink,
+    EditMediaDialog,
     LibraryCard,
     LibraryControls,
     LibraryRow,
+    MovedNotice,
     NearEnd,
     UploadPanel,
   ],
@@ -378,6 +383,12 @@ export class LibraryPage {
 
   protected readonly uploading = signal(false);
   protected readonly removing = signal<MediaItem | null>(null);
+  protected readonly editing = signal<LibraryItem | null>(null);
+  /** The last audio moved from here (KBC-050 FR-3). */
+  protected readonly moved = signal<MediaMove | null>(null);
+  protected readonly movedQuery = computed(() => ({
+    acervo: this.moved()?.topic,
+  }));
   protected readonly actionError = signal('');
   /** The next page failed: "Mostrar mais" stays, to try again. */
   private readonly pageError = computed(() => {
@@ -586,6 +597,7 @@ export class LibraryPage {
 
   protected rowAction(item: LibraryItem, action: RowAction): void {
     if (action === 'remove') this.askRemove(item);
+    else if (action === 'edit') this.openEdit(item);
     else this.mark([item.id], action === 'mark-played');
   }
 
@@ -692,6 +704,48 @@ export class LibraryPage {
         error: (err: unknown) =>
           this.actionError.set(errorMessage(toUiErrorCode(err))),
       });
+  }
+
+  private openEdit(item: LibraryItem): void {
+    this.moved.set(null);
+    this.editing.set(item);
+  }
+
+  protected editClosed(): void {
+    this.editing.set(null);
+  }
+
+  /** A new title changes the row in place; a new author or collection changes the lists. */
+  protected edited({ before, after }: MediaEdited): void {
+    const moved = before.topic !== after.topic;
+    if (!moved && before.author?.slug === after.author?.slug) {
+      this.showTitle(after);
+      this.announcement.set(detailsSavedText());
+      return;
+    }
+    this.reload();
+    this.focusAfterRender(this.allTitle);
+    const move = moved ? mediaMoveOf(after, this.topics()) : null;
+    this.moved.set(move);
+    this.announcement.set(move?.text ?? detailsSavedText());
+  }
+
+  /** Asking again would fold the pages already loaded, and the row with its ⋯. */
+  private showTitle({ id, title }: MediaItem): void {
+    const titled = (item: LibraryItem): LibraryItem =>
+      item.id === id ? { ...item, title } : item;
+    this.lastPage.update(
+      (page) => page && { ...page, items: page.items.map(titled) },
+    );
+    this.morePages.update((more) => ({
+      ...more,
+      items: more.items.map(titled),
+    }));
+    this.home.reload();
+  }
+
+  protected openMovedTopic(topic: string): void {
+    this.changeFilter({ kind: 'topic', topic });
   }
 
   private askRemove(item: LibraryItem): void {

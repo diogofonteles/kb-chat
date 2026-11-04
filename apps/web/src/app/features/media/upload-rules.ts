@@ -1,3 +1,4 @@
+import type { AbstractControl } from '@angular/forms';
 import {
   MEDIA_MAX_UPLOAD_BYTES,
   hasAcceptedAudioExtension,
@@ -38,3 +39,7 @@ export function titleFromFileName(name: string): string {
 /** "128 de 312 MB" while sending. */
 export const sentOf = (loaded: number, total: number): string =>
   $localize`:@@media.upload.sent:${megabytes(loaded)}:loaded: de ${megabytes(total)}:total: MB`;
+
+/** A title is required, and spaces alone are not one (the API trims it too). */
+export const notBlank = (control: AbstractControl<string>) =>
+  control.value.trim() ? null : { required: true };

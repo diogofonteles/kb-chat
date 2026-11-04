@@ -9,12 +9,13 @@ import { RouterLink } from '@angular/router';
 import { listeningStateOf, type LibraryItem } from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import { editDetailsLabel } from '../edit-labels.js';
 import { statusTextOf } from '../media-labels.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
 import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 
 /** What the row's "⋯" can do. */
-export type RowAction = 'mark-played' | 'mark-unplayed' | 'remove';
+export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
 
 /**
  * One media in "Todas" as a list (screens.md T16): the whole row opens the player, ▶ plays
@@ -84,6 +85,8 @@ export class LibraryRow {
               label: $localize`:@@library.markPlayed:Marcar como ouvida`,
             },
       );
+    if (this.item().canEdit)
+      options.push({ id: 'edit', label: editDetailsLabel() });
     if (this.master())
       options.push({
         id: 'remove',
@@ -107,5 +110,6 @@ export class LibraryRow {
 const ACTIONS: readonly RowAction[] = [
   'mark-played',
   'mark-unplayed',
+  'edit',
   'remove',
 ];

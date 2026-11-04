@@ -206,3 +206,7 @@
   height: 9.5rem;
   border-radius: var(--radius-lg);
 }
+
+.edit {
+  margin-top: var(--space-3);
+}

@@ -31,6 +31,19 @@ export function toUiErrorCode(err: unknown): UiErrorCode {
   return parsed.success ? parsed.data.error.code : 'INTERNAL';
 }
 
+/** The field a 400 names (`details.field` of the API's error envelope), if any. */
+export function refusedFieldOf(err: unknown): string | null {
+  if (!(err instanceof HttpErrorResponse) || err.status !== 400) return null;
+  const parsed = apiErrorSchema.safeParse(parseBody(err.error));
+  const details = parsed.success ? parsed.data.error.details : null;
+  return typeof details === 'object' &&
+    details !== null &&
+    'field' in details &&
+    typeof details.field === 'string'
+    ? details.field
+    : null;
+}
+
 const MESSAGES: Record<UiErrorCode, () => string> = {
   OFFLINE: () =>
     $localize`:@@error.offline:Não consegui falar com o servidor de busca. Verifique se ele está rodando (pnpm dev:api).`,
