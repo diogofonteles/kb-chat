@@ -1,7 +1,7 @@
 export {
-  MediaEditService,
+  TrackEditService,
   type EditCall,
-  type MediaEditServiceDeps,
+  type TrackEditServiceDeps,
   type SaveEdit,
-} from './media-edit-service.js';
+} from './track-edit-service.js';
 export { mediaEditRoutes } from './routes.js';

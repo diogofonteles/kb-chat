@@ -132,7 +132,7 @@ import {
   trackProposalRoutes,
 } from './modules/track-proposals/index.js';
 import {
-  MediaEditService,
+  TrackEditService,
   mediaEditRoutes,
 } from './modules/media-edit/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
@@ -679,7 +679,7 @@ async function registerEdit(
   const { edits, trackProposals, transcripts, speakers } = wiring.media;
   await app.register(
     mediaEditRoutes(
-      new MediaEditService({
+      new TrackEditService({
         edits,
         drafts: trackProposals,
         transcripts,

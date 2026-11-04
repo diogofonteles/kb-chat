@@ -22,7 +22,7 @@ import type { TrackProposalStorePort } from '../../ports/track-proposal-store.js
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
 import type { MediaActor } from '../media/index.js';
 
-export interface MediaEditServiceDeps {
+export interface TrackEditServiceDeps {
   readonly edits: MediaEditStorePort;
   readonly drafts: Pick<TrackProposalStorePort, 'draft'>;
   readonly transcripts: Pick<TranscriptStorePort, 'transcripts' | 'words'>;
@@ -65,10 +65,10 @@ const speakerIdsOf = (track: EditTrack) =>
  * listeners but through `approve` (BR-1). The API checks again what the editor checks
  * (BR-3, BR-4), and a write on an old version is refused, never merged (FR-10).
  */
-export class MediaEditService {
+export class TrackEditService {
   private readonly now: () => Date;
 
-  constructor(private readonly deps: MediaEditServiceDeps) {
+  constructor(private readonly deps: TrackEditServiceDeps) {
     this.now = deps.now ?? (() => new Date());
   }
 

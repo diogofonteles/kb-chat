@@ -10,11 +10,12 @@ import {
 import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
 import type { MediaActor } from './modules/media/index.js';
 import { ProposalService } from './modules/track-proposals/index.js';
-import { MediaEditService } from './modules/media-edit/index.js';
+import { TrackEditService } from './modules/media-edit/index.js';
 
 const OWNER: MediaActor = {
   principal: 'owner',
   isMaster: true,
+  canUpload: true,
   canSee: () => true,
 };
 
@@ -64,7 +65,7 @@ function setup(titles: readonly string[] = ['Primeira', 'Segunda']) {
     llm: () => llm,
     caps: { runUsd: 0.25, monthlyUsd: 10 },
   });
-  const edits = new MediaEditService({
+  const edits = new TrackEditService({
     edits: new SqliteMediaEditStore(db.db),
     drafts: db.store,
     transcripts: db.transcripts,

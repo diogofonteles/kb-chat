@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import { assertFeature, type RouteAccess } from '../auth/index.js';
 import { actorOf } from '../media/index.js';
-import type { EditCall, MediaEditService } from './media-edit-service.js';
+import type { EditCall, TrackEditService } from './track-edit-service.js';
 
 /** Editing is `media-edit`, on top of `media` as every other media route (BR-8). */
 const EDIT: RouteAccess = { feature: 'media-edit' };
@@ -69,7 +69,7 @@ function callOf(request: FastifyRequest, mediaId: string): EditCall {
 
 /** The draft and its approval (KBC-066 FR-1, FR-2) and the approved tracks. */
 export const mediaEditRoutes =
-  (service: MediaEditService): FastifyPluginAsync =>
+  (service: TrackEditService): FastifyPluginAsync =>
   async (app) => {
     app.addHook('preHandler', async (request) => {
       assertFeature(request, 'media');
