@@ -41,17 +41,20 @@ const SILENT_MEDIA = () => {
     return play.call(this);
   };
 };
-const launchWebkit = webkit.launch.bind(webkit);
-webkit.launch = async (options) => {
-  const browser = await launchWebkit(options);
-  const newContext = browser.newContext.bind(browser);
-  browser.newContext = async (contextOptions) => {
-    const context = await newContext(contextOptions);
-    await context.addInitScript(SILENT_MEDIA);
-    return context;
+// CI has no speakers, and the route delays the player's clock on its slower runners.
+if (!process.env.CI) {
+  const launchWebkit = webkit.launch.bind(webkit);
+  webkit.launch = async (options) => {
+    const browser = await launchWebkit(options);
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async (contextOptions) => {
+      const context = await newContext(contextOptions);
+      await context.addInitScript(SILENT_MEDIA);
+      return context;
+    };
+    return browser;
   };
-  return browser;
-};
+}
 /** WebKit runs locally only on demand (`KBC_E2E_WEBKIT=1 pnpm e2e`); always in CI. */
 const WITH_WEBKIT = !!process.env.CI || process.env['KBC_E2E_WEBKIT'] === '1';
 
