@@ -277,7 +277,7 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
           stroke: style.getPropertyValue('-webkit-text-stroke-width'),
         };
       });
-    // WebKit paints the highlight but does not report its style: its look is in the shots.
+    // WebKit does not report a highlight's style: the pixels below prove it there.
     if (testInfo.project.name !== 'media-webkit') {
       expect(look.line).toContain('underline');
       expect(look.thickness).toBe('3px');
@@ -290,6 +290,12 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     );
     expect(violations).toEqual([]);
     await saveEvidence(page, `${testInfo.project.name}-${theme}`);
+    // The registry says what was asked, not what was drawn: the pixels must differ too.
+    const text = page.locator('.segment.active .text');
+    const marked = await text.screenshot();
+    await turnOffWordHighlight(page);
+    await expect.poll(() => spokenWord(page)).toBeNull();
+    expect(marked.equals(await text.screenshot())).toBe(false);
   });
 }
 

@@ -27,11 +27,17 @@ interface HighlightRegistry {
   delete(name: string): boolean;
 }
 
-type HighlightConstructor = new (...ranges: Range[]) => { priority?: number };
+type HighlightConstructor = new (...ranges: Range[]) => { priority: number };
 
-/** What the person looks for stays readable over the word that goes by (0 is the default). */
-const PRIORITY: Partial<Record<SearchHighlightName, number>> = {
-  'transcript-word': -1,
+/**
+ * What the person looks for stays readable over the word going by. The word stays at the
+ * default 0: WebKit does not draw the underline of a highlight with a negative priority.
+ */
+const PRIORITY: Readonly<Record<SearchHighlightName, number>> = {
+  'transcript-match': 1,
+  'transcript-current': 1,
+  'transcript-passage': 1,
+  'transcript-word': 0,
 };
 
 export const SEARCH_HIGHLIGHTS = new InjectionToken<SearchHighlights>(
@@ -52,8 +58,7 @@ export const SEARCH_HIGHLIGHTS = new InjectionToken<SearchHighlights>(
       return {
         show: (name, ranges) => {
           const highlight = new Highlight(...ranges);
-          const priority = PRIORITY[name];
-          if (priority !== undefined) highlight.priority = priority;
+          highlight.priority = PRIORITY[name];
           registry.set(name, highlight);
         },
         clear: (name) => registry.delete(name),
