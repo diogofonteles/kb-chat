@@ -182,6 +182,8 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
       )
       .run(startMs, endMs, track.trackId);
     this.queueCut(track.mediaId, input.jobId, input.now.toISOString());
+    // The API allows a jump over a neighbour into a free stretch: places follow time.
+    this.renumber(track.parentId);
   }
 
   private queueCut(mediaId: string, jobId: string, at: string): void {

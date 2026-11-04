@@ -143,7 +143,8 @@ export class TrackRevisionService {
       revisions.record(call.mediaId, changes, author);
       for (const role of ROLES)
         this.applySpeaker({ call, track, role, patch, scope, author });
-      publisher.afterRecordingEdit(track.parentId);
+      if (ROLES.some((role) => askedOf(patch, role) !== undefined))
+        publisher.afterRecordingEdit(track.parentId);
     });
   }
 
@@ -180,7 +181,7 @@ export class TrackRevisionService {
     const { track, role, patch, scope } = input;
     const speakerId = askedOf(patch, role);
     if (speakerId === undefined) return;
-    if (speakerId === speakerIdOf(track, role)) return;
+    if (scope === 'track' && speakerId === speakerIdOf(track, role)) return;
     this.assertOwnSpeaker(track.parentId, speakerId);
     if (scope === 'recording') this.nameVoice(input, speakerId);
     else this.nameHere(input, speakerId);

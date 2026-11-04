@@ -341,7 +341,7 @@ describe('Bounds of an approved track (FR-2)', () => {
     expect(saved.json<{ positionMs: number }>().positionMs).toBe(30_000);
   });
 
-  it('a second change waits for the running cut; a failed one can be changed', async () => {
+  it('a second change waits for the running cut', async () => {
     const world = await startWorld();
     const { media } = world;
     const { first } = await published(world);
@@ -354,6 +354,52 @@ describe('Bounds of an approved track (FR-2)', () => {
 
     expect(refused.statusCode).toBe(409);
     expect(refused.body).toContain('cut-running');
+  });
+});
+
+describe('A cut that fails (FR-2)', () => {
+  const giveUpCut = (media: Media) => {
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    db.exec(`UPDATE jobs SET status = 'dead' WHERE kind = 'cut'`);
+    db.close();
+  };
+
+  it('can be tried again, or replaced by other bounds', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    await moveBounds(media, first.id, { startMs: 90_000, endMs: 210_000 });
+    giveUpCut(media);
+    const failed = await viewOf(media, first.id);
+    expect(failed.cut).toBe('failed');
+
+    const retried = await send(media, {
+      method: 'POST',
+      url: `${urlOf(first.id)}/bounds/retry`,
+      version: failed.version,
+    });
+
+    expect(retried.statusCode, retried.body).toBe(202);
+    giveUpCut(media);
+    const replaced = await moveBounds(media, first.id, {
+      startMs: 80_000,
+      endMs: 210_000,
+    });
+    expect(replaced.statusCode, replaced.body).toBe(202);
+    expect(await finishCuts(media)).toBe(1);
+    const item = (await media.owner('GET', urlOf(first.id))).json<MediaItem>();
+    expect(item.parent?.startMs).toBe(80_000);
+  });
+
+  it('a jump over the neighbour renumbers the tracks', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first, second } = await published(world);
+
+    await moveBounds(media, first.id, { startMs: 500_000, endMs: 560_000 });
+
+    expect((await viewOf(media, second.id)).ordinal).toBe(1);
+    expect((await viewOf(media, first.id)).ordinal).toBe(2);
   });
 });
 

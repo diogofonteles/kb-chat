@@ -1,0 +1,344 @@
+import AxeBuilder from '@axe-core/playwright';
+import type { APIRequestContext, Page } from '@playwright/test';
+import {
+  CSRF,
+  expect,
+  invite,
+  ownerApi,
+  pageAs,
+  test,
+  uniqueEmail,
+} from './fixtures.js';
+import { audioState, useTheme } from './media-helpers.js';
+import { approve, audioWithTracks } from './tracks-helpers.js';
+
+// KBC-073: a track changes after its approval, cut for real by the E2E's media worker.
+
+interface View {
+  readonly version: number;
+  readonly cut: string;
+}
+
+async function publishedIn(owner: APIRequestContext, mediaId: string) {
+  await expect
+    .poll(
+      async () => {
+        const edit = await owner.get(`/api/v1/media/${mediaId}/edit`);
+        return ((await edit.json()) as { preparation: unknown }).preparation;
+      },
+      { timeout: 30_000 },
+    )
+    .toBeNull();
+}
+
+interface LibraryRow {
+  readonly id: string;
+  readonly title: string;
+  readonly tracks: readonly { readonly id: string; readonly title: string }[];
+}
+
+async function approvedTracks(owner: APIRequestContext) {
+  const media = await audioWithTracks(owner);
+  await approve(owner, media.id);
+  await publishedIn(owner, media.id);
+  const library = await owner.get(
+    `/api/v1/media/library?q=${encodeURIComponent(media.title)}`,
+  );
+  const { items } = (await library.json()) as {
+    readonly items: readonly LibraryRow[];
+  };
+  const row = items.find((one) => one.id === media.id);
+  const [first, second] = row?.tracks ?? [];
+  if (!first || !second) throw new Error('no tracks');
+  return { media, first, second };
+}
+
+const trackPage = (id: string) => `/midia/${id}`;
+
+async function viewOf(owner: APIRequestContext, id: string): Promise<View> {
+  const read = await owner.get(`/api/v1/media/${id}/track-edit`);
+  return (await read.json()) as View;
+}
+
+async function waitForCut(owner: APIRequestContext, id: string) {
+  await expect
+    .poll(async () => (await viewOf(owner, id)).cut, { timeout: 30_000 })
+    .toBe('none');
+}
+
+const editDialog = (page: Page) =>
+  page.getByRole('dialog', { name: 'Editar faixa' });
+
+test('AC-1, AC-12: the title changes on the same page and the history says so', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  await page.goto(trackPage(first.id));
+
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  const dialog = editDialog(page);
+  await dialog
+    .getByRole('textbox', { name: 'Título' })
+    .fill('Título corrigido');
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole('heading', { name: 'Título corrigido' }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(first.id));
+  await page.locator('summary', { hasText: 'Histórico' }).click();
+  await expect(
+    page.getByText(/Primeira pergunta → Título corrigido/),
+  ).toBeVisible();
+  await owner.dispose();
+});
+
+test('AC-13: who saves second sees the other title and keeps theirs', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  await page.goto(trackPage(first.id));
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  const dialog = editDialog(page);
+  await dialog.getByRole('textbox', { name: 'Título' }).fill('O meu título');
+
+  const { version } = await viewOf(owner, first.id);
+  const other = await owner.patch(`/api/v1/media/${first.id}`, {
+    headers: { ...CSRF, 'if-match': `"${version}"` },
+    data: { title: 'O título dela' },
+  });
+  expect(other.status()).toBe(200);
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+
+  await expect(dialog.getByRole('alert')).toContainText('O título dela');
+  await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(
+    'O meu título',
+  );
+  await dialog.getByRole('button', { name: 'Salvar o meu por cima' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'O meu título' }),
+  ).toBeVisible();
+  await owner.dispose();
+});
+
+test('AC-4, AC-5, AC-6: the bounds move, with the track in the bar limited by its neighbour, and who listens goes on', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  await page.goto(trackPage(first.id));
+  await page.getByRole('button', { name: 'Tocar', exact: true }).click();
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThan(0.2);
+  const playingFrom = (await audioState(page)).src;
+
+  const { version } = await viewOf(owner, first.id);
+  const moved = await owner.put(`/api/v1/media/${first.id}/bounds`, {
+    headers: { ...CSRF, 'if-match': `"${version}"` },
+    data: { startMs: 2_000, endMs: 12_000 },
+  });
+  expect(moved.status()).toBe(202);
+  await waitForCut(owner, first.id);
+
+  // AC-5: the same file goes on, and a jump inside it still answers.
+  expect((await audioState(page)).src).toBe(playingFrom);
+  expect((await audioState(page)).paused).toBe(false);
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('button', { name: 'Pausar', exact: true }).click();
+  const old = await owner.get(
+    new URL(playingFrom).pathname + new URL(playingFrom).search,
+  );
+  expect(old.status()).toBe(200);
+
+  await page.goto(trackPage(first.id));
+  await page.getByRole('button', { name: 'Tocar', exact: true }).click();
+  await expect
+    .poll(async () => (await audioState(page)).duration)
+    .toBeGreaterThan(9.5);
+  expect((await audioState(page)).duration).toBeLessThan(10.5);
+  expect((await audioState(page)).src).not.toBe(playingFrom);
+  await owner.dispose();
+});
+
+test('FR-6, AC-6: the editor of one track saves with the keyboard and stops at the neighbour', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  await page.goto(trackPage(first.id));
+  await page.getByRole('link', { name: 'Ajustar início e fim' }).click();
+  const end = page.getByRole('slider', { name: /Fim da faixa 1/ });
+  await end.focus();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(page.getByText('Encostou na faixa 2')).toBeVisible();
+
+  const start = page.getByRole('slider', { name: /Início da faixa 1/ });
+  await start.focus();
+  await page.keyboard.press('Alt+ArrowRight');
+  await page.getByRole('button', { name: 'Salvar limites' }).click();
+
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Pronto' }),
+  ).toBeVisible({
+    timeout: 30_000,
+  });
+  await owner.dispose();
+});
+
+test('AC-8: deleting says the impact, the track leaves the library, and it comes back', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { media, first } = await approvedTracks(owner);
+  await page.goto(trackPage(first.id));
+
+  await page.getByRole('button', { name: 'Apagar faixa' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('restaurar em até 30 dias');
+  await dialog.getByRole('button', { name: 'Apagar faixa' }).click();
+
+  await expect(page.getByText('Faixa removida da edição')).toBeVisible();
+  await page.goto(`/midia/${media.id}`);
+  await page.getByRole('heading', { name: 'Faixas apagadas' }).waitFor();
+  await page.getByRole('button', { name: 'Restaurar' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Faixas apagadas' }),
+  ).toBeHidden();
+
+  await page.goto(trackPage(first.id));
+  await expect(page.getByText('Faixa removida da edição')).toBeHidden();
+  await expect(page.getByText('faixa 1 de 3')).toBeVisible();
+  await owner.dispose();
+});
+
+test('AC-11: the suggestion shows its cost, and nothing changes until "Usar" and "Salvar"', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  // The E2E server cannot script its fake model: the route answers here (as KBC-069's spec).
+  await page.route(`**/api/v1/media/${first.id}/suggestions`, async (route) => {
+    const { dryRun } = route.request().postDataJSON() as { dryRun: boolean };
+    await route.fulfill(
+      dryRun
+        ? {
+            status: 200,
+            json: {
+              estimateUsd: 0.0012,
+              runCapUsd: 1,
+              windows: 1,
+              model: 'stub',
+              allowed: true,
+              refusal: null,
+              month: null,
+            },
+          }
+        : {
+            status: 201,
+            json: {
+              title: 'Título da IA',
+              summary: null,
+              askerSpeakerId: null,
+              answererSpeakerId: null,
+              subjects: [],
+              spentUsd: 0.001,
+            },
+          },
+    );
+  });
+  await page.goto(trackPage(first.id));
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  const dialog = editDialog(page);
+  await dialog.getByRole('button', { name: 'Ver quanto custa' }).click();
+  await expect(dialog).toContainText('0,0012');
+  await dialog.getByRole('button', { name: 'Confirmar e sugerir' }).click();
+  await expect(dialog.getByText('Título da IA')).toBeVisible();
+  await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(
+    first.title,
+  );
+
+  await dialog
+    .getByRole('button', { name: 'Usar a sugestão Título da IA' })
+    .click();
+
+  await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(
+    'Título da IA',
+  );
+  await dialog.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(page.getByRole('heading', { name: first.title })).toBeVisible();
+  await owner.dispose();
+});
+
+test("the library's ⋯ opens the page on the action chosen", async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const { media, first } = await approvedTracks(owner);
+  await page.goto('/biblioteca');
+  await page.getByRole('searchbox').fill(media.title);
+  await expect(page.getByText(/^1 mídia/)).toBeVisible();
+
+  await page.getByRole('button', { name: `Ações de ${first.title}` }).click();
+  await page.getByRole('menuitem', { name: 'Editar' }).click();
+
+  await expect(editDialog(page)).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/midia/${first.id}$`));
+  await owner.dispose();
+});
+
+test('AC-14: a listener sees none of it', async ({ browser, viewport }) => {
+  const owner = await ownerApi();
+  const { first } = await approvedTracks(owner);
+  const email = uniqueEmail('ouvinte');
+  await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['media', 'media-tracks'],
+  });
+  await owner.dispose();
+  const page = await pageAs(browser, email, viewport);
+
+  await page.goto(trackPage(first.id));
+
+  await expect(page.getByRole('heading', { name: first.title })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Editar', exact: true }),
+  ).toBeHidden();
+  await expect(
+    page.getByRole('link', { name: 'Ajustar início e fim' }),
+  ).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Apagar faixa' })).toBeHidden();
+});
+
+for (const theme of ['light', 'dark', 'esoteric'] as const) {
+  test(`AC-15: the track page, the dialog and the editor pass axe in the ${theme} theme`, async ({
+    page,
+  }) => {
+    const owner = await ownerApi();
+    const { first } = await approvedTracks(owner);
+    await useTheme(page, theme);
+    await page.goto(trackPage(first.id));
+    await page.getByRole('button', { name: 'Editar', exact: true }).click();
+    await expect(editDialog(page)).toBeVisible();
+    const dialog = await new AxeBuilder({ page })
+      .include('dialog')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+      .analyze();
+    expect(
+      dialog.violations.filter(({ impact }) => impact !== 'minor'),
+    ).toEqual([]);
+
+    await page.goto(`${trackPage(first.id)}/limites`);
+    await expect(page.getByRole('slider').first()).toBeVisible();
+    const editor = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag22aa'])
+      .analyze();
+    expect(
+      editor.violations.filter(({ impact }) => impact !== 'minor'),
+    ).toEqual([]);
+    await owner.dispose();
+  });
+}
