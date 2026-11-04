@@ -547,9 +547,8 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
 
   it('names who speaks, with ✦ for the main author, to a listener (KBC-065 AC-1)', async () => {
     const base = transcriptOf();
-    const { speakers: _, ...listened } = voiced([1, 2]);
     await renderPanel({
-      ...listened,
+      ...transcriptOf(),
       segments: base.segments.map((segment, index) => ({
         ...segment,
         voice: index === 0 ? 1 : 2,
@@ -578,9 +577,10 @@ describe('TranscriptPanel: "Voz N" at each change of voice (KBC-064 FR-5, AC-1)'
   });
 
   it('says "Falante não identificado" to a listener for a voice with no name (AC-5)', async () => {
-    const { speakers: _, ...listened } = voiced([1]);
+    const base = transcriptOf();
     await renderPanel({
-      ...listened,
+      ...base,
+      segments: base.segments.map((segment) => ({ ...segment, voice: 1 })),
       voiceNames: [
         { voice: 1, kind: 'unnamed', speakerId: null, name: null, main: false },
       ],

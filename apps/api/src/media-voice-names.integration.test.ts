@@ -71,9 +71,12 @@ async function aSpeaker(media: Media, name: string, authorSlug?: string) {
 
 const nameVoice = (
   media: Media,
-  mediaId: string,
-  voice: number,
-  body: { speakerId?: string | null; audience?: boolean; version?: number },
+  [mediaId, voice]: readonly [mediaId: string, voice: number],
+  body: {
+    speakerId?: string | null;
+    audience?: boolean;
+    version?: number;
+  } = {},
 ) =>
   media.owner('PUT', `/api/v1/media/${mediaId}/voices/${voice}`, {
     version: 1,
@@ -102,10 +105,11 @@ describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
     const master = await aSpeaker(media, 'Mestre', 'mestre-laercio');
     // Voice 2 answers in CONVERSATION; voices 1 and 3 ask.
     expect(
-      (await nameVoice(media, mediaId, 2, { speakerId: master.id })).statusCode,
+      (await nameVoice(media, [mediaId, 2], { speakerId: master.id }))
+        .statusCode,
     ).toBe(200);
-    await nameVoice(media, mediaId, 1, { audience: true });
-    const saved = await nameVoice(media, mediaId, 3, { audience: true });
+    await nameVoice(media, [mediaId, 1], { audience: true });
+    const saved = await nameVoice(media, [mediaId, 3], { audience: true });
     expect(saved.json<MediaSpeakers>().diarization?.labels).toEqual([
       expect.objectContaining({ voice: 1, kind: 'audience', name: null }),
       {
@@ -132,7 +136,9 @@ describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
     const started = performance.now();
-    const saved = await nameVoice(media, mediaId, 2, { speakerId: gabriel.id });
+    const saved = await nameVoice(media, [mediaId, 2], {
+      speakerId: gabriel.id,
+    });
     expect(performance.now() - started).toBeLessThan(300);
     expect(saved.statusCode).toBe(200);
     const { call } = await listener(media);
@@ -144,15 +150,15 @@ describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
-    await nameVoice(media, mediaId, 2, { speakerId: gabriel.id });
-    const cleared = await nameVoice(media, mediaId, 2, {});
+    await nameVoice(media, [mediaId, 2], { speakerId: gabriel.id });
+    const cleared = await nameVoice(media, [mediaId, 2], {});
     expect(cleared.json().diarization.labels[1].kind).toBe('unnamed');
-    const unknown = await nameVoice(media, mediaId, 2, {
+    const unknown = await nameVoice(media, [mediaId, 2], {
       speakerId: '00000000-0000-4000-8000-000000000000',
     });
     expect(unknown.statusCode).toBe(400);
-    expect((await nameVoice(media, mediaId, 9, {})).statusCode).toBe(404);
-    const both = await nameVoice(media, mediaId, 2, {
+    expect((await nameVoice(media, [mediaId, 9])).statusCode).toBe(404);
+    const both = await nameVoice(media, [mediaId, 2], {
       speakerId: gabriel.id,
       audience: true,
     });
@@ -163,18 +169,22 @@ describe('Naming the voices (KBC-065 AC-1, FR-2, FR-4)', () => {
     const media = await startMedia();
     const { token, mediaId } = await separated(media);
     await separate(media, { token, mediaId });
-    const old = await nameVoice(media, mediaId, 1, { version: 1 });
+    const old = await nameVoice(media, [mediaId, 1], { version: 1 });
     expect(old.statusCode).toBe(409);
     expect(
-      (await nameVoice(media, mediaId, 1, { version: 2 })).statusCode,
+      (await nameVoice(media, [mediaId, 1], { version: 2 })).statusCode,
     ).toBe(200);
     const fresh = await transcribedItem(media, token);
-    expect((await nameVoice(media, fresh, 1, {})).statusCode).toBe(409);
+    expect((await nameVoice(media, [fresh, 1])).statusCode).toBe(409);
   });
 });
 
 describe('Joining two voices (KBC-065 AC-3, FR-2)', () => {
-  const merge = (media: Media, mediaId: string, voice: number, into: number) =>
+  const merge = (
+    media: Media,
+    mediaId: string,
+    [voice, into]: readonly [voice: number, into: number],
+  ) =>
     media.owner('POST', `/api/v1/media/${mediaId}/voices/merge`, {
       version: 1,
       voice,
@@ -186,9 +196,9 @@ describe('Joining two voices (KBC-065 AC-3, FR-2)', () => {
     const { mediaId } = await separated(media, FOUR_VOICES);
     expect((await speakersOf(media, mediaId)).diarization?.voiceCount).toBe(4);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
-    await nameVoice(media, mediaId, 4, { speakerId: gabriel.id });
+    await nameVoice(media, [mediaId, 4], { speakerId: gabriel.id });
 
-    const merged = await merge(media, mediaId, 4, 3);
+    const merged = await merge(media, mediaId, [4, 3]);
     expect(merged.statusCode, merged.body).toBe(200);
     const { diarization } = merged.json<MediaSpeakers>();
     expect(diarization).toMatchObject({
@@ -227,17 +237,17 @@ describe('Joining two voices (KBC-065 AC-3, FR-2)', () => {
   it('joins a chain into the last voice and refuses a joined or unknown voice', async () => {
     const media = await startMedia();
     const { mediaId } = await separated(media, FOUR_VOICES);
-    await merge(media, mediaId, 4, 3);
-    const chain = await merge(media, mediaId, 3, 2);
+    await merge(media, mediaId, [4, 3]);
+    const chain = await merge(media, mediaId, [3, 2]);
     expect(chain.json().diarization.merged).toEqual([
       { voice: 3, into: 2 },
       { voice: 4, into: 2 },
     ]);
-    expect((await merge(media, mediaId, 4, 1)).statusCode).toBe(409);
-    expect((await merge(media, mediaId, 1, 4)).statusCode).toBe(409);
-    expect((await nameVoice(media, mediaId, 4, {})).statusCode).toBe(409);
-    expect((await merge(media, mediaId, 1, 9)).statusCode).toBe(404);
-    expect((await merge(media, mediaId, 1, 1)).statusCode).toBe(400);
+    expect((await merge(media, mediaId, [4, 1])).statusCode).toBe(409);
+    expect((await merge(media, mediaId, [1, 4])).statusCode).toBe(409);
+    expect((await nameVoice(media, [mediaId, 4])).statusCode).toBe(409);
+    expect((await merge(media, mediaId, [1, 9])).statusCode).toBe(404);
+    expect((await merge(media, mediaId, [1, 1])).statusCode).toBe(400);
   });
 });
 
@@ -246,7 +256,7 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
-    await nameVoice(media, mediaId, 2, { speakerId: gabriel.id });
+    await nameVoice(media, [mediaId, 2], { speakerId: gabriel.id });
     const { call } = await member(media, {
       email: 'so-ouve@example.com',
       topics: ['hermetismo'],
@@ -289,7 +299,7 @@ describe('Who may see and change names (KBC-065 AC-4, AC-5, BR-4, BR-6)', () => 
     const media = await startMedia();
     const { mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
-    await nameVoice(media, mediaId, 2, { speakerId: gabriel.id });
+    await nameVoice(media, [mediaId, 2], { speakerId: gabriel.id });
     const { call } = await member(media, {
       email: 'edita@example.com',
       topics: ['hermetismo'],
@@ -324,8 +334,8 @@ describe('A new separation (KBC-065 AC-6, FR-5, BR-5)', () => {
     const media = await startMedia();
     const { token, mediaId } = await separated(media);
     const gabriel = await aSpeaker(media, 'Mestre Gabriel');
-    await nameVoice(media, mediaId, 2, { speakerId: gabriel.id });
-    await nameVoice(media, mediaId, 3, { audience: true });
+    await nameVoice(media, [mediaId, 2], { speakerId: gabriel.id });
+    await nameVoice(media, [mediaId, 3], { audience: true });
     const { call } = await listener(media);
     expect((await transcriptOf(call, mediaId)).voiceNames?.[1]?.name).toBe(
       'Mestre Gabriel',

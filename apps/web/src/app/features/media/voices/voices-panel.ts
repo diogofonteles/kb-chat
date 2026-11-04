@@ -25,7 +25,6 @@ import {
   authorListSchema,
   collectionSpeakerListSchema,
   mediaSpeakersSchema,
-  type CollectionSpeaker,
   type DiarizationStatus,
   type MediaSpeakers,
   type VoiceLabel,
@@ -117,8 +116,14 @@ function fieldTextOf(label: VoiceLabel | undefined): string {
   return label?.kind === 'audience' ? audienceLabel() : '';
 }
 
+/** What a voice's name changes to. */
+interface VoiceChange {
+  readonly speakerId: string | null;
+  readonly audience: boolean;
+}
+
 /** A voice with no name. */
-const NO_LABEL = { speakerId: null, audience: false };
+const NO_LABEL: VoiceChange = { speakerId: null, audience: false };
 
 /**
  * "Vozes" on the audio page (screens.md T15; KBC-064 FR-1, FR-4; KBC-065): for whoever edits
@@ -341,32 +346,22 @@ export class VoicesPanel {
   }
 
   /** What the chosen option saves; a new name or an author becomes a speaker first. */
-  private labelFor(
-    choice: SpeakerChoice,
-  ): Observable<{ speakerId: string | null; audience: boolean }> {
-    const label = (speaker: CollectionSpeaker) => {
-      this.speakerList.reload();
-      return { speakerId: speaker.id, audience: false };
-    };
-    switch (choice.kind) {
-      case 'speaker':
-        return of({ speakerId: choice.id, audience: false });
-      case 'audience':
-        return of({ speakerId: null, audience: true });
-      case 'none':
-        return of(NO_LABEL);
-      case 'new':
-        return this.api
-          .createSpeaker(this.topic(), { name: choice.name })
-          .pipe(map(label));
-      case 'author':
-        return this.api
-          .createSpeaker(this.topic(), {
-            name: choice.author.name,
-            authorSlug: choice.author.slug,
-          })
-          .pipe(map(label));
-    }
+  private labelFor(choice: SpeakerChoice): Observable<VoiceChange> {
+    if (choice.kind === 'speaker')
+      return of({ speakerId: choice.id, audience: false });
+    if (choice.kind === 'audience')
+      return of({ speakerId: null, audience: true });
+    if (choice.kind === 'none') return of(NO_LABEL);
+    const speaker =
+      choice.kind === 'new'
+        ? { name: choice.name }
+        : { name: choice.author.name, authorSlug: choice.author.slug };
+    return this.api.createSpeaker(this.topic(), speaker).pipe(
+      map(({ id }) => {
+        this.speakerList.reload();
+        return { speakerId: id, audience: false };
+      }),
+    );
   }
 
   /**
