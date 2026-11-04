@@ -175,6 +175,7 @@ export async function uploadReady(
     headers: { ...CSRF, 'content-type': 'application/octet-stream' },
   });
   expect(sent.status(), await sent.text()).toBe(200);
+  const t0 = Date.now();
   await expect
     .poll(
       async () =>
@@ -188,6 +189,7 @@ export async function uploadReady(
       },
     )
     .toBe('ready');
+  (await import('node:fs')).appendFileSync(process.env['KBC_WAIT_LOG']!, `${Date.now() - t0} ${input.seconds} ${input.title}\n`);
   return { id, title: input.title };
 }
 
