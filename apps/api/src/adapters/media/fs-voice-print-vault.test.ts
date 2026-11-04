@@ -1,4 +1,5 @@
 import {
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -61,6 +62,42 @@ describe('FsVoicePrintVault (ADR 0032)', () => {
     expect(await vault.has(ID)).toBe(false);
     expect(await vault.read(ID)).toBeNull();
     expect(await vault.ids()).toEqual([]);
+  });
+
+  it('BR-2: removing also takes a write a crash left unfinished', async () => {
+    await vault.put(ID, PRINT);
+    writeFileSync(join(dir, `${ID}.tmp`), 'half a sealed print');
+    await vault.remove(ID);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  it('a write left by a crash neither blocks the next one nor shows as a print', async () => {
+    await vault.put(ID, PRINT);
+    writeFileSync(join(dir, `${ID}.tmp`), 'half a sealed print');
+    expect(await vault.ids()).toEqual([ID]);
+    await vault.put(ID, PRINT);
+    expect(await vault.read(ID)).toEqual(PRINT);
+    expect(readdirSync(dir)).toEqual([`${ID}.sealed`]);
+  });
+
+  it('removes what a crash left on its own, whatever its profile', async () => {
+    await vault.put(ID, PRINT);
+    writeFileSync(join(dir, 'lost.tmp'), 'half a sealed print');
+    expect(await vault.removeUnfinished()).toBe(1);
+    expect(readdirSync(dir)).toEqual([`${ID}.sealed`]);
+    expect(await vault.removeUnfinished()).toBe(0);
+  });
+
+  it('a failed write leaves nothing behind', async () => {
+    await vault.put(ID, PRINT);
+    rmSync(join(dir, `${ID}.sealed`));
+    mkdirSync(join(dir, `${ID}.sealed`));
+    await expect(vault.put(ID, PRINT)).rejects.toThrow();
+    expect(readdirSync(dir)).toEqual([`${ID}.sealed`]);
+  });
+
+  it('finds no unfinished write before the first print', async () => {
+    expect(await vault.removeUnfinished()).toBe(0);
   });
 
   it('lists nothing before the first print', async () => {

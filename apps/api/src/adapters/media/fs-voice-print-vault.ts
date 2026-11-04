@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   chmod,
   mkdir,
@@ -14,11 +13,14 @@ import type { VoicePrintVaultPort } from '../../ports/voice-print-vault.js';
 import { isMissingFile } from '../atomic-json.js';
 
 const SUFFIX = '.sealed';
+const UNFINISHED = '.tmp';
 const contextOf = (profileId: string): string => `voice-print:${profileId}`;
 
 /**
  * One 0600 sealed file per profile (ADR 0032). The folder is not in the backup, which copies
- * `media.db` only: once removed here, a print is gone from the system.
+ * `media.db` only: once removed here, a print is gone from the system. A write in progress
+ * carries the profile's id too, so that a revocation removes it and a start finds it after a
+ * crash.
  */
 export class FsVoicePrintVault implements VoicePrintVaultPort {
   constructor(
@@ -33,9 +35,9 @@ export class FsVoicePrintVault implements VoicePrintVaultPort {
     );
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
     await chmod(this.dir, 0o700);
-    const temp = join(this.dir, `${randomUUID()}.tmp`);
+    const temp = this.unfinishedOf(profileId);
     try {
-      await writeFile(temp, sealed, { flag: 'wx', mode: 0o600 });
+      await writeFile(temp, sealed, { mode: 0o600 });
       await rename(temp, this.pathOf(profileId));
     } catch (err) {
       await rm(temp, { force: true });
@@ -60,14 +62,26 @@ export class FsVoicePrintVault implements VoicePrintVaultPort {
 
   async remove(profileId: string): Promise<void> {
     await rm(this.pathOf(profileId), { force: true });
+    await rm(this.unfinishedOf(profileId), { force: true });
   }
 
   async ids(): Promise<string[]> {
+    const names = await this.names(SUFFIX);
+    return names.map((name) => name.slice(0, -SUFFIX.length));
+  }
+
+  async removeUnfinished(): Promise<number> {
+    const names = await this.names(UNFINISHED);
+    await Promise.all(
+      names.map((name) => rm(join(this.dir, name), { force: true })),
+    );
+    return names.length;
+  }
+
+  private async names(suffix: string): Promise<string[]> {
     try {
       const names = await readdir(this.dir);
-      return names
-        .filter((name) => name.endsWith(SUFFIX))
-        .map((name) => name.slice(0, -SUFFIX.length));
+      return names.filter((name) => name.endsWith(suffix));
     } catch (err) {
       if (isMissingFile(err)) return [];
       throw err;
@@ -81,6 +95,10 @@ export class FsVoicePrintVault implements VoicePrintVaultPort {
       if (isMissingFile(err)) return null;
       throw err;
     }
+  }
+
+  private unfinishedOf(profileId: string): string {
+    return join(this.dir, `${profileId}${UNFINISHED}`);
   }
 
   private pathOf(profileId: string): string {

@@ -7,8 +7,10 @@ export interface VoicePrintVaultPort {
   /** The print; null when there is none, or it no longer opens (another master key). */
   read(profileId: string): Promise<number[] | null>;
   has(profileId: string): Promise<boolean>;
-  /** Removes it for good; removing what is not there is no error. */
+  /** Removes it, and any unfinished write of it, for good; nothing there is no error. */
   remove(profileId: string): Promise<void>;
   /** The profile id of every print on disk. */
   ids(): Promise<string[]>;
+  /** Removes what a crash left half written; how many there were. */
+  removeUnfinished(): Promise<number>;
 }
