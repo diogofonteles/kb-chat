@@ -183,25 +183,15 @@ function insertTracks(db: DatabaseSync, talk: number): void {
   }
 }
 
-function copySpeech(
-  db: DatabaseSync,
-  span: {
-    readonly parent: string;
-    readonly id: string;
-    readonly startMs: number;
-    readonly endMs: number;
-  },
-): void {
-  db.prepare(
-    `INSERT INTO transcripts (id, media_id, version, provider, model, parameters,
-       parameters_version, terms_version, vad, speech_ratio, elapsed_ms, raw_path,
-       filter_version, confidence_version, confidence, word_count, removed_words,
-       low_words, created_at)
-     SELECT ?, ?, version, provider, model, parameters, parameters_version, terms_version, vad,
-       speech_ratio, elapsed_ms, raw_path, filter_version, confidence_version, confidence,
-       word_count, removed_words, low_words, created_at
-     FROM transcripts WHERE media_id = ?`,
-  ).run(`t-${span.id}`, span.id, span.parent);
+interface TrackSpan {
+  readonly parent: string;
+  readonly id: string;
+  readonly startMs: number;
+  readonly endMs: number;
+}
+
+function copySpeech(db: DatabaseSync, span: TrackSpan): void {
+  copyTranscript(db, span);
   db.prepare(
     `INSERT INTO segments (transcript_id, position, start_ms, end_ms, text)
      SELECT ?, position, start_ms - ?, end_ms - ?, text FROM segments
@@ -214,6 +204,19 @@ function copySpeech(
     span.startMs,
     span.endMs,
   );
+}
+
+function copyTranscript(db: DatabaseSync, span: TrackSpan): void {
+  db.prepare(
+    `INSERT INTO transcripts (id, media_id, version, provider, model, parameters,
+       parameters_version, terms_version, vad, speech_ratio, elapsed_ms, raw_path,
+       filter_version, confidence_version, confidence, word_count, removed_words,
+       low_words, created_at)
+     SELECT ?, ?, version, provider, model, parameters, parameters_version, terms_version, vad,
+       speech_ratio, elapsed_ms, raw_path, filter_version, confidence_version, confidence,
+       word_count, removed_words, low_words, created_at
+     FROM transcripts WHERE media_id = ?`,
+  ).run(`t-${span.id}`, span.id, span.parent);
 }
 
 /** Accepted links spread over the tracks, popular concepts holding many (1/rank). */
@@ -407,23 +410,25 @@ function timeCounts(subjects: SubjectSearch, q: string): number {
   return performance.now() - startedAt;
 }
 
+const SUBJECT_CASES = SUBJECT_CONCEPTS.flatMap((concept) =>
+  SUBJECT_QUERIES.map((q) => ({ concept, q })),
+);
+
+function measureFiltered(subjects: SubjectSearch): number[] {
+  return Array.from({ length: RUNS }).flatMap((_, run) =>
+    SUBJECT_CASES.map(({ concept, q }) => {
+      const ms = timeSubject(subjects, [concept], q);
+      if (run === 0) console.log(`  ${concept} · "${q}": ${ms.toFixed(1)} ms`);
+      return ms;
+    }),
+  );
+}
+
 function measureSubjects(subjects: SubjectSearch): void {
-  const filtered: number[] = [];
-  const counted: number[] = [];
-  for (let run = 0; run < RUNS; run++) {
-    for (const concept of SUBJECT_CONCEPTS)
-      for (const q of SUBJECT_QUERIES) {
-        const ms = timeSubject(subjects, [concept], q);
-        filtered.push(ms);
-        if (run === 0)
-          console.log(`  ${concept} · "${q}": ${ms.toFixed(1)} ms`);
-      }
-    for (const q of QUERIES) {
-      const ms = timeCounts(subjects, q);
-      counted.push(ms);
-      if (run === 0) console.log(`  counts · "${q}": ${ms.toFixed(1)} ms`);
-    }
-  }
+  const filtered = measureFiltered(subjects);
+  const counted = Array.from({ length: RUNS }).flatMap(() =>
+    QUERIES.map((q) => timeCounts(subjects, q)),
+  );
   console.log(
     `Subject filter p95: ${p95(filtered).toFixed(1)} ms (target ≤ ${TARGET_MS} ms, ${filtered.length} queries, ${LINKS} links)`,
   );

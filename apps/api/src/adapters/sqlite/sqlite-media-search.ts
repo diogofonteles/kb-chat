@@ -316,7 +316,6 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     const ranges = this.db.prepare(SEGMENT_RANGES).all(JSON.stringify(ids));
     const expression = toMatchExpression(terms);
     return ranges.flatMap((range) => {
-      const row = best.get(
         expression,
         Number(range['first']),
         Number(range['last']),
