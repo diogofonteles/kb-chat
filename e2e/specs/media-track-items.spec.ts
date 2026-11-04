@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import AxeBuilder from '@axe-core/playwright';
 import type { APIRequestContext, Page } from '@playwright/test';
 import {
   CSRF,
@@ -117,6 +118,25 @@ test('AC-3, FR-5: in the grid, the tracks answer to the pointer and show their t
   await expect(
     page.getByRole('heading', { name: 'Segunda pergunta' }),
   ).toBeVisible();
+});
+
+test('NG-30: the links of a track pass axe', async ({ page }) => {
+  const owner = await ownerApi();
+  const media = await approvedAudio(owner);
+  const listed = await owner.get('/api/v1/media/library');
+  const { items } = (await listed.json()) as {
+    items: { id: string; tracks: { id: string }[] }[];
+  };
+  const trackId = items.find((item) => item.id === media.id)?.tracks[0]?.id;
+  await page.goto(`/midia/${trackId}`);
+  const context = page.getByRole('link', { name: 'Ouvir no contexto' });
+  await expect(context).toBeVisible();
+  const axe = await new AxeBuilder({ page })
+    .include('.part-of')
+    .withRules(['target-size'])
+    .analyze();
+  expect(axe.violations).toEqual([]);
+  await owner.dispose();
 });
 
 test('AC-3: without media-tracks the recording stands alone', async ({

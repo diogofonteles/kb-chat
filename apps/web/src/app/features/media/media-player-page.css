@@ -226,6 +226,9 @@
 }
 
 .part-of a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
   color: var(--color-accent-strong);
   font-weight: 600;
 }
