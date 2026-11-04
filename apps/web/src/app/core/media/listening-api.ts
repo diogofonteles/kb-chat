@@ -10,6 +10,9 @@ import { map, type Observable } from 'rxjs';
 import { mediaUrl } from './media-api.js';
 
 export const PREFERENCES_URL = '/api/v1/media/preferences';
+/** Some of the player's choices: the ones that changed, for the account to merge. */
+export type PlayerChange = Partial<MediaPreferences>;
+
 const progressUrl = (id: string): string => `${mediaUrl(id)}/progress`;
 
 /** Each person's way of listening on the server (KBC-041 FR-1 to FR-3). */
@@ -24,10 +27,10 @@ export class ListeningApi {
       .pipe(map((body) => playerPreferencesSchema.parse(body)));
   }
 
-  /** Sends only the player's fields: the server keeps the library's as they are. */
-  savePreferences(preferences: MediaPreferences): Observable<MediaPreferences> {
+  /** Sends only what changed: the server keeps the rest as it is (KBC-051 FR-5). */
+  savePreferences(change: PlayerChange): Observable<MediaPreferences> {
     return this.http
-      .put(PREFERENCES_URL, preferences)
+      .put(PREFERENCES_URL, change)
       .pipe(map((body) => playerPreferencesSchema.parse(body)));
   }
 
