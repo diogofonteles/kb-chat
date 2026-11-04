@@ -54,15 +54,15 @@ describe('PreparationAnnouncer (BR-9)', () => {
   it('says when a stage starts, ends or fails', () => {
     const announcer = new PreparationAnnouncer(() => 0);
     announcer.observe(reading([stage('transcribe', 'queued')], 0));
-    expect(announcer.observe(reading([stage('transcribe', 'running')], 0))).toBe(
-      'Transcrição começou.',
-    );
+    expect(
+      announcer.observe(reading([stage('transcribe', 'running')], 0)),
+    ).toBe('Transcrição começou.');
     expect(announcer.observe(reading([stage('transcribe', 'done')], 0))).toBe(
       'Transcrição terminou.',
     );
-    expect(announcer.observe(reading([stage('transcribe', 'failed')], 0))).toContain(
-      'Falhou',
-    );
+    expect(
+      announcer.observe(reading([stage('transcribe', 'failed')], 0)),
+    ).toContain('Falhou');
   });
 
   it('never says a percentage', () => {
@@ -86,6 +86,7 @@ describe('PreparationAnnouncer (BR-9)', () => {
     }
     expect(said.length).toBeLessThanOrEqual(4);
     expect(said[0]).toBe('1 faixa nova; 1 até agora.');
-    expect(said.at(-1)).toContain('12 até agora');
+    now = 60_000;
+    expect(announcer.observe(reading(running, 12))).toContain('12 até agora');
   });
 });

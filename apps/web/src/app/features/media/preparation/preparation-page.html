@@ -1,0 +1,142 @@
+@if (watch.forbidden()) {
+  <div class="page">
+    <p class="banner" role="alert" i18n="@@tracks.forbidden">
+      Você não tem permissão para editar esta gravação.
+    </p>
+    <a class="secondary" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
+      >Voltar ao áudio</a
+    >
+  </div>
+} @else if (watch.loadError(); as error) {
+  <div class="page">
+    <p class="banner" role="alert">{{ error }}</p>
+    <a class="secondary" [routerLink]="mediaLink()" i18n="@@tracks.backToAudio"
+      >Voltar ao áudio</a
+    >
+  </div>
+} @else if (preparation(); as prep) {
+  <div class="page">
+    <header class="top">
+      <h2 #heading class="heading" tabindex="-1">{{ prep.title }}</h2>
+      <app-preparation-steps
+        class="progress"
+        [step]="step()"
+        [skipped]="prep.skipped && !choosing()"
+        [mediaId]="id()"
+      />
+      @if (!choosing()) {
+        <a
+          class="secondary leave"
+          [routerLink]="mediaLink()"
+          i18n="@@tracks.leave"
+          >Sair e continuar depois</a
+        >
+      }
+    </header>
+
+    <p class="visually-hidden" aria-live="polite">{{ watch.said() }}</p>
+    @if (watch.offline()) {
+      <p class="banner" role="status" i18n="@@prep.offline">
+        Sem conexão: o trabalho continua no servidor; atualizo quando a rede
+        voltar.
+      </p>
+    }
+    @if (actionError(); as error) {
+      <p class="banner" role="alert">{{ error }}</p>
+    }
+
+    @if (choosing()) {
+      <section class="choose">
+        @if (form.nothingLeft()) {
+          <p i18n="@@prep.nothingLeft">
+            Este áudio já está transcrito, com as vozes separadas e as faixas
+            aprovadas.
+          </p>
+          <a
+            class="secondary"
+            [routerLink]="mediaLink()"
+            i18n="@@tracks.backToAudio"
+            >Voltar ao áudio</a
+          >
+        } @else {
+          <app-preparation-options [locked]="busy()" />
+          <div class="actions">
+            <a
+              class="secondary"
+              [routerLink]="mediaLink()"
+              i18n="@@media.upload.cancel"
+              >Cancelar</a
+            >
+            <button
+              type="button"
+              class="primary"
+              [disabled]="busy() || !canStart()"
+              (click)="start()"
+              i18n="@@prep.start"
+            >
+              Preparar
+            </button>
+          </div>
+        }
+      </section>
+    } @else {
+      @if (ready()) {
+        <audio #audio hidden preload="metadata" [src]="streamUrl()"></audio>
+      }
+      <div class="columns">
+        <div class="side">
+          <section>
+            <app-preparation-stage-list
+              [preparation]="prep"
+              [busy]="busy()"
+              (retried)="retry($event)"
+              (markedByHand)="markByHand()"
+            />
+          </section>
+          @if (prep.voices.length > 0) {
+            <section>
+              <app-preparation-voices [preparation]="prep" (named)="named()" />
+            </section>
+          }
+        </div>
+        @if (prep.plan?.tracks !== 'none' || prep.tracks.length > 0) {
+          <section class="list">
+            <app-preparation-tracks [tracks]="prep.tracks" />
+          </section>
+        }
+      </div>
+      @if (concluded(); as text) {
+        <footer class="end">
+          <p role="status">{{ text }}</p>
+          <button
+            type="button"
+            class="primary"
+            [disabled]="busy()"
+            (click)="moveOn()"
+          >
+            @if (prep.next === 'validate') {
+              <ng-container i18n="@@prep.validate">Validar faixas</ng-container>
+            } @else {
+              <ng-container i18n="@@prep.conclude">Concluir</ng-container>
+            }
+          </button>
+        </footer>
+      }
+      @if (prep.step === 3) {
+        <a
+          class="primary"
+          [routerLink]="editLink()"
+          i18n="@@prep.backToValidate"
+          >Continuar validando</a
+        >
+      }
+    }
+  </div>
+} @else {
+  <div class="page" aria-busy="true">
+    <span class="visually-hidden" i18n="@@prep.loading">Carregando…</span>
+    <div class="skeleton"></div>
+    <div class="skeleton"></div>
+    <div class="skeleton"></div>
+  </div>
+}

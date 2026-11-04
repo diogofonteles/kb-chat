@@ -1,7 +1,4 @@
-import type {
-  PreparationPlanRequest,
-  TrackChoice,
-} from '@kb-chat/contracts';
+import type { PreparationPlanRequest, TrackChoice } from '@kb-chat/contracts';
 
 /** What the person ticked in "O que fazer com este áudio". */
 export interface PlanChoices {

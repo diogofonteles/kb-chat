@@ -1,0 +1,62 @@
+<h3 class="count" i18n="@@prep.tracks.soFar">
+  Faixas: {{ lines().length }} até agora
+</h3>
+@if (lines().length > 0) {
+  <ul class="tracks" aria-label="Faixas" i18n-aria-label="@@tracks.list">
+    @for (line of lines(); track line.track.id) {
+      <li [class.fresh]="fresh().has(line.track.id)">
+        <span class="ordinal">{{ line.ordinal }}</span>
+        <div class="body">
+          <p class="title">
+            @if (line.track.title) {
+              {{ line.track.title }}
+            } @else {
+              <span class="untitled" i18n="@@prep.track.untitled"
+                >Sem título</span
+              >
+            }
+          </p>
+          <p class="meta">{{ line.span }} · {{ line.length }}</p>
+          @if (line.who) {
+            <p class="meta">{{ line.who }}</p>
+          }
+          <p class="meta">
+            <span class="status">{{ line.status }}</span>
+            ·
+            <span i18n="@@prep.track.later">Você ajusta no próximo passo</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          class="secondary listen"
+          [attr.aria-pressed]="isPlaying(line.track)"
+          (click)="listen(line.track)"
+        >
+          <span aria-hidden="true">{{
+            isPlaying(line.track) ? '■' : '▶'
+          }}</span>
+          @if (isPlaying(line.track)) {
+            <ng-container i18n="@@prep.track.stop">Parar</ng-container>
+          } @else {
+            <ng-container i18n="@@prep.track.listen">Ouvir</ng-container>
+          }
+          &ngsp;<span class="visually-hidden" i18n="@@prep.track.listenWhich"
+            >a faixa {{ line.ordinal }}</span
+          >
+        </button>
+      </li>
+    }
+  </ul>
+}
+<span #end class="end"></span>
+@if (unseen() > 0) {
+  <button type="button" class="secondary more" (click)="goToEnd()">
+    @if (unseen() === 1) {
+      <ng-container i18n="@@prep.tracks.newOne">1 faixa nova ↓</ng-container>
+    } @else {
+      <ng-container i18n="@@prep.tracks.new"
+        >{{ unseen() }} faixas novas ↓</ng-container
+      >
+    }
+  </button>
+}

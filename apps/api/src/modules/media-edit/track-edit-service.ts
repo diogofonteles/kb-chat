@@ -4,6 +4,7 @@ import {
   type ApprovedTrack,
   type EditApproved,
   type EditSaved,
+  type EditStatus,
   type EditTrack,
   type EditWords,
   type MediaEdit,
@@ -17,6 +18,7 @@ import type {
   EditWrite,
   MediaEditStorePort,
 } from '../../ports/media-edit-store.js';
+import type { PreparationStorePort } from '../../ports/preparation-store.js';
 import type { SpeakerStorePort } from '../../ports/speaker-store.js';
 import type { TrackProposalStorePort } from '../../ports/track-proposal-store.js';
 import type { TranscriptStorePort } from '../../ports/transcript-store.js';
@@ -29,6 +31,8 @@ export interface TrackEditServiceDeps {
   readonly drafts: Pick<TrackProposalStorePort, 'draft'>;
   readonly transcripts: Pick<TranscriptStorePort, 'transcripts' | 'words'>;
   readonly speakers: Pick<SpeakerStorePort, 'list'>;
+  /** The guided flow's plans (KBC-072). */
+  readonly plans: Pick<PreparationStorePort, 'get'>;
   /** The top-level collection whose speakers a recording uses (KBC-065 BR-1). */
   readonly rootOf: (topic: string) => string;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
@@ -98,7 +102,18 @@ export class TrackEditService {
         edit?.status === 'approved'
           ? (this.deps.preparation?.preparation(mediaId) ?? null)
           : null,
+      preparationStep: this.preparationStep(mediaId, edit?.status),
     };
+  }
+
+  /** Where an open plan stands: before "Validar faixas" it is still processing (BR-5). */
+  private preparationStep(
+    mediaId: string,
+    status: EditStatus | undefined,
+  ): 2 | 3 | null {
+    const plan = this.deps.plans.get(mediaId);
+    if (!plan || plan.finishedAt || status === 'approved') return null;
+    return plan.validatingAt ? 3 : 2;
   }
 
   save(call: EditCall, request: SaveEdit): EditSaved {

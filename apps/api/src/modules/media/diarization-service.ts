@@ -180,7 +180,10 @@ export class DiarizationService {
   /** Where the newest separation is (FR-4), without reading its turns. */
   status(mediaId: string): DiarizationStatus {
     const { diarizations } = this.deps;
-    return statusOf(diarizations.latestJob(mediaId), diarizations.latest(mediaId));
+    return statusOf(
+      diarizations.latestJob(mediaId),
+      diarizations.latest(mediaId),
+    );
   }
 
   /** The current separation read on the current transcript (FR-4), with its status. */

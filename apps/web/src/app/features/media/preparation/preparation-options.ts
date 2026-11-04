@@ -88,8 +88,7 @@ export class PreparationOptions {
 
   /** `aria-disabled` keeps it focusable; the click just does nothing. */
   protected chooseTracks(event: Event, tracks: TrackChoice): void {
-    const refused =
-      this.locked() || (tracks !== 'none' && this.isOff(tracks));
+    const refused = this.locked() || (tracks !== 'none' && this.isOff(tracks));
     if (refused) event.preventDefault();
     else this.form.setTracks(tracks);
   }
@@ -110,7 +109,9 @@ function summaryOf(form: PlanForm, usd: (value: number) => string): string {
     transcribe ? $localize`:@@prep.summary.transcribe:transcrever` : '',
     speakers ? $localize`:@@prep.summary.speakers:indicar quem fala` : '',
     tracks === 'ai' ? $localize`:@@prep.summary.ai:propor faixas com IA` : '',
-    tracks === 'manual' ? $localize`:@@prep.summary.manual:você marca as faixas` : '',
+    tracks === 'manual'
+      ? $localize`:@@prep.summary.manual:você marca as faixas`
+      : '',
   ].filter(Boolean);
   if (asked.length === 0)
     return $localize`:@@prep.summary.nothing:Depois do envio: só guardar o áudio.`;
@@ -119,7 +120,9 @@ function summaryOf(form: PlanForm, usd: (value: number) => string): string {
     (speakers ? (form.option('speakers').minutes ?? 0) : 0);
   const estimate = form.offer()?.aiEstimateUsd ?? null;
   const costs = [
-    minutes > 0 ? $localize`:@@prep.summary.minutes:≈ ${minutes}:minutes: min` : '',
+    minutes > 0
+      ? $localize`:@@prep.summary.minutes:≈ ${minutes}:minutes: min`
+      : '',
     tracks === 'ai' && estimate !== null
       ? $localize`:@@prep.summary.usd:≈ ${usd(estimate)}:value:`
       : '',

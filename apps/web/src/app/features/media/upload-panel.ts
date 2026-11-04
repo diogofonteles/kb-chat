@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -19,14 +20,21 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import type { MediaItem, Topic } from '@kb-chat/contracts';
+import { Router } from '@angular/router';
+import type {
+  MediaItem,
+  PreparationPlanRequest,
+  Topic,
+} from '@kb-chat/contracts';
 import {
   errorMessage,
   refusedFieldOf,
   toUiErrorCode,
 } from '@core/api/api-error.js';
+import { SessionStore } from '@core/auth/session-store.js';
 import { AuthorsApi } from '@core/media/authors-api.js';
 import { MediaApi } from '@core/media/media-api.js';
+import { preparationPagePath } from '@core/media/preparation-api.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import {
   Subscription,
@@ -44,6 +52,10 @@ import {
   isInvalidAuthorName,
 } from './author-suggestions.js';
 import { AuthorCombobox } from './author-combobox.js';
+import { AUDIO_LENGTH_READER } from './audio-length.js';
+import { PlanForm } from './preparation/plan-form.js';
+import { PreparationOptions } from './preparation/preparation-options.js';
+import { PreparationSteps } from './preparation/preparation-steps.js';
 import {
   fileProblemOf,
   notBlank,
@@ -62,7 +74,13 @@ type Stage = 'choosing' | 'sending' | 'stopped';
  */
 @Component({
   selector: 'app-upload-panel',
-  imports: [ReactiveFormsModule, AuthorCombobox],
+  imports: [
+    ReactiveFormsModule,
+    AuthorCombobox,
+    PreparationOptions,
+    PreparationSteps,
+  ],
+  providers: [PlanForm],
   templateUrl: './upload-panel.html',
   styleUrl: './upload-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,6 +89,13 @@ type Stage = 'choosing' | 'sending' | 'stopped';
 export class UploadPanel implements OnInit {
   private readonly api = inject(MediaApi);
   private readonly authorsApi = inject(AuthorsApi);
+  private readonly session = inject(SessionStore);
+  private readonly router = inject(Router);
+  private readonly readLength = inject(AUDIO_LENGTH_READER);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly plan = inject(PlanForm);
+  /** Who may only send sees no flow of four steps: the upload is all there is (AC-15). */
+  protected readonly showSteps = computed(() => this.session.can('media-edit'));
   private readonly dialog =
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly fileInput =
@@ -128,12 +153,13 @@ export class UploadPanel implements OnInit {
   constructor() {
     afterNextRender(() => this.dialog().nativeElement.showModal());
     // Leaving the page or the route mid-upload: stop, and remove the half-created item.
-    inject(DestroyRef).onDestroy(() => this.abandon());
+    this.destroyRef.onDestroy(() => this.abandon());
   }
 
   ngOnInit(): void {
     this.form.controls.topic.setValue(this.topic());
     this.chosenTopic.set(this.topic());
+    this.plan.aim({});
   }
 
   protected topicChosen(): void {
@@ -216,6 +242,18 @@ export class UploadPanel implements OnInit {
       this.suggestedTitle = titleFromFileName(file.name);
       title.setValue(this.suggestedTitle);
     }
+    this.measure(file);
+  }
+
+  /** The estimates go by the file's length, read here before anything is sent (BR-4). */
+  private measure(file: File): void {
+    this.readLength(file)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((durationMs) => {
+        if (this.file() !== file) return;
+        if (durationMs === null) this.plan.lengthUnknown();
+        else this.plan.aim({ durationMs });
+      });
   }
 
   private draftOf(file: File): Draft {
@@ -225,6 +263,7 @@ export class UploadPanel implements OnInit {
       title: title.trim(),
       topic,
       author: this.authorName().trim(),
+      plan: this.plan.plan(),
     };
   }
 
@@ -236,7 +275,7 @@ export class UploadPanel implements OnInit {
     if (this.created && sameDraft(this.created.draft, draft))
       return of(this.created.item);
     this.discardCreated();
-    const { file, title, topic } = draft;
+    const { file, title, topic, plan } = draft;
     return this.authorOf(draft).pipe(
       concatMap((author) =>
         this.api.create(topic, {
@@ -244,6 +283,7 @@ export class UploadPanel implements OnInit {
           author,
           fileName: file.name,
           bytes: file.size,
+          plan,
         }),
       ),
       tap((item) => (this.created = { item, draft })),
@@ -266,8 +306,12 @@ export class UploadPanel implements OnInit {
     this.sending = null;
     this.created = null;
     this.stage.set('choosing');
+    this.plan.remember();
+    const guided = this.plan.guided();
     this.uploaded.emit(item);
     this.dialog().nativeElement.close();
+    // Only "Transcrever" ends here, as it always did (AC-15).
+    if (guided) void this.router.navigateByUrl(preparationPagePath(item.id));
   }
 
   private abandon(): void {
@@ -310,10 +354,13 @@ interface Draft {
   readonly topic: string;
   /** The author's name; blank is none. */
   readonly author: string;
+  /** What the person asked for this audio (KBC-072). */
+  readonly plan: PreparationPlanRequest;
 }
 
 const sameDraft = (a: Draft, b: Draft): boolean =>
   a.file === b.file &&
   a.title === b.title &&
   a.topic === b.topic &&
-  a.author === b.author;
+  a.author === b.author &&
+  JSON.stringify(a.plan) === JSON.stringify(b.plan);

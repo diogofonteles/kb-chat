@@ -117,19 +117,13 @@
               @case ('new') {
                 <a
                   class="secondary"
-                  [routerLink]="editLink()"
-                  i18n="@@tracks.entry.new"
-                  >Dividir em faixas</a
+                  [routerLink]="prepareLink()"
+                  i18n="@@prep.entry.new"
+                  >Preparar áudio</a
                 >
               }
               @case ('paused') {
-                <span i18n="@@tracks.entry.paused"
-                  >Preparação parada no passo {{ entry.step }}</span
-                >
-                ·
-                <a [routerLink]="editLink()" i18n="@@tracks.entry.continue"
-                  >Continuar</a
-                >
+                <app-preparation-entry [mediaId]="id()" [step]="entry.step" />
               }
               @case ('approved') {
                 <span>{{ appliedText() }}</span>

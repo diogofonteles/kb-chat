@@ -33,7 +33,7 @@ export const REFUSAL_TEXTS: Record<OptionRefusal, () => string> = {
   'monthly-cap': () =>
     $localize`:@@prep.refusal.monthlyCap:O limite mensal da mídia foi atingido.`,
   'no-estimate': () =>
-    $localize`:@@prep.refusal.noEstimate:Sem a duração do arquivo não dá para estimar o custo.`,
+    $localize`:@@prep.refusal.noEstimate:Escolha um arquivo que o navegador consiga ler para ver a estimativa de custo.`,
 };
 
 const FAILURES: Record<StageFailure, () => string> = {

@@ -29,38 +29,11 @@
   <div class="page">
     <header class="top">
       <h2 class="heading">{{ title() }}</h2>
-      <ol
-        class="steps"
-        aria-label="Preparar áudio"
-        i18n-aria-label="@@tracks.flow"
-      >
-        <li class="done"><span i18n="@@tracks.step1">1 Enviar</span> ✓</li>
-        <li class="done"><span i18n="@@tracks.step2">2 Processar</span> ✓</li>
-        <li [attr.aria-current]="step() === 3 ? 'step' : null">
-          <span i18n="@@tracks.step3">3 Validar faixas</span>
-          @if (step() === 4) {
-            ✓
-          }
-        </li>
-        <li [attr.aria-current]="step() === 4 ? 'step' : null">
-          <span i18n="@@tracks.step4">4 Aprovar</span>
-        </li>
-      </ol>
-      <p class="step-text" data-testid="step-text">
-        @if (step() === 3) {
-          <span class="wide" i18n="@@tracks.stepText3"
-            >Passo 3 de 4: Validar faixas</span
-          >
-          <span class="narrow" i18n="@@tracks.stepShort3"
-            >3/4 Validar faixas</span
-          >
-        } @else {
-          <span class="wide" i18n="@@tracks.stepText4"
-            >Passo 4 de 4: Aprovar</span
-          >
-          <span class="narrow" i18n="@@tracks.stepShort4">4/4 Aprovar</span>
-        }
-      </p>
+      <app-preparation-steps
+        class="progress"
+        [step]="step()"
+        [mediaId]="id()"
+      />
       @if (step() === 3) {
         <button
           type="button"

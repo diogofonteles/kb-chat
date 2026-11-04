@@ -940,7 +940,8 @@ async function registerEdit(
     readonly publisher: TrackPublisher;
   },
 ): Promise<void> {
-  const { edits, trackProposals, transcripts, speakers } = wiring.media;
+  const { edits, trackProposals, transcripts, speakers, preparations } =
+    wiring.media;
   await app.register(
     mediaEditRoutes(
       new TrackEditService({
@@ -948,6 +949,7 @@ async function registerEdit(
         drafts: trackProposals,
         transcripts,
         speakers,
+        plans: preparations,
         rootOf: (topic) => wiring.authors.rootOf(topic),
         findMedia: (actor, mediaId) => wiring.service.get(actor, mediaId),
         publisher: wiring.publisher,

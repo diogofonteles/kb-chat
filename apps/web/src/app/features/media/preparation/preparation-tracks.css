@@ -1,0 +1,102 @@
+:host {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.count {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.tracks {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Rows out of view are skipped by the browser: 200 tracks scroll without a virtual list. */
+.tracks li {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 6.5rem;
+}
+
+.tracks li.fresh {
+  animation: arrive 2s ease-out;
+}
+
+@keyframes arrive {
+  from {
+    background: var(--color-surface-muted);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tracks li.fresh {
+    animation: none;
+  }
+}
+
+.ordinal {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.body {
+  min-width: 0;
+}
+
+.title {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.untitled {
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  color: var(--color-text);
+}
+
+.listen,
+.more {
+  min-height: 48px;
+}
+
+.end {
+  display: block;
+  height: 1px;
+}
+
+.more {
+  position: sticky;
+  bottom: var(--space-3);
+  justify-self: center;
+}

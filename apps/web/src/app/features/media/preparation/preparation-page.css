@@ -1,0 +1,112 @@
+:host {
+  display: block;
+  container-type: inline-size;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.page {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+}
+
+.heading {
+  flex-basis: 100%;
+  margin: 0;
+  font-family: var(--font-reading);
+  overflow-wrap: anywhere;
+}
+
+.heading:focus {
+  outline: none;
+}
+
+.progress {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.leave {
+  margin-left: auto;
+}
+
+a.secondary,
+a.primary,
+button.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  justify-self: start;
+}
+
+.banner {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.choose {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 40rem;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
+.columns,
+.side {
+  display: grid;
+  gap: var(--space-5, var(--space-4));
+  min-width: 0;
+}
+
+.columns section {
+  min-width: 0;
+}
+
+.end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.end p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.skeleton {
+  height: 4rem;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+@container (min-width: 60rem) {
+  .columns {
+    grid-template-columns: minmax(18rem, 2fr) minmax(0, 3fr);
+    align-items: start;
+  }
+}

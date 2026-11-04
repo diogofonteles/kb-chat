@@ -190,6 +190,9 @@
             @if (resumeTextOf(item); as resume) {
               <span class="resume">{{ resume }}</span>
             }
+            @if (preparations.steps().get(item.id); as step) {
+              <app-preparation-entry [mediaId]="item.id" [step]="step" />
+            }
           </span>
           @if (resumeTextOf(item)) {
             <span class="position" aria-hidden="true"

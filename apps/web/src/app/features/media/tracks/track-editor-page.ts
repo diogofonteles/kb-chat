@@ -8,6 +8,7 @@ import {
   afterNextRender,
   afterRenderEffect,
   computed,
+  effect,
   Injector,
   inject,
   signal,
@@ -47,8 +48,10 @@ import {
   mediaUrl,
 } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
+import { preparationPagePath } from '@core/media/preparation-api.js';
 import { collectionSpeakersUrl } from '@core/media/speakers-api.js';
 import { distinctUntilChanged, map } from 'rxjs';
+import { PreparationSteps } from '../preparation/preparation-steps.js';
 import { audienceLabel } from '../voices/speaker-names.js';
 import { TrackAudition, endRange, startRange } from './track-audition.js';
 import { TrackDraft } from './track-draft.js';
@@ -141,6 +144,7 @@ function copyableLine(
 @Component({
   selector: 'app-track-editor-page',
   imports: [
+    PreparationSteps,
     RouterLink,
     TrackTimeline,
     TrackRowList,
@@ -394,6 +398,7 @@ export class TrackEditorPage {
   });
 
   constructor() {
+    this.leaveForProcessing();
     this.stopOtherPlayback();
     this.route.paramMap
       .pipe(
@@ -410,6 +415,16 @@ export class TrackEditorPage {
     this.destroyRef.onDestroy(() => {
       this.audition.stop();
       if (this.noticeTimer !== null) clearTimeout(this.noticeTimer);
+    });
+  }
+
+  /** Arriving early, by a link or another device, goes to the step it is on (BR-5). */
+  private leaveForProcessing(): void {
+    effect(() => {
+      if (this.draft.edit()?.preparationStep === 2)
+        void this.router.navigateByUrl(preparationPagePath(this.id()), {
+          replaceUrl: true,
+        });
     });
   }
 

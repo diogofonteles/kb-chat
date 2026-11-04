@@ -42,17 +42,18 @@ const NO_OPTION: PreparationOption = {
 @Injectable()
 export class PlanForm {
   private readonly session = inject(SessionStore);
-  private readonly target = signal<PlanTarget>({});
+  /** Null until a page shows the form: step 2 asks for no options. */
+  private readonly target = signal<PlanTarget | null>(null);
   private readonly ticked = signal<PlanChoices>(
     recalledChoices(this.session.can('media-edit')),
   );
   private readonly droppedBy = signal<DroppedBy>(null);
-  /** A file whose length the browser could not read: no value, so no paid option (BR-4). */
-  private readonly unreadable = signal(false);
 
   private readonly resource = httpResource(
     () => {
-      const { mediaId, durationMs } = this.target();
+      const target = this.target();
+      if (!target) return undefined;
+      const { mediaId, durationMs } = target;
       const params: Record<string, string | number> = {};
       if (mediaId) params['mediaId'] = mediaId;
       if (durationMs) params['durationMs'] = durationMs;
@@ -69,8 +70,7 @@ export class PlanForm {
   readonly choices = computed<PlanChoices>(() => {
     const ticked = this.ticked();
     return {
-      transcribe:
-        ticked.transcribe && !this.option('transcribe').done,
+      transcribe: ticked.transcribe && !this.option('transcribe').done,
       speakers:
         ticked.speakers &&
         !this.option('speakers').done &&
@@ -93,13 +93,11 @@ export class PlanForm {
 
   aim(target: PlanTarget): void {
     this.target.set(target);
-    this.unreadable.set(false);
   }
 
-  /** The browser could not read this file's length. */
+  /** The browser could not read this file's length: no value, so no paid option (BR-4). */
   lengthUnknown(): void {
     this.target.set({});
-    this.unreadable.set(true);
   }
 
   private allowedTracks(tracks: TrackChoice): TrackChoice {
@@ -115,7 +113,9 @@ export class PlanForm {
   }
 
   /** Why an option cannot be ticked now (BR-3): the server's reason, then the dependency. */
-  refusalOf(id: 'speakers' | 'manual' | 'ai' | 'subjects'): OptionRefusal | null {
+  refusalOf(
+    id: 'speakers' | 'manual' | 'ai' | 'subjects',
+  ): OptionRefusal | null {
     const server = this.option(id).refusal;
     if (server) return server;
     const hasWords = this.ticked().transcribe || this.option('transcribe').done;
@@ -124,7 +124,8 @@ export class PlanForm {
     if (id === 'ai' && !hasVoices) return 'dependency';
     if (id === 'subjects' && this.ticked().tracks === 'none')
       return 'dependency';
-    if (id === 'ai' && this.unreadable()) return 'no-estimate';
+    if (id === 'ai' && (this.offer()?.aiEstimateUsd ?? null) === null)
+      return 'no-estimate';
     return null;
   }
 

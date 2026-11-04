@@ -10,6 +10,7 @@ import type { Feature } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaListPage } from './media-list-page.js';
 import { MediaPlayerPage } from './media-player-page.js';
+import { PreparationPage } from './preparation/preparation-page.js';
 import { TrackEditorPage } from './tracks/track-editor-page.js';
 import { MyBookmarksPage } from './my-bookmarks-page.js';
 import { LibraryPage } from './library/library-page.js';
@@ -82,6 +83,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
       MediaRedirect,
       MediaListPage,
       MyBookmarksPage,
+      PreparationPage,
       TrackEditorPage,
       MediaPlayerPage,
     ]);
@@ -91,6 +93,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
       'midia',
       'midia',
       'midia/marcadores',
+      'midia/:id/preparar',
       'midia/:id/faixas',
       'midia/:id',
     ]);

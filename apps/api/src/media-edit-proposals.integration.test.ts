@@ -66,6 +66,7 @@ function setup(titles: readonly string[] = ['Primeira', 'Segunda']) {
     caps: { runUsd: 0.25, monthlyUsd: 10 },
   });
   const edits = new TrackEditService({
+    plans: { get: () => null },
     edits: new SqliteMediaEditStore(db.db),
     drafts: db.store,
     transcripts: db.transcripts,

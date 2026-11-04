@@ -342,6 +342,7 @@
               [selected]="selected().has(item.id)"
               [playing]="playingId() === item.id"
               [master]="isMaster()"
+              [paused]="preparations.steps().get(item.id) ?? null"
               (played)="play(item)"
               (selectedChange)="select(item, $event)"
               (acted)="rowAction(item, $event)"

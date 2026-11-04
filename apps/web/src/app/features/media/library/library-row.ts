@@ -6,12 +6,17 @@ import {
   output,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { listeningStateOf, type LibraryItem } from '@kb-chat/contracts';
+import {
+  listeningStateOf,
+  type LibraryItem,
+  type PreparationStep,
+} from '@kb-chat/contracts';
 import { formatDuration } from '@kb-chat/player-core';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { editDetailsLabel } from '../edit-labels.js';
 import { statusTextOf } from '../media-labels.js';
 import { MenuButton, type MenuOption } from '../menu-button.js';
+import { PreparationEntry } from '../preparation/preparation-entry.js';
 import { percentOf, resumeTextOf, stateTextOf } from './library-labels.js';
 
 /** What the row's "⋯" can do. */
@@ -24,7 +29,7 @@ export type RowAction = 'mark-played' | 'mark-unplayed' | 'edit' | 'remove';
 @Component({
   // The host is the list item (role), so the list holds only items (axe "list").
   selector: 'app-library-row',
-  imports: [RouterLink, AuthorshipBadge, MenuButton],
+  imports: [RouterLink, AuthorshipBadge, MenuButton, PreparationEntry],
   templateUrl: './library-row.html',
   styleUrl: './library-row.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,6 +47,8 @@ export class LibraryRow {
   readonly selected = input(false);
   readonly playing = input(false);
   readonly master = input(false);
+  /** Where this media's preparation stopped (KBC-072 FR-6). */
+  readonly paused = input<PreparationStep | null>(null);
   readonly played = output();
   readonly selectedChange = output<boolean>();
   readonly acted = output<RowAction>();
