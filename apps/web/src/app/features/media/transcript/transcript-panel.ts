@@ -12,8 +12,10 @@ import {
   computed,
   inject,
   input,
+  effect,
   linkedSignal,
   signal,
+  untracked,
   viewChild,
   viewChildren,
 } from '@angular/core';
@@ -48,7 +50,6 @@ import {
   filter,
   map,
   merge,
-  mergeMap,
   skip,
   switchMap,
 } from 'rxjs';
@@ -160,17 +161,24 @@ export class TranscriptPanel {
   private readonly words = new TranscriptWords(this.transcript, (id, range) =>
     this.mediaApi.transcriptWords(id, range),
   );
-  /** The pages the highlight will need now; -1 when it needs none (FR-4). */
-  private readonly neededPage = computed(() =>
-    this.wordByWord() ? wordsPageOf(Math.max(0, this.activeIndex())) : -1,
+  /** The pages the highlight needs now, for this transcript; none when it is off (FR-4). */
+  private readonly neededPages = computed(
+    () => {
+      if (!this.wordByWord()) return { key: '', pages: [] };
+      const active = Math.max(0, this.activeIndex());
+      const near = Math.min(
+        active + NEXT_PAGE_SEGMENTS,
+        this.segments().length - 1,
+      );
+      return {
+        key: this.words.key(),
+        pages: [
+          ...new Set([wordsPageOf(active), wordsPageOf(Math.max(0, near))]),
+        ],
+      };
+    },
+    { equal: (a, b) => a.key === b.key && a.pages.join() === b.pages.join() },
   );
-  private readonly nextNeededPage = computed(() => {
-    const near = Math.min(
-      Math.max(0, this.activeIndex()) + NEXT_PAGE_SEGMENTS,
-      this.segments().length - 1,
-    );
-    return this.wordByWord() ? wordsPageOf(Math.max(0, near)) : -1;
-  });
   private readonly activeWords = computed(() =>
     this.wordByWord()
       ? (this.words.of(this.activeIndex()) ?? NO_WORDS)
@@ -291,19 +299,25 @@ export class TranscriptPanel {
     this.paintSearch(destroyRef);
     this.paintPassage(destroyRef);
     this.paintWord(destroyRef);
-    this.loadNeededWords();
+    this.loadNeededWords(destroyRef);
     this.landOnPendingWord();
   }
 
-  /** The active segment's page, and the next one a little before it is reached. */
-  private loadNeededWords(): void {
-    merge(toObservable(this.neededPage), toObservable(this.nextNeededPage))
-      .pipe(
-        filter((page) => page >= 0),
-        mergeMap((page) => this.words.load(page)),
-        takeUntilDestroyed(),
-      )
-      .subscribe();
+  /**
+   * The active segment's page, and the next one a little before it is reached. An effect,
+   * since a request is no signal: it also runs for a new version of the transcript.
+   */
+  private loadNeededWords(destroyRef: DestroyRef): void {
+    effect(() => {
+      const { pages } = this.neededPages();
+      untracked(() => {
+        for (const page of pages)
+          this.words
+            .load(page)
+            .pipe(takeUntilDestroyed(destroyRef))
+            .subscribe();
+      });
+    });
   }
 
   /** Once the page of a clicked word arrives, moves from its segment to the word (FR-3). */

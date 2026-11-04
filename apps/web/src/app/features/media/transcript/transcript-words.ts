@@ -48,13 +48,14 @@ function groupBySegment(
  * stays unasked: its segments keep their own highlight until something asks again.
  */
 export class TranscriptWords {
-  private readonly transcriptKey = computed(() => {
+  /** Which transcript the words are for: its media and version. */
+  readonly key = computed(() => {
     const { mediaId, version } = this.transcript();
     return `${mediaId}.${version}`;
   });
   private readonly pages = linkedSignal<string, ReadonlyMap<number, PageWords>>(
     {
-      source: this.transcriptKey,
+      source: this.key,
       computation: () => new Map(),
     },
   );
@@ -74,7 +75,7 @@ export class TranscriptWords {
   /** Brings a page in; completes without a value when it cannot be had. */
   load(page: number): Observable<unknown> {
     if (this.pages().has(page)) return of(page);
-    const key = `${this.transcriptKey()}.${page}`;
+    const key = `${this.key()}.${page}`;
     const asked = this.asking.get(key) ?? this.ask(page, key);
     this.asking.set(key, asked);
     return asked;
@@ -95,7 +96,7 @@ export class TranscriptWords {
             segment,
             alignWords(segments[segment]?.text ?? '', group),
           );
-        if (this.transcriptKey() === `${mediaId}.${version}`)
+        if (this.key() === `${mediaId}.${version}`)
           this.pages.update((pages) => new Map(pages).set(page, aligned));
       }),
       // The caller reads `of`: what matters is that the wait is over.

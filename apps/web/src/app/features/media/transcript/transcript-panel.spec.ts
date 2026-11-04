@@ -814,6 +814,29 @@ describe('TranscriptPanel: word by word (KBC-045)', () => {
     expect(document.querySelectorAll('.text *')).toHaveLength(0);
   });
 
+  it('asks again for the words of a new version of the transcript', async () => {
+    const { media, view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    await at(media, 1.7, view);
+    expect(spokenWord()).toEqual(['está']);
+    view.fixture.componentRef.setInput('transcript', {
+      ...lecture(),
+      version: 2,
+    });
+    await view.fixture.whenStable();
+    expect(spokenWord()).toEqual([]);
+    await answerWords(view, 0, spoken(1_000), 2);
+    expect(spokenWord()).toEqual(['está']);
+  });
+
+  it('keeps the words through a reload of the same version', async () => {
+    const { view } = await renderPanel(lecture(), 0, null, true);
+    await answerWords(view, 0, spoken(1_000));
+    view.fixture.componentRef.setInput('transcript', lecture());
+    await view.fixture.whenStable();
+    http().expectNone((request) => request.url.endsWith('/transcript/words'));
+  });
+
   it('asks for the next page near the end of this one, and only then', async () => {
     const segments = Array.from({ length: 150 }, (_, i) => ({
       startMs: i * 1_000,

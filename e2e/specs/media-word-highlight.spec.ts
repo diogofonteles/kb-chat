@@ -371,11 +371,17 @@ test('NFR-2: on a 2 h transcript the highlight costs at most 2 ms per frame, wit
   await expect
     .poll(async () => (await audioState(page)).currentTime)
     .toBeGreaterThan(0.5);
+  // KBC_E2E_CPU_THROTTLE=4 slows the CPU like a modest laptop (Chromium only).
+  const throttle = Number(process.env['KBC_E2E_CPU_THROTTLE'] ?? '1');
+  if (throttle > 1)
+    await (
+      await page.context().newCDPSession(page)
+    ).send('Emulation.setCPUThrottlingRate', { rate: throttle });
   const withWords = await frameCost(page);
   await turnOffWordHighlight(page);
   const withSegmentOnly = await frameCost(page);
   const extraMs = withWords.busyMsPerFrame - withSegmentOnly.busyMsPerFrame;
-  const report = `words ${JSON.stringify(withWords)}, segment only ${JSON.stringify(withSegmentOnly)}, extra ${extraMs.toFixed(2)} ms per frame`;
+  const report = `CPU x${throttle}: words ${JSON.stringify(withWords)}, segment only ${JSON.stringify(withSegmentOnly)}, extra ${extraMs.toFixed(2)} ms per frame`;
   process.stdout.write(`KBC-045 NFR-2: ${report}\n`);
   testInfo.annotations.push({ type: 'frame cost', description: report });
   expect(withWords.frames).toBeGreaterThan(120);
