@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   ArchivedTracks,
+  MediaBookmark,
   MediaItem,
   MediaTranscript,
   MovedBookmarks,
@@ -340,6 +341,72 @@ describe('Bounds of an approved track (FR-2)', () => {
     });
     expect(saved.statusCode, saved.body).toBe(200);
     expect(saved.json<{ positionMs: number }>().positionMs).toBe(30_000);
+  });
+
+  it.each([
+    ['before the new start', 10_000, 70_000],
+    ['past the new end', 175_000, 235_000],
+  ])(
+    'BR-4: a bookmark made on the old cut, %s, goes to the recording with the notice',
+    async (_where, positionMs, recordingMs) => {
+      const world = await startWorld();
+      const { media } = world;
+      const { recording, first } = await published(world);
+      const fileVersion = first.parent?.fileVersion ?? 1;
+      await moveBounds(media, first.id, { startMs: 90_000, endMs: 210_000 });
+      await finishCuts(media);
+      const payload = { id: randomUUID(), positionMs, fileVersion };
+
+      const made = await send(media, {
+        method: 'POST',
+        url: `${urlOf(first.id)}/bookmarks`,
+        payload,
+      });
+      const again = await send(media, {
+        method: 'POST',
+        url: `${urlOf(first.id)}/bookmarks`,
+        payload,
+      });
+
+      expect(made.statusCode, made.body).toBe(201);
+      expect(made.json<MediaBookmark>()).toMatchObject({
+        mediaId: recording.id,
+        positionMs: recordingMs,
+      });
+      expect(again.statusCode, again.body).toBe(200);
+      expect(again.json<MediaBookmark>().id).toBe(payload.id);
+      const notice = await media.owner('GET', '/api/v1/media/bookmarks/moved');
+      expect(notice.json<MovedBookmarks>().moved).toEqual([
+        {
+          mediaId: first.id,
+          recordingId: recording.id,
+          title: 'Primeira pergunta',
+          count: 1,
+        },
+      ]);
+    },
+  );
+
+  it('BR-4: a bookmark made on the old cut and inside the new bounds stays on the track', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { first } = await published(world);
+    const fileVersion = first.parent?.fileVersion ?? 1;
+    await moveBounds(media, first.id, { startMs: 90_000, endMs: 210_000 });
+    await finishCuts(media);
+
+    const made = await send(media, {
+      method: 'POST',
+      url: `${urlOf(first.id)}/bookmarks`,
+      payload: { id: randomUUID(), positionMs: 60_000, fileVersion },
+    });
+
+    expect(made.json<MediaBookmark>()).toMatchObject({
+      mediaId: first.id,
+      positionMs: 30_000,
+    });
+    const notice = await media.owner('GET', '/api/v1/media/bookmarks/moved');
+    expect(notice.json<MovedBookmarks>().moved).toEqual([]);
   });
 
   it('a second change waits for the running cut', async () => {

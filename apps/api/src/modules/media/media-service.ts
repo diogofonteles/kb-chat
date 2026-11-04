@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import {
   hasAcceptedAudioExtension,
+  remapBookmark,
   type Author,
   type CreateMediaRequest,
   type MediaAuthor,
   type MediaItem,
   type TrackParent,
   type PreparationPlan,
+  type RemappedBookmark,
   type UploadCheck,
   type UploadCheckRequest,
 } from '@kb-chat/contracts';
@@ -481,14 +483,34 @@ export class MediaService {
     item: MediaItem,
     position: { readonly positionMs: number; readonly fileVersion?: number },
   ): number {
-    const { positionMs, fileVersion } = position;
+    const { positionMs } = position;
     const { parent, durationMs } = item;
-    if (!parent || fileVersion === undefined) return positionMs;
-    if (fileVersion === parent.fileVersion) return positionMs;
-    const old = this.deps.oldCuts?.oldFile(item.id, fileVersion);
-    if (!old) return positionMs;
+    const old = this.oldCutOf(item, position.fileVersion);
+    if (!parent || !old) return positionMs;
     const moved = positionMs + old.startMs - parent.startMs;
     return Math.max(0, Math.min(moved, durationMs ?? moved));
+  }
+
+  /** A bookmark read on an older cut: the rule of one that was there when it changed (BR-4). */
+  bookmarkLanding(
+    item: MediaItem,
+    position: { readonly positionMs: number; readonly fileVersion?: number },
+  ): RemappedBookmark {
+    const { positionMs } = position;
+    const { parent, durationMs } = item;
+    const old = this.oldCutOf(item, position.fileVersion);
+    if (!parent || !old) return { inTrack: true, positionMs };
+    return remapBookmark(positionMs, {
+      oldStartMs: old.startMs,
+      newStartMs: parent.startMs,
+      durationMs: durationMs ?? parent.endMs - parent.startMs,
+    });
+  }
+
+  private oldCutOf(item: MediaItem, fileVersion: number | undefined) {
+    if (fileVersion === undefined || fileVersion === item.parent?.fileVersion)
+      return null;
+    return this.deps.oldCuts?.oldFile(item.id, fileVersion) ?? null;
   }
 
   /** The bytes `start..end` of a playable file. */

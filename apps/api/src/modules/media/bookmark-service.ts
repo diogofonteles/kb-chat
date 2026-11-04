@@ -9,6 +9,7 @@ import { AppError } from '../../app-error.js';
 import type {
   BookmarkStorePort,
   BookmarkWithMedia,
+  LeftTrack,
 } from '../../ports/bookmark-store.js';
 import type { MediaActor, MediaService } from './media-service.js';
 
@@ -38,6 +39,13 @@ const asMine = (stored: BookmarkWithMedia): MyMediaBookmark => ({
   mediaTitle: stored.mediaTitle,
   mediaDurationMs: stored.mediaDurationMs,
 });
+
+/** Where a new bookmark goes; `left`: the track it fell out of. */
+interface BookmarkPlace {
+  readonly media: MediaItem;
+  readonly positionMs: number;
+  readonly left?: LeftTrack;
+}
 
 /** One bookmark of one media. */
 export interface BookmarkRef {
@@ -70,26 +78,46 @@ export class BookmarkService {
     const existing = this.deps.bookmarks.bookmark(request.id);
     if (existing) {
       // Another person's (or another media's): as if it did not exist (BR-1).
+      const here = [mediaId, item.parent?.id];
       if (
         existing.principal !== actor.principal ||
-        existing.mediaId !== mediaId
+        !here.includes(existing.mediaId)
       )
         throw unknownBookmark();
       return { bookmark: asBookmark(existing), created: false };
     }
-    const positionMs = this.deps.media.currentPosition(item, request);
-    this.assertCreatable(actor, item, positionMs);
+    const place = this.placeOf(actor, item, request);
+    this.assertCreatable(actor, place.media, place.positionMs);
     const now = this.now().toISOString();
     const bookmark: MediaBookmark = {
       id: request.id,
-      mediaId,
-      positionMs,
+      mediaId: place.media.id,
+      positionMs: place.positionMs,
       note: request.note ?? null,
       createdAt: now,
       updatedAt: now,
     };
-    this.deps.bookmarks.addBookmark({ principal: actor.principal, bookmark });
+    this.deps.bookmarks.addBookmark({
+      principal: actor.principal,
+      bookmark,
+      ...(place.left ? { left: place.left } : {}),
+    });
     return { bookmark, created: true };
+  }
+
+  /** On a cut already replaced, it lands where one made there would have gone (KBC-073 BR-4). */
+  private placeOf(
+    actor: MediaActor,
+    item: MediaItem,
+    request: CreateMediaBookmarkRequest,
+  ): BookmarkPlace {
+    const landing = this.deps.media.bookmarkLanding(item, request);
+    if (landing.inTrack) return { media: item, positionMs: landing.positionMs };
+    return {
+      media: this.deps.media.get(actor, item.parent?.id ?? item.id),
+      positionMs: landing.recordingMs,
+      left: { mediaId: item.id, title: item.title },
+    };
   }
 
   /** Within the media's length, and under the cap per person and media. */

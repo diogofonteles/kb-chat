@@ -7,6 +7,12 @@ export interface BookmarkWithMedia extends MediaBookmark {
   readonly mediaDurationMs: number | null;
 }
 
+/** The track a bookmark fell out of on its way to the recording (KBC-073 BR-4). */
+export interface LeftTrack {
+  readonly mediaId: string;
+  readonly title: string;
+}
+
 /**
  * Each person's bookmarks (KBC-042). Kept in the media database (ADR 0022); a removed media
  * takes its bookmarks along (BR-3). Every read and write is scoped to one person (BR-1).
@@ -19,9 +25,11 @@ export interface BookmarkStorePort {
   countOf(principal: string, mediaId: string): number;
   /** One person's bookmarks in every media, newest first. */
   allOf(principal: string): BookmarkWithMedia[];
+  /** `left`: it was made on a track's replaced cut and fell out; its owner is told (BR-4). */
   addBookmark(input: {
     readonly principal: string;
     readonly bookmark: MediaBookmark;
+    readonly left?: LeftTrack;
   }): void;
   /** False when the person has no such bookmark in that media. */
   updateNote(input: {

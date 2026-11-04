@@ -288,12 +288,28 @@ export class BookmarksStore {
           })
         : this.api.updateNote(bookmark.mediaId, bookmark.id, bookmark.note);
     return request.pipe(
-      tap(() => this.delivered(write.kind, bookmark.id)),
+      tap((answer) => {
+        this.follow(bookmark, answer.mediaId);
+        this.delivered(write.kind, bookmark.id);
+      }),
       catchError((err: unknown) => {
         this.notDelivered(bookmark, err);
         return EMPTY;
       }),
     );
+  }
+
+  /**
+   * Made on a cut already replaced, it may have landed on the recording (KBC-073 BR-4): it
+   * stays on screen where it was marked, and what comes next goes to where it is now.
+   */
+  private follow(bookmark: MediaBookmark, mediaId: string): void {
+    if (bookmark.mediaId === mediaId) return;
+    const moved = (one: MediaBookmark) =>
+      one.id === bookmark.id ? { ...one, mediaId } : one;
+    this.list.update((list) => list.map(moved));
+    const out = this.outbox().get(bookmark.id);
+    if (out) this.track(moved(out.bookmark), out);
   }
 
   private delivered(kind: 'create' | 'note', id: string): void {
