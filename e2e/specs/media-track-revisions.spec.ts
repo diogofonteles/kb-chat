@@ -113,7 +113,9 @@ test('AC-13: who saves second sees the other title and keeps theirs', async ({
   expect(other.status()).toBe(200);
   await dialog.getByRole('button', { name: 'Salvar' }).click();
 
-  await expect(dialog.getByRole('alert')).toContainText('O título dela');
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Título dela: O título dela',
+  );
   await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(
     'O meu título',
   );
