@@ -1,6 +1,8 @@
 <ol class="stages" aria-label="Etapas" i18n-aria-label="@@prep.stages">
   @for (line of lines(); track line.stage.stage) {
     <li
+      #row
+      tabindex="-1"
       [class.done]="line.stage.state === 'done'"
       [class.failed]="line.stage.state === 'failed'"
       [class.current]="line.stage.state === 'running'"
@@ -31,6 +33,9 @@
         <p class="detail">{{ cost }}</p>
       }
       @if (line.stage.state === 'failed') {
+        @if (leftText(line.stage); as left) {
+          <p class="detail">{{ left }}</p>
+        }
         @if (line.stage.canRetry) {
           @if (retryCost(line.stage); as cost) {
             <p class="detail">{{ cost }}</p>

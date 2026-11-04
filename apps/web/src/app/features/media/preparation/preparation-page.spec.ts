@@ -393,6 +393,31 @@ describe('PreparationPage (T20, step 2)', () => {
     http.expectOne(`${URL}/steps/tracks/retry`).flush(RUNNING);
     await settle(harness);
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByText('Faixas com IA').closest('li'),
+    );
+  });
+
+  it('says what a failed proposal left and that a retry pays only for the rest (AC-11)', async () => {
+    await open(
+      aPreparation({
+        stages: [
+          aStage('tracks', 'failed', {
+            failure: 'provider',
+            canRetry: true,
+            estimateUsd: 0.02,
+            windows: { done: 1, total: 3 },
+            spentUsd: 0.0012,
+          }),
+        ],
+        tracks: [aTrack(1)],
+      }),
+    );
+    expect(
+      screen.getByText(
+        /1 de 3 janelas prontas, por US\$\s0,0012\. Tentar de novo refaz só as que faltam\./,
+      ),
+    ).toBeTruthy();
   });
 
   it('"Marcar as faixas eu mesmo" switches and goes to step 3 (AC-11)', async () => {

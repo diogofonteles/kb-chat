@@ -2,11 +2,14 @@ import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   LOCALE_ID,
+  afterRenderEffect,
   computed,
   inject,
   input,
   output,
+  viewChildren,
 } from '@angular/core';
 import {
   retryStageSchema,
@@ -44,6 +47,9 @@ export class PreparationStageList {
   readonly busy = input(false);
   readonly retried = output<RetryStage>();
   readonly markedByHand = output();
+  private readonly rows = viewChildren<ElementRef<HTMLElement>>('row');
+  /** The stage whose "Tentar de novo" was pressed: the button goes, the focus must not. */
+  private retriedStage: RetryStage | null = null;
 
   protected readonly lines = computed<StageLine[]>(() => {
     const { stages } = this.preparation();
@@ -65,6 +71,18 @@ export class PreparationStageList {
     );
   });
 
+  constructor() {
+    afterRenderEffect(() => {
+      const { stages } = this.preparation();
+      if (this.busy() || this.retriedStage === null) return;
+      const index = stages.findIndex(
+        ({ stage }) => stage === this.retriedStage,
+      );
+      this.retriedStage = null;
+      this.rows()[index]?.nativeElement.focus();
+    });
+  }
+
   protected valueText(stage: PreparationStage): string {
     return progressValueText(stage);
   }
@@ -83,8 +101,18 @@ export class PreparationStageList {
     return $localize`:@@prep.retryCost:Tentar de novo custa cerca de ${value}:value:, descontado do limite mensal da mídia.`;
   }
 
+  /** What a proposal that failed left in the draft, and what became of its cost (BR-6). */
+  protected leftText({ windows, spentUsd }: PreparationStage): string {
+    if (!windows || windows.done === 0) return '';
+    const { done, total } = windows;
+    const spent = this.usd(spentUsd ?? 0);
+    return $localize`:@@prep.failure.left:${done}:done: de ${total}:total: janelas prontas, por ${spent}:spent:. Tentar de novo refaz só as que faltam.`;
+  }
+
   protected retry(stage: PreparationStage): void {
-    this.retried.emit(retryStageSchema.parse(stage.stage));
+    const retried = retryStageSchema.parse(stage.stage);
+    this.retriedStage = retried;
+    this.retried.emit(retried);
   }
 
   private usd(value: number): string {
