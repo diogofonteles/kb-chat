@@ -43,7 +43,7 @@ const lineOf = (track: PreparationTrack, index: number): TrackLine => ({
 @Component({
   selector: 'app-preparation-tracks',
   templateUrl: './preparation-tracks.html',
-  styleUrl: './preparation-tracks.css',
+  styleUrls: ['./preparation-buttons.css', './preparation-tracks.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PreparationTracks {

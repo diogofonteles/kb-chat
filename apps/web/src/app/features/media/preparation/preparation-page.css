@@ -41,12 +41,7 @@
 }
 
 a.secondary,
-a.primary,
-button.primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 48px;
+a.primary {
   justify-self: start;
 }
 

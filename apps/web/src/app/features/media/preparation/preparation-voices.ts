@@ -84,7 +84,7 @@ function authorSuggestion({
       <p class="error" role="alert">{{ error() }}</p>
     }
   `,
-  styleUrl: './preparation-voices.css',
+  styleUrls: ['./preparation-buttons.css', './preparation-voices.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PreparationVoices {

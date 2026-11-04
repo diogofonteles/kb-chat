@@ -35,7 +35,7 @@ interface StageLine {
   selector: 'app-preparation-stage-list',
   imports: [DatePipe],
   templateUrl: './preparation-stages.html',
-  styleUrl: './preparation-stages.css',
+  styleUrls: ['./preparation-buttons.css', './preparation-stages.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PreparationStageList {

@@ -59,7 +59,7 @@ function concludedText({ tracks, voices }: MediaPreparation): string {
     PreparationVoices,
   ],
   templateUrl: './preparation-page.html',
-  styleUrl: './preparation-page.css',
+  styleUrls: ['./preparation-buttons.css', './preparation-page.css'],
   providers: [PlanForm, PreparationWatch, TrackAudition],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
