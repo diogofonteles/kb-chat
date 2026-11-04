@@ -446,9 +446,23 @@ export class UploadPanel implements OnInit {
   /** The old item goes first: while it lives, the API calls the same file repeated. */
   private removeHeld(key: number): Observable<unknown> {
     const held = this.created.get(key);
-    this.created.delete(key);
     if (!held) return of(null);
-    return this.api.remove(held.id).pipe(catchError(() => of(null)));
+    return this.api.remove(held.id).pipe(
+      catchError((err: unknown) => {
+        if (err instanceof HttpErrorResponse && err.status === 403)
+          return throwError(() => new ItemKept(this.keptProblem(held)));
+        return of(null);
+      }),
+      tap(() => this.created.delete(key)),
+    );
+  }
+
+  /** An item that left "uploading" is not its sender's to remove: its plan stands. */
+  private keptProblem({ draft: { plan } }: Created): string {
+    const usd = plan?.tracks === 'ai' ? plan.acceptedUsd : null;
+    return usd === null || usd === undefined
+      ? $localize`:@@media.upload.alreadyArrived:Este áudio já tinha chegado, então segue com as escolhas daquele envio. Só um master pode apagá-lo.`
+      : $localize`:@@media.upload.alreadyArrivedPaid:Este áudio já tinha chegado, então segue com as escolhas daquele envio, com IA paga de até ${usdText(usd, this.locale)}:value:. Só um master pode apagá-lo.`;
   }
 
   /** Not tied to this panel's life: the removal must reach the server after it closes. */
@@ -507,7 +521,11 @@ function planOfEntry(
 const validTitle = (title: string): boolean =>
   title.trim().length > 0 && title.length <= 200;
 
+/** The item stays as it was sent; `message` says so to the person. */
+class ItemKept extends Error {}
+
 function problemOf(err: unknown): string {
+  if (err instanceof ItemKept) return err.message;
   const offline =
     err instanceof HttpErrorResponse && (err.status === 0 || err.status >= 502);
   if (offline)

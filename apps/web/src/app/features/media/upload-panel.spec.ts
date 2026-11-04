@@ -1319,6 +1319,47 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       expect(screen.queryByText(/Espere o envio terminar/)).toBeNull();
     });
 
+    it('tells the file already arrived when its item cannot be replaced, and creates none', async () => {
+      const panel = await renderPanel({ features: PAID });
+      await chooseChecked(panel);
+      await chooseAi(panel);
+      clickSend();
+      panel.http.expectOne(TOPIC).flush(CREATED);
+      await panel.fixture.whenStable();
+      panel.tus.last.fail();
+      await panel.fixture.whenStable();
+      fireEvent.click(screen.getByRole('radio', { name: 'Não dividir agora' }));
+      await panel.fixture.whenStable();
+      clickSend();
+      panel.http
+        .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+        .flush(
+          { error: { code: 'FORBIDDEN', message: 'x' } },
+          { status: 403, statusText: 'Forbidden' },
+        );
+      await panel.fixture.whenStable();
+      panel.http.expectNone(TOPIC);
+      const said = screen.getByRole('alert').textContent;
+      expect(said).toContain('já tinha chegado');
+      expect(said).toMatch(/IA paga de até .*0[.,]02/);
+    });
+
+    it('still replaces the item when the removal fails for another reason', async () => {
+      const panel = await renderPanel({ features: EDITOR });
+      await startSending(panel);
+      panel.tus.last.fail();
+      await panel.fixture.whenStable();
+      fireEvent.input(screen.getByRole('textbox', { name: 'Título' }), {
+        target: { value: 'Outro título' },
+      });
+      clickSend();
+      panel.http
+        .expectOne({ method: 'DELETE', url: `/api/v1/media/${CREATED.id}` })
+        .flush({}, { status: 500, statusText: 'x' });
+      await panel.fixture.whenStable();
+      panel.http.expectOne(TOPIC).flush({ ...CREATED, id: OTHER_ID });
+    });
+
     const NO_ESTIMATE = anOffer({ aiEstimateUsd: null });
     const aiReason = () =>
       screen.getByRole('radio', { name: 'Propor as faixas com IA' })
