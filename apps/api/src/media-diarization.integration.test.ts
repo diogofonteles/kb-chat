@@ -265,7 +265,12 @@ describe('No voice print reaches the API (KBC-064 AC-3, BR-1, NFR-3)', () => {
         /embed|centroid|print|vector/i.test(`${row['tbl']} ${row['col']}`),
       ),
     ).toEqual([]);
-    expect(columns.filter((row) => row['type'] === 'BLOB')).toEqual([]);
+    // The only binary columns are SQLite's own for the text search index (KBC-039).
+    expect(
+      columns
+        .filter((row) => row['type'] === 'BLOB')
+        .map((row) => `${row['tbl']}.${row['col']}`),
+    ).toEqual(['segments_fts_data.block', 'segments_fts_docsize.sz']);
   });
 });
 
