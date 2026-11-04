@@ -74,6 +74,38 @@ async function search(page: Page, question: string) {
   await expect(page.getByText(/documentos · Tudo ·/)).toBeVisible();
 }
 
+/** What has the focus, with its rectangle, when that meets `bar`; null when it does not. */
+async function focusOverlapping(
+  page: Page,
+  bar: Awaited<ReturnType<ReturnType<typeof mini>['boundingBox']>>,
+): Promise<string | null> {
+  const focused = await page.evaluate(() => {
+    const element = document.activeElement;
+    if (!element || element === document.body) return null;
+    const rect = element.getBoundingClientRect();
+    return {
+      what: `${element.tagName} ${element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40)}`,
+      top: rect.top,
+      bottom: rect.bottom,
+      left: rect.left,
+      right: rect.right,
+      inMini: element.closest('app-mini-player') !== null,
+      hidden: rect.width === 0 && rect.height === 0,
+    };
+  });
+  if (!focused || focused.inMini || focused.hidden) return null;
+  // Never under the mini-player: the two rectangles do not meet.
+  const box = bar ?? { x: 0, y: 0, width: 0, height: 0 };
+  const overlaps =
+    focused.bottom > box.y + 1 &&
+    focused.top < box.y + box.height - 1 &&
+    focused.right > box.x + 1 &&
+    focused.left < box.x + box.width - 1;
+  return overlaps
+    ? `${focused.what} (${focused.left},${focused.top})–(${focused.right},${focused.bottom})`
+    : null;
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() =>
     localStorage.setItem('kb-chat.view', 'search'),
@@ -167,32 +199,9 @@ test('AC-16: nothing focused hides behind the mini-player', async ({
   await page.locator('h1').first().click();
   for (let i = 0; i < 40; i++) {
     await page.keyboard.press('Tab');
-    const focused = await page.evaluate(() => {
-      const element = document.activeElement;
-      if (!element || element === document.body) return null;
-      const rect = element.getBoundingClientRect();
-      return {
-        what: `${element.tagName} ${element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40)}`,
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        inMini: element.closest('app-mini-player') !== null,
-        hidden: rect.width === 0 && rect.height === 0,
-      };
-    });
-    if (!focused || focused.inMini || focused.hidden) continue;
-    // Never under the mini-player: the two rectangles do not meet.
-    const box = bar ?? { x: 0, y: 0, width: 0, height: 0 };
-    const overlaps =
-      focused.bottom > box.y + 1 &&
-      focused.top < box.y + box.height - 1 &&
-      focused.right > box.x + 1 &&
-      focused.left < box.x + box.width - 1;
-    expect(
-      overlaps,
-      `${focused.what} (${focused.left},${focused.top})–(${focused.right},${focused.bottom})`,
-    ).toBe(false);
+    // Linux WebKit moves the focus first and scrolls to it a moment later: a rectangle read
+    // at once can be the one before the scroll, so the check waits for where it settles.
+    await expect.poll(() => focusOverlapping(page, bar)).toBeNull();
   }
 });
 

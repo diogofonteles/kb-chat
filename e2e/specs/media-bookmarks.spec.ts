@@ -153,16 +153,19 @@ test('FR-4: without "Desfazer" the deletion reaches the server after 8 s', async
   await seed(page, [5_000]);
   await page.clock.install();
   await openPlayer(page);
-  const deleted = page.waitForRequest(
-    (request) =>
-      request.method() === 'DELETE' && request.url().includes('/bookmarks/'),
+  // The answer, not the request: a reload while the DELETE is on its way cancels it, and
+  // the bookmark would still be on the server.
+  const deleted = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'DELETE' &&
+      response.url().includes('/bookmarks/'),
   );
   await list(page)
     .first()
     .getByRole('button', { name: /^Apagar/ })
     .click();
   await page.clock.fastForward('00:08');
-  await deleted;
+  expect((await deleted).ok()).toBe(true);
   await page.reload();
   await expect(page.getByText(/Nenhum marcador ainda/)).toBeVisible();
 });
