@@ -95,6 +95,10 @@ export class ProposalService {
   /** Reserves the estimate and starts the run; it goes on after the answer (FR-1). */
   async start(actor: MediaActor, mediaId: string): Promise<ProposalRun> {
     const prepared = await this.prepare(actor, mediaId);
+    if (this.deps.store.isApproved(mediaId))
+      throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
+        details: { reason: 'approved' },
+      });
     const spendId = this.reserve(actor, prepared.plan);
     const run = this.startRun({ actor, prepared, spendId });
     if (!run) {

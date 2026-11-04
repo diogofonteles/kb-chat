@@ -83,6 +83,8 @@ export interface TrackProposalStorePort {
   }): void;
   /** Ranges a new proposal must leave alone: a person's tracks and edited ones (BR-6). */
   keptRanges(mediaId: string): KeptRange[];
+  /** The edit stands approved: nothing to propose on until it is reopened (BR-9). */
+  isApproved(mediaId: string): boolean;
   /** The draft now: the newest run that did not fail, its tracks and the kept ones. */
   draft(mediaId: string): DraftTracks;
   /** Closes the runs a stopped API left running, as failed (`interrupted`). */

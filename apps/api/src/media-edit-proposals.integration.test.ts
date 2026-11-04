@@ -81,7 +81,7 @@ function setup(titles: readonly string[] = ['Primeira', 'Segunda']) {
     await proposals.start(OWNER, db.mediaId);
     await proposals.idle();
   };
-  return { ...db, edits, proposals, call, propose };
+  return { ...db, edits, proposals, call, propose, llm };
 }
 
 describe('The draft and the AI proposals (KBC-066 with KBC-067)', () => {
@@ -152,6 +152,41 @@ describe('The draft and the AI proposals (KBC-066 with KBC-067)', () => {
       ctx.edits.save(ctx.call(version), { tracks: [], step: 3 }),
     ).toThrow(expect.objectContaining({ code: 'MEDIA_CONFLICT' }));
     await ctx.proposals.idle();
+  });
+
+  it('says the transcript changed for a draft born from a proposal (BR-10)', async () => {
+    const ctx = setup();
+    await ctx.propose();
+    expect(ctx.edits.get(OWNER, ctx.mediaId).transcriptChanged).toBe(false);
+    ctx.db
+      .prepare('UPDATE transcripts SET version = 2 WHERE media_id = ?')
+      .run(ctx.mediaId);
+    expect(ctx.edits.get(OWNER, ctx.mediaId).transcriptChanged).toBe(true);
+  });
+
+  it('keeps the base of a draft through a person`s save (BR-10)', async () => {
+    const ctx = setup();
+    await ctx.propose();
+    ctx.db
+      .prepare('UPDATE transcripts SET version = 2 WHERE media_id = ?')
+      .run(ctx.mediaId);
+    const { version, tracks } = ctx.edits.get(OWNER, ctx.mediaId);
+    ctx.edits.save(ctx.call(version), {
+      tracks: tracks.map((one) => ({ ...one, title: 'Mudei' })),
+      step: 3,
+    });
+    expect(ctx.edits.get(OWNER, ctx.mediaId).transcriptChanged).toBe(true);
+  });
+
+  it('refuses a proposal over an approved edit: it would spend for nobody', async () => {
+    const ctx = setup();
+    await ctx.propose();
+    const { version } = ctx.edits.get(OWNER, ctx.mediaId);
+    ctx.edits.approve(ctx.call(version));
+    await expect(ctx.proposals.start(OWNER, ctx.mediaId)).rejects.toMatchObject(
+      { code: 'MEDIA_CONFLICT', details: { reason: 'approved' } },
+    );
+    expect(ctx.llm.calls).toHaveLength(1);
   });
 
   it('keeps a person`s track through a proposal', async () => {

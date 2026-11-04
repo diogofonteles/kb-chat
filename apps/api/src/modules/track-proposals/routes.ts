@@ -19,7 +19,10 @@ import {
 import type { MediaActor } from '../media/index.js';
 import type { ProposalService } from './proposal-service.js';
 
-/** Proposing with AI needs its own feature on top of editing (KBC-067 BR-2, ADR 0029 §9). */
+/**
+ * Proposing with AI needs its own feature on top of editing (KBC-067 BR-2, ADR 0029 §9), and
+ * `media`, as every media route.
+ */
 const PROPOSE: RouteAccess = { feature: 'media-edit-ai' };
 const EDIT: RouteAccess = { feature: 'media-edit' };
 /** Runs a person may start per minute: each spends money (ND-22); the month caps the rest. */
@@ -69,6 +72,9 @@ const OPTIONS = {
 export const trackProposalRoutes =
   (service: ProposalService): FastifyPluginAsync =>
   async (app) => {
+    app.addHook('preHandler', async (request) => {
+      assertFeature(request, 'media');
+    });
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.post(
       '/api/v1/media/:id/edit/proposals',
