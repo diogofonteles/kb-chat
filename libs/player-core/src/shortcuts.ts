@@ -13,7 +13,8 @@ export type ShortcutAction =
   | { readonly kind: 'seek-fraction'; readonly fraction: number }
   | { readonly kind: 'help' }
   | { readonly kind: 'bookmark' }
-  | { readonly kind: 'captions' };
+  | { readonly kind: 'captions' }
+  | { readonly kind: 'track'; readonly direction: 1 | -1 };
 
 /** Where the focus is, as the shortcuts care about it. */
 export type ShortcutTarget =
@@ -68,6 +69,11 @@ export function shortcutOf(
   if (press.key === ' ') return { kind: 'toggle' };
   if (/^[0-9]$/.test(press.key))
     return { kind: 'seek-fraction', fraction: Number(press.key) / 10 };
+  // KBC-066 FR-9: the previous or next track; the slider took Shift+arrows above.
+  if (press.shiftKey && press.key === 'ArrowLeft')
+    return { kind: 'track', direction: -1 };
+  if (press.shiftKey && press.key === 'ArrowRight')
+    return { kind: 'track', direction: 1 };
   const key = (press.shiftKey && SHIFTED[press.key]) || press.key;
   return LETTERS[key.length === 1 ? key.toLowerCase() : key] ?? null;
 }
