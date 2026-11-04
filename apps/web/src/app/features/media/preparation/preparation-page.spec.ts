@@ -24,7 +24,7 @@ import { PREPARATION_POLL_MS } from './preparation-watch.js';
 const URL = `/api/v1/media/${MEDIA_ID}/preparation`;
 const ITEM = `/api/v1/media/${MEDIA_ID}`;
 
-async function open(first: MediaPreparation, offer = anOffer()) {
+function configure() {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -39,6 +39,22 @@ async function open(first: MediaPreparation, offer = anOffer()) {
       sessionAs({ features: ['media', 'media-edit', 'media-edit-ai'] }),
     ],
   });
+}
+
+async function openFailing() {
+  configure();
+  const harness = await RouterTestingHarness.create(
+    `/midia/${MEDIA_ID}/preparar`,
+  );
+  const http = TestBed.inject(HttpTestingController);
+  await pause();
+  http.match(ITEM).forEach((one) => one.flush(aMediaItem({ id: MEDIA_ID })));
+  await failRead(harness, http);
+  return { harness, http };
+}
+
+async function open(first: MediaPreparation, offer = anOffer()) {
+  configure();
   const harness = await RouterTestingHarness.create(
     `/midia/${MEDIA_ID}/preparar`,
   );
@@ -69,6 +85,33 @@ const settle = async (harness: RouterTestingHarness) => {
 
 const answer = (http: HttpTestingController, body: MediaPreparation) =>
   http.match(URL).forEach((one) => one.flush(body));
+
+const MEDIA_GONE = {
+  status: 404,
+  body: { error: { code: 'MEDIA_NOT_FOUND', message: 'Gone' } },
+};
+const BROKEN = {
+  status: 500,
+  body: { error: { code: 'INTERNAL', message: 'Boom' } },
+};
+
+/** Waits for the next read of the plan and refuses it. */
+async function failRead(
+  harness: RouterTestingHarness,
+  http: HttpTestingController,
+  { status, body } = BROKEN,
+) {
+  for (let tick = 0; tick < 40; tick++) {
+    const reads = http.match(URL);
+    if (reads.length > 0) {
+      reads.forEach((one) => one.flush(body, { status, statusText: 'No' }));
+      await settle(harness);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error('no read came');
+}
 
 /** Waits for the next read of the plan and answers it. */
 async function nextRead(
@@ -102,6 +145,8 @@ const RUNNING = aPreparation({
 });
 
 describe('PreparationPage (T20, step 2)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('says the step, with what is done and what is closed and why (AC-5)', async () => {
     await open(RUNNING);
     expect(screen.getByTestId('step-text').textContent).toContain(
@@ -207,6 +252,33 @@ describe('PreparationPage (T20, step 2)', () => {
     expect(screen.getByText(/Sem conexão: o trabalho continua/)).toBeTruthy();
     await nextRead(harness, http, RUNNING);
     expect(screen.queryByText(/Sem conexão/)).toBeNull();
+  });
+
+  it('keeps watching after a read that failed, and the screen with it (FR-5)', async () => {
+    const { harness, http } = await open(RUNNING);
+    await failRead(harness, http);
+    expect(screen.getByText(/Sem atualizar agora/)).toBeTruthy();
+    expect(screen.getByRole('progressbar')).toBeTruthy();
+    await nextRead(harness, http, RUNNING);
+    expect(screen.queryByText(/Sem atualizar agora/)).toBeNull();
+  });
+
+  it('comes back from a first read that failed (FR-5)', async () => {
+    const { harness, http } = await openFailing();
+    expect(screen.getByRole('alert')).toBeTruthy();
+    await nextRead(harness, http, RUNNING);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('progressbar')).toBeTruthy();
+  });
+
+  it('stops watching a recording that is gone', async () => {
+    const { harness, http } = await open(RUNNING);
+    await failRead(harness, http, MEDIA_GONE);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    http.expectNone(URL);
+    expect(screen.getByRole('alert').textContent).toContain(
+      'não está mais no acervo',
+    );
   });
 
   it('offers "Validar faixas" and does not move by itself; the press goes to step 3 (AC-8)', async () => {

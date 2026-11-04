@@ -42,6 +42,12 @@
         voltar.
       </p>
     }
+    @if (watch.stale()) {
+      <p class="banner" role="status" i18n="@@prep.readFailed">
+        Sem atualizar agora: esta tela pode estar atrasada. Tento de novo em
+        instantes.
+      </p>
+    }
     @if (actionError(); as error) {
       <p class="banner" role="alert">{{ error }}</p>
     }

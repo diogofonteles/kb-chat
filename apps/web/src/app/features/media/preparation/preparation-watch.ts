@@ -2,16 +2,20 @@ import {
   DestroyRef,
   Injectable,
   InjectionToken,
+  computed,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
-import type { MediaPreparation, StageState } from '@kb-chat/contracts';
+import type { MediaPreparation } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { PreparationApi } from '@core/media/preparation-api.js';
 import { Subject, catchError, map, of, switchMap, timer } from 'rxjs';
-import { PreparationAnnouncer } from './preparation-announcer.js';
+import {
+  PreparationAnnouncer,
+  hasMovingStage,
+} from './preparation-announcer.js';
 
 /** While anything runs, step 2 refreshes this often (FR-5). */
 export const PREPARATION_POLL_MS = new InjectionToken<number>(
@@ -19,15 +23,8 @@ export const PREPARATION_POLL_MS = new InjectionToken<number>(
   { providedIn: 'root', factory: () => 3_000 },
 );
 
-const MOVING: ReadonlySet<StageState> = new Set([
-  'waiting',
-  'queued',
-  'running',
-]);
-
 const isMoving = (preparation: MediaPreparation): boolean =>
-  preparation.step === 2 &&
-  preparation.stages.some(({ state }) => MOVING.has(state));
+  preparation.step === 2 && hasMovingStage(preparation.stages);
 
 type Reading =
   | { readonly kind: 'read'; readonly preparation: MediaPreparation }
@@ -40,7 +37,8 @@ const isConnectionLost = (error: unknown): boolean =>
 /**
  * Step 2 as it moves on the server (FR-5, BR-8): a read each 3 s while anything runs, none
  * once nothing does or the tab is hidden, and one on coming back. It only replaces the
- * reading, so the scroll and the focus stay where they are.
+ * reading, so the scroll and the focus stay where they are. A read that fails does not end
+ * it: only a refusal or a recording that is gone do.
  */
 @Injectable()
 export class PreparationWatch {
@@ -56,6 +54,7 @@ export class PreparationWatch {
   private readonly lost = signal(false);
   private readonly refused = signal(false);
   private readonly failure = signal('');
+  private readonly gone = signal(false);
   private readonly spoken = signal('');
   private readonly arrived = signal<ReadonlySet<string>>(new Set());
   private readonly notSeen = signal(0);
@@ -64,7 +63,12 @@ export class PreparationWatch {
   /** "Sem conexão": the work goes on, the screen waits for the network. */
   readonly offline = this.lost.asReadonly();
   readonly forbidden = this.refused.asReadonly();
-  readonly loadError = this.failure.asReadonly();
+  /** Nothing to show: no reading yet, or the recording is gone. */
+  readonly loadError = computed(() =>
+    this.reading() === null || this.gone() ? this.failure() : '',
+  );
+  /** The last read failed: what is on screen stands, and the next read is on its way. */
+  readonly stale = computed(() => this.failure() !== '' && !this.loadError());
   /** The sentence for the live region (BR-9). */
   readonly said = this.spoken.asReadonly();
   /** The tracks that came with the last reading: they enter highlighted. */
@@ -97,6 +101,7 @@ export class PreparationWatch {
   /** An action answered with where things stand now. */
   replace(preparation: MediaPreparation): void {
     this.lost.set(false);
+    this.failure.set('');
     this.take(preparation);
   }
 
@@ -111,13 +116,16 @@ export class PreparationWatch {
 
   private answered(reading: Reading): void {
     if (reading.kind === 'read') return this.replace(reading.preparation);
+    const code = toUiErrorCode(reading.error);
     if (isConnectionLost(reading.error)) {
       this.lost.set(true);
       this.schedule();
-    } else if (toUiErrorCode(reading.error) === 'FORBIDDEN') {
+    } else if (code === 'FORBIDDEN') {
       this.refused.set(true);
     } else {
-      this.failure.set(errorMessage(toUiErrorCode(reading.error)));
+      this.failure.set(errorMessage(code));
+      this.gone.set(code === 'MEDIA_NOT_FOUND');
+      if (!this.gone()) this.schedule();
     }
   }
 
