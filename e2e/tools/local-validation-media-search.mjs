@@ -10,7 +10,10 @@ import { chromium } from '@playwright/test';
 
 const [base, out, ffmpeg = 'ffmpeg'] = process.argv.slice(2);
 const CSRF = { 'x-requested-with': 'kb-chat' };
-const browser = await chromium.launch({ channel: 'chrome' });
+const browser = await chromium.launch({
+  args: ['--mute-audio'],
+  channel: 'chrome',
+});
 
 async function signIn(request) {
   const token = await request.post('/api/e2e/token', {

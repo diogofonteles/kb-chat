@@ -4,7 +4,7 @@
 import { chromium } from '@playwright/test';
 
 const [base, out] = process.argv.slice(2);
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 
 async function signIn(page) {
   const token = await page.request.post(`${base}/api/e2e/token`, {

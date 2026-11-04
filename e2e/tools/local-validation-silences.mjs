@@ -34,7 +34,10 @@ function lectureWithPauses() {
   return readFileSync(path);
 }
 
-const browser = await chromium.launch({ channel: 'chrome' });
+const browser = await chromium.launch({
+  args: ['--mute-audio'],
+  channel: 'chrome',
+});
 const admin = await browser.newContext({ baseURL: base });
 async function signIn(request) {
   const token = await request.post('/api/e2e/token', {

@@ -6,6 +6,17 @@ const WEB_PORT = process.env['KBC_E2E_WEB_PORT'] ?? '4317';
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 /** The media specs: they need a browser that plays AAC (see the media projects). */
 const MEDIA_SPECS = /media-.*\.spec\.ts$/;
+/**
+ * The media specs play real tones (330 Hz, up to minutes long): keep them off the
+ * machine's speakers. Chrome mutes its output only; `muted` and `volume` stay as the
+ * page set them, so the player's assertions still hold.
+ */
+const MUTE_AUDIO = ['--mute-audio'];
+/**
+ * WebKit cannot mute its output, so its media project runs only in CI or on demand
+ * (`KBC_E2E_WEBKIT=1 pnpm e2e`): a local run never plays tones out loud.
+ */
+const WITH_WEBKIT = !!process.env.CI || process.env['KBC_E2E_WEBKIT'] === '1';
 
 /**
  * E2E against the real API on the fixture vault (KB_CHAT_SEARCH=fixture: no QMD,
@@ -49,6 +60,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         channel: 'chrome',
         viewport: { width: 1440, height: 900 },
+        launchOptions: { args: MUTE_AUDIO },
       },
     },
     {
@@ -58,16 +70,21 @@ export default defineConfig({
         ...devices['Pixel 5'],
         channel: 'chrome',
         viewport: { width: 390, height: 844 },
+        launchOptions: { args: MUTE_AUDIO },
       },
     },
-    {
-      name: 'media-webkit',
-      testMatch: MEDIA_SPECS,
-      use: {
-        ...devices['Desktop Safari'],
-        viewport: { width: 1440, height: 900 },
-      },
-    },
+    ...(WITH_WEBKIT
+      ? [
+          {
+            name: 'media-webkit',
+            testMatch: MEDIA_SPECS,
+            use: {
+              ...devices['Desktop Safari'],
+              viewport: { width: 1440, height: 900 },
+            },
+          },
+        ]
+      : []),
   ],
   webServer: [
     {

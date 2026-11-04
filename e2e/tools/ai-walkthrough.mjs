@@ -2,7 +2,11 @@
 import { chromium, expect } from '@playwright/test';
 
 const [base, shot] = process.argv.slice(2);
-const browser = await chromium.launch({ headless: false, slowMo: 300 });
+const browser = await chromium.launch({
+  args: ['--mute-audio'],
+  headless: false,
+  slowMo: 300,
+});
 const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   colorScheme: 'dark',

@@ -21,6 +21,8 @@ export default defineConfig({
     locale: 'pt-BR',
     timezoneId: 'America/Sao_Paulo',
     colorScheme: 'light',
+    // Off the machine's speakers (see MUTE_AUDIO in playwright.config.ts).
+    launchOptions: { args: ['--mute-audio'] },
   },
   webServer: [
     {
