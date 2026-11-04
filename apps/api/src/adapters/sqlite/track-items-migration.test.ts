@@ -11,9 +11,12 @@ const VERSION =
   MEDIA_MIGRATIONS.find((one) => one.name === 'track-items')?.version ?? 0;
 const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < VERSION);
 
-/** What KBC-071's unmerged migration does to `jobs`: a kind, a column and a check. */
+/**
+ * What KBC-071's unmerged migration does to `jobs`: a kind, a column and a check. Numbered past
+ * every real migration, as a branch that landed first: this one then runs as a lower version.
+ */
 const SIBLING_REBUILD: Migration = {
-  version: 16,
+  version: 99,
   name: 'sibling-rebuild',
   sql: `
     CREATE TABLE jobs_sibling (

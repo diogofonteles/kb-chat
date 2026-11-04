@@ -10,7 +10,7 @@ const VERSION = MEDIA_MIGRATIONS.find(
 const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < (VERSION ?? 0));
 const OTHERS = MEDIA_MIGRATIONS.filter((one) => one.version !== VERSION);
 /** A later item's migration, already on a database that still lacks this one. */
-const LATER: Migration = { version: 20, name: 'later-item', sql: 'SELECT 1;' };
+const LATER: Migration = { version: 99, name: 'later-item', sql: 'SELECT 1;' };
 
 describe('word-highlight migration (KBC-045)', () => {
   it('turns the highlight on for who already has preferences', () => {
@@ -59,9 +59,9 @@ describe('word-highlight migration (KBC-045)', () => {
   });
 
   it.each([
-    { state: 'at 19', applied: OTHERS, known: MEDIA_MIGRATIONS },
+    { state: 'at the latest', applied: OTHERS, known: MEDIA_MIGRATIONS },
     {
-      state: 'at 20',
+      state: 'past the latest',
       applied: [...OTHERS, LATER],
       known: [...MEDIA_MIGRATIONS, LATER],
     },
