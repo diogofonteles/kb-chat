@@ -6,6 +6,7 @@ import type {
   ProposalRun,
   SpendCap,
 } from '@kb-chat/contracts';
+import { z } from 'zod';
 import { startOfAppMonth } from '../../app-calendar.js';
 import { AppError } from '../../app-error.js';
 import type { LlmPort } from '../../ports/llm.js';
@@ -89,6 +90,20 @@ const canResume = (attempt: FailedAttempt, windows: number): boolean =>
   attempt.windowsDone > 0 &&
   attempt.windowsDone < attempt.windowsTotal &&
   attempt.windowsTotal === windows;
+
+const ANALYSIS_TAKEN = 'analysis-taken';
+const takenDetails = z.object({ reason: z.literal(ANALYSIS_TAKEN) });
+
+const analysisTaken = () =>
+  new AppError('MEDIA_CONFLICT', 'A proposal already started', {
+    details: { reason: ANALYSIS_TAKEN },
+  });
+
+/** Another start got there first: its analysis stands and nothing stopped. */
+export const isAnalysisTaken = (error: unknown): boolean =>
+  error instanceof AppError &&
+  error.code === 'MEDIA_CONFLICT' &&
+  takenDetails.safeParse(error.details).success;
 
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
@@ -175,9 +190,24 @@ export class ProposalService {
     return { estimateUsd, refusal };
   }
 
-  /** Reserves the estimate and starts the run; it goes on after the answer (FR-1). */
-  async start(actor: MediaActor, mediaId: string): Promise<ProposalRun> {
+  /** The newest run's id: what a person pressing now has in front of them. */
+  newestRunId(mediaId: string): string | null {
+    return this.deps.store.newestRun(mediaId)?.id ?? null;
+  }
+
+  /**
+   * Reserves the estimate and starts the run; it goes on after the answer (FR-1). Single
+   * flight: `seenRunId` is read before anything waits, and nothing waits from the check to
+   * the run's row, so of the starts that saw the same run only the first pays. The API is one
+   * process over this database (ADR 0010), so that stretch is atomic.
+   */
+  async start(
+    actor: MediaActor,
+    mediaId: string,
+    seenRunId: string | null = this.newestRunId(mediaId),
+  ): Promise<ProposalRun> {
     const prepared = await this.prepare(actor, mediaId);
+    this.assertNotTaken(mediaId, seenRunId);
     if (this.deps.store.isApproved(mediaId))
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
@@ -186,10 +216,16 @@ export class ProposalService {
     const run = this.startRun({ actor, prepared, spendId });
     if (!run) {
       this.closeSpend(spendId, { failure: 'interrupted', spentUsd: 0 });
-      throw new AppError('MEDIA_CONFLICT', 'A proposal is already running');
+      throw analysisTaken();
     }
     this.track(run.id, this.execute({ runId: run.id, spendId, prepared }));
     return run;
+  }
+
+  private assertNotTaken(mediaId: string, seenRunId: string | null): void {
+    const newest = this.deps.store.newestRun(mediaId);
+    if (newest?.status === 'running' || (newest?.id ?? null) !== seenRunId)
+      throw analysisTaken();
   }
 
   /** The run's row; a failure to write it gives the reservation back before throwing. */

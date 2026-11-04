@@ -53,8 +53,8 @@ export interface PreparationStorePort {
     readonly usd: number | null;
     readonly now: Date;
   }): void;
-  /** A person's click takes the paid stage again, whatever stopped it. */
-  reclaimProposal(mediaId: string, now: Date): void;
+  /** The paid stage is taken again from this moment, by the run that won it: no stop stands. */
+  reclaimProposal(mediaId: string, at: Date): void;
   /** Changes the choice, dropping what stopped the AI (BR-6). */
   chooseTracks(mediaId: string, tracks: TrackChoice, now: Date): void;
   startValidating(mediaId: string, now: Date): void;

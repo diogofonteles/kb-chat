@@ -213,9 +213,11 @@ function runningTracks(run: ProposalRun, state: StageState): PreparationStage {
 
 function tracksStage(facts: StageFacts, before: Upstream): PreparationStage {
   if (facts.starting) return stageOf('tracks', 'queued');
-  if (facts.stop) return failedTracks(facts, facts.stop);
   if (facts.run?.status === 'running')
     return runningTracks(facts.run, 'running');
+  // An analysis that ended after a stop outdates it.
+  if (facts.stop && facts.run?.status !== 'done')
+    return failedTracks(facts, facts.stop);
   if (facts.runFailure) return failedTracks(facts, facts.runFailure);
   if (facts.run?.status === 'done') return runningTracks(facts.run, 'done');
   // Taken and neither started nor stopped: the API went down in between.

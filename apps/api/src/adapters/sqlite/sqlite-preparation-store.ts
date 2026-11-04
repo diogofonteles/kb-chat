@@ -125,14 +125,14 @@ export class SqlitePreparationStore implements PreparationStorePort {
       .run(input.stop, input.usd, input.now.toISOString(), input.mediaId);
   }
 
-  reclaimProposal(mediaId: string, now: Date): void {
-    const at = now.toISOString();
+  reclaimProposal(mediaId: string, at: Date): void {
+    const moment = at.toISOString();
     this.db
       .prepare(
         `UPDATE media_preparations SET proposal_claimed_at = ?, proposal_stop = NULL,
            proposal_stop_usd = NULL, updated_at = ? WHERE media_id = ?`,
       )
-      .run(at, at, mediaId);
+      .run(moment, moment, mediaId);
   }
 
   chooseTracks(mediaId: string, tracks: TrackChoice, now: Date): void {

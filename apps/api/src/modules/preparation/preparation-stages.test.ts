@@ -225,6 +225,18 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
     });
   });
 
+  it('never lets a stop stand over the analysis that came after it (BUG-10)', () => {
+    const over = (status: 'running' | 'done') =>
+      stateOf(
+        stagesOf(
+          facts({ claimed: true, stop: 'conflict', run: run({ status }) }),
+        ),
+        'tracks',
+      );
+    expect(over('running')?.state).toBe('running');
+    expect(over('done')?.state).toBe('done');
+  });
+
   it('never offers a paid retry past a final failure to who may not propose', () => {
     const stages = stagesOf(
       facts({

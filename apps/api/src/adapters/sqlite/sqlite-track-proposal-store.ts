@@ -140,6 +140,16 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     return row ? toRun(row) : null;
   }
 
+  newestRun(mediaId: string): ProposalRun | null {
+    const row = this.db
+      .prepare(
+        `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r WHERE r.media_id = ?
+         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1`,
+      )
+      .get(mediaId);
+    return row ? toRun(row) : null;
+  }
+
   failedAttempt(mediaId: string, transcriptId: string): FailedAttempt | null {
     const row = this.db
       .prepare(

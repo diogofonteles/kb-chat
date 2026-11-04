@@ -1,5 +1,6 @@
 export {
   ProposalService,
+  isAnalysisTaken,
   type CollectionContext,
   type DurationEstimate,
   type ProposalServiceDeps,

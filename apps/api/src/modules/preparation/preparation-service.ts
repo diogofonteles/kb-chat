@@ -39,7 +39,10 @@ import type {
   TranscriptSummary,
 } from '../../ports/transcript-store.js';
 import type { PlanActor, Presence } from '../media/index.js';
-import type { DurationEstimate } from '../track-proposals/index.js';
+import {
+  isAnalysisTaken,
+  type DurationEstimate,
+} from '../track-proposals/index.js';
 import { isGuided, planRefusals, type PlanContext } from './plan-rules.js';
 import {
   nextActionOf,
@@ -58,7 +61,13 @@ export interface PlanProposals {
     actor: PlanActor,
     mediaId: string,
   ): Promise<{ estimateUsd: number; refusal: StageStop | null }>;
-  start(actor: PlanActor, mediaId: string): Promise<ProposalRun>;
+  newestRunId(mediaId: string): string | null;
+  /** Refuses (`isAnalysisTaken`) when a newer run than `seenRunId` exists or one is running. */
+  start(
+    actor: PlanActor,
+    mediaId: string,
+    seenRunId: string | null,
+  ): Promise<ProposalRun>;
 }
 
 export interface PreparationServiceDeps {
@@ -352,14 +361,22 @@ export class PreparationService {
     try {
       await this.runProposal(record);
     } catch (err) {
-      this.stopProposal(mediaId, stopOf(err), null);
+      if (isAnalysisTaken(err)) this.followNewestRun(mediaId);
+      else this.stopProposal(mediaId, stopOf(err), null);
     } finally {
       this.starting.delete(mediaId);
     }
   }
 
+  /** An analysis from the tracks screen got there first: it is this plan's progress. */
+  private followNewestRun(mediaId: string): void {
+    const { run } = this.deps.drafts.draft(mediaId);
+    if (run) this.deps.plans.reclaimProposal(mediaId, new Date(run.createdAt));
+  }
+
   private async runProposal(record: PreparationRecord): Promise<void> {
     const { mediaId, plan } = record;
+    const seenRunId = this.deps.proposals.newestRunId(mediaId);
     const actor = await this.deps.actorOf(record.principal);
     if (!actor?.canEdit || !actor.canPropose)
       return this.stopProposal(mediaId, 'no-permission', null);
@@ -369,7 +386,7 @@ export class PreparationService {
     const agreed = (plan.acceptedUsd ?? 0) * ESTIMATE_TOLERANCE;
     if (estimateUsd > agreed)
       return this.stopProposal(mediaId, 'estimate-rose', estimateUsd);
-    await proposals.start(actor, mediaId);
+    await proposals.start(actor, mediaId, seenRunId);
   }
 
   private stopProposal(
@@ -386,26 +403,35 @@ export class PreparationService {
     mediaId: string,
     stage: RetryStage,
   ): Promise<MediaPreparation> {
+    // Before anything waits: of clicks made together, the later one must see it lost.
+    const seenRunId = this.deps.proposals.newestRunId(mediaId);
     const current = await this.view(actor, mediaId);
     const found = current.stages.find((one) => one.stage === stage);
     if (!found?.canRetry) throw conflict('This stage cannot be retried now');
     if (stage === 'convert') this.deps.retryConversion(actor, mediaId);
     if (stage === 'transcribe') this.requestTranscription(mediaId);
     if (stage === 'speakers') this.deps.separation.request(mediaId);
-    if (stage === 'tracks') await this.retryProposal(actor, mediaId);
+    if (stage === 'tracks')
+      await this.retryProposal({ actor, mediaId, seenRunId });
     return this.view(actor, mediaId);
   }
 
-  /** The person's click, seeing the value, is what pays; refusals are shown, not thrown. */
-  private async retryProposal(
-    actor: PlanActor,
-    mediaId: string,
-  ): Promise<void> {
-    this.deps.plans.reclaimProposal(mediaId, this.now());
+  /**
+   * The person's click, seeing the value, is what pays; refusals are shown, not thrown. The
+   * plan changes only once this click won: the one that lost leaves the analysis alone.
+   */
+  private async retryProposal(click: {
+    readonly actor: PlanActor;
+    readonly mediaId: string;
+    readonly seenRunId: string | null;
+  }): Promise<void> {
+    const { actor, mediaId, seenRunId } = click;
     this.starting.add(mediaId);
     try {
-      await this.deps.proposals.start(actor, mediaId);
+      const run = await this.deps.proposals.start(actor, mediaId, seenRunId);
+      this.deps.plans.reclaimProposal(mediaId, new Date(run.createdAt));
     } catch (err) {
+      if (isAnalysisTaken(err)) throw conflict('Another click took this stage');
       this.stopProposal(mediaId, stopOf(err), null);
     } finally {
       this.starting.delete(mediaId);

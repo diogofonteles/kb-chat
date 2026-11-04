@@ -53,15 +53,15 @@ const FAILURES: Record<StageFailure, () => string> = {
   'monthly-cap': () =>
     $localize`:@@prep.failure.monthlyCap:O limite mensal da mídia foi atingido. As faixas com IA não rodaram.`,
   'no-permission': () =>
-    $localize`:@@prep.failure.noPermission:Quem pediu não tem mais permissão para propor faixas com IA. Nada foi cobrado.`,
+    $localize`:@@prep.failure.noPermission:Quem pediu não tem mais permissão para propor faixas com IA. Nada foi cobrado nesta tentativa.`,
   'not-connected': () =>
-    $localize`:@@prep.failure.notConnected:A IA da aplicação não está conectada. Nada foi cobrado.`,
+    $localize`:@@prep.failure.notConnected:A IA da aplicação não está conectada. Nada foi cobrado nesta tentativa.`,
   'provider-unavailable': () =>
-    $localize`:@@prep.failure.unavailable:Não consegui falar com o provedor de IA. Nada foi cobrado.`,
+    $localize`:@@prep.failure.unavailable:Não consegui falar com o provedor de IA. Nada foi cobrado nesta tentativa.`,
   'estimate-rose': () =>
-    $localize`:@@prep.failure.estimateRose:A estimativa subiu depois da transcrição, então a análise não rodou. Nada foi cobrado.`,
+    $localize`:@@prep.failure.estimateRose:A estimativa subiu depois da transcrição, então a análise não rodou. Nada foi cobrado nesta tentativa.`,
   conflict: () =>
-    $localize`:@@prep.failure.conflict:A gravação mudou enquanto a análise começava, então ela não rodou. Nada foi cobrado.`,
+    $localize`:@@prep.failure.conflict:A gravação mudou enquanto a análise começava, então ela não rodou. Nada foi cobrado nesta tentativa.`,
 };
 
 export const failureText = (failure: StageFailure): string =>

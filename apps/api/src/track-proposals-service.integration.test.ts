@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import {
   BrokenStream,
@@ -732,6 +733,36 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     const second = await runToEnd(ctx);
     expect(second).toMatchObject({ windowsDone: 0, tracks: 0 });
     expect(second.spentUsd).toBeCloseTo(0.2, 9);
+  });
+
+  it('two starts at once run one analysis and reserve once (BUG-10)', async () => {
+    const ctx = setup({ segments: THREE_WINDOWS, replies: [HANG] });
+    const price = ctx.llm.price.bind(ctx.llm);
+    ctx.llm.price = async () => {
+      await sleep(5);
+      return price();
+    };
+    const results = await Promise.allSettled([
+      ctx.service.start(OWNER, ctx.mediaId),
+      ctx.service.start(OWNER, ctx.mediaId),
+    ]);
+    expect(results.map(({ status }) => status).sort()).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect(spendRows(ctx)).toHaveLength(1);
+    await ctx.service.stop();
+  });
+
+  it('a start that saw an older run pays nothing once a newer one ended (BUG-10)', async () => {
+    const ctx = setup({ replies: [wholeWindow()] });
+    const seen = ctx.service.newestRunId(ctx.mediaId);
+    await runToEnd(ctx);
+    await expect(
+      ctx.service.start(OWNER, ctx.mediaId, seen),
+    ).rejects.toMatchObject({ code: 'MEDIA_CONFLICT' });
+    expect(ctx.llm.calls).toHaveLength(1);
+    expect(spendRows(ctx)).toHaveLength(1);
   });
 
   it('starts over when the transcript changed since the failure', async () => {

@@ -77,6 +77,8 @@ export interface TrackProposalStorePort {
    */
   startRun(run: NewProposalRun): ProposalRun | null;
   getRun(runId: string): ProposalRun | null;
+  /** The recording's newest run, whatever became of it. */
+  newestRun(mediaId: string): ProposalRun | null;
   /** The recording's newest run when it failed on this transcript: the analysis still open. */
   failedAttempt(mediaId: string, transcriptId: string): FailedAttempt | null;
   /** The tracks a run has written, in order. */
