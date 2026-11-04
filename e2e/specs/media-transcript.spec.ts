@@ -143,16 +143,17 @@ const mediaEventsSeen = (page: Page) =>
   );
 
 /**
- * Seconds played since the last seek among `events`, 0 until it ended and playback started. A
- * click lands on a word, so the seek alone moves the clock: only `playing` proves it runs.
+ * Seconds played since the last seek among `events` ended, or since `playing` without a seek; 0
+ * until then. A click lands on a word, so the seek alone moves the clock. WebKit may fire
+ * `playing` before the seek and not again, so the time past `seeked` is what proves playback.
  */
 async function secondsPlayed(page: Page, events: readonly MediaEventSeen[]) {
   const seek = events.findLastIndex(({ event }) => event === 'seeking');
-  const after = events.slice(seek + 1);
-  const seeked = seek < 0 || after.some(({ event }) => event === 'seeked');
-  const playing = after.find(({ event }) => event === 'playing');
-  if (!seeked || !playing) return 0;
-  return (await audioState(page)).currentTime - playing.time;
+  const start =
+    seek < 0
+      ? events.find(({ event }) => event === 'playing')
+      : events.slice(seek).find(({ event }) => event === 'seeked');
+  return start ? (await audioState(page)).currentTime - start.time : 0;
 }
 
 /**
