@@ -76,6 +76,12 @@ const invalidSources = () =>
     details: { field: 'sources' },
   });
 
+function firstOf(sources: readonly StoredNamedVoice[]): StoredNamedVoice {
+  const [first] = sources;
+  if (!first) throw invalidSources();
+  return first;
+}
+
 const JOB_RUNNING: readonly (JobStatus | null)[] = ['queued', 'leased'];
 
 /** What went wrong in a step that must not stop the next; null when nothing did. */
@@ -134,12 +140,10 @@ export class VoiceProfileService {
     const collection = this.deps.rootOf(target.topic);
     const speaker = this.speakerOf(collection, request.speakerId);
     const sources = this.resolveSources(target.topic, request);
-    const [first] = sources;
-    if (!first) throw invalidSources();
+    const first = firstOf(sources);
     const consentId = randomUUID();
     const profileId = randomUUID();
-    // Before the consent, and dated before it: this list has seen every consent from now on.
-    if (list === 'unused') await this.deps.revocations.start(this.now());
+    await this.startListIf(list);
     const created = this.deps.profiles.create({
       profileId,
       consentId,
@@ -238,6 +242,11 @@ export class VoiceProfileService {
     if (profileId !== undefined && list.ids.includes(profileId))
       throw new AppError('MEDIA_CONFLICT', 'This consent was revoked');
     return state;
+  }
+
+  /** Before the first consent, and dated before it: the list sees every consent from then on. */
+  private async startListIf(state: VoiceListState): Promise<void> {
+    if (state === 'unused') await this.deps.revocations.start(this.now());
   }
 
   private async revocationListState(): Promise<VoiceRevocationListState> {
