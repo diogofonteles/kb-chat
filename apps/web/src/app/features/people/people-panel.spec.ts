@@ -344,6 +344,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
       }),
     );
     await fixture.whenStable();
+    expect((field as HTMLInputElement).value).toBe('2,5');
 
     fireEvent.change(field, { target: { value: '' } });
     const cleared = http.expectOne(url);

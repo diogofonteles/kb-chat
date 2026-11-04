@@ -122,7 +122,7 @@ export class PersonEditor {
   );
   protected readonly quotaGb = computed(() => {
     const bytes = this.person().mediaQuotaBytes ?? null;
-    return bytes === null ? '' : String(bytes / BYTES_PER_GB);
+    return bytes === null ? '' : String(bytes / BYTES_PER_GB).replace('.', ',');
   });
   protected readonly defaultQuotaGb = MEDIA_DEFAULT_QUOTA_BYTES / BYTES_PER_GB;
   protected readonly quotaProblem = signal(false);
