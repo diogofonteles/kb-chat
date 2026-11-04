@@ -163,6 +163,12 @@
   --menu-trigger-size: var(--text-md);
 }
 
+/* The last control of the row: on a phone its menu opens to the left, inside the screen. */
+.options app-menu-button.more {
+  --menu-phone-left: auto;
+  --menu-phone-right: 0;
+}
+
 /* The trigger lays its content out as a grid: one item keeps ☾ beside its time. */
 .sleep-face {
   white-space: nowrap;

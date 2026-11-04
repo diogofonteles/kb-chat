@@ -174,9 +174,11 @@ test('AC-4, AC-5: without the permission nothing changes; "Mostrar quem fala" is
     'Falante não identificado',
   );
   await listener.getByRole('button', { name: 'Mais opções' }).click();
-  await listener
-    .getByRole('menuitem', { name: 'Mostrar quem fala: ligado' })
-    .click();
+  const showSpeakers = listener.getByRole('menuitem', {
+    name: 'Mostrar quem fala: ligado',
+  });
+  await expect(showSpeakers).toBeInViewport({ ratio: 1 });
+  await showSpeakers.click();
   await expect(transcriptList(listener)).not.toContainText(
     'Falante não identificado',
   );
