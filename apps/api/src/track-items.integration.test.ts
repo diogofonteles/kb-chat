@@ -578,6 +578,24 @@ describe('A track follows its recording (KBC-068)', () => {
     db.close();
   });
 
+  it("BR-2: a live track a cancelled approval left behind follows the recording's author", async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const { recording, tracks } = await published(world);
+    await leaveThirdBehind(media, recording.id);
+    await media.owner('POST', '/api/v1/topics/udv/authors', {
+      name: 'Autor Novo',
+    });
+    const moved = await media.owner('PATCH', urlOf(recording.id), {
+      topic: 'udv',
+      author: 'autor-novo',
+    });
+    expect(moved.statusCode, moved.body).toBe(200);
+    const third = await media.owner('GET', urlOf(tracks[2]?.id ?? ''));
+    expect(third.json().topic).toBe('udv');
+    expect(third.json().author?.slug).toBe('autor-novo');
+  });
+
   it('AC-1: the track is by who answers when they are an author, else by the recording', async () => {
     const world = await startWorld();
     const { media } = world;

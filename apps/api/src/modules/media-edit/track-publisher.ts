@@ -49,6 +49,10 @@ export interface TrackPublisherDeps {
 /** An item and the real part of the recording its file holds. */
 type LiveItem = ReturnType<TrackItemStorePort['published']>[number];
 
+type Answerer = Pick<TrackItemRow, 'answererVoice' | 'answererSpeakerId'>;
+
+const NO_ANSWERER: Answerer = { answererVoice: null, answererSpeakerId: null };
+
 /** Bounds this close are the same cut: stream copy never lands exactly on the asked time. */
 const SAME_BOUNDS_MS = 50;
 
@@ -160,18 +164,25 @@ export class TrackPublisher {
     }
   }
 
-  /** A recording's author or collection changed: who its tracks are by may too (BR-2). */
+  /**
+   * A recording's author or collection changed: who its tracks are by may too (BR-2). A live
+   * item with no track row no longer has an answerer: it follows the recording until the next
+   * approval takes it back or archives it.
+   */
   afterRecordingEdit(parentId: string): void {
-    const parent = this.deps.store.getMedia(parentId);
+    const { items, store } = this.deps;
+    const parent = store.getMedia(parentId);
     if (!parent) return;
     const authorOf = this.authorResolver(parent);
     const now = this.now();
-    for (const track of this.deps.items.tracksOf(parentId))
-      this.deps.items.setAuthor({
-        mediaId: track.mediaId,
-        now,
-        ...authorOf(track),
-      });
+    const tracks = items.tracksOf(parentId);
+    const withRow = new Set(tracks.map((track) => track.mediaId));
+    const leftBehind = items
+      .published(parentId)
+      .filter((item) => !withRow.has(item.mediaId))
+      .map(({ mediaId }) => ({ mediaId, ...NO_ANSWERER }));
+    for (const track of [...tracks, ...leftBehind])
+      items.setAuthor({ mediaId: track.mediaId, now, ...authorOf(track) });
   }
 
   private detailsFor(parentId: string): DetailsOf {
@@ -203,7 +214,7 @@ export class TrackPublisher {
   private authorResolver(parent: MediaRecord) {
     const labels = this.labelsOf(parent.id);
     return (
-      track: TrackItemRow,
+      track: Answerer,
     ): { author: string | null; legacyAuthorship: LegacyAuthorship } => {
       const speakerId =
         track.answererSpeakerId ??
