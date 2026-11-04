@@ -309,6 +309,43 @@ test('AC-6: the column needs media-classify, and the suggestion media-edit-ai', 
   await owner.dispose();
 });
 
+test('a long name with no spaces stays inside the track page', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const media = await approvedAudio(owner);
+  await expect
+    .poll(
+      async () => {
+        const edit = await owner.get(`/api/v1/media/${media.id}/edit`);
+        return ((await edit.json()) as { preparation: unknown }).preparation;
+      },
+      { timeout: 30_000 },
+    )
+    .toBeNull();
+  const [first] = await stepTracks(owner, media.id);
+  if (!first) throw new Error('no track');
+  const created = await owner.post(SUBJECTS, {
+    data: { name: `${uniqueTag()}${'x'.repeat(70)}`.slice(0, 80) },
+    headers: CSRF,
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  const { id } = (await created.json()) as { id: string };
+  const saved = await owner.put(`/api/v1/media/${first.mediaId}/subjects`, {
+    data: { subjects: [{ kind: 'free', id }], summary: null },
+    headers: { ...CSRF, 'if-match': `"${first.version}"` },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+
+  await page.goto(`/midia/${first.mediaId}`);
+  const shown = page.getByRole('region', { name: 'Assuntos da faixa' });
+  await expect(shown).toBeVisible();
+  const box = await shown.boundingBox();
+  const width = page.viewportSize()?.width ?? 0;
+  expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
+  await owner.dispose();
+});
+
 test('the track page shows its subjects to who classifies, and not to who only listens', async ({
   page,
   browser,

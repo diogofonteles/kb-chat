@@ -57,6 +57,8 @@ import { trackSubjectsUrl } from '@core/media/track-subjects-api.js';
       display: none;
     }
     li {
+      min-width: 0;
+      overflow-wrap: anywhere;
       padding: var(--space-1) var(--space-2);
       border: 1px solid var(--color-border);
       border-radius: var(--radius-md);
