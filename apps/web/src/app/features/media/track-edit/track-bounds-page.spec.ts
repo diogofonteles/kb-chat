@@ -175,4 +175,27 @@ describe('TrackBoundsPage (KBC-073)', () => {
     expect(root.querySelector('.times')?.textContent).toContain('0:00,5');
     expect(root.textContent).toContain('0:00,5');
   });
+
+  it('FR-6: a failed cut says so and can be tried again', async () => {
+    const { click, fixture, root } = await open(
+      view({ cut: 'failed', startMs: 500 }),
+    );
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Não foi possível recortar.',
+    );
+
+    await click('Tentar de novo');
+
+    const retry = http.expectOne({
+      method: 'POST',
+      url: `${BOUNDS_URL}/retry`,
+    });
+    expect(retry.request.headers.get('If-Match')).toBe('"3"');
+    retry.flush(view({ cut: 'running', startMs: 500 }));
+    await fixture.whenStable();
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(root.querySelector('[role="status"]')?.textContent).toContain(
+      'Recortando…',
+    );
+  });
 });

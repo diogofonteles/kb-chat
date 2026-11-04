@@ -188,6 +188,9 @@ export class TrackBoundsPage {
   protected readonly cutting = computed(
     () => this.current()?.cut === 'running' || this.sending(),
   );
+  protected readonly cutFailed = computed(
+    () => this.current()?.cut === 'failed' && !this.sending(),
+  );
   protected readonly canSave = computed(() => {
     const track = this.current();
     const bounds = this.bounds();
@@ -260,6 +263,11 @@ export class TrackBoundsPage {
     const bounds = this.bounds();
     if (!track || !bounds) return;
     this.send(this.api.moveBounds(track, bounds));
+  }
+
+  protected retryCut(): void {
+    const track = this.current();
+    if (track) this.send(this.api.retryCut(track));
   }
 
   protected useTheirs(theirs: TrackEditView): void {

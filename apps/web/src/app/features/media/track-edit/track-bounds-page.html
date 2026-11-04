@@ -134,6 +134,19 @@
     @if (failure(); as text) {
       <p class="error" role="alert">{{ text }}</p>
     }
+    @if (cutFailed()) {
+      <div class="line" role="alert">
+        <span i18n="@@trackEdit.cutFailed">Não foi possível recortar.</span>
+        <button
+          type="button"
+          class="secondary"
+          (click)="retryCut()"
+          i18n="@@trackEdit.retry"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    }
     <p class="status" role="status">
       @if (cutting()) {
         <ng-container i18n="@@trackEdit.cutting">Recortando…</ng-container>
