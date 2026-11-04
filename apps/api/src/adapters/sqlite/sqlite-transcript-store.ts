@@ -2,6 +2,7 @@ import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
   mediaJobKindSchema,
   transcriptConfidenceSchema,
+  type TermVersion,
   type TranscriptionTerms,
 } from '@kb-chat/contracts';
 import type { LeaseOwner } from '../../ports/media-store.js';
@@ -33,6 +34,7 @@ function toSummary(row: Row): TranscriptSummary {
     version: Number(row['version']),
     confidence: transcriptConfidenceSchema.parse(row['confidence']),
     vad: vadOf(row['vad']),
+    termsVersion: Number(row['terms_version']),
     rawPath: text(row, 'raw_path'),
     filterVersion: Number(row['filter_version']),
     confidenceVersion: Number(row['confidence_version']),
@@ -42,23 +44,80 @@ function toSummary(row: Row): TranscriptSummary {
   };
 }
 
+function toTermVersion(row: Row): TermVersion {
+  return {
+    version: Number(row['version']),
+    createdAt: text(row, 'created_at'),
+    authorName: row['author_name'] === null ? null : text(row, 'author_name'),
+    termCount: Number(row['term_count']),
+  };
+}
+
+const TERM_VERSIONS = `SELECT v.version, v.created_at, v.author_name,
+    (SELECT count(*) FROM terms t WHERE t.version = v.version) AS term_count
+  FROM term_versions v`;
+
 /** Transcripts and the term list in the media database (ADR 0022 §1, ADR 0023). */
 export class SqliteTranscriptStore implements TranscriptStorePort {
   constructor(private readonly db: DatabaseSync) {}
 
   currentTerms(): TranscriptionTerms {
+    const row = this.db.prepare('SELECT max(version) AS v FROM terms').get();
+    const list = this.termsAt(Number(row?.['v']));
+    if (!list) throw new Error('the media database has no term list');
+    return list;
+  }
+
+  termsAt(version: number): TranscriptionTerms | null {
     const rows = this.db
-      .prepare(
-        `SELECT version, term FROM terms
-         WHERE version = (SELECT max(version) FROM terms) ORDER BY position`,
-      )
-      .all();
-    const first = rows[0];
-    if (!first) throw new Error('the media database has no term list');
-    return {
-      version: Number(first['version']),
-      terms: rows.map((row) => text(row, 'term')),
-    };
+      .prepare('SELECT term FROM terms WHERE version = ? ORDER BY position')
+      .all(version);
+    if (rows.length === 0) return null;
+    return { version, terms: rows.map((row) => text(row, 'term')) };
+  }
+
+  termVersions(): TermVersion[] {
+    return this.db
+      .prepare(`${TERM_VERSIONS} ORDER BY v.version DESC`)
+      .all()
+      .map(toTermVersion);
+  }
+
+  termVersion(version: number): TermVersion | null {
+    const row = this.db
+      .prepare(`${TERM_VERSIONS} WHERE v.version = ?`)
+      .get(version);
+    return row ? toTermVersion(row) : null;
+  }
+
+  saveTerms(input: {
+    baseVersion: number;
+    terms: readonly string[];
+    author: { principal: string; name: string | null };
+    now: Date;
+  }): boolean {
+    return inTransaction(this.db, () => {
+      if (this.currentTerms().version !== input.baseVersion) return false;
+      const version = input.baseVersion + 1;
+      this.db
+        .prepare(
+          `INSERT INTO term_versions (version, created_at, author_principal, author_name)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(
+          version,
+          input.now.toISOString(),
+          input.author.principal,
+          input.author.name,
+        );
+      const insert = this.db.prepare(
+        'INSERT INTO terms (version, position, term) VALUES (?, ?, ?)',
+      );
+      input.terms.forEach((term, index) =>
+        insert.run(version, index + 1, term),
+      );
+      return true;
+    });
   }
 
   heldJob(owner: LeaseOwner): JobLease | null {
@@ -119,7 +178,7 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
   transcripts(mediaId: string): TranscriptSummary[] {
     return this.db
       .prepare(
-        `SELECT id, media_id, version, confidence, vad, raw_path, filter_version,
+        `SELECT id, media_id, version, confidence, vad, terms_version, raw_path, filter_version,
            confidence_version, word_count, removed_words, created_at
          FROM transcripts WHERE media_id = ? ORDER BY version DESC`,
       )

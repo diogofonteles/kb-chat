@@ -5,6 +5,7 @@ import { applyMigrations } from './media-database.js';
 import { MEDIA_MIGRATIONS } from './media-migrations.js';
 
 const BEFORE = MEDIA_MIGRATIONS.filter(({ version }) => version < 15);
+const UP_TO_15 = MEDIA_MIGRATIONS.filter(({ version }) => version <= 15);
 const AT = '2026-11-04T12:00:00.000Z';
 
 describe('media migration 15 (KBC-071)', () => {
@@ -40,7 +41,7 @@ describe('media migration 15 (KBC-071)', () => {
     open();
     applyMigrations(db, BEFORE);
     anItemWithAJob();
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([15]);
+    expect(applyMigrations(db, UP_TO_15)).toEqual([15]);
     expect(
       db.prepare('SELECT id, kind, voices, voice_profile_id FROM jobs').all(),
     ).toEqual([

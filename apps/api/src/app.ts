@@ -112,6 +112,8 @@ import {
   VoiceNamesService,
   collectionSpeakerRoutes,
   speakerRoutes,
+  termRoutes,
+  TermListService,
   transcriberRoutes,
   TranscriberService,
   TranscriptionService,
@@ -680,6 +682,9 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   await app.register(mediaRoutes(media, mediaEditor(wiring), createPerMinute));
   await app.register(transcriberRoutes({ transcribers, media }));
+  await app.register(
+    termRoutes(new TermListService({ transcripts: wiring.media.transcripts })),
+  );
   await registerListening(app, wiring, { media, transcribers });
   const { silences, waveforms } = await registerMeasures(app, {
     deps: wiring.media,

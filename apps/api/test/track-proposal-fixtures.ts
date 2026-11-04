@@ -115,6 +115,7 @@ export const itemOf = (mediaId: string, author: string | null): MediaItem => ({
   createdAt: new Date().toISOString(),
   canRetry: false,
   canEdit: false,
+  canTranscribeAgain: false,
   positionMs: 0,
   completedAt: null,
   positionUpdatedAt: null,
@@ -124,6 +125,7 @@ export const itemOf = (mediaId: string, author: string | null): MediaItem => ({
     version: 1,
     transcriber: 'none',
     transcriberOffSince: null,
+    lastAttemptFailed: false,
   },
 });
 
