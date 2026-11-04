@@ -43,6 +43,7 @@ import { trackSubjectsUrl } from '@core/media/track-subjects-api.js';
     .view {
       display: grid;
       gap: var(--space-2);
+      margin-top: var(--space-2);
     }
     ul {
       display: flex;
