@@ -174,6 +174,26 @@ describe('SqliteMediaSearch over tracks (KBC-070)', () => {
     expect(best).toMatchObject({ mediaId: 'one', startMs: 0, bm25: -1 });
   });
 
+  it('reads only the passages that will show for a word past the limit', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+    for (const id of ids) insertTrack(db, { id });
+    inTransaction(db, () => {
+      for (const id of ids)
+        say(
+          db,
+          id,
+          Array.from(
+            { length: Math.ceil(RANKED / ids.length) + 1 },
+            () => 'vegetal',
+          ),
+        );
+    });
+
+    expect(
+      search.bestPassages(['vegetal'], ids).map((one) => one.mediaId),
+    ).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
   it('gives a track with no author, length or summary as it is, in the order asked', () => {
     insertTrack(db, { id: 'a', durationMs: null });
     insertTrack(db, { id: 'b', author: 'ana' });

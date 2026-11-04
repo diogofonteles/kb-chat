@@ -1,5 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import {
+  MAX_MEDIA_HITS,
   MEDIA_COUNT_CAP,
   transcriptConfidenceSchema,
 } from '@kb-chat/contracts';
@@ -313,7 +314,9 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
       `${select} WHERE segments_fts MATCH ? AND f.rowid BETWEEN ? AND ?
          AND s.transcript_id = ? ${ranked ? ORDER : ''} LIMIT 1`,
     );
-    const ranges = this.db.prepare(SEGMENT_RANGES).all(JSON.stringify(ids));
+    // Unranked there is nothing to choose among: only the passages that will show are read.
+    const pool = ranked ? ids : ids.slice(0, MAX_MEDIA_HITS);
+    const ranges = this.db.prepare(SEGMENT_RANGES).all(JSON.stringify(pool));
     return ranges.flatMap((range) => {
       const row = best.get(
         expression,
