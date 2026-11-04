@@ -39,7 +39,7 @@ async function signInWithCode(page, email) {
   await page.getByLabel('Sua pergunta').waitFor();
 }
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 // One owner session for both widths: sends are limited per email and per address (BR-5).
 const ownerContext = await browser.newContext();
 await ownerContext.route('https://accounts.google.com/**', (route) =>

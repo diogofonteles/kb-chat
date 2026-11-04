@@ -6,7 +6,7 @@ const sizes = [
   { name: 'desktop', width: 1440, height: 900 },
   { name: 'mobile', width: 390, height: 844 },
 ];
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 for (const { name, width, height } of sizes) {
   const page = await browser.newPage({ viewport: { width, height } });
   const mobile = width < 1024;

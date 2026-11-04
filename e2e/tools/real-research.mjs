@@ -2,7 +2,7 @@
 import { chromium } from '@playwright/test';
 
 const [out, base] = process.argv.slice(2);
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto(base);
 const t0 = Date.now();

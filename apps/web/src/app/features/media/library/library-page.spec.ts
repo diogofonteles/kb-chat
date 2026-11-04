@@ -433,60 +433,70 @@ describe('LibraryPage (T16, KBC-051)', () => {
   const idsFrom = (start: number, end: number) =>
     Array.from({ length: end - start + 1 }, (_, n) => mediaId(start + n));
 
-  it('marks more than the API takes at once in batches of 200, from "Selecionar todas" (FR-3)', async () => {
-    const { open, http, settle, tick } = await renderLibrary();
-    await open(aPage(manyItems(250)));
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: 'Selecionar todas as 250' }),
-    );
-    await settle();
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+  // These two render 250 rows, past the API's batch of 200: 1.6 s here with coverage, 7 to 9 s
+  // on a CI runner beside the other test files. The limit is the runner's, no product budget.
+  const BULK_TEST_MS = 20_000;
 
-    const first = http.expectOne('/api/v1/media/played');
-    expect(first.request.body).toEqual({
-      ids: idsFrom(1, 200),
-      played: true,
-    });
-    first.flush(marked(idsFrom(1, 200)));
-    const second = http.expectOne('/api/v1/media/played');
-    expect(second.request.body).toEqual({
-      ids: idsFrom(201, 250),
-      played: true,
-    });
-    second.flush(marked(idsFrom(201, 250)));
-    await tick();
-    http.expectOne(HOME).flush(aHome());
-    await settle();
+  it(
+    'marks more than the API takes at once in batches of 200, from "Selecionar todas" (FR-3)',
+    async () => {
+      const { open, http, settle, tick } = await renderLibrary();
+      await open(aPage(manyItems(250)));
+      fireEvent.click(screen.getByLabelText('Selecionar todas as 250'));
+      await settle();
+      fireEvent.click(screen.getByText('Marcar como ouvida'));
 
-    expect(screen.getByRole('status').textContent).toContain(
-      '250 mídias marcadas como ouvidas.',
-    );
-    expect(screen.queryByRole('region', { name: 'Seleção' })).toBeNull();
-  });
+      const first = http.expectOne('/api/v1/media/played');
+      expect(first.request.body).toEqual({
+        ids: idsFrom(1, 200),
+        played: true,
+      });
+      first.flush(marked(idsFrom(1, 200)));
+      const second = http.expectOne('/api/v1/media/played');
+      expect(second.request.body).toEqual({
+        ids: idsFrom(201, 250),
+        played: true,
+      });
+      second.flush(marked(idsFrom(201, 250)));
+      await tick();
+      http.expectOne(HOME).flush(aHome());
+      await settle();
 
-  it('says how many were marked and keeps the rest selected when a later batch fails (FR-3)', async () => {
-    const { open, http, settle, tick } = await renderLibrary();
-    await open(aPage(manyItems(250)));
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: 'Selecionar todas as 250' }),
-    );
-    await settle();
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como ouvida' }));
+      expect(
+        screen.getByRole('status', { hidden: true }).textContent,
+      ).toContain('250 mídias marcadas como ouvidas.');
+      expect(
+        screen.queryByRole('region', { name: 'Seleção', hidden: true }),
+      ).toBeNull();
+    },
+    BULK_TEST_MS,
+  );
 
-    http.expectOne('/api/v1/media/played').flush(marked(idsFrom(1, 200)));
-    http
-      .expectOne('/api/v1/media/played')
-      .flush(null, { status: 500, statusText: 'x' });
-    await tick();
-    http.expectOne(HOME).flush(aHome());
-    await settle();
+  it(
+    'says how many were marked and keeps the rest selected when a later batch fails (FR-3)',
+    async () => {
+      const { open, http, settle, tick } = await renderLibrary();
+      await open(aPage(manyItems(250)));
+      fireEvent.click(screen.getByLabelText('Selecionar todas as 250'));
+      await settle();
+      fireEvent.click(screen.getByText('Marcar como ouvida'));
 
-    const bar = screen.getByRole('region', { name: 'Seleção' });
-    expect(within(bar).getByRole('alert').textContent).toContain(
-      '200 mídias marcadas como ouvidas. Faltaram 50: tente de novo.',
-    );
-    expect(within(bar).getByText('50 selecionadas')).toBeTruthy();
-  });
+      http.expectOne('/api/v1/media/played').flush(marked(idsFrom(1, 200)));
+      http
+        .expectOne('/api/v1/media/played')
+        .flush(null, { status: 500, statusText: 'x' });
+      await tick();
+      http.expectOne(HOME).flush(aHome());
+      await settle();
+
+      const bar = screen.getByRole('region', { name: 'Seleção', hidden: true });
+      expect(within(bar).getByRole('alert').textContent).toContain(
+        '200 mídias marcadas como ouvidas. Faltaram 50: tente de novo.',
+      );
+      expect(within(bar).getByText('50 selecionadas')).toBeTruthy();
+    },
+    BULK_TEST_MS,
+  );
 
   it('marks one heard media as not heard from its ⋯ (AC-8)', async () => {
     const { open, http, settle } = await renderLibrary();

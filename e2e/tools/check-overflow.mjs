@@ -1,7 +1,7 @@
 // Checks horizontal overflow at 390 px on the running dev servers (real vault), with a filter applied.
 import { chromium } from '@playwright/test';
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ args: ['--mute-audio'] });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const overflow = () =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

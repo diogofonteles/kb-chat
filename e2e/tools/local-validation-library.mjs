@@ -32,7 +32,10 @@ const tone = (name, seconds) => {
   return readFileSync(path);
 };
 
-const browser = await chromium.launch({ channel: 'chrome' });
+const browser = await chromium.launch({
+  args: ['--mute-audio'],
+  channel: 'chrome',
+});
 
 async function signIn(request, email) {
   const token = await request.post('/api/e2e/token', {
