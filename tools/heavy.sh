@@ -42,10 +42,10 @@ stale() {
 }
 
 load_now() {
-  if command -v sysctl >/dev/null && sysctl -n vm.loadavg >/dev/null 2>&1; then
-    sysctl -n vm.loadavg | awk '{print $2}'
-  else
+  if [ -r /proc/loadavg ]; then
     cut -d' ' -f1 /proc/loadavg
+  else
+    sysctl -n vm.loadavg | awk '{print $2}'
   fi
 }
 
@@ -86,7 +86,7 @@ trap stop INT TERM HUP
 locked=$(date +%s)
 max_load=${KBC_HEAVY_MAX_LOAD:-$(cpus)}
 load_wait=${KBC_HEAVY_LOAD_WAIT:-300}
-while awk -v load="$(load_now)" -v max="$max_load" 'BEGIN { exit !(load + 0 > max + 0) }'; do
+while awk -v load="$(load_now)" -v max="$max_load" 'BEGIN { exit !(load + 0 >= max + 0) }'; do
   now=$(date +%s)
   if [ $((now - locked)) -ge "$load_wait" ]; then
     echo "heavy: the load stayed above $max_load for $load_wait s; going ahead"
