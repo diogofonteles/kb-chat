@@ -317,7 +317,7 @@ describe('the transcript-segments-fts migration (KBC-039)', () => {
     db.prepare(
       `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
          upload_bytes, status, created_at, updated_at)
-       VALUES (?, 'hermetismo', 'Palestra', 'outros-autores', 'owner', 'a.mp3', 3, 'ready', ?, ?)`,
+       VALUES (?, 'udv', 'Palestra', 'outros-autores', 'owner', 'a.mp3', 3, 'ready', ?, ?)`,
     ).run(id, T0.toISOString(), T0.toISOString());
     const insert = (version: number, text: string) => {
       const transcriptId = crypto.randomUUID();
