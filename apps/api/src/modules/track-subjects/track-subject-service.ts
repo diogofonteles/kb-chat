@@ -64,7 +64,8 @@ export type DecideSuggestions = z.output<typeof decideSuggestionsRequestSchema>;
 const stale = () =>
   new AppError('EDIT_STALE', 'Someone else changed these subjects');
 
-const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown track');
+/** The words of the media's own 404: what cannot be seen reads as what does not exist (BR-3). */
+const notFound = () => new AppError('MEDIA_NOT_FOUND', 'Unknown media');
 
 const unknownSubject = () =>
   new AppError('VALIDATION_FAILED', 'Unknown subject', {
@@ -300,11 +301,11 @@ export class TrackSubjectService {
   private track(actor: MediaActor, trackId: string) {
     const record = this.deps.media.getMedia(trackId);
     if (!record) throw notFound();
+    this.deps.findMedia(actor, record.track?.parentId ?? record.id);
     if (!record.track)
       throw new AppError('MEDIA_CONFLICT', 'Subjects belong to tracks', {
         details: { reason: 'not-a-track' },
       });
-    this.deps.findMedia(actor, record.track.parentId);
     return {
       ...record,
       ordinal: record.track.ordinal,

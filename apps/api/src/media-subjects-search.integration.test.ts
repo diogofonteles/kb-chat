@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   LibraryPage,
+  MediaItem,
   SearchResponse,
   SubjectTracksPage,
   TrackAbout,
@@ -359,6 +360,40 @@ describe('GET /media/{id}/about', () => {
       subjects: [{ key: 'concept:cabala', name: 'Cabala' }],
       summary: 'Como a burracheira chega na sessão.',
     });
+  });
+
+  it('gives one 404 for what the person cannot see and what does not exist (BR-3)', async () => {
+    const { media, first } = await worldWithSubjects();
+    const stranger = await member(media, {
+      email: 'de-fora@example.com',
+      topics: ['udv'],
+      features: SUBJECTS,
+    });
+    const track = await media.owner('GET', `/api/v1/media/${first.mediaId}`);
+    const recording = track.json<MediaItem>().parent?.id;
+    const nobody = '6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e';
+    const answers = await Promise.all(
+      [recording, first.mediaId, nobody].map((id) =>
+        stranger.call('GET', `/api/v1/media/${id}/about`),
+      ),
+    );
+    expect(answers.map((one) => one.statusCode)).toEqual([404, 404, 404]);
+    expect(new Set(answers.map((one) => one.body)).size).toBe(1);
+  });
+
+  it('answers an archived track as one that does not exist', async () => {
+    const { media, reader, first } = await worldWithSubjects();
+    const nobody = await reader(
+      'GET',
+      '/api/v1/media/6f1c2b9b-8a11-4d0a-9d55-0b6f1f0e6a3e/about',
+    );
+    sql(
+      media,
+      `UPDATE media SET archived_at = '2026-11-04T00:00:00.000Z' WHERE id = '${first.mediaId}'`,
+    );
+    const archived = await reader('GET', `/api/v1/media/${first.mediaId}/about`);
+    expect(archived.statusCode).toBe(404);
+    expect(archived.body).toBe(nobody.body);
   });
 });
 
