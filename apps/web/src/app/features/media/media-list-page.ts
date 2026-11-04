@@ -21,7 +21,7 @@ import { RouterLink } from '@angular/router';
 import { mediaListSchema, type MediaItem } from '@kb-chat/contracts';
 import { formatClock, formatDuration, resumeFrom } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
-import { trackListText, tracksInTheWay } from './track-removal.js';
+import { alsoRemovesText, tracksInTheWay } from './track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi, mediaListUrl } from '@core/media/media-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
@@ -141,10 +141,9 @@ export class MediaListPage {
   protected readonly removing = signal<MediaItem | null>(null);
   /** The tracks that go with it, once the API named them (KBC-068). */
   protected readonly removingTracks = signal<readonly string[] | null>(null);
-  protected readonly removingTracksText = computed(() => {
-    const titles = this.removingTracks() ?? [];
-    return $localize`:@@media.removeTracks:Também remove ${titles.length}:count: faixas: ${trackListText(titles)}:list:`;
-  });
+  protected readonly removingTracksText = computed(() =>
+    alsoRemovesText(this.removingTracks() ?? []),
+  );
   protected readonly editing = signal<MediaItem | null>(null);
   /** The last audio moved from here (FR-3); cleared on a switch. */
   protected readonly moved = linkedSignal<string | null, MediaMove | null>({

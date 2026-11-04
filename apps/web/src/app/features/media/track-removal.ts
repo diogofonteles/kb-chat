@@ -25,3 +25,11 @@ export function trackListText(titles: readonly string[]): string {
   const others = titles.length - LISTED;
   return others > 0 ? `${listed} +${others}` : listed;
 }
+
+/** The line of the removal dialog that names what goes with the recording (KBC-068). */
+export function alsoRemovesText(titles: readonly string[]): string {
+  const listed = trackListText(titles);
+  return titles.length === 1
+    ? $localize`:@@media.removeTracksOne:Também remove 1 faixa: ${listed}:list:`
+    : $localize`:@@media.removeTracks:Também remove ${titles.length}:count: faixas: ${listed}:list:`;
+}

@@ -38,7 +38,7 @@ import {
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { TrackGroup } from './track-group.js';
-import { trackListText, tracksInTheWay } from '../track-removal.js';
+import { alsoRemovesText, tracksInTheWay } from '../track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import {
   LIBRARY_HOME_URL,
@@ -388,10 +388,9 @@ export class LibraryPage {
   protected readonly removing = signal<MediaItem | null>(null);
   /** The tracks that go with it, once the API named them (KBC-068). */
   protected readonly removingTracks = signal<readonly string[] | null>(null);
-  protected readonly removingTracksText = computed(() => {
-    const titles = this.removingTracks() ?? [];
-    return $localize`:@@media.removeTracks:Também remove ${titles.length}:count: faixas: ${trackListText(titles)}:list:`;
-  });
+  protected readonly removingTracksText = computed(() =>
+    alsoRemovesText(this.removingTracks() ?? []),
+  );
   protected readonly editing = signal<LibraryItem | null>(null);
   /** The last audio moved from here (KBC-050 FR-3). */
   protected readonly moved = signal<MediaMove | null>(null);
