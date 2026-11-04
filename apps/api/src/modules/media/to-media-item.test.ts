@@ -61,6 +61,17 @@ describe('toMediaItem: the transcription (KBC-036)', () => {
     });
   });
 
+  it('tells only masters that an attempt failed (KBC-040)', () => {
+    const record = aRecord({
+      jobStatus: 'dead',
+      version: 1,
+      confidence: 'normal',
+    });
+    expect(toMediaItem(record, false).transcription.lastAttemptFailed).toBe(
+      false,
+    );
+  });
+
   it('calls a failed attempt so only when a transcript stayed (KBC-040 BR-3)', () => {
     const kept = toMediaItem(
       aRecord({ jobStatus: 'dead', version: 1, confidence: 'normal' }),

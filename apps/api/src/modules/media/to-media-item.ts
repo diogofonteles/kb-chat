@@ -67,6 +67,7 @@ const STATUS_BY_JOB: Record<
 function toTranscription(
   record: TranscriptionRecord,
   presence: Presence,
+  isMaster: boolean,
 ): MediaTranscription {
   const hasTranscript = record.version !== null;
   const status = record.jobStatus
@@ -81,6 +82,7 @@ function toTranscription(
     transcriber: presence.transcriber,
     transcriberOffSince: presence.offSince,
     lastAttemptFailed:
+      isMaster &&
       hasTranscript &&
       (record.jobStatus === 'failed' || record.jobStatus === 'dead'),
   };
@@ -122,6 +124,7 @@ export function toMediaItem(
     transcription: toTranscription(
       record.transcription,
       view.presence ?? NO_TRANSCRIBER,
+      isMaster,
     ),
   };
 }
