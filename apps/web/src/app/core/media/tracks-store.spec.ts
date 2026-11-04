@@ -36,7 +36,13 @@ function setup(features: Parameters<typeof sessionAs>[0]) {
     ],
   });
   const engine = TestBed.inject(MediaEngine);
-  engine.load({ id: ID, title: 'P', src: 'x', durationMs: 60_000, artist: 'A' });
+  engine.load({
+    id: ID,
+    title: 'P',
+    src: 'x',
+    durationMs: 60_000,
+    artist: 'A',
+  });
   media.setDuration(60);
   media.emit('loadedmetadata');
   return {
