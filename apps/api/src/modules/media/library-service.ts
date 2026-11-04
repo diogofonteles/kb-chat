@@ -8,7 +8,10 @@ import {
   type MarkPlayedRequest,
   type MarkPlayedResult,
 } from '@kb-chat/contracts';
-import type { ListeningStorePort } from '../../ports/listening-store.js';
+import type {
+  ListeningMark,
+  ListeningStorePort,
+} from '../../ports/listening-store.js';
 import type { LibraryRecord, MediaStorePort } from '../../ports/media-store.js';
 import {
   continueListening,
@@ -92,24 +95,25 @@ export class LibraryService {
         .filter((item) => item.status === 'ready')
         .map((item) => [item.id, item]),
     );
-    const applied = [...new Set(request.ids)].filter((id) => playable.has(id));
-    for (const id of applied) {
+    const chosen = [...new Set(request.ids)].flatMap((id) => {
       const item = playable.get(id);
-      if (item) this.mark(actor, item, request.played);
-    }
-    return { applied };
+      return item ? [item] : [];
+    });
+    this.deps.listening.markMany({
+      principal: actor.principal,
+      marks: chosen.map((item) => this.markOf(item, request.played)),
+    });
+    return { applied: chosen.map((item) => item.id) };
   }
 
-  private mark(actor: MediaActor, item: LibraryItem, played: boolean): void {
+  private markOf(item: LibraryItem, played: boolean): ListeningMark {
     const now = nextSaveTime(item.positionUpdatedAt, this.now());
     const completedAt = played ? (item.completedAt ?? now.toISOString()) : null;
-    this.deps.listening.saveProgress({
-      principal: actor.principal,
+    return {
       mediaId: item.id,
       progress: { positionMs: 0, completedAt },
       now,
-      played: false,
-    });
+    };
   }
 
   /** The chosen collection with its sub-collections, if the person sees it; else none. */

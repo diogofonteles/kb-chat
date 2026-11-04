@@ -14,6 +14,13 @@ export interface SavedProgress extends ListeningProgress {
   readonly playedAt: string | null;
 }
 
+/** One media marked as heard or not: no player saved it (KBC-051 BR-5). */
+export interface ListeningMark {
+  readonly mediaId: string;
+  readonly progress: ListeningProgress;
+  readonly now: Date;
+}
+
 /**
  * Each person's way of listening (KBC-041): their preferences and their position in each
  * media. Kept in the media database (ADR 0022); a removed media takes its positions along.
@@ -39,6 +46,11 @@ export interface ListeningStorePort {
     readonly now: Date;
     /** A player saved it (it counts as played, KBC-051 BR-4); marking does not. */
     readonly played: boolean;
+  }): void;
+  /** Marks several media at once: all of them are saved, or none (KBC-051 FR-3). */
+  markMany(input: {
+    readonly principal: string;
+    readonly marks: readonly ListeningMark[];
   }): void;
   /** When the person last chose "Limpar recentes" (KBC-051 BR-4); null when never. */
   recentsClearedAt(principal: string): string | null;

@@ -54,6 +54,42 @@ describe('migration 7: the media library (KBC-051)', () => {
     db.close();
   });
 
+  it('enters a database already at the newest versions, after them, and keeps its rows', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA foreign_keys = ON');
+    applyMigrations(
+      db,
+      MEDIA_MIGRATIONS.filter((one) => one.version !== 7),
+    );
+    db.prepare(
+      `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,
+         upload_bytes, status, created_at, updated_at)
+       VALUES (?, 'hermetismo', 'Aula', 'outros-autores', 'p', 'a.mp3', 1, 'ready', ?, ?)`,
+    ).run(MEDIA_ID, SAVED_AT, SAVED_AT);
+    db.prepare(
+      `INSERT INTO media_progress (principal, media_id, position_ms, completed_at, updated_at)
+       VALUES ('p', ?, 5000, NULL, ?)`,
+    ).run(MEDIA_ID, SAVED_AT);
+    db.prepare(
+      `INSERT INTO media_preferences (principal, speed, show_remaining, skip_silences, updated_at)
+       VALUES ('p', 1.5, 0, 1, ?)`,
+    ).run(SAVED_AT);
+
+    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([7]);
+
+    const store = new SqliteListeningStore(db);
+    expect(store.allProgressOf('p').get(MEDIA_ID)?.playedAt).toBe(SAVED_AT);
+    expect(store.preferencesOf('p')).toMatchObject({
+      speed: 1.5,
+      skipSilences: true,
+      librarySort: 'recently-played',
+      libraryView: 'list',
+      libraryFilters: { states: [], authors: [], topic: null },
+    });
+    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([]);
+    db.close();
+  });
+
   it('refuses a library order the contract does not know', () => {
     const db = new DatabaseSync(':memory:');
     applyMigrations(db, MEDIA_MIGRATIONS);

@@ -5,10 +5,12 @@ import {
   type ListeningPreferences,
 } from '@kb-chat/contracts';
 import type {
+  ListeningMark,
   ListeningProgress,
   ListeningStorePort,
   SavedProgress,
 } from '../../ports/listening-store.js';
+import { inTransaction } from './media-database.js';
 
 type Row = Record<string, SQLOutputValue>;
 
@@ -161,6 +163,17 @@ export class SqliteListeningStore implements ListeningStorePort {
         at,
         input.played ? at : null,
       );
+  }
+
+  markMany(input: { principal: string; marks: readonly ListeningMark[] }): void {
+    inTransaction(this.db, () => {
+      for (const mark of input.marks)
+        this.saveProgress({
+          principal: input.principal,
+          ...mark,
+          played: false,
+        });
+    });
   }
 }
 
