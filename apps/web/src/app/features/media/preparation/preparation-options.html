@@ -1,5 +1,15 @@
 <fieldset class="options">
-  <legend i18n="@@prep.options.legend">O que fazer com este áudio</legend>
+  <legend>
+    @if (several()) {
+      <ng-container i18n="@@prep.options.legendSeveral"
+        >O que fazer com estes áudios</ng-container
+      >
+    } @else {
+      <ng-container i18n="@@prep.options.legend"
+        >O que fazer com este áudio</ng-container
+      >
+    }
+  </legend>
 
   @if (!done('transcribe')) {
     <div class="option">

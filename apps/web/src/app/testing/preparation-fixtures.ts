@@ -1,9 +1,11 @@
+import { HttpResponse, type HttpInterceptorFn } from '@angular/common/http';
 import type {
   MediaPreparation,
   PreparationOptions,
   PreparationStage,
   PreparationTrack,
 } from '@kb-chat/contracts';
+import { of } from 'rxjs';
 
 export const MEDIA_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -89,3 +91,19 @@ export const anOffer = (
     ...over,
   };
 };
+
+/**
+ * Answers the upload panel's question about its options, as often as the files change it, so
+ * a test only plays the calls it is about. What was asked lands in `asked`.
+ */
+export const answeringOptions =
+  (
+    offer: PreparationOptions = anOffer(),
+    asked: string[] = [],
+  ): HttpInterceptorFn =>
+  (request, next) => {
+    if (!request.url.startsWith('/api/v1/media/preparation-options'))
+      return next(request);
+    asked.push(request.urlWithParams);
+    return of(new HttpResponse({ status: 200, body: offer }));
+  };

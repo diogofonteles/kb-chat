@@ -15,6 +15,8 @@ import {
 import {
   MASTER_FEATURES,
   MASTER_GRANT_ONLY_FEATURES,
+  MEDIA_DEFAULT_QUOTA_BYTES,
+  mediaQuotaSchema,
   type AppAi,
   type Feature,
   type InviteProfile,
@@ -29,6 +31,14 @@ import { PersonAiEditor } from './person-ai-editor.js';
 
 const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
   on ? [...new Set([...values, value])] : values.filter((v) => v !== value);
+
+const BYTES_PER_GB = 1024 ** 3;
+
+/** The quota in the field: three decimals reach 1 MB, and hide what a binary GB leaves over. */
+const quotaFormat = new Intl.NumberFormat('pt-BR', {
+  maximumFractionDigits: 3,
+  useGrouping: false,
+});
 
 /**
  * One person's collections, features and role (KBC-010 FR-3). Presentational: each change
@@ -109,6 +119,32 @@ export class PersonEditor {
   protected readonly collections = computed(() =>
     collectionChoices(this.topics(), this.person().topics, this.isMaster()),
   );
+
+  /** Masters may give someone who sends another quota; the owner has none (KBC-035 BR-1). */
+  protected readonly hasQuota = computed(
+    () =>
+      !this.person().isOwner &&
+      (this.isMaster() || this.person().features.includes('media-upload')),
+  );
+  protected readonly quotaGb = computed(() => {
+    const bytes = this.person().mediaQuotaBytes ?? null;
+    return bytes === null ? '' : quotaFormat.format(bytes / BYTES_PER_GB);
+  });
+  protected readonly defaultQuotaGb = MEDIA_DEFAULT_QUOTA_BYTES / BYTES_PER_GB;
+  protected readonly quotaProblem = signal(false);
+
+  /** Blank goes back to the default; a value the API would refuse is said here. */
+  protected changeQuota(typed: string): void {
+    const gigabytes = Number(typed.replace(',', '.'));
+    const bytes = Math.round(gigabytes * BYTES_PER_GB);
+    const valid =
+      typed.trim() === '' || mediaQuotaSchema.safeParse(bytes).success;
+    this.quotaProblem.set(!valid);
+    if (valid)
+      this.changed.emit({
+        mediaQuotaBytes: typed.trim() === '' ? null : bytes,
+      });
+  }
 
   protected toggleTopic(slug: string, on: boolean): void {
     this.changed.emit({ topics: toggled(this.person().topics, slug, on) });

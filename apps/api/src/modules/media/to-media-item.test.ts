@@ -13,6 +13,7 @@ const aRecord = (transcription: TranscriptionRecord): MediaRecord => ({
   author: 'mestre-laercio',
   ownerPrincipal: 'owner',
   fileName: 'a.mp3',
+  sourceSha256: null,
   uploadBytes: 3,
   status: 'ready',
   progress: null,

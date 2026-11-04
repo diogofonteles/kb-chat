@@ -39,6 +39,14 @@ export const API_ERROR_CODES = [
   'PAYLOAD_TOO_LARGE',
   /** The media item is not waiting for its file (already sent, or abandoned). */
   'MEDIA_CONFLICT',
+  /** The same file is already in this collection; `details.media` names it (KBC-035 BR-2). */
+  'MEDIA_DUPLICATE',
+  /** The upload would pass the person's quota; `details.quotaBytes` says it (KBC-035 BR-1). */
+  'MEDIA_QUOTA_EXCEEDED',
+  /** A body the route does not read: a part of an upload in another format (KBC-035). */
+  'UNSUPPORTED_MEDIA_TYPE',
+  /** The interrupted upload's parts were deleted after 24 h (KBC-035 BR-3). */
+  'MEDIA_UPLOAD_EXPIRED',
   /** One person keeps at most 1 000 bookmarks per media (KBC-042). */
   'BOOKMARK_LIMIT',
   /** Only the person may do this, not a master acting as them (KBC-060). */

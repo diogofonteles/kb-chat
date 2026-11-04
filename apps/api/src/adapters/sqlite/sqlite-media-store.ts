@@ -33,6 +33,9 @@ import { closeLease } from './sqlite-leases.js';
 type Row = Record<string, SQLOutputValue>;
 
 const text = (row: Row, column: string): string => String(row[column]);
+const nullableText = (row: Row, column: string): string | null =>
+  row[column] === null ? null : text(row, column);
+
 const nullableNumber = (row: Row, column: string): number | null =>
   row[column] === null ? null : Number(row[column]);
 
@@ -56,6 +59,7 @@ function toMediaRecord(row: Row): MediaRecord {
     ownerPrincipal: text(row, 'owner_principal'),
     fileName: text(row, 'file_name'),
     uploadBytes: Number(row['upload_bytes']),
+    sourceSha256: nullableText(row, 'source_sha256'),
     status: mediaStatusSchema.parse(row['status']),
     progress: nullableNumber(row, 'progress'),
     failure:
@@ -106,7 +110,7 @@ const AUTHOR_COLUMN = `COALESCE(author,
   CASE WHEN authorship = 'mestre-laercio' THEN 'mestre-laercio' END)`;
 
 /** The item, its newest transcribe job and its current transcript (KBC-036). */
-const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_principal, file_name, upload_bytes,
+const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_principal, file_name, upload_bytes, source_sha256,
   status, progress, failure, duration_ms, bytes, created_at, updated_at,
   parent_media_id, parent_start_ms, parent_end_ms, track_ordinal, archived_at,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
@@ -134,8 +138,9 @@ export class SqliteMediaStore implements MediaStorePort {
     this.db
       .prepare(
         `INSERT INTO media (id, topic, title, author, authorship, owner_principal,
-           file_name, upload_bytes, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)`,
+           file_name, upload_bytes, source_sha256, estimated_bytes, status, created_at,
+           updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)`,
       )
       .run(
         media.id,
@@ -146,10 +151,40 @@ export class SqliteMediaStore implements MediaStorePort {
         media.ownerPrincipal,
         media.fileName,
         media.uploadBytes,
+        media.sourceSha256 ?? null,
+        media.estimatedBytes ?? null,
         at,
         at,
       );
     return this.requireMedia(media.id);
+  }
+
+  findBySource(topic: string, sha256: string): MediaRecord[] {
+    return this.db
+      .prepare(
+        `SELECT ${MEDIA_COLUMNS} FROM media WHERE topic = ? AND source_sha256 = ?
+         ORDER BY created_at DESC, id`,
+      )
+      .all(topic, sha256)
+      .map(toMediaRecord);
+  }
+
+  usedBytes(principal: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(COALESCE(bytes, estimated_bytes, 0)), 0) AS used FROM media
+         WHERE owner_principal = ? AND status <> 'failed' AND parent_media_id IS NULL`,
+      )
+      .get(principal);
+    return Number(row?.['used'] ?? 0);
+  }
+
+  touchUpload(mediaId: string, now: Date): void {
+    this.db
+      .prepare(
+        `UPDATE media SET updated_at = ? WHERE id = ? AND status = 'uploading'`,
+      )
+      .run(now.toISOString(), mediaId);
   }
 
   getMedia(id: string): MediaRecord | null {
@@ -503,7 +538,7 @@ export class SqliteMediaStore implements MediaStorePort {
     return inTransaction(this.db, () => {
       const rows = this.db
         .prepare(
-          `SELECT id FROM media WHERE status = 'uploading' AND created_at < ?`,
+          `SELECT id FROM media WHERE status = 'uploading' AND updated_at < ?`,
         )
         .all(input.olderThan.toISOString());
       const ids = rows.map((row) => text(row, 'id'));

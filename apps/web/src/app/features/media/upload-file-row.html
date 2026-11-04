@@ -1,0 +1,101 @@
+@let current = entry();
+<article class="row" [attr.aria-label]="name()">
+  <div class="top">
+    <p class="name">{{ name() }}</p>
+    @if (canRemove()) {
+      <button
+        type="button"
+        class="remove"
+        [attr.aria-label]="removeLabel()"
+        (click)="removed.emit()"
+        i18n="@@media.upload.remove"
+      >
+        Tirar
+      </button>
+    }
+  </div>
+
+  @if (hasTitle()) {
+    <label class="field">
+      <span class="label" i18n="@@media.upload.titleLabel">Título</span>
+      <input
+        type="text"
+        maxlength="200"
+        autocomplete="off"
+        [value]="current.title"
+        [disabled]="titleLocked()"
+        [attr.aria-invalid]="titleMissing()"
+        (input)="rename($event)"
+      />
+      @if (titleMissing()) {
+        <span class="error" i18n="@@media.upload.titleMissing"
+          ><span aria-hidden="true">⚠</span> Dê um título ao áudio.</span
+        >
+      }
+    </label>
+  }
+
+  @let state = current.state;
+  @switch (state.kind) {
+    @case ('checking') {
+      <p class="status" i18n="@@media.upload.fileChecking">
+        Conferindo… {{ state.percent }}%
+      </p>
+    }
+    @case ('refused') {
+      <p class="error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ state.problem }}
+      </p>
+    }
+    @case ('duplicate') {
+      <p class="notice">
+        <ng-container i18n="@@media.upload.duplicate"
+          >Já está no acervo:</ng-container
+        >&ngsp;<a [routerLink]="mediaPagePath(state.media.id)">{{
+          state.media.title
+        }}</a>
+      </p>
+    }
+    @case ('over-quota') {
+      <p class="error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ overQuota(state.quotaBytes) }}
+      </p>
+    }
+    @case ('resume') {
+      <p class="notice" i18n="@@media.upload.resume">
+        Envio interrompido em {{ resumedText() }}. Enviar continua de onde
+        parou.
+      </p>
+    }
+    @case ('expired') {
+      <p class="error" role="alert" i18n="@@media.upload.expired">
+        <span aria-hidden="true">⚠</span> Este envio expirou. Envie de novo.
+      </p>
+    }
+    @case ('sending') {
+      <div class="progress">
+        <progress
+          max="100"
+          [value]="percent()"
+          [attr.aria-label]="progressLabel()"
+        ></progress>
+        @if (state.offline) {
+          <p>{{ offlineNotice }}</p>
+        } @else {
+          <p i18n="@@media.upload.sending">
+            Enviando… {{ sentText() }} · {{ percent() }}%
+          </p>
+        }
+      </div>
+    }
+    @case ('stopped') {
+      <p class="error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ state.problem }}
+      </p>
+    }
+    @case ('done') {
+      <p class="status" i18n="@@media.upload.done">Enviado</p>
+    }
+  }
+  <p class="visually-hidden" aria-live="polite">{{ spoken() }}</p>
+</article>

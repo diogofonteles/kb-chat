@@ -211,9 +211,14 @@ export function update(
     }),
     // Only a master may hold it; losing the role takes it away (KBC-060 BR-1).
     canActAs: role === 'master' && (patch.canActAs ?? target.canActAs ?? false),
+    ...quotaChangeOf(patch),
   };
   return { people: replace(people, next), result: next };
 }
+
+/** The quota only when it changes: null goes back to the default (KBC-035 BR-1). */
+const quotaChangeOf = ({ mediaQuotaBytes }: PersonUpdate) =>
+  mediaQuotaBytes === undefined ? {} : { mediaQuotaBytes };
 
 /** A grant by name holds for a master only: kept off a member, it cannot wake on a promotion. */
 const heldFeatures = (

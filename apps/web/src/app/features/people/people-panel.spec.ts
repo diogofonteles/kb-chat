@@ -316,6 +316,67 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     ).toBeNull();
   });
 
+  it('edits the media quota of who sends, in GB, blank for the default (KBC-035 BR-1)', async () => {
+    const { http, fixture } = await renderPanel([
+      owner,
+      aPerson({ features: ['media-upload'] }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const url = '/api/v1/people/11111111-1111-4111-8111-111111111111';
+    const field = screen.getByRole('textbox', { name: 'Cota de mídia (GB)' });
+    expect(screen.getByText('Em branco, vale o padrão de 5 GB.')).toBeTruthy();
+
+    fireEvent.change(field, { target: { value: 'muito' } });
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Use um número maior que zero.',
+    );
+    http.expectNone(url);
+
+    fireEvent.change(field, { target: { value: '2,5' } });
+    const quota = http.expectOne(url);
+    expect(quota.request.body).toEqual({ mediaQuotaBytes: 2.5 * 1024 ** 3 });
+    quota.flush(
+      aPerson({
+        features: ['media-upload'],
+        mediaQuotaBytes: 2.5 * 1024 ** 3,
+      }),
+    );
+    await fixture.whenStable();
+    expect((field as HTMLInputElement).value).toBe('2,5');
+
+    fireEvent.change(field, { target: { value: '' } });
+    const cleared = http.expectOne(url);
+    expect(cleared.request.body).toEqual({ mediaQuotaBytes: null });
+    cleared.flush(aPerson({ features: ['media-upload'] }));
+  });
+
+  it('shows a typed quota as typed, with no floating point noise (KBC-035 BR-1)', async () => {
+    const { fixture } = await renderPanel([
+      owner,
+      aPerson({
+        features: ['media-upload'],
+        mediaQuotaBytes: Math.round(0.1 * 1024 ** 3),
+      }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const field = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Cota de mídia (GB)',
+    });
+    expect(field.value).toBe('0,1');
+  });
+
+  it('asks no quota of who does not send', async () => {
+    const { fixture } = await renderPanel();
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    expect(
+      screen.queryByRole('textbox', { name: 'Cota de mídia (GB)' }),
+    ).toBeNull();
+  });
+
   it('saves a collection and a feature as soon as they change', async () => {
     const { http, fixture } = await renderPanel();
     fireEvent.click(row(/Guest/));

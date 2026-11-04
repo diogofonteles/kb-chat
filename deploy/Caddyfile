@@ -37,19 +37,20 @@
 		respond 404
 	}
 
-	# Audio uploads (KBC-034): up to 500 MiB (the contract's MEDIA_MAX_UPLOAD_BYTES), streamed
-	# to the API's disk. Binary units: "501MB" would be 501 000 000 bytes and cut real uploads.
+	# Audio uploads (KBC-035): parts over tus, or a whole file with PUT, up to the contract's
+	# MEDIA_MAX_UPLOAD_BYTES (4 GiB), streamed to the API's disk. Binary units: "4GB" would be
+	# 4 000 000 000 bytes and cut real uploads.
 	# The media stream is never compressed: `encode` only touches text types (Caddy default).
 	@mediaUpload {
-		method PUT
-		path_regexp mediaUpload ^/api/v1/media/[0-9a-f-]{36}/file$
+		method PUT PATCH
+		path_regexp mediaUpload ^/api/v1/media/[0-9a-f-]{36}/(file|upload)$
 	}
 	handle @mediaUpload {
 		request_body {
-			max_size 501MiB
+			max_size 4097MiB
 		}
 		reverse_proxy api:3000 {
-			# Hand the bytes to the API as they arrive (no buffering of 500 MB here).
+			# Hand the bytes to the API as they arrive (no buffering of gigabytes here).
 			request_buffers 0
 		}
 	}

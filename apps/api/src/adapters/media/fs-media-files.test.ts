@@ -8,9 +8,9 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import { text } from 'node:stream/consumers';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UploadRefusedError } from '../../ports/media-files.js';
 import { FsMediaFiles } from './fs-media-files.js';
 
@@ -29,6 +29,96 @@ beforeEach(async () => {
 afterEach(() => {
   chmodSync(root, 0o700);
   rmSync(root, { recursive: true, force: true });
+});
+
+describe('FsMediaFiles: a resumable upload (KBC-035)', () => {
+  it('appends parts and appears for the worker only when finished', async () => {
+    const append = (part: string) =>
+      files.appendUpload({ mediaId: ID, body: chunks(part), expectedBytes: 6 });
+    expect(await files.uploadOffset(ID)).toBe(0);
+    expect(await append('abc')).toBe(3);
+    expect(await append('def')).toBe(6);
+    expect(await files.stat(files.uploadPath(ID))).toBeNull();
+    await files.finishUpload(ID);
+    expect(
+      await text(files.read(files.uploadPath(ID), { start: 0, end: 5 })),
+    ).toBe('abcdef');
+  });
+
+  it('keeps what arrived of a part cut short (NFR-1)', async () => {
+    const cut = new PassThrough();
+    const appending = files.appendUpload({
+      mediaId: ID,
+      body: cut,
+      expectedBytes: 100,
+    });
+    cut.write(Buffer.from('abcde'));
+    await vi.waitFor(() =>
+      expect(existsSync(join(root, 'uploads', `${ID}.upload.part`))).toBe(true),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    cut.destroy();
+    expect(await appending).toBe(5);
+    expect(await files.uploadOffset(ID)).toBe(5);
+  });
+
+  it('refuses a part past the announced size and stays where it was', async () => {
+    await files.appendUpload({
+      mediaId: ID,
+      body: chunks('abc'),
+      expectedBytes: 6,
+    });
+    await expect(
+      files.appendUpload({
+        mediaId: ID,
+        body: chunks('defg'),
+        expectedBytes: 6,
+      }),
+    ).rejects.toBeInstanceOf(UploadRefusedError);
+    expect(await files.uploadOffset(ID)).toBe(3);
+  });
+
+  it('hashes what it has', async () => {
+    await files.appendUpload({
+      mediaId: ID,
+      body: chunks('abc'),
+      expectedBytes: 3,
+    });
+    expect(await files.hashUpload(ID)).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
+  });
+});
+
+describe('FsMediaFiles, a part that stops arriving', () => {
+  it('keeps what arrived and lets go of the part, so the upload can go on', async () => {
+    const quiet = new FsMediaFiles(root, { partIdleMs: 20 });
+    const body = new Readable({ read: () => undefined });
+    body.push(Buffer.from('abc'));
+    const offset = await quiet.appendUpload({
+      mediaId: ID,
+      body,
+      expectedBytes: 6,
+    });
+    expect(offset).toBe(3);
+    await expect(quiet.uploadOffset(ID)).resolves.toBe(3);
+  });
+
+  it('waits for a part that keeps arriving, however slowly', async () => {
+    const quiet = new FsMediaFiles(root, { partIdleMs: 200 });
+    const body = new Readable({ read: () => undefined });
+    const appending = quiet.appendUpload({
+      mediaId: ID,
+      body,
+      expectedBytes: 6,
+    });
+    for (const letters of ['ab', 'cd', 'ef']) {
+      body.push(Buffer.from(letters));
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    body.push(null);
+    await expect(appending).resolves.toBe(6);
+  });
 });
 
 describe('FsMediaFiles', () => {
@@ -59,6 +149,17 @@ describe('FsMediaFiles', () => {
       expectedBytes: 6,
     });
     await expect(saving).rejects.toEqual(new UploadRefusedError('incomplete'));
+    expect(readdirSync(join(root, 'uploads'))).toEqual([]);
+  });
+
+  it('refuses and removes an upload that is not the file announced', async () => {
+    const saving = files.saveUpload({
+      mediaId: ID,
+      body: chunks('abc'),
+      expectedBytes: 3,
+      sha256: '0'.repeat(64),
+    });
+    await expect(saving).rejects.toEqual(new UploadRefusedError('different'));
     expect(readdirSync(join(root, 'uploads'))).toEqual([]);
   });
 

@@ -113,9 +113,17 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   MEDIA_NOT_READY: () =>
     $localize`:@@error.mediaNotReady:Esta mídia ainda não está pronta para tocar.`,
   PAYLOAD_TOO_LARGE: () =>
-    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido. Envie um áudio de até 500 MB.`,
+    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido. Envie um áudio de até 4 GB.`,
   MEDIA_CONFLICT: () =>
     $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
+  MEDIA_DUPLICATE: () =>
+    $localize`:@@error.mediaDuplicate:Este arquivo já está no acervo.`,
+  MEDIA_QUOTA_EXCEEDED: () =>
+    $localize`:@@error.mediaQuota:Este envio passa da sua cota. Fale com um master para aumentar.`,
+  MEDIA_UPLOAD_EXPIRED: () =>
+    $localize`:@@error.mediaUploadExpired:Este envio expirou. Envie de novo.`,
+  UNSUPPORTED_MEDIA_TYPE: () =>
+    $localize`:@@error.unsupportedMediaType:O envio veio num formato que a API não lê. Recarregue a página e tente de novo.`,
   BOOKMARK_LIMIT: () =>
     $localize`:@@error.bookmarkLimit:Você chegou ao limite de 1.000 marcadores nesta mídia. Apague algum para marcar outro.`,
   VIEW_CHANGED: () =>

@@ -1,3 +1,4 @@
+import { MEDIA_AUDIO_BYTES_PER_HOUR } from '@kb-chat/contracts';
 import type { LegacyAuthorship, MediaRecord } from '../../ports/media-store.js';
 import type { MediaActor } from './media-service.js';
 
@@ -8,10 +9,22 @@ export const MAX_JOB_ATTEMPTS = 4;
 /** A worker heartbeats every 15 s; four missed beats lose the lease. */
 export const JOB_LEASE_MS = 60_000;
 export const JANITOR_INTERVAL_MS = 30_000;
-/** An upload that never finished is given up after a day. */
+/** An upload with no new part for a day is given up (KBC-035 BR-3). */
 export const UPLOAD_ABANDON_MS = 24 * 60 * 60 * 1000;
 /** The converted audio (ADR 0022 §4: AAC in MP4). */
 export const AUDIO_MIME = 'audio/mp4';
+
+/**
+ * What a file should take once converted (KBC-035 FR-3): 30 MB per hour, or the file's own
+ * size when the browser could not read its length.
+ */
+export const estimatedBytesOf = (input: {
+  readonly bytes: number;
+  readonly durationMs?: number | null;
+}): number =>
+  input.durationMs
+    ? Math.ceil((input.durationMs / 3_600_000) * MEDIA_AUDIO_BYTES_PER_HOUR)
+    : input.bytes;
 
 /** The author the pre-KBC-049 column means by `mestre-laercio` (ADR 0030 §4). */
 const LEGACY_AUTHOR_SLUG = 'mestre-laercio';

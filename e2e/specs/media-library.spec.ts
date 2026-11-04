@@ -53,7 +53,7 @@ test('AC-1: a person who may upload sends an MP3, sees it go to "Pronta" and ope
   await page.getByRole('button', { name: 'Enviar áudio' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Enviar áudio' });
   await expect(
-    dialog.getByText('mp3, m4a, wav, flac, ogg ou opus, até 500 MB'),
+    dialog.getByText('mp3, m4a, wav, flac, ogg ou opus, até 4 GB cada'),
   ).toBeVisible();
   await dialog.locator('input[type="file"]').setInputFiles(file);
   await expect(dialog.getByRole('textbox', { name: 'Título' })).toHaveValue(

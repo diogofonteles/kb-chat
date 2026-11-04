@@ -24,9 +24,11 @@ import {
   canSee,
   hasFeature,
   isMaster,
+  mediaQuotaOf,
   viewerOf,
   type RouteAccess,
 } from '../auth/index.js';
+import { registerUploadRoutes } from './upload-routes.js';
 import type { MediaEditService } from './media-edit-service.js';
 import type {
   MediaActor,
@@ -73,6 +75,7 @@ export function actorOf(request: FastifyRequest): MediaActor {
     principal: viewer.principal,
     isMaster: isMaster(viewer.person),
     canUpload: hasFeature(viewer.person, 'media-upload'),
+    quotaBytes: mediaQuotaOf(viewer),
     seesTracks: hasFeature(viewer.person, 'media-tracks'),
     canSee: (topic) => canSee(request, topic),
   };
@@ -137,7 +140,7 @@ const OPTIONS = {
   },
 } as const;
 
-/** Until the quotas of KBC-035, creating items is bounded per client. */
+/** Creating items is bounded per client, on top of the quota. */
 const createOptions = (perMinute: number) => ({
   ...OPTIONS.create,
   config: {
@@ -169,6 +172,7 @@ export const mediaRoutes =
       items: service.list(actorOf(request), request.params.topic),
     }));
     registerCreate(typed, { service, ...options });
+    registerUploadRoutes(app, service, actorOf);
     registerItemRoutes(typed, service);
     registerEditRoute(typed, service, editor);
   };

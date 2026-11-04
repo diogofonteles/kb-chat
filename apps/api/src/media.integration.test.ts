@@ -62,7 +62,7 @@ describe('Media library: upload (KBC-034)', () => {
   });
 
   it.each([
-    [{ bytes: 500 * 1024 * 1024 + 1 }, 'a file over 500 MB'],
+    [{ bytes: 4 * 1024 ** 3 + 1 }, 'a file over 4 GB'],
     [{ fileName: 'apostila.pdf' }, 'a file that is not audio'],
     [{ title: '   ' }, 'a blank title'],
     [{ authorship: 'sintese' }, 'the authorship field of before KBC-049'],

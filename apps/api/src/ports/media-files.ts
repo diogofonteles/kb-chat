@@ -1,7 +1,7 @@
 import type { Readable } from 'node:stream';
 
 /** Why an upload was refused while it streamed in. */
-export type UploadProblem = 'too-large' | 'incomplete';
+export type UploadProblem = 'too-large' | 'incomplete' | 'different';
 
 export class UploadRefusedError extends Error {
   constructor(readonly problem: UploadProblem) {
@@ -47,14 +47,32 @@ export interface MediaFilesPort {
   /** Moves a finished work file to its final path (atomic rename). */
   promote(from: string, to: string): Promise<void>;
   /**
-   * Writes the upload, refusing more or fewer bytes than announced (the partial file is
-   * removed); it appears under `uploadPath` only when complete.
+   * Writes the upload, refusing more or fewer bytes than announced, or other bytes than the
+   * `sha256` announced (the partial file is removed); it appears under `uploadPath` only
+   * when complete.
    */
   saveUpload(input: {
     readonly mediaId: string;
     readonly body: Readable;
     readonly expectedBytes: number;
+    readonly sha256?: string | null;
   }): Promise<void>;
+  /** How many bytes of a resumable upload are kept; 0 before the first part (KBC-035). */
+  uploadOffset(mediaId: string): Promise<number>;
+  /**
+   * Appends a part and answers the new offset. A body that stops short keeps what arrived:
+   * that is what makes the upload resumable. More than `expectedBytes` in all is refused and
+   * the file stays as it was.
+   */
+  appendUpload(input: {
+    readonly mediaId: string;
+    readonly body: Readable;
+    readonly expectedBytes: number;
+  }): Promise<number>;
+  /** The SHA-256 of what a resumable upload has so far, in lowercase hex. */
+  hashUpload(mediaId: string): Promise<string>;
+  /** Every byte arrived: the upload appears under `uploadPath` for the worker. */
+  finishUpload(mediaId: string): Promise<void>;
   /** Removes an upload, complete or partial (removal, abandonment, after conversion). */
   discardUpload(mediaId: string): Promise<void>;
   stat(path: string): Promise<StoredFile | null>;

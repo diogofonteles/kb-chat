@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -21,27 +21,37 @@ import {
   Validators,
 } from '@angular/forms';
 import { Router } from '@angular/router';
-import type {
-  MediaItem,
-  PreparationPlanRequest,
-  Topic,
+import {
+  duplicateDetailsSchema,
+  quotaDetailsSchema,
+  type MediaItem,
+  type PreparationPlanRequest,
+  type Topic,
 } from '@kb-chat/contracts';
 import {
+  errorDetailsOf,
   errorMessage,
   refusedFieldOf,
   toUiErrorCode,
 } from '@core/api/api-error.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { AuthorsApi } from '@core/media/authors-api.js';
-import { MediaApi } from '@core/media/media-api.js';
-import { preparationPagePath } from '@core/media/preparation-api.js';
+import { MediaApi, type UploadEvent } from '@core/media/media-api.js';
+import {
+  PreparationApi,
+  preparationPagePath,
+} from '@core/media/preparation-api.js';
 import { openable, treeTitle } from '@core/topics/topic-tree.js';
 import {
+  EMPTY,
   Subscription,
   catchError,
   concatMap,
+  from,
   map,
+  mergeMap,
   of,
+  shareReplay,
   tap,
   throwError,
   type Observable,
@@ -52,25 +62,27 @@ import {
   isInvalidAuthorName,
 } from './author-suggestions.js';
 import { AuthorCombobox } from './author-combobox.js';
-import { AUDIO_LENGTH_READER } from './audio-length.js';
+import { planShare, sameChoices } from './preparation/plan-choices.js';
 import { PlanForm } from './preparation/plan-form.js';
 import { PreparationOptions } from './preparation/preparation-options.js';
 import { PreparationSteps } from './preparation/preparation-steps.js';
-import {
-  fileProblemOf,
-  notBlank,
-  sentOf,
-  titleFromFileName,
-  uploadRule,
-} from './upload-rules.js';
+import { UploadEntries, type UploadEntry } from './upload-entries.js';
+import { UploadFileRow } from './upload-file-row.js';
+import { uploadRule } from './upload-rules.js';
 
 type Stage = 'choosing' | 'sending' | 'stopped';
 
+/** How many files travel at once; the rest wait for a place (KBC-035 AC-8). */
+const FILES_AT_ONCE = 3;
+
 /**
- * "Enviar áudio" (screens.md T14, KBC-034): choose a file (button or drop), check the
- * rule before sending, a title, the author (KBC-049: one of the collection's or a new one,
- * blank for "Outros autores"), then the real progress with "Cancelar envio". A broken
- * connection keeps the fields (MA-26).
+ * "Enviar áudio" (screens.md T14, KBC-034, KBC-035): choose files (button or drop), each
+ * with its title and its check, the author and collection of them all (KBC-049: one of the
+ * collection's or a new one, blank for "Outros autores"), then the progress of each with
+ * "Cancelar envio". A network that goes away is waited for, and the upload goes on alone
+ * when it returns; any other broken connection keeps everything (MA-26), and sending again
+ * goes on from the last byte the server has. Leaving does not lose an upload: choosing the same file
+ * within 24 h continues it. Only "Cancelar" removes what was half sent.
  */
 @Component({
   selector: 'app-upload-panel',
@@ -79,8 +91,9 @@ type Stage = 'choosing' | 'sending' | 'stopped';
     AuthorCombobox,
     PreparationOptions,
     PreparationSteps,
+    UploadFileRow,
   ],
-  providers: [PlanForm],
+  providers: [UploadEntries, PlanForm],
   templateUrl: './upload-panel.html',
   styleUrl: './upload-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -89,10 +102,9 @@ type Stage = 'choosing' | 'sending' | 'stopped';
 export class UploadPanel implements OnInit {
   private readonly api = inject(MediaApi);
   private readonly authorsApi = inject(AuthorsApi);
+  private readonly preparations = inject(PreparationApi);
   private readonly session = inject(SessionStore);
   private readonly router = inject(Router);
-  private readonly readLength = inject(AUDIO_LENGTH_READER);
-  private readonly destroyRef = inject(DestroyRef);
   protected readonly plan = inject(PlanForm);
   /** Who may only send sees no flow of four steps: the upload is all there is (AC-15). */
   protected readonly showSteps = computed(() => this.session.can('media-edit'));
@@ -114,11 +126,8 @@ export class UploadPanel implements OnInit {
   protected readonly rule = uploadRule();
   /** The author's name as typed or chosen; blank is "Outros autores". */
   protected readonly authorName = signal('');
+  protected readonly uploads = inject(UploadEntries);
   protected readonly form = new FormGroup({
-    title: new FormControl('', {
-      nonNullable: true,
-      validators: [notBlank, Validators.maxLength(200)],
-    }),
     topic: new FormControl('', {
       nonNullable: true,
       validators: Validators.required,
@@ -126,44 +135,44 @@ export class UploadPanel implements OnInit {
   });
   /** The "Acervo" field as a signal: the author suggestions follow it. */
   protected readonly chosenTopic = signal('');
-  protected readonly file = signal<File | null>(null);
+  /** Said beside the files: none chosen, or none that can go. */
   protected readonly fileProblem = signal<string | null>(null);
   protected readonly stage = signal<Stage>('choosing');
-  protected readonly progress = signal({ loaded: 0, total: 0 });
-  protected readonly failure = signal('');
   protected readonly submitted = signal(false);
   protected readonly dragging = signal(false);
-  protected readonly percent = computed(() => {
-    const { loaded, total } = this.progress();
-    return total > 0 ? Math.floor((loaded / total) * 100) : 0;
-  });
-  protected readonly sentText = computed(() =>
-    sentOf(
-      this.progress().loaded,
-      this.progress().total || (this.file()?.size ?? 0),
-    ),
-  );
-  /** The item created on the server and what it was created for: a retry reuses it. */
-  private created: { readonly item: MediaItem; readonly draft: Draft } | null =
-    null;
+  /** The items created on the server and what for, per file: a retry reuses them. */
+  private readonly created = new Map<number, Created>();
+  /** Files whose item the list was already told about. */
+  private readonly reported = new Set<number>();
+  /** Each finished file's item, until the list hears of it. */
+  private readonly sent = new Map<number, MediaItem>();
   private sending: Subscription | null = null;
-  /** The title the panel suggested: replaced by the next file's until the person edits it. */
-  private suggestedTitle = '';
+  /** A file came back refused while sending: the panel stays so the person sees it. */
+  private interrupted = false;
 
   constructor() {
     afterNextRender(() => this.dialog().nativeElement.showModal());
-    // Leaving the page or the route mid-upload: stop, and remove the half-created item.
-    this.destroyRef.onDestroy(() => this.abandon());
+    // Leaving the page or the route mid-upload: stop. The same file continues later (FR-2).
+    inject(DestroyRef).onDestroy(() => this.halt());
+    // The estimates go by the files' length, read before anything is sent (KBC-072 BR-4).
+    toObservable(this.uploads.plannedMs)
+      .pipe(takeUntilDestroyed())
+      .subscribe((durationMs) =>
+        durationMs === null
+          ? this.plan.lengthUnknown()
+          : this.plan.aim({ durationMs }),
+      );
   }
 
   ngOnInit(): void {
     this.form.controls.topic.setValue(this.topic());
     this.chosenTopic.set(this.topic());
-    this.plan.aim({});
+    this.uploads.aim(this.topic());
   }
 
   protected topicChosen(): void {
     this.chosenTopic.set(this.form.controls.topic.value);
+    this.uploads.aim(this.form.controls.topic.value);
   }
 
   protected chooseFile(): void {
@@ -172,8 +181,10 @@ export class UploadPanel implements OnInit {
 
   protected fileChosen(event: Event): void {
     const target = event.target;
-    if (target instanceof HTMLInputElement)
-      this.takeFile(target.files?.item(0) ?? null);
+    if (!(target instanceof HTMLInputElement)) return;
+    this.takeFiles(target.files);
+    // The same file can be chosen again after being taken off the list.
+    target.value = '';
   }
 
   protected dragOver(event: DragEvent): void {
@@ -184,48 +195,47 @@ export class UploadPanel implements OnInit {
   protected dropped(event: DragEvent): void {
     event.preventDefault();
     this.dragging.set(false);
-    this.takeFile(event.dataTransfer?.files.item(0) ?? null);
+    this.takeFiles(event.dataTransfer?.files ?? null);
   }
 
   protected send(): void {
     this.submitted.set(true);
-    const file = this.file();
-    if (!file)
-      this.fileProblem.set(
-        $localize`:@@media.upload.noFile:Escolha um arquivo de áudio.`,
-      );
-    const draft = file ? this.draftOf(file) : null;
+    const targets = this.uploads.sendable();
     // A name the API would refuse is said under the "Autor" field and never sent.
     const badAuthor = isInvalidAuthorName(this.authorName());
-    if (!file || !draft || this.fileProblem() || this.form.invalid || badAuthor)
+    this.fileProblem.set(this.nothingToSend(targets));
+    if (
+      targets.length === 0 ||
+      targets.some(({ title }) => !validTitle(title)) ||
+      this.form.invalid ||
+      badAuthor
+    )
       return;
-    this.stage.set('sending');
-    this.failure.set('');
-    this.sending = this.itemFor(draft)
-      .pipe(concatMap((item) => this.api.upload(item.id, file)))
-      .subscribe({
-        next: (event) =>
-          event.kind === 'progress'
-            ? this.progress.set({ loaded: event.loaded, total: event.total })
-            : this.finish(event.item),
-        error: (err: unknown) => this.stop(err),
-      });
+    this.enter('sending');
+    this.interrupted = false;
+    const author = this.authorOf().pipe(shareReplay(1));
+    this.sending = from(targets)
+      .pipe(mergeMap((entry) => this.sendOne(entry, author), FILES_AT_ONCE))
+      .subscribe({ complete: () => this.settle() });
   }
 
-  /** "Cancelar envio": stops sending and removes the half-created item. */
+  /** "Cancelar envio": stops sending and removes what was half sent. */
   protected cancelUpload(): void {
     this.abandon();
-    this.stage.set('choosing');
-    this.progress.set({ loaded: 0, total: 0 });
+    this.reportSent();
+    this.enter('choosing');
   }
 
+  /** "Cancelar": the person gives up what was half sent; other exits keep it (FR-2). */
   protected close(): void {
+    this.abandon();
     this.dialog().nativeElement.close();
   }
 
-  /** Every way out (Cancelar, Escape, after a failure) cleans up before telling the list. */
+  /** Every way out (Cancelar, Escape, the end) stops before telling the list. */
   protected dialogClosed(): void {
-    this.abandon();
+    this.halt();
+    this.reportSent();
     this.closed.emit();
   }
 
@@ -233,60 +243,110 @@ export class UploadPanel implements OnInit {
     if (this.stage() === 'sending') event.preventDefault();
   }
 
-  private takeFile(file: File | null): void {
-    if (!file) return;
-    this.file.set(file);
-    this.fileProblem.set(fileProblemOf(file));
-    const title = this.form.controls.title;
-    if (!title.value || title.value === this.suggestedTitle) {
-      this.suggestedTitle = titleFromFileName(file.name);
-      title.setValue(this.suggestedTitle);
-    }
-    this.measure(file);
+  /** The collection is one for all the files: it cannot change once they are going (T14). */
+  private enter(stage: Stage): void {
+    this.stage.set(stage);
+    const { topic } = this.form.controls;
+    if (stage === 'sending') topic.disable();
+    else topic.enable();
   }
 
-  /** The estimates go by the file's length, read here before anything is sent (BR-4). */
-  private measure(file: File): void {
-    this.readLength(file)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((durationMs) => {
-        if (this.file() !== file) return;
-        if (durationMs === null) this.plan.lengthUnknown();
-        else this.plan.aim({ durationMs });
-      });
+  private takeFiles(files: FileList | null): void {
+    this.fileProblem.set(null);
+    this.uploads.add(Array.from(files ?? []));
   }
 
-  private draftOf(file: File): Draft {
-    const { title, topic } = this.form.getRawValue();
+  private nothingToSend(targets: readonly UploadEntry[]): string | null {
+    if (targets.length > 0) return null;
+    return this.uploads.entries().length === 0
+      ? $localize`:@@media.upload.noFile:Escolha um arquivo de áudio.`
+      : $localize`:@@media.upload.nothingToSend:Nada a enviar: estes arquivos não podem ser enviados.`;
+  }
+
+  private draftOf(entry: UploadEntry): Draft {
+    const { file, title } = entry;
+    const { topic } = this.form.getRawValue();
     return {
       file,
       title: title.trim(),
       topic,
       author: this.authorName().trim(),
-      plan: this.plan.plan(),
+      plan: this.planOf(entry),
     };
   }
 
+  /** None for a file that goes on: its item keeps the plan it was created with. */
+  private planOf(entry: UploadEntry): PreparationPlanRequest | null {
+    if (entry.resumes) return null;
+    const plan = this.plan.plan();
+    const allMs = this.uploads.plannedMs();
+    if (allMs === null || entry.durationMs === null) return plan;
+    return planShare(plan, { lengthMs: entry.durationMs, allMs });
+  }
+
+  /** One file, from its item to its last byte; a failure stays on its own line. */
+  private sendOne(
+    entry: UploadEntry,
+    author: Observable<string | null>,
+  ): Observable<never> {
+    const { key, file } = entry;
+    const start = entry.state.kind === 'resume' ? entry.state.offset : 0;
+    this.uploads.set(key, {
+      kind: 'sending',
+      loaded: start,
+      total: file.size,
+    });
+    return this.itemFor(entry, author).pipe(
+      concatMap((id) => this.api.upload(id, file)),
+      concatMap((event) => {
+        this.follow(key, event);
+        return EMPTY;
+      }),
+      catchError((err: unknown) => {
+        this.stop(key, err);
+        return EMPTY;
+      }),
+    );
+  }
+
+  private follow(key: number, event: UploadEvent): void {
+    if (event.kind === 'done') return this.finishOne(key, event.item);
+    if (event.kind === 'offline') return this.uploads.markOffline(key);
+    const { loaded, total } = event;
+    this.uploads.set(key, { kind: 'sending', loaded, total });
+  }
+
   /**
-   * The item for this draft: the one created before when the person only retries; a new
-   * one (the old removed) when they changed the file, the title, the collection or author.
+   * The item for this file: the one being resumed, the one created before when the person
+   * only retries, or a new one (the old removed) when they changed its details.
    */
-  private itemFor(draft: Draft): Observable<MediaItem> {
-    if (this.created && sameDraft(this.created.draft, draft))
-      return of(this.created.item);
-    this.discardCreated();
-    const { file, title, topic, plan } = draft;
-    return this.authorOf(draft).pipe(
-      concatMap((author) =>
-        this.api.create(topic, {
-          title,
-          author,
+  private itemFor(
+    entry: UploadEntry,
+    author: Observable<string | null>,
+  ): Observable<string> {
+    const { key, file, title, sha256, durationMs, state } = entry;
+    const draft = this.draftOf(entry);
+    if (state.kind === 'resume') {
+      this.created.set(key, { id: state.mediaId, draft });
+      return of(state.mediaId);
+    }
+    const held = this.created.get(key);
+    if (held && sameDraft(held.draft, draft)) return of(held.id);
+    return this.removeHeld(key).pipe(
+      concatMap(() => author),
+      concatMap((authorSlug) =>
+        this.api.create(draft.topic, {
+          title: title.trim(),
+          author: authorSlug,
           fileName: file.name,
           bytes: file.size,
-          plan,
+          sha256,
+          durationMs,
+          ...(draft.plan ? { plan: draft.plan } : {}),
         }),
       ),
-      tap((item) => (this.created = { item, draft })),
+      tap(({ id }) => this.created.set(key, { id, draft })),
+      map(({ id }) => id),
     );
   }
 
@@ -294,57 +354,157 @@ export class UploadPanel implements OnInit {
    * The author's id: the name is registered in the collection first (a name it already
    * has answers with that author, FR-1); none for a blank field.
    */
-  private authorOf({ topic, author }: Draft): Observable<string | null> {
+  private authorOf(): Observable<string | null> {
+    const author = this.authorName().trim();
     if (!author) return of(null);
+    const { topic } = this.form.getRawValue();
     return this.authorsApi.create(topic, author).pipe(
       map(({ slug }) => slug),
       catchError((err: unknown) => throwError(() => authorFailureOf(err))),
     );
   }
 
-  private finish(item: MediaItem): void {
+  private finishOne(key: number, item: MediaItem): void {
+    this.created.delete(key);
+    this.sent.set(key, item);
+    this.uploads.set(key, { kind: 'done' });
+  }
+
+  /** Every file ended: the panel closes, unless one needs the person. */
+  private settle(): void {
     this.sending = null;
-    this.created = null;
-    this.stage.set('choosing');
+    const pending = this.interrupted || this.uploads.sendable().length > 0;
+    this.reportSent();
+    this.enter(pending ? 'stopped' : 'choosing');
+    if (pending) return;
     this.plan.remember();
     const guided = this.plan.guided();
-    this.uploaded.emit(item);
     this.dialog().nativeElement.close();
-    // Only "Transcrever" ends here, as it always did (AC-15).
-    if (guided) void this.router.navigateByUrl(preparationPagePath(item.id));
+    this.continuePreparation(guided);
+  }
+
+  /**
+   * One file goes on to step 2; several stay on the list, where each says where its own
+   * preparation stopped (KBC-072 FR-6). Only "Transcrever" ends here too, as ever (AC-15).
+   */
+  private continuePreparation(guided: boolean): void {
+    const [only, ...others] = this.sent.entries();
+    if (!only || others.length > 0) return;
+    const [key, item] = only;
+    if (this.uploads.entries().find((e) => e.key === key)?.resumes)
+      return this.continueResumed(item.id);
+    if (guided) this.openPreparation(item.id);
+  }
+
+  /** What was resumed goes by the plan on the server: the form may say something else. */
+  private continueResumed(id: string): void {
+    if (!this.session.can('media-edit')) return;
+    this.preparations.read(id).subscribe({
+      next: ({ plan, finished }) => {
+        if (plan && !finished) this.openPreparation(id);
+      },
+      // The list shows the way back all the same.
+      error: () => undefined,
+    });
+  }
+
+  private openPreparation(id: string): void {
+    void this.router.navigateByUrl(preparationPagePath(id));
+  }
+
+  /** The list learns of each new item once; the last one ends up focused (UP-01). */
+  private reportSent(): void {
+    for (const [key, item] of this.sent) {
+      if (this.reported.has(key)) continue;
+      this.reported.add(key);
+      this.uploaded.emit(item);
+    }
+  }
+
+  private halt(): void {
+    this.sending?.unsubscribe();
+    this.sending = null;
   }
 
   private abandon(): void {
-    this.sending?.unsubscribe();
-    this.sending = null;
-    this.discardCreated();
+    this.halt();
+    for (const key of [...this.created.keys()]) this.discardCreated(key);
+    this.uploads.backToReady();
+  }
+
+  /** The old item goes first: while it lives, the API calls the same file repeated. */
+  private removeHeld(key: number): Observable<unknown> {
+    const held = this.created.get(key);
+    this.created.delete(key);
+    if (!held) return of(null);
+    return this.api.remove(held.id).pipe(catchError(() => of(null)));
   }
 
   /** Not tied to this panel's life: the removal must reach the server after it closes. */
-  private discardCreated(): void {
-    const created = this.created;
-    this.created = null;
+  private discardCreated(key: number): void {
+    const created = this.created.get(key);
+    this.created.delete(key);
     if (created)
-      this.api.remove(created.item.id).subscribe({ error: () => undefined });
+      this.api.remove(created.id).subscribe({ error: () => undefined });
   }
 
-  private stop(err: unknown): void {
-    this.sending = null;
-    this.stage.set('stopped');
-    const offline =
-      err instanceof HttpErrorResponse &&
-      (err.status === 0 || err.status >= 502);
+  /** What stopped this file, on its line. */
+  private stop(key: number, err: unknown): void {
+    this.interrupted = true;
     const code = toUiErrorCode(err);
-    this.failure.set(
-      offline
-        ? $localize`:@@media.upload.stopped:O envio parou: verifique a conexão e tente de novo.`
-        : err instanceof AuthorRefused || refusedFieldOf(err) === 'author'
-          ? $localize`:@@media.upload.authorRefused:O nome do autor não foi aceito: use uma linha, até 60 caracteres, sem aspas nem « ».`
-          : code === 'VALIDATION_FAILED'
-            ? $localize`:@@media.upload.refused:Envie um áudio de até 500 MB (mp3, m4a, wav, flac, ogg ou opus).`
-            : errorMessage(code),
+    if (code === 'MEDIA_DUPLICATE') return this.refuseRepeated(key, err);
+    if (code === 'MEDIA_QUOTA_EXCEEDED') return this.refuseOverQuota(key, err);
+    if (err instanceof HttpErrorResponse && err.status === 410) {
+      this.created.delete(key);
+      return this.uploads.set(key, { kind: 'expired' });
+    }
+    this.uploads.set(key, { kind: 'stopped', problem: problemOf(err) });
+  }
+
+  private refuseRepeated(key: number, err: unknown): void {
+    const details = duplicateDetailsSchema.safeParse(errorDetailsOf(err));
+    this.uploads.set(
+      key,
+      details.success
+        ? { kind: 'duplicate', media: details.data.media }
+        : { kind: 'stopped', problem: problemOf(err) },
     );
   }
+
+  private refuseOverQuota(key: number, err: unknown): void {
+    const details = quotaDetailsSchema.safeParse(errorDetailsOf(err));
+    this.uploads.set(
+      key,
+      details.success
+        ? { kind: 'over-quota', quotaBytes: details.data.quotaBytes }
+        : { kind: 'stopped', problem: problemOf(err) },
+    );
+  }
+}
+
+/** The title as the row's field and the API read it. */
+const validTitle = (title: string): boolean =>
+  title.trim().length > 0 && title.length <= 200;
+
+function problemOf(err: unknown): string {
+  const offline =
+    err instanceof HttpErrorResponse && (err.status === 0 || err.status >= 502);
+  if (offline)
+    return $localize`:@@media.upload.stopped:O envio parou: verifique a conexão e tente de novo.`;
+  if (err instanceof AuthorRefused || refusedFieldOf(err) === 'author')
+    return $localize`:@@media.upload.authorRefused:O nome do autor não foi aceito: use uma linha, até 60 caracteres, sem aspas nem « ».`;
+  if (refusedFieldOf(err) === 'sha256')
+    return $localize`:@@media.upload.corrupted:O arquivo chegou diferente do original. Tente de novo: o envio recomeça.`;
+  const code = toUiErrorCode(err);
+  return code === 'VALIDATION_FAILED'
+    ? $localize`:@@media.upload.refused:Envie um áudio de até 4 GB (mp3, m4a, wav, flac, ogg ou opus).`
+    : errorMessage(code);
+}
+
+/** An item on the server and what it was created for. */
+interface Created {
+  readonly id: string;
+  readonly draft: Draft;
 }
 
 /** What an item was created for. */
@@ -354,13 +514,16 @@ interface Draft {
   readonly topic: string;
   /** The author's name; blank is none. */
   readonly author: string;
-  /** What the person asked for this audio (KBC-072). */
-  readonly plan: PreparationPlanRequest;
+  /** What the person asked for this audio (KBC-072); none for an item that goes on. */
+  readonly plan: PreparationPlanRequest | null;
 }
+
+const samePlan = (a: Draft['plan'], b: Draft['plan']): boolean =>
+  a === null || b === null ? a === b : sameChoices(a, b);
 
 const sameDraft = (a: Draft, b: Draft): boolean =>
   a.file === b.file &&
   a.title === b.title &&
   a.topic === b.topic &&
   a.author === b.author &&
-  JSON.stringify(a.plan) === JSON.stringify(b.plan);
+  samePlan(a.plan, b.plan);

@@ -256,6 +256,8 @@ export class MediaListPage {
     }
     this.pendingFocus = item.id;
     this.list.reload();
+    // Several files stay on this list: each says where its preparation stopped (FR-6).
+    this.preparations.reload();
   }
 
   protected retry(item: MediaItem): void {

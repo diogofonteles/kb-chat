@@ -82,6 +82,31 @@ export const planOf = (
   acceptedUsd: choices.tracks === 'ai' ? estimateUsd : null,
 });
 
+/**
+ * One file's part of a plan sent for several: the value the person saw is for them all, and
+ * each file may only spend its share of it, by length (BR-4).
+ */
+export function planShare(
+  plan: PreparationPlanRequest,
+  { lengthMs, allMs }: { readonly lengthMs: number; readonly allMs: number },
+): PreparationPlanRequest {
+  const { acceptedUsd } = plan;
+  if (acceptedUsd === null || acceptedUsd === undefined) return plan;
+  if (lengthMs === allMs) return plan;
+  const share = (acceptedUsd * lengthMs) / allMs;
+  return { ...plan, acceptedUsd: Math.ceil(share * 1e6) / 1e6 };
+}
+
+/** The same choices, whatever the estimate of the moment says. */
+export const sameChoices = (
+  a: PreparationPlanRequest,
+  b: PreparationPlanRequest,
+): boolean =>
+  a.transcribe === b.transcribe &&
+  a.speakers === b.speakers &&
+  a.tracks === b.tracks &&
+  a.subjects === b.subjects;
+
 /** Goes through the guided flow; only transcribing ends at the upload (AC-15). */
 export const isGuided = (choices: PlanChoices): boolean =>
   choices.speakers || choices.tracks !== 'none';
