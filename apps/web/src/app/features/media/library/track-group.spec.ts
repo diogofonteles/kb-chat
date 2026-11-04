@@ -57,6 +57,13 @@ describe('TrackGroup (KBC-068 FR-5)', () => {
     );
   });
 
+  it('keeps the whole title of a track where a narrow screen cuts it', async () => {
+    const fixture = setup(true);
+    await fixture.whenStable();
+    const link = fixture.nativeElement.querySelector('ol a');
+    expect(link.getAttribute('title')).toBe('Pergunta 1');
+  });
+
   it('opens by itself under a search', async () => {
     const fixture = setup(true);
     await fixture.whenStable();

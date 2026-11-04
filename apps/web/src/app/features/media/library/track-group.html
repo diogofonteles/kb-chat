@@ -25,9 +25,12 @@
             playingId() === track.id ? '❚❚' : '▶'
           }}</span>
         </button>
-        <a class="title" [routerLink]="['/midia', track.id]">{{
-          track.title
-        }}</a>
+        <a
+          class="title"
+          [routerLink]="['/midia', track.id]"
+          [title]="track.title"
+          >{{ track.title }}</a
+        >
         <span class="meta">
           @if (showsAuthor(track)) {
             <app-authorship-badge [mediaAuthor]="track.author" />
