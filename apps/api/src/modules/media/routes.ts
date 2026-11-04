@@ -6,8 +6,6 @@ import {
   topicSlugSchema,
   updateMediaRequestSchema,
   type MediaItem,
-  uploadCheckRequestSchema,
-  uploadCheckSchema,
 } from '@kb-chat/contracts';
 import type {
   FastifyBaseLogger,
@@ -109,14 +107,6 @@ const OPTIONS = {
       response: { 201: mediaItemSchema },
     },
   },
-  check: {
-    config: { access: { ...UPLOAD, topicParam: 'topic' } },
-    schema: {
-      params: topicParams,
-      body: uploadCheckRequestSchema,
-      response: { 200: uploadCheckSchema },
-    },
-  },
   upload: {
     config: { access: UPLOAD },
     schema: { params: mediaParams, response: itemResponse },
@@ -182,12 +172,6 @@ export const mediaRoutes =
       items: service.list(actorOf(request), request.params.topic),
     }));
     registerCreate(typed, { service, ...options });
-    typed.post(
-      '/api/v1/topics/:topic/media/check',
-      OPTIONS.check,
-      async (request) =>
-        service.check(actorOf(request), request.params.topic, request.body),
-    );
     registerUploadRoutes(app, service, actorOf);
     registerItemRoutes(typed, service);
     registerEditRoute(typed, service, editor);

@@ -423,7 +423,10 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     const { container, http, tus, fixture } = panel;
     const names = ['a', 'b', 'c', 'd'];
     choose(container, ...names.map((name) => audio(`${name}.mp3`)));
-    for (const _ of names) await answerCheck(panel);
+    await answerCheck(panel);
+    await answerCheck(panel);
+    await answerCheck(panel);
+    await answerCheck(panel);
     clickSend();
     http.match(TOPIC).forEach((call) => call.flush(CREATED));
     await fixture.whenStable();

@@ -1,4 +1,9 @@
-import { mediaIdSchema } from '@kb-chat/contracts';
+import {
+  mediaIdSchema,
+  topicSlugSchema,
+  uploadCheckRequestSchema,
+  uploadCheckSchema,
+} from '@kb-chat/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { Readable } from 'node:stream';
@@ -17,6 +22,15 @@ const options = {
   schema: {
     params: z.object({ id: mediaIdSchema }),
     response: { 204: z.undefined() },
+  },
+};
+
+const checkOptions = {
+  config: { access: { ...UPLOAD, topicParam: 'topic' } },
+  schema: {
+    params: z.object({ topic: topicSlugSchema }),
+    body: uploadCheckRequestSchema,
+    response: { 200: uploadCheckSchema },
   },
 };
 
@@ -62,6 +76,12 @@ export function registerUploadRoutes(
     done(null, payload),
   );
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/topics/:topic/media/check',
+    checkOptions,
+    async (request) =>
+      service.check(actorOf(request), request.params.topic, request.body),
+  );
   typed.head('/api/v1/media/:id/upload', options, async (request, reply) => {
     const { id } = request.params;
     const status = await service.uploadStatus(actorOf(request), id);

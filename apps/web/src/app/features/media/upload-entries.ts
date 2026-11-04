@@ -66,25 +66,26 @@ const SENDABLE: readonly EntryState['kind'][] = [
   'stopped',
 ];
 
-/** A verdict the API gave, as a line of the list. */
-function stateOf(check: UploadCheck): EntryState {
-  switch (check.verdict) {
-    case 'new':
-      return { kind: 'ready' };
-    case 'duplicate':
-      return { kind: 'duplicate', media: check.media };
-    case 'resume':
-      return {
-        kind: 'resume',
-        mediaId: check.media.id,
-        offset: check.offset,
-      };
-    case 'expired':
-      return { kind: 'expired' };
-    case 'over-quota':
-      return { kind: 'over-quota', quotaBytes: check.quotaBytes };
-  }
-}
+/** What each verdict of the API is on the list. */
+const STATE_OF: {
+  readonly [V in UploadCheck['verdict']]: (
+    check: Extract<UploadCheck, { verdict: V }>,
+  ) => EntryState;
+} = {
+  new: () => ({ kind: 'ready' }),
+  duplicate: ({ media }) => ({ kind: 'duplicate', media }),
+  resume: ({ media, offset }) => ({
+    kind: 'resume',
+    mediaId: media.id,
+    offset,
+  }),
+  expired: () => ({ kind: 'expired' }),
+  'over-quota': ({ quotaBytes }) => ({ kind: 'over-quota', quotaBytes }),
+};
+
+const stateOf = <V extends UploadCheck['verdict']>(
+  check: Extract<UploadCheck, { verdict: V }>,
+): EntryState => STATE_OF[check.verdict as V](check);
 
 /**
  * The files of the upload panel: each is hashed and measured in the browser and asked about,

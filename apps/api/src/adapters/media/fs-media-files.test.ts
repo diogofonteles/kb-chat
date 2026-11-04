@@ -8,7 +8,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import { text } from 'node:stream/consumers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UploadRefusedError } from '../../ports/media-files.js';
@@ -46,13 +46,13 @@ describe('FsMediaFiles: a resumable upload (KBC-035)', () => {
   });
 
   it('keeps what arrived of a part cut short (NFR-1)', async () => {
-    const cut = new Readable({ read() {} });
+    const cut = new PassThrough();
     const appending = files.appendUpload({
       mediaId: ID,
       body: cut,
       expectedBytes: 100,
     });
-    cut.push(Buffer.from('abcde'));
+    cut.write(Buffer.from('abcde'));
     await vi.waitFor(() =>
       expect(existsSync(join(root, 'uploads', `${ID}.upload.part`))).toBe(true),
     );
