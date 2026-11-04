@@ -6,6 +6,11 @@ export interface VoiceRevocations {
    * print may be made until the owner has checked them and marked the list as started.
    */
   readonly complete: boolean;
+  /**
+   * When the app started the list, with the first consent; null when the owner marked it as
+   * checked, or nobody did. A consent older than this is older than the list (ADR 0032 §4).
+   */
+  readonly startedAt: string | null;
 }
 
 /**
@@ -16,6 +21,6 @@ export interface VoiceRevocationListPort {
   /** Reaches the disk before it returns: revoking relies on it. */
   add(profileId: string): Promise<void>;
   read(): Promise<VoiceRevocations>;
-  /** Starts an empty list; only for a media library that never had a consent. */
-  start(): Promise<void>;
+  /** Starts the list, dated: only with the first consent of a media library. */
+  start(at: Date): Promise<void>;
 }

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
   copyFileSync,
+  existsSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -876,6 +878,87 @@ describe('A backup from before a revocation (KBC-071 BR-1, BR-2, ADR 0032)', () 
     expect(await profiles(restarted)).toEqual([]);
   });
 
+  describe('after a lost disk (ADR 0032 §4)', () => {
+    const logged = (media: Media, text: string): boolean =>
+      media.started.logs.some((line) => line.includes(text));
+
+    async function revokedAfterBackup() {
+      const { media, token } = await granted();
+      const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+      const copy = snapshotDatabase(media);
+      await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+      await closeApp();
+      return { media, profile, copy };
+    }
+
+    function loseTheDisk(media: Media): void {
+      rmSync(media.mediaDir, { recursive: true, force: true });
+      mkdirSync(media.mediaDir, { recursive: true });
+    }
+
+    async function expectNoPrintUntilChecked(
+      restored: Media,
+      profileId: string,
+    ): Promise<void> {
+      expect(logged(restored, 'voice revocation list is lost')).toBe(true);
+      const again = await restored.owner(
+        'POST',
+        `/api/v1/voice-profiles/${profileId}/recalculate`,
+        {},
+      );
+      expect(again.statusCode).toBe(409);
+    }
+
+    it('the API on the empty disk first, the backup after it: the list reads lost', async () => {
+      const { media, profile, copy } = await revokedAfterBackup();
+      loseTheDisk(media);
+      await startMedia({ state: media.started.state });
+      expect(existsSync(join(media.mediaDir, REVOCATIONS))).toBe(false);
+      const restored = await restoreAndRestart(media, copy);
+      await expectNoPrintUntilChecked(restored, profile.id);
+    });
+
+    it('the backup first, the API after it: the list reads lost', async () => {
+      const { media, profile, copy } = await revokedAfterBackup();
+      loseTheDisk(media);
+      copyFileSync(copy, join(media.mediaDir, 'media.db'));
+      const restored = await startMedia({ state: media.started.state });
+      await expectNoPrintUntilChecked(restored, profile.id);
+    });
+
+    it('a consent on the empty disk does not vouch for the backup restored after it', async () => {
+      const { media, profile, copy } = await revokedAfterBackup();
+      loseTheDisk(media);
+      const empty = await startMedia({ state: media.started.state });
+      const { token } = await pairVoicePrinter(empty, [
+        'diarize',
+        'transcribe',
+        'voice-profile',
+      ]);
+      await readyProfile(empty, { token, name: 'Outra pessoa' });
+      expect(logged(empty, 'voice revocation list is lost')).toBe(false);
+      const restored = await restoreAndRestart(empty, copy);
+      await expectNoPrintUntilChecked(restored, profile.id);
+    });
+
+    it('a backup older than the first consent loses nothing', async () => {
+      const { media, token } = await granted();
+      const copy = snapshotDatabase(media);
+      await readyProfile(media, { token, name: 'Gabriel' });
+      const restored = await restoreAndRestart(media, copy);
+      expect(logged(restored, 'voice revocation list is lost')).toBe(false);
+      const { token: renewed } = await pairVoicePrinter(restored, [
+        'diarize',
+        'transcribe',
+        'voice-profile',
+      ]);
+      await readyProfile(restored, { token: renewed, name: 'Depois' });
+      expect((await profiles(restored)).map(({ status }) => status)).toEqual([
+        'ready',
+      ]);
+    });
+  });
+
   it('checked by the owner, the lost list works again', async () => {
     const { media, token } = await granted();
     const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
@@ -921,7 +1004,9 @@ describe('A backup from before a revocation (KBC-071 BR-1, BR-2, ADR 0032)', () 
     const lines = readFileSync(join(media.mediaDir, REVOCATIONS), 'utf8')
       .split('\n')
       .filter((line) => line !== '');
-    expect(lines).toEqual([REVOCATION_LIST_HEADER, profile.id]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(new RegExp(`^${REVOCATION_LIST_HEADER} since `));
+    expect(lines[1]).toBe(profile.id);
   });
 });
 

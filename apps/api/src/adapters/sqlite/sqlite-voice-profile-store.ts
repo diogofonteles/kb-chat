@@ -186,6 +186,13 @@ export class SqliteVoiceProfileStore implements VoiceProfileStorePort {
       .map((row) => text(row, 'id'));
   }
 
+  oldestConsentAt(): string | null {
+    const row = this.db
+      .prepare('SELECT min(registered_at) AS oldest FROM voice_consents')
+      .get();
+    return row ? nullableText(row, 'oldest') : null;
+  }
+
   recalculate(input: { profileId: string; jobId: string; now: Date }): boolean {
     return inTransaction(this.db, () => {
       const active = this.db

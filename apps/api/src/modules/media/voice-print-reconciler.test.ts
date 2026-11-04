@@ -1,4 +1,3 @@
-import type { VoiceConsentEntry } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { StoredVoiceProfile } from '../../ports/voice-profile-store.js';
 import type { VoiceRevocations } from '../../ports/voice-revocation-list.js';
@@ -9,6 +8,8 @@ import {
 } from './voice-print-reconciler.js';
 
 const AT = new Date('2026-11-04T12:00:00.000Z');
+const WHOLE: VoiceRevocations = { ids: [], complete: true, startedAt: null };
+const LOST: VoiceRevocations = { ...WHOLE, complete: false };
 
 const reconcilerWith = (input: {
   profiles?: readonly string[];
@@ -26,11 +27,8 @@ const reconcilerWith = (input: {
     profiles: {
       ids: () => [...known],
       get: (id) => (known.has(id) ? ({ id } as StoredVoiceProfile) : null),
-      report: () =>
-        Array.from(
-          { length: input.consents ?? 1 },
-          () => ({}) as VoiceConsentEntry,
-        ),
+      oldestConsentAt: () =>
+        (input.consents ?? 1) > 0 ? '2026-10-01T00:00:00.000Z' : null,
       revoke,
     },
     prints: {
@@ -40,7 +38,7 @@ const reconcilerWith = (input: {
     },
     revocations: {
       add: () => Promise.resolve(),
-      read: () => Promise.resolve(input.list ?? { ids: [], complete: true }),
+      read: () => Promise.resolve(input.list ?? WHOLE),
       start,
     },
     now: () => AT,
@@ -82,7 +80,7 @@ describe('VoicePrintReconciler (ADR 0032)', () => {
     const { reconciler, remove, revoke } = reconcilerWith({
       profiles: ['back', 'kept'],
       prints: ['back'],
-      list: { ids: ['back', 'gone'], complete: true },
+      list: { ...WHOLE, ids: ['back', 'gone'] },
     });
     expect((await reconciler.reconcile()).reapplied).toBe(1);
     expect(revoke).toHaveBeenCalledExactlyOnceWith({
@@ -93,28 +91,32 @@ describe('VoicePrintReconciler (ADR 0032)', () => {
     expect(remove).toHaveBeenCalledWith('back');
   });
 
-  it('starts the list of a library with no consent yet', async () => {
-    const { reconciler, start } = reconcilerWith({
-      list: { ids: [], complete: false },
-      consents: 0,
-    });
+  it('leaves the list of a library with no consent alone: a disk may be on its way back', async () => {
+    const { reconciler, start } = reconcilerWith({ list: LOST, consents: 0 });
     expect((await reconciler.reconcile()).listLost).toBe(false);
-    expect(start).toHaveBeenCalledOnce();
+    expect(start).not.toHaveBeenCalled();
   });
 
   it('says the list is lost when consents exist without it, and never starts it', async () => {
     const { reconciler, start } = reconcilerWith({
-      list: { ids: [], complete: false },
+      list: LOST,
       consents: 1,
     });
     expect((await reconciler.reconcile()).listLost).toBe(true);
     expect(start).not.toHaveBeenCalled();
   });
 
+  it('says the list is lost when it is younger than the consents', async () => {
+    const { reconciler } = reconcilerWith({
+      list: { ...WHOLE, startedAt: '2026-11-01T00:00:00.000Z' },
+    });
+    expect((await reconciler.reconcile()).listLost).toBe(true);
+  });
+
   it('a list marked lost still reapplies the ids it has', async () => {
     const { reconciler, revoke } = reconcilerWith({
       profiles: ['back'],
-      list: { ids: ['back'], complete: false },
+      list: { ...LOST, ids: ['back'] },
     });
     await reconciler.reconcile();
     expect(revoke).toHaveBeenCalledOnce();

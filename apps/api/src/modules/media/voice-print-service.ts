@@ -25,6 +25,7 @@ import type {
 } from '../../ports/voice-profile-store.js';
 import type { VoiceRevocationListPort } from '../../ports/voice-revocation-list.js';
 import { JOB_LEASE_MS } from './media-policy.js';
+import { voiceListState } from './voice-list-state.js';
 import {
   aliasOf,
   mergeTurns,
@@ -105,8 +106,9 @@ export class VoicePrintService {
   ): Promise<void> {
     const profileId = this.deps.profiles.heldProfile(owner);
     if (!profileId) throw leaseLost();
-    const { ids, complete } = await this.deps.revocations.read();
-    if (!complete || ids.includes(profileId)) throw leaseLost();
+    const list = await this.deps.revocations.read();
+    const state = voiceListState(list, this.deps.profiles.oldestConsentAt());
+    if (state !== 'whole' || list.ids.includes(profileId)) throw leaseLost();
     await this.deps.prints.put(profileId, done.embedding);
     const stored = this.deps.profiles.completePrint({
       owner,

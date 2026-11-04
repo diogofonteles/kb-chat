@@ -29,6 +29,7 @@ import type {
 } from '../../ports/voice-profile-store.js';
 import type { VoiceRevocationListPort } from '../../ports/voice-revocation-list.js';
 import type { Presence } from './transcriber-service.js';
+import { voiceListState, type VoiceListState } from './voice-list-state.js';
 import { toCollectionSpeaker, type AuthorLookup } from './voice-labels.js';
 
 export interface VoiceProfileServiceDeps {
@@ -117,7 +118,7 @@ export class VoiceProfileService {
     request: CreateVoiceProfileRequest,
   ): Promise<VoiceProfile> {
     const consent = this.consentOf(request.consent);
-    await this.assertMayPrint();
+    const list = await this.assertMayPrint();
     const collection = this.deps.rootOf(target.topic);
     const speaker = this.speakerOf(collection, request.speakerId);
     const sources = this.resolveSources(target.topic, request);
@@ -125,6 +126,8 @@ export class VoiceProfileService {
     if (!first) throw invalidSources();
     const consentId = randomUUID();
     const profileId = randomUUID();
+    // Before the consent, and dated before it: this list has seen every consent from now on.
+    if (list === 'unused') await this.deps.revocations.start(this.now());
     const created = this.deps.profiles.create({
       profileId,
       consentId,
@@ -203,10 +206,15 @@ export class VoiceProfileService {
   }
 
   /** No print for someone who revoked, nor any at all while the list is lost (ADR 0032). */
-  private async assertMayPrint(profileId?: string): Promise<void> {
-    const { ids, complete } = await this.deps.revocations.read();
-    if (!complete || (profileId !== undefined && ids.includes(profileId)))
+  private async assertMayPrint(profileId?: string): Promise<VoiceListState> {
+    const list = await this.deps.revocations.read();
+    const state = voiceListState(list, this.deps.profiles.oldestConsentAt());
+    if (
+      state === 'lost' ||
+      (profileId !== undefined && list.ids.includes(profileId))
+    )
       throw new AppError('MEDIA_CONFLICT', 'This consent was revoked');
+    return state;
   }
 
   private consentOf(sent: unknown): VoiceConsent {

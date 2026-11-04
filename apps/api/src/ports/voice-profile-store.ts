@@ -73,6 +73,8 @@ export interface VoiceProfileStorePort {
   list(collection: string): StoredVoiceProfile[];
   /** Every profile id, for the prints that lost theirs. */
   ids(): string[];
+  /** When the oldest consent was registered, revoked or not; null when there is none. */
+  oldestConsentAt(): string | null;
   /** Queues the print again; false when a job waits or runs, or nothing is left to use. */
   recalculate(input: {
     readonly profileId: string;

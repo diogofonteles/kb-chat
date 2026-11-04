@@ -1,11 +1,12 @@
 import type { VoicePrintVaultPort } from '../../ports/voice-print-vault.js';
 import type { VoiceProfileStorePort } from '../../ports/voice-profile-store.js';
 import type { VoiceRevocationListPort } from '../../ports/voice-revocation-list.js';
+import { voiceListState } from './voice-list-state.js';
 
 export interface VoicePrintReconcilerDeps {
   readonly profiles: Pick<
     VoiceProfileStorePort,
-    'ids' | 'get' | 'report' | 'revoke'
+    'ids' | 'get' | 'oldestConsentAt' | 'revoke'
   >;
   readonly prints: Pick<
     VoicePrintVaultPort,
@@ -41,8 +42,6 @@ export class VoicePrintReconciler {
   async reconcile(): Promise<Reconciled> {
     const { revocations, profiles, prints } = this.deps;
     const list = await revocations.read();
-    const neverUsed = !list.complete && profiles.report().length === 0;
-    if (neverUsed) await revocations.start();
     const reapplied = await this.reapply(list.ids);
     const orphans = await this.dropOrphans();
     const unfinished = await prints.removeUnfinished();
@@ -50,7 +49,7 @@ export class VoicePrintReconciler {
       reapplied,
       orphans,
       unfinished,
-      listLost: !list.complete && !neverUsed,
+      listLost: voiceListState(list, profiles.oldestConsentAt()) === 'lost',
     };
   }
 
