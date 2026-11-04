@@ -154,8 +154,10 @@ jobs:
           DPkg::Lock::Timeout "60";
           Dir::Cache::archives "$HOME/.cache/kb-chat-apt";
           CONF
+          # Each try starts by clearing what a killed one left: its apt holds the dpkg lock.
           tools/ci/retry.sh 3 180 sh -c \
-            'sudo dpkg --configure -a && pnpm --filter @kb-chat/e2e exec playwright install-deps webkit'
+            'sudo pkill -KILL -x "apt-get|dpkg|http|https"; sudo dpkg --configure -a &&
+            pnpm --filter @kb-chat/e2e exec playwright install-deps webkit'
           sudo chown -R "$USER" ~/.cache/kb-chat-apt
         timeout-minutes: 10
       - uses: ./.github/actions/setup-ffmpeg
