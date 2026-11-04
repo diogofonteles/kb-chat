@@ -44,7 +44,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: tools/ci/retry.sh 3 120 pnpm install --frozen-lockfile
+        timeout-minutes: 7
       - run: pnpm --filter @kb-chat/contracts build
       - run: pnpm lint
       - run: pnpm typecheck
@@ -67,7 +68,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: tools/ci/retry.sh 3 120 pnpm install --frozen-lockfile
+        timeout-minutes: 7
       # The media worker's tests convert real audio (KBC-034): ffmpeg and ffprobe.
       - if: matrix.ffmpeg
         uses: ./.github/actions/setup-ffmpeg
@@ -94,7 +96,8 @@ jobs:
           version: '0.13.6'
           enable-cache: true
           cache-dependency-glob: tools/transcriber/uv.lock
-      - run: uv sync --locked
+      - run: ../ci/retry.sh 3 120 uv sync --locked
+        timeout-minutes: 7
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pytest
@@ -118,21 +121,46 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: tools/ci/retry.sh 3 120 pnpm install --frozen-lockfile
+        timeout-minutes: 7
       # Only the browser this group uses (none for Google Chrome, already on the runner),
       # cached by the lockfile (the Playwright version).
       - if: matrix.browser != ''
         uses: actions/cache@v4
         id: browsers
+        timeout-minutes: 5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ matrix.browser }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - if: matrix.browser != '' && steps.browsers.outputs.cache-hit != 'true'
-        run: pnpm --filter @kb-chat/e2e exec playwright install ${{ matrix.browser }}
+        run: tools/ci/retry.sh 3 180 pnpm --filter @kb-chat/e2e exec playwright install ${{ matrix.browser }}
+        timeout-minutes: 10
       # WebKit needs system libraries the runner lacks (Chrome's are there); every group
-      # needs ffmpeg for the E2E server's media worker (KBC-034).
+      # needs ffmpeg for the E2E server's media worker (KBC-034). apt hung for 20 minutes on
+      # two runs: bounded here, with its packages cached so a retry downloads little.
       - if: matrix.browser == 'webkit'
-        run: pnpm --filter @kb-chat/e2e exec playwright install-deps webkit
+        uses: actions/cache@v4
+        timeout-minutes: 5
+        with:
+          path: ~/.cache/kb-chat-apt
+          key: apt-webkit-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: apt-webkit-${{ runner.os }}-
+      - if: matrix.browser == 'webkit'
+        run: |
+          mkdir -p ~/.cache/kb-chat-apt
+          sudo tee /etc/apt/apt.conf.d/99-kb-chat-ci <<CONF
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::Retries "3";
+          DPkg::Lock::Timeout "60";
+          Dir::Cache::archives "$HOME/.cache/kb-chat-apt";
+          CONF
+          # Each try starts by clearing what a killed one left: its apt holds the dpkg lock.
+          tools/ci/retry.sh 3 180 sh -c \
+            'sudo pkill -KILL -x "apt-get|dpkg|http|https"; sudo dpkg --configure -a &&
+            pnpm --filter @kb-chat/e2e exec playwright install-deps webkit'
+          sudo chown -R "$USER" ~/.cache/kb-chat-apt
+        timeout-minutes: 10
       - uses: ./.github/actions/setup-ffmpeg
         timeout-minutes: 5
       # Media specs play real AAC: the runner's own Google Chrome (channel "chrome"; the
