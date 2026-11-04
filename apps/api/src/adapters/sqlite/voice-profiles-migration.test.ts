@@ -58,8 +58,7 @@ describe('media migration 15 (KBC-071)', () => {
       `INSERT INTO jobs (id, media_id, kind, status, voice_profile_id, created_at, updated_at)
        VALUES (?, 'm1', ?, 'queued', ?, '${AT}', '${AT}')`,
     );
-    // `waveform` is KBC-066's: its migration 14 rebuilds this table before this one does.
-    for (const kind of new Set([...MEDIA_JOB_KINDS, 'waveform'])) {
+    for (const kind of MEDIA_JOB_KINDS) {
       const profile = kind === 'voice-profile' ? 'p1' : null;
       expect(() => insert.run(`job-${kind}`, kind, profile)).not.toThrow();
     }
