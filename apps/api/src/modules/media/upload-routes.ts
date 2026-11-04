@@ -33,7 +33,7 @@ const checkOptions = {
     body: uploadCheckRequestSchema,
     response: { 200: uploadCheckSchema },
   },
-};
+} as const;
 
 /** Upload-Offset as tus sends it: digits only. */
 const offsetSchema = z

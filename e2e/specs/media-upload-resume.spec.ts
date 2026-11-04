@@ -166,9 +166,10 @@ test('AC-8: three files at once, each with its bar, pass axe at this width', asy
 }) => {
   const page = await uploaderPage(browser);
   await useTheme(page, 'light');
-  const release = Promise.withResolvers<void>();
+  let release: (value: void) => void = () => undefined;
+  const released = new Promise<void>((resolve) => (release = resolve));
   await page.route(UPLOAD_URL, async (route: Route) => {
-    if (route.request().method() === 'PATCH') await release.promise;
+    if (route.request().method() === 'PATCH') await released;
     return route.continue();
   });
   const dialog = await openPanel(page);
@@ -193,7 +194,7 @@ test('AC-8: three files at once, each with its bar, pass axe at this width', asy
       document.documentElement.clientWidth,
   );
   expect(overflow).toBe(false);
-  release.resolve();
+  release();
   await expect(dialog).toBeHidden({ timeout: 30_000 });
 });
 
