@@ -6,6 +6,7 @@ import {
   Injector,
   DestroyRef,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   signal,
@@ -45,7 +46,9 @@ import { MiniPlayer } from '@features/media/player/mini-player.js';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
-const isMediaUrl = (url: string): boolean => /^\/midia(\/|\?|#|$)/.test(url);
+/** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
+const isMediaUrl = (url: string): boolean =>
+  /^\/(midia|biblioteca)(\/|\?|#|$)/.test(url);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free
@@ -208,6 +211,13 @@ export class ChatPage {
     afterNextRender(() => {
       if (this.view?.matchMedia?.(DESKTOP_QUERY).matches)
         this.composer()?.focus();
+    });
+    // Back from a media page, what was pressed left with it: the focus stays in the page.
+    let wasOnMedia = this.onMedia();
+    afterRenderEffect(() => {
+      const onMedia = this.onMedia();
+      if (wasOnMedia && !onMedia && this.desktop()) this.composer()?.focus();
+      wasOnMedia = onMedia;
     });
   }
 

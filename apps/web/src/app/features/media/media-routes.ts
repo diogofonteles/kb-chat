@@ -3,6 +3,7 @@ import { toObservable } from '@angular/core/rxjs-interop';
 import { Router, type CanMatchFn, type Routes } from '@angular/router';
 import { SessionStore } from '@core/auth/session-store.js';
 import { filter, map, take } from 'rxjs';
+import { hasLibrary } from './library/library-access.js';
 
 /**
  * The media pages exist only when the server has the media library on (me.media) and the
@@ -24,10 +25,47 @@ export const mediaEnabled: CanMatchFn = () => {
 };
 
 /**
- * /midia, /midia/marcadores and /midia/:id (screens.md T14, T15), inside the chat page's
+ * The library (KBC-051 BR-1): "Biblioteca de mídia" on top of "Ouvir mídia". Without it the
+ * person keeps the list of T14; /biblioteca goes home.
+ */
+export const libraryEnabled: CanMatchFn = () => {
+  const session = inject(SessionStore);
+  const router = inject(Router);
+  return toObservable(session.state).pipe(
+    filter((state) => state.kind !== 'loading'),
+    take(1),
+    map(() => (hasLibrary(session) ? true : router.parseUrl('/'))),
+  );
+};
+
+/** /midia, for who has the library, is /biblioteca (FR-7); else it is not this route. */
+export const libraryOnly: CanMatchFn = () => {
+  const session = inject(SessionStore);
+  return toObservable(session.state).pipe(
+    filter((state) => state.kind !== 'loading'),
+    take(1),
+    map(() => hasLibrary(session)),
+  );
+};
+
+/**
+ * /biblioteca (T16), /midia, /midia/marcadores and /midia/:id (screens.md T14, T15), inside the chat page's
  * layout.
  */
 export const MEDIA_ROUTES: Routes = [
+  {
+    path: 'biblioteca',
+    canMatch: [libraryEnabled],
+    title: $localize`:@@route.libraryTitle:Biblioteca — Nova Alexandria`,
+    loadComponent: () =>
+      import('./library/library-page.js').then((m) => m.LibraryPage),
+  },
+  {
+    path: 'midia',
+    canMatch: [libraryOnly],
+    loadComponent: () =>
+      import('./library/media-redirect.js').then((m) => m.MediaRedirect),
+  },
   {
     path: 'midia',
     canMatch: [mediaEnabled],

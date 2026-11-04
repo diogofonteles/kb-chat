@@ -1,0 +1,114 @@
+<div
+  class="chips"
+  role="group"
+  aria-label="Filtros"
+  i18n-aria-label="@@library.filters"
+>
+  @for (chip of stateChips(); track chip.value) {
+    <button
+      type="button"
+      class="chip"
+      [attr.aria-pressed]="chip.pressed"
+      (click)="toggleState(chip.value)"
+    >
+      @if (chip.pressed) {
+        <span aria-hidden="true">✓ </span>
+      }
+      {{ chip.label }}
+    </button>
+  }
+  @if (showAuthorship()) {
+    <label class="choice" [class.on]="authorship() !== ''">
+      <span class="label" i18n="@@library.authorship">Autoria</span>
+      <select (change)="chooseAuthorship($event)">
+        <option
+          value=""
+          [selected]="authorship() === ''"
+          i18n="@@library.allAuthorships"
+        >
+          Todas
+        </option>
+        @for (option of authors(); track option.value) {
+          <option
+            [value]="option.value"
+            [selected]="option.value === authorship()"
+          >
+            {{ option.label }}
+          </option>
+        }
+      </select>
+    </label>
+  }
+  @if (showTopics()) {
+    <label class="choice" [class.on]="filters().topic !== null">
+      <span class="label" i18n="@@library.topic">Acervo</span>
+      <select (change)="chooseTopic($event)">
+        <option
+          value=""
+          [selected]="filters().topic === null"
+          i18n="@@library.allTopics"
+        >
+          Todos
+        </option>
+        @for (option of topicOptions(); track option.value) {
+          <option
+            [value]="option.value"
+            [selected]="option.value === filters().topic"
+          >
+            {{ option.label }}
+          </option>
+        }
+      </select>
+    </label>
+  }
+  @if (active() > 0) {
+    <button
+      type="button"
+      class="clear"
+      (click)="clear()"
+      i18n="@@library.clearFilters"
+    >
+      Limpar filtros
+    </button>
+  }
+</div>
+<div class="tools">
+  <app-menu-button
+    kind="choice"
+    class="sort"
+    [label]="sortLabel()"
+    [options]="sortOptions()"
+    (chosen)="chooseSort($event)"
+  >
+    <span>{{ sortLabel() }} <span aria-hidden="true">▾</span></span>
+  </app-menu-button>
+  <div
+    class="views"
+    role="group"
+    aria-label="Visão"
+    i18n-aria-label="@@library.view"
+  >
+    <button
+      type="button"
+      class="view"
+      [attr.aria-pressed]="view() === 'list'"
+      (click)="viewChange.emit('list')"
+    >
+      <span aria-hidden="true">☰</span>
+      <span class="visually-hidden" i18n="@@library.viewList"
+        >Ver em lista</span
+      >
+    </button>
+    <button
+      type="button"
+      class="view"
+      [attr.aria-pressed]="view() === 'grid'"
+      (click)="viewChange.emit('grid')"
+    >
+      <span aria-hidden="true">▦</span>
+      <span class="visually-hidden" i18n="@@library.viewGrid"
+        >Ver em grade</span
+      >
+    </button>
+  </div>
+</div>

@@ -1,0 +1,97 @@
+:host {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* Chips wrap instead of scrolling sideways: no option hides off screen (MA-18). */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chip,
+.clear,
+.view {
+  min-height: var(--target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.clear {
+  border-style: dashed;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target);
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+}
+
+.choice.on {
+  border-color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-text);
+}
+
+.label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.choice select {
+  min-height: 2.25rem;
+  max-width: 14rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.sort {
+  --menu-trigger-padding: var(--space-3);
+  --menu-trigger-size: var(--text-sm);
+  --menu-trigger-weight: 600;
+  --menu-trigger-color: var(--color-text);
+}
+
+.views {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.view {
+  min-width: var(--target);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+}
+
+.view[aria-pressed='true'] {
+  border-color: var(--color-text);
+  background: var(--color-surface-muted);
+  box-shadow: inset 0 0 0 1px var(--color-text);
+}

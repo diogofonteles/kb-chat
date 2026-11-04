@@ -1,5 +1,10 @@
 import { httpResource } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
   myMediaBookmarkListSchema,
@@ -8,6 +13,8 @@ import {
 import { formatClock } from '@kb-chat/player-core';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MY_BOOKMARKS_URL } from '@core/media/bookmarks-api.js';
+import { SessionStore } from '@core/auth/session-store.js';
+import { hasLibrary } from './library/library-access.js';
 
 /** What the player page reads to play from a bookmark (navigation state, not the URL). */
 export interface PlayFromState {
@@ -23,7 +30,13 @@ export interface PlayFromState {
   imports: [RouterLink],
   template: `
     <section class="page" aria-labelledby="my-bookmarks-title">
-      <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
+      @if (backToLibrary()) {
+        <a class="back" routerLink="/biblioteca" i18n="@@library.back"
+          >← Biblioteca</a
+        >
+      } @else {
+        <a class="back" routerLink="/midia" i18n="@@media.back">← Mídia</a>
+      }
       <h2 id="my-bookmarks-title" i18n="@@bookmarks.mine">Meus marcadores</h2>
 
       @if (loadError()) {
@@ -75,6 +88,9 @@ export interface PlayFromState {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MyBookmarksPage {
+  /** "← Biblioteca" for who has the library (KBC-051), "← Mídia" otherwise. */
+  private readonly session = inject(SessionStore);
+  protected readonly backToLibrary = computed(() => hasLibrary(this.session));
   protected readonly list = httpResource(() => MY_BOOKMARKS_URL, {
     parse: (body) => myMediaBookmarkListSchema.parse(body).items,
   });

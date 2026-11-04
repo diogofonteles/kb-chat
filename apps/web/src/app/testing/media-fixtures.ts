@@ -49,6 +49,7 @@ export const chatStoreOn = (slug = 'hermetismo', title = 'Hermetismo') => ({
   provide: ChatStore,
   useValue: {
     topicSlug: signal(slug),
+    topicsKnown: signal(true),
     topic: signal(aTopic({ slug, title, documentCount: 10 })),
     topicList: signal([
       aTopic({ slug, title, documentCount: 10 }),

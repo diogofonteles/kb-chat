@@ -96,6 +96,8 @@ function pickDefaultTopic(list: TopicList | null): string | null {
 export interface AskOptions {
   readonly mode?: SearchMode;
   readonly filters?: SearchFilters;
+  /** Where to search this time; the person's "Buscar em" choice stays as it is. */
+  readonly kinds?: readonly SearchKind[];
   readonly origin?: Ask['origin'];
 }
 
@@ -180,6 +182,10 @@ export class ChatStore {
     this.topics.hasValue() ? this.topics.value() : null,
   );
   readonly topicList = computed(() => this.topicData()?.items ?? []);
+  /** The list arrived or failed: only now a collection's absence means something. */
+  readonly topicsKnown = computed(
+    () => this.topics.hasValue() || this.topics.error() !== undefined,
+  );
   /** The chosen collection survives a reload of the list (a collection created, KBC-048). */
   readonly topicSlug = linkedSignal<TopicList | null, string | null>({
     source: this.topicData,
@@ -322,6 +328,7 @@ export class ChatStore {
     const {
       mode = this.modeState(),
       filters = NO_FILTERS,
+      kinds = this.kindsState(),
       origin = 'typed',
     } = options;
     const topic = this.topicSlug();
@@ -335,7 +342,7 @@ export class ChatStore {
       question: trimmed,
       mode,
       filters,
-      kinds: this.kindsState(),
+      kinds,
       origin,
     });
   }

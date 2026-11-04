@@ -17,7 +17,7 @@ import type {
   SavedProgress,
 } from '../../ports/listening-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
-import { toMediaItem, type ItemView } from './to-media-item.js';
+import { mediaAuthorOf, toMediaItem, type ItemView } from './to-media-item.js';
 import type { Presence } from './transcriber-service.js';
 
 /** Who acts on the media library: their principal, the collections they see, the role. */
@@ -299,14 +299,7 @@ export class MediaService {
 
   /** The stored author as the list now names it (still shown if no longer listed). */
   private authorOf(record: MediaRecord): MediaAuthor {
-    if (record.author === null) return null;
-    return (
-      this.deps.authorOf(record.topic, record.author) ?? {
-        slug: record.author,
-        name: record.author,
-        main: false,
-      }
-    );
+    return mediaAuthorOf(record, this.deps.authorOf);
   }
 
   private assertTopic(topic: string): void {

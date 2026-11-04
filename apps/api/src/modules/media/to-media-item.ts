@@ -1,4 +1,5 @@
 import type {
+  Author,
   MediaAuthor,
   MediaFailure,
   MediaItem,
@@ -30,6 +31,21 @@ export interface ItemView {
   readonly presence?: Presence;
   /** Its author as the collection's list names it now (KBC-049); null is "Outros autores". */
   readonly author?: MediaAuthor;
+}
+
+/** The stored author as the list now names it (still shown if no longer listed, KBC-049). */
+export function mediaAuthorOf(
+  record: MediaRecord,
+  authorOf: (topic: string, slug: string) => Author | null,
+): MediaAuthor {
+  if (record.author === null) return null;
+  return (
+    authorOf(record.topic, record.author) ?? {
+      slug: record.author,
+      name: record.author,
+      main: false,
+    }
+  );
 }
 
 const NO_TRANSCRIBER: Presence = { transcriber: 'none', offSince: null };

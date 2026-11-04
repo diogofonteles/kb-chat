@@ -63,6 +63,7 @@ import {
   statusTextOf,
   transcriptionTextOf,
 } from './media-labels.js';
+import { hasLibrary } from './library/library-access.js';
 import { MEDIA_POLL_MS } from './media-polling.js';
 import { BookmarkList } from './bookmark-list.js';
 import { MediaPlayer } from './player/media-player.js';
@@ -97,7 +98,9 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
 })
 export class MediaPlayerPage {
   private readonly engine = inject(MediaEngine);
+  /** "← Biblioteca" for who has the library (KBC-051), "← Mídia" otherwise. */
   private readonly session = inject(SessionStore);
+  protected readonly backToLibrary = computed(() => hasLibrary(this.session));
   private readonly saver = inject(ProgressSaver);
   protected readonly shortcuts = inject(PlayerShortcuts);
   private readonly title = inject(Title);

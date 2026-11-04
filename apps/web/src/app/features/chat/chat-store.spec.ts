@@ -194,6 +194,15 @@ describe('ChatStore and spoken passages (KBC-039)', () => {
     expect(localStorage.getItem('kb-chat.search-kinds')).toBe('["audio"]');
   });
 
+  it('searches only what was said when asked to, and keeps the person\'s "Buscar em" (KBC-051 AC-12)', async () => {
+    const { store, searches } = await setup();
+
+    store.ask('conselheira', { kinds: ['audio'] });
+
+    expect(searches[0]?.kinds).toEqual(['audio']);
+    expect(store.kinds()).toEqual(['text', 'audio']);
+  });
+
   it('opens a passage in the reading panel, logs it and closes the document (FR-4, AC-7)', async () => {
     const { store } = await setup();
     store.open('hermetismo', { id: 'a.md', title: 'A' });

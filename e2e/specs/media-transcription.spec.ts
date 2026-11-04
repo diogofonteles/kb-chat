@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import {
   CSRF,
   expect,
@@ -34,6 +34,20 @@ async function openMedia(page: Page) {
   ).toBeVisible();
 }
 
+type Viewport = { width: number; height: number } | null;
+
+/** A person with the list of T14 (masters get the library instead, KBC-051). */
+async function listPage(browser: Browser, viewport: Viewport): Promise<Page> {
+  const email = uniqueEmail('lista-transcricao');
+  const owner = await ownerApi();
+  await invite(owner, email, {
+    topics: ['hermetismo'],
+    features: ['search', 'media'],
+  });
+  await owner.dispose();
+  return pageAs(browser, email, viewport);
+}
+
 const seriousViolations = async (page: Page, include?: string) => {
   const builder = new AxeBuilder({ page });
   if (include) builder.include(include);
@@ -62,8 +76,10 @@ async function transcribersOffForTwoHours(): Promise<void> {
 }
 
 test('AC-2: with no transcriber seen for 2 h, a ready audio waits and says since when it is off', async ({
-  page,
+  browser,
+  viewport,
 }) => {
+  const page = await listPage(browser, viewport);
   await transcribersOffForTwoHours();
   const owner = await ownerApi();
   const { title } = await uploadReady(owner, {
@@ -117,9 +133,11 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
   }) => {
     await useTheme(page, theme);
     await transcribersOffForTwoHours();
-    await openMedia(page);
-    // The status of the media list (T14) in this theme.
-    expect(await seriousViolations(page, 'app-media-list-page')).toEqual([]);
+    // A master's media page is the library (KBC-051): its axe pass is media-library-home.
+    await page.goto('/biblioteca');
+    await expect(
+      page.getByRole('heading', { name: 'Biblioteca', level: 2 }),
+    ).toBeVisible();
 
     const name = `Mac ${theme} ${uniqueTag()}`;
     const dialog = await openSettings(page);

@@ -14,4 +14,5 @@ export const FEATURE_LABELS: Record<Feature, () => string> = {
     $localize`:@@feature.collectionCreate:Criar acervos`,
   'media-edit': () => $localize`:@@feature.mediaEdit:Editar áudios`,
   'media-edit-ai': () => $localize`:@@feature.mediaEditAi:Propor faixas com IA`,
+  'media-library': () => $localize`:@@feature.mediaLibrary:Biblioteca de mídia`,
 };

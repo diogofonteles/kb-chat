@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { DEFAULT_LIBRARY_PREFERENCES } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
@@ -20,6 +21,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     const first = await media.owner('GET', '/api/v1/media/preferences');
     expect(first.statusCode).toBe(200);
     expect(first.json()).toEqual({
+      ...DEFAULT_LIBRARY_PREFERENCES,
       speed: 1,
       showRemaining: true,
       skipBackSec: 15,
@@ -35,6 +37,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     });
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toEqual({
+      ...DEFAULT_LIBRARY_PREFERENCES,
       speed: 1.5,
       showRemaining: false,
       skipBackSec: 10,
@@ -44,6 +47,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
     ).toEqual({
+      ...DEFAULT_LIBRARY_PREFERENCES,
       speed: 1.5,
       showRemaining: false,
       skipBackSec: 10,
@@ -66,6 +70,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     expect(
       (await media.owner('GET', '/api/v1/media/preferences')).json(),
     ).toEqual({
+      ...DEFAULT_LIBRARY_PREFERENCES,
       speed: 1,
       showRemaining: true,
       skipBackSec: 15,
@@ -91,6 +96,7 @@ describe('Media listening: preferences (KBC-041 FR-1)', () => {
     expect(
       (await listener.call('GET', '/api/v1/media/preferences')).json(),
     ).toEqual({
+      ...DEFAULT_LIBRARY_PREFERENCES,
       speed: 1,
       showRemaining: true,
       skipBackSec: 15,

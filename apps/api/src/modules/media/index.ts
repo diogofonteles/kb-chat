@@ -21,6 +21,8 @@ export {
   type BookmarkServiceDeps,
 } from './bookmark-service.js';
 export { listeningRoutes } from './listening-routes.js';
+export { libraryRoutes } from './library-routes.js';
+export { LibraryService, type LibraryServiceDeps } from './library-service.js';
 export {
   DEFAULT_PREFERENCES,
   ListeningService,

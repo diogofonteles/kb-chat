@@ -1,9 +1,9 @@
 import {
+  listeningPreferencesSchema,
+  listeningPreferencesUpdateSchema,
   mediaIdSchema,
-  mediaPreferencesSchema,
   mediaProgressRequestSchema,
   mediaProgressSchema,
-  saveMediaPreferencesRequestSchema,
 } from '@kb-chat/contracts';
 import type { FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -19,13 +19,13 @@ const LISTEN: RouteAccess = { feature: 'media' };
 const OPTIONS = {
   preferences: {
     config: { access: LISTEN },
-    schema: { response: { 200: mediaPreferencesSchema } },
+    schema: { response: { 200: listeningPreferencesSchema } },
   },
   savePreferences: {
     config: { access: LISTEN },
     schema: {
-      body: saveMediaPreferencesRequestSchema,
-      response: { 200: mediaPreferencesSchema },
+      body: listeningPreferencesUpdateSchema,
+      response: { 200: listeningPreferencesSchema },
     },
   },
   progress: {

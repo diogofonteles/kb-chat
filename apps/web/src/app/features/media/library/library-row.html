@@ -1,0 +1,77 @@
+<span class="lead">
+  @if (ready()) {
+    <input
+      type="checkbox"
+      class="select"
+      [checked]="selected()"
+      [attr.aria-label]="selectLabel()"
+      (change)="toggleSelected($event)"
+    />
+    <button
+      type="button"
+      class="play"
+      [attr.aria-label]="playLabel()"
+      (click)="played.emit()"
+    >
+      <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>
+    </button>
+  }
+</span>
+@if (ready()) {
+  <a
+    class="main"
+    [attr.data-media-id]="item().id"
+    [routerLink]="['/midia', item().id]"
+    ><span class="title" [title]="item().title">{{ item().title }}</span></a
+  >
+} @else {
+  <span class="main" [attr.data-media-id]="item().id"
+    ><span class="title" [title]="item().title">{{ item().title }}</span></span
+  >
+}
+<span class="meta">
+  <app-authorship-badge [mediaAuthor]="item().author" />
+  @if (topicTitle()) {
+    <span class="topic">{{ topicTitle() }}</span>
+  }
+  @if (duration()) {
+    <span class="duration">{{ duration() }}</span>
+  }
+  @if (status()) {
+    <span class="status" [class.failed]="item().status === 'failed'">{{
+      status()
+    }}</span>
+  }
+  @if (state()) {
+    <span class="state">{{ state() }}</span>
+  }
+  @if (resume()) {
+    <span class="resume">{{ resume() }}</span>
+  }
+</span>
+@if (resume()) {
+  <span class="position" aria-hidden="true"
+    ><span [style.width.%]="percent()"></span
+  ></span>
+}
+<span class="actions">
+  @if (master() && item().canRetry) {
+    <button
+      type="button"
+      class="secondary"
+      (click)="retried.emit()"
+      i18n="@@media.retry"
+    >
+      Tentar de novo
+    </button>
+  }
+  @if (options().length > 0) {
+    <app-menu-button
+      [label]="menuLabel()"
+      [options]="options()"
+      (chosen)="choose($event)"
+    >
+      <span aria-hidden="true">⋯</span>
+    </app-menu-button>
+  }
+</span>

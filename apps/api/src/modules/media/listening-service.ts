@@ -1,9 +1,10 @@
 import {
+  DEFAULT_LIBRARY_PREFERENCES,
   MEDIA_COMPLETION_RATIO,
+  type ListeningPreferences,
+  type ListeningPreferencesUpdate,
   type MediaItem,
-  type MediaPreferences,
   type MediaProgress,
-  type SaveMediaPreferencesRequest,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { ListeningStorePort } from '../../ports/listening-store.js';
@@ -11,15 +12,23 @@ import type { MediaActor, MediaService } from './media-service.js';
 
 /**
  * Before any choice: normal speed, remaining time, back 15 s and forward 30 s (T15),
- * silences as recorded (KBC-044 BR-2).
+ * silences as recorded (KBC-044 BR-2); the library by recently played, as a list, with no
+ * filter (KBC-051 BR-7).
  */
-export const DEFAULT_PREFERENCES: MediaPreferences = {
+export const DEFAULT_PREFERENCES: ListeningPreferences = {
   speed: 1,
   showRemaining: true,
   skipBackSec: 15,
   skipForwardSec: 30,
   skipSilences: false,
+  ...DEFAULT_LIBRARY_PREFERENCES,
 };
+
+/** Save times only move forward, so each save is a distinct version (even in 1 ms). */
+export function nextSaveTime(previous: string | null, now: Date): Date {
+  const after = previous === null ? 0 : Date.parse(previous) + 1;
+  return now.getTime() >= after ? now : new Date(after);
+}
 
 export interface ListeningServiceDeps {
   readonly listening: ListeningStorePort;
@@ -36,22 +45,22 @@ export interface ListeningServiceDeps {
 export class ListeningService {
   constructor(private readonly deps: ListeningServiceDeps) {}
 
-  preferences(actor: MediaActor): MediaPreferences {
+  preferences(actor: MediaActor): ListeningPreferences {
     return (
       this.deps.listening.preferencesOf(actor.principal) ?? DEFAULT_PREFERENCES
     );
   }
 
-  /** A client that does not send `skipSilences` (older than KBC-044) keeps the stored one. */
+  /**
+   * Only what changed is sent (KBC-051 FR-5): the player and the library each save their
+   * own fields over what is kept, so neither overwrites a newer choice of the other. A
+   * client that does not send `skipSilences` (older than KBC-044) keeps the stored one.
+   */
   savePreferences(
     actor: MediaActor,
-    request: SaveMediaPreferencesRequest,
-  ): MediaPreferences {
-    const preferences: MediaPreferences = {
-      ...request,
-      skipSilences:
-        request.skipSilences ?? this.preferences(actor).skipSilences,
-    };
+    update: ListeningPreferencesUpdate,
+  ): ListeningPreferences {
+    const preferences = { ...this.preferences(actor), ...update };
     this.deps.listening.savePreferences({
       principal: actor.principal,
       preferences,
@@ -73,7 +82,7 @@ export class ListeningService {
   ): MediaProgress {
     const item = this.deps.media.get(actor, mediaId);
     const durationMs = this.assertSavable(item, save);
-    const now = this.nextSaveTime(item.positionUpdatedAt);
+    const now = nextSaveTime(item.positionUpdatedAt, this.now());
     const heard = save.positionMs >= durationMs * MEDIA_COMPLETION_RATIO;
     const progress = heard
       ? { positionMs: 0, completedAt: now.toISOString() }
@@ -83,6 +92,7 @@ export class ListeningService {
       mediaId,
       progress,
       now,
+      played: true,
     });
     return { ...progress, positionUpdatedAt: now.toISOString() };
   }
@@ -106,13 +116,6 @@ export class ListeningService {
         { details: { positionUpdatedAt: item.positionUpdatedAt } },
       );
     return durationMs;
-  }
-
-  /** Save times only move forward, so each save is a distinct version (even in 1 ms). */
-  private nextSaveTime(previous: string | null): Date {
-    const now = this.now();
-    const after = previous === null ? 0 : Date.parse(previous) + 1;
-    return now.getTime() >= after ? now : new Date(after);
   }
 
   private now(): Date {

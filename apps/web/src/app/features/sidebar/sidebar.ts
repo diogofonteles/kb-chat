@@ -31,6 +31,7 @@ import { SettingsButton } from '@features/settings/settings-button.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { GoogleIdentity } from '@core/auth/google-identity.js';
 import { SessionStore } from '@core/auth/session-store.js';
+import { hasLibrary } from '@features/media/library/library-access.js';
 
 export type SidebarAction = 'new' | 'restore' | 'topic' | 'media';
 
@@ -106,9 +107,12 @@ export class Sidebar {
   readonly acted = output<SidebarAction>();
 
   protected readonly theme = this.themes.theme;
+  /** "Biblioteca" (T16, KBC-051 BR-1): in the place of "Mídia", for who has it. */
+  protected readonly libraryOn = computed(() => hasLibrary(this.session));
   /** "Mídia" (T14): when the server has the media library on and a collection is chosen. */
   protected readonly mediaOn = computed(
     () =>
+      !this.libraryOn() &&
       this.session.me()?.media === true &&
       this.session.can('media') &&
       this.chat.topicSlug() !== null,
