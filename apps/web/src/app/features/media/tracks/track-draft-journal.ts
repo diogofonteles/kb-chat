@@ -8,6 +8,8 @@ const keptDraftSchema = z.object({
   /** The version these changes were made over: it decides if they still fit. */
   version: z.number().int().nonnegative(),
   tracks: z.array(draftTrackSchema),
+  /** Sent with no answer yet: the server moved on by these, it is not someone else (BUG-6). */
+  sent: z.array(z.array(draftTrackSchema)).default([]),
 });
 export type KeptDraft = Readonly<z.infer<typeof keptDraftSchema>>;
 
@@ -39,7 +41,11 @@ export class DraftJournal {
   /** False when this browser refuses to keep it: a private window, a full disk. */
   keep(
     mediaId: string,
-    draft: { readonly version: number; readonly tracks: readonly DraftTrack[] },
+    draft: {
+      readonly version: number;
+      readonly tracks: readonly DraftTrack[];
+      readonly sent: readonly (readonly DraftTrack[])[];
+    },
   ): boolean {
     try {
       this.storage?.localStorage.setItem(

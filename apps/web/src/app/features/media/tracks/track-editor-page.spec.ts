@@ -9,7 +9,7 @@ import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { fireEvent, screen } from '@testing-library/angular';
 import type { DraftTrack, MediaEdit, ProposalRun } from '@kb-chat/contracts';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ELEMENT_FACTORY } from '@core/media/media-engine.js';
 import { fakeMediaElement } from '../../../testing/fake-media-element.js';
 import {
@@ -106,6 +106,9 @@ async function openPage(
   await harness.fixture.whenStable();
   return { harness, http };
 }
+
+// A screen goes after this file's `afterEach`, and a save it sends on the way still journals.
+beforeEach(() => localStorage.clear());
 
 afterEach(() => {
   vi.useRealTimers();
@@ -209,9 +212,6 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     expect(screen.getByRole('link', { name: 'Ver no player' })).toBeTruthy();
   });
 
-  it('reopens from the summary (BR-9)', async () => {
-    const { harness, http } = await openPage(
-      anEdit({ status: 'approved', step: 4, approvedTracks: 2 }),
   it('approves once for two presses with a change waiting to save (BUG-5)', async () => {
     const { harness, http } = await openPage();
     await deleteTrack(harness);
@@ -296,6 +296,9 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     });
   });
 
+  it('reopens from the summary (BR-9)', async () => {
+    const { harness, http } = await openPage(
+      anEdit({ status: 'approved', step: 4, approvedTracks: 2 }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Reabrir edição' }));
     http.expectOne(`${BASE}/edit/reopen`).flush({ version: 3 });
@@ -594,9 +597,6 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       expect(TestBed.inject(Router).url).toBe(`/midia/${ITEM.id}`);
     });
 
-    it('stays and says why when this browser cannot hold them (R-1)', async () => {
-      const { harness, http } = await openPage();
-      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     it('says why when the way out does not open, and keeps the changes (F-1)', async () => {
       const { harness, http } = await openPage();
       await deleteTrack(harness);
@@ -617,6 +617,9 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       expect(screen.getByText(/Não consegui abrir a página/)).toBeTruthy();
     });
 
+    it('stays and says why when this browser cannot hold them (R-1)', async () => {
+      const { harness, http } = await openPage();
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
         throw new Error('blocked');
       });
       await deleteTrack(harness);

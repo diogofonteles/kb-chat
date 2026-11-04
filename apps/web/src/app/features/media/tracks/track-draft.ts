@@ -53,6 +53,8 @@ export const SAVE_DELAY_MS = 800;
 const RETRY_MS = 5_000;
 /** "Rascunho salvo" is read aloud at most this often. */
 const SPOKEN_EVERY_MS = 10_000;
+/** How many unanswered saves the journal holds; past that, a false conflict keeps the copy. */
+const SENT_KEPT = 5;
 
 /** Numbered as the screen shows them: by start time. */
 export const numbered = (tracks: readonly DraftTrack[]) =>
@@ -86,8 +88,8 @@ export class TrackDraft {
   private mediaId = '';
   /** The version the tracks on screen were read or saved at. */
   private version = 0;
-  /** Sent, with the answer lost: any of them may be what the server has (I-4). */
-  private inDoubt: (readonly DraftTrack[])[] = [];
+  /** Sent with no answer yet, or a lost one: any may be what the server has (I-4, BUG-6). */
+  private unanswered: readonly (readonly DraftTrack[])[] = [];
   private kept = false;
   private lastSpoken = 0;
 
@@ -218,7 +220,7 @@ export class TrackDraft {
   /**
    * Saves what is on screen now and answers once, with how that went; nothing is left behind
    * to run later. `saved` is the only answer that lets an action go on. With a `lock`,
-   * nothing can change until the answer.
+   * nothing can change until the answer, and a press already waiting keeps its lock.
    */
   flush(lock: DraftAction | null = null): Observable<SaveResult> {
     return defer(() => {
@@ -243,7 +245,10 @@ export class TrackDraft {
     });
   }
 
-  /** The only way to apply (BR-1): after a save of this draft that came back fine. */
+  /**
+   * The only way to apply (BR-1): after a save of this draft that came back fine. One press
+   * at a time: a second one, of this or of `propose`, completes with no answer (BUG-5, F-2).
+   */
   approve(): Observable<ApproveResult> {
     return this.unlessBusy('approve').pipe(
       switchMap((result) =>
@@ -265,16 +270,16 @@ export class TrackDraft {
     );
   }
 
-  reopen(): Observable<void> {
-    return this.api.reopen(this.mediaId, this.version).pipe(
-      map(({ version }) => {
-        this.version = version;
-        this.server.update(
   /** Decided at subscription: two presses in one frame come before any button turns off. */
   private unlessBusy(action: DraftAction): Observable<SaveResult> {
     return defer(() => (this.busy() ? EMPTY : this.flush(action)));
   }
 
+  reopen(): Observable<void> {
+    return this.api.reopen(this.mediaId, this.version).pipe(
+      map(({ version }) => {
+        this.version = version;
+        this.server.update(
           (edit) =>
             edit && {
               ...edit,
@@ -342,7 +347,7 @@ export class TrackDraft {
   private load(edit: MediaEdit): void {
     this.server.set(edit);
     this.version = edit.version;
-    this.inDoubt = [];
+    this.unanswered = [];
     this.show(edit.tracks);
     this.wasRestored.set(edit.started && edit.tracks.length > 0);
     this.wasRecovered.set(false);
@@ -360,10 +365,18 @@ export class TrackDraft {
     this.kept = true;
     this.shown.set(held.tracks);
     this.wasRecovered.set(true);
-    const blocker =
-      blockerOf(edit) ?? (held.version === edit.version ? null : 'stale');
+    this.unanswered = held.sent;
+    const blocker = blockerOf(edit) ?? (this.fits(held, edit) ? null : 'stale');
     if (blocker) this.to({ kind: 'conflict', reason: blocker });
     else this.send();
+  }
+
+  /** The server is where these changes started, or moved on only by this person's save. */
+  private fits(held: KeptDraft, edit: MediaEdit): boolean {
+    return (
+      held.version === edit.version ||
+      held.sent.some((one) => sameTracks(one, edit.tracks))
+    );
   }
 
   /**
@@ -401,6 +414,7 @@ export class TrackDraft {
     this.kept = this.journal.keep(this.mediaId, {
       version: this.version,
       tracks: this.shown(),
+      sent: this.unanswered.slice(-SENT_KEPT),
     });
   }
 
@@ -439,6 +453,10 @@ export class TrackDraft {
   ): void {
     const sent = this.shown();
     this.to({ kind: 'saving', changed: false, lock: options.lock ?? null });
+    if (!this.unanswered.some((one) => sameTracks(one, sent))) {
+      this.unanswered = [...this.unanswered, sent];
+    }
+    this.remember();
     this.api
       .save(this.mediaId, {
         version: this.version,
@@ -447,13 +465,13 @@ export class TrackDraft {
       })
       .subscribe({
         next: ({ version }) => this.accepted(version),
-        error: (err: unknown) => this.refused(err, sent),
+        error: (err: unknown) => this.refused(err),
       });
   }
 
   private accepted(version: number): void {
     this.version = version;
-    this.inDoubt = [];
+    this.unanswered = [];
     this.server.update((edit) => edit && { ...edit, version, started: true });
     this.goOnOrFinish();
   }
@@ -461,7 +479,6 @@ export class TrackDraft {
   private goOnOrFinish(): void {
     const phase = this.state();
     if (phase.kind === 'saving' && phase.changed) {
-      this.remember();
       this.send({ lock: phase.lock });
       return;
     }
@@ -478,17 +495,16 @@ export class TrackDraft {
     this.spoken.set($localize`:@@tracks.saved:Rascunho salvo`);
   }
 
-  private refused(err: unknown, sent: readonly DraftTrack[]): void {
+  private refused(err: unknown): void {
     const status = statusOf(err);
-    if (isUncertain(status)) this.lost(sent);
-    else if (status === 412) this.compare(sent);
+    if (isUncertain(status)) this.lost();
+    else if (status === 412) this.compare();
     else if (status === 409)
       this.stopAt({ kind: 'conflict', reason: conflictOf(err) }, 'conflict');
     else this.stopAt({ kind: 'failed' }, 'failed');
   }
 
-  private lost(sent: readonly DraftTrack[]): void {
-    this.inDoubt = [...this.inDoubt, sent];
+  private lost(): void {
     const timer = this.destroyRef.destroyed
       ? null
       : setTimeout(() => this.send(), RETRY_MS);
@@ -499,13 +515,15 @@ export class TrackDraft {
    * A 412 may be this person's own save, whose answer was lost: if the server has what was
    * sent, there is nobody else here (I-4). Otherwise it is a conflict (FR-10).
    */
-  private compare(sent: readonly DraftTrack[]): void {
-    const mine = [...this.inDoubt, sent];
+  private compare(): void {
     const conflict = () =>
       this.stopAt({ kind: 'conflict', reason: 'stale' }, 'conflict');
     this.read().subscribe({
       next: (edit) => {
-        if (mine.some((one) => sameTracks(one, edit.tracks))) this.adopt(edit);
+        const mine = this.unanswered.some((one) =>
+          sameTracks(one, edit.tracks),
+        );
+        if (mine) this.adopt(edit);
         else conflict();
       },
       error: conflict,
@@ -514,7 +532,7 @@ export class TrackDraft {
 
   private adopt(edit: MediaEdit): void {
     this.version = edit.version;
-    this.inDoubt = [];
+    this.unanswered = [];
     this.server.set(edit);
     const phase = this.state();
     if (phase.kind !== 'saving') return;

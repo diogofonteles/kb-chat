@@ -732,6 +732,99 @@ describe('TrackDraft (KBC-066)', () => {
       expect(draft.phase()).toEqual({ kind: 'conflict', reason: 'stale' });
     });
 
+    describe('a reload during a save (BUG-6)', () => {
+      /** What a page leaves in this browser when it goes with `first` still unanswered. */
+      const leftBehind = () => {
+        open();
+        change();
+        const first = saves();
+        draft.apply([two]);
+        const held = localStorage.getItem(JOURNAL) ?? '';
+        first.flush({ version: 5 });
+        saves().flush({ version: 6 });
+        localStorage.setItem(JOURNAL, held);
+      };
+      const reopened = (read: MediaEdit) => {
+        draft = createEnvironmentInjector(
+          [TrackDraft],
+          TestBed.inject(EnvironmentInjector),
+        ).get(TrackDraft);
+        open(read);
+      };
+
+      it('is no conflict when the save had landed, and the last change goes on', () => {
+        leftBehind();
+        reopened(edit([one], 5));
+        expect(draft.phase().kind).toBe('saving');
+        expect(draft.tracks()).toEqual([two]);
+        expect(draft.recovered()).toBe(true);
+        const resumed = saves();
+        expect(resumed.request.headers.get('If-Match')).toBe('"5"');
+        expect(resumed.request.body.tracks[0].id).toBe(two.id);
+        resumed.flush({ version: 6 });
+        expect(draft.saved()).toBe(true);
+        expect(localStorage.getItem(JOURNAL)).toBeNull();
+      });
+
+      it('is no conflict when the save lands just after the read', () => {
+        leftBehind();
+        reopened(edit([one, two], 4));
+        refuse(412);
+        reads().flush(edit([one], 5));
+        const resumed = saves();
+        expect(resumed.request.headers.get('If-Match')).toBe('"5"');
+        expect(resumed.request.body.tracks[0].id).toBe(two.id);
+        resumed.flush({ version: 6 });
+        expect(draft.saved()).toBe(true);
+      });
+
+      it('is a conflict when someone else wrote after it', () => {
+        leftBehind();
+        reopened(edit([track(3, 0, 5_000)], 6));
+        noSave();
+        expect(draft.phase()).toEqual({ kind: 'conflict', reason: 'stale' });
+        expect(draft.tracks()).toEqual([two]);
+      });
+
+      it('recognizes a save whose answer was lost before the reload', () => {
+        open();
+        change();
+        lose();
+        draft.apply([two]);
+        const held = localStorage.getItem(JOURNAL) ?? '';
+        vi.advanceTimersByTime(5_000);
+        saves().flush({ version: 5 });
+        localStorage.setItem(JOURNAL, held);
+        reopened(edit([one], 5));
+        saves().flush({ version: 6 });
+        expect(draft.saved()).toBe(true);
+      });
+
+      it('keeps each thing sent once, however many tries', () => {
+        open();
+        change();
+        lose();
+        vi.advanceTimersByTime(5_000);
+        lose();
+        vi.advanceTimersByTime(5_000);
+        const sent = JSON.parse(localStorage.getItem(JOURNAL) ?? '').sent;
+        expect(sent).toHaveLength(1);
+        saves().flush({ version: 5 });
+      });
+
+      it('holds no action, only tracks (BR-1)', () => {
+        open();
+        draft.apply([one]);
+        heard(draft.approve());
+        expect(
+          Object.keys(JSON.parse(localStorage.getItem(JOURNAL) ?? '')).sort(),
+        ).toEqual(['sent', 'tracks', 'version']);
+        saves().flush({ version: 5 });
+        http.expectOne(APPROVE).flush({ version: 6, tracks: 1 });
+        reads().flush(edit([one], 6, { status: 'approved', step: 4 }));
+      });
+    });
+
     it('shows it to copy over an approved edit or a running proposal', () => {
       kept([one]);
       open(edit([one, two], 4, { status: 'approved', step: 4 }));
