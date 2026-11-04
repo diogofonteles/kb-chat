@@ -20,6 +20,21 @@ import { preparationPagePath } from '@core/media/preparation-api.js';
     ·
     <a [routerLink]="link()" i18n="@@tracks.entry.continue">Continuar</a>
   `,
+  // In a list, the row's title link covers the whole row: this one stays above it.
+  styles: `
+    :host {
+      position: relative;
+      z-index: 1;
+      color: var(--color-text-muted);
+    }
+
+    a {
+      display: inline-block;
+      padding-block: var(--space-1);
+      color: var(--color-accent-strong);
+      font-weight: 600;
+    }
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PreparationEntry {

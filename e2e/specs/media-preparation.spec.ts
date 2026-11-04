@@ -51,7 +51,7 @@ async function openUpload(page: Page): Promise<Locator> {
 async function chooseFile(dialog: Locator, title: string): Promise<void> {
   await dialog
     .locator('input[type="file"]')
-    .setInputFiles(makeMp3(title.replace(/\W+/g, '-'), 5));
+    .setInputFiles(makeMp3(title.replace(/\W+/g, '-'), 60));
   await dialog.getByRole('textbox', { name: 'Título' }).fill(title);
 }
 
