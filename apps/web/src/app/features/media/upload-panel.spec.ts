@@ -217,6 +217,81 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     expect(screen.queryByText(/Já está no acervo:/)).toBeNull();
   });
 
+  it('ignores the answer of a check from the collection the person left (BR-2)', async () => {
+    const panel = await renderPanel();
+    const { http, fixture } = panel;
+    choose(panel.container, audio());
+    const stale = await vi.waitFor(() => http.expectOne(`${TOPIC}/check`));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Acervo' }), {
+      target: { value: 'alquimia' },
+    });
+    stale.flush({
+      verdict: 'duplicate',
+      media: { id: CREATED.id, title: 'Palestra antiga' },
+    });
+    await fixture.whenStable();
+    await answerCheck(
+      panel,
+      { verdict: 'new' },
+      '/api/v1/topics/alquimia/media',
+    );
+    expect(screen.queryByText(/Já está no acervo:/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeTruthy();
+  });
+
+  it('locks "Acervo" while sending, and frees it once the upload stopped (T14, AC-8)', async () => {
+    const panel = await renderPanel();
+    const { fixture, tus } = panel;
+    const field = () =>
+      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Acervo' });
+    expect(field().disabled).toBe(false);
+    await startSending(panel);
+    expect(field().disabled).toBe(true);
+    tus.last.fail();
+    await fixture.whenStable();
+    expect(field().disabled).toBe(false);
+    expect(field().value).toBe('hermetismo');
+  });
+
+  it('frees "Acervo" after "Cancelar envio"', async () => {
+    const panel = await renderPanel();
+    const { fixture, http } = panel;
+    await startSending(panel);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar envio' }));
+    http.expectOne(`/api/v1/media/${CREATED.id}`).flush(null);
+    await fixture.whenStable();
+    expect(
+      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Acervo' })
+        .disabled,
+    ).toBe(false);
+  });
+
+  it('keeps a file that was sent as sent when the collection changes after a stop', async () => {
+    const panel = await renderPanel();
+    const { container, http, fixture, tus } = panel;
+    choose(container, audio('a.mp3'), audio('b.mp3'));
+    await answerCheck(panel);
+    await answerCheck(panel);
+    clickSend();
+    for (const request of http.match(TOPIC)) request.flush(CREATED);
+    await fixture.whenStable();
+    const [first, second] = tus.sessions;
+    first?.succeed();
+    http.expectOne(`/api/v1/media/${CREATED.id}`).flush(CREATED);
+    second?.fail();
+    await fixture.whenStable();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Acervo' }), {
+      target: { value: 'alquimia' },
+    });
+    await answerCheck(
+      panel,
+      { verdict: 'new' },
+      '/api/v1/topics/alquimia/media',
+    );
+    expect(screen.getByText('Enviado')).toBeTruthy();
+    http.expectNone('/api/v1/topics/alquimia/media/check');
+  });
+
   it('continues an interrupted upload on the same item, with its title (FR-2)', async () => {
     const panel = await renderPanel();
     await chooseChecked(panel, audio(), {

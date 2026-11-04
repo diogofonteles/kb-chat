@@ -15,8 +15,8 @@ import {
   concat,
   concatMap,
   defer,
+  filter,
   ignoreElements,
-  map,
   of,
   tap,
   type Observable,
@@ -67,6 +67,9 @@ const SENDABLE: readonly EntryState['kind'][] = [
   'expired',
   'stopped',
 ];
+
+/** What a change of collection does not ask about again. */
+const SETTLED: readonly EntryState['kind'][] = ['refused', 'sending', 'done'];
 
 /** What each verdict of the API is on the list. */
 const STATE_OF: {
@@ -119,12 +122,15 @@ export class UploadEntries {
       .subscribe();
   }
 
-  /** The collection the files would go to: a change asks about every file again (BR-2). */
+  /**
+   * The collection the files would go to: a change asks about every file again (BR-2), except
+   * those that went or are going, whose collection no longer changes.
+   */
   aim(topic: string): void {
     if (topic === this.topic) return;
     this.topic = topic;
     for (const entry of this.list()) {
-      if (entry.sha256 === null || entry.state.kind === 'refused') continue;
+      if (entry.sha256 === null || SETTLED.includes(entry.state.kind)) continue;
       this.set(entry.key, { kind: 'checking', percent: 100 });
       this.toCheck.next(entry.key);
     }
@@ -240,14 +246,16 @@ export class UploadEntries {
     const { sha256, durationMs, file, state } = entry;
     if (state.kind !== 'checking') return EMPTY;
     const request = { sha256, durationMs, bytes: file.size };
-    return this.api.check(this.topic, request).pipe(
+    const { topic } = this;
+    return this.api.check(topic, request).pipe(
+      catchError(() => of<UploadCheck>({ verdict: 'new' })),
+      // Another collection was chosen meanwhile: its own check is already queued.
+      filter(() => topic === this.topic),
       tap((check) => {
         // A resumed upload keeps the title it was started with.
         if (check.verdict === 'resume') this.rename(key, check.media.title);
+        this.set(key, stateOf(check));
       }),
-      map(stateOf),
-      catchError(() => of<EntryState>({ kind: 'ready' })),
-      tap((next) => this.set(key, next)),
       ignoreElements(),
     );
   }

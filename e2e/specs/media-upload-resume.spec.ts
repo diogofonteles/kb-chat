@@ -212,6 +212,7 @@ test('AC-8: three files at once, each with its bar, pass axe at this width', asy
   await dialog.locator('input[type="file"]').setInputFiles(files);
   await sendButton(dialog).click();
   await expect(dialog.getByRole('progressbar')).toHaveCount(3);
+  await expect(dialog.getByRole('combobox', { name: 'Acervo' })).toBeDisabled();
   await expect(
     dialog.locator('[aria-live="polite"]', { hasText: '0% enviado.' }),
   ).toHaveCount(3);

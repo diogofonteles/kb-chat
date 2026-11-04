@@ -179,7 +179,7 @@ export class UploadPanel implements OnInit {
       badAuthor
     )
       return;
-    this.stage.set('sending');
+    this.enter('sending');
     this.interrupted = false;
     const author = this.authorOf().pipe(shareReplay(1));
     this.sending = from(targets)
@@ -191,7 +191,7 @@ export class UploadPanel implements OnInit {
   protected cancelUpload(): void {
     this.abandon();
     this.reportSent();
-    this.stage.set('choosing');
+    this.enter('choosing');
   }
 
   /** "Cancelar": the person gives up what was half sent; other exits keep it (FR-2). */
@@ -209,6 +209,14 @@ export class UploadPanel implements OnInit {
 
   protected warnBeforeLeaving(event: BeforeUnloadEvent): void {
     if (this.stage() === 'sending') event.preventDefault();
+  }
+
+  /** The collection is one for all the files: it cannot change once they are going (T14). */
+  private enter(stage: Stage): void {
+    this.stage.set(stage);
+    const { topic } = this.form.controls;
+    if (stage === 'sending') topic.disable();
+    else topic.enable();
   }
 
   private takeFiles(files: FileList | null): void {
@@ -323,7 +331,7 @@ export class UploadPanel implements OnInit {
     this.sending = null;
     const pending = this.interrupted || this.uploads.sendable().length > 0;
     this.reportSent();
-    this.stage.set(pending ? 'stopped' : 'choosing');
+    this.enter(pending ? 'stopped' : 'choosing');
     if (!pending) this.dialog().nativeElement.close();
   }
 
