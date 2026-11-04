@@ -3,6 +3,7 @@
  * count, through the real routes, for who has `media-tracks` and `media-subjects`, in the
  * collections they see.
  */
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
@@ -10,12 +11,19 @@ import type {
   MediaItem,
   SearchResponse,
   SubjectTracksPage,
+  TopicFacets,
   TrackAbout,
   TrackSubjects,
 } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
-import { closeApp, type Call } from '../test/ai-app-harness.js';
-import { member, type Media } from '../test/media-harness.js';
+import {
+  caller,
+  closeApp,
+  signIn,
+  start,
+  type Call,
+} from '../test/ai-app-harness.js';
+import { member, vaultWithUdv, type Media } from '../test/media-harness.js';
 import {
   approve,
   finishCuts,
@@ -100,8 +108,8 @@ const cabalaCount = (found: SearchResponse) =>
   found.facets.concepts.find((one) => one.value === 'Cabala');
 
 /** A world with a track on Cabala, one on Ritmo and a third with nothing accepted. */
-async function worldWithSubjects() {
-  const world = await startWorld();
+async function worldWithSubjects(options: { readonly vault?: string } = {}) {
+  const world = await startWorld(options);
   const { media } = world;
   const [first, second, third] = await publishedTracks(world);
   if (!first || !second || !third) throw new Error('three tracks expected');
@@ -248,7 +256,7 @@ describe('the concept filter over tracks (KBC-070)', () => {
     expect(cabalaCount(texts)?.tracks).toBeUndefined();
   });
 
-  it('stops counting a concept the catalog lost and an archived track', async () => {
+  it('stops counting an archived track', async () => {
     const { reader, media, first } = await worldWithSubjects();
     sql(
       media,
@@ -278,6 +286,57 @@ describe('a collection with no transcript (AC-1, BR-2)', () => {
     const found = await search(reader, byConcept('Cabala', ''));
     expect(found.media).toEqual([]);
     expect(found.kinds.audio).toBeNull();
+  });
+});
+
+describe('a concept the catalog lost (ADR 0029 §6)', () => {
+  const CONCEPT_FILE = (vault: string) =>
+    join(vault, TOPIC, 'wiki', 'concepts', 'Cabala.md');
+
+  /** The app read again over the same state, as after the vault changed. */
+  async function restarted(media: Media, vault: string): Promise<Call> {
+    await closeApp();
+    const started = await start({
+      media: true,
+      vault,
+      state: media.started.state,
+    });
+    return caller(started.app, await signIn(started, 'owner@example.com'));
+  }
+
+  const conceptTracks = async (who: Call) => {
+    const page = await who(
+      'GET',
+      `/api/v1/topics/${TOPIC}/concepts/Cabala/media`,
+    );
+    return page.json<SubjectTracksPage>().total;
+  };
+
+  it('shows the concept nowhere, keeps the link and brings it back with the concept', async () => {
+    const vault = await vaultWithUdv();
+    const { media, first } = await worldWithSubjects({ vault });
+    const kept = await readFile(CONCEPT_FILE(vault));
+    await rm(CONCEPT_FILE(vault));
+
+    const owner = await restarted(media, vault);
+    const found = await search(owner, byConcept('Cabala', ''));
+    expect(found.media).toEqual([]);
+    expect(cabalaCount(found)?.tracks ?? 0).toBe(0);
+    const facets = await owner('GET', `/api/v1/topics/${TOPIC}/facets`);
+    // Documents may still name it: the tracks are what the catalog decides.
+    const listed = facets.json<TopicFacets>().concepts;
+    expect(listed.find((one) => one.value === 'Cabala')?.tracks ?? 0).toBe(0);
+    expect(await conceptTracks(owner)).toBe(0);
+    const about = await owner('GET', `/api/v1/media/${first.mediaId}/about`);
+    expect(about.json<TrackAbout>().subjects).toEqual([]);
+    const library = await owner('GET', '/api/v1/media/library');
+    expect(
+      library.json<LibraryPage>().facets.subjects.map((one) => one.name),
+    ).toEqual(['Ritmo']);
+
+    await writeFile(CONCEPT_FILE(vault), kept);
+    const again = await restarted(media, vault);
+    expect(await conceptTracks(again)).toBe(1);
   });
 });
 
