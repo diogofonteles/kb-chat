@@ -8,7 +8,9 @@
   align-items: center;
   gap: var(--space-1) var(--space-3);
   min-height: 3rem;
-  padding: var(--space-3) var(--space-4);
+  /* The block padding sits on the children: on the subgrid below, WebKit's first layout
+     counts it twice, and the row would shrink under the first press or focus. */
+  padding: 0 var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -37,6 +39,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding-block: var(--space-3);
 }
 
 .select {
@@ -77,9 +80,11 @@ a.main {
   display: grid;
   grid-template-columns: subgrid;
   grid-template-rows: subgrid;
-  margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-4));
-  padding: var(--space-3) var(--space-4);
+  margin-inline: calc(-1 * var(--space-4));
+  padding-inline: var(--space-4);
   border-radius: var(--radius-md);
+  /* Room for the focus outline when the row reaches the scroller's edge. */
+  scroll-margin-block: var(--space-1);
 }
 
 a.main .title {
@@ -97,6 +102,7 @@ a.main:focus-visible {
 }
 
 .title {
+  margin-top: var(--space-3);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -107,8 +113,7 @@ a.main:focus-visible {
 
 .meta {
   grid-area: meta;
-  /* A press here is a press on the row. */
-  pointer-events: none;
+  margin-bottom: var(--space-3);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -116,6 +121,11 @@ a.main:focus-visible {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+}
+
+/* A press here is a press on the row; a row with no link keeps its text selectable. */
+a.main ~ .meta {
+  pointer-events: none;
 }
 
 .state,
@@ -140,6 +150,7 @@ a.main:focus-visible {
   overflow: hidden;
   border-radius: 2px;
   background: var(--color-border);
+  pointer-events: none;
 }
 
 .position span {
@@ -153,6 +164,7 @@ a.main:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding-block: var(--space-3);
 }
 
 .secondary {
@@ -178,11 +190,16 @@ a.main:focus-visible {
     grid-template-areas:
       'lead main actions'
       'meta meta meta';
-    padding: var(--space-3);
+    padding: 0 var(--space-3);
   }
 
   a.main {
-    margin: calc(-1 * var(--space-3));
-    padding: var(--space-3);
+    margin-inline: calc(-1 * var(--space-3));
+    padding-inline: var(--space-3);
+  }
+
+  .lead,
+  .actions {
+    padding-block: var(--space-3) 0;
   }
 }

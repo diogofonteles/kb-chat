@@ -318,28 +318,75 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
   browser,
 }) => {
   const { page } = await libraryListener(browser);
+  await savePosition(page, lecture(3), 4_000); // the row draws its position bar
   await openLibrary(page);
   await searchFor(page, tag);
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
   const row = all(page)
     .getByRole('listitem')
     .filter({ hasText: lecture(3).title });
+  const selection = page.getByRole('region', { name: 'Seleção' });
   await row.getByRole('checkbox').check();
-  await expect(page.getByRole('region', { name: 'Seleção' })).toBeVisible();
+  await expect(selection).toBeVisible();
   await row.getByRole('checkbox').uncheck();
+  await expect(selection).toBeHidden();
   await expect(page).toHaveURL(/\/biblioteca/);
 
-  // By the pointer: what the row writes under the link is no target of its own.
-  const meta = await row.getByText('Hermetismo').boundingBox();
-  if (!meta) throw new Error('no collection on the row');
-  await page.mouse.click(meta.x + 4, meta.y + meta.height / 2);
-  await expect(page).toHaveURL(new RegExp(`/midia/${lecture(3).id}`));
-  await page.goBack();
+  await row
+    .getByRole('button', { name: `Mais ações para ${lecture(3).title}` })
+    .click();
+  const menuItem = page.getByRole('menuitem', { name: 'Marcar como ouvida' });
+  await expect(menuItem).toBeVisible();
+  await expect(page).toHaveURL(/\/biblioteca/);
+  await page.keyboard.press('Escape');
+  await expect(menuItem).toBeHidden();
+
+  // Aimed through the link, relative to it: the row may still move, and Playwright checks
+  // the target at the moment of the press. What the row draws over it is no target.
+  const link = row.getByRole('link', { name: lecture(3).title });
+  const [area, meta] = await Promise.all([
+    link.boundingBox(),
+    row.getByText('Hermetismo').boundingBox(),
+  ]);
+  if (!area || !meta) throw new Error('no row to press');
+  for (const position of [
+    { x: meta.x - area.x + 4, y: meta.y - area.y + meta.height / 2 },
+    { x: area.width / 2, y: 4 },
+    { x: area.width / 2, y: area.height - 1 }, // on the position bar
+  ]) {
+    await link.click({ position });
+    await expect(page).toHaveURL(new RegExp(`/midia/${lecture(3).id}`));
+    await page.goBack();
+    await searchFor(page, tag);
+    await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
+  }
+
+  await row.getByRole('button', { name: `Tocar ${lecture(3).title}` }).click();
+  await expect(mini(page)).toBeVisible();
+  await expect(page).toHaveURL(/\/biblioteca/);
+  await page.context().close();
+});
+
+test('MA-01: a row keeps its size when it takes the focus', async ({
+  browser,
+}) => {
+  const { page } = await libraryListener(browser);
+  await openLibrary(page);
   await searchFor(page, tag);
-  const box = await row.boundingBox();
-  if (!box) throw new Error('no row');
-  await page.mouse.click(box.x + box.width / 2, box.y + 4);
-  await expect(page).toHaveURL(new RegExp(`/midia/${lecture(3).id}`));
+  await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
+  const row = all(page)
+    .getByRole('listitem')
+    .filter({ hasText: lecture(3).title });
+  const before = await row.boundingBox();
+  await row.getByRole('link', { name: lecture(3).title }).focus();
+  // The row laying out anew under a press moved the page and lost the click on WebKit.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  expect((await row.boundingBox())?.height).toBe(before?.height);
   await page.context().close();
 });
 

@@ -38,6 +38,7 @@ import {
   authorFilterOptions,
   matchesAuthor,
 } from './media-authors.js';
+import { keepFocusedInView } from './keep-in-view.js';
 import {
   pollEveryOf,
   isLowConfidence,
@@ -140,13 +141,8 @@ export class MediaListPage {
     afterRenderEffect(() => this.focusPending(this.rows()));
   }
 
-  /**
-   * The page scrolls in its own row (above the mini-player): the element that takes the
-   * focus is brought fully into view, in every browser (WCAG 2.4.11, KBC-041 FR-11).
-   */
   protected keepInView(event: FocusEvent): void {
-    if (event.target instanceof HTMLElement)
-      event.target.scrollIntoView?.({ block: 'nearest' });
+    keepFocusedInView(event);
   }
 
   /** Where its transcription is (KBC-036 FR-1), next to the status. */
