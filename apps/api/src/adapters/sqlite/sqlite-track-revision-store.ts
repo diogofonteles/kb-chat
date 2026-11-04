@@ -30,6 +30,17 @@ const TRACK = `SELECT t.id, t.derived_media_id, t.media_id, t.ordinal, t.title, 
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS job_status
   FROM media_tracks t`;
 
+const RESTORE_APPROVED = `INSERT INTO media_tracks (id, media_id, start_ms, end_ms, kind, title,
+    source, asker_voice, answerer_voice, asker_speaker_id, answerer_speaker_id,
+    ordinal, approved_by, approved_at, derived_media_id, cut_status)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    (SELECT coalesce(max(ordinal), 0) + 1 FROM media_tracks WHERE media_id = ?),
+    ?, ?, ?, 'published')`;
+
+const RESTORE_DRAFT = `INSERT INTO media_draft_tracks (id, media_id, start_ms, end_ms, kind, title,
+    source, asker_voice, answerer_voice, asker_speaker_id, answerer_speaker_id, edited, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`;
+
 const nullableNumber = (value: SQLOutputValue | undefined): number | null =>
   value === null || value === undefined ? null : Number(value);
 const nullableText = (value: SQLOutputValue | undefined): string | null =>
@@ -251,22 +262,9 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
     const values = this.keptValues(mediaId, input.trackId);
     const parentId = String(values[1]);
     this.db
-      .prepare(
-        `INSERT INTO media_tracks (id, media_id, start_ms, end_ms, kind, title, source,
-           asker_voice, answerer_voice, asker_speaker_id, answerer_speaker_id,
-           ordinal, approved_by, approved_at, derived_media_id, cut_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-           (SELECT coalesce(max(ordinal), 0) + 1 FROM media_tracks WHERE media_id = ?),
-           ?, ?, ?, 'published')`,
-      )
+      .prepare(RESTORE_APPROVED)
       .run(...values, parentId, principal, at, mediaId);
-    this.db
-      .prepare(
-        `INSERT INTO media_draft_tracks (id, media_id, start_ms, end_ms, kind, title, source,
-           asker_voice, answerer_voice, asker_speaker_id, answerer_speaker_id, edited, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-      )
-      .run(...values, at);
+    this.db.prepare(RESTORE_DRAFT).run(...values, at);
     this.db
       .prepare(
         'UPDATE media SET archived_at = NULL, updated_at = ? WHERE id = ?',

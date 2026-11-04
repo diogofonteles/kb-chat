@@ -3,7 +3,7 @@ import type { HouseAi } from './house-ai-factory.js';
 import type { MediaDeps } from './media-factory.js';
 import type { AuthorsService } from './modules/authors/index.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
-import type { MediaService } from './modules/media/index.js';
+import type { MediaActor, MediaService } from './modules/media/index.js';
 import {
   SubjectDirectory,
   SubjectProposalService,
@@ -41,11 +41,13 @@ export function createSubjectDirectory(
 /** Subjects of a track over the media database, the catalog read-only (KBC-069). */
 export function createTrackSubjects(wiring: TrackSubjectWiring) {
   const { media, catalog, authors, service } = wiring;
+  const findMedia = (actor: MediaActor, mediaId: string) =>
+    service.getRecording(actor, mediaId);
   const subjects = new TrackSubjectService({
     store: media.trackSubjects,
     media: media.store,
     items: media.trackItems,
-    findMedia: (actor, mediaId) => service.getRecording(actor, mediaId),
+    findMedia,
     rootOf: (topic) => authors.rootOf(topic),
     conceptsOf: (root) => catalog.get(root)?.relations.conceptNames() ?? [],
     directory: createSubjectDirectory(wiring),
@@ -58,7 +60,7 @@ export function createTrackSubjects(wiring: TrackSubjectWiring) {
     items: media.trackItems,
     edits: media.edits,
     transcripts: media.transcripts,
-    findMedia: (actor, mediaId) => service.getRecording(actor, mediaId),
+    findMedia,
     titleOf: (topic) => catalog.get(topic)?.topic.title ?? topic,
     llm: mediaLlm(wiring),
     caps: capsOf(media),
