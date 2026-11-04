@@ -326,13 +326,12 @@ test('BUG-5: two presses in one task send one approval, and no false conflict', 
   const sent = pressesSent(page, media.id);
   await open(page, media.id);
   await shortenFirst(page);
-  await page.evaluate(() => {
-    const press = [...document.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Aprovar faixas'),
-    );
-    press?.click();
-    press?.click();
-  });
+  await page
+    .getByRole('button', { name: 'Aprovar faixas' })
+    .evaluate((press) => {
+      (press as HTMLButtonElement).click();
+      (press as HTMLButtonElement).click();
+    });
   await expect(
     page.getByRole('heading', { name: '3 faixas aplicadas.' }),
   ).toBeVisible();
