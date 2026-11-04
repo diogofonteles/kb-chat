@@ -40,6 +40,50 @@ const SIBLING_REBUILD: Migration = {
   `,
 };
 
+/**
+ * KBC-045's unmerged migration, word for word (PR #72): it creates `words_by_segment` with no
+ * `IF NOT EXISTS`, and may reach a database before or after this one.
+ */
+const WORD_HIGHLIGHT: Migration = {
+  version: 16,
+  name: 'word-highlight',
+  sql: `
+    CREATE INDEX words_by_segment ON words (transcript_id, segment_position, position);
+    ALTER TABLE media_preferences ADD COLUMN word_highlight INTEGER NOT NULL DEFAULT 1
+      CHECK (word_highlight IN (0, 1));
+  `,
+};
+/** This code's list without KBC-045's, so these tests outlive that merge. */
+const OURS = MEDIA_MIGRATIONS.filter((one) => one.name !== 'word-highlight');
+const OURS_BEFORE = OURS.filter((one) => one.version < VERSION);
+
+const appliedVersions = (db: DatabaseSync) =>
+  db
+    .prepare('SELECT version FROM schema_migrations')
+    .all()
+    .map((row) => row['version']);
+
+const indexesOfWords = (db: DatabaseSync) =>
+  db
+    .prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'index' AND tbl_name = 'words' AND sql IS NOT NULL ORDER BY name`,
+    )
+    .all()
+    .map((row) => row['name']);
+
+/** PR #72's query: its panel pages a transcript's words in order, without sorting them. */
+const planOfWordPage = (db: DatabaseSync) =>
+  db
+    .prepare(
+      `EXPLAIN QUERY PLAN SELECT start_ms FROM words
+       WHERE transcript_id = 't' AND segment_position >= 100 AND segment_position < 200
+       ORDER BY segment_position, position`,
+    )
+    .all()
+    .map((row) => String(row['detail']))
+    .join(' ');
+
 function seeded(migrations: readonly Migration[]): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON');
@@ -124,6 +168,55 @@ describe('migration track-items (KBC-068)', () => {
     expect(db.prepare('SELECT count(*) AS n FROM jobs').get()).toEqual({
       n: 1,
     });
+    db.close();
+  });
+
+  describe.each([
+    {
+      state: 'a database at word-highlight meets this migration',
+      steps: [[...OURS_BEFORE, WORD_HIGHLIGHT], OURS],
+    },
+    {
+      state: 'a database past this migration gets word-highlight',
+      steps: [OURS, [...OURS, WORD_HIGHLIGHT]],
+    },
+    {
+      state: 'a new database takes both',
+      steps: [[...OURS, WORD_HIGHLIGHT]],
+    },
+  ])('when $state', ({ steps }) => {
+    const migrated = () => {
+      const db = new DatabaseSync(':memory:');
+      steps.forEach((list) => applyMigrations(db, list));
+      return db;
+    };
+
+    it('applies both and keeps the index of each', () => {
+      const db = migrated();
+      expect(appliedVersions(db)).toEqual(
+        expect.arrayContaining([WORD_HIGHLIGHT.version, VERSION]),
+      );
+      expect(indexesOfWords(db)).toEqual([
+        'words_by_segment',
+        'words_by_segment_position',
+      ]);
+      db.close();
+    });
+
+    it("reads a page of words through a segment index, in the index's order", () => {
+      const db = migrated();
+      const plan = planOfWordPage(db);
+      expect(plan).toContain('words_by_segment');
+      expect(plan).not.toContain('TEMP B-TREE');
+      db.close();
+    });
+  });
+
+  it("serves a page of words in order from this migration's index alone", () => {
+    const db = new DatabaseSync(':memory:');
+    applyMigrations(db, OURS);
+    expect(indexesOfWords(db)).toEqual(['words_by_segment_position']);
+    expect(planOfWordPage(db)).not.toContain('TEMP B-TREE');
     db.close();
   });
 

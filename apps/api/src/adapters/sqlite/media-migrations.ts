@@ -901,7 +901,10 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX media_tracks_by_derived ON media_tracks (derived_media_id)
         WHERE derived_media_id IS NOT NULL;
       -- Search asks, per matched segment, whether any of its words is outside the tracks (BR-6).
-      CREATE INDEX words_by_segment ON words (transcript_id, segment_position);
+      -- KBC-045's migration 16 creates \`words_by_segment\` with these columns and may run before
+      -- or after this one, so the name differs; with \`position\`, this index can replace that one.
+      CREATE INDEX words_by_segment_position
+        ON words (transcript_id, segment_position, position);
     `,
   },
   {
