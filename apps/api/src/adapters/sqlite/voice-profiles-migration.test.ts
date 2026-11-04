@@ -27,9 +27,10 @@ describe('media migration 15 (KBC-071)', () => {
   }
 
   const aConsent = (id: string) =>
-    db.exec(`INSERT INTO voice_consents (id, collection, speaker_id, speaker_name, subject,
-        granted_by, granted_on, method, purpose, text_version, registered_by, registered_at)
-      VALUES ('${id}', 'udv', 's1', 'Ana', 'living', 'Ana', '2026-10-01', 'email',
+    db.exec(`INSERT INTO voice_consents (id, profile_id, collection, speaker_id, speaker_name,
+        subject, granted_by, granted_on, method, purpose, text_version, registered_by,
+        registered_at)
+      VALUES ('${id}', 'profile-of-${id}', 'udv', 's1', 'Ana', 'living', 'Ana', '2026-10-01', 'email',
         'suggest-names-when-editing', 1, 'a', '${AT}')`);
   const aProfile = (id: string, consent: string) =>
     db.exec(`INSERT INTO voice_profiles (id, consent_id, speaker_id, collection, created_at,

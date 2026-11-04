@@ -14,6 +14,7 @@ const WHOLE: VoiceRevocations = {
   startedAt: null,
   guarded: true,
 };
+const FULL = new Error('no space left on device');
 const LOST: VoiceRevocations = { ...WHOLE, complete: false };
 
 const reconcilerWith = (input: {
@@ -21,17 +22,23 @@ const reconcilerWith = (input: {
   prints?: readonly string[];
   list?: VoiceRevocations;
   consents?: number;
+  revoked?: readonly string[];
+  addFails?: boolean;
 }) => {
   const known = new Set(input.profiles ?? []);
   const revoke = vi.fn(({ profileId }: { profileId: string }) =>
     known.delete(profileId),
   );
   const remove = vi.fn<(id: string) => Promise<void>>(() => Promise.resolve());
+  const add = vi.fn<(id: string) => Promise<void>>(() =>
+    input.addFails ? Promise.reject(FULL) : Promise.resolve(),
+  );
   const start = vi.fn<() => Promise<void>>(() => Promise.resolve());
   const deps: VoicePrintReconcilerDeps = {
     profiles: {
       ids: () => [...known],
       get: (id) => (known.has(id) ? ({ id } as StoredVoiceProfile) : null),
+      revokedProfileIds: () => [...(input.revoked ?? [])],
       oldestConsentAt: () =>
         (input.consents ?? 1) > 0 ? '2026-10-01T00:00:00.000Z' : null,
       revoke,
@@ -42,7 +49,7 @@ const reconcilerWith = (input: {
       removeUnfinished: () => Promise.resolve(0),
     },
     revocations: {
-      add: () => Promise.resolve(),
+      add,
       read: () => Promise.resolve(input.list ?? WHOLE),
       start,
     },
@@ -50,6 +57,7 @@ const reconcilerWith = (input: {
   };
   return {
     reconciler: new VoicePrintReconciler(deps),
+    add,
     revoke,
     remove,
     start,
@@ -73,10 +81,12 @@ describe('VoicePrintReconciler (ADR 0032)', () => {
     });
     expect(await reconciler.reconcile()).toEqual({
       reapplied: 0,
+      relisted: 0,
       orphans: 0,
       unfinished: 0,
       listLost: false,
       listExposed: false,
+      listError: null,
     });
     expect(remove).not.toHaveBeenCalled();
     expect(revoke).not.toHaveBeenCalled();
@@ -131,6 +141,26 @@ describe('VoicePrintReconciler (ADR 0032)', () => {
     });
     expect(remove).not.toHaveBeenCalled();
     expect(revoke).not.toHaveBeenCalled();
+  });
+
+  it('writes on the list a revocation the database has and the list missed', async () => {
+    const { reconciler, add } = reconcilerWith({
+      list: { ...WHOLE, ids: ['listed'] },
+      revoked: ['listed', 'missed'],
+    });
+    expect((await reconciler.reconcile()).relisted).toBe(1);
+    expect(add).toHaveBeenCalledExactlyOnceWith('missed');
+  });
+
+  it('a list that still cannot be written does not stop the start', async () => {
+    const { reconciler } = reconcilerWith({
+      revoked: ['missed'],
+      addFails: true,
+    });
+    expect(await reconciler.reconcile()).toMatchObject({
+      relisted: 0,
+      listError: FULL,
+    });
   });
 
   it('a list marked lost still reapplies the ids it has', async () => {

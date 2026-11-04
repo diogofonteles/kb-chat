@@ -635,6 +635,71 @@ describe('Revoking (KBC-071 FR-4, BR-2)', () => {
     expect(again.statusCode).toBe(404);
   });
 
+  describe('when the list cannot be written', () => {
+    const listOf = (media: Media): string =>
+      join(media.mediaDir, 'voice-revocations.list');
+
+    it('still removes the print and the profile, and says what failed', async () => {
+      const { media, token } = await granted();
+      const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+      chmodSync(listOf(media), 0o400);
+      const revoked = await media.owner(
+        'DELETE',
+        `/api/v1/voice-profiles/${profile.id}`,
+      );
+      expect(revoked.statusCode).toBe(503);
+      expect(revoked.json().error.code).toBe('VOICE_LIST_NOT_WRITTEN');
+      expect(printFiles(media)).toEqual([]);
+      expect(await profiles(media)).toEqual([]);
+      expect((await report(media))[0]?.revokedAt).not.toBeNull();
+    });
+
+    it('the next start writes what was missed, so a backup cannot undo it', async () => {
+      const { media, token } = await granted();
+      const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+      chmodSync(listOf(media), 0o400);
+      await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+      await closeApp();
+      chmodSync(listOf(media), 0o600);
+      const restarted = await startMedia({ state: media.started.state });
+      expect(readFileSync(listOf(restarted), 'utf8')).toContain(profile.id);
+      const logged = restarted.started.logs.some((line) =>
+        line.includes('"relisted":1'),
+      );
+      expect(logged).toBe(true);
+    });
+
+    it('a start that still cannot write it comes up all the same, and logs it', async () => {
+      const { media, token } = await granted();
+      const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+      chmodSync(listOf(media), 0o400);
+      await media.owner('DELETE', `/api/v1/voice-profiles/${profile.id}`);
+      await closeApp();
+      const restarted = await startMedia({ state: media.started.state });
+      expect(
+        restarted.started.logs.some((line) =>
+          line.includes('voice revocation list could not be written'),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it('the rows go even when the print cannot be removed, and the next start removes it', async () => {
+    const { media, token } = await granted();
+    const { profile } = await readyProfile(media, { token, name: 'Gabriel' });
+    const prints = join(media.mediaDir, PRINTS);
+    chmodSync(prints, 0o500);
+    const revoked = await media.owner(
+      'DELETE',
+      `/api/v1/voice-profiles/${profile.id}`,
+    );
+    chmodSync(prints, 0o700);
+    expect(revoked.statusCode).toBe(500);
+    expect(await profiles(media)).toEqual([]);
+    const restarted = await startMedia({ state: media.started.state });
+    expect(printFiles(restarted)).toEqual([]);
+  });
+
   it('a print arriving after the revocation is dropped', async () => {
     const { media, token } = await granted();
     const speaker = await aSpeaker(media, 'Gabriel');

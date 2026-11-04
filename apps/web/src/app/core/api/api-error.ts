@@ -119,6 +119,8 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.topicExists:Já existe um acervo com esse nome.`,
   CONSENT_REQUIRED: () =>
     $localize`:@@error.consentRequired:Registre o consentimento antes de cadastrar o perfil de voz.`,
+  VOICE_LIST_NOT_WRITTEN: () =>
+    $localize`:@@error.voiceListNotWritten:O consentimento foi revogado e o perfil foi apagado, mas a lista de revogações não foi gravada. Veja "Perfis de voz".`,
   MEDIA_SPEND_CAP: () =>
     $localize`:@@error.mediaSpendCap:O limite de gasto da mídia foi atingido; a análise não rodou.`,
   EDIT_STALE: () =>

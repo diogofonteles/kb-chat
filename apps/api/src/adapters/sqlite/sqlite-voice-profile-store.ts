@@ -96,13 +96,14 @@ export class SqliteVoiceProfileStore implements VoiceProfileStorePort {
     const { consent } = profile;
     this.db
       .prepare(
-        `INSERT INTO voice_consents (id, collection, speaker_id, speaker_name, subject,
-           granted_by, granted_by_role, granted_on, method, purpose, text_version,
+        `INSERT INTO voice_consents (id, profile_id, collection, speaker_id, speaker_name,
+           subject, granted_by, granted_by_role, granted_on, method, purpose, text_version,
            registered_by, registered_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         profile.consentId,
+        profile.profileId,
         profile.collection,
         profile.speakerId,
         profile.speakerName,
@@ -191,6 +192,15 @@ export class SqliteVoiceProfileStore implements VoiceProfileStorePort {
       .prepare('SELECT min(registered_at) AS oldest FROM voice_consents')
       .get();
     return row ? nullableText(row, 'oldest') : null;
+  }
+
+  revokedProfileIds(): string[] {
+    return this.db
+      .prepare(
+        'SELECT profile_id FROM voice_consents WHERE revoked_at IS NOT NULL',
+      )
+      .all()
+      .map((row) => text(row, 'profile_id'));
   }
 
   recalculate(input: { profileId: string; jobId: string; now: Date }): boolean {

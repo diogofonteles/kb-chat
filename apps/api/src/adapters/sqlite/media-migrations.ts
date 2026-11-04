@@ -713,6 +713,8 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     sql: `
       CREATE TABLE voice_consents (
         id TEXT PRIMARY KEY,
+        -- Stays after the profile goes: a revocation the list missed is written at the next start.
+        profile_id TEXT NOT NULL UNIQUE,
         collection TEXT NOT NULL,
         speaker_id TEXT NOT NULL REFERENCES media_speakers (id),
         -- The name authorised, as it was then: this row is the record of the consent.

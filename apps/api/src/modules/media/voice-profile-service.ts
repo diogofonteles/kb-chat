@@ -77,6 +77,13 @@ const invalidSources = () =>
 
 const JOB_RUNNING: readonly (JobStatus | null)[] = ['queued', 'leased'];
 
+/** What went wrong in a step that must not stop the next; null when nothing did. */
+const failureOf = (step: Promise<void>): Promise<{ cause: unknown } | null> =>
+  step.then(
+    () => null,
+    (cause: unknown) => ({ cause }),
+  );
+
 /** Today, as a date, in UTC. */
 const dayOf = (date: Date): string => date.toISOString().slice(0, 10);
 
@@ -148,18 +155,28 @@ export class VoiceProfileService {
 
   /**
    * The list first, then the print: a crash after either leaves a revocation the next start
-   * finishes, never a print or a profile of someone who revoked.
+   * finishes, never a print or a profile of someone who revoked. No step waits for the one
+   * before it: revoking always works on what it can reach (ADR 0032 §4), and only then says
+   * what it could not, for the next start to finish.
    */
   async revoke(actor: VoiceProfileActor, profileId: string): Promise<void> {
     this.visible(actor, profileId);
-    await this.deps.revocations.add(profileId);
-    await this.deps.prints.remove(profileId);
+    const unlisted = await failureOf(this.deps.revocations.add(profileId));
+    const kept = await failureOf(this.deps.prints.remove(profileId));
     const revoked = this.deps.profiles.revoke({
       profileId,
       by: actor.email,
       now: this.now(),
     });
     if (!revoked) throw notFound();
+    if (unlisted)
+      throw new AppError('VOICE_LIST_NOT_WRITTEN', 'Revoked, but not listed', {
+        cause: unlisted.cause,
+      });
+    if (kept)
+      throw new AppError('INTERNAL', 'Revoked, but the print stayed', {
+        cause: kept.cause,
+      });
   }
 
   /**
