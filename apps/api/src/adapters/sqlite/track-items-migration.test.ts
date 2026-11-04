@@ -11,9 +11,12 @@ const VERSION =
   MEDIA_MIGRATIONS.find((one) => one.name === 'track-items')?.version ?? 0;
 const BEFORE = MEDIA_MIGRATIONS.filter((one) => one.version < VERSION);
 
-/** What KBC-071's unmerged migration does to `jobs`: a kind, a column and a check. */
+/**
+ * What KBC-071's unmerged migration does to `jobs`: a kind, a column and a check. Numbered past
+ * every real migration, as a branch that landed first: this one then runs as a lower version.
+ */
 const SIBLING_REBUILD: Migration = {
-  version: 16,
+  version: 99,
   name: 'sibling-rebuild',
   sql: `
     CREATE TABLE jobs_sibling (
@@ -40,20 +43,10 @@ const SIBLING_REBUILD: Migration = {
   `,
 };
 
-/**
- * KBC-045's unmerged migration, word for word (PR #72): it creates `words_by_segment` with no
- * `IF NOT EXISTS`, and may reach a database before or after this one.
- */
-const WORD_HIGHLIGHT: Migration = {
-  version: 16,
-  name: 'word-highlight',
-  sql: `
-    CREATE INDEX words_by_segment ON words (transcript_id, segment_position, position);
-    ALTER TABLE media_preferences ADD COLUMN word_highlight INTEGER NOT NULL DEFAULT 1
-      CHECK (word_highlight IN (0, 1));
-  `,
-};
-/** This code's list without KBC-045's, so these tests outlive that merge. */
+/** KBC-045's migration, numbered below this one, reaches a database before or after it. */
+const WORD_HIGHLIGHT = MEDIA_MIGRATIONS.filter(
+  (one) => one.name === 'word-highlight',
+);
 const OURS = MEDIA_MIGRATIONS.filter((one) => one.name !== 'word-highlight');
 const OURS_BEFORE = OURS.filter((one) => one.version < VERSION);
 
@@ -72,7 +65,7 @@ const indexesOfWords = (db: DatabaseSync) =>
     .all()
     .map((row) => row['name']);
 
-/** PR #72's query: its panel pages a transcript's words in order, without sorting them. */
+/** The panel's query: it pages a transcript's words in order, without sorting them. */
 const planOfWordPage = (db: DatabaseSync) =>
   db
     .prepare(
@@ -174,15 +167,15 @@ describe('migration track-items (KBC-068)', () => {
   describe.each([
     {
       state: 'a database at word-highlight meets this migration',
-      steps: [[...OURS_BEFORE, WORD_HIGHLIGHT], OURS],
+      steps: [[...OURS_BEFORE, ...WORD_HIGHLIGHT], MEDIA_MIGRATIONS],
     },
     {
       state: 'a database past this migration gets word-highlight',
-      steps: [OURS, [...OURS, WORD_HIGHLIGHT]],
+      steps: [OURS, MEDIA_MIGRATIONS],
     },
     {
       state: 'a new database takes both',
-      steps: [[...OURS, WORD_HIGHLIGHT]],
+      steps: [MEDIA_MIGRATIONS],
     },
   ])('when $state', ({ steps }) => {
     const migrated = () => {
@@ -191,22 +184,22 @@ describe('migration track-items (KBC-068)', () => {
       return db;
     };
 
-    it('applies both and keeps the index of each', () => {
+    it('applies both, with one index of the words by segment', () => {
       const db = migrated();
       expect(appliedVersions(db)).toEqual(
-        expect.arrayContaining([WORD_HIGHLIGHT.version, VERSION]),
+        expect.arrayContaining([
+          ...WORD_HIGHLIGHT.map((one) => one.version),
+          VERSION,
+        ]),
       );
-      expect(indexesOfWords(db)).toEqual([
-        'words_by_segment',
-        'words_by_segment_position',
-      ]);
+      expect(indexesOfWords(db)).toEqual(['words_by_segment_position']);
       db.close();
     });
 
-    it("reads a page of words through a segment index, in the index's order", () => {
+    it("reads a page of words through this migration's index, in its order", () => {
       const db = migrated();
       const plan = planOfWordPage(db);
-      expect(plan).toContain('words_by_segment');
+      expect(plan).toContain('USING INDEX words_by_segment_position');
       expect(plan).not.toContain('TEMP B-TREE');
       db.close();
     });

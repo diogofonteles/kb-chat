@@ -12,8 +12,10 @@ import {
   computed,
   inject,
   input,
+  effect,
   linkedSignal,
   signal,
+  untracked,
   viewChild,
   viewChildren,
 } from '@angular/core';
@@ -30,18 +32,32 @@ import {
   prepareSearch,
   quoteWithLink,
   searchPrepared,
+  wordAtOffset,
   type SearchHit,
+  type SpokenWord,
 } from '@kb-chat/player-core';
 import { speak } from '@core/i18n/spoken-time.js';
-import { mediaPagePath } from '@core/media/media-api.js';
+import { MediaApi, mediaPagePath } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { PlaybackClock } from '@core/media/playback-clock.js';
 import { PlayerAnnouncer } from '@core/media/player-announcer.js';
 import type { PassageFocus } from '../search-hit/passage-focus.js';
-import { Subject, debounceTime, distinctUntilChanged, merge, skip } from 'rxjs';
+import {
+  EMPTY,
+  Subject,
+  debounceTime,
+  distinctUntilChanged,
+  filter,
+  map,
+  merge,
+  skip,
+  switchMap,
+} from 'rxjs';
 import { speakerChanges, type SpeakerShown } from '../voices/speaker-names.js';
 import { VoiceTag } from '../voices/voice-tag.js';
 import { SEARCH_HIGHLIGHTS } from './search-highlights.js';
+import { CARET_AT_POINT } from './text-caret.js';
+import { TranscriptWords, wordsPageOf } from './transcript-words.js';
 
 /** One segment as the list shows it. */
 interface SegmentView {
@@ -83,12 +99,18 @@ const HIT_STEPS: Readonly<Record<string, number>> = {
 /** The active segment is kept within this share of the list from its top and bottom. */
 const COMFORT = 0.15;
 
+/** This close to the end of a page of words, the next one is asked for (KBC-045). */
+const NEXT_PAGE_SEGMENTS = 5;
+
+const NO_WORDS: readonly SpokenWord[] = [];
+
 /**
  * The transcript beside the player (screens.md T15, KBC-038): the segment being heard is
  * marked (`aria-current`, background and side bar) and kept in view without stealing the
  * focus; any scrolling by the person stops that until "Voltar ao trecho atual", a segment
  * or a skip in the player. One Tab stop with ↑/↓, Home/End and Enter (FR-7), search
- * without accents (FR-8) and copying a selection with the minute's link (FR-9).
+ * without accents (FR-8) and copying a selection with the minute's link (FR-9). Inside the
+ * active segment the spoken word is painted, and a click plays from the word (KBC-045).
  */
 @Component({
   selector: 'app-transcript-panel',
@@ -112,12 +134,16 @@ export class TranscriptPanel {
   readonly passage = input<PassageFocus | null>(null);
   /** "Mostrar quem fala" (KBC-065 FR-4). */
   readonly showSpeakers = input(true);
+  /** "Destacar palavra a palavra" (KBC-045 FR-4). */
+  readonly wordByWord = input(true);
 
   private readonly engine = inject(MediaEngine);
   private readonly clock = inject(PlaybackClock);
   private readonly announcer = inject(PlayerAnnouncer);
   private readonly document = inject(DOCUMENT);
   private readonly injector = inject(Injector);
+  private readonly caretAt = inject(CARET_AT_POINT);
+  private readonly mediaApi = inject(MediaApi);
   private readonly list = viewChild<ElementRef<HTMLOListElement>>('list');
   private readonly items = viewChildren<ElementRef<HTMLLIElement>>('item');
   private readonly times = viewChildren<ElementRef<HTMLButtonElement>>('time');
@@ -131,6 +157,47 @@ export class TranscriptPanel {
   protected readonly activeIndex = computed(() =>
     lastStartedAt(this.segments(), this.clock.positionMs()),
   );
+  /** The words come apart from the transcript, a page at a time (KBC-045 FR-1). */
+  private readonly words = new TranscriptWords(this.transcript, (id, range) =>
+    this.mediaApi.transcriptWords(id, range),
+  );
+  /** The pages the highlight needs now, for this transcript; none when it is off (FR-4). */
+  private readonly neededPages = computed(
+    () => {
+      if (!this.wordByWord()) return { key: '', pages: [] };
+      const active = Math.max(0, this.activeIndex());
+      const near = Math.min(
+        active + NEXT_PAGE_SEGMENTS,
+        this.segments().length - 1,
+      );
+      return {
+        key: this.words.key(),
+        pages: [
+          ...new Set([wordsPageOf(active), wordsPageOf(Math.max(0, near))]),
+        ],
+      };
+    },
+    { equal: (a, b) => a.key === b.key && a.pages.join() === b.pages.join() },
+  );
+  private readonly activeWords = computed(() =>
+    this.wordByWord()
+      ? (this.words.of(this.activeIndex()) ?? NO_WORDS)
+      : NO_WORDS,
+  );
+  /**
+   * Read on every frame while playing: a binary search over one segment's words, and what
+   * depends on it runs only when the word changes (FR-2, NFR-2).
+   */
+  private readonly activeWord = computed(() =>
+    lastStartedAt(this.activeWords(), this.clock.positionMs()),
+  );
+  /** A click on a word whose page is not here yet; null cancels the one pending. */
+  private readonly pendingWord = new Subject<{
+    readonly segment: number;
+    readonly char: number;
+    /** The engine's seek count after the click's own: any later seek outranks the word. */
+    readonly seeks: number;
+  } | null>();
   /** Off once the person scrolls or moves through the list themselves (FR-3). */
   private readonly tracking = signal(true);
   /** What is in the search field now. */
@@ -233,6 +300,73 @@ export class TranscriptPanel {
     });
     this.paintSearch(destroyRef);
     this.paintPassage(destroyRef);
+    this.paintWord(destroyRef);
+    this.loadNeededWords(destroyRef);
+    this.landOnPendingWord();
+  }
+
+  /**
+   * The active segment's page, and the next one a little before it is reached. An effect,
+   * since a request is no signal: it also runs for a new version of the transcript.
+   */
+  private loadNeededWords(destroyRef: DestroyRef): void {
+    effect(() => {
+      const { pages } = this.neededPages();
+      untracked(() => {
+        for (const page of pages)
+          this.words
+            .load(page)
+            .pipe(takeUntilDestroyed(destroyRef))
+            .subscribe();
+      });
+    });
+  }
+
+  /**
+   * Once the page of a clicked word arrives, moves from its segment to the word (FR-3),
+   * unless the person went elsewhere meanwhile: a skip, the slider, a bookmark, the keys.
+   */
+  private landOnPendingWord(): void {
+    this.pendingWord
+      .pipe(
+        switchMap((clicked) =>
+          clicked
+            ? this.words.load(wordsPageOf(clicked.segment)).pipe(
+                map(() => this.wordAt(clicked.segment, clicked.char)),
+                filter((word) => word !== null),
+                filter(() => this.engine.seeksAsked() === clicked.seeks),
+              )
+            : EMPTY,
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((word) => this.engine.seek(word.startMs));
+  }
+
+  private wordAt(segment: number, char: number): SpokenWord | null {
+    return wordAtOffset(this.words.of(segment) ?? NO_WORDS, char);
+  }
+
+  /**
+   * The spoken word, painted like the search: one range replaced when the word changes (at
+   * most one write per word, FR-2), and no element around it, so nothing lays out (NFR-2).
+   */
+  private paintWord(destroyRef: DestroyRef): void {
+    const highlights = inject(SEARCH_HIGHLIGHTS);
+    afterRenderEffect({
+      write: () => {
+        const word = this.activeWords()[this.activeWord()];
+        const range =
+          word &&
+          this.rangeOf({
+            segment: this.activeIndex(),
+            start: word.charStart,
+            end: word.charEnd,
+          });
+        highlights.show('transcript-word', range ? [range] : []);
+      },
+    });
+    destroyRef.onDestroy(() => highlights.clear('transcript-word'));
   }
 
   /**
@@ -338,13 +472,29 @@ export class TranscriptPanel {
     destroyRef.onDestroy(() => stops.forEach((stop) => stop()));
   }
 
-  /** Clicking a segment's time or text plays from it (FR-4); a selection is left alone. */
+  /**
+   * Clicking a segment's time plays from it (FR-4), and its text from the word under the
+   * pointer (KBC-045 FR-3); a selection is left alone.
+   */
   protected clickSegment(event: MouseEvent): void {
     const index = this.segmentOf(event.target);
     // `detail` is 0 for Enter and Space on the time button: always a request to play.
     if (index === null || (event.detail > 0 && this.selected() !== null))
       return;
-    this.playFrom(index);
+    this.playFrom(index, this.charUnder(event, index));
+  }
+
+  /** The character clicked in the segment's text; null off the text, or from the keyboard. */
+  private charUnder(event: MouseEvent, index: number): number | null {
+    const onText =
+      event.detail > 0 &&
+      event.target instanceof Element &&
+      event.target.closest('.text') !== null;
+    if (!onText) return null;
+    const caret = this.caretAt(event.clientX, event.clientY);
+    return caret?.node === this.textNodeOf(index)
+      ? (caret?.offset ?? null)
+      : null;
   }
 
   /** ↑/↓, PageUp/PageDown, Home/End move the one Tab stop (FR-7); the list stops following. */
@@ -491,13 +641,25 @@ export class TranscriptPanel {
     this.announcer.say(message);
   }
 
-  private playFrom(index: number): void {
+  /**
+   * Plays a segment, or the word at `char` in it. Both happen inside the person's gesture:
+   * Safari refuses a `play()` that comes after a request, so a word whose page is not here
+   * starts at its segment and moves to the word when the page arrives.
+   */
+  private playFrom(index: number, char: number | null = null): void {
     const segment = this.segments()[index];
     if (!segment) return;
     this.resumeTracking();
     this.moved.set(index);
-    this.engine.seek(segment.startMs);
+    const word = char === null ? null : this.wordAt(index, char);
+    this.engine.seek(word?.startMs ?? segment.startMs);
     this.engine.play();
+    const waiting = char !== null && this.words.of(index) === null;
+    this.pendingWord.next(
+      waiting
+        ? { segment: index, char, seeks: this.engine.seeksAsked() }
+        : null,
+    );
   }
 
   private resumeTracking(): void {

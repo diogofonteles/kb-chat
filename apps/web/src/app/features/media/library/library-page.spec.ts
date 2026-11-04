@@ -95,6 +95,7 @@ const PREFERENCES: ListeningPreferences = {
   skipBackSec: 15,
   skipForwardSec: 30,
   skipSilences: false,
+  wordHighlight: true,
   ...DEFAULT_LIBRARY_PREFERENCES,
 };
 

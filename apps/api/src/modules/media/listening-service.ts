@@ -12,7 +12,7 @@ import type { MediaActor, MediaService } from './media-service.js';
 
 /**
  * Before any choice: normal speed, remaining time, back 15 s and forward 30 s (T15),
- * silences as recorded (KBC-044 BR-2); the library by recently played, as a list, with no
+ * silences as recorded (KBC-044 BR-2), the spoken word highlighted (KBC-045); the library by recently played, as a list, with no
  * filter (KBC-051 BR-7).
  */
 export const DEFAULT_PREFERENCES: ListeningPreferences = {
@@ -21,6 +21,7 @@ export const DEFAULT_PREFERENCES: ListeningPreferences = {
   skipBackSec: 15,
   skipForwardSec: 30,
   skipSilences: false,
+  wordHighlight: true,
   ...DEFAULT_LIBRARY_PREFERENCES,
 };
 

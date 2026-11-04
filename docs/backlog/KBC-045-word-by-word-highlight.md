@@ -18,12 +18,12 @@ Como quem estuda lendo junto, quero ver a palavra que está sendo dita e clicar 
 
 ## Business rules
 - BR-1: a palavra destacada é a última cujo início ≤ tempo atual, dentro do segmento ativo; entre palavras (silêncio), fica a anterior.
-- BR-2: o destaque da palavra é um sublinhado grosso em cor de destaque **e** peso maior, nunca só cor (UP-20); com `prefers-reduced-motion`, sem transição.
+- BR-2: o destaque da palavra é um sublinhado grosso em cor de destaque **e** peso maior, nunca só cor (UP-20); com `prefers-reduced-motion`, sem transição. O peso é desenhado com `text-shadow`: `::highlight` não aceita `font-weight`, e peso real empurraria o texto a cada palavra. O WebKit não desenha sombra nem traço em `::highlight`: lá fica só o sublinhado grosso, que continua não sendo só cor.
 
 ## Functional requirements
-- FR-1: `GET /api/v1/media/{id}/transcript` deve incluir, por segmento, as palavras com início e fim em ms (as filtradas pela ADR 0023 ficam de fora).
+- FR-1: `GET /api/v1/media/{id}/transcript/words?from=&count=` deve devolver as palavras de uma faixa de até 200 segmentos, com início e fim em ms (as filtradas pela ADR 0023 ficam de fora). `GET …/transcript` continua sem palavras, para nunca ler as 20 mil de uma palestra de 2 h; o painel pede 100 segmentos por vez, quando precisa (decisão do dono, 2026-11-04).
 - FR-2: Durante a reprodução, a palavra atual deve ser achada por busca binária e atualizada por `requestAnimationFrame` só enquanto toca, com no máximo 1 escrita no DOM por troca de palavra. (BR-1)
-- FR-3: Clicar numa palavra deve pular para o seu início e tocar; pelo teclado, Enter no segmento continua pulando para o início do segmento (a palavra não é parada de Tab).
+- FR-3: Clicar numa palavra deve pular para o seu início e tocar (com a opção ligada ou desligada); pelo teclado, Enter no segmento continua pulando para o início do segmento (a palavra não é parada de Tab).
 - FR-4: Com a opção desligada ou sem tempos de palavras, o destaque volta ao do segmento (KBC-038). (BR-2)
 
 ## Non-functional requirements

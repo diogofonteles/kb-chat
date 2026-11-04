@@ -4,7 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import type { MediaItem } from '@kb-chat/contracts';
+import type { MediaItem, MediaTranscriptWords } from '@kb-chat/contracts';
 import { SessionEvents } from '@core/auth/session-events.js';
 import {
   MediaApi,
@@ -70,6 +70,24 @@ describe('media URLs', () => {
 
 describe('MediaApi', () => {
   afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('asks for the words of a range of segments and parses them (KBC-045)', () => {
+    const { api, http } = setup();
+    let words: MediaTranscriptWords | undefined;
+    api
+      .transcriptWords(ITEM.id, { from: 100, count: 100 })
+      .subscribe((answer) => (words = answer));
+    http
+      .expectOne(
+        `/api/v1/media/${encodeURIComponent(ITEM.id)}/transcript/words?from=100&count=100`,
+      )
+      .flush({
+        mediaId: ITEM.id,
+        version: 2,
+        words: [{ segment: 100, startMs: 1, endMs: 2, text: 'sim' }],
+      });
+    expect(words?.words).toHaveLength(1);
+  });
 
   it('creates an item and parses it', () => {
     const { api, http } = setup();

@@ -327,3 +327,16 @@
   opacity: 0.6;
   cursor: default;
 }
+
+/* The trigger may sit anywhere in the wrapped row: the row, not the trigger, bounds the
+   menu, so its long options break into lines instead of leaving the screen. */
+@media (max-width: 599px) {
+  .options {
+    position: relative;
+  }
+
+  .options app-menu-button.more {
+    position: static;
+    --menu-item-wrap: normal;
+  }
+}

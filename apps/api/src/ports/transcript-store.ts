@@ -127,4 +127,9 @@ export interface TranscriptStorePort {
   transcripts(mediaId: string): TranscriptSummary[];
   segments(transcriptId: string): DerivedSegment[];
   words(transcriptId: string): DerivedWord[];
+  /** The words of `count` segments from `from`, reading only those (KBC-045 FR-1). */
+  wordsOfSegments(
+    transcriptId: string,
+    range: { readonly from: number; readonly count: number },
+  ): DerivedWord[];
 }

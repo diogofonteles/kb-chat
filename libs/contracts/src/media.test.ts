@@ -22,6 +22,7 @@ const PREFS = {
   skipBackSec: 15,
   skipForwardSec: 30,
   skipSilences: false,
+  wordHighlight: true,
 };
 
 const aRequest = {

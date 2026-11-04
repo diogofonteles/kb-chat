@@ -297,15 +297,21 @@ export const mediaPreferencesSchema = z.strictObject({
   skipForwardSec: z.literal(MEDIA_SKIP_FORWARD_SECONDS),
   /** "Encurtar silêncios" (KBC-044): off until the person turns it on (BR-2). */
   skipSilences: z.boolean(),
+  /**
+   * "Destacar palavra a palavra" (KBC-045): on until the person turns it off. No `.default()`:
+   * the partial PUT would then fill it in and turn a saved choice back on.
+   */
+  wordHighlight: z.boolean(),
 });
 export type MediaPreferences = z.infer<typeof mediaPreferencesSchema>;
 
 /**
- * PUT /api/v1/media/preferences. `skipSilences` may be absent (a client from before
- * KBC-044): the account then keeps its stored choice instead of turning it off.
+ * PUT /api/v1/media/preferences. `skipSilences` and `wordHighlight` may be absent (a client
+ * from before KBC-044 or KBC-045): the account then keeps its stored choice.
  */
 export const saveMediaPreferencesRequestSchema = mediaPreferencesSchema.extend({
   skipSilences: z.boolean().optional(),
+  wordHighlight: z.boolean().optional(),
 });
 export type SaveMediaPreferencesRequest = z.infer<
   typeof saveMediaPreferencesRequestSchema
@@ -1009,6 +1015,37 @@ export const transcriptSegmentSchema = z.object({
   voice: voiceIndexSchema.nullable().optional(),
 });
 export type TranscriptSegment = z.infer<typeof transcriptSegmentSchema>;
+
+/** The most segments one request for words may ask (KBC-045): the panel's page. */
+export const TRANSCRIPT_WORDS_MAX_SEGMENTS = 200;
+
+/** GET /api/v1/media/:id/transcript/words: which segments (`from`, the first, and `count`). */
+export const transcriptWordsQuerySchema = z.object({
+  from: z.coerce.number().int().min(0).max(1_000_000),
+  count: z.coerce.number().int().min(1).max(TRANSCRIPT_WORDS_MAX_SEGMENTS),
+});
+export type TranscriptWordsQuery = z.infer<typeof transcriptWordsQuerySchema>;
+
+export const transcriptWordSchema = z.object({
+  /** The segment's index in the transcript. */
+  segment: z.number().int().min(0),
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(0),
+  text: z.string(),
+});
+export type TranscriptWord = z.infer<typeof transcriptWordSchema>;
+
+/**
+ * The words of a range of segments (KBC-045 FR-1), apart from the transcript so that reading
+ * it never scans every word. A segment without word times has none here; `version` says
+ * which transcript they belong to.
+ */
+export const mediaTranscriptWordsSchema = z.object({
+  mediaId: mediaIdSchema,
+  version: z.number().int().min(1),
+  words: z.array(transcriptWordSchema),
+});
+export type MediaTranscriptWords = z.infer<typeof mediaTranscriptWordsSchema>;
 
 /** GET /api/v1/media/:id/transcript: the current version (the newest, KBC-036 BR-3). */
 export const mediaTranscriptSchema = z.object({

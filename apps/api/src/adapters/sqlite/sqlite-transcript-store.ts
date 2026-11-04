@@ -58,6 +58,14 @@ const TERM_VERSIONS = `SELECT v.version, v.created_at, v.author_name,
     (SELECT count(*) FROM terms t WHERE t.version = v.version) AS term_count
   FROM term_versions v`;
 
+const toWord = (row: Row): DerivedWord => ({
+  segment: Number(row['segment_position']),
+  startMs: Number(row['start_ms']),
+  endMs: Number(row['end_ms']),
+  text: text(row, 'text'),
+  probability: nullableNumber(row, 'probability'),
+});
+
 /** Transcripts and the term list in the media database (ADR 0022 §1, ADR 0023). */
 export class SqliteTranscriptStore implements TranscriptStorePort {
   constructor(private readonly db: DatabaseSync) {}
@@ -224,13 +232,22 @@ export class SqliteTranscriptStore implements TranscriptStorePort {
          FROM words WHERE transcript_id = ? ORDER BY position`,
       )
       .all(transcriptId)
-      .map((row) => ({
-        segment: Number(row['segment_position']),
-        startMs: Number(row['start_ms']),
-        endMs: Number(row['end_ms']),
-        text: text(row, 'text'),
-        probability: nullableNumber(row, 'probability'),
-      }));
+      .map(toWord);
+  }
+
+  wordsOfSegments(
+    transcriptId: string,
+    range: { readonly from: number; readonly count: number },
+  ): DerivedWord[] {
+    return this.db
+      .prepare(
+        `SELECT segment_position, start_ms, end_ms, text, probability
+         FROM words INDEXED BY words_by_segment_position
+         WHERE transcript_id = ? AND segment_position >= ? AND segment_position < ?
+         ORDER BY segment_position, position`,
+      )
+      .all(transcriptId, range.from, range.from + range.count)
+      .map(toWord);
   }
 
   /** The newest version of the item gets the next number (BR-3: the newest is current). */

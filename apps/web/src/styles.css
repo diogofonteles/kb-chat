@@ -72,6 +72,28 @@ textarea {
   color: var(--color-on-accent);
 }
 
+/* The spoken word (KBC-045 BR-2): a thick underline and more weight, never colour alone.
+   A highlight takes no font-weight, and a real one would push the text aside at every word,
+   so the weight is drawn with text-shadow. WebKit draws no shadow here: it shows the
+   underline alone, which is still no colour-only cue. Longhands, as WebKit drops the
+   underline of the shorthand when there is a colour or thickness in it. */
+::highlight(transcript-word) {
+  color: var(--color-text);
+  text-decoration-line: underline;
+  text-decoration-color: var(--color-accent-strong);
+  text-decoration-thickness: 3px;
+  text-shadow:
+    0.022em 0 0 var(--color-text),
+    -0.022em 0 0 var(--color-text);
+}
+
+@media (forced-colors: active) {
+  ::highlight(transcript-word) {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

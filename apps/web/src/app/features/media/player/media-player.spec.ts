@@ -56,6 +56,7 @@ async function renderPlayer(
     skipBackSec: 15,
     skipForwardSec: 30,
     skipSilences: false,
+    wordHighlight: true,
   });
   prepare(media, engine);
   await view.fixture.whenStable();
@@ -261,13 +262,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     expect(media.element.playbackRate).toBe(1.5);
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
-    ).toEqual({
-      speed: 1.5,
-      showRemaining: true,
-      skipBackSec: 15,
-      skipForwardSec: 30,
-      skipSilences: false,
-    });
+    ).toEqual({ speed: 1.5 });
     expect(
       screen.getByRole('button', { name: 'Velocidade: 1,5 vezes' }).textContent,
     ).toContain('1,5×');
@@ -279,13 +274,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     await fixture.whenStable();
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
-    ).toEqual({
-      speed: 1,
-      showRemaining: false,
-      skipBackSec: 15,
-      skipForwardSec: 30,
-      skipSilences: false,
-    });
+    ).toEqual({ showRemaining: false });
     expect(screen.getByRole('button', { name: /Duração total/ })).toBeTruthy();
   });
 
@@ -367,7 +356,7 @@ describe('MediaPlayer (KBC-041 full controls)', () => {
     await fixture.whenStable();
     expect(
       http.expectOne({ method: 'PUT', url: PREFERENCES_URL }).request.body,
-    ).toMatchObject({ skipBackSec: 5 });
+    ).toEqual({ skipBackSec: 5 });
     const button = screen.getByRole('button', { name: 'Voltar 5 segundos' });
     expect(button.textContent).toContain('5');
     media.setCurrentTime(60);

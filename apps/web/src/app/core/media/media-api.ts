@@ -4,9 +4,12 @@ import { Injectable, inject } from '@angular/core';
 import {
   MEDIA_UPLOAD_PART_BYTES,
   mediaItemSchema,
+  mediaTranscriptWordsSchema,
   uploadCheckSchema,
   type CreateMediaRequest,
   type MediaItem,
+  type MediaTranscriptWords,
+  type TranscriptWordsQuery,
   type UpdateMediaRequest,
   type UploadCheck,
   type UploadCheckRequest,
@@ -147,6 +150,16 @@ export class MediaApi {
     return this.http
       .post(`${mediaUrl(id)}/transcription`, null)
       .pipe(map((body) => mediaItemSchema.parse(body)));
+  }
+
+  /** The words of a range of segments (KBC-045 FR-1). */
+  transcriptWords(
+    id: string,
+    { from, count }: TranscriptWordsQuery,
+  ): Observable<MediaTranscriptWords> {
+    return this.http
+      .get(`${mediaTranscriptUrl(id)}/words`, { params: { from, count } })
+      .pipe(map((body) => mediaTranscriptWordsSchema.parse(body)));
   }
 
   retry(id: string): Observable<MediaItem> {

@@ -1,10 +1,15 @@
-import { mediaIdSchema, mediaTranscriptSchema } from '@kb-chat/contracts';
-import type { FastifyPluginAsync } from 'fastify';
+import {
+  mediaIdSchema,
+  mediaTranscriptSchema,
+  mediaTranscriptWordsSchema,
+  transcriptWordsQuerySchema,
+} from '@kb-chat/contracts';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { hasFeature, viewerOf, type RouteAccess } from '../auth/index.js';
 import { actorOf } from './routes.js';
-import type { TranscriptService } from './transcript-service.js';
+import type { Subtitles, TranscriptService } from './transcript-service.js';
 
 /** Reading along is part of listening: the `media` feature, as the stream (FR-1). */
 const LISTEN: RouteAccess = { feature: 'media' };
@@ -24,10 +29,29 @@ const OPTIONS = {
     config: { access: LISTEN },
     schema: { params: mediaParams, response: { 200: mediaTranscriptSchema } },
   },
+  words: {
+    config: { access: LISTEN },
+    schema: {
+      params: mediaParams,
+      querystring: transcriptWordsQuerySchema,
+      response: { 200: mediaTranscriptWordsSchema },
+    },
+  },
   subtitles: { config: { access: LISTEN }, schema: { params: mediaParams } },
 } as const;
 
-/** The current transcript and its WebVTT subtitles (KBC-038 FR-1, FR-2). */
+/** Private (per-person access) and revalidated: a new version shows at once. */
+function sendSubtitles(
+  reply: FastifyReply,
+  { etag, body }: Subtitles,
+  ifNoneMatch: string | undefined,
+): FastifyReply {
+  reply.header('cache-control', 'private, no-cache').header('etag', etag);
+  if (matches(ifNoneMatch, etag)) return reply.code(304).send();
+  return reply.type('text/vtt; charset=utf-8').send(body);
+}
+
+/** The current transcript, its words by page (KBC-045) and its WebVTT subtitles (KBC-038). */
 export const transcriptRoutes =
   (service: TranscriptService): FastifyPluginAsync =>
   async (app) => {
@@ -43,19 +67,19 @@ export const transcriptRoutes =
         }),
       ),
     );
+    typed.get('/api/v1/media/:id/transcript/words', OPTIONS.words, (request) =>
+      Promise.resolve(
+        service.words(actorOf(request), request.params.id, request.query),
+      ),
+    );
     typed.get(
       '/api/v1/media/:id/subtitles.vtt',
       OPTIONS.subtitles,
-      async (request, reply) => {
-        const { etag, body } = service.subtitles(
-          actorOf(request),
-          request.params.id,
-        );
-        // Private (per-person access) and revalidated: a new version shows at once.
-        reply.header('cache-control', 'private, no-cache').header('etag', etag);
-        if (matches(request.headers['if-none-match'], etag))
-          return reply.code(304).send();
-        return reply.type('text/vtt; charset=utf-8').send(body);
-      },
+      (request, reply) =>
+        sendSubtitles(
+          reply,
+          service.subtitles(actorOf(request), request.params.id),
+          request.headers['if-none-match'],
+        ),
     );
   };

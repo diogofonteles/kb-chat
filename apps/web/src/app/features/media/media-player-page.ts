@@ -53,6 +53,7 @@ import {
   mediaTranscriptUrl,
   mediaUrl,
 } from '@core/media/media-api.js';
+import { ListeningPreferences } from '@core/media/listening-preferences.js';
 import { TranscriptPreferences } from '@core/media/transcript-preferences.js';
 import { TracksStore } from '@core/media/tracks-store.js';
 import { editPagePath, mediaEditUrl } from '@core/media/media-edit-api.js';
@@ -130,6 +131,7 @@ export class MediaPlayerPage {
   private readonly title = inject(Title);
   private readonly route = inject(ActivatedRoute);
   private readonly preferences = inject(TranscriptPreferences);
+  private readonly listening = inject(ListeningPreferences);
   /** The collections the person sees, for "Editar informações" (KBC-050). */
   protected readonly topics = inject(ChatStore).topicList;
   protected readonly editLabel = editDetailsLabel();
@@ -250,6 +252,10 @@ export class MediaPlayerPage {
     () => this.transcriptVersion() !== null,
   );
   protected readonly collapsed = this.preferences.transcriptCollapsed;
+  /** "Destacar palavra a palavra" (KBC-045), kept in the account. */
+  protected readonly wordHighlight = computed(
+    () => this.listening.value().wordHighlight,
+  );
   /** The subtitles' names come from the transcript, even with its column hidden (FR-4). */
   private readonly wantsTranscript = computed(
     () =>
