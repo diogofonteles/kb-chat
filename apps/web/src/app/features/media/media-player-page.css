@@ -217,6 +217,10 @@
 }
 
 .part-of {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.35em;
   margin: 0 0 var(--space-1);
   font-size: var(--text-sm);
 }
