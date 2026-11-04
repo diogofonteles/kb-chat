@@ -16,10 +16,13 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
-import { viewerOf, type RouteAccess } from '../auth/index.js';
+import { assertFeature, viewerOf, type RouteAccess } from '../auth/index.js';
 import type { SpeakersService } from './speakers-service.js';
 
-/** The list names people: it is for whoever edits that collection's recordings (BR-4). */
+/**
+ * The list names people: it is for whoever edits that collection's recordings and may listen
+ * to them (BR-4): `media-edit` by the route, `media` by the hook below.
+ */
 const EDIT: RouteAccess = { feature: 'media-edit', topicParam: 'topic' };
 const params = z.object({ topic: topicSlugSchema });
 
@@ -89,6 +92,9 @@ function registerCreate(typed: Typed, deps: CollectionSpeakerRoutesDeps): void {
 export const collectionSpeakerRoutes =
   (deps: CollectionSpeakerRoutesDeps): FastifyPluginAsync =>
   async (app) => {
+    app.addHook('preHandler', async (request) =>
+      assertFeature(request, 'media'),
+    );
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.get(
       '/api/v1/topics/:topic/speakers',

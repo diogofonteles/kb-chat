@@ -133,6 +133,49 @@ describe('The speakers of a collection (KBC-065 FR-1, AC-7, BR-2)', () => {
     expect(missing.statusCode).toBe(404);
   });
 
+  it('AC-7: refuses a name made only of combining marks (400, not a failure)', async () => {
+    const { owner } = await startMedia();
+    const marks = { name: '\u0301\u0302' };
+    expect((await owner('POST', URL, marks)).statusCode).toBe(400);
+    const ana = (await owner('POST', URL, { name: 'Ana' })).json<{
+      id: string;
+    }>();
+    expect((await owner('PATCH', `${URL}/${ana.id}`, marks)).statusCode).toBe(
+      400,
+    );
+  });
+
+  it('BR-4: reading or changing the list also needs `media`; with both it works', async () => {
+    const media = await startMedia();
+    const created = await media.owner('POST', URL, { name: 'Ana' });
+    const { id } = created.json<{ id: string }>();
+    const noAudio = await member(media, {
+      email: 'edita@example.com',
+      topics: ['hermetismo'],
+      features: ['media-edit'],
+    });
+    expect((await noAudio.call('GET', URL)).statusCode).toBe(403);
+    expect((await noAudio.call('POST', URL, { name: 'Bia' })).statusCode).toBe(
+      403,
+    );
+    expect(
+      (await noAudio.call('PATCH', `${URL}/${id}`, { name: 'Bia' })).statusCode,
+    ).toBe(403);
+
+    const both = await member(media, {
+      email: 'ambos@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-edit'],
+    });
+    expect((await both.call('GET', URL)).statusCode).toBe(200);
+    expect((await both.call('POST', URL, { name: 'Bia' })).statusCode).toBe(
+      201,
+    );
+    expect(
+      (await both.call('PATCH', `${URL}/${id}`, { name: 'Cida' })).statusCode,
+    ).toBe(200);
+  });
+
   it('BR-4: needs `media-edit` on the collection, and a collection that exists', async () => {
     const media = await startMedia();
     const { call } = await member(media, {
