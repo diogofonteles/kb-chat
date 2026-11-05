@@ -24,7 +24,7 @@ async function openGroq(page: Page): Promise<Locator> {
 
 const seriousViolations = async (page: Page) =>
   (
-    await new AxeBuilder({ page }).include('[role="dialog"]').analyze()
+    await new AxeBuilder({ page }).include('dialog').analyze()
   ).violations.filter((violation) =>
     ['serious', 'critical'].includes(violation.impact ?? ''),
   );
@@ -48,10 +48,10 @@ test('AC-5, AC-7: a master connects Groq, chooses the mode and sees the month, w
 }) => {
   const dialog = await openGroq(page);
   await expect(dialog.getByRole('radio', { name: 'Nunca' })).toBeVisible();
-  await expect(dialog.getByText(/US\$ [\d,]+ de US\$ [\d,]+/)).toBeVisible();
+  await expect(dialog.getByText(/US\$\s[\d,]+ de US\$\s[\d,]+/)).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
 
-  const key = dialog.getByLabel(/Chave da API do Groq/);
+  const key = dialog.getByLabel(/chave da API do Groq/i);
   const keyStatus = dialog.getByRole('status').first();
   await key.fill('gsk_e2e_wrong');
   await dialog.getByRole('button', { name: 'Testar conexão' }).click();
@@ -102,7 +102,7 @@ test('AC-2: "Transcrever com Groq" sends a waiting audio, and it comes back tran
   await expect(
     question.getByRole('button', { name: 'Cancelar' }),
   ).toBeFocused();
-  await expect(question).toContainText('US$ 0,01');
+  await expect(question).toContainText(/US\$\s0,01/);
   await question.getByRole('button', { name: 'Transcrever com Groq' }).click();
 
   await expect(meta).toContainText(
