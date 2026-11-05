@@ -5,7 +5,11 @@
     "test": {
       "command": "node --test tools/ci/*.test.mjs",
       "cache": true,
-      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/tools/heavy.sh"]
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/tools/heavy.sh",
+        "{workspaceRoot}/tools/test-temp.mjs"
+      ]
     }
   }
 }

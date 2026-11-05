@@ -3,6 +3,7 @@ import { registerTranscriberClock } from './transcriber-clock-routes.js';
 import { registerTranscriptSeed } from './transcript-seed-routes.js';
 import { registerDiarizationSeed } from './diarization-seed-routes.js';
 import { startMediaWorkers } from './media-worker-runner.js';
+import { privateTemp } from '../../../../tools/test-temp.mjs';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,6 +52,9 @@ import {
 
 /** Not a secret: the E2E server's media worker token (local, throwaway). */
 const E2E_MEDIA_WORKER_TOKEN = 'e2e-media-worker-token-0123456789abcdef';
+
+// Started by hand (no Playwright around it), it still cleans up after itself.
+privateTemp();
 
 /** The owner of the E2E run: a master with the `owner` data the specs expect. */
 export const E2E_OWNER_EMAIL = 'owner@kb-chat.test';

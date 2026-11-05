@@ -1,5 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { privateTemp } from '../../tools/test-temp.mjs';
+
+privateTemp();
 
 export default defineConfig({
   resolve: {

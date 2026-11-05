@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import { privateTemp } from '../tools/test-temp.mjs';
+
+privateTemp();
 
 // The tutorial's screenshots (KBC-032): `pnpm tutorial:screenshots`. Its own ports, so it runs
 // beside `pnpm e2e` and the dev servers; a fresh E2E server (fixture vault, fake AI) each run.

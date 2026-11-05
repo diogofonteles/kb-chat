@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -16,8 +16,10 @@ test('stops at the first success and passes the command through', () => {
   assert.equal(result.stdout.trim(), 'done');
 });
 
-test('a hung attempt is killed at its limit and the next one succeeds', () => {
-  const marker = join(mkdtempSync(join(tmpdir(), 'kbc-retry-')), 'tries');
+test('a hung attempt is killed at its limit and the next one succeeds', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'kbc-retry-'));
+  t.after(() => rmSync(dir, { recursive: true }));
+  const marker = join(dir, 'tries');
   writeFileSync(marker, '');
   const script = `echo x >> ${marker}; [ "$(wc -l < ${marker})" -gt 1 ] || sleep 30`;
   const started = Date.now();
