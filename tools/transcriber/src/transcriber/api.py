@@ -154,6 +154,10 @@ class ApiClient:
         """The print of a `voice-profile` job (KBC-071 FR-2)."""
         return self._on_job(job, "voice-print", result)
 
+    def upload_kb_result(self, job: dict, result: dict) -> bool:
+        """What kb did to a kb-publish job's documents (KBC-099 FR-2)."""
+        return self._on_job(job, "kb-result", result)
+
     def fail(self, job: dict, failure: str, detail: str) -> bool:
         return self._on_job(job, "fail", {"failure": failure, "detail": detail[:2000]})
 

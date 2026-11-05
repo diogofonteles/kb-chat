@@ -29,6 +29,7 @@ from .config import (
     UNAUTHORIZED_BACKOFF_S,
 )
 from .diarize import Diarizer, separate
+from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
 from .secret import TokenError
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
@@ -78,11 +79,14 @@ class Worker:
     # Voice prints (KBC-071): without a speaker model, none is ever fetched or made.
     embedder: Embedder | None = None
     print_ack_s: float = PRINT_ACK_S
+    # Track documents (KBC-099): without a vault and kb, the worker never asks for them.
+    publisher: KbPublisher | None = None
 
     @property
     def kinds(self) -> tuple[str, ...]:
         kinds = ("transcribe", "diarize") if self.diarizer else ("transcribe",)
-        return (*kinds, "voice-profile") if self.embedder else kinds
+        kinds = (*kinds, "voice-profile") if self.embedder else kinds
+        return (*kinds, "kb-publish") if self.publisher else kinds
 
     def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
         """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
@@ -165,6 +169,7 @@ class Worker:
                 handler = {
                     "diarize": self._diarize,
                     "voice-profile": self._voice_profile,
+                    "kb-publish": self._kb_publish,
                 }.get(job["kind"], self._transcribe)
                 handler(job, Path(work), progress, stop)
         finally:
@@ -201,6 +206,23 @@ class Worker:
             return
         elapsed_ms = int((time.monotonic() - started) * 1000)
         self._upload(job, terms, result, elapsed_ms, stop)
+
+    def _kb_publish(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Writes the documents, runs kb, reports per document (KBC-099 FR-3)."""
+        if self.publisher is None:
+            raise RuntimeError("leased a kb-publish job without a vault and kb")
+        try:
+            result = self.publisher.publish(job)
+        except (KbStepFailed, VaultBusy, UnsafePath) as err:
+            log.error("job %s: publishing failed: %s", job["id"], err)
+            self.api.fail(job, "conversion-failed", str(err)[-2_000:])
+            return
+        progress["percent"] = 100
+        if self.api.upload_kb_result(job, result):
+            count = len(result["documents"])
+            log.info("job %s: %d documents in %s", job["id"], count, job["topic"])
+        else:
+            log.warning("job %s: the lease was lost before the result: dropped", job["id"])
 
     def _diarize(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
         """Separates the voices of the job's audio and uploads only the turns (BR-1)."""

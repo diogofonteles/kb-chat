@@ -48,7 +48,10 @@ def pair(args: argparse.Namespace) -> int:
     except TokenError as err:
         print(str(err), file=sys.stderr)
         return 1
-    save_config({"api_url": api_url, "name": args.name or socket.gethostname()})
+    saved = {"api_url": api_url, "name": args.name or socket.gethostname()}
+    if args.vault:
+        saved["vault_path"] = str(Path(args.vault).expanduser())
+    save_config(saved)
     print("Pareado. Rode `uv run --project tools/transcriber transcriber run` ou carregue o plist.")
     return 0
 
@@ -57,6 +60,7 @@ def run(args: argparse.Namespace) -> int:
     from .api import ApiClient
     from .audio import decode_pcm16k, ffmpeg_bin
     from .diarize import senko_or_none
+    from .kb_publish import KbPublisher, kb_or_none
     from .vad import silero_speech
     from .voiceprint import ecapa_or_none
     from .worker import Worker
@@ -76,6 +80,8 @@ def run(args: argparse.Namespace) -> int:
     except (TokenError, RuntimeError, ValueError) as err:
         print(str(err), file=sys.stderr)
         return 2
+    vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
+    kb = None if args.no_kb_publish else kb_or_none(vault)
     model, count = _mlx()
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -93,6 +99,9 @@ def run(args: argparse.Namespace) -> int:
         # KBC-071: only with the `voiceprint` extra; the API gives prints only to a token
         # marked for them, and nothing is marked by default (ADR 0032).
         embedder=None if args.no_voice_profiles else ecapa_or_none(),
+        # KBC-099: with a vault and kb on this Mac; the API gives track documents only to a
+        # transcriber marked "Publica no acervo" in Transcritores, and kb spends on its key.
+        publisher=KbPublisher(kb.vault, kb) if kb else None,
     )
     if args.poll:
         worker.poll_s = args.poll
@@ -116,6 +125,9 @@ def main(argv: list[str] | None = None) -> int:
     pairing = commands.add_parser("pair", help="store the token shown on the Transcritores screen")
     pairing.add_argument("--api-url", required=True)
     pairing.add_argument("--name")
+    pairing.add_argument(
+        "--vault", help="the kb vault on this Mac, for 'Publica no acervo' (KBC-099)"
+    )
     pairing.set_defaults(handler=pair)
     running = commands.add_parser("run", help="lease and transcribe jobs until stopped")
     running.add_argument("--once", action="store_true", help="at most one job, then exit")
@@ -128,6 +140,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     running.add_argument(
         "--no-voice-profiles", action="store_true", help="never handle voice prints (KBC-071)"
+    )
+    running.add_argument(
+        "--no-kb-publish",
+        action="store_true",
+        help="never write track documents into the vault nor run kb (KBC-099)",
     )
     running.set_defaults(handler=run)
     args = parser.parse_args(argv)
