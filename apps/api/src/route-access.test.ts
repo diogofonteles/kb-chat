@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { closeApp } from '../test/ai-app-harness.js';
 import { FIXTURE_VAULT } from '../test/fixture-paths.js';
+import { startMedia } from '../test/media-harness.js';
 import { FsVaultAdapter } from './adapters/fs-vault-adapter.js';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
@@ -132,6 +134,38 @@ describe('route access (NFR-2, AC-6)', () => {
       /declares no config.access/,
     );
     await other.close();
+  });
+});
+
+// Media routes exist only in an app built with a media library.
+describe('voice-profile routes', () => {
+  afterEach(closeApp);
+
+  it('need the master role and refuse while acting (ADR 0032)', async () => {
+    const { started } = await startMedia();
+    const access = {
+      feature: ['media', 'media-voice-profiles'],
+      master: true,
+      notWhileActing: true,
+    };
+    const inCollection = { ...access, topicParam: 'topic' };
+    const find = (method: string, url: string) =>
+      started.app.routeAccess.find((r) => r.method === method && r.url === url)
+        ?.access;
+
+    for (const [method, url] of [
+      ['GET', '/api/v1/topics/:topic/voice-profiles'],
+      ['POST', '/api/v1/topics/:topic/voice-profiles'],
+      ['GET', '/api/v1/topics/:topic/speakers/:speakerId/named-voices'],
+    ] as const)
+      expect(find(method, url), `${method} ${url}`).toEqual(inCollection);
+    for (const [method, url] of [
+      ['DELETE', '/api/v1/voice-profiles/:id'],
+      ['POST', '/api/v1/voice-profiles/:id/recalculate'],
+      ['GET', '/api/v1/voice-profiles/report'],
+      ['GET', '/api/v1/voice-consents/:id/evidence'],
+    ] as const)
+      expect(find(method, url), `${method} ${url}`).toEqual(access);
   });
 });
 
