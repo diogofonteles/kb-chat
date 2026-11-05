@@ -146,6 +146,16 @@ async function deleteTrack(harness: RouterTestingHarness) {
   await harness.fixture.whenStable();
 }
 
+/** Changes a title and leaves the field: a change that moves no time. */
+async function renameSelected(harness: RouterTestingHarness) {
+  const field = screen.getByRole<HTMLInputElement>('textbox', {
+    name: 'Título',
+  });
+  field.value = `${field.value} novo`;
+  fireEvent.blur(field);
+  await harness.fixture.whenStable();
+}
+
 describe('TrackEditorPage (T20, KBC-066)', () => {
   it('explains a refusal instead of showing an empty editor', async () => {
     await openPage({ error: 403 });
@@ -194,6 +204,172 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       'Faixa 1: Sem título',
     );
     http.expectNone(`${BASE}/edit/approve`);
+  });
+
+  describe('a draft that holds an overlap (KBC-094)', () => {
+    const OVERLAPPING = anEdit({
+      tracks: [aTrack(1, 0, 20_042), aTrack(2, 20_000, 40_000)],
+    });
+    const spied = () =>
+      vi
+        .spyOn(HTMLElement.prototype, 'scrollIntoView')
+        .mockImplementation(() => undefined);
+
+    it('answers the press where the person is: focus, scroll and the size', async () => {
+      const scrolled = spied();
+      const { harness, http } = await openPage(OVERLAPPING);
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Faixa 2: Sobreposta à anterior em 0,042 s',
+      );
+      expect(document.activeElement?.textContent).toContain('Faixa 2');
+      expect(scrolled).toHaveBeenCalledWith({ block: 'center' });
+      http.expectNone(`${BASE}/edit/approve`);
+    });
+
+    it('answers a second press too: the alert is said again', async () => {
+      const scrolled = spied();
+      const { harness } = await openPage(OVERLAPPING);
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      const first = screen.getByRole('alert');
+      button('Aprovar faixas').focus();
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      expect(screen.getByRole('alert')).not.toBe(first);
+      expect(document.activeElement?.textContent).toContain('Faixa 2');
+      expect(scrolled).toHaveBeenCalledTimes(2);
+    });
+
+    it('closes it with one press, undoable, and saves', async () => {
+      spied();
+      const { harness, http } = await openPage(OVERLAPPING);
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      fireEvent.click(button('Encostar na faixa anterior'));
+      await harness.fixture.whenStable();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByText(/Sobreposta/)).toBeNull();
+      expect(document.activeElement?.textContent).toContain('Faixa 2');
+      await saveDelay();
+      const save = http.expectOne({ method: 'PUT', url: `${BASE}/edit` });
+      expect(save.request.body.tracks[1]).toMatchObject({
+        startMs: 20_042,
+        endMs: 40_000,
+      });
+      save.flush({ version: 3 });
+      await harness.fixture.whenStable();
+      expect(button('Desfazer').disabled).toBe(false);
+    });
+
+    it('offers nothing a track could not take: the handles stay', async () => {
+      spied();
+      const { harness } = await openPage(
+        anEdit({ tracks: [aTrack(1, 0, 36_000), aTrack(2, 20_000, 40_000)] }),
+      );
+      fireEvent.click(button('Aprovar faixas'));
+      await harness.fixture.whenStable();
+      expect(screen.getByRole('alert').textContent).toContain('16 s');
+      expect(
+        screen.queryByRole('button', { name: 'Encostar na faixa anterior' }),
+      ).toBeNull();
+    });
+
+    it('names a refused save, offers no retry and sends it once', async () => {
+      const { harness, http } = await openPage(OVERLAPPING);
+      await renameSelected(harness);
+      await saveDelay();
+      http.expectOne({ method: 'PUT', url: `${BASE}/edit` }).flush(
+        {
+          error: {
+            code: 'TRACKS_INVALID',
+            message: 'no',
+            details: {
+              problems: [
+                {
+                  trackId: aTrack(2, 0, 0).id,
+                  ordinal: 2,
+                  problem: 'overlap',
+                },
+              ],
+            },
+          },
+        },
+        { status: 422, statusText: 'Unprocessable' },
+      );
+      await harness.fixture.whenStable();
+      const alert = screen.getByRole('alert').textContent;
+      expect(alert).toContain('Faixa 2: Sobreposta à anterior em 0,042 s');
+      expect(alert).not.toContain('Não consegui salvar a última mudança');
+      expect(
+        screen.queryByRole('button', { name: 'Tentar de novo' }),
+      ).toBeNull();
+      expect(screen.getByText(/Não salvo: corrija a faixa 2/)).toBeTruthy();
+      await renameSelected(harness);
+      await saveDelay();
+      http.expectNone({ method: 'PUT', url: `${BASE}/edit` });
+    });
+  });
+
+  it('keeps a problem only the server knows when "Aprovar faixas" is pressed (KBC-094)', async () => {
+    const { harness, http } = await openPage();
+    await renameSelected(harness);
+    await saveDelay();
+    http.expectOne({ method: 'PUT', url: `${BASE}/edit` }).flush(
+      {
+        error: {
+          code: 'TRACKS_INVALID',
+          message: 'no',
+          details: {
+            problems: [
+              { trackId: aTrack(2, 0, 0).id, ordinal: 2, problem: 'range' },
+            ],
+          },
+        },
+      },
+      { status: 422, statusText: 'Unprocessable' },
+    );
+    await harness.fixture.whenStable();
+    fireEvent.click(button('Aprovar faixas'));
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Faixa 2: Passa do fim da gravação',
+    );
+    expect(
+      screen.getByText(/Passa do fim da gravação/, { selector: '.warning' }),
+    ).toBeTruthy();
+    http.expectNone(`${BASE}/edit/approve`);
+  });
+
+  it('says on step 4 that nothing else is needed (KBC-095)', async () => {
+    await openPage(anEdit({ status: 'approved', step: 4, approvedTracks: 2 }), [
+      'media',
+      'media-edit',
+      'media-classify',
+    ]);
+    expect(
+      screen.getByText(
+        /Preparação concluída: você não precisa fazer mais nada/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Os assuntos abaixo são salvos sozinhos/),
+    ).toBeTruthy();
+    expect(screen.getByTestId('step-text').textContent).toContain(
+      'Passo 4 de 4: Concluído',
+    );
+    expect(screen.getByTestId('step-text').textContent).not.toContain(
+      'Aprovar',
+    );
+    expect(screen.getByRole('link', { name: 'Ver no player' })).toBeTruthy();
+    expect(button('Reabrir edição')).toBeTruthy();
+  });
+
+  it('speaks of no subjects on step 4 to who cannot classify (KBC-095)', async () => {
+    await openPage(anEdit({ status: 'approved', step: 4, approvedTracks: 2 }));
+    expect(screen.getByText(/Preparação concluída/)).toBeTruthy();
+    expect(screen.queryByText(/assuntos/i)).toBeNull();
   });
 
   it('approves with the version, then shows the summary (AC-12)', async () => {

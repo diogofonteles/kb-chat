@@ -24,6 +24,12 @@ const SHORT: Record<PreparationStep, () => string> = {
   4: () => $localize`:@@tracks.stepShort4:4/4 Aprovar`,
 };
 
+/** Step 4 of a finished preparation: nothing there is left to press (KBC-095). */
+const FINISHED = {
+  whole: () => $localize`:@@tracks.stepFinished:Passo 4 de 4: Concluído`,
+  short: () => $localize`:@@tracks.stepFinishedShort:4/4 Concluído`,
+};
+
 /** "Passo 2 de 4: Processar", also the page's title. */
 export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
 
@@ -95,8 +101,14 @@ export const stepTitle = (step: PreparationStep): string => WHOLE[step]();
           <span i18n="@@tracks.step3">3 Validar faixas</span>
         }
       </li>
-      <li [attr.aria-current]="step() === 4 ? 'step' : null">
-        @if (skipped()) {
+      <li
+        [class.done]="finished()"
+        [attr.aria-current]="step() === 4 ? 'step' : null"
+      >
+        @if (finished()) {
+          <span i18n="@@tracks.step4Finished">4 Concluído</span>
+          ✓
+        } @else if (skipped()) {
           <span i18n="@@prep.step.conclude">4 Concluir</span>
         } @else {
           <span i18n="@@tracks.step4">4 Aprovar</span>
@@ -116,12 +128,18 @@ export class PreparationSteps {
   readonly skipped = input(false);
   /** Processing ended: the next step only waits for the press. */
   readonly processed = input(false);
+  /** The tracks were approved: step 4 is done, not to do. */
+  readonly finished = input(false);
   /** Empty on the upload: nothing to go back to yet. */
   readonly mediaId = input('');
 
   protected readonly expanded = signal(false);
-  protected readonly whole = computed(() => WHOLE[this.step()]());
-  protected readonly short = computed(() => SHORT[this.step()]());
+  protected readonly whole = computed(() =>
+    this.finished() ? FINISHED.whole() : WHOLE[this.step()](),
+  );
+  protected readonly short = computed(() =>
+    this.finished() ? FINISHED.short() : SHORT[this.step()](),
+  );
   protected readonly processLink = computed(() =>
     preparationPagePath(this.mediaId()),
   );

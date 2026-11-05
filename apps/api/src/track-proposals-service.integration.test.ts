@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { timingProblems } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
   BrokenStream,
@@ -14,6 +15,8 @@ import {
   type SegmentSpec,
   type StubReply,
 } from '../test/track-proposal-fixtures.js';
+import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
+import { TrackEditService } from './modules/media-edit/track-edit-service.js';
 import { ProposalService } from './modules/track-proposals/index.js';
 import type { MediaActor } from './modules/media/index.js';
 
@@ -369,6 +372,18 @@ describe('ProposalService: windows and the draft (KBC-067 FR-3, BR-6)', () => {
     const third = ctx.llm.calls[2]?.at(-1)?.content ?? '';
     expect(third).toContain('A janela anterior não deixou faixas novas.');
     expect(windowIds(second)).toEqual({ first: 61, last: 120 });
+  });
+
+  it('writes no overlap from a transcript whose segments overlap (KBC-094)', async () => {
+    const segments = evenSegments(30).map((segment, index) => ({
+      ...segment,
+      startMs: index === 0 ? segment.startMs : segment.startMs - 42,
+    }));
+    const ctx = setup({ segments, replies: [INTERVIEW] });
+    await runToEnd(ctx);
+    const { tracks } = ctx.service.draft(OWNER, ctx.mediaId);
+    expect(tracks).toHaveLength(5);
+    expect(timingProblems(tracks, null)).toEqual([]);
   });
 
   it('a new run replaces only the AI tracks and never crosses the person’s (AC-4)', async () => {
@@ -797,6 +812,49 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     await runToEnd(ctx);
     expect(titles(ctx)).toEqual(['Nova', 'Nova', 'Nova']);
     expect(ctx.llm.calls).toHaveLength(7);
+  });
+
+  it('approves what the person sees: a failed run out of sight goes (KBC-094)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Oculta' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    await runToEnd(ctx);
+    const edits = new SqliteMediaEditStore(ctx.db);
+    const service = new TrackEditService({
+      edits,
+      drafts: ctx.store,
+      transcripts: ctx.transcripts,
+      speakers: { list: () => [] },
+      plans: { get: () => null },
+      rootOf: (topic) => topic,
+      findMedia: (_actor, id) => ({ ...itemOf(id, null), durationMs: null }),
+      now: () => NOW,
+    });
+    service.approve({
+      actor: OWNER,
+      mediaId: ctx.mediaId,
+      expectedVersion: edits.edit(ctx.mediaId)?.version ?? 0,
+    });
+    expect(edits.approved(ctx.mediaId).map(({ title }) => title)).toEqual([
+      'Antiga',
+      'Antiga',
+      'Antiga',
+    ]);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(tracks.map(({ title }) => title)).toEqual([
+      'Antiga',
+      'Antiga',
+      'Antiga',
+    ]);
+    expect(timingProblems(tracks, null)).toEqual([]);
   });
 
   it('a restart keeps the windows done and runs nothing until someone asks', async () => {

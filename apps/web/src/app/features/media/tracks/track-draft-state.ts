@@ -12,7 +12,8 @@ import {
 type Timer = ReturnType<typeof setTimeout>;
 
 /** What a save came to; only `saved` lets an action go on (BR-1). */
-export type SaveResult = 'saved' | 'conflict' | 'failed' | 'offline';
+export type SaveResult =
+  'saved' | 'conflict' | 'failed' | 'offline' | 'invalid';
 
 /** Why this draft cannot be written until it is read again (FR-10). */
 export type ConflictReason =
@@ -46,6 +47,12 @@ export type DraftPhase =
     }
   | { readonly kind: 'conflict'; readonly reason: ConflictReason }
   | { readonly kind: 'failed' }
+  /** Refused for its tracks: the same `timing` would be refused again, so it waits (KBC-094). */
+  | {
+      readonly kind: 'invalid';
+      readonly problems: readonly TrackProblem[];
+      readonly timing: string;
+    }
   | { readonly kind: 'applying'; readonly action: DraftAction };
 
 /** Whether a person can change the tracks in each state (KBC-067 FR-3, UP-06). */
@@ -58,6 +65,7 @@ export const EDITABLE: Readonly<Record<DraftPhase['kind'], boolean>> = {
   offline: true,
   conflict: false,
   failed: true,
+  invalid: true,
   applying: false,
 };
 
@@ -99,6 +107,12 @@ export const sameTracks = (
   a: readonly DraftTrack[],
   b: readonly DraftTrack[],
 ): boolean => JSON.stringify(comparable(a)) === JSON.stringify(comparable(b));
+
+/** What a save's refusal depends on: a title or a person changes nothing about it. */
+export const timingOf = (tracks: readonly DraftTrack[]): string =>
+  JSON.stringify(
+    inTimeOrder(tracks).map(({ id, startMs, endMs }) => [id, startMs, endMs]),
+  );
 
 export const statusOf = (err: unknown): number =>
   err instanceof HttpErrorResponse ? err.status : -1;

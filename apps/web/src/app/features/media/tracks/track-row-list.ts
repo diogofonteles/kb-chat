@@ -17,9 +17,16 @@ import {
   type TrackKind,
   type TrackProblem,
 } from '@kb-chat/contracts';
-import { canSplit, formatDuration, nextOf } from '@kb-chat/player-core';
+import type { TrackSpan } from '@kb-chat/player-core';
+import {
+  canSplit,
+  closeOverlap,
+  formatDuration,
+  nextOf,
+  overlapMs,
+} from '@kb-chat/player-core';
 import { MenuButton, type MenuOption } from '../menu-button.js';
-import { KIND_LABELS, formatBoundary } from './track-labels.js';
+import { KIND_LABELS, formatBoundary, secondsText } from './track-labels.js';
 import type { ListenKind, NumberedTrack } from './track-timeline.js';
 
 /** A choice of "quem pergunta" or "quem responde". */
@@ -38,15 +45,24 @@ export interface PersonChange {
 }
 
 /** What is said of a track's problem, by name (FR-8). */
-const PROBLEM_LABELS: Record<TrackProblem['problem'], () => string> = {
+const PROBLEM_LABELS: Record<
+  Exclude<TrackProblem['problem'], 'overlap'>,
+  () => string
+> = {
   title: () => $localize`:@@tracks.problem.title:Sem título`,
   short: () => $localize`:@@tracks.problem.short:Menos de 5 s`,
-  overlap: () => $localize`:@@tracks.problem.overlap:Sobreposta à anterior`,
   range: () => $localize`:@@tracks.problem.range:Passa do fim da gravação`,
 };
 
-export const problemLabel = (problem: TrackProblem['problem']): string =>
-  PROBLEM_LABELS[problem]();
+/** An overlap says its size: under a tenth of a second, both times read the same (KBC-094). */
+export function problemLabel(
+  problem: TrackProblem,
+  tracks: readonly TrackSpan[],
+): string {
+  if (problem.problem !== 'overlap') return PROBLEM_LABELS[problem.problem]();
+  const size = secondsText(overlapMs(tracks, problem.trackId));
+  return $localize`:@@tracks.problem.overlapBy:Sobreposta à anterior em ${size}:size:`;
+}
 
 export const personValue = (
   voice: number | null,
@@ -85,6 +101,7 @@ export class TrackRowList {
   readonly split = output<string>();
   readonly join = output<string>();
   readonly remove = output<string>();
+  readonly closeOverlap = output<string>();
 
   private readonly rowButtons =
     viewChildren<ElementRef<HTMLButtonElement>>('rowButton');
@@ -102,6 +119,7 @@ export class TrackRowList {
   protected readonly rows = computed(() => {
     const problems = this.problems();
     const selectedId = this.selectedId();
+    const plain = this.tracks().map(({ track }) => track);
     return this.tracks().map(({ track, ordinal }) => ({
       track,
       ordinal,
@@ -115,7 +133,11 @@ export class TrackRowList {
       actions: track.id === selectedId ? this.actionsOf(track) : [],
       warnings: problems
         .filter((problem) => problem.trackId === track.id)
-        .map((problem) => problemLabel(problem.problem)),
+        .map((problem) => problemLabel(problem, plain)),
+      closable:
+        problems.some(
+          (one) => one.trackId === track.id && one.problem === 'overlap',
+        ) && closeOverlap(plain, track.id) !== null,
     }));
   });
   protected readonly focusableId = computed(
@@ -127,6 +149,24 @@ export class TrackRowList {
     afterNextRender(() => this.titleField()[0]?.nativeElement.focus(), {
       injector: this.injector,
     });
+  }
+
+  /**
+   * The focus on what stops an approval, in the middle of the list: a focus alone may leave it
+   * under the sticky footer, and the list on top is far from the button (KBC-094).
+   */
+  reveal(what: 'title' | 'row'): void {
+    afterNextRender(
+      () => {
+        const target =
+          what === 'title'
+            ? this.titleField()[0]
+            : this.rowButtons().find((one) => one.nativeElement.tabIndex === 0);
+        target?.nativeElement.focus({ preventScroll: true });
+        target?.nativeElement.scrollIntoView({ block: 'center' });
+      },
+      { injector: this.injector },
+    );
   }
 
   /** The focus on the row of the selected track. */

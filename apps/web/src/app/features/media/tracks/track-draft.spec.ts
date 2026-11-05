@@ -105,6 +105,9 @@ describe('TrackDraft (KBC-066)', () => {
       { error: { code: 'INTERNAL', message: 'no', details } },
       { status, statusText: 'No' },
     );
+  const OVERLAP = { trackId: two.id, ordinal: 2, problem: 'overlap' };
+  /** The answer of a save with a track problem (FR-1). */
+  const refuseTracks = () => refuse(422, { problems: [OVERLAP] });
   const lose = () => saves().error(new ProgressEvent('error'));
   /** A save someone else got ahead of: the read after the 412 shows their draft. */
   const conflict = () => {
@@ -304,6 +307,36 @@ describe('TrackDraft (KBC-066)', () => {
       },
     );
 
+    it('a press keeps its lock through a refusal that sends the fix (KBC-094)', () => {
+      change([{ ...one, startMs: 1 }]);
+      const flying = saves();
+      draft.apply([one, two]);
+      const said = heard(draft.approve());
+      flying.flush(
+        {
+          error: {
+            code: 'INTERNAL',
+            message: 'no',
+            details: { problems: [OVERLAP] },
+          },
+        },
+        { status: 422, statusText: 'No' },
+      );
+      expect(draft.canEdit()).toBe(false);
+      saves().flush({ version: 5 });
+      http.expectOne(APPROVE).flush({ version: 6, tracks: 2 });
+      expect(said).toEqual([{ kind: 'approved' }]);
+      reads().flush(edit([one, two], 6, { status: 'approved', step: 4 }));
+    });
+
+    it('stops on a save refused for a track, naming it (KBC-094)', () => {
+      draft.apply([one]);
+      const said = heard(draft.approve());
+      refuseTracks();
+      noApproval();
+      expect(said).toEqual([{ kind: 'stopped', result: 'invalid' }]);
+    });
+
     it.each(['approved', 'proposal-running', 'preparation'])(
       'stops on a 409 %s, with a conflict to recover from (R-6)',
       (reason) => {
@@ -453,6 +486,60 @@ describe('TrackDraft (KBC-066)', () => {
       expect(said).toEqual([{ kind: 'stopped', result: 'offline' }]);
       reads().flush(edit([one, two], 5, { status: 'approved', step: 4 }));
       expect(draft.edit()?.status).toBe('approved');
+    });
+  });
+
+  describe('a save refused for a track (KBC-094)', () => {
+    const overlapping = { ...two, startMs: 9_958 };
+    const renamed = { ...overlapping, title: 'Outro título' };
+
+    beforeEach(() => {
+      open(edit([one, overlapping]));
+      change([one, renamed]);
+      refuseTracks();
+    });
+
+    it('holds the problems, not a failure, and stays editable', () => {
+      expect(draft.phase()).toMatchObject({
+        kind: 'invalid',
+        problems: [OVERLAP],
+      });
+      expect(draft.canEdit()).toBe(true);
+      expect(draft.keptHere()).toBe(true);
+    });
+
+    it('sends nothing while the times stay the ones refused', () => {
+      draft.retry();
+      change([one, { ...renamed, title: 'Mais um' }]);
+      noSave();
+      expect(draft.phase().kind).toBe('invalid');
+      expect(heard(draft.flush())).toEqual(['invalid']);
+      noSave();
+      expect(draft.tracks()[1]?.title).toBe('Mais um');
+    });
+
+    it('saves everything once the times change', () => {
+      change([one, { ...renamed, startMs: 10_000 }]);
+      saves().flush({ version: 5 });
+      expect(draft.phase()).toEqual({ kind: 'clean', saved: true });
+    });
+
+    it('sends again when the times changed while the refused save flew', () => {
+      change([one, { ...renamed, startMs: 9_000 }]);
+      const flying = saves();
+      draft.apply([one, { ...renamed, startMs: 10_000 }]);
+      flying.flush(
+        {
+          error: {
+            code: 'INTERNAL',
+            message: 'no',
+            details: { problems: [OVERLAP] },
+          },
+        },
+        { status: 422, statusText: 'No' },
+      );
+      saves().flush({ version: 5 });
+      expect(draft.phase()).toEqual({ kind: 'clean', saved: true });
     });
   });
 

@@ -86,9 +86,13 @@ function startLimits(
   track: TrackSpan,
   previous: { track: TrackSpan | undefined; ordinal: number },
 ): HandleLimits {
+  const freeMs = previous.track?.endMs ?? 0;
+  const latestMs = track.endMs - MIN_TRACK_LENGTH_MS;
+  // An older draft's overlap may leave no room: the handle stays, the neighbour must give way.
+  const room = freeMs <= latestMs;
   return {
-    minMs: previous.track?.endMs ?? 0,
-    maxMs: track.endMs - MIN_TRACK_LENGTH_MS,
+    minMs: room ? freeMs : track.startMs,
+    maxMs: room ? latestMs : track.startMs,
     below: previous.track
       ? { kind: 'neighbour', ordinal: previous.ordinal }
       : RECORDING_ENDS,
@@ -101,9 +105,12 @@ function endLimits(
   track: TrackSpan,
   next: { track: TrackSpan | undefined; ordinal: number; durationMs: number },
 ): HandleLimits {
+  const earliestMs = track.startMs + MIN_TRACK_LENGTH_MS;
+  const nextMs = next.track?.startMs ?? next.durationMs;
+  const stuck = next.track !== undefined && nextMs < earliestMs;
   return {
-    minMs: track.startMs + MIN_TRACK_LENGTH_MS,
-    maxMs: next.track?.startMs ?? next.durationMs,
+    minMs: stuck ? track.endMs : earliestMs,
+    maxMs: stuck ? track.endMs : nextMs,
     below: { kind: 'minimum' },
     above: next.track
       ? { kind: 'neighbour', ordinal: next.ordinal }
@@ -291,6 +298,38 @@ export function selectedSpan(
   return endMs - input.startMs >= MIN_TRACK_LENGTH_MS
     ? { startMs: input.startMs, endMs }
     : null;
+}
+
+/** Where the tracks that start before this one end: the latest of them, 0 with none. */
+function freeFrom(tracks: readonly TrackSpan[], track: TrackSpan): number {
+  const ordered = byTime(tracks);
+  return ordered
+    .slice(0, ordered.indexOf(track))
+    .reduce((latest, one) => Math.max(latest, one.endMs), 0);
+}
+
+/** How far a track starts before the ones ahead of it end, in ms; 0 when it does not. */
+export function overlapMs(
+  tracks: readonly TrackSpan[],
+  trackId: string,
+): number {
+  const track = tracks.find((one) => one.id === trackId);
+  return track ? Math.max(0, freeFrom(tracks, track) - track.startMs) : 0;
+}
+
+/**
+ * The way out of an overlap an older draft holds (KBC-094): the track starts where the ones
+ * ahead of it end. Null when there is none, or when that would leave it under 5 s (BR-4).
+ */
+export function closeOverlap<T extends TrackSpan>(
+  tracks: readonly T[],
+  trackId: string,
+): T[] | null {
+  const track = tracks.find((one) => one.id === trackId);
+  if (!track || overlapMs(tracks, trackId) === 0) return null;
+  const startMs = freeFrom(tracks, track);
+  if (track.endMs - startMs < MIN_TRACK_LENGTH_MS) return null;
+  return withHandle(tracks, { trackId, edge: 'start', ms: startMs });
 }
 
 /** The track right after this one in time, touching or not; it joins into this one. */

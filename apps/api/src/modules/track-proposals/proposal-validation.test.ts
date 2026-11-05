@@ -1,3 +1,4 @@
+import { timingProblems } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   acceptTracks,
@@ -36,6 +37,12 @@ const track = (first: number, last: number, extra: object = {}) => ({
   titulo: `Faixa ${first}`,
   continua_faixa_anterior: false,
   ...extra,
+});
+
+const timed = (one: { startMs: number; endMs: number }, index: number) => ({
+  id: String(index),
+  startMs: one.startMs,
+  endMs: one.endMs,
 });
 
 describe('parseWindowReply (KBC-067 FR-2)', () => {
@@ -114,7 +121,7 @@ describe('acceptTracks (KBC-067 FR-2, ADR 0029 §4)', () => {
       [track(21, 25, { continua_faixa_anterior: true }), track(26, 40)],
       rules({
         window: window(20, 21),
-        last: { lastSegment: 20, startMs: 30_000 },
+        last: { lastSegment: 20, startMs: 30_000, endMs: 40_000 },
       }),
     );
     expect(accepted.extendLast).toEqual({ lastSegment: 25, endMs: 50_000 });
@@ -124,7 +131,10 @@ describe('acceptTracks (KBC-067 FR-2, ADR 0029 §4)', () => {
   it('does not join across a gap or a person’s track, nor on the first window', () => {
     const gap = acceptTracks(
       [track(23, 30, { continua_faixa_anterior: true })],
-      rules({ window: window(20, 21), last: { lastSegment: 20, startMs: 0 } }),
+      rules({
+        window: window(20, 21),
+        last: { lastSegment: 20, startMs: 0, endMs: 40_000 },
+      }),
     );
     expect(gap.extendLast).toBeNull();
     expect(gap.tracks).toHaveLength(1);
@@ -132,7 +142,7 @@ describe('acceptTracks (KBC-067 FR-2, ADR 0029 §4)', () => {
       [track(21, 30, { continua_faixa_anterior: true })],
       rules({
         window: window(20, 21),
-        last: { lastSegment: 20, startMs: 0 },
+        last: { lastSegment: 20, startMs: 0, endMs: 40_000 },
         kept: [{ startMs: 39_000, endMs: 41_000 }],
       }),
     );
@@ -150,6 +160,83 @@ describe('acceptTracks (KBC-067 FR-2, ADR 0029 §4)', () => {
       kept: [{ startMs: 10_000, endMs: 20_000 }],
     });
     expect(accepted.tracks.map((one) => one.firstSegment)).toEqual([1, 11]);
+  });
+});
+
+describe('acceptTracks over segments whose times overlap (KBC-094)', () => {
+  /** Whisper's own times: each segment starts `overlapMs` before the last one ends. */
+  const overlapping = (n: number, overlapMs: number): PromptSegment[] =>
+    window(n).map((segment) => ({
+      ...segment,
+      startMs: Math.max(0, segment.startMs - overlapMs),
+    }));
+
+  it('starts a track where the one before it ends: the two touch', () => {
+    const { tracks } = acceptTracks([track(1, 5), track(6, 10)], {
+      ...rules(),
+      window: overlapping(10, 42),
+    });
+    expect(tracks.map((one) => [one.startMs, one.endMs])).toEqual([
+      [0, 10_000],
+      [10_000, 20_000],
+    ]);
+    expect(timingProblems(tracks.map(timed), null)).toEqual([]);
+  });
+
+  it('holds across windows, from the last track the run saved', () => {
+    const { tracks } = acceptTracks([track(6, 10)], {
+      ...rules(),
+      window: overlapping(10, 42),
+      last: { lastSegment: 5, startMs: 0, endMs: 10_000 },
+    });
+    expect(tracks[0]?.startMs).toBe(10_000);
+  });
+
+  it('holds after a continuation stretched the last track', () => {
+    const { extendLast, tracks } = acceptTracks(
+      [track(6, 7, { continua_faixa_anterior: true }), track(8, 12)],
+      {
+        ...rules(),
+        window: overlapping(12, 42),
+        last: { lastSegment: 5, startMs: 0, endMs: 10_000 },
+      },
+    );
+    expect(extendLast?.endMs).toBe(14_000);
+    expect(tracks[0]?.startMs).toBe(14_000);
+  });
+
+  it('never shortens a track a continuation stretches', () => {
+    const { extendLast } = acceptTracks(
+      [track(6, 6, { continua_faixa_anterior: true })],
+      {
+        ...rules(),
+        window: overlapping(10, 42),
+        last: { lastSegment: 5, startMs: 0, endMs: 15_000 },
+      },
+    );
+    expect(extendLast?.endMs).toBe(15_000);
+  });
+
+  it('drops a track the overlap would leave under 5 s', () => {
+    const { tracks, discarded } = acceptTracks([track(1, 5), track(6, 8)], {
+      ...rules(),
+      window: window(10).map((segment) =>
+        segment.id === 5 ? { ...segment, endMs: 13_000 } : segment,
+      ),
+    });
+    expect(tracks.map((one) => one.firstSegment)).toEqual([1]);
+    expect(discarded).toBe(1);
+  });
+
+  it('gives no overlap whatever the size of the overlaps', () => {
+    for (const overlapMs of [1, 42, 99, 100, 700, 1_500]) {
+      const { tracks } = acceptTracks(
+        [track(1, 4), track(5, 8), track(9, 12), track(13, 16)],
+        { ...rules(), window: overlapping(16, overlapMs) },
+      );
+      expect(tracks).toHaveLength(4);
+      expect(timingProblems(tracks.map(timed), null)).toEqual([]);
+    }
   });
 });
 

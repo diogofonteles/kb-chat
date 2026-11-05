@@ -39,6 +39,16 @@
       </button>
       @if (row.selected && !readOnly()) {
         <div class="fields">
+          @if (row.closable) {
+            <button
+              type="button"
+              class="action close-overlap"
+              (click)="closeOverlap.emit(row.track.id)"
+              i18n="@@tracks.closeOverlap"
+            >
+              Encostar na faixa anterior
+            </button>
+          }
           <label class="field title">
             <span i18n="@@tracks.field.title">Título</span>
             <input

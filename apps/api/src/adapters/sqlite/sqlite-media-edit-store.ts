@@ -192,6 +192,7 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
 
   approve(
     write: EditWrite & {
+      trackIds: readonly string[];
       transcriptVersion: number | null;
       alongside?: () => void;
     },
@@ -199,27 +200,43 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
     return inTransaction(this.db, () => {
       const current = this.edit(write.mediaId);
       if (!current || current.version !== write.expectedVersion) return null;
+      this.keepOnly(write.mediaId, write.trackIds);
       this.replaceApproved(write);
       write.alongside?.();
       // Approved proposals are no longer proposals (KBC-067 AC-11): a new run keeps them.
       this.db
         .prepare('UPDATE media_draft_tracks SET edited = 1 WHERE media_id = ?')
         .run(write.mediaId);
-      const next = write.expectedVersion + 1;
-      this.db
-        .prepare(
-          `UPDATE media_edits SET version = ?, status = 'approved', step = 4,
-             transcript_version = ?, updated_by = ?, updated_at = ? WHERE media_id = ?`,
-        )
-        .run(
-          next,
-          write.transcriptVersion,
-          write.principal,
-          write.now.toISOString(),
-          write.mediaId,
-        );
-      return next;
+      return this.markApproved(write);
     });
+  }
+
+  private markApproved(
+    write: EditWrite & { transcriptVersion: number | null },
+  ): number {
+    const next = write.expectedVersion + 1;
+    this.db
+      .prepare(
+        `UPDATE media_edits SET version = ?, status = 'approved', step = 4,
+           transcript_version = ?, updated_by = ?, updated_at = ? WHERE media_id = ?`,
+      )
+      .run(
+        next,
+        write.transcriptVersion,
+        write.principal,
+        write.now.toISOString(),
+        write.mediaId,
+      );
+    return next;
+  }
+
+  private keepOnly(mediaId: string, trackIds: readonly string[]): void {
+    this.db
+      .prepare(
+        `DELETE FROM media_draft_tracks WHERE media_id = ?
+           AND id NOT IN (SELECT value FROM json_each(?))`,
+      )
+      .run(mediaId, JSON.stringify(trackIds));
   }
 
   private replaceApproved(write: EditWrite): void {

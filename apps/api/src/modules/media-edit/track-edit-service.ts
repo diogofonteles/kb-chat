@@ -147,6 +147,7 @@ export class TrackEditService {
     const { version } = this.written(
       this.deps.edits.approve({
         ...this.writeOf(call),
+        trackIds: tracks.map((track) => track.id),
         transcriptVersion: this.transcriptVersion(call.mediaId),
         alongside: () => this.deps.publisher?.afterApproval(call.mediaId),
       }),

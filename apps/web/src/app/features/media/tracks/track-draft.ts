@@ -11,6 +11,7 @@ import {
   inTimeOrder,
   type DraftTrack,
   type MediaEdit,
+  type TrackProblem,
 } from '@kb-chat/contracts';
 import { MediaEditApi } from '@core/media/media-edit-api.js';
 import {
@@ -38,6 +39,7 @@ import {
   problemsOf,
   sameTracks,
   statusOf,
+  timingOf,
   toEditTrack,
   type ApproveResult,
   type DraftAction,
@@ -227,6 +229,7 @@ export class TrackDraft {
       const phase = this.state();
       if (phase.kind === 'clean') return of<SaveResult>('saved');
       if (phase.kind === 'conflict') return of<SaveResult>('conflict');
+      if (phase.kind === 'invalid') return of<SaveResult>('invalid');
       if (
         phase.kind === 'loading' ||
         phase.kind === 'unreadable' ||
@@ -403,6 +406,8 @@ export class TrackDraft {
     this.remember();
     const phase = this.state();
     if (phase.kind === 'saving') this.to({ ...phase, changed: true });
+    else if (phase.kind === 'invalid' && phase.timing === timingOf(tracks))
+      return;
     else if (phase.kind !== 'offline')
       this.to({
         kind: 'pending',
@@ -465,7 +470,7 @@ export class TrackDraft {
       })
       .subscribe({
         next: ({ version }) => this.accepted(version),
-        error: (err: unknown) => this.refused(err),
+        error: (err: unknown) => this.refused(err, sent),
       });
   }
 
@@ -495,13 +500,27 @@ export class TrackDraft {
     this.spoken.set($localize`:@@tracks.saved:Rascunho salvo`);
   }
 
-  private refused(err: unknown): void {
+  private refused(err: unknown, sent: readonly DraftTrack[]): void {
     const status = statusOf(err);
+    const problems = problemsOf(err);
     if (isUncertain(status)) this.lost();
     else if (status === 412) this.compare();
     else if (status === 409)
       this.stopAt({ kind: 'conflict', reason: conflictOf(err) }, 'conflict');
+    else if (problems.length > 0) this.invalid(problems, timingOf(sent));
     else this.stopAt({ kind: 'failed' }, 'failed');
+  }
+
+  /** What moved while that save flew may be the fix: it goes, the rest waits for a change. */
+  private invalid(problems: readonly TrackProblem[], timing: string): void {
+    const phase = this.state();
+    if (
+      phase.kind === 'saving' &&
+      phase.changed &&
+      timingOf(this.shown()) !== timing
+    )
+      this.send({ lock: phase.lock });
+    else this.stopAt({ kind: 'invalid', problems, timing }, 'invalid');
   }
 
   private lost(): void {

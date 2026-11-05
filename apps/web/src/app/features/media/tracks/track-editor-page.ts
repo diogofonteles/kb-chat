@@ -30,6 +30,7 @@ import {
   type VoiceLabel,
 } from '@kb-chat/contracts';
 import {
+  closeOverlap,
   joinTracks,
   newTrackSpan,
   selectedSpan,
@@ -222,6 +223,8 @@ export class TrackEditorPage {
   protected readonly edge = signal<TrackEdge>('start');
   private readonly cursor = signal(0);
   protected readonly showProblems = signal(false);
+  /** Each press on "Aprovar faixas" with a problem: the alert is born again and is said. */
+  protected readonly problemPress = signal(0);
   protected readonly notice = signal('');
   private readonly deletedNotice = signal<DeletedNotice | null>(null);
   protected readonly tab = signal<'tracks' | 'text'>('tracks');
@@ -363,17 +366,34 @@ export class TrackEditorPage {
   private readonly problems = computed(() =>
     approvalProblems(this.draft.tracks(), this.media()?.durationMs ?? null),
   );
-  protected readonly shownProblems = computed(() =>
-    this.showProblems() ? this.problems() : [],
+  /** What a save was refused for: the person is told without pressing anything (KBC-094). */
+  private readonly refusedProblems = computed(() => {
+    const phase = this.draft.phase();
+    return phase.kind === 'invalid' ? phase.problems : [];
+  });
+  /** A press adds what the rules here find to what the server refused, losing neither. */
+  protected readonly shownProblems = computed(() => {
+    const refused = this.refusedProblems();
+    if (!this.showProblems()) return refused;
+    const found = this.problems();
+    const same = (a: TrackProblem, b: TrackProblem) =>
+      a.trackId === b.trackId && a.problem === b.problem;
+    return [
+      ...found,
+      ...refused.filter((one) => !found.some((other) => same(one, other))),
+    ];
+  });
+  protected readonly unsavedTrack = computed(
+    () => this.refusedProblems()[0]?.ordinal ?? null,
   );
   protected readonly warningCount = computed(
     () => new Set(this.problems().map((one) => one.trackId)).size,
   );
   protected readonly problemRows = computed(() =>
-    this.problems().map((one) => ({
+    this.shownProblems().map((one) => ({
       key: `${one.trackId}-${one.problem}`,
       problem: one,
-      text: $localize`:@@tracks.problem.row:Faixa ${one.ordinal}:ordinal:: ${problemLabel(one.problem)}:problem:`,
+      text: $localize`:@@tracks.problem.row:Faixa ${one.ordinal}:ordinal:: ${problemLabel(one, this.draft.tracks())}:problem:`,
     })),
   );
   protected readonly hasEdges = computed(
@@ -617,6 +637,16 @@ export class TrackEditorPage {
     this.list()?.focusRow();
   }
 
+  /** One press out of an overlap too small to see (KBC-094); "Desfazer" takes it back. */
+  protected closeOverlap(id: string): void {
+    const closed = closeOverlap(this.draft.tracks(), id);
+    if (!closed) return;
+    this.draft.apply(
+      closed.map((track) => (track.id === id ? touched(track) : track)),
+    );
+    this.list()?.focusRow();
+  }
+
   protected undo(): void {
     this.draft.undo();
   }
@@ -658,8 +688,11 @@ export class TrackEditorPage {
   /** The press on "Aprovar faixas" (BR-1): problems first, then the draft saves and applies. */
   protected approve(): void {
     this.notice.set('');
-    if (this.problems().length > 0) {
-      this.showProblem(this.problems());
+    const stopping = this.problems().length
+      ? this.problems()
+      : this.refusedProblems();
+    if (stopping.length > 0) {
+      this.showProblem(stopping);
       return;
     }
     this.draft
@@ -680,12 +713,12 @@ export class TrackEditorPage {
   /** The list on top, and the focus where the first problem is fixed (FR-8, AC-11). */
   private showProblem(problems: readonly TrackProblem[]): void {
     this.showProblems.set(true);
+    this.problemPress.update((count) => count + 1);
     const first = problems[0];
     if (!first) return;
     this.chosenId.set(first.trackId);
     this.tab.set('tracks');
-    if (first.problem === 'title') this.list()?.focusTitle();
-    else this.list()?.focusRow();
+    this.list()?.reveal(first.problem === 'title' ? 'title' : 'row');
   }
 
   protected reopen(): void {
