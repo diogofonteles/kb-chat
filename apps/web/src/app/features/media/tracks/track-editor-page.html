@@ -32,6 +32,7 @@
       <app-preparation-steps
         class="progress"
         [step]="step()"
+        [finished]="step() === 4"
         [mediaId]="id()"
       />
       @if (step() === 3) {
@@ -105,7 +106,16 @@
     @if (step() === 4) {
       <section class="summary">
         <h3 #summaryHeading tabindex="-1">{{ appliedText() }}</h3>
-        <p i18n="@@tracks.appliedLead">Quem ouve já vê as faixas no player.</p>
+        <p i18n="@@tracks.finished">
+          Preparação concluída: você não precisa fazer mais nada. Quem ouve já
+          vê as faixas no player.
+        </p>
+        @if (canClassify()) {
+          <p i18n="@@tracks.subjectsSaveThemselves">
+            Os assuntos abaixo são salvos sozinhos, a cada escolha: não há o que
+            aprovar neles.
+          </p>
+        }
         <div class="summary-actions">
           <a
             class="primary"
@@ -170,15 +180,23 @@
           Confira as faixas propostas. Nada é aplicado antes de você aprovar.
         </p>
       }
-      @if (showProblems() && problemRows().length) {
-        <section class="banner" role="alert">
-          <p i18n="@@tracks.problems">Corrija antes de aprovar:</p>
-          <ul>
-            @for (row of problemRows(); track row.key) {
-              <li>{{ row.text }}</li>
+      @if (problemRows().length) {
+        @for (press of [problemPress()]; track press) {
+          <section class="banner" role="alert">
+            @if (showProblems()) {
+              <p i18n="@@tracks.problems">Corrija antes de aprovar:</p>
+            } @else {
+              <p i18n="@@tracks.notSaved">
+                A última mudança ainda não foi salva e continua aqui. Corrija:
+              </p>
             }
-          </ul>
-        </section>
+            <ul>
+              @for (row of problemRows(); track row.key) {
+                <li>{{ row.text }}</li>
+              }
+            </ul>
+          </section>
+        }
       }
       @if (deleted(); as gone) {
         <p class="banner undo" role="status">
@@ -391,6 +409,7 @@
               (split)="split($event)"
               (join)="join($event)"
               (remove)="remove($event)"
+              (closeOverlap)="closeOverlap($event)"
             />
           }
         </section>
@@ -417,6 +436,12 @@
             ·
             <span i18n="@@tracks.footWarnings"
               >{{ warningCount() }} com aviso</span
+            >
+          }
+          @if (unsavedTrack(); as ordinal) {
+            ·
+            <span class="unsaved" i18n="@@tracks.footUnsaved"
+              >Não salvo: corrija a faixa {{ ordinal }}</span
             >
           }
           @if (draft.saved()) {

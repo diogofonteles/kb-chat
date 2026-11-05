@@ -54,6 +54,10 @@ export const CONFLICT_TEXT: Record<ConflictReason, () => string> = {
     $localize`:@@tracks.conflictPreparation:Esta gravação ainda está em processamento; recarregue para acompanhar.`,
 };
 
+/** "0,042 s": what no boundary on screen can show (KBC-094). */
+export const secondsText = (ms: number): string =>
+  `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(ms / 1000)} s`;
+
 const NOT_DONE: Record<Exclude<SaveResult, 'saved'>, () => string> = {
   conflict: () =>
     $localize`:@@tracks.notDone.conflict:Nada foi feito: esta edição tem um conflito. Veja o aviso acima.`,
@@ -61,6 +65,8 @@ const NOT_DONE: Record<Exclude<SaveResult, 'saved'>, () => string> = {
     $localize`:@@tracks.notDone.failed:Nada foi feito: não consegui salvar a última mudança.`,
   offline: () =>
     $localize`:@@tracks.notDone.offline:Nada foi feito: estou sem conexão.`,
+  invalid: () =>
+    $localize`:@@tracks.notDone.invalid:Nada foi feito: corrija antes a faixa indicada.`,
 };
 
 /** Why a press stopped: only a save that came back fine lets it go on (BR-1). */

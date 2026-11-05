@@ -19,9 +19,14 @@
   font-weight: 600;
 }
 
+/* Never broken by the title's `overflow-wrap`; three digits fit, so titles stay aligned. */
 .ordinal {
+  flex: none;
+  min-width: 3ch;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
 }
 
 .subjects {
