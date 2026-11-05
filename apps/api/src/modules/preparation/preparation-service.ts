@@ -517,38 +517,65 @@ export class PreparationService {
       ...plans.failedRecordings(),
     ]);
     const positions = positionsOf(jobs);
-    const separating = new Set(
-      jobs.filter(({ kind }) => kind === 'diarize').map((job) => job.mediaId),
-    );
     const items = [...ids].flatMap((mediaId) => {
-      const item = this.deps.followable(actor, mediaId);
-      if (!item || !hasWholeFile(item)) return [];
+      const separating = jobs.some(
+        (job) => job.mediaId === mediaId && job.kind === 'diarize',
+      );
       const record = open.get(mediaId) ?? null;
-      const step = record ? this.stepOf(record, item) : null;
-      if (step === 4) return [];
-      const facts = this.factsOf(actor, {
-        record: record ?? planlessRecord(item, separating.has(mediaId)),
-        item,
-        draft: this.deps.drafts.draft(mediaId),
-      });
-      const stages = stagesOf(facts);
-      return [
-        queueItemOf({
-          item,
-          stages,
-          next: record ? nextActionOf(record.plan, stages) : null,
-          position: positions.get(mediaId) ?? null,
-          step,
-          canEdit: actor.canEdit,
-          transcriberOn: (stage) => this.transcriberOn(stage),
-        }),
-      ];
+      const line = this.queueLine(actor, { mediaId, record, separating });
+      if (!line) return [];
+      const position = positions.get(mediaId) ?? null;
+      return [this.queueItem(actor, { ...line, position })];
     });
     return {
       items: inQueueOrder(items),
       active: activeCountOf(items),
       ...presenceOf(this.presenceFor(items)),
     };
+  }
+
+  private queueItem(
+    actor: PlanActor,
+    line: {
+      readonly item: MediaItem;
+      readonly record: PreparationRecord | null;
+      readonly step: PreparationStep | null;
+      readonly stages: PreparationStage[];
+      readonly position: number | null;
+    },
+  ): ProcessingQueue['items'][number] {
+    const { item, record, step, stages, position } = line;
+    return queueItemOf({
+      item,
+      stages,
+      next: record ? nextActionOf(record.plan, stages) : null,
+      position,
+      step,
+      canEdit: actor.canEdit,
+      transcriberOn: (stage) => this.transcriberOn(stage),
+    });
+  }
+
+  /** One audio's stages, read from its plan or as if it had one; null when not shown. */
+  private queueLine(
+    actor: PlanActor,
+    input: {
+      readonly mediaId: string;
+      readonly record: PreparationRecord | null;
+      readonly separating: boolean;
+    },
+  ) {
+    const { mediaId, record, separating } = input;
+    const item = this.deps.followable(actor, mediaId);
+    if (!item || !hasWholeFile(item)) return null;
+    const step = record ? this.stepOf(record, item) : null;
+    if (step === 4) return null;
+    const facts = this.factsOf(actor, {
+      record: record ?? planlessRecord(item, separating),
+      item,
+      draft: this.deps.drafts.draft(mediaId),
+    });
+    return { item, record, step, stages: stagesOf(facts) };
   }
 
   private transcriberOn({ stage }: PreparationStage): boolean {
@@ -590,10 +617,6 @@ export class PreparationService {
     const record = this.deps.plans.get(mediaId);
     const draft = this.deps.drafts.draft(mediaId);
     const speakers = this.speakersOf(mediaId);
-    const refusedVoices = this.deps.separation.refused(mediaId);
-    const proposed = draft.voices.filter(
-      ({ voice }) => !refusedVoices.includes(voice),
-    );
     const stages = record
       ? await this.stagesFor(actor, { record, item, draft })
       : [];
@@ -608,17 +631,29 @@ export class PreparationService {
       stages,
       separation: speakers?.version ?? null,
       voices: voicesOf(speakers),
-      suggestions: suggestionsOf(proposed, speakers),
-      refusedVoices: [...refusedVoices],
-      tracks: this.tracksOf({
-        item,
-        draft: { ...draft, voices: proposed },
-        speakers,
-      }),
+      ...this.namesOf({ item, draft, speakers }),
       next:
         open && !record.validatingAt ? nextActionOf(record.plan, stages) : null,
       canSwitchToManual: open && switchable(record.plan, stages),
       ...presenceOf(this.deps.presence()),
+    };
+  }
+
+  /** What was suggested and tracks' people: a refused name is on neither (KBC-090). */
+  private namesOf(input: {
+    item: MediaItem;
+    draft: DraftTracks;
+    speakers: TranscriptSpeakers | null;
+  }) {
+    const { item, draft, speakers } = input;
+    const refusedVoices = this.deps.separation.refused(item.id);
+    const voices = draft.voices.filter(
+      ({ voice }) => !refusedVoices.includes(voice),
+    );
+    return {
+      suggestions: suggestionsOf(voices, speakers),
+      refusedVoices: [...refusedVoices],
+      tracks: this.tracksOf({ item, draft: { ...draft, voices }, speakers }),
     };
   }
 

@@ -1167,8 +1167,7 @@ describe('who the voices are, on steps 2 and 3 (KBC-090)', () => {
   async function named(
     media: Media,
     id: string,
-    version: number,
-    name: string,
+    { version, name }: { version: number; name: string },
   ) {
     const topic = '/api/v1/topics/hermetismo/speakers';
     const speaker = await media.owner('POST', topic, { name });
@@ -1187,7 +1186,10 @@ describe('who the voices are, on steps 2 and 3 (KBC-090)', () => {
       title: 'Conversa com Mestre Laércio, que responde',
       answerer: { name: 'Mestre Laércio' },
     });
-    await named(media, id, done.separation ?? 0, 'Mestre Rafael');
+    await named(media, id, {
+      version: done.separation ?? 0,
+      name: 'Mestre Rafael',
+    });
     const after = await read(media, id);
     expect(after.tracks[0]).toMatchObject({
       title: 'Conversa com Mestre Rafael, que responde',
@@ -1199,12 +1201,21 @@ describe('who the voices are, on steps 2 and 3 (KBC-090)', () => {
 
   it('corrects a name already accepted, and only once', async () => {
     const { media, id, done } = await suggested();
-    await named(media, id, done.separation ?? 0, 'Mestre Laércio');
+    await named(media, id, {
+      version: done.separation ?? 0,
+      name: 'Mestre Laércio',
+    });
     expect((await read(media, id)).tracks[0]?.title).toContain(
       'Mestre Laércio',
     );
-    await named(media, id, done.separation ?? 0, 'Mestre Rafael');
-    await named(media, id, done.separation ?? 0, 'Mestre Rafael');
+    await named(media, id, {
+      version: done.separation ?? 0,
+      name: 'Mestre Rafael',
+    });
+    await named(media, id, {
+      version: done.separation ?? 0,
+      name: 'Mestre Rafael',
+    });
     const after = await read(media, id);
     expect(after.tracks[0]?.title).toBe(
       'Conversa com Mestre Rafael, que responde',
@@ -1242,7 +1253,10 @@ describe('who the voices are, on steps 2 and 3 (KBC-090)', () => {
     const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
     db.prepare(`UPDATE media_draft_tracks SET source = 'manual'`).run();
     db.close();
-    await named(media, id, done.separation ?? 0, 'Mestre Rafael');
+    await named(media, id, {
+      version: done.separation ?? 0,
+      name: 'Mestre Rafael',
+    });
     expect((await read(media, id)).tracks[0]?.title).toContain(
       'Mestre Laércio',
     );

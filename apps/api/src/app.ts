@@ -692,6 +692,19 @@ async function registerListening(
   });
 }
 
+function transcriptService(
+  { media: deps }: MediaWiring,
+  services: { media: MediaService; diarization: DiarizationService },
+): TranscriptService {
+  const { media, diarization } = services;
+  return new TranscriptService({
+    transcripts: deps.transcripts,
+    media,
+    recording: deps.store,
+    voices: (mediaId, transcript) => diarization.voicesOn(mediaId, transcript),
+  });
+}
+
 /** Who the voices are and the speakers of each collection (KBC-065). */
 async function registerSpeakers(
   app: FastifyInstance,

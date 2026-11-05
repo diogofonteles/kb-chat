@@ -66,7 +66,7 @@ async function settle(fixture: { whenStable(): Promise<unknown> }) {
   await fixture.whenStable();
 }
 
-describe('ProcessingQueuePage (T30, KBC-090)', () => {
+describe('ProcessingQueuePage (T22, KBC-090)', () => {
   it('says plainly when nothing is being processed', async () => {
     await open(aQueue());
     expect(screen.getByText('Nada sendo processado agora.')).toBeTruthy();

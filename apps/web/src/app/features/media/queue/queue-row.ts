@@ -25,7 +25,7 @@ export type QueueMove =
   | { readonly kind: 'advance' };
 
 /**
- * One audio of the queue (T30, KBC-090): where it is in words, its bar, its place and what
+ * One audio of the queue (T22, KBC-090): where it is in words, its bar, its place and what
  * comes after. The paid stage's "Tentar de novo" is a link: the value is seen on its page
  * before the press (KBC-072 BR-4). A row with no action has only its title to follow.
  */

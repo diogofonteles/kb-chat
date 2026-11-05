@@ -122,18 +122,6 @@ function registerNames(typed: Typed, names: VoiceNamesService): void {
       ),
     ),
   );
-  typed.post(
-    '/api/v1/media/:id/voices/:voice/refuse-name',
-    OPTIONS.refuseName,
-    (request) =>
-      Promise.resolve(
-        names.refuseName(
-          actorOf(request),
-          { mediaId: request.params.id, voice: request.params.voice },
-          request.body,
-        ),
-      ),
-  );
   typed.post('/api/v1/media/:id/voices/merge', OPTIONS.merge, (request) =>
     Promise.resolve(
       names.merge(actorOf(request), request.params.id, request.body),
@@ -148,6 +136,22 @@ function registerNames(typed: Typed, names: VoiceNamesService): void {
     Promise.resolve(
       names.confirm(actorOf(request), request.params.id, request.body),
     ),
+  );
+}
+
+/** The name suggested is not the voice's (KBC-090). */
+function registerRefusal(typed: Typed, names: VoiceNamesService): void {
+  typed.post(
+    '/api/v1/media/:id/voices/:voice/refuse-name',
+    OPTIONS.refuseName,
+    (request) =>
+      Promise.resolve(
+        names.refuseName(
+          actorOf(request),
+          { mediaId: request.params.id, voice: request.params.voice },
+          request.body,
+        ),
+      ),
   );
 }
 
@@ -186,5 +190,6 @@ export const speakerRoutes =
     const typed = app.withTypeProvider<ZodTypeProvider>();
     registerSeparation(typed, service);
     registerNames(typed, names);
+    registerRefusal(typed, names);
     registerSuggestions(typed, suggestions);
   };

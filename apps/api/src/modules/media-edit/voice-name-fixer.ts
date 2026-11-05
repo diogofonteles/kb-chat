@@ -13,7 +13,7 @@ export interface VoiceNameFixerDeps {
 /** A name as a whole, not a piece of a longer word; any case, as a title may set it. */
 const nameIn = (name: string): RegExp =>
   new RegExp(
-    `(?<![\\p{L}\\p{N}])${name.replaceAll(/[.*+?^\${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}])`,
+    `(?<![\\p{L}\\p{N}])${name.replaceAll(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\p{N}])`,
     'giu',
   );
 

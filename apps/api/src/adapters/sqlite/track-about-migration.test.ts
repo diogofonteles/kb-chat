@@ -45,7 +45,8 @@ describe('Migration 23: the tracks’ title and summary, by word (KBC-070)', () 
     insertMedia(db, 'track', 'recording');
     summaryOf(db, 'track', 'Sobre a burracheira');
 
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([23]);
+    const through = MEDIA_MIGRATIONS.filter((one) => one.version <= 23);
+    expect(applyMigrations(db, through)).toEqual([23]);
 
     expect(found(db, 'burracheira')).toEqual(['track']);
     expect(found(db, 'track')).toEqual(['track']);

@@ -47,8 +47,6 @@ import {
   distinctUntilChanged,
   filter,
   interval,
-  map,
-  of,
   switchMap,
   tap,
   type Observable,

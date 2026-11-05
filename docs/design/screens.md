@@ -855,7 +855,7 @@ no alto (▶, tempo, barra de busca, velocidade) → transcrição abaixo, rolan
 
 ---
 
-## T30 — Fila de processamento (`/fila`, KBC-090)
+## T22 — Fila de processamento (`/fila`, KBC-090)
 
 Quem tem `media-upload` vê o que está sendo processado nos acervos que enxerga: entrada "Fila" na barra lateral, com contagem enquanto algo roda, e bloco na Biblioteca. Enviar vários arquivos leva para cá; um arquivo com plano continua indo para o passo 2.
 

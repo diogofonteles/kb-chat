@@ -141,7 +141,13 @@ describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
     await render(LibraryControls, {
       providers: [provideZonelessChangeDetection()],
       inputs: {
-        facets: { states: [], authors: [], topics: [], subjects: [] },
+        facets: {
+          states: [],
+          authors: [],
+          otherAuthors: false,
+          topics: [],
+          subjects: [],
+        },
         filters: { ...NONE, topic: 'alquimia' },
         sort: 'recently-played',
         view: 'list',
