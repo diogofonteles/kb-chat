@@ -4,6 +4,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
 import {
+  inTransaction,
+  openMediaDatabase,
+} from './adapters/sqlite/media-database.js';
+import { MEDIA_MIGRATIONS } from './adapters/sqlite/media-migrations.js';
+import { SqliteBookmarkStore } from './adapters/sqlite/sqlite-bookmark-store.js';
+import {
   member,
   queuedItem,
   readyItem,
@@ -190,16 +196,49 @@ describe('Media bookmarks (KBC-042 FR-1)', () => {
   });
 });
 
+/**
+ * Seeds `count` bookmarks for the owner of `firstId` on its media in one transaction, through
+ * the store the API itself writes with: a thousand HTTP calls took seconds under load.
+ */
+function seedBookmarks(media: Media, firstId: string, count: number): void {
+  const db = openMediaDatabase(
+    join(media.mediaDir, 'media.db'),
+    MEDIA_MIGRATIONS,
+  );
+  try {
+    const store = new SqliteBookmarkStore(db);
+    const first = store.bookmark(firstId);
+    if (!first) throw new Error(`no bookmark ${firstId}`);
+    inTransaction(db, () => {
+      for (let i = 0; i < count; i++)
+        store.addBookmark({
+          principal: first.principal,
+          bookmark: { ...first, id: randomUUID(), positionMs: i + 1 },
+        });
+    });
+  } finally {
+    db.close();
+  }
+}
+
 describe('Media bookmarks: the cap', () => {
   it('keeps at most 1 000 per person and media, and says so (BOOKMARK_LIMIT)', async () => {
     const media = await startMedia();
     const item = await readyItem(media);
     const url = `/api/v1/media/${item.id}/bookmarks`;
-    for (let i = 0; i < 1_000; i++)
-      expect(
-        (await media.owner('POST', url, { id: randomUUID(), positionMs: i }))
-          .statusCode,
-      ).toBe(201);
+    const first = randomUUID();
+    expect(
+      (await media.owner('POST', url, { id: first, positionMs: 0 })).statusCode,
+    ).toBe(201);
+    seedBookmarks(media, first, 998);
+    // The thousandth still fits; the cap is checked by the API on each create.
+    expect(
+      (await media.owner('POST', url, { id: randomUUID(), positionMs: 999 }))
+        .statusCode,
+    ).toBe(201);
+    expect(
+      (await media.owner('GET', url)).json().items as unknown[],
+    ).toHaveLength(1_000);
     const over = await media.owner('POST', url, {
       id: randomUUID(),
       positionMs: 0,
