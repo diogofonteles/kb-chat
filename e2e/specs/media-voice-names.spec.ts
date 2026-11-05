@@ -34,6 +34,10 @@ async function nameByKeyboard(page: Page, voice: number, text: string) {
   const field = whoIs(page, voice);
   await field.focus();
   await field.fill(text);
+  // The lists first: while "Carregando…" shows, ↓ and Enter have nothing to take.
+  await expect(
+    voicesBlock(page).getByRole('option', { name: text }).first(),
+  ).toBeVisible();
   await field.press('ArrowDown');
   await field.press('Enter');
   await expect(voicesBlock(page)).toContainText('Nome salvo.');

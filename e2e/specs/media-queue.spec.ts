@@ -208,8 +208,9 @@ async function correctVoice(page: Page, voice: number, name: string) {
   const field = page.getByRole('combobox', { name: `Quem é a Voz ${voice}?` });
   await expect(field).toBeFocused();
   await field.fill(name);
+  // Not any option: "Carregando…" is one too, and Enter registers nothing while it shows.
   await expect(
-    page.getByRole('listbox').getByRole('option').first(),
+    page.getByRole('option', { name: `Cadastrar «${name}»`, exact: true }),
   ).toBeVisible();
   await field.press('Enter');
   await expect(field).toHaveCount(0);
