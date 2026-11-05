@@ -4,11 +4,12 @@ import {
   continueListening,
   facetsOf,
   filterLibrary,
-  matchesQuery,
+  holdsWords,
   normalizeText,
   pageOf,
   recentlyPlayed,
   sortLibrary,
+  titleWordsOf,
 } from './library-query.js';
 
 /** The collection's main author (KBC-049). */
@@ -60,11 +61,10 @@ const NO_FILTER = {
   states: [],
   authors: [],
   topics: null,
-  query: '',
 } as const;
 const titles = (items: readonly LibraryItem[]) => items.map((i) => i.title);
 
-describe('normalizeText and matchesQuery', () => {
+describe('normalizeText and holdsWords', () => {
   it('ignores case, accents and extra spaces', () => {
     expect(normalizeText('  Mestre   LAÉRCIO ')).toBe('mestre laercio');
   });
@@ -74,9 +74,9 @@ describe('normalizeText and matchesQuery', () => {
       title: 'Ensino de 1998',
       author: MESTRE,
     });
-    expect(matchesQuery(item, 'laercio 1998')).toBe(true);
-    expect(matchesQuery(item, 'laercio 1999')).toBe(false);
-    expect(matchesQuery(item, '   ')).toBe(true);
+    expect(holdsWords(titleWordsOf(item), 'laercio 1998')).toBe(true);
+    expect(holdsWords(titleWordsOf(item), 'laercio 1999')).toBe(false);
+    expect(holdsWords(titleWordsOf(item), '   ')).toBe(false);
   });
 });
 
@@ -296,9 +296,11 @@ describe('authors (KBC-049)', () => {
   });
 
   it('finds media by the author’s name, and "outros autores" by none', () => {
-    expect(matchesQuery(items[1] as LibraryItem, 'bia')).toBe(true);
-    expect(matchesQuery(items[0] as LibraryItem, 'outros autores')).toBe(true);
-    expect(matchesQuery(items[3] as LibraryItem, 'outros')).toBe(false);
+    const holds = (index: number, query: string) =>
+      holdsWords(titleWordsOf(items[index] as LibraryItem), query);
+    expect(holds(1, 'bia')).toBe(true);
+    expect(holds(0, 'outros autores')).toBe(true);
+    expect(holds(3, 'outros')).toBe(false);
   });
 });
 

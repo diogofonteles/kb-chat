@@ -4,8 +4,8 @@ import {
   computed,
   inject,
   input,
-  linkedSignal,
   output,
+  signal,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import type { LibraryItem, LibraryTrack } from '@kb-chat/contracts';
@@ -48,12 +48,10 @@ export class TrackGroup {
   ];
 
   readonly item = input.required<LibraryItem>();
-  /** A search is on: the track it found must show. */
-  readonly openByDefault = input(false);
   readonly playingId = input<string | null>(null);
   readonly played = output<LibraryTrack>();
 
-  protected readonly open = linkedSignal(() => this.openByDefault());
+  protected readonly open = signal(false);
   protected readonly label = computed(() => {
     const count = this.item().tracks.length;
     return count === 1

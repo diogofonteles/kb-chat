@@ -71,21 +71,29 @@ export async function seedTranscript(
 }
 
 /** A ready audio of a minute with its transcript: what "Separar vozes" works on. */
-export async function transcribedAudio(owner: APIRequestContext) {
+export async function transcribedAudio(
+  owner: APIRequestContext,
+  topic?: string,
+) {
   const media = await uploadReady(owner, {
     title: `Entrevista ${uniqueTag()}`,
     seconds: 60,
+    ...(topic ? { topic } : {}),
   });
   await seedTranscript(owner, media.id);
   return media;
+}
+
+interface SeparationAnswer {
+  readonly turns?: typeof TURNS;
+  readonly voiceMatches?: readonly VoiceMatch[];
 }
 
 /** Asks for a separation and answers it with `turns`, as the Mac would. */
 export async function separateVoices(
   owner: APIRequestContext,
   mediaId: string,
-  turns: typeof TURNS = TURNS,
-  voiceMatches: readonly VoiceMatch[] = [],
+  { turns = TURNS, voiceMatches = [] }: SeparationAnswer = {},
 ): Promise<void> {
   const asked = await owner.post(`/api/v1/media/${mediaId}/diarize`, {
     data: {},

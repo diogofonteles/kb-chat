@@ -225,3 +225,100 @@ describe('SqliteMediaSearch over tracks (KBC-070)', () => {
     expect(search.tracksAbout(['cha'])).toEqual(new Set(['b']));
   });
 });
+
+describe('spokenAmong and passagesAt (KBC-096)', () => {
+  let db: DatabaseSync;
+  let search: SqliteMediaSearch;
+
+  beforeEach(() => {
+    db = openMediaDatabase(':memory:', MEDIA_MIGRATIONS);
+    search = new SqliteMediaSearch(db);
+    insertRecording(db);
+    insertTrack(db, { id: 'one' });
+    insertTrack(db, { id: 'two' });
+    inTransaction(db, () => {
+      say(db, 'one', ['palavra rara', 'outra coisa', 'palavra rara rara']);
+      say(db, 'two', ['nada aqui', 'palavra rara uma vez']);
+    });
+  });
+
+  const spoken = (ids: readonly string[], terms = ['rara'], limit = 10) =>
+    search.spokenAmong({ terms, ids, tracks: true, limit });
+
+  it('gives each media once, at its best passage, and only those asked', () => {
+    const { places, more } = spoken(['one', 'two']);
+    expect(places.map((one) => one.mediaId).sort()).toEqual(['one', 'two']);
+    expect(more).toBe(false);
+    const [passage] = search.passagesAt(
+      ['rara'],
+      places.filter((one) => one.mediaId === 'one').map((one) => one.place),
+    );
+    expect(passage).toMatchObject({ mediaId: 'one', startMs: 2000 });
+    expect(passage?.marked).toContain('\u0002rara\u0003');
+    expect(spoken(['two']).places.map((one) => one.mediaId)).toEqual(['two']);
+  });
+
+  it('marks each place with its own text, not the first one read', () => {
+    const { places } = spoken(['one', 'two']);
+    const passages = search.passagesAt(
+      ['rara'],
+      places.map((one) => one.place),
+    );
+    const textOf = (id: string) =>
+      passages.find((one) => one.mediaId === id)?.marked;
+    expect(textOf('one')).toBe('palavra \u0002rara\u0003 \u0002rara\u0003');
+    expect(textOf('two')).toBe('palavra \u0002rara\u0003 uma vez');
+  });
+
+  it('says when more media hold the words than the limit', () => {
+    const { places, more } = spoken(['one', 'two'], ['rara'], 1);
+    expect(places).toHaveLength(1);
+    expect(more).toBe(true);
+  });
+
+  it('answers nothing without words or media', () => {
+    expect(spoken([])).toEqual({ places: [], more: false });
+    expect(spoken(['one'], [])).toEqual({ places: [], more: false });
+    expect(search.passagesAt([], [1])).toEqual([]);
+  });
+
+  it('reads media one stretch at a time past RANKED, the normal confidence first', () => {
+    const ids = Array.from({ length: 3 }, (_, i) => `many-${i}`);
+    inTransaction(db, () => {
+      for (const id of ids) {
+        insertTrack(db, { id });
+        say(
+          db,
+          id,
+          Array.from({ length: RANKED / 2 }, () => 'comum'),
+        );
+      }
+    });
+    db.prepare(`UPDATE transcripts SET confidence = 'low' WHERE id = ?`).run(
+      't-many-0',
+    );
+
+    const { places, more } = spoken(ids, ['comum'], 2);
+
+    expect(places.map((one) => one.mediaId)).toEqual(['many-1', 'many-2']);
+    expect(more).toBe(true);
+    const all = spoken(ids, ['comum'], 10);
+    expect(all.places.at(-1)?.mediaId).toBe('many-0');
+    expect(all.more).toBe(false);
+  });
+
+  it('past RANKED, a recording speaks only outside its tracks', () => {
+    inTransaction(db, () => {
+      say(db, 'rec', ['comum dentro da faixa']);
+      insertTrack(db, { id: 'bulk' });
+      say(
+        db,
+        'bulk',
+        Array.from({ length: RANKED + 1 }, () => 'comum'),
+      );
+    });
+    expect(
+      spoken(['rec', 'bulk'], ['comum']).places.map((one) => one.mediaId),
+    ).toEqual(['bulk']);
+  });
+});

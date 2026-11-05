@@ -83,6 +83,9 @@
       </select>
     </label>
   }
+  @if (compact() && hiddenActive() > 0) {
+    <span class="hidden-filters">{{ hiddenText() }}</span>
+  }
   @if (active() > 0) {
     <button
       type="button"
@@ -94,43 +97,45 @@
     </button>
   }
 </div>
-<div class="tools">
-  <app-menu-button
-    kind="choice"
-    class="sort"
-    [label]="sortLabel()"
-    [options]="sortOptions()"
-    (chosen)="chooseSort($event)"
-  >
-    <span>{{ sortLabel() }} <span aria-hidden="true">▾</span></span>
-  </app-menu-button>
-  <div
-    class="views"
-    role="group"
-    aria-label="Visão"
-    i18n-aria-label="@@library.view"
-  >
-    <button
-      type="button"
-      class="view"
-      [attr.aria-pressed]="view() === 'list'"
-      (click)="viewChange.emit('list')"
+@if (!compact()) {
+  <div class="tools">
+    <app-menu-button
+      kind="choice"
+      class="sort"
+      [label]="sortLabel()"
+      [options]="sortOptions()"
+      (chosen)="chooseSort($event)"
     >
-      <span aria-hidden="true">☰</span>
-      <span class="visually-hidden" i18n="@@library.viewList"
-        >Ver em lista</span
-      >
-    </button>
-    <button
-      type="button"
-      class="view"
-      [attr.aria-pressed]="view() === 'grid'"
-      (click)="viewChange.emit('grid')"
+      <span>{{ sortLabel() }} <span aria-hidden="true">▾</span></span>
+    </app-menu-button>
+    <div
+      class="views"
+      role="group"
+      aria-label="Visão"
+      i18n-aria-label="@@library.view"
     >
-      <span aria-hidden="true">▦</span>
-      <span class="visually-hidden" i18n="@@library.viewGrid"
-        >Ver em grade</span
+      <button
+        type="button"
+        class="view"
+        [attr.aria-pressed]="view() === 'list'"
+        (click)="viewChange.emit('list')"
       >
-    </button>
+        <span aria-hidden="true">☰</span>
+        <span class="visually-hidden" i18n="@@library.viewList"
+          >Ver em lista</span
+        >
+      </button>
+      <button
+        type="button"
+        class="view"
+        [attr.aria-pressed]="view() === 'grid'"
+        (click)="viewChange.emit('grid')"
+      >
+        <span aria-hidden="true">▦</span>
+        <span class="visually-hidden" i18n="@@library.viewGrid"
+          >Ver em grade</span
+        >
+      </button>
+    </div>
   </div>
-</div>
+}

@@ -256,12 +256,12 @@ test('FR-2: the owner chooses the main author in "Editar acervo" and the badges 
 
   await chooseMainAuthor(page, udv.slug, 'Mestre Gabriel');
   // Masters have every feature, so the sidebar leads to the library; it holds every
-  // collection's media, in pages, so the search finds this test's own.
+  // collection's media, in pages, so the collection's filter shows this test's own.
   await (await sidebar(page)).getByRole('link', { name: 'Biblioteca' }).click();
   await expect(
     page.getByRole('heading', { name: 'Biblioteca', level: 2 }),
   ).toBeVisible();
-  await page.getByLabel('Buscar na biblioteca').fill(title);
+  await page.goto(`/biblioteca?acervo=${encodeURIComponent(udv.slug)}`);
   const row = page.getByRole('listitem').filter({ hasText: title });
   await expect(row.locator('.authorship-badge')).toHaveText(
     /✦\s*Mestre Gabriel/,

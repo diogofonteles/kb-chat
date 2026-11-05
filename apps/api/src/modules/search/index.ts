@@ -4,6 +4,7 @@ export {
   toCollection,
   type SearchServiceDeps,
 } from './search-service.js';
+export { excerptOf, termsOf, unmark } from './media-hits.js';
 export { cleanSnippet } from './snippet.js';
 export {
   SearchWithMedia,

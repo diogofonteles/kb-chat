@@ -42,22 +42,21 @@ export interface LibraryFilter {
   readonly authors: readonly string[];
   /** The chosen collection and its sub-collections; null for every collection. */
   readonly topics: ReadonlySet<string> | null;
-  readonly query: string;
 }
 
 const allows = <T>(chosen: readonly T[], value: T): boolean =>
   chosen.length === 0 || chosen.includes(value);
 
-/** Title or author holds every word of the search (FR-1 `q`). */
-export function matchesQuery(
-  item: LibraryItem | LibraryTrack,
-  query: string,
-): boolean {
+/** `text` holds every word of the search, in any order and accent. */
+export function holdsWords(text: string, query: string): boolean {
   const words = normalizeText(query).split(' ').filter(Boolean);
-  if (words.length === 0) return true;
-  const haystack = normalizeText(`${item.title} ${authorWordsOf(item.author)}`);
-  return words.every((word) => haystack.includes(word));
+  const haystack = normalizeText(text);
+  return words.length > 0 && words.every((word) => haystack.includes(word));
 }
+
+/** The words of an item a search reads besides what was said: title and author. */
+export const titleWordsOf = (item: LibraryTrack): string =>
+  `${item.title} ${authorWordsOf(item.author)}`;
 
 /** Within a group the chips add up; across groups they narrow (state and author). */
 export function filterLibrary(
@@ -68,9 +67,7 @@ export function filterLibrary(
     (item) =>
       allows(filter.states, listeningStateOf(item)) &&
       allows(filter.authors, authorValueOf(item)) &&
-      (filter.topics === null || filter.topics.has(item.topic)) &&
-      (matchesQuery(item, filter.query) ||
-        item.tracks.some((track) => matchesQuery(track, filter.query))),
+      (filter.topics === null || filter.topics.has(item.topic)),
   );
 }
 
@@ -137,16 +134,16 @@ function authorsOf(items: readonly LibraryItem[]) {
   );
 }
 
-export interface LibrarySlice {
-  readonly items: LibraryItem[];
+export interface LibrarySlice<T> {
+  readonly items: T[];
   readonly nextCursor: string | null;
 }
 
 /** One page of 50; the cursor is where the next page starts (FR-1). */
-export function pageOf(
-  items: readonly LibraryItem[],
+export function pageOf<T>(
+  items: readonly T[],
   cursor: string | undefined,
-): LibrarySlice {
+): LibrarySlice<T> {
   const start = cursor === undefined ? 0 : Number(cursor);
   const end = start + LIBRARY_PAGE_SIZE;
   return {

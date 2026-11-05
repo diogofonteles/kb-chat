@@ -70,6 +70,15 @@ export function countTextOf(total: number, totalMs: number): string {
   return `${count} · ${length}`;
 }
 
+/** "3 resultados" (KBC-096); past the cap, "Mais de 200 resultados". */
+export function resultCountOf(total: number, capped: boolean): string {
+  if (capped)
+    return $localize`:@@library.results.capped:Mais de ${total}:count: resultados`;
+  return total === 1
+    ? $localize`:@@library.results.one:1 resultado`
+    : $localize`:@@library.results.many:${total}:count: resultados`;
+}
+
 /** "há 2 dias" next to a recently played media; "agora há pouco" under a minute. */
 export function playedAgoOf(
   playedAt: string,

@@ -56,7 +56,7 @@ pnpm gates                                  # lint, typecheck, test, build, form
 pnpm tutorial:screenshots                   # regenerates the /tutorial pictures (KBC-032, README)
 pnpm e2e                                    # Playwright, ports 3117/4317 (KBC_E2E_API_PORT/KBC_E2E_WEB_PORT to move them), desktop 1440 + mobile 390
 pnpm --filter @kb-chat/api latency          # p95 per search mode against a running API (Q1/Q2)
-pnpm --filter @kb-chat/api exec tsx src/scripts/media-search-latency.ts   # media search p95 on 2,000 h of synthetic transcripts (KBC-039 NFR-1, ≤ 150 ms)
+pnpm --filter @kb-chat/api exec tsx src/scripts/media-search-latency.ts   # media search p95 on 2,000 h of synthetic transcripts (KBC-039 NFR-1, ≤ 150 ms; KBC-096 NFR-1: the library search over tracks, ≤ 400 ms)
 (cd tools/transcriber && uv run ruff check && uv run ruff format --check && uv run pytest)   # the Mac transcriber (KBC-036, Python with uv)
 pnpm --filter @kb-chat/api exec tsx src/scripts/transcript-calibration.ts <raw-dir>   # post-filter and confidence over raw transcripts (manual, ADR 0023)
 ```

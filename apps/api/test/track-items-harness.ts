@@ -14,7 +14,7 @@ import type {
   WorkerJob,
 } from '@kb-chat/contracts';
 import { expect } from 'vitest';
-import { caller, signIn, start } from './ai-app-harness.js';
+import { caller, signIn, start, type StartOptions } from './ai-app-harness.js';
 import { FIXTURE_VAULT } from './fixture-paths.js';
 import {
   CONVERTED,
@@ -91,11 +91,12 @@ async function vaultWithTwoCollections(): Promise<string> {
 }
 
 export async function startWorld(
-  options: { readonly vault?: string } = {},
+  options: { readonly vault?: string; readonly env?: StartOptions['env'] } = {},
 ): Promise<World> {
   const started = await start({
     media: true,
     vault: options.vault ?? (await vaultWithTwoCollections()),
+    ...(options.env ? { env: options.env } : {}),
   });
   const ownerHeaders = await signIn(started, 'owner@example.com');
   const media: Media = {
@@ -108,7 +109,7 @@ export async function startWorld(
   return { media, token };
 }
 
-async function convertLong(media: Media, job: WorkerJob): Promise<void> {
+export async function convertLong(media: Media, job: WorkerJob): Promise<void> {
   writeFileSync(join(media.mediaDir, job.targetPath), CONVERTED);
   if (job.flacTargetPath)
     writeFileSync(join(media.mediaDir, job.flacTargetPath), FLAC);
@@ -130,9 +131,10 @@ async function convertLong(media: Media, job: WorkerJob): Promise<void> {
 export async function transcribed(
   world: World,
   passages: readonly Spoken[],
+  options: { readonly title?: string } = {},
 ): Promise<MediaItem> {
   const { media } = world;
-  const item = await queuedItem(media);
+  const item = await queuedItem(media, 'hermetismo', options);
   await convertLong(media, await leaseJob(media));
   await say(world, passages);
   return item;

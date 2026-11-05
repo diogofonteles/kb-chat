@@ -35,11 +35,18 @@ const recording: LibraryItem = {
   tracks: [aTrack(1), aTrack(2)],
 };
 
-function setup(openByDefault = false, item = recording) {
+function setup(item = recording) {
   TestBed.configureTestingModule({ providers: [provideRouter([])] });
   const fixture = TestBed.createComponent(TrackGroup);
   fixture.componentRef.setInput('item', item);
-  fixture.componentRef.setInput('openByDefault', openByDefault);
+  return fixture;
+}
+
+/** The group with its tracks showing. */
+async function opened(item = recording) {
+  const fixture = setup(item);
+  await fixture.whenStable();
+  fixture.nativeElement.querySelector('.toggle').click();
   return fixture;
 }
 
@@ -65,9 +72,10 @@ describe('TrackGroup (KBC-068 FR-5)', () => {
       });
       const fixture = TestBed.createComponent(TrackGroup);
       fixture.componentRef.setInput('item', recording);
-      fixture.componentRef.setInput('openByDefault', true);
       await fixture.whenStable();
       const root: HTMLElement = fixture.nativeElement;
+      root.querySelector<HTMLElement>('.toggle')?.click();
+      await fixture.whenStable();
       expect(root.querySelectorAll('[aria-label^="Ações de"]').length).toBe(
         shown,
       );
@@ -93,22 +101,16 @@ describe('TrackGroup (KBC-068 FR-5)', () => {
   });
 
   it('keeps the whole title of a track where a narrow screen cuts it', async () => {
-    const fixture = setup(true);
+    const fixture = await opened();
     await fixture.whenStable();
     const link = fixture.nativeElement.querySelector('ol a');
     expect(link.getAttribute('title')).toBe('Pergunta 1');
   });
 
-  it('opens by itself under a search', async () => {
-    const fixture = setup(true);
-    await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('ol')).not.toBeNull();
-  });
-
   it('shows where the person is in each track: heard, or where to continue', async () => {
     const heard = { ...aTrack(1), completedAt: '2026-11-01T00:00:00.000Z' };
     const begun = { ...aTrack(2), positionMs: 20_000 };
-    const fixture = setup(true, { ...recording, tracks: [heard, begun] });
+    const fixture = await opened({ ...recording, tracks: [heard, begun] });
     await fixture.whenStable();
     const [first, second] = fixture.nativeElement.querySelectorAll('li');
     expect(first.textContent).toContain('✓ Ouvida');
@@ -117,7 +119,7 @@ describe('TrackGroup (KBC-068 FR-5)', () => {
   });
 
   it('plays a track at once', async () => {
-    const fixture = setup(true);
+    const fixture = await opened();
     const played = vi.fn();
     fixture.componentInstance.played.subscribe(played);
     await fixture.whenStable();

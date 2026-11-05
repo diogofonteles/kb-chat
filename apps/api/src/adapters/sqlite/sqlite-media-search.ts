@@ -12,6 +12,9 @@ import type {
   MediaSearchQuery,
   MediaSearchResult,
   MediaSegmentMatch,
+  SpokenAmong,
+  SpokenPlace,
+  SpokenQuery,
   SubjectCount,
   TrackDetails,
   TrackLinksPort,
@@ -134,6 +137,11 @@ const SEGMENT_RANGES = `SELECT t.media_id, t.id AS transcript_id,
   FROM json_each(?) j JOIN transcripts t ON t.media_id = j.value
   ORDER BY j.key`;
 
+/** The index read first: a rare word in a large library must not start from the media. */
+const FROM_INDEX = FROM_MATCHES.replaceAll('JOIN', 'CROSS JOIN');
+/** Media asked at a time for a word too common to rank (KBC-096). */
+const SCAN_BATCH = 500;
+
 /** Normal confidence first (BR-3), then relevance, then the earlier passage. */
 const ORDER = `ORDER BY t.confidence = 'low', bm25(segments_fts), s.start_ms`;
 
@@ -143,6 +151,18 @@ const byConfidenceThenRelevance = (
 ): number =>
   Number(a.confidence === 'low') - Number(b.confidence === 'low') ||
   a.bm25 - b.bm25;
+
+/** One row per media, the first seen: rows come best first. */
+function firstOfEach(
+  rows: readonly Record<string, unknown>[],
+): readonly SpokenPlace[] {
+  const best = new Map<string, number>();
+  for (const row of rows) {
+    const mediaId = String(row['media_id']);
+    if (!best.has(mediaId)) best.set(mediaId, Number(row['place']));
+  }
+  return [...best].map(([mediaId, place]) => ({ mediaId, place }));
+}
 
 function toMatch(row: Record<string, unknown>): MediaSegmentMatch {
   return {
@@ -308,7 +328,7 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     const ranked = this.matchesInIndex(expression) <= RANKED;
     const select = selectMatches(
       ranked ? 'bm25(segments_fts)' : UNRANKED_SCORE,
-      FROM_MATCHES.replaceAll('JOIN', 'CROSS JOIN'),
+      FROM_INDEX,
     );
     const best = this.db.prepare(
       `${select} WHERE segments_fts MATCH ? AND f.rowid BETWEEN ? AND ?
@@ -326,6 +346,87 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
       );
       return row ? [toMatch(row)] : [];
     });
+  }
+
+  /**
+   * KBC-096. Up to RANKED matches in the whole index, all are ranked and each media keeps its
+   * best; past that, each media asks its own stretch of the index, in the order of `ids`, until
+   * the limit is passed: such a word ranks nothing useful (NFR-1).
+   */
+  spokenAmong({ terms, ids, tracks, limit }: SpokenQuery): SpokenAmong {
+    if (terms.length === 0 || ids.length === 0)
+      return { places: [], more: false };
+    const expression = toMatchExpression(terms);
+    const places =
+      this.matchesInIndex(expression) <= RANKED
+        ? this.rankedPlaces(expression, ids, tracks)
+        : this.scannedPlaces(expression, { ids, tracks, limit });
+    return { places: places.slice(0, limit), more: places.length > limit };
+  }
+
+  private rankedPlaces(
+    expression: string,
+    ids: readonly string[],
+    tracks: boolean,
+  ): readonly SpokenPlace[] {
+    const rows = this.db
+      .prepare(
+        `SELECT t.media_id, s.rowid AS place ${FROM_INDEX}
+         WHERE segments_fts MATCH ? AND ${IN_IDS} AND ${passagesFor(tracks)} ${ORDER}`,
+      )
+      .all(expression, JSON.stringify(ids));
+    return firstOfEach(rows);
+  }
+
+  /** Normal confidence first (BR-3), among what was read. */
+  private scannedPlaces(
+    expression: string,
+    { ids, tracks, limit }: Omit<SpokenQuery, 'terms'>,
+  ): readonly SpokenPlace[] {
+    const scan = this.db.prepare(
+      `SELECT r.media_id, x.confidence, (
+         SELECT f.rowid FROM segments_fts f CROSS JOIN segments s ON s.rowid = f.rowid
+         WHERE segments_fts MATCH ? AND f.rowid BETWEEN r.first AND r.last
+           AND s.transcript_id = r.transcript_id AND ${passagesFor(tracks)} LIMIT 1
+       ) AS place
+       FROM (${SEGMENT_RANGES}) r
+       CROSS JOIN transcripts x ON x.id = r.transcript_id
+       CROSS JOIN media m ON m.id = r.media_id`,
+    );
+    const found: Record<string, unknown>[] = [];
+    for (let at = 0; at < ids.length && found.length <= limit;) {
+      const batch = JSON.stringify(ids.slice(at, at + SCAN_BATCH));
+      found.push(
+        ...scan.all(expression, batch).filter((row) => row['place'] !== null),
+      );
+      at += SCAN_BATCH;
+    }
+    const low = (row: Record<string, unknown>) =>
+      Number(row['confidence'] === 'low');
+    return firstOfEach(found.sort((a, b) => low(a) - low(b)));
+  }
+
+  passagesAt(
+    terms: readonly string[],
+    places: readonly number[],
+  ): MediaSegmentMatch[] {
+    if (terms.length === 0 || places.length === 0) return [];
+    // One walk over the stretch that holds them: `rowid = ?` marks the wrong text, and a range
+    // per place walks a common word's list from its start each time. `+` keeps the ids a
+    // filter, so `highlight` runs only for the rows wanted.
+    return this.db
+      .prepare(
+        `${selectMatches(UNRANKED_SCORE, FROM_INDEX)}
+         WHERE segments_fts MATCH ? AND f.rowid BETWEEN ? AND ?
+           AND +f.rowid IN (SELECT value FROM json_each(?))`,
+      )
+      .all(
+        toMatchExpression(terms),
+        Math.min(...places),
+        Math.max(...places),
+        JSON.stringify(places),
+      )
+      .map(toMatch);
   }
 
   saying(terms: readonly string[]): ReadonlySet<string> | null {

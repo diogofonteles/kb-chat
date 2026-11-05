@@ -6,6 +6,8 @@ import {
   type LibraryItem,
   type LibraryPage,
   type LibraryQuery,
+  type LibrarySearch,
+  type LibrarySearchQuery,
   type LibraryTrack,
   type MarkPlayedRequest,
   type MarkPlayedResult,
@@ -15,6 +17,7 @@ import type {
   ListeningMark,
   ListeningStorePort,
 } from '../../ports/listening-store.js';
+import type { TrackLinksPort } from '../../ports/media-search.js';
 import type { LibraryRecord, MediaStorePort } from '../../ports/media-store.js';
 import {
   continueListening,
@@ -24,6 +27,7 @@ import {
   recentlyPlayed,
   sortLibrary,
 } from './library-query.js';
+import { isPublished, searchLibrary } from './library-search.js';
 import { nextSaveTime } from './listening-service.js';
 import type { MediaActor } from './media-service.js';
 import { canEditMedia } from './media-policy.js';
@@ -42,6 +46,10 @@ export interface LibraryServiceDeps {
   readonly subjectsOf?: (
     tracks: readonly { readonly mediaId: string; readonly topic: string }[],
   ) => ReadonlyMap<string, readonly HitSubject[]>;
+  /** The transcripts' index (KBC-096); absent, the search reads titles and subjects. */
+  readonly speech?: Pick<TrackLinksPort, 'spokenAmong' | 'passagesAt'>;
+  /** Tracks by title and summary (KBC-070), for who sees subjects. */
+  readonly about?: Pick<TrackLinksPort, 'tracksAbout'>;
   readonly now?: () => Date;
 }
 
@@ -63,7 +71,6 @@ export class LibraryService {
         states: query.state ?? [],
         authors: query.author ?? [],
         topics: this.scope(actor, query.topic),
-        query: query.q ?? '',
       }),
       query.sort ?? DEFAULT_LIBRARY_PREFERENCES.librarySort,
     );
@@ -79,6 +86,31 @@ export class LibraryService {
         subjects: subjects ? distinctSubjects(subjects) : [],
       },
     };
+  }
+
+  /** KBC-096: the tracks and undivided audio that answer, under the filters in force. */
+  search(actor: MediaActor, query: LibrarySearchQuery): LibrarySearch {
+    const entries = this.entriesOf(actor);
+    const subjects = this.subjectsAmong(actor, entries);
+    const asEntries = entries.map((entry) => ({ ...entry, tracks: [] }));
+    const candidates = filterLibrary(
+      linkedTracks(entries, subjects, query.subject) ?? asEntries,
+      {
+        states: query.state ?? [],
+        authors: query.author ?? [],
+        topics: this.scope(actor, query.topic),
+      },
+    ).filter(isPublished);
+    return searchLibrary({
+      candidates,
+      entries,
+      subjects,
+      query,
+      speech: actor.searchesSpeech ? this.deps.speech : undefined,
+      // A summary is derived from the speech: only for who may search it (R4).
+      about: subjects && actor.searchesSpeech ? this.deps.about : undefined,
+      tracks: actor.seesTracks ?? false,
+    });
   }
 
   /** Each track's subjects; null for who does not see subjects and tracks (BR-3). */

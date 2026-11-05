@@ -46,6 +46,8 @@ export interface MediaActor {
   readonly seesTracks?: boolean;
   /** Has `media-subjects`: subjects reach the library (KBC-070 BR-3). */
   readonly seesSubjects?: boolean;
+  /** Has `search`: the library may look inside transcripts for them (KBC-096 R4). */
+  readonly searchesSpeech?: boolean;
   /** The person's name, for the history of a track (KBC-073 BR-8). */
   readonly displayName?: string;
   readonly canSee: (topic: string) => boolean;

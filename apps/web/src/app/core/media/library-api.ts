@@ -3,10 +3,12 @@ import { Injectable, inject } from '@angular/core';
 import {
   MARK_PLAYED_MAX,
   libraryPageSchema,
+  librarySearchSchema,
   listeningPreferencesSchema,
   markPlayedResultSchema,
   type LibraryFilters,
   type LibraryPage,
+  type LibrarySearch,
   type LibrarySort,
   type ListeningPreferences,
   type ListeningPreferencesUpdate,
@@ -27,14 +29,20 @@ import { PREFERENCES_URL } from './listening-api.js';
 
 export const LIBRARY_URL = '/api/v1/media/library';
 export const LIBRARY_HOME_URL = `${LIBRARY_URL}/home`;
+export const LIBRARY_SEARCH_URL = `${LIBRARY_URL}/search`;
 export const LIBRARY_RECENTS_URL = `${LIBRARY_URL}/recents`;
 export const MARK_PLAYED_URL = '/api/v1/media/played';
 
-/** What the library asks for (KBC-051 FR-1): filters, search and order. */
+/** What the library asks for (KBC-051 FR-1): filters and order. */
 export interface LibraryRequest {
   readonly filters: LibraryFilters;
-  readonly query: string;
   readonly sort: LibrarySort;
+}
+
+/** What "Buscar na biblioteca" asks for (KBC-096): the words, under the same filters. */
+export interface LibrarySearchRequest {
+  readonly filters: LibraryFilters;
+  readonly query: string;
 }
 
 /** What a mark in batches did: what the API applied, and what never reached it. */
@@ -51,12 +59,8 @@ function batchesOf(ids: readonly string[]): readonly (readonly string[])[] {
   return batches;
 }
 
-/** The first page's URL; chips go as comma-separated lists, empty ones left out. */
-export function libraryUrlOf(
-  request: LibraryRequest,
-  cursor: string | null = null,
-): string {
-  const { filters } = request;
+/** The chips as comma-separated lists, empty ones left out. */
+function filterParamsOf(filters: LibraryFilters): URLSearchParams {
   const params = new URLSearchParams();
   const lists = {
     state: filters.states,
@@ -66,11 +70,29 @@ export function libraryUrlOf(
     if (values.length > 0) params.set(name, values.join(','));
   if (filters.topic) params.set('topic', filters.topic);
   if (filters.subject) params.set('subject', filters.subject);
-  const query = request.query.trim();
-  if (query) params.set('q', query);
+  return params;
+}
+
+/** The first page's URL. */
+export function libraryUrlOf(
+  request: LibraryRequest,
+  cursor: string | null = null,
+): string {
+  const params = filterParamsOf(request.filters);
   params.set('sort', request.sort);
   if (cursor) params.set('cursor', cursor);
   return `${LIBRARY_URL}?${params.toString()}`;
+}
+
+/** A search's URL; the words are asked trimmed. */
+export function librarySearchUrlOf(
+  request: LibrarySearchRequest,
+  cursor: string | null = null,
+): string {
+  const params = filterParamsOf(request.filters);
+  params.set('q', request.query.trim());
+  if (cursor) params.set('cursor', cursor);
+  return `${LIBRARY_SEARCH_URL}?${params.toString()}`;
 }
 
 /** Writes of the library, and its next pages; the first page and home use httpResource. */
@@ -82,6 +104,15 @@ export class LibraryApi {
     return this.http
       .get(libraryUrlOf(request, cursor))
       .pipe(map((body) => libraryPageSchema.parse(body)));
+  }
+
+  search(
+    request: LibrarySearchRequest,
+    cursor: string,
+  ): Observable<LibrarySearch> {
+    return this.http
+      .get(librarySearchUrlOf(request, cursor))
+      .pipe(map((body) => librarySearchSchema.parse(body)));
   }
 
   markPlayed(

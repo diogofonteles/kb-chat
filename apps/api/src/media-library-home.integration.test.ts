@@ -450,12 +450,17 @@ describe('Media library: filters, search, sort and pages (FR-1, BR-6)', () => {
       author: 'mestre-laercio',
     });
     await ready(media, { title: 'Palestra sobre Hermes' });
-    const byAuthor = (await media.owner('GET', `${LIBRARY}?q=LAÉRCIO`)).json();
-    expect(titles(byAuthor.items)).toEqual(['Ensino do Mestre']);
-    const byTitle = (await media.owner('GET', `${LIBRARY}?q=hermes`)).json();
-    expect(titles(byTitle.items)).toEqual(['Palestra sobre Hermes']);
-    const none = (await media.owner('GET', `${LIBRARY}?q=conselheira`)).json();
-    expect(none).toMatchObject({ items: [], total: 0 });
+    const search = async (q: string) =>
+      (
+        await media.owner('GET', `${LIBRARY}/search?q=${encodeURIComponent(q)}`)
+      ).json();
+    const found = async (q: string) =>
+      (await search(q)).items.map(
+        (hit: { item: { title: string } }) => hit.item.title,
+      );
+    expect(await found('LAÉRCIO')).toEqual(['Ensino do Mestre']);
+    expect(await found('hermes')).toEqual(['Palestra sobre Hermes']);
+    expect(await search('conselheira')).toMatchObject({ items: [], total: 0 });
   });
 
   it('refuses an unknown chip or order with 400', async () => {
@@ -552,7 +557,7 @@ describe('Media library: speed (NFR-1)', () => {
       const started = performance.now();
       const answer = await media.owner(
         'GET',
-        `${LIBRARY}?state=unheard&sort=title&q=palestra`,
+        `${LIBRARY}?state=unheard&sort=title`,
       );
       timings.push(performance.now() - started);
       expect(answer.statusCode).toBe(200);

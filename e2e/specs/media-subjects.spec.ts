@@ -179,8 +179,14 @@ test('AC-5: the concept panel lists the tracks, each opening at the start', asyn
   const seed = await seeded();
   const page = await reader(browser, viewport);
   await page.goto('/');
+  // An Enter before the collection loads is dropped: the button says it can search.
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(
+    'Hermetismo',
+  );
   await page.getByLabel('Sua pergunta').fill('sephiroth');
-  await page.getByLabel('Sua pergunta').press('Enter');
+  const send = page.getByRole('button', { name: 'Buscar' });
+  await expect(send).toBeEnabled();
+  await send.click();
   await page
     .getByRole('button', { name: /A Árvore da Vida/ })
     .first()

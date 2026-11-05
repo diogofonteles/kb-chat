@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -20,9 +21,18 @@ import {
   toObservable,
   toSignal,
 } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import {
+  ActivatedRoute,
+  NavigationEnd,
+  NavigationStart,
+  Router,
+  RouterLink,
+  type UrlTree,
+  convertToParamMap,
+} from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
+  LIBRARY_QUERY_MAX,
   libraryHomeSchema,
   libraryPageSchema,
   listeningPreferencesSchema,
@@ -51,8 +61,17 @@ import { PREFERENCES_URL } from '@core/media/listening-api.js';
 import { MediaApi } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { ChatStore } from '@features/chat/chat-store.js';
-import { ViewStore } from '@features/chat/view-store.js';
-import { EMPTY, Subject, catchError, concatMap, debounceTime, of } from 'rxjs';
+import {
+  EMPTY,
+  Subject,
+  catchError,
+  concatMap,
+  debounceTime,
+  filter,
+  map,
+  of,
+  share,
+} from 'rxjs';
 import { keepFocusedInView } from '../keep-in-view.js';
 import { detailsSavedText } from '../edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from '../edit-media-dialog.js';
@@ -70,11 +89,22 @@ import {
   type FilterChange,
 } from './library-labels.js';
 import { LibraryRow, type RowAction } from './library-row.js';
+import { LibrarySearchResults } from './library-search-results.js';
 import { NearEnd } from './near-end.js';
 import { PlayNow } from './play-now.js';
 
 /** "Buscar na biblioteca" waits this long after the last key (T16). */
 export const SEARCH_DEBOUNCE_MS = 200;
+
+/** The address is typed by anyone: one value, never more than a search takes. */
+const wordsOf = (param: string | null | undefined): string =>
+  (param ?? '').slice(0, LIBRARY_QUERY_MAX);
+
+/** An address without its query and fragment. */
+const pathOf = (url: string): string => url.split(/[?#]/)[0] ?? '';
+
+/** The words in the address: back from a result, the search is still there (KBC-096). */
+const SEARCH_PARAM = 'busca';
 
 /** The library's own choices, as kept in the account (BR-7). */
 interface Choices {
@@ -109,6 +139,7 @@ interface MorePages {
     LibraryCard,
     LibraryControls,
     LibraryRow,
+    LibrarySearchResults,
     MovedNotice,
     NearEnd,
     TrackGroup,
@@ -124,7 +155,6 @@ export class LibraryPage {
   private readonly mediaApi = inject(MediaApi);
   private readonly session = inject(SessionStore);
   private readonly chat = inject(ChatStore);
-  private readonly views = inject(ViewStore);
   private readonly engine = inject(MediaEngine);
   private readonly playNow = inject(PlayNow);
   private readonly locale = inject(LOCALE_ID);
@@ -132,6 +162,7 @@ export class LibraryPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly location = inject(Location);
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
   private readonly strip = viewChild<ElementRef<HTMLElement>>('strip');
@@ -159,8 +190,6 @@ export class LibraryPage {
   );
   /** Where each preparation stopped (KBC-072 FR-6). */
   protected readonly preparations = injectOpenPreparations();
-  /** "Buscar na fala" opens the search, which is a feature of its own. */
-  protected readonly canSearch = computed(() => this.session.can('search'));
   protected readonly isMaster = this.session.isMaster;
 
   private readonly preferences = httpResource(() => PREFERENCES_URL, {
@@ -209,12 +238,24 @@ export class LibraryPage {
   });
 
   /** What is typed in "Buscar na biblioteca", and what is asked after the pause. */
-  protected readonly query = signal('');
-  protected readonly trimmedQuery = computed(() => this.query().trim());
-  private readonly askedQuery = toSignal(
-    toObservable(this.query).pipe(debounceTime(SEARCH_DEBOUNCE_MS)),
-    { initialValue: '' },
+  protected readonly query = signal(
+    wordsOf(this.route.snapshot.queryParamMap.get(SEARCH_PARAM)),
   );
+  protected readonly trimmedQuery = computed(() => this.query().trim());
+  /** Each pause in the typing, even back to the same words: the address may have moved. */
+  private readonly pauses = toObservable(this.query).pipe(
+    debounceTime(SEARCH_DEBOUNCE_MS),
+    share(),
+  );
+  protected readonly askedQuery = toSignal(this.pauses, {
+    initialValue: this.query(),
+  });
+  /** The address as this page left it, to tell a navigation from its own writes. */
+  private lastWordsInAddress = this.query().trim();
+  /** The library's own path: a write never lands on another page's address (QA BUG-11). */
+  private readonly ownPath = pathOf(this.router.url);
+  /** Any text in the box: the page is its results from the first key (KBC-096). */
+  protected readonly searching = computed(() => this.trimmedQuery() !== '');
   /** What is asked; the view (list or grid) is not, so switching it asks nothing. */
   private readonly request = computed<LibraryRequest | null>(
     () => {
@@ -223,7 +264,6 @@ export class LibraryPage {
         ? {
             filters: choices.filters,
             sort: choices.sort,
-            query: this.askedQuery(),
           }
         : null;
     },
@@ -373,10 +413,15 @@ export class LibraryPage {
 
   /** Selected media for "Marcar como ouvida/não ouvida" (only those on screen). */
   protected readonly selected = linkedSignal<
-    LibraryRequest | null,
+    { request: LibraryRequest | null; searching: boolean },
     ReadonlySet<string>
   >({
-    source: this.request,
+    source: computed(
+      () => ({ request: this.request(), searching: this.searching() }),
+      {
+        equal: (a, b) => a.request === b.request && a.searching === b.searching,
+      },
+    ),
     computation: () => new Set<string>(),
   });
   protected readonly selecting = computed(() => this.selected().size > 0);
@@ -445,6 +490,89 @@ export class LibraryPage {
         takeUntilDestroyed(),
       )
       .subscribe();
+    this.followAddress();
+  }
+
+  /** The words and the address, each following the other (KBC-096). */
+  private followAddress(): void {
+    this.pauses
+      .pipe(
+        filter((words) => words.trim() !== this.wordsInAddress()),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((words) => this.keepWordsInAddress(words.trim()));
+    // A link followed before the pause: the words typed stay in this entry, for Back.
+    this.router.events
+      .pipe(
+        filter(
+          (event): event is NavigationStart =>
+            event instanceof NavigationStart &&
+            event.navigationTrigger === 'imperative' &&
+            pathOf(event.url) !== this.ownPath,
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.keepTypedWordsOnLeaving());
+    // "Biblioteca" in the sidebar, or Back: the address says what is on screen.
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        map(() => this.wordsInAddress()),
+        filter((words) => words !== this.lastWordsInAddress),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((words) => {
+        this.lastWordsInAddress = words;
+        this.query.set(words);
+      });
+  }
+
+  /** On another page, or on the way to one: a write would replace that page's address. */
+  private isAway(): boolean {
+    const going = this.router.currentNavigation()?.extractedUrl;
+    const here = pathOf(this.router.url);
+    return (
+      here !== this.ownPath || (!!going && pathOf(going.toString()) !== here)
+    );
+  }
+
+  private wordsInAddress(): string {
+    const { queryParams } = this.router.parseUrl(this.router.url);
+    return wordsOf(convertToParamMap(queryParams).get(SEARCH_PARAM));
+  }
+
+  private addressWith(words: string): UrlTree {
+    const address = this.router.parseUrl(this.router.url);
+    const others = Object.entries(address.queryParams).filter(
+      ([name]) => name !== SEARCH_PARAM,
+    );
+    address.queryParams = Object.fromEntries([
+      ...others,
+      ...(words ? [[SEARCH_PARAM, words]] : []),
+    ]);
+    return address;
+  }
+
+  /** Replaces the entry: Back leaves the library, not one word at a time. */
+  private keepWordsInAddress(words: string): void {
+    if (this.isAway()) return;
+    this.lastWordsInAddress = words;
+    void this.router.navigateByUrl(this.addressWith(words), {
+      replaceUrl: true,
+    });
+  }
+
+  /**
+   * Leaving before the pause: the browser still shows this page's entry, so the typed words
+   * go into it without a navigation, and Back finds them.
+   */
+  private keepTypedWordsOnLeaving(): void {
+    const words = this.trimmedQuery();
+    if (words === this.wordsInAddress()) return;
+    this.lastWordsInAddress = words;
+    this.location.replaceState(
+      this.router.serializeUrl(this.addressWith(words)),
+    );
   }
 
   protected keepInView(event: FocusEvent): void {
@@ -469,15 +597,6 @@ export class LibraryPage {
   protected clearSearch(): void {
     this.query.set('');
     this.focusAfterRender(this.searchBox);
-  }
-
-  /** Nothing in the titles: the same words in what was said, in the search (AC-12). */
-  protected searchSpoken(): void {
-    const topic = this.choices()?.filters.topic;
-    if (topic) this.chat.selectTopic(topic);
-    this.views.select('search');
-    this.chat.ask(this.trimmedQuery(), { kinds: ['audio'] });
-    void this.router.navigateByUrl('/');
   }
 
   /** A control's change, applied to the filters held now (BR-7). */
@@ -701,7 +820,12 @@ export class LibraryPage {
   ): void {
     afterNextRender(
       () =>
-        (target() ?? this.allTitle() ?? this.heading()).nativeElement.focus(),
+        (
+          target() ??
+          this.allTitle() ??
+          this.searchBox() ??
+          this.heading()
+        ).nativeElement.focus(),
       { injector: this.injector },
     );
   }

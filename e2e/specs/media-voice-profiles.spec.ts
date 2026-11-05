@@ -108,9 +108,10 @@ async function storedProfile(api: APIRequestContext, owner: APIRequestContext) {
 
 async function suggested(owner: APIRequestContext, profileId: string) {
   const media = await transcribedAudio(owner);
-  await separateVoices(owner, media.id, TURNS, [
-    { voice: 'SPEAKER_01', profileId, similarity: 0.62 },
-  ]);
+  await separateVoices(owner, media.id, {
+    turns: TURNS,
+    voiceMatches: [{ voice: 'SPEAKER_01', profileId, similarity: 0.62 }],
+  });
   return media.id;
 }
 

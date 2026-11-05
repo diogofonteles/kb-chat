@@ -123,6 +123,16 @@ export interface UploadedMedia {
   readonly title: string;
 }
 
+/** A collection of its own: a list with only this test's media (KBC-096, no title search). */
+export async function aCollection(api: APIRequestContext): Promise<string> {
+  const created = await api.post('/api/v1/topics', {
+    headers: CSRF,
+    data: { title: `Zz Acervo ${uniqueTag()}` },
+  });
+  expect(created.status(), await created.text()).toBe(201);
+  return ((await created.json()) as { slug: string }).slug;
+}
+
 /**
  * A tone of `seconds` silenced over `pauses` ([start, end] in seconds), as the lavfi
  * source of `makeMp3` (KBC-044: pauses of known length).

@@ -167,7 +167,7 @@ test('AC-6: a new separation keeps the names and asks to confirm them', async ({
   const { owner, media } = await audioWithVoices();
   await page.goto(`/midia/${media.id}`);
   await nameByKeyboard(page, 2, 'Mestre Laércio');
-  await separateVoices(owner, media.id, TURNS);
+  await separateVoices(owner, media.id, { turns: TURNS });
   await owner.dispose();
   await page.reload();
   const block = voicesBlock(page);

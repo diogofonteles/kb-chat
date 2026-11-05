@@ -82,6 +82,28 @@ export interface SubjectCount {
   readonly tracks: number;
 }
 
+/** Where a media says the words: `place` is the segment's row, for `passagesAt`. */
+export interface SpokenPlace {
+  readonly mediaId: string;
+  readonly place: number;
+}
+
+export interface SpokenQuery {
+  readonly terms: readonly string[];
+  readonly ids: readonly string[];
+  /** As in `search`: a passage inside a track is the track's. */
+  readonly tracks: boolean;
+  readonly limit: number;
+}
+
+/** Which of the asked media say the words (KBC-096). */
+export interface SpokenAmong {
+  /** One place per media, the best first. */
+  readonly places: readonly SpokenPlace[];
+  /** More media say them than the limit. */
+  readonly more: boolean;
+}
+
 /** The transcripts' own index (ADR 0024 §1), in the media database. */
 export interface MediaSearchPort {
   search(query: MediaSearchQuery): MediaSearchResult;
@@ -117,6 +139,13 @@ export interface TrackLinksPort {
   tracksAbout(terms: readonly string[]): ReadonlySet<string>;
   /** The tracks in `ids`, in that order. */
   trackDetails(ids: readonly string[]): TrackDetails[];
+  /** Of these media, those where every word is said in one segment, each with its best. */
+  spokenAmong(query: SpokenQuery): SpokenAmong;
+  /** The passages at these places, marked for the words, in no set order. */
+  passagesAt(
+    terms: readonly string[],
+    places: readonly number[],
+  ): MediaSegmentMatch[];
   /** Accepted links per subject over published tracks: suggestions never count (BR-1). */
   subjectCounts(
     scope: TrackScope & { readonly authors: AuthorRule },

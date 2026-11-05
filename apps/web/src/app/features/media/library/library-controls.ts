@@ -51,11 +51,14 @@ export class LibraryControls {
   readonly view = input.required<LibraryView>();
   /** The collections the person sees (the sidebar's list). */
   readonly topics = input<readonly Topic[]>([]);
+  /** A search is on (KBC-096): only the collection, the rest out of the results' way. */
+  readonly compact = input(false);
   readonly filtersChange = output<FilterChange>();
   readonly sortChange = output<LibrarySort>();
   readonly viewChange = output<LibraryView>();
 
   protected readonly stateChips = computed<Chip<ListeningState>[]>(() => {
+    if (this.compact()) return [];
     const { states } = this.filters();
     return LISTENING_STATES.filter(
       (value) => this.facets().states.includes(value) || states.includes(value),
@@ -86,7 +89,9 @@ export class LibraryControls {
       : named;
   });
   protected readonly showAuthorship = computed(
-    () => this.authors().length > 1 || this.filters().authors.length > 0,
+    () =>
+      !this.compact() &&
+      (this.authors().length > 1 || this.filters().authors.length > 0),
   );
   protected readonly authorship = computed(
     () => this.filters().authors[0] ?? '',
@@ -116,9 +121,19 @@ export class LibraryControls {
     return [...subjects, { key: chosen, name }];
   });
   protected readonly showSubjects = computed(
-    () => this.subjectOptions().length > 0,
+    () => !this.compact() && this.subjectOptions().length > 0,
   );
   protected readonly active = computed(() => activeFiltersOf(this.filters()));
+  /** Filters in force with no control on screen during a search (KBC-096 R5). */
+  protected readonly hiddenActive = computed(
+    () => this.active() - (this.filters().topic ? 1 : 0),
+  );
+  protected readonly hiddenText = computed(() => {
+    const count = this.hiddenActive();
+    return count === 1
+      ? $localize`:@@library.hiddenFilter:1 filtro em uso`
+      : $localize`:@@library.hiddenFilters:${count}:count: filtros em uso`;
+  });
   protected readonly sortOptions = computed<readonly MenuOption[]>(() =>
     LIBRARY_SORTS.map((id) => ({
       id,
