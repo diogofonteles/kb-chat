@@ -21,7 +21,11 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MediaEditApi } from '@core/media/media-edit-api.js';
 import { SpeakersApi } from '@core/media/speakers-api.js';
 import { map, of, switchMap, type Observable } from 'rxjs';
-import type { ProposeResult, SaveResult } from './track-draft-state.js';
+import {
+  roseEstimateOf,
+  type ProposeResult,
+  type SaveResult,
+} from './track-draft-state.js';
 import { notDoneText } from './track-labels.js';
 
 /** Where the person is in asking for a run. */
@@ -60,9 +64,13 @@ export class TrackProposals {
   readonly separation = input<number | null>(null);
 
   /** Saves the person's changes and starts the run: only when that save came back fine. */
-  readonly start = input.required<() => Observable<ProposeResult>>();
+  readonly start =
+    input.required<(acceptedUsd: number) => Observable<ProposeResult>>();
   /** A conflict (R-3), or a press on the draft waiting for its answer (F-2): no run starts. */
   readonly blocked = input(false);
+
+  /** The draft has proposals a new run may swap: said before the press (KBC-097). */
+  readonly replaces = input(false);
 
   /** A suggested name was accepted (BR-5). */
   readonly named = output();
@@ -147,7 +155,7 @@ export class TrackProposals {
     if (asking.kind !== 'estimated') return;
     this.error.set('');
     this.asking.set({ ...asking, kind: 'starting' });
-    this.start()()
+    this.start()(asking.estimate.estimateUsd)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => this.answered(result, asking.estimate),
@@ -164,8 +172,17 @@ export class TrackProposals {
       return;
     }
     this.asking.set({ kind: 'estimated', estimate });
-    if (result.kind === 'refused') this.showError(result.error);
-    else this.showStopped(result.result);
+    if (result.kind === 'stopped') this.showStopped(result.result);
+    else if (roseEstimateOf(result.error) !== null) this.askAgain();
+    else this.showError(result.error);
+  }
+
+  /** What was confirmed no longer holds (a save changed it): the new value, to confirm. */
+  private askAgain(): void {
+    this.askEstimate();
+    this.error.set(
+      $localize`:@@tracks.ai.estimateRose:O valor mudou depois do último salvamento. Nada foi gasto: confira o novo valor.`,
+    );
   }
 
   private showStopped(result: SaveResult): void {

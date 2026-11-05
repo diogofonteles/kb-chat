@@ -195,6 +195,22 @@
                 <li>{{ row.text }}</li>
               }
             </ul>
+            @if (copyWhileInvalid()) {
+              <label class="copy">
+                <span i18n="@@tracks.yourChange">Suas faixas, para copiar</span>
+                <textarea readonly rows="4" [value]="copyable()"></textarea>
+              </label>
+              <div class="summary-actions">
+                <button
+                  type="button"
+                  class="secondary"
+                  (click)="copyTracks()"
+                  i18n="@@tracks.copy"
+                >
+                  Copiar
+                </button>
+              </div>
+            }
           </section>
         }
       }
@@ -350,6 +366,7 @@
           [separation]="separation()"
           [start]="startProposal"
           [blocked]="proposalsBlocked()"
+          [replaces]="hasProposals()"
           (named)="reloadVoices()"
         />
       }

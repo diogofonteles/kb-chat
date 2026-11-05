@@ -375,7 +375,7 @@ describe('TrackDraft (KBC-066)', () => {
     it('starts no run while an approval waits on its save (F-2)', () => {
       draft.apply([one]);
       const approval = heard(draft.approve());
-      const run = heard(draft.propose());
+      const run = heard(draft.propose(0.02));
       saves().flush({ version: 5 });
       noRun();
       http.expectOne(APPROVE).flush({ version: 6, tracks: 1 });
@@ -384,9 +384,29 @@ describe('TrackDraft (KBC-066)', () => {
       expect(run).toEqual([]);
     });
 
+    it('sends the value confirmed, after the save (KBC-097)', () => {
+      draft.apply([one]);
+      const run = heard(draft.propose(0.02));
+      saves().flush({ version: 5 });
+      const start = http.expectOne(PROPOSE);
+      expect(start.request.body).toEqual({ dryRun: false, acceptedUsd: 0.02 });
+      start.flush(RUN);
+      expect(run).toEqual([{ kind: 'started' }]);
+    });
+
+    it('sends no second run for a second press (KBC-097)', () => {
+      draft.apply([one]);
+      const first = heard(draft.propose(0.02));
+      const second = heard(draft.propose(0.02));
+      saves().flush({ version: 5 });
+      http.expectOne(PROPOSE).flush(RUN);
+      expect(first).toEqual([{ kind: 'started' }]);
+      expect(second).toEqual([]);
+    });
+
     it('sends no approval while a run waits on its save (F-2)', () => {
       draft.apply([one]);
-      const run = heard(draft.propose());
+      const run = heard(draft.propose(0.02));
       const approval = heard(draft.approve());
       saves().flush({ version: 5 });
       noApproval();
@@ -548,7 +568,7 @@ describe('TrackDraft (KBC-066)', () => {
 
     it('starts after the save, and the page reads only from then on', () => {
       draft.apply([one]);
-      const said = heard(draft.propose());
+      const said = heard(draft.propose(0.02));
       noRun();
       saves().flush({ version: 5 });
       http.expectOne(PROPOSE).flush(RUN);
@@ -559,7 +579,7 @@ describe('TrackDraft (KBC-066)', () => {
 
     it('never starts after a conflict, a reload and a saved change (R-1)', () => {
       conflict();
-      expect(heard(draft.propose())).toEqual([
+      expect(heard(draft.propose(0.02))).toEqual([
         { kind: 'stopped', result: 'conflict' },
       ]);
       heard(draft.reload());
@@ -571,14 +591,14 @@ describe('TrackDraft (KBC-066)', () => {
 
     it('never starts over a refused save (R-1)', () => {
       draft.apply([one]);
-      const said = heard(draft.propose());
+      const said = heard(draft.propose(0.02));
       refuse(500);
       noRun();
       expect(said).toEqual([{ kind: 'stopped', result: 'failed' }]);
     });
 
     it('says when the server refuses the run, and reads what stands', () => {
-      const said = heard(draft.propose());
+      const said = heard(draft.propose(0.02));
       http
         .expectOne(PROPOSE)
         .flush({}, { status: 409, statusText: 'Conflict' });

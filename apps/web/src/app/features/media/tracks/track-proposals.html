@@ -8,6 +8,19 @@
       <p class="refusal">{{ refusal() }}</p>
     } @else {
       <p i18n="@@tracks.ai.estimate">Custa cerca de {{ estimateText() }}.</p>
+      @if (shown.restarts) {
+        <p class="hint" i18n="@@tracks.ai.restarts">
+          Uma mudança salva tirou as faixas da tentativa anterior. Para não
+          perder faixas, a análise recomeça do início e paga outra vez as
+          janelas já feitas.
+        </p>
+      }
+      @if (replaces()) {
+        <p class="hint" i18n="@@tracks.ai.replaces">
+          A nova análise pode trocar as faixas propostas que você não alterou.
+          As que você editou ou criou ficam.
+        </p>
+      }
     }
     @if (month()) {
       <p class="hint">{{ month() }}</p>

@@ -8,8 +8,14 @@ import {
   type MediaEdit,
   type TrackProblem,
 } from '@kb-chat/contracts';
+import { z } from 'zod';
 
 type Timer = ReturnType<typeof setTimeout>;
+
+const estimateRoseSchema = z.object({
+  reason: z.literal('estimate-rose'),
+  estimateUsd: z.number(),
+});
 
 /** What a save came to; only `saved` lets an action go on (BR-1). */
 export type SaveResult =
@@ -138,6 +144,12 @@ export function conflictOf(err: unknown): ConflictReason {
   return reason === 'proposal-running' || reason === 'preparation'
     ? reason
     : 'approved';
+}
+
+/** The run would cost more than the value confirmed: the value it would cost now. */
+export function roseEstimateOf(err: unknown): number | null {
+  const details = estimateRoseSchema.safeParse(detailsOf(err));
+  return details.success ? details.data.estimateUsd : null;
 }
 
 /** What keeps a draft read from the server from taking changes now. */

@@ -26,6 +26,7 @@ export const aStage = (
   reservedUsd: null,
   spentUsd: null,
   estimateUsd: null,
+  restarts: false,
   ...over,
 });
 

@@ -806,6 +806,52 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
       expect(screen.getByText(/Copie suas faixas antes de sair/)).toBeTruthy();
     });
 
+    const CROSSED = anEdit({
+      tracks: [aTrack(1, 0, 20_042), aTrack(2, 20_000, 40_000)],
+    });
+    const refuseOverlap = async (
+      harness: RouterTestingHarness,
+      http: HttpTestingController,
+    ) => {
+      await renameSelected(harness);
+      await saveDelay();
+      const problem = {
+        trackId: aTrack(2, 0, 0).id,
+        ordinal: 2,
+        problem: 'overlap',
+      };
+      http.expectOne({ method: 'PUT', url: `${BASE}/edit` }).flush(
+        {
+          error: {
+            code: 'TRACKS_INVALID',
+            message: 'no',
+            details: { problems: [problem] },
+          },
+        },
+        { status: 422, statusText: 'No' },
+      );
+      await harness.fixture.whenStable();
+    };
+
+    it('offers the copy a refused draft asks for when this browser cannot hold it (KBC-094 F-6)', async () => {
+      const { harness, http } = await openPage(CROSSED);
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('blocked');
+      });
+      await refuseOverlap(harness, http);
+      expect(screen.getByRole('alert').textContent).toContain('Sobreposta');
+      expect(screen.getByLabelText('Suas faixas, para copiar')).toBeTruthy();
+      expect(button('Copiar')).toBeTruthy();
+    });
+
+    it('keeps the copy away from a refused draft this browser holds (KBC-094 F-6)', async () => {
+      vi.restoreAllMocks();
+      const { harness, http } = await openPage(CROSSED);
+      await refuseOverlap(harness, http);
+      expect(screen.getByRole('alert').textContent).toContain('Sobreposta');
+      expect(screen.queryByLabelText('Suas faixas, para copiar')).toBeNull();
+    });
+
     it('tells the truth without a network, kept or not (R-2)', async () => {
       const { harness, http } = await openPage();
       await deleteTrack(harness);

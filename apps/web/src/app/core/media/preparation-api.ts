@@ -6,6 +6,7 @@ import {
   type PreparationPlanRequest,
   type RetryStage,
 } from '@kb-chat/contracts';
+import type { RetryStageRequest } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
 import { mediaUrl } from './media-api.js';
 
@@ -38,9 +39,16 @@ export class PreparationApi {
       .pipe(map((answer) => mediaPreparationSchema.parse(answer)));
   }
 
-  retry(mediaId: string, stage: RetryStage): Observable<MediaPreparation> {
+  /** `acceptedUsd`: the value in sight on a paid stage; a dearer run does not start. */
+  retry(
+    mediaId: string,
+    stage: RetryStage,
+    acceptedUsd?: number,
+  ): Observable<MediaPreparation> {
+    const body: RetryStageRequest =
+      acceptedUsd === undefined ? {} : { acceptedUsd };
     return this.http
-      .post(`${preparationUrl(mediaId)}/steps/${stage}/retry`, {})
+      .post(`${preparationUrl(mediaId)}/steps/${stage}/retry`, body)
       .pipe(map((answer) => mediaPreparationSchema.parse(answer)));
   }
 

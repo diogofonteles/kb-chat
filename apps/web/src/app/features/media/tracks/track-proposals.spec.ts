@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -35,6 +35,7 @@ const ESTIMATE: ProposalEstimate = {
   model: 'stub',
   allowed: true,
   refusal: null,
+  restarts: false,
   month: { spentUsd: 1.2, capUsd: 10 },
 };
 
@@ -117,6 +118,58 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
         name: 'Confirmar e propor',
       }).disabled,
     ).toBe(false);
+  });
+
+  it('says a restart pays the finished windows again, before the press (KBC-097)', async () => {
+    const rendered = await setup();
+    (await ask(rendered)).flush({ ...ESTIMATE, restarts: true });
+    await rendered.fixture.whenStable();
+    expect(screen.getByText(/recomeça do início/)).toBeTruthy();
+  });
+
+  it('says nothing of a restart on a plain estimate (KBC-097)', async () => {
+    await estimated({});
+    expect(screen.queryByText(/recomeça do início/)).toBeNull();
+  });
+
+  it('says what a new run may swap, only when there is something to swap (KBC-097)', async () => {
+    await estimated({ replaces: true });
+    expect(screen.getByText(/As que você editou ou criou ficam/)).toBeTruthy();
+  });
+
+  it('confirms the value the person saw (KBC-097)', async () => {
+    const start = vi.fn(() => EMPTY);
+    await estimated({ start });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    expect(start).toHaveBeenCalledWith(ESTIMATE.estimateUsd);
+  });
+
+  it('shows the new value when it rose, and starts nothing until it is confirmed (KBC-097)', async () => {
+    const rose = new HttpErrorResponse({
+      status: 409,
+      error: {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'The estimate rose',
+          details: { reason: 'estimate-rose', estimateUsd: 0.05 },
+        },
+      },
+    });
+    const start = vi
+      .fn<(usd: number) => Observable<ProposeResult>>()
+      .mockReturnValueOnce(of({ kind: 'refused', error: rose }))
+      .mockReturnValue(of({ kind: 'started' }));
+    const rendered = await estimated({ start });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.05 });
+    await rendered.fixture.whenStable();
+    expect(screen.getByText(/Custa cerca de US\$\s0,05/)).toBeTruthy();
+    expect(
+      screen.getByText(/Nada foi gasto: confira o novo valor/),
+    ).toBeTruthy();
+    expect(start).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    expect(start).toHaveBeenLastCalledWith(0.05);
   });
 
   it('says what the server refused', async () => {

@@ -263,11 +263,11 @@ export class TrackDraft {
   }
 
   /** The only way to a paid run (KBC-067 BR-2): after a save that came back fine. */
-  propose(): Observable<ProposeResult> {
+  propose(acceptedUsd: number): Observable<ProposeResult> {
     return this.unlessBusy('propose').pipe(
       switchMap((result) =>
         result === 'saved'
-          ? this.startRun()
+          ? this.startRun(acceptedUsd)
           : of<ProposeResult>({ kind: 'stopped', result }),
       ),
     );
@@ -607,9 +607,9 @@ export class TrackDraft {
       : { kind: 'refused', error: err };
   }
 
-  private startRun(): Observable<ProposeResult> {
+  private startRun(acceptedUsd: number): Observable<ProposeResult> {
     this.to({ kind: 'applying', action: 'propose' });
-    return this.api.propose(this.mediaId).pipe(
+    return this.api.propose(this.mediaId, acceptedUsd).pipe(
       map((run) => {
         this.server.update(
           (edit) => edit && { ...edit, run, lastFailure: null },

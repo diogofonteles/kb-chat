@@ -201,6 +201,73 @@ test('KBC-067 AC-6, FR-5: a failed run stays said, also after a reload', async (
   await owner.dispose();
 });
 
+test('KBC-097: a retry says what it costs, also after a reload, and a dearer one waits for a press', async ({
+  page,
+}, testInfo) => {
+  const owner = await ownerApi();
+  const media = await separated(owner);
+  const sent: { acceptedUsd?: number }[] = [];
+  await page.route(
+    new RegExp(`/api/v1/media/${media.id}/edit/proposals$`),
+    async (route: Route) => {
+      const body = route.request().postDataJSON() as {
+        dryRun?: boolean;
+        acceptedUsd?: number;
+      };
+      if (body.dryRun)
+        return route.fulfill({
+          json: sent.length
+            ? { ...ESTIMATE, estimateUsd: 0.05, windows: 3, restarts: true }
+            : ESTIMATE,
+        });
+      sent.push(body);
+      return sent.length === 1
+        ? route.fulfill({
+            status: 409,
+            json: {
+              error: {
+                code: 'MEDIA_CONFLICT',
+                message: 'The estimate rose',
+                details: { reason: 'estimate-rose', estimateUsd: 0.05 },
+              },
+            },
+          })
+        : route.fulfill({
+            status: 202,
+            json: aRun(media.id, 'running', 0),
+          });
+    },
+  );
+  await page.goto(`/midia/${media.id}/faixas`);
+  await page.reload();
+  await page.getByRole('button', { name: 'Propor faixas com IA' }).click();
+  await expect(page.getByText('Custa cerca de')).toContainText('0,02');
+  await expect(page.getByText(/recomeça do início/)).toBeHidden();
+  await page.getByRole('button', { name: 'Confirmar e propor' }).click();
+
+  await expect(page.getByText('Custa cerca de')).toContainText('0,05');
+  await expect(page.getByText(/recomeça do início/)).toBeVisible();
+  await expect(page.getByText(/Nada foi gasto/)).toBeVisible();
+  expect(sent).toEqual([{ dryRun: false, acceptedUsd: 0.02 }]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: `../work/KBC-097/retry-restarts-${testInfo.project.name}.png`,
+  });
+  expect(
+    await new AxeBuilder({ page }).include('.proposals').analyze(),
+  ).toMatchObject({ violations: [] });
+
+  await page.getByRole('button', { name: 'Confirmar e propor' }).click();
+  await expect(page.getByText(/Propondo… janela/)).toBeVisible();
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toEqual({ dryRun: false, acceptedUsd: 0.05 });
+  await owner.dispose();
+});
+
 test('R-5: a read that fails does not leave the editor stuck', async ({
   page,
 }) => {

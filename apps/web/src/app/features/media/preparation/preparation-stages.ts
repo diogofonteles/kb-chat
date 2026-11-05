@@ -109,6 +109,8 @@ export class PreparationStageList {
     const spent = this.usd(spentUsd ?? 0);
     if (done === 0)
       return $localize`:@@prep.failure.spent:Nenhuma janela ficou pronta. Gasto até aqui: ${spent}:spent:.`;
+    if (canRetry && stage.restarts)
+      return $localize`:@@prep.failure.restarts:${done}:done: de ${total}:total: janelas prontas, por ${spent}:spent:, mas uma mudança salva no rascunho tirou as faixas delas. Para não perder faixas, tentar de novo recomeça do início e paga essas janelas outra vez.`;
     return canRetry
       ? $localize`:@@prep.failure.left:${done}:done: de ${total}:total: janelas prontas, por ${spent}:spent:. Tentar de novo refaz só as que faltam.`
       : $localize`:@@prep.failure.leftStopped:${done}:done: de ${total}:total: janelas prontas, por ${spent}:spent:.`;
