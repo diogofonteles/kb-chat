@@ -252,6 +252,7 @@ test('KBC-090: a correction and a refusal reach the published track', async ({
   await page.getByRole('button', { name: 'Validar faixas' }).click();
   await expect(page).toHaveURL(/\/faixas$/);
   await expect(page.getByText(/Reveja estes títulos/)).toBeVisible();
+  await expect(page.getByText(/Alguns títulos podem citar/)).toBeInViewport();
 
   // The screen may still be saving what it opened with.
   await expect(async () => {

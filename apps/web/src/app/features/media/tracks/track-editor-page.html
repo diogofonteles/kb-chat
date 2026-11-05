@@ -176,6 +176,12 @@
           Rascunho recuperado. O histórico de desfazer recomeçou.
         </p>
       }
+      @if (titlesToReview()) {
+        <p class="banner" role="status" i18n="@@tracks.reviewNames">
+          Alguns títulos podem citar um nome errado. Reveja antes de aprovar: a
+          lista está em "Nomes das vozes".
+        </p>
+      }
       @if (hasProposals()) {
         <p class="banner" role="status" i18n="@@tracks.proposalNotice">
           Confira as faixas propostas. Nada é aplicado antes de você aprovar.

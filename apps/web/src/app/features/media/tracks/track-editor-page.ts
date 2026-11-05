@@ -294,6 +294,10 @@ export class TrackEditorPage {
     );
     return { ...preparation, suggestions };
   });
+  /** Up here too: on a phone the names' block is far below (QA I-2). */
+  protected readonly titlesToReview = computed(
+    () => (this.voicesToName()?.nameReviews.length ?? 0) > 0,
+  );
   /**
    * Opens when something asks for a person, and stays as the person leaves it: closing with
    * the last answer would drop the focus (WCAG 2.4.3).
