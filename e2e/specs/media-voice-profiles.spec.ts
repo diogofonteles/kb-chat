@@ -43,6 +43,9 @@ async function openSettings(page: Page) {
 async function firstVisit(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Pular' }).click();
+  // Closed only once the skip is saved: a navigation before that cancels the save, and
+  // the wizard comes back over the next page (it hid the voices from a click).
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 async function openPanel(page: Page) {

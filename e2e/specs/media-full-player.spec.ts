@@ -144,8 +144,12 @@ test('AC-3, AC-12: another browser offers "Continuar de" silently, and continues
   expect((await audioState(elsewhere)).paused).toBe(true);
   await resume.click();
   await expect(elsewhere.getByRole('button', { name: 'Pausar' })).toBeVisible();
+  // The saved position is applied once the metadata is in: a click before that plays
+  // and then moves there, so the element's time is waited for, not read once.
+  await expect
+    .poll(async () => (await audioState(elsewhere)).currentTime)
+    .toBeGreaterThanOrEqual(Math.floor(stoppedAt) - 1);
   const resumedAt = (await audioState(elsewhere)).currentTime;
-  expect(resumedAt).toBeGreaterThanOrEqual(Math.floor(stoppedAt) - 1);
   expect(resumedAt).toBeLessThan(stoppedAt + 2);
   await elsewhere.context().close();
 });
