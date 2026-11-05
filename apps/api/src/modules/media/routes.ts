@@ -85,6 +85,7 @@ export function actorOf(request: FastifyRequest): MediaActor {
     quotaBytes: mediaQuotaOf(viewer),
     seesTracks: hasFeature(viewer.person, 'media-tracks'),
     seesSubjects: hasFeature(viewer.person, 'media-subjects'),
+    searchesSpeech: hasFeature(viewer.person, 'search'),
     displayName: viewer.person.name,
     canSee: (topic) => canSee(request, topic),
   };

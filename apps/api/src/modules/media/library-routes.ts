@@ -2,6 +2,8 @@ import {
   libraryHomeSchema,
   libraryPageSchema,
   libraryQuerySchema,
+  librarySearchQuerySchema,
+  librarySearchSchema,
   markPlayedRequestSchema,
   markPlayedResultSchema,
 } from '@kb-chat/contracts';
@@ -22,6 +24,13 @@ const OPTIONS = {
     schema: {
       querystring: libraryQuerySchema,
       response: { 200: libraryPageSchema },
+    },
+  },
+  search: {
+    config: { access: LIBRARY },
+    schema: {
+      querystring: librarySearchQuerySchema,
+      response: { 200: librarySearchSchema },
     },
   },
   home: {
@@ -48,6 +57,9 @@ export const libraryRoutes =
     const typed = app.withTypeProvider<ZodTypeProvider>();
     typed.get('/api/v1/media/library', OPTIONS.page, async (request) =>
       service.page(actorOf(request), request.query),
+    );
+    typed.get('/api/v1/media/library/search', OPTIONS.search, async (request) =>
+      service.search(actorOf(request), request.query),
     );
     typed.get('/api/v1/media/library/home', OPTIONS.home, async (request) =>
       service.home(actorOf(request)),

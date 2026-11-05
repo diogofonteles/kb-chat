@@ -100,11 +100,15 @@ export const upload = (
 export async function queuedItem(
   media: Media,
   topic = 'hermetismo',
+  fields: object = {},
 ): Promise<MediaItem> {
   const created = await media.owner(
     'POST',
     `/api/v1/topics/${topic}/media`,
-    aRequest(topic === 'hermetismo' ? {} : { author: null }),
+    aRequest({
+      ...(topic === 'hermetismo' ? {} : { author: null }),
+      ...fields,
+    }),
   );
   expect(created.statusCode).toBe(201);
   const sent = await upload(media, { id: created.json().id, body: AUDIO });

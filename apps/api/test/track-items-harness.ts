@@ -130,9 +130,10 @@ async function convertLong(media: Media, job: WorkerJob): Promise<void> {
 export async function transcribed(
   world: World,
   passages: readonly Spoken[],
+  options: { readonly title?: string } = {},
 ): Promise<MediaItem> {
   const { media } = world;
-  const item = await queuedItem(media);
+  const item = await queuedItem(media, 'hermetismo', options);
   await convertLong(media, await leaseJob(media));
   await say(world, passages);
   return item;

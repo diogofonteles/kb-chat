@@ -127,6 +127,43 @@ export function unmark(marked: string): {
   return { text, highlights };
 }
 
+/** The longest passage a result shows (KBC-096): a segment can run for minutes. */
+export const EXCERPT_MAX = 240;
+/** How much comes before the first word found. */
+const EXCERPT_LEAD = 60;
+
+/** The whole words in [start, end), so a cut never splits one. */
+function wordBounds(
+  text: string,
+  start: number,
+  end: number,
+): readonly [number, number] {
+  const from = start === 0 ? 0 : text.indexOf(' ', start) + 1;
+  const to = end >= text.length ? text.length : text.lastIndexOf(' ', end);
+  return [from, to > from ? to : end];
+}
+
+/** The passage around its first highlight, with "…" where it was cut. */
+export function excerptOf(passage: {
+  readonly text: string;
+  readonly highlights: readonly TextRange[];
+}): { readonly text: string; readonly highlights: TextRange[] } {
+  const { text, highlights } = passage;
+  if (text.length <= EXCERPT_MAX) return { text, highlights: [...highlights] };
+  const first = highlights[0]?.start ?? 0;
+  const latest = text.length - EXCERPT_MAX;
+  const start = Math.min(Math.max(0, first - EXCERPT_LEAD), latest);
+  const [from, to] = wordBounds(text, start, start + EXCERPT_MAX);
+  const head = from > 0 ? '…' : '';
+  const shift = head.length - from;
+  return {
+    text: `${head}${text.slice(from, to)}${to < text.length ? '…' : ''}`,
+    highlights: highlights
+      .filter((one) => one.start >= from && one.end <= to)
+      .map((one) => ({ start: one.start + shift, end: one.end + shift })),
+  };
+}
+
 /** bm25 (negative, lower is better) to 0–1, as QMD scores the documents' lexical match. */
 export const scoreOf = (bm25: number): number => {
   const magnitude = Math.abs(bm25);

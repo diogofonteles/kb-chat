@@ -2,6 +2,8 @@ import { EMPTY_FILTERS } from '@kb-chat/contracts';
 import { describe, expect, it } from 'vitest';
 import type { MediaSegmentMatch } from '../../ports/media-search.js';
 import {
+  EXCERPT_MAX,
+  excerptOf,
   MAX_TERMS,
   authorRuleOf,
   hasDocumentOnlyFilters,
@@ -172,5 +174,42 @@ describe('toMediaHit', () => {
     const anonymous = toMediaHit({ ...match, author: null }, authors);
     expect(anonymous.authorship).toBe('outros-autores');
     expect(anonymous.author).toBeNull();
+  });
+});
+
+describe('excerptOf (KBC-096)', () => {
+  const marked = (text: string, word: string) => {
+    const start = text.indexOf(word);
+    return { text, highlights: [{ start, end: start + word.length }] };
+  };
+  const cut = (excerpt: ReturnType<typeof excerptOf>) =>
+    excerpt.highlights.map((one) => excerpt.text.slice(one.start, one.end));
+
+  it('leaves a short passage whole', () => {
+    const passage = marked('o padre Orlando chegou', 'Orlando');
+    expect(excerptOf(passage)).toEqual(passage);
+  });
+
+  it('keeps the word found in a long passage, cut on whole words', () => {
+    const before = 'antes '.repeat(100);
+    const after = ' depois'.repeat(100);
+    const excerpt = excerptOf(marked(`${before}Orlando${after}`, 'Orlando'));
+    expect(excerpt.text.length).toBeLessThanOrEqual(EXCERPT_MAX + 2);
+    expect(excerpt.text.startsWith('…antes')).toBe(true);
+    expect(excerpt.text.endsWith('depois…')).toBe(true);
+    expect(cut(excerpt)).toEqual(['Orlando']);
+  });
+
+  it('reaches a word at the very end, with nothing cut after it', () => {
+    const excerpt = excerptOf(
+      marked(`${'antes '.repeat(100)}Orlando`, 'Orlando'),
+    );
+    expect(excerpt.text.endsWith('Orlando')).toBe(true);
+    expect(cut(excerpt)).toEqual(['Orlando']);
+  });
+
+  it('cuts a text with no spaces rather than overflow', () => {
+    const excerpt = excerptOf(marked('x'.repeat(500), 'x'));
+    expect(excerpt.text.length).toBeLessThanOrEqual(EXCERPT_MAX + 2);
   });
 });

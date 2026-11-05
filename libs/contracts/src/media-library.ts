@@ -4,9 +4,10 @@ import {
   mediaIdSchema,
   mediaItemSchema,
   mediaPreferencesSchema,
+  transcriptConfidenceSchema,
   type MediaItem,
 } from './media.js';
-import { hitSubjectSchema } from './search.js';
+import { hitSubjectSchema, textRangeSchema } from './search.js';
 import { authorSlugSchema } from './slugs.js';
 import { topicSlugSchema } from './topics.js';
 
@@ -110,7 +111,6 @@ export const libraryQuerySchema = z.strictObject({
   author: csvOf(libraryAuthorSchema).optional(),
   topic: topicSlugSchema.optional(),
   subject: librarySubjectSchema.optional(),
-  q: z.string().max(LIBRARY_QUERY_MAX).optional(),
   sort: librarySortSchema.optional(),
   cursor: z
     .string()
@@ -169,6 +169,51 @@ export const libraryHomeSchema = z.object({
   recentsClearedAt: z.iso.datetime().nullable(),
 });
 export type LibraryHome = z.infer<typeof libraryHomeSchema>;
+
+/** The most results one library search reaches (KBC-096 R6); past it, "Mais de 200". */
+export const LIBRARY_SEARCH_MAX = 200;
+
+/** GET /api/v1/media/library/search: the words, under the filters in force (KBC-096). */
+export const librarySearchQuerySchema = libraryQuerySchema
+  .omit({ sort: true })
+  .extend({ q: z.string().trim().min(1).max(LIBRARY_QUERY_MAX) });
+export type LibrarySearchQuery = z.infer<typeof librarySearchQuerySchema>;
+
+/** Where a result was found: speech first, then title or author, then subject. */
+export const LIBRARY_MATCHES = ['speech', 'title', 'subject'] as const;
+export const libraryMatchSchema = z.enum(LIBRARY_MATCHES);
+export type LibraryMatch = z.infer<typeof libraryMatchSchema>;
+
+/** The passage that answered, cut around the words, in the media's own time. */
+export const libraryPassageSchema = z.object({
+  text: z.string(),
+  highlights: z.array(textRangeSchema),
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().min(0),
+  confidence: transcriptConfidenceSchema,
+});
+export type LibraryPassage = z.infer<typeof libraryPassageSchema>;
+
+/** One result: a track, or an audio with no track holding the match. */
+export const libraryHitSchema = z.object({
+  item: libraryTrackSchema,
+  /** The recording's published tracks; 0 for a track or an undivided audio. */
+  trackCount: z.number().int().min(0),
+  match: libraryMatchSchema,
+  /** Only for a `speech` match. */
+  passage: libraryPassageSchema.nullable(),
+});
+export type LibraryHit = z.infer<typeof libraryHitSchema>;
+
+export const librarySearchSchema = z.object({
+  items: z.array(libraryHitSchema),
+  nextCursor: z.string().nullable(),
+  /** Results over every page, up to LIBRARY_SEARCH_MAX. */
+  total: z.number().int().min(0).max(LIBRARY_SEARCH_MAX),
+  /** More exist than the cap lets through. */
+  capped: z.boolean(),
+});
+export type LibrarySearch = z.infer<typeof librarySearchSchema>;
 
 /** PUT /api/v1/media/played (FR-3). */
 export const markPlayedRequestSchema = z.strictObject({

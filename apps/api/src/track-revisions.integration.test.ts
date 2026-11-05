@@ -125,7 +125,10 @@ describe('Details of an approved track (FR-1)', () => {
     expect(changed.json<MediaItem>().title).toBe('Título corrigido');
     const entry = await libraryEntry(media.owner, recording.id);
     expect(entry?.tracks[0]?.title).toBe('Título corrigido');
-    const found = await media.owner('GET', '/api/v1/media/library?q=corrigido');
+    const found = await media.owner(
+      'GET',
+      '/api/v1/media/library/search?q=corrigido',
+    );
     expect(found.body).toContain(first.id);
   });
 

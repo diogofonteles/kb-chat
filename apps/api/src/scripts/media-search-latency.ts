@@ -2,19 +2,28 @@
 // transcripts (5 s segments, 12 words each from a Zipf-like vocabulary with the UDV terms).
 // Builds a throwaway database in the OS temp dir; prints and exits 0 unless --strict.
 // KBC-070 NFR-1: every talk also cut into tracks, with 20,000 accepted subject links.
+// KBC-096 NFR-1: the library's search over those tracks, adapter and whole service.
 // Usage: tsx src/scripts/media-search-latency.ts [--hours 2000] [--links 20000] [--strict]
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { EMPTY_FILTERS, MAX_MEDIA_HITS } from '@kb-chat/contracts';
+import {
+  EMPTY_FILTERS,
+  LIBRARY_PAGE_SIZE,
+  LIBRARY_SEARCH_MAX,
+  MAX_MEDIA_HITS,
+} from '@kb-chat/contracts';
 import {
   inTransaction,
   openMediaDatabase,
 } from '../adapters/sqlite/media-database.js';
 import { MEDIA_MIGRATIONS } from '../adapters/sqlite/media-migrations.js';
 import { SqliteMediaSearch } from '../adapters/sqlite/sqlite-media-search.js';
+import { SqliteListeningStore } from '../adapters/sqlite/sqlite-listening-store.js';
+import { SqliteMediaStore } from '../adapters/sqlite/sqlite-media-store.js';
 import { SqliteTrackSubjectStore } from '../adapters/sqlite/sqlite-track-subject-store.js';
+import { LibraryService } from '../modules/media/library-service.js';
 import { SubjectSearch } from '../modules/search/index.js';
 import { termsOf } from '../modules/search/media-hits.js';
 import { SubjectDirectory } from '../modules/track-subjects/index.js';
@@ -438,6 +447,98 @@ function measureSubjects(subjects: SubjectSearch): void {
   if (STRICT && p95(filtered) > TARGET_MS) process.exitCode = 1;
 }
 
+const LIBRARY_QUERIES = [...QUERIES, 'padre orlando', 'pergunta 3', '???'];
+const LIBRARY_ADAPTER_MS = 150;
+const LIBRARY_SERVICE_MS = 400;
+
+/** A person who sees all of it, or one small sub-collection. */
+const seesAll = {
+  principal: 'someone',
+  isMaster: false,
+  canUpload: false,
+  seesTracks: true,
+  seesSubjects: false,
+  searchesSpeech: true,
+  canSee: () => true,
+};
+
+/** The transcript part alone: every media asked, a page of passages read. */
+function timeSpeech(
+  search: SqliteMediaSearch,
+  ids: readonly string[],
+  q: string,
+): number {
+  const startedAt = performance.now();
+  const terms = termsOf(q);
+  const { places } = search.spokenAmong({
+    terms,
+    ids,
+    tracks: true,
+    limit: LIBRARY_SEARCH_MAX,
+  });
+  search.passagesAt(
+    terms,
+    places.slice(0, LIBRARY_PAGE_SIZE).map((one) => one.place),
+  );
+  return performance.now() - startedAt;
+}
+
+function libraryServiceOver(db: DatabaseSync, search: SqliteMediaSearch) {
+  return new LibraryService({
+    store: new SqliteMediaStore(db),
+    listening: new SqliteListeningStore(db),
+    authorOf: () => null,
+    speech: search,
+    about: search,
+    scopeOf: (topic) => [topic],
+  });
+}
+
+function timeLibrary(
+  library: LibraryService,
+  q: string,
+  topic?: string,
+): { readonly ms: number; readonly total: number } {
+  const startedAt = performance.now();
+  const page = library.search(seesAll, { q, ...(topic ? { topic } : {}) });
+  return { ms: performance.now() - startedAt, total: page.total };
+}
+
+/** Everyone's library and one small sub-collection, as whole searches. */
+function timeWhole(library: LibraryService, q: string, log: boolean): number[] {
+  return [undefined, 'udv/pequeno'].map((topic) => {
+    const { ms, total } = timeLibrary(library, q, topic);
+    if (log)
+      console.log(
+        `  library "${q}" in ${topic ?? 'everything'}: ${total} results, ${ms.toFixed(1)} ms`,
+      );
+    return ms;
+  });
+}
+
+function measureLibrary(db: DatabaseSync, search: SqliteMediaSearch): void {
+  const ids = db
+    .prepare('SELECT id FROM media ORDER BY parent_media_id IS NULL, id')
+    .all()
+    .map((row) => String(row['id']));
+  const library = libraryServiceOver(db, search);
+  const runs = Array.from({ length: RUNS }, (_, run) => run);
+  const cases = runs.flatMap((run) => LIBRARY_QUERIES.map((q) => ({ q, run })));
+  const speech = cases.map(({ q }) => timeSpeech(search, ids, q));
+  const whole = cases.flatMap(({ q, run }) => timeWhole(library, q, run === 0));
+  console.log(
+    `Library speech p95: ${p95(speech).toFixed(1)} ms, worst ${Math.max(...speech).toFixed(1)} (target ≤ ${LIBRARY_ADAPTER_MS} ms, ${ids.length} media)`,
+  );
+  console.log(
+    `Library search p95: ${p95(whole).toFixed(1)} ms, worst ${Math.max(...whole).toFixed(1)} (target ≤ ${LIBRARY_SERVICE_MS} ms)`,
+  );
+  if (
+    STRICT &&
+    (p95(speech) > LIBRARY_ADAPTER_MS || p95(whole) > LIBRARY_SERVICE_MS)
+  )
+    process.exitCode = 1;
+}
+
 const dir = mkdtempSync(join(tmpdir(), 'kbchat-media-latency-'));
 try {
   const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
@@ -460,6 +561,7 @@ try {
   );
   buildTracks(db, talks);
   measureSubjects(subjectSearchOver(db, search));
+  measureLibrary(db, search);
   db.close();
   if (STRICT && overall > TARGET_MS) process.exitCode = 1;
 } finally {

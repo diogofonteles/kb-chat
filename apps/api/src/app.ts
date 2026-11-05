@@ -748,7 +748,7 @@ async function registerLibrary(
   app: FastifyInstance,
   wiring: MediaWiring & { transcribers: TranscriberService },
 ) {
-  const { store, listening } = wiring.media;
+  const { store, listening, trackLinks } = wiring.media;
   const directory = createSubjectDirectory(wiring);
   const service = new LibraryService({
     store,
@@ -758,6 +758,8 @@ async function registerLibrary(
     scopeOf: (topic) =>
       wiring.catalog.scope(topic).map((one) => one.topic.slug),
     subjectsOf: (tracks) => directory.shownOn(tracks),
+    speech: trackLinks,
+    about: trackLinks,
   });
   await app.register(libraryRoutes(service));
 }

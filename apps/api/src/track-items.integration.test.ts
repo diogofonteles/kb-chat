@@ -214,7 +214,7 @@ describe('Approved tracks become items (KBC-068)', () => {
     expect(page.json().total).toBe(1);
     const found = await world.media.owner(
       'GET',
-      '/api/v1/media/library?q=terceira',
+      '/api/v1/media/library/search?q=terceira',
     );
     expect(found.json().items).toHaveLength(1);
   });
