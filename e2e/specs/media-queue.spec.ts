@@ -296,16 +296,20 @@ async function publishedTitled(
   await expect
     .poll(
       async () => {
-        const page = await owner.get('/api/v1/media/library?q=' + 'Conversa');
-        const { items } = (await page.json()) as {
+        // The track is a media of its own: its id is where its history is.
+        const answer = await owner.get(
+          `/api/v1/media/library/search?${new URLSearchParams({ q: name })}`,
+        );
+        const { items } = (await answer.json()) as {
           items: {
-            id: string;
-            tracks: { id: string; title: string }[];
+            item: { id: string; title: string; parent: { id: string } | null };
           }[];
         };
         found = items
-          .find((item) => item.id === mediaId)
-          ?.tracks.find((one) => one.title.includes(name));
+          .map(({ item }) => item)
+          .find(
+            (item) => item.parent?.id === mediaId && item.title.includes(name),
+          );
         return found?.title;
       },
       { timeout: 30_000 },

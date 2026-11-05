@@ -293,19 +293,21 @@ test('AC-6: a recording found by title is one row, and the Acervo stays in reach
   await owner.dispose();
   const page = await pageAs(browser, email, viewportOf());
   await openLibrary(page);
+  // The library opens on the selected collection (KBC-091): every one is a choice.
+  const acervo = page
+    .locator('app-library-controls')
+    .getByRole('combobox', { name: 'Acervo' });
+  await acervo.selectOption({ label: 'Todos os acervos' });
   await box(page).fill(interview.title);
   await expect(results(page)).toHaveCount(2);
   await expect(
     results(page).filter({ hasText: 'Gravação completa · 3 faixas' }),
   ).toHaveCount(1);
 
-  await page
-    .locator('app-library-controls')
-    .getByRole('combobox', { name: 'Acervo' })
-    .selectOption(other);
+  await acervo.selectOption(other);
   await expect(results(page)).toHaveCount(1);
   await expect(results(page).first()).toContainText(`Outra ${interview.title}`);
-  await page.getByRole('button', { name: 'Limpar filtros' }).click();
+  await acervo.selectOption({ label: 'Todos os acervos' });
   await expect(results(page)).toHaveCount(2);
   await page.context().close();
 });
