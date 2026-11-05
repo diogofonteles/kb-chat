@@ -56,6 +56,7 @@ Como quem prepara um áudio, quero ler o texto da faixa que escolhi e ver a pala
 - **AC-15** (NFR-4): Given só o teclado, When a pessoa abre e fecha o texto e navega pela lista, Then **Ver texto** é uma parada de Tab, as palavras não são, e o foco não pula quando o destaque muda; o leitor de tela anuncia "Texto da faixa 2, expandido" e não anuncia cada palavra.
 - **AC-16** (BR-3): Given os três temas e `prefers-reduced-motion`, When uma palavra está destacada, Then o contraste passa 4,5:1, o destaque tem sublinhado e peso, e não há transição.
 - **AC-17** (NFR-1, NFR-2): Given tempos conhecidos, When a faixa toca, Then a palavra destacada difere da falada em ≤ 120 ms e há no máximo 1 escrita no DOM por troca.
+- **AC-18** (pedido do dono no cartão do quadro): Given o texto de uma faixa aberto, When a pessoa escolhe **Ver transcrição completa**, Then vê a transcrição inteira do áudio com o trecho da faixa marcado e a palavra falada destacada; When escolhe **Ver só a faixa**, Then volta ao texto da faixa, sem parar o áudio.
 
 ## Test strategy
 | AC | Nível | Notas |
