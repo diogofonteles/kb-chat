@@ -32,11 +32,6 @@ import {
   upload,
   type Media,
 } from '../test/media-harness.js';
-import {
-  finishCuts,
-  libraryEntry,
-  withVersion,
-} from '../test/track-items-harness.js';
 import { windowIds } from '../test/track-proposal-fixtures.js';
 import {
   asTranscriber,

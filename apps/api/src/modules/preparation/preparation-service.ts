@@ -27,6 +27,7 @@ import type {
 import { AppError } from '../../app-error.js';
 import type { MediaEditStorePort } from '../../ports/media-edit-store.js';
 import type {
+  ActiveJob,
   MeasuredRates,
   PreparationRecord,
   PreparationStorePort,
@@ -516,15 +517,14 @@ export class PreparationService {
     const { plans } = this.deps;
     const jobs = plans.activeJobs();
     const open = new Map(plans.listOpen().map((one) => [one.mediaId, one]));
+    const failed = plans.failedRecordings();
     const ids = new Set([
-      ...jobs.map(({ mediaId }) => mediaId),
+      ...jobs.map((job) => job.mediaId),
       ...open.keys(),
-      ...plans.failedRecordings(),
+      ...failed,
     ]);
     const positions = positionsOf(jobs);
-    const separating = new Set(
-      jobs.filter(({ kind }) => kind === 'diarize').map((job) => job.mediaId),
-    );
+    const separating = separatingIn(jobs);
     const items = [...ids].flatMap((mediaId) => {
       const record = open.get(mediaId) ?? null;
       const line = this.queueLine(actor, {
@@ -533,8 +533,10 @@ export class PreparationService {
         separating: separating.has(mediaId),
       });
       if (!line) return [];
-      const position = positions.get(mediaId) ?? null;
-      const shown = this.queueItem(actor, { ...line, position });
+      const shown = this.queueItem(actor, {
+        ...line,
+        position: positions.get(mediaId) ?? null,
+      });
       return isGhost(shown) ? [] : [shown];
     });
     return {
@@ -803,6 +805,11 @@ interface StageInput {
   readonly item: MediaItem;
   readonly draft: DraftTracks;
 }
+
+const separatingIn = (jobs: readonly ActiveJob[]): ReadonlySet<string> =>
+  new Set(
+    jobs.filter(({ kind }) => kind === 'diarize').map((job) => job.mediaId),
+  );
 
 /** An audio with no plan read as one, by what is happening to it. */
 const planlessRecord = (

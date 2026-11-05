@@ -12,7 +12,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
-import type { ResearchProfile } from '@kb-chat/contracts';
+import type { MediaSpeakers, ResearchProfile } from '@kb-chat/contracts';
 import type { AppConfig } from './config.js';
 import { registerErrorHandler } from './error-handler.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
@@ -713,6 +713,33 @@ async function registerSpeakers(
   await app.register(collectionSpeakerRoutes({ service, hasTopic }));
 }
 
+/** Names, with what follows from each change: tracks, words and history (KBC-090). */
+function voiceNames(input: {
+  deps: MediaDeps;
+  media: MediaService;
+  diarization: DiarizationService;
+  publisher: TrackPublisher;
+  authors: AuthorsService;
+  rootOf: (topic: string) => string;
+  speakersOf: (actor: MediaActor, mediaId: string) => MediaSpeakers;
+}): VoiceNamesService {
+  const { deps, media, diarization, publisher, authors } = input;
+  const revisions = createTrackRevisions({
+    media: deps,
+    service: media,
+    publisher,
+    diarization,
+    authors,
+  });
+  return new VoiceNamesService({
+    ...deps,
+    rootOf: input.rootOf,
+    speakersOf: input.speakersOf,
+    relabel: (actor, target, apply) =>
+      revisions.voiceRenamed(actor, target, apply),
+  });
+}
+
 /** "Vozes": names, and the answers to what is suggested by voice (KBC-065, KBC-071). */
 function speakerRoutesOf(input: {
   deps: MediaDeps;
@@ -725,20 +752,7 @@ function speakerRoutesOf(input: {
   const rootOf = (topic: string) => authors.rootOf(topic);
   const speakersOf = (actor: MediaActor, mediaId: string) =>
     diarization.speakers(actor, mediaId);
-  const revisions = createTrackRevisions({
-    media: deps,
-    service: input.media,
-    publisher,
-    diarization,
-    authors,
-  });
-  const names = new VoiceNamesService({
-    ...deps,
-    rootOf,
-    speakersOf,
-    relabel: (actor, target, apply) =>
-      revisions.voiceRenamed(actor, target, apply),
-  });
+  const names = voiceNames({ ...input, rootOf, speakersOf });
   return speakerRoutes({
     service: diarization,
     names,

@@ -40,7 +40,7 @@ export interface NameFix {
 }
 
 const escaped = (text: string): string =>
-  text.replaceAll(/[.*+?^\${}()|[\]\\]/gu, '\\$&');
+  text.replaceAll(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 
 /** A name as a whole, in any case; accents count, however they are stored. */
 const nameIn = (name: string): RegExp =>
