@@ -75,6 +75,7 @@ import {
   filter,
   map,
   of,
+  pairwise,
   share,
   take,
 } from 'rxjs';
@@ -529,6 +530,16 @@ export class LibraryPage {
     toObservable(this.chat.topicsKnown)
       .pipe(filter(Boolean), take(1), takeUntilDestroyed())
       .subscribe(() => this.selectArrivedTopic());
+    // The sidebar took the list out of "Todos os acervos": the account forgets it too.
+    toObservable(this.scope)
+      .pipe(
+        pairwise(),
+        filter(
+          ([before, after]) => before.kind === 'all' && after.kind !== 'all',
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.leaveAllTopics());
     this.saves
       .pipe(
         concatMap((update) =>
@@ -700,6 +711,11 @@ export class LibraryPage {
     this.scope.set(topic ? { kind: 'topic', slug: topic } : { kind: 'all' });
     if (topic && this.canOpen(topic)) this.chat.selectTopic(topic);
     this.saveChoice({ ...filters, topic, allTopics: topic === null });
+  }
+
+  private leaveAllTopics(): void {
+    const kept = this.kept()?.filters;
+    if (kept?.allTopics) this.saveChoice({ ...kept, allTopics: false });
   }
 
   /** Any change but the collection's: what is kept of it stays. */

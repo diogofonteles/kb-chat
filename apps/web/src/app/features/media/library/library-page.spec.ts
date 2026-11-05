@@ -1495,6 +1495,27 @@ describe('LibraryPage (T16, KBC-051)', () => {
       });
     });
 
+    it('a collection chosen in the sidebar ends "Todos os acervos" in the account too', async () => {
+      const { http, settle, tick } = await following();
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.change(screen.getByLabelText('Acervo'), {
+        target: { value: '' },
+      });
+      await tick();
+      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      http.expectOne(HOME).flush(aHome());
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      (TestBed.inject(ChatStore).topicSlug as WritableSignal<string>).set(
+        'alquimia',
+      );
+      await tick();
+      expect(
+        http.expectOne({ method: 'PUT', url: PREFS }).request.body,
+      ).toEqual({ libraryFilters: NO_LIBRARY_FILTERS });
+    });
+
     it('choosing a collection here selects it in the sidebar too', async () => {
       const { http, settle, tick, chat } = await following();
       const page = aPage([anItem(1)]);
