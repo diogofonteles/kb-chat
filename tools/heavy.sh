@@ -32,6 +32,7 @@ if [ -n "${CI:-}" ] || [ "${KBC_HEAVY_HELD:-}" = 1 ]; then
   exec "$@"
 fi
 
+here=$(cd "$(dirname "$0")" && pwd)
 lock=${KBC_HEAVY_LOCK:-$HOME/.cache/kb-chat/heavy.lock}
 temp=${KBC_HEAVY_TEMP:-$HOME/.cache/kb-chat/tmp}
 min_free=${KBC_HEAVY_MIN_FREE_GB:-30}
@@ -223,7 +224,9 @@ fi
 # Nx's TUI does, and there the group of this shell already gets the terminal's signals.
 # The daemon would outlive the run in a TMPDIR that is gone; Chrome on macOS ignores TMPDIR.
 (: </dev/tty) 2>/dev/null || set -m
+# Node's writes to a pipe are blocking, as on Linux: see tools/blocking-stdio.cjs.
 KBC_HEAVY_HELD=1 KBC_TEST_TEMP=$root TMPDIR=$root MAC_CHROMIUM_TMPDIR=$root NX_DAEMON=false \
+  NODE_OPTIONS="--require \"$here/blocking-stdio.cjs\"${NODE_OPTIONS:+ $NODE_OPTIONS}" \
   "$@" </dev/null &
 child=$!
 set +m

@@ -138,6 +138,22 @@ test('says the commit it runs on and whether the tree is clean', () => {
   assert.match(bare.stdout, /heavy: at no commit \(not a git checkout\)/);
 });
 
+test('a Node command that exits right after a big write loses none of it to the pipe', () => {
+  const { env } = queue();
+  const bytes = 1_000_000;
+  const result = spawnSync(
+    HEAVY,
+    [
+      process.execPath,
+      '-e',
+      `process.stdout.write('x'.repeat(${bytes})); process.exit(0)`,
+    ],
+    { env, encoding: 'utf8', maxBuffer: 4 * bytes },
+  );
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.match(/x{100,}/)?.[0].length, bytes);
+});
+
 test('without a command it refuses', () => {
   assert.equal(run(queue().env).status, 64);
 });
