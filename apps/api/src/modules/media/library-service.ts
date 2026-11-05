@@ -27,7 +27,7 @@ import {
   recentlyPlayed,
   sortLibrary,
 } from './library-query.js';
-import { searchLibrary } from './library-search.js';
+import { isPublished, searchLibrary } from './library-search.js';
 import { nextSaveTime } from './listening-service.js';
 import type { MediaActor } from './media-service.js';
 import { canEditMedia } from './media-policy.js';
@@ -100,7 +100,7 @@ export class LibraryService {
         authors: query.author ?? [],
         topics: this.scope(actor, query.topic),
       },
-    );
+    ).filter(isPublished);
     return searchLibrary({
       candidates,
       entries,

@@ -17,6 +17,9 @@ import { actorOf } from './routes.js';
 /** "Biblioteca de mídia" needs "Ouvir mídia" as well (KBC-051 BR-1). */
 const LIBRARY: RouteAccess = { feature: ['media', 'media-library'] };
 
+/** A search per pause in the typing: a minute of it, not a script (ND-22). */
+const SEARCHES_PER_MINUTE = 120;
+
 /** Route options, declared once: access (ADR 0008) and contract schemas (ND-08). */
 const OPTIONS = {
   page: {
@@ -27,7 +30,10 @@ const OPTIONS = {
     },
   },
   search: {
-    config: { access: LIBRARY },
+    config: {
+      access: LIBRARY,
+      rateLimit: { max: SEARCHES_PER_MINUTE, timeWindow: '1 minute' },
+    },
     schema: {
       querystring: librarySearchQuerySchema,
       response: { 200: librarySearchSchema },

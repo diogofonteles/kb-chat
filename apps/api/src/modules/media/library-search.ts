@@ -18,7 +18,7 @@ import { holdsWords, pageOf, titleWordsOf } from './library-query.js';
 
 /** One search over what the person may be told about. */
 export interface LibrarySearchInput {
-  /** What the filters leave. */
+  /** What the filters leave, published only (R4). */
   readonly candidates: readonly LibraryItem[];
   /** Everything the person sees, to know each recording's tracks. */
   readonly entries: readonly LibraryTrack[];
@@ -38,8 +38,8 @@ interface Found {
   readonly place: number | null;
 }
 
-/** A published media can be heard, so what it says can be shown. */
-const canSpeak = (item: LibraryItem): boolean =>
+/** Only what can be heard is a result (R4): an upload in progress stays in "Todas". */
+export const isPublished = (item: LibraryItem): boolean =>
   item.status === 'ready' && !item.archived;
 
 const countTracks = (
@@ -84,7 +84,6 @@ function speakersFirst(
 ): string[] {
   const divided = (item: LibraryItem) => Number(totals.has(item.id));
   return [...items]
-    .filter(canSpeak)
     .sort((a, b) => divided(a) - divided(b))
     .map((item) => item.id);
 }

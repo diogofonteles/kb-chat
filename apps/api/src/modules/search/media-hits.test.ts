@@ -208,6 +208,13 @@ describe('excerptOf (KBC-096)', () => {
     expect(cut(excerpt)).toEqual(['Orlando']);
   });
 
+  it('never passes the limit, nor loses the word, with no spaces around it', () => {
+    const text = `${'x'.repeat(300)}Orlando${'y'.repeat(300)}`;
+    const excerpt = excerptOf(marked(text, 'Orlando'));
+    expect(excerpt.text.length).toBeLessThanOrEqual(EXCERPT_MAX + 2);
+    expect(cut(excerpt)).toEqual(['Orlando']);
+  });
+
   it('cuts a text with no spaces rather than overflow', () => {
     const excerpt = excerptOf(marked('x'.repeat(500), 'x'));
     expect(excerpt.text.length).toBeLessThanOrEqual(EXCERPT_MAX + 2);

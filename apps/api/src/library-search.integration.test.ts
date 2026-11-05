@@ -1,11 +1,19 @@
 import type { LibrarySearch } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { closeApp } from '../test/ai-app-harness.js';
-import { member, type Media } from '../test/media-harness.js';
+import {
+  leaseJob,
+  member,
+  queuedItem,
+  vaultWithUdv,
+  type Media,
+} from '../test/media-harness.js';
 import {
   approve,
+  convertLong,
   finishCuts,
   libraryEntry,
+  say,
   startWorld,
   transcribed,
   type World,
@@ -58,6 +66,13 @@ const search = async (
   expect(found.statusCode, found.body).toBe(200);
   return found.json<LibrarySearch>();
 };
+
+/** The next conversion and transcription in the queue, saying `text`. */
+async function convertedAndSaid(world: World, text: string): Promise<void> {
+  const { media } = world;
+  await convertLong(media, await leaseJob(media));
+  await say(world, [{ at: 10, text }]);
+}
 
 const titles = (page: LibrarySearch) => page.items.map((hit) => hit.item.title);
 
@@ -236,6 +251,61 @@ describe('The library search answers with tracks (KBC-096)', () => {
     expect(elsewhere.total).toBe(0);
   });
 
+  it('AC-6: a chosen collection brings its sub-collections, and the author narrows', async () => {
+    const world = await startWorld({ vault: await vaultWithUdv() });
+    const { media } = world;
+    await media.owner('POST', '/api/v1/topics/hermetismo/authors', {
+      name: 'Outra Pessoa',
+    });
+    await interview(world);
+    const sub = await queuedItem(
+      media,
+      encodeURIComponent('udv/palavra-do-mestre'),
+      {
+        title: 'Hoje no sub-acervo',
+      },
+    );
+
+    const inTree = await search(media.owner, 'sub-acervo', '&topic=udv');
+    expect(inTree.items.map((hit) => hit.item.id)).toEqual([]);
+    await convertedAndSaid(world, 'manaus no sub-acervo');
+    const found = await search(media.owner, 'sub-acervo', '&topic=udv');
+    expect(found.items.map((hit) => hit.item.id)).toEqual([sub.id]);
+
+    const byAuthor = await search(
+      media.owner,
+      'orlando',
+      '&author=outra-pessoa',
+    );
+    expect(byAuthor.total).toBe(0);
+    const anyone = await search(
+      media.owner,
+      'orlando',
+      '&author=mestre-laercio',
+    );
+    expect(anyone.total).toBe(2);
+  });
+
+  it('R4: an upload still converting is no result, not even for who sent it', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    await queuedItem(media, 'hermetismo', { title: 'Convertendo Rara' });
+
+    const page = await search(media.owner, 'convertendo rara');
+
+    expect(page).toMatchObject({ items: [], total: 0 });
+  });
+
+  it("R3: a track enters by author only when the author is not its recording's", async () => {
+    const world = await startWorld();
+    await interview(world);
+
+    const page = await search(world.media.owner, 'laercio');
+
+    expect(page.items.map((hit) => hit.trackCount)).toEqual([3]);
+    expect(page.items[0]).toMatchObject({ match: 'title' });
+  });
+
   it('keeps pages and the cap apart: the second page continues the first', async () => {
     const world = await startWorld();
     await interview(world);
@@ -251,5 +321,66 @@ describe('The library search answers with tracks (KBC-096)', () => {
       '/api/v1/media/library?q=orlando',
     );
     expect(refused.statusCode).toBe(400);
+  });
+});
+
+describe('Subjects in the library search (KBC-096 R2, R4)', () => {
+  const concept = (name: string) => ({ kind: 'concept', name });
+
+  async function linked(world: World) {
+    const { media } = world;
+    const { tracks } = await interview(world);
+    const track = tracks[0];
+    if (!track?.parent) throw new Error('no track');
+    const put = await media.started.app.inject({
+      method: 'PUT',
+      url: `/api/v1/media/${track.id}/subjects`,
+      headers: {
+        ...media.ownerHeaders,
+        'if-match': `"${track.parent.version}"`,
+      },
+      payload: {
+        subjects: [concept('Cabala')],
+        summary: 'Resumo sobre a tradição oral.',
+      },
+    });
+    expect(put.statusCode, put.body).toBe(200);
+    return track;
+  }
+
+  it('finds by subject and by summary after the speech and the title', async () => {
+    const world = await startWorld();
+    const track = await linked(world);
+    const owner = world.media.owner;
+
+    for (const q of ['cabala', 'tradição oral']) {
+      const page = await search(owner, q);
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]).toMatchObject({
+        item: { id: track.id },
+        match: 'subject',
+        passage: null,
+      });
+    }
+    const filtered = await search(
+      owner,
+      'orlando',
+      `&subject=${encodeURIComponent('concept:cabala')}`,
+    );
+    expect(filtered.total).toBe(0);
+  });
+
+  it('without media-subjects neither the subject nor the summary answers', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    await linked(world);
+    const person = await member(media, {
+      email: 'semassuntos@example.com',
+      topics: ['hermetismo'],
+      features: LISTENER,
+    });
+
+    expect((await search(person.call, 'cabala')).total).toBe(0);
+    expect((await search(person.call, 'tradição oral')).total).toBe(0);
   });
 });

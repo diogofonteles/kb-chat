@@ -410,17 +410,23 @@ export class SqliteMediaSearch implements MediaSearchPort, TrackLinksPort {
     terms: readonly string[],
     places: readonly number[],
   ): MediaSegmentMatch[] {
-    if (terms.length === 0) return [];
-    const expression = toMatchExpression(terms);
-    const passage = this.db.prepare(
-      `${selectMatches(UNRANKED_SCORE, FROM_INDEX)}
-       WHERE segments_fts MATCH ? AND f.rowid BETWEEN ? AND ?`,
-    );
-    return places.flatMap((place) => {
-      // A range, as `bestPassages` asks: with `rowid = ?` a reused statement marks the first text.
-      const row = passage.get(expression, place, place);
-      return row ? [toMatch(row)] : [];
-    });
+    if (terms.length === 0 || places.length === 0) return [];
+    // One walk over the stretch that holds them: `rowid = ?` marks the wrong text, and a range
+    // per place walks a common word's list from its start each time. `+` keeps the ids a
+    // filter, so `highlight` runs only for the rows wanted.
+    return this.db
+      .prepare(
+        `${selectMatches(UNRANKED_SCORE, FROM_INDEX)}
+         WHERE segments_fts MATCH ? AND f.rowid BETWEEN ? AND ?
+           AND +f.rowid IN (SELECT value FROM json_each(?))`,
+      )
+      .all(
+        toMatchExpression(terms),
+        Math.min(...places),
+        Math.max(...places),
+        JSON.stringify(places),
+      )
+      .map(toMatch);
   }
 
   saying(terms: readonly string[]): ReadonlySet<string> | null {

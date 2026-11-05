@@ -476,11 +476,16 @@ function timeSpeech(
     tracks: true,
     limit: LIBRARY_SEARCH_MAX,
   });
+  const foundAt = performance.now();
   search.passagesAt(
     terms,
     places.slice(0, LIBRARY_PAGE_SIZE).map((one) => one.place),
   );
-  return performance.now() - startedAt;
+  const endedAt = performance.now();
+  console.log(
+    `  speech "${q}": found ${(foundAt - startedAt).toFixed(1)} ms, read ${(endedAt - foundAt).toFixed(1)} ms`,
+  );
+  return endedAt - startedAt;
 }
 
 function libraryServiceOver(db: DatabaseSync, search: SqliteMediaSearch) {

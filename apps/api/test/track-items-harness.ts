@@ -108,7 +108,7 @@ export async function startWorld(
   return { media, token };
 }
 
-async function convertLong(media: Media, job: WorkerJob): Promise<void> {
+export async function convertLong(media: Media, job: WorkerJob): Promise<void> {
   writeFileSync(join(media.mediaDir, job.targetPath), CONVERTED);
   if (job.flacTargetPath)
     writeFileSync(join(media.mediaDir, job.flacTargetPath), FLAC);

@@ -132,15 +132,15 @@ export const EXCERPT_MAX = 240;
 /** How much comes before the first word found. */
 const EXCERPT_LEAD = 60;
 
-/** The whole words in [start, end), so a cut never splits one. */
+/** The whole words in [start, end) that keep `first`, so a cut never splits one. */
 function wordBounds(
   text: string,
-  start: number,
-  end: number,
+  { start, end, first }: { start: number; end: number; first: number },
 ): readonly [number, number] {
-  const from = start === 0 ? 0 : text.indexOf(' ', start) + 1;
+  const space = start === 0 ? -1 : text.slice(start, first).indexOf(' ');
+  const from = space < 0 ? start : start + space + 1;
   const to = end >= text.length ? text.length : text.lastIndexOf(' ', end);
-  return [from, to > from ? to : end];
+  return [from, to > first ? to : end];
 }
 
 /** The passage around its first highlight, with "…" where it was cut. */
@@ -153,7 +153,11 @@ export function excerptOf(passage: {
   const first = highlights[0]?.start ?? 0;
   const latest = text.length - EXCERPT_MAX;
   const start = Math.min(Math.max(0, first - EXCERPT_LEAD), latest);
-  const [from, to] = wordBounds(text, start, start + EXCERPT_MAX);
+  const [from, to] = wordBounds(text, {
+    start,
+    end: start + EXCERPT_MAX,
+    first,
+  });
   const head = from > 0 ? '…' : '';
   const shift = head.length - from;
   return {

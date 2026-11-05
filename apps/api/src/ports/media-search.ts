@@ -141,7 +141,7 @@ export interface TrackLinksPort {
   trackDetails(ids: readonly string[]): TrackDetails[];
   /** Of these media, those where every word is said in one segment, each with its best. */
   spokenAmong(query: SpokenQuery): SpokenAmong;
-  /** The passages at these places, marked for the words, in that order. */
+  /** The passages at these places, marked for the words, in no set order. */
   passagesAt(
     terms: readonly string[],
     places: readonly number[],
