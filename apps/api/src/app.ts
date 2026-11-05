@@ -748,7 +748,7 @@ function speakerRoutesOf(input: {
   publisher: TrackPublisher;
   authors: AuthorsService;
 }) {
-  const { deps, diarization, publisher, authors } = input;
+  const { deps, diarization, authors } = input;
   const rootOf = (topic: string) => authors.rootOf(topic);
   const speakersOf = (actor: MediaActor, mediaId: string) =>
     diarization.speakers(actor, mediaId);

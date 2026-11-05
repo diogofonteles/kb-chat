@@ -518,31 +518,24 @@ export class PreparationService {
     const jobs = plans.activeJobs();
     const open = new Map(plans.listOpen().map((one) => [one.mediaId, one]));
     const failed = plans.failedRecordings();
-    const ids = new Set([
-      ...jobs.map((job) => job.mediaId),
-      ...open.keys(),
-      ...failed,
-    ]);
+    const ids = [...jobs.map((job) => job.mediaId), ...open.keys(), ...failed];
     const positions = positionsOf(jobs);
     const separating = separatingIn(jobs);
-    const items = [...ids].flatMap((mediaId) => {
-      const record = open.get(mediaId) ?? null;
+    const items = [...new Set(ids)].flatMap((mediaId) => {
       const line = this.queueLine(actor, {
         mediaId,
-        record,
+        record: open.get(mediaId) ?? null,
         separating: separating.has(mediaId),
       });
       if (!line) return [];
-      const shown = this.queueItem(actor, {
-        ...line,
-        position: positions.get(mediaId) ?? null,
-      });
-      return isGhost(shown) ? [] : [shown];
+      const position = positions.get(mediaId) ?? null;
+      return [this.queueItem(actor, { ...line, position })];
     });
+    const shown = items.filter((item) => !isGhost(item));
     return {
-      items: inQueueOrder(items),
-      active: activeCountOf(items),
-      ...presenceOf(this.presenceFor(items)),
+      items: inQueueOrder(shown),
+      active: activeCountOf(shown),
+      ...presenceOf(this.presenceFor(shown)),
     };
   }
 
