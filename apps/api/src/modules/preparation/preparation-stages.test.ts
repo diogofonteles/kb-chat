@@ -203,7 +203,6 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
               windowsDone,
               windowsTotal: 3,
               spentUsd,
-              outputGone: false,
             },
           }),
         ),

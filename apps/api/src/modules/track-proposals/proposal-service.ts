@@ -6,6 +6,7 @@ import type {
   ProposalRun,
   SpendCap,
 } from '@kb-chat/contracts';
+import { estimateRoseDetailsSchema } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { startOfAppMonth } from '../../app-calendar.js';
 import { AppError } from '../../app-error.js';
@@ -83,16 +84,12 @@ interface Prepared {
   readonly resumes: FailedAttempt | null;
   /** What the analysis has spent so far: the cap holds over all its attempts. */
   readonly carriedUsd: number;
-  /** Windows a failed run finished are asked, and paid, again. */
+  /** The plan no longer fits a failed run: its finished windows are paid again. */
   readonly restarts: boolean;
 }
 
-/**
- * Windows of it are done, others are missing, the plan still cuts the same windows and what
- * they wrote still stands for them (KBC-097).
- */
+/** Windows of it are done, others are missing and the plan still cuts the same windows. */
 const canResume = (attempt: FailedAttempt, windows: number): boolean =>
-  !attempt.outputGone &&
   attempt.windowsDone > 0 &&
   attempt.windowsDone < attempt.windowsTotal &&
   attempt.windowsTotal === windows;
@@ -119,17 +116,13 @@ export const isAnalysisTaken = (error: unknown): boolean =>
   error.code === 'MEDIA_CONFLICT' &&
   takenDetails.safeParse(error.details).success;
 
-const ESTIMATE_ROSE = 'estimate-rose';
-const roseDetails = z.object({
-  reason: z.literal(ESTIMATE_ROSE),
-  estimateUsd: z.number(),
-});
-
-/** The run would cost more than the person agreed to: nothing started and nothing moved. */
-export const isEstimateRose = (error: unknown): boolean =>
-  error instanceof AppError &&
-  error.code === 'MEDIA_CONFLICT' &&
-  roseDetails.safeParse(error.details).success;
+/** What a run would cost now, when that is more than the person agreed to; else null. */
+export function roseEstimateOf(error: unknown): number | null {
+  if (!(error instanceof AppError) || error.code !== 'MEDIA_CONFLICT')
+    return null;
+  const details = estimateRoseDetailsSchema.safeParse(error.details);
+  return details.success ? details.data.estimateUsd : null;
+}
 
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
@@ -237,16 +230,16 @@ export class ProposalService {
     const { seenRunId = this.newestRunId(mediaId), acceptedUsd } = terms;
     const prepared = await this.prepare(actor, mediaId);
     this.assertNotTaken(mediaId, seenRunId);
-    if (acceptedUsd !== undefined && prepared.plan.estimateUsd > acceptedUsd)
-      throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
-        details: {
-          reason: ESTIMATE_ROSE,
-          estimateUsd: prepared.plan.estimateUsd,
-        },
-      });
     if (this.deps.store.isApproved(mediaId))
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
+      });
+    if (acceptedUsd !== undefined && prepared.plan.estimateUsd > acceptedUsd)
+      throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
+        details: {
+          reason: 'estimate-rose',
+          estimateUsd: prepared.plan.estimateUsd,
+        },
       });
     const spendId = this.reserve(actor, prepared);
     const run = this.startRun({ actor, prepared, spendId });

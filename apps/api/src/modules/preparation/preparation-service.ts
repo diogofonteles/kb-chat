@@ -41,6 +41,7 @@ import type {
 import type { PlanActor, Presence } from '../media/index.js';
 import {
   isAnalysisTaken,
+  roseEstimateOf,
   type StartTerms,
   type DurationEstimate,
 } from '../track-proposals/index.js';
@@ -446,7 +447,7 @@ export class PreparationService {
       this.deps.plans.reclaimProposal(mediaId, new Date(run.createdAt));
     } catch (err) {
       if (isAnalysisTaken(err)) throw conflict('Another click took this stage');
-      this.stopProposal(mediaId, stopOf(err), null);
+      this.stopProposal(mediaId, stopOf(err), roseEstimateOf(err));
     } finally {
       this.starting.delete(mediaId);
     }

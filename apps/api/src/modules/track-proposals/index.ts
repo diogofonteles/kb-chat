@@ -1,7 +1,7 @@
 export {
   ProposalService,
   isAnalysisTaken,
-  isEstimateRose,
+  roseEstimateOf,
   type CollectionContext,
   type DurationEstimate,
   type ProposalServiceDeps,

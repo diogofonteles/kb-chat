@@ -125,6 +125,12 @@ export const proposalEstimateSchema = z.object({
 });
 export type ProposalEstimate = z.infer<typeof proposalEstimateSchema>;
 
+/** The 409 of a run dearer than `acceptedUsd`: what it would cost now (KBC-097). */
+export const estimateRoseDetailsSchema = z.object({
+  reason: z.literal('estimate-rose'),
+  estimateUsd: z.number().nonnegative(),
+});
+
 /** GET /api/v1/media/{id}/edit/draft-tracks: the draft as it is now. */
 export const draftTracksSchema = z.object({
   /**

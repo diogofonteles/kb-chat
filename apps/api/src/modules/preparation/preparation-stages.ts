@@ -17,7 +17,7 @@ import type {
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { FailedAttempt } from '../../ports/track-proposal-store.js';
-import { isEstimateRose } from '../track-proposals/index.js';
+import { roseEstimateOf } from '../track-proposals/index.js';
 
 /** All a plan's stages are read from: the records of the work, never a copy of them. */
 export interface StageFacts {
@@ -167,7 +167,7 @@ export function stopOf(error: unknown): StageStop {
   if (!(error instanceof AppError)) return 'provider-unavailable';
   if (error.code === 'MEDIA_SPEND_CAP')
     return spendCapDetails.parse(error.details).cap;
-  if (isEstimateRose(error)) return 'estimate-rose';
+  if (roseEstimateOf(error) !== null) return 'estimate-rose';
   return STOP_BY_CODE[error.code] ?? 'provider-unavailable';
 }
 

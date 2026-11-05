@@ -29,10 +29,15 @@ export interface EditWrite {
  */
 export interface MediaEditStorePort {
   edit(mediaId: string): MediaEditRecord | null;
-  /** Replaces the draft with `tracks`: a changed proposal stops being one (KBC-067 BR-6). */
+  /**
+   * Replaces the draft with `tracks`: a changed proposal stops being one (KBC-067 BR-6). What
+   * goes is only what left `shownIds`, the draft the person saw: a failed run's tracks out of
+   * sight stand for windows already paid, and its retry needs them (KBC-097).
+   */
   save(
     write: EditWrite & {
       readonly tracks: readonly EditTrack[];
+      readonly shownIds: readonly string[];
       readonly step: EditStep;
       readonly transcriptVersion: number | null;
     },

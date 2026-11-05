@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
+  MIN_TRACK_MS,
   draftTrackSourceSchema,
   proposalFailureSchema,
   proposalStatusSchema,
@@ -81,6 +82,58 @@ const toVoice = (row: Row): VoiceSuggestion => ({
 /** A person's tracks and the ones a person changed: no run replaces them (BR-6). */
 const KEPT = `(source = 'manual' OR edited = 1)`;
 
+type Span = readonly [startMs: number, endMs: number];
+
+/**
+ * What is left of a track around those standing: all of it when nothing crosses it, the
+ * longest free stretch when that is at least half of it and a track's length, else null.
+ */
+function stretchLeft(track: Span, standing: readonly Span[]): Span | null {
+  const [startMs, endMs] = track;
+  const crossing = standing
+    .filter(([start, end]) => start < endMs && end > startMs)
+    .toSorted((a, b) => a[0] - b[0]);
+  if (crossing.length === 0) return track;
+  let longest: Span = [startMs, startMs];
+  let from = startMs;
+  for (const [start, end] of [...crossing, [endMs, endMs] as Span]) {
+    if (start - from > longest[1] - longest[0]) longest = [from, start];
+    from = Math.max(from, end);
+  }
+  const free = longest[1] - longest[0];
+  return free >= MIN_TRACK_MS && free * 2 >= endMs - startMs ? longest : null;
+}
+
+const spanOf = (row: Row): Span => [
+  Number(row['start_ms']),
+  Number(row['end_ms']),
+];
+
+/**
+ * A draft's tracks split for a run that ends: the spans that stand (the new run's, a person's,
+ * the edited) and the untouched AI tracks of the run that was on screen.
+ */
+function draftSpans(
+  rows: readonly Row[],
+  runs: { readonly fromRunId: string; readonly toRunId: string },
+): { standing: Span[]; untouched: Row[] } {
+  const standing = rows
+    .filter(
+      (row) =>
+        row['run_id'] === runs.toRunId ||
+        row['source'] === 'manual' ||
+        row['edited'] === 1,
+    )
+    .map(spanOf);
+  const untouched = rows.filter(
+    (row) =>
+      row['run_id'] === runs.fromRunId &&
+      row['source'] === 'ai' &&
+      row['edited'] === 0,
+  );
+  return { standing, untouched };
+}
+
 /** The run a draft shows: the newest that did not fail, else the newest that wrote windows. */
 const SHOWN_RUN = `r.media_id = ? AND r.id <> ? AND (r.status <> 'failed' OR r.windows_done > 0)
   ORDER BY r.status <> 'failed' DESC, r.created_at DESC, r.rowid DESC LIMIT 1`;
@@ -127,12 +180,27 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       );
   }
 
-  /** The failed run's tracks and names become the new run's: nothing leaves the draft. */
+  /**
+   * The failed run's tracks and names become the new run's. A save leaves its tracks alone
+   * when they are out of sight, so one may cross what the person kept since: theirs wins.
+   */
   private carryOutput(fromRunId: string, toRunId: string): void {
     for (const table of ['media_draft_tracks', 'media_voice_suggestions'])
       this.db
         .prepare(`UPDATE ${table} SET run_id = ? WHERE run_id = ?`)
         .run(toRunId, fromRunId);
+    this.db
+      .prepare(
+        `DELETE FROM media_draft_tracks AS carried
+         WHERE carried.run_id = ? AND carried.source = 'ai' AND carried.edited = 0
+           AND EXISTS (
+             SELECT 1 FROM media_draft_tracks person
+             WHERE person.media_id = carried.media_id
+               AND (person.source = 'manual' OR person.edited = 1)
+               AND person.start_ms < carried.end_ms
+               AND person.end_ms > carried.start_ms)`,
+      )
+      .run(toRunId);
   }
 
   getRun(runId: string): ProposalRun | null {
@@ -169,29 +237,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       windowsDone: Number(row['windows_done']),
       windowsTotal: Number(row['windows_total']),
       spentUsd: Number(row['spent_usd']),
-      outputGone: this.outputGone(mediaId, text(row, 'id')),
     };
-  }
-
-  /**
-   * A save writes what is on screen, so it takes the tracks of a failed run out of sight. Going
-   * on from there would replace the proposal on screen with nothing for those windows.
-   */
-  private outputGone(mediaId: string, runId: string): boolean {
-    const shown = this.shownRun(mediaId);
-    if (shown === null || shown.id === runId) return false;
-    const count = (sql: string, id: string) =>
-      Number(this.db.prepare(sql).get(id)?.['n']);
-    const written = count(
-      'SELECT count(*) AS n FROM media_draft_tracks WHERE run_id = ?',
-      runId,
-    );
-    const untouched = count(
-      `SELECT count(*) AS n FROM media_draft_tracks
-       WHERE run_id = ? AND source = 'ai' AND edited = 0`,
-      shown.id,
-    );
-    return written === 0 && untouched > 0;
   }
 
   private shownRun(mediaId: string, except = ''): ProposalRun | null {
@@ -265,6 +311,24 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     const mediaId = this.mediaOrNull(input.runId);
     if (mediaId === null) return;
     const before = this.shownRun(mediaId, input.runId);
+    this.markEnded(input);
+    if (before && this.shownRun(mediaId)?.id === input.runId)
+      this.keepUnreplaced({
+        fromRunId: before.id,
+        toRunId: input.runId,
+        mediaId,
+        failed: input.failure !== null,
+      });
+    if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
+    this.bumpEdit(mediaId, input.runId);
+  }
+
+  private markEnded(input: {
+    runId: string;
+    failure: ProposalFailure | null;
+    spentUsd: number;
+    now: Date;
+  }): void {
     this.db
       .prepare(
         `UPDATE media_proposal_runs SET status = ?, failure = ?,
@@ -277,26 +341,53 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         input.now.toISOString(),
         input.runId,
       );
-    if (before && this.shownRun(mediaId)?.id === input.runId)
-      this.keepUnreplaced(before.id, input.runId);
-    if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
-    this.bumpEdit(mediaId, input.runId);
   }
 
-  /** What was on screen goes only for something in its place: the rest joins the new run. */
-  private keepUnreplaced(fromRunId: string, toRunId: string): void {
+  /**
+   * What was on screen goes only for something in its place (KBC-097). A track nothing covers
+   * joins the new run, whole; one covered in less than half keeps the stretch left to it, or a
+   * new track at its edge would take the rest of the recording along. After a failed run the
+   * track stays as a person's: a run going on from there must not cross or stretch it.
+   */
+  private keepUnreplaced(input: {
+    fromRunId: string;
+    toRunId: string;
+    mediaId: string;
+    failed: boolean;
+  }): void {
+    const { fromRunId, toRunId, failed } = input;
+    const rows = this.db
+      .prepare(
+        `SELECT id, run_id, source, edited, start_ms, end_ms FROM media_draft_tracks
+         WHERE media_id = ?`,
+      )
+      .all(input.mediaId);
+    const { standing, untouched } = draftSpans(rows, { fromRunId, toRunId });
+    let kept = 0;
+    for (const row of untouched) {
+      const span = stretchLeft(spanOf(row), standing);
+      if (!span) continue;
+      standing.push(span);
+      kept += 1;
+      this.db
+        .prepare(
+          `UPDATE media_draft_tracks SET run_id = ?, start_ms = ?, end_ms = ?, edited = ?
+           WHERE id = ?`,
+        )
+        .run(toRunId, span[0], span[1], failed ? 1 : 0, text(row, 'id'));
+    }
+    if (kept > 0) this.carryNames(fromRunId, toRunId);
+  }
+
+  /** The names the kept tracks carry stay on offer with them. */
+  private carryNames(fromRunId: string, toRunId: string): void {
     this.db
       .prepare(
-        `UPDATE media_draft_tracks SET run_id = ?
-         WHERE run_id = ? AND source = 'ai' AND edited = 0 AND NOT EXISTS (
-           SELECT 1 FROM media_draft_tracks other
-           WHERE other.media_id = media_draft_tracks.media_id
-             AND other.id <> media_draft_tracks.id
-             AND (other.run_id = ? OR other.source = 'manual' OR other.edited = 1)
-             AND other.start_ms < media_draft_tracks.end_ms
-             AND other.end_ms > media_draft_tracks.start_ms)`,
+        `INSERT OR IGNORE INTO media_voice_suggestions (run_id, voice, name, audience, reason)
+         SELECT ?, voice, name, audience, reason FROM media_voice_suggestions
+         WHERE run_id = ?`,
       )
-      .run(toRunId, fromRunId, toRunId);
+      .run(toRunId, fromRunId);
   }
 
   /** Done counts what was spent; failed gives back the rest of the reservation (FR-5). */
