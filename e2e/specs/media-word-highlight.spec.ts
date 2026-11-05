@@ -49,6 +49,11 @@ function lectureRaw() {
 
 let lecture: UploadedMedia;
 
+// One worker per project runs this file: its media are made once in `beforeAll`, which
+// fully parallel would repeat in every worker that picks a test of the file (up to eight
+// conversions of the same recordings, queued with every other spec's).
+test.describe.configure({ mode: 'default' });
+
 test.beforeAll(async () => {
   test.setTimeout(300_000);
   const owner = await ownerApi();
@@ -394,6 +399,7 @@ test('NFR-2: on a 2 h transcript the highlight costs at most 2 ms per frame, wit
   const long = await uploadReady(owner, {
     title: `Palavras em 2 h ${uniqueTag()}`,
     seconds: 7_200,
+    looped: true,
     bitrate: '32k',
     readyWithinMs: 300_000,
   });

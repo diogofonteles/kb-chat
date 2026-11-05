@@ -72,6 +72,11 @@ const seriousViolations = async (page: Page) =>
 let collection: string;
 let lectures: UploadedMedia[];
 
+// One worker per project runs this file: its media are made once in `beforeAll`, which
+// fully parallel would repeat in every worker that picks a test of the file (up to eight
+// conversions of the same recordings, queued with every other spec's).
+test.describe.configure({ mode: 'default' });
+
 test.beforeAll(async () => {
   const tag = uniqueTag();
   const owner = await ownerApi();

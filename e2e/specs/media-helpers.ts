@@ -158,13 +158,23 @@ export async function uploadReady(
     bitrate?: string;
     /** How long to wait for the conversion (it slows down on a loaded machine). */
     readyWithinMs?: number;
+    /**
+     * Hours of tone as one minute repeated (`makeLongMp3`, whole minutes): encoding two
+     * hours here took 14 s of the test for the same bytes the server converts.
+     */
+    looped?: boolean;
   },
 ): Promise<UploadedMedia> {
+  const name = input.title.replace(/\W+/g, '-');
   const body = readFileSync(
-    makeMp3(input.title.replace(/\W+/g, '-'), input.seconds, {
-      source: input.source,
-      bitrate: input.bitrate,
-    }),
+    input.looped
+      ? makeLongMp3(name, input.seconds / 60, {
+          bitrate: input.bitrate ?? '96k',
+        })
+      : makeMp3(name, input.seconds, {
+          source: input.source,
+          bitrate: input.bitrate,
+        }),
   );
   const created = await api.post(
     `/api/v1/topics/${input.topic ?? 'hermetismo'}/media`,

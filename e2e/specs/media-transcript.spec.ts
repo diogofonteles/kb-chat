@@ -55,6 +55,11 @@ let lecture: UploadedMedia;
 let other: UploadedMedia;
 let noisy: UploadedMedia;
 
+// One worker per project runs this file: its media are made once in `beforeAll`, which
+// fully parallel would repeat in every worker that picks a test of the file (up to eight
+// conversions of the same recordings, queued with every other spec's).
+test.describe.configure({ mode: 'default' });
+
 test.beforeAll(async () => {
   // Three conversions; a loaded machine makes them slow (each waits up to 2 min).
   test.setTimeout(600_000);
@@ -672,6 +677,7 @@ test('NFR-2: a 2 h transcript (~20 000 words) opens and answers clicks and keys 
   const long = await uploadReady(owner, {
     title: `Palestra de 2 h ${uniqueTag()}`,
     seconds: 7_200,
+    looped: true,
     bitrate: '32k',
     readyWithinMs: 300_000,
   });
