@@ -74,3 +74,13 @@ jobs:
         run: sudo deploy/scripts/codex-egress.sh
       - name: Prove the sandbox
         run: deploy/scripts/codex-sandbox-proof.sh proof docker.io/library
+
+  # Open boards update without a refresh only if the edge passes live events on at once.
+  board-edge:
+    name: Board edge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove the live events cross the real Caddyfile
+        run: deploy/scripts/board-edge-proof.sh
