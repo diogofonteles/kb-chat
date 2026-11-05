@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { timingProblems } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
   BrokenStream,
@@ -369,6 +370,18 @@ describe('ProposalService: windows and the draft (KBC-067 FR-3, BR-6)', () => {
     const third = ctx.llm.calls[2]?.at(-1)?.content ?? '';
     expect(third).toContain('A janela anterior não deixou faixas novas.');
     expect(windowIds(second)).toEqual({ first: 61, last: 120 });
+  });
+
+  it('writes no overlap from a transcript whose segments overlap (KBC-094)', async () => {
+    const segments = evenSegments(30).map((segment, index) => ({
+      ...segment,
+      startMs: index === 0 ? segment.startMs : segment.startMs - 42,
+    }));
+    const ctx = setup({ segments, replies: [INTERVIEW] });
+    await runToEnd(ctx);
+    const { tracks } = ctx.service.draft(OWNER, ctx.mediaId);
+    expect(tracks).toHaveLength(5);
+    expect(timingProblems(tracks, null)).toEqual([]);
   });
 
   it('a new run replaces only the AI tracks and never crosses the person’s (AC-4)', async () => {
@@ -797,6 +810,38 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     await runToEnd(ctx);
     expect(titles(ctx)).toEqual(['Nova', 'Nova', 'Nova']);
     expect(ctx.llm.calls).toHaveLength(7);
+  });
+
+  it('a track a person kept wins over what a failed run carries (KBC-094)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Antiga' }),
+        wholeWindow({ title: 'Nova' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    await runToEnd(ctx);
+    // The failed run's tracks are out of sight, under this one the person now renames.
+    ctx.db
+      .prepare(
+        `UPDATE media_draft_tracks SET edited = 1, title = 'Da pessoa'
+         WHERE title = 'Antiga' AND start_ms = 0`,
+      )
+      .run();
+    ctx.llm.replies.push(wholeWindow({ title: 'Nova' }));
+    ctx.llm.replies.push(wholeWindow({ title: 'Nova' }));
+    await runToEnd(ctx);
+    const { tracks } = ctx.service.draft(OWNER, ctx.mediaId);
+    expect(timingProblems(tracks, null)).toEqual([]);
+    expect(tracks.map((track) => track.title)).toEqual([
+      'Da pessoa',
+      'Nova',
+      'Nova',
+    ]);
   });
 
   it('a restart keeps the windows done and runs nothing until someone asks', async () => {

@@ -111,7 +111,11 @@ export class WindowRunner {
     const newest = tracks.at(-1);
     // A person's change stays theirs: a new window does not stretch it.
     if (newest && !newest.edited && newest.lastSegment !== null)
-      this.last = { lastSegment: newest.lastSegment, startMs: newest.startMs };
+      this.last = {
+        lastSegment: newest.lastSegment,
+        startMs: newest.startMs,
+        endMs: newest.endMs,
+      };
   }
 
   private failureOf(error: unknown): ProposalFailure {
@@ -142,12 +146,13 @@ export class WindowRunner {
   private remember(accepted: AcceptedTracks): void {
     const newest = accepted.tracks.at(-1);
     if (newest)
-      this.last = { lastSegment: newest.lastSegment, startMs: newest.startMs };
-    else if (accepted.extendLast && this.last)
       this.last = {
-        ...this.last,
-        lastSegment: accepted.extendLast.lastSegment,
+        lastSegment: newest.lastSegment,
+        startMs: newest.startMs,
+        endMs: newest.endMs,
       };
+    else if (accepted.extendLast && this.last)
+      this.last = { ...this.last, ...accepted.extendLast };
     this.previous = accepted.tracks.map((track) => ({ ...track }));
   }
 

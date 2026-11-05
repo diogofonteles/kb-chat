@@ -8,11 +8,13 @@ import {
   canSplit,
   canSplitAt,
   clampHandle,
+  closeOverlap,
   joinTracks,
   landHandle,
   limitsOf,
   neighbourPoint,
   newTrackSpan,
+  overlapMs,
   selectedSpan,
   snapPointsOf,
   snapTo,
@@ -221,6 +223,49 @@ describe('listening by track (FR-9)', () => {
     expect(adjacentTrack(tracks, { ms: 25_000, direction: -1 })?.id).toBe('2');
     expect(adjacentTrack(tracks, { ms: 35_000, direction: 1 })).toBeNull();
     expect(adjacentTrack(tracks, { ms: 5_000, direction: -1 })).toBeNull();
+  });
+});
+
+describe('a draft that already holds an overlap (KBC-094)', () => {
+  const held = [span('a', 0, 10_042), span('b', 10_000, 20_000)];
+
+  it('says how far a track starts before the ones ahead end', () => {
+    expect(overlapMs(held, 'b')).toBe(42);
+    expect(overlapMs(held, 'a')).toBe(0);
+    expect(overlapMs(held, 'missing')).toBe(0);
+  });
+
+  it('counts from the longest track ahead, not just the one before', () => {
+    const nested = [
+      span('a', 0, 30_000),
+      span('b', 5_000, 10_000),
+      span('c', 20_000, 40_000),
+    ];
+    expect(overlapMs(nested, 'c')).toBe(10_000);
+  });
+
+  it('closes it by starting the track where the ones ahead end', () => {
+    expect(closeOverlap(held, 'b')).toEqual([
+      span('a', 0, 10_042),
+      span('b', 10_042, 20_000),
+    ]);
+  });
+
+  it('offers nothing where there is no overlap or 5 s would not be left', () => {
+    expect(closeOverlap(held, 'a')).toBeNull();
+    expect(
+      closeOverlap([span('a', 0, 16_000), span('b', 10_000, 20_000)], 'b'),
+    ).toBeNull();
+  });
+
+  it('a handle never deepens it, even when the room is gone', () => {
+    const tight = [span('a', 0, 10_000), span('b', 9_990, 14_000)];
+    const limits = limitsOf(tight, {
+      trackId: 'b',
+      edge: 'start',
+      durationMs: DURATION,
+    });
+    expect(clampHandle(12_000, limits).ms).toBeGreaterThanOrEqual(10_000);
   });
 });
 

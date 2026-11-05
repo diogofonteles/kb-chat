@@ -123,12 +123,24 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       );
   }
 
-  /** The failed run's tracks and names become the new run's: nothing leaves the draft. */
+  /**
+   * The failed run's tracks and names become the new run's. Those a person's track now crosses
+   * stay behind: they were out of sight when that track was made or changed (KBC-094).
+   */
   private carryOutput(fromRunId: string, toRunId: string): void {
     for (const table of ['media_draft_tracks', 'media_voice_suggestions'])
       this.db
         .prepare(`UPDATE ${table} SET run_id = ? WHERE run_id = ?`)
         .run(toRunId, fromRunId);
+    this.db
+      .prepare(
+        `DELETE FROM media_draft_tracks AS carried
+         WHERE run_id = ? AND source = 'ai' AND edited = 0 AND EXISTS (
+           SELECT 1 FROM media_draft_tracks AS kept
+           WHERE kept.media_id = carried.media_id AND (kept.source = 'manual' OR kept.edited = 1)
+             AND kept.start_ms < carried.end_ms AND carried.start_ms < kept.end_ms)`,
+      )
+      .run(toRunId);
   }
 
   getRun(runId: string): ProposalRun | null {

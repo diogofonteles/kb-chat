@@ -16,7 +16,9 @@ import { voiceOfLabel, type PromptSegment } from './windows.js';
  * Checks what the model answered for one window (KBC-067 FR-2, ADR 0029 §4): an unreadable
  * answer asks the window again; a bad track is dropped on its own (unknown ids, overlap, a
  * person's track crossed, shorter than 5 s); a title too long or a name nobody said is
- * refused (BR-4, BR-5).
+ * refused (BR-4, BR-5). Segment ids say the order, times say the overlap: the transcript's
+ * segments may overlap in time, so a track starts no earlier than the one before it ends
+ * (KBC-094).
  */
 
 const replySchema = z.looseObject({
@@ -108,6 +110,7 @@ const crosses = (range: KeptRange, kept: readonly KeptRange[]): boolean =>
 export interface LastTrack {
   readonly lastSegment: number;
   readonly startMs: number;
+  readonly endMs: number;
 }
 
 export interface TrackRules {
@@ -140,16 +143,21 @@ function voiceIn(label: unknown, voices: ReadonlySet<number>): number | null {
   return voice !== null && voices.has(voice) ? voice : null;
 }
 
+/** The track's time: from its first segment, or from where the one before it ends. */
+const rangeOf = (bounds: Bounds, freeFromMs: number): KeptRange => ({
+  startMs: Math.max(bounds.first.startMs, freeFromMs),
+  endMs: bounds.last.endMs,
+});
+
 function toTrack(
   raw: RawTrack,
-  bounds: Bounds,
+  { bounds, range }: { bounds: Bounds; range: KeptRange },
   voices: ReadonlySet<number>,
 ): ProposedTrack {
   return {
     firstSegment: bounds.first.id,
     lastSegment: bounds.last.id,
-    startMs: bounds.first.startMs,
-    endMs: bounds.last.endMs,
+    ...range,
     kind: KIND_OF[raw.tipo],
     title: titleOf(raw.titulo),
     askerVoice:
@@ -167,17 +175,17 @@ function continuationOf(
   const last = rules.last;
   if (!raw.continua_faixa_anterior || !last) return null;
   if (bounds.first.id !== last.lastSegment + 1) return null;
-  const joined = { startMs: last.startMs, endMs: bounds.last.endMs };
-  if (crosses(joined, rules.kept)) return null;
-  return { lastSegment: bounds.last.id, endMs: bounds.last.endMs };
+  const endMs = Math.max(last.endMs, bounds.last.endMs);
+  if (crosses({ startMs: last.startMs, endMs }, rules.kept)) return null;
+  return { lastSegment: bounds.last.id, endMs };
 }
 
 function isAcceptable(
   bounds: Bounds,
-  after: number,
-  rules: TrackRules,
+  range: KeptRange,
+  context: { readonly after: number; readonly rules: TrackRules },
 ): boolean {
-  const range = { startMs: bounds.first.startMs, endMs: bounds.last.endMs };
+  const { after, rules } = context;
   return (
     bounds.first.id > after &&
     range.endMs - range.startMs >= MIN_TRACK_MS &&
@@ -193,18 +201,22 @@ export function acceptTracks(
   const tracks: ProposedTrack[] = [];
   let extendLast: TrackExtension | null = null;
   let after = rules.last?.lastSegment ?? 0;
+  let freeFromMs = rules.last?.endMs ?? 0;
   for (const [index, value] of raws.entries()) {
     const raw = rawTrackSchema.safeParse(value);
     const bounds = raw.success ? boundsOf(raw.data, rules) : null;
     if (!raw.success || !bounds) continue;
     const extension =
       index === 0 ? continuationOf(raw.data, bounds, rules) : null;
+    const range = rangeOf(bounds, freeFromMs);
     if (extension) {
       extendLast = extension;
       after = extension.lastSegment;
-    } else if (isAcceptable(bounds, after, rules)) {
-      tracks.push(toTrack(raw.data, bounds, rules.voices));
+      freeFromMs = extension.endMs;
+    } else if (isAcceptable(bounds, range, { after, rules })) {
+      tracks.push(toTrack(raw.data, { bounds, range }, rules.voices));
       after = bounds.last.id;
+      freeFromMs = range.endMs;
     }
   }
   const kept = tracks.length + (extendLast ? 1 : 0);
