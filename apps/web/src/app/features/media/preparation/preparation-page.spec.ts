@@ -365,7 +365,9 @@ describe('PreparationPage (T20, step 2)', () => {
       screen.getByText(/Tentar de novo custa cerca de US\$\s0,02/),
     ).toBeTruthy();
     screen.getByRole('button', { name: 'Tentar de novo' }).click();
-    http.expectOne(`${URL}/steps/tracks/retry`).flush(RUNNING);
+    const retry = http.expectOne(`${URL}/steps/tracks/retry`);
+    expect(retry.request.body).toEqual({ acceptedUsd: 0.02 });
+    retry.flush(RUNNING);
     await settle(harness);
     expect(screen.queryByRole('button', { name: 'Tentar de novo' })).toBeNull();
     expect(document.activeElement).toBe(
@@ -393,6 +395,27 @@ describe('PreparationPage (T20, step 2)', () => {
         /1 de 3 janelas prontas, por US\$\s0,0012\. Tentar de novo refaz só as que faltam\./,
       ),
     ).toBeTruthy();
+  });
+
+  it('says a retry starts over and pays the finished windows again (KBC-097)', async () => {
+    await open(
+      aPreparation({
+        stages: [
+          aStage('tracks', 'failed', {
+            failure: 'provider',
+            canRetry: true,
+            estimateUsd: 0.03,
+            restarts: true,
+            windows: { done: 1, total: 3 },
+            spentUsd: 0.0012,
+          }),
+        ],
+      }),
+    );
+    expect(
+      screen.getByText(/recomeça do início e paga essas janelas outra vez/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/refaz só as que faltam/)).toBeNull();
   });
 
   it('offers no retry in words past the cap: only what stands (BUG-9)', async () => {

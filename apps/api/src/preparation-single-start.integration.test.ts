@@ -113,7 +113,8 @@ async function failedOnce(ctx: Ctx): Promise<void> {
   expect(tracksOf(view)).toMatchObject({ state: 'failed', canRetry: true });
 }
 
-const retry = (ctx: Ctx) => ctx.service.retry(OWNER, ctx.mediaId, 'tracks');
+const retry = (ctx: Ctx) =>
+  ctx.service.retry(OWNER, ctx.mediaId, { stage: 'tracks' });
 
 const outcomes = (results: readonly PromiseSettledResult<unknown>[]) =>
   results.map(({ status }) => status).sort();

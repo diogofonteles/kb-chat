@@ -159,7 +159,10 @@ export class PreparationPage {
   }
 
   protected retry(stage: RetryStage): void {
-    this.act(this.api.retry(this.id(), stage));
+    const shown = this.preparation()?.stages.find(
+      (one) => one.stage === stage,
+    )?.estimateUsd;
+    this.act(this.api.retry(this.id(), stage, shown ?? undefined));
   }
 
   /** From the AI to the person: on to step 3 when the words are there (AC-11). */

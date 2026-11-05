@@ -8,6 +8,8 @@
 }
 
 .buttons {
+  /* Brought into view above the editor's sticky bottom bar. */
+  scroll-margin-block: 6rem;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);

@@ -22,6 +22,7 @@ const stage = (
   reservedUsd: null,
   spentUsd: null,
   estimateUsd: null,
+  restarts: false,
 });
 
 const track = (index: number): PreparationTrack => ({

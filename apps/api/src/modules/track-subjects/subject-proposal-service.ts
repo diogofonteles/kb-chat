@@ -188,6 +188,7 @@ export class SubjectProposalService {
       model: plan.llm.model,
       allowed: refusal === null,
       refusal,
+      restarts: false,
       month: actor.isMaster
         ? { spentUsd: used, capUsd: this.deps.caps.monthlyUsd }
         : null,

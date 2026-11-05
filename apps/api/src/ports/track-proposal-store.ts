@@ -48,6 +48,8 @@ export interface ProposedTrack {
 
 /** The new end of the run's last track when a window's first track continues it. */
 export interface TrackExtension {
+  /** Where the continued track starts: it, and no other, is stretched. */
+  readonly startMs: number;
   readonly lastSegment: number;
   readonly endMs: number;
 }
@@ -85,7 +87,8 @@ export interface TrackProposalStorePort {
   runTracks(runId: string): DraftTrack[];
   /**
    * One window's result, in one transaction: tracks, voice names, progress and spend.
-   * `spentUsd` is what this run spent, without what it carried from a failed one.
+   * `spentUsd` is what this run spent, without what it carried from a failed one. Returns
+   * false when `extendLast` found no track of the run to stretch (it went meanwhile).
    */
   saveWindow(input: {
     readonly runId: string;
@@ -93,11 +96,13 @@ export interface TrackProposalStorePort {
     readonly tracks: readonly ProposedTrack[];
     readonly voices: readonly VoiceSuggestion[];
     readonly spentUsd: number;
-  }): void;
+  }): boolean;
   /**
    * Ends a run and its ledger reservation in one transaction. Done: the older untouched AI
-   * tracks of the recording go (BR-6) and the spend is settled. Failed: what its finished
-   * windows wrote stays, paid for, and the unspent part is refunded (FR-5, KBC-072 BR-6). The
+   * tracks of the recording go (BR-6) and the spend is settled; those on screen that nothing
+   * took the place of stay, as the new run's (KBC-097). Failed: what its finished windows
+   * wrote stays, paid for, and the unspent part is refunded (FR-5, KBC-072 BR-6); taking the
+   * screen from an earlier failed run, it keeps that run's tracks the same way. The
    * reservation is closed even when the recording, and so the run, was deleted meanwhile.
    */
   finishRun(input: {

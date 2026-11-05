@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
+  MIN_TRACK_MS,
   draftTrackSourceSchema,
   proposalFailureSchema,
   proposalStatusSchema,
@@ -81,6 +82,62 @@ const toVoice = (row: Row): VoiceSuggestion => ({
 /** A person's tracks and the ones a person changed: no run replaces them (BR-6). */
 const KEPT = `(source = 'manual' OR edited = 1)`;
 
+type Span = readonly [startMs: number, endMs: number];
+
+/**
+ * What is left of a track around those standing: all of it when nothing crosses it, the
+ * longest free stretch when that is at least half of it and a track's length, else null.
+ */
+function stretchLeft(track: Span, standing: readonly Span[]): Span | null {
+  const [startMs, endMs] = track;
+  const crossing = standing
+    .filter(([start, end]) => start < endMs && end > startMs)
+    .toSorted((a, b) => a[0] - b[0]);
+  if (crossing.length === 0) return track;
+  let longest: Span = [startMs, startMs];
+  let from = startMs;
+  for (const [start, end] of [...crossing, [endMs, endMs] as Span]) {
+    if (start - from > longest[1] - longest[0]) longest = [from, start];
+    from = Math.max(from, end);
+  }
+  const free = longest[1] - longest[0];
+  return free >= MIN_TRACK_MS && free * 2 >= endMs - startMs ? longest : null;
+}
+
+const spanOf = (row: Row): Span => [
+  Number(row['start_ms']),
+  Number(row['end_ms']),
+];
+
+/**
+ * A draft's tracks split for a run that ends: the spans that stand (the new run's, a person's,
+ * the edited) and the untouched AI tracks of the run that was on screen.
+ */
+function draftSpans(
+  rows: readonly Row[],
+  runs: { readonly fromRunId: string; readonly toRunId: string },
+): { standing: Span[]; untouched: Row[] } {
+  const standing = rows
+    .filter(
+      (row) =>
+        row['run_id'] === runs.toRunId ||
+        row['source'] === 'manual' ||
+        row['edited'] === 1,
+    )
+    .map(spanOf);
+  const untouched = rows.filter(
+    (row) =>
+      row['run_id'] === runs.fromRunId &&
+      row['source'] === 'ai' &&
+      row['edited'] === 0,
+  );
+  return { standing, untouched };
+}
+
+/** The run a draft shows: the newest that did not fail, else the newest that wrote windows. */
+const SHOWN_RUN = `r.media_id = ? AND r.id <> ? AND (r.status <> 'failed' OR r.windows_done > 0)
+  ORDER BY r.status <> 'failed' DESC, r.created_at DESC, r.rowid DESC LIMIT 1`;
+
 /** The AI's proposal runs and draft tracks in `media.db` (KBC-067, ADR 0029 §4). */
 export class SqliteTrackProposalStore implements TrackProposalStorePort {
   constructor(private readonly db: DatabaseSync) {}
@@ -123,12 +180,65 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       );
   }
 
-  /** The failed run's tracks and names become the new run's: nothing leaves the draft. */
+  /**
+   * The failed run's tracks and names become the new run's. A save leaves its tracks alone
+   * when they are out of sight, so one may cross what the person kept since: theirs wins,
+   * and the carried track keeps the stretch left to it (`stretchLeft`).
+   */
   private carryOutput(fromRunId: string, toRunId: string): void {
     for (const table of ['media_draft_tracks', 'media_voice_suggestions'])
       this.db
         .prepare(`UPDATE ${table} SET run_id = ? WHERE run_id = ?`)
         .run(toRunId, fromRunId);
+    const mediaId = this.mediaOf(toRunId);
+    const standing = this.keptRanges(mediaId).map(
+      ({ startMs, endMs }): Span => [startMs, endMs],
+    );
+    this.fitAround(this.untouchedOf(toRunId), standing);
+  }
+
+  /** The AI tracks of a run nobody changed, in time order. */
+  private untouchedOf(runId: string): Row[] {
+    return this.db
+      .prepare(
+        `SELECT id, start_ms, end_ms FROM media_draft_tracks
+         WHERE run_id = ? AND source = 'ai' AND edited = 0 ORDER BY start_ms`,
+      )
+      .all(runId);
+  }
+
+  /**
+   * Each track keeps what `standing` leaves of it, or goes. A cut track no longer spans the
+   * segments it was proposed over, so it loses them (a next window is not told them).
+   * Returns how many stayed; with `toRunId` they also become that run's.
+   */
+  private fitAround(
+    rows: readonly Row[],
+    standing: Span[],
+    toRunId?: string,
+  ): number {
+    const cut = this.db.prepare(
+      `UPDATE media_draft_tracks SET start_ms = ?, end_ms = ?, first_segment = NULL,
+         last_segment = NULL, run_id = coalesce(?, run_id) WHERE id = ?`,
+    );
+    const move = this.db.prepare(
+      `UPDATE media_draft_tracks SET run_id = coalesce(?, run_id) WHERE id = ?`,
+    );
+    const drop = this.db.prepare('DELETE FROM media_draft_tracks WHERE id = ?');
+    let kept = 0;
+    for (const row of rows) {
+      const whole = spanOf(row);
+      const span = stretchLeft(whole, standing);
+      const id = text(row, 'id');
+      if (!span && toRunId === undefined) drop.run(id);
+      if (!span) continue;
+      standing.push(span);
+      kept += 1;
+      if (span[0] === whole[0] && span[1] === whole[1])
+        move.run(toRunId ?? null, id);
+      else cut.run(span[0], span[1], toRunId ?? null, id);
+    }
+    return kept;
   }
 
   getRun(runId: string): ProposalRun | null {
@@ -168,6 +278,15 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     };
   }
 
+  private shownRun(mediaId: string, except = ''): ProposalRun | null {
+    const row = this.db
+      .prepare(
+        `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r WHERE ${SHOWN_RUN}`,
+      )
+      .get(mediaId, except);
+    return row ? toRun(row) : null;
+  }
+
   runTracks(runId: string): DraftTrack[] {
     return this.db
       .prepare(
@@ -183,9 +302,9 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     tracks: readonly ProposedTrack[];
     voices: readonly VoiceSuggestion[];
     spentUsd: number;
-  }): void {
-    inTransaction(this.db, () => {
-      if (input.extendLast) this.extendLast(input.runId, input.extendLast);
+  }): boolean {
+    return inTransaction(this.db, () => {
+      const extended = this.replaceCarried(input);
       const mediaId = this.mediaOf(input.runId);
       for (const track of input.tracks)
         this.insertTrack({ runId: input.runId, mediaId, track });
@@ -204,6 +323,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
              AND id = (SELECT spend_id FROM media_proposal_runs WHERE id = ?)`,
         )
         .run(input.spentUsd, input.runId);
+      return extended;
     });
   }
 
@@ -229,8 +349,24 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   }): void {
     const mediaId = this.mediaOrNull(input.runId);
     if (mediaId === null) return;
+    const before = this.shownRun(mediaId, input.runId);
+    this.markEnded(input);
+    if (before && this.shownRun(mediaId)?.id === input.runId)
+      this.keepUnreplaced({
+        fromRunId: before.id,
+        toRunId: input.runId,
+        mediaId,
+      });
     if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
     this.bumpEdit(mediaId, input.runId);
+  }
+
+  private markEnded(input: {
+    runId: string;
+    failure: ProposalFailure | null;
+    spentUsd: number;
+    now: Date;
+  }): void {
     this.db
       .prepare(
         `UPDATE media_proposal_runs SET status = ?, failure = ?,
@@ -243,6 +379,41 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         input.now.toISOString(),
         input.runId,
       );
+  }
+
+  /**
+   * What was on screen goes only for something in its place (KBC-097). A track nothing covers
+   * joins the new run, whole; one covered in less than half keeps the stretch left to it, or a
+   * new track at its edge would take the rest of the recording along. It stays a proposal: a
+   * run going on from a failed one asks its windows again and may replace it (`saveWindow`).
+   * What is not kept stays with the old run, out of sight, until a finished run drops it.
+   */
+  private keepUnreplaced(input: {
+    fromRunId: string;
+    toRunId: string;
+    mediaId: string;
+  }): void {
+    const { fromRunId, toRunId } = input;
+    const rows = this.db
+      .prepare(
+        `SELECT id, run_id, source, edited, start_ms, end_ms FROM media_draft_tracks
+         WHERE media_id = ? ORDER BY start_ms`,
+      )
+      .all(input.mediaId);
+    const { standing, untouched } = draftSpans(rows, { fromRunId, toRunId });
+    if (this.fitAround(untouched, standing, toRunId) > 0)
+      this.carryNames(fromRunId, toRunId);
+  }
+
+  /** The names the kept tracks carry stay on offer with them. */
+  private carryNames(fromRunId: string, toRunId: string): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO media_voice_suggestions (run_id, voice, name, audience, reason)
+         SELECT ?, voice, name, audience, reason FROM media_voice_suggestions
+         WHERE run_id = ?`,
+      )
+      .run(toRunId, fromRunId);
   }
 
   /** Done counts what was spent; failed gives back the rest of the reservation (FR-5). */
@@ -279,14 +450,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   }
 
   draft(mediaId: string): DraftTracks {
-    const runRow = this.db
-      .prepare(
-        `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r
-         WHERE r.media_id = ? AND (r.status <> 'failed' OR r.windows_done > 0)
-         ORDER BY r.status <> 'failed' DESC, r.created_at DESC, r.rowid DESC LIMIT 1`,
-      )
-      .get(mediaId);
-    const run = runRow ? toRun(runRow) : null;
+    const run = this.shownRun(mediaId);
     const tracks = this.db
       .prepare(
         `SELECT * FROM media_draft_tracks
@@ -375,14 +539,54 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     return row ? text(row, 'media_id') : null;
   }
 
-  private extendLast(runId: string, extension: TrackExtension): void {
+  /**
+   * A window asked again writes in place of what the run carried there: a carried proposal
+   * its tracks cross keeps the stretch left to it, or goes (KBC-097). The run's own tracks
+   * end before the window's, so only carried ones can cross. False when the continuation
+   * found no track to stretch.
+   */
+  private replaceCarried(input: {
+    runId: string;
+    extendLast: TrackExtension | null;
+    tracks: readonly ProposedTrack[];
+  }): boolean {
+    const extended = input.extendLast
+      ? this.extendLast(input.runId, input.extendLast)
+      : null;
+    const landed = input.extendLast === null || extended !== null;
+    const written: Span[] = input.tracks.map((track) => [
+      track.startMs,
+      track.endMs,
+    ]);
+    if (input.extendLast && extended !== null)
+      written.push([input.extendLast.startMs, input.extendLast.endMs]);
+    if (written.length === 0) return landed;
+    const crossed = this.untouchedOf(input.runId).filter((row) => {
+      const [start, end] = spanOf(row);
+      return (
+        text(row, 'id') !== extended &&
+        written.some(([from, to]) => start < to && from < end)
+      );
+    });
+    this.fitAround(crossed, written);
+    return landed;
+  }
+
+  /** Stretches the track the continuation continues (by its start), never a kept one. */
+  private extendLast(runId: string, extension: TrackExtension): string | null {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM media_draft_tracks WHERE run_id = ? AND source = 'ai'
+           AND edited = 0 AND start_ms = ? ORDER BY rowid DESC LIMIT 1`,
+      )
+      .get(runId, extension.startMs);
+    if (!row) return null;
     this.db
       .prepare(
-        `UPDATE media_draft_tracks SET last_segment = ?, end_ms = ?
-         WHERE id = (SELECT id FROM media_draft_tracks WHERE run_id = ?
-                     ORDER BY start_ms DESC LIMIT 1)`,
+        `UPDATE media_draft_tracks SET last_segment = ?, end_ms = ? WHERE id = ?`,
       )
-      .run(extension.lastSegment, extension.endMs, runId);
+      .run(extension.lastSegment, extension.endMs, text(row, 'id'));
+    return text(row, 'id');
   }
 
   private insertTrack(input: {

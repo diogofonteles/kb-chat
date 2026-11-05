@@ -3,16 +3,31 @@
     <p i18n="@@tracks.ai.running">
       Propondo… janela {{ run()?.windowsDone }} de {{ run()?.windowsTotal }}
     </p>
+    <ng-container *ngTemplateOutlet="errorText" />
   } @else if (estimate(); as shown) {
     @if (refusal()) {
       <p class="refusal">{{ refusal() }}</p>
     } @else {
       <p i18n="@@tracks.ai.estimate">Custa cerca de {{ estimateText() }}.</p>
+      @if (shown.restarts) {
+        <p class="hint" i18n="@@tracks.ai.restarts">
+          A tentativa anterior não pode continuar: a análise recomeça do início
+          e paga outra vez as janelas já feitas.
+        </p>
+      }
+      @if (replaces()) {
+        <p class="hint" i18n="@@tracks.ai.replaces">
+          A nova análise pode trocar as faixas propostas que você não alterou.
+          As que você editou ou criou ficam.
+        </p>
+      }
     }
     @if (month()) {
       <p class="hint">{{ month() }}</p>
     }
-    <div class="buttons">
+    <!-- Before the actions: on a phone the bar at the bottom would hide it. -->
+    <ng-container *ngTemplateOutlet="errorText" />
+    <div #actions class="buttons">
       @if (shown.allowed) {
         <button
           type="button"
@@ -49,11 +64,14 @@
     @if (failed()) {
       <p class="refusal" i18n="@@tracks.ai.failed">Não foi possível propor.</p>
     }
-  }
-  @if (error()) {
-    <p class="refusal">{{ error() }}</p>
+    <ng-container *ngTemplateOutlet="errorText" />
   }
 </div>
+<ng-template #errorText>
+  @if (error()) {
+    <p #notice class="refusal">{{ error() }}</p>
+  }
+</ng-template>
 @if (pending().length && separation() !== null) {
   <ul class="suggestions">
     @for (suggestion of pending(); track suggestion.voice) {

@@ -177,7 +177,7 @@ function continuationOf(
   if (bounds.first.id !== last.lastSegment + 1) return null;
   const endMs = Math.max(last.endMs, bounds.last.endMs);
   if (crosses({ startMs: last.startMs, endMs }, rules.kept)) return null;
-  return { lastSegment: bounds.last.id, endMs };
+  return { startMs: last.startMs, lastSegment: bounds.last.id, endMs };
 }
 
 function isAcceptable(

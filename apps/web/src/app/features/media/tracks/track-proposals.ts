@@ -2,13 +2,17 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   LOCALE_ID,
+  afterRenderEffect,
   computed,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
   CollectionSpeaker,
@@ -21,7 +25,11 @@ import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MediaEditApi } from '@core/media/media-edit-api.js';
 import { SpeakersApi } from '@core/media/speakers-api.js';
 import { map, of, switchMap, type Observable } from 'rxjs';
-import type { ProposeResult, SaveResult } from './track-draft-state.js';
+import {
+  roseEstimateOf,
+  type ProposeResult,
+  type SaveResult,
+} from './track-draft-state.js';
 import { notDoneText } from './track-labels.js';
 
 /** Where the person is in asking for a run. */
@@ -38,6 +46,7 @@ type Asking =
  */
 @Component({
   selector: 'app-track-proposals',
+  imports: [NgTemplateOutlet],
   templateUrl: './track-proposals.html',
   styleUrl: './track-proposals.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,15 +69,26 @@ export class TrackProposals {
   readonly separation = input<number | null>(null);
 
   /** Saves the person's changes and starts the run: only when that save came back fine. */
-  readonly start = input.required<() => Observable<ProposeResult>>();
+  readonly start =
+    input.required<(acceptedUsd: number) => Observable<ProposeResult>>();
   /** A conflict (R-3), or a press on the draft waiting for its answer (F-2): no run starts. */
   readonly blocked = input(false);
+
+  /** The draft has proposals a new run may swap: said before the press (KBC-097). */
+  readonly replaces = input(false);
 
   /** A suggested name was accepted (BR-5). */
   readonly named = output();
 
   private readonly asking = signal<Asking>({ kind: 'idle' });
   protected readonly error = signal('');
+  /**
+   * The value rose: its notice and the actions under it are brought into view, clear of the
+   * editor's bottom bar (the actions are scrolled to; the notice sits right above them).
+   */
+  private readonly rose = signal(false);
+  private readonly notice = viewChild<ElementRef<HTMLElement>>('notice');
+  private readonly actions = viewChild<ElementRef<HTMLElement>>('actions');
   private readonly accepted = signal<readonly number[]>([]);
 
   protected readonly estimate = computed(() => {
@@ -122,7 +142,18 @@ export class TrackProposals {
     }).format(value);
   }
 
+  constructor() {
+    afterRenderEffect({
+      write: () => {
+        const actions = this.actions()?.nativeElement;
+        if (actions && this.notice() && this.rose())
+          actions.scrollIntoView({ block: 'nearest' });
+      },
+    });
+  }
+
   protected askEstimate(): void {
+    this.rose.set(false);
     this.error.set('');
     this.asking.set({ kind: 'estimating' });
     this.api
@@ -138,6 +169,7 @@ export class TrackProposals {
   }
 
   protected cancel(): void {
+    this.rose.set(false);
     this.asking.set({ kind: 'idle' });
   }
 
@@ -145,27 +177,48 @@ export class TrackProposals {
   protected confirm(): void {
     const asking = this.asking();
     if (asking.kind !== 'estimated') return;
+    this.rose.set(false);
     this.error.set('');
-    this.asking.set({ ...asking, kind: 'starting' });
-    this.start()()
+    // This press's own state: its answer counts only while the screen still waits on it.
+    const pressed: Asking = { ...asking, kind: 'starting' };
+    this.asking.set(pressed);
+    this.start()(asking.estimate.estimateUsd)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (result) => this.answered(result, asking.estimate),
+        next: (result) => this.answered(result, { pressed, asking }),
         // No answer: another press got there first, and this one stays to press again.
         complete: () => {
-          if (this.asking().kind === 'starting') this.asking.set(asking);
+          if (this.asking() === pressed) this.asking.set(asking);
         },
       });
   }
 
-  private answered(result: ProposeResult, estimate: ProposalEstimate): void {
+  /** A press cancelled, or followed by a newer one, answers too late to change anything (PD-03). */
+  private answered(
+    result: ProposeResult,
+    press: { readonly pressed: Asking; readonly asking: Asking },
+  ): void {
+    if (this.asking() !== press.pressed) return;
     if (result.kind === 'started') {
       this.asking.set({ kind: 'idle' });
       return;
     }
-    this.asking.set({ kind: 'estimated', estimate });
-    if (result.kind === 'refused') this.showError(result.error);
-    else this.showStopped(result.result);
+    this.asking.set(press.asking);
+    if (result.kind === 'stopped') this.showStopped(result.result);
+    else if (roseEstimateOf(result.error) !== null) this.askAgain();
+    else this.showError(result.error);
+  }
+
+  /**
+   * What was confirmed no longer holds (a price, the plan or the draft changed it): the new
+   * value, to confirm. Neutral: the cause is not known here.
+   */
+  private askAgain(): void {
+    this.askEstimate();
+    this.rose.set(true);
+    this.error.set(
+      $localize`:@@tracks.ai.estimateRose:O valor mudou. Nada foi gasto: confira o novo valor.`,
+    );
   }
 
   private showStopped(result: SaveResult): void {

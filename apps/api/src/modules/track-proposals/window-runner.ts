@@ -108,7 +108,12 @@ export class WindowRunner {
           ? [{ firstSegment, lastSegment, kind, title }]
           : [],
     );
-    const newest = tracks.at(-1);
+    // The newest track before the window it goes on from: a carried one further on is not it.
+    // When that one was cut (no segments), the resume does not reach back to an earlier one:
+    // the window's first track starts on its own and may cut the end of the cut one again,
+    // which a proposal allows (`replaceCarried`).
+    const fromMs = this.deps.plan.windows[fromWindow]?.[0]?.startMs ?? Infinity;
+    const newest = tracks.filter(({ startMs }) => startMs < fromMs).at(-1);
     // A person's change stays theirs: a new window does not stretch it.
     if (newest && !newest.edited && newest.lastSegment !== null)
       this.last = {
@@ -132,18 +137,21 @@ export class WindowRunner {
       kept: store.keptRanges(plan.mediaId),
       voices: plan.evidence.voices,
     });
-    store.saveWindow({
+    const extended = store.saveWindow({
       runId,
       extendLast: accepted.extendLast,
       tracks: accepted.tracks,
       voices: acceptVoices(reply.vozes, plan.evidence),
       spentUsd: this.spentUsd,
     });
-    this.remember(accepted);
+    this.remember(accepted, extended);
   }
 
-  /** The run's last track and this window's tracks, for the next window. */
-  private remember(accepted: AcceptedTracks): void {
+  /**
+   * The run's last track and this window's tracks, for the next window. A continuation whose
+   * track went meanwhile was not written: there is no last track left to go on from.
+   */
+  private remember(accepted: AcceptedTracks, extended: boolean): void {
     const newest = accepted.tracks.at(-1);
     if (newest)
       this.last = {
@@ -151,6 +159,7 @@ export class WindowRunner {
         startMs: newest.startMs,
         endMs: newest.endMs,
       };
+    else if (!extended) this.last = null;
     else if (accepted.extendLast && this.last)
       this.last = { ...this.last, ...accepted.extendLast };
     this.previous = accepted.tracks.map((track) => ({ ...track }));

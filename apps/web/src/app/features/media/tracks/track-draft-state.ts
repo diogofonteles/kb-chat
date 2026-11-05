@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   apiErrorSchema,
+  estimateRoseDetailsSchema,
   inTimeOrder,
   trackProblemsDetailsSchema,
   type DraftTrack,
@@ -138,6 +139,12 @@ export function conflictOf(err: unknown): ConflictReason {
   return reason === 'proposal-running' || reason === 'preparation'
     ? reason
     : 'approved';
+}
+
+/** The run would cost more than the value confirmed: the value it would cost now. */
+export function roseEstimateOf(err: unknown): number | null {
+  const details = estimateRoseDetailsSchema.safeParse(detailsOf(err));
+  return details.success ? details.data.estimateUsd : null;
 }
 
 /** What keeps a draft read from the server from taking changes now. */

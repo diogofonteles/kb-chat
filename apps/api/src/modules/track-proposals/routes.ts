@@ -82,21 +82,20 @@ export const trackProposalRoutes =
       '/api/v1/media/:id/edit/proposals',
       OPTIONS.propose,
       async (request, reply) => {
-        const actor = proposer(request);
         const { id } = request.params;
-        if (request.body.dryRun) return service.estimate(actor, id);
-        return reply.code(202).send(await service.start(actor, id));
+        const { dryRun, ...terms } = request.body;
+        const actor = proposer(request);
+        if (dryRun) return service.estimate(actor, id);
+        return reply.code(202).send(await service.start(actor, id, terms));
       },
     );
     typed.get(
       '/api/v1/media/:id/edit/proposals/:runId',
       OPTIONS.run,
-      async (request) =>
-        service.getRun(
-          proposer(request),
-          request.params.id,
-          request.params.runId,
-        ),
+      async (request) => {
+        const { id, runId } = request.params;
+        return service.getRun(proposer(request), id, runId);
+      },
     );
     typed.get(
       '/api/v1/media/:id/edit/draft-tracks',

@@ -6,6 +6,7 @@ import type {
   ProposalRun,
   SpendCap,
 } from '@kb-chat/contracts';
+import { estimateRoseDetailsSchema } from '@kb-chat/contracts';
 import { z } from 'zod';
 import { startOfAppMonth } from '../../app-calendar.js';
 import { AppError } from '../../app-error.js';
@@ -83,6 +84,8 @@ interface Prepared {
   readonly resumes: FailedAttempt | null;
   /** What the analysis has spent so far: the cap holds over all its attempts. */
   readonly carriedUsd: number;
+  /** The plan no longer fits a failed run: its finished windows are paid again. */
+  readonly restarts: boolean;
 }
 
 /** Windows of it are done, others are missing and the plan still cuts the same windows. */
@@ -90,6 +93,14 @@ const canResume = (attempt: FailedAttempt, windows: number): boolean =>
   attempt.windowsDone > 0 &&
   attempt.windowsDone < attempt.windowsTotal &&
   attempt.windowsTotal === windows;
+
+/** How a start was agreed: what was on screen when the person pressed. */
+export interface StartTerms {
+  /** The newest run they saw; by default, the newest at the press. */
+  readonly seenRunId?: string | null;
+  /** The value they were told; a run that would cost more does not start (KBC-097). */
+  readonly acceptedUsd?: number | undefined;
+}
 
 const ANALYSIS_TAKEN = 'analysis-taken';
 const takenDetails = z.object({ reason: z.literal(ANALYSIS_TAKEN) });
@@ -104,6 +115,14 @@ export const isAnalysisTaken = (error: unknown): boolean =>
   error instanceof AppError &&
   error.code === 'MEDIA_CONFLICT' &&
   takenDetails.safeParse(error.details).success;
+
+/** What a run would cost now, when that is more than the person agreed to; else null. */
+export function roseEstimateOf(error: unknown): number | null {
+  if (!(error instanceof AppError) || error.code !== 'MEDIA_CONFLICT')
+    return null;
+  const details = estimateRoseDetailsSchema.safeParse(error.details);
+  return details.success ? details.data.estimateUsd : null;
+}
 
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
@@ -131,7 +150,7 @@ export class ProposalService {
     actor: MediaActor,
     mediaId: string,
   ): Promise<ProposalEstimate> {
-    const { plan, carriedUsd } = await this.prepare(actor, mediaId);
+    const { plan, carriedUsd, restarts } = await this.prepare(actor, mediaId);
     const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
     const refusal = this.refusalOf({
       estimateUsd: plan.estimateUsd,
@@ -145,6 +164,7 @@ export class ProposalService {
       model: plan.model,
       allowed: refusal === null,
       refusal,
+      restarts,
       month: actor.isMaster
         ? { spentUsd: used, capUsd: this.deps.caps.monthlyUsd }
         : null,
@@ -199,18 +219,27 @@ export class ProposalService {
    * Reserves the estimate and starts the run; it goes on after the answer (FR-1). Single
    * flight: `seenRunId` is read before anything waits, and nothing waits from the check to
    * the run's row, so of the starts that saw the same run only the first pays. The API is one
-   * process over this database (ADR 0010), so that stretch is atomic.
+   * process over this database (ADR 0010), so that stretch is atomic. What the person agreed
+   * to is checked there too: a save after the estimate can change what a retry costs.
    */
   async start(
     actor: MediaActor,
     mediaId: string,
-    seenRunId: string | null = this.newestRunId(mediaId),
+    terms: StartTerms = {},
   ): Promise<ProposalRun> {
+    const { seenRunId = this.newestRunId(mediaId), acceptedUsd } = terms;
     const prepared = await this.prepare(actor, mediaId);
     this.assertNotTaken(mediaId, seenRunId);
     if (this.deps.store.isApproved(mediaId))
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
+      });
+    if (acceptedUsd !== undefined && prepared.plan.estimateUsd > acceptedUsd)
+      throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
+        details: {
+          reason: 'estimate-rose',
+          estimateUsd: prepared.plan.estimateUsd,
+        },
       });
     const spendId = this.reserve(actor, prepared);
     const run = this.startRun({ actor, prepared, spendId });
@@ -416,15 +445,24 @@ export class ProposalService {
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
     const attempt = this.deps.store.failedAttempt(mediaId, transcript.id);
+    return { llm, ...this.goingOn(plan, attempt) };
+  }
+
+  /** The plan over what a failed run left: from where it stopped, or from the start. */
+  private goingOn(
+    plan: ProposalPlan,
+    attempt: FailedAttempt | null,
+  ): Omit<Prepared, 'llm'> {
     const carriedUsd = attempt?.spentUsd ?? 0;
-    return attempt && canResume(attempt, plan.windows.length)
-      ? {
-          plan: planFrom(plan, attempt.windowsDone),
-          llm,
-          resumes: attempt,
-          carriedUsd,
-        }
-      : { plan, llm, resumes: null, carriedUsd };
+    if (attempt && canResume(attempt, plan.windows.length))
+      return {
+        plan: planFrom(plan, attempt.windowsDone),
+        resumes: attempt,
+        carriedUsd,
+        restarts: false,
+      };
+    const restarts = (attempt?.windowsDone ?? 0) > 0;
+    return { plan, resumes: null, carriedUsd, restarts };
   }
 
   private contextOf(item: MediaItem) {

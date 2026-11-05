@@ -166,6 +166,8 @@ export const preparationStageSchema = z.object({
   spentUsd: z.number().nonnegative().nullable(),
   /** What a retry would cost: the new estimate when it rose. */
   estimateUsd: z.number().nonnegative().nullable(),
+  /** A retry asks, and pays, the finished windows again (KBC-097). */
+  restarts: z.boolean().default(false),
 });
 export type PreparationStage = z.infer<typeof preparationStageSchema>;
 
@@ -263,6 +265,12 @@ export const retryStageSchema = z.enum([
   'tracks',
 ]);
 export type RetryStage = z.infer<typeof retryStageSchema>;
+
+/** POST .../steps/{step}/retry: the value in sight when the paid stage was pressed (KBC-097). */
+export const retryStageRequestSchema = z
+  .strictObject({ acceptedUsd: z.number().nonnegative().optional() })
+  .default({});
+export type RetryStageRequest = z.infer<typeof retryStageRequestSchema>;
 
 /** GET /api/v1/media/preparations: where each open preparation stopped (FR-6). */
 export const openPreparationsSchema = z.object({

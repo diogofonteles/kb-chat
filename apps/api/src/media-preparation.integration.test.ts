@@ -619,6 +619,30 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
     expect(done.tracks[0]?.title).toBe('Depois do clique');
   });
 
+  it('runs nothing for more than the value in sight, and says the new one (KBC-097)', async () => {
+    const { media, token } = await connected();
+    const id = await upToProposal(media, token, {
+      ...AI_PLAN,
+      acceptedUsd: 0.000001,
+    });
+    await settled(media, id);
+    media.started.fake.scripted.push(oneTrack('Não roda'));
+    const pressed = await media.owner(
+      'POST',
+      `${preparation(id)}/steps/tracks/retry`,
+      { acceptedUsd: 0.000001 },
+    );
+    expect(pressed.statusCode).toBe(200);
+    expect(media.started.fake.chatBodies).toHaveLength(0);
+    const after = await read(media, id);
+    expect(stage(after, 'tracks')).toMatchObject({
+      state: 'failed',
+      failure: 'estimate-rose',
+      canRetry: true,
+    });
+    expect(stage(after, 'tracks')?.estimateUsd).toBeGreaterThan(0.000001);
+  });
+
   it('does not repeat a failed run by itself, and keeps the work before it (AC-11)', async () => {
     const { media, token } = await connected();
     media.started.fake.scripted.push({ status: 503 });

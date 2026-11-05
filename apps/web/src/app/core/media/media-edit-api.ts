@@ -84,9 +84,13 @@ export class MediaEditApi {
       .pipe(map((answer) => proposalEstimateSchema.parse(answer)));
   }
 
-  propose(mediaId: string): Observable<ProposalRun> {
+  /** `acceptedUsd`: the value the person confirmed; a dearer run is refused (KBC-097). */
+  propose(mediaId: string, acceptedUsd: number): Observable<ProposalRun> {
     return this.http
-      .post(`${mediaEditUrl(mediaId)}/proposals`, { dryRun: false })
+      .post(`${mediaEditUrl(mediaId)}/proposals`, {
+        dryRun: false,
+        acceptedUsd,
+      })
       .pipe(map((answer) => proposalRunSchema.parse(answer)));
   }
 }

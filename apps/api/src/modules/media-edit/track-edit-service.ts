@@ -127,6 +127,9 @@ export class TrackEditService {
       this.deps.edits.save({
         ...this.writeOf(call),
         tracks: request.tracks,
+        shownIds: this.deps.drafts
+          .draft(call.mediaId)
+          .tracks.map((track) => track.id),
         step: request.step,
         transcriptVersion: this.transcriptVersion(call.mediaId),
       }),

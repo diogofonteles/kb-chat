@@ -283,6 +283,10 @@ export class TrackEditorPage {
       ? $localize`:@@tracks.saveFailed:Não consegui salvar a última mudança. Ela continua aqui; tente de novo.`
       : '';
   });
+  /** Refused for its tracks, with nowhere else to keep them: "Sair" asks to copy them. */
+  protected readonly copyWhileInvalid = computed(
+    () => this.draft.phase().kind === 'invalid' && !this.draft.keptHere(),
+  );
   protected readonly offlineKept = computed(() => {
     const phase = this.draft.phase();
     return phase.kind === 'offline' ? phase.kept : null;
@@ -774,7 +778,8 @@ export class TrackEditorPage {
       });
   }
 
-  protected readonly startProposal = () => this.draft.propose();
+  protected readonly startProposal = (acceptedUsd: number) =>
+    this.draft.propose(acceptedUsd);
 
   protected reloadVoices(): void {
     this.transcript.reload();

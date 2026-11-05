@@ -17,7 +17,10 @@ import {
 } from '../test/track-proposal-fixtures.js';
 import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
 import { TrackEditService } from './modules/media-edit/track-edit-service.js';
-import { ProposalService } from './modules/track-proposals/index.js';
+import {
+  ProposalService,
+  roseEstimateOf,
+} from './modules/track-proposals/index.js';
 import type { MediaActor } from './modules/media/index.js';
 
 const OWNER: MediaActor = {
@@ -774,7 +777,7 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     const seen = ctx.service.newestRunId(ctx.mediaId);
     await runToEnd(ctx);
     await expect(
-      ctx.service.start(OWNER, ctx.mediaId, seen),
+      ctx.service.start(OWNER, ctx.mediaId, { seenRunId: seen }),
     ).rejects.toMatchObject({ code: 'MEDIA_CONFLICT' });
     expect(ctx.llm.calls).toHaveLength(1);
     expect(spendRows(ctx)).toHaveLength(1);
@@ -895,5 +898,645 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     await vi.waitFor(() => expect(ctx.llm.calls).toHaveLength(2));
     await ctx.service.stop();
     expect(titles(ctx)).toEqual(['Janela 1']);
+  });
+});
+
+describe('ProposalService: a retry loses no track (KBC-097)', () => {
+  const THREE_WINDOWS = evenSegments(130);
+  /** A window read fine, whose only track points outside it: nothing to write. */
+  const NOTHING_USABLE: StubReply = () =>
+    JSON.stringify({
+      faixas: [{ primeiro_id: 9_999, ultimo_id: 9_999, tipo: 'exposicao' }],
+    });
+  const titles = (ctx: Ctx) =>
+    ctx.service.draft(OWNER, ctx.mediaId).tracks.map(({ title }) => title);
+  const spendCount = (ctx: Ctx) =>
+    ctx.db.prepare('SELECT count(*) AS n FROM media_spend').get()?.['n'];
+
+  interface Change {
+    readonly index: number;
+    readonly title?: string;
+    readonly endMs?: number;
+    /** The person deletes that track instead. */
+    readonly drop?: boolean;
+  }
+
+  function editing(ctx: Ctx) {
+    const edits = new SqliteMediaEditStore(ctx.db);
+    const service = new TrackEditService({
+      edits,
+      drafts: ctx.store,
+      transcripts: ctx.transcripts,
+      speakers: { list: () => [] },
+      plans: { get: () => null },
+      rootOf: (topic) => topic,
+      findMedia: (_actor, id) => ({ ...itemOf(id, null), durationMs: null }),
+      now: () => NOW,
+    });
+    const call = () => ({
+      actor: OWNER,
+      mediaId: ctx.mediaId,
+      expectedVersion: edits.edit(ctx.mediaId)?.version ?? 0,
+    });
+    /** A save of the visible draft, as the editor sends it, with one track changed. */
+    const save = (change?: Change) =>
+      service.save(call(), {
+        step: 3,
+        tracks: ctx.store
+          .draft(ctx.mediaId)
+          .tracks.filter(
+            (_, index) => !(change?.drop && index === change.index),
+          )
+          .map((track, index) => ({
+            id: track.id,
+            source: track.source,
+            startMs: track.startMs,
+            endMs:
+              index === change?.index
+                ? (change.endMs ?? track.endMs)
+                : track.endMs,
+            kind: track.kind,
+            title:
+              index === change?.index
+                ? (change.title ?? track.title)
+                : track.title,
+            askerVoice: track.askerVoice,
+            answererVoice: track.answererVoice,
+            askerSpeakerId: track.askerSpeakerId,
+            answererSpeakerId: track.answererSpeakerId,
+          })),
+      });
+    const reopen = () => service.reopen(call());
+    return { save, approve: () => service.approve(call()), reopen };
+  }
+
+  /** A finished proposal, then a run that failed after its first window. */
+  async function failedOverAProposal() {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga 1' }),
+        wholeWindow({ title: 'Antiga 2' }),
+        wholeWindow({ title: 'Antiga 3' }),
+        wholeWindow({ title: 'Oculta' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    await runToEnd(ctx);
+    return ctx;
+  }
+
+  /** The plan stops fitting the failed run, as with a transcript cut in other windows. */
+  const unfit = (ctx: Ctx) =>
+    ctx.db
+      .prepare(
+        `UPDATE media_proposal_runs SET windows_total = 99 WHERE status = 'failed'`,
+      )
+      .run();
+
+  it('a save then a retry keeps the paid windows and pays only what is missing (KBC-094 N-1)', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      windows: 2,
+      restarts: false,
+    });
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    expect(ctx.llm.calls).toHaveLength(before + 2);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(tracks.map(({ title }) => title)).toEqual([
+      'Oculta',
+      'Nova 2',
+      'Dela',
+    ]);
+    expect(timingProblems(tracks, null)).toEqual([]);
+  });
+
+  it('a save over all that is on screen keeps the windows a failed run paid for (QA BUG-1)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        NOTHING_USABLE,
+        NOTHING_USABLE,
+        () =>
+          JSON.stringify({
+            faixas: [
+              {
+                primeiro_id: 121,
+                ultimo_id: 130,
+                tipo: 'exposicao',
+                titulo: 'Só',
+              },
+            ],
+          }),
+        wholeWindow({ title: 'Paga 1' }),
+        wholeWindow({ title: 'Paga 2' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Só']);
+    editing(ctx).save({ index: 0, title: 'Editada' });
+    expect((await runToEnd(ctx)).windowsDone).toBe(2);
+    expect(titles(ctx)).toEqual(['Editada']);
+    editing(ctx).save({ index: 0, title: 'Editada de novo' });
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      windows: 1,
+      restarts: false,
+    });
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(wholeWindow({ title: 'Nova' }));
+    await runToEnd(ctx);
+    expect(
+      ctx.llm.calls
+        .slice(before)
+        .map((call) => windowIds(String(call.at(-1)?.content)).first),
+    ).toEqual([121]);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(tracks.map(({ title }) => title)).toEqual([
+      'Paga 1',
+      'Paga 2',
+      'Editada de novo',
+    ]);
+    expect(timingProblems(tracks, null)).toEqual([]);
+  });
+
+  it('a carried track that crosses what the person kept since gives way, keeping its free stretch', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 0, title: 'Curta', endMs: 300_000 });
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(tracks.map(({ title }) => title)).toEqual([
+      'Curta',
+      'Oculta',
+      'Nova 2',
+      'Nova 3',
+    ]);
+    // Cut, it no longer spans the segments it was proposed over.
+    expect(tracks[1]).toMatchObject({
+      startMs: 300_000,
+      endMs: 600_000,
+      firstSegment: null,
+      lastSegment: null,
+      edited: false,
+    });
+    expect(timingProblems(tracks, null)).toEqual([]);
+  });
+
+  it('keeps the paid windows without a save: it pays only what is missing', async () => {
+    const ctx = await failedOverAProposal();
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    expect(ctx.llm.calls).toHaveLength(before + 2);
+    expect(titles(ctx)).toEqual(['Oculta', 'Nova 2', 'Nova 3']);
+  });
+
+  it('a window that wrote no track pays nothing twice and takes nothing away', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga 1' }),
+        wholeWindow({ title: 'Antiga 2' }),
+        wholeWindow({ title: 'Antiga 3' }),
+        NOTHING_USABLE,
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    await runToEnd(ctx);
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      windows: 2,
+      restarts: false,
+    });
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Nova 2', 'Nova 3']);
+  });
+
+  it('a track mostly out of a new one’s reach keeps its stretch, in the seam too', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Longa' }),
+        wholeWindow({ continues: true }),
+        wholeWindow({ title: 'Antiga 3' }),
+        NOTHING_USABLE,
+        () =>
+          JSON.stringify({
+            faixas: [
+              {
+                primeiro_id: 61,
+                ultimo_id: 70,
+                tipo: 'exposicao',
+                titulo: 'Beira',
+              },
+            ],
+          }),
+        NOTHING_USABLE,
+      ],
+    });
+    await runToEnd(ctx);
+    const long = ctx.store.draft(ctx.mediaId).tracks[0];
+    await runToEnd(ctx);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(tracks.map(({ title }) => title)).toEqual([
+      'Longa',
+      'Beira',
+      'Antiga 3',
+    ]);
+    expect(tracks[0]?.startMs).toBe(long?.startMs);
+    expect(tracks[0]?.endMs).toBe(tracks[1]?.startMs);
+    // The segments it was proposed over are no longer its own: a next window is not told so.
+    expect(tracks[0]).toMatchObject({ firstSegment: null, lastSegment: null });
+    expect(timingProblems(tracks, null)).toEqual([]);
+  });
+
+  it('after an approval that dropped a failed run, a retry asks its windows again', async () => {
+    const ctx = await failedOverAProposal();
+    const editor = editing(ctx);
+    editor.approve();
+    await editor.reopen();
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      windows: 3,
+    });
+    ctx.llm.replies.push(wholeWindow(), wholeWindow(), wholeWindow());
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Antiga 3']);
+  });
+
+  it('a person’s deletion of a failed run they saw stands, and pays nothing twice', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow({ title: 'Vista' }), new Error('HTTP 503')],
+    });
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Vista']);
+    editing(ctx).save({ index: 0, drop: true });
+    expect(titles(ctx)).toEqual([]);
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      windows: 2,
+      restarts: false,
+    });
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    expect(
+      ctx.llm.calls
+        .slice(before)
+        .map((call) => windowIds(String(call.at(-1)?.content)).first),
+    ).toEqual([61, 121]);
+    expect(titles(ctx)).toEqual(['Nova 2', 'Nova 3']);
+  });
+
+  it('what a new run does not replace stays: a window with no track, or a run with none', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga 1' }),
+        wholeWindow({ title: 'Antiga 2' }),
+        wholeWindow({ title: 'Antiga 3' }),
+        NOTHING_USABLE,
+        wholeWindow({ title: 'Nova 2' }),
+        NOTHING_USABLE,
+      ],
+    });
+    await runToEnd(ctx);
+    const second = await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Nova 2', 'Antiga 3']);
+    expect(ctx.store.draft(ctx.mediaId).run?.id).toBe(second.id);
+    ctx.llm.replies.push(NOTHING_USABLE, NOTHING_USABLE, NOTHING_USABLE);
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Nova 2', 'Antiga 3']);
+  });
+
+  it('the names of the tracks that stay stay on offer', async () => {
+    const named: StubReply = (user) =>
+      JSON.stringify({
+        ...(JSON.parse(wholeWindow({ title: 'Antiga' })(user)) as object),
+        vozes: [
+          {
+            voz: 'Voz 1',
+            nome: 'Mestre Gabriel',
+            plateia: false,
+            motivo: 'o autor',
+          },
+        ],
+      });
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      voices: THREE_WINDOWS.map(() => 1),
+      replies: [
+        named,
+        named,
+        named,
+        NOTHING_USABLE,
+        NOTHING_USABLE,
+        NOTHING_USABLE,
+      ],
+    });
+    await runToEnd(ctx);
+    await runToEnd(ctx);
+    expect(ctx.store.draft(ctx.mediaId).voices).toHaveLength(1);
+  });
+
+  it('a failed run out of sight never surfaces when a later one ends', async () => {
+    const ctx = await failedOverAProposal();
+    unfit(ctx);
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 1' }),
+      wholeWindow({ title: 'Nova 2' }),
+      NOTHING_USABLE,
+    );
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Nova 1', 'Nova 2', 'Antiga 3']);
+    expect(ctx.store.draft(ctx.mediaId).tracks).toHaveLength(3);
+    expect(
+      ctx.db
+        .prepare(
+          'SELECT count(*) AS n FROM media_draft_tracks WHERE media_id = ?',
+        )
+        .get(ctx.mediaId)?.['n'],
+    ).toBe(3);
+  });
+
+  it('a failed run that takes the screen keeps the tracks before it as proposals a resume may replace (QA R2-1)', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Vista 1' }),
+        wholeWindow({ title: 'Vista 2' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    unfit(ctx);
+    ctx.llm.replies.push(NOTHING_USABLE, new Error('HTTP 503'));
+    await runToEnd(ctx);
+    const proposed = (ctx: Ctx) =>
+      ctx.store
+        .draft(ctx.mediaId)
+        .tracks.map(({ title, edited }) => ({ title, edited }));
+    // Nobody changed them: they stay proposals.
+    expect(proposed(ctx)).toEqual([
+      { title: 'Vista 1', edited: false },
+      { title: 'Vista 2', edited: false },
+    ]);
+    ctx.db.prepare('UPDATE media_proposal_runs SET windows_total = 3').run();
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    // The window paid again writes its track in place of the old proposal.
+    expect(proposed(ctx)).toEqual([
+      { title: 'Vista 1', edited: false },
+      { title: 'Nova 2', edited: false },
+      { title: 'Nova 3', edited: false },
+    ]);
+    expect(timingProblems(ctx.store.draft(ctx.mediaId).tracks, null)).toEqual(
+      [],
+    );
+  });
+
+  /** A reply of one track over segments `first` to `last`. */
+  const span =
+    (first: number, last: number, extra: object = {}) =>
+    () =>
+      JSON.stringify({
+        faixas: [
+          {
+            primeiro_id: first,
+            ultimo_id: last,
+            tipo: 'exposicao',
+            ...extra,
+          },
+        ],
+      });
+
+  /**
+   * Two failed runs over four windows: the newest wrote W1 (window 1) and carries T3
+   * (1 590 000 to 1 800 000 ms, window 3) from the one before; a retry resumes at window 2.
+   */
+  async function carriedAhead() {
+    const ctx = setup({
+      segments: evenSegments(190),
+      replies: [
+        wholeWindow({ title: 'T1' }),
+        NOTHING_USABLE,
+        span(160, 180, { titulo: 'T3' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    unfit(ctx);
+    ctx.llm.replies.push(wholeWindow({ title: 'W1' }), new Error('HTTP 503'));
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['W1', 'T3']);
+    return ctx;
+  }
+
+  const spans = (ctx: Ctx) =>
+    ctx.store
+      .draft(ctx.mediaId)
+      .tracks.map(({ title, startMs, endMs, firstSegment }) => ({
+        title,
+        startMs,
+        endMs,
+        firstSegment,
+      }));
+
+  it('a continuation stretches the track it continues, never a kept one further on (review #1)', async () => {
+    const ctx = await carriedAhead();
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      span(61, 120, { titulo: 'N2' }),
+      span(121, 150, { continua_faixa_anterior: true }),
+      span(181, 190, { titulo: 'N4' }),
+    );
+    const run = await runToEnd(ctx);
+    expect(run.failure).toBeNull();
+    expect(ctx.llm.calls).toHaveLength(before + 3);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(
+      tracks.map(({ title, startMs, endMs }) => ({ title, startMs, endMs })),
+    ).toEqual([
+      { title: 'W1', startMs: 0, endMs: 600_000 },
+      { title: 'N2', startMs: 600_000, endMs: 1_500_000 },
+      { title: 'T3', startMs: 1_590_000, endMs: 1_800_000 },
+      { title: 'N4', startMs: 1_800_000, endMs: 1_900_000 },
+    ]);
+    expect(timingProblems(tracks, null)).toEqual([]);
+  });
+
+  it('a new track that crosses part of a carried proposal leaves it the rest (review round 2)', async () => {
+    const ctx = await carriedAhead();
+    ctx.llm.replies.push(
+      span(61, 120, { titulo: 'N2' }),
+      span(121, 165, { titulo: 'N3' }),
+      span(181, 190, { titulo: 'N4' }),
+    );
+    expect((await runToEnd(ctx)).failure).toBeNull();
+    expect(spans(ctx)).toEqual([
+      { title: 'W1', startMs: 0, endMs: 600_000, firstSegment: 1 },
+      { title: 'N2', startMs: 600_000, endMs: 1_200_000, firstSegment: 61 },
+      { title: 'N3', startMs: 1_200_000, endMs: 1_650_000, firstSegment: 121 },
+      { title: 'T3', startMs: 1_650_000, endMs: 1_800_000, firstSegment: null },
+      { title: 'N4', startMs: 1_800_000, endMs: 1_900_000, firstSegment: 181 },
+    ]);
+    expect(timingProblems(ctx.store.draft(ctx.mediaId).tracks, null)).toEqual(
+      [],
+    );
+  });
+
+  it('a continuation that runs into a carried proposal leaves it the rest (review round 2)', async () => {
+    const ctx = await carriedAhead();
+    ctx.llm.replies.push(
+      span(61, 120, { titulo: 'N2' }),
+      span(121, 162, { continua_faixa_anterior: true }),
+      span(181, 190, { titulo: 'N4' }),
+    );
+    expect((await runToEnd(ctx)).failure).toBeNull();
+    expect(spans(ctx)).toEqual([
+      { title: 'W1', startMs: 0, endMs: 600_000, firstSegment: 1 },
+      { title: 'N2', startMs: 600_000, endMs: 1_620_000, firstSegment: 61 },
+      { title: 'T3', startMs: 1_620_000, endMs: 1_800_000, firstSegment: null },
+      { title: 'N4', startMs: 1_800_000, endMs: 1_900_000, firstSegment: 181 },
+    ]);
+    expect(timingProblems(ctx.store.draft(ctx.mediaId).tracks, null)).toEqual(
+      [],
+    );
+  });
+
+  it('a continuation of a track gone meanwhile is not taken as written (review round 2)', async () => {
+    const ctx = setup({ segments: THREE_WINDOWS });
+    const gone: StubReply = () => {
+      // The track window 1 wrote leaves before window 2 continues it.
+      ctx.db.prepare("DELETE FROM media_draft_tracks WHERE title = 'A'").run();
+      return span(61, 120, { continua_faixa_anterior: true })();
+    };
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'A' }),
+      gone,
+      span(121, 130, { continua_faixa_anterior: true, titulo: 'C' }),
+    );
+    expect((await runToEnd(ctx)).failure).toBeNull();
+    // Window 3 cannot continue what is not there: its track stands on its own.
+    expect(titles(ctx)).toEqual(['C']);
+  });
+
+  it('says it starts over, at the value it says, when the plan no longer fits', async () => {
+    const ctx = await failedOverAProposal();
+    const resume = await ctx.service.estimate(OWNER, ctx.mediaId);
+    unfit(ctx);
+    const restart = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(restart).toMatchObject({ windows: 3, restarts: true });
+    expect(restart.estimateUsd).toBeGreaterThan(resume.estimateUsd);
+  });
+
+  it('refuses a cost above the one agreed, reserving and asking nothing', async () => {
+    const ctx = await failedOverAProposal();
+    const agreed = await ctx.service.estimate(OWNER, ctx.mediaId);
+    unfit(ctx);
+    const calls = ctx.llm.calls.length;
+    const reservations = spendCount(ctx);
+    const refused = await ctx.service
+      .start(OWNER, ctx.mediaId, { acceptedUsd: agreed.estimateUsd })
+      .catch((err: unknown) => err);
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(roseEstimateOf(refused)).toBe(estimateUsd);
+    expect(ctx.llm.calls).toHaveLength(calls);
+    expect(spendCount(ctx)).toBe(reservations);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Antiga 3']);
+  });
+
+  it('runs at the cost agreed', async () => {
+    const ctx = await failedOverAProposal();
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    const run = await ctx.service.start(OWNER, ctx.mediaId, {
+      acceptedUsd: estimateUsd,
+    });
+    await ctx.service.idle();
+    expect(ctx.service.getRun(OWNER, ctx.mediaId, run.id).status).toBe('done');
+  });
+
+  it('a restart past the run cap is refused and leaves everything in place', async () => {
+    const ctx = await failedOverAProposal();
+    unfit(ctx);
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    const capped = new ProposalService({
+      store: ctx.store,
+      ledger: ctx.ledger,
+      transcripts: ctx.transcripts,
+      findMedia: (_actor, id) => itemOf(id, null),
+      contextOf: () => ({ collection: 'Hermetismo', knownNames: [] }),
+      segmentVoices: () => null,
+      llm: () => ctx.llm,
+      caps: { runUsd: estimateUsd / 2, monthlyUsd: 10 },
+      now: () => NOW,
+    });
+    expect(await capped.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      allowed: false,
+      refusal: 'run-cap',
+      restarts: true,
+    });
+    const calls = ctx.llm.calls.length;
+    await expect(capped.start(OWNER, ctx.mediaId)).rejects.toMatchObject({
+      code: 'MEDIA_SPEND_CAP',
+    });
+    expect(ctx.llm.calls).toHaveLength(calls);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Antiga 3']);
+  });
+
+  it('two presses on a retry after a save run once and reserve once', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    const reservations = Number(spendCount(ctx));
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    const presses = await Promise.allSettled([
+      ctx.service.start(OWNER, ctx.mediaId),
+      ctx.service.start(OWNER, ctx.mediaId),
+    ]);
+    await ctx.service.idle();
+    expect(presses.map(({ status }) => status).sort()).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect(ctx.llm.calls).toHaveLength(before + 2);
+    expect(spendCount(ctx)).toBe(reservations + 1);
+    expect(titles(ctx)).toHaveLength(3);
+  });
+
+  it('a reload changes nothing about a retry: the database decides', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    const seen = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(
+      new SqliteMediaEditStore(ctx.db).edit(ctx.mediaId)?.version,
+    ).toBeGreaterThan(0);
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toEqual(seen);
+    expect(ctx.service.draft(OWNER, ctx.mediaId).lastFailure).toBe('provider');
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Dela']);
   });
 });

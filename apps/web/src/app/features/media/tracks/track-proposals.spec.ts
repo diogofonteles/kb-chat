@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -35,6 +35,7 @@ const ESTIMATE: ProposalEstimate = {
   model: 'stub',
   allowed: true,
   refusal: null,
+  restarts: false,
   month: { spentUsd: 1.2, capUsd: 10 },
 };
 
@@ -117,6 +118,136 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
         name: 'Confirmar e propor',
       }).disabled,
     ).toBe(false);
+  });
+
+  it('says a restart pays the finished windows again, before the press (KBC-097)', async () => {
+    const rendered = await setup();
+    (await ask(rendered)).flush({ ...ESTIMATE, restarts: true });
+    await rendered.fixture.whenStable();
+    expect(screen.getByText(/recomeça do início/)).toBeTruthy();
+  });
+
+  it('says nothing of a restart on a plain estimate (KBC-097)', async () => {
+    await estimated({});
+    expect(screen.queryByText(/recomeça do início/)).toBeNull();
+  });
+
+  it('says what a new run may swap, only when there is something to swap (KBC-097)', async () => {
+    await estimated({ replaces: true });
+    expect(screen.getByText(/As que você editou ou criou ficam/)).toBeTruthy();
+  });
+
+  it('confirms the value the person saw (KBC-097)', async () => {
+    const start = vi.fn(() => EMPTY);
+    await estimated({ start });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    expect(start).toHaveBeenCalledWith(ESTIMATE.estimateUsd);
+  });
+
+  it('shows the new value when it rose, and starts nothing until it is confirmed (KBC-097)', async () => {
+    const rose = new HttpErrorResponse({
+      status: 409,
+      error: {
+        error: {
+          code: 'MEDIA_CONFLICT',
+          message: 'The estimate rose',
+          details: { reason: 'estimate-rose', estimateUsd: 0.05 },
+        },
+      },
+    });
+    const start = vi
+      .fn<(usd: number) => Observable<ProposeResult>>()
+      .mockReturnValueOnce(of({ kind: 'refused', error: rose }))
+      .mockReturnValue(of({ kind: 'started' }));
+    const rendered = await estimated({ start });
+    const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    try {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Confirmar e propor' }),
+      );
+      rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.05 });
+      await rendered.fixture.whenStable();
+      // The notice and the actions under it come into view together, clear of the
+      // editor's bottom bar on a phone (QA R2-5): the actions are what is scrolled to.
+      const actions = screen.getByRole('button', {
+        name: 'Confirmar e propor',
+      }).parentElement;
+      expect(scrolled.mock.contexts.at(-1)).toBe(actions);
+    } finally {
+      scrolled.mockRestore();
+    }
+    expect(screen.getByText(/Custa cerca de US\$\s0,05/)).toBeTruthy();
+    // Neutral: a price or a plan may have changed it, not only a save.
+    const notice = screen.getByText(
+      'O valor mudou. Nada foi gasto: confira o novo valor.',
+    );
+    // Read before the actions, so a phone shows it above them, not under its bar.
+    const confirm = screen.getByRole('button', { name: 'Confirmar e propor' });
+    expect(
+      notice.compareDocumentPosition(confirm) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(start).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    expect(start).toHaveBeenLastCalledWith(0.05);
+  });
+
+  it('ignores a late answer to a press the person cancelled (PD-03, KBC-097)', async () => {
+    const answer = new Subject<ProposeResult>();
+    const rendered = await estimated({ start: () => answer });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    answer.next({
+      kind: 'refused',
+      error: new HttpErrorResponse({
+        status: 409,
+        error: {
+          error: {
+            code: 'MEDIA_CONFLICT',
+            message: 'The estimate rose',
+            details: { reason: 'estimate-rose', estimateUsd: 0.05 },
+          },
+        },
+      }),
+    });
+    answer.complete();
+    await rendered.fixture.whenStable();
+    rendered.http.expectNone(URL);
+    expect(screen.queryByText(/O valor mudou/)).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Propor faixas com IA' }),
+    ).toBeTruthy();
+  });
+
+  it('takes each answer for its own press: an older one never stands for a newer (PD-03)', async () => {
+    const first = new Subject<ProposeResult>();
+    const second = new Subject<ProposeResult>();
+    const start = vi
+      .fn<(usd: number) => Observable<ProposeResult>>()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const rendered = await estimated({ start });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    (await ask(rendered)).flush(ESTIMATE);
+    await rendered.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    // The first press answers late: it must not take the place of the second.
+    first.next({ kind: 'refused', error: new Error('late') });
+    first.complete();
+    await rendered.fixture.whenStable();
+    rendered.http.expectNone(URL);
+    expect(
+      screen.getByRole('button', { name: 'Confirmar e propor' }),
+    ).toHaveProperty('disabled', true);
+    // The second press's answer is the one taken.
+    second.next({ kind: 'started' });
+    second.complete();
+    await rendered.fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Propor faixas com IA' }),
+    ).toBeTruthy();
+    expect(start).toHaveBeenCalledTimes(2);
   });
 
   it('says what the server refused', async () => {

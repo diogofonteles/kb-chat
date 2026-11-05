@@ -71,6 +71,7 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
   save(
     write: EditWrite & {
       tracks: readonly EditTrack[];
+      shownIds: readonly string[];
       step: EditStep;
       transcriptVersion: number | null;
     },
@@ -78,7 +79,7 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
     return inTransaction(this.db, () => {
       const current = this.edit(write.mediaId);
       if ((current?.version ?? 0) !== write.expectedVersion) return null;
-      this.replaceDraft(write.mediaId, write.tracks, write.now);
+      this.replaceDraft(write);
       this.writeEdit({ ...write, version: write.expectedVersion + 1 });
       return write.expectedVersion + 1;
     });
@@ -113,16 +114,18 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
   }
 
   /** Only what changed is written: an untouched proposal stays one. */
-  private replaceDraft(
-    mediaId: string,
-    tracks: readonly EditTrack[],
-    now: Date,
-  ): void {
+  private replaceDraft(input: {
+    mediaId: string;
+    tracks: readonly EditTrack[];
+    shownIds: readonly string[];
+    now: Date;
+  }): void {
+    const { mediaId, tracks, shownIds, now } = input;
     const rows = new Map(
       this.draftRows(mediaId).map((row) => [String(row['id']), row]),
     );
     const kept = new Set(tracks.map((track) => track.id));
-    for (const id of rows.keys())
+    for (const id of shownIds)
       if (!kept.has(id))
         this.db
           .prepare(
@@ -200,6 +203,7 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
     return inTransaction(this.db, () => {
       const current = this.edit(write.mediaId);
       if (!current || current.version !== write.expectedVersion) return null;
+      this.forgetDroppedWindows(write.mediaId, write.trackIds);
       this.keepOnly(write.mediaId, write.trackIds);
       this.replaceApproved(write);
       write.alongside?.();
@@ -228,6 +232,21 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
         write.mediaId,
       );
     return next;
+  }
+
+  /** A failed run whose tracks an approval drops has no windows left to go on from. */
+  private forgetDroppedWindows(
+    mediaId: string,
+    trackIds: readonly string[],
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE media_proposal_runs SET windows_done = 0
+         WHERE media_id = ? AND status = 'failed' AND id IN (
+           SELECT run_id FROM media_draft_tracks WHERE media_id = ?
+             AND id NOT IN (SELECT value FROM json_each(?)))`,
+      )
+      .run(mediaId, mediaId, JSON.stringify(trackIds));
   }
 
   private keepOnly(mediaId: string, trackIds: readonly string[]): void {

@@ -177,7 +177,10 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
     const withPaid = (refusal: StageStop | null) =>
       stateOf(
         stagesOf(
-          facts({ ...stopped, paidNow: { estimateUsd: 0.02, refusal } }),
+          facts({
+            ...stopped,
+            paidNow: { estimateUsd: 0.02, refusal, restarts: false },
+          }),
         ),
         'tracks',
       );
@@ -195,7 +198,12 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
           facts({
             claimed: true,
             runFailure: 'invalid-output',
-            attempt: { runId: 'r', windowsDone, windowsTotal: 3, spentUsd },
+            attempt: {
+              runId: 'r',
+              windowsDone,
+              windowsTotal: 3,
+              spentUsd,
+            },
           }),
         ),
         'tracks',
@@ -211,12 +219,34 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
     expect(failed(0, 0)).toMatchObject({ windows: null, spentUsd: null });
   });
 
+  it('says when a click would pay the finished windows again (KBC-097)', () => {
+    const stages = stagesOf(
+      facts({
+        claimed: true,
+        runFailure: 'provider',
+        paidNow: { estimateUsd: 0.03, refusal: null, restarts: true },
+      }),
+    );
+    expect(stateOf(stages, 'tracks')).toMatchObject({
+      canRetry: true,
+      estimateUsd: 0.03,
+      restarts: true,
+    });
+  });
+
+  it('stops the paid stage when the value rose past the one in sight (KBC-097)', () => {
+    const rose = new AppError('MEDIA_CONFLICT', 'The estimate rose', {
+      details: { reason: 'estimate-rose', estimateUsd: 0.03 },
+    });
+    expect(stopOf(rose)).toBe('estimate-rose');
+  });
+
   it('tells what a click would meet now, whatever stopped the run (BUG-9)', () => {
     const stages = stagesOf(
       facts({
         claimed: true,
         runFailure: 'provider',
-        paidNow: { estimateUsd: 0.02, refusal: 'run-cap' },
+        paidNow: { estimateUsd: 0.02, refusal: 'run-cap', restarts: false },
       }),
     );
     expect(stateOf(stages, 'tracks')).toMatchObject({
@@ -243,7 +273,7 @@ describe('stages of a plan (KBC-072 FR-2)', () => {
         claimed: true,
         stop: 'no-permission',
         canPropose: false,
-        paidNow: { estimateUsd: 0.02, refusal: null },
+        paidNow: { estimateUsd: 0.02, refusal: null, restarts: false },
       }),
     );
     expect(stateOf(stages, 'tracks')).toMatchObject({ canRetry: false });
