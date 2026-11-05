@@ -232,7 +232,7 @@ export const mediaPreparationSchema = z.object({
   voices: z.array(preparationVoiceSchema),
   suggestions: z.array(voiceSuggestionSchema),
   /** Voices whose suggested name a person refused: no name is offered again. */
-  refusedVoices: z.array(voiceSchema),
+  refusedVoices: z.array(voiceSchema).default([]),
   tracks: z.array(preparationTrackSchema),
   /** The primary action once nothing is left to process; never taken by itself (FR-5). */
   next: nextActionSchema.nullable(),

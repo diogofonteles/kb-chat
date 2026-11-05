@@ -169,10 +169,15 @@ test('KBC-067 AC-1, AC-2: estimate, windows, read-only, proposals, cost and sugg
       .first()
       .evaluate((block) => getComputedStyle(block).borderStyle),
   ).toBe('dashed');
-  await expect(page.getByText('Mestre Gabriel')).toBeVisible();
+  await expect(page.getByText('Voz 1 parece ser')).toBeVisible();
   await expect(
-    page.getByRole('listitem').filter({ hasText: 'Voz 3:' }),
-  ).toContainText('Voz 3: Pergunta da plateia (pergunta uma vez');
+    page.getByRole('button', { name: 'Aceitar Mestre Gabriel para a Voz 1' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', {
+      name: 'Aceitar Pergunta da plateia para a Voz 3',
+    }),
+  ).toBeVisible();
   await expect(page.getByRole('slider').first()).toBeVisible();
   const { violations } = await new AxeBuilder({ page })
     .include('app-track-editor-page')

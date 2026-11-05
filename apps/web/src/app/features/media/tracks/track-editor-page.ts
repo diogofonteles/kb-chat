@@ -281,9 +281,16 @@ export class TrackEditorPage {
     const preparation = this.preparation.hasValue()
       ? this.preparation.value()
       : null;
-    return preparation?.separation != null && preparation.voices.length > 0
-      ? preparation
-      : null;
+    if (preparation?.separation == null || preparation.voices.length === 0)
+      return null;
+    // A run that ended on this page brought its suggestions with the draft.
+    const unnamed = preparation.voices.filter(({ name }) => name === null);
+    const suggestions = (this.draft.edit()?.voices ?? []).filter(
+      ({ voice }) =>
+        unnamed.some((one) => one.voice === voice) &&
+        !preparation.refusedVoices.includes(voice),
+    );
+    return { ...preparation, suggestions };
   });
   /** What is on screen goes first: a name may change the proposals' titles. */
   protected readonly saveFirst = (): Observable<unknown> => this.draft.flush();

@@ -136,4 +136,20 @@ describe('LibraryControls "Assunto" (KBC-070 FR-4)', () => {
     ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Limpar filtros' })).toBeTruthy();
   });
+
+  it('keeps the collection in force on the list, even with no media (KBC-091)', async () => {
+    await render(LibraryControls, {
+      providers: [provideZonelessChangeDetection()],
+      inputs: {
+        facets: { states: [], authors: [], topics: [], subjects: [] },
+        filters: { ...NONE, topic: 'alquimia' },
+        sort: 'recently-played',
+        view: 'list',
+        topics: [aTopic({ slug: 'alquimia', title: 'Alquimia' })],
+      },
+    });
+    expect(
+      screen.getByRole<HTMLSelectElement>('combobox', { name: /Acervo/ }).value,
+    ).toBe('alquimia');
+  });
 });

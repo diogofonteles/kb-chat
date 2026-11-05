@@ -43,7 +43,7 @@ const SECTIONS: readonly {
 ];
 
 /**
- * "Fila de processamento" (T21, KBC-090): one place for what is at work, what comes next and
+ * "Fila de processamento" (T30, KBC-090): one place for what is at work, what comes next and
  * what waits for a person, for the audios this person may see. The moves answer here; what
  * opens a step goes to its page.
  */
