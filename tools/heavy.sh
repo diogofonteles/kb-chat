@@ -76,11 +76,12 @@ cpus() {
 sweep() {
   local dir pid swept=0
   for dir in "$temp"/*; do
+    case ${dir##*/} in *.*) ;; *) continue ;; esac
     pid=${dir##*/}
     pid=${pid%%.*}
     case $pid in '' | *[!0-9]*) continue ;; esac
     kill -0 "$pid" 2>/dev/null && continue
-    rm -rf "$dir"
+    rm -rf "$dir" 2>/dev/null || continue
     swept=$((swept + 1))
   done
   [ "$swept" -eq 0 ] || echo "heavy: swept the temp of $swept dead runs"
@@ -163,9 +164,9 @@ release() {
 stop() {
   [ -n "$child" ] || exit 143
   local tree
-  tree=$(descendants "$child")
+  tree="$child $(descendants "$child")"
   # INT first: it is the stop Playwright and Nx tear their servers and workers down on.
-  signal_run INT 100 TERM 20
+  signal_run INT 100 TERM 20 KILL 0
   # shellcheck disable=SC2086 # one word per pid
   stop_processes $tree
   wait "$child" 2>/dev/null
@@ -189,7 +190,8 @@ done
 
 sweep
 free=$(free_gb)
-if [ "$free" -lt "$min_free" ]; then
+# Not a number on either side refuses too: an unknown free space is not enough free space.
+if ! [ "$free" -ge "$min_free" ] 2>/dev/null; then
   echo "heavy: refusing to run: $free GB free on the disk of $temp, a heavy run needs $min_free GB." >&2
   echo "heavy: free some space first (KBC_HEAVY_MIN_FREE_GB moves the limit)." >&2
   exit 75
@@ -198,8 +200,10 @@ root=$(mktemp -d "$temp/$$.XXXXXX") || exit 73
 
 [ "${KBC_HEAVY_SKIP:-}" = 1 ] || echo "heavy: waited $(($(date +%s) - started)) s; running: $*"
 # A process group of its own, so that everything the command spawns can be stopped with it.
+# Not under a terminal: a background group is stopped the moment it touches the terminal, as
+# Nx's TUI does, and there the group of this shell already gets the terminal's signals.
 # The daemon would outlive the run in a TMPDIR that is gone; Chrome on macOS ignores TMPDIR.
-set -m
+(: </dev/tty) 2>/dev/null || set -m
 KBC_HEAVY_HELD=1 KBC_TEST_TEMP=$root TMPDIR=$root MAC_CHROMIUM_TMPDIR=$root NX_DAEMON=false \
   "$@" </dev/null &
 child=$!

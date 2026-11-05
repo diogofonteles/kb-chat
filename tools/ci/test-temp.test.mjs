@@ -49,10 +49,11 @@ test('a run that fails removes it too', () => {
   assert.deepEqual(readdirSync(base), []);
 });
 
-test('SIGTERM and SIGHUP remove it and end the process', async () => {
+test('a signal nobody handles removes it and ends the process', async () => {
   for (const [signal, code] of [
     ['SIGTERM', 143],
     ['SIGHUP', 129],
+    ['SIGINT', 130],
   ]) {
     const { base, env } = setup();
     const child = spawn(
@@ -71,6 +72,37 @@ test('SIGTERM and SIGHUP remove it and end the process', async () => {
     assert.equal(exit, code);
     assert.deepEqual(readdirSync(base), []);
   }
+});
+
+test("a signal with a handler stays that handler's, and the root still goes", async () => {
+  const { base, env } = setup();
+  const body = `
+    process.on('SIGTERM', () => setTimeout(() => {
+      console.log('closed down');
+      process.exit(0);
+    }, 50));
+    console.log('up');
+    setInterval(() => {}, 1000);`;
+  const child = spawn(
+    process.execPath,
+    ['--input-type=module', '-e', script(body)],
+    { env, stdio: ['ignore', 'pipe', 'inherit'] },
+  );
+  let output = '';
+  child.stdout.on('data', (data) => (output += data));
+  await new Promise((resolve) => child.stdout.once('data', resolve));
+  child.kill('SIGTERM');
+  const exit = await new Promise((resolve) => child.on('close', resolve));
+  assert.equal(exit, 0);
+  assert.match(output, /closed down/);
+  assert.deepEqual(readdirSync(base), []);
+});
+
+test('an empty KBC_HEAVY_TEMP is the same as none', () => {
+  const { env } = setup();
+  const result = run({ ...env, KBC_HEAVY_TEMP: '' }, WHERE);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /\.cache\/kb-chat\/tmp\//);
 });
 
 test('the root is named after its owner, for the sweep of tools/heavy.sh', () => {

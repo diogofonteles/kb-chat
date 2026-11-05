@@ -51,11 +51,14 @@ const alive = (pid) => {
   }
 };
 
-/** A `df` that reports this many GB free. */
+/** A `df` that reports this many GB free, or fails without one. */
 function fakeDf(gb) {
   const bin = mkdtempSync(join(tmpdir(), 'kbc-heavy-'));
   made.push(bin);
-  const script = `#!/bin/sh\necho header\necho "disk 0 0 ${gb * 1048576} 0% /"\n`;
+  const script =
+    gb === undefined
+      ? '#!/bin/sh\nexit 1\n'
+      : `#!/bin/sh\necho header\necho "disk 0 0 ${gb * 1048576} 0% /"\n`;
   writeFileSync(join(bin, 'df'), script, { mode: 0o755 });
   return bin;
 }
@@ -232,6 +235,18 @@ test('a stopped run also stops what left its process group', async () => {
   assert.deepEqual(roots(temp), []);
 });
 
+test('a command that ignores its signals is killed, not waited for', async () => {
+  const { dir, env, lock, temp } = queue();
+  const ready = join(dir, 'ready');
+  const script = `trap '' INT TERM HUP; touch ${ready}; while :; do sleep 0.1; done`;
+  const running = start(env, 'sh', '-c', script);
+  await until(() => existsSync(ready));
+  running.child.kill('SIGTERM');
+  assert.equal((await running.done).code, 143);
+  assert.deepEqual(roots(temp), []);
+  assert.equal(existsSync(lock), false);
+});
+
 test('what a finished command left running is stopped', async () => {
   const { dir, env, temp } = queue();
   const pidFile = join(dir, 'pid');
@@ -259,12 +274,16 @@ test('the root of a run still alive is left alone, whoever sweeps', async () => 
   const live = join(temp, `${process.pid}.live`);
   const dead = join(temp, `${deadPid()}.dead`);
   const foreign = join(temp, 'not-a-run');
-  [live, dead, foreign].forEach((path) => mkdirSync(path, { recursive: true }));
+  const numbered = deadPid();
+  const number = join(temp, numbered);
+  [live, dead, foreign, number].forEach((path) =>
+    mkdirSync(path, { recursive: true }),
+  );
   const skip = { ...env, KBC_HEAVY_SKIP: '1' };
   assert.match(run(skip, 'true').stdout, /swept the temp of 1 dead runs/);
   assert.deepEqual(
     roots(temp).sort(),
-    [`${process.pid}.live`, 'not-a-run'].sort(),
+    [`${process.pid}.live`, 'not-a-run', numbered].sort(),
   );
 });
 
@@ -279,6 +298,34 @@ test('refuses under the free-space floor, with a clear message and no root', () 
   assert.match(result.stderr, /needs 999999999 GB/);
   assert.equal(existsSync(marker), false);
   assert.equal(existsSync(lock), false);
+  assert.deepEqual(roots(temp), []);
+});
+
+test('an unknown free space or a floor that is no number refuses', () => {
+  const { env } = queue();
+  const broken = { ...env, PATH: `${fakeDf()}:${env.PATH}` };
+  assert.equal(run(broken, 'true').status, 75);
+  assert.equal(
+    run({ ...env, KBC_HEAVY_MIN_FREE_GB: 'abc' }, 'true').status,
+    75,
+  );
+});
+
+test('a command under a terminal can use it, and the terminal stops it', () => {
+  const { env, temp } = queue();
+  const inner = `${HEAVY} sh -c 'stty -echo </dev/tty && echo TERMINAL-OK'`;
+  const pty =
+    process.platform === 'darwin'
+      ? ['-q', '/dev/null', 'sh', '-c', inner]
+      : ['-qec', inner, '/dev/null'];
+  const result = spawnSync('script', pty, {
+    env,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 20_000,
+  });
+  assert.match(result.stdout, /^TERMINAL-OK/m);
+  assert.equal(result.status, 0);
   assert.deepEqual(roots(temp), []);
 });
 
