@@ -63,7 +63,14 @@ test('AC-2: a released handle snaps to the word, and saves', async ({
   const media = await audioWithTracks(owner, [
     { startMs: 18_000, endMs: 30_000, title: 'Faixa' },
   ]);
+  // The words are what it snaps to: released before they arrive, it saves the raw time.
+  const words = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/media/${media.id}/edit/words`) &&
+      response.ok(),
+  );
   await open(page, media.id);
+  await words;
   await page.getByRole('button', { name: 'Afastar' }).click();
   const view = 60_000;
   await dragHandle(page, {
