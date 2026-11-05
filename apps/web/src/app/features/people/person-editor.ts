@@ -8,7 +8,6 @@ import {
   computed,
   inject,
   input,
-  linkedSignal,
   output,
   signal,
   viewChild,
@@ -28,23 +27,13 @@ import {
 import { collectionChoices } from '@core/topics/topic-tree.js';
 import { FEATURE_LABELS } from './feature-labels.js';
 import { NO_LENDING, type Lending } from './lending.js';
+import {
+  NO_PENDING,
+  withPending,
+  type PendingChanges,
+  type Toggle,
+} from './pending-changes.js';
 import { PersonAiEditor } from './person-ai-editor.js';
-
-const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
-  on ? [...new Set([...values, value])] : values.filter((v) => v !== value);
-
-/** Saving keeps what was checked here; at rest, what was saved. */
-interface Saving<T> {
-  readonly saved: readonly T[];
-  readonly busy: boolean;
-}
-
-function whileSaving<T>(
-  source: Saving<T>,
-  previous?: { readonly value: readonly T[] },
-): readonly T[] {
-  return source.busy && previous ? previous.value : source.saved;
-}
 
 const BYTES_PER_GB = 1024 ** 3;
 
@@ -69,7 +58,12 @@ export class PersonEditor {
   private readonly injector = inject(Injector);
   readonly person = input.required<Person>();
   readonly topics = input.required<readonly Topic[]>();
+  /** Any write of the panel is on its way: the actions that are not boxes wait. */
   readonly busy = input(false);
+  /** A write about this person is on its way: their boxes say so (aria-busy, KBC-062). */
+  readonly saving = input(false);
+  /** The boxes changed for this person that the server has not kept yet (KBC-062). */
+  readonly pending = input<PendingChanges>(NO_PENDING);
   /** The house default app AI (KBC-022), named in the person's AI choice. */
   readonly defaultAppAi = input<AppAi | null>(null);
   /** Whether the owner's subscription is offered (KBC-024). */
@@ -81,6 +75,8 @@ export class PersonEditor {
   /** The owner looks: only it grants "Ver como" to a master (BR-1). */
   readonly ownerView = input(false);
   readonly changed = output<PersonUpdate>();
+  /** A box of "Acervos" or "Funcionalidades": the panel builds the change when it goes out. */
+  readonly toggled = output<Toggle>();
   readonly actAs = output();
   readonly revoked = output();
   /** "Aplicar perfil", once confirmed: the profile's id. */
@@ -114,25 +110,13 @@ export class PersonEditor {
     this.applyButton()?.nativeElement.focus();
   });
   protected readonly isMaster = computed(() => this.person().role === 'master');
-  /**
-   * The collections and features as checked here (KBC-062): while changes save, the boxes
-   * stay usable and the next change builds on the last one checked, not on the last one
-   * saved; once nothing is saving they show what the server kept.
-   */
-  private readonly checkedTopics = linkedSignal<
-    Saving<string>,
-    readonly string[]
-  >({
-    source: () => ({ saved: this.person().topics, busy: this.busy() }),
-    computation: whileSaving,
-  });
-  private readonly checkedFeatures = linkedSignal<
-    Saving<Feature>,
-    readonly Feature[]
-  >({
-    source: () => ({ saved: this.person().features, busy: this.busy() }),
-    computation: whileSaving,
-  });
+  /** What is saved with the changes still on their way on top (KBC-062). */
+  private readonly checkedTopics = computed(() =>
+    withPending(this.person().topics, this.pending().topics),
+  );
+  private readonly checkedFeatures = computed(() =>
+    withPending(this.person().features, this.pending().features),
+  );
   /** A master's own features (ADR 0032) are not offered to a member. */
   protected readonly features = computed(() =>
     (this.isMaster() ? MASTER_FEATURES : GRANTABLE_FEATURES).map((id) => ({
@@ -173,15 +157,11 @@ export class PersonEditor {
   }
 
   protected toggleTopic(slug: string, on: boolean): void {
-    const topics = toggled(this.checkedTopics(), slug, on);
-    this.checkedTopics.set(topics);
-    this.changed.emit({ topics });
+    this.toggled.emit({ field: 'topics', value: slug, on });
   }
 
   protected toggleFeature(feature: Feature, on: boolean): void {
-    const features = toggled(this.checkedFeatures(), feature, on);
-    this.checkedFeatures.set(features);
-    this.changed.emit({ features });
+    this.toggled.emit({ field: 'features', value: feature, on });
   }
 
   protected toggleMaster(): void {

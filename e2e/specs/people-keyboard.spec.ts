@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import type { Locator, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect, invite, ownerApi, test, uniqueEmail } from './fixtures.js';
 
 /**
@@ -38,19 +38,31 @@ async function tabTo(page: Page, target: Locator): Promise<void> {
 }
 
 /** Each save takes a moment, as on a slow network: the next change comes before it ends. */
-async function slowSaves(page: Page): Promise<void> {
+async function slowSaves(page: Page, ms = 400): Promise<void> {
   await page.route('**/api/v1/people/*', async (route) => {
     if (route.request().method() === 'PATCH')
-      await new Promise((done) => setTimeout(done, 400));
+      await new Promise((done) => setTimeout(done, ms));
     await route.continue();
   });
+}
+
+/** The person as the server keeps them. */
+async function savedPerson(api: APIRequestContext, id: string) {
+  const people = await api.get('/api/v1/people');
+  return (
+    (await people.json()) as {
+      items: { id: string; topics: string[]; features: string[] }[];
+    }
+  ).items.find((person) => person.id === id);
 }
 
 /** WCAG 2.2 AA in the dialog as it stands: no serious or critical violation. */
 async function expectAccessible(page: Page): Promise<void> {
   const axe = await new AxeBuilder({ page }).include('dialog').analyze();
   expect(
-    axe.violations.filter((v) => ['serious', 'critical'].includes(v.impact!)),
+    axe.violations.filter((v) =>
+      ['serious', 'critical'].includes(v.impact ?? ''),
+    ),
   ).toEqual([]);
 }
 
@@ -88,6 +100,8 @@ test('AC-1, AC-2: checking boxes with the keyboard keeps focus and every change'
   await page.keyboard.press('Space');
   await tabTo(page, research);
   await page.keyboard.press('Space');
+  // The first of the two is still on its way.
+  await expect(collections).toHaveAttribute('aria-busy', 'true');
   await expect(research).toBeFocused();
   await expectAccessible(page);
   await shoot(page, 'person-saving', editor);
@@ -97,16 +111,53 @@ test('AC-1, AC-2: checking boxes with the keyboard keeps focus and every change'
   await expect(research).toBeChecked();
   await shoot(page, 'person-saved', editor);
 
-  const people = await api.get('/api/v1/people');
-  const saved = (
-    (await people.json()) as {
-      items: { id: string; topics: string[]; features: string[] }[];
-    }
-  ).items.find((person) => person.id === id);
+  const saved = await savedPerson(api, id);
   expect(saved?.topics).toEqual(
     expect.arrayContaining(['alquimia', 'hermetismo']),
   );
   expect(saved?.features).toContain('research');
+  await api.dispose();
+});
+
+test('BUG-1: closing and reopening the person while a change saves keeps it', async ({
+  page,
+}) => {
+  const api = await ownerApi();
+  const email = uniqueEmail('reopen');
+  const id = await invite(api, email);
+  await slowSaves(page, 2000);
+
+  const dialog = await openPeople(page);
+  const row = dialog.getByRole('button', { name: new RegExp(email) });
+  await row.focus();
+  await page.keyboard.press('Enter');
+  const editor = dialog.locator(`#person-${id}`);
+  const collections = editor.getByRole('group', { name: 'Acervos' });
+  const alquimia = collections.getByRole('checkbox', { name: 'Alquimia' });
+  const hermetismo = collections.getByRole('checkbox', { name: 'Hermetismo' });
+
+  await tabTo(page, alquimia);
+  await page.keyboard.press('Space');
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(editor).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  // Reopened while it saves: the change on its way shows checked, at once (no retry, so a
+  // box that only catches up when the save lands does not pass).
+  await expect(collections).toHaveAttribute('aria-busy', 'true');
+  expect(await alquimia.isChecked()).toBe(true);
+  await tabTo(page, hermetismo);
+  await page.keyboard.press('Space');
+  expect(await collections.getAttribute('aria-busy')).toBe('true');
+  await expect(collections).toHaveAttribute('aria-busy', 'false', {
+    timeout: 20_000,
+  });
+  await expect(alquimia).toBeChecked();
+  await expect(hermetismo).toBeChecked();
+
+  expect((await savedPerson(api, id))?.topics).toEqual(
+    expect.arrayContaining(['alquimia', 'hermetismo']),
+  );
   await api.dispose();
 });
 

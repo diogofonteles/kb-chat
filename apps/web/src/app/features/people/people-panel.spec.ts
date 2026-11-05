@@ -486,7 +486,7 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
       expect(screen.getByRole('status').textContent).toContain('Salvo.');
     });
 
-    it('a failed change drops the ones queued after it and shows what is saved', async () => {
+    it('a failed change is undone and said; the change queued after it still saves', async () => {
       const { http, fixture } = await openGuest();
 
       fireEvent.click(box('Hermetismo'));
@@ -501,16 +501,145 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
           { status: 500, statusText: 'Server Error' },
         );
       await fixture.whenStable();
+      expect(box('Hermetismo').checked).toBe(false);
+      expect(box('Alquimia').checked).toBe(true);
 
-      http.expectNone(URL);
+      // Built from what the server kept, without the change that failed.
+      const next = http.expectOne(URL);
+      expect(next.request.body).toEqual({ topics: ['alquimia'] });
+      next.flush(aPerson({ topics: ['alquimia'] }));
+      await fixture.whenStable();
+
+      // The failure stays said until nothing else is saving.
       expect(screen.getByRole('status').textContent).toContain('Erro:');
       expect(box('Hermetismo').checked).toBe(false);
-      expect(box('Alquimia').checked).toBe(false);
+      expect(box('Alquimia').checked).toBe(true);
       expect(
         screen
           .getByRole('group', { name: 'Acervos' })
           .getAttribute('aria-busy'),
       ).toBe('false');
+    });
+
+    it('BUG-1: closing and reopening the person while a change saves keeps it', async () => {
+      const { http, fixture } = await openGuest();
+
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      // The change still saving shows checked in the new editor.
+      expect(box('Alquimia').checked).toBe(true);
+      fireEvent.click(box('Hermetismo'));
+      await fixture.whenStable();
+
+      http.expectOne(URL).flush(aPerson({ topics: ['alquimia'] }));
+      await fixture.whenStable();
+      const second = http.expectOne(URL);
+      expect(second.request.body).toEqual({
+        topics: ['alquimia', 'hermetismo'],
+      });
+      second.flush(aPerson({ topics: ['alquimia', 'hermetismo'] }));
+      await fixture.whenStable();
+
+      expect(row(/Guest/).textContent).toContain('Alquimia, Hermetismo');
+    });
+
+    it('a box checked while a profile is applied builds on the profile', async () => {
+      const profile: InviteProfile = {
+        id: '44444444-4444-4444-8444-444444444444',
+        name: 'Aluno',
+        isDefault: false,
+        preset: {
+          role: 'member',
+          topics: ['hermetismo'],
+          features: ['search', 'research'],
+          ai: {
+            appAi: 'house',
+            enforced: false,
+            dailyResearches: 3,
+            paidFallback: { enabled: false, monthlyCapUsd: 1 },
+          },
+          preferences: {},
+        },
+      };
+      const { http, fixture } = await renderPanel(
+        [owner, aPerson()],
+        [profile],
+      );
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil' }));
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+      await fixture.whenStable();
+
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      http
+        .expectOne(`${URL}/profile`)
+        .flush(
+          aPerson({ topics: ['hermetismo'], features: ['search', 'research'] }),
+        );
+      await fixture.whenStable();
+
+      const tick = http.expectOne(URL);
+      expect(tick.request.body).toEqual({
+        topics: ['hermetismo', 'alquimia'],
+      });
+      tick.flush(
+        aPerson({
+          topics: ['hermetismo', 'alquimia'],
+          features: ['search', 'research'],
+        }),
+      );
+      await fixture.whenStable();
+      expect(box('Hermetismo').checked).toBe(true);
+      expect(box('Pesquisa com IA').checked).toBe(true);
+    });
+
+    it('a box checked while the person is revoked sends nothing', async () => {
+      const { http, fixture } = await openGuest();
+      fireEvent.click(screen.getByRole('button', { name: 'Revogar acesso' }));
+      await fixture.whenStable();
+      fireEvent.click(screen.getByRole('button', { name: 'Revogar' }));
+      await fixture.whenStable();
+
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      http.expectOne({ url: URL, method: 'DELETE' }).flush(null, {
+        status: 204,
+        statusText: 'No Content',
+      });
+      await fixture.whenStable();
+
+      http.expectNone(URL);
+      expect(screen.getByRole('status').textContent).toContain('revogado');
+    });
+
+    it('only the person whose change saves is busy', async () => {
+      const other = aPerson({
+        id: '33333333-3333-4333-8333-333333333333',
+        email: 'other@example.com',
+        name: 'Other',
+      });
+      const { http, fixture } = await renderPanel([owner, aPerson(), other]);
+      fireEvent.click(row(/Guest/));
+      await fixture.whenStable();
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      fireEvent.click(row(/Other/));
+      await fixture.whenStable();
+
+      expect(
+        screen
+          .getByRole('group', { name: 'Acervos' })
+          .getAttribute('aria-busy'),
+      ).toBe('false');
+      http.expectOne(URL).flush(aPerson({ topics: ['alquimia'] }));
+      await fixture.whenStable();
     });
   });
 

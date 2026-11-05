@@ -8,7 +8,6 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   ElementRef,
   Injector,
   LOCALE_ID,
@@ -20,7 +19,7 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
-import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
   type InvitationPreset,
@@ -32,17 +31,7 @@ import { topicsUrl } from '@core/api/kb-api.js';
 import { PeopleApi, type InviteSetup } from '@core/auth/auth-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatSpend } from '@core/spend/spend-store.js';
-import {
-  EMPTY,
-  Subject,
-  catchError,
-  concatMap,
-  defer,
-  finalize,
-  ignoreElements,
-  tap,
-  type Observable,
-} from 'rxjs';
+import { finalize, type Observable } from 'rxjs';
 import { AccessRequestsList } from './access-requests-list.js';
 import {
   invitationLimitOf,
@@ -56,7 +45,17 @@ import {
 import { HouseAiApi } from '@core/api/house-ai-api.js';
 import { servingLabel } from '@features/house-ai/app-ai-labels.js';
 import { NO_LENDING, type Lending } from './lending.js';
+import {
+  NO_PENDING,
+  addChange,
+  isEmpty,
+  settle,
+  withPending,
+  type PendingChanges,
+  type Toggle,
+} from './pending-changes.js';
 import { PersonEditor } from './person-editor.js';
+import { WriteQueue } from './write-queue.js';
 import { ActAsDialog } from './act-as-dialog.js';
 import { InvitePresetEditor } from './invite-preset-editor.js';
 import { InviteProfilesPanel } from './invite-profiles-panel.js';
@@ -73,12 +72,6 @@ interface Outcome<T> {
   readonly done: (value: T) => string | NonNullable<Notice>;
   /** Where a failure shows; default: next to the person it was about. */
   readonly failed?: (text: string, err: unknown) => void;
-}
-
-/** A queued change; dropped when a change before it failed in the same round. */
-interface Step {
-  readonly round: number;
-  readonly work: Observable<never>;
 }
 
 /**
@@ -105,7 +98,6 @@ interface Step {
 export class PeoplePanel {
   private readonly api = inject(PeopleApi);
   private readonly houseApi = inject(HouseAiApi);
-  private readonly destroyRef = inject(DestroyRef);
   private readonly session = inject(SessionStore);
   private readonly locale = inject(LOCALE_ID);
   private readonly injector = inject(Injector);
@@ -205,26 +197,17 @@ export class PeoplePanel {
   /** Why the last invite failed, shown under the e-mail field (MA-23). */
   protected readonly inviteError = signal('');
   protected readonly openId = signal<string | null>(null);
-  /** Changes waiting or on their way: one at a time, in the order they were made (KBC-062). */
-  private readonly pending = signal(0);
-  protected readonly busy = computed(() => this.pending() > 0);
-  /** A failure ends the queue's round: what was queued on top of the failed change is dropped. */
-  private round = 0;
-  private readonly queue = new Subject<Step>();
+  /** The panel's writes, one at a time, in the order they were made (KBC-062 FR-1). */
+  protected readonly writes = new WriteQueue();
+  protected readonly busy = this.writes.busy;
+  /** Each person's boxes changed but not yet kept by the server (KBC-062 BR-1). */
+  protected readonly pending = signal<ReadonlyMap<string, PendingChanges>>(
+    new Map(),
+  );
+  protected readonly noPending = NO_PENDING;
+  /** A failure stays said while the writes queued with it go on. */
+  private failedInRun = false;
   protected readonly notice = signal<Notice>(null);
-
-  constructor() {
-    this.queue
-      .pipe(
-        concatMap(({ round, work }) =>
-          defer(() => (round === this.round ? work : EMPTY)).pipe(
-            finalize(() => this.pending.update((count) => count - 1)),
-          ),
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe();
-  }
 
   protected toggle(person: Person): void {
     this.openId.update((id) => (id === person.id ? null : person.id));
@@ -328,12 +311,16 @@ export class PeoplePanel {
   /** "Aplicar perfil" (KBC-028 FR-4): role, collections, features and AI change. */
   protected applyProfile(person: Person, profileId: string): void {
     const name = this.profiles.find(profileId)?.name ?? '';
-    this.run(this.api.applyProfile(person.id, profileId), {
-      done: (updated) => {
-        this.replace(updated);
-        return $localize`:@@people.profileApplied:Perfil "${name}:name:" aplicado a ${updated.email}:email:.`;
+    this.run(
+      this.api.applyProfile(person.id, profileId),
+      {
+        done: (updated) => {
+          this.replace(updated);
+          return $localize`:@@people.profileApplied:Perfil "${name}:name:" aplicado a ${updated.email}:email:.`;
+        },
       },
-    });
+      person.id,
+    );
   }
 
   /** "Reenviar convite" / "Enviar convite" (KBC-026 FR-6); the outcome shows next to the person. */
@@ -424,24 +411,96 @@ export class PeoplePanel {
   }
 
   protected change(person: Person, patch: PersonUpdate): void {
-    this.run(this.api.update(person.id, patch), {
-      done: (updated) => {
-        this.replace(updated);
-        return $localize`:@@people.saved:Salvo.`;
+    this.run(
+      this.api.update(person.id, patch),
+      {
+        done: (updated) => {
+          this.replace(updated);
+          return $localize`:@@people.saved:Salvo.`;
+        },
       },
+      person.id,
+    );
+  }
+
+  /**
+   * A box of "Acervos" or "Funcionalidades" (KBC-062): kept as pending at once, and its write
+   * is built when it leaves the queue, from what the server holds then with every pending box
+   * on top. A person revoked meanwhile gets nothing.
+   */
+  protected toggleBox(person: Person, change: Toggle): void {
+    const { id } = person;
+    this.updatePending(id, (current) => addChange(current, change));
+    this.write(
+      () => this.boxWrite(id, change.field),
+      {
+        done: (updated) => {
+          this.replace(updated);
+          return $localize`:@@people.saved:Salvo.`;
+        },
+      },
+      id,
+    );
+  }
+
+  /** The write of a box as it leaves the queue; null when nothing is left to send. */
+  private boxWrite(
+    id: string,
+    field: Toggle['field'],
+  ): Observable<Person> | null {
+    const latest = this.list().find((one) => one.id === id);
+    if (!latest) {
+      this.updatePending(id, () => NO_PENDING);
+      return null;
+    }
+    const pending = this.pendingOf(id);
+    const sent = new Map<string, boolean>(pending[field]);
+    if (sent.size === 0) return null;
+    const patch: PersonUpdate =
+      field === 'topics'
+        ? { topics: withPending(latest.topics, pending.topics) }
+        : { features: withPending(latest.features, pending.features) };
+    // Kept or failed, what this write took is no longer pending.
+    return this.api
+      .update(id, patch)
+      .pipe(
+        finalize(() =>
+          this.updatePending(id, (current) => settle(current, field, sent)),
+        ),
+      );
+  }
+
+  private pendingOf(id: string): PendingChanges {
+    return this.pending().get(id) ?? NO_PENDING;
+  }
+
+  private updatePending(
+    id: string,
+    change: (current: PendingChanges) => PendingChanges,
+  ): void {
+    this.pending.update((all) => {
+      const next = new Map(all);
+      const changed = change(all.get(id) ?? NO_PENDING);
+      if (isEmpty(changed)) next.delete(id);
+      else next.set(id, changed);
+      return next;
     });
   }
 
   protected revoke(person: Person): void {
-    this.run(this.api.revoke(person.id), {
-      done: () => {
-        this.people.update((all) =>
-          (all ?? []).filter((p) => p.id !== person.id),
-        );
-        this.openId.set(null);
-        return $localize`:@@people.revokedNotice:Acesso de ${person.email}:email: revogado.`;
+    this.run(
+      this.api.revoke(person.id),
+      {
+        done: () => {
+          this.people.update((all) =>
+            (all ?? []).filter((p) => p.id !== person.id),
+          );
+          this.openId.set(null);
+          return $localize`:@@people.revokedNotice:Acesso de ${person.email}:email: revogado.`;
+        },
       },
-    });
+      person.id,
+    );
   }
 
   protected topicNames(person: Person): string {
@@ -475,35 +534,44 @@ export class PeoplePanel {
     );
   }
 
+  /** One change at a time; its outcome is announced next to what it changed. */
+  private run<T>(call: Observable<T>, outcome: Outcome<T>, key?: string): void {
+    this.write(() => call, outcome, key);
+  }
+
   /**
-   * One change at a time; its outcome is announced next to what it changed. A change made
-   * while another saves waits for it (KBC-062 BR-1).
+   * `call` is built when the write leaves the queue (KBC-062): null when nothing is left to
+   * send. A failure stays in the notice until the writes queued with it are over.
    */
-  private run<T>(call: Observable<T>, outcome: Outcome<T>): void {
+  private write<T>(
+    call: () => Observable<T> | null,
+    outcome: Outcome<T>,
+    key?: string,
+  ): void {
+    if (!this.busy()) this.failedInRun = false;
     const failed =
       outcome.failed ??
       ((text: string) => this.notice.set({ kind: 'error', text }));
-    const work = defer(() => {
-      this.notice.set(null);
-      return call;
-    }).pipe(
-      tap({
-        next: (value) => {
-          const done = outcome.done(value);
-          this.notice.set(
-            typeof done === 'string' ? { kind: 'ok', text: done } : done,
-          );
+    this.writes.run(
+      call,
+      {
+        started: () => {
+          if (!this.failedInRun) this.notice.set(null);
         },
-        error: (err: unknown) => {
-          this.round++;
+        done: (value) => {
+          const done = outcome.done(value);
+          const notice: NonNullable<Notice> =
+            typeof done === 'string' ? { kind: 'ok', text: done } : done;
+          if (!this.failedInRun || notice.kind === 'error')
+            this.notice.set(notice);
+        },
+        failed: (err) => {
+          this.failedInRun = true;
           failed(errorMessage(toUiErrorCode(err)), err);
         },
-      }),
-      ignoreElements(),
-      catchError(() => EMPTY),
+      },
+      key,
     );
-    this.pending.update((count) => count + 1);
-    this.queue.next({ round: this.round, work });
   }
 }
 
