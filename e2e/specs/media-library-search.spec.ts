@@ -150,7 +150,7 @@ const answered = (page: Page) =>
     'false',
   );
 const status = (page: Page) =>
-  page.locator('app-library-page').getByRole('status');
+  page.locator('app-library-search-results').getByRole('status');
 
 async function openLibrary(page: Page) {
   await page.goto('/biblioteca');
@@ -217,6 +217,10 @@ test('AC-8: ▶ plays 2 s before the passage, the title opens there, Back keeps 
 
   await row.getByRole('link', { name: 'O encontro' }).click();
   await expect(page).toHaveURL(/\/midia\/[^?]+\?t=3$/);
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThanOrEqual(3);
+  expect((await audioState(page)).paused).toBe(true);
   await page.goBack();
   await expect(box(page)).toHaveValue(word);
   await expect(results(page)).toHaveCount(2);
@@ -359,16 +363,27 @@ test('AC-12: a slow answer to older words never replaces the new one', async ({
 }) => {
   const page = await listener(browser);
   await openLibrary(page);
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  const dropped = page
+    .waitForEvent('requestfailed', (request) =>
+      request.url().includes('q=interior'),
+    )
+    .then(() => true);
   await page.route('**/api/v1/media/library/search?*', async (route) => {
     const q = new URL(route.request().url()).searchParams.get('q');
-    if (q === 'interior') await new Promise((done) => setTimeout(done, 1_500));
+    if (q === 'interior') await held;
     await route.continue().catch(() => undefined);
   });
   await box(page).fill('interior');
   await page.waitForRequest((request) => request.url().includes('q=interior'));
   await box(page).fill(word);
   await expect(results(page)).toHaveCount(2);
-  await page.waitForTimeout(1_800);
+  expect(await dropped).toBe(true);
+  release();
+  await answered(page);
   await expect(results(page)).toHaveCount(2);
   await expect(results(page).first()).toContainText(word);
   await page.context().close();
