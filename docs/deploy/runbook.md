@@ -276,6 +276,35 @@ Tudo pela interface (ADR 0016, KBC-022); nada no `.env`.
 4. "Para quem": o padrão "Plano da casa" atende quem não tem IA própria, com 5 pesquisas por dia. Em **Pessoas e permissões**, ajuste por pessoa (IA, "Usar sempre", pesquisas por dia, reserva paga com teto mensal) ou em lote ("Aplicar às selecionadas" / "Aplicar a todos os usuários").
 5. Para você: ⚙ → IA → escolha "Assinatura do Claude" (passo 9) ou outra IA sua.
 
+## 9e. 👤 DONO — quadro dos projetos (hub do devflow)
+
+O quadro é uma pilha separada do kb-chat, que só compartilha o Caddy. Se ele cair, o produto continua. Os dados e o `hub.env` ficam em `/srv/kb-chat/board`, no backup cifrado. Um deploy do kb-chat precisa ter rodado antes, porque é ele que cria a rede `kb-chat-board-edge`.
+
+1. **DNS:** crie um host novo para o quadro (ex.: `quadro.<seu-domínio>`, ou outro subdomínio do DuckDNS) apontando para o IP reservado. Coloque esse host em `KB_CHAT_BOARD_DOMAIN` no `/srv/kb-chat/deploy/.env` e reinicie o Caddy:
+
+   ```bash
+   cd /srv/kb-chat/deploy && sudo docker compose --env-file .env --env-file release.env up -d web
+   ```
+
+2. **Google:** no [Console de credenciais](https://console.cloud.google.com/apis/credentials), crie um cliente OAuth do tipo *Web application*, com o URI de redirecionamento `https://<host do quadro>/auth/callback`.
+3. **Instalar** (no Mac, na cópia do `devflow-harness`):
+
+   ```bash
+   deploy/hub/install.sh ubuntu@<IP> https://<host do quadro> <e-mail do dono>
+   ```
+
+   A primeira execução cria o `hub.env` com segredos novos e para. Preencha `BOARD_HUB_GOOGLE_CLIENT_ID` e `BOARD_HUB_GOOGLE_CLIENT_SECRET` com `sudo nano /srv/kb-chat/board/hub.env` e rode o comando de novo.
+4. **Conferir:** `curl -sS https://<host do quadro>/health` responde `{"ok":true}`. Para provar a atualização ao vivo pelo Caddy, abra o quadro e, com o mesmo projeto, rode `devflow-board log <ID> "teste"`: o passo aparece na tela sem recarregar.
+5. **Ligar um projeto:** ponha `"board": { "url": "https://<host do quadro>" }` no `.claude/harness.json`, copie `DEVFLOW_BOARD_ADMIN_TOKEN` do `hub.env` para o ambiente do Mac (sem colar em comando versionado) e rode:
+
+   ```bash
+   devflow-board hub-project
+   devflow-board import work/board-export
+   devflow-board invite pessoa@gmail.com            # --role view para só leitura
+   ```
+
+Atualizar o hub é repetir o passo 3: as páginas abertas pegam a versão nova sozinhas. O `/srv/kb-chat/board/data` pertence ao uid 10003.
+
 ## 10. Rotina
 
 | O quê | Como |
