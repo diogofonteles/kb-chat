@@ -123,7 +123,17 @@ describe('media contracts', () => {
       parent: null,
       archived: false,
     };
-    expect(mediaItemSchema.parse(item)).toEqual(item);
+    // An API older than KBC-037 sends no Groq fields: the defaults fill them in.
+    expect(mediaItemSchema.parse(item)).toEqual({
+      ...item,
+      canUseGroq: false,
+      transcription: {
+        ...item.transcription,
+        provider: null,
+        route: 'transcriber',
+        hold: null,
+      },
+    });
     expect(mediaItemSchema.safeParse({ ...item, positionMs: -1 }).success).toBe(
       false,
     );

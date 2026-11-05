@@ -28,10 +28,11 @@ beforeEach(() => {
 afterEach(() => (clock = T0));
 
 describe('TranscriberService (KBC-036)', () => {
-  it('names the VM worker by its token, for conversions, measures and cuts only', () => {
+  it('names the VM worker by its token, for conversions, measures, cuts and Groq transcriptions', () => {
+    // KBC-037: `transcribe` too, but the lease gives the VM only the jobs routed to Groq.
     expect(service.identify(VM_TOKEN)).toEqual({
       leaseName: null,
-      kinds: ['transcode', 'silences', 'waveform', 'cut'],
+      kinds: ['transcode', 'silences', 'waveform', 'cut', 'transcribe'],
     });
     expect(service.identify('')).toBeNull();
     expect(service.identify('not-a-paired-token')).toBeNull();
