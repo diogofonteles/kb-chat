@@ -97,7 +97,7 @@ const dayOf = (date: Date): string => date.toISOString().slice(0, 10);
 /**
  * Voice profiles for people (KBC-071, ADR 0032): a profile exists only with a consent
  * recorded first (BR-1), and revoking deletes its print before anything else (BR-2). Who may
- * do this is in the routes: the master role and a grant by name.
+ * do this is in the routes: the master role.
  */
 export class VoiceProfileService {
   private readonly now: () => Date;
