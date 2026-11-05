@@ -403,7 +403,8 @@ export class MediaPlayerPage {
     this.followPlayback();
     this.destroyRef.onDestroy(() => {
       // Playing, it goes on in the mini-player; paused, leaving closes it (FR-8).
-      if (!this.engine.playing() && !this.engine.busy()) this.engine.unload();
+      if (!this.engine.playingOrAsked() && !this.engine.busy())
+        this.engine.unload();
     });
   }
 
