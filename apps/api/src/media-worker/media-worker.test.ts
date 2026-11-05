@@ -1,9 +1,19 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { WaveformJob, WorkerJob } from '@kb-chat/contracts';
+import {
+  SILENCE_DETECTOR,
+  type SilencesJob,
+  type WaveformJob,
+  type WorkerJob,
+} from '@kb-chat/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ffmpegBins, makeLongWav, makeTone } from '../../test/media-tools.js';
+import {
+  ffmpegBins,
+  makeLongWav,
+  makeTone,
+  makeToneWithPauses,
+} from '../../test/media-tools.js';
 import { createLogger } from '../logger.js';
 import type { MediaJobsApi } from './api-client.js';
 import { MediaWorker } from './media-worker.js';
@@ -124,6 +134,25 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     await workerWith(api).process(aWaveformJob(), new AbortController().signal);
     expect(told).toHaveLength(1);
     expect(told[0]).toMatch(/^waveform:\d+$/);
+  });
+
+  // Covered on purpose: the worker loop's integration test reaches a silences job only when
+  // the queue hands one over before its shutdown, which made the coverage floor flaky.
+  it('measures the pauses of a silences job (KBC-044)', async () => {
+    const pauses = makeToneWithPauses(bins, join(dir, 'pauses.mp3'), [2]);
+    const job: SilencesJob = {
+      id: 'job-s',
+      leaseId: 'lease-s',
+      kind: 'silences',
+      mediaId: 'media-1',
+      attempt: 1,
+      sourcePath: 'pauses.mp3',
+      leaseMs: 60_000,
+      detector: SILENCE_DETECTOR,
+    };
+    const { api, told } = fakeApi();
+    await workerWith(api).process(job, new AbortController().signal);
+    expect(told).toEqual([`silences:${pauses.length}`]);
   });
 
   it('reports a waveform it could not measure, so the queue tries again', async () => {
