@@ -211,12 +211,24 @@ jobs:
       - name: Prove the sandbox
         run: deploy/scripts/codex-sandbox-proof.sh proof docker.io/library
 
+  # Open boards update without a refresh only if the edge passes live events on at once.
+  board-edge:
+    name: Board edge
+    needs: changes
+    if: needs.changes.outputs.codex == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove the live events cross the real Caddyfile
+        run: deploy/scripts/board-edge-proof.sh
+
   # The one check that always reports: selected jobs may be skipped, but the selection itself
   # must have worked and nothing that ran may have failed.
   verdict:
     name: CI verdict
     if: always()
-    needs: [changes, checks, test, transcriber, e2e, codex-sandbox]
+    needs: [changes, checks, test, transcriber, e2e, codex-sandbox, board-edge]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
