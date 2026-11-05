@@ -63,7 +63,7 @@ snapshot_media
 
 # Paths relative to ROOT, so a restore lands in the same place; missing ones are skipped.
 paths=()
-for path in state claude codex media/backup/media.db deploy/.env deploy/release.env deploy/releases.log; do
+for path in state claude codex media/backup/media.db deploy/.env deploy/release.env deploy/releases.log board/data board/hub.env; do
   if [ -e "$ROOT/$path" ]; then paths+=("$path"); fi
 done
 [ "${#paths[@]}" -gt 0 ] || die "nothing to back up under $ROOT"

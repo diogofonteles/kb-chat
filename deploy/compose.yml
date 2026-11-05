@@ -190,6 +190,7 @@ services:
     restart: unless-stopped
     environment:
       KB_CHAT_DOMAIN: ${KB_CHAT_DOMAIN:?set KB_CHAT_DOMAIN (.env)}
+      KB_CHAT_BOARD_DOMAIN: ${KB_CHAT_BOARD_DOMAIN:-board.localhost}
     ports:
       - ${HTTP_PORT:-80}:80
       - ${HTTPS_PORT:-443}:443
@@ -201,7 +202,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    networks: [internal]
+    networks: [internal, board-edge]
     mem_limit: 512m
     logging: *logging
     security_opt:
@@ -211,6 +212,9 @@ services:
 
 networks:
   internal: {}
+  # Caddy reaches the project board hub (its own stack, runbook) only through this one.
+  board-edge:
+    name: kb-chat-board-edge
   # Only the API and the Codex sandbox (ADR 0020); Codex reaches the internet through it.
   codex:
     ipam:
