@@ -1166,7 +1166,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         screen.getByRole('heading', { name: 'Mais de 200 resultados' }),
       ).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
-      await library.settle();
+      await library.tick();
       library.http
         .expectOne((request) => request.url.includes('cursor=50'))
         .flush(anAnswer([aHit(2)]));
@@ -1253,7 +1253,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
         screen.getByRole('button', { name: /^Ouvir o trecho de Faixa 1/ }),
       );
       await library.settle();
-      library.media.emit('play');
+      library.media.setDuration(900);
+      library.media.emit('loadedmetadata');
+      library.media.emit('playing');
       await library.settle();
       expect(track).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByRole('button', { name: 'Pausar Faixa 1' }));
