@@ -1154,6 +1154,60 @@ describe('LibraryPage (T16, KBC-051)', () => {
       ).toBeGreaterThan(0);
     });
 
+    it('KBC-091 QA I-10: nothing found in one collection offers every collection, and the focus follows', async () => {
+      const library = await renderLibrary({ features: SPEAKER });
+      await library.open(aPage([anItem(1)]), aHome(), {
+        ...PREFERENCES,
+        libraryFilters: {
+          states: [],
+          authors: [],
+          topic: 'hermetismo',
+          allTopics: false,
+          subject: null,
+        },
+      });
+      const inOne = await ask(library, 'orlando');
+      expect(inOne.request.url).toContain('topic=hermetismo');
+      inOne.flush(anAnswer([]));
+      await library.settle();
+      expect(
+        screen.queryByRole('button', { name: 'Limpar filtros' }),
+      ).toBeNull();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Buscar em todos os acervos' }),
+      );
+      await library.tick();
+
+      const save = library.http.expectOne({ method: 'PUT', url: PREFS });
+      expect(save.request.body).toEqual({
+        libraryFilters: { ...NO_LIBRARY_FILTERS, allTopics: true },
+      });
+      save.flush(PREFERENCES);
+      await library.tick();
+      library.http.expectOne(HOME).flush(aHome());
+      library.http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      const everywhere = library.http.expectOne(
+        (request) =>
+          request.url.startsWith(`${SEARCH}?`) &&
+          request.url.includes('q=orlando'),
+      );
+      expect(everywhere.request.url).not.toContain('topic=');
+      everywhere.flush(anAnswer([aHit(2)]));
+      await library.settle();
+      expect(screen.getByRole('link', { name: 'Faixa 2' })).toBeTruthy();
+      expect(document.activeElement).toBe(
+        screen.getByRole('heading', { name: /resultado/, level: 3 }),
+      );
+    });
+
+    it('KBC-091 QA I-10: across every collection, nothing found has no such way out', async () => {
+      await found({ features: SPEAKER }, anAnswer([]), 'conselheira');
+      expect(
+        screen.queryByRole('button', { name: 'Buscar em todos os acervos' }),
+      ).toBeNull();
+    });
+
     it('AC-11: the count reaches the status region', async () => {
       await found({ features: SPEAKER }, anAnswer([aHit(1), aHit(2)]));
       expect(

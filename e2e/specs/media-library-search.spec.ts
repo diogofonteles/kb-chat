@@ -312,6 +312,51 @@ test('AC-6: a recording found by title is one row, and the Acervo stays in reach
   await page.context().close();
 });
 
+test('KBC-091 QA I-10: nothing found in one collection, "Buscar em todos os acervos" finds it in another', async ({
+  browser,
+}) => {
+  const owner = await ownerApi();
+  const other = await aCollection(owner);
+  const email = uniqueEmail('noutro');
+  await invite(owner, email, {
+    topics: [collection, other],
+    features: LISTENER,
+  });
+  const elsewhere = `Noutro ${uniqueTag()}`;
+  await uploadReady(owner, { title: elsewhere, seconds: 2, topic: other });
+  await owner.dispose();
+  const page = await pageAs(browser, email, viewportOf());
+  await openLibrary(page);
+  const acervo = page
+    .locator('app-library-controls')
+    .getByRole('combobox', { name: 'Acervo' });
+  await acervo.selectOption(collection);
+  await box(page).fill(elsewhere);
+  await expect(page.getByText(/^Nada encontrado para/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Limpar filtros' }),
+  ).toHaveCount(0);
+
+  await page
+    .getByRole('button', { name: 'Buscar em todos os acervos' })
+    .click();
+
+  await expect(results(page)).toHaveCount(1);
+  await expect(results(page).first()).toContainText(elsewhere);
+  await expect(acervo).toHaveValue('');
+  await expect(
+    page.locator('app-library-search-results').getByRole('heading', {
+      level: 3,
+    }),
+  ).toBeFocused();
+  const width = await page.evaluate(() => [
+    document.documentElement.scrollWidth,
+    window.innerWidth,
+  ]);
+  expect(width[0]).toBeLessThanOrEqual(width[1] ?? 0);
+  await page.context().close();
+});
+
 test('AC-9: nothing found says where it looked, and "Limpar busca" returns to the box', async ({
   browser,
 }) => {
