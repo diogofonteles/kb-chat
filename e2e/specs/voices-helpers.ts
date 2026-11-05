@@ -71,10 +71,14 @@ export async function seedTranscript(
 }
 
 /** A ready audio of a minute with its transcript: what "Separar vozes" works on. */
-export async function transcribedAudio(owner: APIRequestContext) {
+export async function transcribedAudio(
+  owner: APIRequestContext,
+  topic?: string,
+) {
   const media = await uploadReady(owner, {
     title: `Entrevista ${uniqueTag()}`,
     seconds: 60,
+    ...(topic ? { topic } : {}),
   });
   await seedTranscript(owner, media.id);
   return media;

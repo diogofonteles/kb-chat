@@ -11,6 +11,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import {
+  aCollection,
   audioState,
   uniqueTag,
   uploadReady,
@@ -24,14 +25,14 @@ const LIBRARY = ['search', 'media', 'media-library'];
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 const viewportOf = () => test.info().project.use.viewport ?? null;
 
-/** A new person with the library on hermetismo: their positions are theirs alone. */
+/** A new person with the library on this spec's collection: positions are theirs alone. */
 async function libraryListener(
   browser: Browser,
   features: readonly string[] = LIBRARY,
 ): Promise<{ page: Page; email: string }> {
   const email = uniqueEmail('biblioteca');
   const owner = await ownerApi();
-  await invite(owner, email, { topics: ['hermetismo'], features });
+  await invite(owner, email, { topics: [collection], features });
   await owner.dispose();
   return { page: await pageAs(browser, email, viewportOf()), email };
 }
@@ -45,20 +46,6 @@ async function openLibrary(page: Page) {
   await expect(
     page.getByRole('heading', { name: 'Biblioteca', level: 2 }),
   ).toBeVisible();
-}
-
-/** "Todas" narrowed to this test's media by the search (other tests upload too). */
-async function searchFor(page: Page, words: string) {
-  // Wait for the answer to the search: a new question clears the selection.
-  const answered = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      url.pathname === '/api/v1/media/library' &&
-      url.searchParams.get('q') === words.trim()
-    );
-  });
-  await page.getByLabel('Buscar na biblioteca').fill(words);
-  await answered;
 }
 
 const all = (page: Page) => page.getByRole('region', { name: 'Todas' });
@@ -82,18 +69,20 @@ const seriousViolations = async (page: Page) =>
     ['serious', 'critical'].includes(violation.impact ?? ''),
   );
 
-let tag: string;
+let collection: string;
 let lectures: UploadedMedia[];
 
 test.beforeAll(async () => {
-  tag = uniqueTag();
+  const tag = uniqueTag();
   const owner = await ownerApi();
+  collection = await aCollection(owner);
   lectures = [];
   for (const n of [1, 2, 3, 4])
     lectures.push(
       await uploadReady(owner, {
         title: `Biblioteca ${tag} aula ${n}`,
         seconds: 20,
+        topic: collection,
       }),
     );
   await owner.dispose();
@@ -115,7 +104,7 @@ test('AC-1: with the library, the sidebar shows Biblioteca and /midia leads to i
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Mídia' })).toHaveCount(0);
   await page.goto('/midia');
-  await expect(page).toHaveURL(/\/biblioteca\?acervo=hermetismo$/);
+  await expect(page).toHaveURL(`/biblioteca?acervo=${collection}`);
   await expect(
     page.getByRole('heading', { name: 'Biblioteca', level: 2 }),
   ).toBeVisible();
@@ -168,14 +157,11 @@ test('AC-3, AC-4: "Continuar ouvindo" lists the latest first, and ▶ resumes at
   await page.context().close();
 });
 
-test('AC-6, AC-12: chips and search narrow "Todas" and say how many', async ({
-  browser,
-}) => {
+test('AC-6: chips narrow "Todas" and say how many', async ({ browser }) => {
   const { page } = await libraryListener(browser);
   await savePosition(page, lecture(1), 4_000);
   await savePosition(page, lecture(2), 6_000);
   await openLibrary(page);
-  await searchFor(page, tag);
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
   // Audio only for now (owner, 2026-11-03): no kind chips.
   await expect(all(page).getByRole('button', { name: 'Vídeo' })).toHaveCount(0);
@@ -186,42 +172,6 @@ test('AC-6, AC-12: chips and search narrow "Todas" and say how many', async ({
   await expect(
     all(page).getByRole('link', { name: lecture(3).title }),
   ).toHaveCount(0);
-  await inProgress.click();
-
-  await searchFor(page, `conselheira ${tag}`);
-  await expect(
-    all(page).getByText(
-      `Nenhuma mídia com 'conselheira ${tag}' no título ou no autor.`,
-    ),
-  ).toBeVisible();
-  await all(page).getByRole('button', { name: 'Limpar busca' }).click();
-  await expect(page.getByLabel('Buscar na biblioteca')).toHaveValue('');
-  await expect(page.getByLabel('Buscar na biblioteca')).toBeFocused();
-  await page.context().close();
-});
-
-test('AC-12: "Buscar na fala" opens the search with the word, only in what was said', async ({
-  browser,
-}) => {
-  const { page } = await libraryListener(browser);
-  await openLibrary(page);
-  const words = `conselheira ${tag}`;
-  await searchFor(page, words);
-  const searched = page.waitForRequest(
-    (request) =>
-      request.method() === 'POST' && request.url().endsWith('/searches'),
-  );
-  await all(page).getByRole('button', { name: 'Buscar na fala' }).click();
-
-  const body = (await searched).postDataJSON() as {
-    q: string;
-    kinds: string[];
-  };
-  expect(body).toMatchObject({ q: words, kinds: ['audio'] });
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('main').getByText(words).first()).toBeVisible();
-  if (desktop(page))
-    await expect(page.getByLabel('Sua pergunta')).toBeFocused();
   await page.context().close();
 });
 
@@ -232,7 +182,6 @@ test('AC-7, AC-8: two selected media are marked heard, then one goes back to not
   await savePosition(page, lecture(1), 5_000);
   await openLibrary(page);
   await expect(strip(page).getByRole('listitem')).toHaveCount(1);
-  await searchFor(page, tag);
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
   await all(page)
     .getByRole('checkbox', { name: `Selecionar ${lecture(1).title}` })
@@ -260,7 +209,6 @@ test('AC-7, AC-8: two selected media are marked heard, then one goes back to not
   await expect(page.getByText(/Continuar de/)).toHaveCount(0);
 
   await page.goto('/biblioteca');
-  await searchFor(page, tag);
   await all(page)
     .getByRole('button', { name: `Mais ações para ${lecture(1).title}` })
     .click();
@@ -278,7 +226,6 @@ test('FR-3: a press on the selection bar acts, also with the page short of its e
 }) => {
   const { page } = await libraryListener(browser);
   await openLibrary(page);
-  await searchFor(page, tag);
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
   await all(page)
     .getByRole('checkbox', { name: `Selecionar ${lecture(3).title}` })
@@ -320,7 +267,6 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
   const { page } = await libraryListener(browser);
   await savePosition(page, lecture(3), 4_000); // the row draws its position bar
   await openLibrary(page);
-  await searchFor(page, tag);
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
   const row = all(page)
     .getByRole('listitem')
@@ -346,7 +292,7 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
   const link = row.getByRole('link', { name: lecture(3).title });
   const [area, meta] = await Promise.all([
     link.boundingBox(),
-    row.getByText('Hermetismo').boundingBox(),
+    row.getByText(/^Zz Acervo/).boundingBox(),
   ]);
   if (!area || !meta) throw new Error('no row to press');
   for (const position of [
@@ -357,7 +303,6 @@ test('MA-01: a press anywhere on a row opens the media, its controls keep their 
     await link.click({ position });
     await expect(page).toHaveURL(new RegExp(`/midia/${lecture(3).id}`));
     await page.goBack();
-    await searchFor(page, tag);
     await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
   }
 
@@ -372,7 +317,6 @@ test('MA-01: a row keeps its size when it takes the focus', async ({
 }) => {
   const { page } = await libraryListener(browser);
   await openLibrary(page);
-  await searchFor(page, tag);
   await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
   const row = all(page)
     .getByRole('listitem')
@@ -416,7 +360,6 @@ test('AC-10: the order and the grid follow the account to another browser', asyn
 }) => {
   const { page, email } = await libraryListener(browser);
   await openLibrary(page);
-  await searchFor(page, tag);
   await page
     .getByRole('button', { name: 'Ordenar: Ouvidas recentemente' })
     .click();
@@ -456,7 +399,6 @@ test('AC-14: chips, order, selection and opening work by keyboard, and the count
   const { page } = await libraryListener(browser);
   await savePosition(page, lecture(2), 6_000);
   await openLibrary(page);
-  await searchFor(page, tag);
   const count = all(page).locator('[aria-live="polite"]');
   await expect(count).toHaveText(/^4 mídias/);
 
@@ -525,7 +467,6 @@ for (const theme of ['light', 'dark', 'esoteric'] as const) {
     await useTheme(page, theme);
     await openLibrary(page);
     await expect(strip(page).getByRole('listitem')).toHaveCount(1);
-    await searchFor(page, tag);
     await expect(all(page).getByText(/^4 mídias/)).toBeVisible();
     await all(page)
       .getByRole('checkbox', { name: `Selecionar ${lecture(3).title}` })

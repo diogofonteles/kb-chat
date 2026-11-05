@@ -9,7 +9,13 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { makeMp3, uniqueTag, uploadReady, useTheme } from './media-helpers.js';
+import {
+  aCollection,
+  makeMp3,
+  uniqueTag,
+  uploadReady,
+  useTheme,
+} from './media-helpers.js';
 
 const desktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024;
 
@@ -146,13 +152,14 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
   page,
 }) => {
   const owner = await ownerApi();
+  const topic = await aCollection(owner);
   const media = await uploadReady(owner, {
     title: `Remover ${uniqueTag()}`,
     seconds: 2,
+    topic,
   });
   // Masters have every feature: they manage the media from the library (KBC-051).
-  await page.goto('/biblioteca');
-  await page.getByLabel('Buscar na biblioteca').fill(media.title);
+  await page.goto(`/biblioteca?acervo=${encodeURIComponent(topic)}`);
   const row = page.getByRole('listitem').filter({ hasText: media.title });
   await expect(row).toBeVisible();
   await page

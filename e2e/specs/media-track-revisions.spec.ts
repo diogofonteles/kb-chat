@@ -9,8 +9,8 @@ import {
   test,
   uniqueEmail,
 } from './fixtures.js';
-import { audioState, useTheme } from './media-helpers.js';
-import { approve, audioWithTracks } from './tracks-helpers.js';
+import { aCollection, audioState, useTheme } from './media-helpers.js';
+import { approve, audioWithTracks, openCollection } from './tracks-helpers.js';
 
 // KBC-073: a track changes after its approval, cut for real by the E2E's media worker.
 
@@ -40,11 +40,12 @@ interface LibraryRow {
 }
 
 async function approvedTracks(owner: APIRequestContext) {
-  const media = await audioWithTracks(owner);
+  const topic = await aCollection(owner);
+  const media = await audioWithTracks(owner, undefined, topic);
   await approve(owner, media.id);
   await publishedIn(owner, media.id);
   const library = await owner.get(
-    `/api/v1/media/library?q=${encodeURIComponent(media.title)}`,
+    `/api/v1/media/library?topic=${encodeURIComponent(topic)}`,
   );
   const { items } = (await library.json()) as {
     readonly items: readonly LibraryRow[];
@@ -52,7 +53,7 @@ async function approvedTracks(owner: APIRequestContext) {
   const row = items.find((one) => one.id === media.id);
   const [first, second] = row?.tracks ?? [];
   if (!first || !second) throw new Error('no tracks');
-  return { media, first, second };
+  return { media, first, second, topic };
 }
 
 const trackPage = (id: string) => `/midia/${id}`;
@@ -488,10 +489,9 @@ test("the library's ⋯ opens the page on the action chosen", async ({
   page,
 }) => {
   const owner = await ownerApi();
-  const { media, first } = await approvedTracks(owner);
-  await page.goto('/biblioteca');
-  await page.getByRole('searchbox').fill(media.title);
-  await expect(page.getByText(/^1 mídia/)).toBeVisible();
+  const { first, topic } = await approvedTracks(owner);
+  await openCollection(page, topic);
+  await page.getByRole('button', { name: '3 faixas' }).click();
 
   await page.getByRole('button', { name: `Ações de ${first.title}` }).click();
   await expectInsideTheScreen(page);
@@ -507,21 +507,20 @@ test("the ⋯ of a track in the library's grid stays on its card", async ({
   viewport,
 }) => {
   const owner = await ownerApi();
-  const { media, first } = await approvedTracks(owner);
+  const { first, topic } = await approvedTracks(owner);
   // The view is remembered per person: the owner's list stays as the other tests need it.
   const email = uniqueEmail('grade-editor');
   await invite(owner, email, {
-    topics: ['hermetismo'],
+    topics: [topic],
     features: ['media', 'media-library', 'media-tracks', 'media-edit'],
   });
   await owner.dispose();
   const page = await pageAs(browser, email, viewport);
-  await page.goto('/biblioteca');
-  await page.getByRole('searchbox').fill(media.title);
-  await expect(page.getByText(/^1 mídia/)).toBeVisible();
+  await openCollection(page, topic);
   const grid = page.getByRole('button', { name: 'Ver em grade' });
   await grid.click();
   await expect(grid).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '3 faixas' }).click();
 
   // On the title's line: below it there is a blank line, beside the time it covers the time.
   const actions = page.getByRole('button', { name: `Ações de ${first.title}` });
@@ -555,27 +554,26 @@ test('the ⋯ of a track stays on screen with a wide font, in the grid and the l
   viewport,
 }) => {
   const owner = await ownerApi();
-  const { media, first } = await approvedTracks(owner);
+  const { first, topic } = await approvedTracks(owner);
   const email = uniqueEmail('menu-editor');
   await invite(owner, email, {
-    topics: ['hermetismo'],
+    topics: [topic],
     features: ['media', 'media-library', 'media-tracks', 'media-edit'],
   });
   await owner.dispose();
   const page = await pageAs(browser, email, viewport);
-  await page.goto('/biblioteca');
+  await openCollection(page, topic);
   // Linux's DejaVu Sans, which the CI has, is as wide as Verdana: a menu's width is its text's.
   await page.addStyleTag({
     content: `* { font-family: 'DejaVu Sans', Verdana, sans-serif !important; }`,
   });
-  await page.getByRole('searchbox').fill(media.title);
-  await expect(page.getByText(/^1 mídia/)).toBeVisible();
   const actions = page.getByRole('button', { name: `Ações de ${first.title}` });
 
   for (const width of [viewport?.width ?? 390, 320]) {
     await page.setViewportSize({ width, height: 800 });
     for (const view of ['Ver em grade', 'Ver em lista']) {
       await page.getByRole('button', { name: view }).click();
+      await page.getByRole('button', { name: '3 faixas' }).click();
       await actions.click();
       await expectInsideTheScreen(page);
       await page.keyboard.press('Escape');
@@ -586,10 +584,10 @@ test('the ⋯ of a track stays on screen with a wide font, in the grid and the l
 
 test('AC-14: a listener sees none of it', async ({ browser, viewport }) => {
   const owner = await ownerApi();
-  const { first } = await approvedTracks(owner);
+  const { first, topic } = await approvedTracks(owner);
   const email = uniqueEmail('ouvinte');
   await invite(owner, email, {
-    topics: ['hermetismo'],
+    topics: [topic],
     features: ['media', 'media-tracks'],
   });
   await owner.dispose();

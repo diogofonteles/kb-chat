@@ -42,10 +42,17 @@ export async function audioWithTracks(
     { startMs: 15_000, endMs: 40_000, title: 'Segunda pergunta' },
     { startMs: 40_000, endMs: 59_000, title: 'Terceira pergunta' },
   ],
+  topic?: string,
 ) {
-  const media = await transcribedAudio(owner);
+  const media = await transcribedAudio(owner, topic);
   await seedDraft(owner, media.id, tracks);
   return media;
+}
+
+/** The library showing only this collection, so its one recording is the list. */
+export async function openCollection(page: Page, topic: string) {
+  await page.goto(`/biblioteca?acervo=${encodeURIComponent(topic)}`);
+  await expect(page.getByText(/^1 mídia/)).toBeVisible();
 }
 
 export async function approve(
