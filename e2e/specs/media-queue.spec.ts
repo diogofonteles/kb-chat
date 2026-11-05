@@ -240,11 +240,16 @@ test('KBC-090: the button that plays offers to stop, with nothing moving around 
   const listen = page.getByRole('button', { name: '▶ Ouvir' });
   const end = page.getByRole('button', { name: 'Ouvir o fim' });
   await expect(listen).toBeVisible();
-  const before = [await listen.boundingBox(), await end.boundingBox()];
+  // Across, not down: the press may scroll the page, which moves nothing on the row.
+  const place = async (one: Locator) => {
+    const box = await one.boundingBox();
+    return { x: box?.x, width: box?.width, height: box?.height };
+  };
+  const before = [await place(listen), await place(end)];
   await listen.click();
   const stop = page.getByRole('button', { name: '■ Parar' });
   await expect(stop).toBeVisible();
-  expect([await stop.boundingBox(), await end.boundingBox()]).toEqual(before);
+  expect([await place(stop), await place(end)]).toEqual(before);
   await stop.click();
   await expect(listen).toBeVisible();
   await owner.dispose();
