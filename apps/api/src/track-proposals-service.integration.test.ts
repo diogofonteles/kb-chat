@@ -15,6 +15,8 @@ import {
   type SegmentSpec,
   type StubReply,
 } from '../test/track-proposal-fixtures.js';
+import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
+import { TrackEditService } from './modules/media-edit/track-edit-service.js';
 import { ProposalService } from './modules/track-proposals/index.js';
 import type { MediaActor } from './modules/media/index.js';
 
@@ -812,36 +814,47 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     expect(ctx.llm.calls).toHaveLength(7);
   });
 
-  it('a track a person kept wins over what a failed run carries (KBC-094)', async () => {
+  it('approves what the person sees: a failed run out of sight goes (KBC-094)', async () => {
     const ctx = setup({
       segments: THREE_WINDOWS,
       replies: [
         wholeWindow({ title: 'Antiga' }),
         wholeWindow({ title: 'Antiga' }),
         wholeWindow({ title: 'Antiga' }),
-        wholeWindow({ title: 'Nova' }),
+        wholeWindow({ title: 'Oculta' }),
         new Error('HTTP 503'),
       ],
     });
     await runToEnd(ctx);
     await runToEnd(ctx);
-    // The failed run's tracks are out of sight, under this one the person now renames.
-    ctx.db
-      .prepare(
-        `UPDATE media_draft_tracks SET edited = 1, title = 'Da pessoa'
-         WHERE title = 'Antiga' AND start_ms = 0`,
-      )
-      .run();
-    ctx.llm.replies.push(wholeWindow({ title: 'Nova' }));
-    ctx.llm.replies.push(wholeWindow({ title: 'Nova' }));
-    await runToEnd(ctx);
-    const { tracks } = ctx.service.draft(OWNER, ctx.mediaId);
-    expect(timingProblems(tracks, null)).toEqual([]);
-    expect(tracks.map((track) => track.title)).toEqual([
-      'Da pessoa',
-      'Nova',
-      'Nova',
+    const edits = new SqliteMediaEditStore(ctx.db);
+    const service = new TrackEditService({
+      edits,
+      drafts: ctx.store,
+      transcripts: ctx.transcripts,
+      speakers: { list: () => [] },
+      plans: { get: () => null },
+      rootOf: (topic) => topic,
+      findMedia: (_actor, id) => ({ ...itemOf(id, null), durationMs: null }),
+      now: () => NOW,
+    });
+    service.approve({
+      actor: OWNER,
+      mediaId: ctx.mediaId,
+      expectedVersion: edits.edit(ctx.mediaId)?.version ?? 0,
+    });
+    expect(edits.approved(ctx.mediaId).map(({ title }) => title)).toEqual([
+      'Antiga',
+      'Antiga',
+      'Antiga',
     ]);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(tracks.map(({ title }) => title)).toEqual([
+      'Antiga',
+      'Antiga',
+      'Antiga',
+    ]);
+    expect(timingProblems(tracks, null)).toEqual([]);
   });
 
   it('a restart keeps the windows done and runs nothing until someone asks', async () => {

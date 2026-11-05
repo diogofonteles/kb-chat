@@ -307,6 +307,28 @@ describe('TrackDraft (KBC-066)', () => {
       },
     );
 
+    it('a press keeps its lock through a refusal that sends the fix (KBC-094)', () => {
+      change([{ ...one, startMs: 1 }]);
+      const flying = saves();
+      draft.apply([one, two]);
+      const said = heard(draft.approve());
+      flying.flush(
+        {
+          error: {
+            code: 'INTERNAL',
+            message: 'no',
+            details: { problems: [OVERLAP] },
+          },
+        },
+        { status: 422, statusText: 'No' },
+      );
+      expect(draft.canEdit()).toBe(false);
+      saves().flush({ version: 5 });
+      http.expectOne(APPROVE).flush({ version: 6, tracks: 2 });
+      expect(said).toEqual([{ kind: 'approved' }]);
+      reads().flush(edit([one, two], 6, { status: 'approved', step: 4 }));
+    });
+
     it('stops on a save refused for a track, naming it (KBC-094)', () => {
       draft.apply([one]);
       const said = heard(draft.approve());

@@ -86,12 +86,13 @@ function startLimits(
   track: TrackSpan,
   previous: { track: TrackSpan | undefined; ordinal: number },
 ): HandleLimits {
+  const freeMs = previous.track?.endMs ?? 0;
+  const latestMs = track.endMs - MIN_TRACK_LENGTH_MS;
+  // An older draft's overlap may leave no room: the handle stays, the neighbour must give way.
+  const room = freeMs <= latestMs;
   return {
-    minMs: previous.track?.endMs ?? 0,
-    maxMs: Math.max(
-      track.endMs - MIN_TRACK_LENGTH_MS,
-      previous.track?.endMs ?? 0,
-    ),
+    minMs: room ? freeMs : track.startMs,
+    maxMs: room ? latestMs : track.startMs,
     below: previous.track
       ? { kind: 'neighbour', ordinal: previous.ordinal }
       : RECORDING_ENDS,
@@ -104,10 +105,12 @@ function endLimits(
   track: TrackSpan,
   next: { track: TrackSpan | undefined; ordinal: number; durationMs: number },
 ): HandleLimits {
-  const shortest = track.startMs + MIN_TRACK_LENGTH_MS;
+  const earliestMs = track.startMs + MIN_TRACK_LENGTH_MS;
+  const nextMs = next.track?.startMs ?? next.durationMs;
+  const stuck = next.track !== undefined && nextMs < earliestMs;
   return {
-    minMs: next.track ? Math.min(shortest, next.track.startMs) : shortest,
-    maxMs: next.track?.startMs ?? next.durationMs,
+    minMs: stuck ? track.endMs : earliestMs,
+    maxMs: stuck ? track.endMs : nextMs,
     below: { kind: 'minimum' },
     above: next.track
       ? { kind: 'neighbour', ordinal: next.ordinal }

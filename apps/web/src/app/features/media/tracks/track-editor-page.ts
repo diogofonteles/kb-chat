@@ -371,9 +371,18 @@ export class TrackEditorPage {
     const phase = this.draft.phase();
     return phase.kind === 'invalid' ? phase.problems : [];
   });
-  protected readonly shownProblems = computed(() =>
-    this.showProblems() ? this.problems() : this.refusedProblems(),
-  );
+  /** A press adds what the rules here find to what the server refused, losing neither. */
+  protected readonly shownProblems = computed(() => {
+    const refused = this.refusedProblems();
+    if (!this.showProblems()) return refused;
+    const found = this.problems();
+    const same = (a: TrackProblem, b: TrackProblem) =>
+      a.trackId === b.trackId && a.problem === b.problem;
+    return [
+      ...found,
+      ...refused.filter((one) => !found.some((other) => same(one, other))),
+    ];
+  });
   protected readonly unsavedTrack = computed(
     () => this.refusedProblems()[0]?.ordinal ?? null,
   );

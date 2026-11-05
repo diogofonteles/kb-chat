@@ -143,6 +143,7 @@ test('KBC-095: step 4 says preparation is finished and offers no pending action'
     page.getByText('Preparação concluída: você não precisa fazer mais nada.'),
   ).toBeVisible();
   await expect(page.getByText('salvos sozinhos')).toBeVisible();
+  await expect(page.getByText('Cada escolha já fica salva.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Ver no player' })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Reabrir edição' }),

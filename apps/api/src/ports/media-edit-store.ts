@@ -37,9 +37,14 @@ export interface MediaEditStorePort {
       readonly transcriptVersion: number | null;
     },
   ): number | null;
-  /** The draft becomes the approved tracks, replacing the previous approval (BR-9). */
+  /**
+   * The draft becomes the approved tracks, replacing the previous approval (BR-9). Only
+   * `trackIds`, what the person saw and the rules checked: a failed run's rows out of sight
+   * go, or they would reach listeners over the tracks in view (KBC-094).
+   */
   approve(
     write: EditWrite & {
+      readonly trackIds: readonly string[];
       readonly transcriptVersion: number | null;
       /** Runs in the same transaction, on the new approved tracks (KBC-068 FR-1). */
       readonly alongside?: () => void;

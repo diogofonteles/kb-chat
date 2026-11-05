@@ -312,6 +312,36 @@ describe('TrackEditorPage (T20, KBC-066)', () => {
     });
   });
 
+  it('keeps a problem only the server knows when "Aprovar faixas" is pressed (KBC-094)', async () => {
+    const { harness, http } = await openPage();
+    await renameSelected(harness);
+    await saveDelay();
+    http.expectOne({ method: 'PUT', url: `${BASE}/edit` }).flush(
+      {
+        error: {
+          code: 'TRACKS_INVALID',
+          message: 'no',
+          details: {
+            problems: [
+              { trackId: aTrack(2, 0, 0).id, ordinal: 2, problem: 'range' },
+            ],
+          },
+        },
+      },
+      { status: 422, statusText: 'Unprocessable' },
+    );
+    await harness.fixture.whenStable();
+    fireEvent.click(button('Aprovar faixas'));
+    await harness.fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Faixa 2: Passa do fim da gravação',
+    );
+    expect(
+      screen.getByText(/Passa do fim da gravação/, { selector: '.warning' }),
+    ).toBeTruthy();
+    http.expectNone(`${BASE}/edit/approve`);
+  });
+
   it('says on step 4 that nothing else is needed (KBC-095)', async () => {
     await openPage(anEdit({ status: 'approved', step: 4, approvedTracks: 2 }), [
       'media',

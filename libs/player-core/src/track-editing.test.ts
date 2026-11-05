@@ -258,14 +258,25 @@ describe('a draft that already holds an overlap (KBC-094)', () => {
     ).toBeNull();
   });
 
-  it('a handle never deepens it, even when the room is gone', () => {
+  it('a handle with no room stays where it is, inside the track', () => {
     const tight = [span('a', 0, 10_000), span('b', 9_990, 14_000)];
-    const limits = limitsOf(tight, {
-      trackId: 'b',
-      edge: 'start',
-      durationMs: DURATION,
-    });
-    expect(clampHandle(12_000, limits).ms).toBeGreaterThanOrEqual(10_000);
+    const held = limits(tight, 'b', 'start');
+    expect(clampHandle(12_000, held).ms).toBe(9_990);
+    expect(clampHandle(1_000, held).ms).toBe(9_990);
+  });
+
+  it('a start never passes the end of a track held inside another', () => {
+    const inside = [span('a', 0, 30_000), span('b', 8_000, 20_000)];
+    const landed = landHandle(
+      { toMs: 9_000, edge: 'start' },
+      { limits: limits(inside, 'b', 'start'), snap: NO_SNAP },
+    );
+    expect(landed.ms).toBe(8_000);
+  });
+
+  it('an end with no room stays where it is too', () => {
+    const tight = [span('a', 0, 7_000), span('b', 3_000, 20_000)];
+    expect(clampHandle(1_000, limits(tight, 'a', 'end')).ms).toBe(7_000);
   });
 });
 
