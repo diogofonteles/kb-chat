@@ -3,6 +3,7 @@
 #
 # Environment (deploy/.env, passed by compose):
 #   KB_CHAT_DOMAIN  public host name, e.g. kb.example.com ("localhost" = Caddy's local CA)
+#   KB_CHAT_BOARD_DOMAIN  host of the project board hub; unset, it stays on a local name
 {
 	# No admin endpoint: configuration only changes by deploying a new image.
 	admin off
@@ -61,6 +62,30 @@
 		header @html Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# The project board hub (devflow harness, deploy/hub there): a separate stack that shares only this
+# edge, so it does not take the product down with it. Not compressed: `encode` would hold back the
+# live events that keep open pages current without a refresh.
+{$KB_CHAT_BOARD_DOMAIN:board.localhost} {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	request_body {
+		max_size 20MB
+	}
+	reverse_proxy board:4600 {
+		flush_interval -1
 	}
 
 	log {
