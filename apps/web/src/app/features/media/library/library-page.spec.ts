@@ -24,6 +24,7 @@ import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
 } from '@core/media/media-engine.js';
+import { UsageLog } from '@core/usage/usage-log.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import {
   fakeMediaElement,
@@ -1116,9 +1117,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
 
     it('AC-11: the count reaches the status region', async () => {
       await found({ features: SPEAKER }, anAnswer([aHit(1), aHit(2)]));
-      expect(screen.getByRole('status').textContent).toBe(
-        '2 resultados: padre orlando',
-      );
+      expect(
+        screen
+          .getAllByRole('status')
+          .some(
+            (region) => region.textContent === '2 resultados: padre orlando',
+          ),
+      ).toBe(true);
     });
 
     it('AC-12: a late answer of older words never lands', async () => {
@@ -1143,7 +1148,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(screen.getByRole('link', { name: 'Faixa 1' })).toBeTruthy();
       expect(
         screen
-          .getByRole('region', { name: '1 resultado' })
+          .getByRole('region', { name: /1 resultado/ })
           .getAttribute('aria-busy'),
       ).toBe('true');
       newer.flush(anAnswer([]));
@@ -1194,6 +1199,65 @@ describe('LibraryPage (T16, KBC-051)', () => {
       const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
       await library.settle();
       expect(TestBed.inject(Router).url).toBe('/?busca=padre%20orlando');
+    });
+
+    it('follows the address: "Biblioteca" in the sidebar leaves the search', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      await TestBed.inject(Router).navigateByUrl('/');
+      await library.settle();
+      expect((box() as HTMLInputElement).value).toBe('');
+      expect(screen.getByRole('heading', { name: 'Todas' })).toBeTruthy();
+    });
+
+    it('never asks more than a search takes from the address', async () => {
+      const library = await renderLibrary({
+        features: SPEAKER,
+        busca: 'a'.repeat(300),
+      });
+      await library.start();
+      const asked = library.http.expectOne((request) =>
+        request.url.startsWith(SEARCH),
+      );
+      expect(asked.request.url).toContain(`q=${'a'.repeat(200)}&`.slice(0, -1));
+      expect(asked.request.url).not.toContain('a'.repeat(201));
+      asked.flush(anAnswer([]));
+      library.http
+        .expectOne((request) =>
+          request.url.startsWith('/api/v1/media/library?'),
+        )
+        .flush(aPage([anItem(1)]));
+      await library.settle();
+    });
+
+    it('drops a next page on its way when the words change, and shows no stale error', async () => {
+      const library = await found(
+        { features: SPEAKER },
+        anAnswer([aHit(1)], { nextCursor: '50', total: 60 }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+      await library.tick();
+      const page = library.http.expectOne((request) =>
+        request.url.includes('cursor=50'),
+      );
+      (await ask(library, 'orlando')).flush(anAnswer([aHit(2)]));
+      await library.settle();
+      expect(page.cancelled).toBe(true);
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
+    });
+
+    it('a pause on the result it plays counts no new opening', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const track = vi.spyOn(TestBed.inject(UsageLog), 'track');
+      fireEvent.click(
+        screen.getByRole('button', { name: /^Ouvir o trecho de Faixa 1/ }),
+      );
+      await library.settle();
+      library.media.emit('play');
+      await library.settle();
+      expect(track).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Pausar Faixa 1' }));
+      expect(track).toHaveBeenCalledTimes(1);
     });
 
     it('opens with the words of the address', async () => {

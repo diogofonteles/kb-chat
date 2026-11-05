@@ -1,13 +1,11 @@
-@if (ready()) {
-  <button
-    type="button"
-    class="play"
-    [attr.aria-label]="playLabel()"
-    (click)="played.emit()"
-  >
-    <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>
-  </button>
-}
+<button
+  type="button"
+  class="play"
+  [attr.aria-label]="playLabel()"
+  (click)="played.emit()"
+>
+  <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>
+</button>
 <div class="body">
   <a
     class="title"

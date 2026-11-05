@@ -20,9 +20,15 @@ import {
   toObservable,
   toSignal,
 } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import {
+  ActivatedRoute,
+  NavigationEnd,
+  Router,
+  RouterLink,
+} from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
+  LIBRARY_QUERY_MAX,
   libraryHomeSchema,
   libraryPageSchema,
   listeningPreferencesSchema,
@@ -58,6 +64,7 @@ import {
   concatMap,
   debounceTime,
   filter,
+  map,
   of,
 } from 'rxjs';
 import { keepFocusedInView } from '../keep-in-view.js';
@@ -83,6 +90,10 @@ import { PlayNow } from './play-now.js';
 
 /** "Buscar na biblioteca" waits this long after the last key (T16). */
 export const SEARCH_DEBOUNCE_MS = 200;
+
+/** The address is typed by anyone: never more than a search takes. */
+const wordsOf = (param: string | null | undefined): string =>
+  (param ?? '').slice(0, LIBRARY_QUERY_MAX);
 
 /** The words in the address: back from a result, the search is still there (KBC-096). */
 const SEARCH_PARAM = 'busca';
@@ -219,13 +230,15 @@ export class LibraryPage {
 
   /** What is typed in "Buscar na biblioteca", and what is asked after the pause. */
   protected readonly query = signal(
-    this.route.snapshot.queryParamMap.get(SEARCH_PARAM) ?? '',
+    wordsOf(this.route.snapshot.queryParamMap.get(SEARCH_PARAM)),
   );
   protected readonly trimmedQuery = computed(() => this.query().trim());
   protected readonly askedQuery = toSignal(
     toObservable(this.query).pipe(debounceTime(SEARCH_DEBOUNCE_MS)),
     { initialValue: this.query() },
   );
+  /** The address as this page left it, to tell a navigation from its own writes. */
+  private lastWordsInAddress = this.query().trim();
   /** Any text in the box: the page is its results from the first key (KBC-096). */
   protected readonly searching = computed(() => this.trimmedQuery() !== '');
   /** What is asked; the view (list or grid) is not, so switching it asks nothing. */
@@ -462,21 +475,39 @@ export class LibraryPage {
         takeUntilDestroyed(),
       )
       .subscribe();
+    this.followAddress();
+  }
+
+  /** The words and the address, each following the other (KBC-096). */
+  private followAddress(): void {
     toObservable(this.askedQuery)
       .pipe(
         filter((words) => words.trim() !== this.wordsInAddress()),
-        takeUntilDestroyed(),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((words) => this.keepWordsInAddress(words.trim()));
+    // "Biblioteca" in the sidebar, or Back: the address says what is on screen.
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        map(() => this.wordsInAddress()),
+        filter((words) => words !== this.lastWordsInAddress),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((words) => {
+        this.lastWordsInAddress = words;
+        this.query.set(words);
+      });
   }
 
   private wordsInAddress(): string {
     const { queryParams } = this.router.parseUrl(this.router.url);
-    return queryParams[SEARCH_PARAM] ?? '';
+    return wordsOf(queryParams[SEARCH_PARAM]);
   }
 
   /** Replaces the entry: Back leaves the library, not one word at a time. */
   private keepWordsInAddress(words: string): void {
+    this.lastWordsInAddress = words;
     const address = this.router.parseUrl(this.router.url);
     const others = Object.entries(address.queryParams).filter(
       ([name]) => name !== SEARCH_PARAM,
@@ -509,7 +540,6 @@ export class LibraryPage {
 
   protected clearSearch(): void {
     this.query.set('');
-    this.announcement.set('');
     this.focusAfterRender(this.searchBox);
   }
 

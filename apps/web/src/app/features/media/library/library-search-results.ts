@@ -2,15 +2,17 @@ import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
   computed,
-  effect,
   inject,
   input,
   linkedSignal,
   output,
-  signal,
+  viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { rxResource } from '@angular/core/rxjs-interop';
 import {
   librarySearchSchema,
   type LibraryFacets,
@@ -30,7 +32,7 @@ import {
 } from '@core/media/library-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { UsageLog } from '@core/usage/usage-log.js';
-import { Subject, catchError, map, of, switchMap } from 'rxjs';
+import { of } from 'rxjs';
 import { playbackStartOf } from '../search-hit/passage-focus.js';
 import { LibraryControls } from './library-controls.js';
 import { LibraryHit } from './library-hit.js';
@@ -43,9 +45,15 @@ import { NearEnd } from './near-end.js';
 import { PlayNow } from './play-now.js';
 
 /** One page asked after the first: of which search, and from where. */
-interface MoreAsked {
+interface NextPageAsked {
   readonly request: LibrarySearchRequest;
   readonly cursor: string;
+}
+
+/** What the pages after the first added to the list. */
+interface MorePages {
+  readonly items: readonly Hit[];
+  readonly nextCursor: string | null;
 }
 
 /**
@@ -66,6 +74,8 @@ export class LibrarySearchResults {
   private readonly engine = inject(MediaEngine);
   private readonly playNow = inject(PlayNow);
   private readonly usage = inject(UsageLog);
+  private readonly injector = inject(Injector);
+  private readonly title = viewChild<ElementRef<HTMLElement>>('title');
 
   /** The words asked, after the pause. */
   readonly query = input.required<string>();
@@ -79,8 +89,6 @@ export class LibrarySearchResults {
   readonly filtersChange = output<FilterChange>();
   readonly clearedSearch = output();
   readonly clearedFilters = output();
-  /** The count, for the page's status region. */
-  readonly announced = output<string>();
 
   private readonly request = computed<LibrarySearchRequest | null>(
     () => {
@@ -107,20 +115,50 @@ export class LibrarySearchResults {
     source: this.firstAnswer,
     computation: (page, previous) => page ?? previous?.value ?? null,
   });
-  /** The pages after the first; each new answer forgets them. */
-  private readonly more = linkedSignal<
+  /** The next page asked; each new answer forgets it, which cancels the one on its way. */
+  private readonly nextPageAsked = linkedSignal<
     LibrarySearch | null,
-    { items: readonly Hit[]; nextCursor: string | null }
+    NextPageAsked | null
+  >({ source: this.firstAnswer, computation: () => null });
+  // Null, not undefined: a resource left without params would let the old load run on.
+  private readonly nextPage = rxResource<
+    LibrarySearch | null,
+    NextPageAsked | null
   >({
-    source: this.firstAnswer,
-    computation: (page) => ({
-      items: [],
-      nextCursor: page?.nextCursor ?? null,
-    }),
+    params: this.nextPageAsked,
+    stream: ({ params }) =>
+      params ? this.api.search(params.request, params.cursor) : of(null),
   });
-  private readonly moreAsked = new Subject<MoreAsked>();
-  protected readonly loadingMore = signal(false);
-  protected readonly moreError = signal('');
+  /** The pages after the first, as the person scrolls; reset with each answer. */
+  private readonly more = linkedSignal<
+    {
+      readonly first: LibrarySearch | null;
+      readonly next: LibrarySearch | null;
+    },
+    MorePages
+  >({
+    source: () => ({
+      first: this.firstAnswer(),
+      next: this.nextPage.hasValue() ? this.nextPage.value() : null,
+    }),
+    computation: ({ first, next }, previous) => {
+      const sameList = previous?.source.first === first;
+      const kept: MorePages =
+        previous && sameList
+          ? previous.value
+          : { items: [], nextCursor: first?.nextCursor ?? null };
+      if (!next || (sameList && next === previous?.source.next)) return kept;
+      return {
+        items: [...kept.items, ...next.items],
+        nextCursor: next.nextCursor,
+      };
+    },
+  });
+  protected readonly loadingMore = this.nextPage.isLoading;
+  protected readonly moreError = computed(() => {
+    const failure = this.nextPage.error();
+    return failure ? errorMessage(toUiErrorCode(failure)) : '';
+  });
 
   protected readonly hits = computed(() => [
     ...(this.lastPage()?.items ?? []),
@@ -155,50 +193,29 @@ export class LibrarySearchResults {
   protected readonly searchesSpeech = computed(() =>
     this.session.can('search'),
   );
+  /** Read aloud once the answer is in, and only then (AC-11). */
+  protected readonly statusText = computed(() =>
+    this.pending() || this.failed()
+      ? ''
+      : `${this.countText()}: ${this.query().trim()}`,
+  );
   protected readonly playingId = computed(() =>
     this.engine.playing() ? (this.engine.source()?.id ?? null) : null,
   );
 
-  constructor() {
-    this.moreAsked
-      .pipe(
-        switchMap((asked) =>
-          this.api.search(asked.request, asked.cursor).pipe(
-            catchError((failure: unknown) => {
-              this.moreError.set(errorMessage(toUiErrorCode(failure)));
-              return of(null);
-            }),
-            // Past this search: the answer belongs to words no longer on screen.
-            map((page) => (asked.request === this.request() ? page : null)),
-          ),
-        ),
-        takeUntilDestroyed(),
-      )
-      .subscribe((page) => {
-        this.loadingMore.set(false);
-        if (page)
-          this.more.update(({ items }) => ({
-            items: [...items, ...page.items],
-            nextCursor: page.nextCursor,
-          }));
-      });
-    effect(() => {
-      if (!this.pending() && !this.failed())
-        this.announced.emit(`${this.countText()}: ${this.query().trim()}`);
-    });
-  }
-
   protected loadMore(): void {
     const request = this.request();
     const cursor = this.more().nextCursor;
-    if (!request || !cursor || this.loadingMore()) return;
-    this.moreError.set('');
-    this.loadingMore.set(true);
-    this.moreAsked.next({ request, cursor });
+    if (request && cursor && !this.loadingMore())
+      this.nextPageAsked.set({ request, cursor });
   }
 
+  /** The button leaves with the failure: the focus goes to the results' title. */
   protected reload(): void {
     this.firstPage.reload();
+    afterNextRender(() => this.title()?.nativeElement.focus(), {
+      injector: this.injector,
+    });
   }
 
   /** The row's ▶: from the passage when there is one, else from where the person stopped. */
@@ -208,7 +225,8 @@ export class LibrarySearchResults {
       this.playNow.play(item);
       return;
     }
-    this.report(hit, position);
+    // Pausing opens nothing: the metric counts passages heard.
+    if (this.playingId() !== item.id) this.report(hit, position);
     this.playNow.playFrom(item, playbackStartOf(passage));
   }
 

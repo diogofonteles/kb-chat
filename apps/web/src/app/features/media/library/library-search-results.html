@@ -4,13 +4,18 @@
   [attr.aria-busy]="pending()"
 >
   <div class="head">
-    <h3 id="results-title">
-      @if (lastPage()) {
-        {{ countText() }}
-      } @else {
-        <ng-container i18n="@@library.results.title">Resultados</ng-container>
+    <div class="title">
+      <h3 id="results-title" #title tabindex="-1">
+        @if (lastPage() && !failed()) {
+          {{ countText() }}
+        } @else {
+          <ng-container i18n="@@library.results.title">Resultados</ng-container>
+        }
+      </h3>
+      @if (pending()) {
+        <span class="busy" i18n="@@library.results.busy">Buscando…</span>
       }
-    </h3>
+    </div>
     <app-library-controls
       [compact]="true"
       [facets]="facets()"
@@ -83,7 +88,7 @@
       </div>
     </div>
   } @else {
-    <ol class="hits" [class.stale]="pending()">
+    <ol class="hits">
       @for (hit of hits(); track hit.item.id; let index = $index) {
         <li>
           <app-library-hit
@@ -114,4 +119,5 @@
       </button>
     }
   }
+  <p class="visually-hidden" role="status">{{ statusText() }}</p>
 </section>

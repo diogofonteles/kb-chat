@@ -32,7 +32,6 @@ export class LibraryHit {
 
   protected readonly item = computed(() => this.hit().item);
   protected readonly passage = computed(() => this.hit().passage);
-  protected readonly ready = computed(() => this.item().status === 'ready');
   protected readonly clock = computed(() =>
     formatClock(this.passage()?.startMs ?? 0),
   );

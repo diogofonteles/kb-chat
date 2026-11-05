@@ -25,17 +25,19 @@
   outline-offset: 2px;
 }
 
-/* With no ▶ (still converting) the text keeps its column. */
 .body {
-  grid-column: 2;
   display: grid;
   gap: var(--space-1);
   min-width: 0;
 }
 
+/* The only way into the result: a touch target of its own (MA-01). */
 .title {
+  display: inline-flex;
+  align-items: center;
   justify-self: start;
   max-width: 100%;
+  min-height: var(--target);
   color: var(--color-text);
   font-family: var(--font-display);
   font-size: 1.125rem;
