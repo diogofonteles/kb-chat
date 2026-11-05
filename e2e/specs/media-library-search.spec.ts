@@ -332,7 +332,9 @@ test('KBC-091 QA I-10: nothing found in one collection, "Buscar em todos os acer
     .getByRole('combobox', { name: 'Acervo' });
   await acervo.selectOption(collection);
   await box(page).fill(elsewhere);
-  await expect(page.getByText(/^Nada encontrado para/)).toBeVisible();
+  await expect(
+    page.getByText(`Nada encontrado para '${elsewhere}'`, { exact: false }),
+  ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Limpar filtros' }),
   ).toHaveCount(0);
