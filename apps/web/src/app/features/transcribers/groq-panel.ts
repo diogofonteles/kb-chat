@@ -3,11 +3,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
   LOCALE_ID,
+  afterNextRender,
   computed,
   inject,
   linkedSignal,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -89,6 +93,9 @@ export class GroqPanel {
   private readonly api = inject(GroqApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
+  private readonly keyInput =
+    viewChild<ElementRef<HTMLInputElement>>('keyInput');
 
   protected readonly loaded = httpResource(() => groqUrl(), {
     parse: (body) => groqSettingsSchema.parse(body),
@@ -154,6 +161,10 @@ export class GroqPanel {
       this.say('key', {
         kind: 'ok',
         text: $localize`:@@groq.removed:Chave removida. O Groq não será usado.`,
+      });
+      // "Remover chave" went with the key: the focus goes to the field (WCAG 2.4.3).
+      afterNextRender(() => this.keyInput()?.nativeElement.focus(), {
+        injector: this.injector,
       });
     });
   }

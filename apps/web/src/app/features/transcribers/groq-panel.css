@@ -10,3 +10,9 @@
   font-weight: 600;
   color: var(--color-accent-strong);
 }
+
+/* Busy, not disabled: the focus stays on the button while its request runs. */
+button[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.6;
+}
