@@ -93,6 +93,7 @@ import { cuesWithSpeakers } from './voices/speaker-names.js';
 import { VoicesPanel } from './voices/voices-panel.js';
 import { PlayerShortcuts } from './player/player-shortcuts.js';
 import { TranscribeAgain } from './transcribe-again.js';
+import { TranscribeWithGroq } from './transcribe-with-groq.js';
 import { TranscriptPanel } from './transcript/transcript-panel.js';
 import { TrackNavList } from './tracks/track-nav-list.js';
 import { TrackAboutView } from './track-about-view.js';
@@ -119,6 +120,7 @@ import { TrackActions } from './track-edit/track-actions.js';
     BookmarkList,
     EditMediaDialog,
     TranscribeAgain,
+    TranscribeWithGroq,
     TranscriptPanel,
     VoicesPanel,
     TrackNavList,

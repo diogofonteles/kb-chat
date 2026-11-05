@@ -1,0 +1,12 @@
+.spent {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.connected {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-accent-strong);
+}

@@ -108,3 +108,50 @@ describe('transcriptionTextOf (KBC-036 FR-1, BR-5)', () => {
     );
   });
 });
+
+describe('Groq in the transcription status (KBC-037)', () => {
+  it.each([
+    [{ status: 'waiting' as const, route: 'groq' as const }, 'Na fila do Groq'],
+    [
+      { status: 'transcribing' as const, route: 'groq' as const },
+      'Transcrevendo pelo Groq…',
+    ],
+    [
+      {
+        status: 'done' as const,
+        confidence: 'normal' as const,
+        provider: 'groq' as const,
+      },
+      'Transcrita pelo Groq',
+    ],
+    [
+      {
+        status: 'done' as const,
+        confidence: 'low' as const,
+        provider: 'groq' as const,
+      },
+      'Transcrição automática de baixa confiança',
+    ],
+    [
+      {
+        status: 'waiting' as const,
+        transcriber: 'none' as const,
+        hold: 'monthly-cap' as const,
+      },
+      'Aguardando o transcritor · nenhum transcritor pareado · Teto mensal de mídia atingido',
+    ],
+  ])('%o reads "%s"', (transcription, expected) => {
+    expect(transcriptionTextOf(withTranscription(transcription), 'pt-BR')).toBe(
+      expected,
+    );
+  });
+
+  it('asks again soon while Groq has the job, never for one waiting for a Mac that is off', () => {
+    expect(
+      isInFlight(withTranscription({ status: 'waiting', route: 'groq' })),
+    ).toBe(true);
+    expect(
+      isInFlight(withTranscription({ status: 'waiting', transcriber: 'off' })),
+    ).toBe(false);
+  });
+});

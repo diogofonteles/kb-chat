@@ -28,6 +28,7 @@ export const aMediaItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   canRetry: false,
   canEdit: false,
   canTranscribeAgain: false,
+  canUseGroq: false,
   positionMs: 0,
   completedAt: null,
   positionUpdatedAt: null,
@@ -47,6 +48,9 @@ export const aTranscription = (
   transcriber: 'none',
   transcriberOffSince: null,
   lastAttemptFailed: false,
+  provider: null,
+  route: 'transcriber',
+  hold: null,
   ...overrides,
 });
 

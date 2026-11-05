@@ -34,6 +34,7 @@ export type SettingsSection =
   | 'people'
   | 'transcribers'
   | 'terms'
+  | 'groq'
   | 'voice-profiles'
   | 'audit'
   | 'accesses'
