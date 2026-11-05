@@ -1,4 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
+import { Location } from '@angular/common';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -1285,6 +1286,38 @@ describe('LibraryPage (T16, KBC-051)', () => {
       release(true);
       expect(await going).toBe(true);
       expect(router.url).toBe('/outra');
+    });
+
+    it('never writes its words into the next page when it closes before the pause', async () => {
+      const library = await renderLibrary({
+        features: SPEAKER,
+        routes: [{ path: 'outra', children: [] }],
+      });
+      await library.open(aPage([anItem(1)]));
+      const router = TestBed.inject(Router);
+      type('orlando');
+      expect(await router.navigateByUrl('/outra')).toBe(true);
+      library.fixture.destroy();
+      await pause();
+      expect(router.url).toBe('/outra');
+    });
+
+    it('keeps the words typed before leaving in its own entry, for Back', async () => {
+      const library = await renderLibrary({
+        features: SPEAKER,
+        routes: [{ path: 'outra', children: [] }],
+      });
+      await library.open(aPage([anItem(1)]));
+      const router = TestBed.inject(Router);
+      type('padre orlando');
+      expect(await router.navigateByUrl('/outra')).toBe(true);
+      library.fixture.destroy();
+      const back = firstValueFrom(
+        router.events.pipe(filter((event) => event instanceof NavigationEnd)),
+      );
+      TestBed.inject(Location).back();
+      await back;
+      expect(router.url).toBe('/?busca=padre%20orlando');
     });
 
     it('writes the address again when the same words come back after it moved', async () => {

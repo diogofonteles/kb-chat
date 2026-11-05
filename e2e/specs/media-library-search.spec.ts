@@ -227,6 +227,34 @@ test('AC-8: ▶ plays 2 s before the passage, the title opens there, Back keeps 
   await page.context().close();
 });
 
+test('AC-8: a result opened right after typing keeps the new words for Back, not in its own address', async ({
+  browser,
+}) => {
+  const page = await listener(browser);
+  await page.goto(`/biblioteca?busca=${word}`);
+  await answered(page);
+  await expect(results(page)).toHaveCount(2);
+  const typed = `padre ${word}`;
+  await box(page).fill(typed);
+  // Before the search's pause: the list on screen is still the one for the old words.
+  await results(page)
+    .filter({ hasText: 'O encontro' })
+    .getByRole('link', { name: 'O encontro' })
+    .click();
+  await expect(page).toHaveURL(/\/midia\/[^?]+\?t=3$/);
+  // The library closes while the player loads: a late write would land by now.
+  await expect
+    .poll(async () => (await audioState(page)).currentTime)
+    .toBeGreaterThanOrEqual(3);
+  await expect(page).toHaveURL(/\/midia\/[^?]+\?t=3$/);
+  await page.goBack();
+  await expect(box(page)).toHaveValue(typed);
+  await expect(page).toHaveURL(
+    new RegExp(`/biblioteca\\?busca=padre(%20|\\+)${word}$`),
+  );
+  await page.context().close();
+});
+
 test('AC-4: without `search` a spoken word finds nothing, and the message does not promise it', async ({
   browser,
 }) => {
