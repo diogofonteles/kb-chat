@@ -24,6 +24,7 @@ const stageOf = (
   reservedUsd: null,
   spentUsd: null,
   estimateUsd: null,
+  restarts: false,
 });
 
 /** What an audio waits for a person to do, once no stage says it. */
