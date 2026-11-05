@@ -89,6 +89,18 @@ const report = async (media: Media) =>
     await media.owner('GET', '/api/v1/voice-profiles/report')
   ).json<VoiceProfileReport>().items;
 
+const ANY_ID = randomUUID();
+const ROUTES = [
+  ['GET', PROFILES],
+  ['POST', PROFILES],
+  ['GET', `/api/v1/topics/hermetismo/speakers/${ANY_ID}/named-voices`],
+  ['DELETE', `/api/v1/voice-profiles/${ANY_ID}`],
+  ['POST', `/api/v1/voice-profiles/${ANY_ID}/recalculate`],
+  ['GET', '/api/v1/voice-profiles/report'],
+  ['GET', `/api/v1/voice-consents/${ANY_ID}/evidence`],
+] as const;
+const bodyOf = (method: string) => (method === 'POST' ? {} : undefined);
+
 describe('The permission (KBC-071 AC-7, ADR 0032)', () => {
   it('comes with the master role, with no grant by name', async () => {
     const media = await startMedia();
@@ -98,6 +110,17 @@ describe('The permission (KBC-071 AC-7, ADR 0032)', () => {
     expect((await media.owner('GET', PROFILES)).statusCode).toBe(200);
   });
 
+  it('AC-7: no session is 401, on every route', async () => {
+    const media = await startMedia();
+    const anonymous = { ...media.ownerHeaders };
+    delete anonymous['cookie'];
+    const call = caller(media.started.app, anonymous);
+    for (const [method, url] of ROUTES)
+      expect((await call(method, url, bodyOf(method))).statusCode, url).toBe(
+        401,
+      );
+  });
+
   it('AC-7: `media-edit` without it is 403, on every route', async () => {
     const media = await startMedia();
     const { call } = await member(media, {
@@ -105,12 +128,10 @@ describe('The permission (KBC-071 AC-7, ADR 0032)', () => {
       topics: ['hermetismo'],
       features: ['media', 'media-edit'],
     });
-    for (const [method, url] of [
-      ['GET', PROFILES],
-      ['POST', PROFILES],
-      ['GET', '/api/v1/voice-profiles/report'],
-    ] as const)
-      expect((await call(method, url, {})).statusCode).toBe(403);
+    for (const [method, url] of ROUTES)
+      expect((await call(method, url, bodyOf(method))).statusCode, url).toBe(
+        403,
+      );
   });
 
   it("does nothing in a member's list: it needs the master role too", async () => {
