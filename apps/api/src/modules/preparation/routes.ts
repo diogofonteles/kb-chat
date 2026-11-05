@@ -5,6 +5,7 @@ import {
   openPreparationsSchema,
   preparationOptionsQuerySchema,
   preparationOptionsSchema,
+  retryStageRequestSchema,
   retryStageSchema,
   startPreparationRequestSchema,
 } from '@kb-chat/contracts';
@@ -60,7 +61,11 @@ const OPTIONS = {
       access: EDIT,
       rateLimit: { max: RETRIES_PER_MINUTE, timeWindow: '1 minute' },
     },
-    schema: { params: stepParams, response: preparationResponse },
+    schema: {
+      params: stepParams,
+      body: retryStageRequestSchema,
+      response: preparationResponse,
+    },
   },
   next: {
     config: { access: EDIT },
@@ -99,6 +104,7 @@ function registerMoves(app: FastifyInstance, service: PreparationService) {
         planActorOf(request),
         request.params.id,
         request.params.step,
+        request.body.acceptedUsd,
       ),
   );
   typed.post('/api/v1/media/:id/preparation/advance', OPTIONS.next, (request) =>

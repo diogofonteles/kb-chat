@@ -17,6 +17,7 @@ import type {
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { FailedAttempt } from '../../ports/track-proposal-store.js';
+import { isEstimateRose } from '../track-proposals/index.js';
 
 /** All a plan's stages are read from: the records of the work, never a copy of them. */
 export interface StageFacts {
@@ -51,6 +52,8 @@ export interface PaidStageNow {
   readonly estimateUsd: number;
   /** The cap a click would meet: the true state of the stage, whatever stopped it before. */
   readonly refusal: StageStop | null;
+  /** A failed run's finished windows would be asked, and paid, again. */
+  readonly restarts: boolean;
 }
 
 const BLANK = {
@@ -64,6 +67,7 @@ const BLANK = {
   reservedUsd: null,
   spentUsd: null,
   estimateUsd: null,
+  restarts: false,
 } as const;
 
 const stageOf = (
@@ -163,6 +167,7 @@ export function stopOf(error: unknown): StageStop {
   if (!(error instanceof AppError)) return 'provider-unavailable';
   if (error.code === 'MEDIA_SPEND_CAP')
     return spendCapDetails.parse(error.details).cap;
+  if (isEstimateRose(error)) return 'estimate-rose';
   return STOP_BY_CODE[error.code] ?? 'provider-unavailable';
 }
 
@@ -199,6 +204,7 @@ function failedTracks(
       facts.canPropose &&
       (paidNow ? paidNow.refusal === null : !FINAL_FAILURES.has(failure)),
     estimateUsd: paidNow?.estimateUsd ?? stopUsd ?? plan.acceptedUsd,
+    restarts: paidNow?.restarts ?? false,
   });
 }
 

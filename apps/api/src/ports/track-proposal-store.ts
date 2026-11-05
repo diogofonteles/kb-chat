@@ -32,6 +32,11 @@ export interface FailedAttempt {
   readonly windowsTotal: number;
   /** Over every attempt so far, finished windows or not. */
   readonly spentUsd: number;
+  /**
+   * Its tracks went with a save while another proposal was on screen: going on would drop
+   * that proposal with nothing in the place of these windows.
+   */
+  readonly outputGone: boolean;
 }
 
 /** A track a window proposed, already checked (segments, times, title). */
@@ -96,8 +101,9 @@ export interface TrackProposalStorePort {
   }): void;
   /**
    * Ends a run and its ledger reservation in one transaction. Done: the older untouched AI
-   * tracks of the recording go (BR-6) and the spend is settled. Failed: what its finished
-   * windows wrote stays, paid for, and the unspent part is refunded (FR-5, KBC-072 BR-6). The
+   * tracks of the recording go (BR-6) and the spend is settled; those on screen that nothing
+   * took the place of stay, as the new run's (KBC-097). Failed: what its finished windows
+   * wrote stays, paid for, and the unspent part is refunded (FR-5, KBC-072 BR-6). The
    * reservation is closed even when the recording, and so the run, was deleted meanwhile.
    */
   finishRun(input: {

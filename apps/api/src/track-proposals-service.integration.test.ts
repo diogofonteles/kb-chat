@@ -17,7 +17,10 @@ import {
 } from '../test/track-proposal-fixtures.js';
 import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
 import { TrackEditService } from './modules/media-edit/track-edit-service.js';
-import { ProposalService } from './modules/track-proposals/index.js';
+import {
+  ProposalService,
+  isEstimateRose,
+} from './modules/track-proposals/index.js';
 import type { MediaActor } from './modules/media/index.js';
 
 const OWNER: MediaActor = {
@@ -774,7 +777,7 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     const seen = ctx.service.newestRunId(ctx.mediaId);
     await runToEnd(ctx);
     await expect(
-      ctx.service.start(OWNER, ctx.mediaId, seen),
+      ctx.service.start(OWNER, ctx.mediaId, { seenRunId: seen }),
     ).rejects.toMatchObject({ code: 'MEDIA_CONFLICT' });
     expect(ctx.llm.calls).toHaveLength(1);
     expect(spendRows(ctx)).toHaveLength(1);
@@ -895,5 +898,325 @@ describe('ProposalService: a run that stopped part way (KBC-072 AC-11, BR-6)', (
     await vi.waitFor(() => expect(ctx.llm.calls).toHaveLength(2));
     await ctx.service.stop();
     expect(titles(ctx)).toEqual(['Janela 1']);
+  });
+});
+
+describe('ProposalService: a retry loses no track (KBC-097)', () => {
+  const THREE_WINDOWS = evenSegments(130);
+  /** A window read fine, whose only track points outside it: nothing to write. */
+  const NOTHING_USABLE: StubReply = () =>
+    JSON.stringify({
+      faixas: [{ primeiro_id: 9_999, ultimo_id: 9_999, tipo: 'exposicao' }],
+    });
+  const titles = (ctx: Ctx) =>
+    ctx.service.draft(OWNER, ctx.mediaId).tracks.map(({ title }) => title);
+  const spendCount = (ctx: Ctx) =>
+    ctx.db.prepare('SELECT count(*) AS n FROM media_spend').get()?.['n'];
+
+  function editing(ctx: Ctx) {
+    const edits = new SqliteMediaEditStore(ctx.db);
+    const service = new TrackEditService({
+      edits,
+      drafts: ctx.store,
+      transcripts: ctx.transcripts,
+      speakers: { list: () => [] },
+      plans: { get: () => null },
+      rootOf: (topic) => topic,
+      findMedia: (_actor, id) => ({ ...itemOf(id, null), durationMs: null }),
+      now: () => NOW,
+    });
+    const call = () => ({
+      actor: OWNER,
+      mediaId: ctx.mediaId,
+      expectedVersion: edits.edit(ctx.mediaId)?.version ?? 0,
+    });
+    /** A save of the visible draft, as the editor sends it, with one track renamed. */
+    const save = (rename?: {
+      readonly index: number;
+      readonly title: string;
+    }) =>
+      service.save(call(), {
+        step: 3,
+        tracks: ctx.store.draft(ctx.mediaId).tracks.map((track, index) => ({
+          id: track.id,
+          source: track.source,
+          startMs: track.startMs,
+          endMs: track.endMs,
+          kind: track.kind,
+          title: index === rename?.index ? rename.title : track.title,
+          askerVoice: track.askerVoice,
+          answererVoice: track.answererVoice,
+          askerSpeakerId: track.askerSpeakerId,
+          answererSpeakerId: track.answererSpeakerId,
+        })),
+      });
+    return { save, approve: () => service.approve(call()), edits, service };
+  }
+
+  /** A finished proposal, then a run that failed after its first window. */
+  async function failedOverAProposal() {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga 1' }),
+        wholeWindow({ title: 'Antiga 2' }),
+        wholeWindow({ title: 'Antiga 3' }),
+        wholeWindow({ title: 'Oculta' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    await runToEnd(ctx);
+    return ctx;
+  }
+
+  const askedFrom = (ctx: Ctx, callsBefore: number) =>
+    ctx.llm.calls
+      .slice(callsBefore)
+      .map((call) => windowIds(String(call.at(-1)?.content)).first);
+
+  it('a save then a retry loses nothing: it starts over, at the value it says', async () => {
+    const ctx = await failedOverAProposal();
+    const resume = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(resume).toMatchObject({ windows: 2, restarts: false });
+    editing(ctx).save({ index: 2, title: 'Dela' });
+
+    const restart = await ctx.service.estimate(OWNER, ctx.mediaId);
+    expect(restart).toMatchObject({ windows: 3, restarts: true });
+    expect(restart.estimateUsd).toBeGreaterThan(resume.estimateUsd);
+
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 1' }),
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    expect(askedFrom(ctx, before)).toHaveLength(3);
+    expect(askedFrom(ctx, before)[0]).toBe(1);
+    const { tracks } = ctx.store.draft(ctx.mediaId);
+    expect(tracks.map(({ title }) => title)).toEqual([
+      'Nova 1',
+      'Nova 2',
+      'Dela',
+    ]);
+    expect(timingProblems(tracks, null)).toEqual([]);
+  });
+
+  it('a failed restart leaves on screen what the person had', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 1' }),
+      new Error('HTTP 503'),
+    );
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Dela']);
+  });
+
+  it('keeps the paid windows without a save: it pays only what is missing', async () => {
+    const ctx = await failedOverAProposal();
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    expect(ctx.llm.calls).toHaveLength(before + 2);
+    expect(titles(ctx)).toEqual(['Oculta', 'Nova 2', 'Nova 3']);
+  });
+
+  it('after an approval a retry resumes: nothing can be lost, so nothing is paid twice', async () => {
+    const ctx = await failedOverAProposal();
+    const editor = editing(ctx);
+    editor.approve();
+    await editor.service.reopen({
+      actor: OWNER,
+      mediaId: ctx.mediaId,
+      expectedVersion: editor.edits.edit(ctx.mediaId)?.version ?? 0,
+    });
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      windows: 2,
+      restarts: false,
+    });
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Antiga 3']);
+  });
+
+  it('a person’s deletion of a failed run they saw stands, and pays nothing twice', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [wholeWindow({ title: 'Vista' }), new Error('HTTP 503')],
+    });
+    await runToEnd(ctx);
+    const editor = editing(ctx);
+    editor.service.save(
+      {
+        actor: OWNER,
+        mediaId: ctx.mediaId,
+        expectedVersion: editor.edits.edit(ctx.mediaId)?.version ?? 0,
+      },
+      { step: 3, tracks: [] },
+    );
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      windows: 2,
+      restarts: false,
+    });
+  });
+
+  it('what a new run does not replace stays: a window with no track, or a run with none', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Antiga 1' }),
+        wholeWindow({ title: 'Antiga 2' }),
+        wholeWindow({ title: 'Antiga 3' }),
+        NOTHING_USABLE,
+        wholeWindow({ title: 'Nova 2' }),
+        NOTHING_USABLE,
+      ],
+    });
+    await runToEnd(ctx);
+    const second = await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Nova 2', 'Antiga 3']);
+    expect(ctx.store.draft(ctx.mediaId).run?.id).toBe(second.id);
+    ctx.llm.replies.push(NOTHING_USABLE, NOTHING_USABLE, NOTHING_USABLE);
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Nova 2', 'Antiga 3']);
+  });
+
+  it('a failed run out of sight never surfaces when a later one ends', async () => {
+    const ctx = await failedOverAProposal();
+    const { db, mediaId } = ctx;
+    // Its windows no longer fit: the next run starts over and the hidden tracks stay behind.
+    db.prepare(
+      `UPDATE media_proposal_runs SET windows_total = 99 WHERE status = 'failed'`,
+    ).run();
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 1' }),
+      wholeWindow({ title: 'Nova 2' }),
+      NOTHING_USABLE,
+    );
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Nova 1', 'Nova 2', 'Antiga 3']);
+    expect(
+      db
+        .prepare(
+          'SELECT count(*) AS n FROM media_draft_tracks WHERE media_id = ?',
+        )
+        .get(mediaId)?.['n'],
+    ).toBe(3);
+  });
+
+  it('a failed run that takes the screen keeps the tracks of the one before', async () => {
+    const ctx = setup({
+      segments: THREE_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'Vista 1' }),
+        wholeWindow({ title: 'Vista 2' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    ctx.db.prepare('UPDATE media_proposal_runs SET windows_total = 99').run();
+    ctx.llm.replies.push(NOTHING_USABLE);
+    ctx.llm.replies.push(new Error('HTTP 503'));
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['Vista 1', 'Vista 2']);
+  });
+
+  it('refuses a cost above the one agreed, reserving and asking nothing', async () => {
+    const ctx = await failedOverAProposal();
+    const agreed = await ctx.service.estimate(OWNER, ctx.mediaId);
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    const calls = ctx.llm.calls.length;
+    const reservations = spendCount(ctx);
+    const refused = await ctx.service
+      .start(OWNER, ctx.mediaId, { acceptedUsd: agreed.estimateUsd })
+      .catch((err: unknown) => err);
+    expect(isEstimateRose(refused)).toBe(true);
+    expect(refused).toMatchObject({
+      details: {
+        estimateUsd: (await ctx.service.estimate(OWNER, ctx.mediaId))
+          .estimateUsd,
+      },
+    });
+    expect(ctx.llm.calls).toHaveLength(calls);
+    expect(spendCount(ctx)).toBe(reservations);
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Dela']);
+  });
+
+  it('runs at the cost agreed', async () => {
+    const ctx = await failedOverAProposal();
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    ctx.llm.replies.push(wholeWindow(), wholeWindow());
+    const run = await ctx.service.start(OWNER, ctx.mediaId, {
+      acceptedUsd: estimateUsd,
+    });
+    await ctx.service.idle();
+    expect(ctx.service.getRun(OWNER, ctx.mediaId, run.id).status).toBe('done');
+  });
+
+  it('a restart past the run cap is refused and leaves everything in place', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    const { estimateUsd } = await ctx.service.estimate(OWNER, ctx.mediaId);
+    const capped = {
+      ...ctx,
+      service: new ProposalService({
+        store: ctx.store,
+        ledger: ctx.ledger,
+        transcripts: ctx.transcripts,
+        findMedia: (_actor, id) => itemOf(id, null),
+        contextOf: () => ({ collection: 'Hermetismo', knownNames: [] }),
+        segmentVoices: () => null,
+        llm: () => ctx.llm,
+        caps: { runUsd: estimateUsd, monthlyUsd: 10 },
+        now: () => NOW,
+      }),
+    };
+    expect(await capped.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
+      allowed: false,
+      refusal: 'run-cap',
+      restarts: true,
+    });
+    await expect(
+      capped.service.start(OWNER, ctx.mediaId),
+    ).rejects.toMatchObject({
+      code: 'MEDIA_SPEND_CAP',
+    });
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Dela']);
+  });
+
+  it('two presses on a retry run once and reserve once', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    const reservations = Number(spendCount(ctx));
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(wholeWindow(), wholeWindow(), wholeWindow());
+    const presses = await Promise.allSettled([
+      ctx.service.start(OWNER, ctx.mediaId),
+      ctx.service.start(OWNER, ctx.mediaId),
+    ]);
+    await ctx.service.idle();
+    expect(presses.map(({ status }) => status).sort()).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect(ctx.llm.calls).toHaveLength(before + 3);
+    expect(spendCount(ctx)).toBe(reservations + 1);
+    expect(titles(ctx)).toHaveLength(3);
+  });
+
+  it('a reload changes nothing about a retry: the database decides', async () => {
+    const ctx = await failedOverAProposal();
+    editing(ctx).save({ index: 2, title: 'Dela' });
+    const seen = await ctx.service.estimate(OWNER, ctx.mediaId);
+    const after = editing(ctx);
+    expect(after.edits.edit(ctx.mediaId)?.version).toBeGreaterThan(0);
+    expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toEqual(seen);
+    expect(ctx.service.draft(OWNER, ctx.mediaId).lastFailure).toBe('provider');
+    expect(titles(ctx)).toEqual(['Antiga 1', 'Antiga 2', 'Dela']);
   });
 });

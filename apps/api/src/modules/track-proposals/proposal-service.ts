@@ -83,13 +83,27 @@ interface Prepared {
   readonly resumes: FailedAttempt | null;
   /** What the analysis has spent so far: the cap holds over all its attempts. */
   readonly carriedUsd: number;
+  /** Windows a failed run finished are asked, and paid, again. */
+  readonly restarts: boolean;
 }
 
-/** Windows of it are done, others are missing and the plan still cuts the same windows. */
+/**
+ * Windows of it are done, others are missing, the plan still cuts the same windows and what
+ * they wrote still stands for them (KBC-097).
+ */
 const canResume = (attempt: FailedAttempt, windows: number): boolean =>
+  !attempt.outputGone &&
   attempt.windowsDone > 0 &&
   attempt.windowsDone < attempt.windowsTotal &&
   attempt.windowsTotal === windows;
+
+/** How a start was agreed: what was on screen when the person pressed. */
+export interface StartTerms {
+  /** The newest run they saw; by default, the newest at the press. */
+  readonly seenRunId?: string | null;
+  /** The value they were told; a run that would cost more does not start (KBC-097). */
+  readonly acceptedUsd?: number | undefined;
+}
 
 const ANALYSIS_TAKEN = 'analysis-taken';
 const takenDetails = z.object({ reason: z.literal(ANALYSIS_TAKEN) });
@@ -104,6 +118,18 @@ export const isAnalysisTaken = (error: unknown): boolean =>
   error instanceof AppError &&
   error.code === 'MEDIA_CONFLICT' &&
   takenDetails.safeParse(error.details).success;
+
+const ESTIMATE_ROSE = 'estimate-rose';
+const roseDetails = z.object({
+  reason: z.literal(ESTIMATE_ROSE),
+  estimateUsd: z.number(),
+});
+
+/** The run would cost more than the person agreed to: nothing started and nothing moved. */
+export const isEstimateRose = (error: unknown): boolean =>
+  error instanceof AppError &&
+  error.code === 'MEDIA_CONFLICT' &&
+  roseDetails.safeParse(error.details).success;
 
 const capError = (cap: SpendCap) =>
   new AppError('MEDIA_SPEND_CAP', `The media ${cap} would be crossed`, {
@@ -131,7 +157,7 @@ export class ProposalService {
     actor: MediaActor,
     mediaId: string,
   ): Promise<ProposalEstimate> {
-    const { plan, carriedUsd } = await this.prepare(actor, mediaId);
+    const { plan, carriedUsd, restarts } = await this.prepare(actor, mediaId);
     const used = this.deps.ledger.usedSince(startOfAppMonth(this.now()));
     const refusal = this.refusalOf({
       estimateUsd: plan.estimateUsd,
@@ -145,6 +171,7 @@ export class ProposalService {
       model: plan.model,
       allowed: refusal === null,
       refusal,
+      restarts,
       month: actor.isMaster
         ? { spentUsd: used, capUsd: this.deps.caps.monthlyUsd }
         : null,
@@ -199,15 +226,24 @@ export class ProposalService {
    * Reserves the estimate and starts the run; it goes on after the answer (FR-1). Single
    * flight: `seenRunId` is read before anything waits, and nothing waits from the check to
    * the run's row, so of the starts that saw the same run only the first pays. The API is one
-   * process over this database (ADR 0010), so that stretch is atomic.
+   * process over this database (ADR 0010), so that stretch is atomic. What the person agreed
+   * to is checked there too: a save after the estimate can change what a retry costs.
    */
   async start(
     actor: MediaActor,
     mediaId: string,
-    seenRunId: string | null = this.newestRunId(mediaId),
+    terms: StartTerms = {},
   ): Promise<ProposalRun> {
+    const { seenRunId = this.newestRunId(mediaId), acceptedUsd } = terms;
     const prepared = await this.prepare(actor, mediaId);
     this.assertNotTaken(mediaId, seenRunId);
+    if (acceptedUsd !== undefined && prepared.plan.estimateUsd > acceptedUsd)
+      throw new AppError('MEDIA_CONFLICT', 'The estimate rose', {
+        details: {
+          reason: ESTIMATE_ROSE,
+          estimateUsd: prepared.plan.estimateUsd,
+        },
+      });
     if (this.deps.store.isApproved(mediaId))
       throw new AppError('MEDIA_CONFLICT', 'Reopen this edit first', {
         details: { reason: 'approved' },
@@ -423,8 +459,15 @@ export class ProposalService {
           llm,
           resumes: attempt,
           carriedUsd,
+          restarts: false,
         }
-      : { plan, llm, resumes: null, carriedUsd };
+      : {
+          plan,
+          llm,
+          resumes: null,
+          carriedUsd,
+          restarts: (attempt?.windowsDone ?? 0) > 0,
+        };
   }
 
   private contextOf(item: MediaItem) {

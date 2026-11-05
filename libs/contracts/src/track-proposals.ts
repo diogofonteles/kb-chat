@@ -97,6 +97,8 @@ export type ProposalRun = z.infer<typeof proposalRunSchema>;
 /** POST /api/v1/media/{id}/edit/proposals: `dryRun` only estimates (FR-1). */
 export const proposalRequestSchema = z.strictObject({
   dryRun: z.boolean().default(false),
+  /** The value the person saw: a run that would cost more is refused (KBC-097). */
+  acceptedUsd: z.number().nonnegative().optional(),
 });
 export type ProposalRequest = z.infer<typeof proposalRequestSchema>;
 
@@ -112,6 +114,8 @@ export const proposalEstimateSchema = z.object({
   model: z.string(),
   allowed: z.boolean(),
   refusal: spendCapSchema.nullable(),
+  /** A failed run's finished windows are asked, and paid, again (KBC-097). */
+  restarts: z.boolean().default(false),
   month: z
     .object({
       spentUsd: z.number().nonnegative(),

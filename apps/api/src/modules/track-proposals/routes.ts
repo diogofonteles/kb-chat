@@ -84,8 +84,11 @@ export const trackProposalRoutes =
       async (request, reply) => {
         const actor = proposer(request);
         const { id } = request.params;
-        if (request.body.dryRun) return service.estimate(actor, id);
-        return reply.code(202).send(await service.start(actor, id));
+        const { dryRun, acceptedUsd } = request.body;
+        if (dryRun) return service.estimate(actor, id);
+        return reply
+          .code(202)
+          .send(await service.start(actor, id, { acceptedUsd }));
       },
     );
     typed.get(

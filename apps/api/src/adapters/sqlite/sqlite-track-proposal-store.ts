@@ -81,6 +81,10 @@ const toVoice = (row: Row): VoiceSuggestion => ({
 /** A person's tracks and the ones a person changed: no run replaces them (BR-6). */
 const KEPT = `(source = 'manual' OR edited = 1)`;
 
+/** The run a draft shows: the newest that did not fail, else the newest that wrote windows. */
+const SHOWN_RUN = `r.media_id = ? AND r.id <> ? AND (r.status <> 'failed' OR r.windows_done > 0)
+  ORDER BY r.status <> 'failed' DESC, r.created_at DESC, r.rowid DESC LIMIT 1`;
+
 /** The AI's proposal runs and draft tracks in `media.db` (KBC-067, ADR 0029 §4). */
 export class SqliteTrackProposalStore implements TrackProposalStorePort {
   constructor(private readonly db: DatabaseSync) {}
@@ -165,7 +169,38 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       windowsDone: Number(row['windows_done']),
       windowsTotal: Number(row['windows_total']),
       spentUsd: Number(row['spent_usd']),
+      outputGone: this.outputGone(mediaId, text(row, 'id')),
     };
+  }
+
+  /**
+   * A save writes what is on screen, so it takes the tracks of a failed run out of sight. Going
+   * on from there would replace the proposal on screen with nothing for those windows.
+   */
+  private outputGone(mediaId: string, runId: string): boolean {
+    const shown = this.shownRun(mediaId);
+    if (shown === null || shown.id === runId) return false;
+    const count = (sql: string, id: string) =>
+      Number(this.db.prepare(sql).get(id)?.['n']);
+    const written = count(
+      'SELECT count(*) AS n FROM media_draft_tracks WHERE run_id = ?',
+      runId,
+    );
+    const untouched = count(
+      `SELECT count(*) AS n FROM media_draft_tracks
+       WHERE run_id = ? AND source = 'ai' AND edited = 0`,
+      shown.id,
+    );
+    return written === 0 && untouched > 0;
+  }
+
+  private shownRun(mediaId: string, except = ''): ProposalRun | null {
+    const row = this.db
+      .prepare(
+        `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r WHERE ${SHOWN_RUN}`,
+      )
+      .get(mediaId, except);
+    return row ? toRun(row) : null;
   }
 
   runTracks(runId: string): DraftTrack[] {
@@ -229,8 +264,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   }): void {
     const mediaId = this.mediaOrNull(input.runId);
     if (mediaId === null) return;
-    if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
-    this.bumpEdit(mediaId, input.runId);
+    const before = this.shownRun(mediaId, input.runId);
     this.db
       .prepare(
         `UPDATE media_proposal_runs SET status = ?, failure = ?,
@@ -243,6 +277,26 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         input.now.toISOString(),
         input.runId,
       );
+    if (before && this.shownRun(mediaId)?.id === input.runId)
+      this.keepUnreplaced(before.id, input.runId);
+    if (input.failure === null) this.dropOlderProposals(mediaId, input.runId);
+    this.bumpEdit(mediaId, input.runId);
+  }
+
+  /** What was on screen goes only for something in its place: the rest joins the new run. */
+  private keepUnreplaced(fromRunId: string, toRunId: string): void {
+    this.db
+      .prepare(
+        `UPDATE media_draft_tracks SET run_id = ?
+         WHERE run_id = ? AND source = 'ai' AND edited = 0 AND NOT EXISTS (
+           SELECT 1 FROM media_draft_tracks other
+           WHERE other.media_id = media_draft_tracks.media_id
+             AND other.id <> media_draft_tracks.id
+             AND (other.run_id = ? OR other.source = 'manual' OR other.edited = 1)
+             AND other.start_ms < media_draft_tracks.end_ms
+             AND other.end_ms > media_draft_tracks.start_ms)`,
+      )
+      .run(toRunId, fromRunId, toRunId);
   }
 
   /** Done counts what was spent; failed gives back the rest of the reservation (FR-5). */
@@ -279,14 +333,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   }
 
   draft(mediaId: string): DraftTracks {
-    const runRow = this.db
-      .prepare(
-        `SELECT ${RUN_COLUMNS} FROM media_proposal_runs r
-         WHERE r.media_id = ? AND (r.status <> 'failed' OR r.windows_done > 0)
-         ORDER BY r.status <> 'failed' DESC, r.created_at DESC, r.rowid DESC LIMIT 1`,
-      )
-      .get(mediaId);
-    const run = runRow ? toRun(runRow) : null;
+    const run = this.shownRun(mediaId);
     const tracks = this.db
       .prepare(
         `SELECT * FROM media_draft_tracks

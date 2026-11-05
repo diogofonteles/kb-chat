@@ -41,6 +41,7 @@ import type {
 import type { PlanActor, Presence } from '../media/index.js';
 import {
   isAnalysisTaken,
+  type StartTerms,
   type DurationEstimate,
 } from '../track-proposals/index.js';
 import { isGuided, planRefusals, type PlanContext } from './plan-rules.js';
@@ -60,13 +61,17 @@ export interface PlanProposals {
   estimate(
     actor: PlanActor,
     mediaId: string,
-  ): Promise<{ estimateUsd: number; refusal: StageStop | null }>;
+  ): Promise<{
+    estimateUsd: number;
+    refusal: StageStop | null;
+    restarts: boolean;
+  }>;
   newestRunId(mediaId: string): string | null;
   /** Refuses (`isAnalysisTaken`) when a newer run than `seenRunId` exists or one is running. */
   start(
     actor: PlanActor,
     mediaId: string,
-    seenRunId: string | null,
+    terms: StartTerms,
   ): Promise<ProposalRun>;
 }
 
@@ -390,7 +395,7 @@ export class PreparationService {
     const agreed = (plan.acceptedUsd ?? 0) * ESTIMATE_TOLERANCE;
     if (estimateUsd > agreed)
       return this.stopProposal(mediaId, 'estimate-rose', estimateUsd);
-    await proposals.start(actor, mediaId, seenRunId);
+    await proposals.start(actor, mediaId, { seenRunId });
   }
 
   private stopProposal(
@@ -406,6 +411,7 @@ export class PreparationService {
     actor: PlanActor,
     mediaId: string,
     stage: RetryStage,
+    acceptedUsd?: number,
   ): Promise<MediaPreparation> {
     // Before anything waits: of clicks made together, the later one must see it lost.
     const seenRunId = this.deps.proposals.newestRunId(mediaId);
@@ -416,7 +422,7 @@ export class PreparationService {
     if (stage === 'transcribe') this.requestTranscription(mediaId);
     if (stage === 'speakers') this.deps.separation.request(mediaId);
     if (stage === 'tracks')
-      await this.retryProposal({ actor, mediaId, seenRunId });
+      await this.retryProposal({ actor, mediaId, seenRunId, acceptedUsd });
     return this.view(actor, mediaId);
   }
 
@@ -428,11 +434,15 @@ export class PreparationService {
     readonly actor: PlanActor;
     readonly mediaId: string;
     readonly seenRunId: string | null;
+    readonly acceptedUsd: number | undefined;
   }): Promise<void> {
-    const { actor, mediaId, seenRunId } = click;
+    const { actor, mediaId, seenRunId, acceptedUsd } = click;
     this.starting.add(mediaId);
     try {
-      const run = await this.deps.proposals.start(actor, mediaId, seenRunId);
+      const run = await this.deps.proposals.start(actor, mediaId, {
+        seenRunId,
+        acceptedUsd,
+      });
       this.deps.plans.reclaimProposal(mediaId, new Date(run.createdAt));
     } catch (err) {
       if (isAnalysisTaken(err)) throw conflict('Another click took this stage');
