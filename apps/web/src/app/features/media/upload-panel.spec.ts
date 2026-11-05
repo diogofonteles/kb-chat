@@ -10,6 +10,7 @@ import { fireEvent, render, screen, within } from '@testing-library/angular';
 import type {
   Feature,
   PreparationOptions,
+  Topic,
   UploadCheck,
 } from '@kb-chat/contracts';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
@@ -32,12 +33,18 @@ const CREATED = aMediaItem({
 });
 const OTHER_ID = '22222222-2222-4222-8222-222222222222';
 const TOPIC = '/api/v1/topics/hermetismo/media';
+const TOPICS = [
+  aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 }),
+  aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 5 }),
+];
 
 async function renderPanel(
   options: {
     readonly features?: Feature[];
     readonly length?: AudioLengthReader;
     readonly offer?: PreparationOptions;
+    readonly topic?: string;
+    readonly topics?: Topic[];
   } = {},
 ) {
   const uploaded = vi.fn();
@@ -63,11 +70,8 @@ async function renderPanel(
       },
     ],
     inputs: {
-      topic: 'hermetismo',
-      topics: [
-        aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 }),
-        aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 5 }),
-      ],
+      topic: options.topic ?? 'hermetismo',
+      topics: options.topics ?? TOPICS,
     },
     on: { uploaded, closed },
   });
@@ -127,6 +131,17 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     expect(
       screen.getByText('mp3, m4a, wav, flac, ogg ou opus, até 4 GB cada'),
     ).toBeTruthy();
+  });
+
+  it('opened before the collections are known, it takes the selected one when they come', async () => {
+    const panel = await renderPanel({ topic: '', topics: [] });
+    panel.fixture.componentRef.setInput('topics', TOPICS);
+    panel.fixture.componentRef.setInput('topic', 'hermetismo');
+    await panel.fixture.whenStable();
+    expect((screen.getByLabelText('Acervo') as HTMLSelectElement).value).toBe(
+      'hermetismo',
+    );
+    await chooseChecked(panel);
   });
 
   it('suggests the title from the file and refuses a file that is not audio (AC-8)', async () => {

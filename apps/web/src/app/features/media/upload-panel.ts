@@ -50,6 +50,7 @@ import {
   Subscription,
   catchError,
   concatMap,
+  filter,
   from,
   map,
   mergeMap,
@@ -175,6 +176,18 @@ export class UploadPanel implements OnInit {
     toObservable(this.uploads.plannedLength)
       .pipe(takeUntilDestroyed())
       .subscribe((length) => this.aimPlan(length));
+    // Opened before the collections were known: the field takes the selected one when it comes.
+    toObservable(this.topic)
+      .pipe(
+        filter(
+          (topic) => topic !== '' && this.form.controls.topic.value === '',
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((topic) => {
+        this.form.controls.topic.setValue(topic);
+        this.topicChosen();
+      });
   }
 
   ngOnInit(): void {
