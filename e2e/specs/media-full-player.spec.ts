@@ -113,13 +113,21 @@ test('AC-3, AC-12: another browser offers "Continuar de" silently, and continues
   await slider.press('PageUp');
   await page.getByRole('button', { name: 'Tocar' }).click();
   await playPast(page, 61);
-  const saved = page.waitForRequest(
-    (request) =>
-      request.method() === 'PUT' && request.url().endsWith('/progress'),
-  );
   await page.getByRole('button', { name: 'Pausar' }).click();
   const stoppedAt = (await audioState(page)).currentTime;
-  await saved;
+  // The server's position, not the request: closing the context cancels a PUT still in
+  // flight (or the one awaited was an earlier periodic save), and the other browser would
+  // then find an older position.
+  await expect
+    .poll(
+      async () =>
+        (
+          (await (
+            await page.request.get(`/api/v1/media/${lecture.id}`)
+          ).json()) as { positionMs: number }
+        ).positionMs,
+    )
+    .toBeGreaterThanOrEqual((Math.floor(stoppedAt) - 1) * 1_000);
   await page.context().close();
 
   const elsewhere = await pageAs(browser, email, null);

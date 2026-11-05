@@ -202,9 +202,15 @@ test('AC-5: the concept panel lists the tracks, each opening at the start', asyn
       name: 'Perguntas e respostas sobre este assunto',
     }),
   ).toBeVisible();
+  // Parallel tests link their own tracks to Cabala: this one may be past the first page.
+  // Retried, not checked once: the list shown first can be the previous concept's.
   const more = page.getByRole('button', { name: /^Ver todas/ });
-  if (await more.isVisible()) await more.click();
-  await page.getByRole('link', { name: seed.title }).click();
+  const link = page.getByRole('link', { name: seed.title });
+  await expect(async () => {
+    if (await more.isVisible()) await more.click();
+    await expect(link).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await link.click();
   await expect(page).toHaveURL(new RegExp(`/midia/${seed.trackId}\\?t=0`));
   await expect(
     page.getByRole('heading', { level: 2, name: seed.title }),
