@@ -124,7 +124,11 @@ describe('acceptTracks (KBC-067 FR-2, ADR 0029 §4)', () => {
         last: { lastSegment: 20, startMs: 30_000, endMs: 40_000 },
       }),
     );
-    expect(accepted.extendLast).toEqual({ lastSegment: 25, endMs: 50_000 });
+    expect(accepted.extendLast).toEqual({
+      startMs: 30_000,
+      lastSegment: 25,
+      endMs: 50_000,
+    });
     expect(accepted.tracks.map((one) => one.firstSegment)).toEqual([26]);
   });
 

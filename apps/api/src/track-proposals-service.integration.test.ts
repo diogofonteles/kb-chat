@@ -917,6 +917,8 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     readonly index: number;
     readonly title?: string;
     readonly endMs?: number;
+    /** The person deletes that track instead. */
+    readonly drop?: boolean;
   }
 
   function editing(ctx: Ctx) {
@@ -940,24 +942,29 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     const save = (change?: Change) =>
       service.save(call(), {
         step: 3,
-        tracks: ctx.store.draft(ctx.mediaId).tracks.map((track, index) => ({
-          id: track.id,
-          source: track.source,
-          startMs: track.startMs,
-          endMs:
-            index === change?.index
-              ? (change.endMs ?? track.endMs)
-              : track.endMs,
-          kind: track.kind,
-          title:
-            index === change?.index
-              ? (change.title ?? track.title)
-              : track.title,
-          askerVoice: track.askerVoice,
-          answererVoice: track.answererVoice,
-          askerSpeakerId: track.askerSpeakerId,
-          answererSpeakerId: track.answererSpeakerId,
-        })),
+        tracks: ctx.store
+          .draft(ctx.mediaId)
+          .tracks.filter(
+            (_, index) => !(change?.drop && index === change.index),
+          )
+          .map((track, index) => ({
+            id: track.id,
+            source: track.source,
+            startMs: track.startMs,
+            endMs:
+              index === change?.index
+                ? (change.endMs ?? track.endMs)
+                : track.endMs,
+            kind: track.kind,
+            title:
+              index === change?.index
+                ? (change.title ?? track.title)
+                : track.title,
+            askerVoice: track.askerVoice,
+            answererVoice: track.answererVoice,
+            askerSpeakerId: track.askerSpeakerId,
+            answererSpeakerId: track.answererSpeakerId,
+          })),
       });
     const reopen = () => service.reopen(call());
     return { save, approve: () => service.approve(call()), reopen };
@@ -1060,7 +1067,7 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     expect(timingProblems(tracks, null)).toEqual([]);
   });
 
-  it('a carried track that crosses what the person kept since gives way', async () => {
+  it('a carried track that crosses what the person kept since gives way, keeping its free stretch', async () => {
     const ctx = await failedOverAProposal();
     editing(ctx).save({ index: 0, title: 'Curta', endMs: 300_000 });
     ctx.llm.replies.push(
@@ -1071,9 +1078,18 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     const { tracks } = ctx.store.draft(ctx.mediaId);
     expect(tracks.map(({ title }) => title)).toEqual([
       'Curta',
+      'Oculta',
       'Nova 2',
       'Nova 3',
     ]);
+    // Cut, it no longer spans the segments it was proposed over.
+    expect(tracks[1]).toMatchObject({
+      startMs: 300_000,
+      endMs: 600_000,
+      firstSegment: null,
+      lastSegment: null,
+      edited: false,
+    });
     expect(timingProblems(tracks, null)).toEqual([]);
   });
 
@@ -1147,6 +1163,8 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     ]);
     expect(tracks[0]?.startMs).toBe(long?.startMs);
     expect(tracks[0]?.endMs).toBe(tracks[1]?.startMs);
+    // The segments it was proposed over are no longer its own: a next window is not told so.
+    expect(tracks[0]).toMatchObject({ firstSegment: null, lastSegment: null });
     expect(timingProblems(tracks, null)).toEqual([]);
   });
 
@@ -1169,14 +1187,25 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
       replies: [wholeWindow({ title: 'Vista' }), new Error('HTTP 503')],
     });
     await runToEnd(ctx);
-    const editor = editing(ctx);
-    const edits = new SqliteMediaEditStore(ctx.db);
-    expect(edits.edit(ctx.mediaId)).not.toBeNull();
-    editor.save({ index: 0, title: 'Dela' });
+    expect(titles(ctx)).toEqual(['Vista']);
+    editing(ctx).save({ index: 0, drop: true });
+    expect(titles(ctx)).toEqual([]);
     expect(await ctx.service.estimate(OWNER, ctx.mediaId)).toMatchObject({
       windows: 2,
       restarts: false,
     });
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'Nova 2' }),
+      wholeWindow({ title: 'Nova 3' }),
+    );
+    await runToEnd(ctx);
+    expect(
+      ctx.llm.calls
+        .slice(before)
+        .map((call) => windowIds(String(call.at(-1)?.content)).first),
+    ).toEqual([61, 121]);
+    expect(titles(ctx)).toEqual(['Nova 2', 'Nova 3']);
   });
 
   it('what a new run does not replace stays: a window with no track, or a run with none', async () => {
@@ -1250,7 +1279,7 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     ).toBe(3);
   });
 
-  it('a failed run that takes the screen keeps the tracks before it, and a resume leaves them', async () => {
+  it('a failed run that takes the screen keeps the tracks before it as proposals a resume may replace (QA R2-1)', async () => {
     const ctx = setup({
       segments: THREE_WINDOWS,
       replies: [
@@ -1263,18 +1292,78 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     unfit(ctx);
     ctx.llm.replies.push(NOTHING_USABLE, new Error('HTTP 503'));
     await runToEnd(ctx);
-    expect(titles(ctx)).toEqual(['Vista 1', 'Vista 2']);
+    const proposed = (ctx: Ctx) =>
+      ctx.store
+        .draft(ctx.mediaId)
+        .tracks.map(({ title, edited }) => ({ title, edited }));
+    // Nobody changed them: they stay proposals.
+    expect(proposed(ctx)).toEqual([
+      { title: 'Vista 1', edited: false },
+      { title: 'Vista 2', edited: false },
+    ]);
     ctx.db.prepare('UPDATE media_proposal_runs SET windows_total = 3').run();
     ctx.llm.replies.push(
       wholeWindow({ title: 'Nova 2' }),
       wholeWindow({ title: 'Nova 3' }),
     );
     await runToEnd(ctx);
+    // The window paid again writes its track in place of the old proposal.
+    expect(proposed(ctx)).toEqual([
+      { title: 'Vista 1', edited: false },
+      { title: 'Nova 2', edited: false },
+      { title: 'Nova 3', edited: false },
+    ]);
+    expect(timingProblems(ctx.store.draft(ctx.mediaId).tracks, null)).toEqual(
+      [],
+    );
+  });
+
+  it('a continuation stretches the track it continues, never a kept one further on (review #1)', async () => {
+    const FOUR_WINDOWS = evenSegments(190);
+    const span =
+      (first: number, last: number, extra: object = {}) =>
+      () =>
+        JSON.stringify({
+          faixas: [
+            {
+              primeiro_id: first,
+              ultimo_id: last,
+              tipo: 'exposicao',
+              ...extra,
+            },
+          ],
+        });
+    const ctx = setup({
+      segments: FOUR_WINDOWS,
+      replies: [
+        wholeWindow({ title: 'T1' }),
+        NOTHING_USABLE,
+        span(160, 180, { titulo: 'T3' }),
+        new Error('HTTP 503'),
+      ],
+    });
+    await runToEnd(ctx);
+    unfit(ctx);
+    ctx.llm.replies.push(wholeWindow({ title: 'W1' }), new Error('HTTP 503'));
+    await runToEnd(ctx);
+    expect(titles(ctx)).toEqual(['W1', 'T3']);
+    const before = ctx.llm.calls.length;
+    ctx.llm.replies.push(
+      span(61, 120, { titulo: 'N2' }),
+      span(121, 150, { continua_faixa_anterior: true }),
+      span(181, 190, { titulo: 'N4' }),
+    );
+    const run = await runToEnd(ctx);
+    expect(run.failure).toBeNull();
+    expect(ctx.llm.calls).toHaveLength(before + 3);
     const { tracks } = ctx.store.draft(ctx.mediaId);
-    expect(tracks.map(({ title }) => title)).toEqual([
-      'Vista 1',
-      'Vista 2',
-      'Nova 3',
+    expect(
+      tracks.map(({ title, startMs, endMs }) => ({ title, startMs, endMs })),
+    ).toEqual([
+      { title: 'W1', startMs: 0, endMs: 600_000 },
+      { title: 'N2', startMs: 600_000, endMs: 1_500_000 },
+      { title: 'T3', startMs: 1_590_000, endMs: 1_800_000 },
+      { title: 'N4', startMs: 1_800_000, endMs: 1_900_000 },
     ]);
     expect(timingProblems(tracks, null)).toEqual([]);
   });

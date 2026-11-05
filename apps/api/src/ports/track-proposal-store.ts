@@ -48,6 +48,8 @@ export interface ProposedTrack {
 
 /** The new end of the run's last track when a window's first track continues it. */
 export interface TrackExtension {
+  /** Where the continued track starts: it, and no other, is stretched. */
+  readonly startMs: number;
   readonly lastSegment: number;
   readonly endMs: number;
 }

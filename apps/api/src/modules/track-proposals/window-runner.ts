@@ -108,7 +108,9 @@ export class WindowRunner {
           ? [{ firstSegment, lastSegment, kind, title }]
           : [],
     );
-    const newest = tracks.at(-1);
+    // The newest track before the window it goes on from: a carried one further on is not it.
+    const fromMs = this.deps.plan.windows[fromWindow]?.[0]?.startMs ?? Infinity;
+    const newest = tracks.filter(({ startMs }) => startMs < fromMs).at(-1);
     // A person's change stays theirs: a new window does not stretch it.
     if (newest && !newest.edited && newest.lastSegment !== null)
       this.last = {
