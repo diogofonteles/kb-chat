@@ -1,28 +1,67 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const HEAVY = fileURLToPath(new URL('../heavy.sh', import.meta.url));
 
-/** A lock of its own, with the variables of the run that calls these tests cleared. */
+const made = [];
+after(() => made.forEach((dir) => rmSync(dir, { recursive: true })));
+
+/** A lock and a temp base of its own, with the variables of the calling run cleared. */
 function queue(extra = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'kbc-heavy-'));
+  made.push(dir);
+  const temp = join(dir, 'temp');
   const env = {
     ...process.env,
     KBC_HEAVY_LOCK: join(dir, 'heavy.lock'),
     KBC_HEAVY_MAX_LOAD: '100000',
+    KBC_HEAVY_MIN_FREE_GB: '0',
+    KBC_HEAVY_TEMP: temp,
     KBC_HEAVY_POLL: '0.05',
     ...extra,
   };
   delete env['CI'];
   delete env['KBC_HEAVY_HELD'];
   delete env['KBC_HEAVY_SKIP'];
-  return { dir, env, lock: env.KBC_HEAVY_LOCK };
+  delete env['KBC_TEST_TEMP'];
+  return { dir, env, lock: env.KBC_HEAVY_LOCK, temp };
 }
+
+const roots = (temp) => (existsSync(temp) ? readdirSync(temp) : []);
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** A `df` that reports this many GB free. */
+function fakeDf(gb) {
+  const bin = mkdtempSync(join(tmpdir(), 'kbc-heavy-'));
+  made.push(bin);
+  const script = `#!/bin/sh\necho header\necho "disk 0 0 ${gb * 1048576} 0% /"\n`;
+  writeFileSync(join(bin, 'df'), script, { mode: 0o755 });
+  return bin;
+}
+
+const deadPid = () =>
+  spawnSync('sh', ['-c', 'echo $$'], { encoding: 'utf8' }).stdout.trim();
 
 const run = (env, ...command) =>
   spawnSync(HEAVY, command, { env, encoding: 'utf8' });
@@ -100,9 +139,8 @@ test('CI and KBC_HEAVY_SKIP skip the queue, even with the lock taken', () => {
 
 test('the lock of a process that died is taken over', () => {
   const { env, lock } = queue();
-  const dead = spawnSync('sh', ['-c', 'echo $$'], { encoding: 'utf8' }).stdout;
   mkdirSync(lock);
-  writeFileSync(join(lock, 'owner'), `${dead.trim()}\n/\nold run\n`);
+  writeFileSync(join(lock, 'owner'), `${deadPid()}\n/\nold run\n`);
   const result = run(env, 'echo', 'mine');
   assert.equal(result.status, 0);
   assert.match(result.stdout, /process that died: old run/);
@@ -126,4 +164,128 @@ test('waits for the load, and only so long', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /stayed above 0 for 0 s; going ahead/);
   assert.match(result.stdout, /went/);
+});
+
+test('a run works in a temp root of its own, gone after success and failure', () => {
+  const { dir, env, temp } = queue();
+  const seen = join(dir, 'seen');
+  const script = `echo "$TMPDIR|$KBC_TEST_TEMP|$MAC_CHROMIUM_TMPDIR|$NX_DAEMON" > ${seen}; touch "$TMPDIR/left"; exit`;
+  for (const code of [0, 7]) {
+    assert.equal(run(env, 'sh', '-c', `${script} ${code}`).status, code);
+    const [root, marker, chrome, daemon] = readFileSync(seen, 'utf8')
+      .trim()
+      .split('|');
+    assert.ok(root.startsWith(`${temp}/`));
+    assert.equal(marker, root);
+    assert.equal(chrome, root);
+    assert.equal(daemon, 'false');
+    assert.deepEqual(roots(temp), []);
+  }
+});
+
+test('KBC_HEAVY_SKIP skips the queue, not the temp root', () => {
+  const { env, temp } = queue();
+  const skip = { ...env, KBC_HEAVY_SKIP: '1' };
+  const result = run(skip, 'sh', '-c', 'echo "$TMPDIR"');
+  assert.equal(result.status, 0);
+  assert.ok(result.stdout.startsWith(`${temp}/`));
+  assert.deepEqual(roots(temp), []);
+});
+
+test('CI and a nested command keep the temp they were given', () => {
+  const { env, temp } = queue({ TMPDIR: '/given' });
+  for (const inside of [{ CI: 'true' }, { KBC_HEAVY_HELD: '1' }]) {
+    const result = run({ ...env, ...inside }, 'sh', '-c', 'echo "$TMPDIR"');
+    assert.equal(result.stdout, '/given\n');
+    assert.deepEqual(roots(temp), []);
+  }
+});
+
+test('a stopped run takes its children and its temp root with it', async () => {
+  const { dir, env, lock, temp } = queue();
+  const pidFile = join(dir, 'pid');
+  // A child that shrugs off SIGINT, in the background of a command that is gone first.
+  const script = `(trap '' INT; sleep 30) & echo $! > ${pidFile}; wait`;
+  const running = start(env, 'sh', '-c', script);
+  await until(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8'));
+  const pid = Number(readFileSync(pidFile, 'utf8'));
+  running.child.kill('SIGTERM');
+  assert.equal((await running.done).code, 143);
+  assert.equal(alive(pid), false);
+  assert.deepEqual(roots(temp), []);
+  assert.equal(existsSync(lock), false);
+});
+
+test('a stopped run also stops what left its process group', async () => {
+  const { dir, env, temp } = queue();
+  const pidFile = join(dir, 'pid');
+  // A leader of its own group, as Playwright makes its web servers.
+  const leader = `perl -e 'setpgrp(0, 0); exec "sleep", "30"'`;
+  const script = `${leader} & echo $! > ${pidFile}; wait`;
+  const running = start(env, 'sh', '-c', script);
+  await until(() => existsSync(pidFile) && readFileSync(pidFile, 'utf8'));
+  const pid = Number(readFileSync(pidFile, 'utf8'));
+  await new Promise((r) => setTimeout(r, 200));
+  running.child.kill('SIGTERM');
+  assert.equal((await running.done).code, 143);
+  assert.equal(alive(pid), false);
+  assert.deepEqual(roots(temp), []);
+});
+
+test('what a finished command left running is stopped', async () => {
+  const { dir, env, temp } = queue();
+  const pidFile = join(dir, 'pid');
+  const script = `sleep 30 & echo $! > ${pidFile}`;
+  assert.equal(run(env, 'sh', '-c', script).status, 0);
+  assert.equal(alive(Number(readFileSync(pidFile, 'utf8'))), false);
+  assert.deepEqual(roots(temp), []);
+});
+
+test('the root of a killed run is swept by the next run', async () => {
+  const { env, lock, temp } = queue();
+  const killed = start(env, 'sleep', '0.5');
+  await until(() => roots(temp).length === 1);
+  killed.child.kill('SIGKILL');
+  await killed.done;
+  assert.equal(roots(temp).length, 1);
+  rmSync(lock, { recursive: true });
+  const result = run(env, 'echo', 'next');
+  assert.match(result.stdout, /swept the temp of 1 dead runs/);
+  assert.deepEqual(roots(temp), []);
+});
+
+test('the root of a run still alive is left alone, whoever sweeps', async () => {
+  const { env, temp } = queue();
+  const live = join(temp, `${process.pid}.live`);
+  const dead = join(temp, `${deadPid()}.dead`);
+  const foreign = join(temp, 'not-a-run');
+  [live, dead, foreign].forEach((path) => mkdirSync(path, { recursive: true }));
+  const skip = { ...env, KBC_HEAVY_SKIP: '1' };
+  assert.match(run(skip, 'true').stdout, /swept the temp of 1 dead runs/);
+  assert.deepEqual(
+    roots(temp).sort(),
+    [`${process.pid}.live`, 'not-a-run'].sort(),
+  );
+});
+
+test('refuses under the free-space floor, with a clear message and no root', () => {
+  const { dir, env, lock, temp } = queue({
+    KBC_HEAVY_MIN_FREE_GB: '999999999',
+  });
+  const marker = join(dir, 'ran');
+  const result = run(env, 'touch', marker);
+  assert.equal(result.status, 75);
+  assert.match(result.stderr, /refusing to run: \d+ GB free/);
+  assert.match(result.stderr, /needs 999999999 GB/);
+  assert.equal(existsSync(marker), false);
+  assert.equal(existsSync(lock), false);
+  assert.deepEqual(roots(temp), []);
+});
+
+test('the floor is 30 GB by default', () => {
+  const { env } = queue();
+  delete env['KBC_HEAVY_MIN_FREE_GB'];
+  const result = run({ ...env, PATH: `${fakeDf(10)}:${env.PATH}` }, 'true');
+  assert.equal(result.status, 75);
+  assert.match(result.stderr, /10 GB free .* needs 30 GB/);
 });

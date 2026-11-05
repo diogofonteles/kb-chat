@@ -14,7 +14,7 @@
     "latency": "tsx src/scripts/latency.ts",
     "usage-report": "tsx src/scripts/usage-report.ts",
     "agent-eval": "tsx src/scripts/agent-eval.ts",
-    "mutation": "stryker run"
+    "mutation": "../../tools/heavy.sh stryker run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.137.0",

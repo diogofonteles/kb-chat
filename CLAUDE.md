@@ -49,7 +49,7 @@ SMOKE_INSECURE=1 deploy/scripts/smoke.sh https://localhost:8443
 
 ## Quality
 
-Gates and E2E wait their turn in one queue per machine, across worktrees ([`tools/heavy.sh`](tools/heavy.sh); `KBC_HEAVY_SKIP=1` skips it, CI skips by itself). On a pull request into `develop`, CI runs what the changed paths touch and reports in the `CI verdict` check ([`tools/ci/select-jobs.mjs`](tools/ci/select-jobs.mjs): the rule table, and `--explain <path>...` to ask); `push` to `develop` and `main` runs everything.
+Gates and E2E wait their turn in one queue per machine, across worktrees ([`tools/heavy.sh`](tools/heavy.sh); `KBC_HEAVY_SKIP=1` skips it, CI skips by itself). Test runs keep their temp files out of the system temp directory, and a heavy run needs free disk: the rule and its limits are in the header of [`tools/heavy.sh`](tools/heavy.sh); a test config that does not go through it calls [`tools/test-temp.mjs`](tools/test-temp.mjs). On a pull request into `develop`, CI runs what the changed paths touch and reports in the `CI verdict` check ([`tools/ci/select-jobs.mjs`](tools/ci/select-jobs.mjs): the rule table, and `--explain <path>...` to ask); `push` to `develop` and `main` runs everything.
 
 ```bash
 pnpm gates                                  # lint, typecheck, test, build, format:check (coverage floor 80%)

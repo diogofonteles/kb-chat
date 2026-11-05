@@ -1,4 +1,8 @@
 import { defineConfig, devices, webkit } from '@playwright/test';
+import { privateTemp } from '../tools/test-temp.mjs';
+
+// Here and not in a global setup: the web servers start before it.
+privateTemp();
 
 // Overridable so a second checkout (a worktree) can run beside the default ports.
 const API_PORT = process.env['KBC_E2E_API_PORT'] ?? '3117';
