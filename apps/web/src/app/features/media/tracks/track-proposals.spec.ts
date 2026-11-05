@@ -49,7 +49,6 @@ async function setup(inputs: object = {}) {
     ],
     inputs: {
       mediaId: MEDIA,
-      topic: 'hermetismo',
       start: (): Observable<ProposeResult> => of({ kind: 'started' }),
       ...inputs,
     },
@@ -312,34 +311,5 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     });
     expect(screen.getByText('Não foi possível propor.')).toBeTruthy();
     expect(screen.queryByText(/Custou/)).toBeNull();
-  });
-
-  it('accepts a name, registering a new speaker (BR-5, FR-3)', async () => {
-    const rendered = await setup({
-      separation: 3,
-      suggestions: [
-        {
-          voice: 1,
-          name: 'Mestre Gabriel',
-          audience: false,
-          reason: 'é o autor do áudio',
-        },
-      ],
-    });
-    expect(screen.getByText(/é o autor do áudio/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Aceitar' }));
-    const id = '33333333-3333-4333-8333-333333333333';
-    rendered.http.expectOne('/api/v1/topics/hermetismo/speakers').flush({
-      id,
-      name: 'Mestre Gabriel',
-      authorSlug: null,
-      main: false,
-    });
-    const named = rendered.http.expectOne(`/api/v1/media/${MEDIA}/voices/1`);
-    expect(named.request.body).toEqual({
-      version: 3,
-      speakerId: id,
-      audience: false,
-    });
   });
 });

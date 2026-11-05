@@ -1,11 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   input,
   linkedSignal,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   SPEAKER_NAME_MAX,
@@ -47,6 +49,7 @@ export class SpeakerCombobox {
   readonly loading = input(false);
   readonly chosen = output<SpeakerChoice>();
 
+  private readonly field = viewChild<ElementRef<HTMLInputElement>>('field');
   private readonly id = `speaker-${nextId++}`;
   protected readonly inputId = `${this.id}-input`;
   protected readonly listId = `${this.id}-list`;
@@ -84,6 +87,13 @@ export class SpeakerCombobox {
   protected readonly activeId = computed(() =>
     this.expanded() && this.active() >= 0 ? this.optionId(this.active()) : null,
   );
+
+  /** Where the person types, with the name selected to be typed over. */
+  focus(): void {
+    const field = this.field()?.nativeElement;
+    field?.focus();
+    field?.select();
+  }
 
   protected optionId(index: number): string {
     return `${this.listId}-${index}`;

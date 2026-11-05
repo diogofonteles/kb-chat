@@ -25,6 +25,7 @@ import {
   collectionSpeakerListSchema,
   editWordsSchema,
   mediaItemSchema,
+  mediaPreparationSchema,
   mediaSilencesSchema,
   mediaTranscriptSchema,
   mediaWaveformSchema,
@@ -53,11 +54,21 @@ import {
   mediaUrl,
 } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
-import { preparationPagePath } from '@core/media/preparation-api.js';
+import {
+  preparationPagePath,
+  preparationUrl,
+} from '@core/media/preparation-api.js';
 import { collectionSpeakersUrl } from '@core/media/speakers-api.js';
-import { distinctUntilChanged, map } from 'rxjs';
+import {
+  EMPTY,
+  catchError,
+  distinctUntilChanged,
+  map,
+  type Observable,
+} from 'rxjs';
 import { PreparationSteps } from '../preparation/preparation-steps.js';
 import { audienceLabel } from '../voices/speaker-names.js';
+import { PreparationVoices } from '../preparation/preparation-voices.js';
 import { TrackAudition, endRange, startRange } from './track-audition.js';
 import { decodePeaks } from './waveform-canvas.js';
 import { TrackDraft } from './track-draft.js';
@@ -156,6 +167,7 @@ function copyableLine(
     TrackRowList,
     TrackTranscript,
     TrackProposals,
+    PreparationVoices,
     TrackPreparationStatus,
     TrackSubjects,
   ],
@@ -260,9 +272,21 @@ export class TrackEditorPage {
   protected readonly lastFailure = computed(
     () => this.draft.edit()?.lastFailure ?? null,
   );
-  protected readonly voiceSuggestions = computed(
-    () => this.draft.edit()?.voices ?? [],
+  /** Who the voices are, also from here: a wrong name is never a dead end (KBC-090). */
+  private readonly preparation = httpResource(
+    () => (this.id() ? preparationUrl(this.id()) : undefined),
+    { parse: (body) => mediaPreparationSchema.parse(body) },
   );
+  protected readonly voicesToName = computed(() => {
+    const preparation = this.preparation.hasValue()
+      ? this.preparation.value()
+      : null;
+    return preparation?.separation != null && preparation.voices.length > 0
+      ? preparation
+      : null;
+  });
+  /** What is on screen goes first: a name may change the proposals' titles. */
+  protected readonly saveFirst = (): Observable<unknown> => this.draft.flush();
   /** Nothing can change now: a run writes the draft, or a press runs, or a conflict (R-5). */
   protected readonly readOnly = computed(() => !this.draft.canEdit());
   protected readonly watching = computed(
@@ -801,8 +825,17 @@ export class TrackEditorPage {
   protected readonly startProposal = (acceptedUsd: number) =>
     this.draft.propose(acceptedUsd);
 
-  protected reloadVoices(): void {
+  /** The names, and the titles that may have changed with them. */
+  protected voicesNamed(): void {
     this.transcript.reload();
+    this.preparation.reload();
+    this.draft
+      .reload()
+      .pipe(
+        catchError(() => EMPTY),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe();
   }
 
   protected copyTracks(): void {

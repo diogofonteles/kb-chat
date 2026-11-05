@@ -358,17 +358,22 @@
       @if (canPropose()) {
         <app-track-proposals
           [mediaId]="id()"
-          [topic]="topic()"
           [latestRun]="run()"
           [lastFailure]="lastFailure()"
-          [suggestions]="voiceSuggestions()"
-          [speakers]="speakerList()"
-          [separation]="separation()"
           [start]="startProposal"
           [blocked]="proposalsBlocked()"
           [replaces]="hasProposals()"
-          (named)="reloadVoices()"
         />
+      }
+      @if (voicesToName(); as prep) {
+        <details class="voice-names" [open]="prep.suggestions.length > 0">
+          <summary i18n="@@tracks.voiceNames">Nomes das vozes</summary>
+          <app-preparation-voices
+            [preparation]="prep"
+            [beforeNaming]="saveFirst"
+            (named)="voicesNamed()"
+          />
+        </details>
       }
 
       <div

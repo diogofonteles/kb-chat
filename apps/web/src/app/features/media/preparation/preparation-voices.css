@@ -8,22 +8,40 @@
   font-size: var(--text-base);
 }
 
-.voices,
-.suggestions {
+.voices {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
   font-size: var(--text-sm);
 }
 
-.suggestions li {
+.voices li {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  min-width: 0;
+}
+
+.line,
+.seems {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.line {
+  font-weight: 600;
+}
+
+.actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-  align-items: center;
-  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+app-speaker-combobox {
+  width: 100%;
 }
 
 .reason {

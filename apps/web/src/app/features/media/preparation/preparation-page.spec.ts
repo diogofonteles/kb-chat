@@ -539,7 +539,10 @@ describe('PreparationPage (T20, step 2)', () => {
     );
     expect(screen.getByText('Vozes achadas: 2')).toBeTruthy();
     expect(screen.getByText(/é o autor da gravação/)).toBeTruthy();
-    screen.getByRole('button', { name: 'Aceitar' }).click();
+    screen
+      .getByRole('button', { name: 'Aceitar Mestre Gabriel para a Voz 1' })
+      .click();
+    await settle(harness);
     http.expectOne('/api/v1/topics/hermetismo/speakers').flush({
       id: '33333333-3333-4333-8333-333333333333',
       name: 'Mestre Gabriel',

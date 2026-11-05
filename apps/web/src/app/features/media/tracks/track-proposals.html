@@ -72,31 +72,3 @@
     <p #notice class="refusal">{{ error() }}</p>
   }
 </ng-template>
-@if (pending().length && separation() !== null) {
-  <ul class="suggestions">
-    @for (suggestion of pending(); track suggestion.voice) {
-      <li>
-        <span>
-          <strong i18n="@@tracks.ai.voice">Voz {{ suggestion.voice }}:</strong
-          >&ngsp;
-          @if (suggestion.audience) {
-            <ng-container i18n="@@tracks.ai.audience"
-              >Pergunta da plateia</ng-container
-            >
-          } @else {
-            {{ suggestion.name }}
-          }
-          {{ ' ' }}<span class="hint">({{ suggestion.reason }})</span>
-        </span>
-        <button
-          type="button"
-          class="secondary"
-          (click)="accept(suggestion)"
-          i18n="@@tracks.ai.accept"
-        >
-          Aceitar
-        </button>
-      </li>
-    }
-  </ul>
-}

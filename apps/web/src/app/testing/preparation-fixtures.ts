@@ -100,6 +100,7 @@ export const aPreparation = (
   separation: null,
   voices: [],
   suggestions: [],
+  refusedVoices: [],
   tracks: [],
   next: null,
   canSwitchToManual: false,
