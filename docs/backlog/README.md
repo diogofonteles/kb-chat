@@ -114,6 +114,7 @@ Pedido do dono: receber um áudio e editá-lo, dividindo em faixas de pergunta e
 | [KBC-076](KBC-076-video-in-the-library.md) | Vídeo na Biblioteca: chip Áudio/Vídeo, selo "Vídeo" e grade com pôster | later-video | ready | KBC-051, KBC-074 |
 | [KBC-077](KBC-077-offline-video.md) | Vídeo offline: baixar o vídeo em 720p ou só o áudio | later-video | ready | KBC-056, KBC-074 |
 | [KBC-072](KBC-072-upload-with-editing-choices-and-live-progress.md) | Envio guiado em 4 passos: enviar e escolher, processar com as faixas aparecendo, validar faixas, aprovar; sair e continuar no mesmo passo | phase-2-editing | ready | KBC-064, KBC-065, KBC-066, KBC-067 |
+| [KBC-096](KBC-096-library-search-by-track.md) | Busca da Biblioteca por faixa: a fala primeiro, só o que atende, abrindo no ponto exato | phase-2-a | ready | KBC-039, KBC-051, KBC-068, KBC-070 |
 
 Todos prontos depois das decisões do dono de 2026-11-03 (nota em "Decisões de escopo").
 

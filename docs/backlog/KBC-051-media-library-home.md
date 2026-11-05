@@ -29,7 +29,7 @@ Como quem estuda pelas palestras, quero uma Biblioteca só de áudios e vídeos,
 - BR-8: vale igual para áudio e vídeo; o tipo aparece em texto ("Vídeo") além do ícone (UP-20).
 
 ## Functional requirements
-- FR-1: `GET /api/v1/media/library` deve devolver as mídias da BR-2 em páginas de 50 (cursor), aceitando `kind`, `state`, `authorship` (ou autor, com o KBC-049), `topic`, `q` e `sort`, com `positionMs`, `completedAt`, `lastPlayedAt`, duração, tipo, acervo e autoria por item; 403 sem `media-library`. (BR-1, BR-2, BR-6)
+- FR-1: `GET /api/v1/media/library` deve devolver as mídias da BR-2 em páginas de 50 (cursor), aceitando `kind`, `state`, `authorship` (ou autor, com o KBC-049), `topic` e `sort` (a busca por palavras passou para `GET /api/v1/media/library/search`, KBC-096), com `positionMs`, `completedAt`, `lastPlayedAt`, duração, tipo, acervo e autoria por item; 403 sem `media-library`. (BR-1, BR-2, BR-6)
 - FR-2: `GET /api/v1/media/library/home` deve devolver "Continuar ouvindo" (até 10) e "Ouvidas recentemente" (até 50) da pessoa. (BR-3, BR-4)
 - FR-3: `PUT /api/v1/media/played` com `{ ids: [...], played: true|false }` (até 200 ids) deve aplicar a BR-5 a cada mídia que a pessoa ouve e ignorar, sem erro, as que ela não vê, devolvendo os ids aplicados. (BR-5)
 - FR-4: `DELETE /api/v1/media/library/recents` deve gravar o instante de limpeza da pessoa; `GET …/home` não deve mostrar o que foi tocado antes dele. (BR-4)
@@ -55,7 +55,7 @@ Como quem estuda pelas palestras, quero uma Biblioteca só de áudios e vídeos,
 - **AC-9** (FR-4, BR-4): Given cinco mídias em "Ouvidas recentemente", When a pessoa clica **Limpar recentes** e confirma, Then a seção fica vazia ("Nada ouvido desde que você limpou."), e as posições e "Continuar ouvindo" continuam iguais.
 - **AC-10** (FR-5, BR-7): Given ordenação "Duração" e visão em grade num navegador, When a pessoa entra em outro navegador com a mesma conta, Then a Biblioteca abre em grade e por duração.
 - **AC-11** (FR-1): Given `PUT /media/played` com um id de mídia que a pessoa não vê, When a API responde, Then devolve 200 sem esse id na lista aplicada, e nada muda nele.
-- **AC-12** (FR-6): Given "Buscar na biblioteca" com "conselheira", When não há título nem autor com a palavra, Then aparece "Nenhuma mídia com 'conselheira' no título ou no autor." com **Limpar busca** e **Buscar na fala**, que abre a busca de mídia com a palavra (KBC-039).
+- **AC-12** (FR-6, reescrito pelo KBC-096): Given "Buscar na biblioteca" com "conselheira", When nenhuma faixa nem áudio atende na fala, no título, no autor ou nos assuntos, Then aparece "Nada encontrado para 'conselheira' na fala, no título, no autor ou nos assuntos." com **Limpar busca**. A busca na fala agora é da própria Biblioteca: **Buscar na fala** saiu.
 - **AC-13** (BR-2): Given uma mídia em conversão enviada por outra pessoa, When um membro abre a Biblioteca, Then ela não aparece; para quem a enviou, aparece com "Convertendo… 40%".
 - **AC-14** (acessibilidade): Given só o teclado e um leitor de tela, When a pessoa usa os chips, a ordenação, a busca, a seleção múltipla e abre uma mídia, Then tudo funciona, a mudança de resultado é anunciada ("12 mídias"), e não há violações sérias ou críticas do axe em 1440 px e 390 px nos três temas.
 
