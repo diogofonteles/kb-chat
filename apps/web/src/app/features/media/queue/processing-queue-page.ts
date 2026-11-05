@@ -89,13 +89,21 @@ export class ProcessingQueuePage {
   protected readonly empty = computed(
     () => this.store.queue() !== null && this.store.items().length === 0,
   );
-  protected readonly sections = computed(() =>
-    SECTIONS.map(({ phase, title }) => ({
+  /** Each row with the name of its collection, read once per reading (NG-08). */
+  protected readonly sections = computed(() => {
+    const titles = this.titles();
+    return SECTIONS.map(({ phase, title }) => ({
       phase,
       title: title(),
-      items: this.store.items().filter((item) => item.phase === phase),
-    })).filter(({ items }) => items.length > 0),
-  );
+      rows: this.store
+        .items()
+        .filter((item) => item.phase === phase)
+        .map((item) => ({
+          item,
+          topicTitle: titles.get(item.topic) ?? item.topic,
+        })),
+    })).filter(({ rows }) => rows.length > 0);
+  });
   /** "Aguardando o transcritor": the usual reason nothing moves. */
   protected readonly transcriberText = computed(() => {
     const queue = this.store.queue();
@@ -135,10 +143,6 @@ export class ProcessingQueuePage {
     const row = this.rows().find((one) => one.item().mediaId === mediaId);
     if (row) row.focusTitle();
     else this.heading().nativeElement.focus();
-  }
-
-  protected topicTitleOf(item: ProcessingQueueItem): string {
-    return this.titles().get(item.topic) ?? item.topic;
   }
 
   protected reload(): void {

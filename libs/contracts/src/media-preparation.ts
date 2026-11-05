@@ -9,6 +9,7 @@ import {
   voiceSchema,
   voiceSuggestionSchema,
 } from './track-proposals.js';
+import { topicSlugSchema } from './topics.js';
 
 /**
  * The guided flow "Preparar áudio" (KBC-072, T20): the plan of a recording and where it is.
@@ -319,7 +320,7 @@ export const processingQueueItemSchema = z.object({
   mediaId: mediaIdSchema,
   title: z.string().min(1),
   /** The audio's own collection. */
-  topic: z.string().min(1),
+  topic: topicSlugSchema,
   phase: queuePhaseSchema,
   /** The stage it is on: the first one not done; null when every stage is. */
   stage: preparationStageIdSchema.nullable(),

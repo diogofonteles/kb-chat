@@ -52,10 +52,11 @@
       <section class="group" [attr.aria-label]="section.title">
         <h3>{{ section.title }}</h3>
         <div class="rows" role="list">
-          @for (item of section.items; track item.mediaId) {
+          @for (row of section.rows; track row.item.mediaId) {
+            @let item = row.item;
             <app-queue-row
               [item]="item"
-              [topicTitle]="topicTitleOf(item)"
+              [topicTitle]="row.topicTitle"
               [canEdit]="canEdit()"
               [busy]="acting() === item.mediaId"
               (moved)="move(item, $event)"
