@@ -127,10 +127,11 @@ export class LibraryControls {
     () => !this.compact() && this.subjectOptions().length > 0,
   );
   protected readonly active = computed(() => activeFiltersOf(this.filters()));
-  /** Filters in force with no control on screen during a search (KBC-096 R5). */
-  protected readonly hiddenActive = computed(
-    () => this.active() - (this.filters().topic ? 1 : 0),
-  );
+  /**
+   * Filters in force with no control on screen during a search (KBC-096 R5): Acervo stays on
+   * screen, and the collection is not counted as a filter (KBC-091).
+   */
+  protected readonly hiddenActive = this.active;
   protected readonly hiddenText = computed(() => {
     const count = this.hiddenActive();
     return count === 1

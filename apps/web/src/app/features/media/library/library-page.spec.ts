@@ -131,13 +131,14 @@ async function renderLibrary(
 ) {
   const media: FakeMedia = fakeMediaElement();
   const chatStore = chatStoreOn();
+  const chat = { selectTopic: vi.fn() };
   const view = await render(LibraryPage, {
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter(options.routes ?? []),
-      chatStore,
+      { ...chatStore, useValue: { ...chatStore.useValue, ...chat } },
       sessionAs({
         features: options.features ?? ['media', 'media-library'],
         master: options.master,
@@ -186,7 +187,7 @@ async function renderLibrary(
       .flush(page);
     await settle();
   };
-  return { ...view, http, settle, tick, start, open, media };
+  return { ...view, http, settle, tick, start, open, media, chat };
 }
 
 /** Longer than the search's pause, so the typed words are asked. */
@@ -1136,6 +1137,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['heard'],
           authors: [],
           topic: 'hermetismo',
+          allTopics: false,
           subject: null,
         },
       });

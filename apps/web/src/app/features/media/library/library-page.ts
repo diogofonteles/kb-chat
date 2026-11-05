@@ -525,21 +525,7 @@ export class LibraryPage {
   );
 
   constructor() {
-    this.collectionHeading.follow(this.headingScope);
-    // A link to a collection is a choice of it: the sidebar says the same as the list.
-    toObservable(this.chat.topicsKnown)
-      .pipe(filter(Boolean), take(1), takeUntilDestroyed())
-      .subscribe(() => this.selectArrivedTopic());
-    // The sidebar took the list out of "Todos os acervos": the account forgets it too.
-    toObservable(this.scope)
-      .pipe(
-        pairwise(),
-        filter(
-          ([before, after]) => before.kind === 'all' && after.kind !== 'all',
-        ),
-        takeUntilDestroyed(),
-      )
-      .subscribe(() => this.leaveAllTopics());
+    this.followCollection();
     this.saves
       .pipe(
         concatMap((update) =>
@@ -556,6 +542,25 @@ export class LibraryPage {
       )
       .subscribe();
     this.followAddress();
+  }
+
+  /** The header, the sidebar and the account say the collection the list shows (KBC-091). */
+  private followCollection(): void {
+    this.collectionHeading.follow(this.headingScope);
+    // A link to a collection is a choice of it: the sidebar says the same as the list.
+    toObservable(this.chat.topicsKnown)
+      .pipe(filter(Boolean), take(1), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.selectArrivedTopic());
+    // The sidebar took the list out of "Todos os acervos": the account forgets it too.
+    toObservable(this.scope)
+      .pipe(
+        pairwise(),
+        filter(
+          ([before, after]) => before.kind === 'all' && after.kind !== 'all',
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.leaveAllTopics());
   }
 
   /** The words and the address, each following the other (KBC-096). */
