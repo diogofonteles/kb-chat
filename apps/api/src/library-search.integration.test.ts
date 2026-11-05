@@ -32,7 +32,7 @@ const TRACKS = [
 ];
 
 const SPEECH = [
-  { at: 10, text: 'nada a ver com a busca' },
+  { at: 10, text: 'nada a ver com o interior' },
   { at: 100, text: 'conheci o Padre Orlando em Manaus' },
   { at: 270, text: 'intervalo com a hoasca fora de qualquer faixa' },
   { at: 310, text: 'o padre Orlândo voltou depois' },
@@ -362,12 +362,25 @@ describe('Subjects in the library search (KBC-096 R2, R4)', () => {
         passage: null,
       });
     }
-    const filtered = await search(
-      owner,
-      'orlando',
-      `&subject=${encodeURIComponent('concept:cabala')}`,
-    );
-    expect(filtered.total).toBe(0);
+    const chosen = `&subject=${encodeURIComponent('concept:cabala')}`;
+    const inTrack = await search(owner, 'interior', chosen);
+    expect(inTrack.items.map((hit) => hit.item.id)).toEqual([track.id]);
+    expect((await search(owner, 'orlando', chosen)).total).toBe(0);
+  });
+
+  it('without `search` the subject answers, a summary never: it comes from the speech', async () => {
+    const world = await startWorld();
+    const { media } = world;
+    const track = await linked(world);
+    const person = await member(media, {
+      email: 'semfalacomassunto@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-library', 'media-tracks', 'media-subjects'],
+    });
+
+    expect((await search(person.call, 'tradição oral')).total).toBe(0);
+    const named = await search(person.call, 'cabala');
+    expect(named.items.map((hit) => hit.item.id)).toEqual([track.id]);
   });
 
   it('without media-subjects neither the subject nor the summary answers', async () => {
@@ -382,5 +395,18 @@ describe('Subjects in the library search (KBC-096 R2, R4)', () => {
 
     expect((await search(person.call, 'cabala')).total).toBe(0);
     expect((await search(person.call, 'tradição oral')).total).toBe(0);
+  });
+});
+
+describe('The search limit (ND-22)', () => {
+  it('refuses past the limit with RATE_LIMITED', async () => {
+    const world = await startWorld({ env: { SEARCH_RATE_LIMIT: '2' } });
+    const { owner } = world.media;
+    const asked = () => owner('GET', `${SEARCH}?q=qualquer`);
+    expect((await asked()).statusCode).toBe(200);
+    expect((await asked()).statusCode).toBe(200);
+    const refused = await asked();
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json().error.code).toBe('RATE_LIMITED');
   });
 });

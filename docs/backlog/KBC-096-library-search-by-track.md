@@ -20,7 +20,7 @@ Como quem estuda, quero buscar na Biblioteca como numa biblioteca de faixas, par
 - BR-1: uma linha por faixa; passagem dentro de faixa é da faixa (KBC-068 BR-6). Áudio sem faixas e trecho entre faixas respondem como a gravação.
 - BR-2: fala (confiança normal, relevância) antes de título e autor, antes de assunto; uma mídia aparece uma vez.
 - BR-3: gravação achada só por título ou autor é uma linha. Faixa só entra pelo autor quando ele difere do da gravação.
-- BR-4: sem `search`, nenhuma transcrição é consultada; sem `media-tracks`, só gravações; sem `media-subjects`, nem assunto nem resumo. Só mídia pronta, não arquivada, nos acervos que a pessoa vê.
+- BR-4: sem `search`, nenhuma transcrição é consultada e nenhum resumo responde (o resumo deriva da fala): só título, autor e nome do assunto; sem `media-tracks`, só gravações; sem `media-subjects`, nem assunto nem resumo. Só mídia pronta, não arquivada, nos acervos que a pessoa vê.
 - BR-5: os filtros em vigor valem na busca. Na tela ficam só Acervo e Limpar filtros; a ordem é a relevância e a visão é lista.
 - BR-6: no máximo 200 resultados, em páginas de 50.
 

@@ -538,7 +538,7 @@ Hierarquia (UP-16): (1) **Continuar ouvindo**, a ação mais frequente; (2) a bu
 - **Buscar na biblioteca** (rótulo visível, SL-04; ✕ para limpar, SL-06; debounce 200 ms; as palavras ficam na URL, `?busca=`, para Voltar reencontrar o resultado): com texto na caixa, a tela é só o resultado (KBC-096).
   - **Resultado**: o primeiro conteúdo sob a caixa. "Continuar ouvindo", "Ouvidas recentemente", "Todas", chips, ordenação e visão somem desde a primeira tecla. Fica uma linha com a contagem ("3 resultados", "Mais de 200 resultados"), **Acervo ▾** e **Limpar filtros**; filtro em vigor sem controle na tela é dito ("1 filtro em uso"). A contagem é anunciada na região de status.
   - **Linha**: ▶ · título (link) · "Entrevista · faixa 3 de 23" (ou "Gravação completa · 23 faixas") · autor · duração · tempo (`8:15`) · frase com as palavras marcadas (até 240 caracteres ao redor do termo) · "baixa confiança" quando for. ▶ toca do trecho menos 2 s; o título abre o player nesse ponto, pausado. Cada faixa aparece uma vez, com seu melhor trecho.
-  - **Ordem**: fala, depois título e autor, depois assunto. Gravação achada só pelo título é uma linha, não todas as faixas. Quem não tem `search` não tem a fala: só título, autor e assunto.
+  - **Ordem**: fala, depois título e autor, depois assunto. Gravação achada só pelo título é uma linha, não todas as faixas. Quem não tem `search` não tem a fala nem os resumos, que derivam dela: só título, autor e nome do assunto.
   - **Sem resultado**: "Nada encontrado para '…' na fala, no título, no autor ou nos assuntos." + dica de palavra inteira + **Limpar busca** (+ **Limpar filtros**, com filtro ativo).
 
 ### Continuar ouvindo e Ouvidas recentemente

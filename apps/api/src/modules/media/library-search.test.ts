@@ -5,7 +5,7 @@ import {
 } from '@kb-chat/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { TrackLinksPort } from '../../ports/media-search.js';
-import { searchLibrary } from './library-search.js';
+import { isPublished, searchLibrary } from './library-search.js';
 
 const anItem = (n: number, title = `Faixa ${n}`) =>
   ({
@@ -79,6 +79,12 @@ describe('searchLibrary (KBC-096)', () => {
     expect(page.items).toHaveLength(10);
     expect(read.mock.calls[0]?.[1]).toHaveLength(10);
     expect(page.items[0]?.passage?.text).toBe('dito');
+  });
+
+  it('R4: an archived or unfinished media is no result', () => {
+    expect(isPublished(anItem(1))).toBe(true);
+    expect(isPublished({ ...anItem(1), archived: true })).toBe(false);
+    expect(isPublished({ ...anItem(1), status: 'queued' })).toBe(false);
   });
 
   it('R4: without the speech port no transcript is asked', () => {

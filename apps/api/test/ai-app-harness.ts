@@ -108,6 +108,8 @@ export interface StartOptions {
   readonly media?: boolean;
   /** Another vault than the fixture one (a copy with sub-collections, KBC-048). */
   readonly vault?: string;
+  /** Settings on top of the test ones. */
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 /** The media worker token of `start({ media: true })`. */
@@ -140,6 +142,7 @@ async function testConfig(state: string, options: StartOptions) {
       KB_CHAT_MEDIA_DIR: join(state, 'media'),
       KB_CHAT_MEDIA_WORKER_TOKEN: MEDIA_WORKER_TOKEN,
     }),
+    ...options.env,
   });
 }
 

@@ -457,6 +457,7 @@ async function registerRoutes(
 }
 
 interface MediaWiring {
+  readonly config: AppConfig;
   readonly media: MediaDeps;
   /** Who a paid stage runs for, as they stand when it starts (KBC-072 BR-4). */
   readonly auth: AuthDeps;
@@ -761,7 +762,7 @@ async function registerLibrary(
     speech: trackLinks,
     about: trackLinks,
   });
-  await app.register(libraryRoutes(service));
+  await app.register(libraryRoutes(service, wiring.config.SEARCH_RATE_LIMIT));
 }
 
 /** "Transcritores" and "Termos da transcrição": what masters set up for the Mac. */

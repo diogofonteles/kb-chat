@@ -107,7 +107,8 @@ export class LibraryService {
       subjects,
       query,
       speech: actor.searchesSpeech ? this.deps.speech : undefined,
-      about: subjects ? this.deps.about : undefined,
+      // A summary is derived from the speech: only for who may search it (R4).
+      about: subjects && actor.searchesSpeech ? this.deps.about : undefined,
       tracks: actor.seesTracks ?? false,
     });
   }
