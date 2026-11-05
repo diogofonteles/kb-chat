@@ -6,6 +6,7 @@ import type { MediaDeps } from './media-factory.js';
 import type { AuthorsService } from './modules/authors/index.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
 import type { DiarizationService, MediaActor } from './modules/media/index.js';
+import { VoiceNameFixer } from './modules/media-edit/index.js';
 import { ProposalService } from './modules/track-proposals/index.js';
 import type { LlmPort } from './ports/llm.js';
 
@@ -67,6 +68,18 @@ function segmentVoicesOf(wiring: TrackProposalWiring) {
 }
 
 /** The AI's track proposals over the media database (KBC-067). */
+/** Who keeps the AI's words in line with the names people give (KBC-090). */
+export function voiceNameFixerOf(media: MediaDeps): VoiceNameFixer {
+  return new VoiceNameFixer({
+    suggestions: (mediaId) => media.trackProposals.draft(mediaId).voices,
+    labels: (mediaId) => {
+      const latest = media.diarizations.latest(mediaId);
+      return latest ? media.voiceLabels.labels(latest.id) : [];
+    },
+    edits: media.edits,
+  });
+}
+
 export function createTrackProposals(
   wiring: TrackProposalWiring,
 ): ProposalService {
@@ -88,5 +101,6 @@ export function createTrackProposals(
     },
     onRunError: (err, runId) =>
       wiring.log.warn({ err, runId }, 'track proposal run failed'),
+    onWindowSaved: (mediaId) => voiceNameFixerOf(media).fix(mediaId),
   });
 }

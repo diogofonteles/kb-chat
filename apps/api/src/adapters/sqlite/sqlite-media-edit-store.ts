@@ -1,5 +1,7 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
+  TRACK_SUMMARY_MAX,
+  TRACK_TITLE_MAX,
   editStatusSchema,
   editStepSchema,
   inTimeOrder,
@@ -294,6 +296,89 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
         .run(next, write.principal, write.now.toISOString(), write.mediaId);
       return next;
     });
+  }
+
+  rewriteProposedTexts(
+    input: Parameters<MediaEditStorePort['rewriteProposedTexts']>[0],
+  ): void {
+    const { mediaId, rewrite, now } = input;
+    inTransaction(this.db, () => {
+      const inDraft = this.rewriteTitles(
+        'media_draft_tracks',
+        mediaId,
+        rewrite,
+      );
+      const inTracks = this.rewriteTitles('media_tracks', mediaId, rewrite);
+      const inSummaries = this.rewriteSummaries(mediaId, rewrite);
+      if (inDraft + inTracks + inSummaries === 0) return;
+      this.db
+        .prepare(
+          `UPDATE media_edits SET version = version + 1, updated_at = ?
+           WHERE media_id = ?`,
+        )
+        .run(now.toISOString(), mediaId);
+    });
+  }
+
+  /** Only what the AI proposed: a person's track keeps a person's words. */
+  private rewriteTitles(
+    table: 'media_draft_tracks' | 'media_tracks',
+    mediaId: string,
+    rewrite: (text: string, max: number) => string,
+  ): number {
+    const rows = this.db
+      .prepare(
+        `SELECT id, title FROM ${table}
+         WHERE media_id = ? AND source = 'ai' AND title IS NOT NULL`,
+      )
+      .all(mediaId);
+    const changed = rows.flatMap((row) => {
+      const title = String(row['title']);
+      const next = rewrite(title, TRACK_TITLE_MAX);
+      return next === title ? [] : [{ id: String(row['id']), title, next }];
+    });
+    for (const { id, title, next } of changed) {
+      this.db
+        .prepare(`UPDATE ${table} SET title = ? WHERE id = ?`)
+        .run(next, id);
+      // The published item carries the same title until someone gives it another.
+      this.db
+        .prepare(
+          `UPDATE media SET title = ? WHERE parent_media_id = ? AND title = ?`,
+        )
+        .run(next, mediaId, title);
+    }
+    return changed.length;
+  }
+
+  private rewriteSummaries(
+    mediaId: string,
+    rewrite: (text: string, max: number) => string,
+  ): number {
+    const rows = this.db
+      .prepare(
+        `SELECT s.media_id, s.summary, s.suggested_summary FROM media_track_subjects s
+         JOIN media m ON m.id = s.media_id WHERE m.parent_media_id = ?`,
+      )
+      .all(mediaId);
+    let changed = 0;
+    for (const row of rows) {
+      const texts = [row['summary'], row['suggested_summary']].map((text) =>
+        typeof text === 'string' ? text : null,
+      );
+      const next = texts.map((text) =>
+        text === null ? null : rewrite(text, TRACK_SUMMARY_MAX),
+      );
+      if (next.every((text, index) => text === texts[index])) continue;
+      changed += 1;
+      this.db
+        .prepare(
+          `UPDATE media_track_subjects SET summary = ?, suggested_summary = ?
+           WHERE media_id = ?`,
+        )
+        .run(next[0] ?? null, next[1] ?? null, String(row['media_id']));
+    }
+    return changed;
   }
 
   approved(mediaId: string): ApprovedTrack[] {

@@ -208,6 +208,30 @@ export class SqliteVoiceLabelStore implements VoiceLabelStorePort {
       .map(toLabel);
   }
 
+  refusedNames(diarizationId: string): number[] {
+    return this.db
+      .prepare(
+        `SELECT voice FROM media_voice_refusals WHERE diarization_id = ?
+         ORDER BY voice`,
+      )
+      .all(diarizationId)
+      .map((row) => Number(row['voice']));
+  }
+
+  refuseName(input: {
+    diarizationId: string;
+    voice: number;
+    by: string;
+    now: Date;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO media_voice_refusals
+           (diarization_id, voice, refused_by, refused_at) VALUES (?, ?, ?, ?)`,
+      )
+      .run(input.diarizationId, input.voice, input.by, input.now.toISOString());
+  }
+
   setLabel(input: {
     diarizationId: string;
     voice: number;

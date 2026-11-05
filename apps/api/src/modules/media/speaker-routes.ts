@@ -6,6 +6,7 @@ import {
   mediaSpeakersSchema,
   mergeVoicesRequestSchema,
   nameVoiceRequestSchema,
+  refuseVoiceNameRequestSchema,
   splitVoiceRequestSchema,
   voiceIndexSchema,
 } from '@kb-chat/contracts';
@@ -70,6 +71,14 @@ const OPTIONS = {
       response: changed,
     },
   },
+  refuseName: {
+    config: { access: EDIT },
+    schema: {
+      params: voiceParams,
+      body: refuseVoiceNameRequestSchema,
+      response: changed,
+    },
+  },
   suggestion: {
     config: { access: EDIT },
     schema: {
@@ -112,6 +121,18 @@ function registerNames(typed: Typed, names: VoiceNamesService): void {
         request.body,
       ),
     ),
+  );
+  typed.post(
+    '/api/v1/media/:id/voices/:voice/refuse-name',
+    OPTIONS.refuseName,
+    (request) =>
+      Promise.resolve(
+        names.refuseName(
+          actorOf(request),
+          { mediaId: request.params.id, voice: request.params.voice },
+          request.body,
+        ),
+      ),
   );
   typed.post('/api/v1/media/:id/voices/merge', OPTIONS.merge, (request) =>
     Promise.resolve(

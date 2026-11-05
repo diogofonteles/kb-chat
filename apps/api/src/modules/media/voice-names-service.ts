@@ -3,6 +3,7 @@ import type {
   MediaSpeakers,
   MergeVoicesRequest,
   NameVoiceRequest,
+  RefuseVoiceNameRequest,
   SplitVoiceRequest,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -26,6 +27,9 @@ export interface VoiceNamesServiceDeps {
   readonly rootOf: (topic: string) => string;
   /** The voices as they read after a change. */
   readonly speakersOf: (actor: MediaActor, mediaId: string) => MediaSpeakers;
+  /** A voice has a new name: what was written with the old one follows (KBC-090). */
+  readonly onNamed?: (mediaId: string) => void;
+  readonly now?: () => Date;
 }
 
 const conflict = (message: string) => new AppError('MEDIA_CONFLICT', message);
@@ -52,6 +56,25 @@ export class VoiceNamesService {
       voice,
       speakerId: request.speakerId,
       audience: request.audience,
+    });
+    this.deps.onNamed?.(mediaId);
+    return this.deps.speakersOf(actor, mediaId);
+  }
+
+  /** The name suggested is not this voice's: nobody is offered it again (KBC-090). */
+  refuseName(
+    actor: MediaActor,
+    target: { readonly mediaId: string; readonly voice: number },
+    request: RefuseVoiceNameRequest,
+  ): MediaSpeakers {
+    const { mediaId, voice } = target;
+    const { current } = this.editable(actor, mediaId, request.version);
+    this.assertStandingVoice(current.id, voice);
+    this.deps.voiceLabels.refuseName({
+      diarizationId: current.id,
+      voice,
+      by: actor.principal,
+      now: this.deps.now?.() ?? new Date(),
     });
     return this.deps.speakersOf(actor, mediaId);
   }

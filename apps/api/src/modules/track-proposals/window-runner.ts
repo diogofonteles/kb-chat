@@ -46,6 +46,7 @@ export interface WindowRunnerDeps {
   readonly carriedUsd: number;
   /** Aborted when the API stops. */
   readonly signal: AbortSignal;
+  readonly onWindowSaved?: (mediaId: string) => void;
 }
 
 /** How a run ended: no failure when every window was written. */
@@ -144,6 +145,7 @@ export class WindowRunner {
       voices: acceptVoices(reply.vozes, plan.evidence),
       spentUsd: this.spentUsd,
     });
+    this.deps.onWindowSaved?.(plan.mediaId);
     this.remember(accepted, extended);
   }
 

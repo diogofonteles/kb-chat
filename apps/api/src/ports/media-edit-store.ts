@@ -58,6 +58,16 @@ export interface MediaEditStorePort {
   /** Back to the draft and step 3; listeners keep the approved tracks (BR-9). */
   reopen(write: EditWrite & { readonly alongside?: () => void }): number | null;
   approved(mediaId: string): ApprovedTrack[];
+  /**
+   * What the AI wrote on a recording's tracks, draft and published, rewritten at once (titles
+   * and summaries). `rewrite` answers the text as it stays. A change moves the edit's version:
+   * a screen still holding the old words cannot save them back.
+   */
+  rewriteProposedTexts(input: {
+    readonly mediaId: string;
+    readonly rewrite: (text: string, max: number) => string;
+    readonly now: Date;
+  }): void;
   /** Which of `ids` are tracks of another recording, in its draft or approved (FR-1). */
   foreignIds(mediaId: string, ids: readonly string[]): string[];
 }

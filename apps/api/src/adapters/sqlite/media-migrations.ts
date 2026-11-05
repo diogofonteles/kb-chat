@@ -1196,4 +1196,20 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       END;
     `,
   },
+  {
+    // KBC-090: a name suggested for a voice that a person refused. By separation: a new one
+    // numbers its voices anew, so the refusal goes with it. New table only: 22 (KBC-073) and
+    // 23 alter nothing here, so the order they land in does not matter.
+    version: 24,
+    name: 'voice-name-refusals',
+    sql: `
+      CREATE TABLE media_voice_refusals (
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        voice INTEGER NOT NULL CHECK (voice BETWEEN 1 AND 10),
+        refused_by TEXT NOT NULL,
+        refused_at TEXT NOT NULL,
+        PRIMARY KEY (diarization_id, voice)
+      ) STRICT, WITHOUT ROWID;
+    `,
+  },
 ];

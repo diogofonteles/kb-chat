@@ -74,6 +74,7 @@ function setup(replies: StubReply[]) {
       status: () => 'done',
       voicesOn: () => ({ speakers: SPEAKERS }),
       request: () => false,
+      refused: () => [],
     },
     edits: { edit: () => null },
     drafts: db.store,

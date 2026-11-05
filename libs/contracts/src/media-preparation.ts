@@ -231,6 +231,8 @@ export const mediaPreparationSchema = z.object({
   separation: z.number().int().min(1).nullable(),
   voices: z.array(preparationVoiceSchema),
   suggestions: z.array(voiceSuggestionSchema),
+  /** Voices whose suggested name a person refused: no name is offered again. */
+  refusedVoices: z.array(voiceSchema),
   tracks: z.array(preparationTrackSchema),
   /** The primary action once nothing is left to process; never taken by itself (FR-5). */
   next: nextActionSchema.nullable(),

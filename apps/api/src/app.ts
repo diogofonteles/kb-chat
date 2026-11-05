@@ -147,7 +147,10 @@ import {
   PreparationService,
   preparationRoutes,
 } from './modules/preparation/index.js';
-import { createTrackProposals } from './track-proposals-factory.js';
+import {
+  createTrackProposals,
+  voiceNameFixerOf,
+} from './track-proposals-factory.js';
 import {
   createSubjectDirectory,
   createTrackSubjects,
@@ -664,10 +667,14 @@ function transcriptService(
 async function registerListening(
   app: FastifyInstance,
   wiring: MediaWiring,
-  services: { media: MediaService; transcribers: TranscriberService },
+  services: {
+    media: MediaService;
+    transcribers: TranscriberService;
+    publisher: TrackPublisher;
+  },
 ) {
   const { listening, bookmarks } = wiring.media;
-  const { media, transcribers } = services;
+  const { media, transcribers, publisher } = services;
   const diarization = diarizationService({ ...wiring, transcribers });
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
@@ -679,6 +686,7 @@ async function registerListening(
   await registerSpeakers(app, {
     deps: wiring.media,
     diarization,
+    publisher,
     authors: wiring.authors,
     hasTopic: (topic) => wiring.catalog.get(topic) !== undefined,
   });
@@ -690,13 +698,14 @@ async function registerSpeakers(
   wiring: {
     deps: MediaDeps;
     diarization: DiarizationService;
+    publisher: TrackPublisher;
     authors: AuthorsService;
     hasTopic: (topic: string) => boolean;
   },
 ) {
-  const { deps, diarization, authors, hasTopic } = wiring;
+  const { deps, diarization, publisher, authors, hasTopic } = wiring;
   const rootOf = (topic: string) => authors.rootOf(topic);
-  await app.register(speakerRoutesOf({ deps, diarization, rootOf }));
+  await app.register(speakerRoutesOf({ deps, diarization, publisher, rootOf }));
   const service = new SpeakersService({
     speakers: deps.speakers,
     rootOf,
@@ -709,12 +718,23 @@ async function registerSpeakers(
 function speakerRoutesOf(input: {
   deps: MediaDeps;
   diarization: DiarizationService;
+  publisher: TrackPublisher;
   rootOf: (topic: string) => string;
 }) {
-  const { deps, diarization, rootOf } = input;
+  const { deps, diarization, publisher, rootOf } = input;
   const speakersOf = (actor: MediaActor, mediaId: string) =>
     diarization.speakers(actor, mediaId);
-  const names = new VoiceNamesService({ ...deps, rootOf, speakersOf });
+  const fixer = voiceNameFixerOf(deps);
+  const names = new VoiceNamesService({
+    ...deps,
+    rootOf,
+    speakersOf,
+    // Who answers decides the author of a published track; the AI's words follow the name.
+    onNamed: (mediaId) => {
+      fixer.fix(mediaId);
+      publisher.afterRecordingEdit(mediaId);
+    },
+  });
   return speakerRoutes({
     service: diarization,
     names,
@@ -797,7 +817,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   const publisher = trackPublisher(wiring);
   await registerTranscribers(app, { transcribers, media, wiring });
-  await registerListening(app, wiring, { media, transcribers });
+  await registerListening(app, wiring, { media, transcribers, publisher });
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
@@ -890,6 +910,10 @@ function planSeparation(media: MediaDeps, diarization: DiarizationService) {
         voices: null,
         now: new Date(),
       }),
+    refused: (mediaId: string) => {
+      const latest = media.diarizations.latest(mediaId);
+      return latest ? media.voiceLabels.refusedNames(latest.id) : [];
+    },
   };
 }
 

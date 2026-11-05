@@ -98,6 +98,8 @@ export interface PreparationServiceDeps {
     ): { readonly speakers: TranscriptSpeakers } | null;
     /** Queues a separation; false when one is waiting or running. */
     request(mediaId: string): boolean;
+    /** The voices whose suggested name a person refused. */
+    refused(mediaId: string): readonly number[];
   };
   readonly edits: Pick<MediaEditStorePort, 'edit'>;
   readonly drafts: Pick<TrackProposalStorePort, 'draft' | 'failedAttempt'>;
@@ -588,6 +590,10 @@ export class PreparationService {
     const record = this.deps.plans.get(mediaId);
     const draft = this.deps.drafts.draft(mediaId);
     const speakers = this.speakersOf(mediaId);
+    const refusedVoices = this.deps.separation.refused(mediaId);
+    const proposed = draft.voices.filter(
+      ({ voice }) => !refusedVoices.includes(voice),
+    );
     const stages = record
       ? await this.stagesFor(actor, { record, item, draft })
       : [];
@@ -602,8 +608,13 @@ export class PreparationService {
       stages,
       separation: speakers?.version ?? null,
       voices: voicesOf(speakers),
-      suggestions: suggestionsOf(draft.voices, speakers),
-      tracks: this.tracksOf({ item, draft, speakers }),
+      suggestions: suggestionsOf(proposed, speakers),
+      refusedVoices: [...refusedVoices],
+      tracks: this.tracksOf({
+        item,
+        draft: { ...draft, voices: proposed },
+        speakers,
+      }),
       next:
         open && !record.validatingAt ? nextActionOf(record.plan, stages) : null,
       canSwitchToManual: open && switchable(record.plan, stages),
