@@ -247,7 +247,19 @@ test('KBC-097: a retry says what it costs, also after a reload, and a dearer one
 
   await expect(page.getByText('Custa cerca de')).toContainText('0,05');
   await expect(page.getByText(/recomeça do início/)).toBeVisible();
-  await expect(page.getByText(/Nada foi gasto/)).toBeVisible();
+  const notice = page.getByText(
+    'O valor mudou. Nada foi gasto: confira o novo valor.',
+  );
+  await expect(notice).toBeVisible();
+  // Above the actions: on a phone the bar at the bottom does not cover it (QA R2-5).
+  const noticeBox = await notice.boundingBox();
+  const confirmBox = await page
+    .getByRole('button', { name: 'Confirmar e propor' })
+    .boundingBox();
+  expect(noticeBox && confirmBox).toBeTruthy();
+  expect((noticeBox?.y ?? 0) + (noticeBox?.height ?? 0)).toBeLessThanOrEqual(
+    confirmBox?.y ?? 0,
+  );
   expect(sent).toEqual([{ dryRun: false, acceptedUsd: 0.02 }]);
   expect(
     await page.evaluate(

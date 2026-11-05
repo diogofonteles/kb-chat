@@ -9,6 +9,7 @@ import {
   output,
   signal,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
   CollectionSpeaker,
@@ -42,6 +43,7 @@ type Asking =
  */
 @Component({
   selector: 'app-track-proposals',
+  imports: [NgTemplateOutlet],
   templateUrl: './track-proposals.html',
   styleUrl: './track-proposals.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -171,17 +173,22 @@ export class TrackProposals {
       this.asking.set({ kind: 'idle' });
       return;
     }
+    // Cancelled while it waited: a late refusal reopens nothing (PD-03).
+    if (this.asking().kind !== 'starting') return;
     this.asking.set({ kind: 'estimated', estimate });
     if (result.kind === 'stopped') this.showStopped(result.result);
     else if (roseEstimateOf(result.error) !== null) this.askAgain();
     else this.showError(result.error);
   }
 
-  /** What was confirmed no longer holds (a save changed it): the new value, to confirm. */
+  /**
+   * What was confirmed no longer holds (a price, the plan or the draft changed it): the new
+   * value, to confirm. Neutral: the cause is not known here.
+   */
   private askAgain(): void {
     this.askEstimate();
     this.error.set(
-      $localize`:@@tracks.ai.estimateRose:O valor mudou depois do último salvamento. Nada foi gasto: confira o novo valor.`,
+      $localize`:@@tracks.ai.estimateRose:O valor mudou. Nada foi gasto: confira o novo valor.`,
     );
   }
 

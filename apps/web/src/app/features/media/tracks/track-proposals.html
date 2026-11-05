@@ -3,6 +3,7 @@
     <p i18n="@@tracks.ai.running">
       Propondo… janela {{ run()?.windowsDone }} de {{ run()?.windowsTotal }}
     </p>
+    <ng-container *ngTemplateOutlet="errorText" />
   } @else if (estimate(); as shown) {
     @if (refusal()) {
       <p class="refusal">{{ refusal() }}</p>
@@ -24,6 +25,8 @@
     @if (month()) {
       <p class="hint">{{ month() }}</p>
     }
+    <!-- Before the actions: on a phone the bar at the bottom would hide it. -->
+    <ng-container *ngTemplateOutlet="errorText" />
     <div class="buttons">
       @if (shown.allowed) {
         <button
@@ -61,11 +64,14 @@
     @if (failed()) {
       <p class="refusal" i18n="@@tracks.ai.failed">Não foi possível propor.</p>
     }
+    <ng-container *ngTemplateOutlet="errorText" />
   }
+</div>
+<ng-template #errorText>
   @if (error()) {
     <p class="refusal">{{ error() }}</p>
   }
-</div>
+</ng-template>
 @if (pending().length && separation() !== null) {
   <ul class="suggestions">
     @for (suggestion of pending(); track suggestion.voice) {

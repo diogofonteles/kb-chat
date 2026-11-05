@@ -164,12 +164,46 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.05 });
     await rendered.fixture.whenStable();
     expect(screen.getByText(/Custa cerca de US\$\s0,05/)).toBeTruthy();
+    // Neutral: a price or a plan may have changed it, not only a save.
+    const notice = screen.getByText(
+      'O valor mudou. Nada foi gasto: confira o novo valor.',
+    );
+    // Read before the actions, so a phone shows it above them, not under its bar.
+    const confirm = screen.getByRole('button', { name: 'Confirmar e propor' });
     expect(
-      screen.getByText(/Nada foi gasto: confira o novo valor/),
+      notice.compareDocumentPosition(confirm) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(start).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
     expect(start).toHaveBeenLastCalledWith(0.05);
+  });
+
+  it('ignores a late answer to a press the person cancelled (PD-03, KBC-097)', async () => {
+    const answer = new Subject<ProposeResult>();
+    const rendered = await estimated({ start: () => answer });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    answer.next({
+      kind: 'refused',
+      error: new HttpErrorResponse({
+        status: 409,
+        error: {
+          error: {
+            code: 'MEDIA_CONFLICT',
+            message: 'The estimate rose',
+            details: { reason: 'estimate-rose', estimateUsd: 0.05 },
+          },
+        },
+      }),
+    });
+    answer.complete();
+    await rendered.fixture.whenStable();
+    rendered.http.expectNone(URL);
+    expect(screen.queryByText(/O valor mudou/)).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Propor faixas com IA' }),
+    ).toBeTruthy();
   });
 
   it('says what the server refused', async () => {
