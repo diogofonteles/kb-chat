@@ -46,6 +46,7 @@ import { DisabledLlm } from '../adapters/disabled-llm.js';
 import { MemorySpendLedger } from '../adapters/memory-spend-ledger.js';
 import { StubLlmAdapter } from '../adapters/stub-llm-adapter.js';
 import { FakeGemini, fakeProvidersFetch } from '../testing/fake-gemini.js';
+import { FakeGroq } from '../testing/fake-groq.js';
 import {
   E2E_AUTHORIZE_PATH,
   registerOpenRouterConsent,
@@ -230,11 +231,17 @@ const access = {
   requests: new MemoryDocumentStore(),
   delivery: { email: outbox, sms: null },
 };
-const media = await createMedia(config, {
-  tokenKey: Buffer.alloc(32, 9),
-  voicePrintKey: Buffer.alloc(32, 10),
-  consentKey: Buffer.alloc(32, 11),
-});
+// Groq (KBC-037) answers through a fake: a key ending in "valid" is accepted. Nothing paid.
+const media = await createMedia(
+  config,
+  {
+    tokenKey: Buffer.alloc(32, 9),
+    voicePrintKey: Buffer.alloc(32, 10),
+    consentKey: Buffer.alloc(32, 11),
+    groqKey: Buffer.alloc(32, 12),
+  },
+  { fetch: new FakeGroq().fetch },
+);
 const app = await buildApp({
   config,
   auth,

@@ -16,6 +16,10 @@ import { SqliteBookmarkStore } from './adapters/sqlite/sqlite-bookmark-store.js'
 import { SqliteListeningStore } from './adapters/sqlite/sqlite-listening-store.js';
 import { SqliteMediaEditStore } from './adapters/sqlite/sqlite-media-edit-store.js';
 import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-ledger.js';
+import { SqliteGroqQueue } from './adapters/sqlite/sqlite-groq-queue.js';
+import { SqliteMediaSettings } from './adapters/sqlite/sqlite-media-settings.js';
+import { GroqClient } from './adapters/groq-client.js';
+import { monthlyCapOf } from './modules/media/index.js';
 import { SqliteMediaSearch } from './adapters/sqlite/sqlite-media-search.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
 import { SqliteTrackItemStore } from './adapters/sqlite/sqlite-track-item-store.js';
@@ -38,6 +42,9 @@ import type { ListeningStorePort } from './ports/listening-store.js';
 import type { MediaFilesPort } from './ports/media-files.js';
 import type { MediaEditStorePort } from './ports/media-edit-store.js';
 import type { MediaSpendLedgerPort } from './ports/media-spend-ledger.js';
+import type { GroqPort } from './ports/groq.js';
+import type { GroqQueuePort } from './ports/groq-queue.js';
+import type { MediaSettingsPort } from './ports/media-settings.js';
 import type { MediaSearchPort, TrackLinksPort } from './ports/media-search.js';
 import type { MediaStorePort } from './ports/media-store.js';
 import type { PreparationStorePort } from './ports/preparation-store.js';
@@ -79,11 +86,21 @@ export interface MediaDeps {
   readonly preparations: PreparationStorePort;
   /** The media monthly spend ledger (ADR 0022 §7). */
   readonly spend: MediaSpendLedgerPort;
-  /** The media AI's model and caps (KBC-067, ADR 0029). */
+  /** The media AI's model and caps (KBC-067, ADR 0029); the monthly one is read live. */
   readonly ai: {
     readonly model: string;
     readonly runCapUsd: number;
     readonly monthlyCapUsd: number;
+  };
+  /** Groq's mode and key, the owner's cap (KBC-037). */
+  readonly settings: MediaSettingsPort;
+  /** The Groq fallback (KBC-037): the queue's side, the API and the key's seal. */
+  readonly groq: {
+    readonly queue: GroqQueuePort;
+    readonly api: GroqPort;
+    readonly sealer: SecretSealerPort;
+    /** MEDIA_MONTHLY_CAP_USD: the cap until the owner sets one. */
+    readonly defaultCapUsd: number;
   };
   /** Silence maps (KBC-044). */
   readonly silences: SilenceStorePort;
@@ -120,6 +137,13 @@ export interface MediaSecrets {
   readonly voicePrintKey: Buffer;
   /** Seals the proof of each consent. */
   readonly consentKey: Buffer;
+  /** Seals the Groq key (KBC-037 BR-3). */
+  readonly groqKey: Buffer;
+}
+
+/** What the media library talks to outside (KBC-037): tests and E2E fake Groq. */
+export interface MediaOptions {
+  readonly fetch?: typeof fetch;
 }
 
 /**
@@ -129,12 +153,34 @@ export interface MediaSecrets {
 export async function createMedia(
   config: AppConfig,
   secrets: MediaSecrets,
+  options: MediaOptions = {},
 ): Promise<MediaDeps | undefined> {
   if (!config.KB_CHAT_MEDIA) return undefined;
   const dir = config.KB_CHAT_MEDIA_DIR;
   const workerToken = config.KB_CHAT_MEDIA_WORKER_TOKEN;
   if (!workerToken)
     throw new Error('KB_CHAT_MEDIA=on needs KB_CHAT_MEDIA_WORKER_TOKEN');
+  const files = await writableFiles(dir);
+  const { groqQueue, ...stores } = openStores(dir);
+  return {
+    ...stores,
+    ...voiceSafes(dir, secrets),
+    files,
+    workerToken,
+    tokenKey: secrets.tokenKey,
+    createPerMinute: config.MEDIA_CREATE_RATE_LIMIT,
+    ai: mediaAi(config, stores.settings),
+    groq: {
+      queue: groqQueue,
+      api: new GroqClient({ fetch: options.fetch }),
+      sealer: new SecretBox(secrets.groqKey),
+      defaultCapUsd: config.MEDIA_MONTHLY_CAP_USD,
+    },
+  };
+}
+
+/** The media folder, writable, or the API does not start (FR-1). */
+async function writableFiles(dir: string): Promise<FsMediaFiles> {
   const files = new FsMediaFiles(dir);
   await files.assertWritable().catch((err: unknown) => {
     throw new Error(
@@ -142,20 +188,20 @@ export async function createMedia(
       { cause: err },
     );
   });
-  return {
-    ...openStores(dir),
-    ...voiceSafes(dir, secrets),
-    files,
-    workerToken,
-    tokenKey: secrets.tokenKey,
-    createPerMinute: config.MEDIA_CREATE_RATE_LIMIT,
-    ai: {
-      model: config.MEDIA_AI_MODEL,
-      runCapUsd: config.MEDIA_AI_RUN_CAP_USD,
-      monthlyCapUsd: config.MEDIA_MONTHLY_CAP_USD,
-    },
-  };
+  return files;
 }
+
+/** The media AI's model and caps; the monthly cap is the owner's when set (KBC-037 BR-2). */
+const mediaAi = (
+  config: AppConfig,
+  settings: MediaSettingsPort,
+): MediaDeps['ai'] => ({
+  model: config.MEDIA_AI_MODEL,
+  runCapUsd: config.MEDIA_AI_RUN_CAP_USD,
+  get monthlyCapUsd() {
+    return monthlyCapOf(settings, config.MEDIA_MONTHLY_CAP_USD);
+  },
+});
 
 /** What holds biometric data and consents' proofs, sealed (ADR 0032). */
 const voiceSafes = (dir: string, secrets: MediaSecrets) => ({
@@ -170,8 +216,9 @@ const voiceSafes = (dir: string, secrets: MediaSecrets) => ({
 });
 
 /** The stores that live in the media database (ADR 0022). */
-type MediaStores = Pick<
+type MediaStores = { readonly groqQueue: GroqQueuePort } & Pick<
   MediaDeps,
+  | 'settings'
   | 'trackItems'
   | 'trackRevisions'
   | 'store'
@@ -222,6 +269,8 @@ function storesOf(db: DatabaseSync): MediaStores {
     edits: new SqliteMediaEditStore(db),
     preparations: new SqlitePreparationStore(db),
     spend: new SqliteMediaSpendLedger(db),
+    settings: new SqliteMediaSettings(db),
+    groqQueue: new SqliteGroqQueue(db),
     silences: new SqliteSilenceStore(db),
     waveforms: new SqliteWaveformStore(db),
     search,

@@ -1218,4 +1218,26 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       UPDATE media_draft_tracks SET person_edited = edited;
     `,
   },
+  {
+    // KBC-037 (ADR 0023 §7): Groq as the transcription fallback. A job routed to Groq is
+    // leased by the VM worker only, and one Groq left for the cap says why (FR-4). Groq's
+    // mode, its sealed key and the monthly cap the owner set live in `media_settings`.
+    // Only ALTERs on `jobs`, so its later rebuilds keep the columns; 24 (KBC-090) touches
+    // neither table, and `media_spend` is rebuilt from what it is.
+    version: 25,
+    name: 'groq-transcription-fallback',
+    sql: (db) => `
+      ALTER TABLE jobs ADD COLUMN route TEXT CHECK (route IS NULL OR route IN ('groq'));
+      ALTER TABLE jobs ADD COLUMN hold TEXT CHECK (hold IS NULL OR hold IN ('monthly-cap'));
+
+      ${rebuildAccepting(db, { table: 'media_spend', kind: 'groq-transcription' })}
+
+      CREATE TABLE media_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_by TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
 ];

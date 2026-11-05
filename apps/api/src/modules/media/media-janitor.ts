@@ -15,6 +15,8 @@ export interface MediaJanitorDeps {
   readonly advancePreparations?: () => Promise<void>;
   /** Replaced cuts after a day, deleted tracks after 30 days (KBC-073 BR-3, BR-7). */
   readonly purgeTrackFiles?: () => Promise<void>;
+  /** Sends transcriptions waiting too long for the Mac to Groq (KBC-037 FR-2). */
+  readonly routeToGroq?: () => number;
   readonly now?: () => Date;
 }
 
@@ -56,6 +58,7 @@ export class MediaJanitor {
       reaped.transcriptionsGivenUp.map((id) => files.flacPath(id)),
     );
     this.backfill();
+    this.deps.routeToGroq?.();
     await this.deps.advancePreparations?.();
     await this.deps.purgeTrackFiles?.();
     const result = {

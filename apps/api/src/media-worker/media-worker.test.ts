@@ -40,6 +40,8 @@ function fakeApi(overrides: Partial<MediaJobsApi> = {}) {
   const api: MediaJobsApi = {
     lease: async () => null,
     completeCut: async () => true,
+    sendGroqChunk: async () => ({ kind: 'lost' }),
+    completeGroq: async () => true,
     heartbeat: async () => {
       told.push('heartbeat');
       return true;

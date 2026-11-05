@@ -6,7 +6,10 @@ import type {
 } from '../../ports/media-store.js';
 import { toMediaItem } from './to-media-item.js';
 
-const aRecord = (transcription: TranscriptionRecord): MediaRecord => ({
+const aRecord = (
+  transcription: Omit<TranscriptionRecord, 'provider' | 'route' | 'hold'> &
+    Partial<TranscriptionRecord>,
+): MediaRecord => ({
   id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   topic: 'hermetismo',
   title: 'Palestra',
@@ -22,7 +25,12 @@ const aRecord = (transcription: TranscriptionRecord): MediaRecord => ({
   bytes: 3,
   createdAt: '2026-11-03T12:00:00.000Z',
   updatedAt: '2026-11-03T12:00:00.000Z',
-  transcription,
+  transcription: {
+    provider: null,
+    route: 'transcriber',
+    hold: null,
+    ...transcription,
+  },
   track: null,
   archivedAt: null,
 });
@@ -61,6 +69,9 @@ describe('toMediaItem: the transcription (KBC-036)', () => {
       transcriber: 'none',
       transcriberOffSince: null,
       lastAttemptFailed: false,
+      provider: null,
+      route: 'transcriber',
+      hold: null,
     });
   });
 

@@ -23,7 +23,10 @@ export interface TrackSubjectWiring {
 
 const capsOf = ({ ai }: MediaDeps) => ({
   runUsd: ai.runCapUsd,
-  monthlyUsd: ai.monthlyCapUsd,
+  // The owner may change the media cap at any time (KBC-037 BR-2): read it live.
+  get monthlyUsd() {
+    return ai.monthlyCapUsd;
+  },
 });
 
 /** Subjects as the search and the library read them (KBC-070). */

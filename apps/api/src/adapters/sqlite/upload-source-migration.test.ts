@@ -26,7 +26,11 @@ describe('Migration upload-source-and-estimate (KBC-035)', () => {
       .prepare(`SELECT sql FROM sqlite_master WHERE name = 'jobs'`)
       .get();
 
-    applyMigrations(db, MEDIA_MIGRATIONS);
+    // KBC-037's 25 adds columns to `jobs` later on, on purpose: up to this one here.
+    applyMigrations(
+      db,
+      MEDIA_MIGRATIONS.filter((one) => one.version <= VERSION),
+    );
 
     expect(
       db.prepare(`SELECT source_sha256, estimated_bytes FROM media`).get(),

@@ -128,6 +128,8 @@ import {
   TranscriptService,
   transcriptRoutes,
   workerRoutes,
+  groqRoutes,
+  type GroqService,
   VoicePrintReconciler,
   VoicePrintService,
   VoiceProfileService,
@@ -136,6 +138,7 @@ import {
   type MediaActor,
 } from './modules/media/index.js';
 import type { MediaDeps } from './media-factory.js';
+import { createGroq } from './groq-factory.js';
 import type { TranscriptSummary } from './ports/transcript-store.js';
 import { createLogger } from './logger.js';
 import { MemorySettingsStore } from './adapters/memory-settings-store.js';
@@ -473,7 +476,11 @@ function mediaService({
   catalog,
   authors,
   transcribers,
-}: MediaWiring & { transcribers: TranscriberService }): MediaService {
+  groq,
+}: MediaWiring & {
+  transcribers: TranscriberService;
+  groq: GroqService;
+}): MediaService {
   const { store, files, listening } = media;
   return new MediaService({
     store,
@@ -482,6 +489,7 @@ function mediaService({
     tracks: media.trackItems,
     oldCuts: media.trackRevisions,
     presence: () => transcribers.presence(),
+    groqReady: () => groq.ready(),
     requestTranscription: (mediaId) =>
       media.transcripts.requestTranscription({
         mediaId,
@@ -531,12 +539,14 @@ async function registerWorker(
     waveforms: WaveformService;
     authors: AuthorsService;
     publisher: TrackPublisher;
+    groq: GroqService;
   },
 ) {
   const { publisher } = wiring;
   const voicePrints = voicePrintService(wiring);
   await app.register(
     workerRoutes({
+      groq: wiring.groq,
       service: workerService(wiring.media, voicePrints),
       transcribers: wiring.transcribers,
       transcription: transcriptionService(wiring.media, publisher),
@@ -551,13 +561,14 @@ async function registerWorker(
 
 /** The queue as workers see it, with what cut and voice-profile jobs carry. */
 function workerService(
-  { store, files, trackItems: tracks }: MediaDeps,
+  { store, files, trackItems: tracks, transcripts }: MediaDeps,
   voicePrints: VoicePrintService,
 ): WorkerService {
   return new WorkerService({
     store,
     files,
     tracks,
+    termsVersion: () => transcripts.currentTerms().version,
     voiceJobOf: (job) => voicePrints.jobOf(job),
   });
 }
@@ -832,16 +843,18 @@ function transcriberService(media: MediaDeps): TranscriberService {
 /** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
 async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const transcribers = transcriberService(wiring.media);
-  const media = mediaService({ ...wiring, transcribers });
+  const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
+  const media = mediaService({ ...wiring, transcribers, groq });
   const publisher = trackPublisher(wiring);
   await registerTranscribers(app, { transcribers, media, wiring });
+  await app.register(groqRoutes({ groq, media }));
   await registerListening(app, wiring, { media, transcribers, publisher });
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
   const { authors, media: deps } = wiring;
   const worker = { ...measures, media: deps, authors, transcribers };
-  await registerWorker(app, { ...worker, publisher });
+  await registerWorker(app, { ...worker, publisher, groq });
   const edited = await registerEditing(app, {
     ...wiring,
     service: media,
@@ -855,7 +868,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
       tracks: edited.revisions,
     }),
   );
-  startJanitor(app, { ...measures, ...edited, media: wiring.media });
+  startJanitor(app, { ...measures, ...edited, media: wiring.media, groq });
 }
 
 /** Proposals, the draft, subjects and the guided flow over them (KBC-066, 067, 069, 072). */
@@ -996,6 +1009,7 @@ function janitorOf(app: FastifyInstance, wiring: JanitorWiring): MediaJanitor {
     backfillWaveforms: () => wiring.waveforms.backfill(),
     advancePreparations: () => wiring.preparation.advanceAll(),
     purgeTrackFiles: () => wiring.revisions.purge(),
+    routeToGroq: () => wiring.groq.sweep(),
   });
 }
 
@@ -1010,6 +1024,7 @@ function startJanitor(
     preparation: PreparationService;
     subjects: SubjectProposalService;
     revisions: TrackRevisionService;
+    groq: GroqService;
   },
 ): void {
   const { store } = wiring.media;

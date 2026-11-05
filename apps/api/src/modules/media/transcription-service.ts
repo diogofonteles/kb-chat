@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import type {
   CompleteTranscribeRequest,
+  TranscriptProvider,
   TranscriptionTerms,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -36,8 +37,17 @@ const unknownTerms = () =>
     details: { field: 'termsVersion' },
   });
 
+/** A raw result from the Mac (mlx-whisper) or from Groq (KBC-037), lease aside. */
+export type TranscriptResult = Omit<
+  CompleteTranscribeRequest,
+  'provider' | 'worker' | 'leaseId'
+> &
+  Partial<Pick<CompleteTranscribeRequest, 'worker' | 'leaseId'>> & {
+    readonly provider: TranscriptProvider;
+  };
+
 /** How a transcript was made: the worker's model, parameters, terms and VAD. */
-const provenanceOf = (done: CompleteTranscribeRequest) => ({
+const provenanceOf = (done: TranscriptResult) => ({
   provider: done.provider,
   model: done.model,
   parameters: JSON.stringify(done.parameters),
@@ -49,7 +59,7 @@ const provenanceOf = (done: CompleteTranscribeRequest) => ({
 });
 
 /** The raw result as stored: everything the worker sent but its lease (ADR 0023 §4). */
-function rawFileOf(done: CompleteTranscribeRequest): string {
+function rawFileOf(done: TranscriptResult): string {
   return JSON.stringify({
     provider: done.provider,
     model: done.model,
@@ -116,10 +126,7 @@ export class TranscriptionService {
    * Keeps the raw JSON as a file, derives it and stores the new version (BR-3, FR-3) in
    * one transaction with the job's end. A lost lease drops the file and is 409.
    */
-  async complete(
-    owner: LeaseOwner,
-    done: CompleteTranscribeRequest,
-  ): Promise<void> {
+  async complete(owner: LeaseOwner, done: TranscriptResult): Promise<void> {
     const job = this.heldTranscription(owner);
     if (!job) throw leaseLost();
     const { files, transcripts, store } = this.deps;
@@ -179,7 +186,7 @@ export class TranscriptionService {
   /** With the list the job was prompted with: only that one can leak into the text. */
   private derive(input: {
     ids: { id: string; mediaId: string; rawPath: string };
-    done: CompleteTranscribeRequest;
+    done: TranscriptResult;
     terms: readonly string[];
   }): NewTranscript {
     const { done, ids } = input;

@@ -30,6 +30,9 @@ const transcription = (
   transcriber: 'on' as const,
   transcriberOffSince: null,
   lastAttemptFailed: false,
+  provider: null,
+  route: 'transcriber' as const,
+  hold: null,
 });
 
 const facts = (over: Partial<StageFacts> = {}): StageFacts => ({

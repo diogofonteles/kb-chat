@@ -48,7 +48,8 @@ export interface TranscriberServiceDeps {
 const TRANSCRIBER_KINDS: readonly MediaJobKind[] = ['transcribe'];
 const VM_WORKER: WorkerIdentity = {
   leaseName: null,
-  kinds: ['transcode', 'silences', 'waveform', 'cut'],
+  // `transcribe`: only the ones routed to Groq (KBC-037); the lease filters the rest.
+  kinds: ['transcode', 'silences', 'waveform', 'cut', 'transcribe'],
 };
 const TOKEN_PREFIX = 'nat_';
 /** At most one "seen" write per transcriber in this window. */

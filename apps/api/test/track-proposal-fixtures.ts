@@ -101,6 +101,19 @@ export function insertManualTrack(
   );
 }
 
+/** A recording transcribed on the Mac, as the item shows it. */
+const TRANSCRIBED: MediaItem['transcription'] = {
+  status: 'done',
+  confidence: 'normal',
+  version: 1,
+  transcriber: 'none',
+  transcriberOffSince: null,
+  lastAttemptFailed: false,
+  provider: 'mlx-whisper',
+  route: 'transcriber',
+  hold: null,
+};
+
 /** The item as the media service would show it to the owner. */
 export const itemOf = (mediaId: string, author: string | null): MediaItem => ({
   id: mediaId,
@@ -116,17 +129,11 @@ export const itemOf = (mediaId: string, author: string | null): MediaItem => ({
   canRetry: false,
   canEdit: false,
   canTranscribeAgain: false,
+  canUseGroq: false,
   positionMs: 0,
   completedAt: null,
   positionUpdatedAt: null,
-  transcription: {
-    status: 'done',
-    confidence: 'normal',
-    version: 1,
-    transcriber: 'none',
-    transcriberOffSince: null,
-    lastAttemptFailed: false,
-  },
+  transcription: TRANSCRIBED,
   parent: null,
   archived: false,
 });

@@ -8,6 +8,8 @@ import {
   mediaKindSchema,
   mediaStatusSchema,
   transcriptConfidenceSchema,
+  transcriptProviderSchema,
+  transcriptionHoldSchema,
   type MediaJobKind,
 } from '@kb-chat/contracts';
 import type {
@@ -87,6 +89,15 @@ function transcriptionOf(row: Row): MediaRecord['transcription'] {
       row['transcript_confidence'] === null
         ? null
         : transcriptConfidenceSchema.parse(row['transcript_confidence']),
+    provider:
+      row['transcript_provider'] === null
+        ? null
+        : transcriptProviderSchema.parse(row['transcript_provider']),
+    route: row['transcribe_route'] === 'groq' ? 'groq' : 'transcriber',
+    hold:
+      row['transcribe_hold'] === null
+        ? null
+        : transcriptionHoldSchema.parse(row['transcribe_hold']),
   };
 }
 
@@ -118,6 +129,12 @@ const MEDIA_COLUMNS = `id, topic, title, ${AUTHOR_COLUMN} AS author, owner_princ
   track_version, file_version,
   (SELECT j.status FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
      ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_job,
+  (SELECT j.route FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
+     ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_route,
+  (SELECT j.hold FROM jobs j WHERE j.media_id = media.id AND j.kind = 'transcribe'
+     ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1) AS transcribe_hold,
+  (SELECT t.provider FROM transcripts t WHERE t.media_id = media.id
+     ORDER BY t.version DESC LIMIT 1) AS transcript_provider,
   (SELECT t.version FROM transcripts t WHERE t.media_id = media.id
      ORDER BY t.version DESC LIMIT 1) AS transcript_version,
   (SELECT t.confidence FROM transcripts t WHERE t.media_id = media.id
@@ -610,6 +627,7 @@ export class SqliteMediaStore implements MediaStorePort {
            worker = ?, lease_until = ?, heartbeat_at = ?, updated_at = ?
          WHERE id = (SELECT id FROM jobs WHERE status = 'queued' AND kind IN (${kinds})
                        AND ${DIARIZE_READY}
+                       AND (kind <> 'transcribe' OR coalesce(route, 'transcriber') = ?)
                      ORDER BY created_at, id LIMIT 1)
          RETURNING id, lease_id, kind, media_id, attempts, voices`,
       )
@@ -620,6 +638,8 @@ export class SqliteMediaStore implements MediaStorePort {
         request.now.getTime(),
         request.now.toISOString(),
         ...request.kinds,
+        // KBC-037: a paired transcriber never takes a job routed to Groq, nor the VM another.
+        request.transcribeRoute ?? 'transcriber',
       );
   }
 

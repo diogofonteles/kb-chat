@@ -16,6 +16,7 @@ const SECRETS = {
   tokenKey: Buffer.alloc(32, 1),
   voicePrintKey: Buffer.alloc(32, 2),
   consentKey: Buffer.alloc(32, 3),
+  groqKey: Buffer.alloc(32, 4),
 };
 let root: string;
 

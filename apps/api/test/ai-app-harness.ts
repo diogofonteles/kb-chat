@@ -54,6 +54,7 @@ import { createResearchAgent } from '../src/research-agent-factory.js';
 import { createSearchIndex } from '../src/search-index-factory.js';
 import { FakeOpenRouter } from '../src/testing/fake-openrouter.js';
 import { FakeGemini, fakeProvidersFetch } from '../src/testing/fake-gemini.js';
+import { FakeGroq } from '../src/testing/fake-groq.js';
 import {
   startCodexRunner,
   type CodexRunner,
@@ -73,6 +74,8 @@ export interface Started {
   readonly state: string;
   readonly fake: FakeOpenRouter;
   readonly gemini: FakeGemini;
+  /** Groq for the media library (KBC-037). */
+  readonly groq: FakeGroq;
   readonly ledger: SpendLedgerPort;
   readonly logs: string[];
 }
@@ -259,6 +262,30 @@ async function buildAi({ config, core, auth, fetch, env }: AiWiring) {
   return { house, ai };
 }
 
+/** OpenRouter and Gemini without the network, behind one fetch. */
+function fakeProviders() {
+  const fake = new FakeOpenRouter();
+  const gemini = new FakeGemini();
+  const fetch = fakeProvidersFetch({
+    openrouter: fake.fetch,
+    gemini: gemini.fetch,
+  });
+  return { fake, gemini, fetch };
+}
+
+/** The media library when on, with fresh keys and the fake Groq (KBC-037). */
+const testMedia = (config: AppConfig, groq: FakeGroq) =>
+  createMedia(
+    config,
+    {
+      tokenKey: randomBytes(32),
+      voicePrintKey: randomBytes(32),
+      consentKey: randomBytes(32),
+      groqKey: randomBytes(32),
+    },
+    { fetch: groq.fetch },
+  );
+
 /** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
 export async function start(options: StartOptions = {}): Promise<Started> {
   const state =
@@ -268,26 +295,27 @@ export async function start(options: StartOptions = {}): Promise<Started> {
     ? { PATH: process.env['PATH'] ?? '', HOME: state }
     : { PATH: '' };
   const { logs, logger } = capturedLogger();
-  const fake = new FakeOpenRouter();
-  const gemini = new FakeGemini();
-  const fetch = fakeProvidersFetch({
-    openrouter: fake.fetch,
-    gemini: gemini.fetch,
-  });
+  const { fake, gemini, fetch } = fakeProviders();
   const keys = await createTestKeys();
   const core = await buildCore(config, logger);
   const auth = testAuth(state, keys);
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
-  const media = await createMedia(config, {
-    tokenKey: randomBytes(32),
-    voicePrintKey: randomBytes(32),
-    consentKey: randomBytes(32),
-  });
+  const groq = new FakeGroq();
+  const media = await testMedia(config, groq);
   current = await buildApp({ config, ...core, ai, auth, house, logger, media });
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
   if (options.claude || options.codexHome)
     await current.listen({ host: '127.0.0.1', port: config.PORT });
-  return { app: current, keys, state, fake, gemini, ledger: core.ledger, logs };
+  return {
+    app: current,
+    keys,
+    state,
+    fake,
+    gemini,
+    groq,
+    ledger: core.ledger,
+    logs,
+  };
 }
 
 const cookieOf = (setCookie: unknown): string =>

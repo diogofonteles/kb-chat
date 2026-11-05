@@ -1,21 +1,27 @@
 import {
   CSRF_HEADER,
   CSRF_HEADER_VALUE,
+  groqChunkResultSchema,
   vmWorkerJobSchema,
   type CompleteCutRequest,
   type CompleteSilencesRequest,
   type CompleteTranscodeRequest,
   type CompleteWaveformRequest,
+  type CompleteGroqTranscriptRequest,
   type CutJob,
   type FailJobRequest,
+  type GroqTranscribeJob,
   type SilencesJob,
   type VmWorkerJob,
   type WaveformJob,
   type WorkerJob,
 } from '@kb-chat/contracts';
+import { retryAfterMsOf } from '../adapters/groq-client.js';
+import type { GroqChunkAnswer, GroqJobsApi } from './groq-transcriber.js';
+import type { Span } from './speech-chunks.js';
 
 /** What the worker loop needs from the API (ADR 0022 §3); a fake stands in for tests. */
-export interface MediaJobsApi {
+export interface MediaJobsApi extends GroqJobsApi {
   /** The oldest conversion, silences or waveform job, or null when there is none. */
   lease(): Promise<VmWorkerJob | null>;
   /** False when the lease is no longer this worker's (409): drop the work. */
@@ -69,7 +75,8 @@ export class HttpMediaJobsApi implements MediaJobsApi {
   async lease(): Promise<VmWorkerJob | null> {
     const response = await this.post('/api/v1/media-worker/jobs/lease', {
       worker: this.options.worker,
-      kinds: ['transcode', 'silences', 'waveform', 'cut'],
+      // `transcribe`: the API gives the VM only the ones routed to Groq (KBC-037).
+      kinds: ['transcode', 'silences', 'waveform', 'cut', 'transcribe'],
     });
     if (response.status === 204) return null;
     if (!response.ok) throw await this.failure(response);
@@ -115,6 +122,45 @@ export class HttpMediaJobsApi implements MediaJobsApi {
     return this.onJob(job, 'fail', failure);
   }
 
+  /** One chunk to Groq through the API (KBC-037): 429 says how long to wait first. */
+  async sendGroqChunk(
+    job: GroqTranscribeJob,
+    chunk: { readonly span: Span; readonly audio: Buffer },
+  ): Promise<GroqChunkAnswer> {
+    const query = new URLSearchParams({
+      worker: this.options.worker,
+      leaseId: job.leaseId,
+      startMs: String(chunk.span.startMs),
+      endMs: String(chunk.span.endMs),
+      termsVersion: String(job.termsVersion),
+    });
+    const response = await this.send(
+      `/api/v1/media-worker/jobs/${job.id}/groq/chunks?${query.toString()}`,
+      {
+        body: new Uint8Array(chunk.audio),
+        contentType: 'audio/flac',
+        // The API waits for Groq: about a second, two minutes at worst.
+        timeoutMs: 150_000,
+      },
+    );
+    if (response.status === 409) return { kind: 'lost' };
+    if (response.status === 429)
+      return {
+        kind: 'wait',
+        retryAfterMs: retryAfterMsOf(response.headers.get('retry-after')),
+      };
+    if (!response.ok) throw await this.failure(response);
+    const { result } = groqChunkResultSchema.parse(await response.json());
+    return { kind: 'ok', result };
+  }
+
+  completeGroq(
+    job: GroqTranscribeJob,
+    done: Omit<CompleteGroqTranscriptRequest, 'worker' | 'leaseId'>,
+  ): Promise<boolean> {
+    return this.onJob(job, 'groq/transcript', done);
+  }
+
   /** 204 is done; 409 means the lease was lost; anything else is an error. */
   private async onJob(
     job: VmWorkerJob,
@@ -135,16 +181,30 @@ export class HttpMediaJobsApi implements MediaJobsApi {
   }
 
   private post(path: string, body: object): Promise<Response> {
+    return this.send(path, {
+      body: JSON.stringify(body),
+      contentType: 'application/json',
+    });
+  }
+
+  private send(
+    path: string,
+    payload: {
+      readonly body: string | Uint8Array;
+      readonly contentType: string;
+      readonly timeoutMs?: number;
+    },
+  ): Promise<Response> {
     const doFetch = this.options.fetch ?? fetch;
     return doFetch(new URL(path, this.options.baseUrl), {
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.options.token}`,
-        'content-type': 'application/json',
+        'content-type': payload.contentType,
         [CSRF_HEADER]: CSRF_HEADER_VALUE,
       },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
+      body: payload.body,
+      signal: AbortSignal.timeout(payload.timeoutMs ?? 30_000),
     });
   }
 
