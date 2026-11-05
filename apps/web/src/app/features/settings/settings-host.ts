@@ -43,6 +43,8 @@ export class SettingsHost {
     viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
   protected readonly panel = this.store.panel;
+  /** The host closed the dialog and its "close" event has not come yet. */
+  private closing = false;
 
   constructor() {
     // The shell loads settings once: the wizard decides from `exists` (BR-5).
@@ -56,7 +58,11 @@ export class SettingsHost {
         // Start at the title, so a screen reader announces where the reader is.
         dialog.querySelector<HTMLElement>('h2')?.focus();
       }
-      if (!open && dialog.open) dialog.close();
+      if (!open && dialog.open) {
+        // Its "close" event is this host's echo, not the person's: `closed()` lets it go.
+        this.closing = true;
+        dialog.close();
+      }
     });
   }
 
@@ -74,9 +80,14 @@ export class SettingsHost {
 
   /**
    * Esc or a close(): the panel state follows the dialog. The event comes in a task of its
-   * own, so it may land after the dialog opened again (Pular, then ⚙ at once): then it is old.
+   * own, so the one the host caused may land after a new opening was asked for (Pular, then ⚙
+   * at once), even before a render opened the dialog: that one is never the person's.
    */
   protected closed(): void {
+    if (this.closing) {
+      this.closing = false;
+      return;
+    }
     if (this.panel() !== null && !this.dialog().nativeElement.open)
       this.store.close();
   }
