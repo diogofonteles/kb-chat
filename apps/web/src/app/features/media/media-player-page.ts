@@ -76,6 +76,10 @@ import {
   statusTextOf,
   transcriptionTextOf,
 } from './media-labels.js';
+import {
+  CollectionHeading,
+  type HeadingScope,
+} from '@features/chat/collection-heading.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { ViewStore } from '@features/chat/view-store.js';
 import { PreparationEntry } from './preparation/preparation-entry.js';
@@ -378,6 +382,12 @@ export class MediaPlayerPage {
     viewChild<ElementRef<HTMLButtonElement>>('editButton');
 
   constructor() {
+    inject(CollectionHeading).follow(
+      computed<HeadingScope | null>(() => {
+        const slug = this.media()?.topic;
+        return slug ? { kind: 'topic', slug } : null;
+      }),
+    );
     toObservable(this.media)
       .pipe(
         filter((media): media is MediaItem => media?.status === 'ready'),

@@ -99,6 +99,9 @@ export class LibraryControls {
   /** Collections holding media, each parent with its sub-collections (ADR 0028). */
   protected readonly topicOptions = computed(() => {
     const holding = new Set(this.facets().topics);
+    // The one in force stays on the list, even with no media: else the field would lie.
+    const chosen = this.filters().topic;
+    if (chosen) holding.add(chosen);
     const parents = new Set(
       this.topics()
         .filter((topic) => topic.parent !== null && holding.has(topic.slug))

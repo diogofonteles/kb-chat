@@ -1,3 +1,7 @@
+import {
+  CollectionHeading,
+  type HeadingScope,
+} from '@features/chat/collection-heading.js';
 import { httpResource } from '@angular/common/http';
 import { DOCUMENT } from '@angular/common';
 import {
@@ -435,6 +439,12 @@ export class TrackEditorPage {
   });
 
   constructor() {
+    inject(CollectionHeading).follow(
+      computed<HeadingScope | null>(() => {
+        const slug = this.media()?.topic;
+        return slug ? { kind: 'topic', slug } : null;
+      }),
+    );
     this.leaveForProcessing();
     this.stopOtherPlayback();
     this.route.paramMap

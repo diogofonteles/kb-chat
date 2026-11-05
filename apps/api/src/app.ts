@@ -491,6 +491,7 @@ function mediaService({
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
     hasTopic: (topic) => catalog.get(topic) !== undefined,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
+    rootOf: (topic) => authors.rootOf(topic),
   });
 }
 

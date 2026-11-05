@@ -1,4 +1,5 @@
 import {
+  libraryHomeQuerySchema,
   libraryHomeSchema,
   libraryPageSchema,
   libraryQuerySchema,
@@ -28,7 +29,10 @@ const OPTIONS = {
   },
   home: {
     config: { access: LIBRARY },
-    schema: { response: { 200: libraryHomeSchema } },
+    schema: {
+      querystring: libraryHomeQuerySchema,
+      response: { 200: libraryHomeSchema },
+    },
   },
   clearRecents: {
     config: { access: LIBRARY },
@@ -70,7 +74,7 @@ export const libraryRoutes =
       async (request) => service.search(actorOf(request), request.query),
     );
     typed.get('/api/v1/media/library/home', OPTIONS.home, async (request) =>
-      service.home(actorOf(request)),
+      service.home(actorOf(request), request.query.topic),
     );
     typed.delete(
       '/api/v1/media/library/recents',

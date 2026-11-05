@@ -212,6 +212,24 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     panel.http.expectNone({ method: 'POST' });
   });
 
+  it('warns of the same file in another part of the collection, and still sends (KBC-091)', async () => {
+    const panel = await renderPanel();
+    await chooseChecked(panel, audio(), {
+      verdict: 'new',
+      elsewhere: [
+        { id: OTHER_ID, title: 'Palestra antiga', topic: 'hermetismo' },
+      ],
+    });
+    expect(screen.getByText(/Também está em Hermetismo:/)).toBeTruthy();
+    expect(screen.getByText(/Pode enviar assim mesmo/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Palestra antiga' })
+        .getAttribute('href'),
+    ).toBe(`/midia/${OTHER_ID}`);
+    expect(screen.getByRole('textbox', { name: 'Título' })).toBeTruthy();
+  });
+
   it('says the quota in the words of the item and sends nothing (AC-3)', async () => {
     const panel = await renderPanel();
     await chooseChecked(panel, audio(), {

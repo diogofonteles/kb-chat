@@ -1,3 +1,7 @@
+import {
+  CollectionHeading,
+  type HeadingScope,
+} from '@features/chat/collection-heading.js';
 import { httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -120,6 +124,12 @@ export class PreparationPage {
   );
 
   constructor() {
+    inject(CollectionHeading).follow(
+      computed<HeadingScope | null>(() => {
+        const slug = this.preparation()?.topic;
+        return slug ? { kind: 'topic', slug } : null;
+      }),
+    );
     effect(() => {
       const id = this.id();
       if (id) this.watch.start(id);

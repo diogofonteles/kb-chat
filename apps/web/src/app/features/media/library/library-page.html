@@ -287,9 +287,25 @@
           </div>
         } @else if (nothingFound()) {
           <div class="empty">
-            <p i18n="@@library.filtersEmpty">
-              Nenhuma mídia com estes filtros.
-            </p>
+            @if (filtered()) {
+              <p i18n="@@library.filtersEmpty">
+                Nenhuma mídia com estes filtros.
+              </p>
+            } @else {
+              <p i18n="@@library.collectionEmpty">
+                Nenhuma mídia neste acervo.
+              </p>
+            }
+            @if (canSeeAll()) {
+              <button
+                type="button"
+                class="secondary"
+                (click)="showAllCollections()"
+                i18n="@@library.seeAllCollections"
+              >
+                Ver todos os acervos
+              </button>
+            }
             @if (filtered()) {
               <button
                 type="button"
@@ -432,7 +448,7 @@
   <app-upload-panel
     [topic]="selectedTopic()"
     [topics]="topics()"
-    (uploaded)="uploaded()"
+    (uploaded)="uploaded($event)"
     (closed)="uploadClosed()"
   />
 }

@@ -9,6 +9,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   PREPARATION_MAX_DURATION_MS,
   type UploadCheck,
+  type UploadElsewhere,
 } from '@kb-chat/contracts';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi } from '@core/media/media-api.js';
@@ -38,7 +39,11 @@ import {
 /** Where a chosen file is, from the choice to "Enviado" (screens.md T14, KBC-035). */
 export type EntryState =
   | { readonly kind: 'checking'; readonly percent: number }
-  | { readonly kind: 'ready' }
+  | {
+      readonly kind: 'ready';
+      /** The same file in another part of the collection: a warning (KBC-091). */
+      readonly elsewhere?: readonly UploadElsewhere[];
+    }
   | { readonly kind: 'refused'; readonly problem: string }
   | {
       readonly kind: 'duplicate';
@@ -101,7 +106,7 @@ const STATE_OF: {
     check: Extract<UploadCheck, { verdict: V }>,
   ) => EntryState;
 } = {
-  new: () => ({ kind: 'ready' }),
+  new: ({ elsewhere }) => ({ kind: 'ready', elsewhere }),
   duplicate: ({ media }) => ({ kind: 'duplicate', media }),
   resume: ({ media, offset }) => ({
     kind: 'resume',

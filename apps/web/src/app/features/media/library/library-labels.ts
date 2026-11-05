@@ -123,12 +123,9 @@ export function coverToneOf(topic: string): number {
   return hash % COVER_TONES;
 }
 
-/** How many filters are on (for "Limpar filtros"). */
+/** How many filters are on (for "Limpar filtros"); the collection is where the list is. */
 export const activeFiltersOf = (filters: LibraryFilters): number =>
-  filters.states.length +
-  filters.authors.length +
-  (filters.topic ? 1 : 0) +
-  (filters.subject ? 1 : 0);
+  filters.states.length + filters.authors.length + (filters.subject ? 1 : 0);
 
 /** The list with the value added or taken out (a chip pressed). */
 export function toggled<T>(values: readonly T[], value: T): T[] {
@@ -154,6 +151,7 @@ export const NO_FILTERS: LibraryFilters = {
   states: [],
   authors: [],
   topic: null,
+  allTopics: false,
   subject: null,
 };
 

@@ -9,6 +9,7 @@ const NONE: LibraryFilters = {
   states: [],
   authors: [],
   topic: null,
+  allTopics: false,
   subject: null,
 };
 

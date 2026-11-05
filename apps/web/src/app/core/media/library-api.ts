@@ -30,6 +30,11 @@ import { PREFERENCES_URL } from './listening-api.js';
 export const LIBRARY_URL = '/api/v1/media/library';
 export const LIBRARY_HOME_URL = `${LIBRARY_URL}/home`;
 export const LIBRARY_SEARCH_URL = `${LIBRARY_URL}/search`;
+/** The strips of one collection, or of all (KBC-091). */
+export const libraryHomeUrlOf = (topic: string | null): string =>
+  topic
+    ? `${LIBRARY_HOME_URL}?${new URLSearchParams({ topic }).toString()}`
+    : LIBRARY_HOME_URL;
 export const LIBRARY_RECENTS_URL = `${LIBRARY_URL}/recents`;
 export const MARK_PLAYED_URL = '/api/v1/media/played';
 

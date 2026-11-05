@@ -68,6 +68,8 @@
               }</span
             >
           </h1>
+        } @else if (allCollections()) {
+          <h1 class="topic" i18n="@@page.allCollections">Todos os acervos</h1>
         } @else {
           <h1 class="topic" i18n="@@page.title">Nova Alexandria</h1>
         }

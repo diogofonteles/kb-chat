@@ -247,6 +247,23 @@ describe('Media library: what each person sees (BR-2, NFR-3)', () => {
 });
 
 describe('Media library: home (FR-2, BR-3, BR-4)', () => {
+  it('narrows the strips to a collection, as the library does (KBC-091)', async () => {
+    const media = await startMedia();
+    const here = await ready(media, { title: 'Aqui' });
+    const there = await ready(media, { title: 'Lá', topic: 'alquimia' });
+    for (const id of [here, there])
+      await playedAt(media, media.owner, {
+        id,
+        positionMs: 10_000,
+        at: '2026-11-01T10:00:00.000Z',
+      });
+    const all = (await media.owner('GET', HOME)).json();
+    expect(titles(all.continueListening).toSorted()).toEqual(['Aqui', 'Lá']);
+    const one = (await media.owner('GET', `${HOME}?topic=alquimia`)).json();
+    expect(titles(one.continueListening)).toEqual(['Lá']);
+    expect(titles(one.recentlyPlayed)).toEqual(['Lá']);
+  });
+
   it('lists in-progress media, the most recently played first (AC-3)', async () => {
     const media = await startMedia();
     const older = await ready(media, { title: 'Mais antiga' });
@@ -530,6 +547,7 @@ describe('Media library: choices in the account (FR-5, BR-7)', () => {
         states: ['in-progress'],
         authors: [],
         topic: 'hermetismo',
+        allTopics: false,
         subject: null,
       },
     });

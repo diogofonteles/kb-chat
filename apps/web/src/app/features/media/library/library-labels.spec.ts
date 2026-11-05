@@ -86,9 +86,10 @@ describe('library labels (T16)', () => {
         states: ['heard', 'unheard'],
         authors: [],
         topic: 'hermetismo',
+        allTopics: false,
         subject: null,
       }),
-    ).toBe(3);
+    ).toBe(2);
     expect(toggled(['a', 'b'], 'a')).toEqual(['b']);
     expect(toggled(['b'], 'a')).toEqual(['b', 'a']);
   });
@@ -106,6 +107,7 @@ describe('library labels (T16)', () => {
       states: ['in-progress'],
       authors: ['-'],
       topic: null,
+      allTopics: false,
       subject: null,
     });
     expect(applyFilterChange(both, { kind: 'topic', topic: 'udv' }).topic).toBe(

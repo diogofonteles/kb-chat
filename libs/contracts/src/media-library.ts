@@ -73,8 +73,10 @@ const librarySubjectSchema = z.string().min(1).max(120);
 export const libraryFiltersSchema = z.strictObject({
   states: z.array(listeningStateSchema).max(LISTENING_STATES.length),
   authors: z.array(libraryAuthorSchema).max(LIBRARY_AUTHORS_MAX),
-  /** A collection, its sub-collections included (ADR 0028); null for all. */
+  /** The collection last chosen here, its sub-collections included (ADR 0028). */
   topic: topicSlugSchema.nullable(),
+  /** "Todos os acervos" was chosen; otherwise the library follows the selected one (KBC-091). */
+  allTopics: z.boolean().default(false),
   /** One subject (KBC-070 FR-4); null for all, also on what was saved before it. */
   subject: librarySubjectSchema.nullable().default(null),
 });
@@ -84,6 +86,7 @@ export const NO_LIBRARY_FILTERS: LibraryFilters = {
   states: [],
   authors: [],
   topic: null,
+  allTopics: false,
   subject: null,
 };
 
@@ -118,6 +121,12 @@ export const libraryQuerySchema = z.strictObject({
     .optional(),
 });
 export type LibraryQuery = z.infer<typeof libraryQuerySchema>;
+
+/** GET /api/v1/media/library/home: the strips of one collection, or of all. */
+export const libraryHomeQuerySchema = z.strictObject({
+  topic: topicSlugSchema.optional(),
+});
+export type LibraryHomeQuery = z.infer<typeof libraryHomeQuerySchema>;
 
 /** A media in the library: the item plus its kind and when the person last played it. */
 const libraryEntrySchema = mediaItemSchema.extend({
