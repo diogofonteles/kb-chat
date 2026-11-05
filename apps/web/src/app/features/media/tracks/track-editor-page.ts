@@ -3,7 +3,7 @@ import {
   type HeadingScope,
 } from '@features/chat/collection-heading.js';
 import { httpResource } from '@angular/common/http';
-import { DOCUMENT } from '@angular/common';
+import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -162,6 +162,7 @@ function copyableLine(
 @Component({
   selector: 'app-track-editor-page',
   imports: [
+    NgTemplateOutlet,
     PreparationSteps,
     RouterLink,
     TrackTimeline,

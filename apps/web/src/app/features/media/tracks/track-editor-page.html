@@ -134,6 +134,7 @@
         </div>
         <app-track-preparation [mediaId]="id()" />
       </section>
+      <ng-container [ngTemplateOutlet]="voiceNames" />
       @if (canClassify()) {
         <app-track-subjects [mediaId]="id()" [topic]="topic()" />
       }
@@ -365,20 +366,7 @@
           [replaces]="hasProposals()"
         />
       }
-      @if (voicesToName(); as prep) {
-        <details
-          class="voice-names"
-          [open]="voicesOpen()"
-          (toggle)="voicesToggled($event)"
-        >
-          <summary i18n="@@tracks.voiceNames">Nomes das vozes</summary>
-          <app-preparation-voices
-            [preparation]="prep"
-            [beforeNaming]="saveFirst"
-            (named)="voicesNamed()"
-          />
-        </details>
-      }
+      <ng-container [ngTemplateOutlet]="voiceNames" />
 
       <div
         class="tabs"
@@ -497,3 +485,20 @@
     }
   </div>
 }
+
+<ng-template #voiceNames>
+  @if (voicesToName(); as prep) {
+    <details
+      class="voice-names"
+      [open]="voicesOpen()"
+      (toggle)="voicesToggled($event)"
+    >
+      <summary i18n="@@tracks.voiceNames">Nomes das vozes</summary>
+      <app-preparation-voices
+        [preparation]="prep"
+        [beforeNaming]="saveFirst"
+        (named)="voicesNamed()"
+      />
+    </details>
+  }
+</ng-template>
