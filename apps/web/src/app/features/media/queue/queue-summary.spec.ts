@@ -37,10 +37,12 @@ describe('QueueSummary (KBC-090)', () => {
     expect(screen.getByRole('link', { name: 'Ver a fila' })).toBeTruthy();
   });
 
-  it('counts one in the singular, and says when only a person is awaited', async () => {
-    const one = await setup([item(1)], 1);
+  it('counts one in the singular', async () => {
+    await setup([item(1)], 1);
     expect(screen.getByText('1 áudio em processamento')).toBeTruthy();
-    one.fixture.destroy();
+  });
+
+  it('says when only a person is awaited', async () => {
     await setup([item(1)], 0);
     expect(screen.getByText('Áudios esperando por você')).toBeTruthy();
   });
