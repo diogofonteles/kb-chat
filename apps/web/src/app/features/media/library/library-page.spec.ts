@@ -8,7 +8,12 @@ import {
   type WritableSignal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import {
+  ActivatedRoute,
+  NavigationEnd,
+  Router,
+  provideRouter,
+} from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   type Feature,
@@ -20,6 +25,7 @@ import {
   type ListeningPreferences,
 } from '@kb-chat/contracts';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
+import { filter, firstValueFrom } from 'rxjs';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -932,6 +938,12 @@ describe('LibraryPage (T16, KBC-051)', () => {
     const type = (value: string) =>
       fireEvent.input(box(), { target: { value } });
 
+    /** The address the page arrives on, then its pause in the typing. */
+    const inAddress = async (url: string) => {
+      await TestBed.inject(Router).navigateByUrl(url);
+      await pause();
+    };
+
     type Library = Awaited<ReturnType<typeof renderLibrary>>;
 
     /** The words typed and asked: the request on its way. */
@@ -1140,7 +1152,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(screen.queryByRole('link', { name: 'Faixa 1' })).toBeNull();
     });
 
-    it('AC-12: what is on screen waits, quieter, and nothing says "nothing found" meanwhile', async () => {
+    it('AC-12: what is on screen waits, says it is searching, and nothing says "nothing found" meanwhile', async () => {
       const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
       const newer = await ask(library, 'orlando');
       await library.tick();
@@ -1148,7 +1160,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(screen.getByRole('link', { name: 'Faixa 1' })).toBeTruthy();
       expect(
         screen
-          .getByRole('region', { name: /1 resultado/ })
+          .getByRole('region', { name: '1 resultado' })
           .getAttribute('aria-busy'),
       ).toBe('true');
       newer.flush(anAnswer([]));
@@ -1209,12 +1221,83 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(screen.getByRole('heading', { name: 'Todas' })).toBeTruthy();
     });
 
+    it('takes one value from a repeated address param', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      await TestBed.inject(Router).navigateByUrl('/?busca=manaus&busca=outra');
+      await library.tick();
+      expect((box() as HTMLInputElement).value).toBe('manaus');
+      await pause();
+      await library.tick();
+      library.http
+        .expectOne((request) => request.url.includes('q=manaus'))
+        .flush(anAnswer([aHit(2)]));
+      await library.settle();
+      expect(screen.getByRole('link', { name: 'Faixa 2' })).toBeTruthy();
+    });
+
+    it('keeps what is typed while its own address write lands', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const landed = firstValueFrom(
+        TestBed.inject(Router).events.pipe(
+          filter((event) => event instanceof NavigationEnd),
+        ),
+      );
+      type('padre orlando em manaus');
+      await pause();
+      type('padre orlando em manaus hoje');
+      await landed;
+      await library.tick();
+      expect((box() as HTMLInputElement).value).toBe(
+        'padre orlando em manaus hoje',
+      );
+      await pause();
+      await library.tick();
+      library.http
+        .match((request) => request.url.startsWith(SEARCH))
+        .forEach((request) => {
+          if (!request.cancelled) request.flush(anAnswer([]));
+        });
+      await library.settle();
+    });
+
+    it('writes the address again when the same words come back after it moved', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/');
+      await library.tick();
+      type('padre orlando');
+      await pause();
+      await library.tick();
+      library.http
+        .match((request) => request.url.startsWith(SEARCH))
+        .forEach((request) => {
+          if (!request.cancelled) request.flush(anAnswer([aHit(1)]));
+        });
+      await library.settle();
+      expect(router.url).toBe('/?busca=padre%20orlando');
+    });
+
+    it('says to wait when the limit is reached', async () => {
+      const library = await renderLibrary({ features: SPEAKER });
+      await library.open(aPage([anItem(1)]));
+      (await ask(library, 'orlando')).flush(
+        { error: { code: 'RATE_LIMITED', message: 'slow down' } },
+        { status: 429, statusText: 'Too Many Requests' },
+      );
+      await library.settle();
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Espere um instante',
+      );
+    });
+
     it('never asks more than a search takes from the address', async () => {
       const library = await renderLibrary({
         features: SPEAKER,
         busca: 'a'.repeat(300),
       });
+      await inAddress(`/?busca=${'a'.repeat(300)}`);
       await library.start();
+      await library.tick();
       const asked = library.http.expectOne((request) =>
         request.url.startsWith(SEARCH),
       );
@@ -1267,7 +1350,9 @@ describe('LibraryPage (T16, KBC-051)', () => {
         features: SPEAKER,
         busca: 'orlando',
       });
+      await inAddress('/?busca=orlando');
       await library.start();
+      await library.tick();
       library.http
         .expectOne((request) => request.url.startsWith(SEARCH))
         .flush(anAnswer([aHit(1)]));

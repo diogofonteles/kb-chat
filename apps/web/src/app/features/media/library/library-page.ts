@@ -25,6 +25,7 @@ import {
   NavigationEnd,
   Router,
   RouterLink,
+  convertToParamMap,
 } from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
@@ -66,6 +67,7 @@ import {
   filter,
   map,
   of,
+  share,
 } from 'rxjs';
 import { keepFocusedInView } from '../keep-in-view.js';
 import { detailsSavedText } from '../edit-labels.js';
@@ -91,7 +93,7 @@ import { PlayNow } from './play-now.js';
 /** "Buscar na biblioteca" waits this long after the last key (T16). */
 export const SEARCH_DEBOUNCE_MS = 200;
 
-/** The address is typed by anyone: never more than a search takes. */
+/** The address is typed by anyone: one value, never more than a search takes. */
 const wordsOf = (param: string | null | undefined): string =>
   (param ?? '').slice(0, LIBRARY_QUERY_MAX);
 
@@ -233,10 +235,14 @@ export class LibraryPage {
     wordsOf(this.route.snapshot.queryParamMap.get(SEARCH_PARAM)),
   );
   protected readonly trimmedQuery = computed(() => this.query().trim());
-  protected readonly askedQuery = toSignal(
-    toObservable(this.query).pipe(debounceTime(SEARCH_DEBOUNCE_MS)),
-    { initialValue: this.query() },
+  /** Each pause in the typing, even back to the same words: the address may have moved. */
+  private readonly pauses = toObservable(this.query).pipe(
+    debounceTime(SEARCH_DEBOUNCE_MS),
+    share(),
   );
+  protected readonly askedQuery = toSignal(this.pauses, {
+    initialValue: this.query(),
+  });
   /** The address as this page left it, to tell a navigation from its own writes. */
   private lastWordsInAddress = this.query().trim();
   /** Any text in the box: the page is its results from the first key (KBC-096). */
@@ -480,7 +486,7 @@ export class LibraryPage {
 
   /** The words and the address, each following the other (KBC-096). */
   private followAddress(): void {
-    toObservable(this.askedQuery)
+    this.pauses
       .pipe(
         filter((words) => words.trim() !== this.wordsInAddress()),
         takeUntilDestroyed(this.destroyRef),
@@ -500,13 +506,21 @@ export class LibraryPage {
       });
   }
 
+  private leaving(): boolean {
+    const going = this.router.currentNavigation()?.extractedUrl;
+    const pathOf = (url: string) => url.split('?')[0];
+    return !!going && pathOf(going.toString()) !== pathOf(this.router.url);
+  }
+
   private wordsInAddress(): string {
     const { queryParams } = this.router.parseUrl(this.router.url);
-    return wordsOf(queryParams[SEARCH_PARAM]);
+    return wordsOf(convertToParamMap(queryParams).get(SEARCH_PARAM));
   }
 
   /** Replaces the entry: Back leaves the library, not one word at a time. */
   private keepWordsInAddress(words: string): void {
+    // Leaving the page: this write would replace that navigation.
+    if (this.leaving()) return;
     this.lastWordsInAddress = words;
     const address = this.router.parseUrl(this.router.url);
     const others = Object.entries(address.queryParams).filter(

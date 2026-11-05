@@ -169,6 +169,13 @@ export class LibrarySearchResults {
   protected readonly pending = computed(
     () => this.typed() !== this.query().trim() || this.firstPage.isLoading(),
   );
+  /** "Espere um instante" past the limit; anything else, that it could not search. */
+  protected readonly failureText = computed(() => {
+    const failure = this.firstPage.error();
+    return failure && toUiErrorCode(failure) === 'RATE_LIMITED'
+      ? errorMessage('RATE_LIMITED')
+      : $localize`:@@library.searchFailed:Não consegui buscar agora.`;
+  });
   protected readonly failed = computed(
     () => this.firstPage.error() !== undefined,
   );
