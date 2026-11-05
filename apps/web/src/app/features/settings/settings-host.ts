@@ -72,8 +72,12 @@ export class SettingsHost {
     this.store.close();
   }
 
-  /** Esc or a close(): the panel state follows the dialog. */
+  /**
+   * Esc or a close(): the panel state follows the dialog. The event comes in a task of its
+   * own, so it may land after the dialog opened again (Pular, then ⚙ at once): then it is old.
+   */
   protected closed(): void {
-    if (this.panel() !== null) this.store.close();
+    if (this.panel() !== null && !this.dialog().nativeElement.open)
+      this.store.close();
   }
 }

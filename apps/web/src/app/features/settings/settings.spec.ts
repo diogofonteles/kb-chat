@@ -652,6 +652,22 @@ describe('Configurações', () => {
     expect(screen.getByText('Passo 1 de 4')).toBeTruthy();
   });
 
+  it('a late "close" of the dialog closed before does not close the one opened since', async () => {
+    const { fixture } = await openSettings();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fechar configurações' }),
+    );
+    await fixture.whenStable();
+    TestBed.inject(SettingsStore).openSettings();
+    await fixture.whenStable();
+    expect(dialog()?.open).toBe(true);
+    // The browser fires "close" in a task of its own: it can land after the new opening.
+    dialog()?.dispatchEvent(new Event('close'));
+    await fixture.whenStable();
+    expect(TestBed.inject(SettingsStore).panel()).toBe('settings');
+    expect(dialog()?.open).toBe(true);
+  });
+
   it('closes with × and with Esc', async () => {
     const { fixture } = await openSettings();
     fireEvent.click(
