@@ -1,6 +1,11 @@
 import type { Authorship } from '@kb-chat/contracts';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
-import { refNumber, resolveEntry, type ToolContext } from './tool-context.js';
+import {
+  isVisible,
+  refNumber,
+  resolveEntry,
+  type ToolContext,
+} from './tool-context.js';
 import {
   AUTHORSHIP_LABELS,
   foldName,
@@ -21,7 +26,14 @@ export interface DocFilter {
   readonly excludeTexts?: readonly string[];
   /** Subject names as the catalog spells them. */
   readonly subjects?: readonly string[];
+  /**
+   * Which documents the turn may see at all (KBC-099 BR-4); without it, texts only: a track
+   * never reaches a call that was not given the person's shelf (the exhaustive sweep).
+   */
+  readonly visible?: (entry: CatalogEntry) => boolean;
 }
+
+const textsOnly = (entry: CatalogEntry): boolean => entry.media === null;
 
 const PIPELINE_PREFIXES = /^(?:_convert\/)?(?:ready\/)?/;
 
@@ -62,6 +74,7 @@ function hasSubject(entry: CatalogEntry, subjects: readonly string[]): boolean {
 
 /** Whether a document passes the filter. */
 export function acceptsEntry(filter: DocFilter, entry: CatalogEntry): boolean {
+  if (!(filter.visible ?? textsOnly)(entry)) return false;
   if (filter.authorship && entry.authorship !== filter.authorship) return false;
   if (filter.entity && !hasFragment(entry.entities, filter.entity))
     return false;
@@ -128,5 +141,6 @@ export function toFilter(
     subjects: args.subjects ?? [],
     excludeIds,
     excludeTexts,
+    visible: (entry) => isVisible(entry, context),
   };
 }

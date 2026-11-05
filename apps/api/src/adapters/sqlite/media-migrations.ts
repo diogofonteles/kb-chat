@@ -196,6 +196,44 @@ const TRACK_SUBJECT_TABLES = `
         WHERE status = 'accepted';
 `;
 
+/** KBC-099 (ADR 0035 §3-4): track documents and their kb-publish queue. */
+const MEDIA_DOCUMENT_TABLES = `
+      CREATE TABLE media_documents (
+        media_id TEXT PRIMARY KEY,
+        topic TEXT NOT NULL,
+        path TEXT NOT NULL,
+        desired_sha256 TEXT NOT NULL,
+        published_sha256 TEXT,
+        published_at TEXT,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'published', 'failed')),
+        last_error TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX media_documents_by_topic ON media_documents (topic, state);
+
+      CREATE TABLE kb_publish_jobs (
+        id TEXT PRIMARY KEY,
+        topic TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'leased', 'done', 'failed', 'dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        lease_id TEXT,
+        lease_until INTEGER,
+        heartbeat_at INTEGER,
+        worker TEXT,
+        -- What the lease delivered: [{ mediaId, path, fingerprint }], as JSON.
+        items TEXT,
+        budget_usd REAL CHECK (budget_usd IS NULL OR budget_usd >= 0),
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      -- Jobs coalesce (ADR 0035 §4): one waiting job per collection.
+      CREATE UNIQUE INDEX kb_publish_one_queued ON kb_publish_jobs (topic)
+        WHERE status = 'queued';
+      CREATE INDEX kb_publish_waiting ON kb_publish_jobs (status, created_at);
+`;
+
 export const MEDIA_MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -1253,6 +1291,20 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
         updated_by TEXT NOT NULL,
         updated_at TEXT NOT NULL
       ) STRICT;
+    `,
+  },
+  {
+    // KBC-099 (ADR 0035 §3-4): each track's document as the app wants it and as the Mac last
+    // published it (the sha256 of the render, ADR 0035's "fingerprint": named apart from voice
+    // prints), and the queue of kb-publish jobs, one queued per collection. New tables
+    // only, plus `media_spend` rebuilt from what it is: nothing here depends on the order of
+    // 24 (KBC-090) and 25 (KBC-037), which rebuilds `media_spend` too.
+    version: 26,
+    name: 'media-documents',
+    sql: (db) => `
+      ${rebuildAccepting(db, { table: 'media_spend', kind: 'kb-publish' })}
+
+      ${MEDIA_DOCUMENT_TABLES}
     `,
   },
 ];

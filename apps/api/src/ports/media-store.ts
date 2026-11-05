@@ -224,6 +224,8 @@ export interface MediaStorePort {
   }): MediaRecord;
 
   leaseJob(request: LeaseRequest): LeasedJob | null;
+  /** Whether this worker holds a lease of the queue now (one job at a time, ADR 0023). */
+  holdsLease(worker: string): boolean;
   /** What a job is; null when it does not exist (anymore). */
   kindOfJob(jobId: string): MediaJobKind | null;
   /** The media item a job converts; null when the job does not exist (anymore). */

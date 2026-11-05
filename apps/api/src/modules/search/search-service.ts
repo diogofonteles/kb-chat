@@ -14,7 +14,9 @@ import type {
 } from '../../ports/search-index.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
+  isTrackEntry,
   splitFrontmatter,
+  type CatalogEntry,
   type CatalogRegistry,
   type TopicCatalog,
 } from '../catalog/index.js';
@@ -49,6 +51,17 @@ export const normalizeQuestion = (q: string): string =>
 
 type SearchFilterQuery = z.output<typeof searchRequestSchema>;
 
+/**
+ * Which cataloged documents a search may return. The documents search (T2), its counts and
+ * suggestions take texts only (ADR 0035 §8); the research tools admit the tracks the person
+ * may research (KBC-099 BR-4).
+ */
+export interface SearchScope {
+  readonly admit?: (entry: CatalogEntry) => boolean;
+}
+
+const textsOnly = (entry: CatalogEntry): boolean => !isTrackEntry(entry);
+
 interface FoundGroups {
   readonly groups: readonly CopyGroup[];
   readonly capped: boolean;
@@ -68,17 +81,20 @@ function mergeByScore(found: readonly FoundGroups[]): CopyGroup[] {
 export class SearchService {
   /** Which collection each group of the current searches came from. */
   private readonly topicOf = new WeakMap<CopyGroup, TopicCatalog>();
+  /** Track documents per catalog load: the index ranks them among the texts. */
+  private readonly trackCounts = new WeakMap<TopicCatalog, number>();
 
   constructor(private readonly deps: SearchServiceDeps) {}
 
-  async search(topic: string, request: SearchRequest): Promise<SearchResponse> {
-    const scope = this.requireScope(topic);
+  async search(
+    topic: string,
+    request: SearchRequest,
+    { admit = textsOnly }: SearchScope = {},
+  ): Promise<SearchResponse> {
     const { q, mode, limit, offset, filters } =
       searchRequestSchema.parse(request);
     const startedAt = performance.now();
-    const found = await Promise.all(
-      scope.map((catalog) => this.findGroups(catalog, { q, mode, filters })),
-    );
+    const found = await this.foundIn(topic, { q, mode, filters, admit });
     const { page, ...refined } = refine(mergeByScore(found), {
       filters,
       offset,
@@ -100,17 +116,38 @@ export class SearchService {
     };
   }
 
+  /** Each collection of the scope searched at once (a parent and its sub-collections). */
+  private foundIn(
+    topic: string,
+    query: Parameters<SearchService['findGroups']>[1],
+  ): Promise<FoundGroups[]> {
+    return Promise.all(
+      this.requireScope(topic).map((one) => this.findGroups(one, query)),
+    );
+  }
+
   /**
    * Index candidates for the question, kept when cataloged and grouped by copy. A collection
    * with no documents (created on the screen, ADR 0028) has no index collection to ask.
    */
   private async findGroups(
     catalog: TopicCatalog,
-    { q, mode, filters }: Pick<SearchFilterQuery, 'q' | 'mode' | 'filters'>,
+    {
+      q,
+      mode,
+      filters,
+      admit,
+    }: Pick<SearchFilterQuery, 'q' | 'mode' | 'filters'> & {
+      admit: (entry: CatalogEntry) => boolean;
+    },
   ): Promise<FoundGroups> {
     if (catalog.entries.size === 0) return { groups: [], capped: false };
     const filtered = Object.values(filters).some((values) => values.length > 0);
-    const limit = filtered ? CANDIDATES.filtered : CANDIDATES.plain;
+    // Track documents take index candidates a texts-only search then drops (KBC-099 AC-13):
+    // asking for as many more keeps the texts' list and counts as they were.
+    const limit =
+      (filtered ? CANDIDATES.filtered : CANDIDATES.plain) +
+      Math.min(this.tracksIn(catalog), CANDIDATES.filtered);
     const collection = toCollection(catalog.topic.slug);
     const hits = await this.queryIndex({
       collection,
@@ -119,15 +156,23 @@ export class SearchService {
       mode,
       limit,
     });
-    const groups = groupCopies(this.keepCataloged(catalog, hits));
+    const groups = groupCopies(this.keepCataloged(catalog, { hits, admit }));
     for (const group of groups) this.topicOf.set(group, catalog);
     return { groups, capped: hits.length >= limit };
+  }
+
+  private tracksIn(catalog: TopicCatalog): number {
+    const known = this.trackCounts.get(catalog);
+    if (known !== undefined) return known;
+    const count = [...catalog.entries.values()].filter(isTrackEntry).length;
+    this.trackCounts.set(catalog, count);
+    return count;
   }
 
   /** Collection-wide counts per facet value (start-screen suggestions and "no acervo" counts). */
   topicFacets(topic: string): TopicFacets {
     const entries = this.requireScope(topic).flatMap((catalog) =>
-      [...catalog.entries.values()].map((entry) => ({
+      [...catalog.entries.values()].filter(textsOnly).map((entry) => ({
         ...entry,
         topic: catalog.topic.slug,
       })),
@@ -137,14 +182,21 @@ export class SearchService {
 
   private keepCataloged(
     catalog: TopicCatalog,
-    hits: readonly IndexHit[],
+    {
+      hits,
+      admit,
+    }: {
+      hits: readonly IndexHit[];
+      admit: (entry: CatalogEntry) => boolean;
+    },
   ): Candidate[] {
     const known: Candidate[] = [];
     const topic = catalog.topic.slug;
     for (const hit of hits) {
       const entry = catalog.entries.get(hit.id);
       // The collection rides along for the "Sub-acervo" filter (KBC-048 FR-4).
-      if (entry) known.push({ hit, entry: { ...entry, topic } });
+      if (entry && admit(entry))
+        known.push({ hit, entry: { ...entry, topic } });
     }
     return known;
   }

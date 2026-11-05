@@ -11,7 +11,13 @@ import {
   type CatalogRegistry,
 } from '../catalog/index.js';
 import type { SearchService } from '../search/index.js';
-import { windowOf, type WindowRequest } from './body-window.js';
+import {
+  firstMatchIn,
+  windowOf,
+  type BodyWindow,
+  type WindowRequest,
+} from './body-window.js';
+import { anchorAt, anchorsIn } from './track-anchors.js';
 import {
   acceptsEntry,
   describeFilter,
@@ -25,6 +31,7 @@ import { SweepPlanner } from './sweep/sweep-planner.js';
 import { TextFinder } from './text-finder.js';
 import {
   failed,
+  isVisible,
   notFound,
   parsedArgs,
   resolveEntry,
@@ -138,6 +145,29 @@ function describeFailure(err: unknown): string {
 }
 
 /**
+ * A track's window shown to the model (KBC-099 BR-5): its anchors may be cited; the passage
+ * it is about is the paragraph of the first match of `around`, or of the window's start.
+ */
+function showWindow(
+  book: ToolContext['book'],
+  n: number,
+  input: { body: string; window: BodyWindow; around: string | undefined },
+): void {
+  const { body, window, around } = input;
+  const opening = anchorAt(body, window.start);
+  const match = around ? firstMatchIn(body, around, window) : null;
+  const focus =
+    anchorAt(body, match ?? window.start) ?? anchorsIn(window.text)[0] ?? null;
+  book.showTrack(n, {
+    anchors: [
+      ...(opening === null ? [] : [opening]),
+      ...anchorsIn(window.text),
+    ],
+    focus,
+  });
+}
+
+/**
  * The research agent's tools over the kb index, summaries and relations (ADR 0006).
  * Read-only: nothing here writes to the vault. Document text goes back fenced as data.
  */
@@ -209,14 +239,19 @@ export class ResearchTools {
     args: SearchArgs,
     context: ToolContext,
   ): Promise<string> {
-    const { topic, book } = context;
+    const { topic } = context;
     const concepts = this.knownSubjects(topic, args.subjects ?? []);
     const filter = toFilter(
       this.deps.catalog,
       { ...args, subjects: [] },
       context,
     );
-    const found = await this.filteredSearch(args, { topic, concepts, filter });
+    const found = await this.filteredSearch(args, {
+      topic,
+      concepts,
+      filter,
+      context,
+    });
     const scope = searchScope(args, {
       concepts,
       filter,
@@ -226,13 +261,23 @@ export class ResearchTools {
     const range = searchRange(args, { ...found, shown: found.shown.length });
     return [
       `Busca ${scope}: ${range}`,
-      ...found.shown.map((hit) =>
-        hitLine(book.number(hit), hit, {
-          summary: this.entry(topic, hit.id)?.summary ?? null,
-          labels: context.labels,
-        }),
-      ),
+      ...found.shown.map((hit) => this.hitOf(hit, context)),
     ].join('\n');
+  }
+
+  /** One hit, numbered with its catalog entry so a track keeps its media (KBC-099). */
+  private hitOf(hit: SearchHit, { topic, book, labels }: ToolContext): string {
+    const entry = this.entry(topic, hit.id);
+    const n = book.number(entry ?? hit);
+    if (entry?.media) {
+      const anchors = anchorsIn(hit.snippet ?? '');
+      book.showTrack(n, { anchors, focus: anchors[0] ?? null });
+    }
+    return hitLine(n, hit, {
+      summary: entry?.summary ?? null,
+      media: entry?.media ?? null,
+      labels,
+    });
   }
 
   /**
@@ -241,19 +286,15 @@ export class ResearchTools {
    */
   private async filteredSearch(
     args: SearchArgs,
-    scope: { topic: string; concepts: string[]; filter: DocFilter },
+    scope: {
+      topic: string;
+      concepts: string[];
+      filter: DocFilter;
+      context: ToolContext;
+    },
   ): Promise<{ shown: SearchHit[]; total: number; candidates: number }> {
     const filtering = isFiltering(scope.filter);
-    const response = await this.deps.search.search(scope.topic, {
-      q: args.query,
-      mode: args.mode,
-      limit: filtering ? MAX_RESULTS : args.limit,
-      offset: filtering ? 0 : args.offset,
-      filters: {
-        concepts: scope.concepts,
-        authorships: scope.filter.authorship ? [scope.filter.authorship] : [],
-      },
-    });
+    const response = await this.searchPage(args, { ...scope, filtering });
     // Only the first MAX_RESULTS candidates can be paged to (the search's own cap).
     if (!filtering)
       return {
@@ -269,6 +310,35 @@ export class ResearchTools {
       total: kept.length,
       candidates: response.total,
     };
+  }
+
+  /** One page of the meaning search, or all its candidates when the tools filter them. */
+  private searchPage(
+    args: SearchArgs,
+    scope: {
+      topic: string;
+      concepts: string[];
+      filter: DocFilter;
+      context: ToolContext;
+      filtering: boolean;
+    },
+  ) {
+    const { authorship } = scope.filter;
+    return this.deps.search.search(
+      scope.topic,
+      {
+        q: args.query,
+        mode: args.mode,
+        limit: scope.filtering ? MAX_RESULTS : args.limit,
+        offset: scope.filtering ? 0 : args.offset,
+        filters: {
+          concepts: scope.concepts,
+          authorships: authorship ? [authorship] : [],
+        },
+      },
+      // The tracks this person may research, among the texts (KBC-099 BR-4).
+      { admit: (entry) => isVisible(entry, scope.context) },
+    );
   }
 
   private accepts(topic: string, hit: SearchHit, filter: DocFilter): boolean {
@@ -364,6 +434,7 @@ export class ResearchTools {
     if (text === null) return `O documento [${n}] não pôde ser lido.`;
     const body = splitFrontmatter(text).body.normalize('NFC');
     const window = windowOf(body, args);
+    if (entry.media) showWindow(book, n, { body, window, around: args.around });
     return [
       ...headerLines(n, entry, labels),
       ...windowLines(n, window, args.around),
@@ -386,14 +457,17 @@ export class ResearchTools {
     };
   }
 
-  private related(
-    entry: CatalogEntry,
-    { topic, book, labels }: ToolContext,
-  ): string {
+  private related(entry: CatalogEntry, context: ToolContext): string {
+    const { topic, book, labels } = context;
     const catalog = this.deps.catalog.get(topic);
     const n = book.number(entry);
     if (!catalog) return `O documento [${n}] não tem ligações.`;
+    const seen = (ref: { id: string }) => {
+      const one = catalog.entries.get(ref.id);
+      return !one || isVisible(one, context);
+    };
     const groups = Object.entries(catalog.relations.groupsOf(entry))
+      .map(([group, refs]) => [group, refs.filter(seen)] as const)
       .filter(([, refs]) => refs.length > 0)
       .map(([group, refs]) => {
         const label = RELATION_LABELS[group as keyof typeof RELATION_LABELS];

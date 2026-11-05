@@ -59,6 +59,7 @@ import {
   startCodexRunner,
   type CodexRunner,
 } from '../src/codex-runner/runner-server.js';
+import type { AgentLlmPort } from '../src/ports/llm.js';
 import type { SpendLedgerPort } from '../src/ports/spend-ledger.js';
 
 export const OWNER_EMAIL = 'owner@example.com';
@@ -78,6 +79,8 @@ export interface Started {
   readonly groq: FakeGroq;
   readonly ledger: SpendLedgerPort;
   readonly logs: string[];
+  /** The vault's catalog: a test that writes a document refreshes its collection. */
+  readonly catalog: CatalogRegistry;
 }
 
 let current: FastifyInstance | null = null;
@@ -113,6 +116,8 @@ export interface StartOptions {
   readonly vault?: string;
   /** Settings on top of the test ones. */
   readonly env?: Readonly<Record<string, string>>;
+  /** One model for every research turn, whoever asks (a scripted stub). */
+  readonly llm?: AgentLlmPort;
 }
 
 /** The media worker token of `start({ media: true })`. */
@@ -286,6 +291,28 @@ const testMedia = (config: AppConfig, groq: FakeGroq) =>
     { fetch: groq.fetch },
   );
 
+/** The app over the built pieces, with the model the test asks for (KBC-099). */
+function appOf(
+  built: {
+    readonly config: AppConfig;
+    readonly core: Awaited<ReturnType<typeof buildCore>>;
+    readonly ai: Awaited<ReturnType<typeof buildAi>>['ai'];
+    readonly auth: ReturnType<typeof testAuth>;
+    readonly house: Awaited<ReturnType<typeof buildAi>>['house'];
+    readonly logger: FastifyBaseLogger;
+    readonly media: Awaited<ReturnType<typeof testMedia>>;
+  },
+  options: StartOptions,
+): Promise<FastifyInstance> {
+  const { config, core, ...rest } = built;
+  return buildApp({
+    config,
+    ...core,
+    ...rest,
+    ...(options.llm && { llm: options.llm }),
+  });
+}
+
 /** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
 export async function start(options: StartOptions = {}): Promise<Started> {
   const state =
@@ -302,7 +329,10 @@ export async function start(options: StartOptions = {}): Promise<Started> {
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
   const groq = new FakeGroq();
   const media = await testMedia(config, groq);
-  current = await buildApp({ config, ...core, ai, auth, house, logger, media });
+  current = await appOf(
+    { config, core, ai, auth, house, logger, media },
+    options,
+  );
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
   if (options.claude || options.codexHome)
     await current.listen({ host: '127.0.0.1', port: config.PORT });
@@ -315,6 +345,7 @@ export async function start(options: StartOptions = {}): Promise<Started> {
     groq,
     ledger: core.ledger,
     logs,
+    catalog: core.catalog,
   };
 }
 

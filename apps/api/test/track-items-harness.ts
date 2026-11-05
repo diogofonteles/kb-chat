@@ -91,12 +91,17 @@ async function vaultWithTwoCollections(): Promise<string> {
 }
 
 export async function startWorld(
-  options: { readonly vault?: string; readonly env?: StartOptions['env'] } = {},
+  options: {
+    readonly vault?: string;
+    readonly env?: StartOptions['env'];
+    readonly llm?: StartOptions['llm'];
+  } = {},
 ): Promise<World> {
   const started = await start({
     media: true,
     vault: options.vault ?? (await vaultWithTwoCollections()),
     ...(options.env ? { env: options.env } : {}),
+    ...(options.llm ? { llm: options.llm } : {}),
   });
   const ownerHeaders = await signIn(started, 'owner@example.com');
   const media: Media = {

@@ -3,7 +3,8 @@ export type MediaSpendKind =
   | 'track-proposal'
   | 'subject-proposal'
   | 'track-suggestion'
-  | 'groq-transcription';
+  | 'groq-transcription'
+  | 'kb-publish';
 
 /** How a reservation ended: all of it counted, or the unspent part given back. */
 export type MediaSpendOutcome = 'settled' | 'refunded';

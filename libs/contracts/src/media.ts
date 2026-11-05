@@ -465,6 +465,8 @@ export const MEDIA_JOB_KINDS = [
   'waveform',
   'voice-profile',
   'cut',
+  /** A collection's track documents to write and pass through kb on the Mac (KBC-099). */
+  'kb-publish',
 ] as const;
 export const mediaJobKindSchema = z.enum(MEDIA_JOB_KINDS);
 export type MediaJobKind = z.infer<typeof mediaJobKindSchema>;
@@ -752,6 +754,66 @@ export const diarizeJobSchema = transcribeJobSchema.extend({
 });
 export type DiarizeJob = z.infer<typeof diarizeJobSchema>;
 
+/* ---------- Track documents through kb on the Mac (KBC-099, ADR 0035 §3) ---------- */
+
+/** The most documents one kb-publish job carries (ADR 0035 §3). */
+export const KB_PUBLISH_MAX_ITEMS = 50;
+/** The most one job may spend on kb's own key (ADR 0035 §11). */
+export const KB_PUBLISH_MAX_BUDGET_USD = 0.5;
+
+/** A document to write, relative to the collection's vault folder (`raw/media/…`). */
+export const kbPublishItemSchema = z.object({
+  op: z.literal('write'),
+  path: z.string().regex(/^raw\/media\/[\w./-]+\.md$/),
+  markdown: z.string().max(5_000_000),
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type KbPublishItem = z.infer<typeof kbPublishItemSchema>;
+
+/**
+ * A leased kb-publish job: the collection's vault folder (`topic`), what to write there and
+ * the most kb may spend on it (`budgetUsd`, passed as `--budget`).
+ */
+export const kbPublishJobSchema = z.object({
+  id: mediaJobIdSchema,
+  leaseId: z.uuid(),
+  kind: z.literal('kb-publish'),
+  topic: topicSlugSchema,
+  attempt: z.number().int().min(1),
+  leaseMs: z.number().int().min(1),
+  budgetUsd: z.number().min(0).max(KB_PUBLISH_MAX_BUDGET_USD),
+  items: z.array(kbPublishItemSchema).min(1).max(KB_PUBLISH_MAX_ITEMS),
+});
+export type KbPublishJob = z.infer<typeof kbPublishJobSchema>;
+
+/** The kb facets a written document has now, as kb wrote them (for the report). */
+export const kbFacetsSchema = z.looseObject({
+  genre: z.string().max(100).optional(),
+  depth: z.number().optional(),
+  relevance: z.string().max(100).optional(),
+  concepts: z.array(z.string().max(300)).max(200).optional(),
+  summary: z.string().max(5_000).optional(),
+});
+export type KbFacets = z.infer<typeof kbFacetsSchema>;
+
+/** POST /api/v1/media-worker/jobs/:id/kb-result: per document, what kb did and spent. */
+export const completeKbPublishRequestSchema = leaseOwnerSchema.extend({
+  documents: z
+    .array(
+      z.strictObject({
+        path: kbPublishItemSchema.shape.path,
+        ok: z.boolean(),
+        error: z.string().max(2_000).optional(),
+        facets: kbFacetsSchema.optional(),
+        spendUsd: z.number().min(0).max(KB_PUBLISH_MAX_BUDGET_USD),
+      }),
+    )
+    .max(KB_PUBLISH_MAX_ITEMS),
+});
+export type CompleteKbPublishRequest = z.infer<
+  typeof completeKbPublishRequestSchema
+>;
+
 /** POST …/jobs/lease answers one of these, by the kinds the token may lease. */
 export const leasedJobSchema = z.union([
   // Before `transcribeJobSchema`: the answer is serialized by the first that fits.
@@ -763,6 +825,7 @@ export const leasedJobSchema = z.union([
   waveformJobSchema,
   voiceProfileJobSchema,
   cutJobSchema,
+  kbPublishJobSchema,
 ]);
 export type LeasedWorkerJob = z.infer<typeof leasedJobSchema>;
 
@@ -1181,6 +1244,8 @@ export const TRANSCRIBER_KINDS = [
   'transcribe',
   'diarize',
   'voice-profile',
+  /** "Publica no acervo" (KBC-099): writes track documents into the vault and runs kb. */
+  'kb-publish',
 ] as const;
 export const updateTranscriberRequestSchema = z.strictObject({
   kinds: z.array(z.enum(TRANSCRIBER_KINDS)).min(1),

@@ -59,7 +59,8 @@ describe('media migration 15 (KBC-071)', () => {
       `INSERT INTO jobs (id, media_id, kind, status, voice_profile_id, created_at, updated_at)
        VALUES (?, 'm1', ?, 'queued', ?, '${AT}', '${AT}')`,
     );
-    for (const kind of MEDIA_JOB_KINDS) {
+    // kb-publish has a queue of its own (KBC-099): it never goes into `jobs`.
+    for (const kind of MEDIA_JOB_KINDS.filter((one) => one !== 'kb-publish')) {
       const profile = kind === 'voice-profile' ? 'p1' : null;
       expect(() => insert.run(`job-${kind}`, kind, profile)).not.toThrow();
     }

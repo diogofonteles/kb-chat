@@ -1,5 +1,6 @@
 import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
+import type { TrackShelf } from '../../ports/track-shelf.js';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
 import type { SourceBook } from './source-book.js';
 import { quote, type AuthorshipLabels } from './tool-output.js';
@@ -9,6 +10,17 @@ export interface ToolContext {
   readonly book: SourceBook;
   /** How this collection names each authorship (KBC-049: its main author); set by the tools. */
   readonly labels?: AuthorshipLabels;
+  /** The tracks this person may research (KBC-099 BR-4); without it, no track is seen. */
+  readonly tracks?: TrackShelf;
+}
+
+/** A text, or a track media.db and the person's permissions let this turn see (BR-4). */
+export function isVisible(
+  entry: Pick<CatalogEntry, 'media'>,
+  { topic, tracks }: Pick<ToolContext, 'topic' | 'tracks'>,
+): boolean {
+  if (entry.media === null) return true;
+  return (tracks?.trackOf(topic, entry.media) ?? null) !== null;
 }
 
 /** A tool call ready to run: the steps shown to the reader and the text for the model. */
@@ -48,11 +60,13 @@ export function refNumber(ref: string | number): number | null {
 export function resolveEntry(
   catalog: CatalogRegistry,
   ref: string | number,
-  { topic, book }: ToolContext,
+  context: ToolContext,
 ): CatalogEntry | null {
+  const { topic, book } = context;
   const n = refNumber(ref);
   const id = n === null ? String(ref) : book.find(n)?.id;
-  return id ? (catalog.get(topic)?.entries.get(id) ?? null) : null;
+  const entry = id ? (catalog.get(topic)?.entries.get(id) ?? null) : null;
+  return entry && isVisible(entry, context) ? entry : null;
 }
 
 export const notFound = (ref: string | number): string =>

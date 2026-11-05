@@ -43,6 +43,11 @@ export interface TrackPublisherDeps {
   readonly files: MediaFilesPort;
   /** One author of the collection's list (KBC-049). */
   readonly authorOf: (topic: string, slug: string) => Author | null;
+  /**
+   * After a publication (KBC-099 FR-1): the recording's track documents follow. Called inside
+   * the publishing transaction, so the documents are wanted with the tracks or not at all.
+   */
+  readonly onPublished?: (parentId: string) => void;
   readonly now?: () => Date;
 }
 
@@ -99,8 +104,9 @@ export class TrackPublisher {
       };
     });
     items.plan({ parentId, plans, now });
-    if (!items.hasPendingCuts(parentId))
-      items.publish({ parentId, detailsOf: this.detailsFor(parentId), now });
+    if (items.hasPendingCuts(parentId)) return;
+    items.publish({ parentId, detailsOf: this.detailsFor(parentId), now });
+    this.deps.onPublished?.(parentId);
   }
 
   private approvedTracks(parentId: string) {
@@ -146,6 +152,9 @@ export class TrackPublisher {
       await files.remove([path]);
       throw leaseLost();
     }
+    const parentId = this.deps.store.getMedia(mediaId)?.track?.parentId;
+    if (parentId && !items.hasPendingCuts(parentId))
+      this.deps.onPublished?.(parentId);
   }
 
   /**
@@ -190,12 +199,13 @@ export class TrackPublisher {
    */
   afterArchive(parentId: string, cutFailed: boolean): void {
     const { items } = this.deps;
-    if (cutFailed && !items.hasPendingCuts(parentId))
-      items.publish({
-        parentId,
-        detailsOf: this.detailsFor(parentId),
-        now: this.now(),
-      });
+    if (!cutFailed || items.hasPendingCuts(parentId)) return;
+    items.publish({
+      parentId,
+      detailsOf: this.detailsFor(parentId),
+      now: this.now(),
+    });
+    this.deps.onPublished?.(parentId);
   }
 
   /** A track came back: its text, cut from the transcript of today, enters search again. */

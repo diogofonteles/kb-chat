@@ -8,6 +8,7 @@ import { AppError } from '../../app-error.js';
 import type { VaultReaderPort } from '../../ports/vault-reader.js';
 import {
   conceptOfArticle,
+  isTrackEntry,
   splitFrontmatter,
   type CatalogEntry,
   type CatalogRegistry,
@@ -31,6 +32,17 @@ export interface RelationPageQuery {
   readonly group: SeeAlsoGroupName;
   readonly offset: number;
   readonly limit: number;
+}
+
+/** "Veja também" lists texts only until KBC-101 shows tracks there (ADR 0035 §8). */
+function textsOf<T extends { id: string }>(
+  catalog: TopicCatalog,
+  refs: readonly T[],
+): T[] {
+  return refs.filter((ref) => {
+    const entry = catalog.entries.get(ref.id);
+    return !entry || !isTrackEntry(entry);
+  });
 }
 
 export class DocumentsService {
@@ -66,7 +78,10 @@ export class DocumentsService {
     query: RelationPageQuery,
   ): RelationPage {
     const { catalog, entry } = this.requireEntry(topic, id);
-    const all = catalog.relations.groupsOf(entry)[query.group];
+    const all = textsOf(
+      catalog,
+      catalog.relations.groupsOf(entry)[query.group],
+    );
     const end = Math.min(query.offset + query.limit, all.length);
     return {
       items: all.slice(query.offset, end),
@@ -85,16 +100,18 @@ export class DocumentsService {
     if (!catalog)
       throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
     const entry = catalog.entries.get(id);
-    if (!entry) throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
+    // A track's Markdown is for kb and the agent, never shown to people (ADR 0035 §7).
+    if (!entry || isTrackEntry(entry))
+      throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
     return { catalog, entry };
   }
 
   private seeAlso(catalog: TopicCatalog, entry: CatalogEntry): SeeAlso {
     const groups = catalog.relations.groupsOf(entry);
-    const preview = (group: SeeAlsoGroupName) => ({
-      items: groups[group].slice(0, SEE_ALSO_PREVIEW),
-      total: groups[group].length,
-    });
+    const preview = (group: SeeAlsoGroupName) => {
+      const texts = textsOf(catalog, groups[group]);
+      return { items: texts.slice(0, SEE_ALSO_PREVIEW), total: texts.length };
+    };
     return {
       exampleOf: preview('exampleOf'),
       extends: preview('extends'),

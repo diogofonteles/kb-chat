@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { authorshipSchema } from './facets.js';
 import { documentRefSchema } from './search.js';
+import { answerMediaSchema, trackPassageSchema } from './track-citations.js';
 import {
   sweepCoverageSchema,
   sweepCursorSchema,
@@ -9,12 +10,16 @@ import {
 
 /**
  * A numbered source: [n] in the answer text points to sources[n - 1]. Its authorship
- * (KBC-020) is optional: turns saved before it have none and render without a badge.
+ * (KBC-020) is optional: turns saved before it have none and render without a badge. A
+ * track of the collection (KBC-099, ADR 0035 §6) adds `media` and the cited `passages`, in
+ * the order the answer cites them; older turns have neither and render as before.
  */
 export const answerSourceSchema = documentRefSchema.extend({
   n: z.number().int().positive(),
   authorship: authorshipSchema.optional(),
   author: z.string().optional(),
+  media: answerMediaSchema.optional(),
+  passages: z.array(trackPassageSchema).max(50).optional(),
 });
 export type AnswerSource = z.infer<typeof answerSourceSchema>;
 

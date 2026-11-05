@@ -176,6 +176,12 @@ import {
 } from './modules/media-edit/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
+import { MediaTrackShelf } from './modules/media-documents/index.js';
+import {
+  createMediaDocuments,
+  startDocumentBackstop,
+  type MediaDocuments,
+} from './media-documents-factory.js';
 import {
   createAiProviders,
   type AiProviders,
@@ -316,9 +322,22 @@ async function registerResearch(
       hasTopic,
       ratePerMinute: deps.config.RESEARCH_RATE_LIMIT,
       ...recording,
+      ...shelfOf(deps.media),
     }),
   );
 }
+
+/** The tracks of media.db a research turn may see (KBC-099), with the media library on. */
+const shelfOf = (media: MediaDeps | undefined) =>
+  media
+    ? {
+        shelf: () =>
+          new MediaTrackShelf({
+            store: media.store,
+            transcripts: media.transcripts,
+          }),
+      }
+    : {};
 
 /** The research routes that run the person's AI. */
 const RESEARCH_TURNS = new Set(['/api/v1/topics/:topic/research']);
@@ -525,12 +544,17 @@ function mediaEditor({
   });
 }
 
-/** What approved tracks become (KBC-068, ADR 0029 §5). */
-function trackPublisher({ media, authors }: MediaWiring): TrackPublisher {
+/** What approved tracks become (KBC-068, ADR 0029 §5), their documents with them (KBC-099). */
+function trackPublisher(
+  { media, authors }: MediaWiring,
+  documents: MediaDocuments,
+): TrackPublisher {
   return new TrackPublisher({
     ...media,
     items: media.trackItems,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
+    onPublished: (parentId) =>
+      documents.reconciler.reconcileRecording(parentId),
   });
 }
 
@@ -545,17 +569,23 @@ async function registerWorker(
     authors: AuthorsService;
     publisher: TrackPublisher;
     groq: GroqService;
+    documents: MediaDocuments;
   },
 ) {
-  const { publisher } = wiring;
+  const { publisher, documents } = wiring;
   const voicePrints = voicePrintService(wiring);
   await app.register(
     workerRoutes({
       groq: wiring.groq,
-      service: workerService(wiring.media, { voicePrints, groq: wiring.groq }),
+      service: workerService(wiring.media, {
+        voicePrints,
+        groq: wiring.groq,
+        documents,
+      }),
       transcribers: wiring.transcribers,
       transcription: transcriptionService(wiring.media, publisher),
       cuts: publisher,
+      kbResults: documents.kb,
       silences: wiring.silences,
       waveforms: wiring.waveforms,
       diarization: diarizationService(wiring),
@@ -567,7 +597,15 @@ async function registerWorker(
 /** The queue as workers see it, with what cut and voice-profile jobs carry. */
 function workerService(
   { store, files, trackItems: tracks, transcripts }: MediaDeps,
-  { voicePrints, groq }: { voicePrints: VoicePrintService; groq: GroqService },
+  {
+    voicePrints,
+    groq,
+    documents,
+  }: {
+    voicePrints: VoicePrintService;
+    groq: GroqService;
+    documents: MediaDocuments;
+  },
 ): WorkerService {
   return new WorkerService({
     store,
@@ -576,6 +614,7 @@ function workerService(
     termsVersion: () => transcripts.currentTerms().version,
     voiceJobOf: (job) => voicePrints.jobOf(job),
     groqWaits: () => groq.waits(),
+    kb: documents.kb,
   });
 }
 
@@ -851,7 +890,9 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const transcribers = transcriberService(wiring.media);
   const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
   const media = mediaService({ ...wiring, transcribers, groq });
-  const publisher = trackPublisher(wiring);
+  const documents = createMediaDocuments(wiring);
+  const publisher = trackPublisher(wiring, documents);
+  startDocumentBackstop(app, documents.reconciler);
   await registerTranscribers(app, { transcribers, media, wiring });
   await app.register(groqRoutes({ groq, media }));
   await registerListening(app, wiring, { media, transcribers, publisher });
@@ -860,7 +901,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   await registerVoiceProfiles(app, { ...wiring, transcribers });
   const { authors, media: deps } = wiring;
   const worker = { ...measures, media: deps, authors, transcribers };
-  await registerWorker(app, { ...worker, publisher, groq });
+  await registerWorker(app, { ...worker, publisher, groq, documents });
   const edited = await registerEditing(app, {
     ...wiring,
     service: media,

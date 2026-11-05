@@ -29,3 +29,4 @@ export * from './media-preparation.js';
 export * from './track-subjects.js';
 export * from './track-revisions.js';
 export * from './media-library.js';
+export * from './track-citations.js';

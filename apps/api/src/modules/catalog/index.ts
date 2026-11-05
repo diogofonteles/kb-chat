@@ -1,7 +1,10 @@
 export { CatalogRegistry, type TopicCatalog } from './catalog.js';
 export {
+  isTrackEntry,
+  toCatalogEntry,
   toConceptName,
   type CatalogEntry,
+  type CatalogMedia,
   type RelationNames,
 } from './catalog-entry.js';
 export { RelationIndex, conceptOfArticle } from './relations.js';

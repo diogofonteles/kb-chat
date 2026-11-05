@@ -1,6 +1,7 @@
 import type { ResearchStep } from '@kb-chat/contracts';
 import type { z } from 'zod';
 import type { CatalogEntry, CatalogRegistry } from '../catalog/index.js';
+import { anchorsIn } from './track-anchors.js';
 import {
   acceptsEntry,
   describeFilter,
@@ -25,6 +26,7 @@ import {
 import {
   foldPhrase,
   type DocMatch,
+  type Occurrence,
   type TextCount,
   type TextFinder,
 } from './text-finder.js';
@@ -167,6 +169,26 @@ function nothingFound(request: GrepRequest, scanned: number): string {
   return `Nenhum dos ${scanned} documentos${scope} contém ${phraseList(request.phrases)}. Antes de concluir que o acervo não trata disso, tente variantes: sinônimos (ocultos, secretos, velados, universais, adicionais), singular e plural, o número por extenso e em algarismos, uma parte menor da frase, outro filtro, e search_collection.`;
 }
 
+/** A track's passage in a files line: its anchors may be cited (KBC-099 BR-5). */
+function showSnippet(context: ToolContext, n: number, passage: string): void {
+  const anchors = anchorsIn(passage);
+  context.book.showTrack(n, { anchors, focus: anchors[0] ?? null });
+}
+
+/** A track's occurrences: each shows the anchor of its paragraph, the last one is the focus. */
+function showOccurrences(
+  context: ToolContext,
+  n: number,
+  items: readonly Occurrence[],
+): void {
+  const anchors = items.flatMap((item) => [
+    ...(item.anchor === undefined || item.anchor === null ? [] : [item.anchor]),
+    ...anchorsIn(item.context),
+  ]);
+  const focus = items.at(-1)?.anchor ?? null;
+  context.book.showTrack(n, { anchors, focus });
+}
+
 /**
  * find_text as a grep (KBC-017, ADR 0013): every matching document of the collection,
  * counted and paged (`files`, `count`, `content`), filtered by entity, origin, subjects
@@ -260,6 +282,7 @@ export class GrepTool {
     const passage = withText
       ? await this.deps.finder.snippet(context.topic, match)
       : null;
+    if (passage) showSnippet(context, n, passage);
     return fileLine(n, match, { passage, labels: context.labels });
   }
 
@@ -322,12 +345,14 @@ export class GrepTool {
     });
     const items = found?.items.slice(at.skip, at.skip + at.room) ?? [];
     if (items.length === 0) return { lines: [], count: 0 };
-    const head = groupLine(context.book.number(entry), entry, {
+    const n = context.book.number(entry);
+    const head = groupLine(n, entry, {
       from: at.skip + 1,
       to: at.skip + items.length,
       of: at.match.occurrences,
       labels: context.labels,
     });
+    showOccurrences(context, n, items);
     const several = phrases.length > 1;
     return {
       lines: [head, ...items.map((item) => occurrenceLine(item, several))],
@@ -363,9 +388,9 @@ export class GrepTool {
     const head = `Texto ${phraseList(phrases)} em [${n}] ${entry.title} (${found.length} caracteres): ${found.items.length} ocorrência(s).`;
     if (mode === 'count' || found.items.length === 0)
       return `${head}${found.items.length === 0 ? ' Tente variantes (sinônimos, singular e plural, uma parte menor da frase).' : ''}`;
-    const items = found.items
-      .slice(page.offset, page.offset + page.size)
-      .map((item) => occurrenceLine(item, phrases.length > 1));
+    const shown = found.items.slice(page.offset, page.offset + page.size);
+    showOccurrences(context, n, shown);
+    const items = shown.map((item) => occurrenceLine(item, phrases.length > 1));
     return [
       `${head} ${pageRange(page)}`,
       ...items,

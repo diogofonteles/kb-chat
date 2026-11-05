@@ -8,7 +8,11 @@ import {
   topicUpdateSchema,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { CatalogRegistry, TopicCatalog } from '../catalog/index.js';
+import {
+  isTrackEntry,
+  type CatalogRegistry,
+  type TopicCatalog,
+} from '../catalog/index.js';
 import type { CollectionRegistry } from './collection-registry.js';
 
 /** Whoever creates or renames, and what they may see (KBC-048 BR-3). */
@@ -58,6 +62,13 @@ const collator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
 const byTitle = (a: TopicCatalog, b: TopicCatalog): number =>
   collator.compare(a.topic.title, b.topic.title);
 
+const textCount = (catalog: TopicCatalog): number => {
+  let count = 0;
+  for (const entry of catalog.entries.values())
+    if (!isTrackEntry(entry)) count += 1;
+  return count;
+};
+
 function toTopic(
   catalog: TopicCatalog,
   scope: readonly TopicCatalog[],
@@ -71,8 +82,9 @@ function toTopic(
     parent: parent ?? null,
     description: description ?? '',
     ...access,
+    // Texts: a track document counts in "Na fala", not here (ADR 0035 §8).
     documentCount: canOpen
-      ? scope.reduce((sum, one) => sum + one.entries.size, 0)
+      ? scope.reduce((sum, one) => sum + textCount(one), 0)
       : 0,
   };
 }
