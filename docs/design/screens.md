@@ -784,3 +784,71 @@ Configurações → **Termos da transcrição**: só masters, onde a mídia est�
 - **Versões da lista:** fechado por padrão; versão, termos, data e autor.
 
 Player (T15), só masters: **Transcrever de novo** abaixo de "Esconder transcrição", com confirmação em linha e o foco em **Cancelar**. Enquanto refaz, quem vê a mídia lê "Retranscrevendo…" ou "Retranscrevendo · aguardando o transcritor", e o texto, as legendas e a busca continuam os atuais. Uma tentativa que falha diz, a masters, "A nova transcrição falhou. O texto atual foi mantido." O painel da transcrição mostra a masters "Feita com a lista de termos v3 (28/10/2026)".
+
+---
+
+## T22. Trecho da faixa citado na pesquisa (KBC-099; estado da publicação no KBC-100; ADR 0035)
+
+**Objetivo:** da citação de uma faixa numa resposta da IA, ler a transcrição no trecho citado e ouvi-lo dali. **Sucesso:** o trecho está destacado e visível sem rolar, e um toque em **Tocar** ouve de 2 s antes dele.
+
+### Na resposta (emenda da T4)
+- A citação de uma faixa é `[n]` como a de um texto; o leitor de tela ouve "Fonte n, faixa <título>, aos 8 minutos e 15 segundos".
+- Em **Fontes**, o chip da faixa: **"♪ <título da faixa> · <gravação> · 8:15"**, no grupo de autoria dela (KBC-020), ao lado dos textos. O ♪ vem com texto ("Faixa de áudio" para leitores de tela), nunca só ícone (UP-20). Título longo trunca em 1 linha com o completo no `title`; no celular, a gravação vai para uma segunda linha do chip. Com mais de um trecho da mesma faixa citado, o chip mostra o primeiro minuto e "+2 trechos"; cada `[n]` no texto abre o seu.
+- Fonte "atualizando" (KBC-100): o chip ganha "· atualizando" em texto discreto; o trecho é o que estava na pesquisa.
+
+### Layout
+```
+Desktop (≥ 1024 px), painel de leitura à direita (o da faixa usa 48rem em vez de 40rem, para o player caber ao lado):
+┌───────────────────────────── painel ─────────────────────────────┐
+│ ♪ Faixa de áudio · 8:15                               ✕ Fechar   │
+│ O que é o ritmo?                    (título, recebe o foco)      │
+│ Palestra de 12/03/2017 · faixa 3 de 12 · ✦ Mestre Laércio        │
+│ ⚠ transcrição automática de baixa confiança (só quando for)      │
+├──────────────── transcrição ───────────┬──────── player ──────────┤
+│ 7:58  … texto anterior …               │  [capa/onda]             │
+│ ▌8:15 texto do trecho citado, em       │  ▶ Tocar   8:13 / 9:28   │
+│ ▌     destaque (fundo + barra lateral) │  ━━━━━━━●━━━  velocidade │
+│ 8:40  … texto seguinte …               │  Abrir na página da faixa│
+│ (rola só a lista; "Voltar ao trecho")  │  (preso no alto)         │
+└────────────────────────────────────────┴──────────────────────────┘
+Celular (< 1024 px; 390 px): tela cheia, uma coluna: cabeçalho → player compacto preso
+no alto (▶, tempo, barra de busca, velocidade) → transcrição abaixo, rolando.
+```
+- O player fica **ao lado** da transcrição no desktop (coluna de 16rem) e **acima** dela no celular, sempre visível enquanto a transcrição rola (o pedido do dono: "ao lado, mostre um player").
+- O trecho citado usa o destaque `transcript-passage` (o mesmo da busca "Na fala"), mais uma barra lateral de 3 px para não depender da cor (UP-20, `forced-colors` ok). A palavra falada usa o destaque do KBC-045.
+- A lista rola até o trecho no terço superior assim que abre (rolagem explícita; não depende do acompanhamento da fala). Com `prefers-reduced-motion`, a rolagem é instantânea.
+
+### Fluxo
+1. Clique ou Enter numa citação ou chip de faixa → o painel abre (ou troca de conteúdo, com "← Voltar" se havia um documento) com o título focado (`preventScroll`).
+2. O player carrega a faixa em **trecho − 2 s, pausado**; **Tocar** é o primeiro controle depois do título na ordem de Tab. Nada toca sozinho.
+3. Tocar → o áudio sai de 2 s antes, a fala atual e a palavra falada se destacam e a lista acompanha; rolar à mão para de acompanhar até "Voltar ao trecho atual" (KBC-038).
+4. Clicar numa fala ou palavra toca dali (KBC-038).
+5. **Abrir na página da faixa** leva a `/midia/:id?t=<s>`; **✕** ou Esc fecha, a reprodução continua no mini-player e o foco volta à citação clicada.
+
+### Estados
+| Estado | Mostra | Ação |
+|---|---|---|
+| Carregando | Cabeçalho (veio da fonte) + esqueleto da transcrição + bloco reservado do player | — |
+| Sucesso | Transcrição no trecho + player pausado em −2 s | Tocar, ler, abrir a página |
+| Trecho sem tempo resolvido (fonte antiga) | Transcrição do começo, player em 0:00, sem destaque | Tocar |
+| Faixa editada depois da resposta | O trecho guardado ainda cai na faixa: destaca a fala nesse tempo; senão, "O trecho citado mudou desde a resposta. Mostrando o começo da faixa." | Tocar |
+| Faixa arquivada, apagada ou sem acesso | "Esta faixa não está mais disponível." | Fechar |
+| Áudio ainda não pronto | Transcrição + "Este áudio ainda não está pronto para ouvir." no lugar do player | — |
+| Erro de rede | "Não foi possível abrir a faixa." | Tentar de novo |
+| Transcrição muito longa (> 2 h) | Lista virtualizada a partir do trecho | — |
+
+### Estado da publicação (KBC-100, página da faixa para `media-edit`; Transcritores para masters)
+- Linha sob o título: **"Pesquisa com IA: Na pesquisa"**, **"Atualizando na pesquisa"**, **"Aguardando o Mac do dono (desligado desde 14:02)"**, **"Falhou: <motivo>"** com **Tentar de novo**, ou **"Fora da pesquisa: <motivo>"** (acervo sem pasta no kb; teto mensal da mídia). Texto com ícone, nunca só cor; mudança anunciada em `role="status"`.
+- Transcritores: o transcritor ganha a opção **Publica no acervo** (como "Separa vozes") e a contagem "12 faixas aguardando publicação · última publicação 14:32".
+
+### Acessibilidade e toque (WCAG 2.2 AA, MA-01 a MA-07)
+- O painel é `role="dialog"`, `aria-modal="false"` no desktop, rotulado pelo título; no celular, a conversa fica `inert` (como o T3).
+- Alvos ≥ 44 px no celular; a barra do player não depende de arrastar (setas ←/→ e os botões de pulo, KBC-041).
+- A lista de falas é um só ponto de Tab com setas (KBC-038); o trecho citado tem `aria-current="true"` até tocar outra fala.
+- 390 px: nenhuma rolagem lateral; texto da fala quebra; o tempo fica numa coluna de 3,5rem.
+
+### Fora do escopo e perguntas em aberto
+- O Markdown do vault nunca é mostrado. Vídeo segue no KBC-075.
+- Pergunta ao dono (padrão adotado): o player abre pausado ("pronto para tocar"), não tocando como o painel da busca "Na fala".
+
+*Emenda 2026-11-05 à T3 (KBC-101):* o "Veja também" pode trazer faixas ligadas pelo `kb link`: "♪ <título da faixa> · <gravação>", que abrem a T22 no começo, com "← Voltar". *À T4 (KBC-101):* a cobertura conta as faixas à parte: "2.700 documentos no conjunto (145 faixas de áudio)" e "· 412 analisados pela IA (30 faixas)".
