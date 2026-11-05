@@ -410,9 +410,9 @@ export class PreparationService {
   async retry(
     actor: PlanActor,
     mediaId: string,
-    stage: RetryStage,
-    acceptedUsd?: number,
+    press: { readonly stage: RetryStage; readonly acceptedUsd?: number },
   ): Promise<MediaPreparation> {
+    const { stage, acceptedUsd } = press;
     // Before anything waits: of clicks made together, the later one must see it lost.
     const seenRunId = this.deps.proposals.newestRunId(mediaId);
     const current = await this.view(actor, mediaId);

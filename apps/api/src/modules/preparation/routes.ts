@@ -100,12 +100,10 @@ function registerMoves(app: FastifyInstance, service: PreparationService) {
     '/api/v1/media/:id/preparation/steps/:step/retry',
     OPTIONS.retry,
     (request) =>
-      service.retry(
-        planActorOf(request),
-        request.params.id,
-        request.params.step,
-        request.body.acceptedUsd,
-      ),
+      service.retry(planActorOf(request), request.params.id, {
+        stage: request.params.step,
+        ...request.body,
+      }),
   );
   typed.post('/api/v1/media/:id/preparation/advance', OPTIONS.next, (request) =>
     service.next(planActorOf(request), request.params.id),

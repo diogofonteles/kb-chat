@@ -452,22 +452,24 @@ export class ProposalService {
       model: { id: llm.model, price: await this.priceOf(llm) },
     });
     const attempt = this.deps.store.failedAttempt(mediaId, transcript.id);
+    return { llm, ...this.goingOn(plan, attempt) };
+  }
+
+  /** The plan over what a failed run left: from where it stopped, or from the start. */
+  private goingOn(
+    plan: ProposalPlan,
+    attempt: FailedAttempt | null,
+  ): Omit<Prepared, 'llm'> {
     const carriedUsd = attempt?.spentUsd ?? 0;
-    return attempt && canResume(attempt, plan.windows.length)
-      ? {
-          plan: planFrom(plan, attempt.windowsDone),
-          llm,
-          resumes: attempt,
-          carriedUsd,
-          restarts: false,
-        }
-      : {
-          plan,
-          llm,
-          resumes: null,
-          carriedUsd,
-          restarts: (attempt?.windowsDone ?? 0) > 0,
-        };
+    if (attempt && canResume(attempt, plan.windows.length))
+      return {
+        plan: planFrom(plan, attempt.windowsDone),
+        resumes: attempt,
+        carriedUsd,
+        restarts: false,
+      };
+    const restarts = (attempt?.windowsDone ?? 0) > 0;
+    return { plan, resumes: null, carriedUsd, restarts };
   }
 
   private contextOf(item: MediaItem) {
