@@ -160,6 +160,7 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
       .mockReturnValueOnce(of({ kind: 'refused', error: rose }))
       .mockReturnValue(of({ kind: 'started' }));
     const rendered = await estimated({ start });
+    const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
     rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.05 });
     await rendered.fixture.whenStable();
@@ -174,6 +175,9 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
       notice.compareDocumentPosition(confirm) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    // Brought into view, clear of the editor's bottom bar on a phone (QA R2-5).
+    expect(scrolled.mock.contexts.at(-1)).toBe(notice);
+    scrolled.mockRestore();
     expect(start).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
     expect(start).toHaveBeenLastCalledWith(0.05);

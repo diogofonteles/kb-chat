@@ -2,12 +2,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   LOCALE_ID,
   computed,
+  effect,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -79,6 +82,9 @@ export class TrackProposals {
 
   private readonly asking = signal<Asking>({ kind: 'idle' });
   protected readonly error = signal('');
+  /** The value rose: its notice is brought into view, clear of the editor's bottom bar. */
+  private readonly rose = signal(false);
+  private readonly notice = viewChild<ElementRef<HTMLElement>>('notice');
   private readonly accepted = signal<readonly number[]>([]);
 
   protected readonly estimate = computed(() => {
@@ -132,7 +138,15 @@ export class TrackProposals {
     }).format(value);
   }
 
+  constructor() {
+    effect(() => {
+      const notice = this.notice()?.nativeElement;
+      if (notice && this.rose()) notice.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
   protected askEstimate(): void {
+    this.rose.set(false);
     this.error.set('');
     this.asking.set({ kind: 'estimating' });
     this.api
@@ -148,6 +162,7 @@ export class TrackProposals {
   }
 
   protected cancel(): void {
+    this.rose.set(false);
     this.asking.set({ kind: 'idle' });
   }
 
@@ -155,6 +170,7 @@ export class TrackProposals {
   protected confirm(): void {
     const asking = this.asking();
     if (asking.kind !== 'estimated') return;
+    this.rose.set(false);
     this.error.set('');
     this.asking.set({ ...asking, kind: 'starting' });
     this.start()(asking.estimate.estimateUsd)
@@ -187,6 +203,7 @@ export class TrackProposals {
    */
   private askAgain(): void {
     this.askEstimate();
+    this.rose.set(true);
     this.error.set(
       $localize`:@@tracks.ai.estimateRose:O valor mudou. Nada foi gasto: confira o novo valor.`,
     );

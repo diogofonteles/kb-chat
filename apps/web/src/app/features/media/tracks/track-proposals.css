@@ -32,6 +32,8 @@
 .refusal {
   color: var(--color-danger);
   font-weight: 600;
+  /* Brought into view above the editor's sticky bottom bar. */
+  scroll-margin-block: 6rem;
 }
 
 .suggestions {

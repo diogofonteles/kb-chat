@@ -69,7 +69,7 @@
 </div>
 <ng-template #errorText>
   @if (error()) {
-    <p class="refusal">{{ error() }}</p>
+    <p #notice class="refusal">{{ error() }}</p>
   }
 </ng-template>
 @if (pending().length && separation() !== null) {

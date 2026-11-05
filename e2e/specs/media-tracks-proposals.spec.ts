@@ -260,6 +260,11 @@ test('KBC-097: a retry says what it costs, also after a reload, and a dearer one
   expect((noticeBox?.y ?? 0) + (noticeBox?.height ?? 0)).toBeLessThanOrEqual(
     confirmBox?.y ?? 0,
   );
+  await expect(notice).toBeInViewport();
+  const footBox = await page.locator('.foot').boundingBox();
+  expect((noticeBox?.y ?? 0) + (noticeBox?.height ?? 0)).toBeLessThanOrEqual(
+    footBox?.y ?? 0,
+  );
   expect(sent).toEqual([{ dryRun: false, acceptedUsd: 0.02 }]);
   expect(
     await page.evaluate(
