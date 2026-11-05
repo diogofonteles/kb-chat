@@ -11,8 +11,10 @@ import { TestBed } from '@angular/core/testing';
 import {
   ActivatedRoute,
   NavigationEnd,
+  NavigationStart,
   Router,
   provideRouter,
+  type Routes,
 } from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
@@ -25,7 +27,7 @@ import {
   type ListeningPreferences,
 } from '@kb-chat/contracts';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
-import { filter, firstValueFrom } from 'rxjs';
+import { filter, firstValueFrom, take } from 'rxjs';
 import {
   MEDIA_ELEMENT_FACTORY,
   MediaEngine,
@@ -114,6 +116,7 @@ async function renderLibrary(
     master?: boolean;
     acervo?: string;
     busca?: string;
+    routes?: Routes;
   } = {},
 ) {
   const media: FakeMedia = fakeMediaElement();
@@ -123,7 +126,7 @@ async function renderLibrary(
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
-      provideRouter([]),
+      provideRouter(options.routes ?? []),
       chatStore,
       sessionAs({
         features: options.features ?? ['media', 'media-library'],
@@ -1237,15 +1240,20 @@ describe('LibraryPage (T16, KBC-051)', () => {
 
     it('keeps what is typed while its own address write lands', async () => {
       const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const router = TestBed.inject(Router);
+      // Typed at the moment the page's own write starts, not after it landed.
+      const typedInFlight = router.events
+        .pipe(
+          filter((event) => event instanceof NavigationStart),
+          take(1),
+        )
+        .subscribe(() => type('padre orlando em manaus hoje'));
       const landed = firstValueFrom(
-        TestBed.inject(Router).events.pipe(
-          filter((event) => event instanceof NavigationEnd),
-        ),
+        router.events.pipe(filter((event) => event instanceof NavigationEnd)),
       );
       type('padre orlando em manaus');
-      await pause();
-      type('padre orlando em manaus hoje');
       await landed;
+      typedInFlight.unsubscribe();
       await library.tick();
       expect((box() as HTMLInputElement).value).toBe(
         'padre orlando em manaus hoje',
@@ -1258,6 +1266,25 @@ describe('LibraryPage (T16, KBC-051)', () => {
           if (!request.cancelled) request.flush(anAnswer([]));
         });
       await library.settle();
+    });
+
+    it('never replaces a navigation away with its own address write', async () => {
+      let release: (allowed: boolean) => void = () => undefined;
+      const held = new Promise<boolean>((done) => {
+        release = done;
+      });
+      const library = await renderLibrary({
+        features: SPEAKER,
+        routes: [{ path: 'outra', canActivate: [() => held], children: [] }],
+      });
+      await library.open(aPage([anItem(1)]));
+      const router = TestBed.inject(Router);
+      type('orlando');
+      const going = router.navigateByUrl('/outra');
+      await pause();
+      release(true);
+      expect(await going).toBe(true);
+      expect(router.url).toBe('/outra');
     });
 
     it('writes the address again when the same words come back after it moved', async () => {

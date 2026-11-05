@@ -506,9 +506,9 @@ export class LibraryPage {
       });
   }
 
-  private leaving(): boolean {
+  private isLeaving(): boolean {
     const going = this.router.currentNavigation()?.extractedUrl;
-    const pathOf = (url: string) => url.split('?')[0];
+    const pathOf = (url: string) => url.split(/[?#]/)[0];
     return !!going && pathOf(going.toString()) !== pathOf(this.router.url);
   }
 
@@ -520,7 +520,7 @@ export class LibraryPage {
   /** Replaces the entry: Back leaves the library, not one word at a time. */
   private keepWordsInAddress(words: string): void {
     // Leaving the page: this write would replace that navigation.
-    if (this.leaving()) return;
+    if (this.isLeaving()) return;
     this.lastWordsInAddress = words;
     const address = this.router.parseUrl(this.router.url);
     const others = Object.entries(address.queryParams).filter(
