@@ -1,6 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
+import { requireFittingNode } from '../tools/check-node.mjs';
 import { privateTemp } from '../tools/test-temp.mjs';
 
+// A Node whose SQLite lacks FTS5 stops here, naming the Node to use, before the servers
+// start (the workers load this file too: the runner has checked already).
+if (!process.env['TEST_WORKER_INDEX']) requireFittingNode();
 privateTemp();
 
 // The tutorial's screenshots (KBC-032): `pnpm tutorial:screenshots`. Its own ports, so it runs

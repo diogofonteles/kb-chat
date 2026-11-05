@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Playwright E2E: the web app against the API on the fixture vault (in-process index, no QMD).",
   "scripts": {
-    "e2e": "../tools/heavy.sh playwright test",
+    "e2e": "node --no-warnings ../tools/check-node.mjs && ../tools/heavy.sh playwright test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
