@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   apiErrorSchema,
+  estimateRoseDetailsSchema,
   inTimeOrder,
   trackProblemsDetailsSchema,
   type DraftTrack,
@@ -8,14 +9,8 @@ import {
   type MediaEdit,
   type TrackProblem,
 } from '@kb-chat/contracts';
-import { z } from 'zod';
 
 type Timer = ReturnType<typeof setTimeout>;
-
-const estimateRoseSchema = z.object({
-  reason: z.literal('estimate-rose'),
-  estimateUsd: z.number(),
-});
 
 /** What a save came to; only `saved` lets an action go on (BR-1). */
 export type SaveResult =
@@ -148,7 +143,7 @@ export function conflictOf(err: unknown): ConflictReason {
 
 /** The run would cost more than the value confirmed: the value it would cost now. */
 export function roseEstimateOf(err: unknown): number | null {
-  const details = estimateRoseSchema.safeParse(detailsOf(err));
+  const details = estimateRoseDetailsSchema.safeParse(detailsOf(err));
   return details.success ? details.data.estimateUsd : null;
 }
 

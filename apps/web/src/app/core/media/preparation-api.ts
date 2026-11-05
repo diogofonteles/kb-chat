@@ -5,8 +5,8 @@ import {
   type MediaPreparation,
   type PreparationPlanRequest,
   type RetryStage,
+  type RetryStageRequest,
 } from '@kb-chat/contracts';
-import type { RetryStageRequest } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
 import { mediaUrl } from './media-api.js';
 

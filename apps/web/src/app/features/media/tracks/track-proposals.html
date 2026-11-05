@@ -10,9 +10,8 @@
       <p i18n="@@tracks.ai.estimate">Custa cerca de {{ estimateText() }}.</p>
       @if (shown.restarts) {
         <p class="hint" i18n="@@tracks.ai.restarts">
-          Uma mudança salva tirou as faixas da tentativa anterior. Para não
-          perder faixas, a análise recomeça do início e paga outra vez as
-          janelas já feitas.
+          A tentativa anterior não pode continuar: a análise recomeça do início
+          e paga outra vez as janelas já feitas.
         </p>
       }
       @if (replaces()) {
