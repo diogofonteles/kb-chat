@@ -89,10 +89,10 @@ function transcriptionOf(row: Row): MediaRecord['transcription'] {
       row['transcript_confidence'] === null
         ? null
         : transcriptConfidenceSchema.parse(row['transcript_confidence']),
+    // A track's transcript is `derived` from its recording's (KBC-068): no engine to name.
     provider:
-      row['transcript_provider'] === null
-        ? null
-        : transcriptProviderSchema.parse(row['transcript_provider']),
+      transcriptProviderSchema.safeParse(row['transcript_provider']).data ??
+      null,
     route: row['transcribe_route'] === 'groq' ? 'groq' : 'transcriber',
     hold:
       row['transcribe_hold'] === null
