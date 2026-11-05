@@ -70,14 +70,29 @@ function segmentVoicesOf(wiring: TrackProposalWiring) {
 /** The AI's track proposals over the media database (KBC-067). */
 /** Who keeps the AI's words in line with the names people give (KBC-090). */
 export function voiceNameFixerOf(media: MediaDeps): VoiceNameFixer {
+  const latest = (mediaId: string) => media.diarizations.latest(mediaId);
   return new VoiceNameFixer({
-    suggestions: (mediaId) => media.trackProposals.draft(mediaId).voices,
+    proposals: media.trackProposals,
     labels: (mediaId) => {
-      const latest = media.diarizations.latest(mediaId);
-      return latest ? media.voiceLabels.labels(latest.id) : [];
+      const separation = latest(mediaId);
+      return separation ? media.voiceLabels.labels(separation.id) : [];
+    },
+    refused: (mediaId) => {
+      const separation = latest(mediaId);
+      return separation ? media.voiceLabels.refusedNames(separation.id) : [];
     },
     edits: media.edits,
+    revisions: media.trackRevisions,
   });
+}
+
+/** A slip here must not fail a paid run: the words wait for the next window or name. */
+function fixWindow({ media, log }: TrackProposalWiring, mediaId: string): void {
+  try {
+    voiceNameFixerOf(media).fix(mediaId, null);
+  } catch (err) {
+    log.warn({ err, mediaId }, 'could not fix a name in a proposal');
+  }
 }
 
 export function createTrackProposals(
@@ -101,6 +116,6 @@ export function createTrackProposals(
     },
     onRunError: (err, runId) =>
       wiring.log.warn({ err, runId }, 'track proposal run failed'),
-    onWindowSaved: (mediaId) => voiceNameFixerOf(media).fix(mediaId),
+    onWindowSaved: (mediaId) => fixWindow(wiring, mediaId),
   });
 }

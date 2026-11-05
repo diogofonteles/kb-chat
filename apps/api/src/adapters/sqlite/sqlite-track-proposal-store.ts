@@ -20,6 +20,7 @@ import type {
   ProposedTrack,
   TrackExtension,
   TrackProposalStorePort,
+  VoiceText,
 } from '../../ports/track-proposal-store.js';
 import { inTransaction } from './media-database.js';
 
@@ -447,6 +448,32 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
         startMs: Number(row['start_ms']),
         endMs: Number(row['end_ms']),
       }));
+  }
+
+  voiceTexts(mediaId: string): VoiceText[] {
+    const runId = this.draft(mediaId).run?.id;
+    if (!runId) return [];
+    return this.db
+      .prepare(
+        `SELECT voice, name, written_name FROM media_voice_suggestions
+         WHERE run_id = ? AND name IS NOT NULL ORDER BY voice`,
+      )
+      .all(runId)
+      .map((row) => ({
+        runId,
+        voice: Number(row['voice']),
+        name: String(row['name']),
+        written: textOrNull(row, 'written_name'),
+      }));
+  }
+
+  markWritten(runId: string, voice: number, name: string): void {
+    this.db
+      .prepare(
+        `UPDATE media_voice_suggestions SET written_name = ?
+         WHERE run_id = ? AND voice = ?`,
+      )
+      .run(name, runId, voice);
   }
 
   draft(mediaId: string): DraftTracks {

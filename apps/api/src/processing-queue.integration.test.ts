@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type {
   MediaItem,
   PreparationPlanRequest,
@@ -146,7 +148,7 @@ describe('GET /media/processing (KBC-090)', () => {
     });
   });
 
-  it('offers no action to who cannot edit recordings', async () => {
+  it('leaves out what waits for a press who cannot edit cannot give', async () => {
     const media = await startMedia();
     const { token } = await pairDiarizer(media);
     await sent(media, { ...PLAN, speakers: false, tracks: 'manual' });
@@ -159,7 +161,38 @@ describe('GET /media/processing (KBC-090)', () => {
       features: ['media', 'media-upload'],
     });
     const queue = (await call('GET', QUEUE)).json<ProcessingQueue>();
-    expect(queue.items[0]).toMatchObject({ action: null });
+    expect(queue.items).toEqual([]);
+  });
+
+  it('does not ask another person to move on an audio that is not theirs', async () => {
+    const media = await startMedia();
+    const { token } = await pairDiarizer(media);
+    await sent(media, { ...PLAN, speakers: false, tracks: 'manual' });
+    await convertWithFlac(media, await leaseJob(media));
+    const job = await leaseTranscription(media, token);
+    await sendTranscript(media, { token, job, raw: conversationRaw() });
+    const { call } = await member(media, {
+      email: 'edita@example.com',
+      topics: ['hermetismo'],
+      features: ['media', 'media-upload', 'media-edit'],
+    });
+    const queue = (await call('GET', QUEUE)).json<ProcessingQueue>();
+    expect(queue.items).toEqual([]);
+  });
+
+  it('leaves out a transcription that failed on an audio that has its text', async () => {
+    const media = await startMedia();
+    const { token } = await pairDiarizer(media);
+    const item = await sent(media, { ...PLAN, speakers: false });
+    await convertWithFlac(media, await leaseJob(media));
+    const job = await leaseTranscription(media, token);
+    await sendTranscript(media, { token, job, raw: conversationRaw() });
+    const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+    db.prepare(
+      `UPDATE jobs SET status = 'failed' WHERE media_id = ? AND kind = 'transcribe'`,
+    ).run(item.id);
+    db.close();
+    expect((await queueOf(media)).items).toEqual([]);
   });
 
   it('never lists an upload still on its way', async () => {

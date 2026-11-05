@@ -46,11 +46,13 @@ import {
   type StartTerms,
   type DurationEstimate,
 } from '../track-proposals/index.js';
+import { nameReviewsOf } from './name-reviews.js';
 import { isGuided, planRefusals, type PlanContext } from './plan-rules.js';
 import {
   activeCountOf,
   impliedPlan,
   inQueueOrder,
+  isGhost,
   positionsOf,
   queueItemOf,
 } from './processing-queue.js';
@@ -102,7 +104,10 @@ export interface PreparationServiceDeps {
     refused(mediaId: string): readonly number[];
   };
   readonly edits: Pick<MediaEditStorePort, 'edit'>;
-  readonly drafts: Pick<TrackProposalStorePort, 'draft' | 'failedAttempt'>;
+  readonly drafts: Pick<
+    TrackProposalStorePort,
+    'draft' | 'failedAttempt' | 'voiceTexts'
+  >;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: PlanActor, mediaId: string) => MediaItem;
   /** The recording, when this person may follow it in the queue (KBC-051 BR-2). */
@@ -517,15 +522,20 @@ export class PreparationService {
       ...plans.failedRecordings(),
     ]);
     const positions = positionsOf(jobs);
+    const separating = new Set(
+      jobs.filter(({ kind }) => kind === 'diarize').map((job) => job.mediaId),
+    );
     const items = [...ids].flatMap((mediaId) => {
-      const separating = jobs.some(
-        (job) => job.mediaId === mediaId && job.kind === 'diarize',
-      );
       const record = open.get(mediaId) ?? null;
-      const line = this.queueLine(actor, { mediaId, record, separating });
+      const line = this.queueLine(actor, {
+        mediaId,
+        record,
+        separating: separating.has(mediaId),
+      });
       if (!line) return [];
       const position = positions.get(mediaId) ?? null;
-      return [this.queueItem(actor, { ...line, position })];
+      const shown = this.queueItem(actor, { ...line, position });
+      return isGhost(shown) ? [] : [shown];
     });
     return {
       items: inQueueOrder(items),
@@ -551,7 +561,7 @@ export class PreparationService {
       next: record ? nextActionOf(record.plan, stages) : null,
       position,
       step,
-      canEdit: actor.canEdit,
+      canEdit: actor.canEdit && item.canEdit,
       transcriberOn: (stage) => this.transcriberOn(stage),
     });
   }
@@ -653,6 +663,12 @@ export class PreparationService {
     return {
       suggestions: suggestionsOf(voices, speakers),
       refusedVoices: [...refusedVoices],
+      nameReviews: nameReviewsOf({
+        texts: this.deps.drafts.voiceTexts(item.id),
+        labels: speakers?.labels ?? [],
+        refused: refusedVoices,
+        tracks: draft.tracks,
+      }),
       tracks: this.tracksOf({ item, draft: { ...draft, voices }, speakers }),
     };
   }

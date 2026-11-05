@@ -72,6 +72,15 @@ export interface InterruptedRun {
  * media database. Each window's tracks are written as the window ends (FR-3), so the
  * draft grows while the run goes on (KBC-072).
  */
+/** A name a run suggested and where its text stands. */
+export interface VoiceText {
+  readonly runId: string;
+  readonly voice: number;
+  readonly name: string;
+  /** Null until a correction changed the text. */
+  readonly written: string | null;
+}
+
 export interface TrackProposalStorePort {
   /**
    * Starts a run, one that goes on from a failed one taking its tracks and names along; null
@@ -83,6 +92,10 @@ export interface TrackProposalStorePort {
   newestRun(mediaId: string): ProposalRun | null;
   /** The recording's newest run when it failed on this transcript: the analysis still open. */
   failedAttempt(mediaId: string, transcriptId: string): FailedAttempt | null;
+  /** What the newest run suggested for each voice and what its words say now (KBC-090). */
+  voiceTexts(mediaId: string): VoiceText[];
+  /** The name the AI's words say now, once a person's took the place of the suggested one. */
+  markWritten(runId: string, voice: number, name: string): void;
   /** The tracks a run has written, in order. */
   runTracks(runId: string): DraftTrack[];
   /**

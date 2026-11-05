@@ -4,6 +4,7 @@ import {
   activeCountOf,
   impliedPlan,
   inQueueOrder,
+  isGhost,
   positionsOf,
   queueItemOf,
 } from './processing-queue.js';
@@ -160,10 +161,28 @@ describe('queueItemOf (KBC-090)', () => {
     expect(queueItemOf(facts({ stages: blocked })).action).toBe('continue');
   });
 
-  it('offers nothing to who cannot edit', () => {
+  it('offers nothing to who cannot edit, and does not ask them', () => {
     const failed = stage('speakers', 'failed', { canRetry: true });
     const item = queueItemOf(facts({ stages: [failed], canEdit: false }));
-    expect(item).toMatchObject({ action: null, retryStage: null });
+    expect(item).toMatchObject({
+      action: null,
+      retryStage: null,
+      phase: 'stopped',
+    });
+  });
+
+  it('retries a stage that failed on step 3', () => {
+    const failed = stage('speakers', 'failed', { canRetry: true });
+    const item = queueItemOf(facts({ stages: [failed], step: 3 }));
+    expect(item).toMatchObject({ action: 'retry', retryStage: 'speakers' });
+  });
+
+  it('calls a line with nothing to say or do a ghost', () => {
+    const done = queueItemOf(
+      facts({ stages: [stage('convert', 'done')], step: null }),
+    );
+    expect(isGhost(done)).toBe(true);
+    expect(isGhost(queueItemOf(facts()))).toBe(false);
   });
 });
 

@@ -1,5 +1,6 @@
 import type { Author } from '@kb-chat/contracts';
 import type { MediaDeps } from './media-factory.js';
+import { voiceNameFixerOf } from './track-proposals-factory.js';
 import {
   TrackRevisionService,
   type TrackPublisher,
@@ -41,6 +42,7 @@ export function createTrackRevisions(
     diarizations: media.diarizations,
     voiceLabels: media.voiceLabels,
     names: new VoiceNamesService({ ...media, rootOf, speakersOf }),
+    fixer: voiceNameFixerOf(media),
     findMedia: (actor, mediaId) => service.get(actor, mediaId),
     rootOf,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),

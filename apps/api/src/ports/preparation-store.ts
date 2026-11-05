@@ -72,7 +72,7 @@ export interface PreparationStorePort {
   jobsAhead(mediaId: string, kind: 'transcribe' | 'diarize'): number;
   /** The jobs not finished, in the order the workers take them (FIFO, ADR 0022). */
   activeJobs(): ActiveJob[];
-  /** Recordings whose conversion or newest transcription failed. */
+  /** Recordings stuck on a failure: their conversion, or a first transcription. */
   failedRecordings(): string[];
   measuredRates(): MeasuredRates;
 }

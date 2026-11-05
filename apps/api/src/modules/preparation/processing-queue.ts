@@ -69,6 +69,7 @@ interface QueueFacts {
   readonly position: number | null;
   /** The step of its plan; null with no plan. */
   readonly step: PreparationStep | null;
+  /** The person may move this audio on: "Precisa de você" is only that. */
   readonly canEdit: boolean;
   /** Whether a transcriber can take this stage now. */
   readonly transcriberOn: (stage: PreparationStage) => boolean;
@@ -93,8 +94,8 @@ function actionOf(
 ): { action: QueueAction | null; retryStage: RetryStage | null } {
   const none = { action: null, retryStage: null };
   if (!facts.canEdit) return none;
-  if (facts.step === 3) return { action: 'continue', retryStage: null };
   if (current?.state === 'failed') return retryOf(current, facts.step);
+  if (facts.step === 3) return { action: 'continue', retryStage: null };
   if (facts.next) return { action: facts.next, retryStage: null };
   if (current?.state === 'blocked')
     return { action: 'continue', retryStage: null };
@@ -107,11 +108,13 @@ export function queueItemOf(facts: QueueFacts): ProcessingQueueItem {
   const index = stages.findIndex(({ state }) => state !== 'done');
   const current = stages[index];
   const after = stages.slice(index + 1).find(({ state }) => state !== 'done');
+  const moves = actionOf(facts, current);
+  const atWork = current && PHASE_OF[current.state];
   return {
     mediaId: item.id,
     title: item.title,
     topic: item.topic,
-    phase: (current && PHASE_OF[current.state]) ?? 'attention',
+    phase: atWork ?? (moves.action === null ? 'stopped' : 'attention'),
     stage: current?.stage ?? null,
     state: current?.state ?? null,
     percent: current?.percent ?? null,
@@ -125,7 +128,7 @@ export function queueItemOf(facts: QueueFacts): ProcessingQueueItem {
       current !== undefined &&
       waitsOnTranscriber(current) &&
       !facts.transcriberOn(current),
-    ...actionOf(facts, current),
+    ...moves,
     step,
   };
 }
@@ -134,7 +137,12 @@ const PHASE_ORDER: Record<QueuePhase, number> = {
   running: 0,
   next: 1,
   attention: 2,
+  stopped: 3,
 };
+
+/** A line with nothing to say or do: all done, and no plan or person it waits for. */
+export const isGhost = ({ stage, action }: ProcessingQueueItem): boolean =>
+  stage === null && action === null;
 
 /** At work, then the line in order, then what waits for a person; else as they came. */
 export function inQueueOrder(
@@ -150,4 +158,4 @@ export function inQueueOrder(
 
 /** Those at work or in line: the sidebar's count. */
 export const activeCountOf = (items: readonly ProcessingQueueItem[]): number =>
-  items.filter(({ phase }) => phase !== 'attention').length;
+  items.filter(({ phase }) => phase === 'running' || phase === 'next').length;

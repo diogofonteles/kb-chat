@@ -209,6 +209,14 @@ export const preparationVoiceSchema = z.object({
 });
 export type PreparationVoice = z.infer<typeof preparationVoiceSchema>;
 
+/** Titles a corrected or refused name may still be in: a person looks at these. */
+export const nameReviewSchema = z.object({
+  voice: voiceSchema,
+  name: z.string().min(1),
+  tracks: z.array(z.object({ id: z.uuid(), title: z.string() })),
+});
+export type NameReview = z.infer<typeof nameReviewSchema>;
+
 export const NEXT_ACTIONS = ['validate', 'conclude'] as const;
 export const nextActionSchema = z.enum(NEXT_ACTIONS);
 export type NextAction = z.infer<typeof nextActionSchema>;
@@ -233,6 +241,7 @@ export const mediaPreparationSchema = z.object({
   suggestions: z.array(voiceSuggestionSchema),
   /** Voices whose suggested name a person refused: no name is offered again. */
   refusedVoices: z.array(voiceSchema).default([]),
+  nameReviews: z.array(nameReviewSchema).default([]),
   tracks: z.array(preparationTrackSchema),
   /** The primary action once nothing is left to process; never taken by itself (FR-5). */
   next: nextActionSchema.nullable(),
@@ -282,8 +291,16 @@ export const openPreparationsSchema = z.object({
 });
 export type OpenPreparations = z.infer<typeof openPreparationsSchema>;
 
-/** Where an audio stands in the queue: at work, waiting its turn, or waiting for a person. */
-export const QUEUE_PHASES = ['running', 'next', 'attention'] as const;
+/**
+ * Where an audio stands in the queue: at work, waiting its turn, waiting for this person, or
+ * stopped with nothing this person can do about it.
+ */
+export const QUEUE_PHASES = [
+  'running',
+  'next',
+  'attention',
+  'stopped',
+] as const;
 export const queuePhaseSchema = z.enum(QUEUE_PHASES);
 export type QueuePhase = z.infer<typeof queuePhaseSchema>;
 

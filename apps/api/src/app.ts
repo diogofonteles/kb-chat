@@ -147,10 +147,7 @@ import {
   PreparationService,
   preparationRoutes,
 } from './modules/preparation/index.js';
-import {
-  createTrackProposals,
-  voiceNameFixerOf,
-} from './track-proposals-factory.js';
+import { createTrackProposals } from './track-proposals-factory.js';
 import {
   createSubjectDirectory,
   createTrackSubjects,
@@ -685,6 +682,7 @@ async function registerListening(
   );
   await registerSpeakers(app, {
     deps: wiring.media,
+    media,
     diarization,
     publisher,
     authors: wiring.authors,
@@ -697,15 +695,16 @@ async function registerSpeakers(
   app: FastifyInstance,
   wiring: {
     deps: MediaDeps;
+    media: MediaService;
     diarization: DiarizationService;
     publisher: TrackPublisher;
     authors: AuthorsService;
     hasTopic: (topic: string) => boolean;
   },
 ) {
-  const { deps, diarization, publisher, authors, hasTopic } = wiring;
+  const { deps, authors, hasTopic } = wiring;
   const rootOf = (topic: string) => authors.rootOf(topic);
-  await app.register(speakerRoutesOf({ deps, diarization, publisher, rootOf }));
+  await app.register(speakerRoutesOf(wiring));
   const service = new SpeakersService({
     speakers: deps.speakers,
     rootOf,
@@ -717,23 +716,28 @@ async function registerSpeakers(
 /** "Vozes": names, and the answers to what is suggested by voice (KBC-065, KBC-071). */
 function speakerRoutesOf(input: {
   deps: MediaDeps;
+  media: MediaService;
   diarization: DiarizationService;
   publisher: TrackPublisher;
-  rootOf: (topic: string) => string;
+  authors: AuthorsService;
 }) {
-  const { deps, diarization, publisher, rootOf } = input;
+  const { deps, diarization, publisher, authors } = input;
+  const rootOf = (topic: string) => authors.rootOf(topic);
   const speakersOf = (actor: MediaActor, mediaId: string) =>
     diarization.speakers(actor, mediaId);
-  const fixer = voiceNameFixerOf(deps);
+  const revisions = createTrackRevisions({
+    media: deps,
+    service: input.media,
+    publisher,
+    diarization,
+    authors,
+  });
   const names = new VoiceNamesService({
     ...deps,
     rootOf,
     speakersOf,
-    // Who answers decides the author of a published track; the AI's words follow the name.
-    onNamed: (mediaId) => {
-      fixer.fix(mediaId);
-      publisher.afterRecordingEdit(mediaId);
-    },
+    relabel: (actor, target, apply) =>
+      revisions.voiceRenamed(actor, target, apply),
   });
   return speakerRoutes({
     service: diarization,

@@ -217,10 +217,11 @@ export class SqlitePreparationStore implements PreparationStorePort {
       .prepare(
         `SELECT m.id FROM media m
          WHERE m.parent_media_id IS NULL AND m.archived_at IS NULL AND (
-           m.status = 'failed' OR (
+           m.status = 'failed' OR ((
              SELECT j.status FROM jobs j WHERE j.media_id = m.id AND j.kind = 'transcribe'
              ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1
-           ) IN ('failed', 'dead'))
+           ) IN ('failed', 'dead') AND NOT EXISTS (
+             SELECT 1 FROM transcripts t WHERE t.media_id = m.id)))
          ORDER BY m.created_at, m.id`,
       )
       .all()
