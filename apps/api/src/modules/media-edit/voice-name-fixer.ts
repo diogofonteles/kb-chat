@@ -112,7 +112,8 @@ export function fixesOf(input: {
  * follow the voice, these do not. Once a person says who the voice is, the words follow, by
  * these rules: only what the AI wrote and no person touched, only the whole suggested name, and
  * never a one-word name, which may be someone else (those tracks go to the person's review).
- * What was written is recorded, so a second correction or an undo starts from it. A published
+ * What was written is recorded only when some text changed, so a second correction or an undo
+ * starts from what the text says. A published
  * title changes as any other change of a track: with its history and a new version.
  */
 export class VoiceNameFixer {
@@ -131,12 +132,19 @@ export class VoiceNameFixer {
       refused: refused(mediaId),
     });
     if (fixes.length === 0) return;
+    // Only a fix that changed some text moves what was written: one that changed nothing (a
+    // one-word name, a title it does not fit in) leaves the words the text still says.
+    const applied = new Set<number>();
     const rewrite = (text: string, max: number) =>
-      fixes.reduce((now, fix) => withNameFixed(now, fix, max), text);
+      fixes.reduce((now, fix, index) => {
+        const next = withNameFixed(now, fix, max);
+        if (next !== now) applied.add(index);
+        return next;
+      }, text);
     revisions.atomically(() => {
       this.rewriteTitles(mediaId, { rewrite, author });
       this.deps.edits.rewriteSuggestedSummaries(mediaId, rewrite);
-      for (const { text, to } of fixes)
+      for (const { text, to } of fixes.filter((_, at) => applied.has(at)))
         proposals.markWritten(text.runId, text.voice, to);
     });
   }
@@ -166,8 +174,9 @@ export class VoiceNameFixer {
     const { edits, revisions } = this.deps;
     const proposed = edits.proposedTrackIds(mediaId);
     for (const track of revisions.tracks(mediaId)) {
+      if (!proposed.has(track.trackId)) continue;
       const after = rewrite(track.title, TRACK_TITLE_MAX);
-      if (!proposed.has(track.trackId) || after === track.title) continue;
+      if (after === track.title) continue;
       revisions.renameProposed(track, after, author.now);
       revisions.record(
         track.mediaId,

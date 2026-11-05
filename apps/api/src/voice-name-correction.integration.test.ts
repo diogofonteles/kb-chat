@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type {
-  MediaItem,
+import {
+  TRACK_TITLE_MAX,
+  type MediaItem,
   MediaPreparation,
   PreparationPlanRequest,
   RawTranscript,
@@ -95,6 +96,15 @@ function sql(media: Media, statement: string, ...values: string[]) {
   const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
   db.prepare(statement).run(...values);
   db.close();
+}
+
+function writtenName(media: Media): string | null {
+  const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+  const row = db
+    .prepare('SELECT written_name FROM media_voice_suggestions WHERE voice = 1')
+    .get() as { written_name: string | null } | undefined;
+  db.close();
+  return row?.written_name ?? null;
 }
 
 /** A finished proposal whose suggestion and title say `suggested`. */
@@ -354,6 +364,74 @@ describe("a corrected name in the AI's words (KBC-090)", () => {
     expect((await read(media, id)).tracks[0]?.answerer).toMatchObject({
       name: 'Márcio da Rós',
     });
+  });
+});
+
+describe('a corrected name the text could not follow (KBC-090)', () => {
+  it('a one-word name left in the title goes to review on the next correction', async () => {
+    const one = await proposed({
+      suggested: 'Pedro Alves',
+      title: 'Conversa com Pedro Alves',
+    });
+    await name(one, 'Pedro');
+    expect(await titleOf(one)).toBe('Conversa com Pedro');
+    expect(writtenName(one.media)).toBe('Pedro');
+
+    await name(one, 'João Silva');
+
+    const after = await read(one.media, one.id);
+    expect(after.tracks[0]?.title).toBe('Conversa com Pedro');
+    expect(writtenName(one.media)).toBe('Pedro');
+    expect(after.nameReviews).toEqual([
+      {
+        voice: 1,
+        name: 'Pedro',
+        tracks: [{ id: after.tracks[0]?.id, title: 'Conversa com Pedro' }],
+      },
+    ]);
+  });
+
+  it('a title the right name does not fit in keeps the old one, and goes to review', async () => {
+    const lead = 'x'.repeat(TRACK_TITLE_MAX - 'Márcio da Roça'.length - 1);
+    const title = `${lead} Márcio da Roça`;
+    const one = await proposed({ suggested: 'Márcio da Roça', title });
+
+    await name(one, 'Márcio da Rocha Filho');
+
+    const after = await read(one.media, one.id);
+    expect(after.tracks[0]?.title).toBe(title);
+    expect(writtenName(one.media)).toBeNull();
+    expect(after.nameReviews).toEqual([
+      {
+        voice: 1,
+        name: 'Márcio da Roça',
+        tracks: [{ id: after.tracks[0]?.id, title }],
+      },
+    ]);
+  });
+
+  it('a refused voice still warns on the title that kept the suggested name', async () => {
+    const lead = 'x'.repeat(TRACK_TITLE_MAX - 'Márcio da Roça'.length - 1);
+    const title = `${lead} Márcio da Roça`;
+    const one = await proposed({ suggested: 'Márcio da Roça', title });
+    await name(one, 'Márcio da Rocha Filho');
+
+    const refused = await one.media.owner(
+      'POST',
+      `${url(one.id)}/voices/1/refuse-name`,
+      { version: one.version },
+    );
+    expect(refused.statusCode, refused.body).toBe(200);
+
+    const after = await read(one.media, one.id);
+    expect(after.refusedVoices).toEqual([1]);
+    expect(after.nameReviews).toEqual([
+      {
+        voice: 1,
+        name: 'Márcio da Roça',
+        tracks: [{ id: after.tracks[0]?.id, title }],
+      },
+    ]);
   });
 });
 
