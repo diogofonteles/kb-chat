@@ -84,12 +84,16 @@ export async function transcribedAudio(
   return media;
 }
 
+interface SeparationAnswer {
+  readonly turns?: typeof TURNS;
+  readonly voiceMatches?: readonly VoiceMatch[];
+}
+
 /** Asks for a separation and answers it with `turns`, as the Mac would. */
 export async function separateVoices(
   owner: APIRequestContext,
   mediaId: string,
-  turns: typeof TURNS = TURNS,
-  voiceMatches: readonly VoiceMatch[] = [],
+  { turns = TURNS, voiceMatches = [] }: SeparationAnswer = {},
 ): Promise<void> {
   const asked = await owner.post(`/api/v1/media/${mediaId}/diarize`, {
     data: {},
