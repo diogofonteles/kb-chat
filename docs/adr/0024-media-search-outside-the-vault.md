@@ -1,6 +1,6 @@
 # 0024 — Media search: transcripts indexed in the app's own SQLite FTS5, merged into search results, outside the kb vault
 
-- Status: accepted (2026-10-28)
+- Status: accepted (2026-10-28); §4 superseded by [0035](0035-tracks-as-kb-documents.md) (2026-11-05)
 - Drivers: phase 2 plan v3 (item A6 → KBC-039; B3 later); Q7 (the API never writes to the vault); Q1 (exact search p95 ≤ 1 s); ADR 0022
 
 ## Context
