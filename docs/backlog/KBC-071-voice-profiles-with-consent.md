@@ -56,7 +56,10 @@ Como quem edita, quero que o sistema reconheça a voz de quem já foi cadastrado
 LGPD (Lei 13.709/2018), art. 5º, II e art. 11 · ADR 0017 (segredos cifrados), [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Tela T11 (política de privacidade) · Pesquisa: KBC-063 (modelo de impressão de voz e limiar) · `docs/product/context.md` (Lei aplicável: LGPD)
 
 ## Decisão do dono (2026-11-03)
-- **Identificar pessoas reais pela voz (dado biométrico, LGPD): quem pode ter perfil e quem autoriza?** — aprovado o padrão recomendado: só pessoas vivas que assinarem um consentimento específico (texto pronto na tela, com finalidade, guarda e como revogar), cadastrado por um master; nunca quem pergunta da plateia; para mestres e autores falecidos, só com autorização escrita de quem responde pela obra (a instituição ou os herdeiros), registrada do mesmo jeito; sem consentimento, só o nome manual do KBC-065 e a sugestão por contexto do KBC-067, que não usam a voz. Isto é orientação prática, não parecer jurídico; o dono pode consultar um advogado antes de ligar a funcionalidade em produção.
+- **Identificar pessoas reais pela voz (dado biométrico, LGPD): quem pode ter perfil e quem autoriza?** — aprovado o padrão recomendado: só pessoas vivas que assinarem um consentimento específico (texto pronto na tela, com finalidade, guarda e como revogar), cadastrado por um master; nunca quem pergunta da plateia; para mestres e autores falecidos, só com autorização escrita de quem responde pela obra (a instituição ou os herdeiros), registrada do mesmo jeito; sem consentimento, só o nome manual do KBC-065 e a sugestão por contexto do KBC-067, que não usam a voz. Isto é orientação prática, não parecer jurídico.
+
+## Decisão do dono (2026-11-04)
+- **Sem revisão jurídica, porque o app não é comercial; ligado para masters.** `media-voice-profiles` vem com o papel de master, sem autorização pelo nome (ADR 0032). Membros não a recebem, nem por perfil de convite. O consentimento, o registro, a revogação e a lista de revogações continuam como estão: nenhum perfil existe sem o consentimento da pessoa (BR-1).
 
 ## Open questions
 Nenhuma.

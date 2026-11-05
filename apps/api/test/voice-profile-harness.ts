@@ -1,13 +1,12 @@
 /**
- * Voice profiles under test (KBC-071): the owner granted by name, a transcriber marked for
- * prints, and synthetic vectors. No print here comes from a recording (BR-1).
+ * Voice profiles under test (KBC-071): a transcriber marked for prints and synthetic vectors.
+ * No print here comes from a recording (BR-1).
  */
 import { VOICE_CONSENT_TEXT_VERSION } from '@kb-chat/contracts';
 import type {
   CollectionSpeaker,
   DiarizeJob,
   MediaSpeakers,
-  Person,
   Transcriber,
   VoiceConsent,
   VoiceMatch,
@@ -58,19 +57,6 @@ export const aConsent = (overrides: Partial<VoiceConsent> = {}) => ({
   evidence: { kind: 'text', text: 'Autorizo o uso da minha voz para sugerir.' },
   ...overrides,
 });
-
-/** Grants the feature to the owner by name: being a master does not give it (ADR 0032). */
-export async function grantVoiceProfiles(media: Media): Promise<void> {
-  const people = await media.owner('GET', '/api/v1/people');
-  const owner = people
-    .json<{ items: Person[] }>()
-    .items.find((one) => one.email === 'owner@example.com');
-  if (!owner) throw new Error('no owner');
-  const granted = await media.owner('PATCH', `/api/v1/people/${owner.id}`, {
-    features: [...owner.features, 'media-voice-profiles'],
-  });
-  expect(granted.statusCode, granted.body).toBe(200);
-}
 
 export async function pairVoicePrinter(
   media: Media,

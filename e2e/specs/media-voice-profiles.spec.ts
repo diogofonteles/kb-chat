@@ -11,11 +11,10 @@ import {
 } from './fixtures.js';
 import { TURNS, separateVoices, transcribedAudio } from './voices-helpers.js';
 
-// KBC-071: voice profiles. Off by default: the feature needs a master and a grant by name.
+// KBC-071: voice profiles. A master has the feature by the role; a member never has it.
 // Everything here is synthetic: the E2E server plays the Mac with a made-up vector, and no
 // voice print is ever made from a recording.
 
-const FEATURE = 'media-voice-profiles';
 const TOPIC = 'hermetismo';
 const PROFILES = `/api/v1/topics/${TOPIC}/voice-profiles`;
 const SPEAKERS = `/api/v1/topics/${TOPIC}/speakers`;
@@ -56,8 +55,8 @@ async function openPanel(page: Page) {
   return dialog;
 }
 
-/** A master granted the feature by name, signed in, with the API of that browser. */
-async function grantedMaster(
+/** A master, signed in, with the API of that browser. */
+async function aMaster(
   browser: Parameters<typeof pageAs>[0],
   viewport: Parameters<typeof pageAs>[2],
 ) {
@@ -66,7 +65,7 @@ async function grantedMaster(
   await invite(owner, email, {
     role: 'master',
     topics: [TOPIC],
-    features: ['media', 'media-edit', FEATURE],
+    features: ['media', 'media-edit'],
   });
   const page = await pageAs(browser, email, viewport);
   return { owner, page, email };
@@ -115,7 +114,7 @@ async function suggested(owner: APIRequestContext, profileId: string) {
   return media.id;
 }
 
-test('AC-7, off by default: `media-edit` sees no screen and the API refuses', async ({
+test('AC-7: a member with `media-edit` sees no screen and the API refuses', async ({
   browser,
   viewport,
 }) => {
@@ -136,30 +135,26 @@ test('AC-7, off by default: `media-edit` sees no screen and the API refuses', as
   expect(refused.status()).toBe(403);
 });
 
-test('a master without the grant by name sees no screen either', async ({
+test('a master has the screen with no grant by name', async ({
   browser,
   viewport,
 }) => {
   const owner = await ownerApi();
-  const email = uniqueEmail('master-sem-voz');
+  const email = uniqueEmail('master-voz');
   await invite(owner, email, { role: 'master', topics: [TOPIC] });
   const page = await pageAs(browser, email, viewport);
-  expect((await page.request.get(PROFILES)).status()).toBe(403);
+  expect((await page.request.get(PROFILES)).status()).toBe(200);
   await firstVisit(page);
-  const dialog = await openSettings(page);
   await expect(
-    dialog.getByRole('button', { name: 'Transcritores' }),
+    (await openPanel(page)).getByText('Cadastrar perfil'),
   ).toBeVisible();
-  await expect(
-    dialog.getByRole('button', { name: 'Perfis de voz' }),
-  ).toHaveCount(0);
 });
 
 test('AC-1: the consent comes first, on screen and at the API (axe)', async ({
   browser,
   viewport,
 }) => {
-  const { owner, page } = await grantedMaster(browser, viewport);
+  const { owner, page } = await aMaster(browser, viewport);
   const voice = await namedVoice(page.request, owner);
   const refused = await post(page.request, PROFILES, {
     speakerId: voice.speakerId,
@@ -210,7 +205,7 @@ test('AC-2, AC-3: a suggestion needs a person, and revoking takes what is pendin
   browser,
   viewport,
 }) => {
-  const { owner, page } = await grantedMaster(browser, viewport);
+  const { owner, page } = await aMaster(browser, viewport);
   const { speakerName, profileId } = await storedProfile(page.request, owner);
   const accepted = await suggested(owner, profileId);
   const pending = await suggested(owner, profileId);
@@ -260,7 +255,7 @@ test('AC-6: nothing the browser reads has a print', async ({
   browser,
   viewport,
 }) => {
-  const { owner, page } = await grantedMaster(browser, viewport);
+  const { owner, page } = await aMaster(browser, viewport);
   const { profileId } = await storedProfile(page.request, owner);
   const mediaId = await suggested(owner, profileId);
   for (const url of [PROFILES, `/api/v1/media/${mediaId}/speakers`]) {
@@ -274,16 +269,6 @@ test('AC-8: the owner reads each consent, the revocation and the counts', async 
   page,
 }) => {
   const owner = await ownerApi();
-  const people = await owner.get('/api/v1/people');
-  const { items } = (await people.json()) as {
-    items: { id: string; isOwner: boolean; features: string[] }[];
-  };
-  const me = items.find(({ isOwner }) => isOwner);
-  expect(me).toBeTruthy();
-  await owner.patch(`/api/v1/people/${me?.id}`, {
-    data: { features: [...new Set([...(me?.features ?? []), FEATURE])] },
-    headers: CSRF,
-  });
   const { speakerName, profileId } = await storedProfile(owner, owner);
   const mediaId = await suggested(owner, profileId);
   await post(owner, `/api/v1/media/${mediaId}/voices/${ANSWERS}/suggestion`, {
@@ -313,7 +298,7 @@ test('a lost revocation list says so, with the step of the owner (axe)', async (
   browser,
   viewport,
 }) => {
-  const { page } = await grantedMaster(browser, viewport);
+  const { page } = await aMaster(browser, viewport);
   await page.route(`**${PROFILES}`, async (route) => {
     const answer = await route.fetch();
     const body = (await answer.json()) as object;

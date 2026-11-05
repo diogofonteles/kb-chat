@@ -14,6 +14,7 @@ import {
 import {
   APP_AI_ASSIGNMENTS,
   DEFAULT_VIEWS,
+  GRANTABLE_FEATURES,
   MASTER_FEATURES,
   MAX_DAILY_RESEARCHES,
   MAX_MONTHLY_CAP_USD,
@@ -95,8 +96,9 @@ export class InvitePresetEditor {
   protected readonly collections = computed(() =>
     collectionChoices(this.topics(), this.preset().topics, this.isMaster()),
   );
+  /** A master's own features (ADR 0032) are not offered to a member. */
   protected readonly features = computed(() =>
-    MASTER_FEATURES.map((id) => ({
+    (this.isMaster() ? MASTER_FEATURES : GRANTABLE_FEATURES).map((id) => ({
       id,
       label: FEATURE_LABELS[id](),
       checked: this.isMaster() || this.preset().features.includes(id),

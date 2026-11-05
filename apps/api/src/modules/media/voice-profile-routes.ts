@@ -23,9 +23,8 @@ import type {
 } from './voice-profile-service.js';
 
 /**
- * Biometric data: the master role and a grant to that master by name (ADR 0032), never while
- * acting as someone: a consent names who registered it. `media` too: profiles are made from
- * recordings.
+ * Biometric data: the master role (ADR 0032), never while acting as someone: a consent names
+ * who registered it. `media` too: profiles are made from recordings.
  */
 const ACCESS: RouteAccess = {
   feature: ['media', 'media-voice-profiles'],

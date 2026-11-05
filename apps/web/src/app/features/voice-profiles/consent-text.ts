@@ -6,9 +6,8 @@ import type {
 } from '@kb-chat/contracts';
 
 /**
- * The consent text on screen, version VOICE_CONSENT_TEXT_VERSION. A recommended default, not
- * legal advice: it needs human legal review before any real use (ADR 0032). A change to these
- * words bumps the version, which is kept with each consent.
+ * The consent text on screen, version VOICE_CONSENT_TEXT_VERSION. A change to these words
+ * bumps the version, which is kept with each consent.
  */
 const LIVING: () => readonly string[] = () => [
   $localize`:@@voiceConsent.livingTitle:Autorização para uso da minha voz`,

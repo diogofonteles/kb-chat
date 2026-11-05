@@ -306,7 +306,7 @@ Acessibilidade: o foco vai para o campo do código quando ele aparece; status em
 - Rota `/privacidade`, aberta com ou sem sessão (a tela de consentimento do Google aponta para ela). Link discreto "Privacidade" abaixo da nota da tela de entrada.
 - Coluna de leitura (até 42rem, serifa de leitura, três tamanhos de texto): "Nova Alexandria" (marca discreta, link para o início), h1 "Política de privacidade", introdução e as seções h2 "Quais dados guardamos", "Para que usamos", "Quem participa", "Por quanto tempo", "Seus direitos"; "Última atualização" e o link "Voltar à Nova Alexandria".
 - "O responsável pelos dados é o administrador da Nova Alexandria, que aprova os acessos." Contato para pedidos sobre os dados: o e-mail do dono (`KB_CHAT_OWNER_EMAIL`, por `GET /api/v1/auth/config`) como link `mailto:`; sem ele (ou com erro), "fale com o administrador que aprovou o seu acesso"; enquanto carrega, só "…".
-- Perfis de voz (KBC-071): "Quais dados" diz o que é o perfil e que só existe com consentimento; "Para que usamos", a finalidade única e a base legal; "Por quanto tempo", a revogação em até 1 minuto (com a exceção do computador suspenso), fora das cópias de segurança; "Seus direitos", revogar a qualquer momento. Padrão recomendado, **a revisar por uma pessoa da área jurídica antes de qualquer uso real**.
+- Perfis de voz (KBC-071): "Quais dados" diz o que é o perfil e que só existe com consentimento; "Para que usamos", a finalidade única e a base legal; "Por quanto tempo", a revogação em até 1 minuto (com a exceção do computador suspenso), fora das cópias de segurança; "Seus direitos", revogar a qualquer momento.
 - Título da aba: "Privacidade — Nova Alexandria"; nas outras telas, "Nova Alexandria".
 
 ## T12. IA da aplicação (KBC-022, só masters)
@@ -687,7 +687,7 @@ Celular (390 px)
 
 **Objetivo:** sugerir o nome de quem fala só para quem autorizou. **Sucesso:** nenhuma voz é escolhida antes do consentimento; revogar apaga na hora.
 
-- Seção de ⚙ Configurações, depois de Transcritores. Só aparece para um **master** que recebeu "Cadastrar perfis de voz" **pelo nome**: ser master não basta, e a permissão começa desligada para todos. Em Pessoas e permissões, a caixa fica no grupo "Só com autorização individual", só para masters.
+- Seção de ⚙ Configurações, depois de Transcritores. Só aparece para um **master**: "Cadastrar perfis de voz" vem com o papel, como as outras funcionalidades, sem autorização pelo nome (decisão do dono, 2026-11-04). Em Pessoas e permissões, a caixa aparece marcada e travada para um master; a um membro ela não é oferecida, nem nos perfis de convite.
 - **Acervo** (só acervos de topo; um sub-acervo usa os perfis do pai, BR-4), lista **Perfis deste acervo** (pessoa, estado em palavras, "Autorizado por … em dd/mm/aaaa", **Revogar**), **Cadastrar perfil**.
 - **Cadastrar:** primeiro a pessoa e o consentimento. Texto em destaque (borda, no corpo da tela), com finalidade, guarda e revogação, e **Copiar texto**; "Quem é" (viva ou falecida; falecida troca o texto e pede quem responde pela obra e em que qualidade); data; meio; prova (documento ou texto do aceite); caixa de confirmação desmarcada. **Continuar** só passa com tudo isso, e só então aparecem as vozes já nomeadas, com o tempo de fala. **Calcular perfil** exige 30 s de fala no total.
 - **Revogar:** pergunta no lugar, foco em **Cancelar**; "Revogar e apagar" (perigo). Depois, o foco vai ao título da lista e o status diz o que aconteceu.

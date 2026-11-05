@@ -13,8 +13,8 @@ import {
   viewChild,
 } from '@angular/core';
 import {
+  GRANTABLE_FEATURES,
   MASTER_FEATURES,
-  MASTER_GRANT_ONLY_FEATURES,
   MEDIA_DEFAULT_QUOTA_BYTES,
   mediaQuotaSchema,
   type AppAi,
@@ -100,19 +100,12 @@ export class PersonEditor {
     this.applyButton()?.nativeElement.focus();
   });
   protected readonly isMaster = computed(() => this.person().role === 'master');
+  /** A master's own features (ADR 0032) are not offered to a member. */
   protected readonly features = computed(() =>
-    MASTER_FEATURES.map((id) => ({
+    (this.isMaster() ? MASTER_FEATURES : GRANTABLE_FEATURES).map((id) => ({
       id,
       label: FEATURE_LABELS[id](),
       checked: this.isMaster() || this.person().features.includes(id),
-    })),
-  );
-  /** Biometric data (ADR 0032): shown only for a master, and given to that master by name. */
-  protected readonly namedFeatures = computed(() =>
-    MASTER_GRANT_ONLY_FEATURES.map((id) => ({
-      id,
-      label: FEATURE_LABELS[id](),
-      checked: this.person().features.includes(id),
     })),
   );
   /** The collections as a tree; a sub-collection comes with its parent (KBC-048 BR-3). */

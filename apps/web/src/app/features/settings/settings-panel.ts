@@ -107,7 +107,7 @@ export class SettingsPanel {
         // KBC-036 BR-1: masters pair the Macs, only where the media library is on.
         ((id !== 'transcribers' && id !== 'terms') ||
           (this.session.isMaster() && this.session.me()?.media === true)) &&
-        // KBC-071 (ADR 0032): only for a master granted it by name.
+        // KBC-071 (ADR 0032): a master's, where the media library is on.
         (id !== 'voice-profiles' ||
           (this.session.me()?.features.includes('media-voice-profiles') ===
             true &&

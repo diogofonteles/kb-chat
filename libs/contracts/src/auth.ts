@@ -18,7 +18,7 @@ import { topicSlugSchema } from './topics.js';
  * see who speaks in a recording (`media-speakers`, KBC-065) and navigate a recording by its
  * approved tracks (`media-tracks`, KBC-066). Every feature is granted per
  * person (owner's rule, 2026-10-28): a new feature never comes on for everyone by itself.
- * Voice profiles (`media-voice-profiles`, KBC-071, ADR 0032) go further, see below.
+ * Voice profiles (`media-voice-profiles`, KBC-071, ADR 0032) stay with masters, see below.
  */
 export const FEATURES = [
   'search',
@@ -38,23 +38,26 @@ export const FEATURES = [
   'media-classify',
   /** "Assuntos na mídia" (KBC-070): subjects in search and library, on top of `media-tracks`. */
   'media-subjects',
-  /** "Cadastrar perfis de voz": biometric data, see MASTER_GRANT_ONLY_FEATURES. */
+  /** "Cadastrar perfis de voz": biometric data, see MASTER_ONLY_FEATURES. */
   'media-voice-profiles',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;
 
 /**
- * Features a master does not get by being one (ADR 0032): they need the master role and a
- * grant to that person. Off by default, and in a member's list they do nothing.
+ * Features that stay with the master role (ADR 0032): a master has them like any other, and
+ * a member cannot hold them, whatever a list or a preset says.
  */
-export const MASTER_GRANT_ONLY_FEATURES: readonly Feature[] = [
+export const MASTER_ONLY_FEATURES: readonly Feature[] = [
   'media-voice-profiles',
 ];
 
 /** What being a master gives by itself (KBC-010 BR-3). */
-export const MASTER_FEATURES: readonly Feature[] = FEATURES.filter(
-  (feature) => !MASTER_GRANT_ONLY_FEATURES.includes(feature),
+export const MASTER_FEATURES: readonly Feature[] = FEATURES;
+
+/** What is granted to one person, and what a stored list or a preset can hold. */
+export const GRANTABLE_FEATURES: readonly Feature[] = FEATURES.filter(
+  (feature) => !MASTER_ONLY_FEATURES.includes(feature),
 );
 
 /** A master grants and revokes collections, features and the master role itself. */

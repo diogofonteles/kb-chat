@@ -31,6 +31,7 @@ import {
   sendTurns,
   turnsOf,
 } from '../test/diarization-harness.js';
+import { caller, signIn } from '../test/ai-app-harness.js';
 import {
   member,
   startMedia,
@@ -45,7 +46,6 @@ import {
   aConsent,
   aSpeaker,
   decide,
-  grantVoiceProfiles,
   leaseKinds,
   leasePrintJob,
   namedRecording,
@@ -77,7 +77,6 @@ const match = (profileId: string, similarity: number) => ({
 
 async function granted() {
   const media = await startMedia();
-  await grantVoiceProfiles(media);
   const { token } = await pairVoicePrinter(media);
   return { media, token };
 }
@@ -91,13 +90,11 @@ const report = async (media: Media) =>
   ).json<VoiceProfileReport>().items;
 
 describe('The permission (KBC-071 AC-7, ADR 0032)', () => {
-  it('is off for a master until it is granted to that master by name', async () => {
+  it('comes with the master role, with no grant by name', async () => {
     const media = await startMedia();
     const me = (await media.owner('GET', '/api/v1/me')).json<Me>();
     expect(me.role).toBe('master');
-    expect(me.features).not.toContain('media-voice-profiles');
-    expect((await media.owner('GET', PROFILES)).statusCode).toBe(403);
-    await grantVoiceProfiles(media);
+    expect(me.features).toContain('media-voice-profiles');
     expect((await media.owner('GET', PROFILES)).statusCode).toBe(200);
   });
 
@@ -129,7 +126,7 @@ describe('The permission (KBC-071 AC-7, ADR 0032)', () => {
     );
   });
 
-  it('a grant saved for a member is dropped, so becoming a master gives nothing', async () => {
+  it('a grant saved for a member is dropped: only the role gives it', async () => {
     const media = await startMedia();
     const invited = await media.owner('POST', '/api/v1/people', {
       email: 'edita@example.com',
@@ -144,20 +141,59 @@ describe('The permission (KBC-071 AC-7, ADR 0032)', () => {
     expect(promoted.json<Person>().features).toEqual(['media']);
   });
 
-  it('a master who loses the role loses the grant', async () => {
+  it('a master who loses the role loses it, a grant from before included', async () => {
     const media = await startMedia();
     const invited = await media.owner('POST', '/api/v1/people', {
       email: 'mestre@example.com',
       sendEmail: false,
     });
-    const url = `/api/v1/people/${invited.json().id}`;
-    await media.owner('PATCH', url, { role: 'master' });
-    const granted = await media.owner('PATCH', url, {
-      features: ['media-voice-profiles'],
+    const url = `/api/v1/people/${invited.json<Person>().id}`;
+    await media.owner('PATCH', url, {
+      topics: ['hermetismo'],
+      features: ['media'],
     });
-    expect(granted.json<Person>().features).toEqual(['media-voice-profiles']);
+    const call = caller(
+      media.started.app,
+      await signIn(media.started, 'mestre@example.com'),
+    );
+    await media.owner('PATCH', url, { role: 'master' });
+    expect((await call('GET', PROFILES)).statusCode).toBe(200);
+    const kept = await media.owner('PATCH', url, {
+      features: ['media', 'media-voice-profiles'],
+    });
+    expect(kept.json<Person>().features).toEqual(['media']);
     const lost = await media.owner('PATCH', url, { role: 'member' });
-    expect(lost.json<Person>().features).toEqual([]);
+    expect(lost.json<Person>().features).toEqual(['media']);
+    expect((await call('GET', PROFILES)).statusCode).toBe(403);
+  });
+
+  it('a preset gives it to no member, at the invitation or applied later', async () => {
+    const media = await startMedia();
+    const created = await media.owner('POST', '/api/v1/invite-profiles', {
+      name: 'Tudo',
+      preset: {
+        topics: ['hermetismo'],
+        features: ['media', 'media-voice-profiles'],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const profileId = created.json<{ id: string }>().id;
+    const invited = await media.owner('POST', '/api/v1/people', {
+      email: 'convidada@example.com',
+      sendEmail: false,
+      profileId,
+    });
+    expect(invited.json<Person>().features).toEqual(['media']);
+    const there = await media.owner('POST', '/api/v1/people', {
+      email: 'antiga@example.com',
+      sendEmail: false,
+    });
+    const applied = await media.owner(
+      'POST',
+      `/api/v1/people/${there.json<Person>().id}/profile`,
+      { profileId },
+    );
+    expect(applied.json<Person>().features).toEqual(['media']);
   });
 });
 
@@ -260,7 +296,6 @@ describe('Registering a profile (KBC-071 FR-1, FR-2, BR-1)', () => {
 
   it('FR-2: the print goes only to a transcriber marked for it, and is stored sealed', async () => {
     const media = await startMedia();
-    await grantVoiceProfiles(media);
     const { token: plain } = await pairVoicePrinter(media, [
       'transcribe',
       'diarize',
@@ -520,7 +555,6 @@ describe('Suggesting a name by voice (KBC-071 FR-3)', () => {
 
   it("BR-4: holds on a sub-collection's recordings, as a source and as a suggestion", async () => {
     const media = await startMedia({ vault: await vaultWithUdv() });
-    await grantVoiceProfiles(media);
     const { token } = await pairVoicePrinter(media);
     const sub = encodeURIComponent('udv/palavra-do-mestre');
     const speaker = await aSpeaker(

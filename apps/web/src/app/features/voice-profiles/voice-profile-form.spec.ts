@@ -95,7 +95,8 @@ describe('VoiceProfileForm (KBC-071 AC-1, BR-1)', () => {
     await renderForm();
     for (const part of [/Finalidade única/, /Guarda:/, /Revogação:/])
       expect(screen.getByText(part)).toBeTruthy();
-    expect(screen.getByText(/ainda sem revisão jurídica/)).toBeTruthy();
+    expect(screen.getByText(/Colha a assinatura neste texto/)).toBeTruthy();
+    expect(screen.queryByText(/revisão jurídica/)).toBeNull();
   });
 
   it('asks for what is missing, one thing at a time, and shows no voice', async () => {
