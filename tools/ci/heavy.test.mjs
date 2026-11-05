@@ -97,6 +97,47 @@ test('runs the command, says what it waited and passes its exit code on', () => 
   assert.equal(existsSync(lock), false);
 });
 
+test('says the commit it runs on and whether the tree is clean', () => {
+  const { dir, env } = queue();
+  const repo = join(dir, 'repo');
+  mkdirSync(repo);
+  const git = (...args) =>
+    spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+  git('init', '-q');
+  git(
+    '-c',
+    'user.name=t',
+    '-c',
+    'user.email=t@t',
+    'commit',
+    '-q',
+    '--allow-empty',
+    '-m',
+    'x',
+  );
+  const sha = git('rev-parse', 'HEAD').stdout.trim();
+  const inRepo = (...command) =>
+    spawnSync(HEAVY, command, { env, cwd: repo, encoding: 'utf8' });
+  assert.match(
+    inRepo('true').stdout,
+    new RegExp(`heavy: at ${sha} \\(clean\\)`),
+  );
+  writeFileSync(join(repo, 'new.txt'), 'x');
+  assert.match(
+    inRepo('true').stdout,
+    new RegExp(`heavy: at ${sha} \\(dirty: 1 changed path\\)`),
+  );
+  const outside = join(dir, 'outside');
+  mkdirSync(outside);
+  const bare = spawnSync(HEAVY, ['true'], {
+    env: { ...env, GIT_CEILING_DIRECTORIES: dir },
+    cwd: outside,
+    encoding: 'utf8',
+  });
+  assert.equal(bare.status, 0);
+  assert.match(bare.stdout, /heavy: at no commit \(not a git checkout\)/);
+});
+
 test('without a command it refuses', () => {
   assert.equal(run(queue().env).status, 64);
 });

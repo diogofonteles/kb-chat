@@ -18,7 +18,8 @@
 #                           path: Chrome and Nx put sockets under TMPDIR)
 #   KBC_HEAVY_MIN_FREE_GB=<n>  refuse to run with less free than this (default 30)
 #
-# A command already inside the queue passes through (`pnpm gates` runs `pnpm test`). Turns
+# Each run starts by saying the commit it runs on and whether the tree is clean, so a log names
+# what it proves. A command already inside the queue passes through (`pnpm gates` runs `pnpm test`). Turns
 # are polled: whoever asks first after a release goes first, not strictly in order of arrival.
 set -u
 
@@ -85,6 +86,20 @@ sweep() {
     swept=$((swept + 1))
   done
   [ "$swept" -eq 0 ] || echo "heavy: swept the temp of $swept dead runs"
+}
+
+revision() {
+  local sha changed
+  sha=$(git rev-parse HEAD 2>/dev/null) || {
+    echo 'no commit (not a git checkout)'
+    return 0
+  }
+  changed=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+  case $changed in
+    0) echo "$sha (clean)" ;;
+    1) echo "$sha (dirty: 1 changed path)" ;;
+    *) echo "$sha (dirty: $changed changed paths)" ;;
+  esac
 }
 
 free_gb() {
@@ -198,7 +213,11 @@ if ! [ "$free" -ge "$min_free" ] 2>/dev/null; then
 fi
 root=$(mktemp -d "$temp/$$.XXXXXX") || exit 73
 
-[ "${KBC_HEAVY_SKIP:-}" = 1 ] || echo "heavy: waited $(($(date +%s) - started)) s; running: $*"
+if [ "${KBC_HEAVY_SKIP:-}" != 1 ]; then
+  echo "heavy: waited $(($(date +%s) - started)) s; running: $*"
+  # The log then names what it proves: the commit, and whether the tree carried more than it.
+  echo "heavy: at $(revision)"
+fi
 # A process group of its own, so that everything the command spawns can be stopped with it.
 # Not under a terminal: a background group is stopped the moment it touches the terminal, as
 # Nx's TUI does, and there the group of this shell already gets the terminal's signals.
