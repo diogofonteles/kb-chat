@@ -1,0 +1,112 @@
+:host {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.play {
+  display: grid;
+  place-items: center;
+  width: var(--target);
+  height: var(--target);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-accent-strong);
+  cursor: pointer;
+}
+
+.play:focus-visible,
+.title:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* With no ▶ (still converting) the text keeps its column. */
+.body {
+  grid-column: 2;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  justify-self: start;
+  max-width: 100%;
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.title:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.place {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.duration,
+.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.passage {
+  margin: 0;
+  font-family: var(--font-reading);
+  overflow-wrap: anywhere;
+}
+
+.clock {
+  margin-right: var(--space-2);
+  color: var(--color-accent-strong);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* Text nodes between the parts would add spaces: the quotes come from CSS. */
+.snippet::before {
+  content: '“';
+}
+
+.snippet::after {
+  content: '”';
+}
+
+mark {
+  background: var(--color-mark);
+  color: inherit;
+}
+
+/* BR-3 of KBC-039: a warning tone, never red (UP-19), with a sign besides the colour (UP-20). */
+.low {
+  justify-self: start;
+  margin: 0;
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--color-text-muted);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+}
+
+.low::before {
+  content: '⚠ ' / '';
+}

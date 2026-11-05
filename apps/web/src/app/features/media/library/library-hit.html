@@ -1,0 +1,51 @@
+@if (ready()) {
+  <button
+    type="button"
+    class="play"
+    [attr.aria-label]="playLabel()"
+    (click)="played.emit()"
+  >
+    <span aria-hidden="true">{{ playing() ? '❚❚' : '▶' }}</span>
+  </button>
+}
+<div class="body">
+  <a
+    class="title"
+    [routerLink]="['/midia', item().id]"
+    [queryParams]="startParams()"
+    (click)="opened.emit()"
+    >{{ item().title }}</a
+  >
+  <p class="meta">
+    @if (place()) {
+      <span class="place">{{ place() }}</span>
+    }
+    <app-authorship-badge [mediaAuthor]="item().author" />
+    @if (duration()) {
+      <span class="duration">{{ duration() }}</span>
+    }
+    @if (bySubject()) {
+      <span i18n="@@library.hit.bySubject">Pelo assunto</span>
+    }
+  </p>
+  @if (passage()) {
+    <p class="passage">
+      <span class="clock" aria-hidden="true">{{ clock() }}</span>
+      <span class="visually-hidden" i18n="@@mediaHit.at"
+        >aos {{ spokenClock() }}</span
+      >
+      <span class="snippet">
+        @for (part of parts(); track $index) {
+          @if (part.marked) {
+            <mark>{{ part.text }}</mark>
+          } @else {
+            <span>{{ part.text }}</span>
+          }
+        }
+      </span>
+    </p>
+    @if (low()) {
+      <p class="low" i18n="@@mediaHit.low">baixa confiança</p>
+    }
+  }
+</div>

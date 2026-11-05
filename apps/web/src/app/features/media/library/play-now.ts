@@ -27,7 +27,29 @@ export class PlayNow {
       return;
     }
     // This browser's unsent position when no device saved since (KBC-041 FR-3).
-    const at = resumeFrom(this.saver.startFrom(item), item.durationMs) ?? 0;
+    this.start(
+      item,
+      resumeFrom(this.saver.startFrom(item), item.durationMs) ?? 0,
+    );
+  }
+
+  /**
+   * A search result's ▶ (KBC-096): from that point, whatever was saved. Playing, it pauses;
+   * paused, it goes back to the point, since that is what the row offers.
+   */
+  playFrom(item: MediaItem, atMs: number): void {
+    if (this.engine.source()?.id !== item.id) {
+      this.saver.startFrom(item);
+      this.start(item, atMs);
+    } else if (this.engine.playing()) {
+      this.engine.toggle();
+    } else {
+      this.engine.seek(atMs);
+      this.engine.play();
+    }
+  }
+
+  private start(item: MediaItem, atMs: number): void {
     this.engine.load(
       {
         id: item.id,
@@ -37,7 +59,7 @@ export class PlayNow {
         artist: item.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
         ...(item.parent ? { fileVersion: item.parent.fileVersion } : {}),
       },
-      at,
+      atMs,
     );
     this.engine.play();
   }

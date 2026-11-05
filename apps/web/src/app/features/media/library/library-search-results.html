@@ -1,0 +1,117 @@
+<section
+  class="results"
+  aria-labelledby="results-title"
+  [attr.aria-busy]="pending()"
+>
+  <div class="head">
+    <h3 id="results-title">
+      @if (lastPage()) {
+        {{ countText() }}
+      } @else {
+        <ng-container i18n="@@library.results.title">Resultados</ng-container>
+      }
+    </h3>
+    <app-library-controls
+      [compact]="true"
+      [facets]="facets()"
+      [filters]="filters()"
+      [sort]="sort()"
+      [view]="view()"
+      [topics]="topics()"
+      (filtersChange)="filtersChange.emit($event)"
+    />
+  </div>
+
+  @if (failed()) {
+    <div class="notice" role="alert">
+      <p i18n="@@library.searchFailed">Não consegui buscar agora.</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="reload()"
+        i18n="@@media.reload"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (showSkeleton()) {
+    <ul
+      class="skeleton"
+      aria-label="Carregando…"
+      i18n-aria-label="@@app.loading"
+    >
+      @for (n of [1, 2, 3, 4]; track n) {
+        <li class="skeleton-row"><span class="bar"></span></li>
+      }
+    </ul>
+  } @else if (nothingFound()) {
+    <div class="empty">
+      @if (searchesSpeech()) {
+        <p i18n="@@library.searchEmpty">
+          Nada encontrado para '{{ query().trim() }}' na fala, no título, no
+          autor ou nos assuntos.
+        </p>
+        <p class="hint" i18n="@@library.searchEmptyHint">
+          Na fala, a busca é por palavra inteira: confira a escrita ou tente
+          outra palavra.
+        </p>
+      } @else {
+        <p i18n="@@library.searchEmptyTitles">
+          Nada encontrado para '{{ query().trim() }}' no título, no autor ou nos
+          assuntos.
+        </p>
+      }
+      <div class="actions">
+        <button
+          type="button"
+          class="secondary"
+          (click)="clearedSearch.emit()"
+          i18n="@@library.clearSearch"
+        >
+          Limpar busca
+        </button>
+        @if (filtered()) {
+          <button
+            type="button"
+            class="secondary"
+            (click)="clearedFilters.emit()"
+            i18n="@@library.clearFilters"
+          >
+            Limpar filtros
+          </button>
+        }
+      </div>
+    </div>
+  } @else {
+    <ol class="hits" [class.stale]="pending()">
+      @for (hit of hits(); track hit.item.id; let index = $index) {
+        <li>
+          <app-library-hit
+            [hit]="hit"
+            [playing]="playingId() === hit.item.id"
+            (played)="play(hit, index + 1)"
+            (opened)="report(hit, index + 1)"
+          />
+        </li>
+      }
+    </ol>
+    @if (moreError()) {
+      <p class="error" role="alert">
+        <span aria-hidden="true">⚠</span> {{ moreError() }}
+      </p>
+    }
+    @if (hasMore()) {
+      <button
+        type="button"
+        class="secondary more"
+        appNearEnd
+        [disabled]="loadingMore()"
+        (nearEnd)="loadMore()"
+        (click)="loadMore()"
+        i18n="@@library.more"
+      >
+        Mostrar mais
+      </button>
+    }
+  }
+</section>

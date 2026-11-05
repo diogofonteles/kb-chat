@@ -51,8 +51,15 @@ import { PREFERENCES_URL } from '@core/media/listening-api.js';
 import { MediaApi } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { ChatStore } from '@features/chat/chat-store.js';
-import { ViewStore } from '@features/chat/view-store.js';
-import { EMPTY, Subject, catchError, concatMap, debounceTime, of } from 'rxjs';
+import {
+  EMPTY,
+  Subject,
+  catchError,
+  concatMap,
+  debounceTime,
+  filter,
+  of,
+} from 'rxjs';
 import { keepFocusedInView } from '../keep-in-view.js';
 import { detailsSavedText } from '../edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from '../edit-media-dialog.js';
@@ -70,11 +77,15 @@ import {
   type FilterChange,
 } from './library-labels.js';
 import { LibraryRow, type RowAction } from './library-row.js';
+import { LibrarySearchResults } from './library-search-results.js';
 import { NearEnd } from './near-end.js';
 import { PlayNow } from './play-now.js';
 
 /** "Buscar na biblioteca" waits this long after the last key (T16). */
 export const SEARCH_DEBOUNCE_MS = 200;
+
+/** The words in the address: back from a result, the search is still there (KBC-096). */
+const SEARCH_PARAM = 'busca';
 
 /** The library's own choices, as kept in the account (BR-7). */
 interface Choices {
@@ -109,6 +120,7 @@ interface MorePages {
     LibraryCard,
     LibraryControls,
     LibraryRow,
+    LibrarySearchResults,
     MovedNotice,
     NearEnd,
     TrackGroup,
@@ -124,7 +136,6 @@ export class LibraryPage {
   private readonly mediaApi = inject(MediaApi);
   private readonly session = inject(SessionStore);
   private readonly chat = inject(ChatStore);
-  private readonly views = inject(ViewStore);
   private readonly engine = inject(MediaEngine);
   private readonly playNow = inject(PlayNow);
   private readonly locale = inject(LOCALE_ID);
@@ -159,8 +170,6 @@ export class LibraryPage {
   );
   /** Where each preparation stopped (KBC-072 FR-6). */
   protected readonly preparations = injectOpenPreparations();
-  /** "Buscar na fala" opens the search, which is a feature of its own. */
-  protected readonly canSearch = computed(() => this.session.can('search'));
   protected readonly isMaster = this.session.isMaster;
 
   private readonly preferences = httpResource(() => PREFERENCES_URL, {
@@ -209,12 +218,16 @@ export class LibraryPage {
   });
 
   /** What is typed in "Buscar na biblioteca", and what is asked after the pause. */
-  protected readonly query = signal('');
-  protected readonly trimmedQuery = computed(() => this.query().trim());
-  private readonly askedQuery = toSignal(
-    toObservable(this.query).pipe(debounceTime(SEARCH_DEBOUNCE_MS)),
-    { initialValue: '' },
+  protected readonly query = signal(
+    this.route.snapshot.queryParamMap.get(SEARCH_PARAM) ?? '',
   );
+  protected readonly trimmedQuery = computed(() => this.query().trim());
+  protected readonly askedQuery = toSignal(
+    toObservable(this.query).pipe(debounceTime(SEARCH_DEBOUNCE_MS)),
+    { initialValue: this.query() },
+  );
+  /** Any text in the box: the page is its results from the first key (KBC-096). */
+  protected readonly searching = computed(() => this.trimmedQuery() !== '');
   /** What is asked; the view (list or grid) is not, so switching it asks nothing. */
   private readonly request = computed<LibraryRequest | null>(
     () => {
@@ -223,7 +236,6 @@ export class LibraryPage {
         ? {
             filters: choices.filters,
             sort: choices.sort,
-            query: this.askedQuery(),
           }
         : null;
     },
@@ -373,10 +385,15 @@ export class LibraryPage {
 
   /** Selected media for "Marcar como ouvida/não ouvida" (only those on screen). */
   protected readonly selected = linkedSignal<
-    LibraryRequest | null,
+    { request: LibraryRequest | null; searching: boolean },
     ReadonlySet<string>
   >({
-    source: this.request,
+    source: computed(
+      () => ({ request: this.request(), searching: this.searching() }),
+      {
+        equal: (a, b) => a.request === b.request && a.searching === b.searching,
+      },
+    ),
     computation: () => new Set<string>(),
   });
   protected readonly selecting = computed(() => this.selected().size > 0);
@@ -445,6 +462,30 @@ export class LibraryPage {
         takeUntilDestroyed(),
       )
       .subscribe();
+    toObservable(this.askedQuery)
+      .pipe(
+        filter((words) => words.trim() !== this.wordsInAddress()),
+        takeUntilDestroyed(),
+      )
+      .subscribe((words) => this.keepWordsInAddress(words.trim()));
+  }
+
+  private wordsInAddress(): string {
+    const { queryParams } = this.router.parseUrl(this.router.url);
+    return queryParams[SEARCH_PARAM] ?? '';
+  }
+
+  /** Replaces the entry: Back leaves the library, not one word at a time. */
+  private keepWordsInAddress(words: string): void {
+    const address = this.router.parseUrl(this.router.url);
+    const others = Object.entries(address.queryParams).filter(
+      ([name]) => name !== SEARCH_PARAM,
+    );
+    address.queryParams = Object.fromEntries([
+      ...others,
+      ...(words ? [[SEARCH_PARAM, words]] : []),
+    ]);
+    void this.router.navigateByUrl(address, { replaceUrl: true });
   }
 
   protected keepInView(event: FocusEvent): void {
@@ -468,16 +509,8 @@ export class LibraryPage {
 
   protected clearSearch(): void {
     this.query.set('');
+    this.announcement.set('');
     this.focusAfterRender(this.searchBox);
-  }
-
-  /** Nothing in the titles: the same words in what was said, in the search (AC-12). */
-  protected searchSpoken(): void {
-    const topic = this.choices()?.filters.topic;
-    if (topic) this.chat.selectTopic(topic);
-    this.views.select('search');
-    this.chat.ask(this.trimmedQuery(), { kinds: ['audio'] });
-    void this.router.navigateByUrl('/');
   }
 
   /** A control's change, applied to the filters held now (BR-7). */
@@ -701,7 +734,12 @@ export class LibraryPage {
   ): void {
     afterNextRender(
       () =>
-        (target() ?? this.allTitle() ?? this.heading()).nativeElement.focus(),
+        (
+          target() ??
+          this.allTitle() ??
+          this.searchBox() ??
+          this.heading()
+        ).nativeElement.focus(),
       { injector: this.injector },
     );
   }

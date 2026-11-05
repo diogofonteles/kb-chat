@@ -12,9 +12,11 @@ import { ActivatedRoute, Router, provideRouter } from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
   type Feature,
+  type LibraryHit,
   type LibraryHome,
   type LibraryItem,
   type LibraryPage as LibraryAnswer,
+  type LibrarySearch,
   type ListeningPreferences,
 } from '@kb-chat/contracts';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
@@ -23,7 +25,6 @@ import {
   MediaEngine,
 } from '@core/media/media-engine.js';
 import { ChatStore } from '@features/chat/chat-store.js';
-import { ViewStore } from '@features/chat/view-store.js';
 import {
   fakeMediaElement,
   type FakeMedia,
@@ -105,23 +106,18 @@ async function renderLibrary(
     features?: Feature[];
     master?: boolean;
     acervo?: string;
+    busca?: string;
   } = {},
 ) {
   const media: FakeMedia = fakeMediaElement();
   const chatStore = chatStoreOn();
-  const chat = {
-    ask: vi.fn(),
-    selectTopic: vi.fn(),
-  };
-  const views = { select: vi.fn() };
   const view = await render(LibraryPage, {
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter([]),
-      { ...chatStore, useValue: { ...chatStore.useValue, ...chat } },
-      { provide: ViewStore, useValue: views },
+      chatStore,
       sessionAs({
         features: options.features ?? ['media', 'media-library'],
         master: options.master,
@@ -131,9 +127,10 @@ async function renderLibrary(
         provide: ActivatedRoute,
         useValue: {
           snapshot: {
-            queryParamMap: new Map(
-              options.acervo ? [['acervo', options.acervo]] : [],
-            ),
+            queryParamMap: new Map([
+              ...(options.acervo ? [['acervo', options.acervo] as const] : []),
+              ...(options.busca ? [['busca', options.busca] as const] : []),
+            ]),
           },
         },
       },
@@ -168,7 +165,7 @@ async function renderLibrary(
       .flush(page);
     await settle();
   };
-  return { ...view, http, settle, tick, start, open, media, chat, views };
+  return { ...view, http, settle, tick, start, open, media };
 }
 
 /** Longer than the search's pause, so the typed words are asked. */
@@ -296,33 +293,6 @@ describe('LibraryPage (T16, KBC-051)', () => {
     expect(screen.queryByRole('button', { name: 'Vídeo' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Áudio' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Não ouvidas' })).toBeTruthy();
-  });
-
-  it('says what was searched when nothing matches, with "Limpar busca" (AC-12)', async () => {
-    const { open, http, settle, tick } = await renderLibrary();
-    await open(aPage([anItem(1)]));
-    fireEvent.input(screen.getByLabelText('Buscar na biblioteca'), {
-      target: { value: 'conselheira' },
-    });
-    await pause();
-    await tick();
-    http
-      .expectOne('/api/v1/media/library?q=conselheira&sort=recently-played')
-      .flush(aPage([], { total: 0, totalDurationMs: 0 }));
-    await settle();
-    expect(
-      screen.getByText(
-        "Nenhuma mídia com 'conselheira' no título ou no autor.",
-      ),
-    ).toBeTruthy();
-    fireEvent.click(
-      screen.getAllByRole('button', { name: 'Limpar busca' })[0] as HTMLElement,
-    );
-    await pause();
-    await tick();
-    http.expectOne(FIRST).flush(aPage([anItem(1)]));
-    await settle();
-    expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
   });
 
   it('offers "Limpar filtros" when the filters leave nothing', async () => {
@@ -927,68 +897,322 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
   });
 
-  describe('"Buscar na fala" (AC-12, FR-6)', () => {
-    const noResult = async (
-      options: Parameters<typeof renderLibrary>[0] = {},
-      preferences = PREFERENCES,
-    ) => {
-      const library = await renderLibrary(options);
-      await library.open(aPage([anItem(1)]), aHome(), preferences);
-      fireEvent.input(screen.getByLabelText('Buscar na biblioteca'), {
-        target: { value: ' conselheira ' },
-      });
+  describe('"Buscar na biblioteca" (KBC-096)', () => {
+    const SEARCH = '/api/v1/media/library/search';
+    const SPEAKER = ['media', 'media-library', 'search'] as Feature[];
+
+    const aHit = (
+      n: number,
+      overrides: Partial<LibraryHit> = {},
+    ): LibraryHit => ({
+      item: anItem(n, { title: `Faixa ${n}` }),
+      trackCount: 0,
+      match: 'speech',
+      passage: {
+        text: 'conheci o Padre Orlando em Manaus',
+        highlights: [{ start: 16, end: 23 }],
+        startMs: 495_000,
+        endMs: 499_000,
+        confidence: 'normal',
+      },
+      ...overrides,
+    });
+    const anAnswer = (
+      items: LibraryHit[],
+      overrides: Partial<LibrarySearch> = {},
+    ): LibrarySearch => ({
+      items,
+      nextCursor: null,
+      total: items.length,
+      capped: false,
+      ...overrides,
+    });
+    const box = () => screen.getByLabelText('Buscar na biblioteca');
+    const type = (value: string) =>
+      fireEvent.input(box(), { target: { value } });
+
+    type Library = Awaited<ReturnType<typeof renderLibrary>>;
+
+    /** The words typed and asked: the request on its way. */
+    const ask = async (library: Library, words: string) => {
+      type(words);
       await pause();
       await library.tick();
-      library.http
-        .expectOne(
-          (request) =>
-            request.url.startsWith('/api/v1/media/library?') &&
-            request.url.includes('q=conselheira'),
-        )
-        .flush(aPage([], { total: 0, totalDurationMs: 0 }));
+      return library.http.expectOne(
+        (request) =>
+          request.url.startsWith(`${SEARCH}?`) &&
+          request.url.includes(
+            `q=${encodeURIComponent(words.trim()).replaceAll('%20', '+')}`,
+          ),
+      );
+    };
+
+    const found = async (
+      options: Parameters<typeof renderLibrary>[0],
+      answer: LibrarySearch,
+      words = 'padre orlando',
+    ) => {
+      const library = await renderLibrary(options);
+      await library.open(aPage([anItem(1)]));
+      (await ask(library, words)).flush(answer);
       await library.settle();
       return library;
     };
 
-    it('opens the media search with the word, only in what was said', async () => {
-      const { chat, views, settle } = await noResult({
-        features: ['search', 'media', 'media-library'],
+    it('AC-7: from the first key the discovery sections leave and the results take their place', async () => {
+      const library = await renderLibrary({ features: SPEAKER });
+      const played = anItem(9, {
+        title: 'Em andamento',
+        positionMs: 5_000,
+        lastPlayedAt: '2026-11-01T10:00:00.000Z',
       });
-
-      fireEvent.click(screen.getByRole('button', { name: 'Buscar na fala' }));
-      await settle();
-
-      expect(views.select).toHaveBeenCalledWith('search');
-      expect(chat.ask).toHaveBeenCalledWith('conselheira', {
-        kinds: ['audio'],
-      });
-      expect(TestBed.inject(Router).url).toBe('/');
-    });
-
-    it('searches the collection of the Acervo filter when one is on', async () => {
-      const { chat } = await noResult(
-        { features: ['search', 'media', 'media-library'] },
-        {
-          ...PREFERENCES,
-          libraryFilters: {
-            states: [],
-            authors: [],
-            topic: 'alquimia',
-            subject: null,
-          },
-        },
+      await library.open(
+        aPage([anItem(1), played]),
+        aHome({ continueListening: [played], recentlyPlayed: [played] }),
       );
+      expect(screen.getByRole('heading', { name: 'Todas' })).toBeTruthy();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Buscar na fala' }));
+      type('o');
+      await library.settle();
 
-      expect(chat.selectTopic).toHaveBeenCalledWith('alquimia');
+      expect(screen.queryByText('Continuar ouvindo')).toBeNull();
+      expect(screen.queryByText('Ouvidas recentemente')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Todas' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Palestra 1' })).toBeNull();
+      expect(screen.queryByRole('group', { name: 'Visão' })).toBeNull();
+      expect(screen.getByRole('heading', { name: 'Resultados' })).toBeTruthy();
     });
 
-    it('is not offered to who cannot search', async () => {
-      await noResult({ features: ['media', 'media-library'] });
+    it('AC-7: "Limpar busca" brings everything back and returns to the box', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      fireEvent.click(screen.getByRole('button', { name: 'Limpar busca' }));
+      await library.settle();
+      expect(screen.getByRole('heading', { name: 'Todas' })).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
+      expect(document.activeElement).toBe(box());
+    });
+
+    it('AC-1: a result shows the passage with the word marked and its time', async () => {
+      await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+
+      expect(screen.getByRole('heading', { name: '1 resultado' })).toBeTruthy();
+      const row = screen.getByRole('listitem');
+      expect(row.querySelector('mark')?.textContent).toBe('Orlando');
+      expect(within(row).getByText('8:15')).toBeTruthy();
+      expect(row.textContent).toContain('conheci o Padre Orlando em Manaus');
+    });
+
+    it('AC-1: a track says its recording and its place, a recording its tracks', async () => {
+      await found(
+        { features: SPEAKER },
+        anAnswer([
+          aHit(1, {
+            item: anItem(1, {
+              title: 'Encontro',
+              parent: {
+                id: mediaId(50),
+                title: 'Entrevista de 1985',
+                startMs: 0,
+                endMs: 60_000,
+                ordinal: 3,
+                total: 23,
+                version: 1,
+                fileVersion: 1,
+              },
+            }),
+          }),
+          aHit(2, { trackCount: 23, match: 'title', passage: null }),
+        ]),
+      );
+      expect(
+        screen.getByText('Entrevista de 1985 · faixa 3 de 23'),
+      ).toBeTruthy();
+      expect(screen.getByText('Gravação completa · 23 faixas')).toBeTruthy();
+    });
+
+    it('AC-8: ▶ plays 2 s before the passage, and the title opens there', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+
+      const link = screen.getByRole('link', { name: 'Faixa 1' });
+      expect(link.getAttribute('href')).toBe(`/midia/${mediaId(1)}?t=493`);
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /^Ouvir o trecho de Faixa 1/ }),
+      );
+      await library.settle();
+      library.media.setDuration(900);
+      library.media.emit('loadedmetadata');
+      const engine = TestBed.inject(MediaEngine);
+      expect(engine.source()?.id).toBe(mediaId(1));
+      expect(library.media.element.currentTime).toBe(493);
+      expect(library.media.calls).toContain('play');
+    });
+
+    it('AC-8: a title match has no point to go to, so it resumes', async () => {
+      await found(
+        { features: SPEAKER },
+        anAnswer([aHit(1, { match: 'title', passage: null })]),
+      );
+      expect(
+        screen.getByRole('link', { name: 'Faixa 1' }).getAttribute('href'),
+      ).toBe(`/midia/${mediaId(1)}`);
+      expect(
+        screen.getByRole('button', { name: 'Ouvir Faixa 1' }),
+      ).toBeTruthy();
+    });
+
+    it('AC-9: nothing found says where it looked, with "Limpar busca" and no "Buscar na fala"', async () => {
+      await found({ features: SPEAKER }, anAnswer([]), 'conselheira');
+
+      expect(
+        screen.getByText(
+          "Nada encontrado para 'conselheira' na fala, no título, no autor ou nos assuntos.",
+        ),
+      ).toBeTruthy();
       expect(
         screen.queryByRole('button', { name: 'Buscar na fala' }),
       ).toBeNull();
+      expect(
+        screen.getAllByRole('button', { name: 'Limpar busca' }).length,
+      ).toBeGreaterThan(0);
+    });
+
+    it('AC-4: without `search` the message does not promise the speech', async () => {
+      await found(
+        { features: ['media', 'media-library'] },
+        anAnswer([]),
+        'conselheira',
+      );
+      expect(
+        screen.getByText(
+          "Nada encontrado para 'conselheira' no título, no autor ou nos assuntos.",
+        ),
+      ).toBeTruthy();
+    });
+
+    it('AC-6: the filters in force go with the words, and only Acervo stays on screen', async () => {
+      const library = await renderLibrary({ features: SPEAKER });
+      await library.open(aPage([anItem(1)]), aHome(), {
+        ...PREFERENCES,
+        libraryFilters: {
+          states: ['heard'],
+          authors: [],
+          topic: 'hermetismo',
+          subject: null,
+        },
+      });
+      const request = await ask(library, 'orlando');
+      expect(request.request.url).toContain('state=heard');
+      expect(request.request.url).toContain('topic=hermetismo');
+      request.flush(anAnswer([]));
+      await library.settle();
+
+      expect(screen.queryByRole('button', { name: /Ouvidas/ })).toBeNull();
+      expect(screen.getByText('1 filtro em uso')).toBeTruthy();
+      expect(
+        screen.getAllByRole('button', { name: 'Limpar filtros' }).length,
+      ).toBeGreaterThan(0);
+    });
+
+    it('AC-11: the count reaches the status region', async () => {
+      await found({ features: SPEAKER }, anAnswer([aHit(1), aHit(2)]));
+      expect(screen.getByRole('status').textContent).toBe(
+        '2 resultados: padre orlando',
+      );
+    });
+
+    it('AC-12: a late answer of older words never lands', async () => {
+      const library = await renderLibrary({ features: SPEAKER });
+      await library.open(aPage([anItem(1)]));
+      const older = await ask(library, 'padre');
+      const newer = await ask(library, 'orlando');
+
+      expect(older.cancelled).toBe(true);
+      newer.flush(anAnswer([aHit(2)]));
+      await library.settle();
+
+      expect(screen.getByRole('link', { name: 'Faixa 2' })).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'Faixa 1' })).toBeNull();
+    });
+
+    it('AC-12: what is on screen waits, quieter, and nothing says "nothing found" meanwhile', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      const newer = await ask(library, 'orlando');
+      await library.tick();
+
+      expect(screen.getByRole('link', { name: 'Faixa 1' })).toBeTruthy();
+      expect(
+        screen
+          .getByRole('region', { name: '1 resultado' })
+          .getAttribute('aria-busy'),
+      ).toBe('true');
+      newer.flush(anAnswer([]));
+      await library.settle();
+      expect(screen.queryByRole('link', { name: 'Faixa 1' })).toBeNull();
+      expect(screen.getByText(/^Nada encontrado/)).toBeTruthy();
+    });
+
+    it('asks the next page, and says when more exist than the cap', async () => {
+      const library = await found(
+        { features: SPEAKER },
+        anAnswer([aHit(1)], { nextCursor: '50', total: 200, capped: true }),
+      );
+      expect(
+        screen.getByRole('heading', { name: 'Mais de 200 resultados' }),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais' }));
+      await library.settle();
+      library.http
+        .expectOne((request) => request.url.includes('cursor=50'))
+        .flush(anAnswer([aHit(2)]));
+      await library.settle();
+      expect(screen.getByRole('link', { name: 'Faixa 2' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Mostrar mais' })).toBeNull();
+    });
+
+    it('says when the search failed, and tries again', async () => {
+      const library = await renderLibrary({ features: SPEAKER });
+      await library.open(aPage([anItem(1)]));
+      (await ask(library, 'orlando')).flush('no', {
+        status: 500,
+        statusText: 'Error',
+      });
+      await library.settle();
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Não consegui buscar agora.',
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+      await library.tick();
+      library.http
+        .expectOne((request) => request.url.startsWith(SEARCH))
+        .flush(anAnswer([aHit(1)]));
+      await library.settle();
+      expect(screen.getByRole('link', { name: 'Faixa 1' })).toBeTruthy();
+    });
+
+    it('keeps the words in the address, and comes back with them', async () => {
+      const library = await found({ features: SPEAKER }, anAnswer([aHit(1)]));
+      await library.settle();
+      expect(TestBed.inject(Router).url).toBe('/?busca=padre%20orlando');
+    });
+
+    it('opens with the words of the address', async () => {
+      const library = await renderLibrary({
+        features: SPEAKER,
+        busca: 'orlando',
+      });
+      await library.start();
+      library.http
+        .expectOne((request) => request.url.startsWith(SEARCH))
+        .flush(anAnswer([aHit(1)]));
+      library.http
+        .expectOne((request) =>
+          request.url.startsWith('/api/v1/media/library?'),
+        )
+        .flush(aPage([anItem(1)]));
+      await library.settle();
+      expect((box() as HTMLInputElement).value).toBe('orlando');
+      expect(screen.getByRole('link', { name: 'Faixa 1' })).toBeTruthy();
     });
   });
 
