@@ -102,9 +102,16 @@ const SHOWN = 3;
 export class QueueSummary {
   private readonly store = inject(ProcessingQueueStore);
   protected readonly path = QUEUE_PAGE_PATH;
+  /** What needs the person first: with three at work it would never show. */
+  private readonly shown = computed(() => {
+    const items = this.store.items();
+    return [
+      ...items.filter(({ phase }) => phase === 'attention'),
+      ...items.filter(({ phase }) => phase === 'running' || phase === 'next'),
+    ];
+  });
   protected readonly lines = computed(() =>
-    this.store
-      .items()
+    this.shown()
       .slice(0, SHOWN)
       .map((item) => ({
         id: item.mediaId,
@@ -113,7 +120,7 @@ export class QueueSummary {
       })),
   );
   protected readonly hiddenCount = computed(() =>
-    Math.max(0, this.store.items().length - SHOWN),
+    Math.max(0, this.shown().length - SHOWN),
   );
   protected readonly titleText = computed(() => {
     const active = this.store.active();

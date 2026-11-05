@@ -29,6 +29,7 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { DocumentPanel } from '@features/document/document-panel.js';
 import { Sidebar, type SidebarAction } from '@features/sidebar/sidebar.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
+import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 import { ChatStore } from './chat-store.js';
 import { CollectionHeading } from './collection-heading.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
@@ -103,6 +104,8 @@ export class ChatPage {
   protected readonly desktop = signal(this.matchesDesktop());
 
   private readonly collectionHeading = inject(CollectionHeading);
+  /** Spoken from here: the page and the sidebar come and go, the layout stays. */
+  protected readonly queue = inject(ProcessingQueueStore);
   /** The collection in the header: on a media page, the one that page shows (KBC-091). */
   protected readonly topic = computed(() => {
     if (!this.onMedia()) return this.store.topic();

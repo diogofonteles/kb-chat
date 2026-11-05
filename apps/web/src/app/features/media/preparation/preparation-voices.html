@@ -59,13 +59,13 @@
               <ng-container i18n="@@prep.voice.name">Dar nome</ng-container>
             }
           </button>
-          @if (row.suggestion; as suggestion) {
+          @if (row.refusable) {
             <button
               type="button"
               class="secondary"
-              [attr.aria-label]="refuseLabel(suggestion)"
+              [attr.aria-label]="refuseLabel(row)"
               [disabled]="saving()"
-              (click)="refuse(suggestion)"
+              (click)="refuse(row)"
               i18n="@@prep.voice.refuse"
             >
               Recusar
@@ -76,6 +76,16 @@
     </li>
   }
 </ul>
+@for (review of preparation().nameReviews; track review.voice) {
+  <div class="review">
+    <p>{{ reviewText(review) }}</p>
+    <ul>
+      @for (track of review.tracks; track track.id) {
+        <li>{{ track.title }}</li>
+      }
+    </ul>
+  </div>
+}
 @if (error()) {
   <p class="error" role="alert">{{ error() }}</p>
 }

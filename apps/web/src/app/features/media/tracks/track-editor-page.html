@@ -243,7 +243,7 @@
         (selectTrack)="choose($event)"
         (moved)="moveHandle($event)"
         (cursorChange)="placeCursor($event)"
-        (listen)="listen($event)"
+        (listen)="listenByKey($event)"
         (edgeChange)="edge.set($event)"
       />
       @if (waveformPending()) {
@@ -366,7 +366,11 @@
         />
       }
       @if (voicesToName(); as prep) {
-        <details class="voice-names" [open]="prep.suggestions.length > 0">
+        <details
+          class="voice-names"
+          [open]="voicesOpen()"
+          (toggle)="voicesToggled($event)"
+        >
           <summary i18n="@@tracks.voiceNames">Nomes das vozes</summary>
           <app-preparation-voices
             [preparation]="prep"
@@ -424,6 +428,9 @@
               [people]="people()"
               [readOnly]="readOnly()"
               [playing]="playingKind()"
+              [playingElsewhere]="playingElsewhere()"
+              (stopPlaying)="audition.stop()"
+              (listenKey)="listenByKey($event)"
               (selectTrack)="choose($event)"
               (titleChange)="rename($event)"
               (kindChange)="changeKind($event)"

@@ -40,6 +40,10 @@ const SECTIONS: readonly {
   },
   { phase: 'running', title: () => $localize`:@@queue.running:Agora` },
   { phase: 'next', title: () => $localize`:@@queue.next.title:A seguir` },
+  {
+    phase: 'stopped',
+    title: () => $localize`:@@queue.stopped:Parados no acervo`,
+  },
 ];
 
 /**

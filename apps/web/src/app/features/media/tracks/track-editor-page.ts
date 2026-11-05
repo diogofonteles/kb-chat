@@ -15,6 +15,7 @@ import {
   effect,
   Injector,
   inject,
+  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
@@ -292,6 +293,20 @@ export class TrackEditorPage {
     );
     return { ...preparation, suggestions };
   });
+  /**
+   * Opens when something asks for a person, and stays as the person leaves it: closing with
+   * the last answer would drop the focus (WCAG 2.4.3).
+   */
+  protected readonly voicesOpen = linkedSignal<boolean, boolean>({
+    source: () => {
+      const voices = this.voicesToName();
+      return (
+        voices !== null &&
+        (voices.suggestions.length > 0 || voices.nameReviews.length > 0)
+      );
+    },
+    computation: (asks, previous) => asks || (previous?.value ?? false),
+  });
   /** What is on screen goes first: a name may change the proposals' titles. */
   protected readonly saveFirst = (): Observable<unknown> => this.draft.flush();
   /** Nothing can change now: a run writes the draft, or a press runs, or a conflict (R-5). */
@@ -365,6 +380,10 @@ export class TrackEditorPage {
     const kind = key.slice(id.length + 1);
     return LISTEN_KINDS.find((one) => one === kind) ?? null;
   });
+  /** Something plays that the selected row's buttons do not name: this row offers to stop. */
+  protected readonly playingElsewhere = computed(
+    () => this.audition.playing() && this.playingKind() === null,
+  );
   protected readonly segments = computed(() =>
     this.transcript.hasValue() ? this.transcript.value().segments : [],
   );
@@ -725,6 +744,12 @@ export class TrackEditorPage {
     this.audition.play(ranges[kind](), `${track.id}:${kind}`);
   }
 
+  /** Space stops whatever plays: a key never swaps the audio under the person. */
+  protected listenByKey(kind: ListenKind): void {
+    if (kind === 'track' && this.audition.playing()) this.audition.stop();
+    else this.listen(kind);
+  }
+
   protected pageKey(event: KeyboardEvent): void {
     const inField =
       event.target instanceof Element &&
@@ -831,6 +856,11 @@ export class TrackEditorPage {
 
   protected readonly startProposal = (acceptedUsd: number) =>
     this.draft.propose(acceptedUsd);
+
+  protected voicesToggled(event: Event): void {
+    if (event.target instanceof HTMLDetailsElement)
+      this.voicesOpen.set(event.target.open);
+  }
 
   /** The names, and the titles that may have changed with them. */
   protected voicesNamed(): void {

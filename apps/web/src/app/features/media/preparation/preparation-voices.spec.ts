@@ -194,6 +194,42 @@ describe('PreparationVoices (KBC-090)', () => {
     expect(screen.queryByText(/parece ser/)).toBeNull();
   });
 
+  it('refuses a name already accepted', async () => {
+    const { http } = await setup({
+      voices: [voice({ name: 'Márcio da Roça' })],
+      suggestions: [],
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Recusar o nome da Voz 1' }),
+    );
+    http.expectOne(`${VOICES}/1/refuse-name`).flush(ANSWER);
+  });
+
+  it('offers nothing to refuse on a voice with no name', async () => {
+    await setup({ suggestions: [] });
+    expect(screen.queryByRole('button', { name: /Recusar/ })).toBeNull();
+  });
+
+  it('lists the titles a person should look at', async () => {
+    await setup({
+      suggestions: [],
+      nameReviews: [
+        {
+          voice: 1,
+          name: 'Pedro',
+          tracks: [
+            {
+              id: '22222222-2222-4222-8222-000000000001',
+              title: 'São Pedro',
+            },
+          ],
+        },
+      ],
+    });
+    expect(screen.getByText(/Reveja estes títulos/)).toBeTruthy();
+    expect(screen.getByText('São Pedro')).toBeTruthy();
+  });
+
   it('says what went wrong and keeps the offer', async () => {
     const { http, fixture } = await setup();
     fireEvent.click(

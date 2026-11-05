@@ -38,6 +38,8 @@ function setup(selectedId: string, extra: object = {}) {
     join: vi.fn(),
     remove: vi.fn(),
     listen: vi.fn(),
+    listenKey: vi.fn(),
+    stopPlaying: vi.fn(),
   };
   return render(TrackRowList, {
     providers: [provideZonelessChangeDetection()],
@@ -141,7 +143,7 @@ describe('TrackRowList (KBC-066)', () => {
       .map((one) => within(one).getAllByRole('button')[0])[1] as HTMLElement;
     fireEvent.keyDown(row, { key: 'i' });
     expect(spies.selectTrack).toHaveBeenCalledWith(IDS.two);
-    expect(spies.listen).toHaveBeenCalledWith('start');
+    expect(spies.listenKey).toHaveBeenCalledWith('start');
   });
 
   it('turns only the button that plays into a stop, in words', async () => {
@@ -152,6 +154,14 @@ describe('TrackRowList (KBC-066)', () => {
     expect(screen.getByRole('button', { name: 'Ouvir o fim' })).toBeTruthy();
     fireEvent.click(stop);
     expect(spies.listen).toHaveBeenCalledWith('start');
+  });
+
+  it('offers to stop what another row plays', async () => {
+    const { spies } = await setup(IDS.one, { playingElsewhere: true });
+    fireEvent.click(
+      screen.getByRole('button', { name: '■ Parar o que está tocando' }),
+    );
+    expect(spies.stopPlaying).toHaveBeenCalled();
   });
 
   it('says "■ Parar" on the track that plays', async () => {

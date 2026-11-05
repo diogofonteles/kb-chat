@@ -17,6 +17,10 @@ import {
   timer,
 } from 'rxjs';
 import { MEDIA_POLL_MS } from '../media-polling.js';
+import { queueChangeText } from './queue-labels.js';
+
+/** The longest wait between reads while they fail. */
+const MAX_RETRY_MS = 60_000;
 
 type Reading =
   | { readonly kind: 'read'; readonly queue: ProcessingQueue }
@@ -42,6 +46,8 @@ export class ProcessingQueueStore {
 
   private readonly reading = signal<ProcessingQueue | null>(null);
   private readonly lost = signal(false);
+  private readonly spoken = signal('');
+  private failures = 0;
 
   readonly allowed = computed(
     () =>
@@ -54,6 +60,8 @@ export class ProcessingQueueStore {
   /** The last read failed. */
   readonly failed = this.lost.asReadonly();
   readonly items = computed(() => this.reading()?.items ?? []);
+  /** The sentence for the live region: a stage that started or failed, what left. */
+  readonly said = this.spoken.asReadonly();
   /** What is at work or in line. */
   readonly active = computed(() => this.reading()?.active ?? 0);
 
@@ -102,6 +110,7 @@ export class ProcessingQueueStore {
     this.next.next(null);
     this.reading.set(null);
     this.lost.set(false);
+    this.failures = 0;
   }
 
   private answered(reading: Reading): void {
@@ -110,8 +119,24 @@ export class ProcessingQueueStore {
       return;
     }
     this.lost.set(reading.kind === 'failed');
-    if (reading.kind === 'read') this.reading.set(reading.queue);
-    if (this.active() > 0 && !this.hidden()) this.next.next(this.pollMs);
+    if (reading.kind === 'read') this.take(reading.queue);
+    else this.failures += 1;
+    if (this.hidden()) return;
+    if (this.lost()) this.next.next(this.retryMs());
+    else if (this.active() > 0) this.next.next(this.pollMs);
+  }
+
+  private take(queue: ProcessingQueue): void {
+    this.failures = 0;
+    const before = this.reading();
+    const sentence = before ? queueChangeText(before.items, queue.items) : '';
+    if (sentence) this.spoken.set(sentence);
+    this.reading.set(queue);
+  }
+
+  /** A read that failed comes again, each time later: the banner promises it. */
+  private retryMs(): number {
+    return Math.min(this.pollMs * 2 ** (this.failures - 1), MAX_RETRY_MS);
   }
 
   private hidden(): boolean {

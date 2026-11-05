@@ -91,6 +91,28 @@ describe('ProcessingQueueStore (KBC-090)', () => {
     expect(store.failed()).toBe(false);
   });
 
+  it('tries again after a failed read with nothing at work', async () => {
+    const { store, http } = setup();
+    await answer(http, aQueue());
+    store.refresh();
+    await wait();
+    http
+      .match(URL)
+      .forEach((one) => one.flush('', { status: 500, statusText: 'x' }));
+    expect(store.failed()).toBe(true);
+    expect(await answer(http, aQueue())).toBe(1);
+    expect(store.failed()).toBe(false);
+    expect(await answer(http, aQueue())).toBe(0);
+  });
+
+  it('says what moved, and nothing on the first read', async () => {
+    const { store, http } = setup();
+    await answer(http, aQueue({ items: [aQueueItem()], active: 1 }));
+    expect(store.said()).toBe('');
+    await answer(http, aQueue());
+    expect(store.said()).toBe('Palestra de 1998 saiu da fila.');
+  });
+
   it('forgets everything when the API refuses', async () => {
     const { store, http } = setup();
     await answer(http, aQueue({ items: [aQueueItem()], active: 1 }));

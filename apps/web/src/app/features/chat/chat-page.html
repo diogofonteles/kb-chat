@@ -40,6 +40,7 @@
       [class.empty]="isEmpty() && !onMedia()"
       [attr.inert]="covered() ? '' : null"
     >
+      <p class="visually-hidden" aria-live="polite">{{ queue.said() }}</p>
       <header class="topbar">
         @if (!desktop()) {
           <button

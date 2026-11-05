@@ -121,12 +121,16 @@ export class TrackRowList {
   readonly readOnly = input(false);
   /** What plays on the selected row. */
   readonly playing = input<ListenKind | null>(null);
+  /** Another row plays: this one offers to stop it. */
+  readonly playingElsewhere = input(false);
 
   readonly selectTrack = output<string>();
   readonly titleChange = output<{ id: string; title: string }>();
   readonly kindChange = output<{ id: string; kind: TrackKind }>();
   readonly personChange = output<PersonChange>();
   readonly listen = output<ListenKind>();
+  readonly listenKey = output<ListenKind>();
+  readonly stopPlaying = output();
   readonly split = output<string>();
   readonly join = output<string>();
   readonly remove = output<string>();
@@ -224,7 +228,7 @@ export class TrackRowList {
       event.preventDefault();
       event.stopPropagation();
       this.selectTrack.emit(id);
-      this.listen.emit(listen);
+      this.listenKey.emit(listen);
       return;
     }
     const step =

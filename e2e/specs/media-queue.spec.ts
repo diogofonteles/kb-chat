@@ -1,5 +1,10 @@
-import type { Browser, Locator, Page } from '@playwright/test';
-import type { Feature, MediaPreparation } from '@kb-chat/contracts';
+import type {
+  APIRequestContext,
+  Browser,
+  Locator,
+  Page,
+} from '@playwright/test';
+import type { Feature } from '@kb-chat/contracts';
 import {
   CSRF,
   expect,
@@ -10,7 +15,12 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import { makeMp3, uniqueTag, uploadReady } from './media-helpers.js';
-import { seedTranscript, transcribedAudio } from './voices-helpers.js';
+import { audioWithTracks, trackRow } from './tracks-helpers.js';
+import {
+  seedTranscript,
+  separateVoices,
+  transcribedAudio,
+} from './voices-helpers.js';
 
 // KBC-090 and KBC-091: the queue of what is being processed, the library that follows the
 // selected collection and the names of the voices. Uploads, conversions and plans are real;
@@ -78,10 +88,9 @@ test('KBC-090: several files go to the queue, which says where each one is', asy
 });
 
 test('KBC-090: the queue takes the person to what is left, and empties', async ({
-  browser,
-  viewport,
+  page,
 }) => {
-  const { page, owner } = await person(browser, viewport);
+  const owner = await ownerApi();
   const title = `Fila ${uniqueTag()}`;
   const media = await uploadReady(owner, { title, seconds: 60 });
   await seedTranscript(owner, media.id);
@@ -165,67 +174,180 @@ test('KBC-091: the library follows the collection, and the header never lies', a
   await owner.dispose();
 });
 
-const VOICE_READING = (id: string): Partial<MediaPreparation> => ({
-  mediaId: id,
-  title: 'Palestra de 1998',
-  topic: 'hermetismo',
-  author: null,
-  step: 2,
-  skipped: false,
-  finished: false,
-  plan: {
-    transcribe: true,
-    speakers: true,
-    tracks: 'manual',
-    subjects: false,
-    acceptedUsd: null,
-  },
-  stages: [],
-  separation: 1,
-  voices: [{ voice: 1, speakingMs: 60_000, name: null, audience: false }],
-  suggestions: [
-    {
-      voice: 1,
-      name: 'Márcio da Roça',
-      audience: false,
-      reason: 'se apresenta',
-    },
-  ],
-  refusedVoices: [],
-  tracks: [],
-  next: null,
-  canSwitchToManual: false,
-  transcriber: 'on',
-  transcriberOffSince: null,
-});
-
-test('KBC-090: a suggested name can be corrected and refused on step 2', async ({
-  browser,
-  viewport,
-}) => {
-  const { page, owner } = await person(browser, viewport);
+/** Separated voices, a plan on step 2 and a proposal that names them, as a run leaves it. */
+async function proposedAudio(
+  owner: APIRequestContext,
+  input: { tracks: object[]; voices: object[] },
+) {
   const media = await transcribedAudio(owner);
-  await page.route(`**/api/v1/media/${media.id}/preparation`, (route) =>
-    route.fulfill({ json: VOICE_READING(media.id) }),
-  );
+  await separateVoices(owner, media.id);
+  const started = await owner.post(`/api/v1/media/${media.id}/preparation`, {
+    data: {
+      plan: {
+        transcribe: false,
+        speakers: false,
+        tracks: 'manual',
+        subjects: false,
+      },
+    },
+    headers: CSRF,
+  });
+  expect(started.status(), await started.text()).toBe(200);
+  const seeded = await owner.post(`/api/e2e/media/${media.id}/proposal`, {
+    data: input,
+    headers: CSRF,
+  });
+  expect(seeded.status(), await seeded.text()).toBe(204);
+  return media;
+}
+
+async function correctVoice(page: Page, voice: number, name: string) {
+  await page
+    .getByRole('button', { name: `Corrigir o nome da Voz ${voice}` })
+    .click();
+  const field = page.getByRole('combobox', { name: `Quem é a Voz ${voice}?` });
+  await expect(field).toBeFocused();
+  await field.fill(name);
+  await expect(
+    page.getByRole('listbox').getByRole('option').first(),
+  ).toBeVisible();
+  await field.press('Enter');
+  await expect(field).toHaveCount(0);
+}
+
+const FIRST = { startMs: 0, endMs: 20_000, answererVoice: 1 };
+const SECOND = { startMs: 20_000, endMs: 45_000, answererVoice: 2 };
+
+test('KBC-090: a correction and a refusal reach the published track', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const tag = uniqueTag();
+  const wrong = `Márcio da Roça ${tag}`;
+  const refused = `Joana Prado ${tag}`;
+  const media = await proposedAudio(owner, {
+    tracks: [
+      { ...FIRST, title: `Conversa com ${wrong}` },
+      { ...SECOND, title: `Pergunta de ${refused}` },
+    ],
+    voices: [
+      { voice: 1, name: wrong },
+      { voice: 2, name: refused },
+    ],
+  });
   await page.goto(`/midia/${media.id}/preparar`);
   await expect(page.getByText('Voz 1 parece ser')).toBeVisible();
+
+  const right = `Márcio da Rós ${tag}`;
+  await correctVoice(page, 1, right);
+  await expect(page.getByText(`Conversa com ${right}`)).toBeVisible();
+  await expect(page.getByText(`Resposta: ${right}`)).toBeVisible();
+
+  await page
+    .getByRole('button', { name: 'Recusar o nome sugerido para a Voz 2' })
+    .click();
+  await expect(page.getByText(/Reveja estes títulos/)).toContainText(refused);
+  await expect(page.getByText('Voz 2 parece ser')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Validar faixas' }).click();
+  await expect(page).toHaveURL(/\/faixas$/);
+  await expect(page.getByText(/Reveja estes títulos/)).toBeVisible();
+
+  // The screen may still be saving what it opened with.
+  await expect(async () => {
+    const edit = await owner.get(`/api/v1/media/${media.id}/edit`);
+    const { version } = (await edit.json()) as { version: number };
+    const approved = await owner.post(
+      `/api/v1/media/${media.id}/edit/approve`,
+      { data: {}, headers: { ...CSRF, 'if-match': `"${version}"` } },
+    );
+    expect(approved.status(), await approved.text()).toBe(200);
+  }).toPass({ timeout: 10_000 });
+  const track = await publishedTitled(owner, media.id, right);
+
+  const later = `Márcio Rocha ${tag}`;
+  await page.goto(`/midia/${media.id}/faixas`);
+  await correctVoice(page, 1, later);
+  await publishedTitled(owner, media.id, later);
+  const history = await owner.get(`/api/v1/media/${track.id}/history`);
+  const { changes } = (await history.json()) as {
+    changes: { field: string; after: string | null }[];
+  };
+  expect(changes).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        field: 'title',
+        after: `Conversa com ${later}`,
+      }),
+    ]),
+  );
+  await owner.dispose();
+});
+
+/** Waits for the recording's track with this name in its title, published. */
+async function publishedTitled(
+  owner: APIRequestContext,
+  mediaId: string,
+  name: string,
+) {
+  let found: { id: string; title: string } | undefined;
+  await expect
+    .poll(
+      async () => {
+        const page = await owner.get('/api/v1/media/library?q=' + 'Conversa');
+        const { items } = (await page.json()) as {
+          items: {
+            id: string;
+            tracks: { id: string; title: string }[];
+          }[];
+        };
+        found = items
+          .find((item) => item.id === mediaId)
+          ?.tracks.find((one) => one.title.includes(name));
+        return found?.title;
+      },
+      { timeout: 30_000 },
+    )
+    .toBeTruthy();
+  if (!found) throw new Error('no published track');
+  return found;
+}
+
+test('KBC-090: a voice already accepted is corrected from step 3, and the focus stays', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const tag = uniqueTag();
+  const wrong = `Márcio da Roça ${tag}`;
+  const media = await proposedAudio(owner, {
+    tracks: [{ ...FIRST, title: `Conversa com ${wrong}` }],
+    voices: [{ voice: 1, name: wrong }],
+  });
+  await page.goto(`/midia/${media.id}/preparar`);
+  await page.getByRole('button', { name: 'Validar faixas' }).click();
+  await expect(page).toHaveURL(/\/faixas$/);
+
+  const accept = page.getByRole('button', {
+    name: `Aceitar ${wrong} para a Voz 1`,
+  });
+  await accept.focus();
+  await page.keyboard.press('Enter');
+  await expect(accept).toHaveCount(0);
+  const correction = page.getByRole('button', {
+    name: 'Corrigir o nome da Voz 1',
+  });
+  await expect(correction).toBeFocused();
+
+  const right = `Márcio da Rós ${tag}`;
+  await correctVoice(page, 1, right);
+  await expect(correction).toBeFocused();
   await expect(
-    page.getByRole('button', { name: 'Aceitar Márcio da Roça para a Voz 1' }),
-  ).toBeVisible();
+    page.getByRole('combobox', { name: 'Quem responde' }),
+  ).toContainText(right);
+  await page.getByRole('button', { name: 'Recusar o nome da Voz 1' }).click();
   await expect(
-    page.getByRole('button', {
-      name: 'Recusar o nome sugerido para a Voz 1',
-    }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Corrigir o nome da Voz 1' }).click();
-  const field = page.getByRole('combobox', { name: 'Quem é a Voz 1?' });
-  await expect(field).toHaveValue('Márcio da Roça');
-  await expect(field).toBeFocused();
-  await page.getByRole('button', { name: 'Cancelar' }).click();
-  await expect(
-    page.getByRole('button', { name: 'Corrigir o nome da Voz 1' }),
-  ).toBeFocused();
+    page.getByRole('button', { name: 'Recusar o nome da Voz 1' }),
+  ).toHaveCount(0);
   await owner.dispose();
 });
 
@@ -252,5 +374,25 @@ test('KBC-090: the button that plays offers to stop, with nothing moving around 
   expect([await place(stop), await place(end)]).toEqual(before);
   await stop.click();
   await expect(listen).toBeVisible();
+  await owner.dispose();
+});
+
+test('KBC-090: another row selected, the person can still stop, and Space stops', async ({
+  browser,
+  viewport,
+}) => {
+  const { page, owner } = await person(browser, viewport);
+  const media = await audioWithTracks(owner);
+  await page.goto(`/midia/${media.id}/faixas`);
+  await trackRow(page, 1).getByRole('button').first().click();
+  await page.getByRole('button', { name: '▶ Ouvir' }).click();
+  await expect(page.getByRole('button', { name: '■ Parar' })).toBeVisible();
+
+  await trackRow(page, 2).getByRole('button').first().click();
+  const stop = page.getByRole('button', { name: '■ Parar o que está tocando' });
+  await expect(stop).toBeVisible();
+  await trackRow(page, 2).getByRole('button').first().press('Space');
+  await expect(stop).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '▶ Ouvir' })).toBeVisible();
   await owner.dispose();
 });

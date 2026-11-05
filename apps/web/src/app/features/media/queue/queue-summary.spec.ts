@@ -37,6 +37,22 @@ describe('QueueSummary (KBC-090)', () => {
     expect(screen.getByRole('link', { name: 'Ver a fila' })).toBeTruthy();
   });
 
+  it('puts what needs the person first, and leaves out what is not theirs', async () => {
+    await setup(
+      [
+        item(1),
+        item(2),
+        item(3),
+        { ...item(4), phase: 'attention' },
+        { ...item(5), phase: 'stopped' },
+      ],
+      3,
+    );
+    expect(screen.getByText('Áudio 4')).toBeTruthy();
+    expect(screen.queryByText('Áudio 5')).toBeNull();
+    expect(screen.getByText('e mais 1')).toBeTruthy();
+  });
+
   it('counts one in the singular', async () => {
     await setup([item(1)], 1);
     expect(screen.getByText('1 áudio em processamento')).toBeTruthy();

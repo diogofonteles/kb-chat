@@ -9,6 +9,7 @@ import {
   computed,
   inject,
   input,
+  linkedSignal,
   output,
   signal,
   viewChild,
@@ -19,6 +20,7 @@ import {
   authorListSchema,
   collectionSpeakerListSchema,
   type MediaPreparation,
+  type NameReview,
   type PreparationVoice,
   type VoiceSuggestion,
 } from '@kb-chat/contracts';
@@ -77,6 +79,8 @@ interface VoiceRow {
   readonly hasName: boolean;
   readonly suggestion: VoiceSuggestion | null;
   readonly filled: string;
+  /** There is a name to say no to: suggested, or already accepted. */
+  readonly refusable: boolean;
 }
 
 /**
@@ -106,7 +110,11 @@ export class PreparationVoices {
   /** A name went in, or was refused: the screen reads the plan again. */
   readonly named = output();
 
-  private readonly settled = signal<readonly number[]>([]);
+  /** Answered here, until the next reading says so: a new separation numbers voices anew. */
+  private readonly settled = linkedSignal<MediaPreparation, readonly number[]>({
+    source: this.preparation,
+    computation: () => [],
+  });
   protected readonly error = signal('');
   /** The voice whose field is open. */
   protected readonly editing = signal<number | null>(null);
@@ -151,9 +159,14 @@ export class PreparationVoices {
         hasName: given !== '' || suggestion !== null,
         suggestion,
         filled: given || (suggestion ? nameOf(suggestion) : ''),
+        refusable: given !== '' || suggestion !== null,
       };
     }),
   );
+
+  protected reviewText({ name }: NameReview): string {
+    return $localize`:@@prep.voice.review:Reveja estes títulos: “${name}:name:” pode ser outra pessoa ou o nome errado.`;
+  }
 
   protected nameOf(suggestion: VoiceSuggestion): string {
     return nameOf(suggestion);
@@ -164,8 +177,10 @@ export class PreparationVoices {
     return $localize`:@@prep.voice.acceptLabel:Aceitar ${name}:name: para a Voz ${suggestion.voice}:voice:`;
   }
 
-  protected refuseLabel({ voice }: VoiceSuggestion): string {
-    return $localize`:@@prep.voice.refuseLabel:Recusar o nome sugerido para a Voz ${voice}:voice:`;
+  protected refuseLabel({ voice, suggestion }: VoiceRow): string {
+    return suggestion
+      ? $localize`:@@prep.voice.refuseLabel:Recusar o nome sugerido para a Voz ${voice}:voice:`
+      : $localize`:@@prep.voice.refuseGiven:Recusar o nome da Voz ${voice}:voice:`;
   }
 
   protected correctLabel({ voice, hasName }: VoiceRow): string {
@@ -218,7 +233,7 @@ export class PreparationVoices {
     );
   }
 
-  protected refuse({ voice }: VoiceSuggestion): void {
+  protected refuse({ voice }: VoiceRow): void {
     const { mediaId, separation } = this.preparation();
     if (separation === null) return;
     this.run(

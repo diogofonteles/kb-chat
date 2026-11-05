@@ -102,6 +102,16 @@
             </select>
           </label>
           <div class="actions">
+            @if (playingElsewhere()) {
+              <button
+                type="button"
+                class="action"
+                (click)="stopPlaying.emit()"
+                i18n="@@tracks.listen.stopOther"
+              >
+                ■ Parar o que está tocando
+              </button>
+            }
             @for (button of listenButtons(); track button.kind) {
               <button
                 type="button"
