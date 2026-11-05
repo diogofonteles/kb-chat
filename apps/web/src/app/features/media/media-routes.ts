@@ -97,6 +97,15 @@ export const MEDIA_ROUTES: Routes = [
       import('./tracks/track-editor-page.js').then((m) => m.TrackEditorPage),
   },
   {
+    path: 'midia/:id/limites',
+    canMatch: [mediaEnabled],
+    title: $localize`:@@route.trackBoundsTitle:Ajustar início e fim — Nova Alexandria`,
+    loadComponent: () =>
+      import('./track-edit/track-bounds-page.js').then(
+        (m) => m.TrackBoundsPage,
+      ),
+  },
+  {
     path: 'midia/:id',
     canMatch: [mediaEnabled],
     title: $localize`:@@route.mediaTitle:Mídia — Nova Alexandria`,

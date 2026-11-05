@@ -42,3 +42,7 @@ export function drawPeaks(canvas: HTMLCanvasElement, input: PeakWindow): void {
     context.fillRect(bar * BAR_PX, (height - barH) / 2, BAR_PX - 1, barH);
   }
 }
+
+/** The peaks as they arrive: base64, one byte each (KBC-066). */
+export const decodePeaks = (base64: string): Uint8Array =>
+  Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));

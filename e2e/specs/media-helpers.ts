@@ -201,6 +201,7 @@ export async function audioState(page: Page) {
       paused: audio.paused,
       ended: audio.ended,
       duration: audio.duration,
+      src: audio.currentSrc,
     };
   });
 }

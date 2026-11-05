@@ -1,5 +1,10 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
-import type { TrackPreparation } from '@kb-chat/contracts';
+import {
+  remapBookmark,
+  remapPosition,
+  type TrackMove,
+  type TrackPreparation,
+} from '@kb-chat/contracts';
 import type {
   CutOrder,
   DetailsOf,
@@ -48,12 +53,10 @@ function toTrackRow(row: Row): TrackItemRow {
 }
 
 /** Where a kept item's listeners go when its bounds move (KBC-073 BR-4). */
-interface Remap {
+interface Remap extends TrackMove {
   readonly mediaId: string;
   readonly parentId: string;
-  readonly oldStartMs: number;
-  readonly newStartMs: number;
-  readonly durationMs: number;
+  readonly title: string;
   readonly at: string;
 }
 
@@ -159,7 +162,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     this.db
       .prepare(
         `UPDATE media_tracks SET cut_status = 'none', cut_path = NULL, cut_bytes = NULL,
-           cut_duration_ms = NULL
+           cut_duration_ms = NULL, cut_alone = 0
          WHERE media_id = ? AND cut_status IN ('pending', 'cut')`,
       )
       .run(parentId);
@@ -184,69 +187,72 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
   recordCut(
     cut: RecordedCut,
     detailsFor: (parentId: string) => DetailsOf,
-  ): { readonly replaced: readonly string[] } | null {
+  ): boolean {
     return inTransaction(this.db, () => {
       const closed = closeLease(this.db, cut.owner, {
         status: 'done',
         error: null,
         at: cut.now.toISOString(),
       });
-      if (!closed) return null;
+      if (!closed) return false;
       const row = this.db
         .prepare(
           `UPDATE media_tracks SET cut_status = 'cut', cut_path = ?, cut_bytes = ?,
              cut_duration_ms = ?
-           WHERE derived_media_id = ? RETURNING media_id`,
+           WHERE derived_media_id = ? RETURNING id, media_id, cut_alone`,
         )
         .get(cut.path, cut.bytes, cut.durationMs, cut.mediaId);
-      if (!row) return null;
+      if (!row) return false;
       const parentId = String(row['media_id']);
-      if (this.hasPendingCuts(parentId)) return { replaced: [] };
-      const replaced = this.publish({
+      this.landCut(row, {
         parentId,
         detailsOf: detailsFor(parentId),
         now: cut.now,
       });
-      return { replaced };
+      return true;
     });
   }
 
-  publish(input: {
-    parentId: string;
-    detailsOf: DetailsOf;
-    now: Date;
-  }): readonly string[] {
-    return inTransaction(this.db, () => {
-      const replaced: string[] = [];
+  /** New bounds on one track wait for nothing else: a sibling's dead cut holds no one (FR-2). */
+  private landCut(
+    row: Row,
+    input: { parentId: string; detailsOf: DetailsOf; now: Date },
+  ): void {
+    const track = this.tracksOf(input.parentId).find(
+      (one) => one.trackId === row['id'],
+    );
+    if (track && row['cut_alone'] === 1) this.publishTrack(track, input);
+    if (!this.hasPendingCuts(input.parentId)) this.publish(input);
+  }
+
+  publish(input: { parentId: string; detailsOf: DetailsOf; now: Date }): void {
+    inTransaction(this.db, () => {
       for (const track of this.tracksOf(input.parentId))
-        replaced.push(...this.publishTrack(track, input));
+        this.publishTrack(track, input);
       this.archiveLeft(input.parentId, input.now.toISOString());
-      return replaced;
     });
   }
 
   private publishTrack(
     track: TrackItemRow,
     input: { parentId: string; detailsOf: DetailsOf; now: Date },
-  ): readonly string[] {
+  ): void {
     const at = input.now.toISOString();
-    const replaced = track.cut
-      ? this.swapFile(track, { parentId: input.parentId, at })
-      : [];
+    if (track.cut) this.swapFile(track, { parentId: input.parentId, at });
     const details = input.detailsOf(track);
     this.writeDetails(track, details, at);
     if (details.transcript)
       this.transcripts.replaceDerived(details.transcript, input.now);
-    return replaced;
   }
 
-  /** The candidate becomes the file, the old one goes after the commit; listeners follow. */
+  /** The candidate becomes the file; the old one stays for who is on it, listeners follow. */
   private swapFile(
     track: TrackItemRow,
     input: { parentId: string; at: string },
-  ): readonly string[] {
+  ): void {
     const row = this.candidateOf(track);
     const durationMs = Number(row['cut_duration_ms']);
+    this.keepOldFile(track.mediaId, row, input.at);
     this.writeFile(track, {
       path: String(row['cut_path']),
       bytes: Number(row['cut_bytes']),
@@ -257,20 +263,42 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
       this.remap({
         mediaId: track.mediaId,
         parentId: input.parentId,
+        title: String(row['title']),
         oldStartMs: Number(row['parent_start_ms']),
         newStartMs: track.realStartMs,
         durationMs,
         at: input.at,
       });
-    const oldPath = nullableText(row['old_path']);
-    return oldPath !== null && oldPath !== row['cut_path'] ? [oldPath] : [];
+  }
+
+  /** A range on the new bytes would mix two cuts: the janitor takes this one after a day. */
+  private keepOldFile(mediaId: string, row: Row, at: string): void {
+    const path = nullableText(row['old_path']);
+    if (path === null || path === row['cut_path']) return;
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO media_track_old_files
+           (media_id, file_version, path, mime, start_ms, replaced_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        mediaId,
+        Number(row['file_version']),
+        path,
+        String(row['old_mime']),
+        Number(row['parent_start_ms']),
+        at,
+      );
+    this.db
+      .prepare('UPDATE media SET file_version = file_version + 1 WHERE id = ?')
+      .run(mediaId);
   }
 
   private candidateOf(track: TrackItemRow): Row {
     const row = this.db
       .prepare(
         `SELECT t.cut_path, t.cut_bytes, t.cut_duration_ms, m.status, m.parent_start_ms,
-           f.path AS old_path
+           m.title, m.file_version, f.path AS old_path, f.mime AS old_mime
          FROM media_tracks t JOIN media m ON m.id = t.derived_media_id
          LEFT JOIN media_files f ON f.media_id = m.id AND f.rendition = 'audio'
          WHERE t.id = ?`,
@@ -305,68 +333,80 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
       );
   }
 
-  /** KBC-073 BR-4: through the absolute time. Past the end is heard; before the start is 0. */
+  /** KBC-073 BR-4, one rule with the tests of it; a track holds few people's rows. */
   private remap(move: Remap): void {
-    const delta = move.oldStartMs - move.newStartMs;
-    if (delta === 0) {
-      this.endPastTheEnd(move);
-      return;
-    }
-    this.db
+    const positions = this.db
       .prepare(
-        `UPDATE media_progress SET
-           completed_at = CASE WHEN position_ms + ? >= ? THEN coalesce(completed_at, ?)
-             ELSE completed_at END,
-           position_ms = CASE WHEN position_ms + ? >= ? OR position_ms + ? < 0 THEN 0
-             ELSE position_ms + ? END
+        `SELECT principal, position_ms FROM media_progress
          WHERE media_id = ? AND position_ms > 0`,
       )
-      .run(
-        delta,
-        move.durationMs,
+      .all(move.mediaId);
+    const write = this.db.prepare(
+      `UPDATE media_progress SET position_ms = ?,
+         completed_at = CASE WHEN ? THEN coalesce(completed_at, ?) ELSE completed_at END
+       WHERE principal = ? AND media_id = ?`,
+    );
+    for (const row of positions) {
+      const { positionMs, heard } = remapPosition(
+        Number(row['position_ms']),
+        move,
+      );
+      write.run(
+        positionMs,
+        heard ? 1 : 0,
         move.at,
-        delta,
-        move.durationMs,
-        delta,
-        delta,
+        String(row['principal']),
         move.mediaId,
       );
-    this.moveBookmarks(move, delta);
-  }
-
-  private endPastTheEnd(move: Remap): void {
-    this.db
-      .prepare(
-        `UPDATE media_progress SET completed_at = coalesce(completed_at, ?), position_ms = 0
-         WHERE media_id = ? AND position_ms >= ?`,
-      )
-      .run(move.at, move.mediaId, move.durationMs);
-    this.moveBookmarks(move, 0);
+    }
+    this.moveBookmarks(move);
   }
 
   /** A bookmark outside the new bounds stays at its moment, now in the full recording. */
-  private moveBookmarks(move: Remap, delta: number): void {
+  private moveBookmarks(move: Remap): void {
+    const bookmarks = this.db
+      .prepare(
+        `SELECT id, principal, position_ms FROM media_bookmarks WHERE media_id = ?`,
+      )
+      .all(move.mediaId);
+    for (const row of bookmarks) {
+      const landed = remapBookmark(Number(row['position_ms']), move);
+      if (landed.inTrack) this.placeBookmark(row, move, landed.positionMs);
+      else this.sendToRecording(row, move, landed.recordingMs);
+    }
+  }
+
+  private placeBookmark(row: Row, move: Remap, positionMs: number): void {
+    if (positionMs === row['position_ms']) return;
     this.db
       .prepare(
-        `UPDATE media_bookmarks SET media_id = ?, position_ms = position_ms + ?, updated_at = ?
-         WHERE media_id = ? AND (position_ms + ? < 0 OR position_ms + ? > ?)`,
+        'UPDATE media_bookmarks SET position_ms = ?, updated_at = ? WHERE id = ?',
+      )
+      .run(positionMs, move.at, String(row['id']));
+  }
+
+  private sendToRecording(row: Row, move: Remap, recordingMs: number): void {
+    const id = String(row['id']);
+    this.db
+      .prepare(
+        `UPDATE media_bookmarks SET media_id = ?, position_ms = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(move.parentId, recordingMs, move.at, id);
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO media_moved_bookmarks
+           (bookmark_id, principal, media_id, recording_id, title, moved_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
-        move.parentId,
-        move.oldStartMs,
-        move.at,
+        id,
+        String(row['principal']),
         move.mediaId,
-        delta,
-        delta,
-        move.durationMs,
+        move.parentId,
+        move.title,
+        move.at,
       );
-    if (delta !== 0)
-      this.db
-        .prepare(
-          `UPDATE media_bookmarks SET position_ms = position_ms + ?, updated_at = ?
-           WHERE media_id = ?`,
-        )
-        .run(delta, move.at, move.mediaId);
   }
 
   private writeDetails(
@@ -390,7 +430,7 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
     this.db
       .prepare(
         `UPDATE media_tracks SET cut_status = 'published', cut_path = NULL, cut_bytes = NULL,
-           cut_duration_ms = NULL WHERE id = ?`,
+           cut_duration_ms = NULL, cut_alone = 0 WHERE id = ?`,
       )
       .run(track.trackId);
   }
@@ -469,9 +509,11 @@ export class SqliteTrackItemStore implements TrackItemStorePort {
         `SELECT f.path FROM media_files f JOIN media m ON m.id = f.media_id
            WHERE m.parent_media_id = ?
          UNION SELECT cut_path FROM media_tracks
-           WHERE media_id = ? AND cut_path IS NOT NULL`,
+           WHERE media_id = ? AND cut_path IS NOT NULL
+         UNION SELECT o.path FROM media_track_old_files o JOIN media m ON m.id = o.media_id
+           WHERE m.parent_media_id = ?`,
       )
-      .all(parentId, parentId)
+      .all(parentId, parentId, parentId)
       .map((row) => String(row['path']));
   }
 

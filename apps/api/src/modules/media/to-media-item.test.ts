@@ -72,7 +72,14 @@ describe('toMediaItem: the transcription (KBC-036)', () => {
     });
     const track = {
       ...recording,
-      track: { parentId: recording.id, startMs: 0, endMs: 500, ordinal: 1 },
+      track: {
+        parentId: recording.id,
+        startMs: 0,
+        endMs: 500,
+        ordinal: 1,
+        version: 0,
+        fileVersion: 1,
+      },
     };
     expect(toMediaItem(recording, true).canTranscribeAgain).toBe(true);
     expect(toMediaItem(track, true).canTranscribeAgain).toBe(false);

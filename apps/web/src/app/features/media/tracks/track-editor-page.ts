@@ -54,6 +54,7 @@ import { distinctUntilChanged, map } from 'rxjs';
 import { PreparationSteps } from '../preparation/preparation-steps.js';
 import { audienceLabel } from '../voices/speaker-names.js';
 import { TrackAudition, endRange, startRange } from './track-audition.js';
+import { decodePeaks } from './waveform-canvas.js';
 import { TrackDraft } from './track-draft.js';
 import type { ApproveResult } from './track-draft-state.js';
 import {
@@ -83,9 +84,6 @@ interface DeletedNotice {
   /** The draft right after deleting: any other change takes the offer away (I-6). */
   readonly revision: number;
 }
-
-const decodePeaks = (base64: string): Uint8Array =>
-  Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 
 const voiceChoice = (label: VoiceLabel): PersonChoice => {
   const number = $localize`:@@voices.voice:Voz ${label.voice}:number:`;

@@ -93,6 +93,9 @@ import { TranscriptPanel } from './transcript/transcript-panel.js';
 import { TrackNavList } from './tracks/track-nav-list.js';
 import { TrackAboutView } from './track-about-view.js';
 import { TrackSubjectsView } from './track-subjects-view.js';
+import { ArchivedTracks } from './track-edit/archived-tracks.js';
+import { MovedBookmarksNotice } from './track-edit/moved-bookmarks-notice.js';
+import { TrackActions } from './track-edit/track-actions.js';
 
 /**
  * One media item (screens.md T15): its title, authorship and length, and the player once
@@ -117,6 +120,9 @@ import { TrackSubjectsView } from './track-subjects-view.js';
     TrackNavList,
     TrackAboutView,
     TrackSubjectsView,
+    TrackActions,
+    ArchivedTracks,
+    MovedBookmarksNotice,
   ],
   templateUrl: './media-player-page.html',
   styleUrl: './media-player-page.css',
@@ -192,6 +198,13 @@ export class MediaPlayerPage {
       this.session.me() !== null &&
       this.session.can('media-edit') &&
       !this.media()?.parent,
+  );
+  /** "Editar", "Ajustar início e fim", "Apagar faixa" (KBC-073 AC-14). */
+  protected readonly canEditTrack = computed(
+    () =>
+      this.session.me() !== null &&
+      this.session.can('media-edit') &&
+      !!this.media()?.parent,
   );
   /** A track's subjects and summary, for who listens with `media-subjects` (KBC-070). */
   protected readonly canReadAbout = computed(
@@ -390,6 +403,12 @@ export class MediaPlayerPage {
     this.announcement.set(detailsSavedText());
   }
 
+  /** A change on a track: what listeners see of it now; the player is left alone (AC-5). */
+  protected trackChanged(item: MediaItem | null): void {
+    if (item) this.item.set(item);
+    else this.item.reload();
+  }
+
   /** Safari leaves a clicked button unfocused, so the dialog has nothing to give back. */
   protected editClosed(): void {
     this.editing.set(false);
@@ -527,7 +546,7 @@ export class MediaPlayerPage {
     const playFrom = this.playFrom;
     this.playFrom = null;
     const startAt = trackStartMs ?? this.startAt();
-    if (this.engine.source()?.id === media.id) {
+    if (this.isLoaded(media)) {
       if (playFrom !== null) this.playAt(playFrom);
       else if (startAt !== null) this.engine.seek(startAt);
       return;
@@ -550,6 +569,15 @@ export class MediaPlayerPage {
     this.engine.load(this.sourceOf(media), at ?? 0);
   }
 
+  /** Who still plays an older cut stays on it; paused, the next opening takes the new one. */
+  private isLoaded(media: MediaItem): boolean {
+    const loaded = this.engine.source();
+    if (loaded?.id !== media.id) return false;
+    return (
+      this.engine.playing() || loaded.fileVersion === media.parent?.fileVersion
+    );
+  }
+
   private playAt(ms: number): void {
     this.answered.set(true);
     this.engine.seek(ms);
@@ -560,9 +588,10 @@ export class MediaPlayerPage {
     return {
       id: media.id,
       title: media.title,
-      src: mediaStreamUrl(media.id),
+      src: mediaStreamUrl(media.id, media.parent?.fileVersion),
       durationMs: media.durationMs,
       artist: media.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
+      ...(media.parent ? { fileVersion: media.parent.fileVersion } : {}),
     };
   }
 }

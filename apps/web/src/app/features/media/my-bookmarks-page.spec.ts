@@ -30,7 +30,9 @@ async function setup() {
     ],
   });
   const harness = await RouterTestingHarness.create('/midia/marcadores');
-  return { harness, http: TestBed.inject(HttpTestingController) };
+  const http = TestBed.inject(HttpTestingController);
+  http.expectOne('/api/v1/media/bookmarks/moved').flush({ moved: [] });
+  return { harness, http };
 }
 
 describe('MyBookmarksPage (KBC-042 FR-5)', () => {

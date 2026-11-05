@@ -146,7 +146,6 @@ export class TrackPublisher {
       await files.remove([path]);
       throw leaseLost();
     }
-    await files.remove(recorded.replaced);
   }
 
   /**
@@ -183,6 +182,32 @@ export class TrackPublisher {
       .map(({ mediaId }) => ({ mediaId, ...NO_ANSWERER }));
     for (const track of [...tracks, ...leftBehind])
       items.setAuthor({ mediaId: track.mediaId, now, ...authorOf(track) });
+  }
+
+  /**
+   * A deleted track stops holding back the approval its dead cut waited on (KBC-073 FR-2):
+   * titles and tracks left out wait too, with no candidate of their own.
+   */
+  afterArchive(parentId: string, cutFailed: boolean): void {
+    const { items } = this.deps;
+    if (cutFailed && !items.hasPendingCuts(parentId))
+      items.publish({
+        parentId,
+        detailsOf: this.detailsFor(parentId),
+        now: this.now(),
+      });
+  }
+
+  /** A track came back: its text, cut from the transcript of today, enters search again. */
+  afterRestore(parentId: string, mediaId: string): void {
+    const slice = this.slicerOf(parentId);
+    const item = this.deps.items
+      .published(parentId)
+      .find((one) => one.mediaId === mediaId);
+    const transcript = item ? slice(item) : null;
+    if (transcript)
+      this.deps.transcripts.replaceDerived(transcript, this.now());
+    this.afterRecordingEdit(parentId);
   }
 
   private detailsFor(parentId: string): DetailsOf {

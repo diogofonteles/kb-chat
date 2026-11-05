@@ -33,7 +33,11 @@ export const mediaListUrl = (topic: string): string =>
   `/api/v1/topics/${encodeURIComponent(topic)}/media`;
 export const mediaUrl = (id: string): string =>
   `/api/v1/media/${encodeURIComponent(id)}`;
-export const mediaStreamUrl = (id: string): string => `${mediaUrl(id)}/stream`;
+/** `fileVersion`: a track's cut; who is on it stays on it when a new one lands (KBC-073 BR-3). */
+export const mediaStreamUrl = (id: string, fileVersion?: number): string =>
+  fileVersion === undefined
+    ? `${mediaUrl(id)}/stream`
+    : `${mediaUrl(id)}/stream?v=${fileVersion}`;
 /** The current transcript and its subtitles (KBC-038). */
 export const mediaTranscriptUrl = (id: string): string =>
   `${mediaUrl(id)}/transcript`;

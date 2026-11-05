@@ -3,7 +3,9 @@ import type { MediaBookmark } from '@kb-chat/contracts';
 import type {
   BookmarkStorePort,
   BookmarkWithMedia,
+  LeftTrack,
 } from '../../ports/bookmark-store.js';
+import { inTransaction } from './media-database.js';
 
 type Row = Record<string, unknown>;
 
@@ -74,8 +76,40 @@ export class SqliteBookmarkStore implements BookmarkStorePort {
       }));
   }
 
-  addBookmark(input: { principal: string; bookmark: MediaBookmark }): void {
-    const { bookmark } = input;
+  addBookmark(input: {
+    principal: string;
+    bookmark: MediaBookmark;
+    left?: LeftTrack;
+  }): void {
+    const { bookmark, principal, left } = input;
+    inTransaction(this.db, () => {
+      this.insertBookmark(principal, bookmark);
+      if (left) this.noteMoved(principal, bookmark, left);
+    });
+  }
+
+  private noteMoved(
+    principal: string,
+    bookmark: MediaBookmark,
+    left: LeftTrack,
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_moved_bookmarks
+           (bookmark_id, principal, media_id, recording_id, title, moved_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        bookmark.id,
+        principal,
+        left.mediaId,
+        bookmark.mediaId,
+        left.title,
+        bookmark.createdAt,
+      );
+  }
+
+  private insertBookmark(principal: string, bookmark: MediaBookmark): void {
     this.db
       .prepare(
         `INSERT INTO media_bookmarks
@@ -84,7 +118,7 @@ export class SqliteBookmarkStore implements BookmarkStorePort {
       )
       .run(
         bookmark.id,
-        input.principal,
+        principal,
         bookmark.mediaId,
         bookmark.positionMs,
         bookmark.note,

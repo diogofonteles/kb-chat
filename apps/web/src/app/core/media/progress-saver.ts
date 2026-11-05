@@ -39,6 +39,8 @@ interface KeptPosition {
   readonly positionMs: number;
   readonly delivered: boolean;
   readonly basedOn: string | null;
+  /** The track's cut it was read on (KBC-073 BR-3). */
+  readonly fileVersion?: number;
 }
 
 function isKept(value: unknown): value is KeptPosition {
@@ -111,7 +113,14 @@ export class ProgressSaver {
    */
   startFrom(item: MediaItem): number {
     const kept = this.read(item.id);
-    if (kept && !kept.delivered && kept.basedOn === item.positionUpdatedAt) {
+    // Read on another cut, it means another moment here (KBC-073 BR-3): the server's stands.
+    const sameCut = kept?.fileVersion === item.parent?.fileVersion;
+    if (
+      kept &&
+      sameCut &&
+      !kept.delivered &&
+      kept.basedOn === item.positionUpdatedAt
+    ) {
       this.bases.set(item.id, kept.basedOn);
       this.pending.add(item.id);
       this.sends.next(item.id);
@@ -193,6 +202,9 @@ export class ProgressSaver {
       positionMs,
       delivered: false,
       basedOn: this.bases.get(source.id) ?? null,
+      ...(source.fileVersion === undefined
+        ? {}
+        : { fileVersion: source.fileVersion }),
     });
   }
 
@@ -219,7 +231,13 @@ export class ProgressSaver {
     return this.api
       .saveProgress(
         id,
-        { positionMs: kept.positionMs, basedOn: kept.basedOn },
+        {
+          positionMs: kept.positionMs,
+          basedOn: kept.basedOn,
+          ...(kept.fileVersion === undefined
+            ? {}
+            : { fileVersion: kept.fileVersion }),
+        },
         options,
       )
       .pipe(

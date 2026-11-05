@@ -1,0 +1,110 @@
+@if (media().archived) {
+  <div class="line">
+    <button
+      type="button"
+      class="secondary"
+      [disabled]="restoring()"
+      (click)="restore()"
+      i18n="@@trackEdit.restoreTrack"
+    >
+      Restaurar faixa
+    </button>
+  </div>
+} @else if (current(); as track) {
+  @if (track.locked) {
+    <p class="note">
+      <span i18n="@@trackEdit.locked">Esta gravação está em edição.</span>
+      <a [routerLink]="editLink()" i18n="@@trackEdit.locked.open"
+        >Abrir a edição</a
+      >
+    </p>
+  } @else {
+    <div class="line">
+      <button
+        #editButton
+        type="button"
+        class="primary"
+        aria-haspopup="dialog"
+        (click)="open.set('edit')"
+        i18n="@@trackEdit.edit"
+      >
+        Editar
+      </button>
+      <a class="secondary" [routerLink]="boundsLink()" i18n="@@trackEdit.bounds"
+        >Ajustar início e fim</a
+      >
+      <button
+        type="button"
+        class="danger"
+        aria-haspopup="dialog"
+        [disabled]="cutting()"
+        (click)="open.set('delete')"
+        i18n="@@trackEdit.delete"
+      >
+        Apagar faixa
+      </button>
+    </div>
+  }
+  <p class="status" role="status">
+    @if (cutting()) {
+      <ng-container i18n="@@trackEdit.cutting">Recortando…</ng-container>
+    } @else if (cutDone()) {
+      <ng-container i18n="@@trackEdit.cutDone">Pronto</ng-container>
+    }
+  </p>
+  @if (cutFailed()) {
+    <div class="line" role="alert">
+      <span i18n="@@trackEdit.cutFailed">Não foi possível recortar.</span>
+      <button
+        type="button"
+        class="secondary"
+        (click)="retryCut()"
+        i18n="@@trackEdit.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  }
+  <details class="history" (toggle)="toggleHistory($event)">
+    <summary i18n="@@trackEdit.history">Histórico</summary>
+    @if (historyOpen()) {
+      <app-track-history [mediaId]="media().id" />
+    }
+  </details>
+} @else if (view.error()) {
+  <div class="line" role="alert">
+    <span i18n="@@trackEdit.readFailed">Não consegui ler esta faixa.</span>
+    <button
+      type="button"
+      class="secondary"
+      (click)="view.reload()"
+      i18n="@@trackEdit.retry"
+    >
+      Tentar de novo
+    </button>
+  </div>
+} @else {
+  <p class="note" aria-busy="true" i18n="@@trackEdit.loading">Carregando…</p>
+}
+@if (failure(); as text) {
+  <p class="error" role="alert">{{ text }}</p>
+}
+
+@if (current(); as track) {
+  @if (open() === 'edit') {
+    <app-track-edit-dialog
+      [track]="track"
+      [canClassify]="canClassify()"
+      [canSuggest]="canSuggest()"
+      (saved)="saved($event)"
+      (closed)="closeDialog()"
+    />
+  } @else if (open() === 'delete') {
+    <app-track-delete-dialog
+      [mediaId]="track.mediaId"
+      [title]="track.title"
+      (deleted)="deleted()"
+      (closed)="closeDialog()"
+    />
+  }
+}

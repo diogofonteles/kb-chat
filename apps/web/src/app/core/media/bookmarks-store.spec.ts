@@ -73,6 +73,25 @@ function firstId(store: BookmarksStore): string {
 describe('BookmarksStore (KBC-042)', () => {
   afterEach(() => vi.useRealTimers());
 
+  it('follows a bookmark the server sent to the recording: its note goes there (KBC-073 BR-4)', () => {
+    const { store, http, at } = setup();
+    at(30);
+    store.mark();
+    const id = firstId(store);
+    http.expectOne({ method: 'POST', url: URL }).flush({
+      ...saved(id, 88_000),
+      mediaId: OTHER,
+    });
+
+    store.saveNote(id, 'Fora do corte novo');
+
+    const note = http.expectOne({
+      method: 'PATCH',
+      url: `/api/v1/media/${OTHER}/bookmarks/${id}`,
+    });
+    expect(note.request.body).toEqual({ note: 'Fora do corte novo' });
+  });
+
   it('lists the media’s bookmarks by position once it loads', () => {
     const { store } = setup([saved(B, 60_000), saved(A, 5_000)]);
     expect(store.mediaId()).toBe(MEDIA);

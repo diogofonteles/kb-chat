@@ -74,4 +74,44 @@ describe('MenuButton (APG menu button)', () => {
     document.removeEventListener('keydown', outside);
     expect(outside).not.toHaveBeenCalled();
   });
+
+  describe('stays on the screen, however wide its text', () => {
+    const rectOf = (left: number, right: number) =>
+      ({ left, right }) as DOMRect;
+
+    const openWith = async (left: number, right: number) => {
+      vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(
+        390,
+      );
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+        rectOf(left, right),
+      );
+      const { trigger, fixture } = await renderChoice();
+      fireEvent.click(trigger);
+      await fixture.whenStable();
+      return screen.getByRole('menu');
+    };
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('moves right when it would start past the left edge', async () => {
+      const menu = await openWith(-27.5, 182.5);
+      await vi.waitFor(() => expect(menu.style.translate).toBe('35.5px'));
+    });
+
+    it('moves left when it would end past the right edge', async () => {
+      const menu = await openWith(200, 410);
+      await vi.waitFor(() => expect(menu.style.translate).toBe('-28px'));
+    });
+
+    it('stays where it opened when it fits', async () => {
+      const menu = await openWith(40, 250);
+      await vi.waitFor(() =>
+        expect(document.activeElement).not.toBe(document.body),
+      );
+      expect(menu.style.translate).toBe('');
+    });
+  });
 });

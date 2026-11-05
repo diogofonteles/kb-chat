@@ -1,5 +1,6 @@
 /** What a paid media run spends on (ADR 0022 §7). */
-export type MediaSpendKind = 'track-proposal' | 'subject-proposal';
+export type MediaSpendKind =
+  'track-proposal' | 'subject-proposal' | 'track-suggestion';
 
 /** How a reservation ended: all of it counted, or the unspent part given back. */
 export type MediaSpendOutcome = 'settled' | 'refunded';

@@ -26,4 +26,5 @@ export * from './track-proposals.js';
 export * from './media-edit.js';
 export * from './media-preparation.js';
 export * from './track-subjects.js';
+export * from './track-revisions.js';
 export * from './media-library.js';

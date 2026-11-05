@@ -9,3 +9,7 @@ export {
   type TrackSubjectServiceDeps,
 } from './track-subject-service.js';
 export { SubjectDirectory, type PlacedTrack } from './subject-directory.js';
+export {
+  TrackSuggestionService,
+  type TrackSuggestionDeps,
+} from './track-suggestion-service.js';

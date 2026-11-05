@@ -32,9 +32,10 @@ export class PlayNow {
       {
         id: item.id,
         title: item.title,
-        src: mediaStreamUrl(item.id),
+        src: mediaStreamUrl(item.id, item.parent?.fileVersion),
         durationMs: item.durationMs,
         artist: item.author?.name ?? AUTHORSHIP_LABELS['outros-autores'],
+        ...(item.parent ? { fileVersion: item.parent.fileVersion } : {}),
       },
       at,
     );

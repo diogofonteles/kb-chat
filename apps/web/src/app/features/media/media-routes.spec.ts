@@ -3,6 +3,7 @@ import {
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
+import { TrackBoundsPage } from './track-edit/track-bounds-page.js';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -85,6 +86,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
       MyBookmarksPage,
       PreparationPage,
       TrackEditorPage,
+      TrackBoundsPage,
       MediaPlayerPage,
     ]);
     // The library's /midia comes before the list's; "marcadores" before ":id".
@@ -95,6 +97,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
       'midia/marcadores',
       'midia/:id/preparar',
       'midia/:id/faixas',
+      'midia/:id/limites',
       'midia/:id',
     ]);
   });

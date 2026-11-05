@@ -131,6 +131,8 @@ function setup(
                 startMs: Number(row['parent_start_ms']),
                 endMs: Number(row['parent_end_ms']),
                 ordinal: Number(row['track_ordinal']),
+                version: 0,
+                fileVersion: 1,
               },
       };
     },

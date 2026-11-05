@@ -55,6 +55,13 @@ function fakeApi(overrides: Partial<MediaJobsApi> = {}) {
   return { api, told };
 }
 
+/** Holds a job open until a heartbeat arrives, whatever the speed of the machine. */
+function firstBeat() {
+  let heard: () => void = () => undefined;
+  const beat = new Promise<void>((resolve) => (heard = resolve));
+  return { beat, heard: () => heard() };
+}
+
 const workerWith = (
   api: MediaJobsApi,
   extra: { aliveFile?: string; heartbeatMs?: number } = {},
@@ -152,6 +159,50 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     expect(told).toEqual([]);
     expect(existsSync(join(dir, 'out.m4a'))).toBe(false);
     expect(lines.join('')).toContain('lease lost: stopping the conversion');
+  });
+
+  it('reports a measure as having no percentage in its heartbeat', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 1);
+    const percents: (number | null)[] = [];
+    const { beat, heard } = firstBeat();
+    const { api } = fakeApi({
+      heartbeat: async (_job, percent) => {
+        percents.push(percent);
+        heard();
+        return true;
+      },
+      completeWaveform: async () => {
+        await beat;
+        return true;
+      },
+    });
+    await workerWith(api, { heartbeatMs: 1 }).process(
+      aWaveformJob(),
+      new AbortController().signal,
+    );
+    expect(percents[0]).toBeNull();
+  });
+
+  it('reports the percentage of a conversion in its heartbeat', async () => {
+    makeTone(bins, join(dir, 'tone.mp3'), 1);
+    const percents: (number | null)[] = [];
+    const { beat, heard } = firstBeat();
+    const { api } = fakeApi({
+      heartbeat: async (_job, percent) => {
+        percents.push(percent);
+        heard();
+        return true;
+      },
+      complete: async () => {
+        await beat;
+        return true;
+      },
+    });
+    await workerWith(api, { heartbeatMs: 1 }).process(
+      aJob(),
+      new AbortController().signal,
+    );
+    expect(percents[0]).toEqual(expect.any(Number));
   });
 
   it('keeps converting when one heartbeat fails on the network', async () => {

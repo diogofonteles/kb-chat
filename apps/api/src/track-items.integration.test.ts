@@ -158,6 +158,8 @@ describe('Approved tracks become items (KBC-068)', () => {
       endMs: 360_000,
       ordinal: 3,
       total: 3,
+      version: 0,
+      fileVersion: 1,
     });
     expect(
       (await world.media.owner('GET', urlOf(recording.id))).json(),
@@ -455,7 +457,7 @@ describe('Approving again (KBC-068 BR-5)', () => {
     expect(await preparationOf(media, recording.id)).toBeNull();
   });
 
-  it('removes the replaced file once the new cut is published', async () => {
+  it('keeps the replaced file for who is on it (KBC-073 BR-3)', async () => {
     const world = await startWorld();
     const { media } = world;
     const { recording, tracks } = await published(world);
@@ -472,8 +474,8 @@ describe('Approving again (KBC-068 BR-5)', () => {
     const after = readdirSync(join(media.mediaDir, 'audio')).filter((name) =>
       name.startsWith(id),
     );
-    expect(after).toHaveLength(1);
-    expect(after).not.toEqual(before);
+    expect(after).toHaveLength(2);
+    expect(after).toEqual(expect.arrayContaining(before));
   });
 });
 
@@ -676,14 +678,10 @@ describe('A track follows its recording (KBC-068)', () => {
     const { tracks } = await published(world);
     const id = tracks[0]?.id ?? '';
     const url = urlOf(id);
-    expect((await media.owner('PATCH', url, { title: 'x' })).statusCode).toBe(
-      403,
-    );
     expect((await media.owner('GET', `${url}/edit`)).statusCode).toBe(409);
     expect(
       (await media.owner('POST', `${url}/transcription`, {})).statusCode,
     ).toBe(409);
-    expect((await media.owner('DELETE', url)).statusCode).toBe(409);
     expect((await media.owner('POST', `${url}/diarize`, {})).statusCode).toBe(
       409,
     );

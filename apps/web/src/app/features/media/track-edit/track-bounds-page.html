@@ -1,0 +1,184 @@
+<section class="page" aria-labelledby="track-bounds-title">
+  <a class="back" [routerLink]="['/midia', id()]" i18n="@@trackEdit.backToTrack"
+    >← Voltar à faixa</a
+  >
+  @if (loadError(); as text) {
+    <div role="alert">
+      <p class="error">{{ text }}</p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="view.reload()"
+        i18n="@@trackEdit.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (current(); as track) {
+    <h2 id="track-bounds-title" i18n="@@trackEdit.bounds">
+      Ajustar início e fim
+    </h2>
+    <p class="note">{{ track.title }} · {{ track.recordingTitle }}</p>
+    <audio
+      #auditionElement
+      hidden
+      preload="metadata"
+      [src]="streamUrl()"
+    ></audio>
+    @if (audition.failed()) {
+      <p class="error" role="alert" i18n="@@tracks.listenFailed">
+        Não consegui tocar este trecho. Tente de novo.
+      </p>
+    }
+    <app-track-timeline
+      [tracks]="numbered()"
+      [selected]="selected()"
+      [durationMs]="track.recordingDurationMs"
+      [peaks]="peaks()"
+      [peaksPerSecond]="peaksPerSecond()"
+      [words]="words()"
+      [snap]="snap()"
+      [cursorMs]="cursorMs()"
+      [playheadMs]="audition.positionMs()"
+      [readOnly]="track.locked"
+      (selectTrack)="ignoreOthers()"
+      (moved)="moveHandle($event)"
+      (cursorChange)="cursorMs.set($event)"
+      (listen)="listen($event)"
+      (edgeChange)="edge.set($event)"
+    />
+    <p class="times" aria-live="polite">{{ timesText() }}</p>
+    <div class="line">
+      <span class="note">
+        @if (edge() === 'start') {
+          <ng-container i18n="@@tracks.adjustStart"
+            >Ajustar o início:</ng-container
+          >
+        } @else {
+          <ng-container i18n="@@tracks.adjustEnd">Ajustar o fim:</ng-container>
+        }
+      </span>
+      <button
+        type="button"
+        class="secondary"
+        aria-label="Menos 0,5 segundo"
+        i18n-aria-label="@@tracks.nudgeBack"
+        (click)="nudge(-1)"
+      >
+        −0,5 s
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        aria-label="Mais 0,5 segundo"
+        i18n-aria-label="@@tracks.nudgeForward"
+        (click)="nudge(1)"
+      >
+        +0,5 s
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        (click)="listen('start')"
+        i18n="@@trackEdit.listenStart"
+      >
+        Ouvir o início
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        (click)="listen('end')"
+        i18n="@@trackEdit.listenEnd"
+      >
+        Ouvir o fim
+      </button>
+    </div>
+    <p class="note" i18n="@@trackEdit.bounds.note">
+      Posições e marcadores acompanham o novo recorte. Quem estiver ouvindo
+      continua até o fim do arquivo atual.
+    </p>
+    @if (conflict(); as theirs) {
+      <div class="conflict" role="alert">
+        <p i18n="@@trackEdit.conflict.bounds">
+          Outra pessoa mudou esta faixa enquanto você ajustava.
+        </p>
+        <p i18n="@@trackEdit.conflict.theirs">
+          Título dela: <strong>{{ theirs.title }}</strong>
+        </p>
+        <p i18n="@@trackEdit.conflict.theirBounds">
+          Limites dela: <strong>{{ theirTimes() }}</strong>
+        </p>
+        <p class="note" i18n="@@trackEdit.conflict.yourBounds">
+          O seu ajuste continua na barra.
+        </p>
+        @if (theirCutRunning()) {
+          <p class="note" i18n="@@trackEdit.conflict.theirCut">
+            O recorte dela ainda está em andamento. Salvar o seu por cima fica
+            possível quando ele terminar.
+          </p>
+        }
+        <div class="line-actions">
+          <button
+            type="button"
+            class="secondary"
+            (click)="useTheirs(theirs)"
+            i18n="@@trackEdit.conflict.useTheirs"
+          >
+            Usar o da outra pessoa
+          </button>
+          <button
+            type="button"
+            class="primary"
+            [disabled]="theirCutRunning()"
+            (click)="saveOver(theirs)"
+            i18n="@@trackEdit.conflict.saveMine"
+          >
+            Salvar o meu por cima
+          </button>
+        </div>
+      </div>
+    }
+    @if (failure(); as text) {
+      <p class="error" role="alert">{{ text }}</p>
+    }
+    @if (cutFailed()) {
+      <div class="line" role="alert">
+        <span i18n="@@trackEdit.cutFailed">Não foi possível recortar.</span>
+        <button
+          type="button"
+          class="secondary"
+          (click)="retryCut()"
+          i18n="@@trackEdit.retry"
+        >
+          Tentar de novo
+        </button>
+      </div>
+    }
+    <p class="status" role="status">
+      @if (cutting()) {
+        <ng-container i18n="@@trackEdit.cutting">Recortando…</ng-container>
+      } @else if (finished()) {
+        <ng-container i18n="@@trackEdit.cutDone">Pronto</ng-container>
+      }
+    </p>
+    <div class="line-actions">
+      <a
+        class="secondary"
+        [routerLink]="['/midia', id()]"
+        i18n="@@trackEdit.cancel"
+        >Cancelar</a
+      >
+      <button
+        type="button"
+        class="primary"
+        [disabled]="!canSave()"
+        (click)="save()"
+        i18n="@@trackEdit.bounds.save"
+      >
+        Salvar limites
+      </button>
+    </div>
+  } @else {
+    <p class="note" aria-busy="true" i18n="@@trackEdit.loading">Carregando…</p>
+  }
+</section>

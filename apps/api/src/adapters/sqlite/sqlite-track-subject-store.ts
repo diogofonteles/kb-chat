@@ -363,6 +363,24 @@ export class SqliteTrackSubjectStore implements TrackSubjectStorePort {
       );
   }
 
+  writeSummary(input: {
+    mediaId: string;
+    summary: string | null;
+    principal: string;
+    now: Date;
+  }): void {
+    const at = input.now.toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO media_track_subjects (media_id, summary, version, updated_by, updated_at)
+         VALUES (?, ?, 1, ?, ?)
+         ON CONFLICT (media_id) DO UPDATE SET summary = excluded.summary,
+           version = version + 1, updated_by = excluded.updated_by,
+           updated_at = excluded.updated_at`,
+      )
+      .run(input.mediaId, input.summary, input.principal, at);
+  }
+
   /** What "Aceitar" or "Recusar" does to the suggested summary. */
   private decidedSummary(write: {
     readonly mediaId: string;

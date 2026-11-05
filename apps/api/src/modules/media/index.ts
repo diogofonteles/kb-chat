@@ -35,7 +35,14 @@ export {
   ListeningService,
   type ListeningServiceDeps,
 } from './listening-service.js';
-export { actorOf, mediaRoutes, planActorOf } from './routes.js';
+export {
+  actorOf,
+  mediaRoutes,
+  planActorOf,
+  versionOf,
+  type TrackCall,
+  type TrackWrites,
+} from './routes.js';
 export { silenceRoutes } from './silence-routes.js';
 export { SilenceService, type SilenceServiceDeps } from './silence-service.js';
 export { waveformRoutes } from './waveform-routes.js';

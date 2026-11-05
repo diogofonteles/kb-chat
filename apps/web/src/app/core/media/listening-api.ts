@@ -37,16 +37,21 @@ export class ListeningApi {
   /**
    * Saves a position that continues the server's save `basedOn` (null: none seen); the
    * answer is what the server keeps, with its time. A 409 means another device saved since.
+   * `fileVersion`: the cut it was read on, so that an older one is translated (KBC-073 BR-3).
    */
   saveProgress(
     id: string,
-    save: { readonly positionMs: number; readonly basedOn: string | null },
+    save: {
+      readonly positionMs: number;
+      readonly basedOn: string | null;
+      readonly fileVersion?: number;
+    },
     options: { readonly keepalive?: boolean } = {},
   ): Observable<MediaProgress> {
     return this.http
       .put(
         progressUrl(id),
-        { positionMs: Math.floor(save.positionMs), basedOn: save.basedOn },
+        { ...save, positionMs: Math.floor(save.positionMs) },
         // `keepalive` lets the request outlive the page as it goes away (pagehide).
         { keepalive: options.keepalive ?? false },
       )

@@ -19,6 +19,7 @@ import { SqliteMediaSpendLedger } from './adapters/sqlite/sqlite-media-spend-led
 import { SqliteMediaSearch } from './adapters/sqlite/sqlite-media-search.js';
 import { SqliteMediaStore } from './adapters/sqlite/sqlite-media-store.js';
 import { SqliteTrackItemStore } from './adapters/sqlite/sqlite-track-item-store.js';
+import { SqliteTrackRevisionStore } from './adapters/sqlite/sqlite-track-revision-store.js';
 import { SqlitePreparationStore } from './adapters/sqlite/sqlite-preparation-store.js';
 import { SqliteTrackProposalStore } from './adapters/sqlite/sqlite-track-proposal-store.js';
 import { SqliteTrackSubjectStore } from './adapters/sqlite/sqlite-track-subject-store.js';
@@ -45,6 +46,7 @@ import type { TrackSubjectStorePort } from './ports/track-subject-store.js';
 import type { SilenceStorePort } from './ports/silence-store.js';
 import type { TranscriberStorePort } from './ports/transcriber-store.js';
 import type { TrackItemStorePort } from './ports/track-item-store.js';
+import type { TrackRevisionStorePort } from './ports/track-revision-store.js';
 import type { TranscriptStorePort } from './ports/transcript-store.js';
 import type { WaveformStorePort } from './ports/waveform-store.js';
 import type { SecretSealerPort } from './ports/secret-sealer.js';
@@ -63,6 +65,8 @@ export interface MediaDeps {
   readonly transcripts: TranscriptStorePort;
   /** The items approved tracks become (KBC-068, ADR 0029 §5). */
   readonly trackItems: TrackItemStorePort;
+  /** What changes a track after its approval (KBC-073). */
+  readonly trackRevisions: TrackRevisionStorePort;
   /** Paired transcribers (KBC-036). */
   readonly transcribers: TranscriberStorePort;
   /** The AI's proposal runs and draft tracks (KBC-067). */
@@ -169,6 +173,7 @@ const voiceSafes = (dir: string, secrets: MediaSecrets) => ({
 type MediaStores = Pick<
   MediaDeps,
   | 'trackItems'
+  | 'trackRevisions'
   | 'store'
   | 'listening'
   | 'bookmarks'
@@ -210,6 +215,7 @@ function storesOf(db: DatabaseSync): MediaStores {
     bookmarks: new SqliteBookmarkStore(db),
     transcripts,
     trackItems: new SqliteTrackItemStore(db, transcripts),
+    trackRevisions: new SqliteTrackRevisionStore(db),
     transcribers: new SqliteTranscriberStore(db),
     trackProposals: new SqliteTrackProposalStore(db),
     trackSubjects: new SqliteTrackSubjectStore(db),

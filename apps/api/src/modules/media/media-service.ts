@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import {
   hasAcceptedAudioExtension,
+  remapBookmark,
   type Author,
   type CreateMediaRequest,
   type MediaAuthor,
   type MediaItem,
   type TrackParent,
   type PreparationPlan,
+  type RemappedBookmark,
   type UploadCheck,
   type UploadCheckRequest,
 } from '@kb-chat/contracts';
@@ -23,6 +25,7 @@ import type {
 } from '../../ports/listening-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import type { TrackItemStorePort } from '../../ports/track-item-store.js';
+import type { TrackRevisionStorePort } from '../../ports/track-revision-store.js';
 import {
   canEditMedia,
   estimatedBytesOf,
@@ -43,6 +46,8 @@ export interface MediaActor {
   readonly seesTracks?: boolean;
   /** Has `media-subjects`: subjects reach the library (KBC-070 BR-3). */
   readonly seesSubjects?: boolean;
+  /** The person's name, for the history of a track (KBC-073 BR-8). */
+  readonly displayName?: string;
   readonly canSee: (topic: string) => boolean;
 }
 
@@ -77,6 +82,8 @@ export interface MediaServiceDeps {
   readonly authorOf: (topic: string, slug: string) => Author | null;
   /** The track items of a recording (KBC-068): what a removal takes with it. */
   readonly tracks?: Pick<TrackItemStorePort, 'filesOf' | 'liveTitles'>;
+  /** The cuts replaced, still served to who is on them (KBC-073 BR-3). */
+  readonly oldCuts?: Pick<TrackRevisionStorePort, 'oldFile'>;
   readonly now?: () => Date;
 }
 
@@ -433,16 +440,77 @@ export class MediaService {
     return item;
   }
 
-  async playable(actor: MediaActor, mediaId: string): Promise<PlayableFile> {
+  /** Whether this item is a track; 404 when the person cannot see it. */
+  isTrack(actor: MediaActor, mediaId: string): boolean {
+    return this.visible(actor, mediaId).track !== null;
+  }
+
+  /**
+   * `fileVersion`: the cut the player started on (KBC-073 BR-3). An old one is served while
+   * it is kept, and once gone it is a 404: the new bytes at that offset would mix two cuts.
+   */
+  async playable(
+    actor: MediaActor,
+    mediaId: string,
+    fileVersion?: number,
+  ): Promise<PlayableFile> {
     const media = this.visible(actor, mediaId);
-    const rendition = this.deps.store.getRendition(mediaId);
     if (media.archivedAt !== null) throw notFound();
+    const rendition = this.renditionOf(media, fileVersion);
     if (media.status !== 'ready' || !rendition)
       throw new AppError('MEDIA_NOT_READY', 'This media cannot be played yet');
     const file = await this.deps.files.stat(rendition.path);
     if (!file)
       throw new AppError('MEDIA_NOT_READY', 'The converted file is missing');
     return { path: rendition.path, mime: rendition.mime, ...file };
+  }
+
+  private renditionOf(media: MediaRecord, fileVersion: number | undefined) {
+    const current = media.track?.fileVersion;
+    if (fileVersion === undefined || fileVersion === current)
+      return this.deps.store.getRendition(media.id);
+    const old = this.deps.oldCuts?.oldFile(media.id, fileVersion);
+    if (!old) throw notFound();
+    return old;
+  }
+
+  /**
+   * A position read on an older cut, in the current one's time (KBC-073 BR-3); past the end
+   * it is the end. With the old cut forgotten there is no way to know: the player's number
+   * stays, as any other position.
+   */
+  currentPosition(
+    item: MediaItem,
+    position: { readonly positionMs: number; readonly fileVersion?: number },
+  ): number {
+    const { positionMs } = position;
+    const { parent, durationMs } = item;
+    const old = this.oldCutOf(item, position.fileVersion);
+    if (!parent || !old) return positionMs;
+    const moved = positionMs + old.startMs - parent.startMs;
+    return Math.max(0, Math.min(moved, durationMs ?? moved));
+  }
+
+  /** A bookmark read on an older cut: the rule of one that was there when it changed (BR-4). */
+  bookmarkLanding(
+    item: MediaItem,
+    position: { readonly positionMs: number; readonly fileVersion?: number },
+  ): RemappedBookmark {
+    const { positionMs } = position;
+    const { parent, durationMs } = item;
+    const old = this.oldCutOf(item, position.fileVersion);
+    if (!parent || !old) return { inTrack: true, positionMs };
+    return remapBookmark(positionMs, {
+      oldStartMs: old.startMs,
+      newStartMs: parent.startMs,
+      durationMs: durationMs ?? parent.endMs - parent.startMs,
+    });
+  }
+
+  private oldCutOf(item: MediaItem, fileVersion: number | undefined) {
+    if (fileVersion === undefined || fileVersion === item.parent?.fileVersion)
+      return null;
+    return this.deps.oldCuts?.oldFile(item.id, fileVersion) ?? null;
   }
 
   /** The bytes `start..end` of a playable file. */
@@ -554,7 +622,8 @@ export class MediaService {
   /** Where a track item comes from (FR-4); null for a recording. */
   private parentOf(record: MediaRecord): TrackParent | null {
     if (!record.track) return null;
-    const { parentId, startMs, endMs, ordinal } = record.track;
+    const { parentId, startMs, endMs, ordinal, version, fileVersion } =
+      record.track;
     const parent = this.deps.store.getMedia(parentId);
     if (!parent) return null;
     return {
@@ -564,6 +633,8 @@ export class MediaService {
       endMs,
       ordinal,
       total: this.deps.store.trackTotal(parentId),
+      version,
+      fileVersion,
     };
   }
 

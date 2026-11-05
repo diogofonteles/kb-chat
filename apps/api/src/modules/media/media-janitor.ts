@@ -13,6 +13,8 @@ export interface MediaJanitorDeps {
   readonly backfillWaveforms?: () => string | null;
   /** The guided flow goes on with no page open (KBC-072 BR-8). */
   readonly advancePreparations?: () => Promise<void>;
+  /** Replaced cuts after a day, deleted tracks after 30 days (KBC-073 BR-3, BR-7). */
+  readonly purgeTrackFiles?: () => Promise<void>;
   readonly now?: () => Date;
 }
 
@@ -55,6 +57,7 @@ export class MediaJanitor {
     );
     this.backfill();
     await this.deps.advancePreparations?.();
+    await this.deps.purgeTrackFiles?.();
     const result = {
       requeued: reaped.requeued,
       failed: reaped.failed,

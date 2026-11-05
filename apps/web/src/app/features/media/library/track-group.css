@@ -50,14 +50,21 @@
 
 .track {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   grid-template-areas:
-    'ordinal play title'
-    'ordinal play meta';
+    'ordinal play title menu'
+    'ordinal play meta menu';
   align-items: center;
   gap: 0 var(--space-2);
   padding: var(--space-1) var(--space-2);
   border-left: 2px solid var(--color-border);
+}
+
+/* The row's end, not its start as on a media row (T14): the menu opens to the left of it. */
+app-menu-button {
+  --menu-phone-left: auto;
+  --menu-phone-right: 0;
+  grid-area: menu;
 }
 
 .ordinal {
@@ -112,8 +119,8 @@
 @container (max-width: 18rem) {
   .track {
     grid-template-areas:
-      'ordinal play meta'
-      'title title title';
+      'ordinal play meta meta'
+      'title title title menu';
     padding-inline: var(--space-1) 0;
   }
 

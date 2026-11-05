@@ -50,7 +50,7 @@ function setup(email = 'ana@example.com') {
     media.setCurrentTime(seconds);
     media.emit('timeupdate');
   };
-  const start = (source = A) => {
+  const start = (source: typeof A & { fileVersion?: number } = A) => {
     engine.load(source);
     media.setDuration(source.durationMs / 1000);
     media.emit('loadedmetadata');
@@ -106,6 +106,19 @@ describe('ProgressSaver (KBC-041 FR-3, NFR-2)', () => {
     expect(puts()).toEqual([]);
     first[0]?.flush(savedAs(10_000));
     expect(puts()[0]?.request.body.positionMs).toBe(11_000);
+  });
+
+  it('tells the server the cut the position was read on (KBC-073 BR-3)', async () => {
+    const { playAt, start, pause, puts } = setup();
+    start({ ...A, fileVersion: 1 });
+    playAt(9.613);
+    await vi.advanceTimersByTimeAsync(1_000);
+    pause();
+    expect(puts()[0]?.request.body).toEqual({
+      positionMs: 9_613,
+      basedOn: null,
+      fileVersion: 1,
+    });
   });
 
   it('sends at once on pause, and never the same position twice', async () => {

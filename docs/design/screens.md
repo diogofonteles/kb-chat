@@ -486,6 +486,16 @@ Título, autoria ("Mestre Laércio — Nova Alexandria") e o ícone do app na te
 - Marcadores com nota, pulos configuráveis, encurtar silêncios, palavra a palavra e timer para dormir entraram por decisão do dono em 2026-10-28 (KBC-042 a KBC-046).
 - **Precisa de teste com usuários** (UP-25): os rótulos ⟲15/30⟳ e o "Continuar de" são entendidos? O mini-player atrapalha a leitura dos resultados no celular? Entra no teste da fase 2 com 1 a 2 colegas (`docs/product/context.md`, ## Research).
 
+### Editar uma faixa aplicada (KBC-073)
+
+- **Página da faixa, para `media-edit`:** abaixo do cabeçalho, **Editar**, **Ajustar início e fim**, **Apagar faixa** (perigo) e "Histórico" (recolhido). Faixa apagada: **Restaurar faixa** junto do aviso. Com a edição da gravação reaberta: "Esta gravação está em edição." e o link para ela.
+- **Editar faixa** (diálogo): Título, Descrição, Quem pergunta, Quem responde; "Aplicar o nome: só nesta faixa / em toda a gravação", quando o nome mudado é de um papel com voz; Assuntos (`media-classify`); "Sugerir de novo com IA" (`media-edit-ai`): custo, "Confirmar e sugerir", e cada sugestão com **Usar**. Conflito: mostra o título da outra pessoa e mantém o que foi escrito, com **Usar o da outra pessoa** e **Salvar o meu por cima**.
+- **Ajustar início e fim** (`/midia/{id}/limites`): a barra do T20 numa faixa só, vizinhas visíveis e limitando, ±0,5 s, "Ouvir o início", "Ouvir o fim", **Salvar limites**, e "Recortando…", "Pronto". Corte falho: "Não foi possível recortar." com **Tentar de novo**. Conflito: a mudança da outra pessoa (título e limites), o ajuste continua na barra, **Usar o da outra pessoa** / **Salvar o meu por cima**.
+- **Apagar faixa:** confirmação com o impacto ("3 pessoas ouviram esta faixa e 5 marcadores estão nela. Você pode restaurar em até 30 dias."). Playlists, favoritos e cópias offline entram na frase quando existirem.
+- **Gravação:** "Faixas apagadas" com **Restaurar** e "restaura até dd/mm", só quando há alguma.
+- **Biblioteca:** ⋯ na linha da faixa com as mesmas três ações.
+- **Marcador movido:** "1 marcador foi movido para a gravação completa porque a faixa mudou", com **Ver a gravação** e **Entendi**, em "Meus marcadores" e na faixa.
+
 ## T16. Biblioteca (KBC-051, KBC-052, KBC-055, KBC-059; ⤓ do KBC-056)
 
 **Objetivo:** navegar só na mídia, no modelo do "Your Library" do Spotify: continuar o que estava ouvindo, achar uma palestra (áudio ou vídeo) pelos filtros e chegar às próprias listas. **Contexto:** em casa no desktop, escolhendo o que estudar; no celular, retomando no trajeto. **Sucesso:** retomar a última palestra em 1 clique a partir da Biblioteca; achar uma palestra por autor e estado em até 3 ações (chip, chip, clique); nenhum controle depende de arrastar ou de passar o mouse.

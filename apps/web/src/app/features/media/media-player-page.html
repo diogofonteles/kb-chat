@@ -85,6 +85,15 @@
             errados.
           </p>
         }
+        @if (canEditTrack()) {
+          <app-moved-bookmarks-notice [mediaId]="current.id" />
+          <app-track-actions
+            [media]="current"
+            (changed)="trackChanged($event)"
+          />
+        } @else if (current.parent) {
+          <app-moved-bookmarks-notice [mediaId]="current.id" />
+        }
         @if (current.canEdit) {
           <button
             #editButton
@@ -222,6 +231,7 @@
   @if (ready()) {
     <app-bookmark-list class="bookmarks" />
     @if (canEdit() && media(); as current) {
+      <app-archived-tracks class="archived" [recordingId]="current.id" />
       <app-voices-panel
         class="voices"
         [mediaId]="current.id"

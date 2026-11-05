@@ -1,8 +1,11 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { LibraryItem, LibraryTrack } from '@kb-chat/contracts';
+import type { Feature, LibraryItem, LibraryTrack } from '@kb-chat/contracts';
+import { SessionStore } from '@core/auth/session-store.js';
 import { describe, expect, it, vi } from 'vitest';
 import { aMediaItem, mediaId } from '../../../testing/media-fixtures.js';
+import { aMe } from '../../../testing/session-fixtures.js';
 import { TrackGroup } from './track-group.js';
 
 const aTrack = (ordinal: number): LibraryTrack => ({
@@ -17,6 +20,8 @@ const aTrack = (ordinal: number): LibraryTrack => ({
       endMs: 65_000,
       ordinal,
       total: 2,
+      version: 0,
+      fileVersion: 1,
     },
   }),
   kind: 'audio',
@@ -39,6 +44,36 @@ function setup(openByDefault = false, item = recording) {
 }
 
 describe('TrackGroup (KBC-068 FR-5)', () => {
+  it('KBC-073: ⋯ on a track exists only for who edits', async () => {
+    const editor = aMe({ features: ['media', 'media-edit'] });
+    for (const [me, shown] of [
+      [aMe({ features: ['media'] }), 0],
+      [editor, 2],
+    ] as const) {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideRouter([]),
+          {
+            provide: SessionStore,
+            useValue: {
+              me: signal(me),
+              can: (feature: Feature) => me.features.includes(feature),
+            },
+          },
+        ],
+      });
+      const fixture = TestBed.createComponent(TrackGroup);
+      fixture.componentRef.setInput('item', recording);
+      fixture.componentRef.setInput('openByDefault', true);
+      await fixture.whenStable();
+      const root: HTMLElement = fixture.nativeElement;
+      expect(root.querySelectorAll('[aria-label^="Ações de"]').length).toBe(
+        shown,
+      );
+    }
+  });
+
   it('shows the count closed, and the tracks in order once opened', async () => {
     const fixture = setup();
     await fixture.whenStable();

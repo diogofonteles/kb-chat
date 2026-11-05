@@ -94,6 +94,19 @@ describe('ListeningApi (KBC-041)', () => {
     await expect(saved).resolves.toEqual(kept);
   });
 
+  it('names the cut the position was read on, for the server to translate it (KBC-073 BR-3)', () => {
+    const { api, http } = setup();
+    api
+      .saveProgress(ID, { positionMs: 9_613, basedOn: null, fileVersion: 1 })
+      .subscribe();
+    const put = http.expectOne(`/api/v1/media/${ID}/progress`);
+    expect(put.request.body).toEqual({
+      positionMs: 9_613,
+      basedOn: null,
+      fileVersion: 1,
+    });
+  });
+
   it('can send one that outlives the page (FR-3)', () => {
     const { api, http } = setup();
     api

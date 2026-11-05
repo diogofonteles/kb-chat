@@ -14,6 +14,7 @@ import {
 import type { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { MediaStorePort } from '../../ports/media-store.js';
+import type { TrackRevisionStorePort } from '../../ports/track-revision-store.js';
 import type {
   LinkTarget,
   StoredLink,
@@ -49,6 +50,8 @@ export interface TrackSubjectServiceDeps {
   readonly conceptsOf: (collection: string) => readonly string[];
   /** What listeners read of a track (KBC-070). */
   readonly directory: Pick<SubjectDirectory, 'about'>;
+  /** Each change of a track's subjects enters its history (KBC-073 BR-8). */
+  readonly history?: Pick<TrackRevisionStorePort, 'record'>;
   readonly now?: () => Date;
 }
 
@@ -181,6 +184,7 @@ export class TrackSubjectService {
       linked: stored?.links ?? [],
     });
     if (accepted.length > MAX_TRACK_SUBJECTS) throw tooMany();
+    const before = this.read(call.actor, call.mediaId);
     this.written(
       this.deps.store.save({
         ...this.writeOf(call),
@@ -188,7 +192,7 @@ export class TrackSubjectService {
         summary: request.summary,
       }),
     );
-    return this.read(call.actor, call.mediaId);
+    return this.recorded(call, before);
   }
 
   /** "Aceitar" and "Recusar" (FR-4): only here does a suggestion start to count (BR-3). */
@@ -200,6 +204,7 @@ export class TrackSubjectService {
     this.suggestionsOf(links, request.refuse);
     const held = links.filter((link) => link.status === 'accepted').length;
     if (held + accepted.length > MAX_TRACK_SUBJECTS) throw tooMany();
+    const before = this.read(call.actor, call.mediaId);
     this.written(
       this.deps.store.decide({
         ...this.writeOf(call),
@@ -208,7 +213,30 @@ export class TrackSubjectService {
         summary: request.summary,
       }),
     );
-    return this.read(call.actor, call.mediaId);
+    return this.recorded(call, before);
+  }
+
+  /** What a write changed, for the track's history; the answer is the track as it is now. */
+  private recorded(call: SubjectCall, before: TrackSubjects): TrackSubjects {
+    const after = this.read(call.actor, call.mediaId);
+    const changes = [
+      this.changeOf('subjects', namesOf(before), namesOf(after)),
+      this.changeOf('summary', before.summary, after.summary),
+    ].flat();
+    this.deps.history?.record(call.mediaId, changes, {
+      principal: call.actor.principal,
+      name: call.actor.displayName ?? call.actor.principal,
+      now: this.now(),
+    });
+    return after;
+  }
+
+  private changeOf(
+    field: 'subjects' | 'summary',
+    before: string | null,
+    after: string | null,
+  ) {
+    return before === after ? [] : [{ field, before, after }];
   }
 
   private decisionOn(topic: string, link: StoredLink) {
@@ -332,6 +360,9 @@ export class TrackSubjectService {
     if (version === null) throw stale();
   }
 }
+
+const namesOf = (track: TrackSubjects): string | null =>
+  track.subjects.map((one) => one.name).join(', ') || null;
 
 const targetKey = (target: LinkTarget): string =>
   target.kind === 'free' ? target.id : subjectKey(target.name);

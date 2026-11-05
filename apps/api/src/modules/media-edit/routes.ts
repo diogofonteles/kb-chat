@@ -18,9 +18,8 @@ import type {
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { AppError } from '../../app-error.js';
 import { assertFeature, type RouteAccess } from '../auth/index.js';
-import { actorOf } from '../media/index.js';
+import { actorOf, versionOf } from '../media/index.js';
 import type { EditCall, TrackEditService } from './track-edit-service.js';
 
 /** Editing is `media-edit`, on top of `media` as every other media route (BR-8). */
@@ -35,7 +34,6 @@ type TypedRoutes = FastifyInstance<
 const EDIT: RouteAccess = { feature: 'media-edit' };
 const NAVIGATE: RouteAccess = { feature: 'media-tracks' };
 const mediaParams = z.object({ id: mediaIdSchema });
-const ETAG = /^"(\d+)"$/;
 
 const editSchema = {
   params: mediaParams,
@@ -66,14 +64,6 @@ const OPTIONS = {
     schema: { params: mediaParams, response: { 200: mediaTracksSchema } },
   },
 } as const;
-
-/** The version a write says it read (FR-1): a write without one is refused (428). */
-function versionOf(request: FastifyRequest): number {
-  const match = ETAG.exec(request.headers['if-match'] ?? '');
-  if (!match?.[1])
-    throw new AppError('EDIT_VERSION_REQUIRED', 'If-Match is required');
-  return Number(match[1]);
-}
 
 /** The person, the media and the version of a write. */
 function callOf(request: FastifyRequest, mediaId: string): EditCall {

@@ -29,6 +29,10 @@ export interface TrackLink {
   readonly endMs: number;
   /** Among the approved tracks; null once it left the edit. */
   readonly ordinal: number | null;
+  /** Guards a person's write (KBC-073 BR-10). */
+  readonly version: number;
+  /** Which cut is the file (KBC-073 BR-3). */
+  readonly fileVersion: number;
 }
 
 /** A media item as stored (ADR 0022): the catalog row the module turns into the contract. */
