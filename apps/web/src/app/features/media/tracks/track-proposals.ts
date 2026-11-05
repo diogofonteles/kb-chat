@@ -4,8 +4,8 @@ import {
   DestroyRef,
   ElementRef,
   LOCALE_ID,
+  afterRenderEffect,
   computed,
-  effect,
   inject,
   input,
   output,
@@ -82,9 +82,13 @@ export class TrackProposals {
 
   private readonly asking = signal<Asking>({ kind: 'idle' });
   protected readonly error = signal('');
-  /** The value rose: its notice is brought into view, clear of the editor's bottom bar. */
+  /**
+   * The value rose: its notice and the actions under it are brought into view, clear of the
+   * editor's bottom bar (the actions are scrolled to; the notice sits right above them).
+   */
   private readonly rose = signal(false);
   private readonly notice = viewChild<ElementRef<HTMLElement>>('notice');
+  private readonly actions = viewChild<ElementRef<HTMLElement>>('actions');
   private readonly accepted = signal<readonly number[]>([]);
 
   protected readonly estimate = computed(() => {
@@ -139,9 +143,12 @@ export class TrackProposals {
   }
 
   constructor() {
-    effect(() => {
-      const notice = this.notice()?.nativeElement;
-      if (notice && this.rose()) notice.scrollIntoView({ block: 'nearest' });
+    afterRenderEffect({
+      write: () => {
+        const actions = this.actions()?.nativeElement;
+        if (actions && this.notice() && this.rose())
+          actions.scrollIntoView({ block: 'nearest' });
+      },
     });
   }
 
@@ -172,26 +179,31 @@ export class TrackProposals {
     if (asking.kind !== 'estimated') return;
     this.rose.set(false);
     this.error.set('');
-    this.asking.set({ ...asking, kind: 'starting' });
+    // This press's own state: its answer counts only while the screen still waits on it.
+    const pressed: Asking = { ...asking, kind: 'starting' };
+    this.asking.set(pressed);
     this.start()(asking.estimate.estimateUsd)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (result) => this.answered(result, asking.estimate),
+        next: (result) => this.answered(result, { pressed, asking }),
         // No answer: another press got there first, and this one stays to press again.
         complete: () => {
-          if (this.asking().kind === 'starting') this.asking.set(asking);
+          if (this.asking() === pressed) this.asking.set(asking);
         },
       });
   }
 
-  private answered(result: ProposeResult, estimate: ProposalEstimate): void {
+  /** A press cancelled, or followed by a newer one, answers too late to change anything (PD-03). */
+  private answered(
+    result: ProposeResult,
+    press: { readonly pressed: Asking; readonly asking: Asking },
+  ): void {
+    if (this.asking() !== press.pressed) return;
     if (result.kind === 'started') {
       this.asking.set({ kind: 'idle' });
       return;
     }
-    // Cancelled while it waited: a late refusal reopens nothing (PD-03).
-    if (this.asking().kind !== 'starting') return;
-    this.asking.set({ kind: 'estimated', estimate });
+    this.asking.set(press.asking);
     if (result.kind === 'stopped') this.showStopped(result.result);
     else if (roseEstimateOf(result.error) !== null) this.askAgain();
     else this.showError(result.error);

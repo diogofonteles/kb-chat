@@ -161,9 +161,21 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
       .mockReturnValue(of({ kind: 'started' }));
     const rendered = await estimated({ start });
     const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
-    rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.05 });
-    await rendered.fixture.whenStable();
+    try {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Confirmar e propor' }),
+      );
+      rendered.http.expectOne(URL).flush({ ...ESTIMATE, estimateUsd: 0.05 });
+      await rendered.fixture.whenStable();
+      // The notice and the actions under it come into view together, clear of the
+      // editor's bottom bar on a phone (QA R2-5): the actions are what is scrolled to.
+      const actions = screen.getByRole('button', {
+        name: 'Confirmar e propor',
+      }).parentElement;
+      expect(scrolled.mock.contexts.at(-1)).toBe(actions);
+    } finally {
+      scrolled.mockRestore();
+    }
     expect(screen.getByText(/Custa cerca de US\$\s0,05/)).toBeTruthy();
     // Neutral: a price or a plan may have changed it, not only a save.
     const notice = screen.getByText(
@@ -175,9 +187,6 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
       notice.compareDocumentPosition(confirm) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    // Brought into view, clear of the editor's bottom bar on a phone (QA R2-5).
-    expect(scrolled.mock.contexts.at(-1)).toBe(notice);
-    scrolled.mockRestore();
     expect(start).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
     expect(start).toHaveBeenLastCalledWith(0.05);
@@ -208,6 +217,37 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
     expect(
       screen.getByRole('button', { name: 'Propor faixas com IA' }),
     ).toBeTruthy();
+  });
+
+  it('takes each answer for its own press: an older one never stands for a newer (PD-03)', async () => {
+    const first = new Subject<ProposeResult>();
+    const second = new Subject<ProposeResult>();
+    const start = vi
+      .fn<(usd: number) => Observable<ProposeResult>>()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const rendered = await estimated({ start });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    (await ask(rendered)).flush(ESTIMATE);
+    await rendered.fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e propor' }));
+    // The first press answers late: it must not take the place of the second.
+    first.next({ kind: 'refused', error: new Error('late') });
+    first.complete();
+    await rendered.fixture.whenStable();
+    rendered.http.expectNone(URL);
+    expect(
+      screen.getByRole('button', { name: 'Confirmar e propor' }),
+    ).toHaveProperty('disabled', true);
+    // The second press's answer is the one taken.
+    second.next({ kind: 'started' });
+    second.complete();
+    await rendered.fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Propor faixas com IA' }),
+    ).toBeTruthy();
+    expect(start).toHaveBeenCalledTimes(2);
   });
 
   it('says what the server refused', async () => {

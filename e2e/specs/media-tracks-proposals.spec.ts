@@ -265,6 +265,13 @@ test('KBC-097: a retry says what it costs, also after a reload, and a dearer one
   expect((noticeBox?.y ?? 0) + (noticeBox?.height ?? 0)).toBeLessThanOrEqual(
     footBox?.y ?? 0,
   );
+  // The actions under it are clear of the bar too (QA round 3).
+  for (const name of ['Confirmar e propor', 'Cancelar']) {
+    const box = await page.getByRole('button', { name }).boundingBox();
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
+      footBox?.y ?? 0,
+    );
+  }
   expect(sent).toEqual([{ dryRun: false, acceptedUsd: 0.02 }]);
   expect(
     await page.evaluate(

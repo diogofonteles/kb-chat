@@ -27,7 +27,7 @@
     }
     <!-- Before the actions: on a phone the bar at the bottom would hide it. -->
     <ng-container *ngTemplateOutlet="errorText" />
-    <div class="buttons">
+    <div #actions class="buttons">
       @if (shown.allowed) {
         <button
           type="button"
