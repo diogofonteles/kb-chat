@@ -176,7 +176,11 @@ export class GroqPanel {
   protected saveMode(event: Event): void {
     event.preventDefault();
     if (this.mode() === 'idle' && !this.hoursValid()) return;
-    const request = { mode: this.mode(), idleHours: this.idleHours() };
+    // Another mode keeps the hours saved before: a draft left invalid is not sent.
+    const idleHours = this.hoursValid()
+      ? this.idleHours()
+      : (this.settings()?.idleHours ?? GROQ_IDLE_HOURS.default);
+    const request = { mode: this.mode(), idleHours };
     this.run('mode', this.api.setMode(request), (settings) => {
       this.settings.set(settings);
       this.say('mode', {

@@ -124,6 +124,22 @@ describe('GroqPanel (KBC-037)', () => {
     expect(status(1)).toContain('Modo salvo.');
   });
 
+  it('saves another mode with the hours saved before when the hours field was left invalid', async () => {
+    await open({ ...OFF, connected: true, idleHours: 8 });
+    root().querySelector<HTMLInputElement>('input[value="idle"]')?.click();
+    await fixture.whenStable();
+    await type('#groq-hours', '0');
+    root().querySelector<HTMLInputElement>('input[value="manual"]')?.click();
+    await fixture.whenStable();
+    button('Salvar modo').click();
+    await fixture.whenStable();
+    const saved = http.expectOne('/api/v1/media/groq/mode');
+    expect(saved.request.body).toEqual({ mode: 'manual', idleHours: 8 });
+    saved.flush({ ...OFF, connected: true, mode: 'manual', idleHours: 8 });
+    await fixture.whenStable();
+    expect(status(1)).toContain('Modo salvo.');
+  });
+
   it('lets the owner change the cap; another master only reads it (BR-2)', async () => {
     await open();
     await type('#groq-cap', '25');
