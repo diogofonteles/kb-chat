@@ -1,0 +1,102 @@
+---
+id: KBC-093
+title: "Corrigir palavras da transcrição"
+status: ready
+slice: phase-2-editing
+outcome: quem prepara um áudio corrige na hora uma palavra que a transcrição errou, e a palavra certa passa a valer na busca, nas legendas, no destaque e nas faixas, com histórico e desfazer
+depends_on: [KBC-092, KBC-045, KBC-068, KBC-073]
+---
+
+# KBC-093 — Corrigir palavras da transcrição
+
+## Story
+Como quem prepara um áudio, quero clicar numa palavra que a transcrição errou (um nome, um termo da doutrina) e escrever a certa, para que a busca encontre a gravação pela palavra certa e quem ouve leia o que foi dito, sem transcrever tudo de novo.
+
+## Scope
+**In:** clicar (ou tocar) numa palavra do **Texto da faixa** e da **transcrição completa** do KBC-092, nos passos 2 (`/midia/{id}/preparar`) e 3 (`/midia/{id}/faixas`), e corrigir no painel **Corrigir palavra**: trocar o texto, juntar até 5 palavras seguidas do mesmo trecho numa só correção, apagar uma palavra inventada; caminho por teclado (**Procurar palavra**); histórico **Correções** por gravação, com **Desfazer**; propagação na mesma transação para o texto, o índice de busca, as legendas, o destaque palavra a palavra e as faixas publicadas; reaplicar as correções quando a gravação é transcrita de novo, e listar as que não couberam; permissão `media-correct` ("Corrigir transcrição").
+**Out:** corrigir na página do player (painel Transcrição do KBC-038) e na página da faixa publicada; mudar os tempos de uma palavra; dividir ou juntar trechos (segmentos); trocar todas as ocorrências de uma vez; levar a palavra para a lista de termos (KBC-040) automaticamente; refazer resumos, títulos e assuntos já propostos pela IA; vídeo.
+
+## Business rules
+- BR-1: uma correção troca o texto de 1 a 5 palavras **seguidas do mesmo trecho** da transcrição atual da **gravação**. Os tempos de cada palavra não mudam e o número de palavras guardadas também não: a primeira recebe o texto novo e as outras ficam vazias. O texto novo pode ter espaços ("concerteza" → "com certeza").
+- BR-2: texto novo vazio apaga a palavra (ou as palavras escolhidas) do texto; os tempos continuam guardados e a palavra apagada não aparece no texto, na busca nem nas legendas.
+- BR-3: o texto vale como foi digitado: maiúsculas, acentos e pontuação são da pessoa (o campo vem com a palavra como está, pontuação junto). Espaços nas pontas caem e espaços repetidos viram um; no máximo 80 caracteres; sem quebra de linha. Texto igual ao atual não grava nada.
+- BR-4: uma correção vale na transcrição atual sem criar versão nova: a transcrição ganha uma **revisão** (número que sobe a cada correção ou desfazer). Vozes, rascunho de faixas e o aviso "a transcrição mudou" do editor não são afetados (ADR 0034).
+- BR-5: quem tem `media-correct` e vê o acervo corrige qualquer palavra e desfaz as próprias correções; um master desfaz a de qualquer pessoa. Sem `media-correct`, as palavras não reagem ao clique e a API responde 403. Mídia que a pessoa não vê: 404. Uma faixa publicada não é corrigida por ela mesma: a correção é na gravação (409 `track-derived`).
+- BR-6: duas pessoas corrigindo ao mesmo tempo: a correção leva o texto que a pessoa viu; se as palavras ainda dizem isso, grava (mesmo que outra palavra tenha mudado no meio); se mudaram, nada é gravado e a pessoa vê o texto novo e quem mudou (409 `word-changed`). Se a gravação foi transcrita de novo, nada é gravado (412). Reenviar a mesma correção depois de gravada não grava de novo.
+- BR-7: **Desfazer** volta as palavras ao texto de antes da correção, e só quando elas ainda dizem o texto que a correção pôs; senão, 409 `changed-since` e a pessoa corrige à mão. Desfazer é uma correção nova no histórico, nunca apaga uma linha.
+- BR-8: o histórico guarda de cada correção: quem, quando, a versão e a revisão, o tempo, o texto de antes e o de depois, e se foi desfeita, reaplicada ou não reaplicada. Nada é apagado (só some com a gravação).
+- BR-9: quando a gravação é transcrita de novo, cada correção ainda em vigor é reaplicada na versão nova se lá houver o mesmo número de palavras no mesmo tempo (ponto médio de cada palavra dentro do intervalo da correção) e elas disserem o mesmo texto de antes (sem diferença de maiúsculas, acentos e pontuação). As outras ficam no histórico como **não reaplicadas**, com o texto que a versão nova tem ali.
+- BR-10: uma palavra corrigida entra nas faixas publicadas cujo intervalo a contém, pela regra de corte do KBC-068 (ponto médio), na mesma transação.
+
+## Functional requirements
+- FR-1: no Texto da faixa e na transcrição completa (KBC-092), quem tem `media-correct` clica numa palavra e abre **Corrigir palavra** com a palavra marcada no texto, o campo preenchido e selecionado, a palavra anterior e a seguinte como contexto, e **Ouvir a palavra** (toca do início da palavra 1 s antes até 1 s depois, pela `TrackAudition`). (BR-1, BR-3)
+- FR-2: no painel, **◀ Anterior** / **Próxima ▶** movem para a palavra vizinha e **Incluir a próxima** / **Incluir a anterior** estendem a escolha até 5 palavras do mesmo trecho; com um trecho selecionado no texto ao clicar, a escolha começa por ele. (BR-1)
+- FR-3: **Salvar** (ou Enter) grava; **Apagar palavra** grava texto vazio; **Cancelar** (ou Esc) fecha sem gravar e devolve o foco à palavra/botão de origem. Depois de gravar, o texto mostra a palavra nova sem recarregar a página e aparece "Palavra corrigida." com **Desfazer** por 10 s. (BR-2, BR-7)
+- FR-4: **Procurar palavra** no bloco de texto: um campo que lista as ocorrências na faixa (ou na transcrição completa, quando aberta), com tempo e contexto; escolher uma abre **Corrigir palavra** nela. É o caminho por teclado e leitor de tela.
+- FR-5: `POST /api/v1/media/{id}/transcript/corrections` com `{ version, position, count, expected, text }` grava a correção, atualiza na mesma transação o texto do trecho, a linha dele em `segments_fts`, a revisão, as faixas publicadas atingidas e o histórico, e responde 201 com a correção, a revisão nova e o trecho reescrito. Erros: 403, 404, 409 `word-changed`/`track-derived`/`not-contiguous`/`not-aligned`, 412 versão antiga, 422 texto inválido. (BR-1 a BR-6, BR-10)
+- FR-6: `GET /api/v1/media/{id}/transcript/corrections` lista o histórico, mais nova primeiro, em páginas; `POST …/corrections/{correctionId}/undo` desfaz. (BR-7, BR-8)
+- FR-7: `GET …/transcript` e `…/transcript/words` passam a dizer `revision` e cada palavra a sua `position`; o ETag das legendas inclui a revisão. A web troca o texto e as palavras quando a revisão muda, como faz com uma versão nova (KBC-092 FR-6), sem destacar palavra errada. (BR-4)
+- FR-8: ao gravar a versão nova de uma transcrição (`completeTranscribe`), na mesma transação, as correções em vigor são reaplicadas ou marcadas como não reaplicadas; a tela do passo mostra "N correções reaplicadas; M não couberam na transcrição nova · Ver" levando ao histórico, onde cada não reaplicada tem **Corrigir aqui**. (BR-9)
+- FR-9: histórico **Correções** (botão no bloco de texto, abre um painel lateral no desktop e uma folha no celular): quem, quando, "antes → depois", tempo com **Ouvir**, estado, e **Desfazer** quando a pessoa pode. (BR-5, BR-8)
+- FR-10: `media-correct` ("Corrigir transcrição") em "Pessoas e permissões", desligada para todos até um master dar; masters têm por padrão. (BR-5)
+
+## Non-functional requirements
+- NFR-1: gravar uma correção numa gravação de 2 h com 12 faixas publicadas leva p95 ≤ 150 ms na API (teste de integração com dados sintéticos), e a palavra nova aparece no texto em ≤ 500 ms depois do clique em Salvar (E2E).
+- NFR-2: uma correção nunca deixa o índice de busca, o texto do trecho e as faixas em desacordo: tudo numa transação; um erro no meio não muda nada (teste com falha injetada).
+- NFR-3: nenhuma correção some sem rastro: toda correção em vigor antes de transcrever de novo termina reaplicada ou não reaplicada no histórico (teste de propriedade com versões sintéticas).
+- NFR-4: WCAG 2.2 AA: painel com foco preso e Esc, foco devolvido, alvos ≥ 44×44 px no celular, contraste ≥ 4,5:1 nos três temas, mensagens anunciadas por região viva educada, axe sem violações sérias.
+- NFR-5: nenhum elemento por palavra: a palavra escolhida é pintada pela CSS Custom Highlight API (`correcting-word`), como o destaque do KBC-045.
+
+## Acceptance criteria
+- **AC-1** (FR-1, FR-3, FR-5): Given uma pessoa com `media-correct` no passo 3 e a palavra "Tiuako" no texto da faixa 2, When clica nela, escreve "Tiuaco" e usa Salvar, Then o texto mostra "Tiuaco" sem recarregar, aparece "Palavra corrigida." com Desfazer, e os tempos da palavra continuam os mesmos (a palavra é destacada no mesmo instante ao ouvir).
+- **AC-2** (FR-5, BR-10): Given a correção do AC-1, When outra pessoa busca "Tiuaco" com "Na fala", Then a gravação e a faixa 2 aparecem no minuto da palavra; When busca "Tiuako", Then nenhuma delas aparece por essa palavra.
+- **AC-3** (FR-7): Given o player da gravação aberto com legendas em outra aba, When a correção é gravada e a pessoa recarrega as legendas, Then a legenda mostra "Tiuaco" (ETag novo; o antigo responde 200 com o texto novo, não 304).
+- **AC-4** (BR-1, FR-2): Given "con certeza" em duas palavras (dois tempos), When a pessoa usa Incluir a próxima e escreve "com certeza", Then o trecho diz "com certeza", a primeira palavra guarda o texto e a segunda fica vazia, e o destaque ao ouvir passa pela palavra corrigida sem erro.
+- **AC-5** (BR-1): Given a palavra "concerteza", When a pessoa escreve "com certeza", Then o trecho diz "com certeza" e a busca acha "certeza".
+- **AC-6** (BR-1, FR-2): Given a última palavra de um trecho, When a pessoa usa Incluir a próxima, Then o botão está desabilitado com "A correção fica dentro de um trecho"; a API responde 409 `not-contiguous` a uma escolha que cruza trechos ou passa de 5.
+- **AC-7** (BR-3): Given "tiuaco," (com vírgula), When a pessoa escreve "Tiuaco," Then o texto mostra "Tiuaco," com a maiúscula e a vírgula; When escreve só "  Tiuaco  ,", Then grava "Tiuaco ,"; When o texto é igual ao atual, Then Salvar está desabilitado e a API não grava nada (200 sem revisão nova).
+- **AC-8** (BR-3): Given um texto com 81 caracteres ou uma quebra de linha, Then o campo diz "Use até 80 caracteres, numa linha só." junto do campo e a API responde 422.
+- **AC-9** (BR-2): Given uma palavra inventada ("obrigado") num trecho, When a pessoa usa Apagar palavra, Then ela some do texto, da busca e das legendas, e Desfazer a traz de volta.
+- **AC-10** (BR-7, FR-3): Given a correção do AC-1, When a pessoa usa Desfazer em 10 s ou no histórico, Then o texto volta a "Tiuako", o histórico mostra as duas linhas e a busca volta a achar "Tiuako".
+- **AC-11** (BR-7): Given a correção do AC-1 e depois outra pessoa trocou "Tiuaco" por "Tiuacu", When a primeira pessoa usa Desfazer na sua, Then nada muda e ela lê "Esta palavra mudou depois: agora diz «Tiuacu». Corrija à mão se precisar."
+- **AC-12** (BR-6): Given duas pessoas com a mesma faixa aberta, When A corrige "Tiuako" para "Tiuaco" e B, que ainda vê "Tiuako", corrige a mesma palavra para "Tiuacô", Then a de B não grava, B vê "Maria corrigiu esta palavra para «Tiuaco» agora há pouco" com **Usar a de Maria** e **Salvar a minha** (que grava sobre a nova, com o texto esperado novo), e o campo guarda o que B digitou.
+- **AC-13** (BR-6): Given A e B corrigindo palavras diferentes do mesmo trecho ao mesmo tempo, Then as duas gravam e o trecho mostra as duas.
+- **AC-14** (BR-6): Given a resposta de Salvar perdida e o cliente repetindo o pedido, Then só uma correção existe no histórico.
+- **AC-15** (BR-6): Given o painel aberto e uma transcrição nova da gravação chegando, When a pessoa salva, Then nada é gravado, lê "A transcrição foi refeita. Confira a palavra no texto novo." e o texto troca para a versão nova.
+- **AC-16** (BR-5): Given um membro sem `media-correct` com acesso ao passo 3, When clica numa palavra, Then nada abre, não há Procurar palavra nem Corrigir; a API responde 403 a um POST direto.
+- **AC-17** (BR-5): Given um membro com `media-correct`, When abre o histórico, Then vê Desfazer só nas próprias correções; Given um master, Then vê Desfazer em todas; a API responde 403 ao membro que tenta desfazer a de outra pessoa.
+- **AC-18** (BR-5): Given uma faixa publicada, When um POST de correção usa o id dela, Then 409 `track-derived`; Given uma mídia de um acervo que a pessoa não vê, Then 404.
+- **AC-19** (BR-9, FR-8): Given duas correções em vigor ("Tiuako"→"Tiuaco" e "Mariri"→"Mariri,") e a gravação transcrita de novo, When a versão nova tem "Tiuako" no mesmo tempo e "Mareri" no lugar de "Mariri", Then a primeira é reaplicada e a segunda fica "não reaplicada: a transcrição nova diz «Mareri»" com Corrigir aqui; a tela mostra "1 correção reaplicada; 1 não coube na transcrição nova · Ver".
+- **AC-20** (BR-4): Given uma gravação com vozes separadas, rascunho de faixas e a edição aprovada na versão 2, When uma palavra é corrigida, Then a versão continua 2, as vozes e quem fala continuam, e o editor não mostra "a transcrição mudou".
+- **AC-21** (BR-10): Given a palavra corrigida dentro da faixa 3 publicada, Then a página da faixa 3 mostra a palavra nova, nas legendas e na busca por faixa (KBC-096); as outras faixas não ganham versão nova de transcrição.
+- **AC-22** (FR-4, NFR-4): Given só o teclado, When a pessoa usa Procurar palavra, digita "tiua", escolhe a ocorrência de 1:12 com Enter, corrige e salva, Then o foco volta para a ocorrência na lista e o leitor de tela anuncia "Palavra corrigida".
+- **AC-23** (NFR-4): Given o painel Corrigir palavra aberto, Then ele tem `role="dialog"` com nome "Corrigir palavra", o foco começa no campo, Tab não sai do painel, Esc fecha e devolve o foco; a palavra escolhida é marcada com sublinhado duplo e fundo (não só cor).
+- **AC-24** (NFR-4): Given 390 px de largura, When a pessoa toca numa palavra, Then o painel abre como folha na parte de baixo, sem rolagem lateral, com Anterior/Próxima, Salvar e Cancelar ≥ 44×44 px, e o teclado do celular não cobre o campo nem Salvar.
+- **AC-25** (FR-1): Given a transcrição completa aberta (KBC-092 AC-18) com o áudio tocando, When a pessoa clica numa palavra, Then o painel abre sem parar o áudio e Ouvir a palavra toca só o pedaço dela.
+- **AC-26** (NFR-2): Given uma falha injetada ao atualizar o índice, When a correção é gravada, Then a API responde 500, o texto, a revisão, as faixas e o histórico ficam como estavam.
+- **AC-27** (FR-10): Given um master em "Pessoas e permissões", Then vê "Corrigir transcrição" e a dá a um membro; um membro novo não a tem.
+
+## Test strategy
+| AC | Nível | Notas |
+|---|---|---|
+| AC-1, AC-4 a AC-9, AC-12 a AC-15 | unitário + integração API | reescrita do trecho (`transcript-correction.ts`), store SQLite com `segments_fts`, `If-Match`/texto esperado |
+| AC-2, AC-3, AC-10, AC-11, AC-16 a AC-18, AC-20, AC-21, AC-26, AC-27 | integração API | `transcript-corrections.integration.test.ts`; busca por `media-search`; ETag das legendas; permissões; vozes e `transcriptChanged`; faixa publicada |
+| AC-19 | unitário + integração | `carryCorrections` com versões sintéticas e propriedade NFR-3 |
+| AC-1, AC-4, AC-6, AC-7, AC-12, AC-15, AC-25 | componente (web) | `word-correction.spec.ts`, `correction-history.spec.ts`, `track-text.spec.ts` |
+| AC-1, AC-2, AC-10, AC-22 a AC-25 | E2E | `e2e/specs/media-transcript-correction.spec.ts`, 1440 e 390 px, axe nos três temas |
+| NFR-1 | integração com medição | gravação sintética de 2 h, 12 faixas |
+
+## References
+Telas: T20 em `docs/design/screens.md` (acréscimo "Corrigir palavra") · ADR: [0034](../adr/0034-transcript-word-corrections.md) (proposta), [0023](../adr/0023-transcription-pull-worker-on-the-owners-mac.md) §4-5, [0024](../adr/0024-media-search-outside-the-vault.md) §1, [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) §5, [0026](../adr/0026-offline-media-downloads.md), [0027](../adr/0027-masters-act-as-a-person.md) · Reuso: KBC-045 (`spoken-words.ts`, `transcript-words.ts`, `search-highlights.ts`), KBC-092 (`track-text.ts`), KBC-068 (`track-slice.ts`, `TrackPublisher.afterTranscript`) · Pedido do dono: 2026-11-05 (cartão do quadro).
+
+## Open questions
+Nenhuma que bloqueie; os padrões assumidos estão em `work/KBC-093/spec.md`, "Perguntas ao dono".
+
+## Definition of ready
+- [x] Story, scope and outcome stated
+- [x] Every BR and FR covered by at least one AC; negative and edge cases present
+- [x] NFRs measurable
+- [x] Test level chosen for every AC
+- [x] UI and architecture references linked
+- [x] Dependencies scheduled (KBC-092 merges first); no blocking questions
+- [x] Fits one goal

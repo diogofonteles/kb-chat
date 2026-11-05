@@ -154,6 +154,8 @@ Pedido do dono: receber um áudio e editá-lo, dividindo em faixas de pergunta e
 | [KBC-096](KBC-096-library-search-by-track.md) | Busca da Biblioteca por faixa: a fala primeiro, só o que atende, abrindo no ponto exato | phase-2-a | ready | KBC-039, KBC-051, KBC-068, KBC-070 |
 | [KBC-092](KBC-092-track-text-and-spoken-word-highlight.md) | Texto da faixa e destaque da palavra falada na tela de preparo (passos 2 e 3), com a transcrição completa a um toque | phase-2-editing | done | KBC-045, KBC-066, KBC-072, KBC-090 |
 | [KBC-112](KBC-112-proposal-run-limited-to-accepted-amount.md) | A análise de faixas pela IA nunca gasta mais do que o valor aceito: para no valor e diz quanto falta (BUG-2 do QA do KBC-097) | phase-2-editing | ready | KBC-067, KBC-072, KBC-097 |
+| [KBC-092](KBC-092-track-text-and-spoken-word-highlight.md) | Texto da faixa e destaque da palavra falada na tela de preparo (passos 2 e 3), com a transcrição completa a um toque | phase-2-editing | in-review | KBC-045, KBC-066, KBC-072, KBC-090 |
+| [KBC-093](KBC-093-correct-transcript-words.md) | Corrigir palavras da transcrição na tela de preparo: clicar na palavra, histórico e desfazer, busca, legendas e faixas na mesma hora, reaplicar ao transcrever de novo (`media-correct`) | phase-2-editing | ready | KBC-092, KBC-045, KBC-068, KBC-073 |
 
 Todos prontos depois das decisões do dono de 2026-11-03 (nota em "Decisões de escopo").
 
