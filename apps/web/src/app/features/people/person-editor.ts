@@ -8,6 +8,7 @@ import {
   computed,
   inject,
   input,
+  linkedSignal,
   output,
   signal,
   viewChild,
@@ -31,6 +32,19 @@ import { PersonAiEditor } from './person-ai-editor.js';
 
 const toggled = <T>(values: readonly T[], value: T, on: boolean): T[] =>
   on ? [...new Set([...values, value])] : values.filter((v) => v !== value);
+
+/** Saving keeps what was checked here; at rest, what was saved. */
+interface Saving<T> {
+  readonly saved: readonly T[];
+  readonly busy: boolean;
+}
+
+function whileSaving<T>(
+  source: Saving<T>,
+  previous?: { readonly value: readonly T[] },
+): readonly T[] {
+  return source.busy && previous ? previous.value : source.saved;
+}
 
 const BYTES_PER_GB = 1024 ** 3;
 
@@ -100,17 +114,36 @@ export class PersonEditor {
     this.applyButton()?.nativeElement.focus();
   });
   protected readonly isMaster = computed(() => this.person().role === 'master');
+  /**
+   * The collections and features as checked here (KBC-062): while changes save, the boxes
+   * stay usable and the next change builds on the last one checked, not on the last one
+   * saved; once nothing is saving they show what the server kept.
+   */
+  private readonly checkedTopics = linkedSignal<
+    Saving<string>,
+    readonly string[]
+  >({
+    source: () => ({ saved: this.person().topics, busy: this.busy() }),
+    computation: whileSaving,
+  });
+  private readonly checkedFeatures = linkedSignal<
+    Saving<Feature>,
+    readonly Feature[]
+  >({
+    source: () => ({ saved: this.person().features, busy: this.busy() }),
+    computation: whileSaving,
+  });
   /** A master's own features (ADR 0032) are not offered to a member. */
   protected readonly features = computed(() =>
     (this.isMaster() ? MASTER_FEATURES : GRANTABLE_FEATURES).map((id) => ({
       id,
       label: FEATURE_LABELS[id](),
-      checked: this.isMaster() || this.person().features.includes(id),
+      checked: this.isMaster() || this.checkedFeatures().includes(id),
     })),
   );
   /** The collections as a tree; a sub-collection comes with its parent (KBC-048 BR-3). */
   protected readonly collections = computed(() =>
-    collectionChoices(this.topics(), this.person().topics, this.isMaster()),
+    collectionChoices(this.topics(), this.checkedTopics(), this.isMaster()),
   );
 
   /** Masters may give someone who sends another quota; the owner has none (KBC-035 BR-1). */
@@ -140,13 +173,15 @@ export class PersonEditor {
   }
 
   protected toggleTopic(slug: string, on: boolean): void {
-    this.changed.emit({ topics: toggled(this.person().topics, slug, on) });
+    const topics = toggled(this.checkedTopics(), slug, on);
+    this.checkedTopics.set(topics);
+    this.changed.emit({ topics });
   }
 
   protected toggleFeature(feature: Feature, on: boolean): void {
-    this.changed.emit({
-      features: toggled(this.person().features, feature, on),
-    });
+    const features = toggled(this.checkedFeatures(), feature, on);
+    this.checkedFeatures.set(features);
+    this.changed.emit({ features });
   }
 
   protected toggleMaster(): void {

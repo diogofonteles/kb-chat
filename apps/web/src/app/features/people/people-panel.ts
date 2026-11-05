@@ -32,7 +32,17 @@ import { topicsUrl } from '@core/api/kb-api.js';
 import { PeopleApi, type InviteSetup } from '@core/auth/auth-api.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { formatSpend } from '@core/spend/spend-store.js';
-import type { Observable } from 'rxjs';
+import {
+  EMPTY,
+  Subject,
+  catchError,
+  concatMap,
+  defer,
+  finalize,
+  ignoreElements,
+  tap,
+  type Observable,
+} from 'rxjs';
 import { AccessRequestsList } from './access-requests-list.js';
 import {
   invitationLimitOf,
@@ -63,6 +73,12 @@ interface Outcome<T> {
   readonly done: (value: T) => string | NonNullable<Notice>;
   /** Where a failure shows; default: next to the person it was about. */
   readonly failed?: (text: string, err: unknown) => void;
+}
+
+/** A queued change; dropped when a change before it failed in the same round. */
+interface Step {
+  readonly round: number;
+  readonly work: Observable<never>;
 }
 
 /**
@@ -189,8 +205,26 @@ export class PeoplePanel {
   /** Why the last invite failed, shown under the e-mail field (MA-23). */
   protected readonly inviteError = signal('');
   protected readonly openId = signal<string | null>(null);
-  protected readonly busy = signal(false);
+  /** Changes waiting or on their way: one at a time, in the order they were made (KBC-062). */
+  private readonly pending = signal(0);
+  protected readonly busy = computed(() => this.pending() > 0);
+  /** A failure ends the queue's round: what was queued on top of the failed change is dropped. */
+  private round = 0;
+  private readonly queue = new Subject<Step>();
   protected readonly notice = signal<Notice>(null);
+
+  constructor() {
+    this.queue
+      .pipe(
+        concatMap(({ round, work }) =>
+          defer(() => (round === this.round ? work : EMPTY)).pipe(
+            finalize(() => this.pending.update((count) => count - 1)),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe();
+  }
 
   protected toggle(person: Person): void {
     this.openId.update((id) => (id === person.id ? null : person.id));
@@ -441,26 +475,35 @@ export class PeoplePanel {
     );
   }
 
-  /** One change at a time; its outcome is announced next to what it changed. */
+  /**
+   * One change at a time; its outcome is announced next to what it changed. A change made
+   * while another saves waits for it (KBC-062 BR-1).
+   */
   private run<T>(call: Observable<T>, outcome: Outcome<T>): void {
-    this.busy.set(true);
-    this.notice.set(null);
     const failed =
       outcome.failed ??
       ((text: string) => this.notice.set({ kind: 'error', text }));
-    call.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (value) => {
-        this.busy.set(false);
-        const done = outcome.done(value);
-        this.notice.set(
-          typeof done === 'string' ? { kind: 'ok', text: done } : done,
-        );
-      },
-      error: (err: unknown) => {
-        this.busy.set(false);
-        failed(errorMessage(toUiErrorCode(err)), err);
-      },
-    });
+    const work = defer(() => {
+      this.notice.set(null);
+      return call;
+    }).pipe(
+      tap({
+        next: (value) => {
+          const done = outcome.done(value);
+          this.notice.set(
+            typeof done === 'string' ? { kind: 'ok', text: done } : done,
+          );
+        },
+        error: (err: unknown) => {
+          this.round++;
+          failed(errorMessage(toUiErrorCode(err)), err);
+        },
+      }),
+      ignoreElements(),
+      catchError(() => EMPTY),
+    );
+    this.pending.update((count) => count + 1);
+    this.queue.next({ round: this.round, work });
   }
 }
 

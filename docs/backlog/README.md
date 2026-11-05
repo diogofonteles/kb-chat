@@ -79,7 +79,7 @@ Plano completo (fases A a E, custos e riscos): plano da fase 2 v3, publicado pel
 | [KBC-042](KBC-042-bookmarks-with-notes.md) | Marcadores com nota | phase-2-a | done | KBC-041 |
 | [KBC-061](KBC-061-house-quota-day-and-refund.md) | Cota diária da IA da aplicação: dia no Recife, estorno e "Tentar de novo" | phase-2-a | done | — |
 | [KBC-060](KBC-060-masters-act-as-a-person.md) | Ver como outra pessoa (master, com auditoria) | phase-2-a | done | KBC-010 |
-| [KBC-062](KBC-062-people-editor-keyboard-focus.md) | Pessoas e permissões: o foco fica na caixa marcada enquanto salva | phase-2-a | ready | — |
+| [KBC-062](KBC-062-people-editor-keyboard-focus.md) | Pessoas e permissões: o foco fica na caixa marcada enquanto salva | phase-2-a | done | — |
 | [KBC-048](KBC-048-collections-and-sub-collections.md) | Acervos e sub-acervos pela tela | phase-2-a | done | KBC-034 |
 | [KBC-050](KBC-050-edit-media-details.md) | Editar as informações de um áudio: título, autoria e acervo | phase-2-a | ready | KBC-034 |
 | [KBC-036](KBC-036-transcription-on-the-mac-worker.md) | Transcrição no Mac do dono: transcritor pareado, VAD e termos, JSON bruto, filtro de repetições, baixa confiança | phase-2-a | ready | KBC-034 |

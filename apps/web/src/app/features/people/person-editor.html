@@ -5,7 +5,7 @@
   </p>
 }
 
-<fieldset class="group" [disabled]="busy() || isMaster()">
+<fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="busy()">
   <legend class="legend" i18n="@@people.collections">Acervos</legend>
   @for (topic of collections(); track topic.slug) {
     <label class="check" [class.child]="topic.parent !== null">
@@ -30,7 +30,7 @@
   }
 </fieldset>
 
-<fieldset class="group" [disabled]="busy() || isMaster()">
+<fieldset class="group" [disabled]="isMaster()" [attr.aria-busy]="busy()">
   <legend class="legend" i18n="@@people.features">Funcionalidades</legend>
   @for (feature of features(); track feature.id) {
     <label class="check">

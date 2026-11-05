@@ -1,7 +1,7 @@
 ---
 id: KBC-062
 title: "Pessoas e permissões: o foco fica na caixa marcada enquanto a mudança salva"
-status: ready
+status: done
 slice: phase-2-a
 outcome: quem usa só o teclado marca vários acervos e funcionalidades de uma pessoa sem perder o lugar a cada clique
 depends_on: []

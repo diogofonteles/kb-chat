@@ -411,6 +411,109 @@ describe('PeoplePanel (KBC-010 FR-3)', () => {
     ).toBe(true);
   });
 
+  describe('keyboard focus while a change saves (KBC-062)', () => {
+    const URL = '/api/v1/people/11111111-1111-4111-8111-111111111111';
+    const box = (name: string) =>
+      screen.getByRole('checkbox', { name }) as HTMLInputElement;
+
+    async function openGuest() {
+      const rendered = await renderPanel();
+      fireEvent.click(row(/Guest/));
+      await rendered.fixture.whenStable();
+      return rendered;
+    }
+
+    it('AC-1: the group is busy, not disabled, and focus stays on the box after saving', async () => {
+      const { http, fixture } = await openGuest();
+      const hermetismo = box('Hermetismo');
+      hermetismo.focus();
+
+      fireEvent.click(hermetismo);
+      await fixture.whenStable();
+
+      const group = screen.getByRole('group', { name: 'Acervos' });
+      expect(group.getAttribute('aria-busy')).toBe('true');
+      expect(hermetismo.matches(':disabled')).toBe(false);
+      expect(document.activeElement).toBe(hermetismo);
+
+      http.expectOne(URL).flush(aPerson({ topics: ['hermetismo'] }));
+      await fixture.whenStable();
+
+      expect(group.getAttribute('aria-busy')).toBe('false');
+      expect(document.activeElement).toBe(box('Hermetismo'));
+      expect(box('Hermetismo').checked).toBe(true);
+    });
+
+    it('AC-2: two quick changes are both applied, one after the other', async () => {
+      const { http, fixture } = await openGuest();
+
+      fireEvent.click(box('Hermetismo'));
+      await fixture.whenStable();
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+      fireEvent.click(box('Pesquisa com IA'));
+      await fixture.whenStable();
+
+      // The next change waits for the one before it.
+      const first = http.expectOne(URL);
+      expect(first.request.body).toEqual({ topics: ['hermetismo'] });
+      first.flush(aPerson({ topics: ['hermetismo'] }));
+      await fixture.whenStable();
+      expect(box('Alquimia').checked).toBe(true);
+
+      const second = http.expectOne(URL);
+      expect(second.request.body).toEqual({
+        topics: ['hermetismo', 'alquimia'],
+      });
+      second.flush(aPerson({ topics: ['hermetismo', 'alquimia'] }));
+      await fixture.whenStable();
+
+      const third = http.expectOne(URL);
+      expect(third.request.body).toEqual({ features: ['search', 'research'] });
+      third.flush(
+        aPerson({
+          topics: ['hermetismo', 'alquimia'],
+          features: ['search', 'research'],
+        }),
+      );
+      await fixture.whenStable();
+
+      http.verify();
+      expect(box('Hermetismo').checked).toBe(true);
+      expect(box('Alquimia').checked).toBe(true);
+      expect(box('Pesquisa com IA').checked).toBe(true);
+      expect(row(/Guest/).textContent).toContain('Hermetismo, Alquimia');
+      expect(screen.getByRole('status').textContent).toContain('Salvo.');
+    });
+
+    it('a failed change drops the ones queued after it and shows what is saved', async () => {
+      const { http, fixture } = await openGuest();
+
+      fireEvent.click(box('Hermetismo'));
+      await fixture.whenStable();
+      fireEvent.click(box('Alquimia'));
+      await fixture.whenStable();
+
+      http
+        .expectOne(URL)
+        .flush(
+          { error: { code: 'internal', message: 'boom' } },
+          { status: 500, statusText: 'Server Error' },
+        );
+      await fixture.whenStable();
+
+      http.expectNone(URL);
+      expect(screen.getByRole('status').textContent).toContain('Erro:');
+      expect(box('Hermetismo').checked).toBe(false);
+      expect(box('Alquimia').checked).toBe(false);
+      expect(
+        screen
+          .getByRole('group', { name: 'Acervos' })
+          .getAttribute('aria-busy'),
+      ).toBe('false');
+    });
+  });
+
   it('AC-7: shows the last-master rule when the only master tries to step down', async () => {
     const { http, fixture } = await renderPanel();
     fireEvent.click(row(/Owner/));
