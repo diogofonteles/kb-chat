@@ -1318,23 +1318,28 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     );
   });
 
-  it('a continuation stretches the track it continues, never a kept one further on (review #1)', async () => {
-    const FOUR_WINDOWS = evenSegments(190);
-    const span =
-      (first: number, last: number, extra: object = {}) =>
-      () =>
-        JSON.stringify({
-          faixas: [
-            {
-              primeiro_id: first,
-              ultimo_id: last,
-              tipo: 'exposicao',
-              ...extra,
-            },
-          ],
-        });
+  /** A reply of one track over segments `first` to `last`. */
+  const span =
+    (first: number, last: number, extra: object = {}) =>
+    () =>
+      JSON.stringify({
+        faixas: [
+          {
+            primeiro_id: first,
+            ultimo_id: last,
+            tipo: 'exposicao',
+            ...extra,
+          },
+        ],
+      });
+
+  /**
+   * Two failed runs over four windows: the newest wrote W1 (window 1) and carries T3
+   * (1 590 000 to 1 800 000 ms, window 3) from the one before; a retry resumes at window 2.
+   */
+  async function carriedAhead() {
     const ctx = setup({
-      segments: FOUR_WINDOWS,
+      segments: evenSegments(190),
       replies: [
         wholeWindow({ title: 'T1' }),
         NOTHING_USABLE,
@@ -1347,6 +1352,21 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
     ctx.llm.replies.push(wholeWindow({ title: 'W1' }), new Error('HTTP 503'));
     await runToEnd(ctx);
     expect(titles(ctx)).toEqual(['W1', 'T3']);
+    return ctx;
+  }
+
+  const spans = (ctx: Ctx) =>
+    ctx.store
+      .draft(ctx.mediaId)
+      .tracks.map(({ title, startMs, endMs, firstSegment }) => ({
+        title,
+        startMs,
+        endMs,
+        firstSegment,
+      }));
+
+  it('a continuation stretches the track it continues, never a kept one further on (review #1)', async () => {
+    const ctx = await carriedAhead();
     const before = ctx.llm.calls.length;
     ctx.llm.replies.push(
       span(61, 120, { titulo: 'N2' }),
@@ -1366,6 +1386,62 @@ describe('ProposalService: a retry loses no track (KBC-097)', () => {
       { title: 'N4', startMs: 1_800_000, endMs: 1_900_000 },
     ]);
     expect(timingProblems(tracks, null)).toEqual([]);
+  });
+
+  it('a new track that crosses part of a carried proposal leaves it the rest (review round 2)', async () => {
+    const ctx = await carriedAhead();
+    ctx.llm.replies.push(
+      span(61, 120, { titulo: 'N2' }),
+      span(121, 165, { titulo: 'N3' }),
+      span(181, 190, { titulo: 'N4' }),
+    );
+    expect((await runToEnd(ctx)).failure).toBeNull();
+    expect(spans(ctx)).toEqual([
+      { title: 'W1', startMs: 0, endMs: 600_000, firstSegment: 1 },
+      { title: 'N2', startMs: 600_000, endMs: 1_200_000, firstSegment: 61 },
+      { title: 'N3', startMs: 1_200_000, endMs: 1_650_000, firstSegment: 121 },
+      { title: 'T3', startMs: 1_650_000, endMs: 1_800_000, firstSegment: null },
+      { title: 'N4', startMs: 1_800_000, endMs: 1_900_000, firstSegment: 181 },
+    ]);
+    expect(timingProblems(ctx.store.draft(ctx.mediaId).tracks, null)).toEqual(
+      [],
+    );
+  });
+
+  it('a continuation that runs into a carried proposal leaves it the rest (review round 2)', async () => {
+    const ctx = await carriedAhead();
+    ctx.llm.replies.push(
+      span(61, 120, { titulo: 'N2' }),
+      span(121, 162, { continua_faixa_anterior: true }),
+      span(181, 190, { titulo: 'N4' }),
+    );
+    expect((await runToEnd(ctx)).failure).toBeNull();
+    expect(spans(ctx)).toEqual([
+      { title: 'W1', startMs: 0, endMs: 600_000, firstSegment: 1 },
+      { title: 'N2', startMs: 600_000, endMs: 1_620_000, firstSegment: 61 },
+      { title: 'T3', startMs: 1_620_000, endMs: 1_800_000, firstSegment: null },
+      { title: 'N4', startMs: 1_800_000, endMs: 1_900_000, firstSegment: 181 },
+    ]);
+    expect(timingProblems(ctx.store.draft(ctx.mediaId).tracks, null)).toEqual(
+      [],
+    );
+  });
+
+  it('a continuation of a track gone meanwhile is not taken as written (review round 2)', async () => {
+    const ctx = setup({ segments: THREE_WINDOWS });
+    const gone: StubReply = () => {
+      // The track window 1 wrote leaves before window 2 continues it.
+      ctx.db.prepare("DELETE FROM media_draft_tracks WHERE title = 'A'").run();
+      return span(61, 120, { continua_faixa_anterior: true })();
+    };
+    ctx.llm.replies.push(
+      wholeWindow({ title: 'A' }),
+      gone,
+      span(121, 130, { continua_faixa_anterior: true, titulo: 'C' }),
+    );
+    expect((await runToEnd(ctx)).failure).toBeNull();
+    // Window 3 cannot continue what is not there: its track stands on its own.
+    expect(titles(ctx)).toEqual(['C']);
   });
 
   it('says it starts over, at the value it says, when the plan no longer fits', async () => {

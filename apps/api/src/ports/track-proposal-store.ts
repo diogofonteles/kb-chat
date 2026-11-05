@@ -87,7 +87,8 @@ export interface TrackProposalStorePort {
   runTracks(runId: string): DraftTrack[];
   /**
    * One window's result, in one transaction: tracks, voice names, progress and spend.
-   * `spentUsd` is what this run spent, without what it carried from a failed one.
+   * `spentUsd` is what this run spent, without what it carried from a failed one. Returns
+   * false when `extendLast` found no track of the run to stretch (it went meanwhile).
    */
   saveWindow(input: {
     readonly runId: string;
@@ -95,7 +96,7 @@ export interface TrackProposalStorePort {
     readonly tracks: readonly ProposedTrack[];
     readonly voices: readonly VoiceSuggestion[];
     readonly spentUsd: number;
-  }): void;
+  }): boolean;
   /**
    * Ends a run and its ledger reservation in one transaction. Done: the older untouched AI
    * tracks of the recording go (BR-6) and the spend is settled; those on screen that nothing

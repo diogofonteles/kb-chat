@@ -302,9 +302,9 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
     tracks: readonly ProposedTrack[];
     voices: readonly VoiceSuggestion[];
     spentUsd: number;
-  }): void {
-    inTransaction(this.db, () => {
-      this.replaceCarried(input);
+  }): boolean {
+    return inTransaction(this.db, () => {
+      const extended = this.replaceCarried(input);
       const mediaId = this.mediaOf(input.runId);
       for (const track of input.tracks)
         this.insertTrack({ runId: input.runId, mediaId, track });
@@ -323,6 +323,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
              AND id = (SELECT spend_id FROM media_proposal_runs WHERE id = ?)`,
         )
         .run(input.spentUsd, input.runId);
+      return extended;
     });
   }
 
@@ -541,23 +542,25 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
   /**
    * A window asked again writes in place of what the run carried there: a carried proposal
    * its tracks cross keeps the stretch left to it, or goes (KBC-097). The run's own tracks
-   * end before the window's, so only carried ones can cross.
+   * end before the window's, so only carried ones can cross. False when the continuation
+   * found no track to stretch.
    */
   private replaceCarried(input: {
     runId: string;
     extendLast: TrackExtension | null;
     tracks: readonly ProposedTrack[];
-  }): void {
+  }): boolean {
     const extended = input.extendLast
       ? this.extendLast(input.runId, input.extendLast)
       : null;
+    const landed = input.extendLast === null || extended !== null;
     const written: Span[] = input.tracks.map((track) => [
       track.startMs,
       track.endMs,
     ]);
     if (input.extendLast && extended !== null)
       written.push([input.extendLast.startMs, input.extendLast.endMs]);
-    if (written.length === 0) return;
+    if (written.length === 0) return landed;
     const crossed = this.untouchedOf(input.runId).filter((row) => {
       const [start, end] = spanOf(row);
       return (
@@ -566,6 +569,7 @@ export class SqliteTrackProposalStore implements TrackProposalStorePort {
       );
     });
     this.fitAround(crossed, written);
+    return landed;
   }
 
   /** Stretches the track the continuation continues (by its start), never a kept one. */
