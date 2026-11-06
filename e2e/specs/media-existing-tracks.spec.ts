@@ -98,15 +98,13 @@ test('AC-16: a master publishes the tracks that already exist, sees the count an
     })
     .click();
   // Only this spec's collection: the others belong to other specs.
-  const choices = section.getByRole('checkbox');
   const mine = `${title} · 2 faixas a publicar`;
-  for (const box of await choices.all()) {
-    const name = (await box.getAttribute('aria-label')) ?? '';
+  await expect(section.getByRole('checkbox', { name: mine })).toBeVisible();
+  for (const box of await section.getByRole('checkbox').all()) {
     const label = await box.evaluate(
       (input) => input.closest('label')?.textContent?.trim() ?? '',
     );
-    if (!label.startsWith(title) && !name.startsWith(title))
-      await box.uncheck();
+    if (!label.startsWith(`${title} ·`)) await box.uncheck();
   }
   await expect(section.getByRole('checkbox', { name: mine })).toBeChecked();
   await expect(section).toContainText(
