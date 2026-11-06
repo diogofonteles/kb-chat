@@ -160,6 +160,9 @@ describe('SqliteTranscriptStore', () => {
     });
     expect(transcripts.words(newest?.id ?? '')[0]?.probability).toBeNull();
     expect(media.getMedia(MEDIA)?.transcription).toEqual({
+      provider: 'mlx-whisper',
+      route: 'transcriber',
+      hold: null,
       jobStatus: 'done',
       version: 2,
       confidence: 'low',

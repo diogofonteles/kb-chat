@@ -146,6 +146,7 @@ const media = await createMedia(config, {
   tokenKey: deriveKey(secretsKey, 'transcriber-tokens'),
   voicePrintKey: deriveKey(secretsKey, 'voice-prints'),
   consentKey: deriveKey(secretsKey, 'voice-consents'),
+  groqKey: deriveKey(secretsKey, 'groq-key'),
 });
 
 const app = await buildApp({

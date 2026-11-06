@@ -33,6 +33,8 @@ import { TRANSCRIBER_LEASE_PREFIX } from '../../ports/transcriber-store.js';
 import { PUBLIC } from '../auth/index.js';
 import { serveMedia } from './serve-media.js';
 import type { DiarizationService } from './diarization-service.js';
+import { groqWorkerRoutes } from './groq-worker-routes.js';
+import type { GroqService } from './groq-service.js';
 import type {
   TranscriberService,
   WorkerIdentity,
@@ -66,6 +68,8 @@ export interface WorkerRoutesDeps {
   readonly voicePrints: VoicePrintService;
   /** Track cuts (KBC-068): the module that publishes them. */
   readonly cuts?: CutReceiver;
+  /** The Groq fallback (KBC-037): the VM's chunks and transcripts. */
+  readonly groq?: GroqService;
 }
 
 /** Who takes a finished cut in: the track items' side, outside this module. */
@@ -139,7 +143,9 @@ function assertJobKind(
 
 /** The routes below are the transcriber's only (ADR 0023): other tokens get 404. */
 function assertTranscriber(request: FastifyRequest): void {
-  const { kinds } = identityOf(request);
+  const { kinds, leaseName } = identityOf(request);
+  // The VM transcribes only through Groq's routes (KBC-037), never as a paired transcriber.
+  if (leaseName === null) throw notThisWorkers();
   if (!kinds.includes('transcribe') && !kinds.includes('diarize'))
     throw notThisWorkers();
 }
@@ -252,6 +258,17 @@ export const workerRoutes =
     registerVoicePrints(app, deps);
     registerVoicePrintResult(app, deps.voicePrints);
     registerVoiceComparison(app, deps.voicePrints);
+    if (deps.groq)
+      await app.register(
+        groqWorkerRoutes({
+          groq: deps.groq,
+          transcription: deps.transcription,
+          ownerOf: (request, body) => {
+            if (identityOf(request).leaseName !== null) throw notThisWorkers();
+            return ownerOf(request, body);
+          },
+        }),
+      );
   };
 
 function registerLease(app: FastifyInstance, service: WorkerService): void {
@@ -266,6 +283,8 @@ function registerLease(app: FastifyInstance, service: WorkerService): void {
         kinds: allowedKinds(identity, request.body.kinds),
         // ADR 0023: a paired transcriber holds one job at a time.
         oneAtATime: identity.leaseName !== null,
+        // KBC-037: the VM takes only the transcriptions routed to Groq.
+        transcribeRoute: identity.leaseName === null ? 'groq' : 'transcriber',
       });
       return job ? reply.code(200).send(job) : reply.code(204).send();
     },

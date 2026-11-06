@@ -73,6 +73,8 @@ export const API_ERROR_CODES = [
   /** A revocation took effect but is not on the list yet (ADR 0032 §4); the next start retries. */
   'VOICE_LIST_NOT_WRITTEN',
   'PLAN_REFUSED',
+  /** Groq is off, or has no key, for a transcription a master sends to it (KBC-037). */
+  'GROQ_UNAVAILABLE',
   'INTERNAL',
 ] as const;
 

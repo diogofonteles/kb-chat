@@ -30,6 +30,7 @@ const ITEM: MediaItem = {
   createdAt: '2026-10-28T12:00:00.000Z',
   canRetry: false,
   canTranscribeAgain: false,
+  canUseGroq: false,
   canEdit: false,
   positionMs: 0,
   completedAt: null,
@@ -41,6 +42,9 @@ const ITEM: MediaItem = {
     transcriber: 'none',
     transcriberOffSince: null,
     lastAttemptFailed: false,
+    provider: null,
+    route: 'transcriber',
+    hold: null,
   },
 };
 

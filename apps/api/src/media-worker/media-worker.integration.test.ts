@@ -16,6 +16,7 @@ import { ffmpegBins, makeLongWav, makeTone } from '../../test/media-tools.js';
 import { createLogger } from '../logger.js';
 import { HttpMediaJobsApi, type MediaJobsApi } from './api-client.js';
 import { MediaWorker } from './media-worker.js';
+import type { FakeGroq } from '../testing/fake-groq.js';
 
 afterEach(closeApp);
 
@@ -28,6 +29,7 @@ interface Running {
   readonly state: string;
   readonly api: HttpMediaJobsApi;
   readonly baseUrl: string;
+  readonly groq: FakeGroq;
 }
 
 /** The real API, listening, with media on, and a worker client pointed at it. */
@@ -43,6 +45,7 @@ async function running(): Promise<Running> {
     mediaDir: join(started.state, 'media'),
     state: started.state,
     baseUrl,
+    groq: started.groq,
     api: new HttpMediaJobsApi({
       baseUrl,
       token: MEDIA_WORKER_TOKEN,
@@ -225,12 +228,49 @@ describe(
         completeWaveform: () => Promise.resolve(true),
         completeCut: () => Promise.resolve(true),
         fail: () => Promise.resolve(true),
+        sendGroqChunk: () => Promise.resolve({ kind: 'lost' }),
+        completeGroq: () => Promise.resolve(true),
       };
       const shutdown = new AbortController();
       const loop = workerFor(env, failing).run(shutdown.signal);
       await new Promise((resolve) => setTimeout(resolve, 200));
       shutdown.abort();
       await expect(loop).resolves.toBeUndefined();
+    });
+
+    it('transcribes a job routed to Groq: real chunks of FLAC through the API (KBC-037 FR-3)', async () => {
+      const env = await running();
+      const source = join(env.state, 'tone.mp3');
+      makeTone(bins, source, 10);
+      const item = await uploadFile(env, source);
+      await workerFor(env).process(
+        await leased(env),
+        new AbortController().signal,
+      );
+      await env.owner('POST', '/api/v1/media/groq/test', {
+        key: 'gsk_e2e_valid',
+      });
+      await env.owner('PUT', '/api/v1/media/groq/mode', {
+        mode: 'manual',
+        idleHours: 12,
+      });
+      const sent = await env.owner(
+        'POST',
+        `/api/v1/media/${item.id}/transcription/groq`,
+      );
+      expect(sent.statusCode).toBe(200);
+      for (let job = await env.api.lease(); job; job = await env.api.lease())
+        await workerFor(env).process(job, new AbortController().signal);
+
+      const done = await itemOf(env, item.id);
+      expect(done.transcription).toMatchObject({
+        status: 'done',
+        provider: 'groq',
+      });
+      // A 10 s tone is one chunk of speech, sent as 16 kHz mono FLAC.
+      expect(env.groq.calls).toHaveLength(1);
+      expect(env.groq.calls[0]?.bytes).toBeGreaterThan(1_000);
+      expect(env.groq.calls[0]?.prompt).toContain('Hoasca');
     });
   },
 );

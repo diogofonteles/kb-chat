@@ -81,6 +81,8 @@ export interface MediaServiceDeps {
   readonly listening: ListeningStorePort;
   /** Whether a transcriber is on (KBC-036 FR-1); "none" when not given. */
   readonly presence?: () => Presence;
+  /** Groq is on and has a key (KBC-037): masters see "Transcrever com Groq". */
+  readonly groqReady?: () => boolean;
   /** Queues a new transcription; false when one is already waiting or running. */
   readonly requestTranscription?: (mediaId: string) => boolean;
   /** One author of the collection's list (KBC-049, a sub-collection uses its parent's). */
@@ -659,6 +661,7 @@ export class MediaService {
       author: this.authorOf(record),
       canEdit: canEditMedia(actor, record),
       parent: this.parentOf(record),
+      groqReady: actor.isMaster && (this.deps.groqReady?.() ?? false),
     });
   }
 

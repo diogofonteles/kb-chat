@@ -41,12 +41,14 @@ function before24(): DatabaseSync {
 }
 
 const rows = (db: DatabaseSync, sql: string) => db.prepare(sql).all();
+// Up to its own version: later ones (KBC-037's 25) have their own tests.
+const THROUGH_24 = MEDIA_MIGRATIONS.filter((one) => one.version <= 24);
 
 describe('Migration 24: refused names and who wrote a title (KBC-090)', () => {
   it('keeps the tracks, and a title already approved counts as a person’s', () => {
     const db = before24();
 
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([24]);
+    expect(applyMigrations(db, THROUGH_24)).toEqual([24]);
 
     expect(
       rows(
@@ -72,7 +74,7 @@ describe('Migration 24: refused names and who wrote a title (KBC-090)', () => {
       rows(db, 'SELECT voice, name, written_name FROM media_voice_suggestions'),
     ).toEqual([{ voice: 1, name: 'Márcio da Roça', written_name: null }]);
     expect(rows(db, 'SELECT * FROM media_voice_refusals')).toEqual([]);
-    expect(applyMigrations(db, MEDIA_MIGRATIONS)).toEqual([]);
+    expect(applyMigrations(db, THROUGH_24)).toEqual([]);
     db.close();
   });
 

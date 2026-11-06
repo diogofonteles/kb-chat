@@ -112,7 +112,10 @@ export function createTrackProposals(
     llm: mediaLlm(wiring),
     caps: {
       runUsd: media.ai.runCapUsd,
-      monthlyUsd: media.ai.monthlyCapUsd,
+      // The owner may change the media cap at any time (KBC-037 BR-2): read it live.
+      get monthlyUsd() {
+        return media.ai.monthlyCapUsd;
+      },
     },
     onRunError: (err, runId) =>
       wiring.log.warn({ err, runId }, 'track proposal run failed'),

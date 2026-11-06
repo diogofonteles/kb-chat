@@ -5,6 +5,9 @@ import type {
   MediaKind,
   MediaStatus,
   TranscriptConfidence,
+  TranscriptProvider,
+  TranscriptionHold,
+  TranscriptionRoute,
 } from '@kb-chat/contracts';
 
 /** Where a job is in the queue (ADR 0022 §2). */
@@ -17,6 +20,12 @@ export interface TranscriptionRecord {
   /** The current (newest) transcript's version and confidence; null before the first. */
   readonly version: number | null;
   readonly confidence: TranscriptConfidence | null;
+  /** Who made the current transcript (KBC-037); null before the first. */
+  readonly provider: TranscriptProvider | null;
+  /** Who the newest transcribe job is for (KBC-037). */
+  readonly route: TranscriptionRoute;
+  /** Why Groq left the newest job to the transcriber (KBC-037 FR-4). */
+  readonly hold: TranscriptionHold | null;
 }
 
 /** The authorship column the app had before KBC-049, still written for a rollback. */
@@ -133,6 +142,11 @@ export interface LeaseRequest {
    * transcriber, so a leaked token cannot drain the queue's audio).
    */
   readonly oneAtATime?: boolean;
+  /**
+   * Which transcriptions it may take (KBC-037): a paired transcriber's (the default) or the
+   * ones routed to Groq, which only the VM worker leases.
+   */
+  readonly transcribeRoute?: TranscriptionRoute;
 }
 
 export interface Heartbeat extends LeaseOwner {

@@ -239,7 +239,7 @@ describe('Transcription: the worker protocol (KBC-036)', () => {
     expect(posing.statusCode).toBe(409);
   });
 
-  it('keeps each token to its kinds: no conversions for a transcriber, no transcriptions for the VM', async () => {
+  it("keeps each token to its kinds: no conversions for a transcriber, no Mac's transcription for the VM", async () => {
     const media = await startMedia();
     const { token } = await pair(media);
     await queuedItem(media);
@@ -254,7 +254,8 @@ describe('Transcription: the worker protocol (KBC-036)', () => {
       worker: 'vm',
       kinds: ['transcribe'],
     });
-    expect(vm.statusCode).toBe(403);
+    // KBC-037: the VM leases only transcriptions routed to Groq; this one waits for the Mac.
+    expect(vm.statusCode).toBe(204);
   });
 
   it('answers 204 when nothing waits', async () => {

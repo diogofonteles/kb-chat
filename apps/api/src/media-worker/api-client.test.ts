@@ -44,7 +44,7 @@ describe('HttpMediaJobsApi', () => {
     expect(headers.get('x-requested-with')).toBe('kb-chat');
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
       worker: 'vm',
-      kinds: ['transcode', 'silences', 'waveform', 'cut'],
+      kinds: ['transcode', 'silences', 'waveform', 'cut', 'transcribe'],
     });
   });
 
@@ -108,5 +108,98 @@ describe('HttpMediaJobsApi', () => {
       progress: 40,
     });
     expect(await apiAnswering(409).api.heartbeat(JOB, 1)).toBe(false);
+  });
+});
+
+describe('HttpMediaJobsApi: Groq chunks (KBC-037)', () => {
+  const GROQ_JOB = {
+    id: '11111111-1111-4111-8111-111111111111',
+    leaseId: '22222222-2222-4222-8222-222222222222',
+    kind: 'transcribe',
+    provider: 'groq',
+    mediaId: '33333333-3333-4333-8333-333333333333',
+    attempt: 1,
+    leaseMs: 60_000,
+    durationMs: 30_000,
+    sourcePath: 'audio/x.flac',
+    renditionPath: null,
+    termsVersion: 3,
+  } as const;
+  const chunk = {
+    span: { startMs: 1_000, endMs: 20_000 },
+    audio: Buffer.from('fLaC'),
+  };
+
+  function answering(response: () => Response) {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const api = new HttpMediaJobsApi({
+      baseUrl: 'http://api:3000',
+      token: 'worker-token',
+      worker: 'vm',
+      fetch: async (url, init) => {
+        calls.push({ url: String(url), init: init ?? {} });
+        return response();
+      },
+    });
+    return { api, calls };
+  }
+
+  it('sends the FLAC with where it sits and reads the words back', async () => {
+    const result = { segments: [{ start: 0, end: 1, text: 'Hoasca' }] };
+    const { api, calls } = answering(() => Response.json({ result }));
+    expect(await api.sendGroqChunk(GROQ_JOB, chunk)).toEqual({
+      kind: 'ok',
+      result,
+    });
+    const url = new URL(calls[0]?.url ?? '');
+    expect(url.pathname).toBe(
+      `/api/v1/media-worker/jobs/${GROQ_JOB.id}/groq/chunks`,
+    );
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      worker: 'vm',
+      leaseId: GROQ_JOB.leaseId,
+      startMs: '1000',
+      endMs: '20000',
+      termsVersion: '3',
+    });
+    expect(new Headers(calls[0]?.init.headers).get('content-type')).toBe(
+      'audio/flac',
+    );
+  });
+
+  it('waits on 429 for its retry-after, and drops the job on 409', async () => {
+    const limited = answering(
+      () =>
+        new Response(null, { status: 429, headers: { 'retry-after': '30' } }),
+    );
+    expect(await limited.api.sendGroqChunk(GROQ_JOB, chunk)).toEqual({
+      kind: 'wait',
+      retryAfterMs: 30_000,
+    });
+    const lost = answering(() => new Response(null, { status: 409 }));
+    expect(await lost.api.sendGroqChunk(GROQ_JOB, chunk)).toEqual({
+      kind: 'lost',
+    });
+  });
+
+  it('fails on any other answer, and completes the job with its chunks', async () => {
+    const broken = answering(() => new Response('boom', { status: 503 }));
+    await expect(broken.api.sendGroqChunk(GROQ_JOB, chunk)).rejects.toThrow(
+      MediaApiError,
+    );
+    const done = answering(() => new Response(null, { status: 204 }));
+    const raw = { chunks: [] };
+    expect(
+      await done.api.completeGroq(GROQ_JOB, {
+        termsVersion: 3,
+        vad: 'applied',
+        speechRatio: 1,
+        elapsedMs: 5,
+        raw,
+      }),
+    ).toBe(true);
+    expect(done.calls[0]?.url).toBe(
+      `http://api:3000/api/v1/media-worker/jobs/${GROQ_JOB.id}/groq/transcript`,
+    );
   });
 });

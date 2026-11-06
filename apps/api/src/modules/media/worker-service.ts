@@ -4,11 +4,13 @@ import {
   WAVEFORM,
   type CompleteTranscodeRequest,
   type FailJobRequest,
+  type GroqTranscribeJob,
   type HeartbeatRequest,
   type LeaseRequest,
   type LeasedWorkerJob,
   type MediaJobKind,
   type TranscribeJob,
+  type TranscriptionRoute,
   type VoiceProfileJob,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -22,6 +24,13 @@ export interface WorkerServiceDeps {
   readonly files: MediaFilesPort;
   /** What a leased `voice-profile` job carries (KBC-071). */
   readonly voiceJobOf?: (job: LeasedJob) => VoiceProfileJob;
+  /** The current term list's version, for a Groq job's prompts (KBC-037). */
+  readonly termsVersion?: () => number;
+  /**
+   * Groq asked for a long wait (KBC-037): until it is over the VM leaves its transcriptions
+   * in the queue and takes only conversions and measures.
+   */
+  readonly groqWaits?: () => boolean;
   /** What a cut job cuts (KBC-068). */
   readonly tracks?: Pick<TrackItemStorePort, 'cutOrder'>;
   readonly now?: () => Date;
@@ -62,16 +71,24 @@ export class WorkerService {
    * transcription names the route its audio is fetched from (the Mac has no shared disk).
    */
   lease(
-    request: LeaseRequest & { readonly oneAtATime?: boolean },
+    request: LeaseRequest & {
+      readonly oneAtATime?: boolean;
+      readonly transcribeRoute?: TranscriptionRoute;
+    },
   ): LeasedWorkerJob | null {
+    const kinds = this.kindsFor(request);
+    if (kinds.length === 0) return null;
     const job = this.deps.store.leaseJob({
-      kinds: request.kinds,
+      kinds,
       worker: request.worker,
       oneAtATime: request.oneAtATime,
+      transcribeRoute: request.transcribeRoute,
       now: this.now(),
       leaseMs: JOB_LEASE_MS,
     });
     if (!job) return null;
+    if (job.kind === 'transcribe' && request.transcribeRoute === 'groq')
+      return this.groqJob(job);
     if (job.kind === 'silences') return this.silencesJob(job);
     if (job.kind === 'waveform') return this.waveformJob(job);
     if (job.kind === 'diarize') return this.diarizeJob(job);
@@ -79,17 +96,29 @@ export class WorkerService {
     if (job.kind === 'cut') return this.cutJob(job);
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
-      : {
-          ...withoutHint(job),
-          kind: 'transcode',
-          sourcePath: this.deps.files.uploadPath(job.mediaId),
-          targetPath: this.deps.files.workPath(job.mediaId, job.leaseId),
-          flacTargetPath: this.deps.files.flacWorkPath(
-            job.mediaId,
-            job.leaseId,
-          ),
-          leaseMs: JOB_LEASE_MS,
-        };
+      : this.transcodeJob(job);
+  }
+
+  private kindsFor(request: {
+    readonly kinds: readonly MediaJobKind[];
+    readonly transcribeRoute?: TranscriptionRoute;
+  }): MediaJobKind[] {
+    const groqWaits =
+      request.transcribeRoute === 'groq' && this.deps.groqWaits?.() === true;
+    return request.kinds.filter((kind) => !groqWaits || kind !== 'transcribe');
+  }
+
+  /** A conversion names its files on the shared disk, the FLAC beside it (ADR 0022 §4). */
+  private transcodeJob(job: LeasedJob): LeasedWorkerJob {
+    const { files } = this.deps;
+    return {
+      ...withoutHint(job),
+      kind: 'transcode',
+      sourcePath: files.uploadPath(job.mediaId),
+      targetPath: files.workPath(job.mediaId, job.leaseId),
+      flacTargetPath: files.flacWorkPath(job.mediaId, job.leaseId),
+      leaseMs: JOB_LEASE_MS,
+    };
   }
 
   /** Measuring the audio rendition on the shared disk (KBC-044 FR-1). */
@@ -147,6 +176,24 @@ export class WorkerService {
       leaseMs: JOB_LEASE_MS,
       durationMs: this.deps.store.getMedia(job.mediaId)?.durationMs ?? null,
       audioPath: `/api/v1/media-worker/jobs/${job.id}/audio`,
+    };
+  }
+
+  /**
+   * A transcription routed to Groq (KBC-037): the VM reads the audio on the shared disk, the
+   * FLAC or, once it is gone, the rendition, and prompts with the current term list.
+   */
+  private groqJob(job: LeasedJob): GroqTranscribeJob {
+    const { files, store } = this.deps;
+    return {
+      ...withoutHint(job),
+      kind: 'transcribe',
+      provider: 'groq',
+      leaseMs: JOB_LEASE_MS,
+      durationMs: store.getMedia(job.mediaId)?.durationMs ?? null,
+      sourcePath: files.flacPath(job.mediaId),
+      renditionPath: store.getRendition(job.mediaId)?.path ?? null,
+      termsVersion: this.deps.termsVersion?.() ?? 1,
     };
   }
 

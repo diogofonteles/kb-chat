@@ -175,6 +175,11 @@
           </button>
         }
         <app-transcribe-again [media]="current" (queued)="item.set($event)" />
+        <app-transcribe-with-groq
+          [media]="current"
+          (sent)="item.set($event)"
+          (capped)="reload()"
+        />
       } @else if (current.archived) {
         <div class="notice" role="status">
           <p i18n="@@tracks.removedFromEdit">Faixa removida da edição</p>

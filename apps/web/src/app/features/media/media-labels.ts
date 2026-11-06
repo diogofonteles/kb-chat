@@ -45,7 +45,10 @@ export const statusTextOf = (item: MediaItem): string =>
 export const isInFlight = (item: MediaItem): boolean =>
   item.status === 'queued' ||
   item.status === 'processing' ||
-  item.transcription.status === 'transcribing';
+  item.transcription.status === 'transcribing' ||
+  // Groq takes it within a minute or so (KBC-037): no Mac to wait for.
+  (item.transcription.status === 'waiting' &&
+    item.transcription.route === 'groq');
 
 /**
  * A transcription waiting while a transcriber is on: it starts some time, maybe in days
@@ -86,21 +89,41 @@ const WAITING_REASONS: Record<TranscriberPresence, Label> = {
     $localize`:@@media.transcription.noTranscriber: · nenhum transcritor pareado`,
 };
 
-const TRANSCRIPTION_LABELS: Record<TranscriptionStatus, Label> = {
-  none: () => '',
-  waiting: (transcription, locale) =>
+/** Why Groq left it to the transcriber (KBC-037 FR-4), after the waiting reason. */
+const holdOf = (transcription: MediaTranscription): string =>
+  transcription.hold === 'monthly-cap'
+    ? $localize`:@@media.transcription.monthlyCap: · Teto mensal de mídia atingido`
+    : '';
+
+/** Waiting for a paired transcriber, or for Groq (KBC-037). */
+const waitingLabel: Label = (transcription, locale) => {
+  if (transcription.route === 'groq')
+    return $localize`:@@media.transcription.groqWaiting:Na fila do Groq`;
+  return (
     (transcription.version === null
       ? $localize`:@@media.transcription.waiting:Aguardando o transcritor`
       : $localize`:@@media.transcription.againWaiting:Retranscrevendo · aguardando o transcritor`) +
-    WAITING_REASONS[transcription.transcriber](transcription, locale),
-  transcribing: (transcription) =>
-    transcription.version === null
+    WAITING_REASONS[transcription.transcriber](transcription, locale) +
+    holdOf(transcription)
+  );
+};
+
+const TRANSCRIPTION_LABELS: Record<TranscriptionStatus, Label> = {
+  none: () => '',
+  waiting: waitingLabel,
+  transcribing: (transcription) => {
+    if (transcription.route === 'groq')
+      return $localize`:@@media.transcription.groqTranscribing:Transcrevendo pelo Groq…`;
+    return transcription.version === null
       ? $localize`:@@media.transcription.transcribing:Transcrevendo…`
-      : $localize`:@@media.transcription.again:Retranscrevendo…`,
-  done: (transcription) =>
-    transcription.confidence === 'low'
-      ? LOW_CONFIDENCE()
-      : $localize`:@@media.transcription.done:Transcrita`,
+      : $localize`:@@media.transcription.again:Retranscrevendo…`;
+  },
+  done: (transcription) => {
+    if (transcription.confidence === 'low') return LOW_CONFIDENCE();
+    return transcription.provider === 'groq'
+      ? $localize`:@@media.transcription.doneGroq:Transcrita pelo Groq`
+      : $localize`:@@media.transcription.done:Transcrita`;
+  },
   failed: () => $localize`:@@media.transcription.failed:A transcrição falhou`,
 };
 

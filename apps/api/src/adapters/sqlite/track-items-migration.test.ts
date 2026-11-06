@@ -220,7 +220,13 @@ describe('migration track-items (KBC-068)', () => {
       // 23 reads the column this one adds: it can only come after it.
       ...OURS.filter((one) => one.version > VERSION && one.version < 23),
     ]);
-    expect(applyMigrations(db, OURS)).toEqual([VERSION, 23, 24]);
+    // KBC-037's 25 adds columns to `jobs` later on, on purpose: up to 24 here.
+    expect(
+      applyMigrations(
+        db,
+        OURS.filter((one) => one.version <= 24),
+      ),
+    ).toEqual([VERSION, 23, 24]);
     db.close();
   });
 

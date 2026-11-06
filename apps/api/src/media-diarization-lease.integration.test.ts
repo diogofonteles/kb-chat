@@ -83,7 +83,8 @@ async function transcribedItem(): Promise<void> {
     bytes: 3,
   });
   const transcribe = workers().lease({ worker: 'mac', kinds: ['transcribe'] });
-  if (transcribe?.kind !== 'transcribe') throw new Error('no transcription');
+  if (transcribe?.kind !== 'transcribe' || !('audioPath' in transcribe))
+    throw new Error('no transcription');
   await completeTranscript(transcribe);
 }
 

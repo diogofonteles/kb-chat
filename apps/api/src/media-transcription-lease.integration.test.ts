@@ -67,7 +67,8 @@ async function readyItem(): Promise<void> {
 
 function leaseFor(worker: string): TranscribeJob {
   const job = workers().lease({ worker, kinds: ['transcribe'] });
-  if (job?.kind !== 'transcribe') throw new Error('no transcription');
+  if (job?.kind !== 'transcribe' || !('audioPath' in job))
+    throw new Error('no transcription');
   return job;
 }
 

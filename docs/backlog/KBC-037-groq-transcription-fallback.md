@@ -33,7 +33,7 @@ Como master, quero mandar para o Groq as transcrições que esperam o Mac há mu
 
 ## Acceptance criteria
 - **AC-1** (BR-1): Given o Groq conectado e o modo "Nunca", When o Mac fica parado 48 h, Then nenhum pedido vai ao Groq.
-- **AC-2** (FR-2): Given o modo "parado há mais de 12 h" e um trabalho na fila há 13 h sem transcritor visto, When o agendador roda, Then o trabalho é transcrito pelo Groq e marcado "Transcrito pelo Groq".
+- **AC-2** (FR-2): Given o modo "parado há mais de 12 h" e um trabalho na fila há 13 h sem transcritor visto, When o agendador roda, Then o trabalho é transcrito pelo Groq e marcado "Transcrita pelo Groq" (concorda com "Transcrita", o rótulo da transcrição já existente).
 - **AC-3** (FR-4, BR-2): Given US$ 9,99 gastos de US$ 10, When um trabalho de 1 h iria ao Groq, Then nada é enviado e a mídia mostra "Teto mensal de mídia atingido".
 - **AC-4** (FR-3): Given um 429 com `retry-after: 30`, When o adaptador recebe, Then espera 30 s e repete sem perder o trabalho.
 - **AC-5** (FR-1, BR-3): Given uma chave inválida, When "Testar conexão", Then "A chave não foi aceita pelo Groq"; e a chave nunca aparece em resposta ou log.

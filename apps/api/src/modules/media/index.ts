@@ -125,3 +125,14 @@ export {
   VoiceSuggestionService,
   type VoiceSuggestionServiceDeps,
 } from './voice-suggestion-service.js';
+export {
+  GroqService,
+  groqUsdOf,
+  type ChunkOutcome,
+  type GroqServiceDeps,
+} from './groq-service.js';
+export { GroqPacer, type PaceVerdict } from './groq-pacer.js';
+export { groqRoutes } from './groq-routes.js';
+export { chunkResultOf } from './groq-result.js';
+export { monthlyCapOf, saveMonthlyCap } from './media-cap.js';
+export { promptOf } from './whisper-tokens.js';

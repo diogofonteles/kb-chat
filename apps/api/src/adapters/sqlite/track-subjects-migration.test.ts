@@ -42,7 +42,8 @@ describe('Migration 20: track subjects (KBC-069)', () => {
     const before = openMediaDatabase(':memory:', upTo(19));
     const jobs = ddlOf(before, 'jobs');
     before.close();
-    const db = openMediaDatabase(':memory:', MEDIA_MIGRATIONS);
+    // KBC-037's 25 adds columns to `jobs` later on, on purpose: up to 20 here.
+    const db = openMediaDatabase(':memory:', upTo(20));
     expect(ddlOf(db, 'jobs')).toBe(jobs);
     db.prepare(
       `INSERT INTO media (id, topic, title, authorship, owner_principal, file_name,

@@ -36,6 +36,8 @@ export interface ItemView {
   readonly canEdit?: boolean;
   /** A track's recording (KBC-068 FR-4). */
   readonly parent?: TrackParent | null;
+  /** Groq is on and has a key: a master may send a waiting transcription to it (KBC-037). */
+  readonly groqReady?: boolean;
 }
 
 /** The stored author as the list now names it (still shown if no longer listed, KBC-049). */
@@ -88,8 +90,18 @@ function toTranscription(
       isMaster &&
       hasTranscript &&
       (record.jobStatus === 'failed' || record.jobStatus === 'dead'),
+    provider: record.provider,
+    route: record.route,
+    hold: record.jobStatus === 'queued' ? record.hold : null,
   };
 }
+
+/** Its transcription waits for a paired transcriber: Groq may take it (KBC-037). */
+const waitsForTranscriber = (record: MediaRecord): boolean =>
+  record.status === 'ready' &&
+  !record.track &&
+  record.transcription.jobStatus === 'queued' &&
+  record.transcription.route === 'transcriber';
 
 /**
  * Ready, with no transcription waiting or running (KBC-040 FR-3). A track follows its
@@ -100,6 +112,17 @@ const canAskAgain = (record: MediaRecord): boolean =>
   !record.track &&
   record.transcription.jobStatus !== 'queued' &&
   record.transcription.jobStatus !== 'leased';
+
+/** What a master may ask of its transcription: again (KBC-040), or of Groq (KBC-037). */
+const transcriptionActions = (
+  record: MediaRecord,
+  isMaster: boolean,
+  view: ItemView,
+) => ({
+  canTranscribeAgain: isMaster && canAskAgain(record),
+  canUseGroq:
+    isMaster && (view.groqReady ?? false) && waitsForTranscriber(record),
+});
 
 const progressOf = (progress: ItemView['progress']) => ({
   positionMs: progress?.positionMs ?? 0,
@@ -130,7 +153,7 @@ export function toMediaItem(
     createdAt: record.createdAt,
     canRetry: isMaster && isRetryable(record),
     canEdit: view.canEdit ?? false,
-    canTranscribeAgain: isMaster && canAskAgain(record),
+    ...transcriptionActions(record, isMaster, view),
     ...progressOf(view.progress),
     transcription: toTranscription(
       record.transcription,

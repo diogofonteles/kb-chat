@@ -1,8 +1,10 @@
 import { stat, rm, utimes, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, normalize, sep } from 'node:path';
-import type {
-  CutJob,
-  SilencesJob,
+import {
+  GROQ_VAD,
+  type CutJob,
+  type GroqTranscribeJob,
+  type SilencesJob,
   VmWorkerJob,
   WaveformJob,
   WorkerJob,
@@ -16,7 +18,10 @@ import {
   transcodeAudio,
   type FfmpegBins,
 } from './ffmpeg.js';
+import { readFlacChunk } from './flac-chunk.js';
+import { GroqTranscriber } from './groq-transcriber.js';
 import { detectSilences } from './silence-detector.js';
+import { planChunks } from './speech-chunks.js';
 import { measurePeaks } from './waveform.js';
 
 export interface MediaWorkerDeps {
@@ -47,6 +52,7 @@ const WORK_OF: Record<VmWorkerJob['kind'], string> = {
   silences: 'silence detection',
   waveform: 'waveform',
   cut: 'cut',
+  transcribe: 'Groq transcription',
 };
 
 const sleep = (ms: number, signal: AbortSignal) =>
@@ -107,6 +113,13 @@ export class MediaWorker {
         shutdown,
         work: (signal) => this.cut(job, signal),
       });
+    if (job.kind === 'transcribe')
+      return this.processMeasure({
+        job,
+        shutdown,
+        work: (signal, progress) =>
+          this.transcribeWithGroq(job, signal, progress),
+      });
     return this.processTranscode(job, shutdown);
   }
 
@@ -116,17 +129,24 @@ export class MediaWorker {
    * the measure until it works.
    */
   private async processMeasure(run: {
-    readonly job: SilencesJob | WaveformJob | CutJob;
+    readonly job: SilencesJob | WaveformJob | CutJob | GroqTranscribeJob;
     readonly shutdown: AbortSignal;
-    readonly work: (signal: AbortSignal) => Promise<void>;
+    readonly work: (
+      signal: AbortSignal,
+      progress: { percent: number },
+    ) => Promise<void>;
   }): Promise<void> {
     const { job, shutdown } = run;
     const abort = new AbortController();
     const stop = () => abort.abort();
     shutdown.addEventListener('abort', stop, { once: true });
-    const beats = this.startHeartbeat(job, { progress: null, abort });
+    const progress = { percent: 0 };
+    const beats = this.startHeartbeat(job, {
+      progress: job.kind === 'transcribe' ? progress : null,
+      abort,
+    });
     try {
-      await run.work(abort.signal);
+      await run.work(abort.signal, progress);
     } catch (err) {
       if (!abort.signal.aborted) await this.reportFailure(job, err);
     } finally {
@@ -188,6 +208,57 @@ export class MediaWorker {
       { job: job.id, peaks: peaks.length, elapsedMs },
       'waveform measured',
     );
+  }
+
+  /**
+   * A transcription routed to Groq (KBC-037): the audio cut here, at its pauses, and each
+   * chunk sent through the API, which holds the key. A lost lease drops it all.
+   */
+  private async transcribeWithGroq(
+    job: GroqTranscribeJob,
+    signal: AbortSignal,
+    progress: { percent: number },
+  ): Promise<void> {
+    const { bins, api, log } = this.deps;
+    const groq = new GroqTranscriber({
+      api,
+      plan: (leased, stop) => this.planGroq(leased, stop),
+      read: (source, span, stop) =>
+        readFlacChunk({ bins, source, ...span, signal: stop }),
+      sleep,
+    });
+    const outcome = await groq.run(job, { signal, progress });
+    if (outcome === 'lost') throw new LeaseLostError();
+    log.info({ job: job.id, outcome }, 'Groq transcription');
+  }
+
+  /** The FLAC, or the rendition once the FLAC is gone, and its speech chunks (FR-3). */
+  private async planGroq(job: GroqTranscribeJob, signal: AbortSignal) {
+    const { bins } = this.deps;
+    const source = await this.groqSource(job);
+    const { durationMs } = await probe(bins, source, signal);
+    const silences = await detectSilences({
+      bins,
+      source,
+      detector: GROQ_VAD,
+      durationMs,
+      timeoutMs: silencesTimeoutFor(durationMs),
+      signal,
+    });
+    return { source, plan: planChunks({ silences, durationMs }) };
+  }
+
+  private async groqSource(job: GroqTranscribeJob): Promise<string> {
+    const flac = this.resolve(job.sourcePath);
+    if (
+      await stat(flac).then(
+        () => true,
+        () => false,
+      )
+    )
+      return flac;
+    if (job.renditionPath) return this.resolve(job.renditionPath);
+    throw new InvalidMediaError('the job has no audio to transcribe');
   }
 
   /** A track copied out of the rendition (KBC-068 FR-2); its work file never outlives it. */

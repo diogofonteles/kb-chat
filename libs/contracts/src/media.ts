@@ -113,6 +113,21 @@ export const TRANSCRIBER_PRESENCES = ['on', 'off', 'none'] as const;
 export const transcriberPresenceSchema = z.enum(TRANSCRIBER_PRESENCES);
 export type TranscriberPresence = z.infer<typeof transcriberPresenceSchema>;
 
+/** Who transcribed: the paired Mac (mlx-whisper, ADR 0023) or the Groq fallback (KBC-037). */
+export const TRANSCRIPT_PROVIDERS = ['mlx-whisper', 'groq'] as const;
+export const transcriptProviderSchema = z.enum(TRANSCRIPT_PROVIDERS);
+export type TranscriptProvider = z.infer<typeof transcriptProviderSchema>;
+
+/** Who a pending transcription waits for (KBC-037). */
+export const TRANSCRIPTION_ROUTES = ['transcriber', 'groq'] as const;
+export const transcriptionRouteSchema = z.enum(TRANSCRIPTION_ROUTES);
+export type TranscriptionRoute = z.infer<typeof transcriptionRouteSchema>;
+
+/** Why Groq left a job to the transcriber: the media monthly cap (KBC-037 FR-4). */
+export const TRANSCRIPTION_HOLDS = ['monthly-cap'] as const;
+export const transcriptionHoldSchema = z.enum(TRANSCRIPTION_HOLDS);
+export type TranscriptionHold = z.infer<typeof transcriptionHoldSchema>;
+
 export const mediaTranscriptionSchema = z.object({
   status: transcriptionStatusSchema,
   /** The current version's; null before the first transcript. */
@@ -125,6 +140,12 @@ export const mediaTranscriptionSchema = z.object({
   transcriberOffSince: z.iso.datetime().nullable(),
   /** The newest attempt failed and the current transcript stayed (KBC-040 BR-3). */
   lastAttemptFailed: z.boolean().default(false),
+  /** Who made the current transcript (KBC-037: "Transcrita pelo Groq"); null before one. */
+  provider: transcriptProviderSchema.nullable().default(null),
+  /** Who the pending job waits for: a paired transcriber or Groq (KBC-037). */
+  route: transcriptionRouteSchema.default('transcriber'),
+  /** Why Groq did not take the pending job (KBC-037 FR-4). */
+  hold: transcriptionHoldSchema.nullable().default(null),
 });
 export type MediaTranscription = z.infer<typeof mediaTranscriptionSchema>;
 
@@ -167,6 +188,8 @@ export const mediaItemSchema = z.object({
   canEdit: z.boolean().default(false),
   /** A master may queue a new transcription: it is ready and none is pending (KBC-040 FR-3). */
   canTranscribeAgain: z.boolean().default(false),
+  /** A master may send its waiting transcription to Groq now (KBC-037). */
+  canUseGroq: z.boolean().default(false),
   /** Where the person who asks stopped (KBC-041 FR-2): 0 when never heard or heard to the end. */
   positionMs: z.number().int().min(0),
   /** When that person heard it to 95% or more (BR-2); null otherwise. */
@@ -544,6 +567,28 @@ export const transcribeJobSchema = z.object({
 });
 export type TranscribeJob = z.infer<typeof transcribeJobSchema>;
 
+/**
+ * A transcription routed to Groq (KBC-037), leased by the VM worker: it cuts the audio on
+ * the shared disk and sends each chunk through the API, which holds the key (ADR 0017).
+ */
+export const groqTranscribeJobSchema = z.object({
+  id: mediaJobIdSchema,
+  leaseId: z.uuid(),
+  kind: z.literal('transcribe'),
+  provider: z.literal('groq'),
+  mediaId: mediaIdSchema,
+  attempt: z.number().int().min(1),
+  leaseMs: z.number().int().min(1),
+  durationMs: z.number().int().min(0).nullable(),
+  /** The 16 kHz FLAC, relative to the media directory; it may be gone already. */
+  sourcePath: z.string().min(1),
+  /** The audio rendition, read when the FLAC is gone (ADR 0022 §4). */
+  renditionPath: z.string().min(1).nullable(),
+  /** The term list every chunk is prompted with. */
+  termsVersion: z.number().int().min(1),
+});
+export type GroqTranscribeJob = z.infer<typeof groqTranscribeJobSchema>;
+
 /* ---------- Silence maps (KBC-044, ADR 0025 §3) ---------- */
 
 /** One pause of a media item, in ms of the original timeline (end after start). */
@@ -624,6 +669,7 @@ export type CutJob = z.infer<typeof cutJobSchema>;
 /** The jobs the VM worker leases: conversions, silence maps, waveforms and cuts. */
 export const vmWorkerJobSchema = z.discriminatedUnion('kind', [
   workerJobSchema,
+  groqTranscribeJobSchema,
   silencesJobSchema,
   waveformJobSchema,
   cutJobSchema,
@@ -708,6 +754,8 @@ export type DiarizeJob = z.infer<typeof diarizeJobSchema>;
 
 /** POST …/jobs/lease answers one of these, by the kinds the token may lease. */
 export const leasedJobSchema = z.union([
+  // Before `transcribeJobSchema`: the answer is serialized by the first that fits.
+  groqTranscribeJobSchema,
   workerJobSchema,
   transcribeJobSchema,
   silencesJobSchema,
@@ -813,16 +861,19 @@ export const rawSegmentSchema = z
       .optional(),
   })
   .refine(inOrder, ORDER);
+/** Whisper's own output for one chunk (the Mac's, or Groq's put in the same shape). */
+export const rawChunkResultSchema = z.looseObject({
+  segments: z
+    .array(rawSegmentSchema)
+    .max(RAW_TRANSCRIPT_LIMITS.segmentsPerChunk),
+});
+export type RawChunkResult = z.infer<typeof rawChunkResultSchema>;
 export const rawChunkSchema = z
   .looseObject({
     /** Seconds from the start of the track. */
     offset: finite.min(0),
     end: finite.min(0),
-    result: z.looseObject({
-      segments: z
-        .array(rawSegmentSchema)
-        .max(RAW_TRANSCRIPT_LIMITS.segmentsPerChunk),
-    }),
+    result: rawChunkResultSchema,
   })
   .refine((chunk) => chunk.offset <= chunk.end, ORDER);
 export const rawTranscriptSchema = z.looseObject({

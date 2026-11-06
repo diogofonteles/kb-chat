@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { TERMS_TOKEN_LIMIT } from '@kb-chat/contracts';
 
 /** The same path from `src/` and from `dist/`. */
 const VOCABULARY = new URL(
@@ -67,4 +68,18 @@ export function countPromptTokens(terms: readonly string[]): number {
     (sum, piece) => sum + tokensOfPiece(piece, vocabulary),
     0,
   );
+}
+
+/**
+ * The prompt `build_prompt` sends (ADR 0023 §3), for Groq (KBC-037): the terms joined with
+ * commas and a period, cut at whole terms to fit whisper's 224 tokens. Saved lists already
+ * fit (KBC-040 BR-2); the cut only guards an older, longer version.
+ */
+export function promptOf(terms: readonly string[]): string {
+  const kept: string[] = [];
+  for (const term of terms) {
+    if (countPromptTokens([...kept, term]) > TERMS_TOKEN_LIMIT) break;
+    kept.push(term);
+  }
+  return kept.length > 0 ? `${kept.join(', ')}.` : '';
 }
