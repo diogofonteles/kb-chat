@@ -704,6 +704,15 @@ export class TrackEditorPage {
   }
 
   /** One press out of an overlap too small to see (KBC-094); "Desfazer" takes it back. */
+  protected closeOverlap(id: string): void {
+    const closed = closeOverlap(this.draft.tracks(), id);
+    if (!closed) return;
+    this.draft.apply(
+      closed.map((track) => (track.id === id ? touched(track) : track)),
+    );
+    this.list()?.focusRow();
+  }
+
   /** The transcript is read at once: a track is always selected, with its text (KBC-092). */
   private followText(): void {
     this.text.follow(
@@ -713,15 +722,6 @@ export class TrackEditorPage {
       }),
     );
     this.text.open();
-  }
-
-  protected closeOverlap(id: string): void {
-    const closed = closeOverlap(this.draft.tracks(), id);
-    if (!closed) return;
-    this.draft.apply(
-      closed.map((track) => (track.id === id ? touched(track) : track)),
-    );
-    this.list()?.focusRow();
   }
 
   protected undo(): void {
