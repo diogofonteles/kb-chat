@@ -129,13 +129,12 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       token: 'nat_the-secret-token-of-the-mac-0123456789',
     });
     TestBed.tick();
-    // The read sent before the pairing answers without it: a fresh one must follow.
-    first.flush({ items: [] });
-    const fresh = await vi.waitFor(() => {
-      TestBed.tick();
-      return http.expectOne({ method: 'GET', url: URL });
-    });
-    fresh.flush({ items: [aTranscriber({ name: 'Mac novo' })] });
+    // The read sent before the pairing would answer without it: it is dropped, and a
+    // fresh one goes out.
+    expect(first.cancelled).toBe(true);
+    http
+      .expectOne({ method: 'GET', url: URL })
+      .flush({ items: [aTranscriber({ name: 'Mac novo' })] });
     await result.fixture.whenStable();
     expect(
       screen.getByRole('button', { name: 'Revogar Mac novo' }),

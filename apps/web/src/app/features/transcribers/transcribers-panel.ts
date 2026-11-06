@@ -7,11 +7,10 @@ import {
   ElementRef,
   afterNextRender,
   computed,
-  effect,
   inject,
   Injector,
+  linkedSignal,
   signal,
-  untracked,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -89,18 +88,32 @@ export class TranscribersPanel {
     viewChild.required<ElementRef<HTMLElement>>('listTitle');
   private copyTimer: ReturnType<typeof setTimeout> | undefined;
 
-  protected readonly list = httpResource(() => transcribersUrl(), {
-    parse: (body) => transcriberListSchema.parse(body),
-  });
   /**
-   * A change the list on screen does not have yet. `reload()` does nothing while a read is
-   * on its way, and that read, sent before the change, answers without it (a new pairing
-   * missing from "Pareados"): the list reads again once it lands.
+   * Bumped after each change: a new request cancels a read still on its way. `reload()`
+   * does nothing then, and that read, sent before the change, answers without it (a new
+   * pairing missing from "Pareados").
    */
-  private readonly listStale = signal(false);
-  protected readonly items = computed<Transcriber[]>(() =>
-    this.list.hasValue() ? this.list.value().items : [],
+  private readonly listVersion = signal(0);
+  protected readonly list = httpResource(
+    () => {
+      this.listVersion();
+      return { url: transcribersUrl() };
+    },
+    { parse: (body) => transcriberListSchema.parse(body) },
   );
+  /**
+   * The rows last read, kept while the next read is on its way: a new request empties the
+   * resource, and the rows (and the focus in them) must not blink away.
+   */
+  private readonly shown = linkedSignal<
+    Transcriber[] | null,
+    Transcriber[] | null
+  >({
+    source: () => (this.list.hasValue() ? this.list.value().items : null),
+    computation: (items, previous) => items ?? previous?.value ?? null,
+  });
+  protected readonly listLoaded = computed(() => this.shown() !== null);
+  protected readonly items = computed<Transcriber[]>(() => this.shown() ?? []);
   /** The same "visto em" format as the media list's (UP-05). */
   protected readonly seenAtFormat = seenAtFormat();
   protected readonly name = signal('');
@@ -122,11 +135,6 @@ export class TranscribersPanel {
 
   constructor() {
     this.destroyRef.onDestroy(() => clearTimeout(this.copyTimer));
-    effect(() => {
-      if (!this.listStale() || this.list.isLoading()) return;
-      this.listStale.set(false);
-      untracked(() => this.list.reload());
-    });
   }
 
   protected editName(event: Event): void {
@@ -309,7 +317,7 @@ export class TranscribersPanel {
   private settle(notice: Notice | null): void {
     this.busy.set(false);
     this.notice.set(notice);
-    if (!this.list.reload()) this.listStale.set(true);
+    this.listVersion.update((version) => version + 1);
   }
 
   private flashCopy(what: Copied, state: CopyState): void {
