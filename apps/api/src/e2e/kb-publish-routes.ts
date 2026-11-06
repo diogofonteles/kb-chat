@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type {
   CompleteKbPublishRequest,
   KbPublishJob,
@@ -62,6 +63,8 @@ export function registerKbPublishMac(
     catalog: CatalogRegistry;
     authors: AuthorsService;
     vault: string;
+    /** The media database's folder: `forget` reaches it directly, as no route does. */
+    mediaDir: string;
   },
 ): void {
   const { kb } = createMediaDocuments(input);
@@ -75,6 +78,23 @@ export function registerKbPublishMac(
       const documents = await publishAll(kb, { topic, vault: input.vault });
       await input.catalog.refresh(topic);
       return reply.code(200).send({ documents });
+    },
+  );
+  // A collection as a database from before KBC-099 left it: its published tracks with no
+  // document and no job ("Publicar no acervo as faixas que já existem", AC-16).
+  app.post(
+    '/api/e2e/kb-publish/forget',
+    { config: { access: PUBLIC } },
+    async (request, reply) => {
+      const { topic } = topicBody.parse(request.body);
+      const db = new DatabaseSync(join(input.mediaDir, 'media.db'));
+      try {
+        db.prepare('DELETE FROM media_documents WHERE topic = ?').run(topic);
+        db.prepare('DELETE FROM kb_publish_jobs WHERE topic = ?').run(topic);
+      } finally {
+        db.close();
+      }
+      return reply.code(204).send();
     },
   );
 }

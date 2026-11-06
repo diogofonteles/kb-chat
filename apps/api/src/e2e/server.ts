@@ -285,6 +285,7 @@ if (media) {
     catalog,
     authors,
     vault: config.KB_VAULT,
+    mediaDir: config.KB_CHAT_MEDIA_DIR,
   });
 }
 registerOpenRouterConsent(app, openRouter);
