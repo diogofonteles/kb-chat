@@ -78,7 +78,16 @@ test('AC-5, AC-7: a master connects Groq, chooses the mode and sees the month, w
   await dialog.getByRole('radio', { name: 'Só quando eu pedir' }).check();
   await dialog.getByRole('button', { name: 'Salvar modo' }).click();
   await expect(dialog.getByText('Modo salvo.')).toBeVisible();
-  await expect(dialog.getByLabel('Teto mensal (US$)')).toBeVisible();
+  const cap = dialog.getByLabel('Teto mensal (US$)');
+  await expect(cap).toBeVisible();
+  // An empty cap is no cap: refused at the field, never saved as US$ 0.
+  await cap.fill('');
+  await dialog.getByRole('button', { name: 'Salvar teto' }).click();
+  await expect(
+    dialog.getByText('Use um valor de 0 a 1000 dólares.'),
+  ).toBeVisible();
+  await expect(cap).toHaveAttribute('aria-invalid', 'true');
+  await expect(dialog.getByText('Teto salvo.')).toHaveCount(0);
   expect(await seriousViolations(page)).toEqual([]);
 });
 

@@ -221,7 +221,12 @@ describe('migration track-items (KBC-068)', () => {
       ...OURS.filter((one) => one.version > VERSION && one.version < 23),
     ]);
     // KBC-037's 25 adds columns to `jobs` later on, on purpose: up to 24 here.
-    expect(applyMigrations(db, OURS.filter((one) => one.version <= 24))).toEqual([VERSION, 23, 24]);
+    expect(
+      applyMigrations(
+        db,
+        OURS.filter((one) => one.version <= 24),
+      ),
+    ).toEqual([VERSION, 23, 24]);
     db.close();
   });
 
