@@ -200,6 +200,44 @@ async function playingAt(page: Page, seconds: number) {
   }, seconds);
 }
 
+/**
+ * Moves the listening to `seconds` at half speed and records, frame by frame, each word
+ * painted until `last` is painted after `first`: a word lasts 0.3 s, too short to catch by
+ * polling from the test, so nothing here hangs on timing (QE-16). Returns the words from
+ * the last `first` on.
+ */
+async function paintedFrom(
+  page: Page,
+  seconds: number,
+  [first, last]: readonly [string, string],
+): Promise<(string | null)[]> {
+  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  const painted = await audition(page).evaluate(
+    async (element, { at, first, last }) => {
+      interface Registry {
+        get(name: string): Iterable<Range> | undefined;
+      }
+      const registry = (CSS as unknown as { highlights: Registry }).highlights;
+      const audio = element as HTMLAudioElement;
+      audio.playbackRate = 0.5;
+      audio.currentTime = at;
+      const seen: (string | null)[] = [];
+      const until = performance.now() + 15_000;
+      while (performance.now() < until) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        if (audio.seeking) continue;
+        const [range] = Array.from(registry.get('track-word') ?? []);
+        const word = range?.toString() ?? null;
+        if (seen.at(-1) !== word) seen.push(word);
+        if (word === last && seen.includes(first)) break;
+      }
+      return seen;
+    },
+    { at: seconds, first, last },
+  );
+  return painted.slice(painted.lastIndexOf(first));
+}
+
 const lineTexts = (region: Locator) =>
   region
     .locator('.line')
@@ -244,9 +282,7 @@ test('AC-2, AC-15: "Ouvir" opens the text and "está" is marked between its star
   await page.getByRole('button', { name: 'Ouvir a faixa 2' }).click();
   await expect(textOf(page, 2)).toBeVisible();
   await textButton(page, 2).focus();
-  await playingAt(page, 40.65);
-  await expect.poll(() => spokenWord(page)).toBe('está');
-  await expect.poll(() => spokenWord(page)).toBe('em');
+  expect(await paintedFrom(page, 40.3, ['está', 'em'])).toEqual(['está', 'em']);
   // The highlight moving never moves the focus.
   await expect(textButton(page, 2)).toBeFocused();
   // AC-8: a segment without word times is marked whole, with no error.
@@ -362,9 +398,11 @@ test('AC-11: a transcript that cannot be read offers "Tentar de novo", and the r
   await expect(textOf(page, 1)).toContainText('Não consegui carregar o texto.');
   refuse = false;
   await page
-    .getByRole('button', { name: 'Tentar de novo carregar o texto' })
+    .getByRole('button', { name: 'Tentar de novo: carregar o texto' })
     .click();
   await expect(textOf(page, 1)).toContainText(BEFORE);
+  // The button is gone with the error: the focus goes to the text, not to the page.
+  await expect(textOf(page, 1)).toBeFocused();
 });
 
 test('AC-12: a new transcript while the text is open replaces it, with no old word marked', async ({
@@ -409,13 +447,11 @@ test('AC-12: a new transcript while the text is open replaces it, with no old wo
   await openStep2(page, lecture, step);
   await page.getByRole('button', { name: 'Ouvir a faixa 2' }).click();
   await expect(textOf(page, 2)).toContainText(FIRST_LINE);
-  await playingAt(page, 40.65);
-  await expect.poll(() => spokenWord(page)).toBe('está');
+  expect(await paintedFrom(page, 40.3, ['está', 'em'])).toEqual(['está', 'em']);
   newer = true;
   step.transcribe = 'done';
   await expect(textOf(page, 2)).toHaveText(NEWER, { timeout: 10_000 });
-  await playingAt(page, 40.65);
-  await expect.poll(() => spokenWord(page)).toBe('da');
+  expect(await paintedFrom(page, 40.3, ['da', 'fala'])).toEqual(['da', 'fala']);
 });
 
 /* ---------- Step 3 ---------- */
@@ -428,21 +464,55 @@ test('AC-4, AC-18: step 3 shows the selected track’s text, the spoken word, an
   expect(await lineTexts(region)).toContain(FIRST_LINE);
   await expect(region).not.toContainText(BEFORE);
   await page.getByRole('button', { name: '▶ Ouvir' }).click();
-  await playingAt(page, 40.65);
-  await expect.poll(() => spokenWord(page)).toBe('está');
+  expect(await paintedFrom(page, 40.3, ['está', 'em'])).toEqual(['está', 'em']);
   await saveEvidence(page, `${testInfo.project.name}-step3-text`);
 
   await page.getByRole('button', { name: 'Ver transcrição completa' }).click();
   await expect(region).toContainText(BEFORE);
   await expect(region.locator('.line.inside').first()).toHaveText(EDGE_IN);
-  await expect(region.locator('.line.inside').first()).toBeInViewport();
-  await playingAt(page, 40.65);
-  await expect.poll(() => spokenWord(page)).toBe('está');
+  expect(await paintedFrom(page, 40.3, ['está', 'em'])).toEqual(['está', 'em']);
   await saveEvidence(page, `${testInfo.project.name}-step3-whole`);
   await page.getByRole('button', { name: 'Ver só a faixa' }).click();
   await expect(region).not.toContainText(BEFORE);
   expect((await auditionState(page)).paused).toBe(false);
 });
+
+test('AC-18: with nothing playing, the whole transcript opens at the track’s first line', async ({
+  page,
+}) => {
+  await openStep3(page, 3);
+  const region = textOf(page, 3);
+  await page.getByRole('button', { name: 'Ver transcrição completa' }).click();
+  await expect(region).toContainText(BEFORE);
+  const first = region.locator('.line.inside').first();
+  await expect(first).toHaveText(EDGE_OUT);
+  // Track 3 starts far below the block's top: it has to scroll there, and not past it.
+  expect(await settledTop(region)).toBeGreaterThan(0);
+  expect(await lineInBlock(first)).toBe(true);
+});
+
+/** The block's scrollTop once it stayed put for 10 frames. */
+const settledTop = (region: Locator) =>
+  region.evaluate(async (block) => {
+    let still = 0;
+    let last = block.scrollTop;
+    while (still < 10) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      still = block.scrollTop === last ? still + 1 : 0;
+      last = block.scrollTop;
+    }
+    return last;
+  });
+
+/** The line's top lies inside its block's visible box. */
+const lineInBlock = (line: Locator) =>
+  line.evaluate((element) => {
+    const block = element.closest('[role="region"]');
+    if (!block) return false;
+    const box = block.getBoundingClientRect();
+    const top = element.getBoundingClientRect().top;
+    return top >= box.top && top < box.bottom;
+  });
 
 test('AC-5: "Ouvir o início" marks nothing before the start and the first word as it starts', async ({
   page,
@@ -514,7 +584,7 @@ test('AC-7: while the AI proposes, the selected track’s text is there to read'
   await expect(page.getByRole('textbox', { name: 'Título' })).toHaveCount(0);
 });
 
-test('AC-13: the block follows the word inside itself, never the page, and not after the person scrolled', async ({
+test('AC-13: the block follows the word inside itself, never the page, and not for 5 s after the person scrolled', async ({
   page,
 }) => {
   await openStep3(page, 3);
@@ -522,32 +592,59 @@ test('AC-13: the block follows the word inside itself, never the page, and not a
   await page.getByRole('button', { name: '▶ Ouvir' }).click();
   await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
   const pageAt = await page.evaluate(() => window.scrollY);
-  await playingAt(page, 106);
-  await expect.poll(() => spokenWord(page)).toMatch(/Linha|26|de|enchimento/);
+  // Line 17 of the filler, far below the block's first lines.
+  await playingAt(page, 95);
+  await expect.poll(() => spokenWord(page)).not.toBeNull();
   await expect
     .poll(() => region.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);
   expect(await page.evaluate(() => window.scrollY)).toBe(pageAt);
-  // The person scrolls the block back up: it stays there for 5 s.
-  await region.dispatchEvent('wheel');
-  await region.evaluate((element) => {
-    element.scrollTop = 0;
-  });
-  const pause = (ms: number) =>
-    page.evaluate(
-      (wait) => new Promise((resolve) => setTimeout(resolve, wait)),
-      ms,
-    );
-  await pause(300);
-  const left = await region.evaluate((element) => element.scrollTop);
-  await playingAt(page, 106.5);
-  await expect.poll(() => spokenWord(page)).toMatch(/26|de|enchimento/);
-  await pause(800);
-  // Following the word would bring it back down, hundreds of pixels.
-  expect(await region.evaluate((element) => element.scrollTop)).toBeLessThan(
-    left + 40,
-  );
+  await expectHeldThenFollowed(region);
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageAt);
 });
+
+/**
+ * Once the block's own scrolling settled, the person scrolls it to the top while the word
+ * plays further down: it stays exactly there while the words go on for 5 s (FR-4), then
+ * follows the word again. Sampled on every frame, so nothing waits for a fixed time.
+ */
+async function expectHeldThenFollowed(region: Locator): Promise<void> {
+  const samples = await region.evaluate(async (block, ownMs) => {
+    interface Registry {
+      get(name: string): Iterable<Range> | undefined;
+    }
+    const registry = (CSS as unknown as { highlights: Registry }).highlights;
+    const frame = () =>
+      new Promise((resolve) => requestAnimationFrame(resolve));
+    // The block's smooth scroll to the word is over: 10 frames in the same place.
+    let still = 0;
+    let last = block.scrollTop;
+    while (still < 10) {
+      await frame();
+      still = block.scrollTop === last ? still + 1 : 0;
+      last = block.scrollTop;
+    }
+    block.dispatchEvent(new WheelEvent('wheel', { deltaY: -1_000 }));
+    block.scrollTop = 0;
+    const from = performance.now();
+    const seen: { ms: number; top: number; word: string | null }[] = [];
+    while (performance.now() - from < ownMs + 5_000) {
+      await frame();
+      const [range] = Array.from(registry.get('track-word') ?? []);
+      const ms = performance.now() - from;
+      seen.push({ ms, top: block.scrollTop, word: range?.toString() ?? null });
+      if (ms > ownMs && block.scrollTop > 100) break;
+    }
+    return seen;
+  }, 5_000);
+  const held = samples.filter(({ ms }) => ms < 5_000);
+  const words = new Set(held.map(({ word }) => word));
+  // Following would have moved it hundreds of pixels on any of these words.
+  expect(words.size).toBeGreaterThanOrEqual(3);
+  expect(held.filter(({ top }) => top !== 0)).toEqual([]);
+  const back = samples.find(({ top }) => top > 100);
+  expect(back?.ms ?? 0).toBeGreaterThanOrEqual(5_000);
+}
 
 test('AC-14: on a phone a long text with a huge word fits, with no sideways scroll', async ({
   page,
@@ -581,8 +678,10 @@ for (const theme of ['light', 'dark', 'esoteric'] as const)
     await openStep2(page, lecture, { transcribe: 'done' });
     await page.getByRole('button', { name: 'Ouvir a faixa 2' }).click();
     const region = textOf(page, 2);
-    await playingAt(page, 40.65);
-    await expect.poll(() => spokenWord(page)).toBe('está');
+    expect(await paintedFrom(page, 40.3, ['está', 'em'])).toEqual([
+      'está',
+      'em',
+    ]);
     const look = await region
       .locator('.line')
       .nth(1)
@@ -699,7 +798,7 @@ test('AC-17: the marked word differs from the spoken one by at most 120 ms, one 
   expect(writes).toBeLessThanOrEqual(changes);
 });
 
-test('NFR-3: on a 60 min track the text shows within 300 ms and the highlight costs at most 2 ms per frame', async ({
+test('NFR-3, AC-13: on a 60 min track the text shows within 300 ms, the highlight costs at most 2 ms per frame, and the block follows the word inside itself', async ({
   page,
 }, testInfo) => {
   test.skip(
@@ -764,7 +863,33 @@ test('NFR-3: on a 60 min track the text shows within 300 ms and the highlight co
   expect(shownMs).toBeLessThanOrEqual(300);
   expect(open.frames).toBeGreaterThan(120);
   if (!process.env['CI']) expect(extraMs).toBeLessThanOrEqual(2);
+
+  // AC-13 on the 60 min track: a jump to its middle is followed inside the block, never
+  // by the page, and the person's own scroll holds it for 5 s.
+  await textButton(page, 1).click();
+  const region = textOf(page, 1);
+  await expect(region.locator('.line')).toHaveCount(600);
+  const pageAt = await page.evaluate(() => window.scrollY);
+  await playingAt(page, 1_800);
+  await expect.poll(() => wordInBlock(region), { timeout: 10_000 }).toBe(true);
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageAt);
+  await expectHeldThenFollowed(region);
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageAt);
 });
+
+/** The painted word lies inside the block's visible box. */
+const wordInBlock = (region: Locator) =>
+  region.evaluate((block) => {
+    interface Registry {
+      get(name: string): Iterable<Range> | undefined;
+    }
+    const registry = (CSS as unknown as { highlights: Registry }).highlights;
+    const [range] = Array.from(registry.get('track-word') ?? []);
+    if (!range) return false;
+    const word = range.getBoundingClientRect();
+    const box = block.getBoundingClientRect();
+    return word.top >= box.top && word.bottom <= box.bottom;
+  });
 
 interface FrameCost {
   readonly frames: number;
