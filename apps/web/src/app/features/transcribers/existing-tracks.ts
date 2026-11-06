@@ -195,18 +195,7 @@ export class ExistingTracks {
       .publish(topics)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (result) => {
-          this.busy.set(false);
-          this.choosing.set(false);
-          this.notice.set(resultText(result));
-          this.waitingFor.set(
-            result.queued > 0
-              ? { topics: new Set(topics), sawQueued: false }
-              : null,
-          );
-          this.overview.reload();
-          this.focusAfterRender(() => this.action()?.nativeElement);
-        },
+        next: (result) => this.published(topics, result),
         error: (err: unknown) => {
           this.busy.set(false);
           this.notice.set(
@@ -216,6 +205,21 @@ export class ExistingTracks {
           );
         },
       });
+  }
+
+  /** Says what was queued, follows it, and gives the focus back to the action. */
+  private published(
+    topics: readonly string[],
+    result: PublishExistingTracksResult,
+  ): void {
+    this.busy.set(false);
+    this.choosing.set(false);
+    this.notice.set(resultText(result));
+    this.waitingFor.set(
+      result.queued > 0 ? { topics: new Set(topics), sawQueued: false } : null,
+    );
+    this.overview.reload();
+    this.focusAfterRender(() => this.action()?.nativeElement);
   }
 
   protected readonly capReachedText = capReached;
