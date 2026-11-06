@@ -88,6 +88,13 @@ class Worker:
         kinds = (*kinds, "voice-profile") if self.embedder else kinds
         return (*kinds, "kb-publish") if self.publisher else kinds
 
+    def _kinds_now(self) -> tuple[str, ...]:
+        """The kinds to ask for now: none of kb-publish while the vault's lock is held, so a
+        busy vault does not cost a job an attempt (QA F-8)."""
+        if self.publisher is not None and self.publisher.busy():
+            return tuple(kind for kind in self.kinds if kind != "kb-publish")
+        return self.kinds
+
     def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
         """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
         log.info(
@@ -113,7 +120,7 @@ class Worker:
     def step(self) -> str:
         """One lease attempt: 'job', 'idle', 'revoked' or 'error'."""
         try:
-            job = self.api.lease(self.kinds)
+            job = self.api.lease(self._kinds_now())
         except (Unauthorized, TokenError) as err:
             log.error(REVOKED if isinstance(err, Unauthorized) else str(err))
             return "revoked"
@@ -215,7 +222,9 @@ class Worker:
             result = self.publisher.publish(job)
         except (KbStepFailed, VaultBusy, UnsafePath) as err:
             log.error("job %s: publishing failed: %s", job["id"], err)
-            self.api.fail(job, "conversion-failed", str(err)[-2_000:])
+            # What kb spent before it failed is booked on the media ledger (ADR 0035 §11).
+            spent = err.spent if isinstance(err, KbStepFailed) else 0.0
+            self.api.fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
             return
         progress["percent"] = 100
         if self.api.upload_kb_result(job, result):

@@ -17,6 +17,7 @@ from transcriber.kb_publish import (
     VaultBusy,
     facets_of,
     kb_or_none,
+    spend_of,
 )
 from transcriber.worker import Worker
 
@@ -61,10 +62,17 @@ JOB = {
 class FakeKb:
     """Records each step; `classify` writes facets into the documents, as kb would."""
 
-    def __init__(self, vault: Path, fail: str | None = None, spend: float = 0.0004) -> None:
+    def __init__(
+        self,
+        vault: Path,
+        fail: str | None = None,
+        spend: float = 0.0004,
+        outputs: dict[str, str] | None = None,
+    ) -> None:
         self.vault = vault
         self.fail = fail
         self.spend = spend
+        self.outputs = outputs or {}
         self.calls: list[tuple[str, str, float]] = []
 
     def run(self, step: str, topic: str, budget_usd: float) -> KbRun:
@@ -76,7 +84,8 @@ class FakeKb:
                 text = file.read_text(encoding="utf-8")
                 facets = 'genre: talk_or_interview\ndepth: 2\nconcepts:\n  - "[[Ritmo]]"\n'
                 file.write_text(text.replace("---\n", f"---\n{facets}", 1), encoding="utf-8")
-        return KbRun(ok=True, output=f"{step} ok", spend_usd=self.spend)
+        spend = 0.0 if step == "index" else self.spend
+        return KbRun(ok=True, output=self.outputs.get(step, f"{step} ok"), spend_usd=spend)
 
 
 @pytest.fixture
@@ -90,13 +99,15 @@ def test_ac3_writes_the_files_and_runs_classify_link_index_in_order_with_the_bud
     result = KbPublisher(vault, kb).publish(JOB)
     written = vault / "hermetismo" / "raw" / "media" / "rec" / "track-1.md"
     assert "[0:41] O ritmo é a lei do pêndulo." in written.read_text(encoding="utf-8")
+    # The spike (kb 0.0.12): index before link gives link its vector neighbours.
     assert [(step, topic) for step, topic, _ in kb.calls] == [
         ("classify", "hermetismo"),
+        ("index", "hermetismo"),
         ("link", "hermetismo"),
         ("index", "hermetismo"),
     ]
-    budgets = [budget for _, _, budget in kb.calls]
-    assert budgets == pytest.approx([0.5, 0.4996, 0.4992])
+    budgets = {step: budget for step, _, budget in kb.calls if step != "index"}
+    assert budgets == pytest.approx({"classify": 0.5, "link": 0.4996})
     assert [one["path"] for one in result["documents"]] == [
         "raw/media/rec/track-1.md",
         "raw/media/rec/track-2.md",
@@ -104,7 +115,7 @@ def test_ac3_writes_the_files_and_runs_classify_link_index_in_order_with_the_bud
     first = result["documents"][0]
     assert first["ok"] is True
     assert first["facets"] == {"genre": "talk_or_interview", "depth": 2, "concepts": ["Ritmo"]}
-    assert first["spendUsd"] == pytest.approx(0.0006)
+    assert first["spendUsd"] == pytest.approx(0.0004)
     assert not (vault / LOCK_FILE).read_text()
 
 
@@ -125,13 +136,34 @@ def test_a_second_publication_while_the_vault_is_locked_is_refused(vault):
 
 
 @pytest.mark.parametrize(
-    "path", ["raw/media/../../../outside.md", "raw/articles/x.md", "/etc/x.md"]
+    "path",
+    [
+        "raw/media/../../../outside.md",
+        "raw/articles/x.md",
+        "/etc/x.md",
+        "raw/media/../articles/x.md",
+        "raw/media/rec/../../articles/x.md",
+        "raw/media",
+    ],
 )
 def test_a_path_outside_the_collections_media_folder_is_refused(vault, path):
+    article = vault / "hermetismo" / "raw" / "articles" / "x.md"
+    article.parent.mkdir(parents=True)
+    article.write_text("o texto do acervo", encoding="utf-8")
     job = {**JOB, "items": [{**JOB["items"][0], "path": path}]}
     with pytest.raises(UnsafePath):
         KbPublisher(vault, FakeKb(vault)).publish(job)
     assert not (vault.parent / "outside.md").exists()
+    assert article.read_text(encoding="utf-8") == "o texto do acervo"
+
+
+@pytest.mark.parametrize("topic", ["../outro", "a/../../b", "/etc", "Hermetismo", "", "a//b"])
+def test_a_topic_that_is_not_a_collection_slug_is_refused(vault, topic):
+    kb = FakeKb(vault)
+    with pytest.raises(UnsafePath):
+        KbPublisher(vault, kb).publish({**JOB, "topic": topic})
+    assert kb.calls == []
+    assert not (vault.parent / "outro").exists()
 
 
 def test_the_real_kb_commands_follow_adr_0035():
@@ -143,14 +175,15 @@ def test_the_real_kb_commands_follow_adr_0035():
         "--budget",
         "0.5000",
     ]
-    assert cli.command("index", "hermetismo", 0.25) == [
+    assert cli.command("link", "hermetismo", 0.25) == [
         "kb",
-        "index",
-        "--topic",
+        "link",
         "hermetismo",
         "--budget",
         "0.2500",
     ]
+    # kb 0.0.12: `kb index --topic t --budget x` exits 1 ("unknown flag: --budget").
+    assert cli.command("index", "hermetismo", 0.25) == ["kb", "index", "--topic", "hermetismo"]
 
 
 def test_kb_is_off_without_a_vault(tmp_path):
@@ -205,3 +238,150 @@ def test_ac4_the_worker_fails_the_job_with_kbs_output(fake_api, vault):
     assert failed["failure"] == "conversion-failed"
     assert failed["detail"] == "kb link: Error: OpenRouter 502 Bad Gateway"
     assert fake_api.bodies("kb-result") == []
+
+
+# What kb 0.0.12 printed in the owner's spike (2026-11-06), cut to the receipt lines.
+CLASSIFY_SPENT = """classify: 56 documents, 3 judged, skipped (stub 39, unchanged 14)
+written: concepts 3, depth 3, entities 3, genre 3, questions 3, relevance 3, summary 3
+decisions: 6 calls, 0 cache hits, US$ 0.0014
+generation: 3 calls, 0 cache hits, US$ 0.0002, 0 fallbacks, 0 failures
+"""
+TINY_BUDGET = """classify: 56 documents, 1 judged, skipped (stub 39, unchanged 16)
+coverage: 0/1 judged documents fully decided
+undecided documents (1, left unclassified): raw/media/rec/track-2.md
+writes: unchanged 1
+undecided: 1 (literals:budget 1); nothing was written for them, re-run to retry
+decisions: 2 calls, 0 cache hits, US$ 0.0005
+classify: 17 decided (apply 5, review 0, ignore 12)
+budget: US$ 0.0003 limit reached; re-run to resume through the cache
+"""
+NOTHING_TO_DO = """classify: 56 documents, 0 judged, skipped (stub 39, unchanged 17)
+coverage: 0/0 judged documents fully decided
+decisions: 0 calls, 0 cache hits, US$ 0.0000
+budget: US$ 0.0000 limit reached; re-run to resume through the cache
+"""
+LINK_UNDECIDED = """link: 56 documents, 3 judged, body links shadow
+undecided: 2
+decisions: 3 calls, 0 cache hits, US$ 0.0010
+"""
+KB_FRONTMATTER = """concepts:
+    - '[[Hermetismo e Filosofia Hermética]]'
+depth: 1.4
+entities:
+    - Lei do Ritmo
+genre: talk_or_interview
+questions:
+    - O que é a Lei do Ritmo?
+relevance: core
+summary: Explica o quinto princípio hermético, a Lei do Ritmo.
+example_of:
+    - '[[Hermetismo e Filosofia Hermética]]'
+"""
+
+
+@pytest.mark.parametrize(
+    ("output", "spent"),
+    [(CLASSIFY_SPENT, 0.0016), (TINY_BUDGET, 0.0005), (NOTHING_TO_DO, 0.0), ("index ok", 0.0)],
+)
+def test_the_spend_is_the_receipt_lines_never_the_budget_line(output, spent):
+    assert spend_of(output) == pytest.approx(spent)
+
+
+def test_facets_read_kbs_own_list_indent_and_numbers():
+    text = f"---\ntitle: T\nkb_chat_render: 1\n{KB_FRONTMATTER}---\n\n# T\n"
+    assert facets_of(text) == {
+        "concepts": ["Hermetismo e Filosofia Hermética"],
+        "depth": 1.4,
+        "genre": "talk_or_interview",
+        "relevance": "core",
+        "summary": "Explica o quinto princípio hermético, a Lei do Ritmo.",
+    }
+
+
+def test_a_document_kb_left_undecided_is_reported_incomplete_with_the_spend(vault):
+    kb = FakeKb(vault, outputs={"classify": TINY_BUDGET})
+    result = KbPublisher(vault, kb).publish(JOB)
+    first, second = result["documents"]
+    assert first["ok"] is True
+    assert second["ok"] is False
+    assert second["error"] == "kb left it undecided (budget reached): re-run"
+    assert second["spendUsd"] == pytest.approx(0.0004)
+
+
+def test_a_step_with_undecided_documents_it_does_not_name_leaves_every_document_incomplete(
+    vault,
+):
+    kb = FakeKb(vault, outputs={"link": LINK_UNDECIDED})
+    result = KbPublisher(vault, kb).publish(JOB)
+    assert [one["ok"] for one in result["documents"]] == [False, False]
+
+
+def test_a_budget_line_alone_is_not_incomplete(vault):
+    kb = FakeKb(vault, outputs={"classify": NOTHING_TO_DO, "link": NOTHING_TO_DO})
+    result = KbPublisher(vault, kb).publish(JOB)
+    assert [one["ok"] for one in result["documents"]] == [True, True]
+
+
+def test_a_failed_step_keeps_what_the_steps_before_it_spent(vault):
+    kb = FakeKb(vault, fail="link")
+    with pytest.raises(KbStepFailed) as failed:
+        KbPublisher(vault, kb).publish(JOB)
+    # classify 0.0004, index 0, link failed after spending 0.0001.
+    assert failed.value.spent == pytest.approx(0.0005)
+
+
+def test_ac4_the_worker_reports_the_spend_of_a_failed_job(fake_api, vault):
+    fake_api.jobs[:] = [dict(JOB)]
+    assert worker(fake_api, KbPublisher(vault, FakeKb(vault, fail="link"))).step() == "job"
+    (failed,) = fake_api.bodies("fail")
+    assert failed["spendUsd"] == pytest.approx(0.0005)
+
+
+def test_a_failure_before_any_spend_sends_no_spend(fake_api, vault):
+    fake_api.jobs[:] = [dict(JOB)]
+    kb = FakeKb(vault, fail="classify", spend=0.0)
+    publisher = KbPublisher(vault, kb)
+    kb.run = lambda step, topic, budget: KbRun(ok=False, output="boom")  # type: ignore[method-assign]
+    assert worker(fake_api, publisher).step() == "job"
+    (failed,) = fake_api.bodies("fail")
+    assert "spendUsd" not in failed
+
+
+def test_rewriting_a_document_keeps_the_keys_kb_wrote(vault):
+    target = vault / "hermetismo" / "raw" / "media" / "rec" / "track-1.md"
+    target.parent.mkdir(parents=True)
+    old = DOCUMENT.format(fingerprint="0" * 64).replace(
+        "kb_chat_fingerprint", "kb_chat_subjects:\n  - Ritmo\nkb_chat_fingerprint", 1
+    )
+    old = old.replace("title: O que é o ritmo?", "title: Título antigo", 1)
+    old = old.replace("\n---\n\n#", f"\n{KB_FRONTMATTER}---\n\n#", 1)
+    target.write_text(old, encoding="utf-8")
+    item = JOB["items"][0]
+    KbPublisher(vault, FakeKb(vault)).write("hermetismo", [item])
+    text = target.read_text(encoding="utf-8")
+    header = text.split("\n---\n", 1)[0]
+    assert header.startswith(item["markdown"].split("\n---\n", 1)[0])
+    assert header.endswith(KB_FRONTMATTER.rstrip("\n"))
+    assert "Título antigo" not in text
+    assert "kb_chat_subjects" not in text
+    assert text.endswith(item["markdown"].split("\n---\n", 1)[1])
+
+
+def test_a_new_document_is_written_as_rendered(vault):
+    KbPublisher(vault, FakeKb(vault)).write("hermetismo", [JOB["items"][0]])
+    target = vault / "hermetismo" / "raw" / "media" / "rec" / "track-1.md"
+    assert target.read_text(encoding="utf-8") == JOB["items"][0]["markdown"]
+
+
+def test_a_mac_whose_vault_is_busy_does_not_ask_for_kb_publish(fake_api, vault):
+    fake_api.jobs.clear()
+    publisher = KbPublisher(vault, FakeKb(vault))
+    with open(vault / LOCK_FILE, "a+") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        assert publisher.busy() is True
+        worker(fake_api, publisher).step()
+    assert publisher.busy() is False
+    worker(fake_api, publisher).step()
+    busy, free = fake_api.bodies("lease")
+    assert "kb-publish" not in busy["kinds"]
+    assert free["kinds"][-1] == "kb-publish"
