@@ -4,7 +4,8 @@
 # image tag also rolls back the edge configuration. Build context: the repository root.
 #   docker build -f apps/web/Dockerfile -t kb-chat-web .
 
-ARG NODE_IMAGE=node:22-bookworm-slim
+# The Node of .nvmrc: its SQLite has the FTS5 the media library's search needs.
+ARG NODE_IMAGE=node:22.23.2-bookworm-slim
 ARG CADDY_IMAGE=caddy:2.10-alpine
 
 # --- Build: the SPA and its CSP snippet ---

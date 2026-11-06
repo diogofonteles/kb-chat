@@ -13,7 +13,8 @@
 # Everything, the workspace and these global CLIs, is installed with pnpm (project rule);
 # versions are pinned.
 
-ARG NODE_IMAGE=node:22-bookworm-slim
+# The Node of .nvmrc: its SQLite has the FTS5 the media library's search needs.
+ARG NODE_IMAGE=node:22.23.2-bookworm-slim
 
 # --- Build: the whole workspace, then a self-contained bundle of the API ---
 FROM ${NODE_IMAGE} AS build
