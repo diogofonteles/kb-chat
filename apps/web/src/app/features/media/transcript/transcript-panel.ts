@@ -132,6 +132,11 @@ export class TranscriptPanel {
   readonly title = input.required<string>();
   /** The passage opened from a search hit, painted over its segments (KBC-039 AC-10). */
   readonly passage = input<PassageFocus | null>(null);
+  /**
+   * A passage cited by the research (KBC-099, T22): scrolled into the list's upper third as
+   * soon as it shows, with no playback to follow, and marked with a side bar besides the paint.
+   */
+  readonly revealPassage = input(false);
   /** "Mostrar quem fala" (KBC-065 FR-4). */
   readonly showSpeakers = input(true);
   /** "Destacar palavra a palavra" (KBC-045 FR-4). */
@@ -272,6 +277,14 @@ export class TranscriptPanel {
     () => this.hits()[this.currentHit()]?.segment ?? -1,
   );
   protected readonly selected = signal<Selected | null>(null);
+  /** The segments of a cited passage (KBC-099): marked and brought into view. */
+  protected readonly citedIndexes = computed((): readonly number[] => {
+    const passage = this.passage();
+    if (!this.revealPassage() || passage?.mediaId !== this.transcript().mediaId)
+      return [];
+    return this.passageIndexes(passage);
+  });
+  protected readonly cited = computed(() => new Set(this.citedIndexes()));
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -298,11 +311,23 @@ export class TranscriptPanel {
       },
       write: (target) => this.scrollList(target()),
     });
+    this.revealCited();
     this.paintSearch(destroyRef);
     this.paintPassage(destroyRef);
     this.paintWord(destroyRef);
     this.loadNeededWords(destroyRef);
     this.landOnPendingWord();
+  }
+
+  /** A cited passage comes into the list's upper third as soon as it shows (KBC-099). */
+  private revealCited(): void {
+    afterRenderEffect({
+      earlyRead: () => {
+        const [first] = this.citedIndexes();
+        return first === undefined ? null : this.scrollTargetOf(first);
+      },
+      write: (target) => this.scrollList(target()),
+    });
   }
 
   /**

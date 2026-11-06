@@ -40,6 +40,8 @@ import { describeForAnnouncement } from './result-count.js';
 import { ResultMessage, type OpenedPassage } from './result-message.js';
 import { passageKey } from './references.js';
 import { PassagePanel } from '@features/media/search-hit/passage-panel.js';
+import { TrackPassagePanel } from '@features/media/track-passage/track-passage-panel.js';
+import type { TrackOpening } from '@features/research/track-opening.js';
 import { ResearchStore } from '@features/research/research-store.js';
 import { ResearchThread } from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
@@ -65,6 +67,7 @@ const isMediaUrl = (url: string): boolean =>
     ViewSwitch,
     DocumentPanel,
     PassagePanel,
+    TrackPassagePanel,
     Sidebar,
     DecimalPipe,
     RouterOutlet,
@@ -150,16 +153,24 @@ export class ChatPage {
   protected readonly passage = computed(() =>
     this.onMedia() ? null : (this.store.openPassage()?.hit ?? null),
   );
+  /** A cited track on its passage, with the player beside it (KBC-099, T22). */
+  protected readonly track = computed(() =>
+    this.onMedia() ? null : this.store.openTrack(),
+  );
+  /** What opened the track panel: the focus goes back there when it closes (AC-12). */
+  private trackTrigger: HTMLElement | null = null;
   protected readonly activePassage = computed(() => {
     const hit = this.passage();
     return hit ? passageKey(hit) : null;
   });
   /** The panel's full player shows this media: no mini-player for it meanwhile. */
   protected readonly playerInPanel = computed(
-    () => this.passage()?.mediaId ?? null,
+    () =>
+      this.passage()?.mediaId ?? this.track()?.source.media?.mediaId ?? null,
   );
   protected readonly panelOpen = computed(
-    () => this.panel() !== null || this.passage() !== null,
+    () =>
+      this.panel() !== null || this.passage() !== null || this.track() !== null,
   );
   protected readonly covered = computed(
     () => this.panelOpen() && !this.desktop(),
@@ -326,6 +337,12 @@ export class ChatPage {
     if (topic) this.store.open(topic, doc);
   }
 
+  /** A cited track opens on its passage, paused, in the reading panel (KBC-099 FR-8). */
+  protected openTrack({ source, at, trigger }: TrackOpening): void {
+    this.trackTrigger = trigger;
+    this.store.openTrackPassage({ source, at });
+  }
+
   /** "Parar" disappears with the answer in flight: focus moves to the question box. */
   protected stopResearch(): void {
     this.research.stop();
@@ -387,7 +404,14 @@ export class ChatPage {
 
   protected closeDocument(): void {
     const closedId = this.opened()?.id;
+    const trigger = this.track() ? this.trackTrigger : null;
+    this.trackTrigger = null;
     this.store.close();
+    if (trigger?.isConnected) {
+      // Back to the citation or chip that opened the track (AC-12), once it is visible again.
+      afterNextRender(() => trigger.focus(), { injector: this.injector });
+      return;
+    }
     // Back to the card that opened the document (focusing the question box would pop the
     // phone keyboard); runs after the conversation is visible again so focus never lands on <body>.
     afterNextRender(() => this.focusCard(closedId), {

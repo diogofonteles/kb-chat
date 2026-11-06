@@ -3,9 +3,10 @@ import { registerTranscriberClock } from './transcriber-clock-routes.js';
 import { registerTranscriptSeed } from './transcript-seed-routes.js';
 import { registerDiarizationSeed } from './diarization-seed-routes.js';
 import { registerProposalSeed } from './proposal-seed-routes.js';
+import { registerKbPublishMac } from './kb-publish-routes.js';
 import { startMediaWorkers } from './media-worker-runner.js';
 import { privateTemp } from '../../../../tools/test-temp.mjs';
-import { mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,12 +75,24 @@ const codexRunner = await startCodexRunner({
   env: { PATH: process.env['PATH'] ?? '' },
 });
 
+/**
+ * A copy of the fixture vault: the fake Mac (KBC-099) writes track documents into it, and the
+ * checked-in fixture stays as it is.
+ */
+function vaultCopy(): string {
+  const copy = mkdtempSync(join(tmpdir(), 'kbchat-e2e-vault-'));
+  cpSync(
+    fileURLToPath(new URL('../../test/fixtures/vault', import.meta.url)),
+    copy,
+    { recursive: true },
+  );
+  return copy;
+}
+
 // E2E server: the fixture vault and the in-process index, no QMD or models.
 const config = loadConfig({
   ...process.env,
-  KB_VAULT: fileURLToPath(
-    new URL('../../test/fixtures/vault', import.meta.url),
-  ),
+  KB_VAULT: vaultCopy(),
   KB_CHAT_SEARCH: 'fixture',
   KB_CHAT_LLM: 'stub',
   KB_CHAT_STATE_DIR: mkdtempSync(join(tmpdir(), 'kbchat-e2e-')),
@@ -267,6 +280,12 @@ if (media) {
   registerTranscriptSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });
   registerDiarizationSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });
   registerProposalSeed(app, { mediaDir: config.KB_CHAT_MEDIA_DIR });
+  registerKbPublishMac(app, {
+    media,
+    catalog,
+    authors,
+    vault: config.KB_VAULT,
+  });
 }
 registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });

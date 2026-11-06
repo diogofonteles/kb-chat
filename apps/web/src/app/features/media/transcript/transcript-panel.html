@@ -88,6 +88,7 @@
             class="segment"
             [class.active]="segment.index === activeIndex()"
             [class.current-hit]="segment.index === currentHitSegment()"
+            [class.cited]="cited().has(segment.index)"
             [attr.data-start-ms]="segment.startMs"
             [attr.data-index]="segment.index"
           >

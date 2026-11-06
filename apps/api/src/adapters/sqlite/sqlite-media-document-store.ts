@@ -114,16 +114,18 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     now: Date;
     leaseMs: number;
     maxAttempts: number;
+    topic?: string;
   }): LeasedKbJob | null {
     return inTransaction(this.db, () => {
       this.buryExpired(input);
       const row = this.db
         .prepare(
           `SELECT id, topic, attempts FROM kb_publish_jobs
-           WHERE status = 'queued' OR (status = 'leased' AND lease_until < ?)
+           WHERE (status = 'queued' OR (status = 'leased' AND lease_until < ?))
+             AND (? IS NULL OR topic = ?)
            ORDER BY created_at, id LIMIT 1`,
         )
-        .get(input.now.getTime());
+        .get(input.now.getTime(), input.topic ?? null, input.topic ?? null);
       if (!row) return null;
       const job = {
         id: String(row['id']),

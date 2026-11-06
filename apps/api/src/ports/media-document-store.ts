@@ -68,6 +68,8 @@ export interface MediaDocumentStorePort {
     readonly now: Date;
     readonly leaseMs: number;
     readonly maxAttempts: number;
+    /** Only this collection's job (the E2E's fake Mac); any by default. */
+    readonly topic?: string;
   }): LeasedKbJob | null;
   /** Whether this worker holds a kb-publish lease now. */
   holds(worker: string): boolean;

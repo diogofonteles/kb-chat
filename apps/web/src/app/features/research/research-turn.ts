@@ -2,6 +2,7 @@ import {
   AUTHORSHIPS,
   mergeFindings,
   MAX_HISTORY_TURNS,
+  SOURCE_CITATION,
   type AnswerSource,
   type Authorship,
   type ResearchBilling,
@@ -271,8 +272,11 @@ export function toHistory(turns: readonly ResearchTurn[]): HistoryTurn[] {
 
 /** Only the sources the answer cites with [n], in their numbering order. */
 export function citedSources(turn: ResearchTurn): AnswerSource[] {
+  // "[3]" and a track's "[3@8:15]" (KBC-099) cite the same source 3.
   const cited = new Set(
-    [...turn.text.matchAll(/\[(\d{1,4})\]/g)].map((match) => Number(match[1])),
+    [...turn.text.matchAll(new RegExp(SOURCE_CITATION.source, 'g'))].map(
+      (match) => Number(match[1]),
+    ),
   );
   return turn.sources.filter((source) => cited.has(source.n));
 }

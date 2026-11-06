@@ -222,6 +222,27 @@ export class TranscribersPanel {
     );
   }
 
+  protected publishes(transcriber: Transcriber): boolean {
+    return transcriber.kinds.includes('kb-publish');
+  }
+
+  /** "Publica no acervo: Mac do dono": which one, in a list of alike boxes (WCAG 2.5.3). */
+  protected publishLabelOf(transcriber: Transcriber): string {
+    return $localize`:@@transcribers.publishLabel:Publica no acervo: ${transcriber.name}:name:`;
+  }
+
+  /** Off on every transcriber: kb spends on the owner's key (KBC-099 BR-1, ADR 0035 §11). */
+  protected togglePublish(transcriber: Transcriber, event: Event): void {
+    const on = (event.target as HTMLInputElement).checked;
+    this.setKinds(
+      transcriber,
+      withKind(transcriber.kinds, 'kb-publish', on),
+      on
+        ? $localize`:@@transcribers.publishOn:"${transcriber.name}:name:" agora publica as faixas no acervo.`
+        : $localize`:@@transcribers.publishOff:"${transcriber.name}:name:" não publica mais as faixas no acervo.`,
+    );
+  }
+
   private setKinds(
     transcriber: Transcriber,
     kinds: readonly Kind[],

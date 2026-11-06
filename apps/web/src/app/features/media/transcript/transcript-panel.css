@@ -185,6 +185,14 @@
   overflow-wrap: anywhere;
 }
 
+/* A passage cited by the research (KBC-099, T22): a side bar besides its paint, so the
+   colour is never the only sign (UP-20). The segment heard now keeps its own. */
+.segment.cited {
+  border-left-color: var(--color-accent-strong);
+  border-left-style: double;
+  border-left-width: 4px;
+}
+
 /* The current search occurrence's segment: an outline, in any browser and besides the
    painted colours (UP-20). The occurrences themselves are painted in styles.css. */
 .segment.current-hit {
@@ -217,5 +225,9 @@
 
   .segment.current-hit {
     outline-color: Highlight;
+  }
+
+  .segment.cited {
+    border-left-color: Highlight;
   }
 }

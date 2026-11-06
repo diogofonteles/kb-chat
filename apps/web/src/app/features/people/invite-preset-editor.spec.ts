@@ -180,6 +180,15 @@ const last = (changed: ReturnType<typeof vi.fn>): InvitationPreset =>
   changed.mock.lastCall?.[0] as InvitationPreset;
 
 describe('InvitePresetEditor (KBC-028 AC-2)', () => {
+  it('KBC-099 AC-14: offers "Pesquisar faixas com IA", unchecked on a new preset', async () => {
+    await renderEditor();
+    const box = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: 'Pesquisar faixas com IA',
+    });
+    expect(box.checked).toBe(false);
+    expect(box.matches(':disabled')).toBe(false);
+  });
+
   it('offers voice profiles to no member (ADR 0032)', async () => {
     await renderEditor();
     expect(

@@ -103,7 +103,13 @@ async function memberWith(
   return caller(media.started.app, await signIn(media.started, email));
 }
 
-const RESEARCHER = ['search', 'research', 'media', 'media-research'];
+const RESEARCHER = [
+  'search',
+  'research',
+  'media',
+  'media-tracks',
+  'media-research',
+];
 
 const ask = async (who: Call, profile = 'fast') => {
   const asked = await who('POST', '/api/v1/topics/hermetismo/research', {
@@ -199,8 +205,9 @@ describe('research over tracks (KBC-099)', () => {
   });
 
   it.each([
-    ['without media-research', ['search', 'research', 'media']],
-    ['without media', ['search', 'research', 'media-research']],
+    ['without media-research', ['search', 'research', 'media', 'media-tracks']],
+    ['without media', ['search', 'research', 'media-tracks', 'media-research']],
+    ['without media-tracks', ['search', 'research', 'media', 'media-research']],
   ])(
     'AC-6: %s, no tool lists, reads or finds the track, and no source brings it',
     async (_, features) => {

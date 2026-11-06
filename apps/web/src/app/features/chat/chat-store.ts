@@ -11,6 +11,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
   topicListSchema,
+  type AnswerSource,
   type DocumentRef,
   type MediaHit,
   type SearchConversation,
@@ -63,6 +64,13 @@ export interface OpenDocument {
   readonly messageId: number | null;
   /** Its question, highlighted in the text. */
   readonly question: string | null;
+}
+
+/** A cited track open in the reading panel on its passage (KBC-099, T22). */
+export interface OpenTrack {
+  readonly source: AnswerSource;
+  /** The time the citation wrote ("" for a plain [n] or the chip). */
+  readonly at: string;
 }
 
 /** A spoken passage open in the reading panel (KBC-039 FR-6). */
@@ -243,6 +251,8 @@ export class ChatStore {
   readonly openDocument = this.openState.asReadonly();
   private readonly passageState = signal<OpenPassage | null>(null);
   readonly openPassage = this.passageState.asReadonly();
+  private readonly trackState = signal<OpenTrack | null>(null);
+  readonly openTrack = this.trackState.asReadonly();
   /** Documents left through "Veja também", for "← Voltar" inside the panel. */
   private readonly historyState = signal<readonly OpenDocument[]>([]);
   readonly canGoBack = computed(() => this.historyState().length > 0);
@@ -387,6 +397,7 @@ export class ChatStore {
     });
     this.historyState.set([]);
     this.passageState.set(null);
+    this.trackState.set(null);
     this.openState.set({
       topic,
       id: doc.id,
@@ -415,7 +426,16 @@ export class ChatStore {
     });
     this.historyState.set([]);
     this.openState.set(null);
+    this.trackState.set(null);
     this.passageState.set({ hit, messageId: from.messageId });
+  }
+
+  /** A cited track opens in the reading panel on its passage, paused (T22). */
+  openTrackPassage(track: OpenTrack): void {
+    this.historyState.set([]);
+    this.openState.set(null);
+    this.passageState.set(null);
+    this.trackState.set(track);
   }
 
   /** Opens a related document in the same panel, remembering the current one. */
@@ -438,6 +458,7 @@ export class ChatStore {
     this.historyState.set([]);
     this.openState.set(null);
     this.passageState.set(null);
+    this.trackState.set(null);
   }
 
   private reset(): void {

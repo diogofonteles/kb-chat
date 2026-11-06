@@ -59,7 +59,8 @@ export class KbPublishService {
     return Math.min(KB_PUBLISH_MAX_BUDGET_USD, Math.floor(left * 1e4) / 1e4);
   }
 
-  lease(worker: string): KbPublishJob | null {
+  /** The next waiting job, rendered now; `topic` keeps to one collection (E2E's fake Mac). */
+  lease(worker: string, topic?: string): KbPublishJob | null {
     const budgetUsd = this.budgetUsd();
     if (budgetUsd <= 0) return null;
     for (let tries = 0; tries < EMPTY_LEASES; tries += 1) {
@@ -69,6 +70,7 @@ export class KbPublishService {
         now: this.now(),
         leaseMs: this.deps.leaseMs,
         maxAttempts: this.deps.maxAttempts,
+        ...(topic && { topic }),
       });
       if (!job) return null;
       const items = this.renderPending(job.topic);

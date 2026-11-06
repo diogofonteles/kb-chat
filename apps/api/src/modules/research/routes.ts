@@ -52,15 +52,17 @@ export interface ResearchRouteOptions {
 /**
  * The tracks a turn may see (KBC-099 BR-4, FR-10): the route already checked the collection
  * and `research`; the person (the one a master acts as, in "Ver como") also needs `media`
- * and `media-research`.
+ * and `media-research`, and `media-tracks`, without which a track item does not exist for
+ * them (KBC-068 FR-5): a citation they could not open is never given.
  */
 function shelfFor(
   request: FastifyRequest,
   shelf: (() => TrackShelf) | undefined,
 ): TrackShelf | undefined {
   const { person } = viewerOf(request);
-  const allowed =
-    hasFeature(person, 'media') && hasFeature(person, 'media-research');
+  const allowed = (['media', 'media-tracks', 'media-research'] as const).every(
+    (feature) => hasFeature(person, feature),
+  );
   return allowed ? shelf?.() : undefined;
 }
 

@@ -170,17 +170,44 @@
                   <button
                     type="button"
                     class="source"
+                    [class.track]="source.media"
                     [attr.data-doc-id]="source.id"
                     [title]="source.title"
-                    (click)="
-                      opened.emit({ id: source.id, title: source.title })
-                    "
+                    (click)="openSource(source, $event)"
                   >
                     <span class="source-n" aria-hidden="true">{{
                       source.n
                     }}</span>
                     <app-authorship-badge [authorship]="source.authorship" />
-                    <span class="source-title">{{ source.title }}</span>
+                    @if (trackChips().get(source.n); as track) {
+                      <span class="track-mark" aria-hidden="true">♪</span>
+                      <span class="visually-hidden" i18n="@@ai.trackSource"
+                        >Faixa de áudio:</span
+                      >
+                      <span class="source-text">
+                        <span class="source-title">{{ source.title }}</span>
+                        <span class="source-track">
+                          <span class="track-recording">{{
+                            track.recording
+                          }}</span>
+                          @if (track.clock) {
+                            <span aria-hidden="true">·</span>
+                            <span class="track-clock">{{ track.clock }}</span>
+                          }
+                          @if (track.more > 0) {
+                            <span
+                              i18n="@@ai.trackMorePassages"
+                              >{track.more, plural,
+                                =1 {+1 trecho}
+                                other {+{{ track.more }} trechos}
+                              }</span
+                            >
+                          }
+                        </span>
+                      </span>
+                    } @else {
+                      <span class="source-title">{{ source.title }}</span>
+                    }
                   </button>
                 </li>
               }
