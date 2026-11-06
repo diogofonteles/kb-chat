@@ -1,6 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
-import { expect, invite, ownerApi, test, uniqueEmail } from './fixtures.js';
+import {
+  CSRF,
+  expect,
+  invite,
+  ownerApi,
+  test,
+  uniqueEmail,
+} from './fixtures.js';
+import { uniqueTag } from './media-helpers.js';
 
 /**
  * KBC-062: in "Pessoas e permissões" a master who uses only the keyboard checks collections
@@ -28,13 +36,52 @@ async function shoot(page: Page, name: string, part: Locator): Promise<void> {
     });
 }
 
-/** Tab forward, as a keyboard user does, until `target` has focus. */
+/**
+ * Tab forward, as a keyboard user does, until `target` has focus. The walk is bounded by the
+ * stops in the target's dialog as it stands (one per collection, so it grows with the vault):
+ * one lap of the modal's focus loop reaches any of them, and a target Tab never reaches
+ * still fails.
+ */
 async function tabTo(page: Page, target: Locator): Promise<void> {
-  for (let step = 0; step < 15; step++) {
+  const stops = await target.evaluate(
+    (el) =>
+      Array.from(
+        (el.closest('dialog') ?? document.body).querySelectorAll<HTMLElement>(
+          'a[href], button, input, select, textarea, [tabindex]',
+        ),
+      ).filter(
+        (stop) =>
+          !stop.matches(':disabled, [tabindex="-1"]') && stop.checkVisibility(),
+      ).length,
+  );
+  for (let step = 0; step <= stops; step++) {
     if (await target.evaluate((el) => el === document.activeElement)) return;
     await page.keyboard.press('Tab');
   }
   await expect(target).toBeFocused();
+}
+
+/**
+ * A vault with many collections, as other specs leave on the shared server: each one is a
+ * stop between the collections the test checks and "Pesquisa com IA".
+ */
+async function manyCollections(
+  api: APIRequestContext,
+  count = 8,
+): Promise<void> {
+  for (let n = 0; n < count; n++) {
+    const created = await api.post('/api/v1/topics', {
+      headers: CSRF,
+      data: { title: `Zz Teclado ${uniqueTag()}` },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const { slug } = (await created.json()) as { slug: string };
+    const child = await api.post('/api/v1/topics', {
+      headers: CSRF,
+      data: { title: 'Subacervo', parent: slug },
+    });
+    expect(child.status(), await child.text()).toBe(201);
+  }
 }
 
 /** Each save takes a moment, as on a slow network: the next change comes before it ends. */
@@ -72,6 +119,7 @@ test('AC-1, AC-2: checking boxes with the keyboard keeps focus and every change'
   const api = await ownerApi();
   const email = uniqueEmail('keyboard');
   const id = await invite(api, email);
+  await manyCollections(api);
   await slowSaves(page);
 
   const dialog = await openPeople(page);
@@ -164,6 +212,9 @@ test('BUG-1: closing and reopening the person while a change saves keeps it', as
 test('AC-3: the invitation profile editor keeps focus on the checked box', async ({
   page,
 }) => {
+  const api = await ownerApi();
+  await manyCollections(api);
+  await api.dispose();
   const dialog = await openPeople(page);
   const section = dialog.getByRole('region', { name: /Perfis de convite/ });
   await section.getByRole('button', { name: /Perfis de convite/ }).click();
