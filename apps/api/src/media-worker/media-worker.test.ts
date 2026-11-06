@@ -190,6 +190,18 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     expect(lines.join('')).toContain('lease lost: stopping the conversion');
   });
 
+  // Covered on purpose: before, only a loop test's timing reached a measure stopped mid-way.
+  it('stops a measure when a heartbeat says the lease was lost, and reports no failure', async () => {
+    makeLongWav(bins, join(dir, 'tone.mp3'), 1_800);
+    const { api, told } = fakeApi({ heartbeat: async () => false });
+    await workerWith(api, { heartbeatMs: 30 }).process(
+      aWaveformJob(),
+      new AbortController().signal,
+    );
+    expect(told).toEqual([]);
+    expect(lines.join('')).toContain('lease lost: stopping the waveform');
+  });
+
   it('reports a measure as having no percentage in its heartbeat', async () => {
     makeTone(bins, join(dir, 'tone.mp3'), 1);
     const percents: (number | null)[] = [];

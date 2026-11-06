@@ -139,6 +139,24 @@ describe('probe and transcodeAudio (real ffmpeg)', () => {
     ).rejects.toThrow('ffmpeg timed out after 100 ms');
   });
 
+  // Covered on purpose: before, only the worker's timing reached an aborted conversion.
+  it('stops a conversion when asked, and says it was aborted', async () => {
+    const ffmpeg = fakeBinary('ffmpeg-held', 'exec sleep 5');
+    const stop = new AbortController();
+    stop.abort();
+    await expect(
+      transcodeAudio({
+        bins: { ...bins, ffmpeg },
+        source: join(dir, 'tone.mp3'),
+        target: join(dir, 'held.m4a'),
+        durationMs: 3_000,
+        timeoutMs: 60_000,
+        signal: stop.signal,
+        onProgress: () => undefined,
+      }),
+    ).rejects.toThrow('conversion aborted');
+  });
+
   it('never blames the file when ffprobe itself is missing', async () => {
     const missing = { ...bins, ffprobe: '/nonexistent/ffprobe' };
     const failure = probe(missing, join(dir, 'tone.mp3'));
