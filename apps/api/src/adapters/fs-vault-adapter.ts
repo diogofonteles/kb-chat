@@ -122,7 +122,9 @@ export class FsVaultAdapter implements VaultReaderPort {
     const isTopic = await exists(join(dir, 'topic.yaml'));
     if (isTopic) {
       const yaml = await readTopicYaml(dir, slug);
-      out.push(at.parent ? { slug, ...yaml, parent: at.parent } : { slug, ...yaml });
+      out.push(
+        at.parent ? { slug, ...yaml, parent: at.parent } : { slug, ...yaml },
+      );
     }
     if (at.depth < MAX_NESTING)
       await this.collectTopics(

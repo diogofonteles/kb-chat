@@ -159,7 +159,12 @@ export class KbPublishService {
     if (spent <= 0 || delivered.length === 0) return;
     const share = spent / delivered.length;
     for (const item of delivered)
-      this.settle({ worker: owner.worker, mediaId: item.mediaId, usd: share, now });
+      this.settle({
+        worker: owner.worker,
+        mediaId: item.mediaId,
+        usd: share,
+        now,
+      });
   }
 
   complete(owner: LeaseOwner, result: CompleteKbPublishRequest): void {

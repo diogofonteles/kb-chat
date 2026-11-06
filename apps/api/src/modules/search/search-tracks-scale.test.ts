@@ -5,10 +5,7 @@ import type {
   IndexQuery,
   SearchIndexPort,
 } from '../../ports/search-index.js';
-import type {
-  TopicFolder,
-  VaultReaderPort,
-} from '../../ports/vault-reader.js';
+import type { TopicFolder, VaultReaderPort } from '../../ports/vault-reader.js';
 import { CatalogRegistry } from '../catalog/index.js';
 import { SearchService } from './search-service.js';
 

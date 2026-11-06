@@ -173,7 +173,9 @@ describe('renderTrackDocument (KBC-099 AC-1, ADR 0035 §2)', () => {
     const body = splitFrontmatter(markdown).body;
     expect(body).not.toContain('[[');
     expect(body).not.toContain(']]');
-    expect(body).toContain('[0:00] **Ana (0:41) Bia:** como diz [ [Ritmo] ] aqui');
+    expect(body).toContain(
+      '[0:00] **Ana (0:41) Bia:** como diz [ [Ritmo] ] aqui',
+    );
   });
 
   it('writes the recording line with only what it knows', () => {
@@ -216,7 +218,9 @@ describe('renderTrackDocument (KBC-099 AC-1, ADR 0035 §2)', () => {
     });
     expect(path).toBe(`raw/media/${RECORDING}/${RECORDING}.md`);
     const data = frontmatterOf(markdown);
-    expect(data['source_path']).toBe(`media/hermetismo/${RECORDING}/${RECORDING}`);
+    expect(data['source_path']).toBe(
+      `media/hermetismo/${RECORDING}/${RECORDING}`,
+    );
     expect(data['kb_chat_media_kind']).toBe('recording');
   });
 
