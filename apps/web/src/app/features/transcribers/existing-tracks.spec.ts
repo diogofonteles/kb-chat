@@ -128,6 +128,83 @@ describe('ExistingTracks (KBC-099 AC-16, scope of 2026-11-06)', () => {
     );
   });
 
+  it('PD-02: a double click in the same frame sends one request', async () => {
+    const { fixture, http } = await renderIt();
+    await open(fixture);
+    const confirm = screen.getByRole('button', { name: 'Publicar 5 faixas' });
+    confirm.click();
+    confirm.click();
+    const sent = http.match(PUBLISH);
+    expect(sent).toHaveLength(1);
+    sent[0]?.flush({ queued: 5, skipped: 0 });
+    TestBed.tick();
+    http.expectOne(URL).flush(anOverview());
+    await fixture.whenStable();
+  });
+
+  it('QA F-11: while tracks wait for the Mac, the counts are read again every 20 s, and not after', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const { fixture, http } = await renderIt(
+        anOverview({ collections: [aCollection({ toPublish: 0, queued: 2 })] }),
+      );
+      vi.advanceTimersByTime(19_999);
+      TestBed.tick();
+      http.expectNone(URL);
+      vi.advanceTimersByTime(1);
+      TestBed.tick();
+      http.expectOne(URL).flush(
+        anOverview({
+          collections: [aCollection({ toPublish: 0, published: 2 })],
+        }),
+      );
+      await fixture.whenStable();
+      vi.advanceTimersByTime(60_000);
+      TestBed.tick();
+      http.expectNone(URL);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('QA F-10: "na fila para o Mac" goes once the Mac published what was asked', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const { fixture, http } = await renderIt(
+        anOverview({ collections: [aCollection()] }),
+      );
+      await open(fixture);
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Publicar 2 faixas' }),
+      );
+      http.expectOne(PUBLISH).flush({ queued: 2, skipped: 0 });
+      TestBed.tick();
+      http.expectOne(URL).flush(
+        anOverview({
+          collections: [aCollection({ toPublish: 0, queued: 2 })],
+        }),
+      );
+      await fixture.whenStable();
+      expect(screen.getByRole('status').textContent).toContain(
+        '2 faixas na fila para o Mac.',
+      );
+      vi.advanceTimersByTime(20_000);
+      TestBed.tick();
+      http.expectOne(URL).flush(
+        anOverview({
+          collections: [aCollection({ toPublish: 0, published: 2 })],
+        }),
+      );
+      await fixture.whenStable();
+      expect(screen.getByRole('status').textContent?.trim()).toBe('');
+      expect(document.body.textContent).toContain(
+        'Hermetismo: 0 na fila · 2 publicadas · 0 falharam',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('says when everything chosen was already in the collection (idempotent)', async () => {
     const { fixture, http } = await renderIt(
       anOverview({ collections: [aCollection()] }),

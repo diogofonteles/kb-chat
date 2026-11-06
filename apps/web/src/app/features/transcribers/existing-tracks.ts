@@ -86,6 +86,14 @@ export class ExistingTracks {
   protected readonly leftOut = signal<ReadonlySet<string>>(new Set());
   protected readonly busy = signal(false);
   protected readonly notice = signal('');
+  /**
+   * The collections of the last request, while "na fila para o Mac" holds; the sentence
+   * goes once the counts showed them queued and then show none left (QA F-10).
+   */
+  private readonly waitingFor = signal<{
+    readonly topics: ReadonlySet<string>;
+    readonly sawQueued: boolean;
+  } | null>(null);
   protected readonly chosen = computed(() =>
     this.offered().filter((one) => !this.leftOut().has(one.topic)),
   );
@@ -123,6 +131,21 @@ export class ExistingTracks {
       const timer = setInterval(() => this.overview.reload(), REFRESH_MS);
       onCleanup(() => clearInterval(timer));
     });
+    effect(() => this.followQueued(this.collections()));
+  }
+
+  private followQueued(collections: readonly TrackDocumentsCollection[]): void {
+    const waiting = this.waitingFor();
+    if (!waiting) return;
+    const queued = collections.some(
+      (one) => waiting.topics.has(one.topic) && one.queued > 0,
+    );
+    if (queued && !waiting.sawQueued)
+      this.waitingFor.set({ ...waiting, sawQueued: true });
+    else if (!queued && waiting.sawQueued) {
+      this.waitingFor.set(null);
+      this.notice.set('');
+    }
   }
 
   protected choiceLabelOf(collection: TrackDocumentsCollection): string {
@@ -164,7 +187,8 @@ export class ExistingTracks {
 
   protected publish(): void {
     const topics = this.chosen().map((one) => one.topic);
-    if (topics.length === 0 || this.capSpent()) return;
+    // PD-02: a second click in the same frame, before [disabled] renders, sends nothing.
+    if (this.busy() || topics.length === 0 || this.capSpent()) return;
     this.busy.set(true);
     this.notice.set('');
     this.api
@@ -175,6 +199,11 @@ export class ExistingTracks {
           this.busy.set(false);
           this.choosing.set(false);
           this.notice.set(resultText(result));
+          this.waitingFor.set(
+            result.queued > 0
+              ? { topics: new Set(topics), sawQueued: false }
+              : null,
+          );
           this.overview.reload();
           this.focusAfterRender(() => this.action()?.nativeElement);
         },
