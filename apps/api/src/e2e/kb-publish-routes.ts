@@ -68,7 +68,6 @@ export function registerKbPublishMac(
   },
 ): void {
   const { kb } = createMediaDocuments(input);
-  const topicBody = z.object({ topic: z.string().min(1) });
   app.post(
     '/api/e2e/kb-publish/run',
     { config: { access: PUBLIC } },
@@ -80,14 +79,22 @@ export function registerKbPublishMac(
       return reply.code(200).send({ documents });
     },
   );
-  // A collection as a database from before KBC-099 left it: its published tracks with no
-  // document and no job ("Publicar no acervo as faixas que já existem", AC-16).
+  registerForget(app, input.mediaDir);
+}
+
+const topicBody = z.object({ topic: z.string().min(1) });
+
+/**
+ * A collection as a database from before KBC-099 left it: its published tracks with no
+ * document and no job ("Publicar no acervo as faixas que já existem", AC-16).
+ */
+function registerForget(app: FastifyInstance, mediaDir: string): void {
   app.post(
     '/api/e2e/kb-publish/forget',
     { config: { access: PUBLIC } },
     async (request, reply) => {
       const { topic } = topicBody.parse(request.body);
-      const db = new DatabaseSync(join(input.mediaDir, 'media.db'));
+      const db = new DatabaseSync(join(mediaDir, 'media.db'));
       try {
         db.prepare('DELETE FROM media_documents WHERE topic = ?').run(topic);
         db.prepare('DELETE FROM kb_publish_jobs WHERE topic = ?').run(topic);

@@ -888,19 +888,28 @@ function transcriberService(media: MediaDeps): TranscriberService {
   });
 }
 
-/** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
-async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
-  const transcribers = transcriberService(wiring.media);
-  const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
-  const media = mediaService({ ...wiring, transcribers, groq });
+/** Track documents (KBC-099): the backstop sweep and the masters' "faixas que já existem". */
+async function startDocuments(
+  app: FastifyInstance,
+  wiring: MediaWiring,
+): Promise<MediaDocuments> {
   const documents = createMediaDocuments({
     ...wiring,
     onRenderError: (mediaId, err) =>
       app.log.error({ err, mediaId }, 'track document: render failed'),
   });
-  const publisher = trackPublisher(wiring, documents);
   startDocumentBackstop(app, documents.reconciler);
   await app.register(existingTracksRoutes(documents.existing));
+  return documents;
+}
+
+/** The media library (KBC-034, ADR 0022): people's routes, the worker's and the janitor. */
+async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
+  const transcribers = transcriberService(wiring.media);
+  const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
+  const media = mediaService({ ...wiring, transcribers, groq });
+  const documents = await startDocuments(app, wiring);
+  const publisher = trackPublisher(wiring, documents);
   await registerTranscribers(app, { transcribers, media, wiring });
   await app.register(groqRoutes({ groq, media }));
   await registerListening(app, wiring, { media, transcribers, publisher });

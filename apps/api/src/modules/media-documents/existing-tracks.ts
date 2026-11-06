@@ -84,18 +84,25 @@ export class ExistingTracks {
       if (this.deps.titleOf(topic) === null)
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
     if (this.deps.budget.budgetUsd() <= 0) throw capReached();
-    let queued = 0;
-    let skipped = 0;
+    const total = { queued: 0, skipped: 0 };
     for (const topic of new Set(topics)) {
-      for (const { mediaId } of this.deps.documents.publishableTracks(topic)) {
-        const rendered = this.deps.reconciler.render(mediaId);
-        if (!rendered) continue;
-        const published = this.deps.documents.publishedFingerprint(mediaId);
-        if (published === rendered.fingerprint) skipped += 1;
-        else queued += 1;
-      }
-      this.deps.reconciler.enqueueIfPending(topic);
+      const one = this.publishTopic(topic);
+      total.queued += one.queued;
+      total.skipped += one.skipped;
     }
-    return { queued, skipped };
+    return total;
+  }
+
+  private publishTopic(topic: string): PublishExistingTracksResult {
+    const result = { queued: 0, skipped: 0 };
+    for (const { mediaId } of this.deps.documents.publishableTracks(topic)) {
+      const rendered = this.deps.reconciler.render(mediaId);
+      if (!rendered) continue;
+      const published = this.deps.documents.publishedFingerprint(mediaId);
+      if (published === rendered.fingerprint) result.skipped += 1;
+      else result.queued += 1;
+    }
+    this.deps.reconciler.enqueueIfPending(topic);
+    return result;
   }
 }
