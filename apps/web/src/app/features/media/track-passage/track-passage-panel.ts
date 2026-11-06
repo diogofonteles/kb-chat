@@ -51,6 +51,12 @@ const GONE_CODES: readonly string[] = [
   'NOT_FOUND',
 ];
 
+/** The track is in the conversation's collection, or one of its sub-collections. */
+const withinTopic = (topic: string, conversation: string): boolean =>
+  !conversation ||
+  topic === conversation ||
+  topic.startsWith(`${conversation}/`);
+
 const sameTarget = (a: Target, b: Target): boolean =>
   a.media.id === b.media.id && a.startMs === b.startMs;
 
@@ -77,7 +83,15 @@ export class TrackPassagePanel {
   readonly source = input.required<AnswerSource>();
   /** The time the citation wrote ("" for a plain [n] or the chip). */
   readonly at = input('');
+  /**
+   * The conversation's collection: a track moved out of it (and its sub-collections) is gone
+   * for this answer, as the research would no longer find it there. Empty skips the check.
+   */
+  readonly topic = input('');
+  /** A document was open when the track opened over it (T22 flow 1). */
+  readonly canGoBack = input(false);
   readonly closed = output();
+  readonly back = output();
 
   private readonly engine = inject(MediaEngine);
   private readonly saver = inject(ProgressSaver);
@@ -92,12 +106,35 @@ export class TrackPassagePanel {
   protected readonly item = httpResource(() => mediaUrl(this.mediaId()), {
     parse: (body) => mediaItemSchema.parse(body),
   });
+  /**
+   * Archived, or moved out of the conversation's collection: the API still answers for its
+   * page (BR-5), but the answer's track is no longer there (QA BUG-1, PD-07).
+   */
+  private readonly left = computed(() => {
+    if (!this.item.hasValue()) return false;
+    const media = this.item.value();
+    return media.archived || !withinTopic(media.topic, this.topic());
+  });
   private readonly media = computed(() =>
-    this.item.hasValue() ? this.item.value() : null,
+    this.item.hasValue() && !this.left() ? this.item.value() : null,
   );
   /** The cited passage, exact from media.db; null for an answer saved before KBC-099. */
+  private readonly stored = computed(() => passageOf(this.source(), this.at()));
+  /**
+   * The stored passage no longer falls on any segment of the current transcript (the track
+   * was edited after the answer): T22 says so and starts the track from the beginning.
+   */
+  protected readonly passageMoved = computed(() => {
+    const passage = this.stored();
+    if (!passage || !this.transcript.hasValue()) return false;
+    return !this.transcript
+      .value()
+      .segments.some(
+        (one) => one.startMs < passage.endMs && one.endMs > passage.startMs,
+      );
+  });
   private readonly passage = computed(() =>
-    passageOf(this.source(), this.at()),
+    this.passageMoved() ? null : this.stored(),
   );
   /** What the transcript paints and scrolls to; none without a resolved passage. */
   protected readonly focus = computed((): PassageFocus | null => {
@@ -137,6 +174,7 @@ export class TrackPassagePanel {
     t: Math.floor(playbackStartOf({ startMs: this.startMs() }) / 1000),
   }));
   protected readonly ready = computed(() => this.media()?.status === 'ready');
+  protected readonly loaded = computed(() => this.media() !== null);
   protected readonly transcript = httpResource(
     () => {
       const media = this.media();
@@ -149,11 +187,12 @@ export class TrackPassagePanel {
   );
   /** Archived, deleted or out of reach: one sentence, the same for all (PD-07). */
   protected readonly gone = computed(() => {
+    if (this.left()) return true;
     const err = this.item.error();
     return err !== undefined && GONE_CODES.includes(toUiErrorCode(err));
   });
   protected readonly loadError = computed(() => {
-    if (!this.item.error()) return '';
+    if (!this.item.error() && !this.left()) return '';
     return this.gone()
       ? $localize`:@@trackPassage.gone:Esta faixa não está mais disponível.`
       : $localize`:@@trackPassage.failed:Não foi possível abrir a faixa.`;
@@ -162,7 +201,12 @@ export class TrackPassagePanel {
   constructor() {
     const target = computed((): Target | null => {
       const media = this.media();
-      return media?.status === 'ready' && media.id === this.mediaId()
+      // A cited passage waits for the transcript: it says whether the passage still falls
+      // on the track, so the player is cued once, on the right place (T22 "Faixa editada").
+      const settling = this.stored() !== null && this.transcript.isLoading();
+      return media?.status === 'ready' &&
+        media.id === this.mediaId() &&
+        !settling
         ? { media, startMs: this.startMs() }
         : null;
     });

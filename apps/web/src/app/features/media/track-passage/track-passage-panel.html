@@ -1,5 +1,15 @@
 <header class="head">
   <div class="head-actions">
+    @if (canGoBack()) {
+      <button
+        type="button"
+        class="nav"
+        (click)="back.emit()"
+        i18n="@@panel.backDoc"
+      >
+        ← Voltar
+      </button>
+    }
     <p class="kind">
       <span aria-hidden="true">♪</span>
       <span i18n="@@trackPassage.kind">Faixa de áudio</span>
@@ -68,7 +78,7 @@
           i18n="@@trackPassage.openPage"
           >Abrir na página da faixa</a
         >
-      } @else if (item.hasValue()) {
+      } @else if (loaded()) {
         <p class="notice" role="status" i18n="@@passage.notReady">
           Este áudio ainda não está pronto para ouvir.
         </p>
@@ -81,6 +91,11 @@
       }
     </div>
     <div class="transcript">
+      @if (passageMoved()) {
+        <p class="moved" role="status" i18n="@@trackPassage.moved">
+          O trecho citado mudou desde a resposta. Mostrando o começo da faixa.
+        </p>
+      }
       @if (transcript.hasValue()) {
         <app-transcript-panel
           [transcript]="transcript.value()"

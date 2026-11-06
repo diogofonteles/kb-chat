@@ -289,7 +289,10 @@
         class="panel"
         [source]="cited.source"
         [at]="cited.at"
+        [topic]="store.topicSlug() ?? ''"
+        [canGoBack]="store.canGoBack()"
         (closed)="closeDocument()"
+        (back)="store.back()"
       />
     }
   </div>

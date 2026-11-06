@@ -86,7 +86,7 @@
           <li
             #item
             class="segment"
-            [class.active]="segment.index === activeIndex()"
+            [class.active]="segment.index === shownActive()"
             [class.current-hit]="segment.index === currentHitSegment()"
             [class.cited]="cited().has(segment.index)"
             [attr.data-start-ms]="segment.startMs"
@@ -98,7 +98,7 @@
               class="time"
               [tabIndex]="segment.index === tabStop() ? 0 : -1"
               [attr.aria-current]="
-                segment.index === activeIndex() ? 'true' : null
+                segment.index === currentIndex() ? 'true' : null
               "
               [attr.aria-label]="segment.label"
               [attr.aria-describedby]="'transcript-text-' + segment.index"

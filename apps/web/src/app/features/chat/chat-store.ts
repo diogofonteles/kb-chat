@@ -430,9 +430,15 @@ export class ChatStore {
     this.passageState.set({ hit, messageId: from.messageId });
   }
 
-  /** A cited track opens in the reading panel on its passage, paused (T22). */
+  /**
+   * A cited track opens in the reading panel on its passage, paused (T22). Over an open
+   * document it keeps the way back to it ("← Voltar", T22 flow 1); over another track, the
+   * way back that one had.
+   */
   openTrackPassage(track: OpenTrack): void {
-    this.historyState.set([]);
+    const current = this.openState();
+    if (current) this.historyState.update((history) => [...history, current]);
+    else if (!this.trackState()) this.historyState.set([]);
     this.openState.set(null);
     this.passageState.set(null);
     this.trackState.set(track);
@@ -451,6 +457,7 @@ export class ChatStore {
     const previous = history.at(-1);
     if (!previous) return;
     this.historyState.set(history.slice(0, -1));
+    this.trackState.set(null);
     this.openState.set(previous);
   }
 
