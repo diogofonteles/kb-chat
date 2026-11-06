@@ -43,6 +43,19 @@ describe('GroqClient (KBC-037)', () => {
     ]);
   });
 
+  it('reads a 200 whose body breaks as a failure Groq still charged', async () => {
+    const broken = new GroqClient({
+      fetch: async () => new Response('{"text": "O chá', { status: 200 }),
+    });
+    expect(
+      await broken.transcribe({
+        key: 'k',
+        audio: Buffer.from('x'),
+        prompt: '',
+      }),
+    ).toEqual({ kind: 'failed', status: 200, charged: true });
+  });
+
   it("passes on a 429's retry-after and a refused key", async () => {
     const groq = new FakeGroq();
     const client = new GroqClient({ fetch: groq.fetch });

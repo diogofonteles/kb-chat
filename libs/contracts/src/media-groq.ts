@@ -59,8 +59,16 @@ export const mediaMonthSchema = z.object({
 export type MediaMonth = z.infer<typeof mediaMonthSchema>;
 
 /** GET /api/v1/media/groq (masters): never the key itself (BR-3). */
+export const GROQ_KEY_PROBLEMS = ['rejected', 'unreadable'] as const;
+/** Why a stored key is not used: Groq refused it, or it no longer opens (ADR 0017). */
+export const groqKeyProblemSchema = z.enum(GROQ_KEY_PROBLEMS);
+export type GroqKeyProblem = z.infer<typeof groqKeyProblemSchema>;
+
 export const groqSettingsSchema = z.object({
+  /** A key is stored (sealed). */
   connected: z.boolean(),
+  /** The stored key is not used until a master pastes or tests one; null when it works. */
+  keyProblem: groqKeyProblemSchema.nullable(),
   mode: groqModeSchema,
   idleHours: groqIdleHoursSchema,
   month: mediaMonthSchema,
@@ -79,6 +87,7 @@ export const GROQ_TEST_FAILURES = [
   'key-rejected',
   'unreachable',
   'no-key',
+  'key-unreadable',
 ] as const;
 export const groqTestFailureSchema = z.enum(GROQ_TEST_FAILURES);
 export type GroqTestFailure = z.infer<typeof groqTestFailureSchema>;

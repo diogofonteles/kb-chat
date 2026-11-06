@@ -470,6 +470,16 @@ interface MediaWiring {
   readonly house: HouseAi;
 }
 
+/** A new transcription job for an item, queued now. */
+const transcriptionRequester =
+  ({ transcripts }: MediaDeps) =>
+  (mediaId: string) =>
+    transcripts.requestTranscription({
+      mediaId,
+      jobId: randomUUID(),
+      now: new Date(),
+    });
+
 /** A collection's media, with its sub-collections' (ADR 0028). */
 function mediaService({
   media,
@@ -490,12 +500,7 @@ function mediaService({
     oldCuts: media.trackRevisions,
     presence: () => transcribers.presence(),
     groqReady: () => groq.ready(),
-    requestTranscription: (mediaId) =>
-      media.transcripts.requestTranscription({
-        mediaId,
-        jobId: randomUUID(),
-        now: new Date(),
-      }),
+    requestTranscription: transcriptionRequester(media),
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
     hasTopic: (topic) => catalog.get(topic) !== undefined,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
@@ -547,7 +552,7 @@ async function registerWorker(
   await app.register(
     workerRoutes({
       groq: wiring.groq,
-      service: workerService(wiring.media, voicePrints),
+      service: workerService(wiring.media, { voicePrints, groq: wiring.groq }),
       transcribers: wiring.transcribers,
       transcription: transcriptionService(wiring.media, publisher),
       cuts: publisher,
@@ -562,7 +567,7 @@ async function registerWorker(
 /** The queue as workers see it, with what cut and voice-profile jobs carry. */
 function workerService(
   { store, files, trackItems: tracks, transcripts }: MediaDeps,
-  voicePrints: VoicePrintService,
+  { voicePrints, groq }: { voicePrints: VoicePrintService; groq: GroqService },
 ): WorkerService {
   return new WorkerService({
     store,
@@ -570,6 +575,7 @@ function workerService(
     tracks,
     termsVersion: () => transcripts.currentTerms().version,
     voiceJobOf: (job) => voicePrints.jobOf(job),
+    groqWaits: () => groq.waits(),
   });
 }
 

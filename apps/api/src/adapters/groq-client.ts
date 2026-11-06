@@ -68,7 +68,7 @@ export class GroqClient implements GroqPort {
     } catch {
       return { kind: 'failed', status: null };
     }
-    if (response.ok) return { kind: 'ok', body: await response.json() };
+    if (response.ok) return bodyOf(response);
     await response.body?.cancel();
     if (response.status === 429)
       return {
@@ -83,6 +83,15 @@ export class GroqClient implements GroqPort {
   private call(path: string, init: RequestInit): Promise<Response> {
     const doFetch = this.options.fetch ?? fetch;
     return doFetch(`${this.options.baseUrl ?? GROQ_API_URL}${path}`, init);
+  }
+}
+
+/** Groq charged a 200 even when its body does not arrive whole: it is paid for. */
+async function bodyOf(response: Response): Promise<GroqTranscription> {
+  try {
+    return { kind: 'ok', body: await response.json() };
+  } catch {
+    return { kind: 'failed', status: response.status, charged: true };
   }
 }
 

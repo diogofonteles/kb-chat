@@ -16,6 +16,8 @@ export interface GroqCall {
 export class FakeGroq {
   readonly calls: GroqCall[] = [];
   readonly keyChecks: string[] = [];
+  /** Transcription requests refused with 401. */
+  refused = 0;
   /** The next answers are 429 with this `retry-after` (seconds), then normal again. */
   private limited: { remaining: number; retryAfter: string } = {
     remaining: 0,
@@ -27,7 +29,19 @@ export class FakeGroq {
     this.revoked = true;
   }
 
+  /** Keys work again, as if Groq's console issued them anew. */
+  restoreKeys(): void {
+    this.revoked = false;
+  }
+
   private revoked = false;
+
+  /** The next transcription answers 200 with a body cut short. */
+  breakNextBody(): void {
+    this.breakBody = true;
+  }
+
+  private breakBody = false;
 
   rateLimitNext(times: number, retryAfterSeconds: number): void {
     this.limited = { remaining: times, retryAfter: String(retryAfterSeconds) };
@@ -49,11 +63,13 @@ export class FakeGroq {
             { status: 401 },
           );
     }
-    if (!this.accepts(key))
+    if (!this.accepts(key)) {
+      this.refused++;
       return Response.json(
         { error: { message: 'Invalid API Key' } },
         { status: 401 },
       );
+    }
     return this.transcribe(request, key);
   };
 
@@ -79,6 +95,10 @@ export class FakeGroq {
         status: 429,
         headers: { 'retry-after': this.limited.retryAfter },
       });
+    }
+    if (this.breakBody) {
+      this.breakBody = false;
+      return new Response('{"text": "O chá', { status: 200 });
     }
     const term = prompt.includes('Hoasca') ? 'Hoasca' : 'Oasca';
     return Response.json(verboseJson(`O chá ${term} foi servido.`));

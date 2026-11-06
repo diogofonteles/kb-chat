@@ -73,6 +73,7 @@ function stores() {
     store,
     files,
     termsVersion: () => transcripts.currentTerms().version,
+    groqWaits: () => groq.waits(),
     now,
   });
   const transcription = new TranscriptionService({
@@ -495,5 +496,390 @@ describe('The term list in every request (FR-3)', () => {
       .map((word) => word.text.trim());
     expect(words.filter((word) => word === 'Hoasca')).toHaveLength(2);
     expect(words).not.toContain('Oasca');
+  });
+});
+
+/** An upload just received: its conversion waits for the VM. */
+async function uploaded(): Promise<string> {
+  const id = crypto.randomUUID();
+  s.store.createMedia({
+    id,
+    topic: 'hermetismo',
+    title: 'Envio novo',
+    author: 'mestre-laercio',
+    legacyAuthorship: 'mestre-laercio',
+    ownerPrincipal: 'owner',
+    fileName: 'b.mp3',
+    uploadBytes: 3,
+    now: clock,
+  });
+  await s.files.saveUpload({
+    mediaId: id,
+    body: Readable.from([Buffer.from('abc')]),
+    expectedBytes: 3,
+  });
+  s.store.markUploaded({ mediaId: id, jobId: crypto.randomUUID(), now: clock });
+  return id;
+}
+
+/** The VM's lease, every kind it takes (the worker's own list). */
+const leaseVm = () =>
+  s.workers.lease({
+    worker: 'vm',
+    kinds: ['transcode', 'silences', 'waveform', 'cut', 'transcribe'],
+    transcribeRoute: 'groq',
+  });
+
+/** Every job the VM takes now, in its order, as `kind:media`. */
+function vmTakes(): string[] {
+  const taken: string[] = [];
+  for (let job = leaseVm(); job; job = leaseVm())
+    taken.push(`${job.kind}:${job.mediaId}`);
+  return taken;
+}
+
+const jobRow = (id: string) =>
+  s.db
+    .prepare('SELECT status, route, hold, attempts FROM jobs WHERE id = ?')
+    .get(id);
+
+const chunkOf = (
+  job: GroqTranscribeJob,
+  span: { startMs: number; endMs: number },
+) => ({
+  query: {
+    worker: 'vm',
+    leaseId: job.leaseId,
+    ...span,
+    termsVersion: job.termsVersion,
+  },
+  audio: Buffer.from('fLaC chunk'),
+});
+
+const ownerOf = (job: GroqTranscribeJob) => ({
+  jobId: job.id,
+  leaseId: job.leaseId,
+  worker: 'vm',
+});
+
+const conflict = expect.objectContaining({ code: 'MEDIA_CONFLICT' });
+
+describe('Conversions never wait behind Groq (the VM has one slot)', () => {
+  it('leases a new upload’s conversion before an older Groq transcription', async () => {
+    const old = await readyItem(HOUR);
+    await connect('idle', 1);
+    clock = at(2);
+    expect(s.groq.sweep()).toBe(1);
+    const fresh = await uploaded();
+
+    const taken = vmTakes();
+    expect(taken).toContain(`transcode:${fresh}`);
+    expect(taken.at(-1)).toBe(`transcribe:${old}`);
+  });
+
+  it('hands a Groq job back, keeping its place and attempts, when a conversion arrives', async () => {
+    const old = await readyItem(40_000);
+    await connect('manual');
+    s.groq.sendItem(old);
+    const job = leaseGroq();
+    if (!job) throw new Error('no Groq job');
+    const before = jobRow(job.id);
+    const fresh = await uploaded();
+
+    await expect(
+      s.groq.transcribeChunk(
+        ownerOf(job),
+        chunkOf(job, { startMs: 0, endMs: 20_000 }),
+      ),
+    ).rejects.toEqual(conflict);
+
+    expect(groqFake.calls).toEqual([]);
+    expect(jobRow(job.id)).toEqual({
+      ...before,
+      status: 'queued',
+      attempts: 0,
+    });
+    const taken = vmTakes();
+    expect(taken).toContain(`transcode:${fresh}`);
+    expect(taken.at(-1)).toBe(`transcribe:${old}`);
+  });
+
+  it('hands the job back instead of sleeping through a long wait, and the VM takes it again after', async () => {
+    const id = await readyItem(40_000);
+    await connect('manual');
+    s.groq.sendItem(id);
+    const job = leaseGroq();
+    if (!job) throw new Error('no Groq job');
+    groqFake.rateLimitNext(1, 3_600);
+
+    await expect(
+      s.groq.transcribeChunk(
+        ownerOf(job),
+        chunkOf(job, { startMs: 0, endMs: 20_000 }),
+      ),
+    ).rejects.toEqual(conflict);
+
+    expect(jobRow(job.id)).toMatchObject({
+      status: 'queued',
+      route: 'groq',
+      attempts: 0,
+    });
+    // A new upload converts meanwhile; the Groq job waits for its hour.
+    const fresh = await uploaded();
+    const taken = vmTakes();
+    expect(taken).toContain(`transcode:${fresh}`);
+    expect(taken).not.toContain(`transcribe:${id}`);
+    clock = new Date(clock.getTime() + HOUR + 1_000);
+    expect(leaseVm()).toMatchObject({ kind: 'transcribe', mediaId: id });
+  });
+
+  it('still waits a short pause holding the job (the minute window)', async () => {
+    const id = await readyItem(40_000);
+    await connect('manual');
+    s.groq.sendItem(id);
+    const job = leaseGroq();
+    if (!job) throw new Error('no Groq job');
+    groqFake.rateLimitNext(1, 30);
+
+    expect(
+      await s.groq.transcribeChunk(
+        ownerOf(job),
+        chunkOf(job, { startMs: 0, endMs: 20_000 }),
+      ),
+    ).toEqual({ kind: 'wait', retryAfterMs: 30_000 });
+    expect(jobRow(job.id)).toMatchObject({ status: 'leased' });
+  });
+});
+
+describe('A chunk Groq transcribed is paid once', () => {
+  it('keeps each paid chunk, so a new lease pays only the rest', async () => {
+    const id = await readyItem(60_000);
+    await connect('manual');
+    s.groq.sendItem(id);
+    const three: ChunkPlan = {
+      chunks: [
+        { startMs: 0, endMs: 20_000 },
+        { startMs: 20_000, endMs: 40_000 },
+        { startMs: 40_000, endMs: 60_000 },
+      ],
+      vad: 'applied',
+      speechRatio: 0.9,
+    };
+    const first = leaseGroq();
+    if (!first) throw new Error('no Groq job');
+    // Two chunks paid, then the VM restarts: the lease runs out.
+    for (const span of three.chunks.slice(0, 2))
+      await s.groq.transcribeChunk(ownerOf(first), chunkOf(first, span));
+    const paid = s.groq.view(true).month.spentUsd;
+    clock = new Date(clock.getTime() + HOUR);
+    s.store.reapExpired({ now: clock, maxAttempts: 4 });
+
+    const second = leaseGroq();
+    if (!second) throw new Error('no Groq job again');
+    expect(
+      await vmWorker(three).run(second, {
+        signal: new AbortController().signal,
+      }),
+    ).toBe('done');
+
+    expect(groqFake.calls).toHaveLength(3);
+    expect(s.groq.view(true).month.spentUsd).toBeCloseTo(
+      paid + (20 / 3_600) * 0.04,
+      10,
+    );
+    expect(s.store.getMedia(id)?.transcription.jobStatus).toBe('done');
+  });
+});
+
+describe('A 200 whose body breaks', () => {
+  it('is counted as spent, since Groq charged it (NFR-1)', async () => {
+    const id = await readyItem(40_000);
+    await connect('manual');
+    s.groq.sendItem(id);
+    const job = leaseGroq();
+    if (!job) throw new Error('no Groq job');
+    groqFake.breakNextBody();
+
+    await expect(
+      s.groq.transcribeChunk(
+        ownerOf(job),
+        chunkOf(job, { startMs: 0, endMs: 20_000 }),
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({ code: 'PROVIDER_UNAVAILABLE' }),
+    );
+    expect(s.groq.view(true).month.spentUsd).toBeCloseTo(
+      (20 / 3_600) * 0.04,
+      10,
+    );
+  });
+});
+
+describe('The estimate counts what is already Groq’s (BR-2, FR-4)', () => {
+  it('routes one of two 1 h items when the month has US$ 0.05 left', async () => {
+    const a = await readyItem(HOUR);
+    clock = new Date(T0.getTime() + 1_000);
+    const b = await readyItem(HOUR);
+    await connect('idle', 1);
+    spent(10 - 0.05);
+    clock = at(2);
+
+    expect(s.groq.sweep()).toBe(1);
+    expect(s.store.getMedia(a)?.transcription.route).toBe('groq');
+    expect(s.store.getMedia(b)?.transcription).toMatchObject({
+      route: 'transcriber',
+      hold: 'monthly-cap',
+    });
+    expect(() => s.groq.sendItem(b)).toThrow(
+      expect.objectContaining({ code: 'MEDIA_SPEND_CAP' }),
+    );
+  });
+
+  it('does not route an item whose length is unknown', async () => {
+    const id = await readyItem(HOUR);
+    s.db.prepare('UPDATE media SET duration_ms = NULL WHERE id = ?').run(id);
+    await connect('idle', 1);
+    clock = at(2);
+
+    expect(s.groq.sweep()).toBe(0);
+    expect(s.store.getMedia(id)?.transcription.route).toBe('transcriber');
+  });
+});
+
+describe('Groq is the Mac’s fallback: a job it cannot finish goes back (ADR 0023 §7)', () => {
+  it('gives a job back to the Mac after its last Groq attempt, keeping the FLAC', async () => {
+    const id = await readyItem(40_000);
+    await s.files.writeFile(s.files.flacPath(id), 'flac');
+    await connect('manual');
+    s.groq.sendItem(id);
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const job = leaseGroq();
+      if (!job) throw new Error(`no Groq job on attempt ${attempt}`);
+      await s.workers.fail(job.id, {
+        worker: 'vm',
+        leaseId: job.leaseId,
+        failure: 'conversion-failed',
+        detail: 'Groq kept failing',
+      });
+    }
+
+    expect(leaseGroq()).toBeNull();
+    const media = s.store.getMedia(id);
+    expect(media?.transcription).toMatchObject({
+      jobStatus: 'queued',
+      route: 'transcriber',
+    });
+    expect(await s.files.stat(s.files.flacPath(id))).not.toBeNull();
+    expect(
+      s.workers.lease({ worker: 'transcriber:mac', kinds: ['transcribe'] }),
+    ).toMatchObject({ mediaId: id, attempt: 1 });
+  });
+
+  it('gives a job back to the Mac when its Groq lease runs out for the last time', async () => {
+    const id = await readyItem(40_000);
+    await connect('manual');
+    s.groq.sendItem(id);
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      expect(leaseGroq()).not.toBeNull();
+      clock = new Date(clock.getTime() + HOUR);
+      expect(
+        s.store.reapExpired({ now: clock, maxAttempts: 4 })
+          .transcriptionsGivenUp,
+      ).toEqual([]);
+    }
+    expect(s.store.getMedia(id)?.transcription).toMatchObject({
+      jobStatus: 'queued',
+      route: 'transcriber',
+    });
+  });
+});
+
+describe('A key Groq stops accepting (QA BUG-1)', () => {
+  it('is marked refused, so later sweeps send nothing and the Mac keeps its attempts', async () => {
+    const id = await readyItem(40_000);
+    await connect('idle', 1);
+    clock = at(2);
+    groqFake.revokeKeys();
+
+    for (let sweep = 0; sweep < 5; sweep++) {
+      s.groq.sweep();
+      const job = leaseGroq();
+      if (job)
+        await vmWorker(TWO_CHUNKS).run(job, {
+          signal: new AbortController().signal,
+        });
+      clock = new Date(clock.getTime() + 60_000);
+    }
+
+    expect(groqFake.refused).toBe(1);
+    expect(s.groq.view(true)).toMatchObject({
+      connected: true,
+      keyProblem: 'rejected',
+    });
+    expect(s.groq.ready()).toBe(false);
+    const job = s.workers.lease({
+      worker: 'transcriber:mac',
+      kinds: ['transcribe'],
+    });
+    expect(job).toMatchObject({ mediaId: id, attempt: 1 });
+  });
+
+  it('is accepted again after a master pastes a key Groq takes', async () => {
+    await connect('manual');
+    groqFake.revokeKeys();
+    const id = await readyItem(40_000);
+    s.groq.sendItem(id);
+    const job = leaseGroq();
+    if (!job) throw new Error('no Groq job');
+    await vmWorker(TWO_CHUNKS).run(job, {
+      signal: new AbortController().signal,
+    });
+    expect(s.groq.view(true).keyProblem).toBe('rejected');
+
+    expect(await s.groq.test({ by: 'owner' }, true)).toEqual({
+      ok: false,
+      reason: 'key-rejected',
+    });
+    groqFake.restoreKeys();
+    expect(await s.groq.test({ key: KEY, by: 'owner' }, true)).toMatchObject({
+      ok: true,
+      settings: { keyProblem: null },
+    });
+    expect(s.groq.ready()).toBe(true);
+  });
+});
+
+describe('A sealed key that no longer opens (QA BUG-3)', () => {
+  it('reads as a key to paste again, never a raw error', async () => {
+    const id = await readyItem(40_000);
+    await connect('manual');
+    s.groq.sendItem(id);
+    const job = leaseGroq();
+    if (!job) throw new Error('no Groq job');
+    // KB_CHAT_SECRETS_KEY changed: the stored value no longer opens.
+    s.db
+      .prepare(
+        `UPDATE media_settings SET value = json_set(value, '$.sealedKey', 'v1.not-sealed-by-this-key')
+         WHERE key = 'groq'`,
+      )
+      .run();
+
+    expect(s.groq.view(true)).toMatchObject({
+      connected: true,
+      keyProblem: 'unreadable',
+    });
+    expect(s.groq.ready()).toBe(false);
+    expect(await s.groq.test({ by: 'owner' }, true)).toEqual({
+      ok: false,
+      reason: 'key-unreadable',
+    });
+    await expect(
+      s.groq.transcribeChunk(
+        ownerOf(job),
+        chunkOf(job, { startMs: 0, endMs: 20_000 }),
+      ),
+    ).rejects.toEqual(conflict);
+    expect(s.store.getMedia(id)?.transcription.route).toBe('transcriber');
+    expect(groqFake.calls).toEqual([]);
   });
 });

@@ -26,6 +26,11 @@ export interface WorkerServiceDeps {
   readonly voiceJobOf?: (job: LeasedJob) => VoiceProfileJob;
   /** The current term list's version, for a Groq job's prompts (KBC-037). */
   readonly termsVersion?: () => number;
+  /**
+   * Groq asked for a long wait (KBC-037): until it is over the VM leaves its transcriptions
+   * in the queue and takes only conversions and measures.
+   */
+  readonly groqWaits?: () => boolean;
   /** What a cut job cuts (KBC-068). */
   readonly tracks?: Pick<TrackItemStorePort, 'cutOrder'>;
   readonly now?: () => Date;
@@ -71,8 +76,10 @@ export class WorkerService {
       readonly transcribeRoute?: TranscriptionRoute;
     },
   ): LeasedWorkerJob | null {
+    const kinds = this.kindsFor(request);
+    if (kinds.length === 0) return null;
     const job = this.deps.store.leaseJob({
-      kinds: request.kinds,
+      kinds,
       worker: request.worker,
       oneAtATime: request.oneAtATime,
       transcribeRoute: request.transcribeRoute,
@@ -90,6 +97,15 @@ export class WorkerService {
     return job.kind === 'transcribe'
       ? this.transcribeJob(job)
       : this.transcodeJob(job);
+  }
+
+  private kindsFor(request: {
+    readonly kinds: readonly MediaJobKind[];
+    readonly transcribeRoute?: TranscriptionRoute;
+  }): MediaJobKind[] {
+    const groqWaits =
+      request.transcribeRoute === 'groq' && this.deps.groqWaits?.() === true;
+    return request.kinds.filter((kind) => !groqWaits || kind !== 'transcribe');
   }
 
   /** A conversion names its files on the shared disk, the FLAC beside it (ADR 0022 §4). */

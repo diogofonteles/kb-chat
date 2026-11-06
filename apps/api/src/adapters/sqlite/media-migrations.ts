@@ -1221,7 +1221,9 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
   {
     // KBC-037 (ADR 0023 §7): Groq as the transcription fallback. A job routed to Groq is
     // leased by the VM worker only, and one Groq left for the cap says why (FR-4). Groq's
-    // mode, its sealed key and the monthly cap the owner set live in `media_settings`.
+    // own leases do not spend the Mac's attempts: `transcriber_attempts` keeps them while
+    // Groq has the job. Groq's mode, its sealed key and the monthly cap the owner set live
+    // in `media_settings`.
     // Only ALTERs on `jobs`, so its later rebuilds keep the columns; 24 (KBC-090) touches
     // neither table, and `media_spend` is rebuilt from what it is.
     version: 25,
@@ -1229,6 +1231,19 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
     sql: (db) => `
       ALTER TABLE jobs ADD COLUMN route TEXT CHECK (route IS NULL OR route IN ('groq'));
       ALTER TABLE jobs ADD COLUMN hold TEXT CHECK (hold IS NULL OR hold IN ('monthly-cap'));
+      ALTER TABLE jobs ADD COLUMN transcriber_attempts INTEGER
+        CHECK (transcriber_attempts IS NULL OR transcriber_attempts >= 0);
+
+      -- Each chunk Groq transcribed, kept until its job ends: a new lease pays it once.
+      CREATE TABLE groq_chunks (
+        job_id TEXT NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        terms_version INTEGER NOT NULL,
+        result TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (job_id, start_ms, end_ms, terms_version)
+      ) STRICT, WITHOUT ROWID;
 
       ${rebuildAccepting(db, { table: 'media_spend', kind: 'groq-transcription' })}
 

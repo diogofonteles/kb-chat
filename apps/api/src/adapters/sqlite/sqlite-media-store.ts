@@ -30,7 +30,7 @@ import type {
   TranscodeResult,
 } from '../../ports/media-store.js';
 import { inTransaction } from './media-database.js';
-import { closeLease } from './sqlite-leases.js';
+import { closeLease, groqBackToTranscriber } from './sqlite-leases.js';
 
 type Row = Record<string, SQLOutputValue>;
 
@@ -511,6 +511,9 @@ export class SqliteMediaStore implements MediaStorePort {
       if (held === null) return false;
       const permanent = failure.failure === 'invalid-audio';
       const givenUp = permanent || held.attempts >= failure.maxAttempts;
+      // KBC-037: what Groq cannot finish is the Mac's again, never a dead job.
+      if (givenUp && held.groq)
+        return this.backFromGroq(failure.jobId, failure.detail, at);
       const status = givenUp ? (permanent ? 'failed' : 'dead') : 'queued';
       this.closeLease(failure, {
         status,
@@ -518,22 +521,23 @@ export class SqliteMediaStore implements MediaStorePort {
         at,
       });
       // A failed transcription, silence map or separation leaves the item playable as it is.
-      if (held.kind !== 'transcode') return true;
-      if (givenUp)
-        this.failMedia({
-          mediaId: this.requireMediaOfJob(failure.jobId),
-          failure: failure.failure,
-          at,
-        });
-      else
-        this.setMediaProgress({
-          mediaId: this.requireMediaOfJob(failure.jobId),
-          status: 'queued',
-          progress: null,
-          at,
-        });
+      if (held.kind === 'transcode')
+        this.afterFailedConversion({ failure, givenUp, at });
       return true;
     });
+  }
+
+  private afterFailedConversion(input: {
+    failure: JobFailure;
+    givenUp: boolean;
+    at: string;
+  }): void {
+    const { failure, at } = input;
+    const mediaId = this.requireMediaOfJob(failure.jobId);
+    if (input.givenUp)
+      this.failMedia({ mediaId, failure: failure.failure, at });
+    else
+      this.setMediaProgress({ mediaId, status: 'queued', progress: null, at });
   }
 
   reapExpired(input: { now: Date; maxAttempts: number }): ReapResult {
@@ -541,21 +545,17 @@ export class SqliteMediaStore implements MediaStorePort {
     return inTransaction(this.db, () => {
       const expired = this.db
         .prepare(
-          `SELECT id, media_id, kind, attempts FROM jobs
+          `SELECT id, media_id, kind, attempts, route FROM jobs
            WHERE status = 'leased' AND lease_until < ?`,
         )
         .all(input.now.getTime());
       let failed = 0;
       const transcriptionsGivenUp: string[] = [];
       for (const row of expired) {
-        const givenUp = Number(row['attempts']) >= input.maxAttempts;
-        const mediaId = text(row, 'media_id');
-        this.releaseExpired({ jobId: text(row, 'id'), givenUp, at });
-        if (givenUp) failed++;
-        if (row['kind'] === 'transcode')
-          this.afterExpiry({ mediaId, givenUp, at });
-        else if (givenUp && row['kind'] === 'transcribe')
-          transcriptionsGivenUp.push(mediaId);
+        const outcome = this.reapOne(row, { ...input, at });
+        if (outcome === 'given-up') failed++;
+        if (outcome === 'given-up' && row['kind'] === 'transcribe')
+          transcriptionsGivenUp.push(text(row, 'media_id'));
       }
       return {
         requeued: expired.length - failed,
@@ -563,6 +563,24 @@ export class SqliteMediaStore implements MediaStorePort {
         transcriptionsGivenUp,
       };
     });
+  }
+
+  /** One expired lease: requeued, given up, or a Groq job back with the transcriber. */
+  private reapOne(
+    row: Row,
+    input: { maxAttempts: number; at: string },
+  ): 'requeued' | 'given-up' {
+    const { at } = input;
+    const jobId = text(row, 'id');
+    const givenUp = Number(row['attempts']) >= input.maxAttempts;
+    if (givenUp && row['route'] === 'groq') {
+      this.backFromGroq(jobId, 'Groq lease expired too many times', at);
+      return 'requeued';
+    }
+    this.releaseExpired({ jobId, givenUp, at });
+    if (row['kind'] === 'transcode')
+      this.afterExpiry({ mediaId: text(row, 'media_id'), givenUp, at });
+    return givenUp ? 'given-up' : 'requeued';
   }
 
   abandonUploads(input: { olderThan: Date; now: Date }): string[] {
@@ -621,6 +639,9 @@ export class SqliteMediaStore implements MediaStorePort {
   private takeOldestQueued(request: LeaseRequest): Row | undefined {
     // Only placeholders are built here; the kinds are bound values (ND-16).
     const kinds = request.kinds.map(() => '?').join(', ');
+    // KBC-037: the VM's Groq transcriptions come last, so they never hold up a conversion.
+    const order =
+      request.transcribeRoute === 'groq' ? "(kind = 'transcribe')," : '';
     return this.db
       .prepare(
         `UPDATE jobs SET status = 'leased', attempts = attempts + 1, lease_id = ?,
@@ -628,7 +649,7 @@ export class SqliteMediaStore implements MediaStorePort {
          WHERE id = (SELECT id FROM jobs WHERE status = 'queued' AND kind IN (${kinds})
                        AND ${DIARIZE_READY}
                        AND (kind <> 'transcribe' OR coalesce(route, 'transcriber') = ?)
-                     ORDER BY created_at, id LIMIT 1)
+                     ORDER BY ${order} created_at, id LIMIT 1)
          RETURNING id, lease_id, kind, media_id, attempts, voices`,
       )
       .get(
@@ -652,10 +673,10 @@ export class SqliteMediaStore implements MediaStorePort {
 
   private heldBy(
     owner: LeaseOwner,
-  ): { attempts: number; kind: MediaJobKind } | null {
+  ): { attempts: number; kind: MediaJobKind; groq: boolean } | null {
     const row = this.db
       .prepare(
-        `SELECT attempts, kind FROM jobs
+        `SELECT attempts, kind, route FROM jobs
          WHERE id = ? AND lease_id = ? AND worker = ? AND status = 'leased'`,
       )
       .get(owner.jobId, owner.leaseId, owner.worker);
@@ -663,8 +684,19 @@ export class SqliteMediaStore implements MediaStorePort {
       ? {
           attempts: Number(row['attempts']),
           kind: mediaJobKindSchema.parse(row['kind']),
+          groq: row['route'] === 'groq',
         }
       : null;
+  }
+
+  /** A Groq job given up goes back to the transcriber, its FLAC kept (ADR 0023 §7). */
+  private backFromGroq(jobId: string, detail: string, at: string): boolean {
+    return groqBackToTranscriber(this.db, {
+      jobId,
+      hold: null,
+      error: detail.slice(0, 2_000),
+      at,
+    });
   }
 
   private releaseExpired(input: {

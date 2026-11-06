@@ -6,7 +6,12 @@ export type GroqTranscription =
   | { readonly kind: 'ok'; readonly body: unknown }
   | { readonly kind: 'rate-limited'; readonly retryAfterMs: number }
   | { readonly kind: 'key-rejected' }
-  | { readonly kind: 'failed'; readonly status: number | null };
+  | {
+      readonly kind: 'failed';
+      readonly status: number | null;
+      /** Groq answered 200 but its body broke: it charged the request anyway. */
+      readonly charged?: true;
+    };
 
 /** One chunk as sent: 16 kHz mono FLAC and the term list's prompt. */
 export interface GroqChunkRequest {

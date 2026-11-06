@@ -1,4 +1,4 @@
-import type { TranscriptionHold } from '@kb-chat/contracts';
+import type { RawChunkResult, TranscriptionHold } from '@kb-chat/contracts';
 import type { LeaseOwner } from './media-store.js';
 
 /** A transcription waiting in the queue, with what Groq needs to price it. */
@@ -9,6 +9,14 @@ export interface WaitingTranscription {
   readonly durationMs: number | null;
   readonly route: 'transcriber' | 'groq';
   readonly createdAt: string;
+}
+
+/** One chunk of a Groq job, as the VM cut it and with the terms it was prompted with. */
+export interface GroqChunkKey {
+  readonly jobId: string;
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly termsVersion: number;
 }
 
 /**
@@ -41,4 +49,25 @@ export interface GroqQueuePort {
     readonly hold: TranscriptionHold | null;
     readonly now: Date;
   }): boolean;
+  /**
+   * The Groq job goes back to the queue still Groq's, in its place and without spending an
+   * attempt: the VM has a conversion to do, or Groq asked for a long wait.
+   */
+  handBack(input: { readonly owner: LeaseOwner; readonly now: Date }): boolean;
+  /** Audio routed to Groq and not transcribed yet, in ms (the cap's estimate, BR-2). */
+  committedMs(): number;
+  /**
+   * A conversion or a track cut waits for the VM, which Groq must not hold up. Measures
+   * (pauses, peaks) can be backfilled by the hundred: they only go before Groq in the lease.
+   */
+  conversionsWaiting(): boolean;
+  /** A chunk Groq already transcribed (and was paid for); null otherwise. */
+  savedChunk(key: GroqChunkKey): RawChunkResult | null;
+  saveChunk(input: {
+    readonly key: GroqChunkKey;
+    readonly result: RawChunkResult;
+    readonly now: Date;
+  }): void;
+  /** Drops the chunks of jobs that ended; how many. */
+  forgetEndedChunks(): number;
 }

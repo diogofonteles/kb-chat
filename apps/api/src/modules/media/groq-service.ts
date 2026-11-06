@@ -16,6 +16,7 @@ import { AppError } from '../../app-error.js';
 import { startOfAppMonth } from '../../app-calendar.js';
 import type { GroqPort } from '../../ports/groq.js';
 import type {
+  GroqChunkKey,
   GroqQueuePort,
   WaitingTranscription,
 } from '../../ports/groq-queue.js';
@@ -37,11 +38,18 @@ const HOUR_MS = 3_600_000;
 /** A chunk a little over 28 s is the worker's rounding; anything longer is refused. */
 const CHUNK_SLACK_MS = 2_000;
 const MAX_CHUNK_MS = 28_000 + CHUNK_SLACK_MS;
+/**
+ * The longest wait the VM sleeps through holding a Groq job (the minute window). Longer
+ * (the hour or the day), the job goes back to the queue and the VM takes conversions.
+ */
+export const GROQ_SHORT_WAIT_MS = 60_000;
 
 const storedGroqSchema = z.object({
   mode: groqModeSchema,
   idleHours: z.number().int().min(1).max(168),
   sealedKey: z.string().nullable(),
+  /** Groq refused the stored key: unused until a master tests or pastes one (QA BUG-1). */
+  keyRejected: z.boolean().default(false),
 });
 type StoredGroq = z.infer<typeof storedGroqSchema>;
 
@@ -49,7 +57,14 @@ const DEFAULT_GROQ: StoredGroq = {
   mode: 'never',
   idleHours: GROQ_IDLE_HOURS.default,
   sealedKey: null,
+  keyRejected: false,
 };
+
+/** The stored key as the service can use it: opened, or why not. */
+type KeyState =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'rejected' | 'unreadable' }
+  | { readonly kind: 'ok'; readonly key: string };
 
 /** What a request costs (BR-2): US$ 0.04 an hour, 10 s at least. */
 export const groqUsdOf = (audioMs: number): number =>
@@ -92,6 +107,8 @@ const capReached = () =>
  */
 export class GroqService {
   private readonly now: () => Date;
+  /** Until when Groq asked to wait (in memory, like the pacer). */
+  private waitUntil = 0;
 
   constructor(private readonly deps: GroqServiceDeps) {
     this.now = deps.now ?? (() => new Date());
@@ -100,8 +117,11 @@ export class GroqService {
   /** The screen's view (FR-5); the key itself never (BR-3). */
   view(isOwner: boolean): GroqSettings {
     const stored = this.stored();
+    const key = this.keyState(stored);
     return {
       connected: stored.sealedKey !== null,
+      keyProblem:
+        key.kind === 'rejected' || key.kind === 'unreadable' ? key.kind : null,
       mode: stored.mode,
       idleHours: stored.idleHours,
       month: {
@@ -115,7 +135,12 @@ export class GroqService {
   /** Groq may take a transcription now: on, with a key (BR-1). */
   ready(): boolean {
     const stored = this.stored();
-    return stored.mode !== 'never' && stored.sealedKey !== null;
+    return stored.mode !== 'never' && this.keyState(stored).kind === 'ok';
+  }
+
+  /** Groq asked for a wait longer than the VM sleeps through: its jobs stay queued. */
+  waits(): boolean {
+    return this.now().getTime() < this.waitUntil;
   }
 
   /** The media monthly cap: the owner's, or the configured default (BR-2). */
@@ -135,23 +160,35 @@ export class GroqService {
     input: { readonly key?: string; readonly by: string },
     isOwner: boolean,
   ): Promise<GroqTestResult> {
-    const key = input.key ?? this.storedKey();
-    if (key === null) return { ok: false, reason: 'no-key' };
-    const check = await this.deps.groq.checkKey(key);
+    if (input.key === undefined) return this.testStored(input.by, isOwner);
+    const check = await this.deps.groq.checkKey(input.key);
     if (check !== 'ok') return { ok: false, reason: check };
-    if (input.key !== undefined)
-      this.save(
-        {
-          ...this.stored(),
-          sealedKey: this.deps.sealer.seal(key, KEY_CONTEXT),
-        },
-        input.by,
-      );
+    const sealedKey = this.deps.sealer.seal(input.key, KEY_CONTEXT);
+    this.save({ ...this.stored(), sealedKey, keyRejected: false }, input.by);
     return { ok: true, settings: this.view(isOwner) };
   }
 
+  /** The stored key checked again: refused, it is marked; accepted, the mark goes. */
+  private async testStored(
+    by: string,
+    isOwner: boolean,
+  ): Promise<GroqTestResult> {
+    const stored = this.stored();
+    if (stored.sealedKey === null) return { ok: false, reason: 'no-key' };
+    const key = this.opened(stored.sealedKey);
+    if (key === null) return { ok: false, reason: 'key-unreadable' };
+    const check = await this.deps.groq.checkKey(key);
+    if (check === 'unreachable') return { ok: false, reason: check };
+    const keyRejected = check === 'key-rejected';
+    if (keyRejected !== stored.keyRejected)
+      this.save({ ...this.stored(), keyRejected }, by);
+    return keyRejected
+      ? { ok: false, reason: 'key-rejected' }
+      : { ok: true, settings: this.view(isOwner) };
+  }
+
   removeKey(by: string): void {
-    this.save({ ...this.stored(), sealedKey: null }, by);
+    this.save({ ...this.stored(), sealedKey: null, keyRejected: false }, by);
   }
 
   setMode(request: GroqModeRequest, by: string): void {
@@ -170,6 +207,11 @@ export class GroqService {
         'MEDIA_CONFLICT',
         'No transcription of this media waits for the transcriber',
       );
+    if (!hasDuration(waiting))
+      throw new AppError(
+        'MEDIA_CONFLICT',
+        'The length of this media is unknown',
+      );
     if (!this.routeOrHold(waiting)) throw capReached();
   }
 
@@ -178,13 +220,15 @@ export class GroqService {
    * longer than N hours, with no transcriber seen in that time, goes to Groq or is held.
    */
   sweep(): number {
+    this.deps.queue.forgetEndedChunks();
     const stored = this.stored();
-    if (stored.mode !== 'idle' || stored.sealedKey === null) return 0;
+    if (stored.mode !== 'idle' || !this.ready()) return 0;
     const since = new Date(this.now().getTime() - stored.idleHours * HOUR_MS);
     if (!this.transcriberIdleSince(since)) return 0;
     let routed = 0;
+    // An item of unknown length cannot be priced: it stays with the transcriber.
     for (const waiting of this.deps.queue.waitingSince(since))
-      if (this.routeOrHold(waiting)) routed++;
+      if (hasDuration(waiting) && this.routeOrHold(waiting)) routed++;
     if (routed > 0)
       this.deps.log.info({ routed }, 'transcriptions sent to Groq');
     return routed;
@@ -202,14 +246,26 @@ export class GroqService {
     const job = this.deps.queue.heldGroqJob(owner);
     if (!job) throw leaseLost();
     const audioMs = assertChunk(chunk.query);
-    const key = this.ready() ? this.storedKey() : null;
-    if (key === null) return this.giveBack(owner, null);
+    const key: GroqChunkKey = { jobId: owner.jobId, ...chunk.query };
+    const saved = this.deps.queue.savedChunk(key);
+    if (saved) return { kind: 'ok', result: saved };
+    // The VM has one slot: a conversion waiting goes first (the job keeps its place).
+    if (this.deps.queue.conversionsWaiting()) return this.handBack(owner);
+    const opened = this.ready() ? this.keyState(this.stored()) : null;
+    if (opened?.kind !== 'ok') return this.giveBack(owner, null);
     const prompt = this.promptFor(chunk.query.termsVersion);
     const pace = this.deps.pacer.admit(audioMs, this.now().getTime());
-    if (!pace.ok) return { kind: 'wait', retryAfterMs: pace.retryAfterMs };
+    if (!pace.ok) return this.waitOrHandBack(owner, pace.retryAfterMs);
     const reservation = this.reserve(job.mediaId, audioMs);
     if (!reservation) return this.giveBack(owner, 'monthly-cap');
-    return this.send({ owner, key, prompt, audio: chunk.audio, reservation });
+    return this.send({
+      owner,
+      chunk: key,
+      key: opened.key,
+      prompt,
+      audio: chunk.audio,
+      reservation,
+    });
   }
 
   /** The job is still Groq's and this lease's (the transcript route checks it first). */
@@ -219,6 +275,7 @@ export class GroqService {
 
   private async send(input: {
     owner: LeaseOwner;
+    chunk: GroqChunkKey;
     key: string;
     prompt: string;
     audio: Buffer;
@@ -226,19 +283,49 @@ export class GroqService {
   }): Promise<ChunkOutcome> {
     const { reservation } = input;
     const answer = await this.deps.groq.transcribe(input);
-    // Groq charges only what it transcribed: anything else gives the reservation back.
-    this.settle(reservation, answer.kind === 'ok' ? reservation.usd : 0);
-    if (answer.kind === 'ok')
-      return { kind: 'ok', result: chunkResultOf(answer.body) };
+    // Groq charges what it answered 200 to: anything else gives the reservation back.
+    const charged =
+      answer.kind === 'ok' || (answer.kind === 'failed' && answer.charged);
+    this.settle(reservation, charged ? reservation.usd : 0);
+    if (answer.kind === 'ok') return this.keep(input.chunk, answer.body);
     if (answer.kind === 'rate-limited')
-      return { kind: 'wait', retryAfterMs: answer.retryAfterMs };
+      return this.waitOrHandBack(input.owner, answer.retryAfterMs);
     if (answer.kind === 'key-rejected') {
       this.deps.log.warn('Groq refused the stored key: the job goes back');
+      this.save({ ...this.stored(), keyRejected: true }, 'groq');
       return this.giveBack(input.owner, null);
     }
     throw new AppError('PROVIDER_UNAVAILABLE', 'Groq did not transcribe', {
       details: { status: answer.status },
     });
+  }
+
+  /** A paid chunk is kept: a later lease of the job gets it without paying again. */
+  private keep(chunk: GroqChunkKey, body: unknown): ChunkOutcome {
+    const result = chunkResultOf(body);
+    this.deps.queue.saveChunk({ key: chunk, result, now: this.now() });
+    return { kind: 'ok', result };
+  }
+
+  /** A short wait the VM sleeps through; a long one hands the job back (it keeps its place). */
+  private waitOrHandBack(
+    owner: LeaseOwner,
+    retryAfterMs: number,
+  ): ChunkOutcome {
+    if (retryAfterMs <= GROQ_SHORT_WAIT_MS)
+      return { kind: 'wait', retryAfterMs };
+    this.waitUntil = this.now().getTime() + retryAfterMs;
+    this.deps.log.info(
+      { job: owner.jobId, retryAfterMs },
+      'Groq asked to wait',
+    );
+    return this.handBack(owner);
+  }
+
+  /** Back to the queue, still Groq's, without spending an attempt; the worker's 409. */
+  private handBack(owner: LeaseOwner): never {
+    this.deps.queue.handBack({ owner, now: this.now() });
+    throw leaseLost();
   }
 
   private settle(reservation: { id: string }, spentUsd: number): void {
@@ -278,11 +365,16 @@ export class GroqService {
   }
 
   /** Routes the job when its estimate fits what the month has left; holds it otherwise. */
-  private routeOrHold(waiting: WaitingTranscription): boolean {
+  private routeOrHold(
+    waiting: WaitingTranscription & { readonly durationMs: number },
+  ): boolean {
     const now = this.now();
     const used = this.deps.ledger.usedSince(startOfAppMonth(now));
-    const estimate = groqUsdOf(waiting.durationMs ?? 0);
-    if (used + estimate > this.capUsd()) {
+    // What is already Groq's and not transcribed counts as spent (BR-2).
+    const committed =
+      (this.deps.queue.committedMs() / HOUR_MS) * GROQ_USD_PER_HOUR;
+    const estimate = groqUsdOf(waiting.durationMs);
+    if (used + committed + estimate > this.capUsd()) {
       this.deps.queue.hold({ jobId: waiting.jobId, hold: 'monthly-cap', now });
       return false;
     }
@@ -318,11 +410,20 @@ export class GroqService {
     return parsed.success ? parsed.data : DEFAULT_GROQ;
   }
 
-  private storedKey(): string | null {
-    const { sealedKey } = this.stored();
-    return sealedKey === null
-      ? null
-      : this.deps.sealer.open(sealedKey, KEY_CONTEXT);
+  private keyState(stored: StoredGroq): KeyState {
+    if (stored.sealedKey === null) return { kind: 'none' };
+    if (stored.keyRejected) return { kind: 'rejected' };
+    const key = this.opened(stored.sealedKey);
+    return key === null ? { kind: 'unreadable' } : { kind: 'ok', key };
+  }
+
+  /** The key, or null when it no longer opens (KB_CHAT_SECRETS_KEY changed, QA BUG-3). */
+  private opened(sealedKey: string): string | null {
+    try {
+      return this.deps.sealer.open(sealedKey, KEY_CONTEXT);
+    } catch {
+      return null;
+    }
   }
 
   private save(value: StoredGroq, by: string): void {
@@ -334,6 +435,11 @@ export class GroqService {
     });
   }
 }
+
+const hasDuration = (
+  waiting: WaitingTranscription,
+): waiting is WaitingTranscription & { readonly durationMs: number } =>
+  waiting.durationMs !== null && waiting.durationMs > 0;
 
 /** A chunk's bounds, in order and at most ~28 s (FR-3); its length in ms. */
 function assertChunk(query: GroqChunkQuery): number {
