@@ -167,6 +167,59 @@ test('AC-16: a master publishes the tracks that already exist, sees the count an
   await owner.dispose();
 });
 
+test('QA F-13: a failed publish says so and gives the focus back to the confirm button, never to the page (WCAG 2.4.3)', async ({
+  page,
+}) => {
+  // The overview and the failure are this test's own: no shared collection is touched.
+  await page.route('**/api/v1/media/track-documents', (route) =>
+    route.fulfill({
+      json: {
+        usdPerTrack: 0.001,
+        remainingUsd: 9.5,
+        collections: [
+          {
+            topic: 'falha-simulada',
+            title: 'Falha simulada',
+            tracks: 2,
+            toPublish: 2,
+            queued: 0,
+            published: 0,
+            failed: 0,
+          },
+        ],
+      },
+    }),
+  );
+  let posts = 0;
+  await page.route('**/api/v1/media/track-documents/publish', (route) => {
+    posts += 1;
+    return route.fulfill({
+      status: 500,
+      json: { error: { code: 'INTERNAL', message: 'simulated' } },
+    });
+  });
+  await page.goto('/biblioteca');
+  const { section } = await openTranscribers(page);
+  await section
+    .getByRole('button', {
+      name: 'Publicar no acervo as faixas que já existem',
+    })
+    .click();
+  const confirm = section.getByRole('button', { name: 'Publicar 2 faixas' });
+  await confirm.focus();
+  await page.keyboard.press('Enter');
+  await expect(section.getByRole('status')).toHaveText(
+    'Não foi possível publicar. Tente de novo.',
+  );
+  await expect(confirm).toBeEnabled();
+  await expect(confirm).toBeFocused();
+  expect(posts).toBe(1);
+  // Trying again from the keyboard sends one more request.
+  await page.keyboard.press('Enter');
+  await expect.poll(() => posts).toBe(2);
+  await expect(confirm).toBeFocused();
+});
+
 test('AC-16: a member, even with every media permission, has no action and the API refuses (403)', async ({
   page,
 }) => {

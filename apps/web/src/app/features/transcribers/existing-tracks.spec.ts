@@ -261,6 +261,25 @@ describe('ExistingTracks (KBC-099 AC-16, scope of 2026-11-06)', () => {
     ).toBe(true);
   });
 
+  it('QA F-13: after a failed publish the focus goes back to the confirm button, never to the page (WCAG 2.4.3)', async () => {
+    const { fixture, http } = await renderIt();
+    await open(fixture);
+    // Chrome drops the focus to the page once the focused button turns disabled; the
+    // test starts from wherever the choice left it (its first collection).
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar 5 faixas' }));
+    await fixture.whenStable();
+    http
+      .expectOne(PUBLISH)
+      .flush('x', { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'Não foi possível publicar. Tente de novo.',
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Publicar 5 faixas' }),
+    );
+  });
+
   it('says the ceiling was reached when the API refuses (429)', async () => {
     const { fixture, http } = await renderIt();
     await open(fixture);

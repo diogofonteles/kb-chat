@@ -74,6 +74,7 @@
         }
         <div class="row">
           <button
+            #confirm
             type="button"
             class="primary"
             [disabled]="busy() || capSpent() || chosenTracks() === 0"

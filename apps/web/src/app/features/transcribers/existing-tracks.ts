@@ -63,6 +63,8 @@ export class ExistingTracks {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly action = viewChild<ElementRef<HTMLButtonElement>>('action');
+  private readonly confirm =
+    viewChild<ElementRef<HTMLButtonElement>>('confirm');
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly title =
     viewChild.required<ElementRef<HTMLHeadingElement>>('title');
@@ -208,6 +210,9 @@ export class ExistingTracks {
               ? capReached()
               : $localize`:@@existingTracks.failed:Não foi possível publicar. Tente de novo.`,
           );
+          // The button was disabled while the request ran, so the browser let the focus
+          // fall to the page; it comes back to it to try again (QA F-13, WCAG 2.4.3).
+          this.focusAfterRender(() => this.confirm()?.nativeElement);
         },
       });
   }
