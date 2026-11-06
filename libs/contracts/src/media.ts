@@ -836,6 +836,57 @@ export type CompleteKbPublishRequest = z.infer<
   typeof completeKbPublishRequestSchema
 >;
 
+/**
+ * What kb spends per track's first publication, measured by the KBC-099 spike on kb 0.0.12
+ * (classify + link ≈ US$ 0.0007–0.0010): the estimate shown before publishing many tracks.
+ */
+export const KB_PUBLISH_USD_PER_TRACK = 0.001;
+
+/** One collection's track documents, for "Publicar no acervo as faixas que já existem". */
+export const trackDocumentsCollectionSchema = z.object({
+  topic: topicSlugSchema,
+  title: z.string(),
+  /** Its published, non-archived tracks with a transcript. */
+  tracks: z.number().int().min(0),
+  /** Of those, the ones whose document is not in the vault as it is now. */
+  toPublish: z.number().int().min(0),
+  /** Documents waiting for the Mac, published, and failed (kb or the Mac). */
+  queued: z.number().int().min(0),
+  published: z.number().int().min(0),
+  failed: z.number().int().min(0),
+});
+export type TrackDocumentsCollection = z.infer<
+  typeof trackDocumentsCollectionSchema
+>;
+
+/** GET /api/v1/media/track-documents (masters, KBC-099 scope of 2026-11-06). */
+export const trackDocumentsOverviewSchema = z.object({
+  usdPerTrack: z.number().min(0),
+  /** What the media monthly ceiling still allows this month. */
+  remainingUsd: z.number().min(0),
+  collections: z.array(trackDocumentsCollectionSchema),
+});
+export type TrackDocumentsOverview = z.infer<
+  typeof trackDocumentsOverviewSchema
+>;
+
+/** POST /api/v1/media/track-documents/publish: the collections a master chose. */
+export const publishExistingTracksRequestSchema = z.strictObject({
+  topics: z.array(topicSlugSchema).min(1).max(100),
+});
+export type PublishExistingTracksRequest = z.infer<
+  typeof publishExistingTracksRequestSchema
+>;
+
+/** Queued for the Mac, and skipped as already in the vault as they are now. */
+export const publishExistingTracksResultSchema = z.object({
+  queued: z.number().int().min(0),
+  skipped: z.number().int().min(0),
+});
+export type PublishExistingTracksResult = z.infer<
+  typeof publishExistingTracksResultSchema
+>;
+
 /** POST …/jobs/lease answers one of these, by the kinds the token may lease. */
 export const leasedJobSchema = z.union([
   // Before `transcribeJobSchema`: the answer is serialized by the first that fits.

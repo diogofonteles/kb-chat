@@ -4,6 +4,7 @@ import { createSubjectDirectory } from './track-subjects-factory.js';
 import type { AuthorsService } from './modules/authors/index.js';
 import type { CatalogRegistry } from './modules/catalog/index.js';
 import {
+  ExistingTracks,
   KbPublishService,
   MediaDocumentReconciler,
   TrackDocumentSource,
@@ -16,6 +17,7 @@ export const RECONCILE_INTERVAL_MS = 10 * 60 * 1000;
 export interface MediaDocuments {
   readonly reconciler: MediaDocumentReconciler;
   readonly kb: KbPublishService;
+  readonly existing: ExistingTracks;
 }
 
 /** Track documents (KBC-099, ADR 0035): rendered from media.db, published through the Mac. */
@@ -61,7 +63,13 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
     leaseMs: JOB_LEASE_MS,
     maxAttempts: MAX_JOB_ATTEMPTS,
   });
-  return { reconciler, kb };
+  const existing = new ExistingTracks({
+    documents: media.documents,
+    reconciler,
+    budget: kb,
+    titleOf: (topic) => wiring.catalog.get(topic)?.topic.title ?? null,
+  });
+  return { reconciler, kb, existing };
 }
 
 /** Every 10 minutes, whatever a missed callback left behind is published (ADR 0035 §4). */

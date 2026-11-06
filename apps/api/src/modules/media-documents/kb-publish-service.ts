@@ -58,11 +58,15 @@ export class KbPublishService {
     this.now = deps.now ?? (() => new Date());
   }
 
+  /** What the media monthly ceiling still allows this month (ADR 0035 §11). */
+  remainingUsd(): number {
+    const used = this.deps.spend.usedSince(startOfAppMonth(this.now()));
+    return Math.floor(Math.max(0, this.deps.monthlyCapUsd - used) * 1e4) / 1e4;
+  }
+
   /** What kb may still spend this month, capped per job; zero leaves the queue waiting. */
   budgetUsd(): number {
-    const used = this.deps.spend.usedSince(startOfAppMonth(this.now()));
-    const left = Math.max(0, this.deps.monthlyCapUsd - used);
-    return Math.min(KB_PUBLISH_MAX_BUDGET_USD, Math.floor(left * 1e4) / 1e4);
+    return Math.min(KB_PUBLISH_MAX_BUDGET_USD, this.remainingUsd());
   }
 
   /** The next waiting job, rendered now; `topic` keeps to one collection (E2E's fake Mac). */

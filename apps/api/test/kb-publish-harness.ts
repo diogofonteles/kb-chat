@@ -113,6 +113,33 @@ export function mediaDb(media: Media): DatabaseSync {
   return new DatabaseSync(join(media.mediaDir, 'media.db'), { readOnly: true });
 }
 
+/**
+ * The media database as one from before KBC-099 left it: published tracks with no document
+ * and no kb-publish job (the tracks "Publicar no acervo as faixas que já existem" is for).
+ */
+export function forgetDocuments(media: Media): void {
+  const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+  try {
+    db.exec('DELETE FROM media_documents; DELETE FROM kb_publish_jobs;');
+  } finally {
+    db.close();
+  }
+}
+
+/** This month's media spend at the ceiling: kb may not spend more. */
+export function spendTheCap(media: Media, usd: number): void {
+  const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+  try {
+    db.prepare(
+      `INSERT INTO media_spend (id, kind, media_id, principal, reserved_usd, spent_usd,
+         status, created_at, settled_at)
+       VALUES ('cap', 'kb-publish', NULL, 'mac', ?, ?, 'settled', ?, ?)`,
+    ).run(usd, usd, new Date().toISOString(), new Date().toISOString());
+  } finally {
+    db.close();
+  }
+}
+
 export const SPEECH: readonly Spoken[] = [
   { at: 75, text: 'Pergunta sobre o ritmo' },
   { at: 113, text: 'O ritmo é a lei do pêndulo que tudo governa' },

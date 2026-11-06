@@ -47,19 +47,25 @@ export class MediaDocumentReconciler {
     this.newId = deps.newId ?? randomUUID;
   }
 
-  /** The document of a track as it is now, recorded as the one to publish; null if none. */
-  render(mediaId: string): TrackRender | null {
+  /** The document of a track as it is now, without recording anything; null if none. */
+  preview(mediaId: string): TrackRender | null {
     const input = this.deps.source.inputOf(mediaId);
     if (!input) return null;
-    const rendered = renderTrackDocument(input);
+    return { ...renderTrackDocument(input), mediaId, topic: input.topic };
+  }
+
+  /** The document of a track as it is now, recorded as the one to publish; null if none. */
+  render(mediaId: string): TrackRender | null {
+    const rendered = this.preview(mediaId);
+    if (!rendered) return null;
     this.deps.documents.desire({
       mediaId,
-      topic: input.topic,
+      topic: rendered.topic,
       path: rendered.path,
       fingerprint: rendered.fingerprint,
       now: this.now(),
     });
-    return { ...rendered, mediaId, topic: input.topic };
+    return rendered;
   }
 
   /** A recording's tracks were published (KBC-068): their documents follow (FR-1). */

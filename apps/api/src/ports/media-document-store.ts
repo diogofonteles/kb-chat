@@ -25,6 +25,19 @@ export interface DeliveredDocument {
   readonly fingerprint: string;
 }
 
+/** A live track and the collection it is in. */
+export interface PublishableTrack {
+  readonly mediaId: string;
+  readonly topic: string;
+}
+
+/** Documents waiting for the Mac, published, and failed. */
+export interface DocumentCounts {
+  readonly queued: number;
+  readonly published: number;
+  readonly failed: number;
+}
+
 /** A leased kb-publish job, before its documents are rendered. */
 export interface LeasedKbJob {
   readonly id: string;
@@ -53,6 +66,13 @@ export interface MediaDocumentStorePort {
    * before KBC-099 get theirs in KBC-100, by the owner's choice of when kb spends on them.
    */
   liveTracks(): readonly string[];
+  /**
+   * Every published, ready, non-archived track of the library (or of one collection), with
+   * a document or not: what "Publicar no acervo as faixas que já existem" goes over.
+   */
+  publishableTracks(topic?: string): readonly PublishableTrack[];
+  /** A collection's documents of live tracks, by state. */
+  countsOf(topic: string): DocumentCounts;
   /** What the Mac last published of a track; null before the first publication. */
   publishedFingerprint(mediaId: string): string | null;
   /** One queued job per collection: a second call while one waits does nothing. */

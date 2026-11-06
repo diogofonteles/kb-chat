@@ -176,7 +176,10 @@ import {
 } from './modules/media-edit/index.js';
 import { houseAiRoutes } from './modules/house-ai/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
-import { MediaTrackShelf } from './modules/media-documents/index.js';
+import {
+  MediaTrackShelf,
+  existingTracksRoutes,
+} from './modules/media-documents/index.js';
 import {
   createMediaDocuments,
   startDocumentBackstop,
@@ -897,6 +900,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   });
   const publisher = trackPublisher(wiring, documents);
   startDocumentBackstop(app, documents.reconciler);
+  await app.register(existingTracksRoutes(documents.existing));
   await registerTranscribers(app, { transcribers, media, wiring });
   await app.register(groqRoutes({ groq, media }));
   await registerListening(app, wiring, { media, transcribers, publisher });

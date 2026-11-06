@@ -3,10 +3,12 @@ import { z } from 'zod';
 import type {
   DeliveredDocument,
   DesiredDocument,
+  DocumentCounts,
   DocumentOutcome,
   LeasedKbJob,
   MediaDocumentStorePort,
   PendingDocument,
+  PublishableTrack,
 } from '../../ports/media-document-store.js';
 import type { LeaseOwner } from '../../ports/media-store.js';
 import { inTransaction } from './media-database.js';
@@ -75,6 +77,39 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
         mediaId: String(row['media_id']),
         path: String(row['path']),
       }));
+  }
+
+  publishableTracks(topic?: string): readonly PublishableTrack[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, topic FROM media
+         WHERE parent_media_id IS NOT NULL AND status = 'ready' AND archived_at IS NULL
+           AND (? IS NULL OR topic = ?)
+         ORDER BY topic, parent_media_id, track_ordinal, id`,
+      )
+      .all(topic ?? null, topic ?? null);
+    return rows.map((row) => ({
+      mediaId: String(row['id']),
+      topic: String(row['topic']),
+    }));
+  }
+
+  countsOf(topic: string): DocumentCounts {
+    const row = this.db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(d.state = 'pending'), 0) AS queued,
+           COALESCE(SUM(d.state = 'published'), 0) AS published,
+           COALESCE(SUM(d.state = 'failed'), 0) AS failed
+         FROM media_documents d JOIN media m ON m.id = d.media_id
+         WHERE d.topic = ? AND m.status = 'ready' AND m.archived_at IS NULL`,
+      )
+      .get(topic);
+    return {
+      queued: Number(row?.['queued'] ?? 0),
+      published: Number(row?.['published'] ?? 0),
+      failed: Number(row?.['failed'] ?? 0),
+    };
   }
 
   liveTracks(): readonly string[] {
