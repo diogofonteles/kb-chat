@@ -19,7 +19,23 @@
 } @else if (settings(); as current) {
   <form class="block" (submit)="testKey($event)" novalidate>
     <h4 class="block-title" i18n="@@groq.keyTitle">Conexão</h4>
-    @if (current.connected) {
+    @if (current.keyProblem === 'rejected') {
+      <p class="key-problem">
+        <span aria-hidden="true">⚠</span>
+        <ng-container i18n="@@groq.keyRefused"
+          >O Groq recusou a chave guardada. Cole uma chave nova para voltar a
+          usá-lo.</ng-container
+        >
+      </p>
+    } @else if (current.keyProblem === 'unreadable') {
+      <p class="key-problem">
+        <span aria-hidden="true">⚠</span>
+        <ng-container i18n="@@groq.keyUnreadable"
+          >A chave guardada não pode mais ser lida neste servidor. Cole a chave
+          de novo.</ng-container
+        >
+      </p>
+    } @else if (current.connected) {
       <p class="connected">
         <span aria-hidden="true">✓</span>
         <ng-container i18n="@@groq.isConnected"
@@ -28,8 +44,8 @@
         >
       </p>
     }
-    <label class="field" for="groq-key">
-      <span class="label">
+    <div class="field">
+      <label class="label" for="groq-key">
         @if (current.connected) {
           <ng-container i18n="@@groq.newKeyLabel"
             >Trocar a chave da API do Groq</ng-container
@@ -39,11 +55,11 @@
             >Chave da API do Groq</ng-container
           >
         }
-      </span>
+      </label>
       <span class="hint" id="groq-key-hint" i18n="@@groq.keyHint"
         >Crie em console.groq.com, em "API Keys", e cole aqui.</span
       >
-    </label>
+    </div>
     <input
       #keyInput
       id="groq-key"
@@ -200,6 +216,8 @@
           max="1000"
           step="0.01"
           [value]="cap()"
+          [attr.aria-invalid]="capInvalid() ? 'true' : null"
+          [attr.aria-describedby]="capInvalid() ? 'groq-cap-error' : null"
           (input)="editCap($event)"
         />
         <button
@@ -211,6 +229,14 @@
           Salvar teto
         </button>
       </div>
+      @if (capInvalid()) {
+        <p class="field-error" id="groq-cap-error">
+          <span aria-hidden="true">⚠</span>
+          <ng-container i18n="@@groq.capInvalid"
+            >Use um valor de 0 a 1000 dólares.</ng-container
+          >
+        </p>
+      }
     } @else {
       <p class="hint" i18n="@@groq.capOwnerOnly">Só o dono muda o teto.</p>
     }

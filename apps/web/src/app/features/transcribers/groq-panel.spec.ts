@@ -10,6 +10,7 @@ import { GroqPanel } from './groq-panel.js';
 
 const OFF: GroqSettings = {
   connected: false,
+  keyProblem: null,
   mode: 'never',
   idleHours: 12,
   month: { spentUsd: 1.5, capUsd: 10 },
@@ -167,5 +168,70 @@ describe('GroqPanel (KBC-037)', () => {
       .flush({}, { status: 500, statusText: 'Error' });
     await fixture.whenStable();
     expect(status(0)).toContain('Não consegui salvar. Tente de novo.');
+  });
+
+  it('refuses an empty cap with a field error, sending nothing (BR-2)', async () => {
+    await open();
+    await type('#groq-cap', '');
+    button('Salvar teto').click();
+    await fixture.whenStable();
+    http.expectNone('/api/v1/media/spend-cap');
+    const field = root().querySelector<HTMLInputElement>('#groq-cap');
+    expect(field?.getAttribute('aria-invalid')).toBe('true');
+    const error = root().querySelector('#groq-cap-error');
+    expect(error?.textContent).toContain('Use um valor de 0 a 1000 dólares.');
+    expect(field?.getAttribute('aria-describedby')).toContain('groq-cap-error');
+    expect(text()).not.toContain('Teto salvo.');
+    await type('#groq-cap', '12');
+    expect(field?.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('says Groq refused the stored key, instead of "Chave conectada" (QA BUG-1)', async () => {
+    await open({ ...OFF, connected: true, keyProblem: 'rejected' });
+    expect(text()).not.toContain('Chave conectada');
+    expect(text()).toContain(
+      'O Groq recusou a chave guardada. Cole uma chave nova para voltar a usá-lo.',
+    );
+  });
+
+  it('marks the stored key refused when a test of it fails, without a reload', async () => {
+    await open({ ...OFF, connected: true });
+    button('Testar conexão').click();
+    await fixture.whenStable();
+    http
+      .expectOne('/api/v1/media/groq/test')
+      .flush({ ok: false, reason: 'key-rejected' });
+    await fixture.whenStable();
+    expect(text()).not.toContain('Chave conectada');
+    expect(text()).toContain('O Groq recusou a chave guardada.');
+  });
+
+  it('says the stored key no longer opens, and why a test of it fails (QA BUG-3)', async () => {
+    await open({ ...OFF, connected: true, keyProblem: 'unreadable' });
+    expect(text()).not.toContain('Chave conectada');
+    expect(text()).toContain(
+      'A chave guardada não pode mais ser lida neste servidor. Cole a chave de novo.',
+    );
+    button('Testar conexão').click();
+    await fixture.whenStable();
+    http
+      .expectOne('/api/v1/media/groq/test')
+      .flush({ ok: false, reason: 'key-unreadable' });
+    await fixture.whenStable();
+    expect(status(0)).toContain(
+      'A chave guardada não pode mais ser lida neste servidor. Cole a chave de novo.',
+    );
+  });
+
+  it('names the key field by its label alone; the hint describes it', async () => {
+    await open();
+    const label = root().querySelector('label[for="groq-key"]');
+    expect(label?.textContent?.trim()).toBe('Chave da API do Groq');
+    expect(
+      root().querySelector('#groq-key')?.getAttribute('aria-describedby'),
+    ).toBe('groq-key-hint');
+    expect(root().querySelector('#groq-key-hint')?.textContent).toContain(
+      'console.groq.com',
+    );
   });
 });

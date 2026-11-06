@@ -17,6 +17,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   GROQ_IDLE_HOURS,
   groqSettingsSchema,
+  type GroqKeyProblem,
   type GroqMode,
   type GroqSettings,
   type GroqTestFailure,
@@ -33,6 +34,9 @@ interface Notice {
 
 type Section = 'key' | 'mode' | 'cap';
 
+const UNREADABLE = () =>
+  $localize`:@@groq.keyUnreadable:A chave guardada não pode mais ser lida neste servidor. Cole a chave de novo.`;
+
 const FAILURES: Record<GroqTestFailure, () => string> = {
   'key-rejected': () =>
     $localize`:@@groq.keyRejected:A chave não foi aceita pelo Groq.`,
@@ -40,6 +44,13 @@ const FAILURES: Record<GroqTestFailure, () => string> = {
     $localize`:@@groq.unreachable:Não consegui falar com o Groq. Tente de novo em instantes.`,
   'no-key': () =>
     $localize`:@@groq.noKey:Cole a chave do Groq antes de testar.`,
+  'key-unreadable': () => UNREADABLE(),
+};
+
+/** What a failed test of the stored key says about it. */
+const KEY_PROBLEMS: Partial<Record<GroqTestFailure, GroqKeyProblem>> = {
+  'key-rejected': 'rejected',
+  'key-unreadable': 'unreadable',
 };
 
 const FAILED = (): Notice => ({
@@ -116,6 +127,8 @@ export class GroqPanel {
   protected readonly cap = linkedSignal<string>(() =>
     String(this.settings()?.month.capUsd ?? ''),
   );
+  /** Set when "Salvar teto" met a value out of range; cleared as the field changes. */
+  protected readonly capInvalid = signal(false);
   protected readonly busy = signal<Section | null>(null);
   protected readonly notices = signal<Partial<Record<Section, Notice>>>({});
   protected readonly spentText = computed(() => {
@@ -142,6 +155,7 @@ export class GroqPanel {
 
   protected editCap(event: Event): void {
     this.cap.set((event.target as HTMLInputElement).value);
+    this.capInvalid.set(false);
   }
 
   /** "Testar conexão" (FR-1): a pasted key, or the stored one when the field is empty. */
@@ -151,7 +165,7 @@ export class GroqPanel {
     const connected = this.settings()?.connected ?? false;
     if (!key && !connected) return this.say('key', this.failure('no-key'));
     this.run('key', this.api.test(key || undefined), (result) =>
-      this.tested(result),
+      this.tested(result, key !== ''),
     );
   }
 
@@ -193,12 +207,12 @@ export class GroqPanel {
   /** The owner's cap (BR-2); the API refuses it to anyone else. */
   protected saveCap(event: Event): void {
     event.preventDefault();
-    const capUsd = Number(this.cap().replace(',', '.'));
-    if (!Number.isFinite(capUsd) || capUsd < 0 || capUsd > 1_000)
-      return this.say('cap', {
-        kind: 'error',
-        text: $localize`:@@groq.capInvalid:Use um valor de 0 a 1000 dólares.`,
-      });
+    const typed = this.cap().trim().replace(',', '.');
+    // An empty field is no cap at all, not US$ 0 (`Number('')` is 0).
+    const capUsd = typed === '' ? Number.NaN : Number(typed);
+    const valid = Number.isFinite(capUsd) && capUsd >= 0 && capUsd <= 1_000;
+    this.capInvalid.set(!valid);
+    if (!valid) return this.say('cap', null);
     this.run('cap', this.api.setCap(capUsd), (settings) => {
       this.settings.set(settings);
       this.say('cap', {
@@ -212,14 +226,26 @@ export class GroqPanel {
     return this.notices()[section] ?? null;
   }
 
-  private tested(result: GroqTestResult): void {
-    if (!result.ok) return this.say('key', this.failure(result.reason));
+  private tested(result: GroqTestResult, pasted: boolean): void {
+    if (!result.ok) {
+      if (!pasted) this.markStoredKey(result.reason);
+      return this.say('key', this.failure(result.reason));
+    }
     this.settings.set(result.settings);
     this.key.set('');
     this.say('key', {
       kind: 'ok',
       text: $localize`:@@groq.connected:Conectado.`,
     });
+  }
+
+  /** The stored key just failed its test: the panel says so without a reload. */
+  private markStoredKey(reason: GroqTestFailure): void {
+    const keyProblem = KEY_PROBLEMS[reason];
+    if (keyProblem)
+      this.settings.update((current) =>
+        current ? { ...current, keyProblem } : current,
+      );
   }
 
   /** One write at a time per section; its answer, or a failure, lands in its status. */

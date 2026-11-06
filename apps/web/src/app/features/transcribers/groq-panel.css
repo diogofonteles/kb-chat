@@ -11,6 +11,13 @@
   color: var(--color-accent-strong);
 }
 
+/* A stored key that is not used: said in words, the sign only beside them. */
+.key-problem {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
 /* Busy, not disabled: the focus stays on the button while its request runs. */
 button[aria-disabled='true'] {
   cursor: default;

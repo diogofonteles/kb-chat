@@ -50,6 +50,8 @@ export class TranscribeWithGroq {
 
   readonly media = input.required<MediaItem>();
   readonly sent = output<MediaItem>();
+  /** The cap refused it: the item is now held, and the page reads it again. */
+  readonly capped = output();
 
   protected readonly confirming = signal(false);
   protected readonly busy = signal(false);
@@ -97,12 +99,17 @@ export class TranscribeWithGroq {
   private failed(err: unknown): void {
     this.busy.set(false);
     const code = toUiErrorCode(err);
+    if (code !== 'MEDIA_SPEND_CAP') {
+      this.error.set(errorMessage(code));
+      return this.focusAfterRender(() => this.cancelButton()?.nativeElement);
+    }
     this.error.set(
-      code === 'MEDIA_SPEND_CAP'
-        ? $localize`:@@groqItem.cap:Teto mensal de mídia atingido. O áudio continua aguardando o transcritor.`
-        : errorMessage(code),
+      $localize`:@@groqItem.cap:Teto mensal de mídia atingido. O áudio continua aguardando o transcritor.`,
     );
-    this.focusAfterRender(() => this.cancelButton()?.nativeElement);
+    // Asking again would meet the same cap: the question closes, the focus stays here.
+    this.confirming.set(false);
+    this.capped.emit();
+    this.focusAfterRender(() => this.host.nativeElement);
   }
 
   private focusAfterRender(target: () => HTMLElement | undefined): void {

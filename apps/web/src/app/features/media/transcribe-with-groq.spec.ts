@@ -73,6 +73,8 @@ describe('TranscribeWithGroq (KBC-037)', () => {
 
   it('says the monthly cap was reached when the API refuses for it (AC-3)', async () => {
     await open(waiting);
+    let capped = 0;
+    fixture.componentInstance.capped.subscribe(() => capped++);
     button('Transcrever com Groq')?.click();
     await fixture.whenStable();
     button('Transcrever com Groq')?.click();
@@ -87,5 +89,8 @@ describe('TranscribeWithGroq (KBC-037)', () => {
     expect(root().querySelector('[role="alert"]')?.textContent).toContain(
       'Teto mensal de mídia atingido',
     );
+    // The question closes and the page reads the item again, now held for the cap.
+    expect(root().querySelector('[role="group"]')).toBeNull();
+    expect(capped).toBe(1);
   });
 });
