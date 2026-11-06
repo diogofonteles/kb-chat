@@ -161,6 +161,8 @@ export class TrackText {
   }
 
   protected switchView(): void {
+    // A scroll in the other view says nothing about this one: it may follow the word.
+    this.ownScrollAt = Number.NEGATIVE_INFINITY;
     this.whole.update((whole) => !whole);
   }
 
@@ -255,7 +257,10 @@ export class TrackText {
   /** After "Tentar de novo" worked, the focus that was on it goes to the text (PD-01). */
   private focusAfterRetry(): void {
     afterRenderEffect(() => {
-      if (this.state() !== 'ready' || !this.focusWhenReady) return;
+      const state = this.state();
+      // Failed again: the focus stays on the button, and nothing moves it later.
+      if (state === 'error' && !this.retrying()) this.focusWhenReady = false;
+      if (state !== 'ready' || !this.focusWhenReady) return;
       this.focusWhenReady = false;
       const active = this.document.activeElement;
       if (active === null || active === this.document.body)

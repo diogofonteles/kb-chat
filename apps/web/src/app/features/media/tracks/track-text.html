@@ -14,6 +14,8 @@
     </button>
   }
 </div>
+<!-- Outside the region: it is busy while retrying, and a busy region may stay silent. -->
+<p class="visually-hidden" role="status">{{ announcement() }}</p>
 <div
   #body
   class="body"
@@ -25,7 +27,6 @@
   (keydown)="scrolledByKey($event)"
   (pointerdown)="pressed($event)"
 >
-  <p class="visually-hidden" role="status">{{ announcement() }}</p>
   @switch (state()) {
     @case ('ready') {
       @for (line of lines(); track line.segment) {

@@ -286,9 +286,11 @@ describe('TrackText (KBC-092)', () => {
     fireEvent.click(retryButton());
     TestBed.tick();
     expect(region().getAttribute('aria-busy')).toBe('true');
-    expect(screen.getByRole('status').textContent?.trim()).toBe(
-      'Carregando o texto…',
-    );
+    const status = screen.getByRole('status');
+    expect(status.textContent?.trim()).toBe('Carregando o texto…');
+    // A busy region may keep its changes quiet: the status lives outside it.
+    expect(region().contains(status)).toBe(false);
+    expect(status.closest('[aria-busy="true"]')).toBe(null);
     expect(retryButton().getAttribute('aria-disabled')).toBe('true');
     expect(document.activeElement).toBe(retryButton());
     await answer(rendered);
@@ -314,6 +316,13 @@ describe('TrackText (KBC-092)', () => {
     );
     expect(retryButton().getAttribute('aria-disabled')).toBeNull();
     expect(document.activeElement).toBe(retryButton());
+    // A later text that loads (a newer transcript) does not pull the focus anymore.
+    retryButton().blur();
+    rendered.aimed.set({ mediaId: MEDIA, status: 'done', key: '2' });
+    TestBed.tick();
+    await answer(rendered, transcriptOf(2), '2');
+    expect(shownLines()).toContain('o que está em cima');
+    expect(document.activeElement).not.toBe(region());
   });
 
   it('drops the words of an older version when a new transcript comes (AC-12)', async () => {
@@ -362,9 +371,22 @@ describe('TrackText (KBC-092)', () => {
       'quase fim fora daqui',
     ]);
     expect(painted.get('track-word')).toEqual(['está']);
+    // The screen reader hears where the track starts and ends, right by its lines.
+    const start = within(region()).getByText('Início da faixa 2');
+    const end = within(region()).getByText('Fim da faixa 2');
+    expect(start.nextElementSibling?.textContent).toBe(
+      'ainda antes agora dentro',
+    );
+    expect(end.previousElementSibling?.textContent).toBe(
+      'quase fim fora daqui',
+    );
+    expect(start.classList).toContain('visually-hidden');
     fireEvent.click(screen.getByRole('button', { name: 'Ver só a faixa' }));
     await rendered.view.fixture.whenStable();
     expect(shownLines()[0]).toBe('agora dentro');
+    expect(within(region()).queryByText(/Início da faixa|Fim da faixa/)).toBe(
+      null,
+    );
     expect(painted.get('track-word')).toEqual(['está']);
   });
 
