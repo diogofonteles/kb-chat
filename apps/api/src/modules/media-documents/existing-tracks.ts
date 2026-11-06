@@ -11,11 +11,11 @@ import type { MediaDocumentReconciler } from './reconciler.js';
 export interface ExistingTracksDeps {
   readonly documents: Pick<
     MediaDocumentStorePort,
-    'publishableTracks' | 'countsOf' | 'publishedFingerprint'
+    'publishableTracks' | 'countsOf' | 'desiredFingerprint'
   >;
   readonly reconciler: Pick<
     MediaDocumentReconciler,
-    'preview' | 'render' | 'enqueueIfPending'
+    'render' | 'enqueueIfPending'
   >;
   /** The media monthly ceiling (ADR 0035 §11). */
   readonly budget: { remainingUsd(): number; budgetUsd(): number };
@@ -39,42 +39,32 @@ const capReached = () =>
 export class ExistingTracks {
   constructor(private readonly deps: ExistingTracksDeps) {}
 
+  /**
+   * Read from the documents' rows, never by rendering (review round 2: the screen asks
+   * every 20 s): "to publish" is a live track with no document yet; one already queued is
+   * counted as queued only.
+   */
   overview(): TrackDocumentsOverview {
-    const byTopic = new Map<string, string[]>();
-    for (const { mediaId, topic } of this.deps.documents.publishableTracks())
-      byTopic.set(topic, [...(byTopic.get(topic) ?? []), mediaId]);
+    const topics = new Map<string, number>();
+    for (const { topic } of this.deps.documents.publishableTracks())
+      topics.set(topic, (topics.get(topic) ?? 0) + 1);
     const collections: TrackDocumentsCollection[] = [];
-    for (const [topic, mediaIds] of byTopic) {
+    for (const [topic, tracks] of topics) {
       const title = this.deps.titleOf(topic);
-      if (title !== null)
-        collections.push(this.collectionOf({ topic, title, mediaIds }));
+      if (title === null) continue;
+      const { undocumented, ...counts } = this.deps.documents.countsOf(topic);
+      collections.push({
+        topic,
+        title,
+        tracks,
+        toPublish: undocumented,
+        ...counts,
+      });
     }
     return {
       usdPerTrack: KB_PUBLISH_USD_PER_TRACK,
       remainingUsd: this.deps.budget.remainingUsd(),
       collections,
-    };
-  }
-
-  private collectionOf(input: {
-    topic: string;
-    title: string;
-    mediaIds: readonly string[];
-  }): TrackDocumentsCollection {
-    const renders = input.mediaIds
-      .map((mediaId) => this.deps.reconciler.preview(mediaId))
-      .filter((one) => one !== null);
-    const toPublish = renders.filter(
-      (one) =>
-        this.deps.documents.publishedFingerprint(one.mediaId) !==
-        one.fingerprint,
-    ).length;
-    return {
-      topic: input.topic,
-      title: input.title,
-      tracks: renders.length,
-      toPublish,
-      ...this.deps.documents.countsOf(input.topic),
     };
   }
 
@@ -96,10 +86,11 @@ export class ExistingTracks {
   private publishTopic(topic: string): PublishExistingTracksResult {
     const result = { queued: 0, skipped: 0 };
     for (const { mediaId } of this.deps.documents.publishableTracks(topic)) {
+      // Already wanted as it renders now (published or in the queue): nothing new.
+      const wanted = this.deps.documents.desiredFingerprint(mediaId);
       const rendered = this.deps.reconciler.render(mediaId);
       if (!rendered) continue;
-      const published = this.deps.documents.publishedFingerprint(mediaId);
-      if (published === rendered.fingerprint) result.skipped += 1;
+      if (wanted === rendered.fingerprint) result.skipped += 1;
       else result.queued += 1;
     }
     this.deps.reconciler.enqueueIfPending(topic);

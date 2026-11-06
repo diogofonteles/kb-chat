@@ -31,8 +31,9 @@ export interface PublishableTrack {
   readonly topic: string;
 }
 
-/** Documents waiting for the Mac, published, and failed. */
+/** Live tracks with no document yet; documents waiting for the Mac, published, failed. */
 export interface DocumentCounts {
+  readonly undocumented: number;
   readonly queued: number;
   readonly published: number;
   readonly failed: number;
@@ -67,12 +68,15 @@ export interface MediaDocumentStorePort {
    */
   liveTracks(): readonly string[];
   /**
-   * Every published, ready, non-archived track of the library (or of one collection), with
-   * a document or not: what "Publicar no acervo as faixas que já existem" goes over.
+   * Every published, ready, non-archived track with a transcript, in the library (or one
+   * collection), with a document or not: what "Publicar no acervo as faixas que já existem"
+   * goes over.
    */
   publishableTracks(topic?: string): readonly PublishableTrack[];
-  /** A collection's documents of live tracks, by state. */
+  /** A collection's live tracks, by the state of their document (none yet included). */
   countsOf(topic: string): DocumentCounts;
+  /** The fingerprint the app last wanted for a track; null without a document. */
+  desiredFingerprint(mediaId: string): string | null;
   /** What the Mac last published of a track; null before the first publication. */
   publishedFingerprint(mediaId: string): string | null;
   /** One queued job per collection: a second call while one waits does nothing. */

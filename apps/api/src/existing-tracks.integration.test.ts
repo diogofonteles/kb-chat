@@ -70,8 +70,9 @@ describe('Publicar no acervo as faixas que já existem (KBC-099 AC-16, scope of 
       queued: 2,
       skipped: 0,
     });
+    // Queued is not "to publish" any more (review round 2).
     expect(await hermetismoOf(world)).toMatchObject({
-      toPublish: 2,
+      toPublish: 0,
       queued: 2,
       published: 0,
     });
@@ -113,9 +114,10 @@ describe('Publicar no acervo as faixas que já existem (KBC-099 AC-16, scope of 
     const twice = await world.media.owner('POST', PUBLISH, {
       topics: ['hermetismo'],
     });
+    // Already queued: nothing new (review round 2).
     expect(twice.json<PublishExistingTracksResult>()).toEqual({
-      queued: 2,
-      skipped: 0,
+      queued: 0,
+      skipped: 2,
     });
     const mac = await publisherMac(world.media);
     await leaseKb(world.media, mac.token);

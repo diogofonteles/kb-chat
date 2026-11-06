@@ -17,6 +17,9 @@ const deliveredSchema = z.array(
   z.object({ mediaId: z.string(), path: z.string(), fingerprint: z.string() }),
 );
 
+/** A track the renderer can make a document of: it has a transcript of its own. */
+const HAS_TRANSCRIPT = `EXISTS (SELECT 1 FROM transcripts t WHERE t.media_id = m.id)`;
+
 /** A document kb failed on this often waits for a new render (ADR 0035 §10: 4 attempts). */
 const MAX_DOCUMENT_ATTEMPTS = 4;
 
@@ -82,9 +85,9 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
   publishableTracks(topic?: string): readonly PublishableTrack[] {
     const rows = this.db
       .prepare(
-        `SELECT id, topic FROM media
+        `SELECT m.id, m.topic FROM media m
          WHERE parent_media_id IS NOT NULL AND status = 'ready' AND archived_at IS NULL
-           AND (? IS NULL OR topic = ?)
+           AND (? IS NULL OR topic = ?) AND ${HAS_TRANSCRIPT}
          ORDER BY topic, parent_media_id, track_ordinal, id`,
       )
       .all(topic ?? null, topic ?? null);
@@ -94,22 +97,33 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
     }));
   }
 
+  /** Counted from the rows, never by rendering (review round 2: a GET every 20 s). */
   countsOf(topic: string): DocumentCounts {
     const row = this.db
       .prepare(
         `SELECT
+           COALESCE(SUM(d.media_id IS NULL), 0) AS undocumented,
            COALESCE(SUM(d.state = 'pending'), 0) AS queued,
            COALESCE(SUM(d.state = 'published'), 0) AS published,
            COALESCE(SUM(d.state = 'failed'), 0) AS failed
-         FROM media_documents d JOIN media m ON m.id = d.media_id
-         WHERE d.topic = ? AND m.status = 'ready' AND m.archived_at IS NULL`,
+         FROM media m LEFT JOIN media_documents d ON d.media_id = m.id
+         WHERE m.topic = ? AND m.parent_media_id IS NOT NULL AND m.status = 'ready'
+           AND m.archived_at IS NULL AND ${HAS_TRANSCRIPT}`,
       )
       .get(topic);
     return {
+      undocumented: Number(row?.['undocumented'] ?? 0),
       queued: Number(row?.['queued'] ?? 0),
       published: Number(row?.['published'] ?? 0),
       failed: Number(row?.['failed'] ?? 0),
     };
+  }
+
+  desiredFingerprint(mediaId: string): string | null {
+    const row = this.db
+      .prepare('SELECT desired_sha256 FROM media_documents WHERE media_id = ?')
+      .get(mediaId);
+    return row ? String(row['desired_sha256']) : null;
   }
 
   liveTracks(): readonly string[] {

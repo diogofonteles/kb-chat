@@ -44,7 +44,7 @@ const capReached = (): string =>
 const resultText = ({ queued, skipped }: PublishExistingTracksResult) =>
   queued > 0
     ? $localize`:@@existingTracks.queued:${tracksWord(queued)}:tracks: na fila para o Mac.`
-    : $localize`:@@existingTracks.nothingNew:Nada novo a publicar: ${tracksWord(skipped)}:tracks: já estavam no acervo.`;
+    : $localize`:@@existingTracks.nothingNew:Nada novo a publicar: ${tracksWord(skipped)}:tracks: já estavam no acervo ou na fila.`;
 
 /**
  * "Publicar no acervo as faixas que já existem" (KBC-099 AC-16, the owner's scope of

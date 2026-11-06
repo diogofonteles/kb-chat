@@ -216,7 +216,7 @@ describe('ExistingTracks (KBC-099 AC-16, scope of 2026-11-06)', () => {
     http.expectOne(URL).flush(anOverview({ collections: [] }));
     await fixture.whenStable();
     expect(screen.getByRole('status').textContent).toContain(
-      'Nada novo a publicar: 2 faixas já estavam no acervo.',
+      'Nada novo a publicar: 2 faixas já estavam no acervo ou na fila.',
     );
   });
 
