@@ -292,7 +292,7 @@ const testMedia = (config: AppConfig, groq: FakeGroq) =>
   );
 
 /** The app over the built pieces, with the model the test asks for (KBC-099). */
-function appOf(
+async function appOf(
   built: {
     readonly config: AppConfig;
     readonly core: Awaited<ReturnType<typeof buildCore>>;
@@ -300,27 +300,32 @@ function appOf(
     readonly auth: ReturnType<typeof testAuth>;
     readonly house: Awaited<ReturnType<typeof buildAi>>['house'];
     readonly logger: FastifyBaseLogger;
-    readonly media: Awaited<ReturnType<typeof testMedia>>;
+    readonly groq: FakeGroq;
   },
   options: StartOptions,
 ): Promise<FastifyInstance> {
-  const { config, core, ...rest } = built;
+  const { config, core, groq, ...rest } = built;
   return buildApp({
     config,
     ...core,
     ...rest,
+    media: await testMedia(config, groq),
     ...(options.llm && { llm: options.llm }),
   });
 }
+
+/** The CLIs see the machine's PATH only when a test runs the Claude CLI. */
+const cliEnv = (options: StartOptions, state: string) =>
+  options.claude
+    ? { PATH: process.env['PATH'] ?? '', HOME: state }
+    : { PATH: '' };
 
 /** The app as main builds it, with sealed settings and fake OpenRouter and Gemini. */
 export async function start(options: StartOptions = {}): Promise<Started> {
   const state =
     options.state ?? (await mkdtemp(join(tmpdir(), 'kbchat-house-')));
   const config = await testConfig(state, options);
-  const env = options.claude
-    ? { PATH: process.env['PATH'] ?? '', HOME: state }
-    : { PATH: '' };
+  const env = cliEnv(options, state);
   const { logs, logger } = capturedLogger();
   const { fake, gemini, fetch } = fakeProviders();
   const keys = await createTestKeys();
@@ -328,9 +333,8 @@ export async function start(options: StartOptions = {}): Promise<Started> {
   const auth = testAuth(state, keys);
   const { house, ai } = await buildAi({ config, core, auth, fetch, env });
   const groq = new FakeGroq();
-  const media = await testMedia(config, groq);
   current = await appOf(
-    { config, core, ai, auth, house, logger, media },
+    { config, core, ai, auth, house, logger, groq },
     options,
   );
   // The CLI reaches the turn's MCP endpoint over HTTP, so this app really listens.
