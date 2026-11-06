@@ -143,22 +143,65 @@ export class SearchService {
   ): Promise<FoundGroups> {
     if (catalog.entries.size === 0) return { groups: [], capped: false };
     const filtered = Object.values(filters).some((values) => values.length > 0);
-    // Track documents take index candidates a texts-only search then drops (KBC-099 AC-13):
-    // asking for as many more keeps the texts' list and counts as they were.
-    const limit =
-      (filtered ? CANDIDATES.filtered : CANDIDATES.plain) +
-      Math.min(this.tracksIn(catalog), CANDIDATES.filtered);
-    const collection = toCollection(catalog.topic.slug);
-    const hits = await this.queryIndex({
-      collection,
+    const base = filtered ? CANDIDATES.filtered : CANDIDATES.plain;
+    const hits = await this.textsAndTracks(catalog, {
       // A subject alone (KBC-070): the documents are found by its name.
       q: normalizeQuestion(q) || normalizeQuestion(filters.concepts.join(' ')),
       mode,
-      limit,
+      base,
     });
-    const groups = groupCopies(this.keepCataloged(catalog, { hits, admit }));
+    const groups = groupCopies(
+      this.keepCataloged(catalog, { hits: hits.kept, admit }),
+    );
     for (const group of groups) this.topicOf.set(group, catalog);
-    return { groups, capped: hits.length >= limit };
+    return { groups, capped: hits.texts >= base };
+  }
+
+  /**
+   * The index's top `base` non-track hits, exactly as a vault without track documents would
+   * give them, plus the track hits ranked among them (KBC-099 AC-13): the index is asked for
+   * more until `base` texts came back, the index ran out, or every track was skipped. Track
+   * documents may rank anywhere, so a fixed extra would let them push texts out at scale.
+   */
+  private async textsAndTracks(
+    catalog: TopicCatalog,
+    query: { q: string; mode: IndexQuery['mode']; base: number },
+  ): Promise<{ kept: readonly IndexHit[]; texts: number }> {
+    const tracks = this.tracksIn(catalog);
+    const isTrack = (hit: IndexHit) => {
+      const entry = catalog.entries.get(hit.id);
+      return entry !== undefined && isTrackEntry(entry);
+    };
+    let extra = Math.min(tracks, query.base);
+    for (;;) {
+      const limit = query.base + extra;
+      const hits = await this.queryIndex({
+        collection: toCollection(catalog.topic.slug),
+        q: query.q,
+        mode: query.mode,
+        limit,
+      });
+      const texts = hits.filter((hit) => !isTrack(hit)).length;
+      if (hits.length < limit || extra >= tracks || texts >= query.base)
+        return this.firstTexts(hits, { isTrack, base: query.base });
+      extra = Math.min(tracks, extra * 4);
+    }
+  }
+
+  private firstTexts(
+    hits: readonly IndexHit[],
+    { isTrack, base }: { isTrack: (hit: IndexHit) => boolean; base: number },
+  ): { kept: readonly IndexHit[]; texts: number } {
+    const kept: IndexHit[] = [];
+    let texts = 0;
+    for (const hit of hits) {
+      if (isTrack(hit)) kept.push(hit);
+      else if (texts < base) {
+        kept.push(hit);
+        texts += 1;
+      }
+    }
+    return { kept, texts };
   }
 
   private tracksIn(catalog: TopicCatalog): number {

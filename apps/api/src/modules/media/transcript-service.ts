@@ -24,7 +24,9 @@ export interface TranscriptServiceDeps {
     'transcripts' | 'segments' | 'words' | 'wordsOfSegments' | 'termVersion'
   >;
   /** Who sees which media: `get` throws the stream's 404 (KBC-038 FR-1). */
-  readonly media: { get(actor: MediaActor, mediaId: string): unknown };
+  readonly media: {
+    get(actor: MediaActor, mediaId: string): { readonly archived: boolean };
+  };
   /** A track's bounds, to read its voices from the recording (KBC-068 FR-3). */
   readonly recording?: Pick<MediaStorePort, 'getMedia'>;
   /** The current separation on a transcript (KBC-064 FR-4); null before the first. */
@@ -251,8 +253,13 @@ export class TranscriptService {
   }
 
   /** The newest version (BR-1), once the person may see the media (404 otherwise). */
+  /**
+   * A deleted track's text goes with its sound (KBC-073 BR-5, KBC-099 BUG-1): an old answer
+   * that cites it may not read its passage any more.
+   */
   private currentOf(actor: MediaActor, mediaId: string): TranscriptSummary {
-    this.deps.media.get(actor, mediaId);
+    if (this.deps.media.get(actor, mediaId).archived)
+      throw new AppError('MEDIA_NOT_FOUND', 'Unknown media');
     const [newest] = this.deps.transcripts.transcripts(mediaId);
     if (!newest) throw noTranscript();
     return newest;

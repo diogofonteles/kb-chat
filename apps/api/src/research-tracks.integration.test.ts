@@ -266,10 +266,20 @@ describe('research over tracks (KBC-099)', () => {
     expect(
       world.media.started.catalog.get('hermetismo')?.entries.get(path),
     ).toBeDefined();
-    await ask(await memberWith(world, RESEARCHER));
+    const member = await memberWith(world, RESEARCHER);
+    await ask(member);
     const told = toolTexts(llm);
     expect(told).not.toContain('O que é o ritmo?');
     expect(told).toContain('não encontrado');
+    // An old answer still names it: the panel must not get its passage either (QA BUG-1).
+    const item = await member('GET', `/api/v1/media/${track.id}`);
+    expect(item.json<MediaItem>().archived).toBe(true);
+    for (const url of [
+      `/api/v1/media/${track.id}/transcript`,
+      `/api/v1/media/${track.id}/transcript/words?from=0&count=1`,
+      `/api/v1/media/${track.id}/subtitles.vtt`,
+    ])
+      expect((await member('GET', url)).statusCode, url).toBe(404);
   });
 
   it('AC-13: "Buscar documentos" lists and counts the same texts with the track documents in the vault', async () => {

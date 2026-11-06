@@ -70,7 +70,7 @@ function serviceOf(ids: readonly string[], cacheSize: number) {
   const { store, reads } = fakeStore(ids);
   const service = new TranscriptService({
     transcripts: store,
-    media: { get: () => undefined },
+    media: { get: () => ({ archived: false }) },
     cacheSize,
   });
   return { service, reads };
