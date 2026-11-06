@@ -7,9 +7,11 @@ import {
   ElementRef,
   afterNextRender,
   computed,
+  effect,
   inject,
   Injector,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -90,6 +92,12 @@ export class TranscribersPanel {
   protected readonly list = httpResource(() => transcribersUrl(), {
     parse: (body) => transcriberListSchema.parse(body),
   });
+  /**
+   * A change the list on screen does not have yet. `reload()` does nothing while a read is
+   * on its way, and that read, sent before the change, answers without it (a new pairing
+   * missing from "Pareados"): the list reads again once it lands.
+   */
+  private readonly listStale = signal(false);
   protected readonly items = computed<Transcriber[]>(() =>
     this.list.hasValue() ? this.list.value().items : [],
   );
@@ -114,6 +122,11 @@ export class TranscribersPanel {
 
   constructor() {
     this.destroyRef.onDestroy(() => clearTimeout(this.copyTimer));
+    effect(() => {
+      if (!this.listStale() || this.list.isLoading()) return;
+      this.listStale.set(false);
+      untracked(() => this.list.reload());
+    });
   }
 
   protected editName(event: Event): void {
@@ -296,7 +309,7 @@ export class TranscribersPanel {
   private settle(notice: Notice | null): void {
     this.busy.set(false);
     this.notice.set(notice);
-    this.list.reload();
+    if (!this.list.reload()) this.listStale.set(true);
   }
 
   private flashCopy(what: Copied, state: CopyState): void {
