@@ -154,6 +154,21 @@ test('a Node command that exits right after a big write loses none of it to the 
   assert.equal(result.stdout.match(/x{100,}/)?.[0].length, bytes);
 });
 
+test('KBC_HEAVY_ASYNC_STDIO=1 leaves the writes as Node makes them', () => {
+  const { env } = queue({ KBC_HEAVY_ASYNC_STDIO: '1' });
+  const result = spawnSync(
+    HEAVY,
+    [
+      process.execPath,
+      '-e',
+      'process.stdout.write(process.env.NODE_OPTIONS ?? "")',
+    ],
+    { env: { ...env, NODE_OPTIONS: '' }, encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0);
+  assert.doesNotMatch(result.stdout, /blocking-stdio/);
+});
+
 test('without a command it refuses', () => {
   assert.equal(run(queue().env).status, 64);
 });

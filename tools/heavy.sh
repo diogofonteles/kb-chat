@@ -17,6 +17,8 @@
 #   KBC_HEAVY_TEMP=<dir>    where the runs' roots live (default ~/.cache/kb-chat/tmp, a short
 #                           path: Chrome and Nx put sockets under TMPDIR)
 #   KBC_HEAVY_MIN_FREE_GB=<n>  refuse to run with less free than this (default 30)
+#   KBC_HEAVY_ASYNC_STDIO=1 leave Node's writes to a pipe asynchronous (the macOS default),
+#                           without tools/blocking-stdio.cjs: a long log may then lose its end
 #
 # Each run starts by saying the commit it runs on and whether the tree is clean, so a log names
 # what it proves. A command already inside the queue passes through (`pnpm gates` runs `pnpm test`). Turns
@@ -225,8 +227,11 @@ fi
 # The daemon would outlive the run in a TMPDIR that is gone; Chrome on macOS ignores TMPDIR.
 (: </dev/tty) 2>/dev/null || set -m
 # Node's writes to a pipe are blocking, as on Linux: see tools/blocking-stdio.cjs.
+node_options=${NODE_OPTIONS:-}
+[ "${KBC_HEAVY_ASYNC_STDIO:-}" = 1 ] ||
+  node_options="--require \"$here/blocking-stdio.cjs\"${node_options:+ $node_options}"
 KBC_HEAVY_HELD=1 KBC_TEST_TEMP=$root TMPDIR=$root MAC_CHROMIUM_TMPDIR=$root NX_DAEMON=false \
-  NODE_OPTIONS="--require \"$here/blocking-stdio.cjs\"${NODE_OPTIONS:+ $NODE_OPTIONS}" \
+  NODE_OPTIONS="$node_options" \
   "$@" </dev/null &
 child=$!
 set +m
