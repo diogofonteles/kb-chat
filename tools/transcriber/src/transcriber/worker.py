@@ -90,7 +90,9 @@ class Worker:
 
     def _kinds_now(self) -> tuple[str, ...]:
         """The kinds to ask for now: none of kb-publish while the vault's lock is held, so a
-        busy vault does not cost a job an attempt (QA F-8)."""
+        busy vault does not cost a job an attempt (QA F-8). Not atomic with the job's own
+        lock: a publication that takes the lock between this check and the job still fails
+        it with VaultBusy (and costs an attempt); the window is a lease round trip."""
         if self.publisher is not None and self.publisher.busy():
             return tuple(kind for kind in self.kinds if kind != "kb-publish")
         return self.kinds
@@ -224,6 +226,8 @@ class Worker:
             log.error("job %s: publishing failed: %s", job["id"], err)
             # What kb spent before it failed is booked on the media ledger (ADR 0035 §11).
             spent = err.spent if isinstance(err, KbStepFailed) else 0.0
+            # kb may pass --budget by one call; the API takes at most the job's budget.
+            spent = min(spent, float(job["budgetUsd"]))
             self.api.fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
             return
         progress["percent"] = 100

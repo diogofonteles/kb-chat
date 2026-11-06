@@ -339,6 +339,14 @@ def test_ac4_the_worker_reports_the_spend_of_a_failed_job(fake_api, vault):
     assert failed["spendUsd"] == pytest.approx(0.0005)
 
 
+def test_a_failed_job_that_went_past_its_budget_reports_the_budget(fake_api, vault):
+    """kb may pass `--budget` by one call (spike): the API refuses more than the budget."""
+    fake_api.jobs[:] = [dict(JOB, budgetUsd=0.0003)]
+    assert worker(fake_api, KbPublisher(vault, FakeKb(vault, fail="link"))).step() == "job"
+    (failed,) = fake_api.bodies("fail")
+    assert failed["spendUsd"] == pytest.approx(0.0003)
+
+
 def test_a_failure_before_any_spend_sends_no_spend(fake_api, vault):
     fake_api.jobs[:] = [dict(JOB)]
     kb = FakeKb(vault, fail="classify", spend=0.0)
