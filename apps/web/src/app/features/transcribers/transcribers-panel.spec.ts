@@ -110,6 +110,37 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
     expect(document.body.textContent).not.toContain('nat_the-secret-token');
   });
 
+  it('lists the new one even when the first read was still on its way (E2E AC-10)', async () => {
+    const result = await render(TranscribersPanel, {
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const first = http.expectOne(URL);
+    fireEvent.input(screen.getByLabelText(/Nome do transcritor/), {
+      target: { value: 'Mac novo' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Parear transcritor' }));
+    http.expectOne({ method: 'POST', url: URL }).flush({
+      transcriber: aTranscriber({ name: 'Mac novo' }),
+      token: 'nat_the-secret-token-of-the-mac-0123456789',
+    });
+    TestBed.tick();
+    // The read sent before the pairing would answer without it: it is dropped, and a
+    // fresh one goes out.
+    expect(first.cancelled).toBe(true);
+    http
+      .expectOne({ method: 'GET', url: URL })
+      .flush({ items: [aTranscriber({ name: 'Mac novo' })] });
+    await result.fixture.whenStable();
+    expect(
+      screen.getByRole('button', { name: 'Revogar Mac novo' }),
+    ).toBeTruthy();
+  });
+
   it('copies the token and says so', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {

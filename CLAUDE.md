@@ -25,6 +25,8 @@ Operational facts only; decisions live in `docs/` (product, design, architecture
 
 ## Run
 
+Node: the exact version in [`.nvmrc`](.nvmrc) (`nvm use`); the media library needs SQLite with FTS5, which Node 22.13 lacks. `pnpm gates` and `pnpm e2e` check it first ([`tools/check-node.mjs`](tools/check-node.mjs)).
+
 ```bash
 pnpm install
 pnpm dev:api     # http://127.0.0.1:3000/health (reads the root .env; KB_VAULT default ~/dev/personal/hermetismo)

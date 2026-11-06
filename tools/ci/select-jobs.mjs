@@ -144,24 +144,32 @@ export const RULES = [
   { match: /^apps\/api\//, ...api, ...everyE2e },
 ];
 
+/**
+ * `shards`: the most a group splits into, sized so the slowest shard of each takes about
+ * the same time (a full run on develop, 2026-11: app ~2.5 min in three shards, media
+ * Chrome ~10 min, media WebKit ~6.5 min). GitHub runs 20 jobs at once on this plan, and a
+ * full run starts 18.
+ */
 const GROUPS = {
   app: {
     name: 'app',
     projects: '--project=desktop --project=mobile',
     browser: 'chromium',
+    shards: 2,
   },
   chrome: {
     name: 'media Chrome',
     projects: '--project=media-desktop --project=media-mobile',
     browser: '',
+    shards: 5,
   },
   webkit: {
     name: 'media WebKit',
     projects: '--project=media-webkit',
     browser: 'webkit',
+    shards: 4,
   },
 };
-const MAX_SHARDS = 3;
 const SPECS_PER_SHARD = 3;
 
 const UNITS = {
@@ -191,11 +199,12 @@ const merged = (current, next) => {
 function e2eMatrix(e2e) {
   return Object.entries(e2e).flatMap(([group, specs]) => {
     const all = specs === ALL;
+    const { shards: most, ...job } = GROUPS[group];
     const shards = all
-      ? MAX_SHARDS
-      : Math.min(MAX_SHARDS, Math.ceil(specs.length / SPECS_PER_SHARD));
+      ? most
+      : Math.min(most, Math.ceil(specs.length / SPECS_PER_SHARD));
     return Array.from({ length: shards }, (_, index) => ({
-      ...GROUPS[group],
+      ...job,
       shard: `${index + 1}/${shards}`,
       specs: all ? '' : specs.map((spec) => `specs/${spec}.spec.ts`).join(' '),
     }));

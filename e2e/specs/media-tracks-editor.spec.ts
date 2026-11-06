@@ -23,11 +23,21 @@ import { transcribedAudio } from './voices-helpers.js';
 // KBC-066, the guided flow's steps 3 and 4 (T20): the draft is seeded through the real
 // routes; everything else is done on the screen.
 
+/**
+ * The step, once its words are in: the handles snap to them and the arrows go word by
+ * word, so a key or a drag before they arrive lands on the raw time (a flake under load).
+ * Every recording here is transcribed.
+ */
 const open = async (page: Page, id: string) => {
+  const words = page.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/media/${id}/edit/words`) && response.ok(),
+  );
   await page.goto(`/midia/${id}/faixas`);
   await expect(page.getByTestId('step-text')).toContainText(
     /3.*Validar faixas/,
   );
+  await words;
 };
 
 test('AC-8, AC-17: the step comes back after a reload and after leaving', async ({

@@ -97,6 +97,78 @@ test('runs the command, says what it waited and passes its exit code on', () => 
   assert.equal(existsSync(lock), false);
 });
 
+test('says the commit it runs on and whether the tree is clean', () => {
+  const { dir, env } = queue();
+  const repo = join(dir, 'repo');
+  mkdirSync(repo);
+  const git = (...args) =>
+    spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+  git('init', '-q');
+  git(
+    '-c',
+    'user.name=t',
+    '-c',
+    'user.email=t@t',
+    'commit',
+    '-q',
+    '--allow-empty',
+    '-m',
+    'x',
+  );
+  const sha = git('rev-parse', 'HEAD').stdout.trim();
+  const inRepo = (...command) =>
+    spawnSync(HEAVY, command, { env, cwd: repo, encoding: 'utf8' });
+  assert.match(
+    inRepo('true').stdout,
+    new RegExp(`heavy: at ${sha} \\(clean\\)`),
+  );
+  writeFileSync(join(repo, 'new.txt'), 'x');
+  assert.match(
+    inRepo('true').stdout,
+    new RegExp(`heavy: at ${sha} \\(dirty: 1 changed path\\)`),
+  );
+  const outside = join(dir, 'outside');
+  mkdirSync(outside);
+  const bare = spawnSync(HEAVY, ['true'], {
+    env: { ...env, GIT_CEILING_DIRECTORIES: dir },
+    cwd: outside,
+    encoding: 'utf8',
+  });
+  assert.equal(bare.status, 0);
+  assert.match(bare.stdout, /heavy: at no commit \(not a git checkout\)/);
+});
+
+test('a Node command that exits right after a big write loses none of it to the pipe', () => {
+  const { env } = queue();
+  const bytes = 1_000_000;
+  const result = spawnSync(
+    HEAVY,
+    [
+      process.execPath,
+      '-e',
+      `process.stdout.write('x'.repeat(${bytes})); process.exit(0)`,
+    ],
+    { env, encoding: 'utf8', maxBuffer: 4 * bytes },
+  );
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.match(/x{100,}/)?.[0].length, bytes);
+});
+
+test('KBC_HEAVY_ASYNC_STDIO=1 leaves the writes as Node makes them', () => {
+  const { env } = queue({ KBC_HEAVY_ASYNC_STDIO: '1' });
+  const result = spawnSync(
+    HEAVY,
+    [
+      process.execPath,
+      '-e',
+      'process.stdout.write(process.env.NODE_OPTIONS ?? "")',
+    ],
+    { env: { ...env, NODE_OPTIONS: '' }, encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0);
+  assert.doesNotMatch(result.stdout, /blocking-stdio/);
+});
+
 test('without a command it refuses', () => {
   assert.equal(run(queue().env).status, 64);
 });

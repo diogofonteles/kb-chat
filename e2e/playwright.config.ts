@@ -1,6 +1,10 @@
 import { defineConfig, devices, webkit } from '@playwright/test';
+import { requireFittingNode } from '../tools/check-node.mjs';
 import { privateTemp } from '../tools/test-temp.mjs';
 
+// A Node whose SQLite lacks FTS5 stops here, naming the Node to use, before the servers
+// start (the workers load this file too: the runner has checked already).
+if (!process.env['TEST_WORKER_INDEX']) requireFittingNode();
 // Here and not in a global setup: the web servers start before it.
 privateTemp();
 

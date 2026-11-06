@@ -13,7 +13,8 @@
 # Everything, the workspace and these global CLIs, is installed with pnpm (project rule);
 # versions are pinned.
 
-ARG NODE_IMAGE=node:22-bookworm-slim
+# The Node of .nvmrc: its SQLite has the FTS5 the media library's search needs.
+ARG NODE_IMAGE=node:22.23.2-bookworm-slim
 
 # --- Build: the whole workspace, then a self-contained bundle of the API ---
 FROM ${NODE_IMAGE} AS build
@@ -25,6 +26,8 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm fetch
 COPY . .
+# The runtime stage runs this same image: a Node whose SQLite lacks FTS5 stops the build here.
+RUN node --no-warnings tools/check-node.mjs
 RUN pnpm install --frozen-lockfile --offline
 RUN pnpm --filter @kb-chat/contracts build && pnpm --filter @kb-chat/api build
 # dist + production dependencies (including the built @kb-chat/contracts).

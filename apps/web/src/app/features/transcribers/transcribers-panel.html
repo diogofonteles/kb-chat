@@ -176,7 +176,7 @@
         Tentar de novo
       </button>
     </div>
-  } @else if (!list.hasValue()) {
+  } @else if (!listLoaded()) {
     <p class="hint" i18n="@@transcribers.loading">Carregando…</p>
   } @else if (items().length === 0) {
     <p class="hint" i18n="@@transcribers.empty">

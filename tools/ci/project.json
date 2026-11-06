@@ -8,7 +8,9 @@
       "inputs": [
         "{projectRoot}/**/*",
         "{workspaceRoot}/tools/heavy.sh",
-        "{workspaceRoot}/tools/test-temp.mjs"
+        "{workspaceRoot}/tools/test-temp.mjs",
+        "{workspaceRoot}/tools/check-node.mjs",
+        "{workspaceRoot}/.nvmrc"
       ]
     }
   }

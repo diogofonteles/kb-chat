@@ -1,9 +1,19 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { WaveformJob, WorkerJob } from '@kb-chat/contracts';
+import {
+  SILENCE_DETECTOR,
+  type SilencesJob,
+  type WaveformJob,
+  type WorkerJob,
+} from '@kb-chat/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ffmpegBins, makeLongWav, makeTone } from '../../test/media-tools.js';
+import {
+  ffmpegBins,
+  makeLongWav,
+  makeTone,
+  makeToneWithPauses,
+} from '../../test/media-tools.js';
 import { createLogger } from '../logger.js';
 import type { MediaJobsApi } from './api-client.js';
 import { MediaWorker } from './media-worker.js';
@@ -126,6 +136,25 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     expect(told[0]).toMatch(/^waveform:\d+$/);
   });
 
+  // Covered on purpose: the worker loop's integration test reaches a silences job only when
+  // the queue hands one over before its shutdown, which made the coverage floor flaky.
+  it('measures the pauses of a silences job (KBC-044)', async () => {
+    const pauses = makeToneWithPauses(bins, join(dir, 'pauses.mp3'), [2]);
+    const job: SilencesJob = {
+      id: 'job-s',
+      leaseId: 'lease-s',
+      kind: 'silences',
+      mediaId: 'media-1',
+      attempt: 1,
+      sourcePath: 'pauses.mp3',
+      leaseMs: 60_000,
+      detector: SILENCE_DETECTOR,
+    };
+    const { api, told } = fakeApi();
+    await workerWith(api).process(job, new AbortController().signal);
+    expect(told).toEqual([`silences:${pauses.length}`]);
+  });
+
   it('reports a waveform it could not measure, so the queue tries again', async () => {
     const { api, told } = fakeApi();
     await workerWith(api).process(aWaveformJob(), new AbortController().signal);
@@ -159,6 +188,18 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     expect(told).toEqual([]);
     expect(existsSync(join(dir, 'out.m4a'))).toBe(false);
     expect(lines.join('')).toContain('lease lost: stopping the conversion');
+  });
+
+  // Covered on purpose: before, only a loop test's timing reached a measure stopped mid-way.
+  it('stops a measure when a heartbeat says the lease was lost, and reports no failure', async () => {
+    makeLongWav(bins, join(dir, 'tone.mp3'), 1_800);
+    const { api, told } = fakeApi({ heartbeat: async () => false });
+    await workerWith(api, { heartbeatMs: 30 }).process(
+      aWaveformJob(),
+      new AbortController().signal,
+    );
+    expect(told).toEqual([]);
+    expect(lines.join('')).toContain('lease lost: stopping the waveform');
   });
 
   it('reports a measure as having no percentage in its heartbeat', async () => {
@@ -240,6 +281,31 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     );
     expect(existsSync(aliveFile)).toBe(true);
     expect(new Set(touches).size).toBeGreaterThan(1);
+  });
+
+  it('keeps working when its alive file cannot be written (the folder went away)', async () => {
+    const aliveFile = join(dir, 'gone', 'alive');
+    let leases = 0;
+    const { api, told } = fakeApi({
+      lease: async () => {
+        leases += 1;
+        return null;
+      },
+    });
+    const shutdown = new AbortController();
+    const loop = workerWith(api, { aliveFile }).run(shutdown.signal);
+    await expect.poll(() => leases).toBeGreaterThan(1);
+    shutdown.abort();
+    await expect(loop).resolves.toBeUndefined();
+    // The heartbeat touches it too, from a timer: a rejection there has no one to catch it.
+    // Nothing here asserts it away: Vitest fails the run on an unhandled rejection.
+    makeTone(bins, join(dir, 'tone.mp3'), 1);
+    await workerWith(api, { aliveFile, heartbeatMs: 1 }).process(
+      aJob(),
+      new AbortController().signal,
+    );
+    expect(told).toContain('complete');
+    expect(lines.join('')).toContain('could not touch the alive file');
   });
 
   it('touches its alive file on every loop for the healthcheck', async () => {

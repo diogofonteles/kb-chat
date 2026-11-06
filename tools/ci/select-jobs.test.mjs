@@ -13,15 +13,17 @@ const e2eSpecs = (chosen, name) =>
   chosen.e2e.include.find((job) => job.name === name)?.specs;
 
 const FULL_E2E = [
-  'app 1/3',
-  'app 2/3',
-  'app 3/3',
-  'media Chrome 1/3',
-  'media Chrome 2/3',
-  'media Chrome 3/3',
-  'media WebKit 1/3',
-  'media WebKit 2/3',
-  'media WebKit 3/3',
+  'app 1/2',
+  'app 2/2',
+  'media Chrome 1/5',
+  'media Chrome 2/5',
+  'media Chrome 3/5',
+  'media Chrome 4/5',
+  'media Chrome 5/5',
+  'media WebKit 1/4',
+  'media WebKit 2/4',
+  'media WebKit 3/4',
+  'media WebKit 4/4',
 ];
 
 function assertFull(chosen) {
@@ -174,13 +176,13 @@ test('the rest of the media pages run every media spec', () => {
     'apps/web/src/app/features/media/player/media-player.ts',
     'apps/web/src/app/core/media/media-engine.ts',
   ])
-    assert.deepEqual(e2eShards(onPullRequest(path)), FULL_E2E.slice(3));
+    assert.deepEqual(e2eShards(onPullRequest(path)), FULL_E2E.slice(2));
 });
 
 test('the player core runs its tests, the web app and every media spec', () => {
   const chosen = onPullRequest('libs/player-core/src/index.ts');
   assert.deepEqual(unitNames(chosen), ['web', 'libs']);
-  assert.deepEqual(e2eShards(chosen), FULL_E2E.slice(3));
+  assert.deepEqual(e2eShards(chosen), FULL_E2E.slice(2));
 });
 
 test('any other web file runs every E2E, not the other unit suites', () => {
@@ -200,18 +202,18 @@ test('any other web file runs every E2E, not the other unit suites', () => {
 test('media API code runs the Chrome specs; WebKit only for the bytes it reads', () => {
   assert.deepEqual(
     e2eShards(onPullRequest('apps/api/src/media-worker/ffmpeg.ts')),
-    FULL_E2E.slice(3, 6),
+    FULL_E2E.slice(2, 7),
   );
   assert.deepEqual(
     e2eShards(onPullRequest('apps/api/src/modules/media/serve-media.ts')),
-    FULL_E2E.slice(3),
+    FULL_E2E.slice(2),
   );
 });
 
 test('API modules away from media run the app specs', () => {
   const chosen = onPullRequest('apps/api/src/modules/research/agent.ts');
   assert.deepEqual(unitNames(chosen), ['api']);
-  assert.deepEqual(e2eShards(chosen), FULL_E2E.slice(0, 3));
+  assert.deepEqual(e2eShards(chosen), FULL_E2E.slice(0, 2));
 });
 
 test('the rest of the API runs every E2E', () => {
@@ -236,11 +238,11 @@ test('specs add up across paths, and "all" wins', () => {
     'e2e/specs/access.spec.ts',
     'apps/api/src/modules/research/agent.ts',
   );
-  assert.deepEqual(e2eShards(wins), FULL_E2E.slice(0, 3));
+  assert.deepEqual(e2eShards(wins), FULL_E2E.slice(0, 2));
   assert.equal(e2eSpecs(wins, 'app'), '');
 });
 
-test('a longer list of specs takes more shards, three at most', () => {
+test("a longer list of specs takes more shards, up to its group's most", () => {
   const chosen = onPullRequest(
     'apps/web/src/app/features/media/tracks/track-group.ts',
   );

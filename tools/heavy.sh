@@ -17,8 +17,11 @@
 #   KBC_HEAVY_TEMP=<dir>    where the runs' roots live (default ~/.cache/kb-chat/tmp, a short
 #                           path: Chrome and Nx put sockets under TMPDIR)
 #   KBC_HEAVY_MIN_FREE_GB=<n>  refuse to run with less free than this (default 30)
+#   KBC_HEAVY_ASYNC_STDIO=1 leave Node's writes to a pipe asynchronous (the macOS default),
+#                           without tools/blocking-stdio.cjs: a long log may then lose its end
 #
-# A command already inside the queue passes through (`pnpm gates` runs `pnpm test`). Turns
+# Each run starts by saying the commit it runs on and whether the tree is clean, so a log names
+# what it proves. A command already inside the queue passes through (`pnpm gates` runs `pnpm test`). Turns
 # are polled: whoever asks first after a release goes first, not strictly in order of arrival.
 set -u
 
@@ -31,6 +34,7 @@ if [ -n "${CI:-}" ] || [ "${KBC_HEAVY_HELD:-}" = 1 ]; then
   exec "$@"
 fi
 
+here=$(cd "$(dirname "$0")" && pwd)
 lock=${KBC_HEAVY_LOCK:-$HOME/.cache/kb-chat/heavy.lock}
 temp=${KBC_HEAVY_TEMP:-$HOME/.cache/kb-chat/tmp}
 min_free=${KBC_HEAVY_MIN_FREE_GB:-30}
@@ -85,6 +89,20 @@ sweep() {
     swept=$((swept + 1))
   done
   [ "$swept" -eq 0 ] || echo "heavy: swept the temp of $swept dead runs"
+}
+
+revision() {
+  local sha changed
+  sha=$(git rev-parse HEAD 2>/dev/null) || {
+    echo 'no commit (not a git checkout)'
+    return 0
+  }
+  changed=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+  case $changed in
+    0) echo "$sha (clean)" ;;
+    1) echo "$sha (dirty: 1 changed path)" ;;
+    *) echo "$sha (dirty: $changed changed paths)" ;;
+  esac
 }
 
 free_gb() {
@@ -198,13 +216,22 @@ if ! [ "$free" -ge "$min_free" ] 2>/dev/null; then
 fi
 root=$(mktemp -d "$temp/$$.XXXXXX") || exit 73
 
-[ "${KBC_HEAVY_SKIP:-}" = 1 ] || echo "heavy: waited $(($(date +%s) - started)) s; running: $*"
+if [ "${KBC_HEAVY_SKIP:-}" != 1 ]; then
+  echo "heavy: waited $(($(date +%s) - started)) s; running: $*"
+  # The log then names what it proves: the commit, and whether the tree carried more than it.
+  echo "heavy: at $(revision)"
+fi
 # A process group of its own, so that everything the command spawns can be stopped with it.
 # Not under a terminal: a background group is stopped the moment it touches the terminal, as
 # Nx's TUI does, and there the group of this shell already gets the terminal's signals.
 # The daemon would outlive the run in a TMPDIR that is gone; Chrome on macOS ignores TMPDIR.
 (: </dev/tty) 2>/dev/null || set -m
+# Node's writes to a pipe are blocking, as on Linux: see tools/blocking-stdio.cjs.
+node_options=${NODE_OPTIONS:-}
+[ "${KBC_HEAVY_ASYNC_STDIO:-}" = 1 ] ||
+  node_options="--require \"$here/blocking-stdio.cjs\"${node_options:+ $node_options}"
 KBC_HEAVY_HELD=1 KBC_TEST_TEMP=$root TMPDIR=$root MAC_CHROMIUM_TMPDIR=$root NX_DAEMON=false \
+  NODE_OPTIONS="$node_options" \
   "$@" </dev/null &
 child=$!
 set +m

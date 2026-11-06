@@ -32,6 +32,12 @@ async function withOverlap(page: Page, mediaId: string, index: number) {
   });
 }
 
+// The page keeps reading the draft after the last step (the approval refreshes it): the
+// test ends with a read still in the route, and closing the page under it is a failure.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
 /** How many saves left the page. */
 function countSaves(page: Page, mediaId: string) {
   const saves = { sent: 0 };

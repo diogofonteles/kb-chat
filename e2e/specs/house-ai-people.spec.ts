@@ -45,6 +45,7 @@ test('AC-2: a member sees no "IA da aplicação" section', async ({
   const member = await pageAs(browser, email, page.viewportSize());
   await member.goto('/');
   await member.getByRole('button', { name: 'Pular' }).click();
+  await expect(member.getByRole('dialog')).toHaveCount(0);
   const dialog = await openSettings(member);
   await expect(
     dialog.getByRole('button', { name: 'Preferências' }),

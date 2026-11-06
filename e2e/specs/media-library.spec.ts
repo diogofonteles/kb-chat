@@ -160,7 +160,11 @@ test('AC-13: a master removes an item after confirming, and its audio is gone', 
   });
   // Masters have every feature: they manage the media from the library (KBC-051).
   await page.goto(`/biblioteca?acervo=${encodeURIComponent(topic)}`);
-  const row = page.getByRole('listitem').filter({ hasText: media.title });
+  // In "Todas": the library's queue summary lists the same title while it waits (KBC-090).
+  const row = page
+    .getByRole('region', { name: 'Todas' })
+    .getByRole('listitem')
+    .filter({ hasText: media.title });
   await expect(row).toBeVisible();
   await page
     .getByRole('button', { name: `Mais ações para ${media.title}` })

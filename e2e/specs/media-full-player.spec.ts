@@ -22,6 +22,11 @@ let lecture: UploadedMedia;
 let other: UploadedMedia;
 let short: UploadedMedia;
 
+// One worker per project runs this file: its media are made once in `beforeAll`, which
+// fully parallel would repeat in every worker that picks a test of the file (up to eight
+// conversions of the same recordings, queued with every other spec's).
+test.describe.configure({ mode: 'default' });
+
 test.beforeAll(async () => {
   const owner = await ownerApi();
   const tag = uniqueTag();
@@ -113,13 +118,21 @@ test('AC-3, AC-12: another browser offers "Continuar de" silently, and continues
   await slider.press('PageUp');
   await page.getByRole('button', { name: 'Tocar' }).click();
   await playPast(page, 61);
-  const saved = page.waitForRequest(
-    (request) =>
-      request.method() === 'PUT' && request.url().endsWith('/progress'),
-  );
   await page.getByRole('button', { name: 'Pausar' }).click();
   const stoppedAt = (await audioState(page)).currentTime;
-  await saved;
+  // The server's position, not the request: closing the context cancels a PUT still in
+  // flight (or the one awaited was an earlier periodic save), and the other browser would
+  // then find an older position.
+  await expect
+    .poll(
+      async () =>
+        (
+          (await (
+            await page.request.get(`/api/v1/media/${lecture.id}`)
+          ).json()) as { positionMs: number }
+        ).positionMs,
+    )
+    .toBeGreaterThanOrEqual((Math.floor(stoppedAt) - 1) * 1_000);
   await page.context().close();
 
   const elsewhere = await pageAs(browser, email, null);
@@ -131,8 +144,12 @@ test('AC-3, AC-12: another browser offers "Continuar de" silently, and continues
   expect((await audioState(elsewhere)).paused).toBe(true);
   await resume.click();
   await expect(elsewhere.getByRole('button', { name: 'Pausar' })).toBeVisible();
+  // The saved position is applied once the metadata is in: a click before that plays
+  // and then moves there, so the element's time is waited for, not read once.
+  await expect
+    .poll(async () => (await audioState(elsewhere)).currentTime)
+    .toBeGreaterThanOrEqual(Math.floor(stoppedAt) - 1);
   const resumedAt = (await audioState(elsewhere)).currentTime;
-  expect(resumedAt).toBeGreaterThanOrEqual(Math.floor(stoppedAt) - 1);
   expect(resumedAt).toBeLessThan(stoppedAt + 2);
   await elsewhere.context().close();
 });
