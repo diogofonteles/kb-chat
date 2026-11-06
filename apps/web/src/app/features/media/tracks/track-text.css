@@ -45,14 +45,18 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * No content-visibility here: in WebKit a line skipped in this grid keeps a sliver of height
+ * once seen, so the words overlap, the block cannot scroll to the word (AC-13) and the
+ * controls above shift under the pointer.
+ * Plain lines lay out fast enough without it: NFR-3 measures a 60 min track.
+ */
 .line {
   margin: 0;
   padding-inline-start: var(--space-2);
   border-left: 3px solid transparent;
   font-family: var(--font-reading);
   line-height: 1.6;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 2lh;
 }
 
 /* The whole transcript: the track's lines carry a bar at the side, not only a colour. */

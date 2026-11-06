@@ -606,6 +606,42 @@ test('AC-13: the block follows the word inside itself, never the page, and not f
   expect(await page.evaluate(() => window.scrollY)).toBe(pageAt);
 });
 
+test('AC-13, AC-14: each line, once in view, is as tall as its words: none is cut', async ({
+  page,
+}) => {
+  await openStep3(page, 3);
+  const region = textOf(page, 3);
+  await expect(region).toContainText(FILLER.at(-1)?.text ?? '');
+  await region.scrollIntoViewIfNeeded();
+  // Most of the block starts out of view: a line sized by a guess until it is seen must
+  // still take its words' height when it is, or it clips them and shifts what follows.
+  const cut = await region.evaluate(async (block) => {
+    const frame = () =>
+      new Promise((resolve) => requestAnimationFrame(resolve));
+    const found: { text: string | null; line: number; words: number }[] = [];
+    for (const line of Array.from(block.querySelectorAll('.line'))) {
+      block.scrollTop =
+        line.getBoundingClientRect().top -
+        block.getBoundingClientRect().top +
+        block.scrollTop;
+      await frame();
+      await frame();
+      const words = document.createRange();
+      words.selectNodeContents(line);
+      const lineHeight = line.getBoundingClientRect().height;
+      const wordsHeight = words.getBoundingClientRect().height;
+      if (lineHeight + 1 < wordsHeight)
+        found.push({
+          text: line.textContent,
+          line: lineHeight,
+          words: wordsHeight,
+        });
+    }
+    return found;
+  });
+  expect(cut).toEqual([]);
+});
+
 /**
  * Once the block's own scrolling settled, the person scrolls it to the top while the word
  * plays further down: it stays exactly there while the words go on for 5 s (FR-4), then
