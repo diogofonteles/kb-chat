@@ -344,11 +344,19 @@ export class MediaWorker {
       );
   }
 
+  /**
+   * Never rejects: the heartbeat calls it from a timer, where a rejection would be
+   * unhandled and stop the process. A file it cannot write leaves the healthcheck to say so.
+   */
   private async touchAlive(): Promise<void> {
     const file = this.deps.aliveFile;
     if (!file) return;
     const now = new Date();
-    await utimes(file, now, now).catch(() => writeFile(file, ''));
+    try {
+      await utimes(file, now, now).catch(() => writeFile(file, ''));
+    } catch (err) {
+      this.deps.log.warn({ err, file }, 'could not touch the alive file');
+    }
   }
 
   /** A path the API gave, inside the media folder (never `..` or absolute). */

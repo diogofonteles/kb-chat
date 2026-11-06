@@ -271,6 +271,30 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     expect(new Set(touches).size).toBeGreaterThan(1);
   });
 
+  it('keeps working when its alive file cannot be written (the folder went away)', async () => {
+    const aliveFile = join(dir, 'gone', 'alive');
+    let leases = 0;
+    const { api, told } = fakeApi({
+      lease: async () => {
+        leases += 1;
+        return null;
+      },
+    });
+    const shutdown = new AbortController();
+    const loop = workerWith(api, { aliveFile }).run(shutdown.signal);
+    await expect.poll(() => leases).toBeGreaterThan(1);
+    shutdown.abort();
+    await expect(loop).resolves.toBeUndefined();
+    // The heartbeat touches it too, from a timer: a rejection there has no one to catch it.
+    makeTone(bins, join(dir, 'tone.mp3'), 1);
+    await workerWith(api, { aliveFile, heartbeatMs: 1 }).process(
+      aJob(),
+      new AbortController().signal,
+    );
+    expect(told).toContain('complete');
+    expect(lines.join('')).toContain('could not touch the alive file');
+  });
+
   it('touches its alive file on every loop for the healthcheck', async () => {
     const aliveFile = join(dir, 'alive');
     const { api } = fakeApi();
