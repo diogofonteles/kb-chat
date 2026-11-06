@@ -127,6 +127,8 @@ async function playAt({ view, position }: Rendered, ms: number | null) {
 }
 
 const region = () => screen.getByRole('region', { name: 'Texto da faixa 2' });
+const retryButton = () =>
+  screen.getByRole('button', { name: 'Tentar de novo: carregar o texto' });
 const shownLines = () =>
   Array.from(region().querySelectorAll('.line')).map((one) => one.textContent);
 
@@ -264,17 +266,54 @@ describe('TrackText (KBC-092)', () => {
       .expectOne(`${BASE}?v=1`)
       .flush(null, { status: 500, statusText: 'Erro' });
     await rendered.view.fixture.whenStable();
-    expect(
-      within(region()).getByText('Não consegui carregar o texto.'),
-    ).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Tentar de novo carregar o texto',
-      }),
+    expect(region().textContent).toContain('Não consegui carregar o texto.');
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
+      'Não consegui carregar o texto.',
     );
+    fireEvent.click(retryButton());
     TestBed.tick();
     await answer(rendered);
     expect(shownLines()).toContain('o que está em cima');
+  });
+
+  it('says it is trying again, and keeps the focus in the block when it loads (AC-11, PD-01)', async () => {
+    const rendered = await renderText();
+    rendered.http
+      .expectOne(`${BASE}?v=1`)
+      .flush(null, { status: 500, statusText: 'Erro' });
+    await rendered.view.fixture.whenStable();
+    retryButton().focus();
+    fireEvent.click(retryButton());
+    TestBed.tick();
+    expect(region().getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
+      'Carregando o texto…',
+    );
+    expect(retryButton().getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(retryButton());
+    await answer(rendered);
+    expect(shownLines()).toContain('o que está em cima');
+    expect(document.activeElement).toBe(region());
+  });
+
+  it('says so when trying again fails too, with the focus on "Tentar de novo"', async () => {
+    const rendered = await renderText();
+    const refuse = () =>
+      rendered.http
+        .expectOne(`${BASE}?v=1`)
+        .flush(null, { status: 500, statusText: 'Erro' });
+    refuse();
+    await rendered.view.fixture.whenStable();
+    retryButton().focus();
+    fireEvent.click(retryButton());
+    TestBed.tick();
+    refuse();
+    await rendered.view.fixture.whenStable();
+    expect(screen.getByRole('status').textContent?.trim()).toBe(
+      'Não consegui carregar o texto.',
+    );
+    expect(retryButton().getAttribute('aria-disabled')).toBeNull();
+    expect(document.activeElement).toBe(retryButton());
   });
 
   it('drops the words of an older version when a new transcript comes (AC-12)', async () => {

@@ -79,6 +79,15 @@ export class TrackText {
   private readonly lineElements = viewChildren<ElementRef<HTMLElement>>('line');
 
   protected readonly state = this.source.state;
+  /** "Tentar de novo" is reading: the error stays until it answers. */
+  protected readonly retrying = this.source.retrying;
+  /** Said by the screen reader as it happens: a failure, and the retry going on. */
+  protected readonly announcement = computed(() => {
+    if (this.state() !== 'error') return '';
+    return this.retrying()
+      ? $localize`:@@trackText.retrying:Carregando o texto…`
+      : $localize`:@@trackText.errorSaid:Não consegui carregar o texto.`;
+  });
   /** "Ver transcrição completa" (AC-18). */
   protected readonly whole = signal(false);
   private readonly segments = computed(
@@ -94,6 +103,15 @@ export class TrackText {
     () =>
       $localize`:@@trackText.region:Texto da faixa ${this.ordinal()}:ordinal:`,
   );
+  /** The whole transcript's first and last lines of the track, for the screen reader. */
+  protected readonly trackBounds = computed(() => {
+    if (!this.whole()) return { first: -1, last: -1 };
+    const lines = this.lines();
+    return {
+      first: lines.findIndex((line) => line.inside),
+      last: lines.findLastIndex((line) => line.inside),
+    };
+  });
   protected readonly canSwitch = computed(
     () => this.state() === 'ready' && this.segments().length > 0,
   );
@@ -129,6 +147,8 @@ export class TrackText {
   );
   /** When the person last scrolled the block themselves. */
   private ownScrollAt = Number.NEGATIVE_INFINITY;
+  /** The retry button disappears with the error: the focus goes on to the text. */
+  private focusWhenReady = false;
 
   constructor() {
     this.source.open();
@@ -136,6 +156,7 @@ export class TrackText {
     this.paintWord();
     this.followWord();
     this.showTrackInWhole();
+    this.focusAfterRetry();
     afterNextRender(() => this.listenPassively());
   }
 
@@ -144,6 +165,8 @@ export class TrackText {
   }
 
   protected retry(): void {
+    if (this.retrying()) return;
+    this.focusWhenReady = true;
     this.source.reload();
   }
 
@@ -199,18 +222,44 @@ export class TrackText {
     });
   }
 
-  /** Opening the whole transcript lands on the track's first line (AC-18). */
+  /**
+   * Opening the whole transcript lands on the track's first line (AC-18), measured in the
+   * block, which is no offset parent. A word playing is left to `followWord`.
+   */
   private showTrackInWhole(): void {
     afterRenderEffect({
       earlyRead: () => {
         if (!this.whole()) return null;
         return untracked(() => {
+          if (this.spoken()) return null;
           const first = this.lines().findIndex((line) => line.inside);
-          const element = this.lineElements()[first]?.nativeElement;
-          return element ? element.offsetTop : null;
+          const element = this.lineOf(first);
+          if (!element) return null;
+          const body = this.body().nativeElement;
+          // Below the block's border and padding, as its first line sits at the top.
+          const inset =
+            body.clientTop +
+            Number.parseFloat(getComputedStyle(body).paddingTop || '0');
+          return (
+            body.scrollTop +
+            element.getBoundingClientRect().top -
+            body.getBoundingClientRect().top -
+            inset
+          );
         });
       },
       write: (target) => this.scrollBody(target(), 'instant'),
+    });
+  }
+
+  /** After "Tentar de novo" worked, the focus that was on it goes to the text (PD-01). */
+  private focusAfterRetry(): void {
+    afterRenderEffect(() => {
+      if (this.state() !== 'ready' || !this.focusWhenReady) return;
+      this.focusWhenReady = false;
+      const active = this.document.activeElement;
+      if (active === null || active === this.document.body)
+        this.body().nativeElement.focus();
     });
   }
 
