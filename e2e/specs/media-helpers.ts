@@ -166,6 +166,8 @@ export async function uploadReady(
   },
 ): Promise<UploadedMedia> {
   const name = input.title.replace(/\W+/g, '-');
+  if (input.looped && input.seconds % 60 !== 0)
+    throw new Error(`looped audio needs whole minutes, not ${input.seconds} s`);
   const body = readFileSync(
     input.looped
       ? makeLongMp3(name, input.seconds / 60, {
