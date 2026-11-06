@@ -157,6 +157,9 @@ async function openStep2(page: Page, media: Media, step: Step2) {
   await expect(
     page.getByRole('button', { name: 'Ouvir a faixa 1' }),
   ).toBeVisible();
+  // The listening's audio comes with the item, read apart from the (routed) preparation:
+  // a press before it is there plays nothing (KBC-090's page, outside this item).
+  await expect(audition(page)).toBeAttached();
 }
 
 /** Step 3 with `ordinal` selected. */
