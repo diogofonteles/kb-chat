@@ -26,6 +26,8 @@ WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm fetch
 COPY . .
+# The runtime stage runs this same image: a Node whose SQLite lacks FTS5 stops the build here.
+RUN node --no-warnings tools/check-node.mjs
 RUN pnpm install --frozen-lockfile --offline
 RUN pnpm --filter @kb-chat/contracts build && pnpm --filter @kb-chat/api build
 # dist + production dependencies (including the built @kb-chat/contracts).
