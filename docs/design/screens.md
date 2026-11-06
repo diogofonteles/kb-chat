@@ -841,6 +841,13 @@ no alto (▶, tempo, barra de busca, velocidade) → transcrição abaixo, rolan
 - Linha sob o título: **"Pesquisa com IA: Na pesquisa"**, **"Atualizando na pesquisa"**, **"Aguardando o Mac do dono (desligado desde 14:02)"**, **"Falhou: <motivo>"** com **Tentar de novo**, ou **"Fora da pesquisa: <motivo>"** (acervo sem pasta no kb; teto mensal da mídia). Texto com ícone, nunca só cor; mudança anunciada em `role="status"`.
 - Transcritores: o transcritor ganha a opção **Publica no acervo** (como "Separa vozes") e a contagem "12 faixas aguardando publicação · última publicação 14:32".
 
+### Faixas que já existem (KBC-099 AC-16; escopo de 2026-11-06; Transcritores, só masters)
+Em ⚙ Configurações → **Transcritores**, depois da lista de pareados, junto do "Publica no acervo" (é o que manda o trabalho a esse Mac): bloco **"Faixas que já existem"**, com uma frase do que faz (as faixas publicadas antes da pesquisa com IA só entram nela depois de publicadas no acervo; o kb as classifica com a chave do dono).
+- Ação secundária **Publicar no acervo as faixas que já existem** → abre no lugar (sem modal) a escolha **"Quais acervos?"**: uma caixa por acervo com faixas a publicar, todas marcadas, "Hermetismo · 12 faixas a publicar"; o foco vai à primeira caixa.
+- Antes de confirmar: **"12 faixas · custo estimado do kb ≈ US$ 0,012"** e "resta US$ 9,50 do teto mensal da mídia" (custo honesto, sem surpresa; ≈ US$ 0,001 por faixa, do spike). Primária **"Publicar 12 faixas"**, secundária **Cancelar** (o foco volta à ação).
+- Depois: `role="status"` "12 faixas na fila para o Mac." ou "Nada novo a publicar: 12 faixas já estavam no acervo."; e o andamento, por acervo: **"Hermetismo: 3 na fila · 9 publicadas · 0 falharam"**, lido de novo a cada 20 s enquanto há fila.
+- Estados: carregando; erro ("Não consegui carregar as faixas do acervo." + Tentar de novo); nada a publicar ("Todas as faixas publicadas já estão no acervo.", sem a ação); teto gasto ("Teto mensal da mídia atingido: nada é publicado até o mês que vem.", confirmar desabilitado). 390 px: uma coluna, sem rolagem lateral.
+
 ### Acessibilidade e toque (WCAG 2.2 AA, MA-01 a MA-07)
 - O painel é `role="dialog"`, `aria-modal="false"` no desktop, rotulado pelo título; no celular, a conversa fica `inert` (como o T3).
 - Alvos ≥ 44 px no celular; a barra do player não depende de arrastar (setas ←/→ e os botões de pulo, KBC-041).
