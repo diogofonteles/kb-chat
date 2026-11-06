@@ -562,29 +562,25 @@ function trackPublisher(
 }
 
 /** The workers' protocol: the VM's conversions and the paired transcribers' (ADR 0023). */
-async function registerWorker(
-  app: FastifyInstance,
-  wiring: {
-    media: MediaDeps;
-    transcribers: TranscriberService;
-    silences: SilenceService;
-    waveforms: WaveformService;
-    authors: AuthorsService;
-    publisher: TrackPublisher;
-    groq: GroqService;
-    documents: MediaDocuments;
-  },
-) {
-  const { publisher, documents } = wiring;
+/** What the workers' routes are wired from. */
+interface WorkerWiring {
+  readonly media: MediaDeps;
+  readonly transcribers: TranscriberService;
+  readonly silences: SilenceService;
+  readonly waveforms: WaveformService;
+  readonly authors: AuthorsService;
+  readonly publisher: TrackPublisher;
+  readonly groq: GroqService;
+  readonly documents: MediaDocuments;
+}
+
+async function registerWorker(app: FastifyInstance, wiring: WorkerWiring) {
+  const { publisher, documents, groq } = wiring;
   const voicePrints = voicePrintService(wiring);
   await app.register(
     workerRoutes({
-      groq: wiring.groq,
-      service: workerService(wiring.media, {
-        voicePrints,
-        groq: wiring.groq,
-        documents,
-      }),
+      groq,
+      service: workerService(wiring.media, { voicePrints, groq, documents }),
       transcribers: wiring.transcribers,
       transcription: transcriptionService(wiring.media, publisher),
       cuts: publisher,
