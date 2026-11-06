@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   SILENCE_DETECTOR,
+  type GroqTranscribeJob,
   type SilencesJob,
   type WaveformJob,
   type WorkerJob,
@@ -324,3 +325,63 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     await loop;
   });
 });
+
+describe(
+  'MediaWorker: a transcription routed to Groq (KBC-037)',
+  { timeout: 30_000 },
+  () => {
+    const aGroqJob = (
+      over: Partial<GroqTranscribeJob> = {},
+    ): GroqTranscribeJob => ({
+      id: 'job-g',
+      leaseId: 'lease-g',
+      kind: 'transcribe',
+      provider: 'groq',
+      mediaId: 'media-1',
+      attempt: 1,
+      leaseMs: 60_000,
+      durationMs: 1_000,
+      sourcePath: 'missing.flac',
+      renditionPath: 'tone.mp3',
+      termsVersion: 1,
+      ...over,
+    });
+
+    it('reads the rendition when the FLAC is gone, and sends its speech in chunks', async () => {
+      makeTone(bins, join(dir, 'tone.mp3'), 1);
+      const sent: number[] = [];
+      const { api, told } = fakeApi({
+        sendGroqChunk: async (_job, chunk) => {
+          sent.push(chunk.audio.length);
+          return { kind: 'ok', result: { segments: [] } };
+        },
+        completeGroq: async (_job, done) => {
+          told.push(`groq:${done.raw.chunks.length}`);
+          return true;
+        },
+      });
+      await workerWith(api).process(aGroqJob(), new AbortController().signal);
+      expect(told).toEqual(['groq:1']);
+      expect(sent[0]).toBeGreaterThan(100);
+    });
+
+    it('fails a job with no audio for good, as invalid', async () => {
+      const { api, told } = fakeApi();
+      await workerWith(api).process(
+        aGroqJob({ renditionPath: null }),
+        new AbortController().signal,
+      );
+      expect(told).toEqual(['fail:invalid-audio']);
+    });
+
+    it('drops the job without a failure when the API says it is no longer ours', async () => {
+      makeTone(bins, join(dir, 'tone.mp3'), 1);
+      const { api, told } = fakeApi({
+        sendGroqChunk: async () => ({ kind: 'lost' }),
+      });
+      await workerWith(api).process(aGroqJob(), new AbortController().signal);
+      expect(told).toEqual([]);
+      expect(lines.join('')).toContain('lease lost before completion');
+    });
+  },
+);
