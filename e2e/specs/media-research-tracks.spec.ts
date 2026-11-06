@@ -272,3 +272,117 @@ test('AC-6: without "Pesquisar faixas com IA" the same question finds no track',
   ).toHaveCount(0);
   await member.context().close();
 });
+
+/** Opens the conversation again from Histórico after a reload, as a returning reader does. */
+async function reopenFromHistory(member: Page) {
+  await member.reload();
+  const skip = member.getByRole('button', { name: 'Pular' });
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+  if (!desktop(member))
+    await member.getByRole('button', { name: 'Menu', exact: true }).click();
+  const side = desktop(member)
+    ? member.getByRole('complementary', { name: 'Lateral' })
+    : member.getByRole('dialog', { name: 'Menu' });
+  await side
+    .getByRole('navigation', { name: 'Histórico' })
+    .getByRole('button', { name: /pêndulo/ })
+    .first()
+    .click();
+  // On a phone the menu closes once the conversation is back.
+  if (!desktop(member)) await expect(side).toBeHidden();
+  return member.locator('app-research-message').last();
+}
+
+test('AC-12 (QA BUG-2): in a conversation reopened from the history, Esc gives the focus back to the citation and to the chip', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner);
+  await owner.dispose();
+  const member = await researcher(page, topic);
+  await ask(member);
+  const answer = await reopenFromHistory(member);
+  const panel = member.getByRole('dialog', {
+    name: new RegExp(`Trecho da faixa ${TITLE}`),
+  });
+
+  const citation = answer.getByRole('link', {
+    name: `Fonte 1, faixa ${TITLE}, aos 41 segundos`,
+  });
+  await citation.focus();
+  await member.keyboard.press('Enter');
+  await expect(panel).toBeVisible();
+  await expect
+    .poll(async () => (await audioState(member)).currentTime, {
+      timeout: 15_000,
+    })
+    .toBeCloseTo(39, 0);
+  if (desktop(member)) {
+    // The race QA saw, made certain: the history brings the same conversation back while
+    // the panel is open, so the answer (and the citation pressed) is drawn anew.
+    await member
+      .getByRole('complementary', { name: 'Lateral' })
+      .getByRole('navigation', { name: 'Histórico' })
+      .getByRole('button', { name: /pêndulo/ })
+      .first()
+      .click();
+    await expect(panel).toBeVisible();
+    await panel.getByRole('heading', { name: TITLE }).focus();
+  }
+  await member.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(citation).toBeFocused();
+
+  const chip = answer.getByRole('button', { name: new RegExp(TITLE) });
+  await chip.focus();
+  await member.keyboard.press('Enter');
+  await expect(panel).toBeVisible();
+  await member.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(chip).toBeFocused();
+  await member.context().close();
+});
+
+test('T22 (QA BUG-1): a track archived after the answer does not open from it: "Esta faixa não está mais disponível."', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const topic = await publishedTrack(owner);
+  const member = await researcher(page, topic);
+  const answer = await ask(member);
+  const chip = answer.getByRole('button', { name: new RegExp(TITLE) });
+  await chip.click();
+  const panel = member.getByRole('dialog', {
+    name: new RegExp(`Trecho da faixa ${TITLE}`),
+  });
+  const href = await panel
+    .getByRole('link', { name: 'Abrir na página da faixa' })
+    .getAttribute('href');
+  const trackId = /\/midia\/([^?]+)/.exec(href ?? '')?.[1];
+  expect(trackId).toBeTruthy();
+  await panel
+    .getByRole('button', { name: /Fechar/ })
+    .first()
+    .click();
+  await expect(panel).toBeHidden();
+  const archived = await owner.delete(`/api/v1/media/${trackId}`, {
+    headers: CSRF,
+  });
+  expect(archived.status(), await archived.text()).toBe(204);
+  await owner.dispose();
+
+  await chip.click();
+  await expect(
+    panel.getByText('Esta faixa não está mais disponível.'),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole('button', { name: 'Tocar', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    panel.getByRole('list', { name: 'Trechos da transcrição' }),
+  ).toHaveCount(0);
+  await shot(member, 'archived-r1');
+  await panel.getByRole('button', { name: 'Fechar' }).last().click();
+  await expect(panel).toBeHidden();
+  await member.context().close();
+});
