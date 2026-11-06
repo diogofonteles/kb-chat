@@ -25,6 +25,10 @@ import { alsoRemovesText, tracksInTheWay } from './track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import { MediaApi, mediaListUrl } from '@core/media/media-api.js';
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
+import {
+  CollectionHeading,
+  type HeadingScope,
+} from '@features/chat/collection-heading.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import {
   EMPTY,
@@ -166,6 +170,12 @@ export class MediaListPage {
   });
 
   constructor() {
+    inject(CollectionHeading).follow(
+      computed<HeadingScope | null>(() => {
+        const slug = this.chat.topicSlug();
+        return slug ? { kind: 'topic', slug } : null;
+      }),
+    );
     this.pollWhileInFlight();
     this.announceReady();
     afterRenderEffect(() => this.focusPending(this.rows()));

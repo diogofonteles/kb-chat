@@ -10,6 +10,7 @@ import {
   type MediaSpeakers,
   type MergeVoicesRequest,
   type NameVoiceRequest,
+  type RefuseVoiceNameRequest,
   type SplitVoiceRequest,
 } from '@kb-chat/contracts';
 import { map, type Observable } from 'rxjs';
@@ -54,6 +55,17 @@ export class SpeakersApi {
   ): Observable<MediaSpeakers> {
     return this.http
       .post(`${mediaUrl(mediaId)}/voices/${voice}/suggestion`, body)
+      .pipe(map((answer) => mediaSpeakersSchema.parse(answer)));
+  }
+
+  /** The name suggested for a voice is not its name (KBC-090). */
+  refuseName(
+    mediaId: string,
+    voice: number,
+    body: RefuseVoiceNameRequest,
+  ): Observable<MediaSpeakers> {
+    return this.http
+      .post(`${mediaUrl(mediaId)}/voices/${voice}/refuse-name`, body)
       .pipe(map((answer) => mediaSpeakersSchema.parse(answer)));
   }
 

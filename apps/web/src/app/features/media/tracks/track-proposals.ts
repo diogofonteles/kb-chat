@@ -8,23 +8,19 @@ import {
   computed,
   inject,
   input,
-  output,
   signal,
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
-  CollectionSpeaker,
   ProposalEstimate,
   ProposalFailure,
   ProposalRun,
-  VoiceSuggestion,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { MediaEditApi } from '@core/media/media-edit-api.js';
-import { SpeakersApi } from '@core/media/speakers-api.js';
-import { map, of, switchMap, type Observable } from 'rxjs';
+import type { Observable } from 'rxjs';
 import {
   roseEstimateOf,
   type ProposeResult,
@@ -53,20 +49,14 @@ type Asking =
 })
 export class TrackProposals {
   private readonly api = inject(MediaEditApi);
-  private readonly speakersApi = inject(SpeakersApi);
   private readonly destroyRef = inject(DestroyRef);
   private readonly locale = inject(LOCALE_ID);
 
   readonly mediaId = input.required<string>();
-  readonly topic = input.required<string>();
   /** The run the draft shows, from the server (it may be running after a reload). */
   readonly latestRun = input<ProposalRun | null>(null);
   /** Why the newest run failed, from the server (FR-5): it survives a reload. */
   readonly lastFailure = input<ProposalFailure | null>(null);
-  readonly suggestions = input<readonly VoiceSuggestion[]>([]);
-  readonly speakers = input<readonly CollectionSpeaker[]>([]);
-  /** The separation's version; null without one: names cannot be accepted. */
-  readonly separation = input<number | null>(null);
 
   /** Saves the person's changes and starts the run: only when that save came back fine. */
   readonly start =
@@ -77,9 +67,6 @@ export class TrackProposals {
   /** The draft has proposals a new run may swap: said before the press (KBC-097). */
   readonly replaces = input(false);
 
-  /** A suggested name was accepted (BR-5). */
-  readonly named = output();
-
   private readonly asking = signal<Asking>({ kind: 'idle' });
   protected readonly error = signal('');
   /**
@@ -89,7 +76,6 @@ export class TrackProposals {
   private readonly rose = signal(false);
   private readonly notice = viewChild<ElementRef<HTMLElement>>('notice');
   private readonly actions = viewChild<ElementRef<HTMLElement>>('actions');
-  private readonly accepted = signal<readonly number[]>([]);
 
   protected readonly estimate = computed(() => {
     const asking = this.asking();
@@ -126,14 +112,6 @@ export class TrackProposals {
       ? $localize`:@@tracks.ai.month:Este mês: ${this.usd(month.spentUsd)}:spent: de ${this.usd(month.capUsd)}:cap:`
       : '';
   });
-  protected readonly pending = computed(() => {
-    const accepted = this.accepted();
-    return this.suggestions().filter(
-      (one) =>
-        (one.name !== null || one.audience) && !accepted.includes(one.voice),
-    );
-  });
-
   private usd(value: number): string {
     return new Intl.NumberFormat(this.locale, {
       style: 'currency',
@@ -223,41 +201,6 @@ export class TrackProposals {
 
   private showStopped(result: SaveResult): void {
     this.error.set(notDoneText(result));
-  }
-
-  protected accept(suggestion: VoiceSuggestion): void {
-    const version = this.separation();
-    if (version === null) return;
-    const body = { version, speakerId: null, audience: suggestion.audience };
-    this.speakerOf(suggestion)
-      .pipe(
-        switchMap((speakerId) =>
-          this.speakersApi.nameVoice(this.mediaId(), suggestion.voice, {
-            ...body,
-            speakerId,
-          }),
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: () => {
-          this.accepted.update((all) => [...all, suggestion.voice]);
-          this.named.emit();
-        },
-        error: (err: unknown) => this.showError(err),
-      });
-  }
-
-  /** The collection's speaker of that name, registered when it is a new one. */
-  private speakerOf(suggestion: VoiceSuggestion): Observable<string | null> {
-    if (suggestion.audience || suggestion.name === null) return of(null);
-    const name = suggestion.name;
-    const known = this.speakers().find((one) => one.name === name);
-    return known
-      ? of(known.id)
-      : this.speakersApi
-          .createSpeaker(this.topic(), { name })
-          .pipe(map((speaker) => speaker.id));
   }
 
   private showError(err: unknown): void {

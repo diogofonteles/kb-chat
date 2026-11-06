@@ -102,33 +102,30 @@
             </select>
           </label>
           <div class="actions">
-            <button
-              type="button"
-              class="action"
-              aria-keyshortcuts="Space"
-              (click)="listen.emit('track')"
-              i18n="@@tracks.listen.track"
-            >
-              ▶ Ouvir
-            </button>
-            <button
-              type="button"
-              class="action"
-              aria-keyshortcuts="I"
-              (click)="listen.emit('start')"
-              i18n="@@tracks.listen.start"
-            >
-              Ouvir o início
-            </button>
-            <button
-              type="button"
-              class="action"
-              aria-keyshortcuts="F"
-              (click)="listen.emit('end')"
-              i18n="@@tracks.listen.end"
-            >
-              Ouvir o fim
-            </button>
+            @if (playingElsewhere()) {
+              <button
+                type="button"
+                class="action"
+                (click)="stopPlaying.emit()"
+                i18n="@@tracks.listen.stopOther"
+              >
+                ■ Parar o que está tocando
+              </button>
+            }
+            @for (button of listenButtons(); track button.kind) {
+              <button
+                type="button"
+                class="action"
+                [attr.aria-keyshortcuts]="button.shortcut"
+                [attr.aria-label]="button.playing ? button.stop : button.idle"
+                (click)="listen.emit(button.kind)"
+              >
+                <span class="swap" aria-hidden="true">
+                  <span [class.off]="button.playing">{{ button.idle }}</span>
+                  <span [class.off]="!button.playing">{{ button.stop }}</span>
+                </span>
+              </button>
+            }
             <app-menu-button
               class="more"
               label="Mais ações da faixa"

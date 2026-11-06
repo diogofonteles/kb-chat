@@ -10,6 +10,7 @@ import { fireEvent, render, screen, within } from '@testing-library/angular';
 import type {
   Feature,
   PreparationOptions,
+  Topic,
   UploadCheck,
 } from '@kb-chat/contracts';
 import { TUS_UPLOAD } from '@core/media/tus-upload.js';
@@ -32,12 +33,18 @@ const CREATED = aMediaItem({
 });
 const OTHER_ID = '22222222-2222-4222-8222-222222222222';
 const TOPIC = '/api/v1/topics/hermetismo/media';
+const TOPICS = [
+  aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 }),
+  aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 5 }),
+];
 
 async function renderPanel(
   options: {
     readonly features?: Feature[];
     readonly length?: AudioLengthReader;
     readonly offer?: PreparationOptions;
+    readonly topic?: string;
+    readonly topics?: Topic[];
   } = {},
 ) {
   const uploaded = vi.fn();
@@ -51,7 +58,10 @@ async function renderPanel(
         withInterceptors([answeringOptions(options.offer, asked)]),
       ),
       provideHttpClientTesting(),
-      provideRouter([{ path: 'midia/:id/preparar', children: [] }]),
+      provideRouter([
+        { path: 'midia/:id/preparar', children: [] },
+        { path: 'fila', children: [] },
+      ]),
       sessionAs({ features: options.features ?? ['media', 'media-upload'] }),
       { provide: TUS_UPLOAD, useValue: tus.factory },
       {
@@ -60,11 +70,8 @@ async function renderPanel(
       },
     ],
     inputs: {
-      topic: 'hermetismo',
-      topics: [
-        aTopic({ slug: 'hermetismo', title: 'Hermetismo', documentCount: 10 }),
-        aTopic({ slug: 'alquimia', title: 'Alquimia', documentCount: 5 }),
-      ],
+      topic: options.topic ?? 'hermetismo',
+      topics: options.topics ?? TOPICS,
     },
     on: { uploaded, closed },
   });
@@ -124,6 +131,17 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     expect(
       screen.getByText('mp3, m4a, wav, flac, ogg ou opus, até 4 GB cada'),
     ).toBeTruthy();
+  });
+
+  it('opened before the collections are known, it takes the selected one when they come', async () => {
+    const panel = await renderPanel({ topic: '', topics: [] });
+    panel.fixture.componentRef.setInput('topics', TOPICS);
+    panel.fixture.componentRef.setInput('topic', 'hermetismo');
+    await panel.fixture.whenStable();
+    expect((screen.getByLabelText('Acervo') as HTMLSelectElement).value).toBe(
+      'hermetismo',
+    );
+    await chooseChecked(panel);
   });
 
   it('suggests the title from the file and refuses a file that is not audio (AC-8)', async () => {
@@ -207,6 +225,24 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
     expect(screen.queryByRole('textbox', { name: 'Título' })).toBeNull();
     clickSend();
     panel.http.expectNone({ method: 'POST' });
+  });
+
+  it('warns of the same file in another part of the collection, and still sends (KBC-091)', async () => {
+    const panel = await renderPanel();
+    await chooseChecked(panel, audio(), {
+      verdict: 'new',
+      elsewhere: [
+        { id: OTHER_ID, title: 'Palestra antiga', topic: 'hermetismo' },
+      ],
+    });
+    expect(screen.getByText(/Também está em Hermetismo:/)).toBeTruthy();
+    expect(screen.getByText(/Pode enviar assim mesmo/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Palestra antiga' })
+        .getAttribute('href'),
+    ).toBe(`/midia/${OTHER_ID}`);
+    expect(screen.getByRole('textbox', { name: 'Título' })).toBeTruthy();
   });
 
   it('says the quota in the words of the item and sends nothing (AC-3)', async () => {
@@ -1054,7 +1090,7 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       expect(TestBed.inject(Router).url).toBe('/');
     });
 
-    it('sends the plan with every file and stays on the list after several (Q177)', async () => {
+    it('sends the plan with every file and goes to the queue after several (KBC-090)', async () => {
       const panel = await renderPanel({ features: EDITOR });
       const { container, fixture, http, uploaded } = panel;
       choose(container, audio('a.mp3'), audio('b.mp3', 4));
@@ -1070,7 +1106,8 @@ describe('UploadPanel (T14, KBC-034, KBC-035)', () => {
       await finish(panel, CREATED.id, 0);
       await finish(panel, SECOND_ID, 1);
       expect(uploaded).toHaveBeenCalledTimes(2);
-      expect(TestBed.inject(Router).url).toBe('/');
+      await fixture.whenStable();
+      expect(TestBed.inject(Router).url).toBe('/fila');
     });
 
     it('gives each file its share of the value seen, by length (BR-4)', async () => {

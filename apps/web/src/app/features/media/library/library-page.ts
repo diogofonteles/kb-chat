@@ -45,14 +45,15 @@ import {
   type ListeningState,
   type MediaItem,
   type MediaMark,
+  type Topic,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
 import { TrackGroup } from './track-group.js';
 import { alsoRemovesText, tracksInTheWay } from '../track-removal.js';
 import { SessionStore } from '@core/auth/session-store.js';
 import {
-  LIBRARY_HOME_URL,
   LibraryApi,
+  libraryHomeUrlOf,
   libraryUrlOf,
   type LibraryRequest,
   type MarkOutcome,
@@ -62,6 +63,10 @@ import { MediaApi } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import {
+  CollectionHeading,
+  type HeadingScope,
+} from '@features/chat/collection-heading.js';
+import {
   EMPTY,
   Subject,
   catchError,
@@ -70,13 +75,16 @@ import {
   filter,
   map,
   of,
+  pairwise,
   share,
+  take,
 } from 'rxjs';
 import { keepFocusedInView } from '../keep-in-view.js';
 import { detailsSavedText } from '../edit-labels.js';
 import { EditMediaDialog, type MediaEdited } from '../edit-media-dialog.js';
 import { MovedNotice, mediaMoveOf, type MediaMove } from '../moved-notice.js';
 import { injectOpenPreparations } from '../preparation/open-preparations.js';
+import { QueueSummary } from '../queue/queue-summary.js';
 import { UploadPanel } from '../upload-panel.js';
 import { LibraryCard } from './library-card.js';
 import { LibraryControls } from './library-controls.js';
@@ -113,6 +121,15 @@ interface Choices {
   readonly filters: LibraryFilters;
 }
 
+/**
+ * Where the list is (KBC-091): every collection, one named by a link, or, by default, the one
+ * selected in the sidebar.
+ */
+type Scope =
+  | { readonly kind: 'all' }
+  | { readonly kind: 'topic'; readonly slug: string }
+  | { readonly kind: 'selected' };
+
 /** One page after the first: of which list, and from where. */
 interface NextPageAsked {
   readonly request: LibraryRequest;
@@ -127,9 +144,9 @@ interface MorePages {
 
 /**
  * "Biblioteca" (screens.md T16, KBC-051): only the media, Spotify-like. "Continuar ouvindo"
- * resumes in one click, "Ouvidas recentemente" shows the last plays, and "Todas" holds every
- * media of every collection the person sees, with chips, search, order, list or grid and
- * "Marcar como ouvida". The choices go to the account (every device).
+ * resumes in one click, "Ouvidas recentemente" shows the last plays, and "Todas" holds the
+ * media of the selected collection (KBC-091), or of all of them by choice, with chips,
+ * search, order, list or grid and "Marcar como ouvida". The choices go to the account.
  */
 @Component({
   selector: 'app-library-page',
@@ -142,6 +159,7 @@ interface MorePages {
     LibrarySearchResults,
     MovedNotice,
     NearEnd,
+    QueueSummary,
     TrackGroup,
     UploadPanel,
   ],
@@ -155,6 +173,7 @@ export class LibraryPage {
   private readonly mediaApi = inject(MediaApi);
   private readonly session = inject(SessionStore);
   private readonly chat = inject(ChatStore);
+  private readonly collectionHeading = inject(CollectionHeading);
   private readonly engine = inject(MediaEngine);
   private readonly playNow = inject(PlayNow);
   private readonly locale = inject(LOCALE_ID);
@@ -201,18 +220,33 @@ export class LibraryPage {
     const kept = this.preferences.hasValue()
       ? this.preferences.value()
       : DEFAULT_LIBRARY_PREFERENCES;
-    const topic = this.arrivedWithTopic ?? kept.libraryFilters.topic;
     return {
       sort: kept.librarySort,
       view: kept.libraryView,
-      filters: { ...kept.libraryFilters, topic },
+      filters: kept.libraryFilters,
     };
+  });
+  /** A change of collection in the sidebar brings the list along, even from "Todos". */
+  private readonly scope = linkedSignal<
+    { readonly ready: boolean; readonly slug: string | null },
+    Scope
+  >({
+    source: () => ({
+      ready: this.kept() !== null,
+      slug: this.chat.topicSlug(),
+    }),
+    computation: ({ ready, slug }, previous) => {
+      if (!ready || !previous?.source.ready) return this.startingScope();
+      const before = previous.source.slug;
+      return before === slug || before === null
+        ? previous.value
+        : { kind: 'selected' };
+    },
   });
   /** The kept collection, when the person no longer sees it. */
   private readonly lostTopic = computed(() => {
     const topic = this.kept()?.filters.topic ?? null;
-    const seen = this.topics().some((one) => one.slug === topic);
-    return seen ? null : topic;
+    return this.sees(topic) ? null : topic;
   });
   /** The kept subject, when the person no longer sees subjects (KBC-070 BR-3). */
   private readonly lostSubject = computed(() => {
@@ -221,20 +255,27 @@ export class LibraryPage {
     return seesSubjects ? null : (this.kept()?.filters.subject ?? null);
   });
   /**
-   * The choices in force, once the collections are known. A collection the person no longer
-   * sees, or a subject, is left aside, not erased: the account keeps it for when the access
-   * comes back.
+   * The choices in force, once the collections are known. The collection comes from where
+   * the list is; a kept one the person no longer sees, or a subject, is left aside, not
+   * erased: the account keeps it for when the access comes back.
    */
   protected readonly choices = computed<Choices | null>(() => {
     const kept = this.kept();
     if (!kept || !this.chat.topicsKnown()) return null;
-    const { topic, subject } = kept.filters;
     const filters = {
       ...kept.filters,
-      topic: this.lostTopic() ? null : topic,
-      subject: this.lostSubject() ? null : subject,
+      topic: this.topicInForce(),
+      allTopics: this.scope().kind === 'all',
+      subject: this.lostSubject() ? null : kept.filters.subject,
     };
     return { ...kept, filters };
+  });
+  /** What the header names (KBC-091). */
+  private readonly headingScope = computed<HeadingScope | null>(() => {
+    const choices = this.choices();
+    if (!choices) return null;
+    const { topic } = choices.filters;
+    return topic ? { kind: 'topic', slug: topic } : { kind: 'all' };
   });
 
   /** What is typed in "Buscar na biblioteca", and what is asked after the pause. */
@@ -272,7 +313,12 @@ export class LibraryPage {
     },
   );
 
-  protected readonly home = httpResource(() => LIBRARY_HOME_URL, {
+  /** Only the collection changes the strips: a chip or the order asks nothing here. */
+  private readonly homeUrl = computed(() => {
+    const choices = this.choices();
+    return choices ? libraryHomeUrlOf(choices.filters.topic) : undefined;
+  });
+  protected readonly home = httpResource(() => this.homeUrl(), {
     parse: (body) => libraryHomeSchema.parse(body),
   });
   protected readonly firstPage = httpResource(
@@ -367,6 +413,10 @@ export class LibraryPage {
     () =>
       !this.choices() ||
       (this.firstPage.isLoading() && this.items().length === 0),
+  );
+  /** A collection with nothing here: the way out is the others. */
+  protected readonly canSeeAll = computed(
+    () => (this.choices()?.filters.topic ?? null) !== null,
   );
   protected readonly filtered = computed(() => {
     const choices = this.choices();
@@ -475,6 +525,7 @@ export class LibraryPage {
   );
 
   constructor() {
+    this.followCollection();
     this.saves
       .pipe(
         concatMap((update) =>
@@ -491,6 +542,25 @@ export class LibraryPage {
       )
       .subscribe();
     this.followAddress();
+  }
+
+  /** The header, the sidebar and the account say the collection the list shows (KBC-091). */
+  private followCollection(): void {
+    this.collectionHeading.follow(this.headingScope);
+    // A link to a collection is a choice of it: the sidebar says the same as the list.
+    toObservable(this.chat.topicsKnown)
+      .pipe(filter(Boolean), take(1), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.selectArrivedTopic());
+    // The sidebar took the list out of "Todos os acervos": the account forgets it too.
+    toObservable(this.scope)
+      .pipe(
+        pairwise(),
+        filter(
+          ([before, after]) => before.kind === 'all' && after.kind !== 'all',
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.leaveAllTopics());
   }
 
   /** The words and the address, each following the other (KBC-096). */
@@ -575,6 +645,35 @@ export class LibraryPage {
     );
   }
 
+  private selectArrivedTopic(): void {
+    const slug = this.arrivedWithTopic;
+    if (slug && this.canOpen(slug)) this.chat.selectTopic(slug);
+  }
+
+  private sees(topic: string | null): boolean {
+    return this.topics().some((one) => one.slug === topic);
+  }
+
+  private canOpen(topic: string): boolean {
+    return this.topics().some((one) => one.slug === topic && one.canOpen);
+  }
+
+  /** A link's collection first, then "Todos os acervos", then the selected one (KBC-091). */
+  private startingScope(): Scope {
+    if (this.arrivedWithTopic)
+      return { kind: 'topic', slug: this.arrivedWithTopic };
+    return this.kept()?.filters.allTopics
+      ? { kind: 'all' }
+      : { kind: 'selected' };
+  }
+
+  private topicInForce(): string | null {
+    const scope = this.scope();
+    if (scope.kind === 'all') return null;
+    if (scope.kind === 'topic' && this.sees(scope.slug)) return scope.slug;
+    return this.chat.topicSlug();
+  }
+
   protected keepInView(event: FocusEvent): void {
     keepFocusedInView(event);
   }
@@ -604,37 +703,56 @@ export class LibraryPage {
     const current = this.choices();
     if (!current) return;
     const filters = applyFilterChange(current.filters, change);
-    // Choosing a collection replaces the kept one; only that does.
-    if (change.kind === 'topic') this.saveFilters(filters);
-    else this.changeFilters(filters);
+    if (change.kind === 'topic') this.chooseCollection(change.topic, filters);
+    else this.saveFilters(filters);
     if (change.kind === 'clear') this.focusAfterRender(this.allTitle);
   }
 
-  /** Any change but the collection's: a lost collection stays for when access returns. */
-  private changeFilters(filters: LibraryFilters): void {
-    const topic = filters.topic ?? this.lostTopic();
-    this.saveFilters({ ...filters, topic });
+  /** Only this replaces the kept collection; choosing one selects it everywhere (KBC-091). */
+  private chooseCollection(
+    topic: string | null,
+    filters: LibraryFilters,
+  ): void {
+    this.scope.set(topic ? { kind: 'topic', slug: topic } : { kind: 'all' });
+    if (topic && this.canOpen(topic)) this.chat.selectTopic(topic);
+    this.saveChoice({ ...filters, topic, allTopics: topic === null });
   }
 
+  private leaveAllTopics(): void {
+    const kept = this.kept()?.filters;
+    if (kept?.allTopics) this.saveChoice({ ...kept, allTopics: false });
+  }
+
+  /** Any change but the collection's: what is kept of it stays. */
   private saveFilters(chosen: LibraryFilters): void {
+    const kept = this.kept()?.filters;
+    this.saveChoice({
+      ...chosen,
+      topic: kept?.topic ?? null,
+      allTopics: kept?.allTopics ?? false,
+    });
+  }
+
+  private saveChoice(chosen: LibraryFilters): void {
     const subject = chosen.subject ?? this.lostSubject();
     const filters = { ...chosen, subject };
     this.choose({ filters }, { libraryFilters: filters });
   }
 
   protected clearFilters(): void {
-    this.changeFilters(NO_FILTERS);
+    this.saveFilters(NO_FILTERS);
+    this.focusAfterRender(this.allTitle);
+  }
+
+  /** The way out of a collection with nothing to show. */
+  protected showAllCollections(): void {
+    this.changeFilter({ kind: 'topic', topic: null });
     this.focusAfterRender(this.allTitle);
   }
 
   /** "Ver tudo" of "Continuar ouvindo": "Todas" with only what is in progress. */
   protected showInProgress(): void {
-    this.changeFilters({
-      states: ['in-progress'],
-      authors: [],
-      topic: null,
-      subject: null,
-    });
+    this.saveFilters({ ...NO_FILTERS, states: ['in-progress'] });
   }
 
   protected changeSort(sort: LibrarySort): void {
@@ -840,8 +958,17 @@ export class LibraryPage {
     this.uploading.set(false);
   }
 
-  protected uploaded(): void {
+  /** Sent to a collection out of this list: the audio is there, and this says where. */
+  protected uploaded(item: MediaItem): void {
     this.firstPage.reload();
+    if (this.isOutOfList(item))
+      this.moved.set(sentElsewhereOf(item, this.topics()));
+  }
+
+  private isOutOfList({ topic }: MediaItem): boolean {
+    const shown = this.choices()?.filters.topic ?? null;
+    const parent = this.topics().find((one) => one.slug === topic)?.parent;
+    return shown !== null && topic !== shown && parent !== shown;
   }
 
   protected retry(item: LibraryItem): void {
@@ -953,6 +1080,16 @@ export class LibraryPage {
   protected readonly selectedTopic = computed(
     () => this.chat.topicSlug() ?? '',
   );
+}
+
+/** "<título> foi enviado para o acervo <nome>.", with the way there. */
+function sentElsewhereOf(item: MediaItem, topics: readonly Topic[]): MediaMove {
+  const name =
+    topics.find((topic) => topic.slug === item.topic)?.title ?? item.topic;
+  return {
+    topic: item.topic,
+    text: $localize`:@@media.sentElsewhere:${item.title}:title: foi enviado para o acervo ${name}:topic:.`,
+  };
 }
 
 /** The item as the server left it: a mark also puts the position back to 0 (BR-5). */

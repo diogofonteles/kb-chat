@@ -37,6 +37,7 @@ import type {
   VoiceNamesService,
 } from '../media/index.js';
 import type { TrackPublisher } from './track-publisher.js';
+import type { VoiceNameFixer } from './voice-name-fixer.js';
 
 export interface TrackRevisionDeps {
   readonly revisions: TrackRevisionStorePort;
@@ -52,6 +53,8 @@ export interface TrackRevisionDeps {
   readonly diarizations: Pick<DiarizationStorePort, 'latest'>;
   readonly voiceLabels: Pick<VoiceLabelStorePort, 'labels'>;
   readonly names: Pick<VoiceNamesService, 'name'>;
+  /** The AI's words follow a corrected name (KBC-090). */
+  readonly fixer: Pick<VoiceNameFixer, 'fix'>;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: MediaActor, mediaId: string) => MediaItem;
   readonly rootOf: (topic: string) => string;
@@ -233,8 +236,37 @@ export class TrackRevisionService {
       voice,
       former,
     });
+    this.deps.fixer.fix(track.parentId, author);
     for (const { one, shown } of before)
       this.recordNames({ track: one, shown, parent, author });
+  }
+
+  /**
+   * A voice's name changes from the recording's screens (KBC-090): what `apply` writes, and in
+   * one transaction what follows it. Tracks that held the old speaker follow the voice, the
+   * AI's words follow the name, and each published track that changed keeps it in its history.
+   */
+  voiceRenamed(
+    actor: MediaActor,
+    target: { readonly mediaId: string; readonly voice: number },
+    apply: () => void,
+  ): void {
+    const { mediaId, voice } = target;
+    const { revisions, publisher, fixer } = this.deps;
+    const author = this.authorOf(actor);
+    const parent = this.parentOf(mediaId);
+    revisions.atomically(() => {
+      const former = this.labelsOf(mediaId).get(voice) ?? null;
+      const before = revisions
+        .tracks(mediaId)
+        .map((one) => ({ one, shown: this.shownNames(one, parent) }));
+      apply();
+      revisions.followVoice({ parentId: mediaId, voice, former });
+      fixer.fix(mediaId, author);
+      publisher.afterRecordingEdit(mediaId);
+      for (const { one, shown } of before)
+        this.recordNames({ track: one, shown, parent, author });
+    });
   }
 
   private renameVoice(

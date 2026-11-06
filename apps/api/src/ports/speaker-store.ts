@@ -65,6 +65,14 @@ export interface StoredVoiceLabel {
 /** The names of the voices of a separation; each change is one transaction. */
 export interface VoiceLabelStorePort {
   labels(diarizationId: string): StoredVoiceLabel[];
+  /** The voices whose suggested name a person refused. */
+  refusedNames(diarizationId: string): number[];
+  refuseName(input: {
+    readonly diarizationId: string;
+    readonly voice: number;
+    readonly by: string;
+    readonly now: Date;
+  }): void;
   setLabel(input: {
     readonly diarizationId: string;
     readonly voice: number;

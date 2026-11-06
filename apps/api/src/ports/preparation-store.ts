@@ -28,6 +28,13 @@ export interface MeasuredRates {
   readonly speakers: number | null;
 }
 
+/** A job the queue shows: a conversion, transcription or separation not finished. */
+export interface ActiveJob {
+  readonly mediaId: string;
+  readonly kind: 'transcode' | 'transcribe' | 'diarize';
+  readonly status: 'queued' | 'leased';
+}
+
 /**
  * The guided flow's plans (KBC-072, migration media-preparations). The claims answer false
  * to whoever comes second, so two reads never start one stage twice.
@@ -63,5 +70,9 @@ export interface PreparationStorePort {
   runningCuts(mediaId: string): JobCuts | null;
   /** Jobs of this kind waiting or running before this recording's. */
   jobsAhead(mediaId: string, kind: 'transcribe' | 'diarize'): number;
+  /** The jobs not finished, in the order the workers take them (FIFO, ADR 0022). */
+  activeJobs(): ActiveJob[];
+  /** Recordings stuck on a failure: their conversion, or a first transcription. */
+  failedRecordings(): string[];
   measuredRates(): MeasuredRates;
 }

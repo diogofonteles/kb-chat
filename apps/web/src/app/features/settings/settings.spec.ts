@@ -652,6 +652,64 @@ describe('Configurações', () => {
     expect(screen.getByText('Passo 1 de 4')).toBeTruthy();
   });
 
+  it('a late "close" of the dialog closed before does not close the one opened since', async () => {
+    const { fixture } = await openSettings();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fechar configurações' }),
+    );
+    await fixture.whenStable();
+    TestBed.inject(SettingsStore).openSettings();
+    await fixture.whenStable();
+    expect(dialog()?.open).toBe(true);
+    // The browser fires "close" in a task of its own: it can land after the new opening.
+    dialog()?.dispatchEvent(new Event('close'));
+    await fixture.whenStable();
+    expect(TestBed.inject(SettingsStore).panel()).toBe('settings');
+    expect(dialog()?.open).toBe(true);
+  });
+
+  it("QA I-9: the wizard's own close landing after ⚙ was pressed, before a render, keeps Configurações", async () => {
+    const { http, fixture } = await renderHost(
+      aSettingsView({ exists: false }),
+    );
+    const element = dialog();
+    if (!element) throw new Error('no dialog');
+    // The browser fires "close" in a task of its own: hold it, as a busy page would.
+    const held: Event[] = [];
+    element.close = function close(this: HTMLDialogElement) {
+      this.removeAttribute('open');
+      held.push(new Event('close'));
+    };
+    fireEvent.click(screen.getByRole('button', { name: 'Pular' }));
+    http
+      .expectOne({ method: 'PUT', url: '/api/v1/settings' })
+      .flush(aSettingsView());
+    TestBed.tick();
+    http.expectOne('/api/v1/ai/providers').flush(aProviderList());
+    flushAiStatus(http);
+    await fixture.whenStable();
+    expect(element.open).toBe(false);
+    expect(held).toHaveLength(1);
+
+    // ⚙ pressed: the panel is asked for, and no render has opened the dialog yet.
+    TestBed.inject(SettingsStore).openSettings();
+    for (const late of held.splice(0)) element.dispatchEvent(late);
+    await fixture.whenStable();
+
+    expect(TestBed.inject(SettingsStore).panel()).toBe('settings');
+    expect(element.open).toBe(true);
+  });
+
+  it('a close the person makes (Esc) while the panel is asked for closes it', async () => {
+    const { fixture } = await openSettings();
+    const element = dialog();
+    // Esc: the browser closes the dialog by itself, not through the host.
+    element?.removeAttribute('open');
+    element?.dispatchEvent(new Event('close'));
+    await fixture.whenStable();
+    expect(TestBed.inject(SettingsStore).panel()).toBeNull();
+  });
+
   it('closes with × and with Esc', async () => {
     const { fixture } = await openSettings();
     fireEvent.click(

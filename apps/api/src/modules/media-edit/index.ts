@@ -11,3 +11,8 @@ export {
   type TrackRevisionDeps,
 } from './track-revision-service.js';
 export { trackRevisionRoutes } from './track-revision-routes.js';
+export {
+  VoiceNameFixer,
+  mentionsName,
+  type VoiceNameFixerDeps,
+} from './voice-name-fixer.js';

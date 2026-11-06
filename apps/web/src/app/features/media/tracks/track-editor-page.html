@@ -134,6 +134,7 @@
         </div>
         <app-track-preparation [mediaId]="id()" />
       </section>
+      <ng-container [ngTemplateOutlet]="voiceNames" />
       @if (canClassify()) {
         <app-track-subjects [mediaId]="id()" [topic]="topic()" />
       }
@@ -173,6 +174,12 @@
       @if (draft.restored()) {
         <p class="hint" i18n="@@tracks.historyRestarted">
           Rascunho recuperado. O histórico de desfazer recomeçou.
+        </p>
+      }
+      @if (titlesToReview()) {
+        <p class="banner" role="status" i18n="@@tracks.reviewNames">
+          Alguns títulos podem citar um nome errado. Reveja antes de aprovar: a
+          lista está em "Nomes das vozes".
         </p>
       }
       @if (hasProposals()) {
@@ -243,7 +250,7 @@
         (selectTrack)="choose($event)"
         (moved)="moveHandle($event)"
         (cursorChange)="placeCursor($event)"
-        (listen)="listen($event)"
+        (listen)="listenByKey($event)"
         (edgeChange)="edge.set($event)"
       />
       @if (waveformPending()) {
@@ -358,18 +365,14 @@
       @if (canPropose()) {
         <app-track-proposals
           [mediaId]="id()"
-          [topic]="topic()"
           [latestRun]="run()"
           [lastFailure]="lastFailure()"
-          [suggestions]="voiceSuggestions()"
-          [speakers]="speakerList()"
-          [separation]="separation()"
           [start]="startProposal"
           [blocked]="proposalsBlocked()"
           [replaces]="hasProposals()"
-          (named)="reloadVoices()"
         />
       }
+      <ng-container [ngTemplateOutlet]="voiceNames" />
 
       <div
         class="tabs"
@@ -418,6 +421,10 @@
               [problems]="shownProblems()"
               [people]="people()"
               [readOnly]="readOnly()"
+              [playing]="playingKind()"
+              [playingElsewhere]="playingElsewhere()"
+              (stopPlaying)="audition.stop()"
+              (listenKey)="listenByKey($event)"
               (selectTrack)="choose($event)"
               (titleChange)="rename($event)"
               (kindChange)="changeKind($event)"
@@ -484,3 +491,20 @@
     }
   </div>
 }
+
+<ng-template #voiceNames>
+  @if (voicesToName(); as prep) {
+    <details
+      class="voice-names"
+      [open]="voicesOpen()"
+      (toggle)="voicesToggled($event)"
+    >
+      <summary i18n="@@tracks.voiceNames">Nomes das vozes</summary>
+      <app-preparation-voices
+        [preparation]="prep"
+        [beforeNaming]="saveFirst"
+        (named)="voicesNamed()"
+      />
+    </details>
+  }
+</ng-template>

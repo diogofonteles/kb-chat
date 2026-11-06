@@ -220,7 +220,7 @@ describe('migration track-items (KBC-068)', () => {
       // 23 reads the column this one adds: it can only come after it.
       ...OURS.filter((one) => one.version > VERSION && one.version < 23),
     ]);
-    expect(applyMigrations(db, OURS)).toEqual([VERSION, 23]);
+    expect(applyMigrations(db, OURS)).toEqual([VERSION, 23, 24]);
     db.close();
   });
 

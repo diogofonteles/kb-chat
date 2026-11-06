@@ -178,6 +178,8 @@ export interface MediaStorePort {
   createMedia(media: NewMedia): MediaRecord;
   /** The items of a collection sent from this file, newest first (KBC-035 BR-2). */
   findBySource(topic: string, sha256: string): MediaRecord[];
+  /** The recordings sent from this file, in any collection (KBC-091). */
+  findEverywhere(sha256: string): MediaRecord[];
   /** A person's converted space: real once converted, the estimate until then (BR-1). */
   usedBytes(principal: string): number;
   /** A part arrived: the 24 h of an upload count from the last one (KBC-035 BR-3). */

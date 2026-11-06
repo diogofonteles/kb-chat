@@ -47,8 +47,6 @@ import {
   distinctUntilChanged,
   filter,
   interval,
-  map,
-  of,
   switchMap,
   tap,
   type Observable,
@@ -59,6 +57,7 @@ import { CollectionSpeakers } from './collection-speakers.js';
 import { audienceLabel } from './speaker-names.js';
 import { SpeakerCombobox } from './speaker-combobox.js';
 import type { SpeakerChoice } from './speaker-suggestions.js';
+import { voiceChangeOf, type VoiceChange } from './voice-change.js';
 import { sampleOf } from './voice-changes.js';
 import { VoiceSample } from './voice-sample.js';
 import { VoiceTag } from './voice-tag.js';
@@ -116,15 +115,6 @@ function fieldTextOf(label: VoiceLabel | undefined): string {
   if (label?.kind === 'person') return label.name ?? '';
   return label?.kind === 'audience' ? audienceLabel() : '';
 }
-
-/** What a voice's name changes to. */
-interface VoiceChange {
-  readonly speakerId: string | null;
-  readonly audience: boolean;
-}
-
-/** A voice with no name. */
-const NO_LABEL: VoiceChange = { speakerId: null, audience: false };
 
 /**
  * "Vozes" on the audio page (screens.md T15; KBC-064 FR-1, FR-4; KBC-065): for whoever edits
@@ -389,22 +379,12 @@ export class VoicesPanel {
     this.renamed.emit();
   }
 
-  /** What the chosen option saves; a new name or an author becomes a speaker first. */
+  /** What the chosen option saves; a new speaker comes on the list. */
   private labelFor(choice: SpeakerChoice): Observable<VoiceChange> {
-    if (choice.kind === 'speaker')
-      return of({ speakerId: choice.id, audience: false });
-    if (choice.kind === 'audience')
-      return of({ speakerId: null, audience: true });
-    if (choice.kind === 'none') return of(NO_LABEL);
-    const speaker =
-      choice.kind === 'new'
-        ? { name: choice.name }
-        : { name: choice.author.name, authorSlug: choice.author.slug };
-    return this.api.createSpeaker(this.topic(), speaker).pipe(
-      map(({ id }) => {
-        this.speakerList.reload();
-        return { speakerId: id, audience: false };
-      }),
+    return voiceChangeOf(choice, (speaker) =>
+      this.api
+        .createSpeaker(this.topic(), speaker)
+        .pipe(tap(() => this.speakerList.reload())),
     );
   }
 

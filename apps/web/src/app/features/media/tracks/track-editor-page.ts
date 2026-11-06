@@ -1,5 +1,9 @@
+import {
+  CollectionHeading,
+  type HeadingScope,
+} from '@features/chat/collection-heading.js';
 import { httpResource } from '@angular/common/http';
-import { DOCUMENT } from '@angular/common';
+import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,6 +15,7 @@ import {
   effect,
   Injector,
   inject,
+  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
@@ -21,6 +26,7 @@ import {
   collectionSpeakerListSchema,
   editWordsSchema,
   mediaItemSchema,
+  mediaPreparationSchema,
   mediaSilencesSchema,
   mediaTranscriptSchema,
   mediaWaveformSchema,
@@ -49,11 +55,21 @@ import {
   mediaUrl,
 } from '@core/media/media-api.js';
 import { MediaEngine } from '@core/media/media-engine.js';
-import { preparationPagePath } from '@core/media/preparation-api.js';
+import {
+  preparationPagePath,
+  preparationUrl,
+} from '@core/media/preparation-api.js';
 import { collectionSpeakersUrl } from '@core/media/speakers-api.js';
-import { distinctUntilChanged, map } from 'rxjs';
+import {
+  EMPTY,
+  catchError,
+  distinctUntilChanged,
+  map,
+  type Observable,
+} from 'rxjs';
 import { PreparationSteps } from '../preparation/preparation-steps.js';
 import { audienceLabel } from '../voices/speaker-names.js';
+import { PreparationVoices } from '../preparation/preparation-voices.js';
 import { TrackAudition, endRange, startRange } from './track-audition.js';
 import { decodePeaks } from './waveform-canvas.js';
 import { TrackDraft } from './track-draft.js';
@@ -100,6 +116,8 @@ const tracksText = (count: number): string =>
     ? $localize`:@@tracks.one:1 faixa`
     : $localize`:@@tracks.many:${count}:count: faixas`;
 
+const LISTEN_KINDS: readonly ListenKind[] = ['track', 'start', 'end'];
+
 const touched = (track: DraftTrack): DraftTrack => ({ ...track, edited: true });
 
 /** The name of who asks or answers; a voice without one, by its number. */
@@ -144,12 +162,14 @@ function copyableLine(
 @Component({
   selector: 'app-track-editor-page',
   imports: [
+    NgTemplateOutlet,
     PreparationSteps,
     RouterLink,
     TrackTimeline,
     TrackRowList,
     TrackTranscript,
     TrackProposals,
+    PreparationVoices,
     TrackPreparationStatus,
     TrackSubjects,
   ],
@@ -254,9 +274,46 @@ export class TrackEditorPage {
   protected readonly lastFailure = computed(
     () => this.draft.edit()?.lastFailure ?? null,
   );
-  protected readonly voiceSuggestions = computed(
-    () => this.draft.edit()?.voices ?? [],
+  /** Who the voices are, also from here: a wrong name is never a dead end (KBC-090). */
+  private readonly preparation = httpResource(
+    () => (this.id() ? preparationUrl(this.id()) : undefined),
+    { parse: (body) => mediaPreparationSchema.parse(body) },
   );
+  protected readonly voicesToName = computed(() => {
+    const preparation = this.preparation.hasValue()
+      ? this.preparation.value()
+      : null;
+    if (preparation?.separation == null || preparation.voices.length === 0)
+      return null;
+    // A run that ended on this page brought its suggestions with the draft.
+    const unnamed = preparation.voices.filter(({ name }) => name === null);
+    const suggestions = (this.draft.edit()?.voices ?? []).filter(
+      ({ voice }) =>
+        unnamed.some((one) => one.voice === voice) &&
+        !preparation.refusedVoices.includes(voice),
+    );
+    return { ...preparation, suggestions };
+  });
+  /** Up here too: on a phone the names' block is far below (QA I-2). */
+  protected readonly titlesToReview = computed(
+    () => (this.voicesToName()?.nameReviews.length ?? 0) > 0,
+  );
+  /**
+   * Opens when something asks for a person, and stays as the person leaves it: closing with
+   * the last answer would drop the focus (WCAG 2.4.3).
+   */
+  protected readonly voicesOpen = linkedSignal<boolean, boolean>({
+    source: () => {
+      const voices = this.voicesToName();
+      return (
+        voices !== null &&
+        (voices.suggestions.length > 0 || voices.nameReviews.length > 0)
+      );
+    },
+    computation: (asks, previous) => asks || (previous?.value ?? false),
+  });
+  /** What is on screen goes first: a name may change the proposals' titles. */
+  protected readonly saveFirst = (): Observable<unknown> => this.draft.flush();
   /** Nothing can change now: a run writes the draft, or a press runs, or a conflict (R-5). */
   protected readonly readOnly = computed(() => !this.draft.canEdit());
   protected readonly watching = computed(
@@ -320,6 +377,18 @@ export class TrackEditorPage {
       })),
     ];
   });
+  /** What the selected track is playing: another row's range stops nothing here. */
+  protected readonly playingKind = computed<ListenKind | null>(() => {
+    const id = this.selected()?.track.id;
+    const key = this.audition.playingKey();
+    if (!id || !key?.startsWith(`${id}:`)) return null;
+    const kind = key.slice(id.length + 1);
+    return LISTEN_KINDS.find((one) => one === kind) ?? null;
+  });
+  /** Something plays that the selected row's buttons do not name: this row offers to stop. */
+  protected readonly playingElsewhere = computed(
+    () => this.audition.playing() && this.playingKind() === null,
+  );
   protected readonly segments = computed(() =>
     this.transcript.hasValue() ? this.transcript.value().segments : [],
   );
@@ -425,6 +494,12 @@ export class TrackEditorPage {
   });
 
   constructor() {
+    inject(CollectionHeading).follow(
+      computed<HeadingScope | null>(() => {
+        const slug = this.media()?.topic;
+        return slug ? { kind: 'topic', slug } : null;
+      }),
+    );
     this.leaveForProcessing();
     this.stopOtherPlayback();
     this.route.paramMap
@@ -662,7 +737,7 @@ export class TrackEditorPage {
   protected listen(kind: ListenKind): void {
     const track = this.selected()?.track;
     if (!track) return;
-    if (kind === 'track' && this.audition.playing()) {
+    if (this.playingKind() === kind) {
       this.audition.stop();
       return;
     }
@@ -671,7 +746,13 @@ export class TrackEditorPage {
       start: () => startRange(track.startMs),
       end: () => endRange(track.endMs),
     };
-    this.audition.play(ranges[kind]());
+    this.audition.play(ranges[kind](), `${track.id}:${kind}`);
+  }
+
+  /** Space stops whatever plays: a key never swaps the audio under the person. */
+  protected listenByKey(kind: ListenKind): void {
+    if (kind === 'track' && this.audition.playing()) this.audition.stop();
+    else this.listen(kind);
   }
 
   protected pageKey(event: KeyboardEvent): void {
@@ -781,8 +862,22 @@ export class TrackEditorPage {
   protected readonly startProposal = (acceptedUsd: number) =>
     this.draft.propose(acceptedUsd);
 
-  protected reloadVoices(): void {
+  protected voicesToggled(event: Event): void {
+    if (event.target instanceof HTMLDetailsElement)
+      this.voicesOpen.set(event.target.open);
+  }
+
+  /** The names, and the titles that may have changed with them. */
+  protected voicesNamed(): void {
     this.transcript.reload();
+    this.preparation.reload();
+    this.draft
+      .reload()
+      .pipe(
+        catchError(() => EMPTY),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe();
   }
 
   protected copyTracks(): void {

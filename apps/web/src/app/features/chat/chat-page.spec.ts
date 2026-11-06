@@ -12,6 +12,7 @@ import {
   Component,
   ErrorHandler,
   provideZonelessChangeDetection,
+  signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -26,6 +27,7 @@ import {
 } from '../../testing/fixtures.js';
 import { NO_FILTERS } from './chat-message.js';
 import { ChatPage } from './chat-page.js';
+import { CollectionHeading, type HeadingScope } from './collection-heading.js';
 import { ResearchApi } from '@core/api/research-api.js';
 import { UsageLog } from '@core/usage/usage-log.js';
 import type { ResearchConversation, TopicList } from '@kb-chat/contracts';
@@ -827,6 +829,48 @@ describe('ChatPage start suggestions and usage log (KBC-006)', () => {
 class MediaStub {}
 
 describe('ChatPage on the media pages (no question box)', () => {
+  async function openMediaWith(scope: HeadingScope | null) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([fakeStartRequests])),
+        provideHttpClientTesting(),
+        FAKE_ANSWERS,
+        { provide: UsageLog, useValue: usage },
+        provideRouter([
+          {
+            path: '',
+            component: ChatPage,
+            children: [{ path: 'midia', component: MediaStub }],
+          },
+        ]),
+      ],
+    });
+    const harness = await RouterTestingHarness.create('/midia');
+    TestBed.inject(HttpTestingController)
+      .match('/api/v1/topics')
+      .forEach((request) => request.flush(TOPICS));
+    TestBed.runInInjectionContext(() =>
+      TestBed.inject(CollectionHeading).follow(signal(scope)),
+    );
+    await harness.fixture.whenStable();
+    return screen.getByRole('heading', { level: 1 }).textContent ?? '';
+  }
+
+  it('names the collection the page shows, not the selected one (KBC-091)', async () => {
+    const heading = await openMediaWith({ kind: 'topic', slug: 'alquimia' });
+    expect(heading).toContain('Alquimia');
+    expect(heading).not.toContain('Hermetismo');
+  });
+
+  it('says "Todos os acervos" when the list holds them all (KBC-091)', async () => {
+    expect(await openMediaWith({ kind: 'all' })).toContain('Todos os acervos');
+  });
+
+  it('names no collection on a page that belongs to none (KBC-091)', async () => {
+    expect(await openMediaWith(null)).toContain('Nova Alexandria');
+  });
+
   it('opens /midia on a desktop and handles "/" without a missing question box (NG0951)', async () => {
     localStorage.clear();
     localStorage.setItem('kb-chat.view', 'search');

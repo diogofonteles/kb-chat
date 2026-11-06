@@ -3,6 +3,7 @@ import {
   mediaIdSchema,
   mediaPreparationSchema,
   openPreparationsSchema,
+  processingQueueSchema,
   preparationOptionsQuerySchema,
   preparationOptionsSchema,
   retryStageRequestSchema,
@@ -18,6 +19,7 @@ import type { PreparationService } from './preparation-service.js';
 
 const LISTEN: RouteAccess = { feature: 'media' };
 const EDIT: RouteAccess = { feature: 'media-edit' };
+const UPLOAD: RouteAccess = { feature: 'media-upload' };
 /** Retries a person may press per minute: one of them spends money (ND-22). */
 const RETRIES_PER_MINUTE = 6;
 const mediaParams = z.object({ id: mediaIdSchema });
@@ -35,6 +37,10 @@ const OPTIONS = {
   open: {
     config: { access: EDIT },
     schema: { response: { 200: openPreparationsSchema } },
+  },
+  queue: {
+    config: { access: UPLOAD },
+    schema: { response: { 200: processingQueueSchema } },
   },
   read: {
     config: { access: EDIT },
@@ -81,6 +87,9 @@ function registerReads(app: FastifyInstance, service: PreparationService) {
   );
   typed.get('/api/v1/media/preparations', OPTIONS.open, async (request) =>
     service.listOpen(planActorOf(request)),
+  );
+  typed.get('/api/v1/media/processing', OPTIONS.queue, async (request) =>
+    service.queue(planActorOf(request)),
   );
   typed.get('/api/v1/media/:id/preparation', OPTIONS.read, (request) =>
     service.view(planActorOf(request), request.params.id),

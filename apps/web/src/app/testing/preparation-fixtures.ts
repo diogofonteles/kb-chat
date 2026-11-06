@@ -4,6 +4,8 @@ import type {
   PreparationOptions,
   PreparationStage,
   PreparationTrack,
+  ProcessingQueue,
+  ProcessingQueueItem,
 } from '@kb-chat/contracts';
 import { of } from 'rxjs';
 
@@ -27,6 +29,39 @@ export const aStage = (
   spentUsd: null,
   estimateUsd: null,
   restarts: false,
+  ...over,
+});
+
+export const aQueueItem = (
+  over: Partial<ProcessingQueueItem> = {},
+): ProcessingQueueItem => ({
+  mediaId: MEDIA_ID,
+  title: 'Palestra de 1998',
+  topic: 'hermetismo',
+  phase: 'running',
+  stage: 'transcribe',
+  state: 'running',
+  percent: 35,
+  cuts: { done: 14, total: 40 },
+  windows: null,
+  failure: null,
+  blockedBy: null,
+  position: null,
+  nextStage: 'speakers',
+  waitsForTranscriber: false,
+  action: null,
+  retryStage: null,
+  step: 2,
+  ...over,
+});
+
+export const aQueue = (
+  over: Partial<ProcessingQueue> = {},
+): ProcessingQueue => ({
+  items: [],
+  active: 0,
+  transcriber: 'on',
+  transcriberOffSince: null,
   ...over,
 });
 
@@ -65,6 +100,8 @@ export const aPreparation = (
   separation: null,
   voices: [],
   suggestions: [],
+  refusedVoices: [],
+  nameReviews: [],
   tracks: [],
   next: null,
   canSwitchToManual: false,

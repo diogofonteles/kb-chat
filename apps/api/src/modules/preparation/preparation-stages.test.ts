@@ -42,6 +42,7 @@ const facts = (over: Partial<StageFacts> = {}): StageFacts => ({
     transcription: transcription('done'),
   },
   separation: 'done',
+  speakersAsked: false,
   hasVoices: true,
   claimed: false,
   starting: false,
@@ -77,6 +78,22 @@ const stateOf = (stages: ReturnType<typeof stagesOf>, id: string) =>
   stages.find(({ stage }) => stage === id);
 
 describe('stages of a plan (KBC-072 FR-2)', () => {
+  it('never leaves asked voices in the queue when no job and no result stand', () => {
+    const stages = stagesOf(facts({ separation: 'none', speakersAsked: true }));
+    expect(stateOf(stages, 'speakers')).toMatchObject({
+      state: 'failed',
+      failure: 'work',
+      canRetry: true,
+    });
+  });
+
+  it('keeps voices nobody asked yet in the queue', () => {
+    const stages = stagesOf(
+      facts({ separation: 'none', speakersAsked: false }),
+    );
+    expect(stateOf(stages, 'speakers')?.state).toBe('queued');
+  });
+
   it('leaves out what nobody asked for', () => {
     const stages = stagesOf(
       facts({

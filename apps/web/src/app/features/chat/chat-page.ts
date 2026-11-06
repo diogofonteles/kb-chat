@@ -29,7 +29,9 @@ import { SessionStore } from '@core/auth/session-store.js';
 import { DocumentPanel } from '@features/document/document-panel.js';
 import { Sidebar, type SidebarAction } from '@features/sidebar/sidebar.js';
 import { NO_FILTERS, type ChatMessage } from './chat-message.js';
+import { ProcessingQueueStore } from '@features/media/queue/processing-queue-store.js';
 import { ChatStore } from './chat-store.js';
+import { CollectionHeading } from './collection-heading.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
 import { provideResearchRestorer } from '@features/research/research-restorer.js';
 import { Composer } from './composer.js';
@@ -48,7 +50,7 @@ const DESKTOP_QUERY = '(min-width: 1024px)';
 
 /** The media pages: the list and player (T14, T15) and the library (T16, KBC-051). */
 const isMediaUrl = (url: string): boolean =>
-  /^\/(midia|biblioteca)(\/|\?|#|$)/.test(url);
+  /^\/(midia|biblioteca|fila)(\/|\?|#|$)/.test(url);
 
 /**
  * Chat page (screens.md): two views over one question box and document panel, the free
@@ -101,7 +103,19 @@ export class ChatPage {
   /** Desktop shows the side panel as a column; phones open it as a drawer (KBC-005 FR-6). */
   protected readonly desktop = signal(this.matchesDesktop());
 
-  protected readonly topic = this.store.topic;
+  private readonly collectionHeading = inject(CollectionHeading);
+  /** Spoken from here: the page and the sidebar come and go, the layout stays. */
+  protected readonly queue = inject(ProcessingQueueStore);
+  /** The collection in the header: on a media page, the one that page shows (KBC-091). */
+  protected readonly topic = computed(() => {
+    if (!this.onMedia()) return this.store.topic();
+    const scope = this.collectionHeading.scope();
+    if (scope?.kind !== 'topic') return null;
+    return this.store.topicList().find((t) => t.slug === scope.slug) ?? null;
+  });
+  protected readonly allCollections = computed(
+    () => this.onMedia() && this.collectionHeading.scope()?.kind === 'all',
+  );
   protected readonly topicList = this.store.topicList;
   /** The chosen collection (with its sub-collections) has no text yet (KBC-048, ADR 0028). */
   protected readonly emptyTopic = computed(

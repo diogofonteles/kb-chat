@@ -70,3 +70,11 @@ export const collectionSpeakerUpdateSchema = z.strictObject({
 export type CollectionSpeakerUpdate = z.infer<
   typeof collectionSpeakerUpdateSchema
 >;
+
+/** POST …/voices/:voice/refuse-name: the name suggested for a voice is not its name. */
+export const refuseVoiceNameRequestSchema = z.strictObject({
+  version: z.number().int().min(1),
+});
+export type RefuseVoiceNameRequest = z.infer<
+  typeof refuseVoiceNameRequestSchema
+>;

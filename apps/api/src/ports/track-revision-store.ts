@@ -71,7 +71,10 @@ export interface TrackRevisionStorePort {
   bump(mediaId: string, expectedVersion: number): boolean;
   /** Every track whose speakers changed: nobody's open form is right any more. */
   touch(mediaId: string): void;
+  /** A person's title: from now on it is theirs (KBC-090). */
   rename(track: RevisableTrack, title: string, now: Date): void;
+  /** The AI's title with a corrected name: still the AI's. */
+  renameProposed(track: RevisableTrack, title: string, now: Date): void;
   setSpeaker(
     track: RevisableTrack,
     change: { readonly role: TrackRole; readonly speakerId: string | null },

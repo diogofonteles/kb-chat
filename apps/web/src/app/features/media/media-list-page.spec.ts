@@ -44,7 +44,10 @@ async function renderList(
       provideZonelessChangeDetection(),
       provideHttpClient(withInterceptors([answeringOptions()])),
       provideHttpClientTesting(),
-      provideRouter([{ path: 'midia', children: [] }]),
+      provideRouter([
+        { path: 'midia', children: [] },
+        { path: 'fila', children: [] },
+      ]),
       chatStoreOn(),
       sessionAs(who),
       { provide: MEDIA_POLL_MS, useValue: pollMs },

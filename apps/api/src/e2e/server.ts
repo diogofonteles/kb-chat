@@ -2,6 +2,7 @@ import { createMedia } from '../media-factory.js';
 import { registerTranscriberClock } from './transcriber-clock-routes.js';
 import { registerTranscriptSeed } from './transcript-seed-routes.js';
 import { registerDiarizationSeed } from './diarization-seed-routes.js';
+import { registerProposalSeed } from './proposal-seed-routes.js';
 import { startMediaWorkers } from './media-worker-runner.js';
 import { privateTemp } from '../../../../tools/test-temp.mjs';
 import { mkdtempSync } from 'node:fs';
@@ -258,6 +259,7 @@ if (media) {
   registerTranscriberClock(app, media.transcribers);
   registerTranscriptSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });
   registerDiarizationSeed(app, { media, mediaDir: config.KB_CHAT_MEDIA_DIR });
+  registerProposalSeed(app, { mediaDir: config.KB_CHAT_MEDIA_DIR });
 }
 registerOpenRouterConsent(app, openRouter);
 await app.listen({ host: '127.0.0.1', port: config.PORT });

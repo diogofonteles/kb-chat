@@ -227,9 +227,18 @@ const uploadCheckMediaSchema = z.object({
   title: z.string().min(1).max(200),
 });
 
+/** The same file in another sub-collection of the collection (KBC-091): a warning only. */
+export const uploadElsewhereSchema = uploadCheckMediaSchema.extend({
+  topic: z.string().min(1),
+});
+export type UploadElsewhere = z.infer<typeof uploadElsewhereSchema>;
+
 /** What a chosen file is to this collection and person. */
 export const uploadCheckSchema = z.discriminatedUnion('verdict', [
-  z.object({ verdict: z.literal('new') }),
+  z.object({
+    verdict: z.literal('new'),
+    elsewhere: z.array(uploadElsewhereSchema).optional(),
+  }),
   z.object({ verdict: z.literal('duplicate'), media: uploadCheckMediaSchema }),
   z.object({
     verdict: z.literal('resume'),

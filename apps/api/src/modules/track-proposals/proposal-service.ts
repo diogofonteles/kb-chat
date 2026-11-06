@@ -51,6 +51,8 @@ export interface ProposalServiceDeps {
   readonly caps: { readonly runUsd: number; readonly monthlyUsd: number };
   readonly now?: () => Date;
   readonly onRunError?: (error: unknown, runId: string) => void;
+  /** A window's tracks are in the draft (KBC-090: a name given meanwhile follows). */
+  readonly onWindowSaved?: (mediaId: string) => void;
 }
 
 /** An estimate before there are words to read. */
@@ -348,6 +350,7 @@ export class ProposalService {
         runCapUsd: this.deps.caps.runUsd,
         carriedUsd: prepared.carriedUsd,
         signal: this.closing.signal,
+        onWindowSaved: this.deps.onWindowSaved,
       }).run();
       if (outcome.error !== undefined)
         this.deps.onRunError?.(outcome.error, runId);

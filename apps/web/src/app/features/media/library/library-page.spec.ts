@@ -19,6 +19,7 @@ import {
 } from '@angular/router';
 import {
   DEFAULT_LIBRARY_PREFERENCES,
+  NO_LIBRARY_FILTERS,
   type Feature,
   type LibraryHit,
   type LibraryHome,
@@ -34,7 +35,10 @@ import {
   MediaEngine,
 } from '@core/media/media-engine.js';
 import { UsageLog } from '@core/usage/usage-log.js';
+import { By } from '@angular/platform-browser';
 import { ChatStore } from '@features/chat/chat-store.js';
+import { CollectionHeading } from '@features/chat/collection-heading.js';
+import { UploadPanel } from '../upload-panel.js';
 import {
   fakeMediaElement,
   type FakeMedia,
@@ -109,6 +113,11 @@ const PREFERENCES: ListeningPreferences = {
   skipSilences: false,
   wordHighlight: true,
   ...DEFAULT_LIBRARY_PREFERENCES,
+  // Most of this file is about the list itself: every collection, by choice (KBC-091).
+  libraryFilters: {
+    ...DEFAULT_LIBRARY_PREFERENCES.libraryFilters,
+    allTopics: true,
+  },
 };
 
 async function renderLibrary(
@@ -122,13 +131,14 @@ async function renderLibrary(
 ) {
   const media: FakeMedia = fakeMediaElement();
   const chatStore = chatStoreOn();
+  const chat = { selectTopic: vi.fn() };
   const view = await render(LibraryPage, {
     providers: [
       provideZonelessChangeDetection(),
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter(options.routes ?? []),
-      chatStore,
+      { ...chatStore, useValue: { ...chatStore.useValue, ...chat } },
       sessionAs({
         features: options.features ?? ['media', 'media-library'],
         master: options.master,
@@ -161,7 +171,8 @@ async function renderLibrary(
     preferences = PREFERENCES,
   ) => {
     http.expectOne(PREFS).flush(preferences);
-    http.expectOne(HOME).flush(home);
+    await tick();
+    http.expectOne((request) => request.url.startsWith(HOME)).flush(home);
     await tick();
   };
   /** Choices, home and the first page answered, the screen settled. */
@@ -176,7 +187,7 @@ async function renderLibrary(
       .flush(page);
     await settle();
   };
-  return { ...view, http, settle, tick, start, open, media };
+  return { ...view, http, settle, tick, start, open, media, chat };
 }
 
 /** Longer than the search's pause, so the typed words are asked. */
@@ -284,6 +295,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         states: ['in-progress'],
         authors: ['mestre-laercio'],
         topic: null,
+        allTopics: true,
         subject: null,
       },
     });
@@ -314,6 +326,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         states: ['heard'],
         authors: [],
         topic: null,
+        allTopics: true,
         subject: null,
       },
     });
@@ -596,8 +609,13 @@ describe('LibraryPage (T16, KBC-051)', () => {
   });
 
   it('starts filtered by the collection it came from (/midia, FR-7)', async () => {
-    const { http, settle, start } = await renderLibrary({ acervo: 'alquimia' });
-    await start();
+    const { http, settle, tick, chat } = await renderLibrary({
+      acervo: 'alquimia',
+    });
+    http.expectOne(PREFS).flush(PREFERENCES);
+    await tick();
+    http.expectOne(`${HOME}?topic=alquimia`).flush(aHome());
+    expect(chat.selectTopic).toHaveBeenCalledWith('alquimia');
     http
       .expectOne('/api/v1/media/library?topic=alquimia&sort=recently-played')
       .flush(aPage([anItem(1, { topic: 'alquimia' })]));
@@ -612,6 +630,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
         states: [],
         authors: [],
         topic: null,
+        allTopics: true,
         subject: 'concept:cabala',
       },
     };
@@ -641,6 +660,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['in-progress'],
           authors: [],
           topic: null,
+          allTopics: true,
           subject: 'concept:cabala',
         },
       });
@@ -709,6 +729,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['unheard'],
           authors: [],
           topic: null,
+          allTopics: true,
           subject: null,
         },
       },
@@ -833,6 +854,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['heard'],
           authors: [],
           topic: null,
+          allTopics: true,
           subject: null,
         },
       });
@@ -1115,6 +1137,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['heard'],
           authors: [],
           topic: 'hermetismo',
+          allTopics: false,
           subject: null,
         },
       });
@@ -1129,6 +1152,60 @@ describe('LibraryPage (T16, KBC-051)', () => {
       expect(
         screen.getAllByRole('button', { name: 'Limpar filtros' }).length,
       ).toBeGreaterThan(0);
+    });
+
+    it('KBC-091 QA I-10: nothing found in one collection offers every collection, and the focus follows', async () => {
+      const library = await renderLibrary({ features: SPEAKER });
+      await library.open(aPage([anItem(1)]), aHome(), {
+        ...PREFERENCES,
+        libraryFilters: {
+          states: [],
+          authors: [],
+          topic: 'hermetismo',
+          allTopics: false,
+          subject: null,
+        },
+      });
+      const inOne = await ask(library, 'orlando');
+      expect(inOne.request.url).toContain('topic=hermetismo');
+      inOne.flush(anAnswer([]));
+      await library.settle();
+      expect(
+        screen.queryByRole('button', { name: 'Limpar filtros' }),
+      ).toBeNull();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Buscar em todos os acervos' }),
+      );
+      await library.tick();
+
+      const save = library.http.expectOne({ method: 'PUT', url: PREFS });
+      expect(save.request.body).toEqual({
+        libraryFilters: { ...NO_LIBRARY_FILTERS, allTopics: true },
+      });
+      save.flush(PREFERENCES);
+      await library.tick();
+      library.http.expectOne(HOME).flush(aHome());
+      library.http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      const everywhere = library.http.expectOne(
+        (request) =>
+          request.url.startsWith(`${SEARCH}?`) &&
+          request.url.includes('q=orlando'),
+      );
+      expect(everywhere.request.url).not.toContain('topic=');
+      everywhere.flush(anAnswer([aHit(2)]));
+      await library.settle();
+      expect(screen.getByRole('link', { name: 'Faixa 2' })).toBeTruthy();
+      expect(document.activeElement).toBe(
+        screen.getByRole('heading', { name: /resultado/, level: 3 }),
+      );
+    });
+
+    it('KBC-091 QA I-10: across every collection, nothing found has no such way out', async () => {
+      await found({ features: SPEAKER }, anAnswer([]), 'conselheira');
+      expect(
+        screen.queryByRole('button', { name: 'Buscar em todos os acervos' }),
+      ).toBeNull();
     });
 
     it('AC-11: the count reaches the status region', async () => {
@@ -1427,6 +1504,158 @@ describe('LibraryPage (T16, KBC-051)', () => {
     });
   });
 
+  describe('the collection it follows (KBC-091)', () => {
+    const FOLLOWS = { ...PREFERENCES, libraryFilters: NO_LIBRARY_FILTERS };
+    const OF_TOPIC =
+      '/api/v1/media/library?topic=hermetismo&sort=recently-played';
+
+    async function following() {
+      const library = await renderLibrary();
+      library.http.expectOne(PREFS).flush(FOLLOWS);
+      await library.tick();
+      library.http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
+      return library;
+    }
+
+    it('shows the selected collection by default, and the header says so', async () => {
+      const { http, settle } = await following();
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      expect(TestBed.inject(CollectionHeading).scope()).toEqual({
+        kind: 'topic',
+        slug: 'hermetismo',
+      });
+      expect(
+        screen.queryByRole('button', { name: 'Limpar filtros' }),
+      ).toBeNull();
+    });
+
+    it('"Todos os acervos" is a choice kept in the account, and the header drops the name', async () => {
+      const { http, settle, tick } = await following();
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.change(screen.getByLabelText('Acervo'), {
+        target: { value: '' },
+      });
+      await tick();
+      const save = http.expectOne({ method: 'PUT', url: PREFS });
+      expect(save.request.body).toEqual({
+        libraryFilters: { ...NO_LIBRARY_FILTERS, allTopics: true },
+      });
+      save.flush(PREFERENCES);
+      http.expectOne(HOME).flush(aHome());
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      expect(TestBed.inject(CollectionHeading).scope()).toEqual({
+        kind: 'all',
+      });
+    });
+
+    it('a collection chosen in the sidebar ends "Todos os acervos" in the account too', async () => {
+      const { http, settle, tick } = await following();
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.change(screen.getByLabelText('Acervo'), {
+        target: { value: '' },
+      });
+      await tick();
+      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      http.expectOne(HOME).flush(aHome());
+      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      await settle();
+      (TestBed.inject(ChatStore).topicSlug as WritableSignal<string>).set(
+        'alquimia',
+      );
+      await tick();
+      expect(
+        http.expectOne({ method: 'PUT', url: PREFS }).request.body,
+      ).toEqual({ libraryFilters: NO_LIBRARY_FILTERS });
+    });
+
+    it('choosing a collection here selects it in the sidebar too', async () => {
+      const { http, settle, tick, chat } = await following();
+      const page = aPage([anItem(1)]);
+      http.expectOne(OF_TOPIC).flush({
+        ...page,
+        facets: { ...page.facets, topics: ['alquimia', 'hermetismo'] },
+      });
+      await settle();
+      fireEvent.change(screen.getByLabelText('Acervo'), {
+        target: { value: 'alquimia' },
+      });
+      await tick();
+      expect(chat.selectTopic).toHaveBeenCalledWith('alquimia');
+      expect(
+        http.expectOne({ method: 'PUT', url: PREFS }).request.body,
+      ).toEqual({
+        libraryFilters: { ...NO_LIBRARY_FILTERS, topic: 'alquimia' },
+      });
+    });
+
+    it('"Limpar filtros" keeps the collection', async () => {
+      const { http, settle, tick } = await following();
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: 'Em andamento' }));
+      await tick();
+      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      http
+        .expectOne(
+          '/api/v1/media/library?state=in-progress&topic=hermetismo&sort=recently-played',
+        )
+        .flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.click(
+        screen.getAllByRole('button', {
+          name: 'Limpar filtros',
+        })[0] as HTMLElement,
+      );
+      await tick();
+      http.expectOne({ method: 'PUT', url: PREFS }).flush(PREFERENCES);
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+    });
+
+    it('offers all the collections when this one has nothing', async () => {
+      const { http, settle } = await following();
+      http.expectOne(OF_TOPIC).flush({
+        ...aPage([]),
+        facets: { ...aPage([]).facets, topics: ['alquimia'] },
+      });
+      await settle();
+      expect(screen.getByText('Nenhuma mídia neste acervo.')).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: 'Ver todos os acervos' }),
+      ).toBeTruthy();
+    });
+
+    it('says where an audio sent to another collection went, with the way there', async () => {
+      const library = await renderLibrary({
+        features: ['media', 'media-library', 'media-upload'],
+      });
+      const { fixture, http, settle, tick } = library;
+      http.expectOne(PREFS).flush(FOLLOWS);
+      await tick();
+      http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
+      http.expectOne(OF_TOPIC).flush(aPage([anItem(1)]));
+      await settle();
+      fireEvent.click(
+        screen.getAllByRole('button', {
+          name: 'Enviar mídia',
+        })[0] as HTMLElement,
+      );
+      await tick();
+      const panel = fixture.debugElement.query(By.directive(UploadPanel));
+      const sent = aMediaItem({ topic: 'alquimia', title: 'Nova' });
+      (panel.componentInstance as UploadPanel).uploaded.emit(sent);
+      await tick();
+      expect(document.body.textContent).toContain(
+        'Nova foi enviado para o acervo Alquimia.',
+      );
+      expect(screen.getByRole('link', { name: 'Ver o acervo' })).toBeTruthy();
+    });
+  });
+
   describe('a collection the person lost (BR-7, AC-5)', () => {
     it('leaves a saved filter aside, shows all the rest and keeps it in the account', async () => {
       const { http, settle, start } = await renderLibrary();
@@ -1436,6 +1665,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: [],
           authors: [],
           topic: 'perdido',
+          allTopics: true,
           subject: null,
         },
       });
@@ -1457,6 +1687,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: [],
           authors: [],
           topic: 'perdido',
+          allTopics: true,
           subject: null,
         },
       });
@@ -1471,6 +1702,7 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: ['in-progress'],
           authors: [],
           topic: 'perdido',
+          allTopics: true,
           subject: null,
         },
       });
@@ -1498,32 +1730,40 @@ describe('LibraryPage (T16, KBC-051)', () => {
           states: [],
           authors: [],
           topic: 'perdido',
+          allTopics: true,
           subject: null,
         },
       });
     });
 
     it('leaves aside a collection arrived with in the address', async () => {
-      const { http, settle, start } = await renderLibrary({
+      const { http, settle, tick } = await renderLibrary({
         acervo: 'perdido',
       });
-      await start();
-      http.expectOne(FIRST).flush(aPage([anItem(1)]));
+      http.expectOne(PREFS).flush(PREFERENCES);
+      await tick();
+      http.expectOne(`${HOME}?topic=hermetismo`).flush(aHome());
+      http
+        .expectOne(
+          '/api/v1/media/library?topic=hermetismo&sort=recently-played',
+        )
+        .flush(aPage([anItem(1)]));
       await settle();
       expect(screen.getByRole('link', { name: 'Palestra 1' })).toBeTruthy();
     });
 
     it('waits for the collections before judging a saved filter', async () => {
-      const { http, tick, start } = await renderLibrary();
+      const { http, tick } = await renderLibrary();
       const chat = TestBed.inject(ChatStore);
       const known = chat.topicsKnown as WritableSignal<boolean>;
       known.set(false);
-      await start();
+      http.expectOne(PREFS).flush(PREFERENCES);
       await tick();
       http.expectNone(FIRST);
 
       known.set(true);
       await tick();
+      http.expectOne(HOME).flush(aHome());
       http.expectOne(FIRST).flush(aPage([anItem(1)]));
     });
   });

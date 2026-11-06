@@ -3,6 +3,7 @@ import type {
   MediaSpeakers,
   MergeVoicesRequest,
   NameVoiceRequest,
+  RefuseVoiceNameRequest,
   SplitVoiceRequest,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -26,6 +27,13 @@ export interface VoiceNamesServiceDeps {
   readonly rootOf: (topic: string) => string;
   /** The voices as they read after a change. */
   readonly speakersOf: (actor: MediaActor, mediaId: string) => MediaSpeakers;
+  /** Writes a new name and, with it, what follows from it (KBC-090); default: only the name. */
+  readonly relabel?: (
+    actor: MediaActor,
+    target: { readonly mediaId: string; readonly voice: number },
+    apply: () => void,
+  ) => void;
+  readonly now?: () => Date;
 }
 
 const conflict = (message: string) => new AppError('MEDIA_CONFLICT', message);
@@ -47,11 +55,52 @@ export class VoiceNamesService {
     const { media, current } = this.editable(actor, mediaId, request.version);
     this.assertStandingVoice(current.id, voice);
     this.assertSpeakerOf(media, request.speakerId);
-    this.deps.voiceLabels.setLabel({
-      diarizationId: current.id,
-      voice,
-      speakerId: request.speakerId,
-      audience: request.audience,
+    this.relabel(actor, target, () =>
+      this.deps.voiceLabels.setLabel({
+        diarizationId: current.id,
+        voice,
+        speakerId: request.speakerId,
+        audience: request.audience,
+      }),
+    );
+    return this.deps.speakersOf(actor, mediaId);
+  }
+
+  private relabel(
+    actor: MediaActor,
+    target: { readonly mediaId: string; readonly voice: number },
+    apply: () => void,
+  ): void {
+    if (this.deps.relabel) this.deps.relabel(actor, target, apply);
+    else apply();
+  }
+
+  /**
+   * The name suggested or accepted is not this voice's (KBC-090): the voice is left with no
+   * name, and nobody is offered that one again.
+   */
+  refuseName(
+    actor: MediaActor,
+    target: { readonly mediaId: string; readonly voice: number },
+    request: RefuseVoiceNameRequest,
+  ): MediaSpeakers {
+    const { mediaId, voice } = target;
+    const { current } = this.editable(actor, mediaId, request.version);
+    this.assertStandingVoice(current.id, voice);
+    const { voiceLabels } = this.deps;
+    this.relabel(actor, target, () => {
+      voiceLabels.setLabel({
+        diarizationId: current.id,
+        voice,
+        speakerId: null,
+        audience: false,
+      });
+      voiceLabels.refuseName({
+        diarizationId: current.id,
+        voice,
+        by: actor.principal,
+        now: this.deps.now?.() ?? new Date(),
+      });
     });
     return this.deps.speakersOf(actor, mediaId);
   }

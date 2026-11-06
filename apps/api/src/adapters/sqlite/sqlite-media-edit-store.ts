@@ -1,5 +1,7 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import {
+  TRACK_SUMMARY_MAX,
+  TRACK_TITLE_MAX,
   editStatusSchema,
   editStepSchema,
   inTimeOrder,
@@ -168,8 +170,8 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
       .prepare(
         `INSERT INTO media_draft_tracks (start_ms, end_ms, kind, title, asker_voice,
            answerer_voice, asker_speaker_id, answerer_speaker_id, id, media_id, source,
-           edited, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           edited, person_edited, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         ...trackValues(track),
@@ -177,6 +179,7 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
         input.mediaId,
         track.source,
         // A proposal coming back with "Desfazer" is a person's choice now (BR-6).
+        track.source === 'ai' ? 1 : 0,
         track.source === 'ai' ? 1 : 0,
         input.now.toISOString(),
       );
@@ -187,10 +190,10 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
       .prepare(
         `UPDATE media_draft_tracks SET start_ms = ?, end_ms = ?, kind = ?, title = ?,
            asker_voice = ?, answerer_voice = ?, asker_speaker_id = ?, answerer_speaker_id = ?,
-           edited = 1
+           edited = 1, person_edited = CASE WHEN title IS ? THEN person_edited ELSE 1 END
          WHERE id = ? AND media_id = ?`,
       )
-      .run(...trackValues(track), track.id, mediaId);
+      .run(...trackValues(track), track.title, track.id, mediaId);
   }
 
   approve(
@@ -294,6 +297,71 @@ export class SqliteMediaEditStore implements MediaEditStorePort {
         .run(next, write.principal, write.now.toISOString(), write.mediaId);
       return next;
     });
+  }
+
+  proposedTrackIds(mediaId: string): ReadonlySet<string> {
+    return new Set(this.proposedRows(mediaId).map((row) => String(row['id'])));
+  }
+
+  /** What the AI wrote and no person touched. */
+  private proposedRows(mediaId: string): Row[] {
+    return this.db
+      .prepare(
+        `SELECT id, title FROM media_draft_tracks
+         WHERE media_id = ? AND source = 'ai' AND person_edited = 0
+           AND title IS NOT NULL`,
+      )
+      .all(mediaId);
+  }
+
+  rewriteProposedDraft(
+    input: Parameters<MediaEditStorePort['rewriteProposedDraft']>[0],
+  ): void {
+    const { mediaId, rewrite, now } = input;
+    inTransaction(this.db, () => {
+      const changed = this.proposedRows(mediaId).flatMap((row) => {
+        const title = String(row['title']);
+        const next = rewrite(title, TRACK_TITLE_MAX);
+        return next === title ? [] : [{ id: String(row['id']), next }];
+      });
+      for (const { id, next } of changed)
+        this.db
+          .prepare('UPDATE media_draft_tracks SET title = ? WHERE id = ?')
+          .run(next, id);
+      if (changed.length === 0) return;
+      // A screen still holding the old words cannot save them back.
+      this.db
+        .prepare(
+          `UPDATE media_edits SET version = version + 1, updated_at = ?
+           WHERE media_id = ?`,
+        )
+        .run(now.toISOString(), mediaId);
+    });
+  }
+
+  /** A summary waiting for a person is the AI's alone; one in force passed through a person. */
+  rewriteSuggestedSummaries(
+    mediaId: string,
+    rewrite: (text: string, max: number) => string,
+  ): void {
+    const rows = this.db
+      .prepare(
+        `SELECT s.media_id, s.suggested_summary FROM media_track_subjects s
+         JOIN media m ON m.id = s.media_id
+         WHERE m.parent_media_id = ? AND s.suggested_summary IS NOT NULL`,
+      )
+      .all(mediaId);
+    for (const row of rows) {
+      const text = String(row['suggested_summary']);
+      const next = rewrite(text, TRACK_SUMMARY_MAX);
+      if (next !== text)
+        this.db
+          .prepare(
+            `UPDATE media_track_subjects SET suggested_summary = ?
+             WHERE media_id = ?`,
+          )
+          .run(next, String(row['media_id']));
+    }
   }
 
   approved(mediaId: string): ApprovedTrack[] {

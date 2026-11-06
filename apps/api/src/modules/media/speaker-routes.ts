@@ -6,6 +6,7 @@ import {
   mediaSpeakersSchema,
   mergeVoicesRequestSchema,
   nameVoiceRequestSchema,
+  refuseVoiceNameRequestSchema,
   splitVoiceRequestSchema,
   voiceIndexSchema,
 } from '@kb-chat/contracts';
@@ -70,6 +71,14 @@ const OPTIONS = {
       response: changed,
     },
   },
+  refuseName: {
+    config: { access: EDIT },
+    schema: {
+      params: voiceParams,
+      body: refuseVoiceNameRequestSchema,
+      response: changed,
+    },
+  },
   suggestion: {
     config: { access: EDIT },
     schema: {
@@ -130,6 +139,22 @@ function registerNames(typed: Typed, names: VoiceNamesService): void {
   );
 }
 
+/** The name suggested is not the voice's (KBC-090). */
+function registerRefusal(typed: Typed, names: VoiceNamesService): void {
+  typed.post(
+    '/api/v1/media/:id/voices/:voice/refuse-name',
+    OPTIONS.refuseName,
+    (request) =>
+      Promise.resolve(
+        names.refuseName(
+          actorOf(request),
+          { mediaId: request.params.id, voice: request.params.voice },
+          request.body,
+        ),
+      ),
+  );
+}
+
 /** A person's answer to "parece ser" (KBC-071 AC-2). */
 function registerSuggestions(
   typed: Typed,
@@ -165,5 +190,6 @@ export const speakerRoutes =
     const typed = app.withTypeProvider<ZodTypeProvider>();
     registerSeparation(typed, service);
     registerNames(typed, names);
+    registerRefusal(typed, names);
     registerSuggestions(typed, suggestions);
   };

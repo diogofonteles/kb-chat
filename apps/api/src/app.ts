@@ -12,7 +12,7 @@ import {
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
-import type { ResearchProfile } from '@kb-chat/contracts';
+import type { MediaSpeakers, ResearchProfile } from '@kb-chat/contracts';
 import type { AppConfig } from './config.js';
 import { registerErrorHandler } from './error-handler.js';
 import { MemorySpendLedger } from './adapters/memory-spend-ledger.js';
@@ -491,6 +491,7 @@ function mediaService({
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
     hasTopic: (topic) => catalog.get(topic) !== undefined,
     scopeOf: (topic) => catalog.scope(topic).map((one) => one.topic.slug),
+    rootOf: (topic) => authors.rootOf(topic),
   });
 }
 
@@ -663,10 +664,14 @@ function transcriptService(
 async function registerListening(
   app: FastifyInstance,
   wiring: MediaWiring,
-  services: { media: MediaService; transcribers: TranscriberService },
+  services: {
+    media: MediaService;
+    transcribers: TranscriberService;
+    publisher: TrackPublisher;
+  },
 ) {
   const { listening, bookmarks } = wiring.media;
-  const { media, transcribers } = services;
+  const { media, transcribers, publisher } = services;
   const diarization = diarizationService({ ...wiring, transcribers });
   await app.register(
     listeningRoutes(new ListeningService({ listening, media })),
@@ -677,7 +682,9 @@ async function registerListening(
   );
   await registerSpeakers(app, {
     deps: wiring.media,
+    media,
     diarization,
+    publisher,
     authors: wiring.authors,
     hasTopic: (topic) => wiring.catalog.get(topic) !== undefined,
   });
@@ -688,14 +695,16 @@ async function registerSpeakers(
   app: FastifyInstance,
   wiring: {
     deps: MediaDeps;
+    media: MediaService;
     diarization: DiarizationService;
+    publisher: TrackPublisher;
     authors: AuthorsService;
     hasTopic: (topic: string) => boolean;
   },
 ) {
-  const { deps, diarization, authors, hasTopic } = wiring;
+  const { deps, authors, hasTopic } = wiring;
   const rootOf = (topic: string) => authors.rootOf(topic);
-  await app.register(speakerRoutesOf({ deps, diarization, rootOf }));
+  await app.register(speakerRoutesOf(wiring));
   const service = new SpeakersService({
     speakers: deps.speakers,
     rootOf,
@@ -704,16 +713,46 @@ async function registerSpeakers(
   await app.register(collectionSpeakerRoutes({ service, hasTopic }));
 }
 
+/** Names, with what follows from each change: tracks, words and history (KBC-090). */
+function voiceNames(input: {
+  deps: MediaDeps;
+  media: MediaService;
+  diarization: DiarizationService;
+  publisher: TrackPublisher;
+  authors: AuthorsService;
+  rootOf: (topic: string) => string;
+  speakersOf: (actor: MediaActor, mediaId: string) => MediaSpeakers;
+}): VoiceNamesService {
+  const { deps, media, diarization, publisher, authors } = input;
+  const revisions = createTrackRevisions({
+    media: deps,
+    service: media,
+    publisher,
+    diarization,
+    authors,
+  });
+  return new VoiceNamesService({
+    ...deps,
+    rootOf: input.rootOf,
+    speakersOf: input.speakersOf,
+    relabel: (actor, target, apply) =>
+      revisions.voiceRenamed(actor, target, apply),
+  });
+}
+
 /** "Vozes": names, and the answers to what is suggested by voice (KBC-065, KBC-071). */
 function speakerRoutesOf(input: {
   deps: MediaDeps;
+  media: MediaService;
   diarization: DiarizationService;
-  rootOf: (topic: string) => string;
+  publisher: TrackPublisher;
+  authors: AuthorsService;
 }) {
-  const { deps, diarization, rootOf } = input;
+  const { deps, diarization, authors } = input;
+  const rootOf = (topic: string) => authors.rootOf(topic);
   const speakersOf = (actor: MediaActor, mediaId: string) =>
     diarization.speakers(actor, mediaId);
-  const names = new VoiceNamesService({ ...deps, rootOf, speakersOf });
+  const names = voiceNames({ ...input, rootOf, speakersOf });
   return speakerRoutes({
     service: diarization,
     names,
@@ -796,7 +835,7 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const media = mediaService({ ...wiring, transcribers });
   const publisher = trackPublisher(wiring);
   await registerTranscribers(app, { transcribers, media, wiring });
-  await registerListening(app, wiring, { media, transcribers });
+  await registerListening(app, wiring, { media, transcribers, publisher });
   const measures = await registerMeasures(app, { deps: wiring.media, media });
   await registerLibrary(app, { ...wiring, transcribers });
   await registerVoiceProfiles(app, { ...wiring, transcribers });
@@ -889,6 +928,10 @@ function planSeparation(media: MediaDeps, diarization: DiarizationService) {
         voices: null,
         now: new Date(),
       }),
+    refused: (mediaId: string) => {
+      const latest = media.diarizations.latest(mediaId);
+      return latest ? media.voiceLabels.refusedNames(latest.id) : [];
+    },
   };
 }
 
@@ -910,6 +953,7 @@ function preparationService(
     edits: media.edits,
     drafts: media.trackProposals,
     findMedia: (actor, mediaId) => service.get(actor, mediaId),
+    followable: (actor, mediaId) => service.followable(actor, mediaId),
     retryConversion: (actor, mediaId) => {
       service.retry(actor, mediaId);
     },
@@ -917,6 +961,7 @@ function preparationService(
     proposals,
     actorOf: planActors(app, wiring),
     presence: () => transcribers.presence(),
+    voicePresence: () => transcribers.presence('diarize'),
     onError: (err, mediaId) =>
       app.log.warn({ err, mediaId }, 'media preparation could not go on'),
   });

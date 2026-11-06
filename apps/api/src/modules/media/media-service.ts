@@ -12,6 +12,7 @@ import {
   type RemappedBookmark,
   type UploadCheck,
   type UploadCheckRequest,
+  type UploadElsewhere,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import {
@@ -74,6 +75,8 @@ export interface MediaServiceDeps {
   readonly hasTopic: (topic: string) => boolean;
   /** The collection and its sub-collections, listed like a folder (ADR 0028); default: itself. */
   readonly scopeOf?: (topic: string) => readonly string[];
+  /** The collection a sub-collection belongs to (ADR 0028); default: itself. */
+  readonly rootOf?: (topic: string) => string;
   /** Each person's position in each media (KBC-041). */
   readonly listening: ListeningStorePort;
   /** Whether a transcriber is on (KBC-036 FR-1); "none" when not given. */
@@ -204,9 +207,35 @@ export class MediaService {
       };
     if (this.overQuota(actor, request))
       return { verdict: 'over-quota', quotaBytes: actor.quotaBytes ?? 0 };
-    return sent.some((media) => isOwnAbandoned(media, actor))
-      ? { verdict: 'expired' }
+    if (sent.some((media) => isOwnAbandoned(media, actor)))
+      return { verdict: 'expired' };
+    const elsewhere = this.elsewhere(actor, topic, request);
+    return elsewhere.length > 0
+      ? { verdict: 'new', elsewhere }
       : { verdict: 'new' };
+  }
+
+  /** The same file in another part of the collection, as far as the person sees (KBC-091). */
+  private elsewhere(
+    actor: MediaActor,
+    topic: string,
+    { sha256 }: UploadCheckRequest,
+  ): UploadElsewhere[] {
+    const rootOf = this.deps.rootOf ?? ((slug: string) => slug);
+    const root = rootOf(topic);
+    return this.deps.store
+      .findEverywhere(sha256)
+      .filter(
+        (media) =>
+          media.topic !== topic &&
+          rootOf(media.topic) === root &&
+          media.status !== 'failed' &&
+          actor.canSee(media.topic) &&
+          (media.status === 'ready' ||
+            actor.isMaster ||
+            media.ownerPrincipal === actor.principal),
+      )
+      .map(({ id, title, topic: where }) => ({ id, title, topic: where }));
   }
 
   private assertNotRepeated(topic: string, sha256: string): void {
@@ -430,6 +459,18 @@ export class MediaService {
       .progressOf(actor.principal, [mediaId])
       .get(mediaId);
     return this.itemOf(record, actor, this.view(progress));
+  }
+
+  /**
+   * A recording the queue may show this person (KBC-090): as in the library, one not ready
+   * yet only for who sent it and masters (KBC-051 BR-2); null for anything else.
+   */
+  followable(actor: MediaActor, mediaId: string): MediaItem | null {
+    const media = this.deps.store.getMedia(mediaId);
+    if (!media || media.track !== null || !actor.canSee(media.topic))
+      return null;
+    const mine = actor.isMaster || media.ownerPrincipal === actor.principal;
+    return media.status === 'ready' || mine ? this.get(actor, mediaId) : null;
   }
 
   /** The item, for what only a recording has (proposals, voices, an edit). */

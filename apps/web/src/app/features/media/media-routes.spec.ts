@@ -16,6 +16,7 @@ import { TrackEditorPage } from './tracks/track-editor-page.js';
 import { MyBookmarksPage } from './my-bookmarks-page.js';
 import { LibraryPage } from './library/library-page.js';
 import { MediaRedirect } from './library/media-redirect.js';
+import { ProcessingQueuePage } from './queue/processing-queue-page.js';
 import {
   MEDIA_ROUTES,
   libraryEnabled,
@@ -81,6 +82,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
     );
     expect(pages).toEqual([
       LibraryPage,
+      ProcessingQueuePage,
       MediaRedirect,
       MediaListPage,
       MyBookmarksPage,
@@ -92,6 +94,7 @@ describe('mediaEnabled (every feature granted per person)', () => {
     // The library's /midia comes before the list's; "marcadores" before ":id".
     expect(MEDIA_ROUTES.map((route) => route.path)).toEqual([
       'biblioteca',
+      'fila',
       'midia',
       'midia',
       'midia/marcadores',

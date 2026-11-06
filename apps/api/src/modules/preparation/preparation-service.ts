@@ -16,6 +16,7 @@ import type {
   PreparationStep,
   PreparationTrack,
   PreparationVoice,
+  ProcessingQueue,
   ProposalRun,
   RetryStage,
   StageStop,
@@ -26,6 +27,7 @@ import type {
 import { AppError } from '../../app-error.js';
 import type { MediaEditStorePort } from '../../ports/media-edit-store.js';
 import type {
+  ActiveJob,
   MeasuredRates,
   PreparationRecord,
   PreparationStorePort,
@@ -45,7 +47,16 @@ import {
   type StartTerms,
   type DurationEstimate,
 } from '../track-proposals/index.js';
+import { nameReviewsOf } from './name-reviews.js';
 import { isGuided, planRefusals, type PlanContext } from './plan-rules.js';
+import {
+  activeCountOf,
+  impliedPlan,
+  inQueueOrder,
+  isGhost,
+  positionsOf,
+  queueItemOf,
+} from './processing-queue.js';
 import {
   nextActionOf,
   stagesOf,
@@ -90,11 +101,18 @@ export interface PreparationServiceDeps {
     ): { readonly speakers: TranscriptSpeakers } | null;
     /** Queues a separation; false when one is waiting or running. */
     request(mediaId: string): boolean;
+    /** The voices whose suggested name a person refused. */
+    refused(mediaId: string): readonly number[];
   };
   readonly edits: Pick<MediaEditStorePort, 'edit'>;
-  readonly drafts: Pick<TrackProposalStorePort, 'draft' | 'failedAttempt'>;
+  readonly drafts: Pick<
+    TrackProposalStorePort,
+    'draft' | 'failedAttempt' | 'voiceTexts'
+  >;
   /** The item as this person sees it; throws MEDIA_NOT_FOUND when they cannot. */
   readonly findMedia: (actor: PlanActor, mediaId: string) => MediaItem;
+  /** The recording, when this person may follow it in the queue (KBC-051 BR-2). */
+  readonly followable: (actor: PlanActor, mediaId: string) => MediaItem | null;
   /** "Tentar de novo" of a failed conversion, for masters. */
   readonly retryConversion: (actor: PlanActor, mediaId: string) => void;
   /** The names of a collection's speakers, by id (KBC-065). */
@@ -103,6 +121,8 @@ export interface PreparationServiceDeps {
   /** The person who asked, as they stand now; null when they are gone. */
   readonly actorOf: (principal: string) => Promise<PlanActor | null>;
   readonly presence: () => Presence;
+  /** Who can separate voices, which not every transcriber does (KBC-064). */
+  readonly voicePresence?: () => Presence;
   readonly now?: () => Date;
   readonly onError?: (error: unknown, mediaId: string) => void;
 }
@@ -489,6 +509,101 @@ export class PreparationService {
     return { items };
   }
 
+  /**
+   * What is being processed, for this person (KBC-090). Read every few seconds: it moves no
+   * plan and asks no estimate, so it can never start or price paid work.
+   */
+  queue(actor: PlanActor): ProcessingQueue {
+    const { plans } = this.deps;
+    const jobs = plans.activeJobs();
+    const open = new Map(plans.listOpen().map((one) => [one.mediaId, one]));
+    const failed = plans.failedRecordings();
+    const ids = [...jobs.map((job) => job.mediaId), ...open.keys(), ...failed];
+    const positions = positionsOf(jobs);
+    const separating = separatingIn(jobs);
+    const items = [...new Set(ids)].flatMap((mediaId) => {
+      const line = this.queueLine(actor, {
+        mediaId,
+        record: open.get(mediaId) ?? null,
+        separating: separating.has(mediaId),
+      });
+      if (!line) return [];
+      const position = positions.get(mediaId) ?? null;
+      return [this.queueItem(actor, { ...line, position })];
+    });
+    const shown = items.filter((item) => !isGhost(item));
+    return {
+      items: inQueueOrder(shown),
+      active: activeCountOf(shown),
+      ...presenceOf(this.presenceFor(shown)),
+    };
+  }
+
+  private queueItem(
+    actor: PlanActor,
+    line: {
+      readonly item: MediaItem;
+      readonly record: PreparationRecord | null;
+      readonly step: PreparationStep | null;
+      readonly stages: PreparationStage[];
+      readonly position: number | null;
+    },
+  ): ProcessingQueue['items'][number] {
+    const { item, record, step, stages, position } = line;
+    return queueItemOf({
+      item,
+      stages,
+      next: record ? nextActionOf(record.plan, stages) : null,
+      position,
+      step,
+      canEdit: actor.canEdit && item.canEdit,
+      transcriberOn: (stage) => this.transcriberOn(stage),
+    });
+  }
+
+  /** One audio's stages, read from its plan or as if it had one; null when not shown. */
+  private queueLine(
+    actor: PlanActor,
+    input: {
+      readonly mediaId: string;
+      readonly record: PreparationRecord | null;
+      readonly separating: boolean;
+    },
+  ) {
+    const { mediaId, record, separating } = input;
+    const item = this.deps.followable(actor, mediaId);
+    if (!item || !hasWholeFile(item)) return null;
+    const step = record ? this.stepOf(record, item) : null;
+    if (step === 4) return null;
+    const facts = this.factsOf(actor, {
+      record: record ?? planlessRecord(item, separating),
+      item,
+      draft: this.deps.drafts.draft(mediaId),
+    });
+    return { item, record, step, stages: stagesOf(facts) };
+  }
+
+  private transcriberOn({ stage }: PreparationStage): boolean {
+    const presence =
+      stage === 'speakers' ? this.voicePresence() : this.deps.presence();
+    return presence.transcriber === 'on';
+  }
+
+  private voicePresence(): Presence {
+    return (this.deps.voicePresence ?? this.deps.presence)();
+  }
+
+  /** The presence that explains the wait: the voices' when only they wait. */
+  private presenceFor(items: ProcessingQueue['items']): Presence {
+    const transcribing = this.deps.presence();
+    const waitsForVoices = items.some(
+      (one) => one.waitsForTranscriber && one.stage === 'speakers',
+    );
+    return waitsForVoices && transcribing.transcriber === 'on'
+      ? this.voicePresence()
+      : transcribing;
+  }
+
   private visibleItem(actor: PlanActor, mediaId: string): MediaItem | null {
     try {
       return this.deps.findMedia(actor, mediaId);
@@ -521,12 +636,35 @@ export class PreparationService {
       stages,
       separation: speakers?.version ?? null,
       voices: voicesOf(speakers),
-      suggestions: suggestionsOf(draft.voices, speakers),
-      tracks: this.tracksOf({ item, draft, speakers }),
+      ...this.namesOf({ item, draft, speakers }),
       next:
         open && !record.validatingAt ? nextActionOf(record.plan, stages) : null,
       canSwitchToManual: open && switchable(record.plan, stages),
       ...presenceOf(this.deps.presence()),
+    };
+  }
+
+  /** What was suggested and tracks' people: a refused name is on neither (KBC-090). */
+  private namesOf(input: {
+    item: MediaItem;
+    draft: DraftTracks;
+    speakers: TranscriptSpeakers | null;
+  }) {
+    const { item, draft, speakers } = input;
+    const refusedVoices = this.deps.separation.refused(item.id);
+    const voices = draft.voices.filter(
+      ({ voice }) => !refusedVoices.includes(voice),
+    );
+    return {
+      suggestions: suggestionsOf(voices, speakers),
+      refusedVoices: [...refusedVoices],
+      nameReviews: nameReviewsOf({
+        texts: this.deps.drafts.voiceTexts(item.id),
+        labels: speakers?.labels ?? [],
+        refused: refusedVoices,
+        tracks: draft.tracks,
+      }),
+      tracks: this.tracksOf({ item, draft: { ...draft, voices }, speakers }),
     };
   }
 
@@ -573,6 +711,7 @@ export class PreparationService {
       plan: record.plan,
       item,
       separation: separation.status(mediaId),
+      speakersAsked: record.speakersAskedAt !== null,
       hasVoices: this.hasVoices(mediaId),
       claimed: proposalClaimedAt !== null,
       starting: this.starting.has(mediaId),
@@ -659,6 +798,28 @@ interface StageInput {
   readonly item: MediaItem;
   readonly draft: DraftTracks;
 }
+
+const separatingIn = (jobs: readonly ActiveJob[]): ReadonlySet<string> =>
+  new Set(
+    jobs.filter(({ kind }) => kind === 'diarize').map((job) => job.mediaId),
+  );
+
+/** An audio with no plan read as one, by what is happening to it. */
+const planlessRecord = (
+  item: MediaItem,
+  separating: boolean,
+): PreparationRecord => ({
+  mediaId: item.id,
+  principal: '',
+  plan: impliedPlan(item, separating),
+  speakersAskedAt: null,
+  proposalClaimedAt: null,
+  proposalStop: null,
+  proposalStopUsd: null,
+  validatingAt: null,
+  finishedAt: null,
+  createdAt: '',
+});
 
 const detailsOf = ({ title, topic, author }: MediaItem) => ({
   title,

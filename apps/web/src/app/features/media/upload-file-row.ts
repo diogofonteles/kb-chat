@@ -6,6 +6,7 @@ import {
   output,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import type { Topic } from '@kb-chat/contracts';
 import { mediaPagePath } from '@core/media/media-api.js';
 import type { UploadEntry } from './upload-entries.js';
 import { overQuota, sentOf } from './upload-rules.js';
@@ -26,10 +27,15 @@ export class UploadFileRow {
   /** While the panel sends, nothing on the line changes. */
   readonly locked = input(false);
   readonly submitted = input(false);
+  /** The collections' names, for a file that is also in another one. */
+  readonly topics = input<readonly Topic[]>([]);
   readonly renamed = output<string>();
   readonly removed = output();
 
   protected readonly mediaPagePath = mediaPagePath;
+  protected topicTitle(slug: string): string {
+    return this.topics().find((topic) => topic.slug === slug)?.title ?? slug;
+  }
   protected readonly overQuota = overQuota;
   protected readonly offlineNotice = $localize`:@@media.upload.offline:Sem conexão. O envio continua sozinho quando a rede voltar.`;
   protected readonly name = computed(() => this.entry().file.name);

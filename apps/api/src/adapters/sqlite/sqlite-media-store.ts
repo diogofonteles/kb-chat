@@ -172,6 +172,17 @@ export class SqliteMediaStore implements MediaStorePort {
       .map(toMediaRecord);
   }
 
+  findEverywhere(sha256: string): MediaRecord[] {
+    return this.db
+      .prepare(
+        `SELECT ${MEDIA_COLUMNS} FROM media
+         WHERE source_sha256 = ? AND parent_media_id IS NULL
+         ORDER BY created_at DESC, id`,
+      )
+      .all(sha256)
+      .map(toMediaRecord);
+  }
+
   usedBytes(principal: string): number {
     const row = this.db
       .prepare(

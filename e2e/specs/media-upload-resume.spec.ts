@@ -238,7 +238,7 @@ test('AC-8: three files at once, each with its bar, pass axe at this width', asy
   await expect(dialog).toBeHidden({ timeout: 30_000 });
 });
 
-test('KBC-072: one file with a plan goes to step 2; several stay on the list, each with its way back', async ({
+test('KBC-072, KBC-090: one file with a plan goes to step 2; several go to the queue', async ({
   browser,
 }) => {
   const page = await uploaderPage(browser, { features: EDITOR });
@@ -264,13 +264,10 @@ test('KBC-072: one file with a plan goes to step 2; several stay on the list, ea
   ).toBeVisible();
   await sendButton(again).click();
   await expect(again).toBeHidden({ timeout: 30_000 });
-  await expect(page).toHaveURL(/\/midia$/);
+  await expect(page).toHaveURL(/\/fila$/);
   for (const file of files)
     await expect(
-      page
-        .getByRole('listitem')
-        .filter({ hasText: rowTitleOf(file) })
-        .getByRole('link', { name: 'Continuar' }),
+      page.locator('app-queue-row').filter({ hasText: rowTitleOf(file) }),
     ).toBeVisible({ timeout: 30_000 });
 });
 

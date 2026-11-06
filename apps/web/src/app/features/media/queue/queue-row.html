@@ -1,0 +1,74 @@
+<div class="main">
+  <a #title class="title" [routerLink]="link()">{{ item().title }}</a>
+  <p class="topic">{{ topicTitle() }}</p>
+  <p class="state">{{ stateText() }}</p>
+  @if (showBar()) {
+    <div
+      class="bar"
+      role="progressbar"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      [attr.aria-valuenow]="item().percent"
+      [attr.aria-valuetext]="progressText()"
+      [attr.aria-label]="item().title"
+    >
+      <span [style.width.%]="item().percent"></span>
+    </div>
+  }
+  @if (positionText() || nextText()) {
+    <p class="detail">
+      @if (positionText(); as place) {
+        <span>{{ place }}</span>
+      }
+      @if (nextText(); as after) {
+        <span>{{ after }}</span>
+      }
+    </p>
+  }
+</div>
+@switch (item().action) {
+  @case ('continue') {
+    <a class="secondary action" [routerLink]="link()" i18n="@@queue.continue"
+      >Continuar</a
+    >
+  }
+  @case ('retry') {
+    @if (retryStage(); as stage) {
+      <button
+        type="button"
+        class="secondary action"
+        [disabled]="busy()"
+        (click)="retry(stage)"
+        i18n="@@prep.retry"
+      >
+        Tentar de novo
+      </button>
+    } @else {
+      <a class="secondary action" [routerLink]="link()" i18n="@@prep.retry"
+        >Tentar de novo</a
+      >
+    }
+  }
+  @case ('validate') {
+    <button
+      type="button"
+      class="primary action"
+      [disabled]="busy()"
+      (click)="advance()"
+      i18n="@@prep.validate"
+    >
+      Validar faixas
+    </button>
+  }
+  @case ('conclude') {
+    <button
+      type="button"
+      class="primary action"
+      [disabled]="busy()"
+      (click)="advance()"
+      i18n="@@prep.conclude"
+    >
+      Concluir
+    </button>
+  }
+}

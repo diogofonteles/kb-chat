@@ -1196,4 +1196,26 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       END;
     `,
   },
+  {
+    // KBC-090: a name suggested for a voice that a person refused, by separation (a new one
+    // numbers its voices anew). `written_name` is the name the AI's words say now, so a second
+    // correction finds it. `person_edited` tells a title a person wrote: `edited` cannot,
+    // since an approval sets it on every row. Added columns and a new table only: nothing here
+    // depends on the order of 22 (KBC-073) and 23.
+    version: 24,
+    name: 'voice-name-refusals',
+    sql: `
+      CREATE TABLE media_voice_refusals (
+        diarization_id TEXT NOT NULL REFERENCES diarizations (id) ON DELETE CASCADE,
+        voice INTEGER NOT NULL CHECK (voice BETWEEN 1 AND 10),
+        refused_by TEXT NOT NULL,
+        refused_at TEXT NOT NULL,
+        PRIMARY KEY (diarization_id, voice)
+      ) STRICT, WITHOUT ROWID;
+      ALTER TABLE media_voice_suggestions ADD COLUMN written_name TEXT;
+      ALTER TABLE media_draft_tracks ADD COLUMN person_edited INTEGER NOT NULL DEFAULT 0
+        CHECK (person_edited IN (0, 1));
+      UPDATE media_draft_tracks SET person_edited = edited;
+    `,
+  },
 ];

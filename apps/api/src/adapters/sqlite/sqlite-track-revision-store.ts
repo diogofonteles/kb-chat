@@ -131,6 +131,13 @@ export class SqliteTrackRevisionStore implements TrackRevisionStorePort {
   }
 
   rename(track: RevisableTrack, title: string, now: Date): void {
+    this.renameProposed(track, title, now);
+    this.db
+      .prepare('UPDATE media_draft_tracks SET person_edited = 1 WHERE id = ?')
+      .run(track.trackId);
+  }
+
+  renameProposed(track: RevisableTrack, title: string, now: Date): void {
     this.db
       .prepare('UPDATE media SET title = ?, updated_at = ? WHERE id = ?')
       .run(title, now.toISOString(), track.mediaId);

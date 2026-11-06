@@ -321,6 +321,24 @@ describe('MediaPlayerPage (T15)', () => {
     expect(TestBed.inject(MediaEngine).source()?.id).toBe(ITEM.id);
   });
 
+  it('keeps a play asked and not yet started after leaving the page (FR-8)', async () => {
+    localStorage.clear();
+    const { harness, http, media } = await openPage();
+    http.expectOne(ITEM_URL).flush(ITEM);
+    await harness.fixture.whenStable();
+    media.setDuration(3_735);
+    media.emit('loadedmetadata');
+    const engine = TestBed.inject(MediaEngine);
+    engine.play();
+    // The element knows the duration and still has not said `playing`: neither playing nor busy.
+    expect(engine.playing()).toBe(false);
+    expect(engine.busy()).toBe(false);
+    await harness.navigateByUrl('/outra');
+    expect(engine.source()?.id).toBe(ITEM.id);
+    media.emit('playing');
+    expect(engine.playing()).toBe(true);
+  });
+
   it('hands key presses to the player shortcuts (FR-6)', async () => {
     localStorage.clear();
     const { harness, http, media } = await openPage();

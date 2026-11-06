@@ -74,6 +74,7 @@
               [entry]="entry"
               [locked]="stage() === 'sending'"
               [submitted]="submitted()"
+              [topics]="topics()"
               (renamed)="uploads.rename(entry.key, $event)"
               (removed)="uploads.remove(entry.key)"
             />

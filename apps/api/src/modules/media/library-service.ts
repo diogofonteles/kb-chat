@@ -127,11 +127,11 @@ export class LibraryService {
     );
   }
 
-  home(actor: MediaActor): LibraryHome {
-    const items = this.entriesOf(actor).map((entry) => ({
-      ...entry,
-      tracks: [],
-    }));
+  home(actor: MediaActor, topic?: string): LibraryHome {
+    const scope = this.scope(actor, topic);
+    const items = this.entriesOf(actor)
+      .filter((entry) => scope === null || scope.has(entry.topic))
+      .map((entry) => ({ ...entry, tracks: [] }));
     const clearedAt = this.deps.listening.recentsClearedAt(actor.principal);
     return {
       continueListening: continueListening(items),

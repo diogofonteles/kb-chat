@@ -132,6 +132,13 @@ export class MediaEngine {
   readonly canPlay = computed(() => canAskToPlay(this.state()));
   /** Show the busy indicator: a requested play still loading, or a long wait. */
   readonly busy = computed(() => isBusy(this.state()));
+  /**
+   * Playing, or asked to and not yet answered by the element: a source loaded but still
+   * starting counts, so leaving the page right after "Tocar" keeps it (FR-8).
+   */
+  readonly playingOrAsked = computed(
+    () => this.state().phase === 'playing' || this.state().playRequested,
+  );
   /** The speed every source plays at (KBC-041 FR-5). */
   readonly speed = this.speedValue.asReadonly();
   readonly volume = this.volumeValue.asReadonly();

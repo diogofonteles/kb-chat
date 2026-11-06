@@ -42,6 +42,18 @@
         Conferindo… {{ state.percent }}%
       </p>
     }
+    @case ('ready') {
+      @for (other of state.elsewhere ?? []; track other.id) {
+        <p class="notice">
+          <ng-container i18n="@@media.upload.elsewhere"
+            >Também está em {{ topicTitle(other.topic) }}:</ng-container
+          >&ngsp;<a [routerLink]="mediaPagePath(other.id)">{{ other.title }}</a
+          >.&ngsp;<ng-container i18n="@@media.upload.elsewhereGo"
+            >Pode enviar assim mesmo.</ng-container
+          >
+        </p>
+      }
+    }
     @case ('refused') {
       <p class="error" role="alert">
         <span aria-hidden="true">⚠</span> {{ state.problem }}

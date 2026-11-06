@@ -852,3 +852,13 @@ no alto (▶, tempo, barra de busca, velocidade) → transcrição abaixo, rolan
 - Pergunta ao dono (padrão adotado): o player abre pausado ("pronto para tocar"), não tocando como o painel da busca "Na fala".
 
 *Emenda 2026-11-05 à T3 (KBC-101):* o "Veja também" pode trazer faixas ligadas pelo `kb link`: "♪ <título da faixa> · <gravação>", que abrem a T22 no começo, com "← Voltar". *À T4 (KBC-101):* a cobertura conta as faixas à parte: "2.700 documentos no conjunto (145 faixas de áudio)" e "· 412 analisados pela IA (30 faixas)".
+
+---
+
+## T23 — Fila de processamento (`/fila`, KBC-090)
+
+Quem tem `media-upload` vê o que está sendo processado nos acervos que enxerga: entrada "Fila" na barra lateral, com contagem enquanto algo roda, e bloco na Biblioteca. Enviar vários arquivos leva para cá; um arquivo com plano continua indo para o passo 2.
+
+Seções: **Precisa de você** (só o que esta pessoa pode mover: falha, "Validar faixas", "Concluir", "Continuar"), **Agora**, **A seguir** e **Parados no acervo** (parado, sem ação para esta pessoa), com etapa em palavras, barra, posição e "Depois: …". Transcritor desligado: "Aguardando o transcritor". O "Tentar de novo" da etapa paga leva a `/preparar`, onde o valor aparece antes do clique. Lê a cada 5 s só com algo ativo e aba visível.
+
+A Biblioteca segue o acervo selecionado, com "Todos os acervos" como escolha; o cabeçalho nomeia o que a página mostra (KBC-091). Nos passos 2 e 3, cada voz tem "Aceitar", "Corrigir" e "Recusar", também depois de aceita. O nome dado muda quem pergunta e responde em toda faixa. No texto, só troca o nome inteiro sugerido em título que a IA escreveu e ninguém editou, e em resumo sugerido ainda não aceito; nome de uma palavra, texto de pessoa e nome recusado não mudam e aparecem em "Reveja estes títulos". Faixa publicada muda pelo histórico (KBC-073), com nova versão.

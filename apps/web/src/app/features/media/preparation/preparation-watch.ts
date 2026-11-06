@@ -23,8 +23,9 @@ export const PREPARATION_POLL_MS = new InjectionToken<number>(
   { providedIn: 'root', factory: () => 3_000 },
 );
 
-const isMoving = (preparation: MediaPreparation): boolean =>
-  preparation.step === 2 && hasMovingStage(preparation.stages);
+/** A stage retried after "Validar faixas" moves on step 3 too. */
+const isMoving = ({ step, stages }: MediaPreparation): boolean =>
+  (step === 2 || step === 3) && hasMovingStage(stages);
 
 type Reading =
   | { readonly kind: 'read'; readonly preparation: MediaPreparation }
@@ -35,7 +36,7 @@ const isConnectionLost = (error: unknown): boolean =>
   (error.status === 0 || error.status >= 502);
 
 /**
- * Step 2 as it moves on the server (FR-5, BR-8): a read each 3 s while anything runs, none
+ * The stages as they move on the server (FR-5, BR-8): a read each 3 s while anything runs, none
  * once nothing does or the tab is hidden, and one on coming back. It only replaces the
  * reading, so the scroll and the focus stay where they are. A read that fails does not end
  * it: only a refusal or a recording that is gone do.

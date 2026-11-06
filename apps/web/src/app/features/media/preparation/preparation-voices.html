@@ -1,0 +1,91 @@
+<h3 class="title" i18n="@@prep.voices.found">
+  Vozes achadas: {{ preparation().voices.length }}
+</h3>
+<ul class="voices">
+  @for (row of rows(); track row.voice) {
+    <li>
+      <p class="line">{{ row.line }}</p>
+      @if (row.suggestion; as suggestion) {
+        <p class="seems">
+          <span i18n="@@prep.voice.seems"
+            >Voz {{ suggestion.voice }} parece ser</span
+          >
+          {{ nameOf(suggestion) }}
+          <span class="reason">— {{ suggestion.reason }}</span>
+        </p>
+      }
+      @if (editing() === row.voice) {
+        <app-speaker-combobox
+          [voice]="row.voice"
+          [current]="row.filled"
+          [speakers]="speakers()"
+          [authors]="authors()"
+          [loading]="listsLoading()"
+          (chosen)="chosen(row.voice, $event)"
+        />
+        <button
+          type="button"
+          class="secondary"
+          (click)="cancel(row.voice)"
+          i18n="@@media.upload.cancel"
+        >
+          Cancelar
+        </button>
+      } @else {
+        <div class="actions">
+          @if (row.suggestion; as suggestion) {
+            <button
+              type="button"
+              class="secondary"
+              [attr.aria-label]="acceptLabel(suggestion)"
+              [disabled]="saving()"
+              (click)="accept(suggestion)"
+              i18n="@@tracks.ai.accept"
+            >
+              Aceitar
+            </button>
+          }
+          <button
+            #correction
+            type="button"
+            class="secondary"
+            [attr.data-voice]="row.voice"
+            [attr.aria-label]="correctLabel(row)"
+            (click)="correct(row)"
+          >
+            @if (row.hasName) {
+              <ng-container i18n="@@prep.voice.correct">Corrigir</ng-container>
+            } @else {
+              <ng-container i18n="@@prep.voice.name">Dar nome</ng-container>
+            }
+          </button>
+          @if (row.refusable) {
+            <button
+              type="button"
+              class="secondary"
+              [attr.aria-label]="refuseLabel(row)"
+              [disabled]="saving()"
+              (click)="refuse(row)"
+              i18n="@@prep.voice.refuse"
+            >
+              Recusar
+            </button>
+          }
+        </div>
+      }
+    </li>
+  }
+</ul>
+@for (review of preparation().nameReviews; track review.voice) {
+  <div class="review">
+    <p>{{ reviewText(review) }}</p>
+    <ul>
+      @for (track of review.tracks; track track.id) {
+        <li>{{ track.title }}</li>
+      }
+    </ul>
+  </div>
+}
+@if (error()) {
+  <p class="error" role="alert">{{ error() }}</p>
+}

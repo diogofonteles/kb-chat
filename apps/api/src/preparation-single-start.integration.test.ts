@@ -68,11 +68,13 @@ function setup(replies: StubReply[]) {
   });
   const service = new PreparationService({
     plans,
+    followable: () => null,
     transcripts: db.transcripts,
     separation: {
       status: () => 'done',
       voicesOn: () => ({ speakers: SPEAKERS }),
       request: () => false,
+      refused: () => [],
     },
     edits: { edit: () => null },
     drafts: db.store,

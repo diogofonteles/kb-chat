@@ -23,12 +23,14 @@ import {
   member,
   startMedia,
   upload,
+  vaultWithUdv,
   type Media,
 } from '../test/media-harness.js';
 
 afterEach(closeApp);
 
 const TOPIC_MEDIA = '/api/v1/topics/hermetismo/media';
+const SUB = encodeURIComponent('udv/palavra-do-mestre');
 const HOUR_MS = 3_600_000;
 const shaOf = (bytes: Buffer) =>
   createHash('sha256').update(bytes).digest('hex');
@@ -343,6 +345,51 @@ describe('Asking before sending (KBC-035 FR-1, FR-3)', () => {
     expect(job.mediaId).toBe(id);
     sql(media, `UPDATE media SET status = 'failed' WHERE id = ?`, id);
     expect((await check(media, aCheck())).json()).toEqual({ verdict: 'new' });
+  });
+
+  it('warns of the same file in another part of the collection, without refusing (KBC-091)', async () => {
+    const media = await startMedia({ vault: await vaultWithUdv() });
+    const sent = await media.owner(
+      'POST',
+      '/api/v1/topics/udv/media',
+      aRequest({ sha256: SHA, durationMs: 60_000, author: null }),
+    );
+    const { id } = sent.json<{ id: string }>();
+    await patch(media, { id, offset: 0, body: AUDIO });
+    const sub = `/api/v1/topics/${SUB}/media`;
+    const reply = await media.owner('POST', `${sub}/check`, aCheck());
+    expect(reply.json()).toEqual({
+      verdict: 'new',
+      elsewhere: [{ id, title: 'Palestra de 1998', topic: 'udv' }],
+    });
+    const again = await media.owner(
+      'POST',
+      sub,
+      aRequest({ sha256: SHA, author: null }),
+    );
+    expect(again.statusCode).toBe(201);
+  });
+
+  it('says nothing of a part of the collection the person does not see (KBC-091)', async () => {
+    const media = await startMedia({ vault: await vaultWithUdv() });
+    const sent = await media.owner(
+      'POST',
+      '/api/v1/topics/udv/media',
+      aRequest({ sha256: SHA, durationMs: 60_000, author: null }),
+    );
+    const { id } = sent.json<{ id: string }>();
+    await patch(media, { id, offset: 0, body: AUDIO });
+    const { call } = await member(media, {
+      email: 'parte@example.com',
+      topics: ['udv/palavra-do-mestre'],
+      features: ['media', 'media-upload'],
+    });
+    const reply = await call(
+      'POST',
+      `/api/v1/topics/${SUB}/media/check`,
+      aCheck(),
+    );
+    expect(reply.json()).toEqual({ verdict: 'new' });
   });
 
   it('offers to continue an unfinished upload from where it stopped (FR-2)', async () => {
