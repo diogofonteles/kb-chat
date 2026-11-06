@@ -51,7 +51,7 @@ APP_KEYS = frozenset(
     }
 )
 # A collection's vault folder, as the contract's topic slug (`hermetismo`, `a/b`).
-TOPIC = re.compile(r"^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$")
+TOPIC = re.compile(r"^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*\Z")
 UNDECIDED_ERROR = "kb left it undecided (budget reached): re-run"
 
 

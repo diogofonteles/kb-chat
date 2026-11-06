@@ -157,7 +157,9 @@ def test_a_path_outside_the_collections_media_folder_is_refused(vault, path):
     assert article.read_text(encoding="utf-8") == "o texto do acervo"
 
 
-@pytest.mark.parametrize("topic", ["../outro", "a/../../b", "/etc", "Hermetismo", "", "a//b"])
+@pytest.mark.parametrize(
+    "topic", ["../outro", "a/../../b", "/etc", "Hermetismo", "", "a//b", "hermetismo\n"]
+)
 def test_a_topic_that_is_not_a_collection_slug_is_refused(vault, topic):
     kb = FakeKb(vault)
     with pytest.raises(UnsafePath):
