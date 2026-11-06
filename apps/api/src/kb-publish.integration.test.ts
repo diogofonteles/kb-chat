@@ -152,6 +152,86 @@ describe('kb-publish: track documents through the Mac (KBC-099)', () => {
     expect((await leaseAs(world.media, mac.token)).statusCode).toBe(204);
   });
 
+  it('a step that fails after another spent books that spend on the media ledger (ADR 0035 §11)', async () => {
+    const world = await startWorld();
+    const { tracks } = await publishedTracks(world);
+    const mac = await publisherMac(world.media);
+    const job = await leaseKb(world.media, mac.token);
+    const failed = await asTranscriber(world.media, mac.token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/fail`,
+      payload: {
+        worker: 'mac',
+        leaseId: job.leaseId,
+        failure: 'conversion-failed',
+        detail: 'kb link: exit 1',
+        spendUsd: 0.0016,
+      },
+    });
+    expect(failed.statusCode, failed.body).toBe(204);
+    const spend = rowsOf(
+      world,
+      `SELECT media_id, status, spent_usd FROM media_spend WHERE kind = 'kb-publish'`,
+    );
+    expect(spend.every((row) => row['status'] === 'settled')).toBe(true);
+    expect(spend.map((row) => row['media_id']).sort()).toEqual(
+      tracks.map((track) => track.id).sort(),
+    );
+    const total = spend.reduce((sum, row) => sum + Number(row['spent_usd']), 0);
+    expect(total).toBeCloseTo(0.0016, 6);
+    // The job still goes back to the queue, as any failure.
+    const [row] = rowsOf(world, 'SELECT status FROM kb_publish_jobs');
+    expect(row).toEqual({ status: 'queued' });
+  });
+
+  it('a fail with no spend books nothing', async () => {
+    const world = await startWorld();
+    await publishedTracks(world);
+    const mac = await publisherMac(world.media);
+    const job = await leaseKb(world.media, mac.token);
+    const failed = await asTranscriber(world.media, mac.token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/fail`,
+      payload: {
+        worker: 'mac',
+        leaseId: job.leaseId,
+        failure: 'conversion-failed',
+        detail: 'kb classify: exit 1',
+      },
+    });
+    expect(failed.statusCode, failed.body).toBe(204);
+    expect(
+      rowsOf(world, `SELECT 1 FROM media_spend WHERE kind = 'kb-publish'`),
+    ).toEqual([]);
+  });
+
+  it('a result whose facets have another shape still publishes and books the spend', async () => {
+    const world = await startWorld();
+    await publishedTracks(world);
+    const mac = await publisherMac(world.media);
+    const job = await leaseKb(world.media, mac.token);
+    const done = await asTranscriber(world.media, mac.token, {
+      method: 'POST',
+      url: `/api/v1/media-worker/jobs/${job.id}/kb-result`,
+      payload: {
+        worker: 'mac',
+        leaseId: job.leaseId,
+        documents: job.items.map((item) => ({
+          path: item.path,
+          ok: true,
+          facets: { depth: 'intermediate', relevance: 3, concepts: 'x' },
+          spendUsd: 0.0005,
+        })),
+      },
+    });
+    expect(done.statusCode, done.body).toBe(204);
+    const documents = rowsOf(world, 'SELECT state FROM media_documents');
+    expect(documents.every((one) => one['state'] === 'published')).toBe(true);
+    expect(
+      rowsOf(world, `SELECT 1 FROM media_spend WHERE kind = 'kb-publish'`),
+    ).toHaveLength(2);
+  });
+
   it('a document kb could not take stays to publish; the job still ends', async () => {
     const world = await startWorld();
     await publishedTracks(world);

@@ -225,12 +225,14 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
   fail(
     owner: LeaseOwner,
     input: { error: string; now: Date; maxAttempts: number },
-  ): boolean {
+  ): readonly DeliveredDocument[] | null {
     return inTransaction(this.db, () => {
       const row = this.db
-        .prepare(`SELECT topic, attempts FROM kb_publish_jobs WHERE ${HELD}`)
+        .prepare(
+          `SELECT topic, attempts, items FROM kb_publish_jobs WHERE ${HELD}`,
+        )
         .get(...heldArgs(owner));
-      if (!row) return false;
+      if (!row) return null;
       const topic = String(row['topic']);
       const error = input.error.slice(0, 2_000);
       this.markFailed(topic, error, input.now);
@@ -238,7 +240,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       // A newer job of the collection already waits: it publishes the same documents.
       const status = givenUp ? 'dead' : this.waits(topic) ? 'failed' : 'queued';
       this.close(owner, { status, error, now: input.now });
-      return true;
+      return deliveredSchema.parse(JSON.parse(String(row['items'] ?? '[]')));
     });
   }
 

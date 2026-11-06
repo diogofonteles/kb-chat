@@ -47,7 +47,11 @@ export interface KbPublishQueue {
   lease(worker: string): LeasedWorkerJob | null;
   isJob(jobId: string): boolean;
   heartbeat(owner: LeaseOwner): void;
-  fail(owner: LeaseOwner, detail: string): void;
+  /** kb's output, and what kb spent before failing (ADR 0035 §11). */
+  fail(
+    owner: LeaseOwner,
+    failure: { readonly detail: string; readonly spendUsd?: number },
+  ): void;
   /** Whether this worker holds a kb-publish lease now. */
   isHeldBy?(worker: string): boolean;
 }
@@ -365,7 +369,10 @@ export class WorkerService {
   async fail(jobId: string, failure: FailJobRequest): Promise<void> {
     if (this.deps.kb?.isJob(jobId)) {
       const owner = { jobId, worker: failure.worker, leaseId: failure.leaseId };
-      this.deps.kb.fail(owner, failure.detail);
+      this.deps.kb.fail(owner, {
+        detail: failure.detail,
+        ...(failure.spendUsd !== undefined && { spendUsd: failure.spendUsd }),
+      });
       return;
     }
     const mediaId = this.deps.store.mediaOfJob(jobId);

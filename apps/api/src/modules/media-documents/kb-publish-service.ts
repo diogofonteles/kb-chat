@@ -27,6 +27,12 @@ export interface KbPublishServiceDeps {
   readonly now?: () => Date;
 }
 
+/** Why a kb-publish job failed on the Mac, and what kb spent before it did. */
+export interface KbFailure {
+  readonly detail: string;
+  readonly spendUsd?: number;
+}
+
 /** A job rendered nothing (every document already out): tried again this many times. */
 const EMPTY_LEASES = 5;
 
@@ -132,14 +138,24 @@ export class KbPublishService {
     if (!held) throw leaseLost();
   }
 
-  /** A failed step: the job goes back with kb's output; the written files stay (AC-4). */
-  fail(owner: LeaseOwner, detail: string): void {
-    const recorded = this.deps.documents.fail(owner, {
-      error: detail,
-      now: this.now(),
+  /**
+   * A failed step: the job goes back with kb's output; the written files stay (AC-4). What
+   * kb spent before failing (a step that spent, then a later one failed) is booked on the
+   * delivered documents in equal shares: never lost (ADR 0035 §11).
+   */
+  fail(owner: LeaseOwner, failure: KbFailure): void {
+    const now = this.now();
+    const delivered = this.deps.documents.fail(owner, {
+      error: failure.detail,
+      now,
       maxAttempts: this.deps.maxAttempts,
     });
-    if (!recorded) throw leaseLost();
+    if (!delivered) throw leaseLost();
+    const spent = failure.spendUsd ?? 0;
+    if (spent <= 0 || delivered.length === 0) return;
+    const share = spent / delivered.length;
+    for (const item of delivered)
+      this.settle({ worker: owner.worker, mediaId: item.mediaId, usd: share, now });
   }
 
   complete(owner: LeaseOwner, result: CompleteKbPublishRequest): void {
@@ -166,25 +182,40 @@ export class KbPublishService {
     for (const outcome of input.result.documents) {
       const item = input.delivered.find((one) => one.path === outcome.path);
       if (!item || outcome.spendUsd <= 0) continue;
-      const id = randomUUID();
-      this.deps.spend.reserve({
-        id,
-        kind: 'kb-publish',
+      this.settle({
+        worker: owner.worker,
         mediaId: item.mediaId,
-        principal: owner.worker,
         usd: outcome.spendUsd,
-        // Already spent on kb's own key: booked whatever the cap says, never lost.
-        capUsd: Number.MAX_VALUE,
-        since: startOfAppMonth(input.now),
-        now: input.now,
-      });
-      this.deps.spend.close({
-        id,
-        spentUsd: outcome.spendUsd,
-        outcome: 'settled',
         now: input.now,
       });
     }
+  }
+
+  /** One spend of kb on a document's line of the media ledger, already settled. */
+  private settle(spend: {
+    worker: string;
+    mediaId: string;
+    usd: number;
+    now: Date;
+  }): void {
+    const id = randomUUID();
+    this.deps.spend.reserve({
+      id,
+      kind: 'kb-publish',
+      mediaId: spend.mediaId,
+      principal: spend.worker,
+      usd: spend.usd,
+      // Already spent on kb's own key: booked whatever the cap says, never lost.
+      capUsd: Number.MAX_VALUE,
+      since: startOfAppMonth(spend.now),
+      now: spend.now,
+    });
+    this.deps.spend.close({
+      id,
+      spentUsd: spend.usd,
+      outcome: 'settled',
+      now: spend.now,
+    });
   }
 }
 

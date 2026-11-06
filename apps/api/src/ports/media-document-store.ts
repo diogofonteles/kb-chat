@@ -88,7 +88,10 @@ export interface MediaDocumentStorePort {
     owner: LeaseOwner,
     input: { readonly now: Date; readonly leaseMs: number },
   ): boolean;
-  /** Back to the queue, or `dead` past the attempts; false when the lease is not held. */
+  /**
+   * Back to the queue, or `dead` past the attempts. What the lease delivered (to book what
+   * kb spent before failing); null when the lease is not held.
+   */
   fail(
     owner: LeaseOwner,
     input: {
@@ -96,7 +99,7 @@ export interface MediaDocumentStorePort {
       readonly now: Date;
       readonly maxAttempts: number;
     },
-  ): boolean;
+  ): readonly DeliveredDocument[] | null;
   /**
    * The result of a lease: each delivered document it names is published (or failed) with
    * the fingerprint it was rendered with. Null when the lease is not held any more.

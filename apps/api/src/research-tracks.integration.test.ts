@@ -285,7 +285,12 @@ describe('research over tracks (KBC-099)', () => {
       expect(found.statusCode, found.body).toBe(200);
       return { ...found.json<SearchResponse>(), tookMs: 0 };
     };
+    const suggestionsOf = async (world: World) =>
+      (
+        await world.media.owner('GET', '/api/v1/topics/hermetismo/suggestions')
+      ).json<{ items: { concept: string; count: number }[] }>().items;
     let before: Awaited<ReturnType<typeof searchOf>> | undefined;
+    let suggestionsBefore: Awaited<ReturnType<typeof suggestionsOf>> = [];
     let countBefore = 0;
     const countOf = async (world: World) =>
       (await world.media.owner('GET', '/api/v1/topics'))
@@ -295,6 +300,7 @@ describe('research over tracks (KBC-099)', () => {
       [{ text: 'nada' }],
       async (one) => {
         before = await searchOf(one);
+        suggestionsBefore = await suggestionsOf(one);
         countBefore = await countOf(one);
       },
     );
@@ -307,6 +313,8 @@ describe('research over tracks (KBC-099)', () => {
     );
     expect(after).toEqual(before);
     expect(await countOf(world)).toBe(countBefore);
+    // BR-7: the start screen's subjects count texts only, never the tracks' concepts.
+    expect(await suggestionsOf(world)).toEqual(suggestionsBefore);
     const opened = await world.media.owner(
       'GET',
       `/api/v1/topics/hermetismo/documents/${encodeURIComponent(path)}`,

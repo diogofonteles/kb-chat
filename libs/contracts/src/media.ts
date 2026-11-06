@@ -543,11 +543,21 @@ export type CompleteTranscodeRequest = z.infer<
   typeof completeTranscodeRequestSchema
 >;
 
+/** The most documents one kb-publish job carries (ADR 0035 §3). */
+export const KB_PUBLISH_MAX_ITEMS = 50;
+/** The most one job may spend on kb's own key (ADR 0035 §11). */
+export const KB_PUBLISH_MAX_BUDGET_USD = 0.5;
+
 export const failJobRequestSchema = leaseOwnerSchema.extend({
   /** `invalid-audio` is permanent and never retried (KBC-034 BR-5). */
   failure: z.enum(['invalid-audio', 'conversion-failed']),
   /** For the log; never shown to people. */
   detail: z.string().max(2_000),
+  /**
+   * A kb-publish step that failed after another spent (KBC-099, ADR 0035 §11): what kb
+   * spent on the owner's key before failing, booked so it is never lost.
+   */
+  spendUsd: z.number().min(0).max(KB_PUBLISH_MAX_BUDGET_USD).optional(),
 });
 export type FailJobRequest = z.infer<typeof failJobRequestSchema>;
 
@@ -756,15 +766,17 @@ export type DiarizeJob = z.infer<typeof diarizeJobSchema>;
 
 /* ---------- Track documents through kb on the Mac (KBC-099, ADR 0035 §3) ---------- */
 
-/** The most documents one kb-publish job carries (ADR 0035 §3). */
-export const KB_PUBLISH_MAX_ITEMS = 50;
-/** The most one job may spend on kb's own key (ADR 0035 §11). */
-export const KB_PUBLISH_MAX_BUDGET_USD = 0.5;
+/**
+ * The only path the API renders, `raw/media/<recording id>/<track id>.md`: no `..`, no
+ * other folder, so a job can never write outside the collection's media folder.
+ */
+const KB_DOCUMENT_PATH =
+  /^raw\/media\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.md$/;
 
 /** A document to write, relative to the collection's vault folder (`raw/media/…`). */
 export const kbPublishItemSchema = z.object({
   op: z.literal('write'),
-  path: z.string().regex(/^raw\/media\/[\w./-]+\.md$/),
+  path: z.string().regex(KB_DOCUMENT_PATH),
   markdown: z.string().max(5_000_000),
   fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
 });
@@ -786,13 +798,23 @@ export const kbPublishJobSchema = z.object({
 });
 export type KbPublishJob = z.infer<typeof kbPublishJobSchema>;
 
-/** The kb facets a written document has now, as kb wrote them (for the report). */
+/** A facet kb wrote as a word or a number (kb 0.0.12: `depth: 1.4`, `relevance: core`). */
+const facetValue = z
+  .union([z.string().max(100), z.number()])
+  .optional()
+  .catch(undefined);
+
+/**
+ * The kb facets a written document has now, as kb wrote them (for the report only). It is
+ * read after kb spent, so a facet of an unexpected shape is dropped, never a reason to
+ * refuse the whole result (KBC-099 review).
+ */
 export const kbFacetsSchema = z.looseObject({
-  genre: z.string().max(100).optional(),
-  depth: z.number().optional(),
-  relevance: z.string().max(100).optional(),
-  concepts: z.array(z.string().max(300)).max(200).optional(),
-  summary: z.string().max(5_000).optional(),
+  genre: facetValue,
+  depth: facetValue,
+  relevance: facetValue,
+  concepts: z.array(z.string().max(300)).max(200).optional().catch(undefined),
+  summary: z.string().max(5_000).optional().catch(undefined),
 });
 export type KbFacets = z.infer<typeof kbFacetsSchema>;
 
@@ -804,7 +826,7 @@ export const completeKbPublishRequestSchema = leaseOwnerSchema.extend({
         path: kbPublishItemSchema.shape.path,
         ok: z.boolean(),
         error: z.string().max(2_000).optional(),
-        facets: kbFacetsSchema.optional(),
+        facets: kbFacetsSchema.optional().catch(undefined),
         spendUsd: z.number().min(0).max(KB_PUBLISH_MAX_BUDGET_USD),
       }),
     )
