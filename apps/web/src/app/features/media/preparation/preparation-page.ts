@@ -27,6 +27,10 @@ import { PreparationApi } from '@core/media/preparation-api.js';
 import { ProcessingQueueStore } from '../queue/processing-queue-store.js';
 import { map, of, switchMap, type Observable } from 'rxjs';
 import { TrackAudition } from '../tracks/track-audition.js';
+import {
+  TrackTextSource,
+  preparationTarget,
+} from '../tracks/track-text-source.js';
 import type { MediaPreparation } from '@kb-chat/contracts';
 import { PlanForm } from './plan-form.js';
 import { PreparationOptions } from './preparation-options.js';
@@ -65,7 +69,7 @@ function concludedText({ tracks, voices }: MediaPreparation): string {
   ],
   templateUrl: './preparation-page.html',
   styleUrls: ['./preparation-buttons.css', './preparation-page.css'],
-  providers: [PlanForm, PreparationWatch, TrackAudition],
+  providers: [PlanForm, PreparationWatch, TrackAudition, TrackTextSource],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:visibilitychange)': 'watch.resume()',
@@ -134,6 +138,7 @@ export class PreparationPage {
       const id = this.id();
       if (id) this.watch.start(id);
     });
+    this.followText();
     effect(() => {
       if (this.choosing()) this.form.aim({ mediaId: this.id() });
     });
@@ -149,6 +154,17 @@ export class PreparationPage {
     // Arriving is the one time the focus moves: on to the step's title.
     this.onceRendered(this.heading, (element) => element.focus());
     this.destroyRef.onDestroy(() => this.audition.stop());
+  }
+
+  /** The tracks' text (KBC-092): a transcription that ends reads the transcript again. */
+  private followText(): void {
+    inject(TrackTextSource).follow(
+      computed(() =>
+        this.item.hasValue()
+          ? preparationTarget(this.item.value(), this.preparation())
+          : null,
+      ),
+    );
   }
 
   /** Runs once, the first time the element is on the page. */

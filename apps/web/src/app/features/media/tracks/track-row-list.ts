@@ -26,6 +26,7 @@ import {
   overlapMs,
 } from '@kb-chat/player-core';
 import { MenuButton, type MenuOption } from '../menu-button.js';
+import { TrackText } from './track-text.js';
 import { KIND_LABELS, formatBoundary, secondsText } from './track-labels.js';
 import type { ListenKind, NumberedTrack } from './track-timeline.js';
 
@@ -106,7 +107,7 @@ export const personValue = (
  */
 @Component({
   selector: 'app-track-row-list',
-  imports: [MenuButton],
+  imports: [MenuButton, TrackText],
   templateUrl: './track-row-list.html',
   styleUrl: './track-row-list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

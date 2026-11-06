@@ -13,6 +13,7 @@ import {
 import type { PreparationTrack } from '@kb-chat/contracts';
 import { formatClock } from '@kb-chat/player-core';
 import { TrackAudition } from '../tracks/track-audition.js';
+import { TrackText } from '../tracks/track-text.js';
 import { spanText, trackStatusText, whoText } from './preparation-labels.js';
 import { PreparationWatch } from './preparation-watch.js';
 
@@ -38,10 +39,12 @@ const lineOf = (track: PreparationTrack, index: number): TrackLine => ({
 /**
  * The list that grows on step 2 (T20, UP-16): each track can be heard as a stretch of the
  * recording before anything ends (BR-7). A new one fades in without moving the scroll; away
- * from the end of the list, "3 faixas novas ↓" goes there instead.
+ * from the end of the list, "3 faixas novas ↓" goes there instead. "Ver texto" shows what
+ * the track says, one at a time, and "Ouvir" opens it too (KBC-092 FR-1, BR-5).
  */
 @Component({
   selector: 'app-preparation-tracks',
+  imports: [TrackText],
   templateUrl: './preparation-tracks.html',
   styleUrls: ['./preparation-buttons.css', './preparation-tracks.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,6 +64,8 @@ export class PreparationTracks {
     this.atEnd() ? 0 : this.watch.unseen(),
   );
   protected readonly playing = signal<string | null>(null);
+  /** The one track whose text is open (BR-5). */
+  protected readonly textOpen = signal<string | null>(null);
 
   constructor() {
     afterNextRender(() => this.followEnd());
@@ -95,7 +100,23 @@ export class PreparationTracks {
       return;
     }
     this.playing.set(track.id);
+    this.textOpen.set(track.id);
     this.audition.play({ fromMs: track.startMs, toMs: track.endMs });
+  }
+
+  protected textLabel({ track, ordinal }: TrackLine): string {
+    return this.textOpen() === track.id
+      ? $localize`:@@prep.track.hideTextWhich:Esconder texto da faixa ${ordinal}:ordinal:`
+      : $localize`:@@prep.track.showTextWhich:Ver texto da faixa ${ordinal}:ordinal:`;
+  }
+
+  /** Opening another closes this one; closing never stops the audio (BR-5). */
+  protected toggleText(track: PreparationTrack): void {
+    this.textOpen.update((open) => (open === track.id ? null : track.id));
+  }
+
+  protected textId(track: PreparationTrack): string {
+    return `track-text-${track.id}`;
   }
 
   protected goToEnd(): void {

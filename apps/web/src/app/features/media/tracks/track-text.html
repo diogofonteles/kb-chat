@@ -1,0 +1,81 @@
+<div class="head">
+  <span class="caption" aria-hidden="true" i18n="@@trackText.caption"
+    >Texto da faixa</span
+  >
+  @if (canSwitch()) {
+    <button type="button" class="switch" (click)="switchView()">
+      @if (whole()) {
+        <ng-container i18n="@@trackText.onlyTrack">Ver só a faixa</ng-container>
+      } @else {
+        <ng-container i18n="@@trackText.whole"
+          >Ver transcrição completa</ng-container
+        >
+      }
+    </button>
+  }
+</div>
+<div
+  #body
+  class="body"
+  role="region"
+  [attr.id]="regionId()"
+  [attr.aria-label]="label()"
+  [attr.aria-busy]="state() === 'loading' ? 'true' : null"
+  [attr.tabindex]="state() === 'ready' ? 0 : null"
+  (keydown)="scrolledByKey($event)"
+  (pointerdown)="pressed($event)"
+>
+  @switch (state()) {
+    @case ('ready') {
+      @for (line of lines(); track line.segment) {
+        <p
+          #line
+          class="line"
+          [class.inside]="whole() && line.inside"
+          [class.speaking]="$index === speakingLine()"
+          [textContent]="line.text"
+        ></p>
+      } @empty {
+        <p class="note" i18n="@@trackText.noSpeech">
+          Nenhuma fala transcrita neste trecho.
+        </p>
+      }
+    }
+    @case ('waiting') {
+      <p class="note" i18n="@@trackText.waiting">
+        O texto aparece quando a transcrição terminar.
+      </p>
+    }
+    @case ('failed') {
+      <p class="note" i18n="@@trackText.failed">
+        A transcrição falhou: não há texto para mostrar.
+      </p>
+    }
+    @case ('none') {
+      <p class="note" i18n="@@trackText.none">Este áudio não foi transcrito.</p>
+    }
+    @case ('error') {
+      <p class="note" i18n="@@trackText.error">
+        Não consegui carregar o texto.
+      </p>
+      <button
+        type="button"
+        class="retry"
+        aria-label="Tentar de novo carregar o texto"
+        i18n-aria-label="@@trackText.retryName"
+        (click)="retry()"
+        i18n="@@trackText.retry"
+      >
+        Tentar de novo
+      </button>
+    }
+    @default {
+      <span class="visually-hidden" i18n="@@trackText.loading"
+        >Carregando o texto…</span
+      >
+      <span class="skeleton"></span>
+      <span class="skeleton"></span>
+      <span class="skeleton short"></span>
+    }
+  }
+</div>
