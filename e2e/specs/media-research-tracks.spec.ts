@@ -183,6 +183,16 @@ test('AC-10, AC-11: Tocar plays from 0:39 with the words followed; the mini-play
   });
   await expect(panel).toBeVisible();
 
+  // Beside the panel, the chip shrinks into the conversation's column (PD-12).
+  if (desktop(member)) {
+    const [chipBox, threadBox] = await Promise.all([
+      answer.getByRole('button', { name: new RegExp(TITLE) }).boundingBox(),
+      member.getByRole('region', { name: 'Conversa' }).boundingBox(),
+    ]);
+    expect((chipBox?.x ?? 0) + (chipBox?.width ?? 0)).toBeLessThanOrEqual(
+      (threadBox?.x ?? 0) + (threadBox?.width ?? 0) + 1,
+    );
+  }
   // AC-11: nothing scrolls sideways, and on a phone the player sits above the transcript.
   const overflow = await member.evaluate(
     () =>
