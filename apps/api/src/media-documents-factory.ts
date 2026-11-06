@@ -23,6 +23,8 @@ interface DocumentsWiring {
   readonly media: MediaDeps;
   readonly catalog: CatalogRegistry;
   readonly authors: AuthorsService;
+  /** Where a track that could not be rendered is told (the app's log). */
+  readonly onRenderError?: (mediaId: string, err: unknown) => void;
 }
 
 /** What a track's document is read from: media.db, the authors and the subjects. */
@@ -35,6 +37,7 @@ function documentSource(wiring: DocumentsWiring): TrackDocumentSource {
     transcripts: media.transcripts,
     mainOf: (topic) => authors.mainOf(topic)?.slug ?? null,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
+    domainOf: (topic) => wiring.catalog.get(topic)?.topic.domain ?? null,
     subjectsOf: (track) =>
       (subjects.shownOn([track]).get(track.mediaId) ?? []).map(
         (subject) => subject.name,
@@ -48,6 +51,7 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
     source: documentSource(wiring),
     documents: media.documents,
     liveTracks: () => media.documents.liveTracks(),
+    ...(wiring.onRenderError && { onError: wiring.onRenderError }),
   });
   const kb = new KbPublishService({
     documents: media.documents,

@@ -7,13 +7,15 @@ import {
 } from './track-document.js';
 
 export interface ReconcilerDeps {
-  readonly source: TrackDocumentSource;
+  readonly source: Pick<TrackDocumentSource, 'inputOf' | 'tracksOf'>;
   readonly documents: Pick<
     MediaDocumentStorePort,
     'desire' | 'pendingOf' | 'enqueue'
   >;
   /** Every live track of the media library, for the backstop sweep. */
   readonly liveTracks: () => readonly string[];
+  /** A track whose document could not be rendered (logged; the sweep tries it again). */
+  readonly onError?: (mediaId: string, err: unknown) => void;
   readonly now?: () => Date;
   readonly newId?: () => string;
 }
@@ -33,6 +35,12 @@ export interface TrackRender extends RenderedDocument {
 export class MediaDocumentReconciler {
   private readonly now: () => Date;
   private readonly newId: () => string;
+  /**
+   * Tracks whose render threw: the sweep renders them again, since a first render that
+   * failed left no `media_documents` row for `liveTracks` to find. Kept in memory: after a
+   * restart such a track gets its document at its next change (or KBC-100's catch-up).
+   */
+  private readonly unrendered = new Set<string>();
 
   constructor(private readonly deps: ReconcilerDeps) {
     this.now = deps.now ?? (() => new Date());
@@ -61,16 +69,34 @@ export class MediaDocumentReconciler {
 
   /** The backstop, every 10 minutes: whatever a missed callback left behind. */
   reconcileAll(): void {
-    this.reconcile(this.deps.liveTracks());
+    this.reconcile([
+      ...new Set([...this.deps.liveTracks(), ...this.unrendered]),
+    ]);
   }
 
+  /**
+   * Runs inside the publication's transaction (KBC-068): a track that cannot be rendered is
+   * logged and left for the sweep, never thrown, so it never undoes the publication.
+   */
   private reconcile(mediaIds: readonly string[]): void {
     const topics = new Set<string>();
     for (const mediaId of mediaIds) {
-      const rendered = this.render(mediaId);
+      const rendered = this.tryRender(mediaId);
       if (rendered) topics.add(rendered.topic);
     }
     for (const topic of topics) this.enqueueIfPending(topic);
+  }
+
+  private tryRender(mediaId: string): TrackRender | null {
+    try {
+      const rendered = this.render(mediaId);
+      this.unrendered.delete(mediaId);
+      return rendered;
+    } catch (err) {
+      this.unrendered.add(mediaId);
+      this.deps.onError?.(mediaId, err);
+      return null;
+    }
   }
 
   /** One queued job per collection, only when something waits to be published. */

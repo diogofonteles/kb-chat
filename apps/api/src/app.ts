@@ -890,7 +890,11 @@ async function registerMedia(app: FastifyInstance, wiring: MediaWiring) {
   const transcribers = transcriberService(wiring.media);
   const groq = createGroq({ media: wiring.media, transcribers, log: app.log });
   const media = mediaService({ ...wiring, transcribers, groq });
-  const documents = createMediaDocuments(wiring);
+  const documents = createMediaDocuments({
+    ...wiring,
+    onRenderError: (mediaId, err) =>
+      app.log.error({ err, mediaId }, 'track document: render failed'),
+  });
   const publisher = trackPublisher(wiring, documents);
   startDocumentBackstop(app, documents.reconciler);
   await registerTranscribers(app, { transcribers, media, wiring });
