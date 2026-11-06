@@ -319,13 +319,7 @@ O quadro é uma pilha separada do kb-chat, que só compartilha o Caddy. Se ele c
 
    A primeira execução cria o `hub.env` com segredos novos e para. Preencha `BOARD_HUB_GOOGLE_CLIENT_ID` e `BOARD_HUB_GOOGLE_CLIENT_SECRET` com `sudo nano /srv/kb-chat/board/hub.env` e rode o comando de novo.
 4. **Conferir:** `curl -sS https://<host do quadro>/health` responde `{"ok":true}`. Para provar a atualização ao vivo pelo Caddy, abra o quadro e, com o mesmo projeto, rode `devflow-board log <ID> "teste"`: o passo aparece na tela sem recarregar.
-5. **Ligar um projeto:** ponha `"board": { "url": "https://<host do quadro>" }` no `.claude/harness.json`, copie `DEVFLOW_BOARD_ADMIN_TOKEN` do `hub.env` para o ambiente do Mac (sem colar em comando versionado) e rode:
-
-   ```bash
-   devflow-board hub-project
-   devflow-board import work/board-export
-   devflow-board invite pessoa@gmail.com            # --role view para só leitura
-   ```
+5. **Ligar um projeto:** dentro do projeto, no Claude Code, rode `devflow-board connect`. O navegador abre, você entra com Google, clica em Autorizar e pronto; depois faça commit do `.claude/harness.json`. Funciona em qualquer máquina com o harness instalado, sem SSH nem token para copiar. Quem criou o quadro convida com `devflow-board invite pessoa@gmail.com` (`--role view` para só leitura), e a pessoa roda o mesmo `connect` no computador dela. Detalhes no README do `devflow-harness`, em "Project board".
 
 Atualizar o hub é repetir o passo 3: as páginas abertas pegam a versão nova sozinhas. O `/srv/kb-chat/board/data` pertence ao uid 10003.
 
