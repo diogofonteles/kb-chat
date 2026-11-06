@@ -239,7 +239,10 @@ test('AC-10: "Transcritores" works by keyboard, and the focus never falls to the
   await expect(confirm).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(dialog.getByRole('heading', { name: 'Pareados' })).toBeFocused();
-  await expect(dialog.getByRole('status')).toContainText(`"${name}" revogado.`);
+  // Each section of Transcritores has its own live region: this one is the pairing's.
+  await expect(
+    dialog.locator('app-transcribers-panel').getByRole('status'),
+  ).toContainText(`"${name}" revogado.`);
   await expect(
     dialog.getByRole('listitem').filter({ hasText: name }),
   ).toHaveCount(0);
