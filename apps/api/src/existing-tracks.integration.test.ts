@@ -154,6 +154,15 @@ describe('Publicar no acervo as faixas que já existem (KBC-099 AC-16, scope of 
       (await world.media.owner('POST', PUBLISH, { topics: ['nao-existe'] }))
         .statusCode,
     ).toBe(404);
+    // PD-08: one unknown collection refuses the whole request before anything is queued.
+    expect(
+      (
+        await world.media.owner('POST', PUBLISH, {
+          topics: ['hermetismo', 'nao-existe'],
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect((await hermetismoOf(world))?.queued).toBe(0);
   });
 
   it('is for masters only: 401 without a session, 403 to a member with every media permission', async () => {

@@ -117,13 +117,32 @@ test('AC-16: a master publishes the tracks that already exist, sees the count an
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
 
-  await section.getByRole('button', { name: 'Publicar 2 faixas' }).click();
+  // PD-02: a same-frame double click sends exactly one request.
+  const posts: string[] = [];
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      request.url().endsWith('/api/v1/media/track-documents/publish')
+    )
+      posts.push(request.url());
+  });
+  await section
+    .getByRole('button', { name: 'Publicar 2 faixas' })
+    .evaluate((button: HTMLButtonElement) => {
+      button.click();
+      button.click();
+    });
   await expect(section.getByRole('status')).toHaveText(
     '2 faixas na fila para o Mac.',
   );
   await expect(section).toContainText(
     `${title}: 2 na fila · 0 publicadas · 0 falharam`,
   );
+  expect(posts).toHaveLength(1);
+  // PD-01: the action may go once all is queued; the focus stays on the section.
+  await expect(
+    section.getByRole('heading', { name: 'Faixas que já existem' }),
+  ).toBeFocused();
 
   const ran = await owner.post('/api/e2e/kb-publish/run', {
     data: { topic },
