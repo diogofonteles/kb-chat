@@ -298,6 +298,7 @@ describe('MediaWorker', { timeout: 30_000 }, () => {
     shutdown.abort();
     await expect(loop).resolves.toBeUndefined();
     // The heartbeat touches it too, from a timer: a rejection there has no one to catch it.
+    // Nothing here asserts it away: Vitest fails the run on an unhandled rejection.
     makeTone(bins, join(dir, 'tone.mp3'), 1);
     await workerWith(api, { aliveFile, heartbeatMs: 1 }).process(
       aJob(),
