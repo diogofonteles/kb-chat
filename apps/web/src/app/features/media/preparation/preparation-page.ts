@@ -29,6 +29,7 @@ import { map, of, switchMap, type Observable } from 'rxjs';
 import { TrackAudition } from '../tracks/track-audition.js';
 import {
   TrackTextSource,
+  finishedRounds,
   preparationTarget,
 } from '../tracks/track-text-source.js';
 import type { MediaPreparation } from '@kb-chat/contracts';
@@ -158,10 +159,15 @@ export class PreparationPage {
 
   /** The tracks' text (KBC-092): a transcription that ends reads the transcript again. */
   private followText(): void {
+    const rounds = finishedRounds(
+      () =>
+        this.preparation()?.stages.find((one) => one.stage === 'transcribe')
+          ?.state ?? null,
+    );
     inject(TrackTextSource).follow(
       computed(() =>
         this.item.hasValue()
-          ? preparationTarget(this.item.value(), this.preparation())
+          ? preparationTarget(this.item.value(), this.preparation(), rounds())
           : null,
       ),
     );

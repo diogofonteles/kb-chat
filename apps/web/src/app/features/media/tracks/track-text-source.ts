@@ -3,6 +3,7 @@ import {
   Injectable,
   computed,
   inject,
+  linkedSignal,
   signal,
   type Signal,
 } from '@angular/core';
@@ -11,6 +12,7 @@ import {
   type MediaPreparation,
   type MediaItem,
   type MediaTranscript,
+  type StageState,
 } from '@kb-chat/contracts';
 import { MediaApi, mediaTranscriptUrl } from '@core/media/media-api.js';
 import { TranscriptWords } from '../transcript/transcript-words.js';
@@ -41,23 +43,49 @@ const MOVING = new Set(['waiting', 'queued', 'running', 'blocked']);
 
 /**
  * Step 2: the item says which transcript there was when the page opened; the transcription
- * stage, read every 3 s, says when a new one ended, which reads the transcript again.
+ * stage, read every 3 s, says whether one is going on. The key changes only when a
+ * transcription ends (`rounds`, FR-6): its states on the way leave the text as it is.
  */
 export function preparationTarget(
   item: MediaItem,
   preparation: MediaPreparation | null,
+  rounds: number,
 ): TextTarget {
   const stage = preparation?.stages.find((one) => one.stage === 'transcribe');
   const { version } = item.transcription;
   if (!stage) return itemTarget(item);
-  const key = `${version ?? 0}.${stage.state}`;
-  if (stage.state === 'done' || version !== null)
-    return { mediaId: item.id, status: 'done', key };
+  if (stage.state === 'done' || version !== null) {
+    const known = `${version ?? 0}`;
+    return {
+      mediaId: item.id,
+      status: 'done',
+      key: rounds === 0 ? known : `${known}.${rounds}`,
+    };
+  }
   return {
     mediaId: item.id,
     status: MOVING.has(stage.state) ? 'waiting' : 'failed',
-    key,
+    key: '',
   };
+}
+
+/**
+ * How many transcriptions ended while the page was open, each one maybe a newer transcript
+ * (FR-6). One already done when the stage is first read does not count.
+ */
+export function finishedRounds(state: () => StageState | null): Signal<number> {
+  const done = computed(() => {
+    const now = state();
+    return now === null ? null : now === 'done';
+  });
+  return linkedSignal<boolean | null, number>({
+    source: done,
+    computation: (now, previous) => {
+      if (!previous) return 0;
+      const ended = now === true && previous.source === false;
+      return previous.value + (ended ? 1 : 0);
+    },
+  });
 }
 
 function notDone(status: MediaItem['transcription']['status']) {
@@ -82,14 +110,27 @@ export class TrackTextSource {
   private readonly api = inject(MediaApi);
   private readonly target = signal<Signal<TextTarget | null>>(signal(null));
   private readonly asked = signal(false);
-  private readonly read = httpResource(
+  /**
+   * Equal in value, equal request: every read of the preparation brings a new target, and
+   * `httpResource` would read again for a new object (FR-3).
+   */
+  private readonly request = computed(
     () => {
       const target = this.target()();
       if (!this.asked() || target?.status !== 'done') return undefined;
-      return {
-        url: mediaTranscriptUrl(target.mediaId),
-        params: { v: target.key },
-      };
+      return { mediaId: target.mediaId, key: target.key };
+    },
+    { equal: (a, b) => a?.mediaId === b?.mediaId && a?.key === b?.key },
+  );
+  private readonly read = httpResource(
+    () => {
+      const request = this.request();
+      return (
+        request && {
+          url: mediaTranscriptUrl(request.mediaId),
+          params: { v: request.key },
+        }
+      );
     },
     { parse: (body) => mediaTranscriptSchema.parse(body) },
   );
@@ -110,6 +151,10 @@ export class TrackTextSource {
     if (this.read.error()) return 'error';
     return this.transcript() ? 'ready' : 'loading';
   });
+  /** "Tentar de novo" was pressed and its read has not answered yet. */
+  readonly retrying = computed(
+    () => this.read.isLoading() && this.read.error() !== undefined,
+  );
 
   /** The page says where its transcript is (in its constructor). */
   follow(target: Signal<TextTarget | null>): void {
