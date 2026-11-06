@@ -48,6 +48,9 @@ const aTranscription = {
   transcriber: 'on' as const,
   transcriberOffSince: null,
   lastAttemptFailed: false,
+  provider: null,
+  route: 'transcriber' as const,
+  hold: null,
 };
 
 describe('positionsOf (KBC-090)', () => {
