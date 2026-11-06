@@ -1,5 +1,7 @@
 <section class="block existing" aria-labelledby="existing-tracks-title">
   <h4
+    #title
+    tabindex="-1"
     id="existing-tracks-title"
     class="block-title"
     i18n="@@existingTracks.title"
@@ -28,7 +30,11 @@
   } @else if (!overview.hasValue()) {
     <p class="hint" i18n="@@existingTracks.loading">Carregando…</p>
   } @else {
-    @if (offered().length === 0) {
+    @if (offered().length === 0 && anyQueued()) {
+      <p class="hint" i18n="@@existingTracks.allQueued">
+        As faixas que faltavam estão na fila para o Mac.
+      </p>
+    } @else if (offered().length === 0) {
       <p class="hint" i18n="@@existingTracks.allIn">
         Todas as faixas publicadas já estão no acervo.
       </p>

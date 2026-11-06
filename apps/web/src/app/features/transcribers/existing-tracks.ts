@@ -64,6 +64,8 @@ export class ExistingTracks {
   private readonly injector = inject(Injector);
   private readonly action = viewChild<ElementRef<HTMLButtonElement>>('action');
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly title =
+    viewChild.required<ElementRef<HTMLHeadingElement>>('title');
 
   protected readonly overview = httpResource(() => trackDocumentsUrl(), {
     parse: (body) => trackDocumentsOverviewSchema.parse(body),
@@ -80,6 +82,9 @@ export class ExistingTracks {
     this.collections().filter(
       (one) => one.queued + one.published + one.failed > 0,
     ),
+  );
+  protected readonly anyQueued = computed(() =>
+    this.collections().some((one) => one.queued > 0),
   );
   protected readonly choosing = signal(false);
   /** Topics left out of the choice (all are in by default). */
@@ -207,7 +212,7 @@ export class ExistingTracks {
       });
   }
 
-  /** Says what was queued, follows it, and gives the focus back to the action. */
+  /** Says what was queued, follows it, and puts the focus on the section's title. */
   private published(
     topics: readonly string[],
     result: PublishExistingTracksResult,
@@ -219,7 +224,9 @@ export class ExistingTracks {
       result.queued > 0 ? { topics: new Set(topics), sawQueued: false } : null,
     );
     this.overview.reload();
-    this.focusAfterRender(() => this.action()?.nativeElement);
+    // The action may go once the counts come back (all queued): the section's title stays
+    // (PD-01), and the status says what happened.
+    this.focusAfterRender(() => this.title().nativeElement);
   }
 
   protected readonly capReachedText = capReached;

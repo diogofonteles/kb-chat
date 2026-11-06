@@ -205,6 +205,32 @@ describe('ExistingTracks (KBC-099 AC-16, scope of 2026-11-06)', () => {
     }
   });
 
+  it('PD-01: once everything is queued, the focus goes to the section, never to the page, and it says they are queued', async () => {
+    const { fixture, http } = await renderIt(
+      anOverview({ collections: [aCollection()] }),
+    );
+    await open(fixture);
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar 2 faixas' }));
+    http.expectOne(PUBLISH).flush({ queued: 2, skipped: 0 });
+    TestBed.tick();
+    http
+      .expectOne(URL)
+      .flush(
+        anOverview({ collections: [aCollection({ toPublish: 0, queued: 2 })] }),
+      );
+    await fixture.whenStable();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.textContent?.trim()).toBe(
+      'Faixas que já existem',
+    );
+    expect(document.body.textContent).toContain(
+      'As faixas que faltavam estão na fila para o Mac.',
+    );
+    expect(document.body.textContent).not.toContain(
+      'Todas as faixas publicadas já estão no acervo.',
+    );
+  });
+
   it('says when everything chosen was already in the collection (idempotent)', async () => {
     const { fixture, http } = await renderIt(
       anOverview({ collections: [aCollection()] }),
