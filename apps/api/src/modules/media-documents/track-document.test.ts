@@ -26,6 +26,8 @@ const RHYTHM: TrackDocumentInput = {
   authorship: 'mestre-laercio',
   author: 'Mestre Laércio',
   subjects: ['Ritmo', 'Polaridade'],
+  domain: 'esoterismo',
+  transcribedAt: '2026-10-01T12:30:00.000Z',
   segments: [
     { startMs: 0, endMs: 40_500, text: ' Pergunta sobre o ritmo.' },
     { startMs: 41_300, endMs: 70_000, text: ' O ritmo é a lei do pêndulo.' },
@@ -51,6 +53,9 @@ describe('renderTrackDocument (KBC-099 AC-1, ADR 0035 §2)', () => {
       stage: 'raw',
       source_kind: 'media-transcript',
       source_path: `media/hermetismo/${RECORDING}/${TRACK}`,
+      domain: 'esoterismo',
+      scraped: '2026-10-01',
+      tags: ['esoterismo', 'raw', 'media-transcript'],
       author_group: 'mestre-laercio',
       author: 'Mestre Laércio',
       kb_chat_media_id: TRACK,
@@ -134,6 +139,104 @@ describe('renderTrackDocument (KBC-099 AC-1, ADR 0035 §2)', () => {
     expect(splitFrontmatter(markdown).body).toContain(
       '[0:00] veja (2:30) e isto',
     );
+  });
+
+  it('keeps kb lint clean without a domain: no domain key, the tags without it', () => {
+    const data = frontmatterOf(
+      renderTrackDocument({ ...RHYTHM, domain: null }).markdown,
+    );
+    expect(data).not.toHaveProperty('domain');
+    expect(data['tags']).toEqual(['raw', 'media-transcript']);
+  });
+
+  it('dates the document by its transcript, never by the clock (BR-2)', () => {
+    const later = renderTrackDocument({
+      ...RHYTHM,
+      transcribedAt: '2026-11-02T00:00:00.000Z',
+    });
+    expect(frontmatterOf(later.markdown)['scraped']).toBe('2026-11-02');
+    expect(later.fingerprint).not.toBe(renderTrackDocument(RHYTHM).fingerprint);
+  });
+
+  it('neutralizes wikilinks in the speech and anchors in a speaker name (kb link reads [[x]])', () => {
+    const { markdown } = renderTrackDocument({
+      ...RHYTHM,
+      segments: [
+        {
+          startMs: 0,
+          endMs: 1_000,
+          text: 'como diz [[Ritmo]] aqui',
+          speaker: 'Ana [0:41]\n**Bia**',
+        },
+      ],
+    });
+    const body = splitFrontmatter(markdown).body;
+    expect(body).not.toContain('[[');
+    expect(body).not.toContain(']]');
+    expect(body).toContain('[0:00] **Ana (0:41) Bia:** como diz [ [Ritmo] ] aqui');
+  });
+
+  it('writes the recording line with only what it knows', () => {
+    const lineOf = (input: TrackDocumentInput) =>
+      splitFrontmatter(renderTrackDocument(input).markdown)
+        .body.split('\n\n')
+        .find((one) => one.startsWith('Gravação'));
+    expect(lineOf({ ...RHYTHM, ordinal: null })).toBe(
+      'Gravação: Palestra de 12/03/2017 · Mestre Laércio · 8:28',
+    );
+    expect(lineOf({ ...RHYTHM, total: null })).toBe(
+      'Gravação: Palestra de 12/03/2017 · Mestre Laércio · 8:28',
+    );
+    expect(
+      lineOf({ ...RHYTHM, author: null, authorship: 'outros-autores' }),
+    ).toBe('Gravação: Palestra de 12/03/2017 · faixa 3 de 12 · 8:28');
+  });
+
+  it('leaves out the author and the place it does not know', () => {
+    const data = frontmatterOf(
+      renderTrackDocument({
+        ...RHYTHM,
+        author: null,
+        authorship: 'outros-autores',
+        ordinal: null,
+        total: null,
+      }).markdown,
+    );
+    expect(data).not.toHaveProperty('author');
+    expect(data).not.toHaveProperty('kb_chat_track_ordinal');
+    expect(data).not.toHaveProperty('kb_chat_tracks_total');
+    expect(data['author_group']).toBe('outros-autores');
+  });
+
+  it('a recording without tracks names itself as the source and the kind', () => {
+    const { markdown, path } = renderTrackDocument({
+      ...RHYTHM,
+      kind: 'recording',
+      mediaId: RECORDING,
+    });
+    expect(path).toBe(`raw/media/${RECORDING}/${RECORDING}.md`);
+    const data = frontmatterOf(markdown);
+    expect(data['source_path']).toBe(`media/hermetismo/${RECORDING}/${RECORDING}`);
+    expect(data['kb_chat_media_kind']).toBe('recording');
+  });
+
+  it('keeps a long title and summary line on one YAML line (no folding)', () => {
+    const title = 'Uma pergunta muito longa '.repeat(8).trim();
+    const { markdown } = renderTrackDocument({ ...RHYTHM, title });
+    expect(markdown).toContain(`\ntitle: ${title}\n`);
+  });
+
+  it('skips a segment with no speech: no empty anchored paragraph', () => {
+    const { markdown } = renderTrackDocument({
+      ...RHYTHM,
+      segments: [
+        { startMs: 0, endMs: 1_000, text: '  \n ' },
+        { startMs: 2_000, endMs: 3_000, text: 'fala' },
+      ],
+    });
+    const body = splitFrontmatter(markdown).body;
+    expect(body).not.toContain('[0:00]');
+    expect(body).toContain('[0:02] fala');
   });
 
   it('a recording without tracks is one document under its own id', () => {

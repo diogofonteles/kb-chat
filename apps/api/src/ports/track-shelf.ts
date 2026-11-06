@@ -1,9 +1,11 @@
 import type { TranscriptConfidence } from '@kb-chat/contracts';
 
-/** What a document's `kb_chat_*` keys say about its track (the catalog's view). */
+/**
+ * What a document's `kb_chat_*` keys say about its track (the catalog's view). Only the id
+ * decides: whether the vault's text is behind media.db ("atualizando") is KBC-100's.
+ */
 export interface ShelfQuery {
   readonly mediaId: string;
-  readonly fingerprint: string;
 }
 
 /** A track as media.db has it now, for the research tools (ADR 0035 §5). */

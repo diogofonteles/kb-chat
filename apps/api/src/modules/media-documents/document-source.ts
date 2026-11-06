@@ -11,6 +11,8 @@ export interface DocumentSourceDeps {
   /** The collection's main author's slug (ADR 0030), or null. */
   readonly mainOf: (topic: string) => string | null;
   readonly authorOf: (topic: string, slug: string) => Author | null;
+  /** The collection's `domain` (its topic.yaml); null without one. */
+  readonly domainOf: (topic: string) => string | null;
   /** The accepted subjects of a track (KBC-069), by name. */
   readonly subjectsOf: (track: {
     mediaId: string;
@@ -57,6 +59,8 @@ export class TrackDocumentSource {
       authorship,
       author,
       subjects: this.deps.subjectsOf({ mediaId, topic: media.topic }),
+      domain: this.deps.domainOf(media.topic),
+      transcribedAt: current.createdAt,
       segments: this.deps.transcripts.segments(current.id),
     };
   }

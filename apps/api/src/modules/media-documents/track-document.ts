@@ -39,6 +39,13 @@ export interface TrackDocumentInput {
   readonly author: string | null;
   /** Accepted subjects (KBC-069), by name. */
   readonly subjects: readonly string[];
+  /** The collection's `domain` in its topic.yaml (kb lint wants it); null without one. */
+  readonly domain: string | null;
+  /**
+   * When the transcript in use was made (ISO): the document's `scraped` date, from the
+   * state and never from the clock, so the same track renders the same text (BR-2).
+   */
+  readonly transcribedAt: string;
   readonly segments: readonly DocumentSegment[];
 }
 
@@ -62,8 +69,19 @@ const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
 const withoutAnchors = (text: string): string =>
   text.replace(new RegExp(TRACK_ANCHOR.source, 'g'), '($1)');
 
-const speechOf = (segment: DocumentSegment): string =>
-  withoutAnchors(oneLine(segment.text));
+/** `[[x]]` in what was said would read as a wikilink to `kb link`: it keeps a space. */
+const withoutWikilinks = (text: string): string =>
+  text.replaceAll('[[', '[ [').replaceAll(']]', '] ]');
+
+/** Spoken text as the vault may hold it: one line, no anchor and no link of its own. */
+const plain = (text: string): string =>
+  withoutWikilinks(withoutAnchors(oneLine(text)));
+
+const speechOf = (segment: DocumentSegment): string => plain(segment.text);
+
+/** A name between `**` cannot carry its own `*`. */
+const speakerOf = (segment: DocumentSegment): string =>
+  segment.speaker ? plain(segment.speaker.replaceAll('*', '')) : '';
 
 /**
  * One paragraph per spoken segment (KBC-099 AC-1), each opened by its anchor: every passage
@@ -72,7 +90,8 @@ const speechOf = (segment: DocumentSegment): string =>
  * segments without an anchor of their own.
  */
 function paragraphLine(segment: DocumentSegment): string {
-  const speaker = segment.speaker ? `**${oneLine(segment.speaker)}:** ` : '';
+  const name = speakerOf(segment);
+  const speaker = name ? `**${name}:** ` : '';
   return `[${formatTrackClock(segment.startMs)}] ${speaker}${speechOf(segment)}`;
 }
 
@@ -98,6 +117,10 @@ function headerOf(input: TrackDocumentInput): Record<string, unknown> {
     stage: 'raw',
     source_kind: 'media-transcript',
     source_path: `media/${input.topic}/${source}`,
+    // What `kb lint` requires of a raw document (KBC-099 spike, kb 0.0.12).
+    ...(input.domain ? { domain: input.domain } : {}),
+    scraped: input.transcribedAt.slice(0, 10),
+    tags: [input.domain, 'raw', 'media-transcript'].filter(Boolean),
     author_group: input.authorship,
     ...(input.author ? { author: oneLine(input.author) } : {}),
     kb_chat_media_id: input.mediaId,

@@ -103,6 +103,19 @@ describe('FsVaultAdapter', () => {
     ]);
   });
 
+  it("reads the topic's kb domain from topic.yaml (KBC-099: the track documents carry it)", async () => {
+    const root = await mkdtemp(join(tmpdir(), 'kbchat-'));
+    const fs = await import('node:fs/promises');
+    await fs.mkdir(join(root, 'h'), { recursive: true });
+    await writeFile(
+      join(root, 'h', 'topic.yaml'),
+      'title: H\ndomain: " esoterismo "\n',
+    );
+    expect(await new FsVaultAdapter(root).listTopics()).toEqual([
+      { slug: 'h', title: 'H', domain: 'esoterismo' },
+    ]);
+  });
+
   it('finds a sub-topic inside a topic, one level down, with its parent', async () => {
     const root = await mkdtemp(join(tmpdir(), 'kbchat-'));
     const fs = await import('node:fs/promises');
