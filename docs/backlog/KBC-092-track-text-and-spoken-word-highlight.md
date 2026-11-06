@@ -1,7 +1,7 @@
 ---
 id: KBC-092
 title: "Texto da faixa e destaque da palavra falada na tela de preparo"
-status: ready
+status: in-review
 slice: phase-2-editing
 outcome: quem prepara um áudio confere o que cada faixa diz sem sair dela, lendo junto a palavra que está tocando
 depends_on: [KBC-045, KBC-066, KBC-072, KBC-090]
