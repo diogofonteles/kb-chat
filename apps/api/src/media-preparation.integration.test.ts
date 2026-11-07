@@ -730,7 +730,7 @@ describe('money (BR-2, BR-4, KBC-066 BR-1)', () => {
       pricing: { prompt: '0', completion: '0.0000066' },
     });
     const billed =
-      (cost: number, reply: (body: FakeChatBody) => object) =>
+      (cost: number, reply: (body: FakeChatBody) => { content: string }) =>
       (body: FakeChatBody) => ({ ...reply(body), cost });
     media.started.fake.scripted.push(
       billed(0.0198, oneTrack('Primeira')),
