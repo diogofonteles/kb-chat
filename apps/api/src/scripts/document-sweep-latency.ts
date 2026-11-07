@@ -4,7 +4,9 @@
 // render; who speaks is read as a second pass over the segments, as the app reads the
 // transcript again with its voices. Builds a throwaway database in the OS temp dir.
 // Prints the longest slice (the longest the API waits) and exits 0 unless --strict.
-// Usage: tsx src/scripts/document-sweep-latency.ts [--hours 2000] [--limit n] [--slice n] [--strict]
+// `--topic` measures a speaker renamed in the whole collection instead (review 3): how long
+// the request waits for reconcileTopic, then the slices that render every document after it.
+// Usage: tsx src/scripts/document-sweep-latency.ts [--hours 2000] [--limit n] [--slice n] [--topic] [--strict]
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,6 +33,9 @@ const arg = (name: string, fallback: number): number => {
 };
 const HOURS = arg('--hours', 2_000);
 const STRICT = process.argv.includes('--strict');
+const TOPIC = process.argv.includes('--topic');
+/** The speaker's name as the app shows it; `--topic` renames them. */
+let voice = 'Mestre';
 /** `--limit 100000 --slice 100000` measures the sweep as it was: everything in one go. */
 const LIMIT = arg('--limit', SWEEP_LIMIT);
 const SLICE = arg('--slice', SWEEP_SLICE);
@@ -158,7 +163,7 @@ function sourceOver(
       return current
         ? transcripts
             .segments(current.id)
-            .map((_, at) => (at % 2 ? 'Mestre' : null))
+            .map((_, at) => (at % 2 ? voice : null))
         : [];
     },
     mainOf: () => null,
@@ -182,23 +187,24 @@ function reconcilerOver(
   });
 }
 
-const dir = mkdtempSync(join(tmpdir(), 'kbchat-sweep-latency-'));
-try {
-  const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
-  const tracks = buildLibrary(db);
-  const slices: number[] = [];
-  let since = performance.now();
-  const reconciler = reconcilerOver(db, tracks, async () => {
-    slices.push(performance.now() - since);
-    await new Promise((resolve) => setImmediate(resolve));
-    since = performance.now();
-  });
-  // Every track documented once, as a library looks after the first sweeps.
-  for (const parent of tracks.keys()) reconciler.reconcileRecording(parent);
-  const documents = [...tracks.values()].flat().length;
-  slices.length = 0;
+/** What a measure runs over: the reconciler, its slices so far and the library's size. */
+interface Measured {
+  readonly reconciler: MediaDocumentReconciler;
+  readonly slices: readonly number[];
+  readonly documents: number;
+  /** Where the next slice starts counting from. */
+  readonly restart: (at: number) => void;
+}
+
+/** One backstop sweep: its slices and the whole of it. */
+async function measureSweep({
+  reconciler,
+  slices,
+  documents,
+  restart,
+}: Measured): Promise<void> {
   const started = performance.now();
-  since = started;
+  restart(started);
   const report = await reconciler.reconcileAll();
   const total = performance.now() - started;
   const longest = Math.max(...slices);
@@ -214,8 +220,57 @@ try {
   console.log(
     `  a whole pass over the library: ${Math.ceil(documents / LIMIT)} sweeps`,
   );
-  db.close();
   if (STRICT && longest > TARGET_MS) process.exitCode = 1;
+}
+
+/** A speaker renamed in the whole collection: the request's wait, then the drain's slices. */
+async function measureTopic({
+  reconciler,
+  slices,
+  documents,
+  restart,
+}: Measured): Promise<void> {
+  voice = 'Mestre Renomeado';
+  const started = performance.now();
+  reconciler.reconcileTopic('udv');
+  const request = performance.now() - started;
+  restart(performance.now());
+  await reconciler.idle();
+  const total = performance.now() - started;
+  const longest = Math.max(...slices);
+  console.log(
+    `${HOURS} h, ${documents} track documents; a speaker renamed in the collection (slice ${SLICE}):`,
+  );
+  console.log(`  the request waits ${request.toFixed(1)} ms`);
+  console.log(
+    `  then ${slices.length} slices, ${total.toFixed(0)} ms in all, longest ${longest.toFixed(1)} ms (target ≤ ${TARGET_MS} ms)`,
+  );
+  if (STRICT && Math.max(request, longest) > TARGET_MS) process.exitCode = 1;
+}
+
+const dir = mkdtempSync(join(tmpdir(), 'kbchat-sweep-latency-'));
+try {
+  const db = openMediaDatabase(join(dir, 'media.db'), MEDIA_MIGRATIONS);
+  const tracks = buildLibrary(db);
+  const slices: number[] = [];
+  let since = performance.now();
+  const reconciler = reconcilerOver(db, tracks, async () => {
+    slices.push(performance.now() - since);
+    await new Promise((resolve) => setImmediate(resolve));
+    since = performance.now();
+  });
+  // Every track documented once, as a library looks after the first sweeps.
+  for (const parent of tracks.keys()) reconciler.reconcileRecording(parent);
+  const documents = [...tracks.values()].flat().length;
+  slices.length = 0;
+  const restart = (at: number) => (since = at);
+  await (TOPIC ? measureTopic : measureSweep)({
+    reconciler,
+    slices,
+    documents,
+    restart,
+  });
+  db.close();
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

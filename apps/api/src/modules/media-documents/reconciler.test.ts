@@ -160,10 +160,11 @@ describe('MediaDocumentReconciler (KBC-100)', () => {
 });
 
 describe('MediaDocumentReconciler (KBC-100 fix round 1)', () => {
-  it("QA BUG-1: a change to the whole collection renders its recordings' tracks again", () => {
+  it("QA BUG-1: a change to the whole collection renders its recordings' tracks again", async () => {
     const { state, desired, queued, reconciler } = world();
     state.broken = false;
     reconciler.reconcileTopic('hermetismo');
+    await reconciler.idle();
     expect(desired.map((one) => one.mediaId).sort()).toEqual(
       [GOOD, BAD].sort(),
     );
@@ -284,5 +285,176 @@ describe('MediaDocumentReconciler (KBC-100 fix round 1)', () => {
     await reconciler.reconcileAll();
 
     expect(read).toEqual([GOOD]);
+  });
+});
+
+describe('MediaDocumentReconciler: a whole collection off the request (KBC-100 review 3)', () => {
+  /** A collection of `count` recordings without tracks, each with a document already. */
+  function collection(count: number) {
+    const ids = Array.from(
+      { length: count },
+      (_, at) => `0b9c1f7e-3333-4a2b-8c3d-${String(at).padStart(12, '0')}`,
+    );
+    const state = { text: 'fala' };
+    const rendered: string[] = [];
+    const queued: string[] = [];
+    const rows = new Map<string, string>();
+    const turns: number[] = [];
+    let running = 0;
+    let pending = false;
+    let release: (() => void) | null = null;
+    const gate = { hold: false };
+    const reconciler = new MediaDocumentReconciler({
+      source: {
+        inputOf: (mediaId) => {
+          rendered.push(mediaId);
+          running += 1;
+          return {
+            ...inputOf(mediaId),
+            kind: 'recording',
+            segments: [{ startMs: 0, endMs: 1_000, text: state.text }],
+          };
+        },
+        tracksOf: () => [],
+      },
+      documents: {
+        desire: (document) => {
+          if (rows.get(document.mediaId) === document.fingerprint) return false;
+          rows.set(document.mediaId, document.fingerprint);
+          pending = true;
+          return true;
+        },
+        retire: () => null,
+        hasPending: () => pending,
+        enqueue: ({ topic }) => {
+          // One job queued per collection until the Mac leases it.
+          if (queued.at(-1) !== topic) queued.push(topic);
+        },
+        documented: () => [...rows.keys()],
+        documentedUnder: () => [],
+        undocumentedRecordings: () => [],
+        statusOf: () => null,
+      },
+      hasFolder: () => true,
+      mediaOf: (topic) => (topic === 'hermetismo' ? ids : []),
+      sweep: {
+        slice: 20,
+        pause: async () => {
+          turns.push(running);
+          running = 0;
+          if (gate.hold) await new Promise<void>((go) => (release = go));
+        },
+      },
+    });
+    // Every document rendered once, as a library looks after the first sweeps.
+    for (const id of ids) reconciler.reconcileRecording(id);
+    rendered.length = 0;
+    queued.length = 0;
+    running = 0;
+    pending = false;
+    return {
+      ids,
+      state,
+      rendered,
+      queued,
+      turns,
+      gate,
+      reconciler,
+      release: () => release?.(),
+    };
+  }
+
+  it('the request returns before any render; the collection is rendered after, 20 at a time', async () => {
+    const { ids, state, rendered, queued, turns, reconciler } =
+      collection(1_000);
+    state.text = 'Mestre renomeado';
+
+    reconciler.reconcileTopic('hermetismo');
+
+    expect(rendered).toEqual([]);
+    await reconciler.idle();
+    expect(rendered).toEqual(ids);
+    expect(turns).toHaveLength(50);
+    expect(Math.max(...turns)).toBe(20);
+    expect(queued).toEqual(['hermetismo']);
+  });
+
+  it('only a changed fingerprint queues a job (BR-1)', async () => {
+    const { rendered, queued, reconciler } = collection(50);
+
+    reconciler.reconcileTopic('hermetismo');
+    await reconciler.idle();
+
+    expect(rendered).toHaveLength(50);
+    expect(queued).toEqual([]);
+  });
+
+  it('a collection marked twice while it waits is drained once', async () => {
+    const { ids, rendered, reconciler } = collection(100);
+
+    reconciler.reconcileTopic('hermetismo');
+    reconciler.reconcileTopic('hermetismo');
+    await reconciler.idle();
+
+    expect(rendered).toEqual(ids);
+  });
+
+  it('a collection marked again while it drains is drained again, with what changed', async () => {
+    const { ids, state, rendered, gate, reconciler, release } = collection(100);
+    gate.hold = true;
+    reconciler.reconcileTopic('hermetismo');
+    await new Promise((done) => setImmediate(done));
+    expect(rendered).toHaveLength(20);
+
+    state.text = 'segunda mudança';
+    reconciler.reconcileTopic('hermetismo');
+    gate.hold = false;
+    release();
+    await reconciler.idle();
+
+    expect(rendered).toEqual([...ids, ...ids]);
+  });
+
+  it('no work twice with the sweep: they take turns and the sweep skips what the drain just rendered', async () => {
+    const { ids, rendered, gate, reconciler, release } = collection(100);
+    gate.hold = true;
+    const sweep = reconciler.reconcileAll();
+    await new Promise((done) => setImmediate(done));
+    reconciler.reconcileTopic('hermetismo'); // waits for the sweep's turn
+    expect(rendered).toHaveLength(20);
+    gate.hold = false;
+    release();
+    await sweep;
+    await reconciler.idle();
+    // The sweep, then the drain: never side by side.
+    expect(rendered).toEqual([...ids, ...ids]);
+
+    rendered.length = 0;
+    expect(await reconciler.reconcileAll()).toEqual({
+      rendered: 0,
+      slices: 0,
+    });
+    // The next sweep renders everything again (a missed callback is still caught).
+    await reconciler.reconcileAll();
+    expect(rendered).toEqual(ids);
+  });
+
+  it('review suggestion: closing stops a sweep at its next slice, and nothing starts after', async () => {
+    const { rendered, gate, reconciler, release } = collection(100);
+    gate.hold = true;
+    const sweep = reconciler.reconcileAll();
+    await new Promise((done) => setImmediate(done));
+    const stopped = reconciler.stop();
+    release();
+    await stopped;
+
+    expect((await sweep).rendered).toBe(20);
+    reconciler.reconcileTopic('hermetismo');
+    expect(await reconciler.reconcileAll()).toEqual({
+      rendered: 0,
+      slices: 0,
+    });
+    await reconciler.idle();
+    expect(rendered).toHaveLength(20);
   });
 });

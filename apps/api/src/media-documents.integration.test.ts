@@ -365,8 +365,9 @@ describe('A change to a whole collection rewrites its tracks right away (KBC-100
       mainAuthor: slug,
     });
     expect(main.statusCode, main.body).toBe(200);
-    // No sweep runs here (10 min): the job is queued by the change itself.
-    expect(jobStatuses(world)).toEqual(['hermetismo:queued']);
+    // No sweep runs here (10 min): the job is queued by the change itself, once the
+    // collection is rendered off the request (review 3).
+    await expect.poll(() => jobStatuses(world)).toEqual(['hermetismo:queued']);
     const jobs = await runMac(docs);
 
     const paths = [first, second].map((one) =>
@@ -423,7 +424,7 @@ describe('A change to a whole collection rewrites its tracks right away (KBC-100
       { name: 'Josué' },
     );
     expect(renamed.statusCode, renamed.body).toBe(200);
-    expect(jobStatuses(world)).toEqual(['hermetismo:queued']);
+    await expect.poll(() => jobStatuses(world)).toEqual(['hermetismo:queued']);
     const jobs = await runMac(docs);
 
     const written = jobs.flatMap(writesOf);

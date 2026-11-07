@@ -44,6 +44,8 @@ export interface ReconcilerDeps {
   readonly mediaOf?: (topic: string) => readonly string[];
   /** A media whose document could not be rendered (logged; the sweep tries it again). */
   readonly onError?: (mediaId: string, err: unknown) => void;
+  /** A collection's background render that stopped short (the store failed; logged). */
+  readonly onTopicError?: (topic: string, err: unknown) => void;
   readonly now?: () => Date;
   readonly newId?: () => string;
   /** The sweep's bounds (defaults SWEEP_LIMIT, SWEEP_SLICE) and its pause between slices. */
@@ -86,6 +88,22 @@ export class MediaDocumentReconciler {
   private cursor: string | null = null;
   /** A sweep still running when the next one is due: that one is skipped. */
   private sweeping = false;
+  /**
+   * Collections whose every recording is due a render (reconcileTopic), drained off the
+   * request in slices (review 3). A collection asked again while it waits is drained once.
+   */
+  private readonly dueTopics = new Set<string>();
+  /** The drain of `dueTopics` running, if any. */
+  private draining: Promise<void> | null = null;
+  /**
+   * Media a collection's drain rendered since the last sweep began: that sweep does not
+   * render them again (the fingerprint would only match).
+   */
+  private readonly freshFromTopics = new Set<string>();
+  /** The sweep and the drains take turns: never two renders of a media side by side. */
+  private turn: Promise<void> = Promise.resolve();
+  /** The app is closing: no slice starts any more (its database is about to close). */
+  private stopped = false;
 
   constructor(private readonly deps: ReconcilerDeps) {
     this.now = deps.now ?? (() => new Date());
@@ -145,14 +163,74 @@ export class MediaDocumentReconciler {
   /**
    * Something of a whole collection changed (its main author, an author's or a speaker's
    * name): each of its recordings follows as one that changed, with every track it has or
-   * had (a track's authorship and speakers are its recording's).
+   * had (a track's authorship and speakers are its recording's). A big collection holds
+   * thousands of documents, so the request only marks it and returns; its recordings are
+   * rendered after, in slices of SWEEP_SLICE with a turn of the event loop between them
+   * (review 3). Only a render whose fingerprint changed queues a job (BR-1).
    */
   reconcileTopic(topic: string): void {
-    this.reconcile(
-      (this.deps.mediaOf?.(topic) ?? []).flatMap((recordingId) =>
-        this.familyOf(recordingId),
-      ),
-    );
+    if (this.stopped) return;
+    this.dueTopics.add(topic);
+    this.draining ??= this.exclusive(() => this.drainTopics())
+      .catch((err: unknown) => this.deps.onTopicError?.(topic, err))
+      .finally(() => {
+        this.draining = null;
+        // Marked between the drain's last look and now: drained by a new run.
+        if (this.dueTopics.size > 0 && !this.stopped)
+          this.reconcileTopic([...this.dueTopics][0] ?? topic);
+      });
+  }
+
+  /** Resolves once no sweep nor collection drain is running or waiting (tests, measures, close). */
+  async idle(): Promise<void> {
+    while (this.draining || this.sweeping) {
+      await (this.draining ?? this.turn);
+    }
+  }
+
+  /** The app is closing: what runs stops at its next slice and nothing new starts. */
+  async stop(): Promise<void> {
+    this.stopped = true;
+    this.dueTopics.clear();
+    await this.idle();
+  }
+
+  private async drainTopics(): Promise<void> {
+    for (const topic of this.dueTopics) {
+      this.dueTopics.delete(topic);
+      if (this.stopped) return;
+      try {
+        await this.drainTopic(topic);
+      } catch (err) {
+        this.deps.onTopicError?.(topic, err);
+      }
+    }
+  }
+
+  /** A collection's recordings with their families, rendered a slice at a time. */
+  private async drainTopic(topic: string): Promise<void> {
+    const slice = this.deps.sweep?.slice ?? SWEEP_SLICE;
+    const pause = this.deps.sweep?.pause ?? nextTurn;
+    let batch: string[] = [];
+    const flush = async () => {
+      this.reconcile(batch);
+      for (const mediaId of batch) this.freshFromTopics.add(mediaId);
+      batch = [];
+      await pause();
+    };
+    for (const recordingId of this.deps.mediaOf?.(topic) ?? []) {
+      if (this.stopped) return;
+      batch.push(...this.familyOf(recordingId));
+      if (batch.length >= slice) await flush();
+    }
+    if (batch.length > 0 && !this.stopped) await flush();
+  }
+
+  /** Runs `work` after whatever sweep or drain is running ends. */
+  private exclusive(work: () => Promise<void>): Promise<void> {
+    const run = this.turn.then(work);
+    this.turn = run.catch(() => undefined);
+    return run;
   }
 
   /**
@@ -163,28 +241,43 @@ export class MediaDocumentReconciler {
    * speakers, so a big library would otherwise hold the API for seconds (review 6).
    */
   async reconcileAll(): Promise<SweepReport> {
-    if (this.sweeping) return { rendered: 0, slices: 0 };
+    if (this.sweeping || this.stopped) return { rendered: 0, slices: 0 };
     this.sweeping = true;
+    let report: SweepReport = { rendered: 0, slices: 0 };
     try {
-      const due = [
-        ...new Set([
-          ...this.unrendered,
-          ...this.backfill(),
-          ...this.nextDocumented(),
-        ]),
-      ];
-      const slice = this.deps.sweep?.slice ?? SWEEP_SLICE;
-      const pause = this.deps.sweep?.pause ?? nextTurn;
-      let slices = 0;
-      for (let at = 0; at < due.length; at += slice) {
-        this.reconcile(due.slice(at, at + slice));
-        slices += 1;
-        await pause();
-      }
-      return { rendered: due.length, slices };
+      await this.exclusive(async () => {
+        report = await this.sweep();
+      });
+      return report;
     } finally {
       this.sweeping = false;
     }
+  }
+
+  private async sweep(): Promise<SweepReport> {
+    // What a collection's drain just rendered is not rendered again; a failed one is.
+    const fresh = new Set(this.freshFromTopics);
+    this.freshFromTopics.clear();
+    const due = [
+      ...new Set([
+        ...this.unrendered,
+        ...[...this.backfill(), ...this.nextDocumented()].filter(
+          (mediaId) => !fresh.has(mediaId),
+        ),
+      ]),
+    ];
+    const slice = this.deps.sweep?.slice ?? SWEEP_SLICE;
+    const pause = this.deps.sweep?.pause ?? nextTurn;
+    let slices = 0;
+    let rendered = 0;
+    for (let at = 0; at < due.length && !this.stopped; at += slice) {
+      const part = due.slice(at, at + slice);
+      this.reconcile(part);
+      rendered += part.length;
+      slices += 1;
+      await pause();
+    }
+    return { rendered, slices };
   }
 
   /**

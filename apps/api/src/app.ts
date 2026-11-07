@@ -916,6 +916,11 @@ async function startDocuments(
     ...wiring,
     onRenderError: (mediaId, err) =>
       app.log.error({ err, mediaId }, 'track document: render failed'),
+    onTopicError: (topic, err) =>
+      app.log.error(
+        { err, topic },
+        'track documents: collection render failed',
+      ),
     speakersOf: documentSpeakers(wiring),
     presence: () => transcribers.presence('kb-publish'),
   });

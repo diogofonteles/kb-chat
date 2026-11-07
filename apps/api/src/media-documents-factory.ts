@@ -28,6 +28,8 @@ interface DocumentsWiring {
   readonly authors: AuthorsService;
   /** Where a track that could not be rendered is told (the app's log). */
   readonly onRenderError?: (mediaId: string, err: unknown) => void;
+  /** A collection's background render that stopped short (logged; the sweep catches up). */
+  readonly onTopicError?: (topic: string, err: unknown) => void;
   /** Who speaks in each segment, by the names listeners see (KBC-065). */
   readonly speakersOf?: (mediaId: string) => readonly (string | null)[];
   /** Whether a Mac marked "Publica no acervo" is seen (ADR 0035 §10). */
@@ -98,6 +100,7 @@ function reconcilerOf(
         .flatMap((one) => media.store.listMedia(one.topic.slug))
         .map((one) => one.id),
     ...(wiring.onRenderError && { onError: wiring.onRenderError }),
+    ...(wiring.onTopicError && { onTopicError: wiring.onTopicError }),
   });
 }
 
@@ -169,5 +172,10 @@ export function startDocumentBackstop(
     );
   }, intervalMs);
   timer.unref();
-  app.addHook('onClose', async () => clearInterval(timer));
+  // preClose: before any onClose hook closes media.db, a sweep or a collection's drain
+  // running stops at its next slice (review suggestion, a candidate for PD-19).
+  app.addHook('preClose', async () => {
+    clearInterval(timer);
+    await reconciler.stop();
+  });
 }
