@@ -195,9 +195,32 @@ const auditionState = (page: Page) =>
     paused: (element as HTMLAudioElement).paused,
   }));
 
+/**
+ * Waits for the listening to really play. `paused` turns false as play() is called, but the
+ * screen seeks to the range only once the metadata is in, which would undo a seek made
+ * before it; and a loaded WebKit can take seconds to get there. Once the audio moves on, not
+ * seeking, the range's seek is done.
+ */
+async function untilPlaying(page: Page) {
+  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  const moved = await audition(page).evaluate(async (element) => {
+    const audio = element as HTMLAudioElement;
+    const until = performance.now() + 15_000;
+    let last: number | null = null;
+    while (performance.now() < until && !audio.paused) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (audio.seeking) last = null;
+      else if (last !== null && audio.currentTime > last) return true;
+      else last = audio.currentTime;
+    }
+    return false;
+  });
+  expect(moved, 'the listening plays on').toBe(true);
+}
+
 /** Waits for the listening to play, then moves it, as the audio going on would. */
 async function playingAt(page: Page, seconds: number) {
-  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  await untilPlaying(page);
   await audition(page).evaluate((element, at) => {
     (element as HTMLAudioElement).currentTime = at;
   }, seconds);
@@ -214,7 +237,7 @@ async function paintedFrom(
   seconds: number,
   [first, last]: readonly [string, string],
 ): Promise<(string | null)[]> {
-  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  await untilPlaying(page);
   const painted = await audition(page).evaluate(
     async (element, { at, first, last }) => {
       interface Registry {
@@ -527,28 +550,26 @@ const onTheFirstWord = ({ at }: Sample) => at >= 30.13 && at < 30.28;
 
 /**
  * Clicks "Ouvir o início" (28 s to 33 s) and records, frame by frame, the time and the
- * painted word until the audio is past "agora" or stops. `paused` turns false as play() is
- * called, before the seek to 28 s lands and the data arrives, which a loaded WebKit takes
- * seconds to do: the frames are recorded once the audio moves on from 28 s, not for a fixed
+ * painted word from when it plays until the audio is past "agora" or stops, not for a fixed
  * time from the click.
  */
 async function listenToTheStart(page: Page): Promise<Sample[]> {
   await page.getByRole('button', { name: 'Ouvir o início' }).click();
-  await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
+  await untilPlaying(page);
   return audition(page).evaluate(async (element) => {
     interface Registry {
       get(name: string): Iterable<Range> | undefined;
     }
     const registry = (CSS as unknown as { highlights: Registry }).highlights;
     const audio = element as HTMLAudioElement;
-    const frame = () =>
-      new Promise((resolve) => requestAnimationFrame(resolve));
     const found: Sample[] = [];
     const until = performance.now() + 15_000;
-    const going = () => performance.now() < until && !audio.paused;
-    while (going() && (audio.seeking || audio.currentTime <= 28)) await frame();
-    while (going() && audio.currentTime < 30.4) {
-      await frame();
+    while (
+      performance.now() < until &&
+      !audio.paused &&
+      audio.currentTime < 30.4
+    ) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       const [range] = Array.from(registry.get('track-word') ?? []);
       found.push({ at: audio.currentTime, word: range?.toString() ?? null });
     }
