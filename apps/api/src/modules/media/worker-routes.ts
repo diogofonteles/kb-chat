@@ -21,6 +21,8 @@ import {
   mediaIdSchema,
   transcriptionTermsSchema,
   workerVoiceProfilesSchema,
+  vaultSyncReportSchema,
+  type VaultSyncReport,
 } from '@kb-chat/contracts';
 import type {
   FastifyInstance,
@@ -74,6 +76,13 @@ export interface WorkerRoutesDeps {
   readonly groq?: GroqService;
   /** What kb did to a collection's track documents (KBC-099). */
   readonly kbResults?: KbResultReceiver;
+  /** What the Mac reported of its syncs with production (KBC-100 FR-4). */
+  readonly vaultSyncs?: VaultSyncReceiver;
+}
+
+/** Who keeps the Mac's sync reports: the track documents' side, outside this module. */
+export interface VaultSyncReceiver {
+  recordSync(worker: string, report: VaultSyncReport): void;
 }
 
 /** Who takes a kb-publish result in: the track documents' side, outside this module. */
@@ -262,6 +271,7 @@ export const workerRoutes =
     registerWaveform(app, deps);
     registerCut(app, deps);
     registerKbResult(app, deps);
+    registerVaultSync(app, deps);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
@@ -447,6 +457,35 @@ function registerKbResult(app: FastifyInstance, deps: WorkerRoutesDeps): void {
         { jobId, ...ownerOf(request, request.body) },
         request.body,
       );
+      return reply.code(204).send();
+    },
+  );
+}
+
+/**
+ * The Mac's report of an automatic sync with production (KBC-100 FR-4): only a transcriber
+ * marked "Publica no acervo" syncs, so only its token may tell.
+ */
+function registerVaultSync(app: FastifyInstance, deps: WorkerRoutesDeps): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/media-worker/vault-sync',
+    {
+      config: { access: PUBLIC },
+      schema: {
+        body: vaultSyncReportSchema,
+        response: { 204: z.undefined() },
+      },
+    },
+    async (request, reply) => {
+      const identity = identityOf(request);
+      if (
+        !deps.vaultSyncs ||
+        identity.leaseName === null ||
+        !identity.kinds.includes('kb-publish')
+      )
+        throw notThisWorkers();
+      deps.vaultSyncs.recordSync(identity.leaseName, request.body);
       return reply.code(204).send();
     },
   );

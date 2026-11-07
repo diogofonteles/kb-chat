@@ -3,6 +3,7 @@ import {
   completeKbPublishRequestSchema,
   failJobRequestSchema,
   kbPublishItemSchema,
+  trackPublicationSchema,
 } from './media.js';
 
 const RECORDING = '7d2f4a10-5c3e-4b8a-9f01-3a6e2b9c0d01';
@@ -113,6 +114,46 @@ describe('a failed kb-publish reports what kb spent before failing (review IMPOR
     ).toBe(false);
     expect(
       failJobRequestSchema.safeParse({ ...fail, spendUsd: 0.51 }).success,
+    ).toBe(false);
+  });
+});
+
+describe('kb-publish remove item (KBC-100 BR-2)', () => {
+  it('takes a remove with only the path the API renders', () => {
+    const path = `raw/media/${RECORDING}/${TRACK}.md`;
+    expect(kbPublishItemSchema.parse({ op: 'remove', path })).toEqual({
+      op: 'remove',
+      path,
+    });
+  });
+
+  it('refuses a remove outside the media folder', () => {
+    expect(
+      kbPublishItemSchema.safeParse({
+        op: 'remove',
+        path: 'raw/articles/a-lei-do-ritmo.md',
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('track publication state (KBC-100 BR-4)', () => {
+  it.each([
+    { state: 'live', since: '2026-11-07T14:02:00.000Z' },
+    { state: 'updating', since: '2026-11-07T14:02:00.000Z' },
+    { state: 'waiting-mac', offSince: '2026-11-07T14:02:00.000Z' },
+    { state: 'waiting-mac', offSince: null },
+    { state: 'failed', since: '2026-11-07T14:02:00.000Z', reason: 'kb link' },
+    { state: 'out', reason: 'no-folder' },
+    { state: 'out', reason: 'cap' },
+  ])('takes %o', (publication) => {
+    expect(trackPublicationSchema.safeParse(publication).success).toBe(true);
+  });
+
+  it('refuses an unknown reason to be out', () => {
+    expect(
+      trackPublicationSchema.safeParse({ state: 'out', reason: 'other' })
+        .success,
     ).toBe(false);
   });
 });

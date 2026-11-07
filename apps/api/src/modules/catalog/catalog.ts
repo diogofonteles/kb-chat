@@ -42,8 +42,27 @@ async function loadTopicCatalog(
 /** In-memory facet catalog of every topic in the vault, derived from frontmatter (ADR 0003). */
 export class CatalogRegistry {
   private catalogs = new Map<string, TopicCatalog>();
+  private readonly listeners: (() => void)[] = [];
 
   constructor(private readonly vault: VaultReaderPort) {}
+
+  /**
+   * Told after every load or refresh: what the catalog sees changed (KBC-100 FR-6). A
+   * listener that throws does not stop the others nor the load.
+   */
+  onReload(listener: () => void): void {
+    this.listeners.push(listener);
+  }
+
+  private reloaded(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch {
+        // A listener logs its own failures; the catalog stays loaded.
+      }
+    }
+  }
 
   async load(): Promise<void> {
     const topics = await this.vault.listTopics();
@@ -53,6 +72,7 @@ export class CatalogRegistry {
     this.catalogs = new Map(
       loaded.map((catalog) => [catalog.topic.slug, catalog]),
     );
+    this.reloaded();
   }
 
   /**
@@ -69,6 +89,7 @@ export class CatalogRegistry {
     if (loaded) next.set(slug, loaded);
     else next.delete(slug);
     this.catalogs = next;
+    this.reloaded();
   }
 
   topics(): readonly TopicCatalog[] {

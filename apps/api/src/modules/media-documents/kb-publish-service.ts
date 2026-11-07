@@ -11,6 +11,7 @@ import type {
   DeliveredDocument,
   LeasedKbJob,
   MediaDocumentStorePort,
+  PendingDocument,
 } from '../../ports/media-document-store.js';
 import type { MediaSpendLedgerPort } from '../../ports/media-spend-ledger.js';
 import type { LeaseOwner } from '../../ports/media-store.js';
@@ -83,14 +84,21 @@ export class KbPublishService {
         ...(topic && { topic }),
       });
       if (!job) return null;
-      const items = this.renderPending(job.topic);
+      const writes = this.renderPending(job.topic);
+      const removals = this.deps.documents.removalsOf(
+        job.topic,
+        KB_PUBLISH_MAX_ITEMS - writes.length,
+      );
+      const items = [
+        ...writes.map(delivered),
+        ...removals.map(
+          (one): DeliveredDocument => ({ op: 'remove', ...one }),
+        ),
+      ];
       const owner = ownerOf(job, worker);
       if (items.length > 0) {
-        this.deps.documents.deliver(owner, {
-          items: items.map(delivered),
-          budgetUsd,
-        });
-        return this.toJob(job, { items, budgetUsd });
+        this.deps.documents.deliver(owner, { items, budgetUsd });
+        return this.toJob(job, { writes, removals, budgetUsd });
       }
       this.deps.documents.finishEmpty(owner, this.now());
     }
@@ -99,7 +107,15 @@ export class KbPublishService {
 
   private toJob(
     job: LeasedKbJob,
-    { items, budgetUsd }: { items: readonly TrackRender[]; budgetUsd: number },
+    {
+      writes,
+      removals,
+      budgetUsd,
+    }: {
+      writes: readonly TrackRender[];
+      removals: readonly PendingDocument[];
+      budgetUsd: number;
+    },
   ): KbPublishJob {
     return {
       id: job.id,
@@ -109,20 +125,26 @@ export class KbPublishService {
       attempt: job.attempt,
       leaseMs: this.deps.leaseMs,
       budgetUsd,
-      items: items.map(({ path, markdown, fingerprint }) => ({
-        op: 'write' as const,
-        path,
-        markdown,
-        fingerprint,
-      })),
+      items: [
+        ...writes.map(({ path, markdown, fingerprint }) => ({
+          op: 'write' as const,
+          path,
+          markdown,
+          fingerprint,
+        })),
+        ...removals.map(({ path }) => ({ op: 'remove' as const, path })),
+      ],
     };
   }
 
-  /** The newest render of each document still to publish (coalesced, ADR 0035 §4). */
+  /**
+   * The newest render of each document still to publish (coalesced, ADR 0035 §4); one that
+   * stopped having a document since it was wanted becomes a removal here.
+   */
   private renderPending(topic: string): TrackRender[] {
     return this.deps.documents
       .pendingOf(topic, KB_PUBLISH_MAX_ITEMS)
-      .map(({ mediaId }) => this.deps.reconciler.render(mediaId))
+      .map(({ mediaId }) => this.deps.reconciler.refresh(mediaId))
       .filter((one): one is TrackRender => one?.topic === topic);
   }
 
@@ -229,6 +251,7 @@ export class KbPublishService {
 }
 
 const delivered = (render: TrackRender): DeliveredDocument => ({
+  op: 'write',
   mediaId: render.mediaId,
   path: render.path,
   fingerprint: render.fingerprint,

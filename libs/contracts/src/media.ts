@@ -774,12 +774,26 @@ const KB_DOCUMENT_PATH =
   /^raw\/media\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.md$/;
 
 /** A document to write, relative to the collection's vault folder (`raw/media/…`). */
-export const kbPublishItemSchema = z.object({
+export const kbWriteItemSchema = z.object({
   op: z.literal('write'),
   path: z.string().regex(KB_DOCUMENT_PATH),
   markdown: z.string().max(5_000_000),
   fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
 });
+
+/**
+ * A document to take out of the vault (KBC-100 BR-2): its track was archived, deleted or
+ * moved, or its recording got tracks. Removing a file that is not there is not an error.
+ */
+export const kbRemoveItemSchema = z.object({
+  op: z.literal('remove'),
+  path: z.string().regex(KB_DOCUMENT_PATH),
+});
+
+export const kbPublishItemSchema = z.discriminatedUnion('op', [
+  kbWriteItemSchema,
+  kbRemoveItemSchema,
+]);
 export type KbPublishItem = z.infer<typeof kbPublishItemSchema>;
 
 /**
@@ -823,7 +837,7 @@ export const completeKbPublishRequestSchema = leaseOwnerSchema.extend({
   documents: z
     .array(
       z.strictObject({
-        path: kbPublishItemSchema.shape.path,
+        path: kbWriteItemSchema.shape.path,
         ok: z.boolean(),
         error: z.string().max(2_000).optional(),
         facets: kbFacetsSchema.optional().catch(undefined),
@@ -859,12 +873,46 @@ export type TrackDocumentsCollection = z.infer<
   typeof trackDocumentsCollectionSchema
 >;
 
+/** What the Mac reported of its last automatic sync with production (KBC-100 FR-4). */
+export const vaultSyncReportSchema = z.strictObject({
+  ok: z.boolean(),
+  /** The end of sync-vault.sh's output (why it failed, or what it sent). */
+  detail: z.string().max(2_000),
+  startedAt: z.iso.datetime(),
+  finishedAt: z.iso.datetime(),
+});
+export type VaultSyncReport = z.infer<typeof vaultSyncReportSchema>;
+
+/** A document kb or the Mac gave up on after its attempts, with **Tentar de novo**. */
+export const failedDocumentSchema = z.object({
+  mediaId: z.uuid(),
+  topic: topicSlugSchema,
+  title: z.string(),
+  error: z.string(),
+  since: z.iso.datetime(),
+});
+export type FailedDocument = z.infer<typeof failedDocumentSchema>;
+
+/** The publishing queue as masters see it in Transcritores (KBC-100 FR-3, T22). */
+export const publicationQueueSchema = z.object({
+  /** Documents (writes and removals) waiting for the Mac or for production. */
+  waiting: z.number().int().min(0),
+  /** When the Mac last finished a publication; null before the first. */
+  lastPublishedAt: z.iso.datetime().nullable(),
+  lastSync: vaultSyncReportSchema.nullable(),
+  /** At most 20, the newest first. */
+  failed: z.array(failedDocumentSchema),
+});
+export type PublicationQueue = z.infer<typeof publicationQueueSchema>;
+
 /** GET /api/v1/media/track-documents (masters, KBC-099 scope of 2026-11-06). */
 export const trackDocumentsOverviewSchema = z.object({
   usdPerTrack: z.number().min(0),
   /** What the media monthly ceiling still allows this month. */
   remainingUsd: z.number().min(0),
   collections: z.array(trackDocumentsCollectionSchema),
+  /** Additive (KBC-100): absent from an API older than it. */
+  queue: publicationQueueSchema.optional(),
 });
 export type TrackDocumentsOverview = z.infer<
   typeof trackDocumentsOverviewSchema
@@ -886,6 +934,46 @@ export const publishExistingTracksResultSchema = z.object({
 export type PublishExistingTracksResult = z.infer<
   typeof publishExistingTracksResultSchema
 >;
+
+/**
+ * Where a track (or a recording without tracks) stands in the AI research (KBC-100 BR-4):
+ * only `live` means production's catalog sees the document as it is now.
+ */
+export const PUBLICATION_OUT_REASONS = [
+  'no-folder',
+  'cap',
+  'not-published',
+] as const;
+export type PublicationOutReason = (typeof PUBLICATION_OUT_REASONS)[number];
+
+export const trackPublicationSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('live'), since: z.iso.datetime() }),
+  z.object({ state: z.literal('updating'), since: z.iso.datetime() }),
+  z.object({
+    state: z.literal('waiting-mac'),
+    /** Since when no Mac that publishes was seen; null when none is paired. */
+    offSince: z.iso.datetime().nullable(),
+  }),
+  z.object({
+    state: z.literal('failed'),
+    since: z.iso.datetime(),
+    /** kb's or the Mac's output, shortened. */
+    reason: z.string(),
+  }),
+  z.object({ state: z.literal('out'), reason: z.enum(PUBLICATION_OUT_REASONS) }),
+]);
+export type TrackPublication = z.infer<typeof trackPublicationSchema>;
+export type TrackPublicationState = TrackPublication['state'];
+
+/**
+ * GET /api/v1/media/:id/publication (`media-edit`): null for a media that has no document
+ * (a recording with tracks, an archived track, one not transcribed yet).
+ */
+export const mediaPublicationSchema = z.object({
+  mediaId: z.uuid(),
+  publication: trackPublicationSchema.nullable(),
+});
+export type MediaPublication = z.infer<typeof mediaPublicationSchema>;
 
 /** POST …/jobs/lease answers one of these, by the kinds the token may lease. */
 export const leasedJobSchema = z.union([

@@ -43,7 +43,14 @@ const toAuthors = ({ main, authors }: CollectionAuthors): Author[] =>
  * and main author, found by the catalog's tree, never by the slug's text (BR-1, ADR 0028).
  */
 export class AuthorsService {
+  private readonly mainListeners: ((topic: string) => void)[] = [];
+
   constructor(private readonly deps: AuthorsServiceDeps) {}
+
+  /** Told after a collection's main author changes (KBC-100: who media is by follows). */
+  onMainChanged(listener: (topic: string) => void): void {
+    this.mainListeners.push(listener);
+  }
 
   /** The top-level collection whose list this one uses. */
   rootOf(topic: string): string {
@@ -130,6 +137,7 @@ export class AuthorsService {
   async setMain(topic: string, slug: string | null): Promise<void> {
     this.assertMainChoice(topic, slug);
     await this.deps.directory.setMain(topic, slug);
+    for (const listener of this.mainListeners) listener(topic);
   }
 
   private collectionOf(topic: string): CollectionAuthors {

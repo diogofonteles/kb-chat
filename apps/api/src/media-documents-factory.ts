@@ -7,17 +7,18 @@ import {
   ExistingTracks,
   KbPublishService,
   MediaDocumentReconciler,
+  PublicationStatus,
   TrackDocumentSource,
+  type PublisherPresence,
+  type SeenDocument,
 } from './modules/media-documents/index.js';
 import { JOB_LEASE_MS, MAX_JOB_ATTEMPTS } from './modules/media/index.js';
-
-/** The backstop of the reconciliation (ADR 0035 §4). */
-export const RECONCILE_INTERVAL_MS = 10 * 60 * 1000;
 
 export interface MediaDocuments {
   readonly reconciler: MediaDocumentReconciler;
   readonly kb: KbPublishService;
   readonly existing: ExistingTracks;
+  readonly status: PublicationStatus;
 }
 
 /** Track documents (KBC-099, ADR 0035): rendered from media.db, published through the Mac. */
@@ -27,16 +28,43 @@ interface DocumentsWiring {
   readonly authors: AuthorsService;
   /** Where a track that could not be rendered is told (the app's log). */
   readonly onRenderError?: (mediaId: string, err: unknown) => void;
+  /** Who speaks in each segment, by the names listeners see (KBC-065). */
+  readonly speakersOf?: (mediaId: string) => readonly (string | null)[];
+  /** Whether a Mac marked "Publica no acervo" is seen (ADR 0035 §10). */
+  readonly presence?: () => PublisherPresence;
 }
 
+/** No Mac known: the queue waits (a test world without transcribers). */
+const NO_PUBLISHER: PublisherPresence = { transcriber: 'none', offSince: null };
+
+/** Every track document the catalog holds now, with the fingerprint written in it. */
+export const seenIn = (catalog: CatalogRegistry): SeenDocument[] =>
+  catalog.topics().flatMap((one) =>
+    [...one.entries.values()].flatMap((entry) =>
+      entry.media
+        ? [{ mediaId: entry.media.mediaId, fingerprint: entry.media.fingerprint }]
+        : [],
+    ),
+  );
+
+/** A collection with a folder in the kb vault: one created on the screen may have none. */
+export const hasVaultFolder =
+  (catalog: CatalogRegistry) =>
+  (topic: string): boolean => {
+    const found = catalog.get(topic);
+    return found !== undefined && found.topic.screenOnly !== true;
+  };
+
 /** What a track's document is read from: media.db, the authors and the subjects. */
-function documentSource(wiring: DocumentsWiring): TrackDocumentSource {
+export function documentSource(wiring: DocumentsWiring): TrackDocumentSource {
   const { media, authors } = wiring;
   const subjects = createSubjectDirectory(wiring);
   return new TrackDocumentSource({
     store: media.store,
     items: media.trackItems,
     transcripts: media.transcripts,
+    hasTracks: (recordingId) => media.documents.hasTracks(recordingId),
+    ...(wiring.speakersOf && { speakersOf: wiring.speakersOf }),
     mainOf: (topic) => authors.mainOf(topic)?.slug ?? null,
     authorOf: (topic, slug) => authors.authorOf(topic, slug),
     domainOf: (topic) => wiring.catalog.get(topic)?.topic.domain ?? null,
@@ -49,10 +77,17 @@ function documentSource(wiring: DocumentsWiring): TrackDocumentSource {
 
 export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
   const { media } = wiring;
+  const source = documentSource(wiring);
   const reconciler = new MediaDocumentReconciler({
-    source: documentSource(wiring),
+    source,
     documents: media.documents,
-    liveTracks: () => media.documents.liveTracks(),
+    hasFolder: hasVaultFolder(wiring.catalog),
+    // A sub-collection uses its parent's authors and speakers (ADR 0028).
+    mediaOf: (topic) =>
+      wiring.catalog
+        .scope(topic)
+        .flatMap((one) => media.store.listMedia(one.topic.slug))
+        .map((one) => one.id),
     ...(wiring.onRenderError && { onError: wiring.onRenderError }),
   });
   const kb = new KbPublishService({
@@ -63,19 +98,30 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
     leaseMs: JOB_LEASE_MS,
     maxAttempts: MAX_JOB_ATTEMPTS,
   });
+  const status = new PublicationStatus({
+    documents: media.documents,
+    reconciler,
+    store: media.store,
+    isDocumentable: (one) => source.isDocumentable(one),
+    hasFolder: hasVaultFolder(wiring.catalog),
+    budgetUsd: () => kb.budgetUsd(),
+    presence: wiring.presence ?? (() => NO_PUBLISHER),
+  });
   const existing = new ExistingTracks({
     documents: media.documents,
     reconciler,
     budget: kb,
     titleOf: (topic) => wiring.catalog.get(topic)?.topic.title ?? null,
+    queue: () => status.queue(),
   });
-  return { reconciler, kb, existing };
+  return { reconciler, kb, existing, status };
 }
 
 /** Every 10 minutes, whatever a missed callback left behind is published (ADR 0035 §4). */
 export function startDocumentBackstop(
   app: FastifyInstance,
   reconciler: MediaDocumentReconciler,
+  intervalMs: number,
 ): void {
   const timer = setInterval(() => {
     try {
@@ -83,7 +129,7 @@ export function startDocumentBackstop(
     } catch (err) {
       app.log.error({ err }, 'track documents: the backstop failed');
     }
-  }, RECONCILE_INTERVAL_MS);
+  }, intervalMs);
   timer.unref();
   app.addHook('onClose', async () => clearInterval(timer));
 }

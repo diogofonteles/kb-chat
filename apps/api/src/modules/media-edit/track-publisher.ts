@@ -48,6 +48,12 @@ export interface TrackPublisherDeps {
    * the publishing transaction, so the documents are wanted with the tracks or not at all.
    */
   readonly onPublished?: (parentId: string) => void;
+  /**
+   * Anything else of a recording that its documents show changed (KBC-100 FR-1): a new
+   * transcript, its details, a track's revision, an archive, a restore. Called inside the
+   * change's transaction.
+   */
+  readonly onChanged?: (parentId: string) => void;
   readonly now?: () => Date;
 }
 
@@ -170,6 +176,15 @@ export class TrackPublisher {
       const transcript = slice(item);
       if (transcript) transcripts.replaceDerived(transcript, now);
     }
+    this.deps.onChanged?.(parentId);
+  }
+
+  /**
+   * Something else its documents show changed (a track's title or summary, KBC-073; who
+   * speaks): the recording's documents follow.
+   */
+  afterChange(parentId: string): void {
+    this.deps.onChanged?.(parentId);
   }
 
   /**
@@ -191,6 +206,7 @@ export class TrackPublisher {
       .map(({ mediaId }) => ({ mediaId, ...NO_ANSWERER }));
     for (const track of [...tracks, ...leftBehind])
       items.setAuthor({ mediaId: track.mediaId, now, ...authorOf(track) });
+    this.deps.onChanged?.(parentId);
   }
 
   /**
@@ -199,6 +215,8 @@ export class TrackPublisher {
    */
   afterArchive(parentId: string, cutFailed: boolean): void {
     const { items } = this.deps;
+    // The archived track's document leaves (KBC-100 BR-2), whatever the cuts.
+    this.deps.onChanged?.(parentId);
     if (!cutFailed || items.hasPendingCuts(parentId)) return;
     items.publish({
       parentId,

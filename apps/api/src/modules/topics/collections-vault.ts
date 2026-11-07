@@ -19,13 +19,17 @@ export class CollectionsVault implements VaultReaderPort {
     ]);
     const bySlug = new Map(folders.map((folder) => [folder.slug, folder]));
     for (const { slug, title, description, parent } of collections) {
-      const within = bySlug.get(slug)?.parent ?? parent;
-      bySlug.set(
+      const folder = bySlug.get(slug);
+      const within = folder?.parent ?? parent;
+      bySlug.set(slug, {
         slug,
-        within
-          ? { slug, title, description, parent: within }
-          : { slug, title, description },
-      );
+        title,
+        description,
+        ...(within && { parent: within }),
+        // The vault's folder keeps what kb files it under (the documents' `domain`).
+        ...(folder?.domain && { domain: folder.domain }),
+        ...(!folder && { screenOnly: true as const }),
+      });
     }
     return [...bySlug.values()].sort((a, b) => a.slug.localeCompare(b.slug));
   }

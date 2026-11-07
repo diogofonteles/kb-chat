@@ -1307,4 +1307,37 @@ export const MEDIA_MIGRATIONS: readonly Migration[] = [
       ${MEDIA_DOCUMENT_TABLES}
     `,
   },
+  {
+    // KBC-100 (ADR 0035 §4, §9-§10): what production's catalog sees of each document
+    // (`live_*`: only then is a track "na pesquisa com IA", FR-6), the documents to take out
+    // of the vault at their old place (archived, deleted, moved; BR-2), and what the Mac
+    // reported of its automatic syncs with production (FR-4). Expand only.
+    version: 27,
+    name: 'media-documents-up-to-date',
+    sql: `
+      ALTER TABLE media_documents ADD COLUMN live_sha256 TEXT;
+      ALTER TABLE media_documents ADD COLUMN live_at TEXT;
+
+      CREATE TABLE media_document_removals (
+        topic TEXT NOT NULL,
+        path TEXT NOT NULL,
+        media_id TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (topic, path)
+      ) STRICT, WITHOUT ROWID;
+
+      CREATE TABLE vault_syncs (
+        id TEXT PRIMARY KEY,
+        worker TEXT NOT NULL,
+        ok INTEGER NOT NULL CHECK (ok IN (0, 1)),
+        detail TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX vault_syncs_by_time ON vault_syncs (finished_at);
+    `,
+  },
 ];

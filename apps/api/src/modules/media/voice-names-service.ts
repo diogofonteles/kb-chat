@@ -33,6 +33,8 @@ export interface VoiceNamesServiceDeps {
     target: { readonly mediaId: string; readonly voice: number },
     apply: () => void,
   ) => void;
+  /** Who speaks in a recording changed outside a relabel: its documents follow (KBC-100). */
+  readonly onChanged?: (mediaId: string) => void;
   readonly now?: () => Date;
 }
 
@@ -115,6 +117,7 @@ export class VoiceNamesService {
     this.assertStandingVoice(current.id, voice);
     this.assertStandingVoice(current.id, into);
     this.deps.voiceLabels.merge({ diarizationId: current.id, voice, into });
+    this.deps.onChanged?.(mediaId);
     return this.deps.speakersOf(actor, mediaId);
   }
 
@@ -126,6 +129,7 @@ export class VoiceNamesService {
     const { voice, version } = request;
     const { current } = this.editable(actor, mediaId, version);
     this.deps.voiceLabels.split({ diarizationId: current.id, voice });
+    this.deps.onChanged?.(mediaId);
     return this.deps.speakersOf(actor, mediaId);
   }
 
@@ -137,6 +141,7 @@ export class VoiceNamesService {
   ): MediaSpeakers {
     const { current } = this.editable(actor, mediaId, request.version);
     this.deps.voiceLabels.confirmNames(current.id);
+    this.deps.onChanged?.(mediaId);
     return this.deps.speakersOf(actor, mediaId);
   }
 
