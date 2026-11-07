@@ -10,7 +10,7 @@ import {
   uniqueEmail,
 } from './fixtures.js';
 import {
-  aCollection,
+  aCollectionInVault,
   audioState,
   uniqueTag,
   uploadReady,
@@ -49,7 +49,7 @@ async function published(owner: APIRequestContext, mediaId: string) {
 
 /** A collection of its own with one recording, two tracks published through the Mac. */
 async function publishedTrack(owner: APIRequestContext): Promise<string> {
-  const topic = await aCollection(owner);
+  const topic = await aCollectionInVault(owner);
   const media = await uploadReady(owner, {
     title: `Palestra ${uniqueTag()}`,
     seconds: 90,

@@ -21,7 +21,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const SCRIPTS = fileURLToPath(new URL('../../../deploy/scripts', import.meta.url));
+const SCRIPTS = fileURLToPath(
+  new URL('../../../deploy/scripts', import.meta.url),
+);
 const SQLITE_HEADER = 'SQLite format 3\u0000 fake index';
 
 interface Run {
@@ -158,7 +160,7 @@ describe('install-index.sh --hot (KBC-100 FR-5, AC-13)', () => {
     expect(files).not.toContain('index-0.sqlite');
   });
 
-  it('without the API\'s answer it goes back to the previous index and fails', async () => {
+  it("without the API's answer it goes back to the previous index and fails", async () => {
     const vm = await aVm({ previous: 'link' });
     const done = await run(join(vm.root, 'deploy/scripts/install-index.sh'), {
       args: ['--hot'],
@@ -186,9 +188,9 @@ describe('install-index.sh --hot (KBC-100 FR-5, AC-13)', () => {
     expect(await readlink(join(vm.cache, 'index.sqlite'))).toBe(
       'index-1.sqlite',
     );
-    expect((await lstat(join(vm.root, 'qmd/incoming/index.sqlite'))).isFile()).toBe(
-      true,
-    );
+    expect(
+      (await lstat(join(vm.root, 'qmd/incoming/index.sqlite'))).isFile(),
+    ).toBe(true);
   });
 
   it('before the first deploy it only puts the files in place', async () => {
@@ -221,8 +223,16 @@ async function aMac() {
     `collections:\n  hermetismo:\n    path: ${vault}/hermetismo\n`,
   );
   await fakeBin(bin, 'ssh', `echo "ssh $*" >>"${log}"`);
-  await fakeBin(bin, 'rsync', `printf 'rsync' >>"${log}"; printf ' [%s]' "$@" >>"${log}"; echo >>"${log}"`);
-  await fakeBin(bin, 'sqlite3', `echo "sqlite3 $*" >>"${log}"; touch "$(echo "$2" | sed "s/.backup '\\(.*\\)'/\\1/")"`);
+  await fakeBin(
+    bin,
+    'rsync',
+    `printf 'rsync' >>"${log}"; printf ' [%s]' "$@" >>"${log}"; echo >>"${log}"`,
+  );
+  await fakeBin(
+    bin,
+    'sqlite3',
+    `echo "sqlite3 $*" >>"${log}"; touch "$(echo "$2" | sed "s/.backup '\\(.*\\)'/\\1/")"`,
+  );
   const env = {
     HOME: home,
     XDG_CONFIG_HOME: join(home, '.config'),

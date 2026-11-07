@@ -29,7 +29,12 @@ export interface SeenDocument {
 export interface PublicationStatusDeps {
   readonly documents: Pick<
     MediaDocumentStorePort,
-    'statusOf' | 'retry' | 'queueSummary' | 'markLive' | 'recordSync' | 'lastSync'
+    | 'statusOf'
+    | 'retry'
+    | 'queueSummary'
+    | 'markLive'
+    | 'recordSync'
+    | 'lastSync'
   >;
   readonly reconciler: Pick<
     MediaDocumentReconciler,

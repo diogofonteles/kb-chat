@@ -3,6 +3,7 @@ import {
   KB_PUBLISH_MAX_BUDGET_USD,
   KB_PUBLISH_MAX_ITEMS,
   type CompleteKbPublishRequest,
+  type KbPublishItem,
   type KbPublishJob,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
@@ -11,7 +12,6 @@ import type {
   DeliveredDocument,
   LeasedKbJob,
   MediaDocumentStorePort,
-  PendingDocument,
 } from '../../ports/media-document-store.js';
 import type { MediaSpendLedgerPort } from '../../ports/media-spend-ledger.js';
 import type { LeaseOwner } from '../../ports/media-store.js';
@@ -84,47 +84,29 @@ export class KbPublishService {
         ...(topic && { topic }),
       });
       if (!job) return null;
-      const writes = this.renderPending(job.topic);
-      const removals = this.deps.documents.removalsOf(
-        job.topic,
-        KB_PUBLISH_MAX_ITEMS - writes.length,
-      );
-      const items = [
-        ...writes.map(delivered),
-        ...removals.map(
-          (one): DeliveredDocument => ({ op: 'remove', ...one }),
-        ),
-      ];
+      const work = this.workOf(job.topic);
       const owner = ownerOf(job, worker);
-      if (items.length > 0) {
+      if (work.items.length > 0) {
+        const items = work.delivered;
         this.deps.documents.deliver(owner, { items, budgetUsd });
-        return this.toJob(job, { writes, removals, budgetUsd });
+        return this.toJob(job, { items: work.items, budgetUsd });
       }
       this.deps.documents.finishEmpty(owner, this.now());
     }
     return null;
   }
 
-  private toJob(
-    job: LeasedKbJob,
-    {
-      writes,
-      removals,
-      budgetUsd,
-    }: {
-      writes: readonly TrackRender[];
-      removals: readonly PendingDocument[];
-      budgetUsd: number;
-    },
-  ): KbPublishJob {
+  /** What a collection's job carries now: its documents to write, then those to remove. */
+  private workOf(topic: string): {
+    items: KbPublishItem[];
+    delivered: DeliveredDocument[];
+  } {
+    const writes = this.renderPending(topic);
+    const removals = this.deps.documents.removalsOf(
+      topic,
+      KB_PUBLISH_MAX_ITEMS - writes.length,
+    );
     return {
-      id: job.id,
-      leaseId: job.leaseId,
-      kind: 'kb-publish',
-      topic: job.topic,
-      attempt: job.attempt,
-      leaseMs: this.deps.leaseMs,
-      budgetUsd,
       items: [
         ...writes.map(({ path, markdown, fingerprint }) => ({
           op: 'write' as const,
@@ -134,6 +116,26 @@ export class KbPublishService {
         })),
         ...removals.map(({ path }) => ({ op: 'remove' as const, path })),
       ],
+      delivered: [
+        ...writes.map(delivered),
+        ...removals.map((one): DeliveredDocument => ({ op: 'remove', ...one })),
+      ],
+    };
+  }
+
+  private toJob(
+    job: LeasedKbJob,
+    { items, budgetUsd }: { items: KbPublishItem[]; budgetUsd: number },
+  ): KbPublishJob {
+    return {
+      id: job.id,
+      leaseId: job.leaseId,
+      kind: 'kb-publish',
+      topic: job.topic,
+      attempt: job.attempt,
+      leaseMs: this.deps.leaseMs,
+      budgetUsd,
+      items,
     };
   }
 

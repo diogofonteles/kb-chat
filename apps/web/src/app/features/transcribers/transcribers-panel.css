@@ -244,3 +244,33 @@ button:disabled {
   padding-left: 1.25rem;
   overflow-wrap: anywhere;
 }
+
+/* The publishing queue (KBC-100, T22): what waits, the last sync, what failed. */
+.existing .queue {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.existing .queue p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.existing .failed {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.existing .failed li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.existing .failed .what {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

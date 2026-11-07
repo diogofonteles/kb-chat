@@ -344,3 +344,106 @@ describe('ExistingTracks (KBC-099 AC-16, scope of 2026-11-06)', () => {
     http.expectOne(URL).flush(anOverview());
   });
 });
+
+describe('ExistingTracks: the publishing queue (KBC-100 FR-3, FR-4, T22)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  const today = (hours: number, minutes: number): string => {
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date.toISOString();
+  };
+  const FAILED = {
+    mediaId: '0b9c1f7e-1111-4a2b-8c3d-000000000001',
+    topic: 'hermetismo',
+    title: 'O que é o ritmo?',
+    error: 'kb link: exit 1',
+    since: today(14, 2),
+  };
+
+  it('says how many documents wait and when the Mac last published', async () => {
+    await renderIt(
+      anOverview({
+        queue: {
+          waiting: 12,
+          lastPublishedAt: today(14, 32),
+          lastSync: null,
+          failed: [],
+        },
+      }),
+    );
+    expect(
+      screen.getByText(
+        '12 faixas aguardando publicação · última publicação 14:32',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('says when the last sync with production failed, and why', async () => {
+    await renderIt(
+      anOverview({
+        queue: {
+          waiting: 1,
+          lastPublishedAt: null,
+          lastSync: {
+            ok: false,
+            detail: 'sync-vault: would delete 250 files on the VM (limit 200)',
+            startedAt: today(14, 40),
+            finishedAt: today(14, 40),
+          },
+          failed: [],
+        },
+      }),
+    );
+    expect(
+      screen.getByText(
+        'A sincronização com a produção falhou às 14:40: sync-vault: would delete 250 files on the VM (limit 200)',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('AC-10: lists what failed with "Tentar de novo", which queues it again', async () => {
+    const { fixture, http } = await renderIt(
+      anOverview({
+        queue: {
+          waiting: 1,
+          lastPublishedAt: null,
+          lastSync: null,
+          failed: [FAILED],
+        },
+      }),
+    );
+    expect(
+      screen.getByText(
+        'O que é o ritmo? (Hermetismo) — Falhou: kb link: exit 1',
+      ),
+    ).toBeTruthy();
+    const retry = screen.getByRole('button', {
+      name: 'Tentar de novo: O que é o ritmo?',
+    });
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+    http.expectOne(`/api/v1/media/${FAILED.mediaId}/publication/retry`).flush({
+      mediaId: FAILED.mediaId,
+      publication: { state: 'updating', since: today(14, 50) },
+    });
+    TestBed.tick();
+    http.expectOne(URL).flush(
+      anOverview({
+        queue: {
+          waiting: 1,
+          lastPublishedAt: null,
+          lastSync: null,
+          failed: [],
+        },
+      }),
+    );
+    await fixture.whenStable();
+    expect(screen.getByRole('status').textContent).toContain(
+      'O que é o ritmo? está na fila de novo.',
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole('heading', { name: 'Faixas que já existem' }),
+    );
+  });
+});

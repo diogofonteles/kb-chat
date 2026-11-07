@@ -960,7 +960,10 @@ export const trackPublicationSchema = z.discriminatedUnion('state', [
     /** kb's or the Mac's output, shortened. */
     reason: z.string(),
   }),
-  z.object({ state: z.literal('out'), reason: z.enum(PUBLICATION_OUT_REASONS) }),
+  z.object({
+    state: z.literal('out'),
+    reason: z.enum(PUBLICATION_OUT_REASONS),
+  }),
 ]);
 export type TrackPublication = z.infer<typeof trackPublicationSchema>;
 export type TrackPublicationState = TrackPublication['state'];
