@@ -153,9 +153,12 @@ Pedido do dono: receber um áudio e editá-lo, dividindo em faixas de pergunta e
 | [KBC-072](KBC-072-upload-with-editing-choices-and-live-progress.md) | Envio guiado em 4 passos: enviar e escolher, processar com as faixas aparecendo, validar faixas, aprovar; sair e continuar no mesmo passo | phase-2-editing | ready | KBC-064, KBC-065, KBC-066, KBC-067 |
 | [KBC-096](KBC-096-library-search-by-track.md) | Busca da Biblioteca por faixa: a fala primeiro, só o que atende, abrindo no ponto exato | phase-2-a | ready | KBC-039, KBC-051, KBC-068, KBC-070 |
 | [KBC-092](KBC-092-track-text-and-spoken-word-highlight.md) | Texto da faixa e destaque da palavra falada na tela de preparo (passos 2 e 3), com a transcrição completa a um toque | phase-2-editing | in-review | KBC-045, KBC-066, KBC-072, KBC-090 |
-| [KBC-093](KBC-093-correct-transcript-words.md) | Corrigir palavras da transcrição na tela de preparo: clicar na palavra, histórico e desfazer, busca, legendas e faixas na mesma hora, reaplicar ao transcrever de novo (`media-correct`) | phase-2-editing | ready | KBC-092, KBC-045, KBC-068, KBC-073 |
+| [KBC-093](KBC-093-correct-transcript-words.md) | Corrigir palavras da transcrição na tela de preparo: clicar na palavra leva o áudio a ela e abre a correção, corrigir todas as ocorrências com prévia, histórico e desfazer (também em grupo), busca, legendas e faixas na mesma hora, reaplicar ao transcrever de novo (`media-correct`) | phase-2-editing | ready | KBC-092, KBC-045, KBC-068, KBC-073 |
+| [KBC-113](KBC-113-term-suggestions-from-corrections.md) | Sugestões para a lista de termos a partir das correções: o master aceita ou dispensa (T21) | phase-2-editing | ready | KBC-093, KBC-040 |
 
 Todos prontos depois das decisões do dono de 2026-11-03 (nota em "Decisões de escopo").
+
+Decisões do dono de 2026-11-07 (conversa) sobre o KBC-093: ficam os padrões de onde corrigir, quem corrige, reaplicar e confiança; entram no item "trocar todas as ocorrências" ("essa feature é importante, pois facilita a correção de palavras na transcrição") e o clique que leva o áudio à palavra e abre a correção; a palavra corrigida não entra sozinha na lista de termos, vira sugestão (KBC-113). ADR 0034 aceita, com emenda.
 
 ### Fase 3 — processamento sem o Mac do dono (versão posterior)
 

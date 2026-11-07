@@ -1,6 +1,6 @@
 # 0034 — Transcript word corrections: in place on the current version, with a revision and an append-only log, carried to the next version by time and text
 
-- Status: proposed (2026-11-05, KBC-093); becomes accepted with the owner's answers to the questions in `work/KBC-093/spec.md` or with their recommended defaults
+- Status: accepted (2026-11-07, the owner's answers in conversation; proposed 2026-11-05, KBC-093), with the amendment below
 - Amends: [0023](0023-transcription-pull-worker-on-the-owners-mac.md) §4 (the derived rows are the raw JSON, the post-filter **and** the corrections), [0024](0024-media-search-outside-the-vault.md) §1 (the index also follows a correction), [0029](0029-recording-edits-speakers-tracks-and-subjects.md) §5 (a track's slice follows a correction of its recording)
 - Drivers: the owner's request (2026-11-05, board card "Corrigir palavras da transcrição"); search must find a recording by the right word (ADR 0024); every place that shows the text agrees (KBC-038, KBC-045, KBC-092, KBC-068); edits are auditable and undoable (KBC-073 pattern); the per-person feature rule (2026-10-28)
 
@@ -41,5 +41,13 @@ A person fixing one wrong word must not invalidate all of that, and the fix must
 - Bad: a correction spanning two segments, or one that changes word times, is not possible; it waits for a "segment editing" item if ever needed.
 - Bad: carry-over by time and text may leave corrections `not-carried` when the model changes its segmentation; they are listed, not lost.
 - Threats: a person with `media-correct` could deface a transcript; mitigated by the per-person grant, the log with authors, undo, masters undoing anyone's change, and the ADR 0027 audit when acting as someone. Text is stored and served as text (no HTML), max 80 characters.
-- Revisit when: corrections are wanted on the player page or on tracks; word times need editing; the term list (KBC-040) should learn from corrections.
+- Revisit when: corrections are wanted on the player page or on tracks; word times need editing. (The term list learning from corrections was decided on 2026-11-07: suggestions only, KBC-113.)
 - Compliance: integration tests that a correction changes the search result, the subtitles ETag and the affected tracks only, and leaves the version, voices and `transcriptChanged` untouched; a failure-injection test of the transaction; a property test that every active correction ends `carried` or `not-carried` after a new version; migration test of the new column and table.
+
+## Amendment 2026-11-07 (owner's decisions)
+
+Approved as proposed: corrections only on the preparation steps; the `media-correct` feature (masters by default, members undo their own); carry-over by time and text (rule 6); a correction does not change the low-confidence label (ADR 0023 §6). Changed or added:
+
+8. **Correct all occurrences (KBC-093 BR-11 to BR-15).** A batch replaces every chosen occurrence (1 to 5 consecutive words of one segment whose text, ignoring case and edge punctuation, equals the chosen text) in a track's window or the whole recording, at most 200 per request, each keeping its own edge punctuation. It is one transaction and one revision: all or nothing; `412` when re-transcribed; `409 word-changed` naming the positions whose words no longer say what the preview showed; a client key makes a retry idempotent. The log keeps one row per occurrence (rules 3 and 6 unchanged) plus `group_id` (nullable column on `transcript_corrections`, expand-only); undoing a group is one transaction that restores the rows whose words still say `after` and reports the others. Each affected published track is re-sliced once per batch (rule 5), and each affected track document (ADR 0035, KBC-100) is reconciled once.
+9. **No automatic term list.** A correction never changes the transcriber's term list (KBC-040). Active, non-empty `after` texts are read from the log as suggestions a master accepts into the list (a new list version) or dismisses (a new dismissal table); KBC-113.
+10. **A word click seeks and opens.** On the preparation steps, a click (or Enter on an occurrence in "Procurar palavra") by someone with `media-correct` seeks the step's player to the word's `startMs`, keeping play or pause, and opens the correction panel, as one action; a word with no time opens the panel without seeking. This is client behaviour only; no contract changes.
