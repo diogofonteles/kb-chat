@@ -53,7 +53,7 @@
     </div>
   } @else if (stop()) {
     <!-- Above the button: on a phone the bar at the bottom would hide it (KBC-112 AC-14). -->
-    <p class="refusal">{{ stopText() }}</p>
+    <p class="stopped">{{ stopText() }}</p>
     <ng-container *ngTemplateOutlet="errorText" />
     <div class="buttons">
       <button

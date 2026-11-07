@@ -36,6 +36,17 @@
   font-weight: 600;
 }
 
+/*
+ * A stop at the value accepted is expected, not an error (KBC-112): body text, set apart by
+ * the accent's rule, the person decides whether to go on.
+ */
+.stopped {
+  padding-inline-start: var(--space-2);
+  border-inline-start: 3px solid var(--color-accent);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
 .suggestions {
   display: grid;
   gap: var(--space-2);

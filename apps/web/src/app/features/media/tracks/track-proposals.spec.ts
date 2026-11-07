@@ -390,11 +390,12 @@ describe('TrackProposals (KBC-067 on KBC-066)', () => {
       statusText: 'Unavailable',
     });
     await rendered.fixture.whenStable();
-    expect(
-      screen.getByText(
-        'A análise parou no valor aceito (US$ 0,020): 1 de 3 janelas prontas.',
-      ),
-    ).toBeTruthy();
+    const said = screen.getByText(
+      'A análise parou no valor aceito (US$ 0,020): 1 de 3 janelas prontas.',
+    );
+    // An expected stop, the person decides: said as a notice, not in an error's red.
+    expect(said.classList).toContain('stopped');
+    expect(said.classList).not.toContain('refusal');
     expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
   });
 });
