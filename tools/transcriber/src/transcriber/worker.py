@@ -34,6 +34,7 @@ from .secret import TokenError
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
 from .vad import SpeechFinder
+from .vault_sync import VaultSync
 from .voiceprint import (
     Embedder,
     PrintHold,
@@ -81,6 +82,8 @@ class Worker:
     print_ack_s: float = PRINT_ACK_S
     # Track documents (KBC-099): without a vault and kb, the worker never asks for them.
     publisher: KbPublisher | None = None
+    # The automatic sync with production (KBC-100): without a host, the owner syncs by hand.
+    sync: VaultSync | None = None
 
     @property
     def kinds(self) -> tuple[str, ...]:
@@ -129,7 +132,24 @@ class Worker:
         except ApiError as err:
             log.warning("could not lease a job: %s", err)
             return "error"
-        return "idle" if job is None else self._run_job(job)
+        if job is None:
+            self._sync_if_due()
+            return "idle"
+        return self._run_job(job)
+
+    def _sync_if_due(self) -> None:
+        """Between jobs only: a change waiting for production goes there (BR-7)."""
+        if self.sync is None:
+            return
+        report = self.sync.run_if_due()
+        if report is None:
+            return
+        level = logging.INFO if report["ok"] else logging.ERROR
+        log.log(level, "sync with production: %s", report["detail"].splitlines()[-1:])
+        try:
+            self.api.report_sync(report)
+        except ApiError as err:
+            log.warning("could not report the sync: %s", err)
 
     def _run_job(self, job: dict) -> str:
         """Processes one job; 'job', or 'revoked'/'error' when it could not finish."""
@@ -231,9 +251,13 @@ class Worker:
             self.api.fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
             return
         progress["percent"] = 100
+        # The vault changed on this Mac whatever happens to the lease: production follows.
+        if self.sync is not None:
+            self.sync.mark_pending()
         if self.api.upload_kb_result(job, result):
             count = len(result["documents"])
             log.info("job %s: %d documents in %s", job["id"], count, job["topic"])
+            self._sync_if_due()
         else:
             log.warning("job %s: the lease was lost before the result: dropped", job["id"])
 
