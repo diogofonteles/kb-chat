@@ -154,8 +154,16 @@ class ApiClient:
         """The print of a `voice-profile` job (KBC-071 FR-2)."""
         return self._on_job(job, "voice-print", result)
 
-    def fail(self, job: dict, failure: str, detail: str) -> bool:
-        return self._on_job(job, "fail", {"failure": failure, "detail": detail[:2000]})
+    def upload_kb_result(self, job: dict, result: dict) -> bool:
+        """What kb did to a kb-publish job's documents (KBC-099 FR-2)."""
+        return self._on_job(job, "kb-result", result)
+
+    def fail(self, job: dict, failure: str, detail: str, spend_usd: float = 0.0) -> bool:
+        """Gives the job back; a kb-publish job also says what kb spent before it failed."""
+        body: dict = {"failure": failure, "detail": detail[:2000]}
+        if spend_usd > 0:
+            body["spendUsd"] = round(spend_usd, 6)
+        return self._on_job(job, "fail", body)
 
     def _on_job(self, job: dict, action: str, body: dict) -> bool:
         """True on 204; False when the lease is no longer ours (409)."""

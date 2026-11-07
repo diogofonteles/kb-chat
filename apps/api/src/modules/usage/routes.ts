@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { UsageLogPort } from '../../ports/usage-log.js';
 import { SIGNED_IN, principalOf } from '../auth/index.js';
-import type { CatalogRegistry } from '../catalog/index.js';
+import { isTrackEntry, type CatalogRegistry } from '../catalog/index.js';
 import { topSuggestions } from './suggestions.js';
 
 export interface UsageDeps {
@@ -36,7 +36,12 @@ function registerSuggestions(app: FastifyInstance, { catalog }: UsageDeps) {
       const scope = catalog.scope(params.topic);
       if (scope.length === 0)
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${params.topic}`);
-      return topSuggestions(scope.flatMap((one) => [...one.entries.values()]));
+      // Texts only: a track's concepts never reach the start screen (KBC-099 BR-7).
+      return topSuggestions(
+        scope.flatMap((one) =>
+          [...one.entries.values()].filter((entry) => !isTrackEntry(entry)),
+        ),
+      );
     },
   );
 }

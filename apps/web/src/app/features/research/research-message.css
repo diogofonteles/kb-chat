@@ -187,6 +187,12 @@ p.steps {
   list-style: none;
 }
 
+.sources li {
+  /* A long chip shrinks into its column instead of spilling over (PD-12). */
+  min-width: 0;
+  max-width: 100%;
+}
+
 .source {
   display: inline-flex;
   align-items: center;
@@ -224,9 +230,80 @@ p.steps {
   white-space: nowrap;
 }
 
+/* A track (KBC-099, T22): "♪ title · recording · 0:41", the recording on a second line on
+   phones. The note is text-backed for screen readers, never an icon alone (UP-20). */
+.track-mark {
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+.source.track > * {
+  flex-shrink: 0;
+}
+
+/* One line on a desktop: the title and the recording give way (ellipsis), the minute stays. */
+.source.track > .source-text {
+  display: inline-flex;
+  flex: 0 1 auto;
+  column-gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.source.track .source-title {
+  flex: 0 1 auto;
+  min-width: 3rem;
+}
+
+.source-track {
+  display: inline-flex;
+  flex: 0 1 auto;
+  column-gap: 0.3em;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.track-recording {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-track > :not(.track-recording) {
+  flex-shrink: 0;
+}
+
+.source-track::before {
+  content: '·';
+}
+
 @media (max-width: 1023px) {
   .source {
     min-height: var(--target);
+  }
+
+  .source.track {
+    padding-block: var(--space-1);
+    border-radius: var(--radius-sm);
+  }
+
+  .source.track > .source-text {
+    flex-direction: column;
+  }
+
+  .source-track {
+    flex-wrap: wrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .track-recording {
+    overflow: visible;
+  }
+
+  .source-track::before {
+    content: none;
   }
 }
 

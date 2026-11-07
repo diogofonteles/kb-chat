@@ -1,3 +1,4 @@
+import { formatTrackClock } from '@kb-chat/contracts';
 import type { CatalogEntry } from '../catalog/index.js';
 import { originFolder } from './doc-filter.js';
 import type { DocMatch, Occurrence } from './text-finder.js';
@@ -5,6 +6,7 @@ import {
   authorshipPart,
   oneLine,
   quote,
+  trackPart,
   type AuthorshipLabels,
 } from './tool-output.js';
 
@@ -68,7 +70,7 @@ const occurrencesPart = (match: DocMatch): string => {
 };
 
 const titlePart = (n: number, entry: CatalogEntry): string =>
-  `[${n}] ${oneLine(entry.title, TITLE_CHARS)}`;
+  `[${n}] ${oneLine(entry.title, TITLE_CHARS)}${trackPart(entry.media)}`;
 
 /** One files-mode line: [n], title, occurrences, origin; a passage when one is given. */
 export function fileLine(
@@ -136,6 +138,11 @@ export function occurrenceLine(
 ): string {
   const where =
     occurrence.offset === null ? '(resumo)' : `@${occurrence.offset}`;
+  // A track's occurrence shows the anchor of its paragraph, to cite it (KBC-099 FR-5).
+  const anchor =
+    occurrence.anchor === undefined || occurrence.anchor === null
+      ? ''
+      : ` [${formatTrackClock(occurrence.anchor * 1000)}]`;
   const which = severalPhrases ? ` ${quote(occurrence.phrase)}` : '';
-  return `- ${where}${which}: ${occurrence.context}`;
+  return `- ${where}${anchor}${which}: ${occurrence.context}`;
 }

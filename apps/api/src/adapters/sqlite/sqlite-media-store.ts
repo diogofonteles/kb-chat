@@ -378,7 +378,7 @@ export class SqliteMediaStore implements MediaStorePort {
     });
   }
 
-  private holdsLease(worker: string): boolean {
+  holdsLease(worker: string): boolean {
     return (
       this.db
         .prepare(

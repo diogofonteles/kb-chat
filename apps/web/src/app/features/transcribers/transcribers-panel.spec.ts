@@ -400,6 +400,32 @@ describe('TranscribersPanel (KBC-036 FR-5, BR-1)', () => {
       await fixture.whenStable();
     });
 
+    it('KBC-099: "Publica no acervo" starts unmarked and marks the kb-publish kind', async () => {
+      const { http, fixture } = await renderPanel([
+        aTranscriber({ kinds: ['transcribe', 'diarize'] }),
+      ]);
+      const box = screen.getByRole<HTMLInputElement>('checkbox', {
+        name: 'Publica no acervo: Mac do dono',
+      });
+      expect(box.checked).toBe(false);
+      fireEvent.click(box);
+      const patch = http.expectOne(
+        `${URL}/dddddddd-dddd-4ddd-8ddd-dddddddddddd`,
+      );
+      expect(patch.request.body).toEqual({
+        kinds: ['transcribe', 'diarize', 'kb-publish'],
+      });
+      patch.flush(aTranscriber());
+      TestBed.tick();
+      http.expectOne(URL).flush({ items: [aTranscriber()] });
+      await fixture.whenStable();
+      expect(
+        await screen.findByText(
+          '"Mac do dono" agora publica as faixas no acervo.',
+        ),
+      ).toBeTruthy();
+    });
+
     it('unmarking "Separa vozes" keeps the voice profiles mark', async () => {
       const { http, fixture } = await renderPanel([
         aTranscriber({ kinds: ['transcribe', 'diarize', 'voice-profile'] }),

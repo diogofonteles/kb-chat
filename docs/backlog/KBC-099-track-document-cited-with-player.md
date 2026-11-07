@@ -24,8 +24,9 @@ Como quem estuda, quero perguntar à IA e receber, entre as fontes, a faixa onde
 - Permissão nova `media-research` ("Pesquisar faixas com IA"), em "Pessoas e permissões", nos perfis de convite e no "Ver como" (KBC-060); masters a têm.
 - Saída das ferramentas para faixas (tipo, gravação, faixa n de N, autor, autoria, confiança) com as âncoras; instrução no prompt para citar `[n@m:ss]`.
 - Contrato `answerSourceSchema.media` e `.passages` (aditivo) e a resolução do trecho (ADR 0035 §6 a, b).
+- **Publicar no acervo as faixas que já existem** (escopo acrescentado em 2026-11-06, aprovado pelo dono, vindo do KBC-100): ação de master em Transcritores que mostra, por acervo, quantas faixas publicadas ainda não estão no vault como estão hoje e o custo estimado do kb, e as enfileira ao confirmar; o andamento (na fila, publicadas, falharam) fica à vista.
 - Web: `[n@m:ss]` vira link; chip da fonte com ♪, título da faixa, gravação e minuto; painel "Trecho da faixa" (T22) com a transcrição rolada até o trecho destacado e o player ao lado, em −2 s, pausado.
-**Out:** regerar e remover documentos em toda mudança, estado visível da publicação, documentos das faixas antigas e das gravações sem faixas, sincronização automática com a produção (KBC-100); Exaustivo, cobertura, filtro de origem "Faixas", sub-acervos nas ferramentas de leitura, faixas no "Veja também" (KBC-101); mostrar o Markdown do vault.
+**Out:** regerar e remover documentos em toda mudança, estado visível da publicação, documentos das gravações sem faixas, sincronização automática com a produção (KBC-100); Exaustivo, cobertura, filtro de origem "Faixas", sub-acervos nas ferramentas de leitura, faixas no "Veja também" (KBC-101); mostrar o Markdown do vault.
 
 ## Business rules
 - BR-1 (KBC-098 BR-1, BR-2): só o transcritor marcado **Publica no acervo** recebe `kb-publish`; a API nunca escreve no vault.
@@ -34,6 +35,7 @@ Como quem estuda, quero perguntar à IA e receber, entre as fontes, a faixa onde
 - BR-4 (KBC-098 BR-4): uma entrada de faixa só aparece numa ferramenta se o `media.db` a confirma (existe, pronta, não arquivada, mesmo acervo) e a pessoa tem acesso ao acervo, `research`, `media` e `media-research`.
 - BR-5 (KBC-098 BR-6): o trecho citado vem do `media.db`: o tempo escrito pelo modelo só vale se a âncora foi mostrada a ele nesta resposta, para aquela fonte; senão vale o último trecho que as ferramentas mostraram dela; sem nenhum, o começo da faixa.
 - BR-6 (KBC-098 BR-8): a autoria e o autor do documento são os da mídia; as ferramentas os mostram como nos textos.
+- BR-8: publicar as faixas que já existem é só de masters, idempotente (faixa já publicada com o mesmo fingerprint é pulada) e respeita o teto mensal da mídia (gasto o teto, nada é enfileirado); o custo mostrado é uma estimativa (≈ US$ 0,001 por faixa, medido no spike).
 - BR-7: a busca de documentos (T2), suas facetas e o "Veja também" não mostram documentos de faixa; "Na fala", a Biblioteca e os assuntos não mudam.
 
 ## Functional requirements
@@ -47,6 +49,8 @@ Como quem estuda, quero perguntar à IA e receber, entre as fontes, a faixa onde
 - FR-8: Clicar num link ou chip de faixa deve abrir o painel T22: transcrição atual do `media.db` com o trecho destacado e rolado para a vista, e o player da faixa carregado em `startMs − 2 s`, pausado. (BR-5)
 - FR-9: A busca (T2) deve excluir entradas com `media` da lista de documentos, das contagens e do "Veja também". (BR-7)
 - FR-10: A permissão `media-research` deve existir no contrato, na tela "Pessoas e permissões", nos perfis de convite e valer em "Ver como". (BR-4)
+
+- FR-11: `GET /api/v1/media/track-documents` deve dar, por acervo com faixas, `{ tracks, toPublish, queued, published, failed }`, o custo por faixa e o que resta do teto; `POST /api/v1/media/track-documents/publish { topics }` deve renderizar e enfileirar as faixas publicadas desses acervos e responder `{ queued, skipped }`; a tela Transcritores deve oferecer a ação, a escolha dos acervos, o total e o custo antes de confirmar, e o andamento depois. (BR-8)
 
 ## Non-functional requirements
 - NFR-1: faixa aprovada → citável na API local em p95 ≤ 10 min com o Mac ligado (20 faixas, `published_at − approved_at`).
@@ -71,6 +75,7 @@ Como quem estuda, quero perguntar à IA e receber, entre as fontes, a faixa onde
 - **AC-13** (BR-7, FR-9, regressão): Given o vault com documentos de faixa, When alguém busca "ritmo" em "Buscar documentos", Then a lista de textos e as contagens são as mesmas de sem eles e a faixa aparece só em "Na fala"; os specs `media-library-search`, `media-search`, `media-subjects`, `media-track-items` e `media-player` passam sem mudança.
 - **AC-14** (FR-10): Given um master, Then `media-research` aparece marcado; Given um perfil de convite, Then a caixa "Pesquisar faixas com IA" existe e começa desmarcada.
 - **AC-15** (borda): Given uma resposta salva antes deste item, When reaberta do histórico, Then as fontes aparecem como antes.
+- **AC-16** (FR-11, BR-8; escopo de 2026-11-06): Given 2 faixas de "Hermetismo" publicadas antes deste item (sem documento), When um master abre Transcritores e escolhe **Publicar no acervo as faixas que já existem**, Then vê "Hermetismo · 2 faixas a publicar" e "custo estimado do kb ≈ US$ 0,002" antes de confirmar; When confirma, Then as 2 entram na fila, o andamento mostra "2 na fila" e, depois que o Mac publica, "2 publicadas"; pedir de novo enfileira 0 e pula 2; Given o teto mensal da mídia gasto, Then nada é enfileirado e a tela diz "teto mensal da mídia atingido"; Given um membro (mesmo com todas as permissões de mídia), Then a API responde 403 e a ação não aparece; sem sessão, 401; um corpo sem acervo ou com campo desconhecido, 400.
 
 ## Test strategy
 | AC | Nível | Notas |
@@ -82,6 +87,7 @@ Como quem estuda, quero perguntar à IA e receber, entre as fontes, a faixa onde
 | AC-9 a AC-12 | componente + E2E | `track-passage-panel.spec.ts`; `e2e/specs/research-tracks.spec.ts` (Chrome, áudio real gerado por ffmpeg, `--repeat-each=3`, 1440 e 390) |
 | AC-13 | integração + E2E existentes | `search.integration` com documentos de faixa; specs de mídia sem mudança |
 | AC-14, AC-15 | componente | `people-editor.spec.ts`, `research-message.spec.ts` |
+| AC-16 | integração + componente + E2E | `existing-tracks.integration.test.ts` (401/403/400/404, idempotência, teto); spec do painel em Transcritores; E2E `media-research-tracks` com o Mac falso, 1440 e 390 |
 | NFR-3 | script | `latency` com 2.000 faixas sintéticas |
 
 ## References

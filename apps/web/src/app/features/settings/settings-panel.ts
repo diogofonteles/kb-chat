@@ -23,6 +23,7 @@ import { PeoplePanel } from '@features/people/people-panel.js';
 import { HouseAiPanel } from '@features/house-ai/house-ai-panel.js';
 import { TermsPanel } from '@features/transcribers/terms-panel.js';
 import { GroqPanel } from '@features/transcribers/groq-panel.js';
+import { ExistingTracks } from '@features/transcribers/existing-tracks.js';
 import { TranscribersPanel } from '@features/transcribers/transcribers-panel.js';
 import { VoiceProfilesPanel } from '@features/voice-profiles/voice-profiles-panel.js';
 import { AiStatusCard } from './ai-status-card.js';
@@ -85,6 +86,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'failed' | 'invalid';
     PeoplePanel,
     HouseAiPanel,
     TranscribersPanel,
+    ExistingTracks,
     TermsPanel,
     GroqPanel,
     VoiceProfilesPanel,

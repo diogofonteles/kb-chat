@@ -62,6 +62,12 @@ A revocation reaches a running job: each heartbeat (15 s) names the prints held,
 
 The recipe is the one measured in KBC-063, not a calibrated one (threshold 0.4 at the API; margin 0.1 and at least 10 s of speech here, in `config.py`).
 
+## Track documents in the collection (KBC-099)
+
+**kb spends on the owner's key: off unless you turn it on, at both ends.** With a vault path (`transcriber pair --vault ~/dev/personal/hermetismo`, or `KB_CHAT_VAULT`) and `kb` on PATH, the worker asks for `kb-publish` jobs, and the API gives them only to a transcriber marked **Publica no acervo** in Transcritores. A job carries a collection's rendered track documents; the worker takes `<vault>/.kb-chat-publish.lock`, writes each one under `<vault>/<collection>/raw/media/`, then runs `kb classify <collection>`, `kb link <collection>` and `kb index --topic <collection>`, each with `--budget` (what is left of the media monthly cap, at most US$ 0.50). A step that fails fails the job with kb's output; the files stay and the next job runs kb again. `transcriber run --no-kb-publish` keeps the worker out of it. The owner's `sync-vault.sh` takes the documents to production.
+
+**Pending:** the commands follow ADR 0035 §3; the flags, the receipts' spend format and whether kb 0.0.12 classifies a file it did not ingest are checked by the owner's spike on a vault copy (it spends money). If it does not, the fallback is `kb ingest file --force` (ADR 0035 option 5).
+
 ## Run
 
 ```bash

@@ -4,6 +4,9 @@ import type {
   ResearchToolsFactory,
   ResearchToolsPort,
 } from '../../ports/research-tools.js';
+import type { AnswerSource } from '@kb-chat/contracts';
+import type { TrackShelf } from '../../ports/track-shelf.js';
+import { resolveTurnPassages } from './passage-resolution.js';
 import { SourceBook } from './source-book.js';
 import type { SweepKit } from './sweep/sweep-kit.js';
 import type { ResearchTools } from './tools.js';
@@ -20,6 +23,7 @@ export class TurnResearchTools implements ResearchToolsPort {
   constructor(
     private readonly tools: ResearchTools,
     private readonly topic: string,
+    private readonly tracks?: TrackShelf,
   ) {}
 
   /** The sweep's planner and this turn's numbering, for an exhaustive CLI turn (KBC-030). */
@@ -42,10 +46,21 @@ export class TurnResearchTools implements ResearchToolsPort {
     this.calls += 1;
     const prepared = this.tools.prepare(
       { id: `mcp-${this.calls}`, name, arguments: JSON.stringify(args ?? {}) },
-      { topic: this.topic, book: this.book },
+      {
+        topic: this.topic,
+        book: this.book,
+        ...(this.tracks && { tracks: this.tracks }),
+      },
     );
     const text = await prepared.run();
     return { text, steps: prepared.steps, sources: this.book.list() };
+  }
+
+  finalSources(answer: string): readonly AnswerSource[] | null {
+    return resolveTurnPassages(answer, {
+      book: this.book,
+      tracks: this.tracks,
+    });
   }
 }
 
@@ -55,7 +70,7 @@ export class TurnResearchTools implements ResearchToolsPort {
  */
 export const turnToolsFactory =
   (tools: ResearchTools): ResearchToolsFactory =>
-  (topic) => {
+  (topic, tracks) => {
     void tools.warm(topic).catch(() => undefined);
-    return new TurnResearchTools(tools, topic);
+    return new TurnResearchTools(tools, topic, tracks);
   };

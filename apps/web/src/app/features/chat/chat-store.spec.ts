@@ -223,6 +223,33 @@ describe('ChatStore and spoken passages (KBC-039)', () => {
     expect(store.openPassage()).toBeNull();
   });
 
+  it('KBC-099 T22 flow 1: a cited track opened over a document keeps "← Voltar" to it', async () => {
+    const { store } = await setup();
+    const track = {
+      source: { n: 1, id: 'raw/media/r/t.md', title: 'O que é o ritmo?' },
+      at: '0:41',
+    };
+    store.open('hermetismo', { id: 'a.md', title: 'A' });
+    store.openTrackPassage(track);
+    expect(store.openDocument()).toBeNull();
+    expect(store.openTrack()).toEqual(track);
+    expect(store.canGoBack()).toBe(true);
+
+    // Another track over the first one still goes back to the document.
+    store.openTrackPassage({ ...track, at: '1:00' });
+    expect(store.canGoBack()).toBe(true);
+
+    store.back();
+    expect(store.openTrack()).toBeNull();
+    expect(store.openDocument()?.id).toBe('a.md');
+    expect(store.canGoBack()).toBe(false);
+
+    // Opened from the answer with nothing open: no way back.
+    store.close();
+    store.openTrackPassage(track);
+    expect(store.canGoBack()).toBe(false);
+  });
+
   it("counts a document's place among texts and passages, as for a passage (FR-4)", async () => {
     const { store, answer } = await setup();
     store.ask('hoasca');

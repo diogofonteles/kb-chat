@@ -15,7 +15,11 @@ import {
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { MediaFilesPort } from '../../ports/media-files.js';
-import type { LeasedJob, MediaStorePort } from '../../ports/media-store.js';
+import type {
+  LeasedJob,
+  LeaseOwner,
+  MediaStorePort,
+} from '../../ports/media-store.js';
 import type { TrackItemStorePort } from '../../ports/track-item-store.js';
 import { AUDIO_MIME, JOB_LEASE_MS, MAX_JOB_ATTEMPTS } from './media-policy.js';
 
@@ -33,8 +37,26 @@ export interface WorkerServiceDeps {
   readonly groqWaits?: () => boolean;
   /** What a cut job cuts (KBC-068). */
   readonly tracks?: Pick<TrackItemStorePort, 'cutOrder'>;
+  /** The kb-publish queue (KBC-099), kept apart from `jobs`: it has no media item. */
+  readonly kb?: KbPublishQueue;
   readonly now?: () => Date;
 }
+
+/** A collection's track documents for the Mac to write and pass through kb (ADR 0035 §3). */
+export interface KbPublishQueue {
+  lease(worker: string): LeasedWorkerJob | null;
+  isJob(jobId: string): boolean;
+  heartbeat(owner: LeaseOwner): void;
+  /** kb's output, and what kb spent before failing (ADR 0035 §11). */
+  fail(
+    owner: LeaseOwner,
+    failure: { readonly detail: string; readonly spendUsd?: number },
+  ): void;
+  /** Whether this worker holds a kb-publish lease now. */
+  isHeldBy?(worker: string): boolean;
+}
+
+const KB_PUBLISH = 'kb-publish';
 
 const leaseOf = (done: CompleteTranscodeRequest) => ({
   worker: done.worker,
@@ -76,17 +98,11 @@ export class WorkerService {
       readonly transcribeRoute?: TranscriptionRoute;
     },
   ): LeasedWorkerJob | null {
-    const kinds = this.kindsFor(request);
-    if (kinds.length === 0) return null;
-    const job = this.deps.store.leaseJob({
-      kinds,
-      worker: request.worker,
-      oneAtATime: request.oneAtATime,
-      transcribeRoute: request.transcribeRoute,
-      now: this.now(),
-      leaseMs: JOB_LEASE_MS,
-    });
-    if (!job) return null;
+    // ADR 0023: one job at a time, whichever queue it came from.
+    if (request.oneAtATime && this.deps.kb?.isHeldBy?.(request.worker))
+      return null;
+    const job = this.leaseMediaJob(request);
+    if (!job) return this.leaseKb(request);
     if (job.kind === 'transcribe' && request.transcribeRoute === 'groq')
       return this.groqJob(job);
     if (job.kind === 'silences') return this.silencesJob(job);
@@ -119,6 +135,35 @@ export class WorkerService {
       flacTargetPath: files.flacWorkPath(job.mediaId, job.leaseId),
       leaseMs: JOB_LEASE_MS,
     };
+  }
+
+  /** The oldest job of the asked kinds in `jobs` (every kind but kb-publish). */
+  private leaseMediaJob(
+    request: LeaseRequest & {
+      readonly oneAtATime?: boolean;
+      readonly transcribeRoute?: TranscriptionRoute;
+    },
+  ): LeasedJob | null {
+    const kinds = this.kindsFor(request).filter((kind) => kind !== KB_PUBLISH);
+    if (kinds.length === 0) return null;
+    return this.deps.store.leaseJob({
+      kinds,
+      worker: request.worker,
+      oneAtATime: request.oneAtATime,
+      transcribeRoute: request.transcribeRoute,
+      now: this.now(),
+      leaseMs: JOB_LEASE_MS,
+    });
+  }
+
+  /** Track documents wait behind the media jobs of the same transcriber (ADR 0035 §3). */
+  private leaseKb(
+    request: LeaseRequest & { readonly oneAtATime?: boolean },
+  ): LeasedWorkerJob | null {
+    const { kb, store } = this.deps;
+    if (!kb || !request.kinds.includes(KB_PUBLISH)) return null;
+    if (request.oneAtATime && store.holdsLease(request.worker)) return null;
+    return kb.lease(request.worker);
   }
 
   /** Measuring the audio rendition on the shared disk (KBC-044 FR-1). */
@@ -199,10 +244,20 @@ export class WorkerService {
 
   /** What a job is, for the routes to check it against the token's kinds (BR-2). */
   kindOf(jobId: string): MediaJobKind | null {
-    return this.deps.store.kindOfJob(jobId);
+    const kind = this.deps.store.kindOfJob(jobId);
+    if (kind) return kind;
+    return this.deps.kb?.isJob(jobId) ? KB_PUBLISH : null;
   }
 
   heartbeat(jobId: string, beat: HeartbeatRequest): void {
+    if (this.deps.kb?.isJob(jobId)) {
+      this.deps.kb.heartbeat({
+        jobId,
+        worker: beat.worker,
+        leaseId: beat.leaseId,
+      });
+      return;
+    }
     const held = this.deps.store.heartbeat({
       jobId,
       ...beat,
@@ -312,6 +367,14 @@ export class WorkerService {
    * it). A crash keeps the original: the job is retried, or a master may "Tentar de novo".
    */
   async fail(jobId: string, failure: FailJobRequest): Promise<void> {
+    if (this.deps.kb?.isJob(jobId)) {
+      const owner = { jobId, worker: failure.worker, leaseId: failure.leaseId };
+      this.deps.kb.fail(owner, {
+        detail: failure.detail,
+        ...(failure.spendUsd !== undefined && { spendUsd: failure.spendUsd }),
+      });
+      return;
+    }
     const mediaId = this.deps.store.mediaOfJob(jobId);
     const kind = this.deps.store.kindOfJob(jobId);
     const recorded = this.deps.store.failJob({

@@ -40,6 +40,11 @@ export const FEATURES = [
   'media-subjects',
   /** "Cadastrar perfis de voz": biometric data, see MASTER_ONLY_FEATURES. */
   'media-voice-profiles',
+  /**
+   * "Pesquisar faixas com IA" (KBC-099, ADR 0035 §5): the research tools see the tracks of the
+   * collection, on top of `research` and `media`.
+   */
+  'media-research',
 ] as const;
 export const featureSchema = z.enum(FEATURES);
 export type Feature = z.infer<typeof featureSchema>;

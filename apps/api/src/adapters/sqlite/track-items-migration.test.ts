@@ -125,8 +125,9 @@ describe('migration track-items (KBC-068)', () => {
       'jobs_queued',
     ]);
     // A later migration may need columns for its kind (voice-profile): the rule is the CHECK.
+    // kb-publish has a queue of its own (KBC-099): it never goes into `jobs`.
     const kinds = MEDIA_JOB_KINDS.filter(
-      (kind) => String(kind) !== 'voice-profile',
+      (kind) => String(kind) !== 'voice-profile' && kind !== 'kb-publish',
     );
     kinds.forEach((kind, index) => insertJob(db, `new-${index}`, kind));
     expect(() => insertJob(db, 'nope', 'unknown')).toThrow(/CHECK/);

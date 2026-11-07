@@ -40,6 +40,13 @@ import { describeForAnnouncement } from './result-count.js';
 import { ResultMessage, type OpenedPassage } from './result-message.js';
 import { passageKey } from './references.js';
 import { PassagePanel } from '@features/media/search-hit/passage-panel.js';
+import { TrackPassagePanel } from '@features/media/track-passage/track-passage-panel.js';
+import type { TrackOpening } from '@features/research/track-opening.js';
+import {
+  controlAt,
+  placeOf,
+  type TriggerPlace,
+} from '@features/research/trigger-place.js';
 import { ResearchStore } from '@features/research/research-store.js';
 import { ResearchThread } from '@features/research/research-thread.js';
 import { ViewStore, type ChatView } from './view-store.js';
@@ -65,6 +72,7 @@ const isMediaUrl = (url: string): boolean =>
     ViewSwitch,
     DocumentPanel,
     PassagePanel,
+    TrackPassagePanel,
     Sidebar,
     DecimalPipe,
     RouterOutlet,
@@ -150,16 +158,28 @@ export class ChatPage {
   protected readonly passage = computed(() =>
     this.onMedia() ? null : (this.store.openPassage()?.hit ?? null),
   );
+  /** A cited track on its passage, with the player beside it (KBC-099, T22). */
+  protected readonly track = computed(() =>
+    this.onMedia() ? null : this.store.openTrack(),
+  );
+  /**
+   * What opened the track panel, and its place in the conversation: the focus goes back
+   * there when it closes (AC-12), also when the answer was drawn anew meanwhile (QA BUG-2).
+   */
+  private trackTrigger: HTMLElement | null = null;
+  private triggerPlace: TriggerPlace | null = null;
   protected readonly activePassage = computed(() => {
     const hit = this.passage();
     return hit ? passageKey(hit) : null;
   });
   /** The panel's full player shows this media: no mini-player for it meanwhile. */
   protected readonly playerInPanel = computed(
-    () => this.passage()?.mediaId ?? null,
+    () =>
+      this.passage()?.mediaId ?? this.track()?.source.media?.mediaId ?? null,
   );
   protected readonly panelOpen = computed(
-    () => this.panel() !== null || this.passage() !== null,
+    () =>
+      this.panel() !== null || this.passage() !== null || this.track() !== null,
   );
   protected readonly covered = computed(
     () => this.panelOpen() && !this.desktop(),
@@ -326,6 +346,13 @@ export class ChatPage {
     if (topic) this.store.open(topic, doc);
   }
 
+  /** A cited track opens on its passage, paused, in the reading panel (KBC-099 FR-8). */
+  protected openTrack({ source, at, trigger }: TrackOpening): void {
+    this.trackTrigger = trigger;
+    this.triggerPlace = placeOf(trigger, this.host);
+    this.store.openTrackPassage({ source, at });
+  }
+
   /** "Parar" disappears with the answer in flight: focus moves to the question box. */
   protected stopResearch(): void {
     this.research.stop();
@@ -387,7 +414,27 @@ export class ChatPage {
 
   protected closeDocument(): void {
     const closedId = this.opened()?.id;
+    const track = this.track() !== null;
+    const trigger = this.trackTrigger;
+    const place = this.triggerPlace;
+    this.trackTrigger = null;
+    this.triggerPlace = null;
     this.store.close();
+    if (track && (trigger || place)) {
+      // Back to the citation or chip that opened the track (AC-12), once it is visible again:
+      // the same node, or the one now at its place if the answer was drawn anew (QA BUG-2).
+      afterNextRender(
+        () => {
+          const back = trigger?.isConnected
+            ? trigger
+            : controlAt(place, this.host);
+          if (back) back.focus();
+          else this.composer()?.focus();
+        },
+        { injector: this.injector },
+      );
+      return;
+    }
     // Back to the card that opened the document (focusing the question box would pop the
     // phone keyboard); runs after the conversation is visible again so focus never lands on <body>.
     afterNextRender(() => this.focusCard(closedId), {

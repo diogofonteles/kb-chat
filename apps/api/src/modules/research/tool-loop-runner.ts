@@ -45,6 +45,7 @@ import {
   type SweepBudget,
 } from './limits.js';
 import { promptText } from './prompt-text.js';
+import { resolveTurnPassages } from './passage-resolution.js';
 import { SourceBook } from './source-book.js';
 import { CoverageLineFilter } from './sweep/coverage-filter.js';
 import {
@@ -254,6 +255,12 @@ export class ToolLoopRunner implements ResearchRunnerPort {
         return;
       }
     }
+    // The cited tracks' passages, from media.db (KBC-099 FR-6), once the answer is written.
+    const sources = resolveTurnPassages(turn.answer.shown, {
+      book: turn.book,
+      tracks: input.tracks,
+    });
+    if (sources) yield { type: 'sources', sources };
     yield await this.record(turn, input.signal.aborted);
   }
 
@@ -710,6 +717,7 @@ export class ToolLoopRunner implements ResearchRunnerPort {
       return this.deps.tools.prepare(call, {
         topic: turn.input.topic,
         book: turn.book,
+        ...(turn.input.tracks && { tracks: turn.input.tracks }),
       });
     const plan = parsedArgs(sweepPlanSchema, parseJson(call.arguments));
     if (typeof plan === 'string') return failed(plan);

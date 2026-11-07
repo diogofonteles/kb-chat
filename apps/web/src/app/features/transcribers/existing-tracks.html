@@ -1,0 +1,111 @@
+<section class="block existing" aria-labelledby="existing-tracks-title">
+  <h4
+    #title
+    tabindex="-1"
+    id="existing-tracks-title"
+    class="block-title"
+    i18n="@@existingTracks.title"
+  >
+    Faixas que já existem
+  </h4>
+  <p class="hint" i18n="@@existingTracks.lead">
+    Faixas publicadas antes da pesquisa com IA só entram nela depois que o Mac
+    marcado "Publica no acervo" as publica no acervo. O kb as classifica como os
+    textos, com a chave do kb do dono.
+  </p>
+  @if (overview.error()) {
+    <div class="notice" role="alert">
+      <p i18n="@@existingTracks.loadFailed">
+        Não consegui carregar as faixas do acervo.
+      </p>
+      <button
+        type="button"
+        class="secondary"
+        (click)="overview.reload()"
+        i18n="@@existingTracks.retry"
+      >
+        Tentar de novo
+      </button>
+    </div>
+  } @else if (!overview.hasValue()) {
+    <p class="hint" i18n="@@existingTracks.loading">Carregando…</p>
+  } @else {
+    @if (offered().length === 0 && anyQueued()) {
+      <p class="hint" i18n="@@existingTracks.allQueued">
+        As faixas que faltavam estão na fila para o Mac.
+      </p>
+    } @else if (offered().length === 0) {
+      <p class="hint" i18n="@@existingTracks.allIn">
+        Todas as faixas publicadas já estão no acervo.
+      </p>
+    } @else if (!choosing()) {
+      <button
+        #action
+        type="button"
+        class="secondary"
+        (click)="open()"
+        i18n="@@existingTracks.action"
+      >
+        Publicar no acervo as faixas que já existem
+      </button>
+    } @else {
+      <fieldset class="choice">
+        <legend class="label" i18n="@@existingTracks.legend">
+          Quais acervos?
+        </legend>
+        @for (collection of offered(); track collection.topic) {
+          <label class="check">
+            <input
+              type="checkbox"
+              data-choice
+              [checked]="isChosen(collection.topic)"
+              (change)="toggle(collection.topic, $event)"
+            />
+            <span>{{ choiceLabelOf(collection) }}</span>
+          </label>
+        }
+        <p class="summary">{{ summary() }}</p>
+        @if (capSpent()) {
+          <p class="field-error">
+            <span aria-hidden="true">⚠</span> {{ capReachedText() }}
+          </p>
+        } @else {
+          <p class="hint">{{ remaining() }}</p>
+        }
+        <div class="row">
+          <button
+            #confirm
+            type="button"
+            class="primary"
+            [disabled]="busy() || capSpent() || chosenTracks() === 0"
+            (click)="publish()"
+          >
+            {{ confirmLabel() }}
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            (click)="cancel()"
+            i18n="@@existingTracks.cancel"
+          >
+            Cancelar
+          </button>
+        </div>
+      </fieldset>
+    }
+    @if (progress().length > 0) {
+      <ul
+        class="progress"
+        aria-label="Andamento da publicação"
+        i18n-aria-label="@@existingTracks.progressLabel"
+      >
+        @for (collection of progress(); track collection.topic) {
+          <li>{{ progressOf(collection) }}</li>
+        }
+      </ul>
+    }
+  }
+  <p class="status" role="status" [class.empty]="!notice()">
+    {{ notice() }}
+  </p>
+</section>

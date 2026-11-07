@@ -534,7 +534,8 @@ const leaseVm = () =>
 function vmTakes(): string[] {
   const taken: string[] = [];
   for (let job = leaseVm(); job; job = leaseVm())
-    taken.push(`${job.kind}:${job.mediaId}`);
+    // A kb-publish job (KBC-099) names a collection, not a media item.
+    taken.push(`${job.kind}:${'mediaId' in job ? job.mediaId : job.topic}`);
   return taken;
 }
 

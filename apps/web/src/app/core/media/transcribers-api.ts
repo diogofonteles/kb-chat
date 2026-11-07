@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   pairedTranscriberSchema,
+  publishExistingTracksResultSchema,
+  type PublishExistingTracksResult,
   transcriberSchema,
   type PairedTranscriber,
   type Transcriber,
@@ -40,5 +42,20 @@ export class TranscribersApi {
     return this.http
       .delete(`${transcribersUrl()}/${id}`)
       .pipe(map(() => undefined));
+  }
+}
+
+/** "Faixas que já existem" (KBC-099): what each collection has to publish into the vault. */
+export const trackDocumentsUrl = (): string => '/api/v1/media/track-documents';
+
+/** Queues the published tracks of the chosen collections for the Mac (masters only). */
+@Injectable({ providedIn: 'root' })
+export class TrackDocumentsApi {
+  private readonly http = inject(HttpClient);
+
+  publish(topics: readonly string[]): Observable<PublishExistingTracksResult> {
+    return this.http
+      .post(`${trackDocumentsUrl()}/publish`, { topics })
+      .pipe(map((body) => publishExistingTracksResultSchema.parse(body)));
   }
 }

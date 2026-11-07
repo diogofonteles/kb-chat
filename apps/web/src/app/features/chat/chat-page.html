@@ -32,7 +32,11 @@
       </div>
     </dialog>
   }
-  <div class="layout" [class.with-panel]="panelOpen()">
+  <div
+    class="layout"
+    [class.with-panel]="panelOpen()"
+    [class.wide-panel]="track() !== null"
+  >
     <main
       class="conversation"
       [class.covered]="panelOpen()"
@@ -214,6 +218,7 @@
             <app-research-thread
               [turns]="research.turns()"
               (opened)="openSource($event)"
+              (trackOpened)="openTrack($event)"
               (stopped)="stopResearch()"
               (retried)="research.retry()"
               (continued)="research.continueSweep()"
@@ -278,6 +283,16 @@
         class="panel"
         [passage]="hit"
         (closed)="closeDocument()"
+      />
+    } @else if (track(); as cited) {
+      <app-track-passage-panel
+        class="panel"
+        [source]="cited.source"
+        [at]="cited.at"
+        [topic]="store.topicSlug() ?? ''"
+        [canGoBack]="store.canGoBack()"
+        (closed)="closeDocument()"
+        (back)="store.back()"
       />
     }
   </div>

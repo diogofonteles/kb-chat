@@ -293,8 +293,12 @@ export class ResearchStore {
     this.chat.selectTopic(conversation.topic);
     this.views.select('research');
     this.remember(conversation.id);
-    const turns = conversation.turns.map((t) =>
-      fromSavedTurn(this.nextId++, t),
+    // The same conversation brought back again (the history and the reopening after a
+    // reload may both do it) keeps its turns' ids, so the answers on screen are not drawn
+    // anew under the person's focus (KBC-099 QA BUG-2).
+    const shown = this.state().id === conversation.id ? this.state().turns : [];
+    const turns = conversation.turns.map((t, index) =>
+      fromSavedTurn(shown[index]?.id ?? this.nextId++, t),
     );
     this.state.set({
       id: conversation.id,

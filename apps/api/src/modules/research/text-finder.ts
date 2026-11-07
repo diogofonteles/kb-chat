@@ -5,6 +5,7 @@ import {
   type CatalogRegistry,
   type TopicCatalog,
 } from '../catalog/index.js';
+import { anchorAt } from './track-anchors.js';
 import { flatWithMap } from './flat-map.js';
 import { countOccurrences, flatText, foldText } from './folded-text.js';
 
@@ -60,6 +61,8 @@ export interface Occurrence {
   /** Offset in the NFC body as read_document counts it; null inside the kb summary. */
   readonly offset: number | null;
   readonly context: string;
+  /** In a track (KBC-099): the anchor of the paragraph it falls in, in seconds. */
+  readonly anchor?: number | null;
 }
 
 export interface DocOccurrences {
@@ -235,10 +238,14 @@ export class TextFinder {
       ({ at, phrase }) => {
         const inBody = bodyStart >= 0 && at >= bodyStart;
         const floor = inBody ? bodyStart : 0;
+        const offset = inBody ? (map[at] ?? 0) - prefix.length : null;
         return {
           phrase,
-          offset: inBody ? (map[at] ?? 0) - prefix.length : null,
+          offset,
           context: contextAround(flat, { at, chars: scan.chars, floor }),
+          ...(entry.media && offset !== null
+            ? { anchor: anchorAt(body, offset) }
+            : {}),
         };
       },
     );

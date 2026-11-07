@@ -1,0 +1,111 @@
+<header class="head">
+  <div class="head-actions">
+    @if (canGoBack()) {
+      <button
+        type="button"
+        class="nav"
+        (click)="back.emit()"
+        i18n="@@panel.backDoc"
+      >
+        ← Voltar
+      </button>
+    }
+    <p class="kind">
+      <span aria-hidden="true">♪</span>
+      <span i18n="@@trackPassage.kind">Faixa de áudio</span>
+      @if (focus()) {
+        <span aria-hidden="true">· {{ clock() }}</span>
+        <span class="visually-hidden" i18n="@@trackPassage.at"
+          >aos {{ spokenClock() }}</span
+        >
+      }
+    </p>
+    <button type="button" class="close" (click)="closed.emit()">
+      <span class="close-label" i18n="@@panel.closeLabel">Fechar</span>
+      <span aria-hidden="true">×</span>
+    </button>
+  </div>
+  <h2 id="track-passage-title" #heading tabindex="-1">{{ source().title }}</h2>
+  <div class="meta">
+    <span class="recording">{{ recordingLine() }}</span>
+    @if (item.hasValue()) {
+      <app-authorship-badge [mediaAuthor]="item.value().author" />
+    } @else {
+      <app-authorship-badge [authorship]="source().authorship" />
+    }
+  </div>
+  @if (low()) {
+    <p class="low-confidence" i18n="@@trackPassage.low">
+      Transcrição automática de baixa confiança: pode haver trechos errados.
+    </p>
+  }
+</header>
+
+@if (loadError()) {
+  <div class="body single">
+    <div class="notice" role="alert">
+      <p>{{ loadError() }}</p>
+      @if (gone()) {
+        <button
+          type="button"
+          class="secondary"
+          (click)="closed.emit()"
+          i18n="@@panel.closeLabel"
+        >
+          Fechar
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="secondary"
+          (click)="reload()"
+          i18n="@@media.reload"
+        >
+          Tentar de novo
+        </button>
+      }
+    </div>
+  </div>
+} @else {
+  <div class="body">
+    <div class="player">
+      @if (ready()) {
+        <app-media-player [lowConfidence]="low()" />
+        <a
+          class="page-link"
+          [routerLink]="['/midia', mediaId()]"
+          [queryParams]="pageQuery()"
+          i18n="@@trackPassage.openPage"
+          >Abrir na página da faixa</a
+        >
+      } @else if (loaded()) {
+        <p class="notice" role="status" i18n="@@passage.notReady">
+          Este áudio ainda não está pronto para ouvir.
+        </p>
+      } @else {
+        <div class="player-skeleton" aria-busy="true">
+          <span class="visually-hidden" i18n="@@passage.loading"
+            >Carregando o áudio…</span
+          >
+        </div>
+      }
+    </div>
+    <div class="transcript">
+      @if (passageMoved()) {
+        <p class="moved" role="status" i18n="@@trackPassage.moved">
+          O trecho citado mudou desde a resposta. Mostrando o começo da faixa.
+        </p>
+      }
+      @if (transcript.hasValue()) {
+        <app-transcript-panel
+          [transcript]="transcript.value()"
+          [title]="source().title"
+          [passage]="focus()"
+          [revealPassage]="true"
+        />
+      } @else {
+        <div class="transcript-skeleton" aria-hidden="true"></div>
+      }
+    </div>
+  </div>
+}

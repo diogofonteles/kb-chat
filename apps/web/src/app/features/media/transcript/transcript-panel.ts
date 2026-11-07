@@ -132,6 +132,11 @@ export class TranscriptPanel {
   readonly title = input.required<string>();
   /** The passage opened from a search hit, painted over its segments (KBC-039 AC-10). */
   readonly passage = input<PassageFocus | null>(null);
+  /**
+   * A passage cited by the research (KBC-099, T22): scrolled into the list's upper third as
+   * soon as it shows, with no playback to follow, and marked with a side bar besides the paint.
+   */
+  readonly revealPassage = input(false);
   /** "Mostrar quem fala" (KBC-065 FR-4). */
   readonly showSpeakers = input(true);
   /** "Destacar palavra a palavra" (KBC-045 FR-4). */
@@ -229,7 +234,7 @@ export class TranscriptPanel {
   /** The segment the person moved to with the keys; else the active one takes the Tab. */
   private readonly moved = signal<number | null>(null);
   protected readonly tabStop = computed(
-    () => this.moved() ?? Math.max(0, this.activeIndex()),
+    () => this.moved() ?? Math.max(0, this.currentIndex()),
   );
 
   /** The texts folded once per transcript: a keystroke only scans them (NFR-2). */
@@ -272,6 +277,35 @@ export class TranscriptPanel {
     () => this.hits()[this.currentHit()]?.segment ?? -1,
   );
   protected readonly selected = signal<Selected | null>(null);
+  /** The segments of a cited passage (KBC-099): marked and brought into view. */
+  protected readonly citedIndexes = computed((): readonly number[] => {
+    const passage = this.passage();
+    if (!this.revealPassage() || passage?.mediaId !== this.transcript().mediaId)
+      return [];
+    return this.passageIndexes(passage);
+  });
+  protected readonly cited = computed(() => new Set(this.citedIndexes()));
+  /** This transcript's media played since the list showed (or a segment was asked for). */
+  private readonly heard = signal(false);
+  /**
+   * T22: until something plays, the cited passage is the current one (`aria-current`, the
+   * side bar) and the segment the paused player sits in at −2 s is not marked as heard, so
+   * the eye and a screen reader land on what the answer cites, not on the speech before it.
+   */
+  protected readonly holdingCited = computed(
+    () => !this.heard() && this.citedIndexes().length > 0,
+  );
+  /**
+   * The segment marked (and followed) as the one heard: none while the cited passage holds,
+   * so the list stays on it, not on the segment at −2 s.
+   */
+  protected readonly shownActive = computed(() =>
+    this.holdingCited() ? -1 : this.activeIndex(),
+  );
+  /** Who carries `aria-current`: the first cited segment, until something plays. */
+  protected readonly currentIndex = computed(() =>
+    this.holdingCited() ? (this.citedIndexes()[0] ?? -1) : this.activeIndex(),
+  );
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -284,7 +318,7 @@ export class TranscriptPanel {
     // Measure, then scroll: one layout per change, never a read after a write.
     afterRenderEffect({
       earlyRead: () => {
-        const index = this.activeIndex();
+        const index = this.shownActive();
         return this.following() && index >= 0
           ? this.scrollTargetOf(index)
           : null;
@@ -298,11 +332,38 @@ export class TranscriptPanel {
       },
       write: (target) => this.scrollList(target()),
     });
+    this.revealCited();
     this.paintSearch(destroyRef);
     this.paintPassage(destroyRef);
     this.paintWord(destroyRef);
     this.loadNeededWords(destroyRef);
     this.landOnPendingWord();
+  }
+
+  /** Once this media plays, the cited passage no longer holds `aria-current` (T22). */
+  private noteHeard(): void {
+    effect(() => {
+      if (
+        this.engine.playing() &&
+        this.engine.source()?.id === this.transcript().mediaId
+      )
+        this.heard.set(true);
+    });
+  }
+
+  /**
+   * A cited passage comes into the list's upper third as soon as it shows (KBC-099), and
+   * holds `aria-current` until the media plays (T22).
+   */
+  private revealCited(): void {
+    afterRenderEffect({
+      earlyRead: () => {
+        const [first] = this.citedIndexes();
+        return first === undefined ? null : this.scrollTargetOf(first);
+      },
+      write: (target) => this.scrollList(target()),
+    });
+    this.noteHeard();
   }
 
   /**
@@ -355,7 +416,9 @@ export class TranscriptPanel {
     const highlights = inject(SEARCH_HIGHLIGHTS);
     afterRenderEffect({
       write: () => {
-        const word = this.activeWords()[this.activeWord()];
+        const word = this.holdingCited()
+          ? undefined
+          : this.activeWords()[this.activeWord()];
         const range =
           word &&
           this.rangeOf({
@@ -650,6 +713,7 @@ export class TranscriptPanel {
     const segment = this.segments()[index];
     if (!segment) return;
     this.resumeTracking();
+    this.heard.set(true);
     this.moved.set(index);
     const word = char === null ? null : this.wordAt(index, char);
     this.engine.seek(word?.startMs ?? segment.startMs);

@@ -1,5 +1,9 @@
-import type { Authorship, SearchHit } from '@kb-chat/contracts';
-import type { CatalogEntry } from '../catalog/index.js';
+import {
+  formatTrackClock,
+  type Authorship,
+  type SearchHit,
+} from '@kb-chat/contracts';
+import type { CatalogEntry, CatalogMedia } from '../catalog/index.js';
 import type { BodyWindow } from './body-window.js';
 
 const OPEN = '<<<DOCUMENTO';
@@ -79,16 +83,51 @@ function authorshipLine(entry: CatalogEntry, labels: AuthorshipLabels): string {
   return `Autoria: ${labels[entry.authorship]}${detail}`;
 }
 
+/** What a track is, beside its title on every line (KBC-099 FR-5). */
+function trackKind(media: CatalogMedia): string {
+  const low = media.confidence === 'low' ? ', confiança baixa' : '';
+  return `faixa de áudio (transcrição automática${low})`;
+}
+
+/** " · faixa de áudio (…) · gravação “X” · faixa 3 de 12"; empty for a text. */
+export function trackPart(media: CatalogMedia | null): string {
+  if (!media) return '';
+  const place =
+    media.ordinal && media.total
+      ? ` · faixa ${media.ordinal} de ${media.total}`
+      : '';
+  return ` · ${trackKind(media)} · gravação ${quote(media.recordingTitle)}${place}`;
+}
+
+/** The read header of a track: what it is and how to cite a passage of it (ADR 0035 §6). */
+function trackLines(n: number, media: CatalogMedia | null): string[] {
+  if (!media) return [];
+  const place =
+    media.ordinal && media.total
+      ? ` · faixa ${media.ordinal} de ${media.total}`
+      : '';
+  return [
+    `Tipo: ${trackKind(media)}`,
+    `Gravação: ${oneLine(media.recordingTitle, 160)}${place} · duração ${formatTrackClock(media.durationMs)}`,
+    `Como citar: cada parágrafo começa com a sua âncora [m:ss]; cite um trecho como [${n}@m:ss], com a âncora do parágrafo citado. Nunca invente um tempo.`,
+  ];
+}
+
 export function hitLine(
   n: number,
   hit: SearchHit,
   {
     summary,
+    media = null,
     labels = AUTHORSHIP_LABELS,
-  }: { readonly summary: string | null; readonly labels?: AuthorshipLabels },
+  }: {
+    readonly summary: string | null;
+    readonly media?: CatalogMedia | null;
+    readonly labels?: AuthorshipLabels;
+  },
 ): string {
   const parts = [
-    `[${n}] ${oneLine(hit.title, 160)}${authorshipPart(hit.authorship, labels)}`,
+    `[${n}] ${oneLine(hit.title, 160)}${trackPart(media)}${authorshipPart(hit.authorship, labels)}`,
   ];
   if (summary) parts.push(`Resumo: ${oneLine(summary, HIT_TEXT_CHARS)}`);
   if (hit.snippet && hit.snippet !== summary)
@@ -104,7 +143,7 @@ export function refLine(
   labels: AuthorshipLabels = AUTHORSHIP_LABELS,
 ): string {
   const summary = entry.summary ? ` — ${oneLine(entry.summary, 200)}` : '';
-  return `[${n}] ${oneLine(entry.title, 160)}${authorshipPart(entry.authorship, labels)}${summary}`;
+  return `[${n}] ${oneLine(entry.title, 160)}${trackPart(entry.media)}${authorshipPart(entry.authorship, labels)}${summary}`;
 }
 
 function facetsLine(entry: CatalogEntry): string {
@@ -125,6 +164,7 @@ export function headerLines(
   return [
     `[${n}] ${entry.title}`,
     `Id: ${entry.id}`,
+    ...trackLines(n, entry.media),
     authorshipLine(entry, labels),
     entry.summary ? `Resumo do kb: ${entry.summary}` : '',
     entry.criterion ? `Critério do kb: ${entry.criterion}` : '',

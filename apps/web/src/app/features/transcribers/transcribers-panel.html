@@ -238,6 +238,16 @@
               />
               <span i18n="@@transcribers.voicePrint">Perfis de voz</span>
             </label>
+            <label class="check">
+              <input
+                type="checkbox"
+                [checked]="publishes(item)"
+                [disabled]="busy()"
+                [attr.aria-label]="publishLabelOf(item)"
+                (change)="togglePublish(item, $event)"
+              />
+              <span i18n="@@transcribers.publish">Publica no acervo</span>
+            </label>
           </div>
           @if (confirming() === item.id) {
             <div class="confirm" role="group" [attr.aria-label]="item.name">

@@ -8,7 +8,10 @@ const SERVED_ROOTS = ['raw', join('wiki', 'concepts')] as const;
 const EXCLUDED_SEGMENT = '_quarantine';
 const MAX_NESTING = 2;
 
-const topicYamlSchema = z.looseObject({ title: z.string().optional() });
+const topicYamlSchema = z.looseObject({
+  title: z.string().optional(),
+  domain: z.string().optional(),
+});
 
 /** Where the topic walk is: the folder, how deep, and the topic it sits in (if any). */
 interface Walk {
@@ -28,11 +31,16 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function readTopicTitle(dir: string, slug: string): Promise<string> {
+/** The topic's title (its slug without one) and its kb `domain`, from topic.yaml. */
+async function readTopicYaml(
+  dir: string,
+  slug: string,
+): Promise<{ title: string; domain?: string }> {
   const yamlText = await readFile(join(dir, 'topic.yaml'), 'utf8');
   const parsed = topicYamlSchema.safeParse(parse(yamlText));
   const title = parsed.success ? parsed.data.title?.trim() : undefined;
-  return title || slug;
+  const domain = parsed.success ? parsed.data.domain?.trim() : undefined;
+  return { title: title || slug, ...(domain && { domain }) };
 }
 
 async function listServedRoot(
@@ -113,9 +121,9 @@ export class FsVaultAdapter implements VaultReaderPort {
     const dir = join(this.root, slug);
     const isTopic = await exists(join(dir, 'topic.yaml'));
     if (isTopic) {
-      const title = await readTopicTitle(dir, slug);
+      const yaml = await readTopicYaml(dir, slug);
       out.push(
-        at.parent ? { slug, title, parent: at.parent } : { slug, title },
+        at.parent ? { slug, ...yaml, parent: at.parent } : { slug, ...yaml },
       );
     }
     if (at.depth < MAX_NESTING)

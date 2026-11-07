@@ -29,6 +29,7 @@ from .config import (
     UNAUTHORIZED_BACKOFF_S,
 )
 from .diarize import Diarizer, separate
+from .kb_publish import KbPublisher, KbStepFailed, UnsafePath, VaultBusy
 from .secret import TokenError
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
@@ -78,11 +79,23 @@ class Worker:
     # Voice prints (KBC-071): without a speaker model, none is ever fetched or made.
     embedder: Embedder | None = None
     print_ack_s: float = PRINT_ACK_S
+    # Track documents (KBC-099): without a vault and kb, the worker never asks for them.
+    publisher: KbPublisher | None = None
 
     @property
     def kinds(self) -> tuple[str, ...]:
         kinds = ("transcribe", "diarize") if self.diarizer else ("transcribe",)
-        return (*kinds, "voice-profile") if self.embedder else kinds
+        kinds = (*kinds, "voice-profile") if self.embedder else kinds
+        return (*kinds, "kb-publish") if self.publisher else kinds
+
+    def _kinds_now(self) -> tuple[str, ...]:
+        """The kinds to ask for now: none of kb-publish while the vault's lock is held, so a
+        busy vault does not cost a job an attempt (QA F-8). Not atomic with the job's own
+        lock: a publication that takes the lock between this check and the job still fails
+        it with VaultBusy (and costs an attempt); the window is a lease round trip."""
+        if self.publisher is not None and self.publisher.busy():
+            return tuple(kind for kind in self.kinds if kind != "kb-publish")
+        return self.kinds
 
     def run(self, *, once: bool = False, exit_when_idle: bool = False) -> int:
         """Runs until stopped; `once` handles at most one job, `exit_when_idle` stops at 204."""
@@ -109,7 +122,7 @@ class Worker:
     def step(self) -> str:
         """One lease attempt: 'job', 'idle', 'revoked' or 'error'."""
         try:
-            job = self.api.lease(self.kinds)
+            job = self.api.lease(self._kinds_now())
         except (Unauthorized, TokenError) as err:
             log.error(REVOKED if isinstance(err, Unauthorized) else str(err))
             return "revoked"
@@ -165,6 +178,7 @@ class Worker:
                 handler = {
                     "diarize": self._diarize,
                     "voice-profile": self._voice_profile,
+                    "kb-publish": self._kb_publish,
                 }.get(job["kind"], self._transcribe)
                 handler(job, Path(work), progress, stop)
         finally:
@@ -201,6 +215,27 @@ class Worker:
             return
         elapsed_ms = int((time.monotonic() - started) * 1000)
         self._upload(job, terms, result, elapsed_ms, stop)
+
+    def _kb_publish(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
+        """Writes the documents, runs kb, reports per document (KBC-099 FR-3)."""
+        if self.publisher is None:
+            raise RuntimeError("leased a kb-publish job without a vault and kb")
+        try:
+            result = self.publisher.publish(job)
+        except (KbStepFailed, VaultBusy, UnsafePath) as err:
+            log.error("job %s: publishing failed: %s", job["id"], err)
+            # What kb spent before it failed is booked on the media ledger (ADR 0035 §11).
+            spent = err.spent if isinstance(err, KbStepFailed) else 0.0
+            # kb may pass --budget by one call; the API takes at most the job's budget.
+            spent = min(spent, float(job["budgetUsd"]))
+            self.api.fail(job, "conversion-failed", str(err)[-2_000:], spend_usd=spent)
+            return
+        progress["percent"] = 100
+        if self.api.upload_kb_result(job, result):
+            count = len(result["documents"])
+            log.info("job %s: %d documents in %s", job["id"], count, job["topic"])
+        else:
+            log.warning("job %s: the lease was lost before the result: dropped", job["id"])
 
     def _diarize(self, job: dict, work: Path, progress: dict, stop: _JobStop) -> None:
         """Separates the voices of the job's audio and uploads only the turns (BR-1)."""

@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import type {
+  AnswerSource,
   DocumentRef,
   ResearchPlan,
   SweepCoverage,
@@ -15,10 +16,12 @@ import type {
 import { AuthorshipBadge } from '@features/authorship/authorship-badge.js';
 import { injectAuthorshipLabels } from '@features/authorship/authorship-labels.js';
 import {
+  citedAt,
   citedSource,
   formatCost,
   renderAnswer,
 } from '@features/answer/answer-format.js';
+import { trackChipOf, type TrackOpening } from './track-opening.js';
 import { SettingsStore } from '@features/settings/settings-store.js';
 import { OWN_AI_OFFER, aiErrorMessage } from './research-errors.js';
 import { describeSteps, groupedSteps } from './research-steps.js';
@@ -76,6 +79,8 @@ export class ResearchMessage {
   /** Only the last turn offers "Tentar de novo" (asking again in its place). */
   readonly last = input(false);
   readonly opened = output<DocumentRef>();
+  /** A cited track (KBC-099): the panel opens on its passage with the player (T22). */
+  readonly trackOpened = output<TrackOpening>();
   readonly stopped = output();
   readonly retried = output();
   readonly continued = output();
@@ -93,6 +98,16 @@ export class ResearchMessage {
     renderAnswer(this.turn().text, this.turn().sources),
   );
   protected readonly cited = computed(() => citedSources(this.turn()));
+  /** What each cited track's chip says after its title (T22): recording, minute, more. */
+  protected readonly trackChips = computed(
+    () =>
+      new Map(
+        this.cited().flatMap((source) => {
+          const chip = trackChipOf(source);
+          return chip ? [[source.n, chip] as const] : [];
+        }),
+      ),
+  );
   /** The open collection's labels: its main author's name (KBC-049). */
   private readonly labels = injectAuthorshipLabels();
   /** Mixed authorships are listed apart, the Mestre's first (KBC-020 FR-7). */
@@ -221,6 +236,23 @@ export class ResearchMessage {
     const source = this.turn().sources.find((s) => s.n === n);
     if (!source) return;
     event.preventDefault();
-    this.opened.emit({ id: source.id, title: source.title });
+    const link =
+      event.target instanceof Element ? event.target.closest('a') : null;
+    if (source.media)
+      this.trackOpened.emit({ source, at: citedAt(link), trigger: link });
+    else this.opened.emit({ id: source.id, title: source.title });
+  }
+
+  /** A chip: a text opens in the document panel, a track on its first cited passage. */
+  protected openSource(source: AnswerSource, event: Event): void {
+    const trigger =
+      event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    if (source.media)
+      this.trackOpened.emit({
+        source,
+        at: source.passages?.[0]?.at ?? '',
+        trigger,
+      });
+    else this.opened.emit({ id: source.id, title: source.title });
   }
 }

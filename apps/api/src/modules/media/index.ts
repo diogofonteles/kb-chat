@@ -50,7 +50,11 @@ export {
   WaveformService,
   type WaveformServiceDeps,
 } from './waveform-service.js';
-export { WorkerService, type WorkerServiceDeps } from './worker-service.js';
+export {
+  WorkerService,
+  type KbPublishQueue,
+  type WorkerServiceDeps,
+} from './worker-service.js';
 export { workerRoutes, type WorkerRoutesDeps } from './worker-routes.js';
 export {
   TranscriberService,

@@ -5,6 +5,7 @@ import { originFolder } from './doc-filter.js';
 import { PAGE_CHARS, fitting, pageFooter, pageRange } from './grep-output.js';
 import {
   failed,
+  isVisible,
   parsedArgs,
   type PreparedCall,
   type ToolContext,
@@ -87,10 +88,8 @@ function authorshipLine(
 export class SourcesTool {
   constructor(private readonly catalog: CatalogRegistry) {}
 
-  prepare(
-    raw: unknown,
-    { topic, labels = AUTHORSHIP_LABELS }: ToolContext,
-  ): PreparedCall {
+  prepare(raw: unknown, context: ToolContext): PreparedCall {
+    const { labels = AUTHORSHIP_LABELS } = context;
     const args = parsedArgs(sourcesArgsSchema, raw);
     if (typeof args === 'string') return failed(args);
     const about = [
@@ -103,38 +102,51 @@ export class SourcesTool {
       steps: [
         { kind: 'subjects', text: `Listando as origens e entidades${about}` },
       ],
-      run: async () => this.list(topic, args, labels),
+      run: async () => this.list(context, args, labels),
     };
   }
 
   private list(
-    topic: string,
+    context: ToolContext,
     args: SourcesArgs,
     labels: AuthorshipLabels,
   ): string {
-    const catalog = this.catalog.get(topic);
+    const catalog = this.catalog.get(context.topic);
     if (!catalog) return 'O acervo deste tópico não está disponível.';
-    const all = [...catalog.entries.values()];
+    // A track only counts for whom it may be researched (KBC-099 BR-4).
+    const all = [...catalog.entries.values()].filter((entry) =>
+      isVisible(entry, context),
+    );
     const entries = args.authorship
       ? all.filter((entry) => entry.authorship === args.authorship)
       : all;
-    const lines: string[] = [authorshipLine(all, labels)];
-    if (args.kind !== 'entities')
-      lines.push(
-        ...section(
-          'Origens',
-          countNames(entries, (e) => [originFolder(e)]),
-          args,
-        ),
-      );
-    if (args.kind !== 'sources')
-      lines.push(
-        ...section(
-          'Entidades',
-          countNames(entries, (e) => e.entities),
-          args,
-        ),
-      );
-    return lines.join('\n');
+    return [authorshipLine(all, labels), ...sectionsOf(entries, args)].join(
+      '\n',
+    );
   }
+}
+
+/** The origins and entities sections a call asked for. */
+function sectionsOf(
+  entries: readonly CatalogEntry[],
+  args: SourcesArgs,
+): string[] {
+  const lines: string[] = [];
+  if (args.kind !== 'entities')
+    lines.push(
+      ...section(
+        'Origens',
+        countNames(entries, (e) => [originFolder(e)]),
+        args,
+      ),
+    );
+  if (args.kind !== 'sources')
+    lines.push(
+      ...section(
+        'Entidades',
+        countNames(entries, (e) => e.entities),
+        args,
+      ),
+    );
+  return lines;
 }

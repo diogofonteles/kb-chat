@@ -804,6 +804,35 @@ describe('PeoplePanel: voice profiles come with the master role (ADR 0032)', () 
   });
 });
 
+describe('PeoplePanel: "Pesquisar faixas com IA" (KBC-099 AC-14, FR-10)', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  const TRACKS = 'Pesquisar faixas com IA';
+
+  it('shows a master with it, as every feature', async () => {
+    const { fixture } = await renderPanel([
+      aPerson({ role: 'master', features: [] }),
+    ]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const box = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: TRACKS,
+    });
+    expect(box.checked).toBe(true);
+  });
+
+  it('offers it to a member, off until a master grants it', async () => {
+    const { fixture } = await renderPanel([aPerson({ role: 'member' })]);
+    fireEvent.click(row(/Guest/));
+    await fixture.whenStable();
+    const box = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: TRACKS,
+    });
+    expect(box.checked).toBe(false);
+    expect(box.matches(':disabled')).toBe(false);
+  });
+});
+
 describe('PeoplePanel for the owner (BR-6)', () => {
   it("shows each person's AI spend today", async () => {
     const result = await render(PeoplePanel, {

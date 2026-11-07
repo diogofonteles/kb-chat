@@ -175,14 +175,34 @@ const search = (query: string, mode: string): StubReply => ({
 /** "- [n] “Título” trata do assunto" as the sweep's merged findings list it (KBC-030). */
 const FOUND = /^- \[(\d+)\] “([^”]+)” trata do assunto/m;
 
+const fold = (text: string): string =>
+  text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/**
+ * KBC-099: when the document read is a track, the paragraph anchor ("[0:41]") of the first
+ * paragraph that says a word of the question, for a citation "[n@0:41]"; else null.
+ */
+function trackAnchor(output: string, question: string): string | null {
+  if (!output.includes('Como citar:')) return null;
+  const words = fold(question)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 3);
+  for (const match of output.matchAll(/^\[((?:\d+:)?\d+:\d{2})\] (.*)$/gmu))
+    if (words.some((word) => fold(match[2] ?? '').includes(word)))
+      return match[1] ?? null;
+  return null;
+}
+
 function finalText(messages: AgentHistory): string {
-  const found = FOUND.exec(messages[lastUserIndex(messages)]?.content ?? '');
+  const question = messages[lastUserIndex(messages)]?.content ?? '';
+  const found = FOUND.exec(question);
   if (found)
     return `Segundo o acervo, “${found[2]}” trata do assunto [${found[1]}].`;
   const read = firstReference(messages);
-  return read
-    ? `Segundo o acervo, “${read.title}” trata do assunto [${read.n}].`
-    : 'Procurei no acervo e não encontrei documentos sobre isso.';
+  if (!read) return 'Procurei no acervo e não encontrei documentos sobre isso.';
+  const anchor = trackAnchor(lastToolOutput(messages), question);
+  const cite = anchor ? `${read.n}@${anchor}` : `${read.n}`;
+  return `Segundo o acervo, “${read.title}” trata do assunto [${cite}].`;
 }
 
 /**

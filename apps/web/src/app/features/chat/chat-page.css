@@ -31,6 +31,11 @@
   grid-template-columns: minmax(0, 1fr) minmax(24rem, var(--panel));
 }
 
+/* A track's passage (T22): 48rem, so its player fits beside the transcript. */
+.layout.with-panel.wide-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 48rem);
+}
+
 .conversation {
   display: grid;
   /* One column that may shrink: with the document panel open on a narrow desktop, the
@@ -337,7 +342,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .layout.with-panel {
+  .layout.with-panel,
+  .layout.with-panel.wide-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 

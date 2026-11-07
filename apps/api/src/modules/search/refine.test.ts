@@ -23,6 +23,7 @@ const entry = (
   sourcePath: null,
   authorship: 'mestre-laercio',
   author: null,
+  media: null,
   ...overrides,
 });
 const candidate = (e: CatalogEntry, score = 1): Candidate => ({

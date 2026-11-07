@@ -17,7 +17,13 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
 import type { ResearchRunnerPort } from '../../ports/research-runner.js';
-import { principalOf, type RouteAccess } from '../auth/index.js';
+import type { TrackShelf } from '../../ports/track-shelf.js';
+import {
+  hasFeature,
+  principalOf,
+  viewerOf,
+  type RouteAccess,
+} from '../auth/index.js';
 import type { LiveTurn, LiveTurns } from './live-turns.js';
 import { pendingTurn, recordTurn } from './turn-record.js';
 
@@ -39,6 +45,25 @@ export interface ResearchRouteOptions {
   readonly journal: TurnJournal;
   /** Research turns per minute per client (RESEARCH_RATE_LIMIT). */
   readonly ratePerMinute: number;
+  /** A turn's view of media.db (KBC-099), when the media library is on. */
+  readonly shelf?: () => TrackShelf;
+}
+
+/**
+ * The tracks a turn may see (KBC-099 BR-4, FR-10): the route already checked the collection
+ * and `research`; the person (the one a master acts as, in "Ver como") also needs `media`
+ * and `media-research`, and `media-tracks`, without which a track item does not exist for
+ * them (KBC-068 FR-5): a citation they could not open is never given.
+ */
+function shelfFor(
+  request: FastifyRequest,
+  shelf: (() => TrackShelf) | undefined,
+): TrackShelf | undefined {
+  const { person } = viewerOf(request);
+  const allowed = (['media', 'media-tracks', 'media-research'] as const).every(
+    (feature) => hasFeature(person, feature),
+  );
+  return allowed ? shelf?.() : undefined;
 }
 
 /** The history as the research routes write to it (KBC-029); the conversations module. */
@@ -102,6 +127,8 @@ const researchOptions = (ratePerMinute: number) => ({
 export interface ResearchCall {
   readonly topic: string;
   readonly body: ResearchRequestBody;
+  /** The tracks this person may research; none without the permissions. */
+  readonly tracks?: TrackShelf;
 }
 
 type ResearchRequestBody = z.output<typeof researchRequestSchema>;
@@ -109,14 +136,14 @@ type ResearchRequestBody = z.output<typeof researchRequestSchema>;
 /** Streams one research turn as SSE; a failure becomes an `error` event. */
 async function streamResearch(
   runner: ResearchRunnerPort,
-  { topic, body }: ResearchCall,
+  call: ResearchCall,
   { request, reply }: { request: FastifyRequest; reply: FastifyReply },
 ): Promise<void> {
   const signal = abortOnDisconnect(reply);
   const send = openStream(reply);
   send({ type: 'start', model: runner.model, billing: runner.billing });
   try {
-    for await (const event of runner.run(inputOf({ topic, body }, signal)))
+    for await (const event of runner.run(inputOf(call, signal)))
       send(withPlan(event));
   } catch (err) {
     request.log.error({ err }, 'research stream failed');
@@ -125,8 +152,12 @@ async function streamResearch(
   reply.raw.end();
 }
 
-const inputOf = ({ topic, body }: ResearchCall, signal: AbortSignal) => ({
+const inputOf = (
+  { topic, body, tracks }: ResearchCall,
+  signal: AbortSignal,
+) => ({
   topic,
+  ...(tracks && { tracks }),
   question: body.question,
   history: body.history,
   profile: body.profile,
@@ -264,9 +295,21 @@ async function handleResearch(
   if (!options.hasTopic(topic))
     throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
   const { conversationId, turnId } = body;
+  const tracks = shelfFor(request, options.shelf);
   if (!conversationId || !turnId)
-    return streamResearch(current, { topic, body }, { request, reply });
-  const call = { topic, body, principal, conversationId, turnId };
+    return streamResearch(
+      current,
+      { topic, body, ...(tracks && { tracks }) },
+      { request, reply },
+    );
+  const call = {
+    topic,
+    body,
+    principal,
+    conversationId,
+    turnId,
+    ...(tracks && { tracks }),
+  };
   return startRecorded(current, call, { reply, log: request.log, options });
 }
 

@@ -60,6 +60,8 @@ import type { SecretSealerPort } from './ports/secret-sealer.js';
 import type { VoicePrintVaultPort } from './ports/voice-print-vault.js';
 import type { VoiceRevocationListPort } from './ports/voice-revocation-list.js';
 import type { VoiceProfileStorePort } from './ports/voice-profile-store.js';
+import type { MediaDocumentStorePort } from './ports/media-document-store.js';
+import { SqliteMediaDocumentStore } from './adapters/sqlite/sqlite-media-document-store.js';
 
 /** The media library's adapters and the worker token (ADR 0022). */
 export interface MediaDeps {
@@ -86,6 +88,8 @@ export interface MediaDeps {
   readonly preparations: PreparationStorePort;
   /** The media monthly spend ledger (ADR 0022 §7). */
   readonly spend: MediaSpendLedgerPort;
+  /** Track documents and their kb-publish queue (KBC-099, ADR 0035). */
+  readonly documents: MediaDocumentStorePort;
   /** The media AI's model and caps (KBC-067, ADR 0029); the monthly one is read live. */
   readonly ai: {
     readonly model: string;
@@ -231,6 +235,7 @@ type MediaStores = { readonly groqQueue: GroqQueuePort } & Pick<
   | 'edits'
   | 'preparations'
   | 'spend'
+  | 'documents'
   | 'silences'
   | 'waveforms'
   | 'search'
@@ -271,6 +276,7 @@ function storesOf(db: DatabaseSync): MediaStores {
     spend: new SqliteMediaSpendLedger(db),
     settings: new SqliteMediaSettings(db),
     groqQueue: new SqliteGroqQueue(db),
+    documents: new SqliteMediaDocumentStore(db),
     silences: new SqliteSilenceStore(db),
     waveforms: new SqliteWaveformStore(db),
     search,

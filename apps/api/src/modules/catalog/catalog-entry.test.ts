@@ -32,7 +32,52 @@ describe('toCatalogEntry', () => {
       sourcePath: null,
       authorship: 'nao-classificado',
       author: null,
+      media: null,
     });
+  });
+
+  it('KBC-099: reads a track document from its kb_chat_* keys, as audio', () => {
+    const entry = toCatalogEntry('raw/media/r/t.md', {
+      title: 'O que é o ritmo?',
+      source_path: 'media/hermetismo/r/t',
+      kb_chat_media_id: '0b9c1f7e-1111-4a2b-8c3d-000000000001',
+      kb_chat_media_kind: 'track',
+      kb_chat_recording_id: '0b9c1f7e-1111-4a2b-8c3d-000000000002',
+      kb_chat_recording_title: 'Palestra de 12/03/2017',
+      kb_chat_track_ordinal: 3,
+      kb_chat_tracks_total: 12,
+      kb_chat_start_ms: 72_000,
+      kb_chat_duration_ms: 508_000,
+      kb_chat_confidence: 'low',
+      kb_chat_fingerprint: 'f'.repeat(64),
+    });
+    expect(entry.origin).toBe('audio');
+    expect(entry.media).toEqual({
+      mediaId: '0b9c1f7e-1111-4a2b-8c3d-000000000001',
+      kind: 'track',
+      recordingId: '0b9c1f7e-1111-4a2b-8c3d-000000000002',
+      recordingTitle: 'Palestra de 12/03/2017',
+      startMs: 72_000,
+      durationMs: 508_000,
+      ordinal: 3,
+      total: 12,
+      confidence: 'low',
+      fingerprint: 'f'.repeat(64),
+    });
+  });
+
+  it('KBC-099: a document without a valid media id or fingerprint is a text', () => {
+    expect(
+      toCatalogEntry('raw/x.md', {
+        kb_chat_media_id: 'not-a-uuid',
+        kb_chat_fingerprint: 'x',
+      }).media,
+    ).toBeNull();
+    expect(
+      toCatalogEntry('raw/x.md', {
+        kb_chat_media_id: '0b9c1f7e-1111-4a2b-8c3d-000000000001',
+      }).media,
+    ).toBeNull();
   });
 
   it('nulls unknown facet values and clamps depth', () => {

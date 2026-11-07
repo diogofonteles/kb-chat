@@ -3,6 +3,8 @@ import {
   MAX_RAW_TRANSCRIPT_BYTES,
   completeSilencesRequestSchema,
   completeCutRequestSchema,
+  completeKbPublishRequestSchema,
+  type CompleteKbPublishRequest,
   completeDiarizeRequestSchema,
   completeTranscodeRequestSchema,
   completeTranscribeRequestSchema,
@@ -70,6 +72,13 @@ export interface WorkerRoutesDeps {
   readonly cuts?: CutReceiver;
   /** The Groq fallback (KBC-037): the VM's chunks and transcripts. */
   readonly groq?: GroqService;
+  /** What kb did to a collection's track documents (KBC-099). */
+  readonly kbResults?: KbResultReceiver;
+}
+
+/** Who takes a kb-publish result in: the track documents' side, outside this module. */
+export interface KbResultReceiver {
+  complete(owner: LeaseOwner, result: CompleteKbPublishRequest): void;
 }
 
 /** Who takes a finished cut in: the track items' side, outside this module. */
@@ -252,6 +261,7 @@ export const workerRoutes =
     registerSilences(app, deps);
     registerWaveform(app, deps);
     registerCut(app, deps);
+    registerKbResult(app, deps);
     registerTranscriberReads(app, deps.transcription);
     registerTranscript(app, deps.transcription);
     registerDiarization(app, deps.diarization);
@@ -410,6 +420,30 @@ function registerCut(app: FastifyInstance, deps: WorkerRoutesDeps): void {
       assertJobKind(request, { jobId, service: deps.service, only: 'cut' });
       if (!deps.cuts) throw notThisWorkers();
       await deps.cuts.completeCut(
+        { jobId, ...ownerOf(request, request.body) },
+        request.body,
+      );
+      return reply.code(204).send();
+    },
+  );
+}
+
+/** What kb did on the Mac to the documents a kb-publish job delivered (KBC-099 FR-2). */
+function registerKbResult(app: FastifyInstance, deps: WorkerRoutesDeps): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.post(
+    '/api/v1/media-worker/jobs/:id/kb-result',
+    route(completeKbPublishRequestSchema),
+    async (request, reply) => {
+      const jobId = request.params.id;
+      assertJobKind(request, {
+        jobId,
+        service: deps.service,
+        only: 'kb-publish',
+      });
+      if (!deps.kbResults || !deps.service.kindOf(jobId))
+        throw notThisWorkers();
+      deps.kbResults.complete(
         { jobId, ...ownerOf(request, request.body) },
         request.body,
       );

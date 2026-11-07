@@ -1,5 +1,6 @@
 import type { AnswerSource, ResearchStep } from '@kb-chat/contracts';
 import type { ToolDefinition } from './llm.js';
+import type { TrackShelf } from './track-shelf.js';
 
 /** What one tool call produced: the text the model reads, the step shown and the sources so far. */
 export interface ResearchToolResult {
@@ -18,7 +19,15 @@ export interface ResearchToolsPort {
   definitions(): readonly ToolDefinition[];
   /** Runs a tool; `args` is the parsed JSON the model wrote. Unknown tools reject. */
   call(name: string, args: unknown): Promise<ResearchToolResult>;
+  /**
+   * The sources once the answer is written, each cited track with its passages (KBC-099
+   * FR-6); null when nothing changed.
+   */
+  finalSources?(answer: string): readonly AnswerSource[] | null;
 }
 
-/** A fresh tool set per turn: each turn numbers its own sources. */
-export type ResearchToolsFactory = (topic: string) => ResearchToolsPort;
+/** A fresh tool set per turn: each turn numbers its own sources; `tracks` it may see. */
+export type ResearchToolsFactory = (
+  topic: string,
+  tracks?: TrackShelf,
+) => ResearchToolsPort;

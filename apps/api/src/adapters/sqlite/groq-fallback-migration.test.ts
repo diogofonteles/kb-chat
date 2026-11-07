@@ -34,10 +34,11 @@ const schemaOf = (db: DatabaseSync) =>
 describe('Migration 25: Groq as the transcription fallback (KBC-037)', () => {
   it('ends in the same schema whether 24 (KBC-090) comes before or after it', () => {
     const inOrder = before24();
-    expect(applyMigrations(inOrder, MEDIA_MIGRATIONS)).toEqual([24, 25]);
+    // Through 25 only: 26 (KBC-099) comes after both, whatever their order.
+    expect(applyMigrations(inOrder, upTo(25))).toEqual([24, 25]);
     const swapped = before24();
     expect(applyMigrations(swapped, [...upTo(23), ...only(25)])).toEqual([25]);
-    expect(applyMigrations(swapped, MEDIA_MIGRATIONS)).toEqual([24]);
+    expect(applyMigrations(swapped, upTo(25))).toEqual([24]);
 
     expect(schemaOf(swapped)).toEqual(schemaOf(inOrder));
     expect(swapped.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
