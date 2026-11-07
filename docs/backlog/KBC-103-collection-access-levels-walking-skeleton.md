@@ -81,7 +81,12 @@ Como master de um acervo, quero cadastrar níveis ordenados (ex.: QS, CI, CDC, Q
 ADR [0036](../adr/0036-access-levels-per-collection.md) §1–§7, §9, §11 · [0028](../adr/0028-app-owned-collections-and-sub-collections.md) · [0008](../adr/0008-google-login-and-permissions.md) · Telas T24 (nova), T9, T3 em `docs/design/screens.md` · Contratos: `libs/contracts/src/auth.ts`, novo `libs/contracts/src/access-levels.ts`.
 
 ## Open questions
-Nenhuma bloqueante. Decisões assumidas com o padrão recomendado (o dono pode mudar antes do goal): conteúdo existente vai para o nível mais baixo; pessoa sem nível = mais baixo; documento novo sem nível fica só com masters; sub-acervo usa a escala do pai; membros não veem selos de nível.
+Resolvidas em 2026-11-07 (dono, conversa: "aprovo todos"), com o padrão recomendado:
+- Conteúdo existente vai para o nível mais baixo quando a escala é criada (ADR 0036 §4).
+- Pessoa com acesso e sem nível fica no nível mais baixo.
+- Documento novo sem nível fica só com masters (e com quem tem `content-levels`, KBC-107).
+- Sub-acervo usa a escala do acervo pai.
+- Membros não veem selos de nível.
 
 ## Definition of ready
 - [x] Story, escopo e resultado

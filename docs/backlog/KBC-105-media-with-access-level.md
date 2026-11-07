@@ -68,7 +68,8 @@ Como quem envia áudios a um acervo com níveis, quero ser obrigado a escolher o
 ADR [0036](../adr/0036-access-levels-per-collection.md) §3, §5, §7 · [0022](../adr/0022-media-library-store-queue-and-streaming.md), [0024](../adr/0024-media-search-outside-the-vault.md), [0033](../adr/0033-resumable-uploads-tus-core-on-the-item.md) · Tela T14 (envio e "Editar informações") com a emenda de 2026-11-06 · Barra de qualidade da fase 2.
 
 ## Open questions
-Nenhuma bloqueante. Decisão assumida (o dono pode mudar): quem envia não escolhe nível acima do seu.
+Resolvidas em 2026-11-07 (dono, conversa: "aprovo todos"), com o padrão recomendado:
+- Quem envia não escolhe nível acima do seu (masters: qualquer um).
 
 ## Definition of ready
 - [x] Story, escopo e resultado

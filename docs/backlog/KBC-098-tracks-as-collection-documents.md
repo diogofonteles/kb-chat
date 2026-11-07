@@ -25,10 +25,11 @@ Como quem estuda o acervo, quero que cada faixa transcrita seja um documento do 
 | 5 | Faixas nas fontes da resposta ao lado dos textos, com ícone de áudio, título, gravação e minuto | KBC-099 | AC-10 |
 | 6 | O clique abre a transcrição no painel de leitura, rolada até o trecho destacado, e o player ao lado em −2 s, pronto para tocar, com a palavra falada destacada; 390 px sem rolagem lateral; teclado e leitor de tela | KBC-099 | AC-11, AC-12 |
 | 7 | Nada fora da conversa piora (Biblioteca, player, busca por faixa KBC-096, assuntos KBC-069/070) | KBC-099 (regressão), KBC-101 ("Veja também" com faixas) | AC-13 |
+| 8 | Decisão do dono de 2026-11-07: "cada faixa transcrita é um documento do acervo" também na busca de documentos (T2): na lista, nas facetas e nas contagens, com ♪, abrindo o T22, sem repetir o que "Na fala" já mostra | KBC-101 | AC-14 |
 
 ## Scope
 **In:** documento por faixa publicada (e por gravação transcrita sem faixas) escrito no vault pelo Mac do dono; `kb classify`, `kb link` e `kb index` por padrão; reconciliação que mantém o documento em dia; visibilidade decidida pelo `media.db`; ferramentas e varredura da pesquisa com faixas; citação com faixa e milissegundos; painel com transcrição e player; estado da publicação visível; publicação automática em produção; permissão nova `media-research` ("Pesquisar faixas com IA").
-**Out:** mostrar o Markdown do vault às pessoas (o painel mostra a transcrição do `media.db`); rodar o kb no servidor (fase 3, ADR 0031); vídeo (KBC-075 segue a mesma regra depois); confirmação humana da classificação do kb (pergunta ao dono); faixas na lista de documentos da busca (T2), que continuam no grupo "Na fala".
+**Out:** mostrar o Markdown do vault às pessoas (o painel mostra a transcrição do `media.db`); rodar o kb no servidor (fase 3, ADR 0031); vídeo (KBC-075 segue a mesma regra depois); confirmação humana da classificação do kb (o dono decidiu em 2026-11-07 que não há). As faixas na lista de documentos da busca (T2) ficaram fora do KBC-099 e entram no KBC-101 (decisão do dono de 2026-11-07).
 
 ## Business rules
 - BR-1: toda faixa pronta, publicada e não arquivada tem exatamente um documento no vault, na pasta do acervo da gravação; uma gravação transcrita sem faixas tem um documento inteiro. Exceção: acervo sem pasta no vault (criado na tela e ainda sem `kb topic new`) fica em "Falhou: acervo sem pasta no kb" até a pasta existir.
@@ -60,7 +61,8 @@ Como quem estuda o acervo, quero que cada faixa transcrita seja um documento do 
 - **AC-10** (BR-6, ponto 5): Given uma resposta que cita uma faixa, Then "Fontes" mostra o chip com ♪, título da faixa, gravação e minuto, ao lado dos textos. → KBC-099 AC-8
 - **AC-11** (ponto 6): Given o clique numa citação de faixa, Then o painel mostra a transcrição rolada até o trecho destacado e, ao lado, o player 2 s antes, pausado; ao tocar, a palavra falada se destaca. → KBC-099 AC-9, AC-10
 - **AC-12** (NFR-5, ponto 6): Given 390 px, só teclado ou leitor de tela, Then tudo funciona sem rolagem lateral. → KBC-099 AC-11, AC-12
-- **AC-13** (ponto 7): Given os testes da Biblioteca, do player, do KBC-096 e dos assuntos, Then continuam passando sem mudança; a busca de documentos (T2) não mostra faixas na lista de textos. → KBC-099 AC-13
+- **AC-13** (ponto 7): Given os testes da Biblioteca, do player, do KBC-096 e dos assuntos, Then continuam passando sem mudança; no KBC-099 a busca de documentos (T2) ainda não mostra faixas na lista de textos. → KBC-099 AC-13
+- **AC-14** (ponto 8): Given um acervo com textos e faixas publicadas, When alguém que pode ver as faixas busca em "Buscar documentos", Then as faixas aparecem na lista de documentos com ♪, entram nas facetas e nas contagens como qualquer documento, cada faixa uma vez só (sem repetir o cartão "Na fala" dela), e o clique abre o T22. → KBC-101 AC-10 a AC-20
 
 ## Test strategy
 Em cada item filho. O E2E de ponta a ponta (pergunta → citação de faixa → painel com player) entra no KBC-099 e é estendido no KBC-101.
@@ -69,7 +71,14 @@ Em cada item filho. O E2E de ponta a ponta (pergunta → citação de faixa → 
 ADR [0035](../adr/0035-tracks-as-kb-documents.md) (substitui o §4 da [0024](../adr/0024-media-search-outside-the-vault.md)); [0003](../adr/0003-facets-from-frontmatter-catalog.md), [0015](../adr/0015-authorship-in-catalog-and-tool-contracts.md), [0016](../adr/0016-house-ai-plan-and-access-policy.md), [0021](../adr/0021-app-driven-exhaustive-sweep.md), [0023](../adr/0023-transcription-pull-worker-on-the-owners-mac.md), [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md), [0030](../adr/0030-authors-per-collection.md); KBC-093 (ADR 0034, no ramo dele). Tela: T22 em `docs/design/screens.md` e emenda na T4.
 
 ## Open questions
-As perguntas ao dono estão nos itens filhos e em `work/KBC-098/spec.md`, cada uma com o padrão adotado; nenhuma bloqueia o KBC-099.
+Resolvidas em 2026-11-07 (dono, conversa). As perguntas de `work/KBC-098/spec.md` §Perguntas ficaram assim:
+1. Classificação do kb sem confirmação: **sim**, `kb classify`/`kb link` automáticos (padrão aprovado).
+2. `media-research` não liga sozinha para quem já tem `research` e `media`: masters têm; o master concede em Pessoas e permissões ou num perfil de convite (padrão aprovado).
+3. Player ao abrir a citação: **pausado em −2 s**, pronto para tocar (padrão aprovado).
+4. Gravação transcrita sem faixas vira **um documento** da gravação inteira (KBC-100; padrão aprovado).
+5. Faixas na lista de documentos da busca (T2): **sim, mudou.** O dono: "as faixas devem aparecer na lista de documentos, cada faixa transcrita é um «documento» do acervo". Entram na lista, nas facetas e nas contagens como qualquer documento do acervo, com ♪, abrindo o T22 com o player. Vai para o KBC-101 (ponto 8, AC-14); emenda na ADR 0035 e nas telas T2 e T22.
+6. Transcrição de baixa confiança: **entra** na pesquisa, marcada "confiança baixa" para a IA e no chip (padrão aprovado).
+7. Sincronização automática com a produção: **a cada 30 min** (KBC-100; padrão aprovado).
 
 ## Definition of ready
 - [x] Story, escopo e resultado

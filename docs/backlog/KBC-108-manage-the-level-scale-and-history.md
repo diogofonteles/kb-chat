@@ -56,7 +56,8 @@ Como master, quero apagar, reordenar ou tirar níveis vendo antes o impacto, e c
 ADR [0036](../adr/0036-access-levels-per-collection.md) §10, §11 · Tela T24 ("Apagar nível", "Mover", "Histórico de níveis").
 
 ## Open questions
-Nenhuma bloqueante. Decisão assumida (o dono pode mudar): destinos padrão de BR-2.
+Resolvidas em 2026-11-07 (dono, conversa: "aprovo todos"), com o padrão recomendado:
+- Destinos padrão do BR-2 (conteúdo para o nível imediatamente acima; pessoas para o imediatamente abaixo).
 
 ## Definition of ready
 - [x] Story, escopo e resultado

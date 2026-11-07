@@ -54,7 +54,8 @@ Como quem edita uma gravação, quero dar a uma faixa um nível diferente do da 
 ADR [0036](../adr/0036-access-levels-per-collection.md) §3, §7 · [0035](../adr/0035-tracks-as-kb-documents.md) §5 · [0029](../adr/0029-recording-edits-speakers-tracks-and-subjects.md) · Telas T15 e T20 com a emenda de 2026-11-06 · Barra de qualidade da fase 2.
 
 ## Open questions
-Nenhuma bloqueante. Decisão assumida (o dono pode mudar): faixas herdam o nível da gravação e podem ter um mais alto.
+Resolvidas em 2026-11-07 (dono, conversa: "aprovo todos"), com o padrão recomendado:
+- Faixas herdam o nível da gravação e podem ter um nível mais alto.
 
 ## Definition of ready
 - [x] Story, escopo e resultado

@@ -15,7 +15,7 @@ Como master (ou quem classifica conteúdo), quero ver os documentos que chegaram
 
 ## Scope
 **In:** na T24, a seção **Sem nível (N)**: lista paginada com título, sub-acervo, origem, autoria e "chegou em"; filtros (sub-acervo, origem, autoria, pasta do vault, "chegou desde"); seleção por linha, "Selecionar os N filtrados" e **Dar nível** com confirmação ("Dar o nível CI a 37 documentos?"); mesma ação em lote sobre documentos já classificados ("Mudar nível" na busca de documentos do acervo, para masters e quem classifica); permissão nova `content-levels` ("Classificar nível de conteúdo"), dada por pessoa, que permite classificar e mudar documentos até o próprio nível e vê a fila e os selos; aviso na lateral para masters "N documentos sem nível" no acervo; auditoria `bulk` com o filtro.
-**Out:** escolher o nível no Mac/frontmatter (ADR 0036 opção 2); um "nível padrão para documentos novos" (pergunta ao dono).
+**Out:** escolher o nível no Mac/frontmatter (ADR 0036 opção 2); um "nível padrão para documentos novos" (o dono decidiu em 2026-11-07 que o documento novo fica fechado até ser classificado).
 
 ## Business rules
 - BR-1: documento sem nível só aparece para masters e para quem tem `content-levels` naquele acervo (KBC-103 BR-6, ampliado).
@@ -58,7 +58,8 @@ Como master (ou quem classifica conteúdo), quero ver os documentos que chegaram
 ADR [0036](../adr/0036-access-levels-per-collection.md) §3, §5, §9, §11 · Tela T24 (seção "Sem nível") · Regra de permissão por funcionalidade (definição de pronto global).
 
 ## Open questions
-Nenhuma bloqueante. Decisão assumida (o dono pode mudar): documento novo fica fechado até ser classificado; alternativas: entrar no nível mais baixo ou um "nível padrão para documentos novos" por acervo.
+Resolvidas em 2026-11-07 (dono, conversa: "aprovo todos"), com o padrão recomendado:
+- Documento novo fica fechado até ser classificado (sem "nível padrão para documentos novos" por acervo).
 
 ## Definition of ready
 - [x] Story, escopo e resultado
