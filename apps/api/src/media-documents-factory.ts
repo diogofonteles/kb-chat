@@ -117,7 +117,11 @@ export function createMediaDocuments(wiring: DocumentsWiring): MediaDocuments {
     documents: media.documents,
     reconciler,
     budget: kb,
-    titleOf: (topic) => wiring.catalog.get(topic)?.topic.title ?? null,
+    // A collection with no vault folder has nothing to publish yet (KBC-100 AC-12).
+    titleOf: (topic) =>
+      hasVaultFolder(wiring.catalog)(topic)
+        ? (wiring.catalog.get(topic)?.topic.title ?? null)
+        : null,
     queue: () => status.queue(),
   });
   return { reconciler, kb, existing, status };
