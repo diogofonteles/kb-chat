@@ -821,7 +821,7 @@ test('AC-17: the marked word differs from the spoken one by at most 120 ms, one 
   await expect
     .poll(async () => (await auditionState(page)).time)
     .toBeGreaterThan(LONG_LINE_AT + 0.5);
-  const { samples, delaysMs, changes, writes } = await page.evaluate(
+  const { samples, delaysMs, changes, writes, skipped } = await page.evaluate(
     async ({ startMs, stepMs, words }) => {
       interface Registry {
         get(name: string): Iterable<Range> | undefined;
@@ -846,17 +846,38 @@ test('AC-17: the marked word differs from the spoken one by at most 120 ms, one 
       let samples = 0;
       let changes = 0;
       let last: string | null = null;
-      const until = performance.now() + 5_000;
+      const skipped = { frozen: 0, stalled: 0, outside: 0 };
+      const endMs = startMs + words * stepMs;
+      // Every frame until the line's last word is spoken or the audio stops, not a fixed time.
+      const until = performance.now() + 20_000;
       let previous = performance.now();
-      while (performance.now() < until) {
+      let previousTime = audio?.currentTime ?? 0;
+      while (
+        performance.now() < until &&
+        audio &&
+        !audio.paused &&
+        audio.currentTime * 1000 < endMs
+      ) {
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const frameAt = performance.now();
+        // A frame after the page itself froze (a loaded machine), or with the audio waiting
+        // for data, shows nothing about the highlight: those are not samples. readyState
+        // alone cannot say the audio waits: after a seek while playing, Linux WebKit stays
+        // at 2 while currentTime runs normally (as in media-transcript's NFR-1).
         const frozen = frameAt - previous > 100;
+        const stalled =
+          audio.readyState < 3 && audio.currentTime <= previousTime;
         previous = frameAt;
-        if (frozen || !audio || audio.readyState < 3 || audio.paused) continue;
+        previousTime = audio.currentTime;
+        skipped.frozen += Number(frozen);
+        skipped.stalled += Number(stalled);
+        if (frozen || stalled || audio.paused) continue;
         const nowMs = audio.currentTime * 1000;
         const spoken = Math.floor((nowMs - startMs) / stepMs);
-        if (spoken < 0 || spoken >= words) continue;
+        if (spoken < 0 || spoken >= words) {
+          skipped.outside++;
+          continue;
+        }
         const [range] = Array.from(registry.get('track-word') ?? []);
         const text = range?.toString() ?? null;
         if (text !== last) changes++;
@@ -870,11 +891,14 @@ test('AC-17: the marked word differs from the spoken one by at most 120 ms, one 
         );
       }
       observer.disconnect();
-      return { samples, delaysMs: delays, changes, writes };
+      return { samples, delaysMs: delays, changes, writes, skipped };
     },
     { startMs: LONG_LINE_AT * 1000, stepMs: 300, words: WORD_COUNT },
   );
-  expect(samples).toBeGreaterThanOrEqual(100);
+  expect(
+    samples,
+    `frames skipped: ${JSON.stringify(skipped)}`,
+  ).toBeGreaterThanOrEqual(100);
   const worst = Math.max(0, ...delaysMs);
   process.stdout.write(
     `KBC-092 NFR-1: worst ${Math.round(worst)} ms over ${samples} samples; ${writes} DOM writes for ${changes} word changes\n`,
