@@ -56,7 +56,8 @@ Como master, quero que ao rebaixar o nível de alguém as conversas antigas dess
 ADR [0036](../adr/0036-access-levels-per-collection.md) §8 · KBC-029 (turnos gravados) · Tela T4 (fontes) com a emenda de 2026-11-06.
 
 ## Open questions
-Nenhuma bloqueante. Decisão assumida (o dono pode mudar): a prosa fica e só as fontes são escondidas; a alternativa é esconder a resposta inteira.
+Resolvidas em 2026-11-07 (dono, conversa: "aprovo todos"), com o padrão recomendado:
+- A prosa da resposta guardada fica e só as fontes restritas são escondidas.
 
 ## Definition of ready
 - [x] Story, escopo e resultado

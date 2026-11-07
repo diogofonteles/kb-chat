@@ -1,7 +1,7 @@
 ---
 id: KBC-092
 title: "Texto da faixa e destaque da palavra falada na tela de preparo"
-status: in-review
+status: done
 slice: phase-2-editing
 outcome: quem prepara um áudio confere o que cada faixa diz sem sair dela, lendo junto a palavra que está tocando
 depends_on: [KBC-045, KBC-066, KBC-072, KBC-090]
@@ -70,7 +70,11 @@ Como quem prepara um áudio, quero ler o texto da faixa que escolhi e ver a pala
 Telas: T20 em `docs/design/screens.md` (Preparar áudio) · Reuso: KBC-045 (`libs/player-core/src/spoken-words.ts`, `transcript/transcript-words.ts`, `transcript/search-highlights.ts`) · ADR: [0023](../adr/0023-transcription-pull-worker-on-the-owners-mac.md) §5 (texto montado das palavras), [0025](../adr/0025-own-media-player-for-audio-and-video.md) · Pedido do dono: 2026-11-05 (cartão do quadro, "owner feedback").
 
 ## Open questions
-Nenhuma que bloqueie; os padrões assumidos estão em `work/KBC-092/spec.md`, "Perguntas ao dono".
+Resolvidas em 2026-11-07 (dono, conversa). As perguntas de `work/KBC-092/spec.md` ficaram assim:
+1. Passo 2 e passo 3: **os dois** (padrão aprovado).
+2. Palavra na borda da faixa pertence à faixa em que começa (padrão aprovado, igual ao KBC-068 BR-6).
+3. Clique na palavra: continua fora deste item e reservado ao KBC-093. O dono pediu que, lá, o clique (ou Enter) numa palavra leve o áudio ao começo dela, mantendo tocando ou pausado, **e** abra a correção dessa palavra ao mesmo tempo (KBC-093, decisão de 2026-11-07).
+4. Palavra a palavra na coluna Transcrição do passo 3: **fora** (padrão aprovado).
 
 ## Definition of ready
 - [x] Story, scope and outcome stated

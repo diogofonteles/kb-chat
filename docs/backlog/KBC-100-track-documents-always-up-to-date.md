@@ -73,7 +73,7 @@ Como quem edita o acervo de áudio, quero que toda mudança numa faixa chegue so
 ADR [0035](../adr/0035-tracks-as-kb-documents.md) §4, §9–§11 · KBC-093 / ADR 0034 (ramo `feature/correct-transcript-words`) · Runbook `docs/deploy/runbook.md` §7 e §10 · Tela T22 (estado da publicação).
 
 ## Open questions
-- Intervalo da sincronização automática: 30 min (padrão) — dono. Não bloqueia.
+Resolvidas em 2026-11-07 (dono, conversa): sincronização automática com a produção a cada 30 min (BR-7) e gravação transcrita sem faixas vira um documento da gravação inteira, como já escrito aqui (padrões aprovados).
 
 ## Definition of ready
 - [x] Story, escopo e resultado

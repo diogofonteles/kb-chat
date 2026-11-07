@@ -111,6 +111,15 @@ Hierarquia (UP-16), em ordem: (1) caixa de pergunta, (2) cartões de resultado, 
 - **Assuntos nas faixas (KBC-070, `media`, `media-tracks` e `media-subjects`):** com um assunto ativo, a mídia mostra as faixas ligadas a ele (só ligações aceitas). Sem texto, ou com o nome do assunto como pergunta, entram todas; com outro texto, a faixa precisa tê-lo na fala, no título ou no resumo. Cada faixa aparece uma vez: com a melhor passagem na fala ("♪ Áudio · Na fala · 8:15") ou inteira ("♪ Faixa · Assunto", título, resumo, abre no começo). Os assuntos aparecem como texto, porque o cartão inteiro é um botão. O filtro soma à parte: "Cabala (12 · 3 faixas)"; só faixas: "Preparo (3 faixas)". Assunto livre entra como opção do mesmo filtro.
 - Estados do painel: carregando (bloco reservado do player), áudio ainda não pronto ("Este áudio ainda não está pronto para ouvir."), removido ou sem acesso ("Esta mídia não está mais disponível."), erro de rede (mensagem + "Tentar de novo").
 
+### Faixas como documentos (KBC-101; decisão do dono de 2026-11-07; ADR 0035, emenda de 2026-11-07)
+"Cada faixa transcrita é um documento do acervo": a faixa publicada entra na lista de documentos, nas facetas e nas contagens como um texto.
+- **Cartão da faixa**, misturado aos textos pela relevância, em qualquer página: primeira linha **"♪ Faixa · <gravação> · faixa 3 de 12 · 8:15"** (o ♪ sempre com texto; o leitor de tela ouve "Faixa de áudio, <título>, aos 8 minutos e 15 segundos"), título, trecho de 3 linhas com os termos em `<mark>` (nunca frontmatter nem marcação das âncoras), facetas em texto como nos textos, selo de autoria, "em <sub-acervo>" quando for o caso, **"⚠ baixa confiança"** e **"· atualizando"** (KBC-100) quando valem.
+- **Uma faixa, um cartão:** quando a faixa bate pelo documento e pela fala, o cartão é o da faixa, com o minuto e a frase do trecho "Na fala"; o cartão "♪ Áudio · Na fala" dela não aparece de novo. O mesmo para a gravação sem faixas e o documento dela. Trechos de gravações cujas faixas ainda não são documentos seguem como acima.
+- **Contagens:** a faixa conta no resumo ("23 documentos (3 faixas) · Tudo · 0,6 s"), em "Autoria", nos chips (com os valores do `kb classify`) e em "Buscar em", onde conta em **"♪ Áudios"**, uma vez cada. "Fora do tema" oculto por padrão vale para ela. Faixas nunca viram "+N cópias" de um texto nem de outra faixa.
+- **Quem vê:** quem tem acesso ao acervo, "Ouvir mídia" (`media`) e "Navegar por faixas" (`media-tracks`); a pesquisa com IA continua exigindo `media-research`. Faixa arquivada, apagada ou movida some na hora, e uma faixa que a pessoa não vê não entra em nenhuma contagem. Com níveis de acesso (KBC-106), o nível vale aqui também.
+- **Clique ou Enter** → o painel T22 no trecho do cartão, com o player pausado em −2 s; ✕ ou Esc devolve o foco ao cartão.
+- 390 px: o cartão quebra a primeira linha em duas (tipo e minuto; gravação), sem rolagem lateral; alvo inteiro ≥ 44 px.
+
 ### Estados
 | Estado | Mostra | Ação |
 |---|---|---|
@@ -799,6 +808,8 @@ Player (T15), só masters: **Transcrever de novo** abaixo de "Esconder transcri�
 
 **Objetivo:** da citação de uma faixa numa resposta da IA, ler a transcrição no trecho citado e ouvi-lo dali. **Sucesso:** o trecho está destacado e visível sem rolar, e um toque em **Tocar** ouve de 2 s antes dele.
 
+*Emenda 2026-11-07 (KBC-101):* o T22 também abre do cartão da faixa na lista de documentos da busca (T2), no trecho do cartão; o comportamento é o mesmo da citação.
+
 ### Na resposta (emenda da T4)
 - A citação de uma faixa é `[n]` como a de um texto; o leitor de tela ouve "Fonte n, faixa <título>, aos 8 minutos e 15 segundos".
 - Em **Fontes**, o chip da faixa: **"♪ <título da faixa> · <gravação> · 8:15"**, no grupo de autoria dela (KBC-020), ao lado dos textos. O ♪ vem com texto ("Faixa de áudio" para leitores de tela), nunca só ícone (UP-20). Título longo trunca em 1 linha com o completo no `title`; no celular, a gravação vai para uma segunda linha do chip. Com mais de um trecho da mesma faixa citado, o chip mostra o primeiro minuto e "+2 trechos"; cada `[n]` no texto abre o seu.
@@ -864,7 +875,7 @@ Em ⚙ Configurações → **Transcritores**, depois da lista de pareados, junto
 
 ### Fora do escopo e perguntas em aberto
 - O Markdown do vault nunca é mostrado. Vídeo segue no KBC-075.
-- Pergunta ao dono (padrão adotado): o player abre pausado ("pronto para tocar"), não tocando como o painel da busca "Na fala".
+- Decidido pelo dono em 2026-11-07: o player abre pausado em −2 s ("pronto para tocar"), não tocando como o painel da busca "Na fala"; vale também quando o T22 abre da T2.
 
 *Emenda 2026-11-05 à T3 (KBC-101):* o "Veja também" pode trazer faixas ligadas pelo `kb link`: "♪ <título da faixa> · <gravação>", que abrem a T22 no começo, com "← Voltar". *À T4 (KBC-101):* a cobertura conta as faixas à parte: "2.700 documentos no conjunto (145 faixas de áudio)" e "· 412 analisados pela IA (30 faixas)".
 

@@ -1,7 +1,7 @@
 ---
 id: KBC-099
 title: "Faixa vira documento do acervo pelo kb e a IA a cita: a referência abre a transcrição no trecho com o player ao lado (esqueleto)"
-status: ready
+status: done
 slice: phase-2-research-media
 outcome: uma faixa aprovada é citada pela pesquisa com IA (Rápido e Profundo) e o clique leva ao trecho com o player pronto; prova o caminho inteiro Mac → kb → catálogo → agente → citação → painel
 depends_on: [KBC-068, KBC-069, KBC-008, KBC-011, KBC-020, KBC-038, KBC-045]
@@ -36,7 +36,7 @@ Como quem estuda, quero perguntar à IA e receber, entre as fontes, a faixa onde
 - BR-5 (KBC-098 BR-6): o trecho citado vem do `media.db`: o tempo escrito pelo modelo só vale se a âncora foi mostrada a ele nesta resposta, para aquela fonte; senão vale o último trecho que as ferramentas mostraram dela; sem nenhum, o começo da faixa.
 - BR-6 (KBC-098 BR-8): a autoria e o autor do documento são os da mídia; as ferramentas os mostram como nos textos.
 - BR-8: publicar as faixas que já existem é só de masters, idempotente (faixa já publicada com o mesmo fingerprint é pulada) e respeita o teto mensal da mídia (gasto o teto, nada é enfileirado); o custo mostrado é uma estimativa (≈ US$ 0,001 por faixa, medido no spike).
-- BR-7: a busca de documentos (T2), suas facetas e o "Veja também" não mostram documentos de faixa; "Na fala", a Biblioteca e os assuntos não mudam.
+- BR-7: a busca de documentos (T2), suas facetas e o "Veja também" não mostram documentos de faixa; "Na fala", a Biblioteca e os assuntos não mudam. (Vale para este item. O dono decidiu em 2026-11-07 que as faixas entram na lista de documentos, nas facetas e nas contagens da T2: o KBC-101 tira esta exclusão.)
 
 ## Functional requirements
 - FR-1: Quando uma faixa é publicada (KBC-068), o sistema deve renderizar o documento e enfileirar `kb-publish` para o acervo dela, coalescendo num só job por acervo. (BR-1, BR-2)
@@ -94,7 +94,7 @@ Como quem estuda, quero perguntar à IA e receber, entre as fontes, a faixa onde
 ADR [0035](../adr/0035-tracks-as-kb-documents.md) · Tela T22 e emenda da T4 em `docs/design/screens.md` · Spec: `work/KBC-098/spec.md` · Pai: [KBC-098](KBC-098-tracks-as-collection-documents.md).
 
 ## Open questions
-Perguntas ao dono com padrão adotado (não bloqueiam): ver `work/KBC-098/spec.md` §Perguntas.
+Resolvidas em 2026-11-07 (dono, conversa): as decisões estão no KBC-098, "Open questions". Mudou só a das faixas na T2, que vai para o KBC-101; as outras seguem o padrão já adotado aqui (classificação sem confirmação, `media-research` não liga sozinha, player pausado em −2 s, baixa confiança pesquisável e marcada).
 
 ## Definition of ready
 - [x] Story, escopo e resultado
