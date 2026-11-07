@@ -1820,5 +1820,6 @@ describe('ProposalService: never past the value accepted (KBC-112)', () => {
         expect(row.spentUsd).toBeLessThanOrEqual(limit);
       expect(run.spentUsd).toBeLessThanOrEqual(limit);
     }
-  });
+    // 200 databases with every migration: seconds, not the default 5 s budget.
+  }, 30_000);
 });
