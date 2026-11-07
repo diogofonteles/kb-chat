@@ -137,7 +137,7 @@ function rebuildAccepting(
  * Rebuilds `media_proposal_runs` from the table as it stands with `failure` taking
  * `accepted-limit` (KBC-112): every column, check and index kept, as `rebuildAccepting` does.
  */
-function rebuildRunsAcceptingLimit(db: DatabaseSync): string {
+export function rebuildRunsAcceptingLimit(db: DatabaseSync): string {
   const table = 'media_proposal_runs';
   const ddl = String(
     db

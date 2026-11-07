@@ -1,7 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { applyMigrations } from './media-database.js';
-import { MEDIA_MIGRATIONS } from './media-migrations.js';
+import {
+  MEDIA_MIGRATIONS,
+  rebuildRunsAcceptingLimit,
+  type Migration,
+} from './media-migrations.js';
 
 const MEDIA_ID = '77777777-7777-4777-8777-777777777777';
 const AT = '2026-11-07T10:00:00.000Z';
@@ -111,5 +115,48 @@ describe('migration proposal-accepted-limit (KBC-112)', () => {
     expect(
       db.prepare('SELECT count(*) AS n FROM media_draft_tracks').get(),
     ).toEqual({ n: 0 });
+  });
+
+  it('has nothing to rebuild once the failure is accepted', () => {
+    const db = migrated();
+    expect(rebuildRunsAcceptingLimit(db)).toBe('');
+  });
+
+  it('refuses a runs table with no failure check to extend', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('CREATE TABLE media_proposal_runs (id TEXT, failure TEXT)');
+    expect(() => rebuildRunsAcceptingLimit(db)).toThrow(/no failure check/);
+  });
+
+  it('rolls a rebuild back when it leaves a broken key, and turns the keys on again', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA foreign_keys = ON');
+    applyMigrations(db, MEDIA_MIGRATIONS);
+    const broken: Migration = {
+      version: 900,
+      name: 'broken-rebuild',
+      rebuildsReferenced: true,
+      sql: `INSERT INTO media_draft_tracks (id, media_id, run_id, source, first_segment,
+          last_segment, start_ms, end_ms, kind, title, created_at)
+        VALUES ('orphan', 'none', 'none', 'ai', 1, 2, 0, 9000, 'qa', 'Tema', '${AT}');`,
+    };
+    expect(() => applyMigrations(db, [...MEDIA_MIGRATIONS, broken])).toThrow(
+      /broken foreign keys/,
+    );
+    expect(
+      db.prepare('SELECT count(*) AS n FROM media_draft_tracks').get(),
+    ).toEqual({ n: 0 });
+    expect(db.prepare('PRAGMA foreign_keys').get()).toEqual({
+      foreign_keys: 1,
+    });
+  });
+
+  it('leaves the keys off on a database that had them off', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA foreign_keys = OFF');
+    applyMigrations(db, MEDIA_MIGRATIONS);
+    expect(db.prepare('PRAGMA foreign_keys').get()).toEqual({
+      foreign_keys: 0,
+    });
   });
 });
