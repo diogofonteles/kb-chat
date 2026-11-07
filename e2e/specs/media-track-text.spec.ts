@@ -517,17 +517,25 @@ const lineInBlock = (line: Locator) =>
     return top >= box.top && top < box.bottom;
   });
 
-test('AC-5: "Ouvir o início" marks nothing before the start and the first word as it starts', async ({
-  page,
-}) => {
-  await openStep3(page, 2);
+interface Sample {
+  readonly at: number;
+  readonly word: string | null;
+}
+
+/** "agora" runs from 30 s to 30.3 s: give or take a frame and NFR-1's 120 ms, it is painted here. */
+const onTheFirstWord = ({ at }: Sample) => at >= 30.13 && at < 30.28;
+
+/**
+ * Clicks "Ouvir o início" (28 s to 33 s) and records, frame by frame, the time and the
+ * painted word until the audio is past "agora" or stops. `paused` turns false as play() is
+ * called, before the seek to 28 s lands and the data arrives, which a loaded WebKit takes
+ * seconds to do: the frames are recorded once the audio moves on from 28 s, not for a fixed
+ * time from the click.
+ */
+async function listenToTheStart(page: Page): Promise<Sample[]> {
   await page.getByRole('button', { name: 'Ouvir o início' }).click();
   await expect.poll(async () => (await auditionState(page)).paused).toBe(false);
-  // The audition goes from 28 s to 33 s. `paused` turns false as soon as play() is called,
-  // before the seek to 28 s lands and the data arrives, which a loaded WebKit takes seconds
-  // to do: the frames are sampled once the audio moves on from 28 s, and until it is past
-  // "agora" or stops, not for a fixed time from the click.
-  const samples = await audition(page).evaluate(async (element) => {
+  return audition(page).evaluate(async (element) => {
     interface Registry {
       get(name: string): Iterable<Range> | undefined;
     }
@@ -535,7 +543,7 @@ test('AC-5: "Ouvir o início" marks nothing before the start and the first word 
     const audio = element as HTMLAudioElement;
     const frame = () =>
       new Promise((resolve) => requestAnimationFrame(resolve));
-    const found: { at: number; word: string | null }[] = [];
+    const found: Sample[] = [];
     const until = performance.now() + 15_000;
     const going = () => performance.now() < until && !audio.paused;
     while (going() && (audio.seeking || audio.currentTime <= 28)) await frame();
@@ -546,11 +554,23 @@ test('AC-5: "Ouvir o início" marks nothing before the start and the first word 
     }
     return found;
   });
+}
+
+test('AC-5: "Ouvir o início" marks nothing before the start and the first word as it starts', async ({
+  page,
+}) => {
+  await openStep3(page, 2);
+  const samples = await listenToTheStart(page);
+  // A loaded WebKit can move currentTime in 0.2 s steps, over the 0.15 s that must show
+  // "agora": then it listens again (the button is back once the range ends) until a frame
+  // lands there. Every frame of every listening is checked below.
+  for (let again = 0; again < 2 && !samples.some(onTheFirstWord); again++) {
+    samples.push(...(await listenToTheStart(page)));
+  }
   const before = samples.filter(({ at }) => at < 29.95);
   expect(before.length).toBeGreaterThan(10);
   expect(before.every(({ word }) => word === null)).toBe(true);
-  // "agora" from 30 s to 30.3 s, give or take a frame and NFR-1's 120 ms.
-  const first = samples.filter(({ at }) => at >= 30.13 && at < 30.28);
+  const first = samples.filter(onTheFirstWord);
   expect(first.length).toBeGreaterThan(0);
   expect(first.every(({ word }) => word === 'agora')).toBe(true);
 });
